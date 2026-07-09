@@ -1,0 +1,99 @@
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+a {
+  color: #059669;
+  text-decoration: none;
+}
+a:hover {
+  color: #047857;
+}
+
+::placeholder {
+  color: #94a3b8;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+@keyframes dfpulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+/* ── hover utilities (values match DealFlow App.dc.html style-hover attrs) ── */
+.df-btn-primary:hover {
+  background: #047857 !important;
+}
+.df-btn-outline-green:hover {
+  background: #ecfdf5 !important;
+}
+.df-btn-amber:hover {
+  background: #d97706 !important;
+}
+.df-card-hover-amber:hover {
+  border-color: #f59e0b !important;
+}
+.df-card-hover-green:hover {
+  border-color: #059669 !important;
+}
+.df-row-hover:hover {
+  background: #f8fafc !important;
+}
+.df-danger-hover:hover {
+  color: #dc2626 !important;
+}
+.df-upload-tile:hover {
+  border-color: #059669 !important;
+  color: #059669 !important;
+}
+.df-close-hover:hover {
+  color: #1e293b !important;
+}
+.df-toggle-mode:hover {
+  color: #fff !important;
+  background: #1e293b !important;
+}
+.df-copy-btn:hover {
+  border-color: #059669 !important;
+  color: #059669 !important;
+}
+.df-input:focus {
+  outline: none;
+  border-color: #059669 !important;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
+}
+
+/* En pantalla pequeña, las cuadrículas marcadas colapsan a una columna */
+@media (max-width: 767px) {
+  .df-collapse {
+    grid-template-columns: 1fr !important;
+  }
+}
