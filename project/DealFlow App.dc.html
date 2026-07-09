@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{height:100%;margin:0;}
+a{color:#059669;text-decoration:none;}
+a:hover{color:#047857;}
+::placeholder{color:#94A3B8;}
+@keyframes dfpulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.5)}70%{box-shadow:0 0 0 6px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+</style>
+</helmet>
+<div style="position:relative;display:flex;width:100%;height:100%;min-height:600px;font-family:'Inter',system-ui,sans-serif;background:#F8FAFC;color:#1E293B;overflow:hidden;">
+
+  <!-- ══════════ MENÚ LATERAL ══════════ -->
+  <aside style="width:224px;flex-shrink:0;background:#0F172A;display:flex;flex-direction:column;padding:18px 12px 14px;overflow-y:auto;">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 8px 18px;">
+      <img src="assets/logo.png" alt="DealFlow" style="width:34px;height:30px;object-fit:contain;">
+      <span style="color:#fff;font-weight:800;font-size:17px;letter-spacing:-0.02em;">DealFlow</span>
+    </div>
+
+    <sc-if value="{{ isVendedor }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;flex-direction:column;gap:2px;">
+        <div onClick="{{ goResumen }}" style="{{ navResumen }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg><span>Resumen</span></div>
+        <div onClick="{{ goProductos }}" style="{{ navProductos }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"></path><circle cx="7.5" cy="7.5" r="1.2"></circle></svg><span>Productos</span></div>
+        <div onClick="{{ goPromos }}" style="{{ navPromos }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="19" y1="5" x2="5" y2="19"></line><circle cx="6.5" cy="6.5" r="2"></circle><circle cx="17.5" cy="17.5" r="2"></circle></svg><span>Promos</span></div>
+        <div onClick="{{ goAsistente }}" style="{{ navAsistente }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="7" width="16" height="11" rx="3"></rect><circle cx="9.5" cy="12.5" r="1"></circle><circle cx="14.5" cy="12.5" r="1"></circle><line x1="12" y1="7" x2="12" y2="4"></line><circle cx="12" cy="3.2" r="0.9"></circle></svg><span>Asistente</span></div>
+        <div onClick="{{ goWhatsApp }}" style="{{ navWhatsApp }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.5L3 21l2-5.4A8.5 8.5 0 1 1 21 11.5Z"></path></svg><span>WhatsApp</span><sc-if value="{{ waConnected }}" hint-placeholder-val="{{ true }}"><span style="width:7px;height:7px;border-radius:50%;background:#10B981;margin-left:auto;"></span></sc-if></div>
+        <div onClick="{{ goPedidos }}" style="{{ navPedidos }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="M3 8l9 5 9-5"></path><line x1="12" y1="13" x2="12" y2="21"></line></svg><span>Pedidos</span><sc-if value="{{ hasNewOrders }}" hint-placeholder-val="{{ true }}"><span style="margin-left:auto;background:#F59E0B;color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;">{{ newOrdersCount }}</span></sc-if></div>
+        <div onClick="{{ goLeads }}" style="{{ navLeads }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><path d="M16 5a3.2 3.2 0 0 1 0 6.2M17.5 14.5a5.5 5.5 0 0 1 3 4.5"></path></svg><span>Leads</span></div>
+        <div onClick="{{ goCRM }}" style="{{ navCRM }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 13a8 8 0 0 1 16 0"></path><rect x="2.5" y="13" width="4" height="6" rx="1.5"></rect><rect x="17.5" y="13" width="4" height="6" rx="1.5"></rect></svg><span>CRM</span><span style="width:7px;height:7px;border-radius:50%;background:#10B981;margin-left:auto;animation:dfpulse 1.8s infinite;"></span></div>
+        <div onClick="{{ goIntegraciones }}" style="{{ navIntegraciones }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3v4M15 3v4M7 7h10v5a5 5 0 0 1-10 0V7Z"></path><line x1="12" y1="17" x2="12" y2="21"></line></svg><span>Integraciones</span></div>
+      </nav>
+    </sc-if>
+
+    <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+      <div style="color:#64748B;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:2px 10px 8px;">Administración</div>
+      <nav style="display:flex;flex-direction:column;gap:2px;">
+        <div onClick="{{ goVentas }}" style="{{ navVentas }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="5" y1="20" x2="5" y2="12"></line><line x1="12" y1="20" x2="12" y2="6"></line><line x1="19" y1="20" x2="19" y2="10"></line></svg><span>Ventas</span></div>
+        <div onClick="{{ goPlanes }}" style="{{ navPlanes }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 3 8l9 5 9-5-9-5Z"></path><path d="M3 13l9 5 9-5"></path></svg><span>Planes</span></div>
+        <div onClick="{{ goCuentas }}" style="{{ navCuentas }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2"></circle><path d="M5.5 20a6.5 6.5 0 0 1 13 0"></path></svg><span>Cuentas</span></div>
+      </nav>
+    </sc-if>
+
+    <div style="flex:1;"></div>
+    <div onClick="{{ toggleMode }}" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:8px;cursor:pointer;color:#94A3B8;font-size:13px;font-weight:600;border:1px solid #1E293B;" style-hover="color:#fff;background:#1E293B;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 16V8m0 8-3-3m3 3 3-3M17 8v8m0-8-3 3m3-3 3 3"></path></svg>
+      <span>{{ modeBtnLabel }}</span>
+    </div>
+  </aside>
+
+  <!-- ══════════ COLUMNA PRINCIPAL ══════════ -->
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+
+    <header style="background:#fff;border-bottom:1px solid #E2E8F0;padding:0 28px;height:58px;display:flex;align-items:center;gap:14px;flex-shrink:0;">
+      <span style="font-weight:700;font-size:15px;">{{ headerTitle }}</span>
+      <sc-if value="{{ isVendedor }}" hint-placeholder-val="{{ true }}">
+        <span style="{{ waPill }}"><span style="{{ waDot }}"></span>{{ waLabel }}</span>
+      </sc-if>
+      <div style="flex:1;"></div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="color:#64748B;font-size:13px;">{{ userLabel }}</span>
+        <div style="width:32px;height:32px;border-radius:50%;background:#059669;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;">{{ userInitials }}</div>
+      </div>
+    </header>
+
+    <main style="flex:1;overflow-y:auto;padding:26px 28px 40px;">
+
+      <!-- ── RESUMEN ── -->
+      <sc-if value="{{ isResumen }}" hint-placeholder-val="{{ true }}">
+        <section data-screen-label="Resumen">
+          <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 4px;">Hola, Karla 👋</h1>
+          <p style="color:#64748B;font-size:14px;margin:0 0 22px;">Así va tu tienda hoy, martes 8 de julio.</p>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;">
+            <div onClick="{{ goPedidos }}" style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);" style-hover="border-color:#F59E0B;">
+              <div style="color:#64748B;font-size:13px;font-weight:600;margin-bottom:6px;">Pedidos nuevos</div>
+              <div style="font-size:30px;font-weight:800;letter-spacing:-0.03em;color:#F59E0B;">{{ newOrdersCount }}</div>
+              <div style="color:#64748B;font-size:12px;margin-top:4px;">por confirmar</div>
+            </div>
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+              <div style="color:#64748B;font-size:13px;font-weight:600;margin-bottom:6px;">Ventas de hoy</div>
+              <div style="font-size:30px;font-weight:800;letter-spacing:-0.03em;">{{ ventasHoy }}</div>
+              <div style="color:#059669;font-size:12px;margin-top:4px;font-weight:600;">↑ 3 pedidos más que ayer</div>
+            </div>
+            <div onClick="{{ goLeads }}" style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);" style-hover="border-color:#059669;">
+              <div style="color:#64748B;font-size:13px;font-weight:600;margin-bottom:6px;">Leads activos</div>
+              <div style="font-size:30px;font-weight:800;letter-spacing:-0.03em;">{{ leadsCount }}</div>
+              <div style="color:#64748B;font-size:12px;margin-top:4px;">conversaciones abiertas</div>
+            </div>
+            <div onClick="{{ goProductos }}" style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);" style-hover="border-color:#059669;">
+              <div style="color:#64748B;font-size:13px;font-weight:600;margin-bottom:6px;">Productos</div>
+              <div style="font-size:30px;font-weight:800;letter-spacing:-0.03em;">{{ productCount }}</div>
+              <div style="color:#DC2626;font-size:12px;margin-top:4px;font-weight:600;">1 agotado · 1 con poco stock</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:14px;">
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+              <div style="font-weight:700;font-size:15px;margin-bottom:14px;">Así trabaja tu asistente</div>
+              <div style="display:flex;flex-direction:column;gap:0;">
+                <div style="display:flex;gap:12px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;"><div style="width:28px;height:28px;border-radius:50%;background:#ECFDF5;color:#059669;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div><div style="width:2px;flex:1;background:#E2E8F0;margin:4px 0;"></div></div>
+                  <div style="padding-bottom:16px;"><div style="font-weight:600;font-size:14px;">El cliente escribe a tu WhatsApp</div><div style="color:#64748B;font-size:13px;margin-top:2px;">Pregunta por un producto, un precio o un envío.</div></div>
+                </div>
+                <div style="display:flex;gap:12px;">
+                  <div style="display:flex;flex-direction:column;align-items:center;"><div style="width:28px;height:28px;border-radius:50%;background:#ECFDF5;color:#059669;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div><div style="width:2px;flex:1;background:#E2E8F0;margin:4px 0;"></div></div>
+                  <div style="padding-bottom:16px;"><div style="font-weight:600;font-size:14px;">El asistente responde y vende</div><div style="color:#64748B;font-size:13px;margin-top:2px;">Usa tu catálogo, tus promos y tus reglas para cerrar la venta.</div></div>
+                </div>
+                <div style="display:flex;gap:12px;">
+                  <div style="width:28px;height:28px;border-radius:50%;background:#FFFBEB;color:#F59E0B;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
+                  <div><div style="font-weight:600;font-size:14px;">El pedido entra aquí, listo para despachar</div><div style="color:#64748B;font-size:13px;margin-top:2px;">Tú solo lo confirmas y lo avanzas con un toque.</div></div>
+                </div>
+              </div>
+            </div>
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+              <div style="display:flex;align-items:center;margin-bottom:12px;"><span style="font-weight:700;font-size:15px;">Pedidos recientes</span><div style="flex:1;"></div><a href="#" onClick="{{ goPedidosLink }}" style="font-size:13px;font-weight:600;">Ver todos</a></div>
+              <sc-for list="{{ recentOrders }}" as="o" hint-placeholder-count="4">
+                <div onClick="{{ o.open }}" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #F1F5F9;cursor:pointer;">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#64748B;">{{ o.id }}</span>
+                  <span style="font-size:13px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ o.cliente }}</span>
+                  <span style="font-size:13px;font-weight:700;">{{ o.totalFmt }}</span>
+                  <span style="{{ o.pillStyle }}">{{ o.estado }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── PRODUCTOS ── -->
+      <sc-if value="{{ isProductos }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="Productos">
+          <div style="display:flex;align-items:center;margin-bottom:18px;">
+            <div><h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0;">Productos</h1><p style="color:#64748B;font-size:14px;margin:4px 0 0;">{{ productCount }} productos en tu catálogo. Toca uno para editarlo.</p></div>
+            <div style="flex:1;"></div>
+            <button style="background:#059669;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-weight:600;font-size:14px;cursor:pointer;" style-hover="background:#047857;">+ Nuevo producto</button>
+          </div>
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+            <sc-for list="{{ products }}" as="p" hint-placeholder-count="5">
+              <div>
+                <div onClick="{{ p.toggle }}" style="display:grid;grid-template-columns:52px 1fr 120px 130px 24px;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #F1F5F9;cursor:pointer;" style-hover="background:#F8FAFC;">
+                  <div style="{{ p.fotoStyle }}">{{ p.iniciales }}</div>
+                  <div style="min-width:0;"><div style="font-weight:600;font-size:14px;">{{ p.nombre }}</div><div style="color:#64748B;font-size:12px;margin-top:1px;">{{ p.variantesLabel }}</div></div>
+                  <div style="font-weight:700;font-size:14px;">{{ p.precioFmt }}</div>
+                  <span style="{{ p.stockPill }}">{{ p.stockLabel }}</span>
+                  <span style="color:#94A3B8;font-size:12px;">{{ p.chevron }}</span>
+                </div>
+                <sc-if value="{{ p.expanded }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#F8FAFC;border-bottom:1px solid #F1F5F9;padding:18px 18px 18px 84px;">
+                    <div style="font-size:12px;font-weight:700;color:#64748B;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:8px;">Fotos principales · las que envía el asistente al ofrecer el producto</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                      <sc-for list="{{ p.fotosMain }}" as="f" hint-placeholder-count="3">
+                        <div style="{{ f.tileStyle }}">{{ f.label }}</div>
+                      </sc-for>
+                      <div style="width:64px;height:64px;border:1px dashed #CBD5E1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:#64748B;font-size:10.5px;font-weight:600;cursor:pointer;box-sizing:border-box;" style-hover="border-color:#059669;color:#059669;"><span style="font-size:16px;line-height:1;">＋</span><span>Subir foto</span></div>
+                    </div>
+                    <div style="font-size:12px;font-weight:700;color:#64748B;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:8px;">Variantes · cada una con sus propias fotos</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
+                      <sc-for list="{{ p.variantes }}" as="v" hint-placeholder-count="3">
+                        <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:9px 12px;">
+                          <span style="{{ v.swatchStyle }}"></span>
+                          <span style="{{ v.labelStyle }}">{{ v.label }}</span>
+                          <span style="{{ v.stockPill }}">{{ v.stockLabel }}</span>
+                          <div style="flex:1;"></div>
+                          <div style="display:flex;gap:5px;align-items:center;">
+                            <sc-for list="{{ v.thumbs }}" as="t" hint-placeholder-count="2"><div style="{{ t }}"></div></sc-for>
+                            <span style="color:#64748B;font-size:12px;">{{ v.fotosLabel }}</span>
+                            <span style="border:1px dashed #CBD5E1;border-radius:6px;padding:4px 9px;font-size:12px;font-weight:600;color:#64748B;cursor:pointer;" style-hover="border-color:#059669;color:#059669;">+ Foto</span>
+                          </div>
+                        </div>
+                      </sc-for>
+                      <span style="align-self:flex-start;background:#fff;border:1px dashed #CBD5E1;color:#64748B;border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;" style-hover="border-color:#059669;color:#059669;">+ Agregar variante</span>
+                    </div>
+                    <div style="color:#94A3B8;font-size:12px;margin-bottom:16px;">Si el cliente elige un color o talla, el asistente envía solo las fotos de esa variante.</div>
+                    <div style="font-size:12px;font-weight:700;color:#64748B;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:8px;">Regla para el asistente</div>
+                    <div style="display:flex;gap:10px;align-items:center;">
+                      <div style="flex:1;background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;font-size:13px;color:#1E293B;">{{ p.regla }}</div>
+                      <button style="background:#059669;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;" style-hover="background:#047857;">Guardar producto</button>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── PROMOS ── -->
+      <sc-if value="{{ isPromos }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="Promos">
+          <div style="display:flex;align-items:center;margin-bottom:18px;">
+            <div><h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0;">Promos</h1><p style="color:#64748B;font-size:14px;margin:4px 0 0;">El asistente las ofrece solo cuando aplican.</p></div>
+            <div style="flex:1;"></div>
+            <button style="background:#059669;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-weight:600;font-size:14px;cursor:pointer;" style-hover="background:#047857;">+ Nueva promo</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px;">
+            <sc-for list="{{ promos }}" as="pr" hint-placeholder-count="4">
+              <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                  <span style="{{ pr.badgeStyle }}">{{ pr.tipo }}</span>
+                  <div style="flex:1;"></div>
+                  <span onClick="{{ pr.toggle }}" style="{{ pr.estadoStyle }}">{{ pr.estadoLabel }}</span>
+                </div>
+                <div style="font-weight:700;font-size:16px;margin-bottom:4px;">{{ pr.titulo }}</div>
+                <div style="color:#64748B;font-size:13px;line-height:1.5;margin-bottom:10px;">{{ pr.desc }}</div>
+                <div style="color:#94A3B8;font-size:12px;">{{ pr.vigencia }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── ASISTENTE ── -->
+      <sc-if value="{{ isAsistente }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="Asistente">
+          <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 4px;">Asistente</h1>
+          <p style="color:#64748B;font-size:14px;margin:0 0 18px;">Dile en palabras normales cómo debe vender. Él se encarga del resto.</p>
+          <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;align-items:start;">
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+              <div style="font-weight:700;font-size:15px;margin-bottom:4px;">Cómo debe vender</div>
+              <div style="color:#64748B;font-size:13px;margin-bottom:12px;">Escríbelo como se lo dirías a un empleado nuevo.</div>
+              <textarea value="{{ assistantText }}" onChange="{{ onAssistantText }}" rows="9" style="width:100%;box-sizing:border-box;border:1px solid #E2E8F0;border-radius:8px;padding:12px;font-family:inherit;font-size:14px;line-height:1.6;color:#1E293B;resize:vertical;outline:none;" style-focus="border-color:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.12);"></textarea>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:12px;">
+                <button onClick="{{ saveAssistant }}" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-weight:600;font-size:14px;cursor:pointer;" style-hover="background:#047857;">Guardar instrucciones</button>
+                <sc-if value="{{ assistantSaved }}" hint-placeholder-val="{{ false }}"><span style="color:#059669;font-size:13px;font-weight:600;">✓ Guardado. El asistente ya vende así.</span></sc-if>
+              </div>
+            </div>
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+              <div style="font-weight:700;font-size:15px;margin-bottom:4px;">Reglas</div>
+              <div style="color:#64748B;font-size:13px;margin-bottom:12px;">Se cumplen siempre, pase lo que pase.</div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+                <sc-for list="{{ rules }}" as="r" hint-placeholder-count="3">
+                  <div style="display:flex;gap:10px;align-items:flex-start;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;">
+                    <span style="color:#059669;font-weight:700;flex-shrink:0;">✓</span>
+                    <span style="font-size:13px;line-height:1.5;flex:1;">{{ r.texto }}</span>
+                    <span onClick="{{ r.remove }}" style="color:#94A3B8;cursor:pointer;font-size:14px;line-height:1;padding:2px;" style-hover="color:#DC2626;">✕</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <input value="{{ ruleDraft }}" onChange="{{ onRuleDraft }}" placeholder="Escribe una regla nueva…" style="flex:1;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;font-family:inherit;font-size:13px;outline:none;" style-focus="border-color:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.12);">
+                <button onClick="{{ addRule }}" style="background:#fff;color:#059669;border:1px solid #059669;border-radius:8px;padding:10px 14px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;" style-hover="background:#ECFDF5;">Agregar regla</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── WHATSAPP ── -->
+      <sc-if value="{{ isWhatsApp }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="WhatsApp" style="max-width:720px;">
+          <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 4px;">WhatsApp</h1>
+          <p style="color:#64748B;font-size:14px;margin:0 0 18px;">Conecta el número de tu negocio en tres pasos.</p>
+          <div style="{{ waCardStyle }}">
+            <span style="{{ waBigDot }}"></span>
+            <div style="flex:1;">
+              <div style="font-weight:700;font-size:15px;">{{ waStatusTitle }}</div>
+              <div style="color:#64748B;font-size:13px;margin-top:2px;">Número del negocio: <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;">+57 300 123 4567</span></div>
+            </div>
+            <button onClick="{{ toggleWa }}" style="{{ waToggleBtn }}">{{ waToggleLabel }}</button>
+          </div>
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:22px;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+            <div style="display:flex;gap:14px;margin-bottom:20px;">
+              <div style="width:28px;height:28px;border-radius:50%;background:#ECFDF5;color:#059669;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+              <div><div style="font-weight:600;font-size:14px;">Abre WhatsApp Business en tu celular</div><div style="color:#64748B;font-size:13px;margin-top:2px;">Ve a Ajustes → Herramientas para el negocio → API.</div></div>
+            </div>
+            <div style="display:flex;gap:14px;margin-bottom:20px;">
+              <div style="width:28px;height:28px;border-radius:50%;background:#ECFDF5;color:#059669;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:14px;margin-bottom:10px;">Pega estos dos datos donde te los pida</div>
+                <div style="color:#64748B;font-size:12px;font-weight:600;margin-bottom:4px;">Dirección de conexión</div>
+                <div style="display:flex;gap:8px;margin-bottom:12px;">
+                  <div style="flex:1;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ webhookUrl }}</div>
+                  <button onClick="{{ copyWebhook }}" style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:9px 14px;font-family:inherit;font-weight:600;font-size:13px;color:#1E293B;cursor:pointer;white-space:nowrap;" style-hover="border-color:#059669;color:#059669;">{{ webhookBtnLabel }}</button>
+                </div>
+                <div style="color:#64748B;font-size:12px;font-weight:600;margin-bottom:4px;">Código de verificación</div>
+                <div style="display:flex;gap:8px;">
+                  <div style="flex:1;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#1E293B;letter-spacing:0.1em;">{{ waCode }}</div>
+                  <button onClick="{{ copyCode }}" style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:9px 14px;font-family:inherit;font-weight:600;font-size:13px;color:#1E293B;cursor:pointer;white-space:nowrap;" style-hover="border-color:#059669;color:#059669;">{{ codeBtnLabel }}</button>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:14px;">
+              <div style="width:28px;height:28px;border-radius:50%;background:#ECFDF5;color:#059669;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
+              <div><div style="font-weight:600;font-size:14px;">Listo. Escríbele "hola" a tu número para probar</div><div style="color:#64748B;font-size:13px;margin-top:2px;">El asistente debe responderte en segundos. Si no, revisa el paso 2.</div></div>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── PEDIDOS ── -->
+      <sc-if value="{{ isPedidos }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="Pedidos">
+          <div style="display:flex;align-items:center;margin-bottom:16px;">
+            <div><h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0;">Pedidos</h1><p style="color:#64748B;font-size:14px;margin:4px 0 0;">Toca un pedido para ver el detalle, o avánzalo directo con el botón.</p></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+            <sc-for list="{{ filters }}" as="f" hint-placeholder-count="6">
+              <span onClick="{{ f.set }}" style="{{ f.style }}">{{ f.label }}</span>
+            </sc-for>
+          </div>
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+            <sc-for list="{{ orders }}" as="o" hint-placeholder-count="6">
+              <div onClick="{{ o.open }}" style="display:grid;grid-template-columns:82px 1fr 110px 116px 170px;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid #F1F5F9;cursor:pointer;" style-hover="background:#F8FAFC;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#64748B;">{{ o.id }}</span>
+                <div style="min-width:0;"><div style="font-weight:600;font-size:14px;">{{ o.cliente }} <span style="color:#94A3B8;font-weight:400;font-size:12px;">· {{ o.ciudad }}</span></div><div style="color:#64748B;font-size:12.5px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ o.itemsResumen }}</div></div>
+                <span style="font-weight:700;font-size:14px;">{{ o.totalFmt }}</span>
+                <span style="{{ o.pillStyle }}">{{ o.estado }}</span>
+                <div style="display:flex;justify-content:flex-end;">
+                  <sc-if value="{{ o.hasNext }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ o.advance }}" style="background:#F59E0B;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;min-width:150px;" style-hover="background:#D97706;">{{ o.advanceLabel }}</button>
+                  </sc-if>
+                  <sc-if value="{{ o.isDone }}" hint-placeholder-val="{{ false }}">
+                    <span style="color:#059669;font-size:13px;font-weight:600;">✓ Completado</span>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ noOrders }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:36px;text-align:center;color:#64748B;font-size:14px;">No hay pedidos en este estado.</div>
+            </sc-if>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── LEADS ── -->
+      <sc-if value="{{ isLeads }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="Leads">
+          <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 4px;">Leads</h1>
+          <p style="color:#64748B;font-size:14px;margin:0 0 18px;">Conversaciones abiertas. Asígnalas o envíalas a un flujo.</p>
+          <div style="display:grid;grid-template-columns:360px 1fr;gap:14px;align-items:start;">
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+              <sc-for list="{{ leads }}" as="l" hint-placeholder-count="5">
+                <div onClick="{{ l.select }}" style="{{ l.rowStyle }}">
+                  <div style="{{ l.avatarStyle }}">{{ l.iniciales }}</div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:baseline;gap:8px;"><span style="font-weight:600;font-size:14px;">{{ l.nombre }}</span><span style="color:#94A3B8;font-size:11.5px;margin-left:auto;">{{ l.hora }}</span></div>
+                    <div style="color:#64748B;font-size:12.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ l.ultimo }}</div>
+                    <span style="{{ l.etapaStyle }}">{{ l.etapa }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ hasLead }}" hint-placeholder-val="{{ true }}">
+              <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;box-shadow:0 1px 2px rgba(15,23,42,.04);display:flex;flex-direction:column;min-height:480px;">
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #F1F5F9;">
+                  <div style="{{ lead.avatarStyle }}">{{ lead.iniciales }}</div>
+                  <div><div style="font-weight:700;font-size:14px;">{{ lead.nombre }}</div><div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#64748B;">{{ lead.tel }}</div></div>
+                  <span style="{{ lead.etapaStyle }}">{{ lead.etapa }}</span>
+                  <div style="flex:1;"></div>
+                  <a href="#" style="font-size:13px;font-weight:600;">Abrir en WhatsApp</a>
+                </div>
+                <div style="flex:1;background:#F8FAFC;padding:16px 18px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">
+                  <sc-for list="{{ lead.mensajes }}" as="m" hint-placeholder-count="4">
+                    <div style="{{ m.rowStyle }}"><div style="{{ m.bubbleStyle }}">{{ m.texto }}<span style="display:block;font-size:10.5px;color:#94A3B8;margin-top:3px;text-align:right;">{{ m.hora }}</span></div></div>
+                  </sc-for>
+                </div>
+                <div style="padding:14px 18px;border-top:1px solid #F1F5F9;display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+                  <div>
+                    <div style="color:#64748B;font-size:12px;font-weight:600;margin-bottom:5px;">Asignar a</div>
+                    <select value="{{ leadAsignado }}" onChange="{{ assignLead }}" style="border:1px solid #E2E8F0;border-radius:8px;padding:9px 10px;font-family:inherit;font-size:13px;color:#1E293B;background:#fff;outline:none;cursor:pointer;">
+                      <option value="Asistente (bot)">Asistente (bot)</option>
+                      <option value="Karla">Karla</option>
+                      <option value="Andrés">Andrés</option>
+                    </select>
+                  </div>
+                  <div style="flex:1;min-width:240px;">
+                    <div style="color:#64748B;font-size:12px;font-weight:600;margin-bottom:5px;">Enviar a un flujo</div>
+                    <div style="display:flex;gap:8px;">
+                      <select value="{{ flowSel }}" onChange="{{ onFlowSel }}" style="flex:1;border:1px solid #E2E8F0;border-radius:8px;padding:9px 10px;font-family:inherit;font-size:13px;color:#1E293B;background:#fff;outline:none;cursor:pointer;">
+                        <option value="Recuperar carrito">Recuperar carrito</option>
+                        <option value="Confirmar pago">Confirmar pago</option>
+                        <option value="Seguimiento de envío">Seguimiento de envío</option>
+                        <option value="Postventa">Postventa</option>
+                      </select>
+                      <button onClick="{{ sendFlow }}" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;" style-hover="background:#047857;">Enviar</button>
+                    </div>
+                  </div>
+                  <sc-if value="{{ hasFlowMsg }}" hint-placeholder-val="{{ false }}"><div style="width:100%;color:#059669;font-size:13px;font-weight:600;">{{ flowMsg }}</div></sc-if>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── CRM ── -->
+      <sc-if value="{{ isCRM }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="CRM">
+          <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 4px;">CRM · Chats en vivo</h1>
+          <p style="color:#64748B;font-size:14px;margin:0 0 18px;">Lo que pasa ahora mismo en tu WhatsApp. Entra a un chat si quieres tomar el control.</p>
+          <div style="display:grid;grid-template-columns:360px 1fr;gap:14px;align-items:start;">
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+              <sc-for list="{{ crmChats }}" as="c" hint-placeholder-count="5">
+                <div onClick="{{ c.select }}" style="{{ c.crmRowStyle }}">
+                  <div style="{{ c.avatarStyle }}">{{ c.iniciales }}</div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:baseline;gap:8px;"><span style="font-weight:600;font-size:14px;">{{ c.nombre }}</span><span style="color:#94A3B8;font-size:11.5px;margin-left:auto;">{{ c.hora }}</span></div>
+                    <div style="color:#64748B;font-size:12.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.ultimo }}</div>
+                    <div style="{{ c.liveStyle }}"><span style="{{ c.liveDot }}"></span><span>{{ c.liveLabel }}</span><span style="color:#94A3B8;font-weight:500;">· atiende {{ c.asignado }}</span></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ hasCrmChat }}" hint-placeholder-val="{{ true }}">
+              <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;box-shadow:0 1px 2px rgba(15,23,42,.04);display:flex;flex-direction:column;min-height:480px;">
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #F1F5F9;">
+                  <div style="{{ crmChat.avatarStyle }}">{{ crmChat.iniciales }}</div>
+                  <div><div style="font-weight:700;font-size:14px;">{{ crmChat.nombre }}</div><div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#64748B;">{{ crmChat.tel }}</div></div>
+                  <div style="{{ crmChat.liveStyle }}"><span style="{{ crmChat.liveDot }}"></span><span>{{ crmChat.liveLabel }}</span></div>
+                  <div style="flex:1;"></div>
+                  <a href="#" style="font-size:13px;font-weight:600;">Abrir en WhatsApp</a>
+                </div>
+                <div style="flex:1;background:#F8FAFC;padding:16px 18px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">
+                  <sc-for list="{{ crmChat.mensajes }}" as="m" hint-placeholder-count="4">
+                    <div style="{{ m.rowStyle }}"><div style="{{ m.bubbleStyle }}">{{ m.texto }}<span style="{{ m.horaStyle }}">{{ m.hora }}</span></div></div>
+                  </sc-for>
+                  <sc-if value="{{ crmTyping }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:flex-end;"><div style="background:#D1FAE5;border:1px solid #A7F3D0;border-radius:12px 12px 4px 12px;padding:9px 14px;font-size:13px;color:#047857;">El asistente está escribiendo…</div></div>
+                  </sc-if>
+                </div>
+                <div style="padding:14px 18px;border-top:1px solid #F1F5F9;">
+                  <sc-if value="{{ crmNotIntervening }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                      <span style="color:#64748B;font-size:13px;flex:1;">El asistente está atendiendo este chat.</span>
+                      <button onClick="{{ intervene }}" style="background:#0F172A;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;" style-hover="background:#1E293B;">Intervenir yo</button>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ crmIntervening }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      <input value="{{ crmDraft }}" onChange="{{ onCrmDraft }}" placeholder="Escribe tu mensaje…" style="flex:1;border:1px solid #E2E8F0;border-radius:8px;padding:11px 12px;font-family:inherit;font-size:13px;outline:none;" style-focus="border-color:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.12);">
+                      <button onClick="{{ sendCrm }}" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:11px 16px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;" style-hover="background:#047857;">Enviar</button>
+                      <button onClick="{{ backToBot }}" style="background:#fff;color:#64748B;border:1px solid #E2E8F0;border-radius:8px;padding:11px 14px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;" style-hover="color:#1E293B;">Devolver al asistente</button>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── INTEGRACIONES ── -->
+      <sc-if value="{{ isIntegraciones }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="Integraciones">
+          <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 4px;">Integraciones</h1>
+          <p style="color:#64748B;font-size:14px;margin:0 0 18px;">Conecta DealFlow con las herramientas que ya usas.</p>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+            <sc-for list="{{ integrations }}" as="i" hint-placeholder-count="5">
+              <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.04);display:flex;flex-direction:column;gap:10px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <div style="{{ i.logoStyle }}">{{ i.logoText }}</div>
+                  <div style="font-weight:700;font-size:15px;">{{ i.nombre }}</div>
+                  <div style="flex:1;"></div>
+                  <span style="{{ i.badgeStyle }}">{{ i.badgeLabel }}</span>
+                </div>
+                <div style="color:#64748B;font-size:13px;line-height:1.5;flex:1;">{{ i.desc }}</div>
+                <button onClick="{{ i.action }}" style="{{ i.btnStyle }}">{{ i.btnLabel }}</button>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── ADMIN · VENTAS ── -->
+      <sc-if value="{{ isVentas }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="Admin Ventas">
+          <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 4px;">Ventas</h1>
+          <p style="color:#64748B;font-size:14px;margin:0 0 18px;">Cómo va DealFlow este mes, en todas las cuentas.</p>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;">
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.04);"><div style="color:#64748B;font-size:13px;font-weight:600;margin-bottom:6px;">Ingreso mensual (MRR)</div><div style="font-size:28px;font-weight:800;letter-spacing:-0.03em;">$ 12.4M</div><div style="color:#059669;font-size:12px;margin-top:4px;font-weight:600;">↑ 9% vs. junio</div></div>
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.04);"><div style="color:#64748B;font-size:13px;font-weight:600;margin-bottom:6px;">Cuentas activas</div><div style="font-size:28px;font-weight:800;letter-spacing:-0.03em;">118</div><div style="color:#64748B;font-size:12px;margin-top:4px;">4 inactivas</div></div>
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.04);"><div style="color:#64748B;font-size:13px;font-weight:600;margin-bottom:6px;">Ventas de las tiendas</div><div style="font-size:28px;font-weight:800;letter-spacing:-0.03em;">$ 486M</div><div style="color:#059669;font-size:12px;margin-top:4px;font-weight:600;">↑ 14% vs. junio</div></div>
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.04);"><div style="color:#64748B;font-size:13px;font-weight:600;margin-bottom:6px;">Cuentas nuevas</div><div style="font-size:28px;font-weight:800;letter-spacing:-0.03em;">14</div><div style="color:#64748B;font-size:12px;margin-top:4px;">en julio</div></div>
+          </div>
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+            <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 110px;gap:14px;padding:11px 18px;border-bottom:1px solid #E2E8F0;color:#64748B;font-size:12px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;">
+              <span>Tienda</span><span>Plan</span><span>Ventas del mes</span><span>Estado</span>
+            </div>
+            <sc-for list="{{ accountRows }}" as="a" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 110px;gap:14px;align-items:center;padding:13px 18px;border-bottom:1px solid #F1F5F9;">
+                <div><div style="font-weight:600;font-size:14px;">{{ a.tienda }}</div><div style="color:#94A3B8;font-size:12px;">{{ a.correo }}</div></div>
+                <span style="font-size:13px;color:#64748B;">{{ a.plan }}</span>
+                <span style="font-weight:700;font-size:14px;">{{ a.ventasFmt }}</span>
+                <span style="{{ a.estadoStyle }}">{{ a.estadoLabel }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── ADMIN · PLANES ── -->
+      <sc-if value="{{ isPlanes }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="Admin Planes">
+          <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 4px;">Planes</h1>
+          <p style="color:#64748B;font-size:14px;margin:0 0 18px;">Lo que pagan las tiendas por usar DealFlow.</p>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px;">
+            <sc-for list="{{ plans }}" as="pl" hint-placeholder-count="3">
+              <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+                <div style="font-weight:700;font-size:15px;margin-bottom:2px;">{{ pl.nombre }}</div>
+                <div style="font-size:24px;font-weight:800;letter-spacing:-0.02em;margin-bottom:2px;">{{ pl.precioFmt }}<span style="font-size:13px;font-weight:500;color:#64748B;"> /mes</span></div>
+                <div style="color:#94A3B8;font-size:12px;margin-bottom:12px;">{{ pl.cuentasLabel }}</div>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <sc-for list="{{ pl.features }}" as="ft" hint-placeholder-count="3">
+                    <div style="display:flex;gap:8px;font-size:13px;color:#1E293B;"><span style="color:#059669;">✓</span><span>{{ ft }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(15,23,42,.04);max-width:720px;">
+            <div style="font-weight:700;font-size:15px;margin-bottom:14px;">Crear plan</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+              <div><div style="color:#64748B;font-size:12px;font-weight:600;margin-bottom:5px;">Nombre del plan</div><input value="{{ planNombre }}" onChange="{{ onPlanNombre }}" placeholder="Ej: Empresarial" style="width:100%;box-sizing:border-box;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;font-family:inherit;font-size:13px;outline:none;" style-focus="border-color:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.12);"></div>
+              <div><div style="color:#64748B;font-size:12px;font-weight:600;margin-bottom:5px;">Precio mensual (COP)</div><input value="{{ planPrecio }}" onChange="{{ onPlanPrecio }}" placeholder="Ej: 299900" style="width:100%;box-sizing:border-box;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;" style-focus="border-color:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.12);"></div>
+            </div>
+            <div style="margin-bottom:14px;"><div style="color:#64748B;font-size:12px;font-weight:600;margin-bottom:5px;">Qué incluye (separado por comas)</div><input value="{{ planDesc }}" onChange="{{ onPlanDesc }}" placeholder="Ej: 5 números de WhatsApp, API, soporte dedicado" style="width:100%;box-sizing:border-box;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;font-family:inherit;font-size:13px;outline:none;" style-focus="border-color:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.12);"></div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <button onClick="{{ crearPlan }}" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-family:inherit;font-weight:600;font-size:14px;cursor:pointer;" style-hover="background:#047857;">Crear plan</button>
+              <sc-if value="{{ planError }}" hint-placeholder-val="{{ false }}"><span style="color:#DC2626;font-size:13px;">Falta el nombre o el precio. Complétalos y vuelve a intentar.</span></sc-if>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ── ADMIN · CUENTAS ── -->
+      <sc-if value="{{ isCuentas }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="Admin Cuentas">
+          <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 4px;">Cuentas</h1>
+          <p style="color:#64748B;font-size:14px;margin:0 0 18px;">Activa o desactiva cuentas con el interruptor. El cambio aplica al instante.</p>
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+            <sc-for list="{{ accounts }}" as="a" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:1.4fr 1fr 110px 60px;gap:14px;align-items:center;padding:14px 18px;border-bottom:1px solid #F1F5F9;">
+                <div><div style="font-weight:600;font-size:14px;">{{ a.tienda }}</div><div style="color:#94A3B8;font-size:12px;">{{ a.correo }}</div></div>
+                <span style="font-size:13px;color:#64748B;">Plan {{ a.plan }}</span>
+                <span style="{{ a.estadoStyle }}">{{ a.estadoLabel }}</span>
+                <div onClick="{{ a.toggle }}" style="{{ a.switchStyle }}"><div style="{{ a.knobStyle }}"></div></div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+    </main>
+  </div>
+
+  <!-- ══════════ DETALLE DE PEDIDO ══════════ -->
+  <sc-if value="{{ hasSelectedOrder }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:40;display:flex;justify-content:flex-end;">
+      <div onClick="{{ closeOrder }}" style="position:absolute;inset:0;background:rgba(15,23,42,.45);"></div>
+      <div style="position:relative;width:430px;max-width:92%;background:#fff;height:100%;box-shadow:-12px 0 40px rgba(15,23,42,.18);display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #E2E8F0;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;">{{ sel.id }}</span>
+          <span style="{{ sel.pillStyle }}">{{ sel.estado }}</span>
+          <div style="flex:1;"></div>
+          <span onClick="{{ closeOrder }}" style="color:#64748B;cursor:pointer;font-size:18px;line-height:1;padding:4px;" style-hover="color:#1E293B;">✕</span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:20px;">
+          <div style="font-size:12px;font-weight:700;color:#64748B;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:8px;">Cliente</div>
+          <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:18px;">
+            <div style="font-weight:700;font-size:15px;margin-bottom:2px;">{{ sel.cliente }}</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#64748B;margin-bottom:8px;">{{ sel.tel }}</div>
+            <div style="font-size:13.5px;line-height:1.5;">{{ sel.direccion }}</div>
+            <div style="color:#64748B;font-size:13px;">{{ sel.ciudad }}</div>
+          </div>
+          <div style="font-size:12px;font-weight:700;color:#64748B;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:8px;">Qué pidió</div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;margin-bottom:18px;">
+            <sc-for list="{{ sel.items }}" as="it" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid #F1F5F9;">
+                <span style="background:#F1F5F9;border-radius:6px;font-size:12px;font-weight:700;padding:3px 8px;color:#475569;">{{ it.qty }}×</span>
+                <span style="font-size:13.5px;flex:1;">{{ it.nombre }}</span>
+                <span style="font-weight:600;font-size:13.5px;">{{ it.precioFmt }}</span>
+              </div>
+            </sc-for>
+            <div style="display:flex;padding:11px 14px;background:#F8FAFC;font-size:13px;color:#64748B;"><span>Envío ({{ sel.transportadora }})</span><div style="flex:1;"></div><span>{{ sel.envioFmt }}</span></div>
+            <div style="display:flex;padding:12px 14px;border-top:1px solid #E2E8F0;font-weight:800;font-size:15px;"><span>Total</span><div style="flex:1;"></div><span>{{ sel.totalFmt }}</span></div>
+          </div>
+          <sc-if value="{{ sel.hasNota }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:12px 14px;font-size:13px;color:#92400E;margin-bottom:18px;">📝 {{ sel.nota }}</div>
+          </sc-if>
+          <div style="font-size:12px;font-weight:700;color:#64748B;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:10px;">Avance</div>
+          <div style="display:flex;flex-direction:column;gap:0;">
+            <sc-for list="{{ sel.timeline }}" as="t" hint-placeholder-count="5">
+              <div style="display:flex;gap:10px;align-items:center;padding:5px 0;">
+                <span style="{{ t.dotStyle }}"></span>
+                <span style="{{ t.labelStyle }}">{{ t.estado }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="padding:16px 20px;border-top:1px solid #E2E8F0;">
+          <sc-if value="{{ selHasNext }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ selAdvance }}" style="width:100%;background:#F59E0B;color:#fff;border:none;border-radius:10px;padding:14px;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer;" style-hover="background:#D97706;">{{ selAdvanceLabel }}</button>
+          </sc-if>
+          <sc-if value="{{ selIsDone }}" hint-placeholder-val="{{ false }}">
+            <div style="text-align:center;color:#059669;font-weight:700;font-size:14px;">✓ Pedido entregado. Nada pendiente.</div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;modo&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;vendedor&quot;,&quot;admin&quot;],&quot;default&quot;:&quot;vendedor&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Vista&quot;},&quot;vistaInicial&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;resumen&quot;,&quot;productos&quot;,&quot;promos&quot;,&quot;asistente&quot;,&quot;whatsapp&quot;,&quot;pedidos&quot;,&quot;leads&quot;,&quot;integraciones&quot;],&quot;default&quot;:&quot;resumen&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Vista&quot;},&quot;whatsappConectado&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Estado&quot;}}">
+class Component extends DCLogic {
+  state = {
+    mode: null, section: null, adminSection: 'ventas', filter: 'Todos',
+    selectedOrderId: null, expandedProductId: 7, selectedLeadId: 1,
+    crmSelectedId: 1, crmIntervening: false, crmDraft: '',
+    copied: null, flowMsg: null, ruleDraft: '', assistantSaved: false,
+    flowSel: 'Recuperar carrito', planNombre: '', planPrecio: '', planDesc: '', planError: false,
+    waConnectedOverride: null,
+    assistantText: "Vende como una asesora amable de Luna Accesorios. Saluda por el nombre si lo sabes. Recomienda máximo 2 productos por mensaje. Si preguntan por tallas, pide la talla habitual antes de sugerir. Cierra siempre preguntando la ciudad para cotizar el envío.",
+    rules: [
+      'Si preguntan por envío, pide la ciudad antes de dar el precio.',
+      'Nunca ofrezcas más del 10% de descuento.',
+      'Si el cliente está listo, pide nombre, dirección y método de pago en un solo mensaje.'
+    ],
+    orders: [
+      { id: 'DF-1048', cliente: 'Mariana López', ciudad: 'Bogotá', tel: '+57 310 442 8811', direccion: 'Cra 15 # 82-40, apto 302', estado: 'Nuevo', hora: 'hace 8 min', transportadora: 'Dropi', envio: 9900, nota: 'Pagó por Nequi. Comprobante recibido.', items: [ { qty: 2, nombre: 'Camiseta oversize algodón', precio: 59900 }, { qty: 1, nombre: 'Gorra bordada logo', precio: 39900 } ] },
+      { id: 'DF-1047', cliente: 'Julián Pérez', ciudad: 'Medellín', tel: '+57 301 887 2245', direccion: 'Cl 10 # 43E-31, Torre 2', estado: 'Nuevo', hora: 'hace 25 min', transportadora: 'Dropi', envio: 12000, nota: '', items: [ { qty: 1, nombre: 'Jean mom fit tiro alto', precio: 129900 } ] },
+      { id: 'DF-1046', cliente: 'Sofía Ramírez', ciudad: 'Cali', tel: '+57 315 662 9034', direccion: 'Av 6N # 25-30', estado: 'Confirmado', hora: 'hace 1 h', transportadora: 'Dropi', envio: 12000, nota: 'Pide entrega antes del viernes.', items: [ { qty: 1, nombre: 'Vestido midi floral', precio: 149900 } ] },
+      { id: 'DF-1045', cliente: 'Andrés Castro', ciudad: 'Bogotá', tel: '+57 320 118 7752', direccion: 'Cl 147 # 19-64', estado: 'Empacado', hora: 'hace 3 h', transportadora: 'Dropi', envio: 9900, nota: '', items: [ { qty: 1, nombre: 'Bolso tote cuero vegano', precio: 89900 }, { qty: 1, nombre: 'Collar acero dorado', precio: 34900 } ] },
+      { id: 'DF-1044', cliente: 'Valentina Ruiz', ciudad: 'Barranquilla', tel: '+57 300 954 1120', direccion: 'Cra 53 # 79-140', estado: 'Despachado', hora: 'ayer', transportadora: 'Dropi · guía 402118', envio: 14000, nota: '', items: [ { qty: 3, nombre: 'Camiseta oversize algodón', precio: 59900 } ] },
+      { id: 'DF-1043', cliente: 'Camilo Torres', ciudad: 'Bucaramanga', tel: '+57 311 240 6673', direccion: 'Cl 36 # 26-48', estado: 'Entregado', hora: 'ayer', transportadora: 'Dropi', envio: 12000, nota: '', items: [ { qty: 1, nombre: 'Gorra bordada logo', precio: 39900 } ] },
+      { id: 'DF-1042', cliente: 'Laura Gómez', ciudad: 'Bogotá', tel: '+57 316 778 3390', direccion: 'Cra 7 # 45-22, apto 801', estado: 'Entregado', hora: 'hace 2 días', transportadora: 'Dropi', envio: 9900, nota: '', items: [ { qty: 1, nombre: 'Jean mom fit tiro alto', precio: 129900 }, { qty: 1, nombre: 'Camiseta oversize algodón', precio: 59900 } ] }
+    ],
+    products: [
+      { id: 7, nombre: 'Jogger jaspeado', precio: 44900, stock: 21, color: '#D1FAE5', txt: '#047857', regla: 'Si piden 2 o más, ofrece la promo "3 joggers por $109.900" sin que la pidan.', fotos: ['Frente', 'Espalda', 'Detalle tela'], variantes: [ { label: 'M · Verde', stock: 6, fotos: 2 }, { label: 'L · Verde', stock: 4, fotos: 2 }, { label: 'M · Negro', stock: 7, fotos: 3 }, { label: 'L · Negro', stock: 4, fotos: 3 } ] },
+      { id: 1, nombre: 'Camiseta oversize algodón', precio: 59900, stock: 24, color: '#E0E7FF', txt: '#4338CA', regla: 'Si compran 2 o más, aplica la promo "2 por $99.900" sin que la pidan.', variantes: [ { label: 'S · Blanco', stock: 8 }, { label: 'M · Blanco', stock: 6 }, { label: 'M · Negro', stock: 7 }, { label: 'L · Negro', stock: 3 } ] },
+      { id: 2, nombre: 'Jean mom fit tiro alto', precio: 129900, stock: 12, color: '#DBEAFE', txt: '#1D4ED8', regla: 'Sugiere la guía de tallas antes de confirmar. No hay cambios por talla en promoción.', variantes: [ { label: '6 · Azul claro', stock: 4 }, { label: '8 · Azul claro', stock: 5 }, { label: '10 · Azul oscuro', stock: 3 } ] },
+      { id: 3, nombre: 'Bolso tote cuero vegano', precio: 89900, stock: 8, color: '#FEF3C7', txt: '#B45309', regla: 'Combínalo con el collar dorado cuando pregunten por regalos.', variantes: [ { label: 'Único · Camel', stock: 5 }, { label: 'Único · Negro', stock: 3 } ] },
+      { id: 4, nombre: 'Gorra bordada logo', precio: 39900, stock: 30, color: '#DCFCE7', txt: '#15803D', regla: 'Producto de entrada: ofrécela como complemento de cualquier compra.', variantes: [ { label: 'Única · Negra', stock: 18 }, { label: 'Única · Beige', stock: 12 } ] },
+      { id: 5, nombre: 'Vestido midi floral', precio: 149900, stock: 5, color: '#FCE7F3', txt: '#BE185D', regla: 'Stock bajo: avisa que quedan pocas unidades, sin presionar.', variantes: [ { label: 'S', stock: 2 }, { label: 'M', stock: 3 } ] },
+      { id: 6, nombre: 'Collar acero dorado', precio: 34900, stock: 0, color: '#F1F5F9', txt: '#475569', regla: 'Agotado: ofrece avisar cuando llegue y sugiere el bolso tote.', variantes: [ { label: 'Único · Dorado', stock: 0 } ] }
+    ],
+    promos: [
+      { id: 1, tipo: 'Promoción', titulo: '2 camisetas por $99.900', desc: 'Aplica a la camiseta oversize en cualquier talla y color. El asistente la ofrece cuando piden 2 o más.', vigencia: 'Vence el 31 de julio', activa: true },
+      { id: 2, tipo: 'Combo', titulo: 'Jean + camiseta por $169.900', desc: 'Un jean mom fit y una camiseta oversize. Ahorro de $19.900 frente al precio por separado.', vigencia: 'Sin fecha de vencimiento', activa: true },
+      { id: 3, tipo: 'Promoción', titulo: 'Envío gratis desde $150.000', desc: 'En compras desde $150.000 el envío va por cuenta de la tienda, a cualquier ciudad.', vigencia: 'Vence el 15 de agosto', activa: true },
+      { id: 4, tipo: 'Combo', titulo: 'Bolso + collar por $109.900', desc: 'El tote de cuero vegano con el collar dorado. Pausado mientras llega stock del collar.', vigencia: 'Pausado', activa: false },
+      { id: 5, tipo: 'Promoción', titulo: '3 joggers por $109.900', desc: 'Tres joggers jaspeados en cualquier talla y color. Ahorro de $24.800 frente al precio por unidad.', vigencia: 'Sin fecha de vencimiento', activa: true }
+    ],
+    leads: [
+      { id: 1, nombre: 'Mariana López', tel: '+57 310 442 8811', ultimo: 'Listo, entonces 2 en talla M y la gorra 🙌', hora: '10:42', etapa: 'Listo para comprar', asignado: 'Asistente (bot)', mensajes: [
+        { de: 'cliente', texto: 'Hola! ¿Tienen la camiseta oversize en talla M?', hora: '10:31' },
+        { de: 'bot', texto: '¡Hola Mariana! Sí, la tenemos en M en blanco y negro, a $59.900. Y ojo: 2 camisetas te quedan en $99.900 😉 ¿Te muestro fotos?', hora: '10:31' },
+        { de: 'cliente', texto: '¿Y si llevo 2 y una gorra?', hora: '10:38' },
+        { de: 'bot', texto: 'Te quedaría así: 2 camisetas $99.900 + gorra $39.900 = $139.700 + envío. ¿A qué ciudad te lo enviamos?', hora: '10:39' },
+        { de: 'cliente', texto: 'Listo, entonces 2 en talla M y la gorra 🙌', hora: '10:42' } ] },
+      { id: 2, nombre: 'Daniela Mora', tel: '+57 314 220 9987', ultimo: '¿Cuánto vale el envío a Pasto?', hora: '10:15', etapa: 'Cotizando', asignado: 'Asistente (bot)', mensajes: [
+        { de: 'cliente', texto: 'Me interesa el vestido midi floral', hora: '10:12' },
+        { de: 'bot', texto: '¡Buena elección! Está a $149.900 y quedan pocas unidades en S y M. ¿Cuál es tu talla?', hora: '10:12' },
+        { de: 'cliente', texto: '¿Cuánto vale el envío a Pasto?', hora: '10:15' } ] },
+      { id: 3, nombre: 'Esteban Vargas', tel: '+57 305 671 4432', ultimo: '¿Hay descuento si llevo 2 jeans?', hora: '09:48', etapa: 'Cotizando', asignado: 'Karla', mensajes: [
+        { de: 'cliente', texto: '¿Hay descuento si llevo 2 jeans?', hora: '09:48' },
+        { de: 'bot', texto: 'Por ahora el jean no tiene promo, pero el combo jean + camiseta queda en $169.900. Le paso tu chat a Karla para ver qué se puede hacer 😉', hora: '09:49' } ] },
+      { id: 4, nombre: 'Jorge Rivas', tel: '+57 322 908 1276', ultimo: 'Me interesa el combo del bolso', hora: '09:20', etapa: 'Explorando', asignado: 'Asistente (bot)', mensajes: [
+        { de: 'cliente', texto: 'Hola, vi el bolso tote en Instagram', hora: '09:18' },
+        { de: 'bot', texto: '¡Hola Jorge! El tote de cuero vegano está a $89.900, en camel y negro. ¿Es para ti o para regalo?', hora: '09:18' },
+        { de: 'cliente', texto: 'Me interesa el combo del bolso', hora: '09:20' } ] },
+      { id: 5, nombre: 'Paola Sierra', tel: '+57 318 445 6210', ultimo: 'Aún no me llega el pedido de la semana pasada', hora: '08:55', etapa: 'Postventa', asignado: 'Andrés', mensajes: [
+        { de: 'cliente', texto: 'Aún no me llega el pedido de la semana pasada', hora: '08:55' },
+        { de: 'bot', texto: 'Lo siento, Paola. Tu pedido DF-1031 salió con Dropi el jueves. Ya le avisé a Andrés para que revise la guía y te escriba en un momento.', hora: '08:56' } ] }
+    ],
+    integrations: [
+      { id: 'dropi', nombre: 'Dropi', logoText: 'Dr', logoBg: '#FEF3C7', logoTxt: '#B45309', desc: 'Envía tus pedidos a Dropi con un clic: genera la guía, asigna transportadora y sincroniza el estado del envío.', estado: 'conectado' },
+      { id: 'wa', nombre: 'WhatsApp Business', logoText: 'WA', logoBg: '#DCFCE7', logoTxt: '#15803D', desc: 'El canal donde tu asistente atiende y vende. Se configura en la sección WhatsApp.', estado: 'conectado' },
+      { id: 'shopify', nombre: 'Shopify', logoText: 'Sh', logoBg: '#F1F5F9', logoTxt: '#64748B', desc: 'Sincroniza tu catálogo y tus pedidos con tu tienda Shopify.', estado: 'pronto' },
+      { id: 'ig', nombre: 'Instagram DM', logoText: 'IG', logoBg: '#F1F5F9', logoTxt: '#64748B', desc: 'Que el asistente también responda los mensajes directos de Instagram.', estado: 'pronto' },
+      { id: 'mp', nombre: 'Mercado Pago', logoText: 'MP', logoBg: '#F1F5F9', logoTxt: '#64748B', desc: 'Cobra con link de pago y confirma pedidos automáticamente al recibir el pago.', estado: 'pronto' }
+    ],
+    plans: [
+      { id: 1, nombre: 'Inicio', precio: 49900, cuentas: 52, features: ['1 número de WhatsApp', 'Hasta 100 pedidos al mes', 'Asistente con catálogo y promos'] },
+      { id: 2, nombre: 'Crecimiento', precio: 99900, cuentas: 48, features: ['1 número de WhatsApp', 'Pedidos ilimitados', 'Flujos y asignación de chats', 'Integración con Dropi'] },
+      { id: 3, nombre: 'Pro', precio: 199900, cuentas: 18, features: ['3 números de WhatsApp', 'Todo lo de Crecimiento', 'Varios usuarios por cuenta', 'Acceso por API'] }
+    ],
+    accounts: [
+      { id: 1, tienda: 'Luna Accesorios', correo: 'karla@lunaaccesorios.co', plan: 'Crecimiento', ventas: 8200000, activa: true },
+      { id: 2, tienda: 'Moda Urbana MDE', correo: 'hola@modaurbana.co', plan: 'Pro', ventas: 21400000, activa: true },
+      { id: 3, tienda: 'Dulce Hogar', correo: 'ventas@dulcehogar.com.co', plan: 'Inicio', ventas: 3100000, activa: true },
+      { id: 4, tienda: 'TecnoCel Cali', correo: 'tecnocel@gmail.com', plan: 'Crecimiento', ventas: 0, activa: false },
+      { id: 5, tienda: 'Variedades Sara', correo: 'sara.variedades@gmail.com', plan: 'Inicio', ventas: 1900000, activa: true }
+    ]
+  };
+
+  fmt(n) { return '$ ' + n.toLocaleString('es-CO'); }
+
+  estados() {
+    return {
+      'Nuevo':      { color: '#1D4ED8', bg: '#DBEAFE', next: 'Confirmar', nextEstado: 'Confirmado' },
+      'Confirmado': { color: '#6D28D9', bg: '#EDE9FE', next: 'Empacar', nextEstado: 'Empacado' },
+      'Empacado':   { color: '#B45309', bg: '#FEF3C7', next: 'Despachar', nextEstado: 'Despachado' },
+      'Despachado': { color: '#0E7490', bg: '#CFFAFE', next: 'Marcar entregado', nextEstado: 'Entregado' },
+      'Entregado':  { color: '#047857', bg: '#D1FAE5', next: null, nextEstado: null }
+    };
+  }
+
+  pill(cfg) { return { display: 'inline-block', background: cfg.bg, color: cfg.color, borderRadius: '999px', padding: '3px 10px', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }; }
+
+  swatch(label, fallback) {
+    const l = label.toLowerCase();
+    if (l.includes('verde')) return '#34D399';
+    if (l.includes('negr')) return '#334155';
+    if (l.includes('blanco')) return '#E2E8F0';
+    if (l.includes('azul claro')) return '#93C5FD';
+    if (l.includes('azul')) return '#1D4ED8';
+    if (l.includes('camel')) return '#D6A45C';
+    if (l.includes('beige')) return '#E7D8BF';
+    if (l.includes('dorado')) return '#FBBF24';
+    return fallback;
+  }
+
+  advanceOrder(id) {
+    const E = this.estados();
+    this.setState(s => ({ orders: s.orders.map(o => o.id === id && E[o.estado].nextEstado ? Object.assign({}, o, { estado: E[o.estado].nextEstado }) : o) }));
+  }
+
+  decorateOrder(o) {
+    const E = this.estados(); const cfg = E[o.estado];
+    const total = o.items.reduce((a, it) => a + it.qty * it.precio, 0) + o.envio;
+    return Object.assign({}, o, {
+      totalFmt: this.fmt(total),
+      envioFmt: this.fmt(o.envio),
+      itemsResumen: o.items.map(it => it.qty + '× ' + it.nombre).join(' · '),
+      items: o.items.map(it => Object.assign({}, it, { precioFmt: this.fmt(it.qty * it.precio) })),
+      pillStyle: this.pill(cfg),
+      hasNext: !!cfg.next, isDone: !cfg.next,
+      advanceLabel: cfg.next || '',
+      hasNota: !!o.nota,
+      advance: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.advanceOrder(o.id); },
+      open: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ selectedOrderId: o.id, section: 'pedidos' }); },
+      timeline: Object.keys(E).map(est => {
+        const order = Object.keys(E); const done = order.indexOf(est) <= order.indexOf(o.estado);
+        return { estado: est,
+          dotStyle: { width: '10px', height: '10px', borderRadius: '50%', background: done ? E[est].color : '#E2E8F0', flexShrink: 0 },
+          labelStyle: { fontSize: '13px', fontWeight: done ? 600 : 400, color: done ? '#1E293B' : '#94A3B8' } };
+      })
+    });
+  }
+
+  copy(key, text) {
+    try { if (navigator.clipboard) navigator.clipboard.writeText(text); } catch (e) {}
+    this.setState({ copied: key });
+    clearTimeout(this._ct); this._ct = setTimeout(() => this.setState({ copied: null }), 1600);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const mode = s.mode || this.props.modo || 'vendedor';
+    const isAdmin = mode === 'admin';
+    const section = s.section || (isAdmin ? null : (this.props.vistaInicial || 'resumen'));
+    const vSection = isAdmin ? null : (section || 'resumen');
+    const aSection = isAdmin ? (s.adminSection || 'ventas') : null;
+    const waConnected = s.waConnectedOverride === null ? (this.props.whatsappConectado !== undefined ? !!this.props.whatsappConectado : true) : s.waConnectedOverride;
+
+    const navStyle = (active) => ({ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 11px', borderRadius: '8px', cursor: 'pointer', fontSize: '13.5px', fontWeight: active ? 600 : 500, color: active ? '#fff' : '#94A3B8', background: active ? 'rgba(5,150,105,.32)' : 'transparent' });
+    const go = (id) => () => this.setState({ section: id, mode: 'vendedor', selectedOrderId: null });
+    const goA = (id) => () => this.setState({ adminSection: id, mode: 'admin', selectedOrderId: null });
+
+    const E = this.estados();
+    const newOrders = s.orders.filter(o => o.estado === 'Nuevo');
+    const activeOrders = s.orders.filter(o => o.estado !== 'Entregado');
+    const ventasHoy = activeOrders.reduce((a, o) => a + o.items.reduce((x, it) => x + it.qty * it.precio, 0), 0);
+
+    const filterList = ['Todos'].concat(Object.keys(E));
+    const filtered = s.orders.filter(o => s.filter === 'Todos' || o.estado === s.filter).map(o => this.decorateOrder(o));
+    const selRaw = s.orders.find(o => o.id === s.selectedOrderId);
+    const sel = selRaw ? this.decorateOrder(selRaw) : null;
+
+    const etapaCfg = { 'Explorando': { color: '#475569', bg: '#F1F5F9' }, 'Cotizando': { color: '#1D4ED8', bg: '#DBEAFE' }, 'Listo para comprar': { color: '#047857', bg: '#D1FAE5' }, 'Postventa': { color: '#0E7490', bg: '#CFFAFE' } };
+    const avatarColors = ['#E0E7FF|#4338CA', '#FCE7F3|#BE185D', '#DCFCE7|#15803D', '#FEF3C7|#B45309', '#CFFAFE|#0E7490'];
+    const leadDec = (l, i) => {
+      const [bg, txt] = avatarColors[i % avatarColors.length].split('|');
+      const selL = l.id === s.selectedLeadId;
+      return Object.assign({}, l, {
+        iniciales: l.nombre.split(' ').map(w => w[0]).slice(0, 2).join(''),
+        avatarStyle: { width: '38px', height: '38px', borderRadius: '50%', background: bg, color: txt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px', flexShrink: 0 },
+        etapaStyle: Object.assign(this.pill(etapaCfg[l.etapa]), { marginTop: '5px', fontSize: '11px' }),
+        rowStyle: { display: 'flex', gap: '11px', padding: '12px 14px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', background: selL ? '#ECFDF5' : '#fff', borderLeft: selL ? '3px solid #059669' : '3px solid transparent' },
+        select: () => this.setState({ selectedLeadId: l.id, flowMsg: null }),
+        mensajes: l.mensajes.map(m => ({
+          texto: m.texto, hora: m.hora,
+          rowStyle: { display: 'flex', justifyContent: m.de === 'cliente' ? 'flex-start' : 'flex-end' },
+          bubbleStyle: { maxWidth: '78%', padding: '9px 12px', borderRadius: m.de === 'cliente' ? '12px 12px 12px 4px' : '12px 12px 4px 12px', background: m.de === 'cliente' ? '#fff' : (m.de === 'vendedor' ? '#059669' : '#D1FAE5'), color: m.de === 'vendedor' ? '#fff' : '#1E293B', border: m.de === 'vendedor' ? 'none' : '1px solid ' + (m.de === 'cliente' ? '#E2E8F0' : '#A7F3D0'), fontSize: '13px', lineHeight: 1.5 },
+          horaStyle: { display: 'block', fontSize: '10.5px', color: m.de === 'vendedor' ? 'rgba(255,255,255,.75)' : '#94A3B8', marginTop: '3px', textAlign: 'right' }
+        }))
+      });
+    };
+    const leads = s.leads.map(leadDec);
+    const lead = leads.find(l => l.id === s.selectedLeadId) || null;
+
+    const crmChats = s.leads.map((l, i) => {
+      const d = leadDec(l, i);
+      const live = l.id === 1 || l.id === 2;
+      const selC = l.id === s.crmSelectedId;
+      return Object.assign({}, d, {
+        live,
+        liveLabel: live ? 'En vivo' : 'Esperando',
+        liveStyle: { display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 700, color: live ? '#047857' : '#94A3B8', marginTop: '5px' },
+        liveDot: { width: '7px', height: '7px', borderRadius: '50%', background: live ? '#10B981' : '#CBD5E1', animation: live ? 'dfpulse 1.8s infinite' : 'none', flexShrink: 0 },
+        crmRowStyle: { display: 'flex', gap: '11px', padding: '12px 14px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', background: selC ? '#ECFDF5' : '#fff', borderLeft: selC ? '3px solid #059669' : '3px solid transparent' },
+        select: () => this.setState({ crmSelectedId: l.id, crmIntervening: false })
+      });
+    });
+    const crmChat = crmChats.find(l => l.id === s.crmSelectedId) || null;
+
+    const stockPillCfg = (st) => st === 0 ? { color: '#B91C1C', bg: '#FEE2E2' } : (st <= 5 ? { color: '#B45309', bg: '#FEF3C7' } : { color: '#047857', bg: '#D1FAE5' });
+    const products = s.products.map(p => Object.assign({}, p, {
+      iniciales: p.nombre.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase(),
+      fotoStyle: { width: '44px', height: '44px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' },
+      precioFmt: this.fmt(p.precio),
+      variantesLabel: p.variantes.length + (p.variantes.length === 1 ? ' variante' : ' variantes'),
+      stockLabel: p.stock === 0 ? 'Agotado' : (p.stock <= 5 ? 'Quedan ' + p.stock : p.stock + ' en stock'),
+      stockPill: this.pill(stockPillCfg(p.stock)),
+      expanded: s.expandedProductId === p.id,
+      chevron: s.expandedProductId === p.id ? '▲' : '▼',
+      toggle: () => this.setState({ expandedProductId: s.expandedProductId === p.id ? null : p.id }),
+      fotosMain: (p.fotos || ['Principal', 'Detalle']).map(fl => ({ label: fl, tileStyle: { width: '64px', height: '64px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontSize: '10px', fontWeight: 600, paddingBottom: '5px', boxSizing: 'border-box' } })),
+      variantes: p.variantes.map(v => {
+        const nf = v.fotos == null ? 2 : v.fotos;
+        const sw = this.swatch(v.label, p.txt);
+        return {
+          label: v.label,
+          swatchStyle: { width: '16px', height: '16px', borderRadius: '5px', background: sw, border: '1px solid rgba(15,23,42,.12)', flexShrink: 0 },
+          labelStyle: { fontSize: '13px', fontWeight: 600, minWidth: '110px', color: v.stock === 0 ? '#94A3B8' : '#1E293B', textDecoration: v.stock === 0 ? 'line-through' : 'none' },
+          stockPill: this.pill(stockPillCfg(v.stock)),
+          stockLabel: v.stock === 0 ? 'Agotado' : v.stock + ' en stock',
+          fotosLabel: nf + (nf === 1 ? ' foto' : ' fotos'),
+          thumbs: Array.from({ length: Math.min(nf, 3) }, (_, k) => ({ width: '22px', height: '22px', borderRadius: '5px', background: sw, opacity: 1 - k * 0.28, border: '1px solid rgba(15,23,42,.1)' }))
+        };
+      })
+    }));
+
+    const promos = s.promos.map(pr => Object.assign({}, pr, {
+      badgeStyle: this.pill(pr.tipo === 'Combo' ? { color: '#B45309', bg: '#FEF3C7' } : { color: '#047857', bg: '#D1FAE5' }),
+      estadoLabel: pr.activa ? 'Activa' : 'Pausada',
+      estadoStyle: Object.assign(this.pill(pr.activa ? { color: '#047857', bg: '#D1FAE5' } : { color: '#64748B', bg: '#F1F5F9' }), { cursor: 'pointer' }),
+      toggle: () => this.setState(st => ({ promos: st.promos.map(x => x.id === pr.id ? Object.assign({}, x, { activa: !x.activa }) : x) }))
+    }));
+
+    const rules = s.rules.map((texto, i) => ({ texto, remove: () => this.setState(st => ({ rules: st.rules.filter((_, j) => j !== i) })) }));
+
+    const integrations = s.integrations.map(i => {
+      const conectado = i.estado === 'conectado'; const pronto = i.estado === 'pronto';
+      return Object.assign({}, i, {
+        logoStyle: { width: '38px', height: '38px', borderRadius: '10px', background: i.logoBg, color: i.logoTxt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px' },
+        badgeLabel: conectado ? 'Conectado' : (pronto ? 'Próximamente' : 'Disponible'),
+        badgeStyle: this.pill(conectado ? { color: '#047857', bg: '#D1FAE5' } : { color: '#64748B', bg: '#F1F5F9' }),
+        btnLabel: conectado ? 'Configurar' : (pronto ? 'Avisarme cuando esté' : 'Conectar'),
+        btnStyle: pronto
+          ? { background: '#fff', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }
+          : (conectado
+            ? { background: '#fff', color: '#1E293B', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }
+            : { background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }),
+        action: () => {}
+      });
+    });
+
+    const plans = s.plans.map(pl => Object.assign({}, pl, { precioFmt: this.fmt(pl.precio), cuentasLabel: pl.cuentas + ' cuentas en este plan', features: pl.features }));
+
+    const accounts = s.accounts.map(a => Object.assign({}, a, {
+      ventasFmt: a.ventas > 0 ? this.fmt(a.ventas) : '—',
+      estadoLabel: a.activa ? 'Activa' : 'Inactiva',
+      estadoStyle: this.pill(a.activa ? { color: '#047857', bg: '#D1FAE5' } : { color: '#B91C1C', bg: '#FEE2E2' }),
+      switchStyle: { width: '40px', height: '23px', borderRadius: '999px', background: a.activa ? '#059669' : '#CBD5E1', padding: '2.5px', cursor: 'pointer', transition: 'background .15s', boxSizing: 'border-box' },
+      knobStyle: { width: '18px', height: '18px', borderRadius: '50%', background: '#fff', transform: a.activa ? 'translateX(17px)' : 'translateX(0)', transition: 'transform .15s', boxShadow: '0 1px 2px rgba(15,23,42,.25)' },
+      toggle: () => this.setState(st => ({ accounts: st.accounts.map(x => x.id === a.id ? Object.assign({}, x, { activa: !x.activa }) : x) }))
+    }));
+
+    const webhookUrl = 'https://api.dealflow.co/wa/hook/luna-accesorios';
+    const waCode = '8F4K-2Q9D';
+
+    return {
+      isVendedor: !isAdmin, isAdmin,
+      isResumen: vSection === 'resumen', isProductos: vSection === 'productos', isPromos: vSection === 'promos',
+      isAsistente: vSection === 'asistente', isWhatsApp: vSection === 'whatsapp', isPedidos: vSection === 'pedidos',
+      isLeads: vSection === 'leads', isIntegraciones: vSection === 'integraciones', isCRM: vSection === 'crm',
+      isVentas: aSection === 'ventas', isPlanes: aSection === 'planes', isCuentas: aSection === 'cuentas',
+      navResumen: navStyle(vSection === 'resumen'), navProductos: navStyle(vSection === 'productos'), navPromos: navStyle(vSection === 'promos'),
+      navAsistente: navStyle(vSection === 'asistente'), navWhatsApp: navStyle(vSection === 'whatsapp'), navPedidos: navStyle(vSection === 'pedidos'),
+      navLeads: navStyle(vSection === 'leads'), navIntegraciones: navStyle(vSection === 'integraciones'), navCRM: navStyle(vSection === 'crm'),
+      navVentas: navStyle(aSection === 'ventas'), navPlanes: navStyle(aSection === 'planes'), navCuentas: navStyle(aSection === 'cuentas'),
+      goResumen: go('resumen'), goProductos: go('productos'), goPromos: go('promos'), goAsistente: go('asistente'),
+      goWhatsApp: go('whatsapp'), goPedidos: go('pedidos'), goLeads: go('leads'), goIntegraciones: go('integraciones'), goCRM: go('crm'),
+      crmChats, crmChat: crmChat || {}, hasCrmChat: !!crmChat,
+      crmTyping: !!(crmChat && crmChat.live && !s.crmIntervening),
+      crmIntervening: s.crmIntervening, crmNotIntervening: !s.crmIntervening,
+      intervene: () => this.setState({ crmIntervening: true }),
+      backToBot: () => this.setState({ crmIntervening: false }),
+      crmDraft: s.crmDraft, onCrmDraft: (e) => this.setState({ crmDraft: e.target.value }),
+      sendCrm: () => { const txt = s.crmDraft.trim(); if (!txt) return; this.setState(st => ({ crmDraft: '', leads: st.leads.map(l => l.id === st.crmSelectedId ? Object.assign({}, l, { asignado: 'Karla', mensajes: l.mensajes.concat([{ de: 'vendedor', texto: txt, hora: 'ahora' }]) }) : l) })); },
+      goPedidosLink: (e) => { if (e && e.preventDefault) e.preventDefault(); go('pedidos')(); },
+      goVentas: goA('ventas'), goPlanes: goA('planes'), goCuentas: goA('cuentas'),
+      toggleMode: () => this.setState({ mode: isAdmin ? 'vendedor' : 'admin', section: 'resumen', adminSection: 'ventas', selectedOrderId: null }),
+      modeBtnLabel: isAdmin ? 'Volver al panel vendedor' : 'Panel de administración',
+      headerTitle: isAdmin ? 'DealFlow · Administración' : 'Luna Accesorios',
+      userLabel: isAdmin ? 'Equipo DealFlow' : 'Karla',
+      userInitials: isAdmin ? 'DF' : 'K',
+      waConnected,
+      waPill: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: waConnected ? '#ECFDF5' : '#FEF2F2', border: '1px solid ' + (waConnected ? '#A7F3D0' : '#FECACA'), color: waConnected ? '#047857' : '#B91C1C', borderRadius: '999px', padding: '4px 11px', fontSize: '12px', fontWeight: 700 },
+      waDot: { width: '8px', height: '8px', borderRadius: '50%', background: waConnected ? '#10B981' : '#EF4444' },
+      waLabel: waConnected ? 'WhatsApp conectado' : 'WhatsApp desconectado',
+      waCardStyle: { display: 'flex', alignItems: 'center', gap: '14px', background: '#fff', border: '1px solid ' + (waConnected ? '#A7F3D0' : '#FECACA'), borderRadius: '12px', padding: '16px 18px', marginBottom: '14px', boxShadow: '0 1px 2px rgba(15,23,42,.04)' },
+      waBigDot: { width: '12px', height: '12px', borderRadius: '50%', background: waConnected ? '#10B981' : '#EF4444', flexShrink: 0 },
+      waStatusTitle: waConnected ? 'Conectado y respondiendo' : 'Sin conexión',
+      waToggleBtn: waConnected
+        ? { background: '#fff', color: '#B91C1C', border: '1px solid #FECACA', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }
+        : { background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' },
+      waToggleLabel: waConnected ? 'Desconectar' : 'Conectar',
+      toggleWa: () => this.setState({ waConnectedOverride: !waConnected }),
+      webhookUrl, waCode,
+      copyWebhook: () => this.copy('webhook', webhookUrl),
+      copyCode: () => this.copy('code', waCode),
+      webhookBtnLabel: s.copied === 'webhook' ? '✓ Copiado' : 'Copiar',
+      codeBtnLabel: s.copied === 'code' ? '✓ Copiado' : 'Copiar',
+      newOrdersCount: newOrders.length, hasNewOrders: newOrders.length > 0,
+      ventasHoy: this.fmt(ventasHoy),
+      leadsCount: s.leads.length, productCount: s.products.length,
+      recentOrders: s.orders.slice(0, 4).map(o => this.decorateOrder(o)),
+      filters: filterList.map(f => {
+        const active = s.filter === f;
+        const count = f === 'Todos' ? s.orders.length : s.orders.filter(o => o.estado === f).length;
+        return { label: f + ' (' + count + ')', set: () => this.setState({ filter: f }),
+          style: { padding: '7px 14px', borderRadius: '999px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', background: active ? '#0F172A' : '#fff', color: active ? '#fff' : '#64748B', border: '1px solid ' + (active ? '#0F172A' : '#E2E8F0') } };
+      }),
+      orders: filtered, noOrders: filtered.length === 0,
+      hasSelectedOrder: !!sel, sel: sel || {},
+      closeOrder: () => this.setState({ selectedOrderId: null }),
+      selAdvance: () => sel && this.advanceOrder(sel.id),
+      selAdvanceLabel: sel && sel.hasNext ? sel.advanceLabel + ' este pedido' : '',
+      selHasNext: !!(sel && sel.hasNext), selIsDone: !!(sel && sel.isDone),
+      leads, hasLead: !!lead, lead: lead || {},
+      leadAsignado: lead ? lead.asignado : 'Asistente (bot)',
+      assignLead: (e) => { const v = e.target.value; this.setState(st => ({ leads: st.leads.map(l => l.id === st.selectedLeadId ? Object.assign({}, l, { asignado: v }) : l), flowMsg: 'Chat asignado a ' + v + ' ✓' })); },
+      flowSel: s.flowSel, onFlowSel: (e) => this.setState({ flowSel: e.target.value }),
+      sendFlow: () => this.setState({ flowMsg: (lead ? lead.nombre : 'El lead') + ' entró al flujo «' + s.flowSel + '» ✓' }),
+      flowMsg: s.flowMsg || '', hasFlowMsg: !!s.flowMsg,
+      products, promos, rules,
+      ruleDraft: s.ruleDraft, onRuleDraft: (e) => this.setState({ ruleDraft: e.target.value }),
+      addRule: () => { if (s.ruleDraft.trim()) this.setState(st => ({ rules: st.rules.concat([st.ruleDraft.trim()]), ruleDraft: '' })); },
+      assistantText: s.assistantText, onAssistantText: (e) => this.setState({ assistantText: e.target.value, assistantSaved: false }),
+      saveAssistant: () => { this.setState({ assistantSaved: true }); clearTimeout(this._at); this._at = setTimeout(() => this.setState({ assistantSaved: false }), 2500); },
+      assistantSaved: s.assistantSaved,
+      integrations, plans, accounts, accountRows: accounts,
+      planNombre: s.planNombre, planPrecio: s.planPrecio, planDesc: s.planDesc, planError: s.planError,
+      onPlanNombre: (e) => this.setState({ planNombre: e.target.value, planError: false }),
+      onPlanPrecio: (e) => this.setState({ planPrecio: e.target.value.replace(/[^0-9]/g, ''), planError: false }),
+      onPlanDesc: (e) => this.setState({ planDesc: e.target.value }),
+      crearPlan: () => {
+        if (!s.planNombre.trim() || !s.planPrecio) { this.setState({ planError: true }); return; }
+        const features = s.planDesc.split(',').map(x => x.trim()).filter(Boolean);
+        this.setState(st => ({ plans: st.plans.concat([{ id: Date.now(), nombre: st.planNombre.trim(), precio: parseInt(st.planPrecio, 10), cuentas: 0, features: features.length ? features : ['Plan nuevo, sin cuentas todavía'] }]), planNombre: '', planPrecio: '', planDesc: '', planError: false }));
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

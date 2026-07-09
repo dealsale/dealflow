@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{height:100%;margin:0;}
+a{color:#059669;text-decoration:none;}
+a:hover{color:#047857;}
+::placeholder{color:#94A3B8;}
+@keyframes dfpulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.5)}70%{box-shadow:0 0 0 6px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+</style>
+</helmet>
+<div style="position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-height:600px;font-family:'Inter',system-ui,sans-serif;background:#F8FAFC;color:#1E293B;overflow:hidden;">
+
+  <!-- BARRA SUPERIOR -->
+  <header style="background:#0F172A;color:#fff;display:flex;align-items:center;gap:12px;padding:56px 16px 12px;flex-shrink:0;">
+    <div onClick="{{ openMenu }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;margin-left:-10px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="17" x2="20" y2="17"></line></svg>
+    </div>
+    <img src="assets/logo.png" alt="DealFlow" style="width:28px;height:25px;object-fit:contain;">
+    <div style="flex:1;min-width:0;">
+      <div style="font-weight:700;font-size:15px;">Luna Accesorios</div>
+    </div>
+    <span style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.4);color:#6EE7B7;border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;"><span style="width:7px;height:7px;border-radius:50%;background:#10B981;"></span>Conectado</span>
+  </header>
+
+  <!-- CONTENIDO -->
+  <main style="flex:1;overflow-y:auto;padding:18px 16px 90px;">
+
+    <sc-if value="{{ isResumen }}" hint-placeholder-val="{{ false }}">
+      <section data-screen-label="Móvil Resumen">
+        <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.02em;margin:0 0 14px;">Hola, Karla 👋</h1>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+          <div onClick="{{ goPedidos }}" style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px;cursor:pointer;"><div style="color:#64748B;font-size:12px;font-weight:600;">Pedidos nuevos</div><div style="font-size:26px;font-weight:800;color:#F59E0B;">{{ newOrdersCount }}</div></div>
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px;"><div style="color:#64748B;font-size:12px;font-weight:600;">Ventas de hoy</div><div style="font-size:22px;font-weight:800;letter-spacing:-0.02em;">{{ ventasHoy }}</div></div>
+          <div onClick="{{ goCRM }}" style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px;cursor:pointer;"><div style="color:#64748B;font-size:12px;font-weight:600;">Chats en vivo</div><div style="font-size:26px;font-weight:800;">{{ liveCount }}</div></div>
+          <div onClick="{{ goProductos }}" style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px;cursor:pointer;"><div style="color:#64748B;font-size:12px;font-weight:600;">Productos</div><div style="font-size:26px;font-weight:800;">{{ productCount }}</div></div>
+        </div>
+        <button onClick="{{ goPedidos }}" style="width:100%;background:#F59E0B;color:#fff;border:none;border-radius:12px;padding:15px;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer;">Ver pedidos por despachar →</button>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ isPedidos }}" hint-placeholder-val="{{ true }}">
+      <section data-screen-label="Móvil Pedidos">
+        <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.02em;margin:0 0 12px;">Pedidos</h1>
+        <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:6px;">
+          <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+            <span onClick="{{ f.set }}" style="{{ f.style }}">{{ f.label }}</span>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <sc-for list="{{ orders }}" as="o" hint-placeholder-count="5">
+            <div onClick="{{ o.open }}" style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:14px;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#64748B;">{{ o.id }}</span>
+                <span style="{{ o.pillStyle }}">{{ o.estado }}</span>
+                <div style="flex:1;"></div>
+                <span style="color:#94A3B8;font-size:11.5px;">{{ o.hora }}</span>
+              </div>
+              <div style="font-weight:700;font-size:15px;">{{ o.cliente }} <span style="color:#94A3B8;font-weight:400;font-size:12.5px;">· {{ o.ciudad }}</span></div>
+              <div style="color:#64748B;font-size:13px;margin:3px 0 10px;">{{ o.itemsResumen }}</div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-weight:800;font-size:16px;">{{ o.totalFmt }}</span>
+                <div style="flex:1;"></div>
+                <sc-if value="{{ o.hasNext }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ o.advance }}" style="background:#F59E0B;color:#fff;border:none;border-radius:10px;padding:12px 18px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;min-height:44px;">{{ o.advanceLabel }}</button>
+                </sc-if>
+                <sc-if value="{{ o.isDone }}" hint-placeholder-val="{{ false }}">
+                  <span style="color:#059669;font-size:13px;font-weight:600;">✓ Completado</span>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ isProductos }}" hint-placeholder-val="{{ false }}">
+      <section data-screen-label="Móvil Productos">
+        <div style="display:flex;align-items:center;margin-bottom:12px;">
+          <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.02em;margin:0;">Productos</h1>
+          <div style="flex:1;"></div>
+          <button style="background:#059669;color:#fff;border:none;border-radius:10px;padding:11px 15px;font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer;min-height:44px;">+ Nuevo</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <sc-for list="{{ products }}" as="p" hint-placeholder-count="4">
+            <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04);">
+              <div onClick="{{ p.toggle }}" style="display:flex;align-items:center;gap:12px;padding:13px 14px;cursor:pointer;">
+                <div style="{{ p.fotoStyle }}">{{ p.iniciales }}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-weight:700;font-size:14.5px;">{{ p.nombre }}</div>
+                  <div style="color:#64748B;font-size:12.5px;margin-top:1px;">{{ p.precioFmt }} · {{ p.variantesLabel }}</div>
+                </div>
+                <span style="{{ p.stockPill }}">{{ p.stockLabel }}</span>
+                <span style="color:#94A3B8;font-size:11px;">{{ p.chevron }}</span>
+              </div>
+              <sc-if value="{{ p.expanded }}" hint-placeholder-val="{{ false }}">
+                <div style="background:#F8FAFC;border-top:1px solid #F1F5F9;padding:14px;">
+                  <div style="font-size:11.5px;font-weight:700;color:#64748B;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:8px;">Fotos principales · las envía el asistente</div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+                    <sc-for list="{{ p.fotosMain }}" as="f" hint-placeholder-count="3">
+                      <div style="{{ f.tileStyle }}">{{ f.label }}</div>
+                    </sc-for>
+                    <div style="width:58px;height:58px;border:1px dashed #CBD5E1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:#64748B;font-size:9.5px;font-weight:600;cursor:pointer;box-sizing:border-box;"><span style="font-size:15px;line-height:1;">＋</span><span>Subir</span></div>
+                  </div>
+                  <div style="font-size:11.5px;font-weight:700;color:#64748B;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:8px;">Variantes · cada una con sus fotos</div>
+                  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
+                    <sc-for list="{{ p.variantes }}" as="v" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;min-height:44px;box-sizing:border-box;">
+                        <span style="{{ v.swatchStyle }}"></span>
+                        <div style="flex:1;min-width:0;">
+                          <div style="{{ v.labelStyle }}">{{ v.label }}</div>
+                          <div style="color:#64748B;font-size:11.5px;">{{ v.stockLabel }} · {{ v.fotosLabel }}</div>
+                        </div>
+                        <div style="display:flex;gap:4px;">
+                          <sc-for list="{{ v.thumbs }}" as="t" hint-placeholder-count="2"><div style="{{ t }}"></div></sc-for>
+                        </div>
+                        <span style="border:1px dashed #CBD5E1;border-radius:6px;padding:5px 9px;font-size:12px;font-weight:600;color:#64748B;cursor:pointer;">+ Foto</span>
+                      </div>
+                    </sc-for>
+                    <span style="align-self:flex-start;background:#fff;border:1px dashed #CBD5E1;color:#64748B;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;">+ Agregar variante</span>
+                  </div>
+                  <div style="color:#94A3B8;font-size:11.5px;margin-bottom:12px;">Si el cliente elige un color o talla, el asistente envía solo las fotos de esa variante.</div>
+                  <button style="width:100%;background:#059669;color:#fff;border:none;border-radius:10px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;">Guardar producto</button>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ isCRM }}" hint-placeholder-val="{{ false }}">
+      <section data-screen-label="Móvil CRM">
+        <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.02em;margin:0 0 4px;">CRM · Chats en vivo</h1>
+        <p style="color:#64748B;font-size:13px;margin:0 0 12px;">Toca un chat para verlo y tomar el control si quieres.</p>
+        <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;">
+          <sc-for list="{{ crmChats }}" as="c" hint-placeholder-count="5">
+            <div onClick="{{ c.open }}" style="display:flex;gap:11px;padding:13px 14px;border-bottom:1px solid #F1F5F9;cursor:pointer;">
+              <div style="{{ c.avatarStyle }}">{{ c.iniciales }}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:baseline;"><span style="font-weight:600;font-size:14px;">{{ c.nombre }}</span><span style="color:#94A3B8;font-size:11px;margin-left:auto;">{{ c.hora }}</span></div>
+                <div style="color:#64748B;font-size:12.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.ultimo }}</div>
+                <div style="{{ c.liveStyle }}"><span style="{{ c.liveDot }}"></span><span>{{ c.liveLabel }}</span><span style="color:#94A3B8;font-weight:500;">· atiende {{ c.asignado }}</span></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ isLeads }}" hint-placeholder-val="{{ false }}">
+      <section data-screen-label="Móvil Leads">
+        <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.02em;margin:0 0 12px;">Leads</h1>
+        <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;">
+          <sc-for list="{{ leads }}" as="l" hint-placeholder-count="5">
+            <div style="display:flex;gap:11px;padding:13px 14px;border-bottom:1px solid #F1F5F9;">
+              <div style="{{ l.avatarStyle }}">{{ l.iniciales }}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:baseline;"><span style="font-weight:600;font-size:14px;">{{ l.nombre }}</span><span style="color:#94A3B8;font-size:11px;margin-left:auto;">{{ l.hora }}</span></div>
+                <div style="color:#64748B;font-size:12.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ l.ultimo }}</div>
+                <span style="{{ l.etapaStyle }}">{{ l.etapa }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ isOtra }}" hint-placeholder-val="{{ false }}">
+      <section data-screen-label="Móvil Otra sección">
+        <h1 style="font-size:20px;font-weight:800;letter-spacing:-0.02em;margin:0 0 12px;">{{ otraTitulo }}</h1>
+        <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:28px 20px;text-align:center;">
+          <div style="font-size:14px;color:#64748B;line-height:1.6;">Esta sección funciona igual que en el computador, adaptada a tu pantalla. En esta demo, mírala completa en la versión de escritorio.</div>
+        </div>
+      </section>
+    </sc-if>
+
+  </main>
+
+  <!-- MENÚ (drawer) -->
+  <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:50;display:flex;">
+      <div style="width:260px;background:#0F172A;height:100%;padding:18px 12px;display:flex;flex-direction:column;gap:2px;box-shadow:12px 0 40px rgba(15,23,42,.3);box-sizing:border-box;">
+        <div style="display:flex;align-items:center;gap:10px;padding:0 8px 18px;">
+          <img src="assets/logo.png" alt="DealFlow" style="width:30px;height:27px;object-fit:contain;">
+          <span style="color:#fff;font-weight:800;font-size:16px;">DealFlow</span>
+        </div>
+        <sc-for list="{{ menuItems }}" as="m" hint-placeholder-count="9">
+          <div onClick="{{ m.go }}" style="{{ m.style }}"><span>{{ m.label }}</span><sc-if value="{{ m.hasBadge }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;background:#F59E0B;color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;">{{ m.badge }}</span></sc-if><sc-if value="{{ m.hasLive }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:#10B981;animation:dfpulse 1.8s infinite;"></span></sc-if></div>
+        </sc-for>
+      </div>
+      <div onClick="{{ closeMenu }}" style="flex:1;background:rgba(15,23,42,.5);"></div>
+    </div>
+  </sc-if>
+
+  <!-- CHAT CRM (pantalla completa) -->
+  <sc-if value="{{ hasChat }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:55;background:#F8FAFC;display:flex;flex-direction:column;">
+      <div style="background:#0F172A;color:#fff;display:flex;align-items:center;gap:11px;padding:54px 14px 10px;flex-shrink:0;">
+        <div onClick="{{ closeChat }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;margin-left:-10px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5l-7 7 7 7"></path></svg></div>
+        <div style="{{ chat.avatarStyle }}">{{ chat.iniciales }}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:14.5px;">{{ chat.nombre }}</div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:#94A3B8;"><span style="{{ chat.liveDot }}"></span>{{ chat.liveLabel }} · atiende {{ chat.asignado }}</div>
+        </div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:8px;">
+        <sc-for list="{{ chat.mensajes }}" as="m" hint-placeholder-count="4">
+          <div style="{{ m.rowStyle }}"><div style="{{ m.bubbleStyle }}">{{ m.texto }}<span style="{{ m.horaStyle }}">{{ m.hora }}</span></div></div>
+        </sc-for>
+        <sc-if value="{{ chatTyping }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;justify-content:flex-end;"><div style="background:#D1FAE5;border:1px solid #A7F3D0;border-radius:12px 12px 4px 12px;padding:9px 14px;font-size:13px;color:#047857;">El asistente está escribiendo…</div></div>
+        </sc-if>
+      </div>
+      <div style="padding:12px 14px 20px;border-top:1px solid #E2E8F0;background:#fff;">
+        <sc-if value="{{ notIntervening }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ intervene }}" style="width:100%;background:#0F172A;color:#fff;border:none;border-radius:12px;padding:14px;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer;">Intervenir yo en este chat</button>
+        </sc-if>
+        <sc-if value="{{ intervening }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:8px;">
+            <input value="{{ chatDraft }}" onChange="{{ onChatDraft }}" placeholder="Escribe tu mensaje…" style="flex:1;border:1px solid #E2E8F0;border-radius:10px;padding:12px;font-family:inherit;font-size:14px;outline:none;min-height:44px;box-sizing:border-box;" style-focus="border-color:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.12);">
+            <button onClick="{{ sendChat }}" style="background:#059669;color:#fff;border:none;border-radius:10px;padding:12px 18px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;min-height:44px;">Enviar</button>
+          </div>
+          <div onClick="{{ backToBot }}" style="text-align:center;color:#64748B;font-size:13px;font-weight:600;margin-top:10px;cursor:pointer;">Devolver al asistente</div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- DETALLE DE PEDIDO (hoja inferior) -->
+  <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:60;display:flex;flex-direction:column;justify-content:flex-end;">
+      <div onClick="{{ closeOrder }}" style="position:absolute;inset:0;background:rgba(15,23,42,.45);"></div>
+      <div style="position:relative;background:#fff;border-radius:18px 18px 0 0;max-height:86%;display:flex;flex-direction:column;box-shadow:0 -12px 40px rgba(15,23,42,.2);">
+        <div style="display:flex;justify-content:center;padding:10px 0 2px;"><div style="width:40px;height:4px;border-radius:999px;background:#E2E8F0;"></div></div>
+        <div style="display:flex;align-items:center;gap:9px;padding:8px 18px 12px;border-bottom:1px solid #F1F5F9;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;">{{ sel.id }}</span>
+          <span style="{{ sel.pillStyle }}">{{ sel.estado }}</span>
+          <div style="flex:1;"></div>
+          <span onClick="{{ closeOrder }}" style="color:#64748B;cursor:pointer;font-size:18px;padding:6px;">✕</span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px 18px;">
+          <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:13px;margin-bottom:14px;">
+            <div style="font-weight:700;font-size:15px;">{{ sel.cliente }}</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#64748B;margin:2px 0 6px;">{{ sel.tel }}</div>
+            <div style="font-size:13.5px;line-height:1.5;">{{ sel.direccion }}</div>
+            <div style="color:#64748B;font-size:13px;">{{ sel.ciudad }}</div>
+          </div>
+          <div style="border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;">
+            <sc-for list="{{ sel.items }}" as="it" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid #F1F5F9;">
+                <span style="background:#F1F5F9;border-radius:6px;font-size:12px;font-weight:700;padding:3px 7px;color:#475569;">{{ it.qty }}×</span>
+                <span style="font-size:13px;flex:1;">{{ it.nombre }}</span>
+                <span style="font-weight:600;font-size:13px;">{{ it.precioFmt }}</span>
+              </div>
+            </sc-for>
+            <div style="display:flex;padding:11px 13px;font-weight:800;font-size:15px;background:#F8FAFC;"><span>Total</span><div style="flex:1;"></div><span>{{ sel.totalFmt }}</span></div>
+          </div>
+        </div>
+        <div style="padding:14px 18px 22px;border-top:1px solid #F1F5F9;">
+          <sc-if value="{{ selHasNext }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ selAdvance }}" style="width:100%;background:#F59E0B;color:#fff;border:none;border-radius:12px;padding:16px;font-family:inherit;font-weight:700;font-size:16px;cursor:pointer;">{{ selAdvanceLabel }}</button>
+          </sc-if>
+          <sc-if value="{{ selIsDone }}" hint-placeholder-val="{{ false }}">
+            <div style="text-align:center;color:#059669;font-weight:700;font-size:14px;">✓ Pedido entregado. Nada pendiente.</div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:760}}">
+class Component extends DCLogic {
+  state = {
+    section: 'pedidos', menuOpen: false, selectedOrderId: null, filter: 'Todos',
+    expandedProductId: 1, openChatId: null, intervening: false, chatDraft: '',
+    orders: [
+      { id: 'DF-1048', cliente: 'Mariana López', ciudad: 'Bogotá', tel: '+57 310 442 8811', direccion: 'Cra 15 # 82-40, apto 302', estado: 'Nuevo', hora: 'hace 8 min', envio: 9900, items: [ { qty: 2, nombre: 'Camiseta oversize algodón', precio: 59900 }, { qty: 1, nombre: 'Gorra bordada logo', precio: 39900 } ] },
+      { id: 'DF-1047', cliente: 'Julián Pérez', ciudad: 'Medellín', tel: '+57 301 887 2245', direccion: 'Cl 10 # 43E-31, Torre 2', estado: 'Nuevo', hora: 'hace 25 min', envio: 12000, items: [ { qty: 3, nombre: 'Jogger jaspeado (promo 3×)', precio: 36633 } ] },
+      { id: 'DF-1046', cliente: 'Sofía Ramírez', ciudad: 'Cali', tel: '+57 315 662 9034', direccion: 'Av 6N # 25-30', estado: 'Confirmado', hora: 'hace 1 h', envio: 12000, items: [ { qty: 1, nombre: 'Vestido midi floral', precio: 149900 } ] },
+      { id: 'DF-1045', cliente: 'Andrés Castro', ciudad: 'Bogotá', tel: '+57 320 118 7752', direccion: 'Cl 147 # 19-64', estado: 'Empacado', hora: 'hace 3 h', envio: 9900, items: [ { qty: 1, nombre: 'Bolso tote cuero vegano', precio: 89900 }, { qty: 1, nombre: 'Collar acero dorado', precio: 34900 } ] },
+      { id: 'DF-1044', cliente: 'Valentina Ruiz', ciudad: 'Barranquilla', tel: '+57 300 954 1120', direccion: 'Cra 53 # 79-140', estado: 'Despachado', hora: 'ayer', envio: 14000, items: [ { qty: 3, nombre: 'Camiseta oversize algodón', precio: 59900 } ] },
+      { id: 'DF-1043', cliente: 'Camilo Torres', ciudad: 'Bucaramanga', tel: '+57 311 240 6673', direccion: 'Cl 36 # 26-48', estado: 'Entregado', hora: 'ayer', envio: 12000, items: [ { qty: 1, nombre: 'Gorra bordada logo', precio: 39900 } ] }
+    ],
+    products: [
+      { id: 1, nombre: 'Jogger jaspeado', precio: 44900, stock: 21, color: '#D1FAE5', txt: '#047857', fotos: ['Frente', 'Espalda', 'Detalle'], variantes: [ { label: 'M · Verde', stock: 6, fotos: 2 }, { label: 'L · Verde', stock: 4, fotos: 2 }, { label: 'M · Negro', stock: 7, fotos: 3 }, { label: 'L · Negro', stock: 4, fotos: 3 } ] },
+      { id: 2, nombre: 'Camiseta oversize algodón', precio: 59900, stock: 24, color: '#E0E7FF', txt: '#4338CA', fotos: ['Frente', 'Espalda'], variantes: [ { label: 'S · Blanco', stock: 8, fotos: 2 }, { label: 'M · Blanco', stock: 6, fotos: 2 }, { label: 'M · Negro', stock: 7, fotos: 2 }, { label: 'L · Negro', stock: 3, fotos: 1 } ] },
+      { id: 3, nombre: 'Jean mom fit tiro alto', precio: 129900, stock: 12, color: '#DBEAFE', txt: '#1D4ED8', fotos: ['Frente', 'Detalle'], variantes: [ { label: '6 · Azul claro', stock: 4, fotos: 2 }, { label: '8 · Azul claro', stock: 5, fotos: 2 }, { label: '10 · Azul oscuro', stock: 3, fotos: 2 } ] },
+      { id: 4, nombre: 'Gorra bordada logo', precio: 39900, stock: 30, color: '#DCFCE7', txt: '#15803D', fotos: ['Frente'], variantes: [ { label: 'Única · Negra', stock: 18, fotos: 2 }, { label: 'Única · Beige', stock: 12, fotos: 2 } ] }
+    ],
+    leads: [
+      { id: 1, nombre: 'Mariana López', tel: '+57 310 442 8811', ultimo: 'Listo, entonces 2 en talla M y la gorra 🙌', hora: '10:42', etapa: 'Listo para comprar', asignado: 'Asistente', mensajes: [
+        { de: 'cliente', texto: 'Hola! ¿Tienen la camiseta oversize en talla M?', hora: '10:31' },
+        { de: 'bot', texto: '¡Hola Mariana! Sí, la tenemos en M en blanco y negro, a $59.900. Y ojo: 2 camisetas te quedan en $99.900 😉', hora: '10:31' },
+        { de: 'cliente', texto: '¿Y si llevo 2 y una gorra?', hora: '10:38' },
+        { de: 'bot', texto: 'Te quedaría así: 2 camisetas $99.900 + gorra $39.900 = $139.700 + envío. ¿A qué ciudad te lo enviamos?', hora: '10:39' },
+        { de: 'cliente', texto: 'Listo, entonces 2 en talla M y la gorra 🙌', hora: '10:42' } ] },
+      { id: 2, nombre: 'Daniela Mora', tel: '+57 314 220 9987', ultimo: '¿Cuánto vale el envío a Pasto?', hora: '10:15', etapa: 'Cotizando', asignado: 'Asistente', mensajes: [
+        { de: 'cliente', texto: 'Me interesa el vestido midi floral', hora: '10:12' },
+        { de: 'bot', texto: '¡Buena elección! Está a $149.900 y quedan pocas unidades en S y M. ¿Cuál es tu talla?', hora: '10:12' },
+        { de: 'cliente', texto: '¿Cuánto vale el envío a Pasto?', hora: '10:15' } ] },
+      { id: 3, nombre: 'Esteban Vargas', tel: '+57 305 671 4432', ultimo: '¿Hay descuento si llevo 2 jeans?', hora: '09:48', etapa: 'Cotizando', asignado: 'Karla', mensajes: [
+        { de: 'cliente', texto: '¿Hay descuento si llevo 2 jeans?', hora: '09:48' },
+        { de: 'bot', texto: 'Por ahora el jean no tiene promo, pero el combo jean + camiseta queda en $169.900. Le paso tu chat a Karla 😉', hora: '09:49' } ] },
+      { id: 4, nombre: 'Jorge Rivas', tel: '+57 322 908 1276', ultimo: 'Me interesa el combo del bolso', hora: '09:20', etapa: 'Explorando', asignado: 'Asistente', mensajes: [
+        { de: 'cliente', texto: 'Hola, vi el bolso tote en Instagram', hora: '09:18' },
+        { de: 'bot', texto: '¡Hola Jorge! El tote está a $89.900, en camel y negro. ¿Es para ti o para regalo?', hora: '09:18' },
+        { de: 'cliente', texto: 'Me interesa el combo del bolso', hora: '09:20' } ] },
+      { id: 5, nombre: 'Paola Sierra', tel: '+57 318 445 6210', ultimo: 'Aún no me llega el pedido de la semana pasada', hora: '08:55', etapa: 'Postventa', asignado: 'Andrés', mensajes: [
+        { de: 'cliente', texto: 'Aún no me llega el pedido de la semana pasada', hora: '08:55' },
+        { de: 'bot', texto: 'Lo siento, Paola. Tu pedido DF-1031 salió con Dropi el jueves. Andrés te escribe en un momento.', hora: '08:56' } ] }
+    ]
+  };
+
+  fmt(n) { return '$ ' + n.toLocaleString('es-CO'); }
+
+  estados() {
+    return {
+      'Nuevo':      { color: '#1D4ED8', bg: '#DBEAFE', next: 'Confirmar', nextEstado: 'Confirmado' },
+      'Confirmado': { color: '#6D28D9', bg: '#EDE9FE', next: 'Empacar', nextEstado: 'Empacado' },
+      'Empacado':   { color: '#B45309', bg: '#FEF3C7', next: 'Despachar', nextEstado: 'Despachado' },
+      'Despachado': { color: '#0E7490', bg: '#CFFAFE', next: 'Entregado', nextEstado: 'Entregado' },
+      'Entregado':  { color: '#047857', bg: '#D1FAE5', next: null, nextEstado: null }
+    };
+  }
+
+  pill(cfg) { return { display: 'inline-block', background: cfg.bg, color: cfg.color, borderRadius: '999px', padding: '3px 10px', fontSize: '11.5px', fontWeight: 700, whiteSpace: 'nowrap' }; }
+
+  swatch(label, fallback) {
+    const l = label.toLowerCase();
+    if (l.includes('verde')) return '#34D399';
+    if (l.includes('negr')) return '#334155';
+    if (l.includes('blanco')) return '#E2E8F0';
+    if (l.includes('azul claro')) return '#93C5FD';
+    if (l.includes('azul')) return '#1D4ED8';
+    if (l.includes('camel')) return '#D6A45C';
+    if (l.includes('beige')) return '#E7D8BF';
+    if (l.includes('dorado')) return '#FBBF24';
+    return fallback;
+  }
+
+  advanceOrder(id) {
+    const E = this.estados();
+    this.setState(s => ({ orders: s.orders.map(o => o.id === id && E[o.estado].nextEstado ? Object.assign({}, o, { estado: E[o.estado].nextEstado }) : o) }));
+  }
+
+  decorateOrder(o) {
+    const E = this.estados(); const cfg = E[o.estado];
+    const total = o.items.reduce((a, it) => a + it.qty * it.precio, 0) + o.envio;
+    return Object.assign({}, o, {
+      totalFmt: this.fmt(total),
+      itemsResumen: o.items.map(it => it.qty + '× ' + it.nombre).join(' · '),
+      items: o.items.map(it => Object.assign({}, it, { precioFmt: this.fmt(it.qty * it.precio) })),
+      pillStyle: this.pill(cfg),
+      hasNext: !!cfg.next, isDone: !cfg.next, advanceLabel: cfg.next || '',
+      advance: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.advanceOrder(o.id); },
+      open: () => this.setState({ selectedOrderId: o.id })
+    });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const newOrders = s.orders.filter(o => o.estado === 'Nuevo');
+    const ventasHoy = s.orders.filter(o => o.estado !== 'Entregado').reduce((a, o) => a + o.items.reduce((x, it) => x + it.qty * it.precio, 0), 0);
+    const filterList = ['Todos', 'Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado'];
+    const filtered = s.orders.filter(o => s.filter === 'Todos' || o.estado === s.filter).map(o => this.decorateOrder(o));
+    const selRaw = s.orders.find(o => o.id === s.selectedOrderId);
+    const sel = selRaw ? this.decorateOrder(selRaw) : null;
+
+    const stockPillCfg = (st) => st === 0 ? { color: '#B91C1C', bg: '#FEE2E2' } : (st <= 5 ? { color: '#B45309', bg: '#FEF3C7' } : { color: '#047857', bg: '#D1FAE5' });
+    const products = s.products.map(p => Object.assign({}, p, {
+      iniciales: p.nombre.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase(),
+      fotoStyle: { width: '46px', height: '46px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px', flexShrink: 0 },
+      precioFmt: this.fmt(p.precio),
+      variantesLabel: p.variantes.length + ' variantes',
+      stockLabel: p.stock === 0 ? 'Agotado' : (p.stock <= 5 ? 'Quedan ' + p.stock : p.stock + ' en stock'),
+      stockPill: this.pill(stockPillCfg(p.stock)),
+      expanded: s.expandedProductId === p.id,
+      chevron: s.expandedProductId === p.id ? '▲' : '▼',
+      toggle: () => this.setState({ expandedProductId: s.expandedProductId === p.id ? null : p.id }),
+      fotosMain: (p.fotos || []).map(fl => ({ label: fl, tileStyle: { width: '58px', height: '58px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontSize: '9.5px', fontWeight: 600, paddingBottom: '4px', boxSizing: 'border-box' } })),
+      variantes: p.variantes.map(v => {
+        const nf = v.fotos == null ? 2 : v.fotos;
+        const sw = this.swatch(v.label, p.txt);
+        return {
+          label: v.label,
+          swatchStyle: { width: '16px', height: '16px', borderRadius: '5px', background: sw, border: '1px solid rgba(15,23,42,.12)', flexShrink: 0 },
+          labelStyle: { fontSize: '13px', fontWeight: 600, color: v.stock === 0 ? '#94A3B8' : '#1E293B', textDecoration: v.stock === 0 ? 'line-through' : 'none' },
+          stockLabel: v.stock === 0 ? 'Agotado' : v.stock + ' en stock',
+          fotosLabel: nf + (nf === 1 ? ' foto' : ' fotos'),
+          thumbs: Array.from({ length: Math.min(nf, 3) }, (_, k) => ({ width: '20px', height: '20px', borderRadius: '5px', background: sw, opacity: 1 - k * 0.28, border: '1px solid rgba(15,23,42,.1)' }))
+        };
+      })
+    }));
+
+    const etapaCfg = { 'Explorando': { color: '#475569', bg: '#F1F5F9' }, 'Cotizando': { color: '#1D4ED8', bg: '#DBEAFE' }, 'Listo para comprar': { color: '#047857', bg: '#D1FAE5' }, 'Postventa': { color: '#0E7490', bg: '#CFFAFE' } };
+    const avatarColors = ['#E0E7FF|#4338CA', '#FCE7F3|#BE185D', '#DCFCE7|#15803D', '#FEF3C7|#B45309', '#CFFAFE|#0E7490'];
+    const dec = (l, i) => {
+      const [bg, txt] = avatarColors[i % avatarColors.length].split('|');
+      const live = l.id === 1 || l.id === 2;
+      return Object.assign({}, l, {
+        live,
+        iniciales: l.nombre.split(' ').map(w => w[0]).slice(0, 2).join(''),
+        avatarStyle: { width: '38px', height: '38px', borderRadius: '50%', background: bg, color: txt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px', flexShrink: 0 },
+        etapaStyle: Object.assign(this.pill(etapaCfg[l.etapa]), { marginTop: '5px', fontSize: '11px' }),
+        liveLabel: live ? 'En vivo' : 'Esperando',
+        liveStyle: { display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 700, color: live ? '#047857' : '#94A3B8', marginTop: '5px' },
+        liveDot: { width: '7px', height: '7px', borderRadius: '50%', background: live ? '#10B981' : '#CBD5E1', animation: live ? 'dfpulse 1.8s infinite' : 'none', flexShrink: 0 },
+        open: () => this.setState({ openChatId: l.id, intervening: false }),
+        mensajes: l.mensajes.map(m => ({
+          texto: m.texto, hora: m.hora,
+          rowStyle: { display: 'flex', justifyContent: m.de === 'cliente' ? 'flex-start' : 'flex-end' },
+          bubbleStyle: { maxWidth: '80%', padding: '9px 12px', borderRadius: m.de === 'cliente' ? '12px 12px 12px 4px' : '12px 12px 4px 12px', background: m.de === 'cliente' ? '#fff' : (m.de === 'vendedor' ? '#059669' : '#D1FAE5'), color: m.de === 'vendedor' ? '#fff' : '#1E293B', border: m.de === 'vendedor' ? 'none' : '1px solid ' + (m.de === 'cliente' ? '#E2E8F0' : '#A7F3D0'), fontSize: '13px', lineHeight: 1.5 },
+          horaStyle: { display: 'block', fontSize: '10.5px', color: m.de === 'vendedor' ? 'rgba(255,255,255,.75)' : '#94A3B8', marginTop: '3px', textAlign: 'right' }
+        }))
+      });
+    };
+    const leads = s.leads.map(dec);
+    const chat = leads.find(l => l.id === s.openChatId) || null;
+    const liveCount = leads.filter(l => l.live).length;
+
+    const secciones = [
+      { id: 'resumen', label: 'Resumen' }, { id: 'productos', label: 'Productos' }, { id: 'promos', label: 'Promos' },
+      { id: 'asistente', label: 'Asistente' }, { id: 'whatsapp', label: 'WhatsApp' }, { id: 'pedidos', label: 'Pedidos' },
+      { id: 'crm', label: 'CRM' }, { id: 'leads', label: 'Leads' }, { id: 'integraciones', label: 'Integraciones' }
+    ];
+    const menuItems = secciones.map(m => ({
+      label: m.label,
+      hasBadge: m.id === 'pedidos' && newOrders.length > 0, badge: newOrders.length,
+      hasLive: m.id === 'crm' && liveCount > 0,
+      style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '14.5px', fontWeight: s.section === m.id ? 600 : 500, color: s.section === m.id ? '#fff' : '#94A3B8', background: s.section === m.id ? 'rgba(5,150,105,.32)' : 'transparent' },
+      go: () => this.setState({ section: m.id, menuOpen: false })
+    }));
+
+    const otras = { promos: 'Promos', asistente: 'Asistente', whatsapp: 'WhatsApp', integraciones: 'Integraciones' };
+
+    return {
+      isResumen: s.section === 'resumen', isPedidos: s.section === 'pedidos', isLeads: s.section === 'leads',
+      isProductos: s.section === 'productos', isCRM: s.section === 'crm',
+      isOtra: !!otras[s.section], otraTitulo: otras[s.section] || '',
+      menuOpen: s.menuOpen, openMenu: () => this.setState({ menuOpen: true }), closeMenu: () => this.setState({ menuOpen: false }),
+      menuItems,
+      goPedidos: () => this.setState({ section: 'pedidos' }),
+      goProductos: () => this.setState({ section: 'productos' }),
+      goCRM: () => this.setState({ section: 'crm' }),
+      newOrdersCount: newOrders.length, ventasHoy: this.fmt(ventasHoy), liveCount, productCount: s.products.length,
+      filters: filterList.map(f => {
+        const active = s.filter === f;
+        return { label: f, set: () => this.setState({ filter: f }),
+          style: { padding: '9px 15px', borderRadius: '999px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, background: active ? '#0F172A' : '#fff', color: active ? '#fff' : '#64748B', border: '1px solid ' + (active ? '#0F172A' : '#E2E8F0') } };
+      }),
+      orders: filtered, leads, products,
+      crmChats: leads,
+      hasChat: !!chat, chat: chat || {},
+      chatTyping: !!(chat && chat.live && !s.intervening),
+      closeChat: () => this.setState({ openChatId: null, intervening: false }),
+      intervening: s.intervening, notIntervening: !s.intervening,
+      intervene: () => this.setState({ intervening: true }),
+      backToBot: () => this.setState({ intervening: false }),
+      chatDraft: s.chatDraft, onChatDraft: (e) => this.setState({ chatDraft: e.target.value }),
+      sendChat: () => { const txt = s.chatDraft.trim(); if (!txt) return; this.setState(st => ({ chatDraft: '', leads: st.leads.map(l => l.id === st.openChatId ? Object.assign({}, l, { asignado: 'Karla', mensajes: l.mensajes.concat([{ de: 'vendedor', texto: txt, hora: 'ahora' }]) }) : l) })); },
+      hasSel: !!sel, sel: sel || {},
+      closeOrder: () => this.setState({ selectedOrderId: null }),
+      selAdvance: () => sel && this.advanceOrder(sel.id),
+      selAdvanceLabel: sel && sel.hasNext ? sel.advanceLabel + ' este pedido' : '',
+      selHasNext: !!(sel && sel.hasNext), selIsDone: !!(sel && sel.isDone)
+    };
+  }
+}
+</script>
+</body>
+</html>
