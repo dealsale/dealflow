@@ -156,6 +156,21 @@ export function MProductos({ df }: { df: DealFlowState }) {
                         ))}
                       </div>
                       <PhotoAddChip onFiles={v.addFotos} />
+                      {v.deleteArmed ? (
+                        <span
+                          onClick={v.requestDelete}
+                          style={{ background: '#DC2626', color: '#fff', borderRadius: 8, padding: '7px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                        >
+                          Sí, quitar
+                        </span>
+                      ) : (
+                        <span
+                          onClick={v.requestDelete}
+                          style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}
+                        >
+                          ✕
+                        </span>
+                      )}
                     </div>
                   ))}
                   {!df.variantFormOpen ? (

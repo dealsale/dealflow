@@ -182,6 +182,23 @@ export function Productos({ df }: { df: DealFlowState }) {
                         ))}
                         <span style={{ color: '#64748B', fontSize: 12 }}>{v.fotosLabel}</span>
                         <PhotoAddChip onFiles={v.addFotos} />
+                        {v.deleteArmed ? (
+                          <span
+                            onClick={v.requestDelete}
+                            style={{ background: '#DC2626', color: '#fff', borderRadius: 6, padding: '4px 9px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          >
+                            Sí, quitar
+                          </span>
+                        ) : (
+                          <span
+                            onClick={v.requestDelete}
+                            className="df-danger-hover"
+                            title="Quitar esta variante"
+                            style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '4px 2px' }}
+                          >
+                            ✕
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}

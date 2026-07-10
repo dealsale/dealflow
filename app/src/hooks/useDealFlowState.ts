@@ -87,6 +87,8 @@ export interface DecoratedVariante {
   stock: number;
   incStock: () => void;
   decStock: () => void;
+  requestDelete: () => void;
+  deleteArmed: boolean;
 }
 
 export interface DecoratedProduct extends Product {
@@ -257,6 +259,7 @@ export function useDealFlowState() {
   const [accounts, setAccounts] = useState<Account[]>(snap?.accounts ?? ACCOUNTS);
   const [armedDeleteProductId, setArmedDeleteProductId] = useState<number | null>(null);
   const [armedDeletePromoId, setArmedDeletePromoId] = useState<number | null>(null);
+  const [armedDeleteVariant, setArmedDeleteVariant] = useState<{ productId: number; index: number } | null>(null);
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
   const [soundOn, setSoundOn] = useState<boolean>(snap?.soundOn ?? true);
   const [orderQuery, setOrderQuery] = useState<string>('');
@@ -504,14 +507,36 @@ export function useDealFlowState() {
     savedProductTimer.current = setTimeout(() => setSavedProductId(null), 2500);
   }
 
-  function armDelete(kind: 'product' | 'promo', id: number) {
-    if (kind === 'product') setArmedDeleteProductId(id);
-    else setArmedDeletePromoId(id);
+  function armDeleteTimer() {
     clearTimeout(armedDeleteTimer.current);
     armedDeleteTimer.current = setTimeout(() => {
       setArmedDeleteProductId(null);
       setArmedDeletePromoId(null);
+      setArmedDeleteVariant(null);
     }, 3500);
+  }
+
+  function armDelete(kind: 'product' | 'promo', id: number) {
+    if (kind === 'product') setArmedDeleteProductId(id);
+    else setArmedDeletePromoId(id);
+    armDeleteTimer();
+  }
+
+  function deleteVariant(productId: number, index: number) {
+    const armed = armedDeleteVariant;
+    if (!armed || armed.productId !== productId || armed.index !== index) {
+      setArmedDeleteVariant({ productId, index });
+      armDeleteTimer();
+      return;
+    }
+    setProducts((st) =>
+      st.map((p) => {
+        if (p.id !== productId) return p;
+        const variantes = p.variantes.filter((_, i) => i !== index);
+        return { ...p, variantes, stock: variantes.reduce((a, v) => a + v.stock, 0) };
+      }),
+    );
+    setArmedDeleteVariant(null);
   }
 
   function deleteProduct(id: number) {
@@ -648,10 +673,12 @@ export function useDealFlowState() {
             stock: v.stock,
             incStock: () => changeVariantStock(p.id, vIndex, 1),
             decStock: () => changeVariantStock(p.id, vIndex, -1),
+            requestDelete: () => deleteVariant(p.id, vIndex),
+            deleteArmed: !!armedDeleteVariant && armedDeleteVariant.productId === p.id && armedDeleteVariant.index === vIndex,
           };
         }),
       })),
-    [products, expandedProductId, productRuleDraft, savedProductId, variantLabel, variantStock, armedDeleteProductId],
+    [products, expandedProductId, productRuleDraft, savedProductId, variantLabel, variantStock, armedDeleteProductId, armedDeleteVariant],
   );
 
   const promosDecorated: DecoratedPromo[] = useMemo(
