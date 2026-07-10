@@ -1,0 +1,144 @@
+import { useRef, useState } from 'react';
+import type { CSSProperties, DragEvent } from 'react';
+
+/** Lee imágenes como data URLs para guardarlas en el estado. */
+export function readImagesAsDataUrls(files: File[]): Promise<string[]> {
+  const images = files.filter((f) => f.type.startsWith('image/'));
+  return Promise.all(
+    images.map(
+      (f) =>
+        new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result as string);
+          r.onerror = () => reject(r.error);
+          r.readAsDataURL(f);
+        }),
+    ),
+  );
+}
+
+function useFilePick(onFiles: (files: File[]) => void) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+
+  const dragProps = {
+    onDragOver: (e: DragEvent) => {
+      e.preventDefault();
+      setOver(true);
+    },
+    onDragLeave: () => setOver(false),
+    onDrop: (e: DragEvent) => {
+      e.preventDefault();
+      setOver(false);
+      onFiles(Array.from(e.dataTransfer.files));
+    },
+  };
+
+  const input = (
+    <input
+      ref={inputRef}
+      type="file"
+      accept="image/*"
+      multiple
+      style={{ display: 'none' }}
+      onChange={(e) => {
+        if (e.target.files?.length) onFiles(Array.from(e.target.files));
+        e.target.value = '';
+      }}
+    />
+  );
+
+  return { open: () => inputRef.current?.click(), over, dragProps, input };
+}
+
+/** Casilla punteada "Subir foto": clic para elegir o arrastra y suelta. */
+export function PhotoDropTile({ size = 64, label = 'Subir foto', onFiles }: { size?: number; label?: string; onFiles: (files: File[]) => void }) {
+  const { open, over, dragProps, input } = useFilePick(onFiles);
+  return (
+    <div
+      onClick={open}
+      {...dragProps}
+      className={over ? '' : 'df-upload-tile'}
+      style={{
+        width: size,
+        height: size,
+        border: '1px dashed ' + (over ? '#059669' : '#CBD5E1'),
+        background: over ? '#ECFDF5' : 'transparent',
+        borderRadius: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1,
+        color: over ? '#059669' : '#64748B',
+        fontSize: size < 64 ? 9.5 : 10.5,
+        fontWeight: 600,
+        cursor: 'pointer',
+        boxSizing: 'border-box',
+      }}
+    >
+      <span style={{ fontSize: size < 64 ? 15 : 16, lineHeight: 1 }}>＋</span>
+      <span>{label}</span>
+      {input}
+    </div>
+  );
+}
+
+/** Chip "+ Foto" para variantes: clic para elegir o arrastra y suelta. */
+export function PhotoAddChip({ onFiles }: { onFiles: (files: File[]) => void }) {
+  const { open, over, dragProps, input } = useFilePick(onFiles);
+  return (
+    <span
+      onClick={open}
+      {...dragProps}
+      className={over ? '' : 'df-upload-tile'}
+      style={{
+        border: '1px dashed ' + (over ? '#059669' : '#CBD5E1'),
+        background: over ? '#ECFDF5' : 'transparent',
+        color: over ? '#059669' : '#64748B',
+        borderRadius: 6,
+        padding: '4px 9px',
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      + Foto
+      {input}
+    </span>
+  );
+}
+
+/** Miniatura de una foto subida, con botón para quitarla. */
+export function UploadedThumb({ src, size, onRemove, style }: { src: string; size: number; onRemove: () => void; style?: CSSProperties }) {
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0, ...style }}>
+      <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: size >= 40 ? 10 : 5, border: '1px solid rgba(15,23,42,.1)', display: 'block' }} />
+      <span
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        title="Quitar foto"
+        style={{
+          position: 'absolute',
+          top: -5,
+          right: -5,
+          width: 16,
+          height: 16,
+          borderRadius: '50%',
+          background: '#0F172A',
+          color: '#fff',
+          fontSize: 9,
+          lineHeight: '16px',
+          textAlign: 'center',
+          cursor: 'pointer',
+          boxShadow: '0 1px 2px rgba(15,23,42,.3)',
+        }}
+      >
+        ✕
+      </span>
+    </div>
+  );
+}

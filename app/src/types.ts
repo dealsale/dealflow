@@ -15,6 +15,8 @@ export interface Order {
   estado: EstadoPedido;
   hora: string;
   transportadora: string;
+  /** Número de guía generado al enviar el pedido a Dropi */
+  guia?: string;
   envio: number;
   nota: string;
   items: OrderItem[];
@@ -24,6 +26,8 @@ export interface Variante {
   label: string;
   stock: number;
   fotos?: number;
+  /** Fotos subidas por el vendedor, como data URLs */
+  fotosSubidas?: string[];
 }
 
 export interface Product {
@@ -33,8 +37,10 @@ export interface Product {
   stock: number;
   color: string;
   txt: string;
-  regla: string;
+  reglas: string[];
   fotos?: string[];
+  /** Fotos principales subidas por el vendedor, como data URLs */
+  fotosSubidas?: string[];
   variantes: Variante[];
 }
 

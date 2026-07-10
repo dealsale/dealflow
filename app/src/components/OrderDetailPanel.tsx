@@ -53,6 +53,53 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
             </div>
           )}
 
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Envío con Dropi</div>
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: sel.hasGuia ? 10 : 0 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#FEF3C7', color: '#B45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>
+                Dr
+              </div>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Dropi</span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  background: sel.hasGuia ? '#D1FAE5' : '#F1F5F9',
+                  color: sel.hasGuia ? '#047857' : '#64748B',
+                  borderRadius: 999,
+                  padding: '3px 10px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                {sel.hasGuia ? 'Guía generada' : 'Sin guía'}
+              </span>
+              <div style={{ flex: 1 }} />
+              {!sel.hasGuia && (
+                <button
+                  onClick={sel.sendToDropi}
+                  className="df-copy-btn"
+                  style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: '#1E293B', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  Enviar a Dropi
+                </button>
+              )}
+            </div>
+            {sel.hasGuia && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ flex: 1, background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: '#1E293B' }}>
+                  Guía {sel.guia}
+                </div>
+                <button
+                  onClick={() => df.copyGuia(sel.guia!)}
+                  className="df-copy-btn"
+                  style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: '#1E293B', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  {df.guiaBtnLabel}
+                </button>
+              </div>
+            )}
+          </div>
+
           <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 10 }}>Avance</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {sel.timeline.map((t, i) => (

@@ -1,3 +1,4 @@
+import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../../components/PhotoUpload';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function MProductos({ df }: { df: DealFlowState }) {
@@ -39,28 +40,10 @@ export function MProductos({ df }: { df: DealFlowState }) {
                       {f.label}
                     </div>
                   ))}
-                  <div
-                    className="df-upload-tile"
-                    style={{
-                      width: 58,
-                      height: 58,
-                      border: '1px dashed #CBD5E1',
-                      borderRadius: 10,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 1,
-                      color: '#64748B',
-                      fontSize: 9.5,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      boxSizing: 'border-box',
-                    }}
-                  >
-                    <span style={{ fontSize: 15, lineHeight: 1 }}>＋</span>
-                    <span>Subir</span>
-                  </div>
+                  {p.uploadedMain.map((src, i) => (
+                    <UploadedThumb key={i} src={src} size={58} onRemove={() => p.removeMainFoto(i)} />
+                  ))}
+                  <PhotoDropTile size={58} label="Subir" onFiles={p.addMainFotos} />
                 </div>
 
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
@@ -83,10 +66,11 @@ export function MProductos({ df }: { df: DealFlowState }) {
                         {v.thumbs.map((t, k) => (
                           <div key={k} style={{ ...t, width: 20, height: 20 }} />
                         ))}
+                        {v.uploaded.map((src, k) => (
+                          <UploadedThumb key={k} src={src} size={20} onRemove={() => v.removeFoto(k)} />
+                        ))}
                       </div>
-                      <span className="df-upload-tile" style={{ border: '1px dashed #CBD5E1', borderRadius: 6, padding: '5px 9px', fontSize: 12, fontWeight: 600, color: '#64748B', cursor: 'pointer' }}>
-                        + Foto
-                      </span>
+                      <PhotoAddChip onFiles={v.addFotos} />
                     </div>
                   ))}
                   <span
@@ -98,6 +82,40 @@ export function MProductos({ df }: { df: DealFlowState }) {
                 </div>
                 <div style={{ color: '#94A3B8', fontSize: 11.5, marginBottom: 12 }}>
                   Si el cliente elige un color o talla, el asistente envía solo las fotos de esa variante.
+                </div>
+
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Reglas para el asistente
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+                  {p.reglasDecoradas.map((r, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px' }}>
+                      <span style={{ color: '#059669', fontWeight: 700, flexShrink: 0 }}>✓</span>
+                      <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>{r.texto}</span>
+                      <span onClick={r.remove} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 4 }}>
+                        ✕
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <input
+                    className="df-input"
+                    value={df.productRuleDraft}
+                    onChange={(e) => df.setProductRuleDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') p.addRegla();
+                    }}
+                    placeholder="Regla nueva…"
+                    style={{ flex: 1, minWidth: 0, border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
+                  />
+                  <button
+                    onClick={p.addRegla}
+                    className="df-btn-outline-green"
+                    style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 44 }}
+                  >
+                    Agregar
+                  </button>
                 </div>
                 <button
                   className="df-btn-primary"

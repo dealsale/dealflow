@@ -13,6 +13,7 @@ import {
   WA_CODE,
   WEBHOOK_URL,
 } from '../data';
+import { readImagesAsDataUrls } from '../components/PhotoUpload';
 import { fmt } from '../lib/format';
 import { AVATAR_COLORS, ESTADOS, ESTADO_ORDER, ETAPA_CFG, initials, pill, stockPillCfg, swatch } from '../lib/style';
 import type {
@@ -40,8 +41,10 @@ export interface DecoratedOrder extends Order {
   isDone: boolean;
   advanceLabel: string;
   hasNota: boolean;
+  hasGuia: boolean;
   advance: () => void;
   open: () => void;
+  sendToDropi: () => void;
   timeline: { estado: string; dotStyle: CSSProperties; labelStyle: CSSProperties }[];
 }
 
@@ -76,6 +79,9 @@ export interface DecoratedVariante {
   stockLabel: string;
   fotosLabel: string;
   thumbs: CSSProperties[];
+  uploaded: string[];
+  addFotos: (files: File[]) => void;
+  removeFoto: (index: number) => void;
 }
 
 export interface DecoratedProduct extends Product {
@@ -89,6 +95,11 @@ export interface DecoratedProduct extends Product {
   chevron: string;
   toggle: () => void;
   fotosMain: { label: string; tileStyle: CSSProperties }[];
+  uploadedMain: string[];
+  addMainFotos: (files: File[]) => void;
+  removeMainFoto: (index: number) => void;
+  reglasDecoradas: { texto: string; remove: () => void }[];
+  addRegla: () => void;
   variantesDecorated: DecoratedVariante[];
 }
 
@@ -155,7 +166,7 @@ export function useDealFlowState() {
   const [crmSelectedId, setCrmSelectedId] = useState<number>(1);
   const [crmIntervening, setCrmIntervening] = useState<boolean>(false);
   const [crmDraft, setCrmDraft] = useState<string>('');
-  const [copied, setCopied] = useState<'webhook' | 'code' | null>(null);
+  const [copied, setCopied] = useState<'webhook' | 'code' | 'guia' | null>(null);
   const [flowMsg, setFlowMsg] = useState<string | null>(null);
   const [ruleDraft, setRuleDraft] = useState<string>('');
   const [assistantSaved, setAssistantSaved] = useState<boolean>(false);
@@ -170,7 +181,8 @@ export function useDealFlowState() {
   const [assistantText, setAssistantText] = useState<string>(ASSISTANT_TEXT_DEFAULT);
   const [rules, setRules] = useState<string[]>(RULES_DEFAULT);
   const [orders, setOrders] = useState<Order[]>(ORDERS);
-  const [products] = useState<Product[]>(PRODUCTS);
+  const [products, setProducts] = useState<Product[]>(PRODUCTS);
+  const [productRuleDraft, setProductRuleDraft] = useState<string>('');
   const [promos, setPromos] = useState<Promo[]>(PROMOS);
   const [leads, setLeads] = useState<Lead[]>(LEADS);
   const [integrations] = useState<Integration[]>(INTEGRATIONS);
@@ -216,6 +228,11 @@ export function useDealFlowState() {
     );
   }
 
+  function sendToDropi(id: string) {
+    const guia = String(402000 + Math.floor(Math.random() * 900) + 100);
+    setOrders((prev) => prev.map((o) => (o.id === id && !o.guia ? { ...o, guia } : o)));
+  }
+
   function decorateOrder(o: Order): DecoratedOrder {
     const cfg = ESTADOS[o.estado];
     const total = o.items.reduce((a, it) => a + it.qty * it.precio, 0) + o.envio;
@@ -230,11 +247,13 @@ export function useDealFlowState() {
       isDone: !cfg.next,
       advanceLabel: cfg.next || '',
       hasNota: !!o.nota,
+      hasGuia: !!o.guia,
       advance: () => advanceOrder(o.id),
       open: () => {
         setSelectedOrderId(o.id);
         setSection('pedidos');
       },
+      sendToDropi: () => sendToDropi(o.id),
       timeline: ESTADO_ORDER.map((est) => {
         const done = ESTADO_ORDER.indexOf(est) <= ESTADO_ORDER.indexOf(o.estado);
         return {
@@ -246,7 +265,7 @@ export function useDealFlowState() {
     };
   }
 
-  function copy(key: 'webhook' | 'code', text: string) {
+  function copy(key: 'webhook' | 'code' | 'guia', text: string) {
     try {
       if (navigator.clipboard) navigator.clipboard.writeText(text);
     } catch {
@@ -320,6 +339,38 @@ export function useDealFlowState() {
   );
   const crmChat = crmChats.find((c) => c.id === crmSelectedId) || null;
 
+  async function addMainPhotos(productId: number, files: File[]) {
+    const urls = await readImagesAsDataUrls(files);
+    if (!urls.length) return;
+    setProducts((st) => st.map((p) => (p.id === productId ? { ...p, fotosSubidas: [...(p.fotosSubidas || []), ...urls] } : p)));
+  }
+
+  function removeMainPhoto(productId: number, index: number) {
+    setProducts((st) => st.map((p) => (p.id === productId ? { ...p, fotosSubidas: (p.fotosSubidas || []).filter((_, i) => i !== index) } : p)));
+  }
+
+  async function addVariantPhotos(productId: number, variantIndex: number, files: File[]) {
+    const urls = await readImagesAsDataUrls(files);
+    if (!urls.length) return;
+    setProducts((st) =>
+      st.map((p) =>
+        p.id === productId
+          ? { ...p, variantes: p.variantes.map((v, i) => (i === variantIndex ? { ...v, fotosSubidas: [...(v.fotosSubidas || []), ...urls] } : v)) }
+          : p,
+      ),
+    );
+  }
+
+  function removeVariantPhoto(productId: number, variantIndex: number, index: number) {
+    setProducts((st) =>
+      st.map((p) =>
+        p.id === productId
+          ? { ...p, variantes: p.variantes.map((v, i) => (i === variantIndex ? { ...v, fotosSubidas: (v.fotosSubidas || []).filter((_, j) => j !== index) } : v)) }
+          : p,
+      ),
+    );
+  }
+
   const productsDecorated: DecoratedProduct[] = useMemo(
     () =>
       products.map((p) => ({
@@ -332,13 +383,31 @@ export function useDealFlowState() {
         stockPill: pill(stockPillCfg(p.stock)),
         expanded: expandedProductId === p.id,
         chevron: expandedProductId === p.id ? '▲' : '▼',
-        toggle: () => setExpandedProductId((cur) => (cur === p.id ? null : p.id)),
+        toggle: () => {
+          setExpandedProductId((cur) => (cur === p.id ? null : p.id));
+          setProductRuleDraft('');
+        },
         fotosMain: (p.fotos || ['Principal', 'Detalle']).map((fl) => ({
           label: fl,
           tileStyle: { width: '64px', height: '64px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontSize: '10px', fontWeight: 600, paddingBottom: '5px', boxSizing: 'border-box' },
         })),
-        variantesDecorated: p.variantes.map((v) => {
+        uploadedMain: p.fotosSubidas || [],
+        addMainFotos: (files: File[]) => void addMainPhotos(p.id, files),
+        removeMainFoto: (index: number) => removeMainPhoto(p.id, index),
+        reglasDecoradas: p.reglas.map((texto, i) => ({
+          texto,
+          remove: () => setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, reglas: x.reglas.filter((_, j) => j !== i) } : x))),
+        })),
+        addRegla: () => {
+          const t = productRuleDraft.trim();
+          if (!t) return;
+          setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, reglas: [...x.reglas, t] } : x)));
+          setProductRuleDraft('');
+        },
+        variantesDecorated: p.variantes.map((v, vIndex) => {
           const nf = v.fotos == null ? 2 : v.fotos;
+          const uploaded = v.fotosSubidas || [];
+          const total = nf + uploaded.length;
           const sw = swatch(v.label, p.txt);
           return {
             label: v.label,
@@ -346,12 +415,15 @@ export function useDealFlowState() {
             labelStyle: { fontSize: '13px', fontWeight: 600, minWidth: '110px', color: v.stock === 0 ? '#94A3B8' : '#1E293B', textDecoration: v.stock === 0 ? 'line-through' : 'none' },
             stockPill: pill(stockPillCfg(v.stock)),
             stockLabel: v.stock === 0 ? 'Agotado' : v.stock + ' en stock',
-            fotosLabel: nf + (nf === 1 ? ' foto' : ' fotos'),
+            fotosLabel: total + (total === 1 ? ' foto' : ' fotos'),
             thumbs: Array.from({ length: Math.min(nf, 3) }, (_, k) => ({ width: '22px', height: '22px', borderRadius: '5px', background: sw, opacity: 1 - k * 0.28, border: '1px solid rgba(15,23,42,.1)' })),
+            uploaded,
+            addFotos: (files: File[]) => void addVariantPhotos(p.id, vIndex, files),
+            removeFoto: (index: number) => removeVariantPhoto(p.id, vIndex, index),
           };
         }),
       })),
-    [products, expandedProductId],
+    [products, expandedProductId, productRuleDraft],
   );
 
   const promosDecorated: DecoratedPromo[] = useMemo(
@@ -599,6 +671,10 @@ export function useDealFlowState() {
     sendCrm,
 
     products: productsDecorated,
+    productRuleDraft,
+    setProductRuleDraft,
+    copyGuia: (guia: string) => copy('guia', guia),
+    guiaBtnLabel: copied === 'guia' ? '✓ Copiado' : 'Copiar',
     promos: promosDecorated,
     rules: rulesDecorated,
     ruleDraft,
