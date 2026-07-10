@@ -14,6 +14,7 @@ import {
   WEBHOOK_URL,
 } from '../data';
 import { readImagesAsDataUrls } from '../components/PhotoUpload';
+import { apiLogin, apiLogout, apiMe } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -272,6 +273,7 @@ export function useDealFlowState() {
     }
   });
   const [loginError, setLoginError] = useState<string>('');
+  const [apiMode, setApiMode] = useState<boolean>(false);
   const [waCfg, setWaCfg] = useState<{ wabaId: string; phoneNumberId: string; numero: string } | null>(snap?.waCfg ?? null);
   const [waForm, setWaForm] = useState({ wabaId: '', phoneNumberId: '', accessToken: '' });
   const [waLinking, setWaLinking] = useState(false);
@@ -571,13 +573,42 @@ export function useDealFlowState() {
     setArmedDeletePromoId(null);
   }
 
-  // Cuentas de la demo. Con el backend conectado, esto llama a POST /api/auth/login.
+  // Al arrancar, detecta si el panel está servido por el backend real.
+  // Si es así, la sesión viene del servidor; si no (demo), del navegador.
+  useEffect(() => {
+    void apiMe().then(({ available, user }) => {
+      setApiMode(available);
+      if (available) {
+        setSessionUser(user ? { nombre: user.nombre, email: user.email, role: user.role === 'ADMIN' ? 'admin' : 'vendedor' } : null);
+        if (user) setMode(user.role === 'ADMIN' ? 'admin' : 'vendedor');
+      }
+    });
+  }, []);
+
+  // Cuentas de la demo estática (sin backend).
   const DEMO_ACCOUNTS: Record<string, { password: string; nombre: string; role: 'vendedor' | 'admin' }> = {
     'karla@lunaaccesorios.co': { password: 'demo123', nombre: 'Karla', role: 'vendedor' },
     'admin@dealflow.co': { password: 'admin123', nombre: 'Equipo DealFlow', role: 'admin' },
   };
 
-  function login(email: string, password: string) {
+  function completeLogin(user: { nombre: string; email: string; role: 'vendedor' | 'admin' }) {
+    setSessionUser(user);
+    setMode(user.role === 'admin' ? 'admin' : 'vendedor');
+    setSection('resumen');
+    setAdminSection('ventas');
+    setLoginError('');
+  }
+
+  async function login(email: string, password: string) {
+    if (apiMode) {
+      const r = await apiLogin(email.trim().toLowerCase(), password);
+      if (r.error || !r.user) {
+        setLoginError(r.error || 'No pudimos iniciar sesión.');
+        return;
+      }
+      completeLogin({ nombre: r.user.nombre, email: r.user.email, role: r.user.role === 'ADMIN' ? 'admin' : 'vendedor' });
+      return;
+    }
     const e = email.trim().toLowerCase();
     const acc = DEMO_ACCOUNTS[e];
     if (!acc || acc.password !== password) {
@@ -585,17 +616,14 @@ export function useDealFlowState() {
       return;
     }
     const user = { nombre: acc.nombre, email: e, role: acc.role };
-    setSessionUser(user);
     try {
       localStorage.setItem('dealflow:session', JSON.stringify(user));
     } catch { /* sin almacenamiento */ }
-    setMode(acc.role === 'admin' ? 'admin' : 'vendedor');
-    setSection('resumen');
-    setAdminSection('ventas');
-    setLoginError('');
+    completeLogin(user);
   }
 
   function logout() {
+    if (apiMode) apiLogout();
     try {
       localStorage.removeItem('dealflow:session');
     } catch { /* nada */ }
@@ -1043,7 +1071,8 @@ export function useDealFlowState() {
     isLoggedIn: !!sessionUser,
     sessionUser,
     canAdmin: sessionUser?.role === 'admin',
-    login,
+    apiMode,
+    login: (email: string, password: string) => void login(email, password),
     logout,
     loginError,
     clearLoginError: () => setLoginError(''),

@@ -57,12 +57,14 @@ export function Login({ df }: { df: DealFlowState }) {
           </button>
         </div>
 
-        <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '12px 16px', marginTop: 14, fontSize: 12.5, color: '#047857', lineHeight: 1.7 }}>
-          <div style={{ fontWeight: 700, marginBottom: 2 }}>Cuentas de la demo</div>
-          Vendedora: <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>karla@lunaaccesorios.co · demo123</span>
-          <br />
-          Admin: <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>admin@dealflow.co · admin123</span>
-        </div>
+        {!df.apiMode && (
+          <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '12px 16px', marginTop: 14, fontSize: 12.5, color: '#047857', lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 700, marginBottom: 2 }}>Cuentas de la demo</div>
+            Vendedora: <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>karla@lunaaccesorios.co · demo123</span>
+            <br />
+            Admin: <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>admin@dealflow.co · admin123</span>
+          </div>
+        )}
       </div>
     </div>
   );
