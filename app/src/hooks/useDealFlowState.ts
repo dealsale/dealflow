@@ -263,11 +263,24 @@ export function useDealFlowState() {
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
   const [soundOn, setSoundOn] = useState<boolean>(snap?.soundOn ?? true);
   const [orderQuery, setOrderQuery] = useState<string>('');
+  const [sessionUser, setSessionUser] = useState<{ nombre: string; email: string; role: 'vendedor' | 'admin' } | null>(() => {
+    try {
+      const raw = localStorage.getItem('dealflow:session');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loginError, setLoginError] = useState<string>('');
+  const [waCfg, setWaCfg] = useState<{ wabaId: string; phoneNumberId: string; numero: string } | null>(snap?.waCfg ?? null);
+  const [waForm, setWaForm] = useState({ wabaId: '', phoneNumberId: '', accessToken: '' });
+  const [waLinking, setWaLinking] = useState(false);
+  const [waError, setWaError] = useState('');
 
   // Guarda los datos de la demo en el navegador: los cambios sobreviven al refrescar.
   useEffect(() => {
-    saveSnapshot({ orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected, soundOn });
-  }, [orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected, soundOn]);
+    saveSnapshot({ orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected, soundOn, waCfg });
+  }, [orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected, soundOn, waCfg]);
 
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const assistantTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -556,6 +569,62 @@ export function useDealFlowState() {
     }
     setPromos((st) => st.filter((p) => p.id !== id));
     setArmedDeletePromoId(null);
+  }
+
+  // Cuentas de la demo. Con el backend conectado, esto llama a POST /api/auth/login.
+  const DEMO_ACCOUNTS: Record<string, { password: string; nombre: string; role: 'vendedor' | 'admin' }> = {
+    'karla@lunaaccesorios.co': { password: 'demo123', nombre: 'Karla', role: 'vendedor' },
+    'admin@dealflow.co': { password: 'admin123', nombre: 'Equipo DealFlow', role: 'admin' },
+  };
+
+  function login(email: string, password: string) {
+    const e = email.trim().toLowerCase();
+    const acc = DEMO_ACCOUNTS[e];
+    if (!acc || acc.password !== password) {
+      setLoginError('Correo o contraseña incorrectos.');
+      return;
+    }
+    const user = { nombre: acc.nombre, email: e, role: acc.role };
+    setSessionUser(user);
+    try {
+      localStorage.setItem('dealflow:session', JSON.stringify(user));
+    } catch { /* sin almacenamiento */ }
+    setMode(acc.role === 'admin' ? 'admin' : 'vendedor');
+    setSection('resumen');
+    setAdminSection('ventas');
+    setLoginError('');
+  }
+
+  function logout() {
+    try {
+      localStorage.removeItem('dealflow:session');
+    } catch { /* nada */ }
+    setSessionUser(null);
+    setMode('vendedor');
+    setSection('resumen');
+    setSelectedOrderId(null);
+    setMenuOpen(false);
+  }
+
+  function vincularWa() {
+    if (!waForm.wabaId.trim() || !waForm.phoneNumberId.trim() || !waForm.accessToken.trim()) {
+      setWaError('Faltan datos: WABA ID, Phone Number ID y Access Token.');
+      return;
+    }
+    setWaError('');
+    setWaLinking(true);
+    // Con el backend conectado, esto llama a PUT /api/whatsapp y Meta valida las credenciales.
+    setTimeout(() => {
+      setWaCfg({ wabaId: waForm.wabaId.trim(), phoneNumberId: waForm.phoneNumberId.trim(), numero: '+57 300 123 4567' });
+      setWaConnected(true);
+      setWaForm({ wabaId: '', phoneNumberId: '', accessToken: '' });
+      setWaLinking(false);
+    }, 900);
+  }
+
+  function desvincularWa() {
+    setWaCfg(null);
+    setWaConnected(false);
   }
 
   function resetDemo() {
@@ -970,6 +1039,25 @@ export function useDealFlowState() {
     setVariantStock: (v: string) => setVariantStock(v.replace(/[^0-9]/g, '')),
 
     resetDemo,
+
+    isLoggedIn: !!sessionUser,
+    sessionUser,
+    canAdmin: sessionUser?.role === 'admin',
+    login,
+    logout,
+    loginError,
+    clearLoginError: () => setLoginError(''),
+
+    waCfg,
+    waForm,
+    setWaForm: (patch: Partial<typeof waForm>) => {
+      setWaForm((f) => ({ ...f, ...patch }));
+      setWaError('');
+    },
+    waLinking,
+    waError,
+    vincularWa,
+    desvincularWa,
 
     incoming: incomingOrder ? decorateOrder(incomingOrder) : null,
     dismissToast: () => {

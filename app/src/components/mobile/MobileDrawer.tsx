@@ -91,18 +91,27 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         )}
 
         <div style={{ flex: 1 }} />
+        {df.canAdmin && (
+          <div
+            onClick={df.toggleMode}
+            className="df-toggle-mode"
+            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px', borderRadius: 8, cursor: 'pointer', color: '#94A3B8', fontSize: 13, fontWeight: 600, border: '1px solid #1E293B' }}
+          >
+            <IconToggleMode />
+            <span>{df.modeBtnLabel}</span>
+          </div>
+        )}
         <div
-          onClick={df.toggleMode}
+          onClick={df.logout}
           className="df-toggle-mode"
-          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px', borderRadius: 8, cursor: 'pointer', color: '#94A3B8', fontSize: 13, fontWeight: 600, border: '1px solid #1E293B' }}
+          style={{ textAlign: 'center', padding: '11px 12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: '#94A3B8', fontSize: 12.5, fontWeight: 600 }}
         >
-          <IconToggleMode />
-          <span>{df.modeBtnLabel}</span>
+          Cerrar sesión
         </div>
         <div
           onClick={df.resetDemo}
           className="df-toggle-mode"
-          style={{ textAlign: 'center', padding: '11px 12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: '#64748B', fontSize: 12.5, fontWeight: 600 }}
+          style={{ textAlign: 'center', padding: '11px 12px', borderRadius: 8, cursor: 'pointer', color: '#64748B', fontSize: 12.5, fontWeight: 600 }}
         >
           ↺ Restablecer demo
         </div>

@@ -1,4 +1,5 @@
 import { Header } from './components/Header';
+import { Login } from './components/Login';
 import { OrderDetailPanel } from './components/OrderDetailPanel';
 import { OrderToast } from './components/OrderToast';
 import { Sidebar } from './components/Sidebar';
@@ -117,6 +118,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
 function App() {
   const df = useDealFlowState();
   const isMobile = useIsMobile();
+  if (!df.isLoggedIn) return <Login df={df} />;
   return isMobile ? <MobileApp df={df} /> : <DesktopApp df={df} />;
 }
 

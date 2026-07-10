@@ -13,6 +13,7 @@ export interface Snapshot {
   accounts: Account[];
   waConnected: boolean;
   soundOn?: boolean;
+  waCfg?: { wabaId: string; phoneNumberId: string; numero: string } | null;
 }
 
 export function loadSnapshot(): Snapshot | null {

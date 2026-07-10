@@ -87,6 +87,6 @@ export const ACCOUNTS: Account[] = [
   { id: 5, tienda: 'Variedades Sara', correo: 'sara.variedades@gmail.com', plan: 'Inicio', ventas: 1900000, activa: true },
 ];
 
-export const WEBHOOK_URL = 'https://api.dealflow.co/wa/hook/luna-accesorios';
-export const WA_CODE = '8F4K-2Q9D';
+export const WEBHOOK_URL = 'https://panel.dealflow.co/webhooks/whatsapp';
+export const WA_CODE = 'dealflow-verify';
 export const WA_NUMBER = '+57 300 123 4567';
