@@ -1,5 +1,6 @@
 import { Header } from './components/Header';
 import { OrderDetailPanel } from './components/OrderDetailPanel';
+import { OrderToast } from './components/OrderToast';
 import { Sidebar } from './components/Sidebar';
 import { MobileChat } from './components/mobile/MobileChat';
 import { MobileDrawer } from './components/mobile/MobileDrawer';
@@ -70,6 +71,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
       </div>
 
       <OrderDetailPanel df={df} />
+      <OrderToast df={df} />
     </div>
   );
 }
@@ -107,6 +109,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
       <MobileDrawer df={df} />
       <MobileChat df={df} />
       <MobileOrderSheet df={df} />
+      <OrderToast df={df} mobile />
     </div>
   );
 }

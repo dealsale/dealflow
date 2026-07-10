@@ -91,6 +91,24 @@ textarea {
   box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
 }
 
+@keyframes dfslidein {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
 /* En pantalla pequeña, las cuadrículas marcadas colapsan a una columna */
 @media (max-width: 767px) {
   .df-collapse {

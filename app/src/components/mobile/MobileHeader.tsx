@@ -1,5 +1,6 @@
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import logo from '../../assets/logo.png';
+import { IconBell } from '../icons';
 
 export function MobileHeader({ df }: { df: DealFlowState }) {
   return (
@@ -29,6 +30,12 @@ export function MobileHeader({ df }: { df: DealFlowState }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 15 }}>{df.headerTitle}</div>
       </div>
+      <span
+        onClick={df.toggleSound}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, cursor: 'pointer', color: df.soundOn ? '#94A3B8' : '#475569' }}
+      >
+        <IconBell muted={!df.soundOn} />
+      </span>
       <span
         style={{
           display: 'inline-flex',

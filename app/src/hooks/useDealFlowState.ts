@@ -16,6 +16,7 @@ import {
 import { readImagesAsDataUrls } from '../components/PhotoUpload';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
+import { playOrderChime } from '../lib/sound';
 import { AVATAR_COLORS, ESTADOS, ESTADO_ORDER, ETAPA_CFG, initials, pill, stockPillCfg, swatch } from '../lib/style';
 import type {
   Account,
@@ -148,6 +149,43 @@ export interface OrderFilterOption {
   style: CSSProperties;
 }
 
+const CLIENTES_ENTRANTES = [
+  { cliente: 'Camila Duarte', ciudad: 'Bogotá', tel: '+57 312 884 2210', direccion: 'Cl 63 # 11-24, apto 501' },
+  { cliente: 'Andrés Felipe Gil', ciudad: 'Medellín', tel: '+57 300 218 7743', direccion: 'Cra 43A # 1-50, Torre 1' },
+  { cliente: 'Luisa Cárdenas', ciudad: 'Cali', tel: '+57 316 405 9912', direccion: 'Cl 5 # 38-25' },
+  { cliente: 'Óscar Peña', ciudad: 'Cartagena', tel: '+57 311 720 5568', direccion: 'Cl 30 # 8B-15' },
+  { cliente: 'Natalia Reyes', ciudad: 'Pereira', tel: '+57 313 662 4471', direccion: 'Cra 7 # 21-33' },
+  { cliente: 'Felipe Osorio', ciudad: 'Bucaramanga', tel: '+57 315 908 3324', direccion: 'Cl 45 # 27-10' },
+];
+
+function generateIncomingOrder(orders: Order[], products: Product[]): Order {
+  const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+  const c = pick(CLIENTES_ENTRANTES);
+  const disponibles = products.filter((p) => p.stock > 0);
+  const base = disponibles.length ? disponibles : [{ nombre: 'Camiseta oversize algodón', precio: 59900 } as Product];
+  const n = Math.random() < 0.35 ? 2 : 1;
+  const items: OrderItem[] = [];
+  for (let i = 0; i < n; i++) {
+    const p = pick(base);
+    if (items.some((it) => it.nombre === p.nombre)) continue;
+    items.push({ qty: Math.random() < 0.3 ? 2 : 1, nombre: p.nombre, precio: p.precio });
+  }
+  const maxNum = orders.reduce((m, o) => Math.max(m, parseInt(o.id.replace(/\D/g, ''), 10) || 0), 1000);
+  return {
+    id: 'DF-' + (maxNum + 1),
+    cliente: c.cliente,
+    ciudad: c.ciudad,
+    tel: c.tel,
+    direccion: c.direccion,
+    estado: 'Nuevo',
+    hora: 'ahora',
+    transportadora: 'Dropi',
+    envio: pick([9900, 12000, 14000]),
+    nota: Math.random() < 0.3 ? 'Pagó por Nequi. Comprobante recibido.' : '',
+    items,
+  };
+}
+
 function navStyle(active: boolean): CSSProperties {
   return {
     display: 'flex',
@@ -214,16 +252,49 @@ export function useDealFlowState() {
   const [accounts, setAccounts] = useState<Account[]>(snap?.accounts ?? ACCOUNTS);
   const [armedDeleteProductId, setArmedDeleteProductId] = useState<number | null>(null);
   const [armedDeletePromoId, setArmedDeletePromoId] = useState<number | null>(null);
+  const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
+  const [soundOn, setSoundOn] = useState<boolean>(snap?.soundOn ?? true);
 
   // Guarda los datos de la demo en el navegador: los cambios sobreviven al refrescar.
   useEffect(() => {
-    saveSnapshot({ orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected });
-  }, [orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected]);
+    saveSnapshot({ orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected, soundOn });
+  }, [orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected, soundOn]);
 
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const assistantTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const savedProductTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const armedDeleteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
+  const productsRef = useRef(products);
+  productsRef.current = products;
+  const soundOnRef = useRef(soundOn);
+  soundOnRef.current = soundOn;
+
+  // Simula la llegada de pedidos desde el asistente de WhatsApp: el primero
+  // entra a los ~15 s y luego cada 35–70 s, con notificación y timbre.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const arrive = () => {
+      if (cancelled) return;
+      const nuevo = generateIncomingOrder(ordersRef.current, productsRef.current);
+      setOrders((st) => [nuevo, ...st]);
+      setIncomingOrder(nuevo);
+      clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setIncomingOrder(null), 8000);
+      if (soundOnRef.current) playOrderChime();
+      timer = setTimeout(arrive, 35000 + Math.random() * 35000);
+    };
+    timer = setTimeout(arrive, 15000 + Math.random() * 10000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   const isAdmin = mode === 'admin';
 
@@ -841,6 +912,19 @@ export function useDealFlowState() {
     setVariantStock: (v: string) => setVariantStock(v.replace(/[^0-9]/g, '')),
 
     resetDemo,
+
+    incoming: incomingOrder ? decorateOrder(incomingOrder) : null,
+    dismissToast: () => {
+      clearTimeout(toastTimer.current);
+      setIncomingOrder(null);
+    },
+    soundOn,
+    toggleSound: () => {
+      setSoundOn((s) => {
+        if (!s) playOrderChime();
+        return !s;
+      });
+    },
 
     newPromoOpen,
     toggleNewPromo: () => {

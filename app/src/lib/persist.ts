@@ -12,6 +12,7 @@ export interface Snapshot {
   plans: Plan[];
   accounts: Account[];
   waConnected: boolean;
+  soundOn?: boolean;
 }
 
 export function loadSnapshot(): Snapshot | null {
