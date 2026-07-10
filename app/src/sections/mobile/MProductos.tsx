@@ -87,6 +87,24 @@ export function MProductos({ df }: { df: DealFlowState }) {
             {p.expanded && (
               <div style={{ background: '#F8FAFC', borderTop: '1px solid #F1F5F9', padding: 14 }}>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Datos del producto
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                  <input
+                    className="df-input"
+                    value={p.nombre}
+                    onChange={(e) => p.setNombre(e.target.value)}
+                    style={{ flex: 1, minWidth: 0, border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, minHeight: 44, boxSizing: 'border-box' }}
+                  />
+                  <input
+                    className="df-input"
+                    value={String(p.precio)}
+                    onChange={(e) => p.setPrecio(e.target.value)}
+                    style={{ width: 100, border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Fotos principales · las envía el asistente
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -117,6 +135,18 @@ export function MProductos({ df }: { df: DealFlowState }) {
                           {v.stockLabel} · {v.fotosLabel}
                         </div>
                       </div>
+                      <span
+                        onClick={v.decStock}
+                        style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: v.stock > 0 ? '#64748B' : '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, cursor: v.stock > 0 ? 'pointer' : 'default', userSelect: 'none', flexShrink: 0 }}
+                      >
+                        −
+                      </span>
+                      <span
+                        onClick={v.incStock}
+                        style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, cursor: 'pointer', userSelect: 'none', flexShrink: 0 }}
+                      >
+                        +
+                      </span>
                       <div style={{ display: 'flex', gap: 4 }}>
                         {v.thumbs.map((t, k) => (
                           <div key={k} style={{ ...t, width: 20, height: 20 }} />

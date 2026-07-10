@@ -4,6 +4,13 @@ export function MPedidos({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="Móvil Pedidos">
       <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 12px' }}>Pedidos</h1>
+      <input
+        className="df-input"
+        value={df.orderQuery}
+        onChange={(e) => df.setOrderQuery(e.target.value)}
+        placeholder="Buscar por cliente o número…"
+        style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 999, padding: '11px 16px', fontFamily: 'inherit', fontSize: 13.5, background: '#fff', minHeight: 44, marginBottom: 10 }}
+      />
       <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, marginBottom: 6 }}>
         {df.orderFilters.map((f) => {
           const active = df.filter === f.key;
@@ -67,7 +74,9 @@ export function MPedidos({ df }: { df: DealFlowState }) {
         ))}
         {df.noOrders && (
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: 28, textAlign: 'center', color: '#64748B', fontSize: 14 }}>
-            No hay pedidos en este estado.
+            {df.orderQuery.trim()
+              ? `No encontramos pedidos para «${df.orderQuery.trim()}». Revisa el nombre o el número.`
+              : 'No hay pedidos en este estado.'}
           </div>
         )}
       </div>

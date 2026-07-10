@@ -109,6 +109,30 @@ export function Productos({ df }: { df: DealFlowState }) {
             {p.expanded && (
               <div style={{ background: '#F8FAFC', borderBottom: '1px solid #F1F5F9', padding: '18px 18px 18px 84px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Datos del producto
+                </div>
+                <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 10, marginBottom: 16, maxWidth: 560 }}>
+                  <div>
+                    <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre</div>
+                    <input
+                      className="df-input"
+                      value={p.nombre}
+                      onChange={(e) => p.setNombre(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Precio (COP)</div>
+                    <input
+                      className="df-input"
+                      value={String(p.precio)}
+                      onChange={(e) => p.setPrecio(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Fotos principales · las que envía el asistente al ofrecer el producto
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
@@ -131,7 +155,23 @@ export function Productos({ df }: { df: DealFlowState }) {
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '9px 12px' }}>
                       <span style={v.swatchStyle} />
                       <span style={v.labelStyle}>{v.label}</span>
+                      <span
+                        onClick={v.decStock}
+                        className={v.stock > 0 ? 'df-copy-btn' : undefined}
+                        title="Quitar una unidad"
+                        style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid #E2E8F0', background: '#fff', color: v.stock > 0 ? '#64748B' : '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, cursor: v.stock > 0 ? 'pointer' : 'default', userSelect: 'none' }}
+                      >
+                        −
+                      </span>
                       <span style={v.stockPill}>{v.stockLabel}</span>
+                      <span
+                        onClick={v.incStock}
+                        className="df-copy-btn"
+                        title="Sumar una unidad"
+                        style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        +
+                      </span>
                       <div style={{ flex: 1 }} />
                       <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                         {v.thumbs.map((t, k) => (

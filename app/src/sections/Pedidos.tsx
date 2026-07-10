@@ -10,12 +10,20 @@ export function Pedidos({ df }: { df: DealFlowState }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
         {df.orderFilters.map((f) => (
           <span key={f.key} onClick={f.set} style={f.style}>
             {f.label}
           </span>
         ))}
+        <div style={{ flex: 1 }} />
+        <input
+          className="df-input"
+          value={df.orderQuery}
+          onChange={(e) => df.setOrderQuery(e.target.value)}
+          placeholder="Buscar por cliente o número…"
+          style={{ width: 250, border: '1px solid #E2E8F0', borderRadius: 999, padding: '9px 16px', fontFamily: 'inherit', fontSize: 13, background: '#fff' }}
+        />
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
@@ -52,7 +60,13 @@ export function Pedidos({ df }: { df: DealFlowState }) {
             </div>
           </div>
         ))}
-        {df.noOrders && <div style={{ padding: 36, textAlign: 'center', color: '#64748B', fontSize: 14 }}>No hay pedidos en este estado.</div>}
+        {df.noOrders && (
+          <div style={{ padding: 36, textAlign: 'center', color: '#64748B', fontSize: 14 }}>
+            {df.orderQuery.trim()
+              ? `No encontramos pedidos para «${df.orderQuery.trim()}». Revisa el nombre o el número.`
+              : 'No hay pedidos en este estado.'}
+          </div>
+        )}
       </div>
     </section>
   );

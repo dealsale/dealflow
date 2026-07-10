@@ -84,6 +84,9 @@ export interface DecoratedVariante {
   uploaded: string[];
   addFotos: (files: File[]) => void;
   removeFoto: (index: number) => void;
+  stock: number;
+  incStock: () => void;
+  decStock: () => void;
 }
 
 export interface DecoratedProduct extends Product {
@@ -107,6 +110,8 @@ export interface DecoratedProduct extends Product {
   addVariante: () => void;
   requestDelete: () => void;
   deleteArmed: boolean;
+  setNombre: (v: string) => void;
+  setPrecio: (v: string) => void;
   variantesDecorated: DecoratedVariante[];
 }
 
@@ -254,6 +259,7 @@ export function useDealFlowState() {
   const [armedDeletePromoId, setArmedDeletePromoId] = useState<number | null>(null);
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
   const [soundOn, setSoundOn] = useState<boolean>(snap?.soundOn ?? true);
+  const [orderQuery, setOrderQuery] = useState<string>('');
 
   // Guarda los datos de la demo en el navegador: los cambios sobreviven al refrescar.
   useEffect(() => {
@@ -478,6 +484,20 @@ export function useDealFlowState() {
     setVariantFormOpen(false);
   }
 
+  function updateProduct(id: number, patch: Partial<Product>) {
+    setProducts((st) => st.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }
+
+  function changeVariantStock(productId: number, variantIndex: number, delta: number) {
+    setProducts((st) =>
+      st.map((p) => {
+        if (p.id !== productId) return p;
+        const variantes = p.variantes.map((v, i) => (i === variantIndex ? { ...v, stock: Math.max(0, v.stock + delta) } : v));
+        return { ...p, variantes, stock: variantes.reduce((a, v) => a + v.stock, 0) };
+      }),
+    );
+  }
+
   function saveProduct(id: number) {
     setSavedProductId(id);
     clearTimeout(savedProductTimer.current);
@@ -590,6 +610,8 @@ export function useDealFlowState() {
         addVariante: () => addVariante(p.id),
         requestDelete: () => deleteProduct(p.id),
         deleteArmed: armedDeleteProductId === p.id,
+        setNombre: (v: string) => updateProduct(p.id, { nombre: v }),
+        setPrecio: (v: string) => updateProduct(p.id, { precio: parseInt(v.replace(/[^0-9]/g, ''), 10) || 0 }),
         fotosMain: (p.fotos || ['Principal', 'Detalle']).map((fl) => ({
           label: fl,
           tileStyle: { width: '64px', height: '64px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontSize: '10px', fontWeight: 600, paddingBottom: '5px', boxSizing: 'border-box' },
@@ -623,6 +645,9 @@ export function useDealFlowState() {
             uploaded,
             addFotos: (files: File[]) => void addVariantPhotos(p.id, vIndex, files),
             removeFoto: (index: number) => removeVariantPhoto(p.id, vIndex, index),
+            stock: v.stock,
+            incStock: () => changeVariantStock(p.id, vIndex, 1),
+            decStock: () => changeVariantStock(p.id, vIndex, -1),
           };
         }),
       })),
@@ -694,10 +719,14 @@ export function useDealFlowState() {
   const ventasHoy = activeOrders.reduce((a, o) => a + o.items.reduce((x, it) => x + it.qty * it.precio, 0), 0);
 
   const filterList = ['Todos', ...ESTADO_ORDER];
-  const filteredOrders: DecoratedOrder[] = useMemo(
-    () => orders.filter((o) => filter === 'Todos' || o.estado === filter).map(decorateOrder),
-    [orders, filter],
-  );
+  const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const filteredOrders: DecoratedOrder[] = useMemo(() => {
+    const q = norm(orderQuery.trim());
+    return orders
+      .filter((o) => filter === 'Todos' || o.estado === filter)
+      .filter((o) => !q || norm(o.cliente).includes(q) || norm(o.id).includes(q))
+      .map(decorateOrder);
+  }, [orders, filter, orderQuery]);
   const recentOrders: DecoratedOrder[] = useMemo(() => orders.slice(0, 4).map(decorateOrder), [orders]);
   const selRaw = orders.find((o) => o.id === selectedOrderId) || null;
   const sel = selRaw ? decorateOrder(selRaw) : null;
@@ -828,6 +857,8 @@ export function useDealFlowState() {
     filter,
     filteredOrders,
     noOrders: filteredOrders.length === 0,
+    orderQuery,
+    setOrderQuery,
 
     hasSelectedOrder: !!sel,
     sel,
