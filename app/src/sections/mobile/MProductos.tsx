@@ -55,6 +55,20 @@ export function MProductos({ df }: { df: DealFlowState }) {
         </div>
       )}
 
+      {df.products.length === 0 && !df.newProductOpen && (
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: '32px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>Aún no tienes productos.</div>
+          <div style={{ color: '#64748B', fontSize: 13 }}>Crea el primero y el asistente empieza a ofrecerlo en WhatsApp.</div>
+          <button
+            onClick={df.toggleNewProduct}
+            className="df-btn-primary"
+            style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', minHeight: 44 }}
+          >
+            + Crear mi primer producto
+          </button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {df.products.map((p) => (
           <div key={p.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
@@ -204,6 +218,16 @@ export function MProductos({ df }: { df: DealFlowState }) {
                   Guardar producto
                 </button>
                 {p.saved && <div style={{ textAlign: 'center', color: '#059669', fontSize: 13, fontWeight: 600, marginTop: 8 }}>✓ Producto guardado. El asistente ya lo ofrece así.</div>}
+                <button
+                  onClick={p.requestDelete}
+                  style={
+                    p.deleteArmed
+                      ? { width: '100%', background: '#DC2626', color: '#fff', border: '1px solid #DC2626', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', marginTop: 8 }
+                      : { width: '100%', background: '#fff', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', marginTop: 8 }
+                  }
+                >
+                  {p.deleteArmed ? '¿Seguro? Sí, eliminar' : 'Eliminar producto'}
+                </button>
               </div>
             )}
           </div>

@@ -99,6 +99,20 @@ export function Promos({ df }: { df: DealFlowState }) {
         </div>
       )}
 
+      {df.promos.length === 0 && !df.newPromoOpen && (
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '40px 24px', boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>Aún no tienes promos.</div>
+          <div style={{ color: '#64748B', fontSize: 13.5 }}>Crea la primera y el asistente la ofrece cuando aplique.</div>
+          <button
+            onClick={df.toggleNewPromo}
+            className="df-btn-primary"
+            style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+          >
+            + Crear mi primera promo
+          </button>
+        </div>
+      )}
+
       <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
         {df.promos.map((pr) => (
           <div key={pr.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 18, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
@@ -111,7 +125,20 @@ export function Promos({ df }: { df: DealFlowState }) {
             </div>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{pr.titulo}</div>
             <div style={{ color: '#64748B', fontSize: 13, lineHeight: 1.5, marginBottom: 10 }}>{pr.desc}</div>
-            <div style={{ color: '#94A3B8', fontSize: 12 }}>{pr.vigencia}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: '#94A3B8', fontSize: 12 }}>{pr.vigencia}</span>
+              <div style={{ flex: 1 }} />
+              <span
+                onClick={pr.requestDelete}
+                style={
+                  pr.deleteArmed
+                    ? { background: '#DC2626', color: '#fff', border: '1px solid #DC2626', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }
+                    : { color: '#DC2626', fontSize: 12, fontWeight: 600, cursor: 'pointer' }
+                }
+              >
+                {pr.deleteArmed ? '¿Seguro? Sí, eliminar' : 'Eliminar'}
+              </span>
+            </div>
           </div>
         ))}
       </div>

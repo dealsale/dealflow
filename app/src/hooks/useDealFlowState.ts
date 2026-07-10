@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   ACCOUNTS,
@@ -15,6 +15,7 @@ import {
 } from '../data';
 import { readImagesAsDataUrls } from '../components/PhotoUpload';
 import { fmt } from '../lib/format';
+import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { AVATAR_COLORS, ESTADOS, ESTADO_ORDER, ETAPA_CFG, initials, pill, stockPillCfg, swatch } from '../lib/style';
 import type {
   Account,
@@ -103,6 +104,8 @@ export interface DecoratedProduct extends Product {
   save: () => void;
   saved: boolean;
   addVariante: () => void;
+  requestDelete: () => void;
+  deleteArmed: boolean;
   variantesDecorated: DecoratedVariante[];
 }
 
@@ -111,6 +114,8 @@ export interface DecoratedPromo extends Promo {
   estadoLabel: string;
   estadoStyle: CSSProperties;
   toggle: () => void;
+  requestDelete: () => void;
+  deleteArmed: boolean;
 }
 
 export interface DecoratedIntegration extends Integration {
@@ -159,6 +164,7 @@ function navStyle(active: boolean): CSSProperties {
 }
 
 export function useDealFlowState() {
+  const [snap] = useState(loadSnapshot);
   const [mode, setMode] = useState<Mode>('vendedor');
   const [section, setSection] = useState<VendedorSection>('resumen');
   const [adminSection, setAdminSection] = useState<AdminSection>('ventas');
@@ -178,13 +184,13 @@ export function useDealFlowState() {
   const [planPrecio, setPlanPrecio] = useState<string>('');
   const [planDesc, setPlanDesc] = useState<string>('');
   const [planError, setPlanError] = useState<boolean>(false);
-  const [waConnected, setWaConnected] = useState<boolean>(true);
+  const [waConnected, setWaConnected] = useState<boolean>(snap?.waConnected ?? true);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [mobileChatOpen, setMobileChatOpen] = useState<boolean>(false);
-  const [assistantText, setAssistantText] = useState<string>(ASSISTANT_TEXT_DEFAULT);
-  const [rules, setRules] = useState<string[]>(RULES_DEFAULT);
-  const [orders, setOrders] = useState<Order[]>(ORDERS);
-  const [products, setProducts] = useState<Product[]>(PRODUCTS);
+  const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? ASSISTANT_TEXT_DEFAULT);
+  const [rules, setRules] = useState<string[]>(snap?.rules ?? RULES_DEFAULT);
+  const [orders, setOrders] = useState<Order[]>(snap?.orders ?? ORDERS);
+  const [products, setProducts] = useState<Product[]>(snap?.products ?? PRODUCTS);
   const [productRuleDraft, setProductRuleDraft] = useState<string>('');
   const [newProductOpen, setNewProductOpen] = useState<boolean>(false);
   const [newProdNombre, setNewProdNombre] = useState<string>('');
@@ -201,15 +207,23 @@ export function useDealFlowState() {
   const [promoDesc, setPromoDesc] = useState<string>('');
   const [promoVigencia, setPromoVigencia] = useState<string>('');
   const [promoError, setPromoError] = useState<boolean>(false);
-  const [promos, setPromos] = useState<Promo[]>(PROMOS);
-  const [leads, setLeads] = useState<Lead[]>(LEADS);
+  const [promos, setPromos] = useState<Promo[]>(snap?.promos ?? PROMOS);
+  const [leads, setLeads] = useState<Lead[]>(snap?.leads ?? LEADS);
   const [integrations] = useState<Integration[]>(INTEGRATIONS);
-  const [plans, setPlans] = useState<Plan[]>(PLANS);
-  const [accounts, setAccounts] = useState<Account[]>(ACCOUNTS);
+  const [plans, setPlans] = useState<Plan[]>(snap?.plans ?? PLANS);
+  const [accounts, setAccounts] = useState<Account[]>(snap?.accounts ?? ACCOUNTS);
+  const [armedDeleteProductId, setArmedDeleteProductId] = useState<number | null>(null);
+  const [armedDeletePromoId, setArmedDeletePromoId] = useState<number | null>(null);
+
+  // Guarda los datos de la demo en el navegador: los cambios sobreviven al refrescar.
+  useEffect(() => {
+    saveSnapshot({ orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected });
+  }, [orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected]);
 
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const assistantTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const savedProductTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const armedDeleteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const isAdmin = mode === 'admin';
 
@@ -399,6 +413,40 @@ export function useDealFlowState() {
     savedProductTimer.current = setTimeout(() => setSavedProductId(null), 2500);
   }
 
+  function armDelete(kind: 'product' | 'promo', id: number) {
+    if (kind === 'product') setArmedDeleteProductId(id);
+    else setArmedDeletePromoId(id);
+    clearTimeout(armedDeleteTimer.current);
+    armedDeleteTimer.current = setTimeout(() => {
+      setArmedDeleteProductId(null);
+      setArmedDeletePromoId(null);
+    }, 3500);
+  }
+
+  function deleteProduct(id: number) {
+    if (armedDeleteProductId !== id) {
+      armDelete('product', id);
+      return;
+    }
+    setProducts((st) => st.filter((p) => p.id !== id));
+    setExpandedProductId((cur) => (cur === id ? null : cur));
+    setArmedDeleteProductId(null);
+  }
+
+  function deletePromo(id: number) {
+    if (armedDeletePromoId !== id) {
+      armDelete('promo', id);
+      return;
+    }
+    setPromos((st) => st.filter((p) => p.id !== id));
+    setArmedDeletePromoId(null);
+  }
+
+  function resetDemo() {
+    clearSnapshot();
+    window.location.reload();
+  }
+
   function crearPromo() {
     const titulo = promoTitulo.trim();
     const desc = promoDesc.trim();
@@ -469,6 +517,8 @@ export function useDealFlowState() {
         save: () => saveProduct(p.id),
         saved: savedProductId === p.id,
         addVariante: () => addVariante(p.id),
+        requestDelete: () => deleteProduct(p.id),
+        deleteArmed: armedDeleteProductId === p.id,
         fotosMain: (p.fotos || ['Principal', 'Detalle']).map((fl) => ({
           label: fl,
           tileStyle: { width: '64px', height: '64px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontSize: '10px', fontWeight: 600, paddingBottom: '5px', boxSizing: 'border-box' },
@@ -505,7 +555,7 @@ export function useDealFlowState() {
           };
         }),
       })),
-    [products, expandedProductId, productRuleDraft, savedProductId, variantLabel, variantStock],
+    [products, expandedProductId, productRuleDraft, savedProductId, variantLabel, variantStock, armedDeleteProductId],
   );
 
   const promosDecorated: DecoratedPromo[] = useMemo(
@@ -516,8 +566,10 @@ export function useDealFlowState() {
         estadoLabel: pr.activa ? 'Activa' : 'Pausada',
         estadoStyle: { ...pill(pr.activa ? { color: '#047857', bg: '#D1FAE5' } : { color: '#64748B', bg: '#F1F5F9' }), cursor: 'pointer' },
         toggle: () => setPromos((st) => st.map((x) => (x.id === pr.id ? { ...x, activa: !x.activa } : x))),
+        requestDelete: () => deletePromo(pr.id),
+        deleteArmed: armedDeletePromoId === pr.id,
       })),
-    [promos],
+    [promos, armedDeletePromoId],
   );
 
   const rulesDecorated = useMemo(
@@ -787,6 +839,8 @@ export function useDealFlowState() {
     setVariantLabel,
     variantStock,
     setVariantStock: (v: string) => setVariantStock(v.replace(/[^0-9]/g, '')),
+
+    resetDemo,
 
     newPromoOpen,
     toggleNewPromo: () => {

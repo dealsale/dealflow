@@ -99,6 +99,13 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
           <IconToggleMode />
           <span>{df.modeBtnLabel}</span>
         </div>
+        <div
+          onClick={df.resetDemo}
+          className="df-toggle-mode"
+          style={{ textAlign: 'center', padding: '11px 12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: '#64748B', fontSize: 12.5, fontWeight: 600 }}
+        >
+          ↺ Restablecer demo
+        </div>
       </div>
       <div onClick={df.closeMenu} style={{ flex: 1, background: 'rgba(15,23,42,.5)' }} />
     </div>

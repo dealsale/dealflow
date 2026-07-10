@@ -74,7 +74,21 @@ export function Productos({ df }: { df: DealFlowState }) {
         </div>
       )}
 
-      <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+      {df.products.length === 0 && !df.newProductOpen && (
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '40px 24px', boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>Aún no tienes productos.</div>
+          <div style={{ color: '#64748B', fontSize: 13.5 }}>Crea el primero y el asistente empieza a ofrecerlo en WhatsApp.</div>
+          <button
+            onClick={df.toggleNewProduct}
+            className="df-btn-primary"
+            style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+          >
+            + Crear mi primer producto
+          </button>
+        </div>
+      )}
+
+      <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: df.products.length === 0 ? 'none' : 'block' }}>
         {df.products.map((p) => (
           <div key={p.id}>
             <div
@@ -212,7 +226,18 @@ export function Productos({ df }: { df: DealFlowState }) {
                     Agregar regla
                   </button>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button
+                    onClick={p.requestDelete}
+                    style={
+                      p.deleteArmed
+                        ? { background: '#DC2626', color: '#fff', border: '1px solid #DC2626', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }
+                        : { background: '#fff', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }
+                    }
+                  >
+                    {p.deleteArmed ? '¿Seguro? Sí, eliminar' : 'Eliminar producto'}
+                  </button>
+                  <div style={{ flex: 1 }} />
                   {p.saved && <span style={{ color: '#059669', fontSize: 13, fontWeight: 600 }}>✓ Producto guardado. El asistente ya lo ofrece así.</span>}
                   <button
                     onClick={p.save}

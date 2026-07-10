@@ -103,6 +103,14 @@ export function Sidebar({ df }: { df: DealFlowState }) {
         <IconToggleMode />
         <span>{df.modeBtnLabel}</span>
       </div>
+      <div
+        onClick={df.resetDemo}
+        className="df-toggle-mode"
+        style={{ textAlign: 'center', padding: '9px 12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: '#64748B', fontSize: 12, fontWeight: 600 }}
+        title="Vuelve a los datos de muestra originales"
+      >
+        ↺ Restablecer demo
+      </div>
     </aside>
   );
 }
