@@ -1,0 +1,306 @@
+import { Router } from 'express';
+import { db, j, pj, uid } from './db.js';
+import { clearAuthCookie, hashPassword, requireAdmin, requireAuth, requireStore, setAuthCookie, verifyPassword } from './auth.js';
+import type { AuthUser } from './auth.js';
+import { handleIncomingWebhook, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
+
+export const api = Router();
+export const webhooks = Router();
+
+const ESTADOS = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado'] as const;
+
+// ── Auth ──────────────────────────────────────────────────────────────
+api.post('/auth/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: 'Escribe tu correo y tu contraseña.' });
+  const row = db.prepare('SELECT id, email, password_hash, nombre, role, store_id FROM users WHERE email = ?').get(String(email).toLowerCase().trim()) as
+    | { id: string; email: string; password_hash: string; nombre: string; role: 'VENDEDOR' | 'ADMIN'; store_id: string | null }
+    | undefined;
+  if (!row || !verifyPassword(String(password), row.password_hash)) {
+    return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
+  }
+  if (row.role === 'VENDEDOR' && row.store_id) {
+    const store = db.prepare('SELECT activa FROM stores WHERE id = ?').get(row.store_id) as { activa: number } | undefined;
+    if (!store?.activa) return res.status(403).json({ error: 'Tu cuenta está desactivada. Escríbenos para reactivarla.' });
+  }
+  const user: AuthUser = { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id };
+  setAuthCookie(res, user);
+  res.json({ user });
+});
+
+api.post('/auth/logout', (_req, res) => {
+  clearAuthCookie(res);
+  res.json({ ok: true });
+});
+
+api.get('/auth/me', requireAuth, (req, res) => {
+  res.json({ user: req.user });
+});
+
+// ── Estado completo de la tienda (una llamada para pintar el panel) ───
+api.get('/state', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  const store = db.prepare('SELECT id, nombre, plan FROM stores WHERE id = ?').get(sid);
+  const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
+    id: p.id, nombre: p.nombre, precio: p.precio, color: p.color, txt: p.txt,
+    reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
+    variantes: (db.prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY orden').all(p.id as string) as Record<string, unknown>[]).map((v) => ({
+      id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: pj(v.fotos_subidas as string, []),
+    })),
+  }));
+  const promos = (db.prepare('SELECT * FROM promos WHERE store_id = ?').all(sid) as Record<string, unknown>[]).map((p) => ({
+    id: p.id, tipo: p.tipo, titulo: p.titulo, desc: p.descripcion, vigencia: p.vigencia, activa: !!p.activa,
+  }));
+  const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, tel: o.tel, direccion: o.direccion,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, envio: o.envio, nota: o.nota, createdAt: o.created_at,
+    items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
+  }));
+  const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
+    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
+    mensajes: (db.prepare('SELECT de, texto, created_at FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
+      de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16),
+    })),
+  }));
+  const assistant = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string } | undefined;
+  const wa = db.prepare('SELECT waba_id, phone_number_id, numero, conectado, access_token FROM whatsapp WHERE store_id = ?').get(sid) as
+    | { waba_id: string; phone_number_id: string; numero: string; conectado: number; access_token: string }
+    | undefined;
+
+  res.json({
+    store,
+    products,
+    promos,
+    orders,
+    leads,
+    assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []) },
+    whatsapp: {
+      conectado: !!wa?.conectado,
+      wabaId: wa?.waba_id || '',
+      phoneNumberId: wa?.phone_number_id || '',
+      numero: wa?.numero || '',
+      tokenGuardado: !!wa?.access_token,
+    },
+  });
+});
+
+// ── Productos ─────────────────────────────────────────────────────────
+api.post('/products', requireAuth, requireStore, (req, res) => {
+  const { nombre, precio, stock = 0, color = '#E0E7FF', txt = '#4338CA' } = req.body || {};
+  if (!nombre?.trim() || !Number(precio)) return res.status(400).json({ error: 'Falta el nombre o el precio.' });
+  const id = uid();
+  db.prepare('INSERT INTO products (id, store_id, nombre, precio, color, txt) VALUES (?,?,?,?,?,?)').run(id, req.user!.storeId, nombre.trim(), Number(precio), color, txt);
+  db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos) VALUES (?,?,?,?,0)').run(uid(), id, 'Única', Number(stock) || 0);
+  res.json({ id });
+});
+
+function ownProduct(req: { user?: AuthUser }, id: string) {
+  return db.prepare('SELECT id FROM products WHERE id = ? AND store_id = ?').get(id, req.user!.storeId) as { id: string } | undefined;
+}
+
+api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
+  if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const { nombre, precio, reglas, fotosSubidas } = req.body || {};
+  if (nombre !== undefined) db.prepare('UPDATE products SET nombre = ? WHERE id = ?').run(String(nombre), req.params.id);
+  if (precio !== undefined) db.prepare('UPDATE products SET precio = ? WHERE id = ?').run(Number(precio) || 0, req.params.id);
+  if (Array.isArray(reglas)) db.prepare('UPDATE products SET reglas = ? WHERE id = ?').run(j(reglas), req.params.id);
+  if (Array.isArray(fotosSubidas)) db.prepare('UPDATE products SET fotos_subidas = ? WHERE id = ?').run(j(fotosSubidas), req.params.id);
+  res.json({ ok: true });
+});
+
+api.delete('/products/:id', requireAuth, requireStore, (req, res) => {
+  if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+api.post('/products/:id/variants', requireAuth, requireStore, (req, res) => {
+  if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const { label, stock = 0 } = req.body || {};
+  if (!label?.trim()) return res.status(400).json({ error: 'Falta la talla o el color de la variante.' });
+  const orden = (db.prepare('SELECT COALESCE(MAX(orden),0)+1 AS o FROM variants WHERE product_id = ?').get(req.params.id) as { o: number }).o;
+  const id = uid();
+  db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, orden) VALUES (?,?,?,?,0,?)').run(id, req.params.id, label.trim(), Number(stock) || 0, orden);
+  res.json({ id });
+});
+
+api.patch('/variants/:id', requireAuth, requireStore, (req, res) => {
+  const v = db.prepare('SELECT v.id FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!v) return res.status(404).json({ error: 'Variante no encontrada.' });
+  const { stock, fotosSubidas } = req.body || {};
+  if (stock !== undefined) db.prepare('UPDATE variants SET stock = ? WHERE id = ?').run(Math.max(0, Number(stock) || 0), req.params.id);
+  if (Array.isArray(fotosSubidas)) db.prepare('UPDATE variants SET fotos_subidas = ? WHERE id = ?').run(j(fotosSubidas), req.params.id);
+  res.json({ ok: true });
+});
+
+api.delete('/variants/:id', requireAuth, requireStore, (req, res) => {
+  const v = db.prepare('SELECT v.id FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!v) return res.status(404).json({ error: 'Variante no encontrada.' });
+  db.prepare('DELETE FROM variants WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ── Promos ────────────────────────────────────────────────────────────
+api.post('/promos', requireAuth, requireStore, (req, res) => {
+  const { tipo = 'Promoción', titulo, desc, vigencia } = req.body || {};
+  if (!titulo?.trim() || !desc?.trim()) return res.status(400).json({ error: 'Falta el título o la descripción.' });
+  const id = uid();
+  db.prepare('INSERT INTO promos (id, store_id, tipo, titulo, descripcion, vigencia) VALUES (?,?,?,?,?,?)').run(
+    id, req.user!.storeId, tipo === 'Combo' ? 'Combo' : 'Promoción', titulo.trim(), desc.trim(), vigencia?.trim() || 'Sin fecha de vencimiento',
+  );
+  res.json({ id });
+});
+
+api.patch('/promos/:id', requireAuth, requireStore, (req, res) => {
+  const p = db.prepare('SELECT id, activa FROM promos WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as { id: string; activa: number } | undefined;
+  if (!p) return res.status(404).json({ error: 'Promo no encontrada.' });
+  const activa = req.body?.activa;
+  db.prepare('UPDATE promos SET activa = ? WHERE id = ?').run(activa === undefined ? (p.activa ? 0 : 1) : activa ? 1 : 0, req.params.id);
+  res.json({ ok: true });
+});
+
+api.delete('/promos/:id', requireAuth, requireStore, (req, res) => {
+  db.prepare('DELETE FROM promos WHERE id = ? AND store_id = ?').run(req.params.id, req.user!.storeId);
+  res.json({ ok: true });
+});
+
+// ── Pedidos ───────────────────────────────────────────────────────────
+api.post('/orders/:rowId/advance', requireAuth, requireStore, (req, res) => {
+  const o = db.prepare('SELECT id, estado FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, req.user!.storeId) as { id: string; estado: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const idx = ESTADOS.indexOf(o.estado as (typeof ESTADOS)[number]);
+  if (idx < 0 || idx >= ESTADOS.length - 1) return res.status(400).json({ error: 'Este pedido ya está entregado.' });
+  db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(ESTADOS[idx + 1], o.id);
+  res.json({ estado: ESTADOS[idx + 1] });
+});
+
+api.post('/orders/:rowId/dropi', requireAuth, requireStore, (req, res) => {
+  const o = db.prepare('SELECT id, guia FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, req.user!.storeId) as { id: string; guia: string | null } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (o.guia) return res.json({ guia: o.guia });
+  // Integración real con Dropi pendiente: por ahora genera la guía localmente.
+  const guia = String(402000 + Math.floor(Math.random() * 900) + 100);
+  db.prepare('UPDATE orders SET guia = ? WHERE id = ?').run(guia, o.id);
+  res.json({ guia });
+});
+
+// ── Leads / CRM ───────────────────────────────────────────────────────
+api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {
+  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
+  const { asignado, etapa } = req.body || {};
+  if (asignado) db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(String(asignado), req.params.id);
+  if (etapa) db.prepare('UPDATE leads SET etapa = ? WHERE id = ?').run(String(etapa), req.params.id);
+  res.json({ ok: true });
+});
+
+api.post('/leads/:id/messages', requireAuth, requireStore, async (req, res) => {
+  const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as
+    | { id: string; tel: string; wa_id: string | null }
+    | undefined;
+  if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
+  const texto = String(req.body?.texto || '').trim();
+  if (!texto) return res.status(400).json({ error: 'Escribe el mensaje primero.' });
+  db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), l.id, 'vendedor', texto);
+  db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
+  let enviado = false;
+  const wa = await sendWhatsappText(req.user!.storeId!, l.wa_id || l.tel, texto);
+  enviado = wa.ok;
+  res.json({ ok: true, enviadoPorWhatsapp: enviado, aviso: wa.ok ? undefined : wa.error });
+});
+
+// ── Asistente ─────────────────────────────────────────────────────────
+api.put('/assistant', requireAuth, requireStore, (req, res) => {
+  const { instrucciones, reglas } = req.body || {};
+  db.prepare(
+    `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
+     ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
+  ).run(req.user!.storeId, String(instrucciones || ''), j(Array.isArray(reglas) ? reglas : []));
+  res.json({ ok: true });
+});
+
+// ── WhatsApp (vinculación por WABA ID + token) ───────────────────────
+api.put('/whatsapp', requireAuth, requireStore, async (req, res) => {
+  const { wabaId, phoneNumberId, accessToken } = req.body || {};
+  if (!wabaId?.trim() || !phoneNumberId?.trim() || !accessToken?.trim()) {
+    return res.status(400).json({ error: 'Faltan datos: WABA ID, Phone Number ID y Access Token.' });
+  }
+  const check = await verifyWhatsappCredentials(phoneNumberId.trim(), accessToken.trim());
+  if (!check.ok) return res.status(400).json({ error: check.error });
+  db.prepare(
+    `INSERT INTO whatsapp (store_id, waba_id, phone_number_id, access_token, numero, conectado) VALUES (?,?,?,?,?,1)
+     ON CONFLICT(store_id) DO UPDATE SET waba_id = excluded.waba_id, phone_number_id = excluded.phone_number_id,
+       access_token = excluded.access_token, numero = excluded.numero, conectado = 1`,
+  ).run(req.user!.storeId, wabaId.trim(), phoneNumberId.trim(), accessToken.trim(), check.numero);
+  res.json({ conectado: true, numero: check.numero });
+});
+
+api.delete('/whatsapp', requireAuth, requireStore, (req, res) => {
+  db.prepare('UPDATE whatsapp SET conectado = 0, access_token = \'\' WHERE store_id = ?').run(req.user!.storeId);
+  res.json({ conectado: false });
+});
+
+// ── Admin ─────────────────────────────────────────────────────────────
+api.get('/admin/overview', requireAuth, requireAdmin, (_req, res) => {
+  const stores = (db.prepare('SELECT * FROM stores ORDER BY created_at').all() as Record<string, unknown>[]).map((s) => {
+    const ventas = db.prepare(
+      `SELECT COALESCE(SUM(oi.qty * oi.precio), 0) + COALESCE((SELECT SUM(envio) FROM orders WHERE store_id = ? AND created_at >= date('now','start of month')), 0) AS total
+       FROM order_items oi JOIN orders o ON o.id = oi.order_id
+       WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
+    ).get(s.id, s.id) as { total: number };
+    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa };
+  });
+  const plans = (db.prepare('SELECT * FROM plans').all() as Record<string, unknown>[]).map((p) => ({
+    id: p.id, nombre: p.nombre, precio: p.precio, features: pj(p.features as string, []),
+    cuentas: (db.prepare('SELECT COUNT(*) AS n FROM stores WHERE plan = ?').get(p.nombre) as { n: number }).n,
+  }));
+  res.json({ stores, plans });
+});
+
+api.post('/admin/plans', requireAuth, requireAdmin, (req, res) => {
+  const { nombre, precio, features } = req.body || {};
+  if (!nombre?.trim() || !Number(precio)) return res.status(400).json({ error: 'Falta el nombre o el precio.' });
+  const id = uid();
+  db.prepare('INSERT INTO plans (id, nombre, precio, features) VALUES (?,?,?,?)').run(id, nombre.trim(), Number(precio), j(Array.isArray(features) ? features : []));
+  res.json({ id });
+});
+
+api.patch('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
+  const s = db.prepare('SELECT id, activa FROM stores WHERE id = ?').get(req.params.id) as { id: string; activa: number } | undefined;
+  if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
+  const activa = req.body?.activa;
+  db.prepare('UPDATE stores SET activa = ? WHERE id = ?').run(activa === undefined ? (s.activa ? 0 : 1) : activa ? 1 : 0, req.params.id);
+  res.json({ ok: true });
+});
+
+api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
+  const { nombre, correo, plan = 'Inicio', password } = req.body || {};
+  if (!nombre?.trim() || !correo?.trim() || !password) return res.status(400).json({ error: 'Faltan el nombre de la tienda, el correo o la contraseña.' });
+  const email = String(correo).toLowerCase().trim();
+  if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
+  const storeId = uid();
+  db.prepare('INSERT INTO stores (id, nombre, correo, plan) VALUES (?,?,?,?)').run(storeId, nombre.trim(), email, String(plan));
+  db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)').run(uid(), email, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', storeId);
+  db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
+  db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
+  res.json({ storeId });
+});
+
+// ── Webhook de Meta (una sola URL para todas las tiendas) ────────────
+webhooks.get('/whatsapp', (req, res) => {
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'dealflow-verify';
+  if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === verifyToken) {
+    return res.send(req.query['hub.challenge']);
+  }
+  res.sendStatus(403);
+});
+
+webhooks.post('/whatsapp', (req, res) => {
+  // Meta exige responder rápido: procesamos y contestamos 200 siempre.
+  try {
+    handleIncomingWebhook(req.body);
+  } catch (e) {
+    console.error('[webhook] error procesando entrada', e);
+  }
+  res.sendStatus(200);
+});
