@@ -100,6 +100,9 @@ export interface DecoratedProduct extends Product {
   removeMainFoto: (index: number) => void;
   reglasDecoradas: { texto: string; remove: () => void }[];
   addRegla: () => void;
+  save: () => void;
+  saved: boolean;
+  addVariante: () => void;
   variantesDecorated: DecoratedVariante[];
 }
 
@@ -183,6 +186,21 @@ export function useDealFlowState() {
   const [orders, setOrders] = useState<Order[]>(ORDERS);
   const [products, setProducts] = useState<Product[]>(PRODUCTS);
   const [productRuleDraft, setProductRuleDraft] = useState<string>('');
+  const [newProductOpen, setNewProductOpen] = useState<boolean>(false);
+  const [newProdNombre, setNewProdNombre] = useState<string>('');
+  const [newProdPrecio, setNewProdPrecio] = useState<string>('');
+  const [newProdStock, setNewProdStock] = useState<string>('');
+  const [newProdError, setNewProdError] = useState<boolean>(false);
+  const [variantFormOpen, setVariantFormOpen] = useState<boolean>(false);
+  const [variantLabel, setVariantLabel] = useState<string>('');
+  const [variantStock, setVariantStock] = useState<string>('');
+  const [savedProductId, setSavedProductId] = useState<number | null>(null);
+  const [newPromoOpen, setNewPromoOpen] = useState<boolean>(false);
+  const [promoTipo, setPromoTipo] = useState<'Promoción' | 'Combo'>('Promoción');
+  const [promoTitulo, setPromoTitulo] = useState<string>('');
+  const [promoDesc, setPromoDesc] = useState<string>('');
+  const [promoVigencia, setPromoVigencia] = useState<string>('');
+  const [promoError, setPromoError] = useState<boolean>(false);
   const [promos, setPromos] = useState<Promo[]>(PROMOS);
   const [leads, setLeads] = useState<Lead[]>(LEADS);
   const [integrations] = useState<Integration[]>(INTEGRATIONS);
@@ -191,6 +209,7 @@ export function useDealFlowState() {
 
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const assistantTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const savedProductTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const isAdmin = mode === 'admin';
 
@@ -339,6 +358,63 @@ export function useDealFlowState() {
   );
   const crmChat = crmChats.find((c) => c.id === crmSelectedId) || null;
 
+  function crearProducto() {
+    const nombre = newProdNombre.trim();
+    const precio = parseInt(newProdPrecio, 10);
+    const stock = parseInt(newProdStock, 10) || 0;
+    if (!nombre || !precio) {
+      setNewProdError(true);
+      return;
+    }
+    const [bg, txt] = AVATAR_COLORS[products.length % AVATAR_COLORS.length];
+    const id = Date.now();
+    setProducts((st) => [{ id, nombre, precio, stock, color: bg, txt, reglas: [], variantes: [{ label: 'Única', stock, fotos: 0 }] }, ...st]);
+    setExpandedProductId(id);
+    setNewProdNombre('');
+    setNewProdPrecio('');
+    setNewProdStock('');
+    setNewProdError(false);
+    setNewProductOpen(false);
+  }
+
+  function addVariante(productId: number) {
+    const label = variantLabel.trim();
+    const stock = parseInt(variantStock, 10) || 0;
+    if (!label) return;
+    setProducts((st) =>
+      st.map((p) =>
+        p.id === productId
+          ? { ...p, variantes: [...p.variantes, { label, stock, fotos: 0 }], stock: p.variantes.reduce((a, v) => a + v.stock, 0) + stock }
+          : p,
+      ),
+    );
+    setVariantLabel('');
+    setVariantStock('');
+    setVariantFormOpen(false);
+  }
+
+  function saveProduct(id: number) {
+    setSavedProductId(id);
+    clearTimeout(savedProductTimer.current);
+    savedProductTimer.current = setTimeout(() => setSavedProductId(null), 2500);
+  }
+
+  function crearPromo() {
+    const titulo = promoTitulo.trim();
+    const desc = promoDesc.trim();
+    if (!titulo || !desc) {
+      setPromoError(true);
+      return;
+    }
+    setPromos((st) => [{ id: Date.now(), tipo: promoTipo, titulo, desc, vigencia: promoVigencia.trim() || 'Sin fecha de vencimiento', activa: true }, ...st]);
+    setPromoTitulo('');
+    setPromoDesc('');
+    setPromoVigencia('');
+    setPromoTipo('Promoción');
+    setPromoError(false);
+    setNewPromoOpen(false);
+  }
+
   async function addMainPhotos(productId: number, files: File[]) {
     const urls = await readImagesAsDataUrls(files);
     if (!urls.length) return;
@@ -386,7 +462,13 @@ export function useDealFlowState() {
         toggle: () => {
           setExpandedProductId((cur) => (cur === p.id ? null : p.id));
           setProductRuleDraft('');
+          setVariantFormOpen(false);
+          setVariantLabel('');
+          setVariantStock('');
         },
+        save: () => saveProduct(p.id),
+        saved: savedProductId === p.id,
+        addVariante: () => addVariante(p.id),
         fotosMain: (p.fotos || ['Principal', 'Detalle']).map((fl) => ({
           label: fl,
           tileStyle: { width: '64px', height: '64px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontSize: '10px', fontWeight: 600, paddingBottom: '5px', boxSizing: 'border-box' },
@@ -423,7 +505,7 @@ export function useDealFlowState() {
           };
         }),
       })),
-    [products, expandedProductId, productRuleDraft],
+    [products, expandedProductId, productRuleDraft, savedProductId, variantLabel, variantStock],
   );
 
   const promosDecorated: DecoratedPromo[] = useMemo(
@@ -673,6 +755,61 @@ export function useDealFlowState() {
     products: productsDecorated,
     productRuleDraft,
     setProductRuleDraft,
+
+    newProductOpen,
+    toggleNewProduct: () => {
+      setNewProductOpen((o) => !o);
+      setNewProdError(false);
+    },
+    newProdNombre,
+    setNewProdNombre: (v: string) => {
+      setNewProdNombre(v);
+      setNewProdError(false);
+    },
+    newProdPrecio,
+    setNewProdPrecio: (v: string) => {
+      setNewProdPrecio(v.replace(/[^0-9]/g, ''));
+      setNewProdError(false);
+    },
+    newProdStock,
+    setNewProdStock: (v: string) => setNewProdStock(v.replace(/[^0-9]/g, '')),
+    newProdError,
+    crearProducto,
+
+    variantFormOpen,
+    openVariantForm: () => setVariantFormOpen(true),
+    cancelVariantForm: () => {
+      setVariantFormOpen(false);
+      setVariantLabel('');
+      setVariantStock('');
+    },
+    variantLabel,
+    setVariantLabel,
+    variantStock,
+    setVariantStock: (v: string) => setVariantStock(v.replace(/[^0-9]/g, '')),
+
+    newPromoOpen,
+    toggleNewPromo: () => {
+      setNewPromoOpen((o) => !o);
+      setPromoError(false);
+    },
+    promoTipo,
+    setPromoTipo,
+    promoTitulo,
+    setPromoTitulo: (v: string) => {
+      setPromoTitulo(v);
+      setPromoError(false);
+    },
+    promoDesc,
+    setPromoDesc: (v: string) => {
+      setPromoDesc(v);
+      setPromoError(false);
+    },
+    promoVigencia,
+    setPromoVigencia,
+    promoError,
+    crearPromo,
+
     copyGuia: (guia: string) => copy('guia', guia),
     guiaBtnLabel: copied === 'guia' ? '✓ Copiado' : 'Copiar',
     promos: promosDecorated,

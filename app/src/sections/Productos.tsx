@@ -10,10 +10,69 @@ export function Productos({ df }: { df: DealFlowState }) {
           <p style={{ color: '#64748B', fontSize: 14, margin: '4px 0 0' }}>{df.productCount} productos en tu catálogo. Toca uno para editarlo.</p>
         </div>
         <div style={{ flex: 1 }} />
-        <button className="df-btn-primary" style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+        <button
+          onClick={df.toggleNewProduct}
+          className="df-btn-primary"
+          style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+        >
           + Nuevo producto
         </button>
       </div>
+
+      {df.newProductOpen && (
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>Nuevo producto</div>
+          <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div>
+              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre</div>
+              <input
+                className="df-input"
+                value={df.newProdNombre}
+                onChange={(e) => df.setNewProdNombre(e.target.value)}
+                placeholder="Ej: Chaqueta bomber"
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
+              />
+            </div>
+            <div>
+              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Precio (COP)</div>
+              <input
+                className="df-input"
+                value={df.newProdPrecio}
+                onChange={(e) => df.setNewProdPrecio(e.target.value)}
+                placeholder="Ej: 79900"
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+              />
+            </div>
+            <div>
+              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Stock inicial</div>
+              <input
+                className="df-input"
+                value={df.newProdStock}
+                onChange={(e) => df.setNewProdStock(e.target.value)}
+                placeholder="Ej: 10"
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              onClick={df.crearProducto}
+              className="df-btn-primary"
+              style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+            >
+              Crear producto
+            </button>
+            <button
+              onClick={df.toggleNewProduct}
+              style={{ background: '#fff', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+            >
+              Cancelar
+            </button>
+            {df.newProdError && <span style={{ color: '#DC2626', fontSize: 13 }}>Falta el nombre o el precio. Complétalos y vuelve a intentar.</span>}
+          </div>
+          <div style={{ color: '#94A3B8', fontSize: 12, marginTop: 10 }}>Se crea con una variante "Única". Al abrirlo puedes agregar más variantes, fotos y reglas.</div>
+        </div>
+      )}
 
       <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
         {df.products.map((p) => (
@@ -72,12 +131,49 @@ export function Productos({ df }: { df: DealFlowState }) {
                       </div>
                     </div>
                   ))}
-                  <span
-                    className="df-upload-tile"
-                    style={{ alignSelf: 'flex-start', background: '#fff', border: '1px dashed #CBD5E1', color: '#64748B', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}
-                  >
-                    + Agregar variante
-                  </span>
+                  {!df.variantFormOpen ? (
+                    <span
+                      onClick={df.openVariantForm}
+                      className="df-upload-tile"
+                      style={{ alignSelf: 'flex-start', background: '#fff', border: '1px dashed #CBD5E1', color: '#64748B', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}
+                    >
+                      + Agregar variante
+                    </span>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input
+                        className="df-input"
+                        value={df.variantLabel}
+                        onChange={(e) => df.setVariantLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') p.addVariante();
+                        }}
+                        placeholder="Talla · Color (ej: M · Rojo)"
+                        autoFocus
+                        style={{ flex: 1, minWidth: 180, border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                      />
+                      <input
+                        className="df-input"
+                        value={df.variantStock}
+                        onChange={(e) => df.setVariantStock(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') p.addVariante();
+                        }}
+                        placeholder="Stock"
+                        style={{ width: 80, border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+                      />
+                      <button
+                        onClick={p.addVariante}
+                        className="df-btn-outline-green"
+                        style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        Agregar variante
+                      </button>
+                      <span onClick={df.cancelVariantForm} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, padding: 4 }}>
+                        ✕
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div style={{ color: '#94A3B8', fontSize: 12, marginBottom: 16 }}>
                   Si el cliente elige un color o talla, el asistente envía solo las fotos de esa variante.
@@ -116,8 +212,13 @@ export function Productos({ df }: { df: DealFlowState }) {
                     Agregar regla
                   </button>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button className="df-btn-primary" style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
+                  {p.saved && <span style={{ color: '#059669', fontSize: 13, fontWeight: 600 }}>✓ Producto guardado. El asistente ya lo ofrece así.</span>}
+                  <button
+                    onClick={p.save}
+                    className="df-btn-primary"
+                    style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                  >
                     Guardar producto
                   </button>
                 </div>
