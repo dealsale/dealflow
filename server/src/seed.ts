@@ -1,17 +1,27 @@
 import { db, j, uid } from './db.js';
 import { hashPassword } from './auth.js';
 
-/** Crea el admin, los planes y (opcional) la tienda demo si la base está vacía. */
+/**
+ * Sincroniza el admin con ADMIN_EMAIL/ADMIN_PASSWORD en cada arranque
+ * (las variables de entorno mandan siempre), y crea los planes y la
+ * tienda demo solo si la base está vacía.
+ */
 export function seed() {
-  const hasUsers = (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n > 0;
-  if (hasUsers) return;
-
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@dealflow.co';
+  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@dealflow.co').toLowerCase().trim();
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-  db.prepare('INSERT INTO users (id, email, password_hash, nombre, role) VALUES (?,?,?,?,?)').run(
-    uid(), adminEmail, hashPassword(adminPassword), 'Equipo DealFlow', 'ADMIN',
-  );
-  console.log(`[seed] Admin creado: ${adminEmail} (contraseña: ${process.env.ADMIN_PASSWORD ? 'la de ADMIN_PASSWORD' : adminPassword + ' — cámbiala'})`);
+  const admin = db.prepare("SELECT id FROM users WHERE role = 'ADMIN' ORDER BY rowid LIMIT 1").get() as { id: string } | undefined;
+  if (admin) {
+    db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?').run(adminEmail, hashPassword(adminPassword), admin.id);
+  } else {
+    db.prepare('INSERT INTO users (id, email, password_hash, nombre, role) VALUES (?,?,?,?,?)').run(
+      uid(), adminEmail, hashPassword(adminPassword), 'Equipo DealFlow', 'ADMIN',
+    );
+  }
+  console.log(`[seed] Admin listo: ${adminEmail} (contraseña tomada de ADMIN_PASSWORD${process.env.ADMIN_PASSWORD ? '' : ' — usa la variable, hoy es admin123'})`);
+
+  const hasStores = (db.prepare('SELECT COUNT(*) AS n FROM stores').get() as { n: number }).n > 0;
+  const hasPlans = (db.prepare('SELECT COUNT(*) AS n FROM plans').get() as { n: number }).n > 0;
+  if (hasStores || hasPlans) return;
 
   for (const [nombre, precio, features] of [
     ['Inicio', 49900, ['1 número de WhatsApp', 'Hasta 100 pedidos al mes', 'Asistente con catálogo y promos']],
