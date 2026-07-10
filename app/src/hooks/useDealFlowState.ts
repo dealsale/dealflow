@@ -14,7 +14,7 @@ import {
   WEBHOOK_URL,
 } from '../data';
 import { readImagesAsDataUrls } from '../components/PhotoUpload';
-import { apiLogin, apiLogout, apiMe } from '../lib/api';
+import { apiAdminOverview, apiCreatePlan, apiCreateStore, apiLogin, apiLogout, apiMe, apiToggleStore } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -274,6 +274,11 @@ export function useDealFlowState() {
   });
   const [loginError, setLoginError] = useState<string>('');
   const [apiMode, setApiMode] = useState<boolean>(false);
+  const [newAccountOpen, setNewAccountOpen] = useState(false);
+  const [accForm, setAccForm] = useState({ nombre: '', correo: '', password: '', plan: 'Inicio' });
+  const [accError, setAccError] = useState('');
+  const [accSaving, setAccSaving] = useState(false);
+  const [accCreated, setAccCreated] = useState('');
   const [waCfg, setWaCfg] = useState<{ wabaId: string; phoneNumberId: string; numero: string } | null>(snap?.waCfg ?? null);
   const [waForm, setWaForm] = useState({ wabaId: '', phoneNumberId: '', accessToken: '' });
   const [waLinking, setWaLinking] = useState(false);
@@ -824,6 +829,23 @@ export function useDealFlowState() {
     [plans],
   );
 
+  // En modo servidor, el panel admin carga cuentas y planes reales.
+  async function reloadAdmin() {
+    const { data } = await apiAdminOverview();
+    if (!data) return;
+    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa })));
+    setPlans(data.plans.map((p) => ({ id: p.id, nombre: p.nombre, precio: p.precio, cuentas: p.cuentas, features: p.features })));
+  }
+  useEffect(() => {
+    if (apiMode && isAdmin) void reloadAdmin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, isAdmin]);
+
+  function toggleAccount(id: number | string, activa: boolean) {
+    setAccounts((st) => st.map((x) => (x.id === id ? { ...x, activa: !x.activa } : x)));
+    if (apiMode) void apiToggleStore(String(id), !activa).then((r) => { if (r.error) void reloadAdmin(); });
+  }
+
   const accountsDecorated: DecoratedAccount[] = useMemo(
     () =>
       accounts.map((a) => ({
@@ -833,9 +855,9 @@ export function useDealFlowState() {
         estadoStyle: pill(a.activa ? { color: '#047857', bg: '#D1FAE5' } : { color: '#B91C1C', bg: '#FEE2E2' }),
         switchStyle: { width: '40px', height: '23px', borderRadius: '999px', background: a.activa ? '#059669' : '#CBD5E1', padding: '2.5px', cursor: 'pointer', transition: 'background .15s', boxSizing: 'border-box' },
         knobStyle: { width: '18px', height: '18px', borderRadius: '50%', background: '#fff', transform: a.activa ? 'translateX(17px)' : 'translateX(0)', transition: 'transform .15s', boxShadow: '0 1px 2px rgba(15,23,42,.25)' },
-        toggle: () => setAccounts((st) => st.map((x) => (x.id === a.id ? { ...x, activa: !x.activa } : x))),
+        toggle: () => toggleAccount(a.id, a.activa),
       })),
-    [accounts],
+    [accounts, apiMode],
   );
 
   const newOrders = orders.filter((o) => o.estado === 'Nuevo');
@@ -912,6 +934,20 @@ export function useDealFlowState() {
       return;
     }
     const features = planDesc.split(',').map((x) => x.trim()).filter(Boolean);
+    if (apiMode) {
+      void apiCreatePlan({ nombre: planNombre.trim(), precio: parseInt(planPrecio, 10), features }).then((r) => {
+        if (r.error) {
+          setPlanError(true);
+          return;
+        }
+        void reloadAdmin();
+        setPlanNombre('');
+        setPlanPrecio('');
+        setPlanDesc('');
+        setPlanError(false);
+      });
+      return;
+    }
     setPlans((st) => [
       ...st,
       { id: Date.now(), nombre: planNombre.trim(), precio: parseInt(planPrecio, 10), cuentas: 0, features: features.length ? features : ['Plan nuevo, sin cuentas todavía'] },
@@ -920,6 +956,38 @@ export function useDealFlowState() {
     setPlanPrecio('');
     setPlanDesc('');
     setPlanError(false);
+  }
+
+  function crearCuenta() {
+    const nombre = accForm.nombre.trim();
+    const correo = accForm.correo.trim().toLowerCase();
+    if (!nombre || !correo || !accForm.password) {
+      setAccError('Faltan el nombre de la tienda, el correo o la contraseña.');
+      return;
+    }
+    if (apiMode) {
+      setAccSaving(true);
+      setAccError('');
+      void apiCreateStore({ nombre, correo, password: accForm.password, plan: accForm.plan }).then((r) => {
+        setAccSaving(false);
+        if (r.error) {
+          setAccError(r.error);
+          return;
+        }
+        void reloadAdmin();
+        setAccCreated(`Cuenta creada. ${correo} ya puede entrar con la contraseña que definiste.`);
+        setAccForm({ nombre: '', correo: '', password: '', plan: 'Inicio' });
+        setNewAccountOpen(false);
+        setTimeout(() => setAccCreated(''), 5000);
+      });
+      return;
+    }
+    // Modo demo: la cuenta vive solo en el navegador.
+    setAccounts((st) => [...st, { id: Date.now(), tienda: nombre, correo, plan: accForm.plan, ventas: 0, activa: true }]);
+    setAccCreated(`Cuenta creada para ${correo} (demo).`);
+    setAccForm({ nombre: '', correo: '', password: '', plan: 'Inicio' });
+    setNewAccountOpen(false);
+    setTimeout(() => setAccCreated(''), 5000);
   }
 
   const waPill: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '6px', background: waConnected ? '#ECFDF5' : '#FEF2F2', border: '1px solid ' + (waConnected ? '#A7F3D0' : '#FECACA'), color: waConnected ? '#047857' : '#B91C1C', borderRadius: '999px', padding: '4px 11px', fontSize: '12px', fontWeight: 700 };
@@ -1142,6 +1210,21 @@ export function useDealFlowState() {
     integrations: integrationsDecorated,
     plans: plansDecorated,
     accounts: accountsDecorated,
+    planNames: plansDecorated.map((p) => p.nombre),
+    newAccountOpen,
+    toggleNewAccount: () => {
+      setNewAccountOpen((o) => !o);
+      setAccError('');
+    },
+    accForm,
+    setAccForm: (patch: Partial<typeof accForm>) => {
+      setAccForm((f) => ({ ...f, ...patch }));
+      setAccError('');
+    },
+    accError,
+    accSaving,
+    accCreated,
+    crearCuenta,
 
     planNombre,
     setPlanNombre: (v: string) => {

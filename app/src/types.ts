@@ -89,7 +89,7 @@ export interface Integration {
 }
 
 export interface Plan {
-  id: number;
+  id: number | string;
   nombre: string;
   precio: number;
   cuentas: number;
@@ -97,7 +97,7 @@ export interface Plan {
 }
 
 export interface Account {
-  id: number;
+  id: number | string;
   tienda: string;
   correo: string;
   plan: string;

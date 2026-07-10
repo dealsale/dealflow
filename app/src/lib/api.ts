@@ -46,3 +46,42 @@ export async function apiLogin(email: string, password: string): Promise<{ user?
 export function apiLogout() {
   void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
 }
+
+async function req<T>(url: string, method: string, body?: unknown): Promise<{ data?: T; error?: string }> {
+  try {
+    const r = await fetch(url, {
+      method,
+      credentials: 'same-origin',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const ct = r.headers.get('content-type') || '';
+    const b = ct.includes('application/json') ? await r.json() : {};
+    if (!r.ok) return { error: (b as { error?: string }).error || 'Algo salió mal. Intenta de nuevo.' };
+    return { data: b as T };
+  } catch {
+    return { error: 'No pudimos hablar con el servidor. Revisa tu conexión.' };
+  }
+}
+
+export interface AdminStore {
+  id: string;
+  tienda: string;
+  correo: string;
+  plan: string;
+  ventas: number;
+  activa: boolean;
+}
+export interface AdminPlan {
+  id: string;
+  nombre: string;
+  precio: number;
+  features: string[];
+  cuentas: number;
+}
+
+export const apiAdminOverview = () => req<{ stores: AdminStore[]; plans: AdminPlan[] }>('/api/admin/overview', 'GET');
+export const apiCreateStore = (b: { nombre: string; correo: string; password: string; plan: string }) =>
+  req<{ storeId: string }>('/api/admin/stores', 'POST', b);
+export const apiToggleStore = (id: string, activa: boolean) => req<{ ok: true }>(`/api/admin/stores/${id}`, 'PATCH', { activa });
+export const apiCreatePlan = (b: { nombre: string; precio: number; features: string[] }) => req<{ id: string }>('/api/admin/plans', 'POST', b);
