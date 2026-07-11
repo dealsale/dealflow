@@ -376,6 +376,7 @@ export function useDealFlowState() {
   const [loginError, setLoginError] = useState<string>('');
   const [apiMode, setApiMode] = useState<boolean>(false);
   const [storeNombre, setStoreNombre] = useState<string>('');
+  const [waVerifyToken, setWaVerifyToken] = useState<string>('');
   const [crmDeleteArmed, setCrmDeleteArmed] = useState<boolean>(false);
   const crmDeleteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [newAccountOpen, setNewAccountOpen] = useState(false);
@@ -925,6 +926,7 @@ export function useDealFlowState() {
           setWaCfg({ wabaId: data.whatsapp.wabaId, phoneNumberId: data.whatsapp.phoneNumberId, numero: data.whatsapp.numero });
         }
         if (data.store?.nombre) setStoreNombre(data.store.nombre);
+        if (data.whatsapp.verifyToken) setWaVerifyToken(data.whatsapp.verifyToken);
         // Datos reales de la tienda: nada de textos demo de "Luna Accesorios".
         setAssistantText(data.assistant?.instrucciones || '');
         setRules(data.assistant?.reglas || []);
@@ -1475,10 +1477,10 @@ export function useDealFlowState() {
     toggleWa: () => setWaConnected((c) => !c),
     // En el servidor real, el webhook es tu propio dominio; en demo, el de ejemplo.
     webhookUrl: apiMode ? window.location.origin + '/webhooks/whatsapp' : WEBHOOK_URL,
-    waCode: WA_CODE,
+    waCode: apiMode ? waVerifyToken || WA_CODE : WA_CODE,
     copied,
     copyWebhook: () => copy('webhook', apiMode ? window.location.origin + '/webhooks/whatsapp' : WEBHOOK_URL),
-    copyCode: () => copy('code', WA_CODE),
+    copyCode: () => copy('code', apiMode ? waVerifyToken || WA_CODE : WA_CODE),
     webhookBtnLabel: copied === 'webhook' ? '✓ Copiado' : 'Copiar',
     codeBtnLabel: copied === 'code' ? '✓ Copiado' : 'Copiar',
 

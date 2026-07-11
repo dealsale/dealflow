@@ -87,6 +87,7 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
       phoneNumberId: wa?.phone_number_id || '',
       numero: wa?.numero || '',
       tokenGuardado: !!wa?.access_token,
+      verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || 'dealflow-verify',
     },
   });
 });
