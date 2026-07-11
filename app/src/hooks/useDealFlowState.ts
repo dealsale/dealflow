@@ -317,8 +317,9 @@ export function useDealFlowState() {
   const [waError, setWaError] = useState('');
   const [waMethod, setWaMethod] = useState<'qr' | 'cloud'>('qr');
   const [waModo, setWaModo] = useState<'cloud' | 'qr'>('cloud');
-  const [qrEstado, setQrEstado] = useState<'inactivo' | 'iniciando' | 'qr' | 'conectado'>('inactivo');
+  const [qrEstado, setQrEstado] = useState<'inactivo' | 'iniciando' | 'qr' | 'conectado' | 'error'>('inactivo');
   const [qrImg, setQrImg] = useState<string>('');
+  const [qrError, setQrError] = useState<string>('');
   const [apiLeadsState, setApiLeadsState] = useState<Lead[] | null>(null);
   const [crmSendWarn, setCrmSendWarn] = useState('');
 
@@ -724,10 +725,16 @@ export function useDealFlowState() {
 
   function iniciarQr() {
     setWaError('');
+    setQrError('');
     setQrEstado('iniciando');
     setQrImg('');
     if (apiMode) {
-      void apiWaQrStart();
+      void apiWaQrStart().then((r) => {
+        if (r.error) {
+          setQrEstado('error');
+          setQrError(r.error);
+        }
+      });
       return;
     }
     // Demo: muestra un QR de ejemplo y "conecta" a los pocos segundos.
@@ -756,7 +763,14 @@ export function useDealFlowState() {
   // Polling del estado del QR mientras se está escaneando (solo modo servidor).
   useEffect(() => {
     if (!apiMode || (qrEstado !== 'iniciando' && qrEstado !== 'qr')) return;
+    const inicio = Date.now();
     const t = setInterval(() => {
+      // Si en 40 s no apareció el código, avisamos en vez de dejarlo pegado.
+      if (qrEstado === 'iniciando' && Date.now() - inicio > 40000) {
+        setQrEstado('error');
+        setQrError('WhatsApp está tardando en responder. Vuelve a intentar en un momento.');
+        return;
+      }
       void apiWaQrStatus().then(({ data }) => {
         if (!data) return;
         if (data.estado === 'qr' && data.qr) {
@@ -768,6 +782,9 @@ export function useDealFlowState() {
           setQrImg('');
           setWaConnected(true);
           setWaCfg({ wabaId: '', phoneNumberId: '', numero: data.numero });
+        } else if (data.estado === 'error') {
+          setQrEstado('error');
+          setQrError(data.error || 'No pudimos generar el código. Intenta de nuevo.');
         }
       });
     }, 2000);
@@ -1314,6 +1331,7 @@ export function useDealFlowState() {
     waModo,
     qrEstado,
     qrImg,
+    qrError,
     iniciarQr,
 
     incoming: incomingOrder ? decorateOrder(incomingOrder) : null,

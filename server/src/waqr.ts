@@ -1,4 +1,4 @@
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState } from '@whiskeysockets/baileys';
 import type { WASocket } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
@@ -9,17 +9,32 @@ import { saveIncomingMessage } from './wa.js';
 
 const DATA_DIR = process.env.DATA_DIR || './data';
 
-type Estado = 'iniciando' | 'qr' | 'conectado' | 'desconectado';
+type Estado = 'iniciando' | 'qr' | 'conectado' | 'desconectado' | 'error';
 
 interface Session {
   sock: WASocket | null;
   estado: Estado;
   qrDataUrl: string | null;
   numero: string;
+  error: string;
   starting: boolean;
 }
 
 const sessions = new Map<string, Session>();
+
+// Logger silencioso (Baileys espera algo tipo pino) para no llenar los logs.
+const silentLogger = {
+  level: 'silent',
+  child() {
+    return silentLogger;
+  },
+  trace() {},
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+  fatal() {},
+};
 
 function authDir(storeId: string) {
   return path.join(DATA_DIR, 'wa', storeId);
@@ -39,69 +54,98 @@ function markDisconnected(storeId: string) {
 /** Inicia (o reutiliza) la sesión por QR de una tienda. */
 export async function startQrSession(storeId: string): Promise<void> {
   const existing = sessions.get(storeId);
-  if (existing && (existing.starting || existing.estado === 'conectado')) return;
+  if (existing && (existing.starting || existing.estado === 'conectado' || existing.estado === 'qr')) return;
 
-  const session: Session = { sock: null, estado: 'iniciando', qrDataUrl: null, numero: '', starting: true };
+  const session: Session = { sock: null, estado: 'iniciando', qrDataUrl: null, numero: '', error: '', starting: true };
   sessions.set(storeId, session);
 
-  const { state, saveCreds } = await useMultiFileAuthState(authDir(storeId));
-  const sock = makeWASocket({ auth: state, printQRInTerminal: false, syncFullHistory: false });
-  session.sock = sock;
-  session.starting = false;
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState(authDir(storeId));
+    const { version } = await fetchLatestBaileysVersion();
+    const sock = makeWASocket({
+      version,
+      auth: state,
+      printQRInTerminal: false,
+      syncFullHistory: false,
+      browser: ['DealFlow', 'Chrome', '1.0.0'],
+      logger: silentLogger as never,
+    });
+    session.sock = sock;
+    session.starting = false;
 
-  sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-    if (qr) {
-      session.estado = 'qr';
-      session.qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 });
-    }
-    if (connection === 'open') {
-      session.estado = 'conectado';
-      session.qrDataUrl = null;
-      session.numero = sock.user?.id ? '+' + sock.user.id.split(':')[0].split('@')[0] : '';
-      setConnected(storeId, session.numero);
-    }
-    if (connection === 'close') {
-      const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      if (code === DisconnectReason.loggedOut) {
-        // El usuario cerró sesión desde el teléfono: limpiar credenciales.
-        session.estado = 'desconectado';
-        markDisconnected(storeId);
-        try { rmSync(authDir(storeId), { recursive: true, force: true }); } catch { /* nada */ }
-        sessions.delete(storeId);
-      } else {
-        // Caída temporal: reintentar.
-        session.estado = 'desconectado';
-        sessions.delete(storeId);
-        void startQrSession(storeId).catch(() => {});
+    sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+      if (qr) {
+        try {
+          session.estado = 'qr';
+          session.qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 });
+          console.log(`[wa-qr] ${storeId}: código QR generado`);
+        } catch (e) {
+          session.estado = 'error';
+          session.error = 'No pudimos dibujar el código QR.';
+          console.error('[wa-qr] error generando QR', e);
+        }
       }
-    }
-  });
+      if (connection === 'open') {
+        session.estado = 'conectado';
+        session.qrDataUrl = null;
+        session.numero = sock.user?.id ? '+' + sock.user.id.split(':')[0].split('@')[0] : '';
+        setConnected(storeId, session.numero);
+        console.log(`[wa-qr] ${storeId}: conectado como ${session.numero}`);
+      }
+      if (connection === 'close') {
+        const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        const teniaSesion = session.estado === 'conectado' || session.qrDataUrl !== null;
+        if (code === DisconnectReason.loggedOut) {
+          session.estado = 'desconectado';
+          markDisconnected(storeId);
+          try { rmSync(authDir(storeId), { recursive: true, force: true }); } catch { /* nada */ }
+          sessions.delete(storeId);
+          console.log(`[wa-qr] ${storeId}: sesión cerrada desde el teléfono`);
+        } else if (teniaSesion) {
+          // Estaba vinculado y se cayó: reintentar conservando credenciales.
+          console.log(`[wa-qr] ${storeId}: conexión cerrada (code ${code}), reintentando`);
+          sessions.delete(storeId);
+          setTimeout(() => void startQrSession(storeId).catch(() => {}), 1500);
+        } else {
+          // Nunca llegó a mostrar el QR: no insistir en bucle, avisar.
+          session.estado = 'error';
+          session.error = 'No pudimos conectar con WhatsApp. Intenta de nuevo en un momento.';
+          console.log(`[wa-qr] ${storeId}: falló antes del QR (code ${code})`);
+        }
+      }
+    });
 
-  sock.ev.on('messages.upsert', (ev) => {
-    if (ev.type !== 'notify') return;
-    for (const m of ev.messages) {
-      if (m.key.fromMe || !m.key.remoteJid || m.key.remoteJid.endsWith('@g.us')) continue;
-      const texto = m.message?.conversation || m.message?.extendedTextMessage?.text;
-      if (!texto) continue;
-      const waId = m.key.remoteJid.split('@')[0];
-      saveIncomingMessage(storeId, waId, m.pushName || '', texto);
-    }
-  });
+    sock.ev.on('messages.upsert', (ev) => {
+      if (ev.type !== 'notify') return;
+      for (const m of ev.messages) {
+        if (m.key.fromMe || !m.key.remoteJid || m.key.remoteJid.endsWith('@g.us')) continue;
+        const texto = m.message?.conversation || m.message?.extendedTextMessage?.text;
+        if (!texto) continue;
+        const waId = m.key.remoteJid.split('@')[0];
+        saveIncomingMessage(storeId, waId, m.pushName || '', texto);
+      }
+    });
+  } catch (e) {
+    session.starting = false;
+    session.estado = 'error';
+    session.error = 'No pudimos iniciar la conexión con WhatsApp. Intenta de nuevo.';
+    console.error(`[wa-qr] ${storeId}: error al iniciar`, e);
+  }
 }
 
-export function getQrStatus(storeId: string): { estado: Estado; qr: string | null; numero: string } {
+export function getQrStatus(storeId: string): { estado: Estado; qr: string | null; numero: string; error: string } {
   const s = sessions.get(storeId);
   if (!s) {
     const row = db.prepare("SELECT conectado, numero FROM whatsapp WHERE store_id = ? AND modo = 'qr'").get(storeId) as
       | { conectado: number; numero: string }
       | undefined;
-    if (row?.conectado) return { estado: 'conectado', qr: null, numero: row.numero };
-    return { estado: 'desconectado', qr: null, numero: '' };
+    if (row?.conectado) return { estado: 'conectado', qr: null, numero: row.numero, error: '' };
+    return { estado: 'desconectado', qr: null, numero: '', error: '' };
   }
-  return { estado: s.estado, qr: s.qrDataUrl, numero: s.numero };
+  return { estado: s.estado, qr: s.qrDataUrl, numero: s.numero, error: s.error };
 }
 
 export async function sendViaQr(storeId: string, to: string, texto: string): Promise<{ ok: boolean; error?: string }> {

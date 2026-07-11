@@ -85,6 +85,19 @@ export function WhatsAppSection({ df }: { df: DealFlowState }) {
                 </div>
               )}
 
+              {df.qrEstado === 'error' && (
+                <div>
+                  <div style={{ color: '#DC2626', fontSize: 13.5, marginBottom: 12 }}>{df.qrError || 'No pudimos generar el código. Intenta de nuevo.'}</div>
+                  <button
+                    onClick={df.iniciarQr}
+                    className="df-btn-primary"
+                    style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 20px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              )}
+
               {df.qrEstado === 'qr' && (
                 <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ width: 220, height: 220, border: '1px solid #E2E8F0', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>

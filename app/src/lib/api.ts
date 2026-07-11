@@ -99,7 +99,7 @@ export const apiWaLinkCloud = (b: { wabaId: string; phoneNumberId: string; acces
   req<{ conectado: boolean; numero: string }>('/api/whatsapp', 'PUT', b);
 export const apiWaUnlink = () => req<{ conectado: boolean }>('/api/whatsapp', 'DELETE');
 export const apiWaQrStart = () => req<{ ok: true }>('/api/whatsapp/qr/start', 'POST');
-export const apiWaQrStatus = () => req<{ estado: string; qr: string | null; numero: string }>('/api/whatsapp/qr/status', 'GET');
+export const apiWaQrStatus = () => req<{ estado: string; qr: string | null; numero: string; error: string }>('/api/whatsapp/qr/status', 'GET');
 
 export const apiAdminOverview = () => req<{ stores: AdminStore[]; plans: AdminPlan[] }>('/api/admin/overview', 'GET');
 export const apiCreateStore = (b: { nombre: string; correo: string; password: string; plan: string }) =>
