@@ -13,7 +13,7 @@ import {
   WA_CODE,
   WEBHOOK_URL,
 } from '../data';
-import { readFilesAsDataUrls } from '../components/PhotoUpload';
+import { comprimirImagen, readFilesAsDataUrls } from '../components/PhotoUpload';
 import {
   apiAddVariant,
   apiAdminOverview,
@@ -362,6 +362,7 @@ export function useDealFlowState() {
   const [faqR, setFaqR] = useState('');
   const [bloqueTexto, setBloqueTexto] = useState('');
   const [videoWarn, setVideoWarn] = useState('');
+  const [mediaWarn, setMediaWarn] = useState('');
   const [bundleCantidad, setBundleCantidad] = useState('');
   const [bundlePrecio, setBundlePrecio] = useState('');
   const [bundleEtiqueta, setBundleEtiqueta] = useState('');
@@ -1011,14 +1012,27 @@ export function useDealFlowState() {
     setNewPromoOpen(false);
   }
 
-  /** Sube archivos al servidor y devuelve sus enlaces (livianos). En demo usa data URLs. */
+  /** Sube archivos al servidor y devuelve sus enlaces (livianos). Comprime las
+   *  imágenes antes de subir. En demo usa data URLs. */
   async function subir(files: File[], mimePrefix: string): Promise<string[]> {
-    const dataUrls = await readFilesAsDataUrls(files, mimePrefix);
+    setMediaWarn('');
+    const validos = files.filter((f) => f.type.startsWith(mimePrefix));
+    const dataUrls: string[] = [];
+    for (const f of validos) {
+      if (f.type.startsWith('image/')) {
+        const d = await comprimirImagen(f);
+        if (d) dataUrls.push(d);
+      } else {
+        const [d] = await readFilesAsDataUrls([f], mimePrefix);
+        if (d) dataUrls.push(d);
+      }
+    }
     if (!apiMode) return dataUrls; // demo local: sin servidor, se guarda el data URL
     const urls: string[] = [];
     for (const d of dataUrls) {
-      const { data } = await apiUpload(d);
+      const { data, error } = await apiUpload(d);
       if (data?.url) urls.push(data.url);
+      else if (error) setMediaWarn('No pudimos subir un archivo: ' + error);
     }
     return urls;
   }
@@ -1702,6 +1716,7 @@ export function useDealFlowState() {
     bloqueTexto,
     setBloqueTexto,
     videoWarn,
+    mediaWarn,
     bundleCantidad,
     setBundleCantidad: (v: string) => setBundleCantidad(v.replace(/[^0-9]/g, '')),
     bundlePrecio,

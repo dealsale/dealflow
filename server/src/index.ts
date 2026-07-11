@@ -12,7 +12,7 @@ restoreQrSessions();
 
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '15mb' })); // las fotos viajan como data URLs
+app.use(express.json({ limit: '25mb' })); // fotos/videos viajan como data URLs
 app.use(cookieParser());
 
 if (process.env.NODE_ENV !== 'production') {

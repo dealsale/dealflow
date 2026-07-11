@@ -22,6 +22,44 @@ export function readImagesAsDataUrls(files: File[]): Promise<string[]> {
   return readFilesAsDataUrls(files, 'image/');
 }
 
+/**
+ * Reduce una imagen (máx ~1600px, JPEG) antes de subirla: las fotos de celular
+ * pesan varios MB y así el envío es liviano y no falla. Si el navegador no la
+ * puede decodificar, devuelve la original.
+ */
+export function comprimirImagen(file: File, max = 1600, quality = 0.85): Promise<string> {
+  return new Promise((resolve) => {
+    const fallback = () => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = () => resolve('');
+      r.readAsDataURL(file);
+    };
+    try {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width, height } = img;
+        if (width > max || height > max) {
+          if (width >= height) { height = Math.round((height * max) / width); width = max; }
+          else { width = Math.round((width * max) / height); height = max; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { fallback(); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        try { resolve(canvas.toDataURL('image/jpeg', quality)); } catch { fallback(); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); fallback(); };
+      img.src = url;
+    } catch {
+      fallback();
+    }
+  });
+}
+
 function useFilePick(onFiles: (files: File[]) => void, accept = 'image/*') {
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);

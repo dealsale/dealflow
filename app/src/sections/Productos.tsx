@@ -286,6 +286,7 @@ export function Productos({ df }: { df: DealFlowState }) {
                   ))}
                   <PhotoDropTile size={64} onFiles={p.addMainFotos} />
                 </div>
+                {df.mediaWarn && <div style={{ color: '#DC2626', fontSize: 12, marginTop: -8, marginBottom: 16 }}>{df.mediaWarn}</div>}
 
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Testimonios · capturas de clientes felices que el asistente puede enviar
