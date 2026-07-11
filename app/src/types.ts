@@ -66,7 +66,7 @@ export interface Mensaje {
 export type Etapa = 'Explorando' | 'Cotizando' | 'Listo para comprar' | 'Postventa';
 
 export interface Lead {
-  id: number;
+  id: number | string;
   nombre: string;
   tel: string;
   ultimo: string;

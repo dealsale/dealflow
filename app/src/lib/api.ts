@@ -80,6 +80,27 @@ export interface AdminPlan {
   cuentas: number;
 }
 
+export interface ApiLead {
+  id: string;
+  nombre: string;
+  tel: string;
+  etapa: string;
+  asignado: string;
+  mensajes: { de: string; texto: string; hora: string }[];
+}
+
+export const apiState = () => req<{ whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean }; leads: ApiLead[] }>('/api/state', 'GET');
+export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
+export const apiSendLeadMessage = (id: string, texto: string) =>
+  req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/messages`, 'POST', { texto });
+export const apiAssignLead = (id: string, asignado: string) => req<{ ok: true }>(`/api/leads/${id}`, 'PATCH', { asignado });
+
+export const apiWaLinkCloud = (b: { wabaId: string; phoneNumberId: string; accessToken: string }) =>
+  req<{ conectado: boolean; numero: string }>('/api/whatsapp', 'PUT', b);
+export const apiWaUnlink = () => req<{ conectado: boolean }>('/api/whatsapp', 'DELETE');
+export const apiWaQrStart = () => req<{ ok: true }>('/api/whatsapp/qr/start', 'POST');
+export const apiWaQrStatus = () => req<{ estado: string; qr: string | null; numero: string }>('/api/whatsapp/qr/status', 'GET');
+
 export const apiAdminOverview = () => req<{ stores: AdminStore[]; plans: AdminPlan[] }>('/api/admin/overview', 'GET');
 export const apiCreateStore = (b: { nombre: string; correo: string; password: string; plan: string }) =>
   req<{ storeId: string }>('/api/admin/stores', 'POST', b);

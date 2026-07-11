@@ -63,8 +63,8 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
     })),
   }));
   const assistant = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string } | undefined;
-  const wa = db.prepare('SELECT waba_id, phone_number_id, numero, conectado, access_token FROM whatsapp WHERE store_id = ?').get(sid) as
-    | { waba_id: string; phone_number_id: string; numero: string; conectado: number; access_token: string }
+  const wa = db.prepare('SELECT waba_id, phone_number_id, numero, conectado, access_token, modo FROM whatsapp WHERE store_id = ?').get(sid) as
+    | { waba_id: string; phone_number_id: string; numero: string; conectado: number; access_token: string; modo: string }
     | undefined;
 
   res.json({
@@ -76,12 +76,25 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
     assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []) },
     whatsapp: {
       conectado: !!wa?.conectado,
+      modo: wa?.modo || 'cloud',
       wabaId: wa?.waba_id || '',
       phoneNumberId: wa?.phone_number_id || '',
       numero: wa?.numero || '',
       tokenGuardado: !!wa?.access_token,
     },
   });
+});
+
+// Leads en vivo (para que el CRM refresque sin recargar toda la tienda).
+api.get('/leads', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
+    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
+    mensajes: (db.prepare('SELECT de, texto, created_at FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
+      de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16),
+    })),
+  }));
+  res.json({ leads });
 });
 
 // ── Productos ─────────────────────────────────────────────────────────
@@ -228,16 +241,35 @@ api.put('/whatsapp', requireAuth, requireStore, async (req, res) => {
   const check = await verifyWhatsappCredentials(phoneNumberId.trim(), accessToken.trim());
   if (!check.ok) return res.status(400).json({ error: check.error });
   db.prepare(
-    `INSERT INTO whatsapp (store_id, waba_id, phone_number_id, access_token, numero, conectado) VALUES (?,?,?,?,?,1)
+    `INSERT INTO whatsapp (store_id, waba_id, phone_number_id, access_token, numero, conectado, modo) VALUES (?,?,?,?,?,1,'cloud')
      ON CONFLICT(store_id) DO UPDATE SET waba_id = excluded.waba_id, phone_number_id = excluded.phone_number_id,
-       access_token = excluded.access_token, numero = excluded.numero, conectado = 1`,
+       access_token = excluded.access_token, numero = excluded.numero, conectado = 1, modo = 'cloud'`,
   ).run(req.user!.storeId, wabaId.trim(), phoneNumberId.trim(), accessToken.trim(), check.numero);
   res.json({ conectado: true, numero: check.numero });
 });
 
-api.delete('/whatsapp', requireAuth, requireStore, (req, res) => {
-  db.prepare('UPDATE whatsapp SET conectado = 0, access_token = \'\' WHERE store_id = ?').run(req.user!.storeId);
+api.delete('/whatsapp', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const cur = db.prepare('SELECT modo FROM whatsapp WHERE store_id = ?').get(sid) as { modo: string } | undefined;
+  if (cur?.modo === 'qr') {
+    const { stopQrSession } = await import('./waqr.js');
+    await stopQrSession(sid);
+  } else {
+    db.prepare("UPDATE whatsapp SET conectado = 0, access_token = '' WHERE store_id = ?").run(sid);
+  }
   res.json({ conectado: false });
+});
+
+// ── WhatsApp por QR (Baileys) ─────────────────────────────────────────
+api.post('/whatsapp/qr/start', requireAuth, requireStore, async (req, res) => {
+  const { startQrSession } = await import('./waqr.js');
+  await startQrSession(req.user!.storeId!);
+  res.json({ ok: true });
+});
+
+api.get('/whatsapp/qr/status', requireAuth, requireStore, async (req, res) => {
+  const { getQrStatus } = await import('./waqr.js');
+  res.json(getQrStatus(req.user!.storeId!));
 });
 
 // ── Admin ─────────────────────────────────────────────────────────────

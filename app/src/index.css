@@ -91,6 +91,12 @@ textarea {
   box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
 }
 
+@keyframes dfspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes dfslidein {
   from {
     opacity: 0;

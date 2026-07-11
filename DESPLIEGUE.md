@@ -38,7 +38,21 @@ git pull
 docker compose up -d --build
 ```
 
-## Conectar el WhatsApp de una tienda (API oficial de Meta)
+## Conectar WhatsApp: dos formas
+
+Cada tienda elige en su panel (sección WhatsApp) cómo conectar su número:
+
+### Opción A — Por código QR (rápido)
+
+Toca «Generar código QR», y desde el teléfono: WhatsApp → Dispositivos
+vinculados → Vincular un dispositivo, y escanea. En cuanto conecta, los
+chats entran al CRM y puedes responder desde ahí.
+
+> Nota: esta vía usa la conexión de WhatsApp Web (no oficial). Es la más
+> rápida para empezar, pero Meta podría restringir el número; para volumen
+> alto o algo formal, usa la Opción B.
+
+### Opción B — Por API oficial de Meta (WABA ID + Access Token)
 
 Cada tienda vincula su número con sus credenciales de la **WhatsApp Cloud API**:
 

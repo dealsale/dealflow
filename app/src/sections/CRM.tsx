@@ -99,6 +99,11 @@ export function CRM({ df }: { df: DealFlowState }) {
                   </button>
                 </div>
               )}
+              {df.crmSendWarn && (
+                <div style={{ color: '#B45309', fontSize: 12.5, marginTop: 8 }}>
+                  Guardado en el CRM, pero no salió por WhatsApp: {df.crmSendWarn}
+                </div>
+              )}
             </div>
           </div>
         )}

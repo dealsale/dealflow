@@ -14,7 +14,24 @@ import {
   WEBHOOK_URL,
 } from '../data';
 import { readImagesAsDataUrls } from '../components/PhotoUpload';
-import { apiAdminOverview, apiCreatePlan, apiCreateStore, apiLogin, apiLogout, apiMe, apiToggleStore } from '../lib/api';
+import {
+  apiAdminOverview,
+  apiCreatePlan,
+  apiCreateStore,
+  apiLeads,
+  // apiAssignLead disponible para asignación desde el CRM (próximo)
+  apiLogin,
+  apiLogout,
+  apiMe,
+  apiSendLeadMessage,
+  apiState,
+  apiToggleStore,
+  apiWaLinkCloud,
+  apiWaQrStart,
+  apiWaQrStatus,
+  apiWaUnlink,
+} from '../lib/api';
+import type { ApiLead } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -194,6 +211,21 @@ function generateIncomingOrder(orders: Order[], products: Product[]): Order {
   };
 }
 
+const ETAPAS_VALIDAS = ['Explorando', 'Cotizando', 'Listo para comprar', 'Postventa'];
+
+function mapApiLeads(leads: ApiLead[]): Lead[] {
+  return leads.map((l) => ({
+    id: l.id,
+    nombre: l.nombre,
+    tel: l.tel,
+    ultimo: l.mensajes.length ? l.mensajes[l.mensajes.length - 1].texto : '',
+    hora: l.mensajes.length ? l.mensajes[l.mensajes.length - 1].hora : '',
+    etapa: (ETAPAS_VALIDAS.includes(l.etapa) ? l.etapa : 'Explorando') as Lead['etapa'],
+    asignado: l.asignado,
+    mensajes: l.mensajes.map((m) => ({ de: (m.de === 'bot' || m.de === 'vendedor' ? m.de : 'cliente') as Mensaje['de'], texto: m.texto, hora: m.hora })),
+  }));
+}
+
 function navStyle(active: boolean): CSSProperties {
   return {
     display: 'flex',
@@ -217,8 +249,8 @@ export function useDealFlowState() {
   const [filter, setFilter] = useState<string>('Todos');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [expandedProductId, setExpandedProductId] = useState<number | null>(7);
-  const [selectedLeadId, setSelectedLeadId] = useState<number>(1);
-  const [crmSelectedId, setCrmSelectedId] = useState<number>(1);
+  const [selectedLeadId, setSelectedLeadId] = useState<number | string>(1);
+  const [crmSelectedId, setCrmSelectedId] = useState<number | string>(1);
   const [crmIntervening, setCrmIntervening] = useState<boolean>(false);
   const [crmDraft, setCrmDraft] = useState<string>('');
   const [copied, setCopied] = useState<'webhook' | 'code' | 'guia' | null>(null);
@@ -283,6 +315,12 @@ export function useDealFlowState() {
   const [waForm, setWaForm] = useState({ wabaId: '', phoneNumberId: '', accessToken: '' });
   const [waLinking, setWaLinking] = useState(false);
   const [waError, setWaError] = useState('');
+  const [waMethod, setWaMethod] = useState<'qr' | 'cloud'>('qr');
+  const [waModo, setWaModo] = useState<'cloud' | 'qr'>('cloud');
+  const [qrEstado, setQrEstado] = useState<'inactivo' | 'iniciando' | 'qr' | 'conectado'>('inactivo');
+  const [qrImg, setQrImg] = useState<string>('');
+  const [apiLeadsState, setApiLeadsState] = useState<Lead[] | null>(null);
+  const [crmSendWarn, setCrmSendWarn] = useState('');
 
   // Guarda los datos de la demo en el navegador: los cambios sobreviven al refrescar.
   useEffect(() => {
@@ -433,7 +471,7 @@ export function useDealFlowState() {
     };
   }
 
-  function decorateLead(l: Lead, i: number, selectedId: number, onSelect: (id: number) => void): DecoratedLead {
+  function decorateLead(l: Lead, i: number, selectedId: number | string, onSelect: (id: number | string) => void): DecoratedLead {
     const [bg, txt] = AVATAR_COLORS[i % AVATAR_COLORS.length];
     const selL = l.id === selectedId;
     return {
@@ -447,17 +485,21 @@ export function useDealFlowState() {
     };
   }
 
+  // En modo servidor, los leads vienen de la API; en demo, del estado local.
+  const leadsSource = apiMode && apiLeadsState ? apiLeadsState : leads;
+
   const leadsDecorated = useMemo(
-    () => leads.map((l, i) => decorateLead(l, i, selectedLeadId, (id) => { setSelectedLeadId(id); setFlowMsg(null); })),
-    [leads, selectedLeadId],
+    () => leadsSource.map((l, i) => decorateLead(l, i, selectedLeadId, (id) => { setSelectedLeadId(id); setFlowMsg(null); })),
+    [leadsSource, selectedLeadId],
   );
   const lead = leadsDecorated.find((l) => l.id === selectedLeadId) || null;
 
   const crmChats: DecoratedCrmChat[] = useMemo(
     () =>
-      leads.map((l, i) => {
+      leadsSource.map((l, i) => {
         const d = decorateLead(l, i, crmSelectedId, (id) => { setCrmSelectedId(id); setCrmIntervening(false); });
-        const live = l.id === 1 || l.id === 2;
+        // En modo servidor, "en vivo" = el bot lo atiende; en demo, los dos primeros.
+        const live = apiMode && apiLeadsState ? l.asignado.includes('bot') || l.asignado.includes('Asistente') : l.id === 1 || l.id === 2;
         const selC = l.id === crmSelectedId;
         return {
           ...d,
@@ -468,7 +510,7 @@ export function useDealFlowState() {
           crmRowStyle: { display: 'flex', gap: '11px', padding: '12px 14px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', background: selC ? '#ECFDF5' : '#fff', borderLeft: selC ? '3px solid #059669' : '3px solid transparent' },
         };
       }),
-    [leads, crmSelectedId],
+    [leadsSource, crmSelectedId, apiMode, apiLeadsState],
   );
   const crmChat = crmChats.find((c) => c.id === crmSelectedId) || null;
 
@@ -605,7 +647,17 @@ export function useDealFlowState() {
   }
 
   async function login(email: string, password: string) {
-    if (apiMode) {
+    // Si el panel lo sirve el backend, el login SIEMPRE va contra el servidor
+    // (aunque la detección inicial aún no haya terminado, la reconfirmamos).
+    let usarApi = apiMode;
+    if (!usarApi) {
+      const me = await apiMe();
+      if (me.available) {
+        usarApi = true;
+        setApiMode(true);
+      }
+    }
+    if (usarApi) {
       const r = await apiLogin(email.trim().toLowerCase(), password);
       if (r.error || !r.user) {
         setLoginError(r.error || 'No pudimos iniciar sesión.');
@@ -646,8 +698,23 @@ export function useDealFlowState() {
     }
     setWaError('');
     setWaLinking(true);
-    // Con el backend conectado, esto llama a PUT /api/whatsapp y Meta valida las credenciales.
+    if (apiMode) {
+      void apiWaLinkCloud({ wabaId: waForm.wabaId.trim(), phoneNumberId: waForm.phoneNumberId.trim(), accessToken: waForm.accessToken.trim() }).then((r) => {
+        setWaLinking(false);
+        if (r.error || !r.data) {
+          setWaError(r.error || 'No pudimos validar las credenciales.');
+          return;
+        }
+        setWaModo('cloud');
+        setWaConnected(true);
+        setWaCfg({ wabaId: waForm.wabaId.trim(), phoneNumberId: waForm.phoneNumberId.trim(), numero: r.data.numero });
+        setWaForm({ wabaId: '', phoneNumberId: '', accessToken: '' });
+      });
+      return;
+    }
+    // Demo: validación simulada.
     setTimeout(() => {
+      setWaModo('cloud');
       setWaCfg({ wabaId: waForm.wabaId.trim(), phoneNumberId: waForm.phoneNumberId.trim(), numero: '+57 300 123 4567' });
       setWaConnected(true);
       setWaForm({ wabaId: '', phoneNumberId: '', accessToken: '' });
@@ -655,10 +722,83 @@ export function useDealFlowState() {
     }, 900);
   }
 
+  function iniciarQr() {
+    setWaError('');
+    setQrEstado('iniciando');
+    setQrImg('');
+    if (apiMode) {
+      void apiWaQrStart();
+      return;
+    }
+    // Demo: muestra un QR de ejemplo y "conecta" a los pocos segundos.
+    setTimeout(() => {
+      setQrEstado('qr');
+      setQrImg('demo');
+    }, 700);
+    setTimeout(() => {
+      setWaModo('qr');
+      setQrEstado('conectado');
+      setQrImg('');
+      setWaConnected(true);
+      setWaCfg({ wabaId: '', phoneNumberId: '', numero: '+57 300 123 4567' });
+    }, 4500);
+  }
+
   function desvincularWa() {
+    if (apiMode) void apiWaUnlink();
     setWaCfg(null);
     setWaConnected(false);
+    setWaModo('cloud');
+    setQrEstado('inactivo');
+    setQrImg('');
   }
+
+  // Polling del estado del QR mientras se está escaneando (solo modo servidor).
+  useEffect(() => {
+    if (!apiMode || (qrEstado !== 'iniciando' && qrEstado !== 'qr')) return;
+    const t = setInterval(() => {
+      void apiWaQrStatus().then(({ data }) => {
+        if (!data) return;
+        if (data.estado === 'qr' && data.qr) {
+          setQrEstado('qr');
+          setQrImg(data.qr);
+        } else if (data.estado === 'conectado') {
+          setWaModo('qr');
+          setQrEstado('conectado');
+          setQrImg('');
+          setWaConnected(true);
+          setWaCfg({ wabaId: '', phoneNumberId: '', numero: data.numero });
+        }
+      });
+    }, 2000);
+    return () => clearInterval(t);
+  }, [apiMode, qrEstado]);
+
+  // En modo servidor, el panel del vendedor carga WhatsApp real y los leads,
+  // y refresca el CRM cada 5 s para ver los mensajes que van llegando.
+  useEffect(() => {
+    if (!apiMode || isAdmin) return;
+    const load = () => {
+      void apiState().then(({ data }) => {
+        if (!data) return;
+        setWaConnected(data.whatsapp.conectado);
+        setWaModo(data.whatsapp.modo === 'qr' ? 'qr' : 'cloud');
+        if (data.whatsapp.conectado) {
+          setWaCfg({ wabaId: data.whatsapp.wabaId, phoneNumberId: data.whatsapp.phoneNumberId, numero: data.whatsapp.numero });
+        }
+        setApiLeadsState(mapApiLeads(data.leads));
+      });
+    };
+    if (!sessionUser) return;
+    load();
+    const t = setInterval(() => {
+      void apiLeads().then(({ data }) => {
+        if (data) setApiLeadsState(mapApiLeads(data.leads));
+      });
+    }, 5000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, isAdmin, sessionUser]);
 
   function resetDemo() {
     clearSnapshot();
@@ -837,9 +977,9 @@ export function useDealFlowState() {
     setPlans(data.plans.map((p) => ({ id: p.id, nombre: p.nombre, precio: p.precio, cuentas: p.cuentas, features: p.features })));
   }
   useEffect(() => {
-    if (apiMode && isAdmin) void reloadAdmin();
+    if (apiMode && isAdmin && sessionUser) void reloadAdmin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiMode, isAdmin]);
+  }, [apiMode, isAdmin, sessionUser]);
 
   function toggleAccount(id: number | string, activa: boolean) {
     setAccounts((st) => st.map((x) => (x.id === id ? { ...x, activa: !x.activa } : x)));
@@ -923,6 +1063,17 @@ export function useDealFlowState() {
     const txt = crmDraft.trim();
     if (!txt) return;
     setCrmDraft('');
+    if (apiMode && apiLeadsState) {
+      // Optimista: muestra el mensaje ya, y lo confirma/refresca contra el servidor.
+      setApiLeadsState((st) =>
+        (st || []).map((l) => (l.id === crmSelectedId ? { ...l, asignado: sessionUser?.nombre || 'Yo', mensajes: [...l.mensajes, { de: 'vendedor' as const, texto: txt, hora: 'ahora' }] } : l)),
+      );
+      void apiSendLeadMessage(String(crmSelectedId), txt).then((r) => {
+        if (r.data && !r.data.enviadoPorWhatsapp && r.data.aviso) setCrmSendWarn(r.data.aviso);
+        void apiLeads().then(({ data }) => { if (data) setApiLeadsState(mapApiLeads(data.leads)); });
+      });
+      return;
+    }
     setLeads((st) =>
       st.map((l) => (l.id === crmSelectedId ? { ...l, asignado: 'Karla', mensajes: [...l.mensajes, { de: 'vendedor' as const, texto: txt, hora: 'ahora' }] } : l)),
     );
@@ -1030,10 +1181,11 @@ export function useDealFlowState() {
       : { background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }) as CSSProperties,
     waToggleLabel: waConnected ? 'Desconectar' : 'Conectar',
     toggleWa: () => setWaConnected((c) => !c),
-    webhookUrl: WEBHOOK_URL,
+    // En el servidor real, el webhook es tu propio dominio; en demo, el de ejemplo.
+    webhookUrl: apiMode ? window.location.origin + '/webhooks/whatsapp' : WEBHOOK_URL,
     waCode: WA_CODE,
     copied,
-    copyWebhook: () => copy('webhook', WEBHOOK_URL),
+    copyWebhook: () => copy('webhook', apiMode ? window.location.origin + '/webhooks/whatsapp' : WEBHOOK_URL),
     copyCode: () => copy('code', WA_CODE),
     webhookBtnLabel: copied === 'webhook' ? '✓ Copiado' : 'Copiar',
     codeBtnLabel: copied === 'code' ? '✓ Copiado' : 'Copiar',
@@ -1080,7 +1232,7 @@ export function useDealFlowState() {
     openMenu: () => setMenuOpen(true),
     closeMenu: () => setMenuOpen(false),
     mobileChatOpen,
-    openMobileChat: (id: number) => {
+    openMobileChat: (id: number | string) => {
       setCrmSelectedId(id);
       setCrmIntervening(false);
       setMobileChatOpen(true);
@@ -1097,6 +1249,8 @@ export function useDealFlowState() {
     crmDraft,
     setCrmDraft,
     sendCrm,
+    crmSendWarn,
+    clearCrmSendWarn: () => setCrmSendWarn(''),
 
     products: productsDecorated,
     productRuleDraft,
@@ -1155,6 +1309,12 @@ export function useDealFlowState() {
     waError,
     vincularWa,
     desvincularWa,
+    waMethod,
+    setWaMethod,
+    waModo,
+    qrEstado,
+    qrImg,
+    iniciarQr,
 
     incoming: incomingOrder ? decorateOrder(incomingOrder) : null,
     dismissToast: () => {

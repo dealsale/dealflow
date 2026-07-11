@@ -2,6 +2,25 @@ import { db, uid } from './db.js';
 
 const GRAPH = 'https://graph.facebook.com/v20.0';
 
+/**
+ * Guarda un mensaje entrante: crea el lead si no existe y agrega el mensaje.
+ * La usan tanto el webhook de la Cloud API como la sesión por QR.
+ */
+export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string) {
+  let lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND wa_id = ?').get(storeId, waId) as { id: string } | undefined;
+  if (!lead) {
+    const id = uid();
+    db.prepare('INSERT INTO leads (id, store_id, nombre, tel, etapa, asignado, wa_id) VALUES (?,?,?,?,?,?,?)').run(
+      id, storeId, nombre || '+' + waId, '+' + waId, 'Explorando', 'Asistente (bot)', waId,
+    );
+    lead = { id };
+  } else if (nombre) {
+    db.prepare('UPDATE leads SET nombre = ? WHERE id = ? AND (nombre = ? OR nombre = ?)').run(nombre, lead.id, '+' + waId, waId);
+  }
+  db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'cliente', texto);
+  return lead.id;
+}
+
 /** Valida las credenciales contra la API de Meta y devuelve el número mostrado. */
 export async function verifyWhatsappCredentials(phoneNumberId: string, accessToken: string): Promise<{ ok: true; numero: string } | { ok: false; error: string }> {
   try {
@@ -16,12 +35,16 @@ export async function verifyWhatsappCredentials(phoneNumberId: string, accessTok
   }
 }
 
-/** Envía un mensaje de texto por la Cloud API. */
+/** Envía un mensaje de texto por la vía activa de la tienda (Cloud API o QR). */
 export async function sendWhatsappText(storeId: string, to: string, texto: string): Promise<{ ok: boolean; error?: string }> {
-  const cfg = db.prepare('SELECT phone_number_id, access_token, conectado FROM whatsapp WHERE store_id = ?').get(storeId) as
-    | { phone_number_id: string; access_token: string; conectado: number }
+  const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
+    | { phone_number_id: string; access_token: string; conectado: number; modo: string }
     | undefined;
   if (!cfg?.conectado) return { ok: false, error: 'WhatsApp no está conectado.' };
+  if (cfg.modo === 'qr') {
+    const { sendViaQr } = await import('./waqr.js');
+    return sendViaQr(storeId, to, texto);
+  }
   try {
     const res = await fetch(`${GRAPH}/${cfg.phone_number_id}/messages`, {
       method: 'POST',
@@ -67,16 +90,8 @@ export function handleIncomingWebhook(body: unknown) {
       for (const msg of value.messages) {
         if (msg.type !== 'text' || !msg.text?.body) continue;
         const waId = msg.from;
-        const nombre = value.contacts?.find((c) => c.wa_id === waId)?.profile?.name || '+' + waId;
-        let lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND wa_id = ?').get(store.store_id, waId) as { id: string } | undefined;
-        if (!lead) {
-          const id = uid();
-          db.prepare('INSERT INTO leads (id, store_id, nombre, tel, etapa, asignado, wa_id) VALUES (?,?,?,?,?,?,?)').run(
-            id, store.store_id, nombre, '+' + waId, 'Explorando', 'Asistente (bot)', waId,
-          );
-          lead = { id };
-        }
-        db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'cliente', msg.text.body);
+        const nombre = value.contacts?.find((c) => c.wa_id === waId)?.profile?.name || '';
+        saveIncomingMessage(store.store_id, waId, nombre, msg.text.body);
       }
     }
   }

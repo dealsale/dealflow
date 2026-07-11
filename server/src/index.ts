@@ -5,8 +5,10 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { api, webhooks } from './routes.js';
 import { seed } from './seed.js';
+import { restoreQrSessions } from './waqr.js';
 
 seed();
+restoreQrSessions();
 
 const app = express();
 app.disable('x-powered-by');

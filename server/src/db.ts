@@ -115,10 +115,19 @@ CREATE TABLE IF NOT EXISTS plans (
   features TEXT NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_orders_store ON orders(store_id);
+CREATE INDEX IF NOT EXISTS idx_leads_wa ON leads(store_id, wa_id);
 CREATE INDEX IF NOT EXISTS idx_products_store ON products(store_id);
 CREATE INDEX IF NOT EXISTS idx_leads_store ON leads(store_id);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_phone ON whatsapp(phone_number_id);
 `);
+
+// Migraciones suaves: agregar columnas nuevas sin romper bases existentes.
+function addColumn(table: string, colDef: string) {
+  const col = colDef.split(' ')[0];
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDef}`);
+}
+addColumn('whatsapp', "modo TEXT NOT NULL DEFAULT 'cloud'");
 
 export const uid = () => crypto.randomUUID();
 export const j = (v: unknown) => JSON.stringify(v);
