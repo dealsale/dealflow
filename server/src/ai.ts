@@ -61,19 +61,31 @@ Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "
 
 FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), y todavía no le hayas enviado su material, incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). El sistema enviará automáticamente las fotos y videos de ese producto; no describas que "no puedes enviar fotos". Usa el marcador una sola vez por producto.`;
 
+  const nombreMedia = (tipo: string) =>
+    tipo === 'audio' ? 'una nota de voz' : tipo === 'image' ? 'una imagen' : tipo === 'video' ? 'un video' : 'un archivo';
   const historia = (db.prepare('SELECT de, texto, tipo FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 16').all(leadId) as { de: string; texto: string; tipo: string }[])
     .reverse()
     .map((m) => ({
       role: m.de === 'cliente' ? ('user' as const) : ('assistant' as const),
-      content: m.texto || (m.tipo && m.tipo !== 'texto' ? `[${m.tipo} adjunto]` : ''),
+      content: m.texto || (m.tipo && m.tipo !== 'texto' ? `[el cliente envió ${nombreMedia(m.tipo)}]` : ''),
     }))
     .filter((m) => m.content);
+
+  // Si el último mensaje del cliente es multimedia sin texto (nota de voz, foto…),
+  // DeepSeek no lo puede oír/ver: le pedimos que responda igual, pidiendo texto.
+  const ultimo = db.prepare("SELECT texto, tipo FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(leadId) as
+    | { texto: string; tipo: string }
+    | undefined;
+  const mediaSinTexto = !!ultimo && ultimo.tipo !== 'texto' && !String(ultimo.texto || '').trim();
+  const systemFinal = mediaSinTexto
+    ? `${system}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
+    : system;
 
   try {
     const res = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'system', content: system }, ...historia], max_tokens: 300, temperature: 0.7 }),
+      body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'system', content: systemFinal }, ...historia], max_tokens: 300, temperature: 0.7 }),
     });
     if (!res.ok) {
       console.error('[ia] DeepSeek respondió', res.status, await res.text().catch(() => ''));
