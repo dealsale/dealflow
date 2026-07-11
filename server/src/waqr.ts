@@ -148,7 +148,7 @@ async function connect(storeId: string, session: Session): Promise<void> {
 
 /** Procesa un mensaje entrante: texto y/o adjunto (lo descarga y guarda). */
 async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
-  const waId = m.key.remoteJid!.split('@')[0];
+  const waId = m.key.remoteJid!;
   const nombre = m.pushName || '';
   const msg = m.message;
   const texto = msg?.conversation || msg?.extendedTextMessage?.text;
@@ -198,7 +198,7 @@ export async function sendViaQr(storeId: string, to: string, texto: string): Pro
   const s = sessions.get(storeId);
   if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
   try {
-    const jid = to.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+    const jid = to.includes('@') ? to : to.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
     await s.sock.sendMessage(jid, { text: texto });
     return { ok: true };
   } catch {
@@ -216,7 +216,7 @@ export async function sendMediaViaQr(
   const s = sessions.get(storeId);
   if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
   try {
-    const jid = to.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+    const jid = to.includes('@') ? to : to.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
     if (media.tipo === 'image') await s.sock.sendMessage(jid, { image: media.buffer, caption: caption || undefined });
     else if (media.tipo === 'video') await s.sock.sendMessage(jid, { video: media.buffer, caption: caption || undefined });
     else if (media.tipo === 'audio') await s.sock.sendMessage(jid, { audio: media.buffer, mimetype: media.mime });

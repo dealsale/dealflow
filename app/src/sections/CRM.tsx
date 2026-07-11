@@ -8,7 +8,7 @@ export function CRM({ df }: { df: DealFlowState }) {
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>CRM · Chats en vivo</h1>
       <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 18px' }}>Lo que pasa ahora mismo en tu WhatsApp. Entra a un chat si quieres tomar el control.</p>
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
-        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
           {df.crmChats.map((c) => (
             <div key={c.id} onClick={c.select} style={c.crmRowStyle}>
               <div style={c.avatarStyle}>{c.iniciales}</div>
@@ -29,7 +29,7 @@ export function CRM({ df }: { df: DealFlowState }) {
         </div>
 
         {chat && (
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', minHeight: 480 }}>
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', height: 'min(70vh, 620px)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid #F1F5F9' }}>
               <div style={chat.avatarStyle}>{chat.iniciales}</div>
               <div>

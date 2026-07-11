@@ -16,6 +16,7 @@ import {
 import { readImagesAsDataUrls } from '../components/PhotoUpload';
 import {
   apiAdminOverview,
+  apiAssignLead,
   apiCreatePlan,
   apiCreateStore,
   apiLeads,
@@ -1301,8 +1302,14 @@ export function useDealFlowState() {
     crmTyping: !!(crmChat && crmChat.live && !crmIntervening),
     crmIntervening,
     crmNotIntervening: !crmIntervening,
-    intervene: () => setCrmIntervening(true),
-    backToBot: () => setCrmIntervening(false),
+    intervene: () => {
+      setCrmIntervening(true);
+      if (apiMode) void apiAssignLead(String(crmSelectedId), sessionUser?.nombre || 'Vendedor');
+    },
+    backToBot: () => {
+      setCrmIntervening(false);
+      if (apiMode) void apiAssignLead(String(crmSelectedId), 'Asistente (bot)');
+    },
     crmDraft,
     setCrmDraft,
     sendCrm,

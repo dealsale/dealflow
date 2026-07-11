@@ -14,11 +14,11 @@ function ensureLead(storeId: string, waId: string, nombre: string): string {
   if (!lead) {
     const id = uid();
     db.prepare('INSERT INTO leads (id, store_id, nombre, tel, etapa, asignado, wa_id) VALUES (?,?,?,?,?,?,?)').run(
-      id, storeId, nombre || '+' + waId, '+' + waId, 'Explorando', 'Asistente (bot)', waId,
+      id, storeId, nombre || '+' + waId.split('@')[0], '+' + waId.split('@')[0], 'Explorando', 'Asistente (bot)', waId,
     );
     lead = { id };
   } else if (nombre) {
-    db.prepare('UPDATE leads SET nombre = ? WHERE id = ? AND (nombre = ? OR nombre = ?)').run(nombre, lead.id, '+' + waId, waId);
+    db.prepare('UPDATE leads SET nombre = ? WHERE id = ? AND (nombre = ? OR nombre = ?)').run(nombre, lead.id, '+' + waId.split('@')[0], waId);
   }
   return lead.id;
 }
@@ -32,6 +32,8 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
   db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)').run(
     uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null,
   );
+  // Respuesta automática por IA (si está configurada y el bot atiende este chat).
+  void import('./ai.js').then((a) => a.maybeAutoReply(storeId, leadId)).catch(() => {});
   return leadId;
 }
 
