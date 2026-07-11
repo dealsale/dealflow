@@ -95,7 +95,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       )}
 
       <div style={{ flex: 1 }} />
-      {df.canAdmin && (
+      {df.canAdmin && !df.apiMode && (
         <div
           onClick={df.toggleMode}
           className="df-toggle-mode"
@@ -112,6 +112,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       >
         Cerrar sesión
       </div>
+      {!df.apiMode && (
       <div
         onClick={df.resetDemo}
         className="df-toggle-mode"
@@ -120,6 +121,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       >
         ↺ Restablecer demo
       </div>
+      )}
     </aside>
   );
 }

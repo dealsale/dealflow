@@ -21,7 +21,13 @@ if (process.env.NODE_ENV !== 'production') {
 
 app.use('/api', api);
 app.use('/webhooks', webhooks);
-app.get('/salud', (_req, res) => res.json({ ok: true }));
+app.get('/salud', (_req, res) =>
+  res.json({
+    ok: true,
+    // Con el volumen de Railway montado en /srv/data, esto lo confirma.
+    datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
+  }),
+);
 
 // En producción el mismo servidor sirve el panel (app/dist)
 const APP_DIST = process.env.APP_DIST || path.resolve(import.meta.dirname, '../../app/dist');

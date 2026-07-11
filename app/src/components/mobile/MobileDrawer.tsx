@@ -91,7 +91,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         )}
 
         <div style={{ flex: 1 }} />
-        {df.canAdmin && (
+        {df.canAdmin && !df.apiMode && (
           <div
             onClick={df.toggleMode}
             className="df-toggle-mode"
@@ -108,6 +108,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         >
           Cerrar sesión
         </div>
+        {!df.apiMode && (
         <div
           onClick={df.resetDemo}
           className="df-toggle-mode"
@@ -115,6 +116,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         >
           ↺ Restablecer demo
         </div>
+        )}
       </div>
       <div onClick={df.closeMenu} style={{ flex: 1, background: 'rgba(15,23,42,.5)' }} />
     </div>
