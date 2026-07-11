@@ -7,12 +7,18 @@ import { sendWhatsappText } from './wa.js';
  */
 export async function maybeAutoReply(storeId: string, leadId: string) {
   const key = process.env.DEEPSEEK_API_KEY;
-  if (!key) return;
+  if (!key) {
+    console.log('[ia] DEEPSEEK_API_KEY no está configurada: el asistente no responde');
+    return;
+  }
   const lead = db.prepare('SELECT id, nombre, asignado, wa_id, tel FROM leads WHERE id = ?').get(leadId) as
     | { id: string; nombre: string; asignado: string; wa_id: string | null; tel: string }
     | undefined;
   if (!lead) return;
-  if (!/asistente|bot/i.test(lead.asignado)) return; // un humano intervino: la IA calla
+  if (!/asistente|bot/i.test(lead.asignado)) {
+    console.log(`[ia] el chat lo atiende "${lead.asignado}": no respondo (usa "Devolver al asistente")`);
+    return;
+  }
 
   const assistant = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(storeId) as
     | { instrucciones: string; reglas: string }
@@ -68,7 +74,8 @@ Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "
     if (!texto) return;
     db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', texto);
     const send = await sendWhatsappText(storeId, lead.wa_id || lead.tel, texto);
-    if (!send.ok) console.error('[ia] respuesta generada pero no enviada:', send.error);
+    if (send.ok) console.log('[ia] respuesta enviada por WhatsApp');
+    else console.error('[ia] respuesta generada pero NO enviada:', send.error, '| destino:', lead.wa_id || lead.tel);
   } catch (e) {
     console.error('[ia] error llamando a DeepSeek', e);
   }

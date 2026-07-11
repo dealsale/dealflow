@@ -389,6 +389,7 @@ export function useDealFlowState() {
   // Simula la llegada de pedidos desde el asistente de WhatsApp: el primero
   // entra a los ~15 s y luego cada 35–70 s, con notificación y timbre.
   useEffect(() => {
+    if (apiMode) return; // en modo servidor no se simulan pedidos
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const arrive = () => {
@@ -407,7 +408,7 @@ export function useDealFlowState() {
       clearTimeout(timer);
       clearTimeout(toastTimer.current);
     };
-  }, []);
+  }, [apiMode]);
 
   const isAdmin = mode === 'admin';
 
