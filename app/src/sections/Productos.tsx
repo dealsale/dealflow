@@ -21,10 +21,16 @@ function OpcionesEditor({ p }: { p: DecoratedProduct }) {
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
               {o.valores.map((val, vi) => (
-                <span key={vi} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: '#F1F5F9', borderRadius: 999, padding: '5px 10px', fontSize: 13, fontWeight: 500 }}>
-                  {val}
+                <div key={vi} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: '#F1F5F9', borderRadius: 10, padding: '5px 8px' }}>
+                  {val.foto && <img src={val.foto} alt="" style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover', border: '1px solid rgba(15,23,42,.1)' }} />}
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{val.valor}</span>
+                  {val.foto ? (
+                    <span onClick={() => o.removeValorFoto(vi)} className="df-danger-hover" title="Quitar la foto de esta opción" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 11 }}>quitar foto</span>
+                  ) : (
+                    <PhotoAddChip label="+ foto" onFiles={(files) => o.setValorFoto(vi, files)} />
+                  )}
                   <span onClick={() => o.removeValor(vi)} className="df-danger-hover" title="Quitar" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}>✕</span>
-                </span>
+                </div>
               ))}
               {o.valores.length === 0 && <span style={{ color: '#94A3B8', fontSize: 12.5 }}>Aún no agregas opciones a este grupo.</span>}
             </div>
@@ -220,20 +226,56 @@ export function Productos({ df }: { df: DealFlowState }) {
                     />
                   </div>
                 </div>
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Modo de uso · cómo se usa el producto</div>
-                  <textarea
-                    className="df-input"
-                    value={p.modosUso || ''}
-                    onChange={(e) => p.setModosUso(e.target.value)}
-                    rows={2}
-                    placeholder="Ej: Aplicar sobre la piel limpia, 2 veces al día…"
-                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, resize: 'vertical' }}
-                  />
+                <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+                  <div>
+                    <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Modo de uso · cómo se usa el producto</div>
+                    <textarea
+                      className="df-input"
+                      value={p.modosUso || ''}
+                      onChange={(e) => p.setModosUso(e.target.value)}
+                      rows={2}
+                      placeholder="Ej: Aplicar sobre la piel limpia, 2 veces al día…"
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, resize: 'vertical' }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Contenido del paquete · qué le llega al cliente</div>
+                    <textarea
+                      className="df-input"
+                      value={p.contenidoPaquete || ''}
+                      onChange={(e) => p.setContenidoPaquete(e.target.value)}
+                      rows={2}
+                      placeholder="Ej: 1 jogger, 1 bolsa de regalo y guía de tallas."
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, resize: 'vertical' }}
+                    />
+                  </div>
                 </div>
 
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
-                  Mensaje inicial · constrúyelo con bloques: textos, imágenes y videos en orden
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                    Mensaje inicial · fotos, textos y videos que se envían solos
+                  </div>
+                  <div style={{ flex: 1 }} />
+                  <span style={{ fontSize: 12, color: p.mensajeInicialActivo !== false ? '#059669' : '#94A3B8', fontWeight: 600 }}>
+                    {p.mensajeInicialActivo !== false ? 'Encendido' : 'Apagado'}
+                  </span>
+                  <span
+                    onClick={p.toggleMensajeInicial}
+                    title="Encender o apagar el envío automático del mensaje inicial"
+                    style={{ width: 40, height: 23, borderRadius: 999, background: p.mensajeInicialActivo !== false ? '#059669' : '#CBD5E1', position: 'relative', cursor: 'pointer', transition: 'background .2s', flexShrink: 0 }}
+                  >
+                    <span style={{ position: 'absolute', top: 2, left: p.mensajeInicialActivo !== false ? 19 : 2, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 2px rgba(15,23,42,.3)' }} />
+                  </span>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Disparador · si el primer mensaje se parece a esto, envía todo el mensaje inicial</div>
+                  <input
+                    className="df-input"
+                    value={p.disparador || ''}
+                    onChange={(e) => p.setDisparador(e.target.value)}
+                    placeholder="Ej: ¡Hola! Me interesan los Bota recta ámbar."
+                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                  />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
                   {p.bloquesDecorados.map((b, i) => (

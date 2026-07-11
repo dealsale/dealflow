@@ -38,10 +38,15 @@ export interface FaqItem {
   respuesta: string;
 }
 
-/** Un grupo de opciones del producto, ej: { nombre: 'Color', valores: ['Negro','Azul'] } */
+/** Un valor de opción, con foto propia opcional (ej: { valor: 'Blanco', foto: '/api/media/…' }) */
+export interface OpcionValor {
+  valor: string;
+  foto?: string;
+}
+/** Un grupo de opciones del producto, ej: { nombre: 'Color', valores: [{valor:'Negro'}, ...] } */
 export interface Opcion {
   nombre: string;
-  valores: string[];
+  valores: OpcionValor[];
 }
 
 /** Un combo/bundle del producto: llevar N por un precio especial. */
@@ -82,6 +87,12 @@ export interface Product {
   bundles?: Bundle[];
   /** Grupos de opciones: Color (negro, azul…), Talla (S, M, L…) */
   opciones?: Opcion[];
+  /** Qué trae el paquete (texto que usa el asistente) */
+  contenidoPaquete?: string;
+  /** Frase que dispara el envío del mensaje inicial (ej: "Me interesan los Bota recta ámbar") */
+  disparador?: string;
+  /** Si el mensaje inicial (estructura completa) está encendido para este producto */
+  mensajeInicialActivo?: boolean;
   fotos?: string[];
   /** Fotos principales subidas por el vendedor, como data URLs */
   fotosSubidas?: string[];

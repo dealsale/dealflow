@@ -57,10 +57,12 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
     const guion = bloques || (p.mensaje_inicial as string);
     const combos = pj<{ cantidad: number; precio: number; etiqueta?: string }[]>(p.bundles as string, [])
       .map((b) => `  · Combo: ${b.cantidad} por $${Number(b.precio).toLocaleString('es-CO')} COP${b.etiqueta ? ` (${b.etiqueta})` : ''}`).join('\n');
-    const opciones = pj<{ nombre: string; valores: string[] }[]>(p.opciones as string, [])
-      .filter((o) => o.nombre && o.valores?.length).map((o) => `  ${o.nombre}: ${o.valores.join(', ')}`).join('\n');
+    const opciones = pj<{ nombre: string; valores: (string | { valor: string; foto?: string })[] }[]>(p.opciones as string, [])
+      .filter((o) => o.nombre && o.valores?.length)
+      .map((o) => `  ${o.nombre}: ${o.valores.map((v) => (typeof v === 'string' ? v : v.valor + (v.foto ? ' 📷' : ''))).join(', ')}`).join('\n');
     const extra = [p.descripcion && `  Descripción: ${p.descripcion}`, p.caracteristicas && `  Características: ${p.caracteristicas}`,
-      p.modos_uso && `  Modo de uso: ${p.modos_uso}`, opciones && `  Opciones disponibles:\n${opciones}`,
+      p.contenido_paquete && `  Contenido del paquete: ${p.contenido_paquete}`,
+      p.modos_uso && `  Modo de uso: ${p.modos_uso}`, opciones && `  Opciones disponibles (📷 = tiene foto propia):\n${opciones}`,
       guion && `  Si preguntan por este producto, preséntalo así: ${guion}`]
       .filter(Boolean).join('\n');
     const variantesTxt = opciones ? '' : ` Variantes: ${vars || 'única'}.`;
@@ -86,7 +88,7 @@ ${promos || '(ninguna)'}
 
 Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "tú", sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
 
-FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), y todavía no le hayas enviado su material, incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). El sistema enviará automáticamente las fotos y videos de ese producto; no describas que "no puedes enviar fotos". Usa el marcador una sola vez por producto.
+FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), y todavía no le hayas enviado su material, incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si pide la foto de una OPCIÓN específica que tiene 📷 (ej: "foto del jogger blanco"), usa ##MEDIA:Nombre del producto|Blanco##. El sistema enviará automáticamente las fotos y videos; no digas que "no puedes enviar fotos". Usa el marcador una sola vez por producto.
 
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
 ##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto, 1x Otro producto"##
@@ -112,6 +114,24 @@ Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses lla
     ? `${system}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
     : system;
 
+  const destino = lead.wa_id || lead.tel;
+  const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
+
+  // Disparador: si el mensaje del cliente menciona/coincide con un producto
+  // activo (típico de anuncios "Me interesan los X"), enviamos su estructura
+  // completa aunque la IA aún no responda.
+  if (ultimo?.tipo === 'texto' && ultimo.texto) {
+    for (const p of productRows) {
+      if (Number(p.mensaje_inicial_activo) === 0) continue;
+      const t = norm(ultimo.texto);
+      const nom = norm(String(p.nombre));
+      const disp = norm(String(p.disparador || ''));
+      if ((nom.length >= 4 && t.includes(nom)) || (disp.length >= 6 && (t.includes(disp) || disp.includes(t)))) {
+        await enviarPresentacion(storeId, leadId, destino, p, pn);
+      }
+    }
+  }
+
   try {
     const res = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
@@ -125,10 +145,9 @@ Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses lla
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const bruto = body.choices?.[0]?.message?.content?.trim();
     if (!bruto) return;
-    const destino = lead.wa_id || lead.tel;
-    const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
 
-    // La IA marca con ##MEDIA:Nombre## cuando el cliente pide un producto: enviamos su presentación (bloques/fotos/videos).
+    // La IA marca con ##MEDIA:Nombre## cuando el cliente pide un producto; con
+    // ##MEDIA:Nombre|Valor## pide la foto de una opción específica.
     const marca = /##\s*MEDIA:\s*([^#]+?)\s*##/i;
     // El pedido va en su propia línea; capturamos hasta el fin de línea porque
     // la dirección puede tener '#'. No dependemos de un cierre '##'.
@@ -137,10 +156,15 @@ Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses lla
     const mp = bruto.match(marcaPed);
     const texto = bruto.replace(new RegExp(marca, 'gi'), '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').trim();
     if (m) {
-      const pedido = m[1].trim().toLowerCase();
+      const [prodName, valName] = m[1].split('|').map((s) => s.trim());
+      const pedido = prodName.toLowerCase();
       const prod = productRows.find((p) => String(p.nombre).trim().toLowerCase() === pedido)
         || productRows.find((p) => String(p.nombre).toLowerCase().includes(pedido) || pedido.includes(String(p.nombre).toLowerCase()));
-      if (prod) await enviarPresentacion(storeId, leadId, destino, prod, pn);
+      if (prod) {
+        const foto = valName ? fotoDeOpcion(prod, valName) : null;
+        if (foto) await enviarUnaFoto(storeId, leadId, destino, foto, pn);
+        else await enviarPresentacion(storeId, leadId, destino, prod, pn);
+      }
     }
     if (mp) crearPedido(storeId, lead, mp[1], productRows);
 
@@ -199,8 +223,32 @@ function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: s
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
 }
 
+/** Normaliza texto: minúsculas, sin acentos ni signos, para comparar. */
+function norm(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Busca la foto de una opción por su valor (ej: "Blanco"). */
+function fotoDeOpcion(prod: Record<string, unknown>, valName: string): string | null {
+  const v = norm(valName);
+  const ops = pj<{ valores: (string | { valor: string; foto?: string })[] }[]>(prod.opciones as string, []);
+  const items = ops.flatMap((o) => o.valores || []).filter((x): x is { valor: string; foto?: string } => typeof x !== 'string' && !!x.foto);
+  return (items.find((x) => norm(x.valor) === v) || items.find((x) => norm(x.valor).includes(v) || v.includes(norm(x.valor))))?.foto || null;
+}
+
+/** Envía una sola foto (ej: la de una opción de color) sin marcar presentación. */
+async function enviarUnaFoto(storeId: string, leadId: string, destino: string, valor: string, pn?: string) {
+  const media = materializar(storeId, valor);
+  if (!media) return;
+  await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
+  db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
+    .run(uid(), leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+  console.log(`[ia] foto de opción enviada`);
+}
+
 /** Envía una vez por chat la presentación de un producto: bloques (texto/imagen/video) o, si no hay, sus fotos y videos. */
 async function enviarPresentacion(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string) {
+  if (Number(p.mensaje_inicial_activo) === 0) return; // mensaje inicial apagado para este producto
   const pid = String(p.id);
   const yaEnviada = db.prepare('SELECT 1 FROM sent_presentations WHERE lead_id = ? AND product_id = ?').get(leadId, pid);
   if (yaEnviada) return;

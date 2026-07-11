@@ -115,7 +115,10 @@ export interface ApiProduct {
   videos: string[];
   mensajeBloques: { tipo: string; valor: string }[];
   bundles: { cantidad: number; precio: number; etiqueta?: string }[];
-  opciones: { nombre: string; valores: string[] }[];
+  opciones: { nombre: string; valores: ({ valor: string; foto?: string } | string)[] }[];
+  contenidoPaquete: string;
+  disparador: string;
+  mensajeInicialActivo: boolean;
   fotos: string[];
   fotosSubidas: string[];
   variantes: { id: string; label: string; stock: number; fotos: number; fotosSubidas: string[] }[];

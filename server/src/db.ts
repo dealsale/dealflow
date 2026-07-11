@@ -142,7 +142,10 @@ addColumn('products', "modos_uso TEXT NOT NULL DEFAULT ''");
 addColumn('products', "videos TEXT NOT NULL DEFAULT '[]'");
 addColumn('products', "mensaje_bloques TEXT NOT NULL DEFAULT '[]'");
 addColumn('products', "bundles TEXT NOT NULL DEFAULT '[]'");
-addColumn('products', "opciones TEXT NOT NULL DEFAULT '[]'"); // [{nombre:'Color',valores:['Negro','Azul']},...]
+addColumn('products', "opciones TEXT NOT NULL DEFAULT '[]'"); // [{nombre:'Color',valores:[{valor:'Negro',foto:'...'}]}]
+addColumn('products', "contenido_paquete TEXT NOT NULL DEFAULT ''");
+addColumn('products', "disparador TEXT NOT NULL DEFAULT ''");
+addColumn('products', 'mensaje_inicial_activo INTEGER NOT NULL DEFAULT 1');
 addColumn('messages', "tipo TEXT NOT NULL DEFAULT 'texto'");
 addColumn('messages', 'media_url TEXT');
 addColumn('messages', 'media_mime TEXT');
