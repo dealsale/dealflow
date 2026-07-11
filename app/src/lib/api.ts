@@ -120,6 +120,7 @@ export interface ApiProduct {
   variantes: { id: string; label: string; stock: number; fotos: number; fotosSubidas: string[] }[];
 }
 
+export const apiUpload = (dataUrl: string, nombre?: string) => req<{ url: string }>('/api/upload', 'POST', { dataUrl, nombre });
 export const apiCreateProduct = (b: { nombre: string; precio: number; stock: number }) => req<{ id: string }>('/api/products', 'POST', b);
 export const apiPatchProduct = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/products/${id}`, 'PATCH', patch);
 export const apiDeleteProduct = (id: string) => req<{ ok: true }>(`/api/products/${id}`, 'DELETE');

@@ -115,6 +115,15 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   res.json({ orders });
 });
 
+// Sube un archivo (foto/video) y devuelve su enlace, para guardarlo liviano en el producto.
+api.post('/upload', requireAuth, requireStore, (req, res) => {
+  const { dataUrl, nombre } = req.body || {};
+  if (!dataUrl) return res.status(400).json({ error: 'No recibimos el archivo.' });
+  const saved = saveOutgoingMedia(req.user!.storeId!, String(dataUrl), String(nombre || ''));
+  if (!saved) return res.status(400).json({ error: 'El archivo no es válido.' });
+  res.json({ url: saved.url });
+});
+
 // ── Productos ─────────────────────────────────────────────────────────
 api.post('/products', requireAuth, requireStore, (req, res) => {
   const { nombre, precio, stock = 0, color = '#E0E7FF', txt = '#4338CA' } = req.body || {};

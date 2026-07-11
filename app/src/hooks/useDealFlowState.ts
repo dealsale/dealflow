@@ -13,7 +13,7 @@ import {
   WA_CODE,
   WEBHOOK_URL,
 } from '../data';
-import { readFilesAsDataUrls, readImagesAsDataUrls } from '../components/PhotoUpload';
+import { readFilesAsDataUrls } from '../components/PhotoUpload';
 import {
   apiAddVariant,
   apiAdminOverview,
@@ -36,6 +36,7 @@ import {
   apiSendLeadMedia,
   apiSendLeadMessage,
   apiState,
+  apiUpload,
   apiOrders,
   apiOrderAdvance,
   apiOrderDropi,
@@ -1010,8 +1011,20 @@ export function useDealFlowState() {
     setNewPromoOpen(false);
   }
 
+  /** Sube archivos al servidor y devuelve sus enlaces (livianos). En demo usa data URLs. */
+  async function subir(files: File[], mimePrefix: string): Promise<string[]> {
+    const dataUrls = await readFilesAsDataUrls(files, mimePrefix);
+    if (!apiMode) return dataUrls; // demo local: sin servidor, se guarda el data URL
+    const urls: string[] = [];
+    for (const d of dataUrls) {
+      const { data } = await apiUpload(d);
+      if (data?.url) urls.push(data.url);
+    }
+    return urls;
+  }
+
   async function addMainPhotos(productId: number | string, files: File[]) {
-    const urls = await readImagesAsDataUrls(files);
+    const urls = await subir(files, 'image/');
     if (!urls.length) return;
     let nuevas: string[] = [];
     setProducts((st) => st.map((p) => {
@@ -1048,7 +1061,7 @@ export function useDealFlowState() {
   }
 
   async function addTestimonios(productId: number | string, files: File[]) {
-    const urls = await readImagesAsDataUrls(files);
+    const urls = await subir(files, 'image/');
     if (urls.length) patchProductList(productId, 'testimonios', (t) => [...t, ...urls]);
   }
 
@@ -1060,17 +1073,17 @@ export function useDealFlowState() {
   }
 
   async function addProductVideos(productId: number | string, files: File[]) {
-    const urls = await readFilesAsDataUrls(filtrarVideos(files), 'video/');
+    const urls = await subir(filtrarVideos(files), 'video/');
     if (urls.length) patchProductList(productId, 'videos', (v) => [...v, ...urls]);
   }
 
   async function addBloqueMedia(productId: number | string, files: File[], tipo: 'imagen' | 'video') {
-    const urls = await readFilesAsDataUrls(tipo === 'video' ? filtrarVideos(files) : files, tipo === 'imagen' ? 'image/' : 'video/');
+    const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, tipo === 'imagen' ? 'image/' : 'video/');
     if (urls.length) patchProductList(productId, 'mensajeBloques', (b) => [...b, ...urls.map((valor) => ({ tipo, valor }))]);
   }
 
   async function addVariantPhotos(productId: number | string, variantIndex: number, files: File[]) {
-    const urls = await readImagesAsDataUrls(files);
+    const urls = await subir(files, 'image/');
     if (!urls.length) return;
     let vid: string | undefined;
     let nuevas: string[] = [];

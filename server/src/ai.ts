@@ -1,6 +1,27 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { db, pj, uid } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia } from './wa.js';
-import { saveOutgoingMedia } from './media.js';
+import { saveOutgoingMedia, mediaPath, tipoDeMime } from './media.js';
+
+const MIME_POR_EXT: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+  mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', ogg: 'audio/ogg', mp3: 'audio/mpeg', m4a: 'audio/mp4', pdf: 'application/pdf',
+};
+
+/** Obtiene el archivo (buffer/mime/tipo/url) de un valor: enlace guardado o data URL. */
+function materializar(storeId: string, valor: string): { buffer: Buffer; mime: string; tipo: string; url: string } | null {
+  if (valor.startsWith('data:')) {
+    const s = saveOutgoingMedia(storeId, valor, '');
+    return s ? { buffer: s.buffer, mime: s.mime, tipo: s.tipo, url: s.url } : null;
+  }
+  const mm = valor.match(/\/api\/media\/[^/]+\/([^/?#]+)/);
+  if (!mm) return null;
+  const p = mediaPath(storeId, mm[1]);
+  if (!existsSync(p)) return null;
+  const ext = (mm[1].split('.').pop() || '').toLowerCase();
+  const mime = MIME_POR_EXT[ext] || 'application/octet-stream';
+  return { buffer: readFileSync(p), mime, tipo: tipoDeMime(mime), url: valor };
+}
 
 /**
  * Si la tienda tiene IA disponible (DEEPSEEK_API_KEY) y el chat lo atiende
@@ -63,9 +84,9 @@ Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "
 
 FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), y todavía no le hayas enviado su material, incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). El sistema enviará automáticamente las fotos y videos de ese producto; no describas que "no puedes enviar fotos". Usa el marcador una sola vez por producto.
 
-CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, el marcador:
+CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
 ##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto, 1x Otro producto"##
-Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.`;
+Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.`;
 
   const nombreMedia = (tipo: string) =>
     tipo === 'audio' ? 'una nota de voz' : tipo === 'image' ? 'una imagen' : tipo === 'video' ? 'un video' : 'un archivo';
@@ -130,13 +151,17 @@ Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordada
   }
 }
 
+/** Quita comillas, barras invertidas, llaves y demás restos si la IA formatea de más. */
+function limpiarValor(v: string): string {
+  return v.replace(/\\+/g, '').replace(/^[\s"'`{}[\]]+|[\s"'`{}[\]]+$/g, '').trim();
+}
 function campoPedido(s: string, k: string): string {
   // Primero el valor entre comillas (tolera el # de las direcciones colombianas),
   // y si no, hasta el siguiente ';'.
   const q = s.match(new RegExp(k + '\\s*[:=]\\s*"([^"]+)"', 'i'));
-  if (q) return q[1].trim();
+  if (q) return limpiarValor(q[1]);
   const u = s.match(new RegExp(k + '\\s*[:=]\\s*([^;]+)', 'i'));
-  return u ? u[1].replace(/#+\s*$/, '').trim() : '';
+  return u ? limpiarValor(u[1]) : '';
 }
 
 /** Registra automáticamente el pedido cuando la IA cierra la venta (marcador ##PEDIDO##). */
@@ -148,10 +173,10 @@ function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: s
   const items = itemsRaw.split(',').map((s) => s.trim()).filter(Boolean).map((it) => {
     const mm = it.match(/(\d+)\s*[xX×]\s*(.+)/);
     const qty = mm ? parseInt(mm[1], 10) || 1 : 1;
-    const nom = (mm ? mm[2] : it).trim().toLowerCase();
+    const nom = limpiarValor(mm ? mm[2] : it).toLowerCase();
     const prod = productRows.find((p) => String(p.nombre).toLowerCase() === nom)
       || productRows.find((p) => String(p.nombre).toLowerCase().includes(nom) || nom.includes(String(p.nombre).toLowerCase()));
-    return { qty, nombre: prod ? String(prod.nombre) : (mm ? mm[2] : it).trim(), precio: prod ? Number(prod.precio) : 0 };
+    return { qty, nombre: prod ? String(prod.nombre) : limpiarValor(mm ? mm[2] : it), precio: prod ? Number(prod.precio) : 0 };
   }).filter((i) => i.nombre);
   if (!items.length || (!direccion && !ciudad)) return; // datos insuficientes, esperamos
 
@@ -207,7 +232,7 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
       const r = await sendWhatsappText(storeId, destino, b.valor, pn);
       if (r.ok) enviadas++;
     } else {
-      const media = saveOutgoingMedia(storeId, b.valor, '');
+      const media = materializar(storeId, b.valor);
       if (!media) continue;
       const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
       db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
