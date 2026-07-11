@@ -29,12 +29,21 @@ app.get('/salud', (_req, res) =>
   }),
 );
 
-// En producción el mismo servidor sirve el panel (app/dist)
+// En producción el mismo servidor sirve el panel (app/dist) y, en el dominio
+// raíz configurado, la landing. La app vive en app.<dominio> (o en cualquier
+// otro host, como la URL de Railway, para no romper nada).
 const APP_DIST = process.env.APP_DIST || path.resolve(import.meta.dirname, '../../app/dist');
+const LANDING = process.env.LANDING_PATH || path.resolve(APP_DIST, '..', 'landing.html');
+const LANDING_HOSTS = (process.env.LANDING_HOSTS || 'zennku.sbs,www.zennku.sbs')
+  .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
 if (existsSync(APP_DIST)) {
-  app.use(express.static(APP_DIST));
-  app.get(/^\/(?!api|webhooks).*/, (_req, res) => res.sendFile(path.join(APP_DIST, 'index.html')));
-  console.log('[web] Sirviendo el panel desde', APP_DIST);
+  app.use(express.static(APP_DIST, { index: false })); // sirve /logo.png y /assets/* en cualquier host
+  app.get(/^\/(?!api|webhooks).*/, (req, res) => {
+    const host = (req.hostname || '').toLowerCase();
+    if (LANDING_HOSTS.includes(host) && existsSync(LANDING)) return res.sendFile(LANDING);
+    res.sendFile(path.join(APP_DIST, 'index.html'));
+  });
+  console.log('[web] Panel desde', APP_DIST, '· landing en', LANDING_HOSTS.join(', '));
 }
 
 const PORT = Number(process.env.PORT) || 3001;
