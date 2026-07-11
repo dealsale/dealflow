@@ -1,8 +1,14 @@
+import { useEffect, useRef } from 'react';
 import { AttachButton, MediaContent } from '../MediaBubble';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function MobileChat({ df }: { df: DealFlowState }) {
   const chat = df.crmChat;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chat?.tel, chat?.mensajesDecorated.length, df.mobileChatOpen]);
   if (!df.mobileChatOpen || !chat) return null;
 
   return (
@@ -60,7 +66,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {chat.mensajesDecorated.map((m, i) => (
           <div key={i} style={m.rowStyle}>
             <div style={{ ...m.bubbleStyle, maxWidth: '80%' }}>

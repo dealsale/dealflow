@@ -48,8 +48,10 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   const system = `Eres el asistente de ventas por WhatsApp de la tienda "${store?.nombre || 'la tienda'}".
 ${assistant?.instrucciones || 'Atiende con calidez y ayuda a cerrar la venta.'}
 
-REGLAS QUE SE CUMPLEN SIEMPRE:
+REGLAS GENERALES DE LA TIENDA:
 ${reglas || '- Sé honesto y claro.'}
+
+MUY IMPORTANTE: cada producto puede tener sus PROPIAS reglas (aparecen como "· Regla:" dentro de él). Esas reglas del producto son EXCEPCIONES y tienen PRIORIDAD sobre las reglas generales. Ejemplo: si la regla general dice que no se venden 2 unidades, pero un producto tiene una regla que sí permite llevar 2 por cierto precio, respeta la del producto. Usa siempre la descripción, características, modo de uso, combos, precios y reglas EXACTAS del producto del catálogo; no inventes ni generalices.
 
 CATÁLOGO (precios en COP):
 ${products || '(sin productos cargados aún)'}
@@ -127,13 +129,22 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
   db.prepare('INSERT OR IGNORE INTO sent_presentations (lead_id, product_id) VALUES (?,?)').run(leadId, pid);
 
   const bloques = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, []);
-  let piezas: { tipo: string; valor: string }[] = bloques.length
-    ? bloques
-    : [
-        ...pj<string[]>(p.fotos_subidas as string, []).map((v) => ({ tipo: 'imagen', valor: v })),
-        ...pj<string[]>(p.videos as string, []).map((v) => ({ tipo: 'video', valor: v })),
-      ];
-  piezas = piezas.slice(0, 8); // no inundar el chat
+  const fotos = pj<string[]>(p.fotos_subidas as string, []);
+  const videos = pj<string[]>(p.videos as string, []);
+  // Reunimos TODO el material del producto (no solo los bloques): así, cuando
+  // el cliente pide fotos, sí le llegan las fotos aunque el mensaje inicial
+  // tenga un video. Orden: primero el texto de presentación, luego las
+  // imágenes y por último los videos.
+  const textos = bloques.filter((b) => b.tipo === 'texto');
+  const imgsBloque = bloques.filter((b) => b.tipo === 'imagen').map((b) => b.valor);
+  const vidsBloque = bloques.filter((b) => b.tipo === 'video').map((b) => b.valor);
+  const imagenes = [...imgsBloque, ...fotos.filter((f) => !imgsBloque.includes(f))].slice(0, 6);
+  const clips = [...vidsBloque, ...videos.filter((v) => !vidsBloque.includes(v))].slice(0, 2);
+  const piezas: { tipo: string; valor: string }[] = [
+    ...textos.map((b) => ({ tipo: 'texto', valor: b.valor })),
+    ...imagenes.map((v) => ({ tipo: 'imagen', valor: v })),
+    ...clips.map((v) => ({ tipo: 'video', valor: v })),
+  ];
   if (!piezas.length) {
     console.log(`[ia] "${p.nombre}": el cliente lo pidió pero no hay fotos/videos cargados`);
     return;

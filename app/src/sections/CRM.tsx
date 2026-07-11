@@ -1,8 +1,14 @@
+import { useEffect, useRef } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 export function CRM({ df }: { df: DealFlowState }) {
   const chat = df.crmChat;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chat?.tel, chat?.mensajesDecorated.length]);
   return (
     <section data-screen-label="CRM">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>CRM · Chats en vivo</h1>
@@ -61,7 +67,7 @@ export function CRM({ df }: { df: DealFlowState }) {
               </button>
             </div>
 
-            <div style={{ flex: 1, background: '#F8FAFC', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+            <div ref={scrollRef} style={{ flex: 1, background: '#F8FAFC', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
               {chat.mensajesDecorated.map((m, i) => (
                 <div key={i} style={m.rowStyle}>
                   <div style={m.bubbleStyle}>

@@ -574,7 +574,7 @@ export function useDealFlowState() {
   const crmChats: DecoratedCrmChat[] = useMemo(
     () =>
       leadsSource.map((l, i) => {
-        const d = decorateLead(l, i, crmSelectedId, (id) => { setCrmSelectedId(id); setCrmIntervening(false); });
+        const d = decorateLead(l, i, crmSelectedId, (id) => { setCrmSelectedId(id); setCrmIntervening(false); setCrmSendWarn(''); });
         // En modo servidor, "en vivo" = el bot lo atiende; en demo, los dos primeros.
         const live = apiMode && apiLeadsState ? l.asignado.includes('bot') || l.asignado.includes('Asistente') : l.id === 1 || l.id === 2;
         const selC = l.id === crmSelectedId;
@@ -1326,6 +1326,7 @@ export function useDealFlowState() {
     const txt = crmDraft.trim();
     if (!txt) return;
     setCrmDraft('');
+    setCrmSendWarn('');
     if (apiMode && apiLeadsState) {
       // Optimista: muestra el mensaje ya, y lo confirma/refresca contra el servidor.
       setApiLeadsState((st) =>
@@ -1343,6 +1344,7 @@ export function useDealFlowState() {
   }
 
   function sendCrmMedia(file: File) {
+    setCrmSendWarn('');
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
