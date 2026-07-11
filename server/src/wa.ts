@@ -89,6 +89,27 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
   }
 }
 
+/** Envía un adjunto por la vía activa (QR ya soporta; Cloud API enviará el texto). */
+export async function sendWhatsappMedia(
+  storeId: string,
+  to: string,
+  media: { buffer: Buffer; mime: string; tipo: string },
+  caption: string,
+  nombre: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const cfg = db.prepare('SELECT conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
+    | { conectado: number; modo: string }
+    | undefined;
+  if (!cfg?.conectado) return { ok: false, error: 'WhatsApp no está conectado.' };
+  if (cfg.modo === 'qr') {
+    const { sendMediaViaQr } = await import('./waqr.js');
+    return sendMediaViaQr(storeId, to, media, caption, nombre);
+  }
+  // Cloud API: el envío de adjuntos está en camino; por ahora mandamos el texto.
+  if (caption) return sendWhatsappText(storeId, to, caption);
+  return { ok: false, error: 'Enviar adjuntos por la API oficial está en camino.' };
+}
+
 interface WebhookMessage {
   from: string;
   id: string;

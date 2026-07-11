@@ -114,6 +114,11 @@ CREATE TABLE IF NOT EXISTS plans (
   precio INTEGER NOT NULL,
   features TEXT NOT NULL DEFAULT '[]'
 );
+CREATE TABLE IF NOT EXISTS sent_presentations (
+  lead_id TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  PRIMARY KEY (lead_id, product_id)
+);
 CREATE INDEX IF NOT EXISTS idx_orders_store ON orders(store_id);
 CREATE INDEX IF NOT EXISTS idx_leads_wa ON leads(store_id, wa_id);
 CREATE INDEX IF NOT EXISTS idx_products_store ON products(store_id);

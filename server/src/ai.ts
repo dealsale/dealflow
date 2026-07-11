@@ -1,5 +1,6 @@
 import { db, pj, uid } from './db.js';
-import { sendWhatsappText } from './wa.js';
+import { sendWhatsappText, sendWhatsappMedia } from './wa.js';
+import { saveOutgoingMedia } from './media.js';
 
 /**
  * Si la tienda tiene IA disponible (DEEPSEEK_API_KEY) y el chat lo atiende
@@ -24,7 +25,8 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
     | { instrucciones: string; reglas: string }
     | undefined;
   const store = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined;
-  const products = (db.prepare('SELECT * FROM products WHERE store_id = ?').all(storeId) as Record<string, unknown>[]).map((p) => {
+  const productRows = db.prepare('SELECT * FROM products WHERE store_id = ?').all(storeId) as Record<string, unknown>[];
+  const products = productRows.map((p) => {
     const vars = (db.prepare('SELECT label, stock FROM variants WHERE product_id = ?').all(p.id as string) as { label: string; stock: number }[])
       .map((v) => `${v.label} (${v.stock} disp.)`).join(', ');
     const reglas = pj<string[]>(p.reglas as string, []).map((r) => `  · Regla: ${r}`).join('\n');
@@ -55,7 +57,9 @@ ${products || '(sin productos cargados aún)'}
 PROMOS ACTIVAS:
 ${promos || '(ninguna)'}
 
-Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "tú", sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.`;
+Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "tú", sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
+
+FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), y todavía no le hayas enviado su material, incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). El sistema enviará automáticamente las fotos y videos de ese producto; no describas que "no puedes enviar fotos". Usa el marcador una sola vez por producto.`;
 
   const historia = (db.prepare('SELECT de, texto, tipo FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 16').all(leadId) as { de: string; texto: string; tipo: string }[])
     .reverse()
@@ -76,13 +80,67 @@ Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "
       return;
     }
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const texto = body.choices?.[0]?.message?.content?.trim();
-    if (!texto) return;
-    db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', texto);
-    const send = await sendWhatsappText(storeId, lead.wa_id || lead.tel, texto);
-    if (send.ok) console.log('[ia] respuesta enviada por WhatsApp');
-    else console.error('[ia] respuesta generada pero NO enviada:', send.error, '| destino:', lead.wa_id || lead.tel);
+    const bruto = body.choices?.[0]?.message?.content?.trim();
+    if (!bruto) return;
+    const destino = lead.wa_id || lead.tel;
+
+    // La IA marca con ##MEDIA:Nombre## cuando el cliente pide un producto: enviamos su presentación (bloques/fotos/videos).
+    const marca = /##\s*MEDIA:\s*([^#]+?)\s*##/i;
+    const m = bruto.match(marca);
+    const texto = bruto.replace(new RegExp(marca, 'gi'), '').trim();
+    if (m) {
+      const pedido = m[1].trim().toLowerCase();
+      const prod = productRows.find((p) => String(p.nombre).trim().toLowerCase() === pedido)
+        || productRows.find((p) => String(p.nombre).toLowerCase().includes(pedido) || pedido.includes(String(p.nombre).toLowerCase()));
+      if (prod) await enviarPresentacion(storeId, leadId, destino, prod);
+    }
+
+    if (texto) {
+      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', texto);
+      const send = await sendWhatsappText(storeId, destino, texto);
+      if (send.ok) console.log('[ia] respuesta enviada por WhatsApp');
+      else console.error('[ia] respuesta generada pero NO enviada:', send.error, '| destino:', destino);
+    }
   } catch (e) {
     console.error('[ia] error llamando a DeepSeek', e);
   }
+}
+
+/** Envía una vez por chat la presentación de un producto: bloques (texto/imagen/video) o, si no hay, sus fotos y videos. */
+async function enviarPresentacion(storeId: string, leadId: string, destino: string, p: Record<string, unknown>) {
+  const pid = String(p.id);
+  const yaEnviada = db.prepare('SELECT 1 FROM sent_presentations WHERE lead_id = ? AND product_id = ?').get(leadId, pid);
+  if (yaEnviada) return;
+  db.prepare('INSERT OR IGNORE INTO sent_presentations (lead_id, product_id) VALUES (?,?)').run(leadId, pid);
+
+  const bloques = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, []);
+  let piezas: { tipo: string; valor: string }[] = bloques.length
+    ? bloques
+    : [
+        ...pj<string[]>(p.fotos_subidas as string, []).map((v) => ({ tipo: 'imagen', valor: v })),
+        ...pj<string[]>(p.videos as string, []).map((v) => ({ tipo: 'video', valor: v })),
+      ];
+  piezas = piezas.slice(0, 8); // no inundar el chat
+  if (!piezas.length) {
+    console.log(`[ia] "${p.nombre}": el cliente lo pidió pero no hay fotos/videos cargados`);
+    return;
+  }
+
+  let enviadas = 0;
+  for (const b of piezas) {
+    if (b.tipo === 'texto') {
+      if (!b.valor.trim()) continue;
+      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', b.valor);
+      const r = await sendWhatsappText(storeId, destino, b.valor);
+      if (r.ok) enviadas++;
+    } else {
+      const media = saveOutgoingMedia(storeId, b.valor, '');
+      if (!media) continue;
+      const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '');
+      db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
+        .run(uid(), leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+      if (r.ok) enviadas++;
+    }
+  }
+  console.log(`[ia] presentación de "${p.nombre}" enviada (${enviadas}/${piezas.length} piezas)`);
 }
