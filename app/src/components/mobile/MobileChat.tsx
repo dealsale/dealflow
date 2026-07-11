@@ -1,3 +1,4 @@
+import { AttachButton, MediaContent } from '../MediaBubble';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function MobileChat({ df }: { df: DealFlowState }) {
@@ -40,7 +41,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
         {chat.mensajesDecorated.map((m, i) => (
           <div key={i} style={m.rowStyle}>
             <div style={{ ...m.bubbleStyle, maxWidth: '80%' }}>
-              {m.texto}
+              <MediaContent m={m} />
               <span style={m.horaStyle}>{m.hora}</span>
             </div>
           </div>
@@ -66,12 +67,13 @@ export function MobileChat({ df }: { df: DealFlowState }) {
         {df.crmIntervening && (
           <>
             <div style={{ display: 'flex', gap: 8 }}>
+              <AttachButton onFile={df.sendCrmMedia} size={44} />
               <input
                 className="df-input"
                 value={df.crmDraft}
                 onChange={(e) => df.setCrmDraft(e.target.value)}
                 placeholder="Escribe tu mensaje…"
-                style={{ flex: 1, border: '1px solid #E2E8F0', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontSize: 14, minHeight: 44, boxSizing: 'border-box' }}
+                style={{ flex: 1, minWidth: 0, border: '1px solid #E2E8F0', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontSize: 14, minHeight: 44, boxSizing: 'border-box' }}
               />
               <button
                 onClick={df.sendCrm}

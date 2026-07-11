@@ -128,6 +128,10 @@ function addColumn(table: string, colDef: string) {
   if (!cols.some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDef}`);
 }
 addColumn('whatsapp', "modo TEXT NOT NULL DEFAULT 'cloud'");
+addColumn('messages', "tipo TEXT NOT NULL DEFAULT 'texto'");
+addColumn('messages', 'media_url TEXT');
+addColumn('messages', 'media_mime TEXT');
+addColumn('messages', 'media_nombre TEXT');
 
 export const uid = () => crypto.randomUUID();
 export const j = (v: unknown) => JSON.stringify(v);

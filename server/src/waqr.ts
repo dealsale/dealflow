@@ -1,11 +1,12 @@
-import makeWASocket, { Browsers, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState } from '@whiskeysockets/baileys';
-import type { WASocket } from '@whiskeysockets/baileys';
+import makeWASocket, { Browsers, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import type { WAMessage, WASocket } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
 import path from 'node:path';
-import { rmSync } from 'node:fs';
-import { db } from './db.js';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { db, uid } from './db.js';
 import { saveIncomingMessage } from './wa.js';
+import { mediaExt } from './media.js';
 
 const DATA_DIR = process.env.DATA_DIR || './data';
 
@@ -135,10 +136,7 @@ async function connect(storeId: string, session: Session): Promise<void> {
       if (ev.type !== 'notify') return;
       for (const m of ev.messages) {
         if (m.key.fromMe || !m.key.remoteJid || m.key.remoteJid.endsWith('@g.us') || m.key.remoteJid === 'status@broadcast') continue;
-        const texto = m.message?.conversation || m.message?.extendedTextMessage?.text;
-        if (!texto) continue;
-        const waId = m.key.remoteJid.split('@')[0];
-        saveIncomingMessage(storeId, waId, m.pushName || '', texto);
+        void handleIncoming(storeId, sock, m).catch((e) => console.error('[wa-qr] error mensaje entrante', e));
       }
     });
   } catch (e) {
@@ -146,6 +144,42 @@ async function connect(storeId: string, session: Session): Promise<void> {
     session.error = 'No pudimos iniciar la conexión con WhatsApp. Intenta de nuevo.';
     console.error(`[wa-qr] ${storeId}: error al iniciar`, e);
   }
+}
+
+/** Procesa un mensaje entrante: texto y/o adjunto (lo descarga y guarda). */
+async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
+  const waId = m.key.remoteJid!.split('@')[0];
+  const nombre = m.pushName || '';
+  const msg = m.message;
+  const texto = msg?.conversation || msg?.extendedTextMessage?.text;
+  const mediaMsg = msg?.imageMessage || msg?.videoMessage || msg?.audioMessage || msg?.documentMessage;
+
+  if (mediaMsg) {
+    const mime = (mediaMsg as { mimetype?: string }).mimetype || 'application/octet-stream';
+    const tipo = tipoDeMime(mime);
+    const caption = (msg?.imageMessage?.caption || msg?.videoMessage?.caption || msg?.documentMessage?.caption || '') as string;
+    const nombreArch = (msg?.documentMessage?.fileName || '') as string;
+    try {
+      const buffer = (await downloadMediaMessage(m, 'buffer', {})) as Buffer;
+      const file = uid() + '.' + mediaExt(tipo, mime);
+      mkdirSync(path.join(DATA_DIR, 'media', storeId), { recursive: true });
+      writeFileSync(path.join(DATA_DIR, 'media', storeId, file), buffer);
+      saveIncomingMessage(storeId, waId, nombre, caption, { tipo, url: '/api/media/' + storeId + '/' + file, mime, nombre: nombreArch });
+    } catch (e) {
+      console.error('[wa-qr] no se pudo descargar el adjunto', e);
+      saveIncomingMessage(storeId, waId, nombre, caption || '[adjunto no disponible]');
+    }
+    return;
+  }
+
+  if (texto) saveIncomingMessage(storeId, waId, nombre, texto);
+}
+
+function tipoDeMime(mime: string): 'image' | 'video' | 'audio' | 'document' {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'document';
 }
 
 export function getQrStatus(storeId: string): { estado: Estado; qr: string | null; numero: string; error: string } {
@@ -169,6 +203,27 @@ export async function sendViaQr(storeId: string, to: string, texto: string): Pro
     return { ok: true };
   } catch {
     return { ok: false, error: 'No pudimos enviar el mensaje por WhatsApp.' };
+  }
+}
+
+export async function sendMediaViaQr(
+  storeId: string,
+  to: string,
+  media: { buffer: Buffer; mime: string; tipo: string },
+  caption: string,
+  nombre: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const s = sessions.get(storeId);
+  if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
+  try {
+    const jid = to.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+    if (media.tipo === 'image') await s.sock.sendMessage(jid, { image: media.buffer, caption: caption || undefined });
+    else if (media.tipo === 'video') await s.sock.sendMessage(jid, { video: media.buffer, caption: caption || undefined });
+    else if (media.tipo === 'audio') await s.sock.sendMessage(jid, { audio: media.buffer, mimetype: media.mime });
+    else await s.sock.sendMessage(jid, { document: media.buffer, mimetype: media.mime, fileName: nombre || 'archivo' });
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'No pudimos enviar el adjunto por WhatsApp.' };
   }
 }
 

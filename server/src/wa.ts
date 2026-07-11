@@ -2,11 +2,14 @@ import { db, uid } from './db.js';
 
 const GRAPH = 'https://graph.facebook.com/v20.0';
 
-/**
- * Guarda un mensaje entrante: crea el lead si no existe y agrega el mensaje.
- * La usan tanto el webhook de la Cloud API como la sesión por QR.
- */
-export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string) {
+interface MediaInfo {
+  tipo: string;
+  url: string;
+  mime: string;
+  nombre: string;
+}
+
+function ensureLead(storeId: string, waId: string, nombre: string): string {
   let lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND wa_id = ?').get(storeId, waId) as { id: string } | undefined;
   if (!lead) {
     const id = uid();
@@ -17,8 +20,19 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
   } else if (nombre) {
     db.prepare('UPDATE leads SET nombre = ? WHERE id = ? AND (nombre = ? OR nombre = ?)').run(nombre, lead.id, '+' + waId, waId);
   }
-  db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'cliente', texto);
   return lead.id;
+}
+
+/**
+ * Guarda un mensaje entrante (texto y/o adjunto). Crea el lead si no existe.
+ * La usan tanto el webhook de la Cloud API como la sesión por QR.
+ */
+export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo) {
+  const leadId = ensureLead(storeId, waId, nombre);
+  db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)').run(
+    uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null,
+  );
+  return leadId;
 }
 
 /** Valida las credenciales contra la API de Meta y devuelve el número mostrado. */

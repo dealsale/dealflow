@@ -80,19 +80,31 @@ export interface AdminPlan {
   cuentas: number;
 }
 
+export interface ApiMensaje {
+  de: string;
+  texto: string;
+  hora: string;
+  tipo?: string;
+  mediaUrl?: string | null;
+  mediaMime?: string | null;
+  mediaNombre?: string | null;
+}
+
 export interface ApiLead {
   id: string;
   nombre: string;
   tel: string;
   etapa: string;
   asignado: string;
-  mensajes: { de: string; texto: string; hora: string }[];
+  mensajes: ApiMensaje[];
 }
 
 export const apiState = () => req<{ whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean }; leads: ApiLead[] }>('/api/state', 'GET');
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
 export const apiSendLeadMessage = (id: string, texto: string) =>
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/messages`, 'POST', { texto });
+export const apiSendLeadMedia = (id: string, dataUrl: string, nombre: string, caption: string) =>
+  req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/media`, 'POST', { dataUrl, nombre, caption });
 export const apiAssignLead = (id: string, asignado: string) => req<{ ok: true }>(`/api/leads/${id}`, 'PATCH', { asignado });
 
 export const apiWaLinkCloud = (b: { wabaId: string; phoneNumberId: string; accessToken: string }) =>

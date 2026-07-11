@@ -3,6 +3,8 @@ import { db, j, pj, uid } from './db.js';
 import { clearAuthCookie, hashPassword, requireAdmin, requireAuth, requireStore, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
 import { handleIncomingWebhook, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
+import { mediaPath, saveOutgoingMedia, saveOutgoingMessage } from './media.js';
+import { existsSync } from 'node:fs';
 
 export const api = Router();
 export const webhooks = Router();
@@ -58,8 +60,8 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
   }));
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
     id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
-    mensajes: (db.prepare('SELECT de, texto, created_at FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
-      de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16),
+    mensajes: (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime, media_nombre FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
+      de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null,
     })),
   }));
   const assistant = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string } | undefined;
@@ -90,8 +92,8 @@ api.get('/leads', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
     id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
-    mensajes: (db.prepare('SELECT de, texto, created_at FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
-      de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16),
+    mensajes: (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime, media_nombre FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
+      de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null,
     })),
   }));
   res.json({ leads });
@@ -216,10 +218,35 @@ api.post('/leads/:id/messages', requireAuth, requireStore, async (req, res) => {
   if (!texto) return res.status(400).json({ error: 'Escribe el mensaje primero.' });
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), l.id, 'vendedor', texto);
   db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
-  let enviado = false;
   const wa = await sendWhatsappText(req.user!.storeId!, l.wa_id || l.tel, texto);
-  enviado = wa.ok;
-  res.json({ ok: true, enviadoPorWhatsapp: enviado, aviso: wa.ok ? undefined : wa.error });
+  res.json({ ok: true, enviadoPorWhatsapp: wa.ok, aviso: wa.ok ? undefined : wa.error });
+});
+
+// Enviar un adjunto (imagen, video, audio o archivo) al lead.
+api.post('/leads/:id/media', requireAuth, requireStore, async (req, res) => {
+  const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as
+    | { id: string; tel: string; wa_id: string | null }
+    | undefined;
+  if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
+  const { dataUrl, nombre, caption } = req.body || {};
+  if (!dataUrl) return res.status(400).json({ error: 'No recibimos el archivo.' });
+  const saved = saveOutgoingMedia(req.user!.storeId!, String(dataUrl), String(nombre || ''));
+  if (!saved) return res.status(400).json({ error: 'El archivo no es válido.' });
+  saveOutgoingMessage(l.id, String(caption || ''), saved.tipo, saved.url, saved.mime, String(nombre || ''));
+  db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
+
+  const cfg = db.prepare('SELECT modo FROM whatsapp WHERE store_id = ?').get(req.user!.storeId) as { modo: string } | undefined;
+  let enviado = false;
+  let aviso: string | undefined;
+  if (cfg?.modo === 'qr') {
+    const { sendMediaViaQr } = await import('./waqr.js');
+    const r = await sendMediaViaQr(req.user!.storeId!, l.wa_id || l.tel, { buffer: saved.buffer, mime: saved.mime, tipo: saved.tipo }, String(caption || ''), String(nombre || ''));
+    enviado = r.ok;
+    aviso = r.error;
+  } else {
+    aviso = 'Enviar adjuntos por la API oficial está en camino; por ahora funciona con la conexión por QR.';
+  }
+  res.json({ ok: true, enviadoPorWhatsapp: enviado, aviso: enviado ? undefined : aviso });
 });
 
 // ── Asistente ─────────────────────────────────────────────────────────
@@ -316,6 +343,16 @@ api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
   db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
   db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
   res.json({ storeId });
+});
+
+// ── Archivos de conversaciones (imágenes, videos, etc.) ──────────────
+// Servidos bajo /api/media para que la sesión (cookie) los proteja: cada
+// tienda solo ve los suyos.
+api.get('/media/:storeId/:file', requireAuth, requireStore, (req, res) => {
+  if (req.params.storeId !== req.user!.storeId) return res.status(403).end();
+  const file = mediaPath(req.params.storeId, req.params.file);
+  if (!existsSync(file)) return res.status(404).end();
+  res.sendFile(file);
 });
 
 // ── Webhook de Meta (una sola URL para todas las tiendas) ────────────

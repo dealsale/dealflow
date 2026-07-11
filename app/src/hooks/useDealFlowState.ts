@@ -23,6 +23,7 @@ import {
   apiLogin,
   apiLogout,
   apiMe,
+  apiSendLeadMedia,
   apiSendLeadMessage,
   apiState,
   apiToggleStore,
@@ -222,7 +223,15 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     hora: l.mensajes.length ? l.mensajes[l.mensajes.length - 1].hora : '',
     etapa: (ETAPAS_VALIDAS.includes(l.etapa) ? l.etapa : 'Explorando') as Lead['etapa'],
     asignado: l.asignado,
-    mensajes: l.mensajes.map((m) => ({ de: (m.de === 'bot' || m.de === 'vendedor' ? m.de : 'cliente') as Mensaje['de'], texto: m.texto, hora: m.hora })),
+    mensajes: l.mensajes.map((m) => ({
+      de: (m.de === 'bot' || m.de === 'vendedor' ? m.de : 'cliente') as Mensaje['de'],
+      texto: m.texto,
+      hora: m.hora,
+      tipo: m.tipo,
+      mediaUrl: m.mediaUrl,
+      mediaMime: m.mediaMime,
+      mediaNombre: m.mediaNombre,
+    })),
   }));
 }
 
@@ -1096,6 +1105,37 @@ export function useDealFlowState() {
     );
   }
 
+  function sendCrmMedia(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const tipo = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'document';
+      if (apiMode && apiLeadsState) {
+        setApiLeadsState((st) =>
+          (st || []).map((l) =>
+            l.id === crmSelectedId
+              ? { ...l, asignado: sessionUser?.nombre || 'Yo', mensajes: [...l.mensajes, { de: 'vendedor' as const, texto: '', hora: 'ahora', tipo, mediaUrl: dataUrl, mediaMime: file.type, mediaNombre: file.name }] }
+              : l,
+          ),
+        );
+        void apiSendLeadMedia(String(crmSelectedId), dataUrl, file.name, '').then((r) => {
+          if (r.data && !r.data.enviadoPorWhatsapp && r.data.aviso) setCrmSendWarn(r.data.aviso);
+          void apiLeads().then(({ data }) => { if (data) setApiLeadsState(mapApiLeads(data.leads)); });
+        });
+      } else {
+        // Demo: solo lo muestra localmente.
+        setLeads((st) =>
+          st.map((l) =>
+            l.id === crmSelectedId
+              ? { ...l, mensajes: [...l.mensajes, { de: 'vendedor' as const, texto: '', hora: 'ahora', tipo, mediaUrl: dataUrl, mediaMime: file.type, mediaNombre: file.name }] }
+              : l,
+          ),
+        );
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
   function crearPlan() {
     if (!planNombre.trim() || !planPrecio) {
       setPlanError(true);
@@ -1266,6 +1306,7 @@ export function useDealFlowState() {
     crmDraft,
     setCrmDraft,
     sendCrm,
+    sendCrmMedia,
     crmSendWarn,
     clearCrmSendWarn: () => setCrmSendWarn(''),
 

@@ -61,6 +61,10 @@ export interface Mensaje {
   de: MensajeDe;
   texto: string;
   hora: string;
+  tipo?: string;
+  mediaUrl?: string | null;
+  mediaMime?: string | null;
+  mediaNombre?: string | null;
 }
 
 export type Etapa = 'Explorando' | 'Cotizando' | 'Listo para comprar' | 'Postventa';
