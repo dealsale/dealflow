@@ -72,7 +72,7 @@ export function Resumen({ df }: { df: DealFlowState }) {
               </div>
               <div style={{ paddingBottom: 16 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>El asistente responde y vende</div>
-                <div style={{ color: '#64748B', fontSize: 13, marginTop: 2 }}>Usa tu catálogo, tus promos y tus reglas para cerrar la venta.</div>
+                <div style={{ color: '#64748B', fontSize: 13, marginTop: 2 }}>Usa tu catálogo, tus combos y tus reglas para cerrar la venta.</div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>

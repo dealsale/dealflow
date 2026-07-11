@@ -146,7 +146,6 @@ export interface Account {
 export type VendedorSection =
   | 'resumen'
   | 'productos'
-  | 'promos'
   | 'asistente'
   | 'whatsapp'
   | 'pedidos'

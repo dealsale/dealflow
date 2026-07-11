@@ -12,7 +12,10 @@ interface MediaInfo {
 function ensureLead(storeId: string, waId: string, nombre: string, tel?: string): string {
   const numPart = waId.split('@')[0];
   const telMostrar = tel || '+' + numPart; // número legible para el CRM (el @lid no sirve de teléfono)
-  let lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND (wa_id = ? OR wa_id = ?)').get(storeId, waId, numPart) as { id: string } | undefined;
+  // Se busca por la dirección completa, por el número pelado (chats viejos) y
+  // por teléfono (el mismo contacto puede llegar hoy como @lid y ayer como número).
+  let lead = db.prepare("SELECT id FROM leads WHERE store_id = ? AND (wa_id = ? OR wa_id = ? OR (? != '' AND tel = ?))")
+    .get(storeId, waId, numPart, tel || '', tel || '') as { id: string } | undefined;
   if (lead) {
     db.prepare('UPDATE leads SET wa_id = ? WHERE id = ?').run(waId, lead.id); // actualiza chats viejos a la dirección completa
     if (tel) db.prepare("UPDATE leads SET tel = ? WHERE id = ? AND (tel = '' OR tel LIKE '+%@%' OR tel = ?)").run(tel, lead.id, '+' + numPart);

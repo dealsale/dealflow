@@ -9,7 +9,6 @@ import {
   IconPedidos,
   IconPlanes,
   IconProductos,
-  IconPromos,
   IconResumen,
   IconToggleMode,
   IconVentas,
@@ -52,7 +51,6 @@ export function Sidebar({ df }: { df: DealFlowState }) {
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {item('resumen', <IconResumen />, 'Resumen')}
           {item('productos', <IconProductos />, 'Productos')}
-          {item('promos', <IconPromos />, 'Promos')}
           {item('asistente', <IconAsistente />, 'Asistente')}
           {item(
             'whatsapp',

@@ -146,19 +146,22 @@ async function connect(storeId: string, session: Session): Promise<void> {
           return;
         }
 
-        // 515 (restart requerido tras vincular) y caídas temporales: reconectar
-        // reutilizando las credenciales, con el MISMO objeto de sesión (sin
-        // crear sockets en paralelo).
+        // 515 (restart requerido tras vincular), 440 (conflicto durante un
+        // redeploy: dos contenedores con la misma sesión) y caídas temporales:
+        // reconectar con espera creciente, con el MISMO objeto de sesión (sin
+        // crear sockets en paralelo). El vigilante de restoreQrSessions
+        // levanta la sesión si aun así se agotan los reintentos.
         session.intentos += 1;
-        if (session.intentos > 8) {
+        if (session.intentos > 30) {
           session.estado = 'error';
           session.error = 'No pudimos mantener la conexión con WhatsApp. Intenta de nuevo.';
           sessions.delete(storeId);
           console.log(`[wa-qr] ${storeId}: demasiados reintentos, me detengo`);
           return;
         }
-        console.log(`[wa-qr] ${storeId}: conexión cerrada (code ${code}), reconectando (intento ${session.intentos})`);
-        setTimeout(() => void connect(storeId, session).catch(() => {}), 1200);
+        const espera = Math.min(1500 * session.intentos, 30000);
+        console.log(`[wa-qr] ${storeId}: conexión cerrada (code ${code}), reconectando en ${espera}ms (intento ${session.intentos})`);
+        setTimeout(() => void connect(storeId, session).catch(() => {}), espera);
       }
     });
 
@@ -191,6 +194,7 @@ async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
   const msg = m.message;
   const texto = msg?.conversation || msg?.extendedTextMessage?.text;
   const mediaMsg = msg?.imageMessage || msg?.videoMessage || msg?.audioMessage || msg?.documentMessage;
+  console.log(`[wa-qr] ${storeId}: mensaje entrante de ${waId}${tel ? ` (${tel})` : ''}${texto ? '' : mediaMsg ? ' [adjunto]' : ' [sin contenido legible]'}`);
 
   if (mediaMsg) {
     const mime = (mediaMsg as { mimetype?: string }).mimetype || 'application/octet-stream';
@@ -288,8 +292,21 @@ export async function stopQrSession(storeId: string): Promise<void> {
   markDisconnected(storeId);
 }
 
-/** Al arrancar el servidor, reconecta las tiendas que ya estaban en modo QR. */
+/**
+ * Al arrancar, reconecta las tiendas que ya estaban en modo QR y deja un
+ * vigilante que levanta cualquier sesión que se haya quedado muerta (por
+ * ejemplo, tras un redeploy en el que se agotaron los reintentos).
+ */
 export function restoreQrSessions() {
-  const rows = db.prepare("SELECT store_id FROM whatsapp WHERE modo = 'qr' AND conectado = 1").all() as { store_id: string }[];
-  for (const r of rows) void startQrSession(r.store_id).catch(() => {});
+  const revisar = (alArrancar = false) => {
+    const rows = db.prepare("SELECT store_id FROM whatsapp WHERE modo = 'qr' AND conectado = 1").all() as { store_id: string }[];
+    for (const r of rows) {
+      const s = sessions.get(r.store_id);
+      if (s && s.estado !== 'error' && s.estado !== 'desconectado') continue;
+      if (!alArrancar) console.log(`[wa-qr] ${r.store_id}: la sesión estaba caída, la levanto de nuevo`);
+      void startQrSession(r.store_id).catch(() => {});
+    }
+  };
+  revisar(true);
+  setInterval(() => revisar(), 60_000).unref();
 }
