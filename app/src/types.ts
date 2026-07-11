@@ -38,6 +38,12 @@ export interface FaqItem {
   respuesta: string;
 }
 
+/** Un grupo de opciones del producto, ej: { nombre: 'Color', valores: ['Negro','Azul'] } */
+export interface Opcion {
+  nombre: string;
+  valores: string[];
+}
+
 /** Un combo/bundle del producto: llevar N por un precio especial. */
 export interface Bundle {
   cantidad: number;
@@ -74,6 +80,8 @@ export interface Product {
   mensajeBloques?: MensajeBloque[];
   /** Combos/bundles: llevar N por un precio especial */
   bundles?: Bundle[];
+  /** Grupos de opciones: Color (negro, azul…), Talla (S, M, L…) */
+  opciones?: Opcion[];
   fotos?: string[];
   /** Fotos principales subidas por el vendedor, como data URLs */
   fotosSubidas?: string[];

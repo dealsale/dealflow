@@ -169,6 +169,8 @@ export interface DecoratedProduct extends Product {
   addBloqueVideo: (files: File[]) => void;
   bundlesDecorados: (Bundle & { precioFmt: string; remove: () => void })[];
   addBundle: () => void;
+  opcionesDecoradas: { nombre: string; valores: string[]; addValor: (v: string) => void; removeValor: (i: number) => void; remove: () => void }[];
+  addOpcion: (nombre: string) => void;
   variantesDecorated: DecoratedVariante[];
 }
 
@@ -308,6 +310,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     videos: p.videos || [],
     mensajeBloques: (p.mensajeBloques || []).filter((b): b is MensajeBloque => b.tipo === 'texto' || b.tipo === 'imagen' || b.tipo === 'video'),
     bundles: p.bundles || [],
+    opciones: (p.opciones || []).filter((o) => o && typeof o.nombre === 'string' && Array.isArray(o.valores)),
     fotos: p.fotos?.length ? p.fotos : undefined,
     fotosSubidas: p.fotosSubidas || [],
     variantes: p.variantes.map((v) => ({ id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: v.fotosSubidas || [] })),
@@ -1060,7 +1063,7 @@ export function useDealFlowState() {
   }
 
   /** Actualiza una lista (testimonios, videos, bloques) de un producto y la sincroniza. */
-  function patchProductList<K extends 'testimonios' | 'videos' | 'mensajeBloques' | 'bundles'>(
+  function patchProductList<K extends 'testimonios' | 'videos' | 'mensajeBloques' | 'bundles' | 'opciones'>(
     productId: number | string,
     key: K,
     mutate: (actual: NonNullable<Product[K]>) => Product[K],
@@ -1133,9 +1136,11 @@ export function useDealFlowState() {
         iniciales: initials(p.nombre).toUpperCase(),
         fotoStyle: { width: '44px', height: '44px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' },
         precioFmt: fmt(p.precio),
-        variantesLabel: p.variantes.length + (p.variantes.length === 1 ? ' variante' : ' variantes'),
-        stockLabel: p.stock === 0 ? 'Agotado' : p.stock <= 5 ? 'Quedan ' + p.stock : p.stock + ' en stock',
-        stockPill: pill(stockPillCfg(p.stock)),
+        variantesLabel: (p.opciones && p.opciones.length)
+          ? p.opciones.filter((o) => o.valores.length).map((o) => o.nombre + ': ' + o.valores.join(', ')).join('  ·  ') || 'Opciones sin valores'
+          : 'Sin opciones aún',
+        stockLabel: (p.opciones && p.opciones.length) ? p.opciones.reduce((a, o) => a + o.valores.length, 0) + ' opciones' : '',
+        stockPill: pill({ color: '#475569', bg: '#F1F5F9' }),
         expanded: expandedProductId === p.id,
         chevron: expandedProductId === p.id ? '▲' : '▼',
         toggle: () => {
@@ -1210,6 +1215,22 @@ export function useDealFlowState() {
           setBundleCantidad('');
           setBundlePrecio('');
           setBundleEtiqueta('');
+        },
+        opcionesDecoradas: (p.opciones || []).map((o, gi) => ({
+          nombre: o.nombre,
+          valores: o.valores,
+          addValor: (v: string) => {
+            const t = v.trim();
+            if (!t) return;
+            patchProductList(p.id, 'opciones', (ops) => ops.map((x, i) => (i === gi && !x.valores.includes(t) ? { ...x, valores: [...x.valores, t] } : x)));
+          },
+          removeValor: (idx: number) => patchProductList(p.id, 'opciones', (ops) => ops.map((x, i) => (i === gi ? { ...x, valores: x.valores.filter((_, j) => j !== idx) } : x))),
+          remove: () => patchProductList(p.id, 'opciones', (ops) => ops.filter((_, i) => i !== gi)),
+        })),
+        addOpcion: (nombre: string) => {
+          const t = nombre.trim();
+          if (!t) return;
+          patchProductList(p.id, 'opciones', (ops) => [...ops, { nombre: t, valores: [] as string[] }]);
         },
         faqsDecoradas: (p.faqs || []).map((f, i) => ({
           ...f,

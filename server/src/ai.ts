@@ -57,10 +57,14 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
     const guion = bloques || (p.mensaje_inicial as string);
     const combos = pj<{ cantidad: number; precio: number; etiqueta?: string }[]>(p.bundles as string, [])
       .map((b) => `  · Combo: ${b.cantidad} por $${Number(b.precio).toLocaleString('es-CO')} COP${b.etiqueta ? ` (${b.etiqueta})` : ''}`).join('\n');
+    const opciones = pj<{ nombre: string; valores: string[] }[]>(p.opciones as string, [])
+      .filter((o) => o.nombre && o.valores?.length).map((o) => `  ${o.nombre}: ${o.valores.join(', ')}`).join('\n');
     const extra = [p.descripcion && `  Descripción: ${p.descripcion}`, p.caracteristicas && `  Características: ${p.caracteristicas}`,
-      p.modos_uso && `  Modo de uso: ${p.modos_uso}`, guion && `  Si preguntan por este producto, preséntalo así: ${guion}`]
+      p.modos_uso && `  Modo de uso: ${p.modos_uso}`, opciones && `  Opciones disponibles:\n${opciones}`,
+      guion && `  Si preguntan por este producto, preséntalo así: ${guion}`]
       .filter(Boolean).join('\n');
-    return `- ${p.nombre}: $${Number(p.precio).toLocaleString('es-CO')} COP. Variantes: ${vars || 'única'}.${extra ? '\n' + extra : ''}${combos ? '\n' + combos : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
+    const variantesTxt = opciones ? '' : ` Variantes: ${vars || 'única'}.`;
+    return `- ${p.nombre}: $${Number(p.precio).toLocaleString('es-CO')} COP.${variantesTxt}${extra ? '\n' + extra : ''}${combos ? '\n' + combos : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
   }).join('\n');
   const promos = (db.prepare('SELECT titulo, descripcion FROM promos WHERE store_id = ? AND activa = 1').all(storeId) as { titulo: string; descripcion: string }[])
     .map((p) => `- ${p.titulo}: ${p.descripcion}`).join('\n');

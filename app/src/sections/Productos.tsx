@@ -1,5 +1,76 @@
+import { useState } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
-import type { DealFlowState } from '../hooks/useDealFlowState';
+import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
+
+/** Editor de opciones del producto: grupos como Color (Negro, Azul…) y Talla (S, M, L…). */
+function OpcionesEditor({ p }: { p: DecoratedProduct }) {
+  const [nuevoGrupo, setNuevoGrupo] = useState('');
+  const [valorDrafts, setValorDrafts] = useState<Record<number, string>>({});
+  const setDraft = (gi: number, v: string) => setValorDrafts((d) => ({ ...d, [gi]: v }));
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
+        {p.opcionesDecoradas.map((o, gi) => (
+          <div key={gi} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700 }}>{o.nombre}</span>
+              <span style={{ color: '#94A3B8', fontSize: 12 }}>· {o.valores.length} {o.valores.length === 1 ? 'opción' : 'opciones'}</span>
+              <div style={{ flex: 1 }} />
+              <span onClick={o.remove} className="df-danger-hover" title="Quitar este grupo" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>✕</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
+              {o.valores.map((val, vi) => (
+                <span key={vi} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: '#F1F5F9', borderRadius: 999, padding: '5px 10px', fontSize: 13, fontWeight: 500 }}>
+                  {val}
+                  <span onClick={() => o.removeValor(vi)} className="df-danger-hover" title="Quitar" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}>✕</span>
+                </span>
+              ))}
+              {o.valores.length === 0 && <span style={{ color: '#94A3B8', fontSize: 12.5 }}>Aún no agregas opciones a este grupo.</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="df-input"
+                value={valorDrafts[gi] || ''}
+                onChange={(e) => setDraft(gi, e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { o.addValor(valorDrafts[gi] || ''); setDraft(gi, ''); } }}
+                placeholder={`Agregar a ${o.nombre}… (ej: ${o.nombre.toLowerCase().includes('tall') ? 'M' : 'Negro'})`}
+                style={{ flex: 1, minWidth: 140, border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 }}
+              />
+              <button
+                onClick={() => { o.addValor(valorDrafts[gi] || ''); setDraft(gi, ''); }}
+                className="df-btn-outline-green"
+                style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                Agregar
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+        <input
+          className="df-input"
+          value={nuevoGrupo}
+          onChange={(e) => setNuevoGrupo(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { p.addOpcion(nuevoGrupo); setNuevoGrupo(''); } }}
+          placeholder="Nuevo grupo · ej: Color, Talla, Sabor…"
+          style={{ flex: 1, minWidth: 180, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
+        />
+        <button
+          onClick={() => { p.addOpcion(nuevoGrupo); setNuevoGrupo(''); }}
+          className="df-btn-outline-green"
+          style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          + Agregar grupo
+        </button>
+      </div>
+      <div style={{ color: '#94A3B8', fontSize: 12 }}>
+        Crea un grupo por cada tipo de opción: uno "Color" con Negro, Azul… y otro "Talla" con S, M, L… El asistente se las ofrece al cliente.
+      </div>
+    </div>
+  );
+}
 
 export function Productos({ df }: { df: DealFlowState }) {
   return (
@@ -22,7 +93,7 @@ export function Productos({ df }: { df: DealFlowState }) {
       {df.newProductOpen && (
         <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>Nuevo producto</div>
-          <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+          <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 12, marginBottom: 14 }}>
             <div>
               <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre</div>
               <input
@@ -43,16 +114,6 @@ export function Productos({ df }: { df: DealFlowState }) {
                 style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
               />
             </div>
-            <div>
-              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Stock inicial</div>
-              <input
-                className="df-input"
-                value={df.newProdStock}
-                onChange={(e) => df.setNewProdStock(e.target.value)}
-                placeholder="Ej: 10"
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
-              />
-            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button
@@ -70,7 +131,7 @@ export function Productos({ df }: { df: DealFlowState }) {
             </button>
             {df.newProdError && <span style={{ color: '#DC2626', fontSize: 13 }}>Falta el nombre o el precio. Complétalos y vuelve a intentar.</span>}
           </div>
-          <div style={{ color: '#94A3B8', fontSize: 12, marginTop: 10 }}>Se crea con una variante "Única". Al abrirlo puedes agregar más variantes, fotos y reglas.</div>
+          <div style={{ color: '#94A3B8', fontSize: 12, marginTop: 10 }}>Al abrirlo agregas fotos, videos, opciones (Color, Talla…), combos y reglas.</div>
         </div>
       )}
 
@@ -319,107 +380,9 @@ export function Productos({ df }: { df: DealFlowState }) {
                 {df.videoWarn && <div style={{ color: '#DC2626', fontSize: 12, marginTop: -10, marginBottom: 16 }}>{df.videoWarn}</div>}
 
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
-                  Variantes · cada una con sus propias fotos
+                  Opciones · Color, Talla… (el asistente las ofrece)
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-                  {p.variantesDecorated.map((v, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '9px 12px' }}>
-                      <span style={v.swatchStyle} />
-                      <span style={v.labelStyle}>{v.label}</span>
-                      <span
-                        onClick={v.decStock}
-                        className={v.stock > 0 ? 'df-copy-btn' : undefined}
-                        title="Quitar una unidad"
-                        style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid #E2E8F0', background: '#fff', color: v.stock > 0 ? '#64748B' : '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, cursor: v.stock > 0 ? 'pointer' : 'default', userSelect: 'none' }}
-                      >
-                        −
-                      </span>
-                      <span style={v.stockPill}>{v.stockLabel}</span>
-                      <span
-                        onClick={v.incStock}
-                        className="df-copy-btn"
-                        title="Sumar una unidad"
-                        style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, cursor: 'pointer', userSelect: 'none' }}
-                      >
-                        +
-                      </span>
-                      <div style={{ flex: 1 }} />
-                      <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-                        {v.thumbs.map((t, k) => (
-                          <div key={k} style={t} />
-                        ))}
-                        {v.uploaded.map((src, k) => (
-                          <UploadedThumb key={k} src={src} size={22} onRemove={() => v.removeFoto(k)} />
-                        ))}
-                        <span style={{ color: '#64748B', fontSize: 12 }}>{v.fotosLabel}</span>
-                        <PhotoAddChip onFiles={v.addFotos} />
-                        {v.deleteArmed ? (
-                          <span
-                            onClick={v.requestDelete}
-                            style={{ background: '#DC2626', color: '#fff', borderRadius: 6, padding: '4px 9px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                          >
-                            Sí, quitar
-                          </span>
-                        ) : (
-                          <span
-                            onClick={v.requestDelete}
-                            className="df-danger-hover"
-                            title="Quitar esta variante"
-                            style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '4px 2px' }}
-                          >
-                            ✕
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {!df.variantFormOpen ? (
-                    <span
-                      onClick={df.openVariantForm}
-                      className="df-upload-tile"
-                      style={{ alignSelf: 'flex-start', background: '#fff', border: '1px dashed #CBD5E1', color: '#64748B', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}
-                    >
-                      + Agregar variante
-                    </span>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <input
-                        className="df-input"
-                        value={df.variantLabel}
-                        onChange={(e) => df.setVariantLabel(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') p.addVariante();
-                        }}
-                        placeholder="Talla · Color (ej: M · Rojo)"
-                        autoFocus
-                        style={{ flex: 1, minWidth: 180, border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 }}
-                      />
-                      <input
-                        className="df-input"
-                        value={df.variantStock}
-                        onChange={(e) => df.setVariantStock(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') p.addVariante();
-                        }}
-                        placeholder="Stock"
-                        style={{ width: 80, border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
-                      />
-                      <button
-                        onClick={p.addVariante}
-                        className="df-btn-outline-green"
-                        style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                      >
-                        Agregar variante
-                      </button>
-                      <span onClick={df.cancelVariantForm} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, padding: 4 }}>
-                        ✕
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div style={{ color: '#94A3B8', fontSize: 12, marginBottom: 16 }}>
-                  Si el cliente elige un color o talla, el asistente envía solo las fotos de esa variante.
-                </div>
+                <OpcionesEditor p={p} />
 
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Reglas para el asistente · agrega todas las que necesites
