@@ -23,6 +23,7 @@ export interface Order {
 }
 
 export interface Variante {
+  id?: string;
   label: string;
   stock: number;
   fotos?: number;
@@ -30,14 +31,23 @@ export interface Variante {
   fotosSubidas?: string[];
 }
 
+export interface FaqItem {
+  pregunta: string;
+  respuesta: string;
+}
+
 export interface Product {
-  id: number;
+  id: number | string;
   nombre: string;
   precio: number;
   stock: number;
   color: string;
   txt: string;
   reglas: string[];
+  descripcion?: string;
+  caracteristicas?: string;
+  mensajeInicial?: string;
+  faqs?: FaqItem[];
   fotos?: string[];
   /** Fotos principales subidas por el vendedor, como data URLs */
   fotosSubidas?: string[];

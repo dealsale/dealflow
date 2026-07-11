@@ -128,6 +128,10 @@ function addColumn(table: string, colDef: string) {
   if (!cols.some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDef}`);
 }
 addColumn('whatsapp', "modo TEXT NOT NULL DEFAULT 'cloud'");
+addColumn('products', "descripcion TEXT NOT NULL DEFAULT ''");
+addColumn('products', "caracteristicas TEXT NOT NULL DEFAULT ''");
+addColumn('products', "mensaje_inicial TEXT NOT NULL DEFAULT ''");
+addColumn('products', "faqs TEXT NOT NULL DEFAULT '[]'");
 addColumn('messages', "tipo TEXT NOT NULL DEFAULT 'texto'");
 addColumn('messages', 'media_url TEXT');
 addColumn('messages', 'media_mime TEXT');

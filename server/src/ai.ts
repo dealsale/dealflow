@@ -21,8 +21,11 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ?').all(storeId) as Record<string, unknown>[]).map((p) => {
     const vars = (db.prepare('SELECT label, stock FROM variants WHERE product_id = ?').all(p.id as string) as { label: string; stock: number }[])
       .map((v) => `${v.label} (${v.stock} disp.)`).join(', ');
-    const reglas = pj<string[]>(p.reglas as string, []).map((r) => `  · ${r}`).join('\n');
-    return `- ${p.nombre}: $${Number(p.precio).toLocaleString('es-CO')} COP. Variantes: ${vars || 'única'}.${reglas ? '\n' + reglas : ''}`;
+    const reglas = pj<string[]>(p.reglas as string, []).map((r) => `  · Regla: ${r}`).join('\n');
+    const faqs = pj<{ pregunta: string; respuesta: string }[]>(p.faqs as string, []).map((f) => `  · P: ${f.pregunta} → R: ${f.respuesta}`).join('\n');
+    const extra = [p.descripcion && `  Descripción: ${p.descripcion}`, p.caracteristicas && `  Características: ${p.caracteristicas}`, p.mensaje_inicial && `  Si preguntan por este producto, preséntalo así: ${p.mensaje_inicial}`]
+      .filter(Boolean).join('\n');
+    return `- ${p.nombre}: $${Number(p.precio).toLocaleString('es-CO')} COP. Variantes: ${vars || 'única'}.${extra ? '\n' + extra : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
   }).join('\n');
   const promos = (db.prepare('SELECT titulo, descripcion FROM promos WHERE store_id = ? AND activa = 1').all(storeId) as { titulo: string; descripcion: string }[])
     .map((p) => `- ${p.titulo}: ${p.descripcion}`).join('\n');

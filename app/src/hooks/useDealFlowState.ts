@@ -15,9 +15,16 @@ import {
 } from '../data';
 import { readImagesAsDataUrls } from '../components/PhotoUpload';
 import {
+  apiAddVariant,
   apiAdminOverview,
   apiAssignLead,
   apiCreatePlan,
+  apiCreateProduct,
+  apiDeleteProduct,
+  apiDeleteVariant,
+  apiPatchProduct,
+  apiPatchVariant,
+  apiPutAssistant,
   apiCreateStore,
   apiLeads,
   // apiAssignLead disponible para asignación desde el CRM (próximo)
@@ -33,7 +40,7 @@ import {
   apiWaQrStatus,
   apiWaUnlink,
 } from '../lib/api';
-import type { ApiLead } from '../lib/api';
+import type { ApiLead, ApiProduct } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -134,6 +141,11 @@ export interface DecoratedProduct extends Product {
   deleteArmed: boolean;
   setNombre: (v: string) => void;
   setPrecio: (v: string) => void;
+  setDescripcion: (v: string) => void;
+  setCaracteristicas: (v: string) => void;
+  setMensajeInicial: (v: string) => void;
+  faqsDecoradas: { pregunta: string; respuesta: string; remove: () => void }[];
+  addFaq: () => void;
   variantesDecorated: DecoratedVariante[];
 }
 
@@ -236,6 +248,25 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
   }));
 }
 
+function mapApiProducts(items: ApiProduct[]): Product[] {
+  return items.map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    precio: p.precio,
+    stock: p.variantes.reduce((a, v) => a + v.stock, 0),
+    color: p.color || '#E0E7FF',
+    txt: p.txt || '#4338CA',
+    reglas: p.reglas || [],
+    descripcion: p.descripcion || '',
+    caracteristicas: p.caracteristicas || '',
+    mensajeInicial: p.mensajeInicial || '',
+    faqs: p.faqs || [],
+    fotos: p.fotos?.length ? p.fotos : undefined,
+    fotosSubidas: p.fotosSubidas || [],
+    variantes: p.variantes.map((v) => ({ id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: v.fotosSubidas || [] })),
+  }));
+}
+
 function navStyle(active: boolean): CSSProperties {
   return {
     display: 'flex',
@@ -258,7 +289,7 @@ export function useDealFlowState() {
   const [adminSection, setAdminSection] = useState<AdminSection>('ventas');
   const [filter, setFilter] = useState<string>('Todos');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [expandedProductId, setExpandedProductId] = useState<number | null>(7);
+  const [expandedProductId, setExpandedProductId] = useState<number | string | null>(7);
   const [selectedLeadId, setSelectedLeadId] = useState<number | string>(1);
   const [crmSelectedId, setCrmSelectedId] = useState<number | string>(1);
   const [crmIntervening, setCrmIntervening] = useState<boolean>(false);
@@ -280,6 +311,8 @@ export function useDealFlowState() {
   const [orders, setOrders] = useState<Order[]>(snap?.orders ?? ORDERS);
   const [products, setProducts] = useState<Product[]>(snap?.products ?? PRODUCTS);
   const [productRuleDraft, setProductRuleDraft] = useState<string>('');
+  const [faqP, setFaqP] = useState('');
+  const [faqR, setFaqR] = useState('');
   const [newProductOpen, setNewProductOpen] = useState<boolean>(false);
   const [newProdNombre, setNewProdNombre] = useState<string>('');
   const [newProdPrecio, setNewProdPrecio] = useState<string>('');
@@ -288,7 +321,7 @@ export function useDealFlowState() {
   const [variantFormOpen, setVariantFormOpen] = useState<boolean>(false);
   const [variantLabel, setVariantLabel] = useState<string>('');
   const [variantStock, setVariantStock] = useState<string>('');
-  const [savedProductId, setSavedProductId] = useState<number | null>(null);
+  const [savedProductId, setSavedProductId] = useState<number | string | null>(null);
   const [newPromoOpen, setNewPromoOpen] = useState<boolean>(false);
   const [promoTipo, setPromoTipo] = useState<'Promoción' | 'Combo'>('Promoción');
   const [promoTitulo, setPromoTitulo] = useState<string>('');
@@ -300,9 +333,9 @@ export function useDealFlowState() {
   const [integrations] = useState<Integration[]>(INTEGRATIONS);
   const [plans, setPlans] = useState<Plan[]>(snap?.plans ?? PLANS);
   const [accounts, setAccounts] = useState<Account[]>(snap?.accounts ?? ACCOUNTS);
-  const [armedDeleteProductId, setArmedDeleteProductId] = useState<number | null>(null);
-  const [armedDeletePromoId, setArmedDeletePromoId] = useState<number | null>(null);
-  const [armedDeleteVariant, setArmedDeleteVariant] = useState<{ productId: number; index: number } | null>(null);
+  const [armedDeleteProductId, setArmedDeleteProductId] = useState<number | string | null>(null);
+  const [armedDeletePromoId, setArmedDeletePromoId] = useState<number | string | null>(null);
+  const [armedDeleteVariant, setArmedDeleteVariant] = useState<{ productId: number | string; index: number } | null>(null);
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
   const [soundOn, setSoundOn] = useState<boolean>(snap?.soundOn ?? true);
   const [orderQuery, setOrderQuery] = useState<string>('');
@@ -343,6 +376,8 @@ export function useDealFlowState() {
   const savedProductTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const armedDeleteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const patchTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingPatch = useRef<Record<string, Record<string, unknown>>>({});
 
   const ordersRef = useRef(orders);
   ordersRef.current = orders;
@@ -533,6 +568,21 @@ export function useDealFlowState() {
       setNewProdError(true);
       return;
     }
+    if (apiMode) {
+      void apiCreateProduct({ nombre, precio, stock }).then((r) => {
+        if (r.error || !r.data) {
+          setNewProdError(true);
+          return;
+        }
+        void reloadProducts().then(() => setExpandedProductId(r.data!.id));
+        setNewProdNombre('');
+        setNewProdPrecio('');
+        setNewProdStock('');
+        setNewProdError(false);
+        setNewProductOpen(false);
+      });
+      return;
+    }
     const [bg, txt] = AVATAR_COLORS[products.length % AVATAR_COLORS.length];
     const id = Date.now();
     setProducts((st) => [{ id, nombre, precio, stock, color: bg, txt, reglas: [], variantes: [{ label: 'Única', stock, fotos: 0 }] }, ...st]);
@@ -544,7 +594,7 @@ export function useDealFlowState() {
     setNewProductOpen(false);
   }
 
-  function addVariante(productId: number) {
+  function addVariante(productId: number | string) {
     const label = variantLabel.trim();
     const stock = parseInt(variantStock, 10) || 0;
     if (!label) return;
@@ -558,23 +608,50 @@ export function useDealFlowState() {
     setVariantLabel('');
     setVariantStock('');
     setVariantFormOpen(false);
+    if (apiMode && typeof productId === 'string') void apiAddVariant(productId, { label, stock }).then(() => reloadProducts());
   }
 
-  function updateProduct(id: number, patch: Partial<Product>) {
+  function queuePatch(id: number | string, patch: Record<string, unknown>) {
+    if (!apiMode || typeof id === 'number') return; // los ids numéricos son de la demo local
+    const k = String(id);
+    pendingPatch.current[k] = { ...pendingPatch.current[k], ...patch };
+    clearTimeout(patchTimers.current[k]);
+    patchTimers.current[k] = setTimeout(() => {
+      const body = pendingPatch.current[k];
+      delete pendingPatch.current[k];
+      void apiPatchProduct(k, body);
+    }, 700);
+  }
+
+  async function reloadProducts() {
+    const { data } = await apiState();
+    if (data?.products) setProducts(mapApiProducts(data.products));
+  }
+
+  function updateProduct(id: number | string, patch: Partial<Product>) {
     setProducts((st) => st.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+    queuePatch(id, patch as Record<string, unknown>);
   }
 
-  function changeVariantStock(productId: number, variantIndex: number, delta: number) {
+  function changeVariantStock(productId: number | string, variantIndex: number, delta: number) {
+    let vid: string | undefined;
+    let nuevo = 0;
     setProducts((st) =>
       st.map((p) => {
         if (p.id !== productId) return p;
-        const variantes = p.variantes.map((v, i) => (i === variantIndex ? { ...v, stock: Math.max(0, v.stock + delta) } : v));
+        const variantes = p.variantes.map((v, i) => {
+          if (i !== variantIndex) return v;
+          nuevo = Math.max(0, v.stock + delta);
+          vid = v.id;
+          return { ...v, stock: nuevo };
+        });
         return { ...p, variantes, stock: variantes.reduce((a, v) => a + v.stock, 0) };
       }),
     );
+    if (apiMode && vid) void apiPatchVariant(vid, { stock: nuevo });
   }
 
-  function saveProduct(id: number) {
+  function saveProduct(id: number | string) {
     setSavedProductId(id);
     clearTimeout(savedProductTimer.current);
     savedProductTimer.current = setTimeout(() => setSavedProductId(null), 2500);
@@ -589,30 +666,33 @@ export function useDealFlowState() {
     }, 3500);
   }
 
-  function armDelete(kind: 'product' | 'promo', id: number) {
+  function armDelete(kind: 'product' | 'promo', id: number | string) {
     if (kind === 'product') setArmedDeleteProductId(id);
     else setArmedDeletePromoId(id);
     armDeleteTimer();
   }
 
-  function deleteVariant(productId: number, index: number) {
+  function deleteVariant(productId: number | string, index: number) {
     const armed = armedDeleteVariant;
     if (!armed || armed.productId !== productId || armed.index !== index) {
       setArmedDeleteVariant({ productId, index });
       armDeleteTimer();
       return;
     }
+    let vid: string | undefined;
     setProducts((st) =>
       st.map((p) => {
         if (p.id !== productId) return p;
+        vid = p.variantes[index]?.id;
         const variantes = p.variantes.filter((_, i) => i !== index);
         return { ...p, variantes, stock: variantes.reduce((a, v) => a + v.stock, 0) };
       }),
     );
     setArmedDeleteVariant(null);
+    if (apiMode && vid) void apiDeleteVariant(vid);
   }
 
-  function deleteProduct(id: number) {
+  function deleteProduct(id: number | string) {
     if (armedDeleteProductId !== id) {
       armDelete('product', id);
       return;
@@ -620,6 +700,7 @@ export function useDealFlowState() {
     setProducts((st) => st.filter((p) => p.id !== id));
     setExpandedProductId((cur) => (cur === id ? null : cur));
     setArmedDeleteProductId(null);
+    if (apiMode && typeof id === 'string') void apiDeleteProduct(id);
   }
 
   function deletePromo(id: number) {
@@ -814,6 +895,7 @@ export function useDealFlowState() {
           setWaCfg({ wabaId: data.whatsapp.wabaId, phoneNumberId: data.whatsapp.phoneNumberId, numero: data.whatsapp.numero });
         }
         setApiLeadsState(mapApiLeads(data.leads));
+        if (data.products) setProducts(mapApiProducts(data.products));
       });
     };
     if (!sessionUser) return;
@@ -848,29 +930,49 @@ export function useDealFlowState() {
     setNewPromoOpen(false);
   }
 
-  async function addMainPhotos(productId: number, files: File[]) {
+  async function addMainPhotos(productId: number | string, files: File[]) {
     const urls = await readImagesAsDataUrls(files);
     if (!urls.length) return;
-    setProducts((st) => st.map((p) => (p.id === productId ? { ...p, fotosSubidas: [...(p.fotosSubidas || []), ...urls] } : p)));
+    let nuevas: string[] = [];
+    setProducts((st) => st.map((p) => {
+      if (p.id !== productId) return p;
+      nuevas = [...(p.fotosSubidas || []), ...urls];
+      return { ...p, fotosSubidas: nuevas };
+    }));
+    queuePatch(productId, { fotosSubidas: nuevas });
   }
 
-  function removeMainPhoto(productId: number, index: number) {
-    setProducts((st) => st.map((p) => (p.id === productId ? { ...p, fotosSubidas: (p.fotosSubidas || []).filter((_, i) => i !== index) } : p)));
+  function removeMainPhoto(productId: number | string, index: number) {
+    let nuevas: string[] = [];
+    setProducts((st) => st.map((p) => {
+      if (p.id !== productId) return p;
+      nuevas = (p.fotosSubidas || []).filter((_, i) => i !== index);
+      return { ...p, fotosSubidas: nuevas };
+    }));
+    queuePatch(productId, { fotosSubidas: nuevas });
   }
 
-  async function addVariantPhotos(productId: number, variantIndex: number, files: File[]) {
+  async function addVariantPhotos(productId: number | string, variantIndex: number, files: File[]) {
     const urls = await readImagesAsDataUrls(files);
     if (!urls.length) return;
+    let vid: string | undefined;
+    let nuevas: string[] = [];
     setProducts((st) =>
       st.map((p) =>
         p.id === productId
-          ? { ...p, variantes: p.variantes.map((v, i) => (i === variantIndex ? { ...v, fotosSubidas: [...(v.fotosSubidas || []), ...urls] } : v)) }
+          ? { ...p, variantes: p.variantes.map((v, i) => {
+              if (i !== variantIndex) return v;
+              vid = v.id;
+              nuevas = [...(v.fotosSubidas || []), ...urls];
+              return { ...v, fotosSubidas: nuevas };
+            }) }
           : p,
       ),
     );
+    if (apiMode && vid) void apiPatchVariant(vid, { fotosSubidas: nuevas });
   }
 
-  function removeVariantPhoto(productId: number, variantIndex: number, index: number) {
+  function removeVariantPhoto(productId: number | string, variantIndex: number, index: number) {
     setProducts((st) =>
       st.map((p) =>
         p.id === productId
@@ -915,13 +1017,40 @@ export function useDealFlowState() {
         removeMainFoto: (index: number) => removeMainPhoto(p.id, index),
         reglasDecoradas: p.reglas.map((texto, i) => ({
           texto,
-          remove: () => setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, reglas: x.reglas.filter((_, j) => j !== i) } : x))),
+          remove: () => {
+            const nuevas = p.reglas.filter((_, j) => j !== i);
+            setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, reglas: nuevas } : x)));
+            queuePatch(p.id, { reglas: nuevas });
+          },
         })),
         addRegla: () => {
           const t = productRuleDraft.trim();
           if (!t) return;
-          setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, reglas: [...x.reglas, t] } : x)));
+          const nuevas = [...p.reglas, t];
+          setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, reglas: nuevas } : x)));
+          queuePatch(p.id, { reglas: nuevas });
           setProductRuleDraft('');
+        },
+        setDescripcion: (v: string) => updateProduct(p.id, { descripcion: v }),
+        setCaracteristicas: (v: string) => updateProduct(p.id, { caracteristicas: v }),
+        setMensajeInicial: (v: string) => updateProduct(p.id, { mensajeInicial: v }),
+        faqsDecoradas: (p.faqs || []).map((f, i) => ({
+          ...f,
+          remove: () => {
+            const nuevas = (p.faqs || []).filter((_, j) => j !== i);
+            setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, faqs: nuevas } : x)));
+            queuePatch(p.id, { faqs: nuevas });
+          },
+        })),
+        addFaq: () => {
+          const pq = faqP.trim();
+          const rr = faqR.trim();
+          if (!pq || !rr) return;
+          const nuevas = [...(p.faqs || []), { pregunta: pq, respuesta: rr }];
+          setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, faqs: nuevas } : x)));
+          queuePatch(p.id, { faqs: nuevas });
+          setFaqP('');
+          setFaqR('');
         },
         variantesDecorated: p.variantes.map((v, vIndex) => {
           const nf = v.fotos == null ? 2 : v.fotos;
@@ -1081,6 +1210,7 @@ export function useDealFlowState() {
   }
 
   function saveAssistant() {
+    if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules });
     setAssistantSaved(true);
     clearTimeout(assistantTimer.current);
     assistantTimer.current = setTimeout(() => setAssistantSaved(false), 2500);
@@ -1320,6 +1450,10 @@ export function useDealFlowState() {
     products: productsDecorated,
     productRuleDraft,
     setProductRuleDraft,
+    faqP,
+    setFaqP,
+    faqR,
+    setFaqR,
 
     newProductOpen,
     toggleNewProduct: () => {

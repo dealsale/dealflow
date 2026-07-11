@@ -133,6 +133,45 @@ export function Productos({ df }: { df: DealFlowState }) {
                 </div>
 
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Información del producto · la usa el asistente para vender
+                </div>
+                <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Descripción</div>
+                    <textarea
+                      className="df-input"
+                      value={p.descripcion || ''}
+                      onChange={(e) => p.setDescripcion(e.target.value)}
+                      rows={3}
+                      placeholder="Qué es, para quién, por qué es bueno…"
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, resize: 'vertical' }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Características</div>
+                    <textarea
+                      className="df-input"
+                      value={p.caracteristicas || ''}
+                      onChange={(e) => p.setCaracteristicas(e.target.value)}
+                      rows={3}
+                      placeholder="Material, medidas, cuidados…"
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, resize: 'vertical' }}
+                    />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Mensaje inicial · cómo debe presentarlo el asistente</div>
+                  <textarea
+                    className="df-input"
+                    value={p.mensajeInicial || ''}
+                    onChange={(e) => p.setMensajeInicial(e.target.value)}
+                    rows={2}
+                    placeholder="Ej: ¡Claro! Te cuento: 3 joggers por $109.900, envío gratis…"
+                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, resize: 'vertical' }}
+                  />
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Fotos principales · las que envía el asistente al ofrecer el producto
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
@@ -283,6 +322,45 @@ export function Productos({ df }: { df: DealFlowState }) {
                     Agregar regla
                   </button>
                 </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Preguntas frecuentes · el asistente responde con esto
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                  {p.faqsDecoradas.map((f, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{f.pregunta}</div>
+                        <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>{f.respuesta}</div>
+                      </div>
+                      <span onClick={f.remove} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>✕</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                  <input
+                    className="df-input"
+                    value={df.faqP}
+                    onChange={(e) => df.setFaqP(e.target.value)}
+                    placeholder="Pregunta · ej: ¿Hacen envíos a Pasto?"
+                    style={{ flex: 1, minWidth: 180, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                  />
+                  <input
+                    className="df-input"
+                    value={df.faqR}
+                    onChange={(e) => df.setFaqR(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') p.addFaq(); }}
+                    placeholder="Respuesta"
+                    style={{ flex: 1, minWidth: 180, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                  />
+                  <button
+                    onClick={p.addFaq}
+                    className="df-btn-outline-green"
+                    style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    Agregar
+                  </button>
+                </div>
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <button
                     onClick={p.requestDelete}

@@ -156,7 +156,11 @@ async function connect(storeId: string, session: Session): Promise<void> {
 
 /** Procesa un mensaje entrante: texto y/o adjunto (lo descarga y guarda). */
 async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
-  const waId = m.key.remoteJid!;
+  // Los chats con privacidad LID no aceptan envíos directos: WhatsApp adjunta
+  // el número real en senderPn/remoteJidAlt y respondemos a ese.
+  const rawKey = m.key as unknown as { remoteJid?: string; senderPn?: string; remoteJidAlt?: string; participantPn?: string };
+  const alt = rawKey.senderPn || rawKey.remoteJidAlt || rawKey.participantPn;
+  const waId = m.key.remoteJid!.endsWith('@lid') && alt ? alt : m.key.remoteJid!;
   const nombre = m.pushName || '';
   const msg = m.message;
   const texto = msg?.conversation || msg?.extendedTextMessage?.text;
@@ -208,6 +212,7 @@ export async function sendViaQr(storeId: string, to: string, texto: string): Pro
   try {
     const jid = toJid(to);
     await s.sock.sendMessage(jid, { text: texto });
+    console.log(`[wa-qr] texto enviado a ${jid}`);
     return { ok: true };
   } catch (e) {
     console.error('[wa-qr] fallo enviando texto a', to, e);

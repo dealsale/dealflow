@@ -99,7 +99,31 @@ export interface ApiLead {
   mensajes: ApiMensaje[];
 }
 
-export const apiState = () => req<{ whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean }; leads: ApiLead[] }>('/api/state', 'GET');
+export interface ApiProduct {
+  id: string;
+  nombre: string;
+  precio: number;
+  color: string;
+  txt: string;
+  reglas: string[];
+  descripcion: string;
+  caracteristicas: string;
+  mensajeInicial: string;
+  faqs: { pregunta: string; respuesta: string }[];
+  fotos: string[];
+  fotosSubidas: string[];
+  variantes: { id: string; label: string; stock: number; fotos: number; fotosSubidas: string[] }[];
+}
+
+export const apiCreateProduct = (b: { nombre: string; precio: number; stock: number }) => req<{ id: string }>('/api/products', 'POST', b);
+export const apiPatchProduct = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/products/${id}`, 'PATCH', patch);
+export const apiDeleteProduct = (id: string) => req<{ ok: true }>(`/api/products/${id}`, 'DELETE');
+export const apiAddVariant = (productId: string, b: { label: string; stock: number }) => req<{ id: string }>(`/api/products/${productId}/variants`, 'POST', b);
+export const apiPatchVariant = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/variants/${id}`, 'PATCH', patch);
+export const apiDeleteVariant = (id: string) => req<{ ok: true }>(`/api/variants/${id}`, 'DELETE');
+export const apiPutAssistant = (b: { instrucciones: string; reglas: string[] }) => req<{ ok: true }>('/api/assistant', 'PUT', b);
+
+export const apiState = () => req<{ products: ApiProduct[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean }; leads: ApiLead[] }>('/api/state', 'GET');
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
 export const apiSendLeadMessage = (id: string, texto: string) =>
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/messages`, 'POST', { texto });
