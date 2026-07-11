@@ -1,4 +1,4 @@
-import makeWASocket, { DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import makeWASocket, { Browsers, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState } from '@whiskeysockets/baileys';
 import type { WASocket } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
@@ -17,12 +17,13 @@ interface Session {
   qrDataUrl: string | null;
   numero: string;
   error: string;
-  starting: boolean;
+  intentos: number;
+  cerrando: boolean;
 }
 
 const sessions = new Map<string, Session>();
 
-// Logger silencioso (Baileys espera algo tipo pino) para no llenar los logs.
+// Logger silencioso (Baileys espera algo tipo pino).
 const silentLogger = {
   level: 'silent',
   child() {
@@ -53,12 +54,16 @@ function markDisconnected(storeId: string) {
 
 /** Inicia (o reutiliza) la sesión por QR de una tienda. */
 export async function startQrSession(storeId: string): Promise<void> {
-  const existing = sessions.get(storeId);
-  if (existing && (existing.starting || existing.estado === 'conectado' || existing.estado === 'qr')) return;
+  const prev = sessions.get(storeId);
+  if (prev && prev.estado !== 'error' && prev.estado !== 'desconectado') return;
 
-  const session: Session = { sock: null, estado: 'iniciando', qrDataUrl: null, numero: '', error: '', starting: true };
+  const session: Session = { sock: null, estado: 'iniciando', qrDataUrl: null, numero: '', error: '', intentos: 0, cerrando: false };
   sessions.set(storeId, session);
+  await connect(storeId, session);
+}
 
+/** Crea un socket y engancha sus eventos. Se vuelve a llamar para reconectar. */
+async function connect(storeId: string, session: Session): Promise<void> {
   try {
     const { state, saveCreds } = await useMultiFileAuthState(authDir(storeId));
     const { version } = await fetchLatestBaileysVersion();
@@ -67,61 +72,69 @@ export async function startQrSession(storeId: string): Promise<void> {
       auth: state,
       printQRInTerminal: false,
       syncFullHistory: false,
-      browser: ['DealFlow', 'Chrome', '1.0.0'],
+      browser: Browsers.appropriate('Chrome'),
       logger: silentLogger as never,
     });
     session.sock = sock;
-    session.starting = false;
 
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
+
       if (qr) {
         try {
           session.estado = 'qr';
           session.qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 });
           console.log(`[wa-qr] ${storeId}: código QR generado`);
-        } catch (e) {
+        } catch {
           session.estado = 'error';
           session.error = 'No pudimos dibujar el código QR.';
-          console.error('[wa-qr] error generando QR', e);
         }
       }
+
       if (connection === 'open') {
         session.estado = 'conectado';
         session.qrDataUrl = null;
+        session.intentos = 0;
         session.numero = sock.user?.id ? '+' + sock.user.id.split(':')[0].split('@')[0] : '';
         setConnected(storeId, session.numero);
         console.log(`[wa-qr] ${storeId}: conectado como ${session.numero}`);
       }
+
       if (connection === 'close') {
+        if (session.cerrando) return; // desvinculación manual: no reconectar
         const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
-        const teniaSesion = session.estado === 'conectado' || session.qrDataUrl !== null;
+
         if (code === DisconnectReason.loggedOut) {
           session.estado = 'desconectado';
           markDisconnected(storeId);
           try { rmSync(authDir(storeId), { recursive: true, force: true }); } catch { /* nada */ }
           sessions.delete(storeId);
           console.log(`[wa-qr] ${storeId}: sesión cerrada desde el teléfono`);
-        } else if (teniaSesion) {
-          // Estaba vinculado y se cayó: reintentar conservando credenciales.
-          console.log(`[wa-qr] ${storeId}: conexión cerrada (code ${code}), reintentando`);
-          sessions.delete(storeId);
-          setTimeout(() => void startQrSession(storeId).catch(() => {}), 1500);
-        } else {
-          // Nunca llegó a mostrar el QR: no insistir en bucle, avisar.
-          session.estado = 'error';
-          session.error = 'No pudimos conectar con WhatsApp. Intenta de nuevo en un momento.';
-          console.log(`[wa-qr] ${storeId}: falló antes del QR (code ${code})`);
+          return;
         }
+
+        // 515 (restart requerido tras vincular) y caídas temporales: reconectar
+        // reutilizando las credenciales, con el MISMO objeto de sesión (sin
+        // crear sockets en paralelo).
+        session.intentos += 1;
+        if (session.intentos > 8) {
+          session.estado = 'error';
+          session.error = 'No pudimos mantener la conexión con WhatsApp. Intenta de nuevo.';
+          sessions.delete(storeId);
+          console.log(`[wa-qr] ${storeId}: demasiados reintentos, me detengo`);
+          return;
+        }
+        console.log(`[wa-qr] ${storeId}: conexión cerrada (code ${code}), reconectando (intento ${session.intentos})`);
+        setTimeout(() => void connect(storeId, session).catch(() => {}), 1200);
       }
     });
 
     sock.ev.on('messages.upsert', (ev) => {
       if (ev.type !== 'notify') return;
       for (const m of ev.messages) {
-        if (m.key.fromMe || !m.key.remoteJid || m.key.remoteJid.endsWith('@g.us')) continue;
+        if (m.key.fromMe || !m.key.remoteJid || m.key.remoteJid.endsWith('@g.us') || m.key.remoteJid === 'status@broadcast') continue;
         const texto = m.message?.conversation || m.message?.extendedTextMessage?.text;
         if (!texto) continue;
         const waId = m.key.remoteJid.split('@')[0];
@@ -129,7 +142,6 @@ export async function startQrSession(storeId: string): Promise<void> {
       }
     });
   } catch (e) {
-    session.starting = false;
     session.estado = 'error';
     session.error = 'No pudimos iniciar la conexión con WhatsApp. Intenta de nuevo.';
     console.error(`[wa-qr] ${storeId}: error al iniciar`, e);
@@ -150,7 +162,7 @@ export function getQrStatus(storeId: string): { estado: Estado; qr: string | nul
 
 export async function sendViaQr(storeId: string, to: string, texto: string): Promise<{ ok: boolean; error?: string }> {
   const s = sessions.get(storeId);
-  if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La sesión de WhatsApp por QR no está conectada.' };
+  if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
   try {
     const jid = to.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
     await s.sock.sendMessage(jid, { text: texto });
@@ -162,7 +174,9 @@ export async function sendViaQr(storeId: string, to: string, texto: string): Pro
 
 export async function stopQrSession(storeId: string): Promise<void> {
   const s = sessions.get(storeId);
+  if (s) s.cerrando = true;
   try { await s?.sock?.logout(); } catch { /* nada */ }
+  try { s?.sock?.end(undefined); } catch { /* nada */ }
   try { rmSync(authDir(storeId), { recursive: true, force: true }); } catch { /* nada */ }
   sessions.delete(storeId);
   markDisconnected(storeId);
