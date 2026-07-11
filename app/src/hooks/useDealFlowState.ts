@@ -696,13 +696,29 @@ export function useDealFlowState() {
       const body = pendingPatch.current[k];
       delete pendingPatch.current[k];
       void apiPatchProduct(k, body);
-    }, 700);
+    }, 500);
   }
 
   async function reloadProducts() {
     const { data } = await apiState();
     if (data?.products) setProducts(mapApiProducts(data.products));
   }
+
+  /** Manda ya cualquier cambio de producto pendiente (al recargar/cerrar). */
+  function flushPatches() {
+    for (const k of Object.keys(pendingPatch.current)) {
+      clearTimeout(patchTimers.current[k]);
+      const body = pendingPatch.current[k];
+      delete pendingPatch.current[k];
+      void apiPatchProduct(k, body);
+    }
+  }
+  useEffect(() => {
+    const h = () => flushPatches();
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function updateProduct(id: number | string, patch: Partial<Product>) {
     setProducts((st) => st.map((p) => (p.id === id ? { ...p, ...patch } : p)));
@@ -1043,37 +1059,34 @@ export function useDealFlowState() {
   async function addMainPhotos(productId: number | string, files: File[]) {
     const urls = await subir(files, 'image/');
     if (!urls.length) return;
-    let nuevas: string[] = [];
-    setProducts((st) => st.map((p) => {
-      if (p.id !== productId) return p;
-      nuevas = [...(p.fotosSubidas || []), ...urls];
-      return { ...p, fotosSubidas: nuevas };
-    }));
+    const prod = productsRef.current.find((p) => p.id === productId);
+    const nuevas = [...(prod?.fotosSubidas || []), ...urls];
+    setProducts((st) => st.map((p) => (p.id === productId ? { ...p, fotosSubidas: nuevas } : p)));
     queuePatch(productId, { fotosSubidas: nuevas });
   }
 
   function removeMainPhoto(productId: number | string, index: number) {
-    let nuevas: string[] = [];
-    setProducts((st) => st.map((p) => {
-      if (p.id !== productId) return p;
-      nuevas = (p.fotosSubidas || []).filter((_, i) => i !== index);
-      return { ...p, fotosSubidas: nuevas };
-    }));
+    const prod = productsRef.current.find((p) => p.id === productId);
+    const nuevas = (prod?.fotosSubidas || []).filter((_, i) => i !== index);
+    setProducts((st) => st.map((p) => (p.id === productId ? { ...p, fotosSubidas: nuevas } : p)));
     queuePatch(productId, { fotosSubidas: nuevas });
   }
 
-  /** Actualiza una lista (testimonios, videos, bloques) de un producto y la sincroniza. */
+  /**
+   * Actualiza una lista (testimonios, videos, bloques, combos, opciones) y la
+   * sincroniza. Calcula el nuevo valor desde el estado actual (productsRef), NO
+   * desde dentro del updater de setProducts: en un manejador de evento ese
+   * updater corre después, y leer la variable ahí daba undefined → no se
+   * guardaba (por eso se perdían textos, combos y opciones).
+   */
   function patchProductList<K extends 'testimonios' | 'videos' | 'mensajeBloques' | 'bundles' | 'opciones'>(
     productId: number | string,
     key: K,
     mutate: (actual: NonNullable<Product[K]>) => Product[K],
   ) {
-    let nueva: Product[K] | undefined;
-    setProducts((st) => st.map((p) => {
-      if (p.id !== productId) return p;
-      nueva = mutate((p[key] || []) as NonNullable<Product[K]>);
-      return { ...p, [key]: nueva };
-    }));
+    const prod = productsRef.current.find((p) => p.id === productId);
+    const nueva = mutate((prod?.[key] || []) as NonNullable<Product[K]>);
+    setProducts((st) => st.map((p) => (p.id === productId ? { ...p, [key]: nueva } : p)));
     queuePatch(productId, { [key]: nueva });
   }
 
