@@ -9,18 +9,22 @@ interface MediaInfo {
   nombre: string;
 }
 
-function ensureLead(storeId: string, waId: string, nombre: string): string {
+function ensureLead(storeId: string, waId: string, nombre: string, tel?: string): string {
   const numPart = waId.split('@')[0];
+  const telMostrar = tel || '+' + numPart; // número legible para el CRM (el @lid no sirve de teléfono)
   let lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND (wa_id = ? OR wa_id = ?)').get(storeId, waId, numPart) as { id: string } | undefined;
-  if (lead) db.prepare('UPDATE leads SET wa_id = ? WHERE id = ?').run(waId, lead.id); // actualiza chats viejos a la dirección completa
+  if (lead) {
+    db.prepare('UPDATE leads SET wa_id = ? WHERE id = ?').run(waId, lead.id); // actualiza chats viejos a la dirección completa
+    if (tel) db.prepare("UPDATE leads SET tel = ? WHERE id = ? AND (tel = '' OR tel LIKE '+%@%' OR tel = ?)").run(tel, lead.id, '+' + numPart);
+  }
   if (!lead) {
     const id = uid();
     db.prepare('INSERT INTO leads (id, store_id, nombre, tel, etapa, asignado, wa_id) VALUES (?,?,?,?,?,?,?)').run(
-      id, storeId, nombre || '+' + waId.split('@')[0], '+' + waId.split('@')[0], 'Explorando', 'Asistente (bot)', waId,
+      id, storeId, nombre || telMostrar, telMostrar, 'Explorando', 'Asistente (bot)', waId,
     );
     lead = { id };
   } else if (nombre) {
-    db.prepare('UPDATE leads SET nombre = ? WHERE id = ? AND (nombre = ? OR nombre = ?)').run(nombre, lead.id, '+' + waId.split('@')[0], waId);
+    db.prepare('UPDATE leads SET nombre = ? WHERE id = ? AND (nombre = ? OR nombre = ?)').run(nombre, lead.id, '+' + numPart, waId);
   }
   return lead.id;
 }
@@ -29,8 +33,8 @@ function ensureLead(storeId: string, waId: string, nombre: string): string {
  * Guarda un mensaje entrante (texto y/o adjunto). Crea el lead si no existe.
  * La usan tanto el webhook de la Cloud API como la sesión por QR.
  */
-export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo) {
-  const leadId = ensureLead(storeId, waId, nombre);
+export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo, tel?: string) {
+  const leadId = ensureLead(storeId, waId, nombre, tel);
   db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)').run(
     uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null,
   );

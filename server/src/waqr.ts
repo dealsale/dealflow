@@ -46,6 +46,28 @@ function toJid(to: string): string {
   return num + (num.length >= 14 ? '@lid' : '@s.whatsapp.net');
 }
 
+/**
+ * Resuelve la dirección real de envío. Los chats con privacidad LID (@lid) se
+ * responden tal cual: WhatsApp mapea internamente ese identificador. Para un
+ * número normal le preguntamos a WhatsApp cuál es su JID canónico (así evitamos
+ * enviar a un número mal formado que "se acepta" pero nunca llega).
+ */
+async function resolveSendJid(sock: WASocket, to: string): Promise<{ jid: string } | { error: string }> {
+  if (to.endsWith('@lid') || to.endsWith('@g.us')) return { jid: to };
+  const num = to.replace(/[^0-9]/g, '');
+  if (!num) return { error: 'No hay un número al que enviar.' };
+  try {
+    const found = await sock.onWhatsApp(num);
+    const hit = found?.find((f) => f.exists);
+    if (hit?.jid) return { jid: hit.jid };
+    // WhatsApp respondió y el número no tiene cuenta: no insistimos en silencio.
+    if (found && found.length) return { error: 'Ese número no tiene WhatsApp o no está disponible para recibir mensajes.' };
+  } catch {
+    // Sin red para verificar: seguimos con la heurística de siempre.
+  }
+  return { jid: toJid(to) };
+}
+
 function authDir(storeId: string) {
   return path.join(DATA_DIR, 'wa', storeId);
 }
@@ -156,11 +178,15 @@ async function connect(storeId: string, session: Session): Promise<void> {
 
 /** Procesa un mensaje entrante: texto y/o adjunto (lo descarga y guarda). */
 async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
-  // Los chats con privacidad LID no aceptan envíos directos: WhatsApp adjunta
-  // el número real en senderPn/remoteJidAlt y respondemos a ese.
+  // Respondemos SIEMPRE a la dirección exacta con la que llegó el mensaje
+  // (m.key.remoteJid). Si es un chat con privacidad LID, WhatsApp mapea ese
+  // @lid internamente; convertirlo a un número "normal" rompe el envío.
+  // El número real (senderPn) solo lo usamos para mostrarlo en el CRM.
   const rawKey = m.key as unknown as { remoteJid?: string; senderPn?: string; remoteJidAlt?: string; participantPn?: string };
-  const alt = rawKey.senderPn || rawKey.remoteJidAlt || rawKey.participantPn;
-  const waId = m.key.remoteJid!.endsWith('@lid') && alt ? alt : m.key.remoteJid!;
+  const waId = m.key.remoteJid!;
+  const pn = [rawKey.senderPn, rawKey.remoteJidAlt, rawKey.participantPn].find((x) => x && !x.endsWith('@lid'));
+  const telSrc = pn || (waId.endsWith('@lid') ? '' : waId);
+  const tel = telSrc ? '+' + telSrc.split('@')[0].replace(/[^0-9]/g, '') : '';
   const nombre = m.pushName || '';
   const msg = m.message;
   const texto = msg?.conversation || msg?.extendedTextMessage?.text;
@@ -176,15 +202,15 @@ async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
       const file = uid() + '.' + mediaExt(tipo, mime);
       mkdirSync(path.join(DATA_DIR, 'media', storeId), { recursive: true });
       writeFileSync(path.join(DATA_DIR, 'media', storeId, file), buffer);
-      saveIncomingMessage(storeId, waId, nombre, caption, { tipo, url: '/api/media/' + storeId + '/' + file, mime, nombre: nombreArch });
+      saveIncomingMessage(storeId, waId, nombre, caption, { tipo, url: '/api/media/' + storeId + '/' + file, mime, nombre: nombreArch }, tel);
     } catch (e) {
       console.error('[wa-qr] no se pudo descargar el adjunto', e);
-      saveIncomingMessage(storeId, waId, nombre, caption || '[adjunto no disponible]');
+      saveIncomingMessage(storeId, waId, nombre, caption || '[adjunto no disponible]', undefined, tel);
     }
     return;
   }
 
-  if (texto) saveIncomingMessage(storeId, waId, nombre, texto);
+  if (texto) saveIncomingMessage(storeId, waId, nombre, texto, undefined, tel);
 }
 
 function tipoDeMime(mime: string): 'image' | 'video' | 'audio' | 'document' {
@@ -209,13 +235,17 @@ export function getQrStatus(storeId: string): { estado: Estado; qr: string | nul
 export async function sendViaQr(storeId: string, to: string, texto: string): Promise<{ ok: boolean; error?: string }> {
   const s = sessions.get(storeId);
   if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
+  const r = await resolveSendJid(s.sock, to);
+  if ('error' in r) {
+    console.warn(`[wa-qr] no envío texto a ${to}: ${r.error}`);
+    return { ok: false, error: r.error };
+  }
   try {
-    const jid = toJid(to);
-    await s.sock.sendMessage(jid, { text: texto });
-    console.log(`[wa-qr] texto enviado a ${jid}`);
+    await s.sock.sendMessage(r.jid, { text: texto });
+    console.log(`[wa-qr] texto enviado a ${r.jid} (destino original ${to})`);
     return { ok: true };
   } catch (e) {
-    console.error('[wa-qr] fallo enviando texto a', to, e);
+    console.error('[wa-qr] fallo enviando texto a', r.jid, e);
     return { ok: false, error: 'No pudimos enviar el mensaje por WhatsApp.' };
   }
 }
@@ -229,15 +259,21 @@ export async function sendMediaViaQr(
 ): Promise<{ ok: boolean; error?: string }> {
   const s = sessions.get(storeId);
   if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
+  const r = await resolveSendJid(s.sock, to);
+  if ('error' in r) {
+    console.warn(`[wa-qr] no envío adjunto a ${to}: ${r.error}`);
+    return { ok: false, error: r.error };
+  }
+  const jid = r.jid;
   try {
-    const jid = toJid(to);
     if (media.tipo === 'image') await s.sock.sendMessage(jid, { image: media.buffer, caption: caption || undefined });
     else if (media.tipo === 'video') await s.sock.sendMessage(jid, { video: media.buffer, caption: caption || undefined });
     else if (media.tipo === 'audio') await s.sock.sendMessage(jid, { audio: media.buffer, mimetype: media.mime });
     else await s.sock.sendMessage(jid, { document: media.buffer, mimetype: media.mime, fileName: nombre || 'archivo' });
+    console.log(`[wa-qr] adjunto enviado a ${jid} (destino original ${to})`);
     return { ok: true };
   } catch (e) {
-    console.error('[wa-qr] fallo enviando adjunto a', to, e);
+    console.error('[wa-qr] fallo enviando adjunto a', jid, e);
     return { ok: false, error: 'No pudimos enviar el adjunto por WhatsApp.' };
   }
 }

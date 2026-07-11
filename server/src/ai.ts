@@ -32,10 +32,12 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
     const bloques = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, [])
       .filter((b) => b.tipo === 'texto').map((b) => b.valor).join(' ');
     const guion = bloques || (p.mensaje_inicial as string);
+    const combos = pj<{ cantidad: number; precio: number; etiqueta?: string }[]>(p.bundles as string, [])
+      .map((b) => `  · Combo: ${b.cantidad} por $${Number(b.precio).toLocaleString('es-CO')} COP${b.etiqueta ? ` (${b.etiqueta})` : ''}`).join('\n');
     const extra = [p.descripcion && `  Descripción: ${p.descripcion}`, p.caracteristicas && `  Características: ${p.caracteristicas}`,
       p.modos_uso && `  Modo de uso: ${p.modos_uso}`, guion && `  Si preguntan por este producto, preséntalo así: ${guion}`]
       .filter(Boolean).join('\n');
-    return `- ${p.nombre}: $${Number(p.precio).toLocaleString('es-CO')} COP. Variantes: ${vars || 'única'}.${extra ? '\n' + extra : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
+    return `- ${p.nombre}: $${Number(p.precio).toLocaleString('es-CO')} COP. Variantes: ${vars || 'única'}.${extra ? '\n' + extra : ''}${combos ? '\n' + combos : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
   }).join('\n');
   const promos = (db.prepare('SELECT titulo, descripcion FROM promos WHERE store_id = ? AND activa = 1').all(storeId) as { titulo: string; descripcion: string }[])
     .map((p) => `- ${p.titulo}: ${p.descripcion}`).join('\n');

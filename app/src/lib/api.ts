@@ -114,6 +114,7 @@ export interface ApiProduct {
   modosUso: string;
   videos: string[];
   mensajeBloques: { tipo: string; valor: string }[];
+  bundles: { cantidad: number; precio: number; etiqueta?: string }[];
   fotos: string[];
   fotosSubidas: string[];
   variantes: { id: string; label: string; stock: number; fotos: number; fotosSubidas: string[] }[];

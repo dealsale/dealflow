@@ -222,6 +222,57 @@ export function Productos({ df }: { df: DealFlowState }) {
                 </div>
 
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Combos · llevar varias unidades por un precio especial
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                  {p.bundlesDecorados.map((b, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '9px 12px' }}>
+                      <span style={{ background: '#FEF3C7', color: '#B45309', borderRadius: 6, padding: '3px 9px', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                        {b.cantidad} unidades
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{b.precioFmt}</span>
+                      {b.etiqueta && <span style={{ fontSize: 12, color: '#64748B' }}>· {b.etiqueta}</span>}
+                      <div style={{ flex: 1 }} />
+                      <span onClick={b.remove} className="df-danger-hover" title="Quitar combo" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>✕</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input
+                    className="df-input"
+                    value={df.bundleCantidad}
+                    onChange={(e) => df.setBundleCantidad(e.target.value)}
+                    placeholder="Cantidad · ej: 3"
+                    style={{ width: 120, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+                  />
+                  <input
+                    className="df-input"
+                    value={df.bundlePrecio}
+                    onChange={(e) => df.setBundlePrecio(e.target.value)}
+                    placeholder="Precio total (COP) · ej: 109900"
+                    style={{ width: 200, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+                  />
+                  <input
+                    className="df-input"
+                    value={df.bundleEtiqueta}
+                    onChange={(e) => df.setBundleEtiqueta(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') p.addBundle(); }}
+                    placeholder="Etiqueta opcional · ej: ¡El más pedido!"
+                    style={{ flex: 1, minWidth: 160, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                  />
+                  <button
+                    onClick={p.addBundle}
+                    className="df-btn-outline-green"
+                    style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    Agregar combo
+                  </button>
+                </div>
+                <div style={{ color: '#94A3B8', fontSize: 12, marginBottom: 16 }}>
+                  El asistente ofrece estos combos para subir el ticket (ej: 3 por $109.900 en vez de $180.000).
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Fotos principales · las que envía el asistente al ofrecer el producto
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>

@@ -59,7 +59,7 @@ import type {
   Promo,
   VendedorSection,
 } from '../types';
-import type { MensajeBloque } from '../types';
+import type { Bundle, MensajeBloque } from '../types';
 
 export interface DecoratedOrder extends Order {
   totalFmt: string;
@@ -158,6 +158,8 @@ export interface DecoratedProduct extends Product {
   addBloqueTexto: () => void;
   addBloqueImagen: (files: File[]) => void;
   addBloqueVideo: (files: File[]) => void;
+  bundlesDecorados: (Bundle & { precioFmt: string; remove: () => void })[];
+  addBundle: () => void;
   variantesDecorated: DecoratedVariante[];
 }
 
@@ -277,6 +279,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     modosUso: p.modosUso || '',
     videos: p.videos || [],
     mensajeBloques: (p.mensajeBloques || []).filter((b): b is MensajeBloque => b.tipo === 'texto' || b.tipo === 'imagen' || b.tipo === 'video'),
+    bundles: p.bundles || [],
     fotos: p.fotos?.length ? p.fotos : undefined,
     fotosSubidas: p.fotosSubidas || [],
     variantes: p.variantes.map((v) => ({ id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: v.fotosSubidas || [] })),
@@ -331,6 +334,9 @@ export function useDealFlowState() {
   const [faqR, setFaqR] = useState('');
   const [bloqueTexto, setBloqueTexto] = useState('');
   const [videoWarn, setVideoWarn] = useState('');
+  const [bundleCantidad, setBundleCantidad] = useState('');
+  const [bundlePrecio, setBundlePrecio] = useState('');
+  const [bundleEtiqueta, setBundleEtiqueta] = useState('');
   const [newProductOpen, setNewProductOpen] = useState<boolean>(false);
   const [newProdNombre, setNewProdNombre] = useState<string>('');
   const [newProdPrecio, setNewProdPrecio] = useState<string>('');
@@ -972,7 +978,7 @@ export function useDealFlowState() {
   }
 
   /** Actualiza una lista (testimonios, videos, bloques) de un producto y la sincroniza. */
-  function patchProductList<K extends 'testimonios' | 'videos' | 'mensajeBloques'>(
+  function patchProductList<K extends 'testimonios' | 'videos' | 'mensajeBloques' | 'bundles'>(
     productId: number | string,
     key: K,
     mutate: (actual: NonNullable<Product[K]>) => Product[K],
@@ -1109,6 +1115,20 @@ export function useDealFlowState() {
         },
         addBloqueImagen: (files: File[]) => void addBloqueMedia(p.id, files, 'imagen'),
         addBloqueVideo: (files: File[]) => void addBloqueMedia(p.id, files, 'video'),
+        bundlesDecorados: (p.bundles || []).map((b, i) => ({
+          ...b,
+          precioFmt: fmt(b.precio),
+          remove: () => patchProductList(p.id, 'bundles', (bl) => bl.filter((_, j) => j !== i)),
+        })),
+        addBundle: () => {
+          const cantidad = parseInt(bundleCantidad, 10) || 0;
+          const precio = parseInt(bundlePrecio.replace(/[^0-9]/g, ''), 10) || 0;
+          if (cantidad < 2 || !precio) return;
+          patchProductList(p.id, 'bundles', (bl) => [...bl, { cantidad, precio, etiqueta: bundleEtiqueta.trim() || undefined }]);
+          setBundleCantidad('');
+          setBundlePrecio('');
+          setBundleEtiqueta('');
+        },
         faqsDecoradas: (p.faqs || []).map((f, i) => ({
           ...f,
           remove: () => {
@@ -1151,7 +1171,7 @@ export function useDealFlowState() {
           };
         }),
       })),
-    [products, expandedProductId, productRuleDraft, savedProductId, variantLabel, variantStock, armedDeleteProductId, armedDeleteVariant, faqP, faqR, bloqueTexto],
+    [products, expandedProductId, productRuleDraft, savedProductId, variantLabel, variantStock, armedDeleteProductId, armedDeleteVariant, faqP, faqR, bloqueTexto, bundleCantidad, bundlePrecio, bundleEtiqueta],
   );
 
   const promosDecorated: DecoratedPromo[] = useMemo(
@@ -1532,6 +1552,12 @@ export function useDealFlowState() {
     bloqueTexto,
     setBloqueTexto,
     videoWarn,
+    bundleCantidad,
+    setBundleCantidad: (v: string) => setBundleCantidad(v.replace(/[^0-9]/g, '')),
+    bundlePrecio,
+    setBundlePrecio: (v: string) => setBundlePrecio(v.replace(/[^0-9]/g, '')),
+    bundleEtiqueta,
+    setBundleEtiqueta,
 
     newProductOpen,
     toggleNewProduct: () => {

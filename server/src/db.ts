@@ -136,6 +136,7 @@ addColumn('products', "testimonios TEXT NOT NULL DEFAULT '[]'");
 addColumn('products', "modos_uso TEXT NOT NULL DEFAULT ''");
 addColumn('products', "videos TEXT NOT NULL DEFAULT '[]'");
 addColumn('products', "mensaje_bloques TEXT NOT NULL DEFAULT '[]'");
+addColumn('products', "bundles TEXT NOT NULL DEFAULT '[]'");
 addColumn('messages', "tipo TEXT NOT NULL DEFAULT 'texto'");
 addColumn('messages', 'media_url TEXT');
 addColumn('messages', 'media_mime TEXT');
