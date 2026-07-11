@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db, j, pj, uid } from './db.js';
 import { clearAuthCookie, hashPassword, requireAdmin, requireAuth, requireStore, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
-import { handleIncomingWebhook, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
+import { handleIncomingWebhook, sendWhatsappMedia, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
 import { mediaPath, saveOutgoingMedia, saveOutgoingMessage } from './media.js';
 import { existsSync } from 'node:fs';
 
@@ -267,18 +267,8 @@ api.post('/leads/:id/media', requireAuth, requireStore, async (req, res) => {
   saveOutgoingMessage(l.id, String(caption || ''), saved.tipo, saved.url, saved.mime, String(nombre || ''));
   db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
 
-  const cfg = db.prepare('SELECT modo FROM whatsapp WHERE store_id = ?').get(req.user!.storeId) as { modo: string } | undefined;
-  let enviado = false;
-  let aviso: string | undefined;
-  if (cfg?.modo === 'qr') {
-    const { sendMediaViaQr } = await import('./waqr.js');
-    const r = await sendMediaViaQr(req.user!.storeId!, l.wa_id || l.tel, { buffer: saved.buffer, mime: saved.mime, tipo: saved.tipo }, String(caption || ''), String(nombre || ''), l.tel);
-    enviado = r.ok;
-    aviso = r.error;
-  } else {
-    aviso = 'Enviar adjuntos por la API oficial está en camino; por ahora funciona con la conexión por QR.';
-  }
-  res.json({ ok: true, enviadoPorWhatsapp: enviado, aviso: enviado ? undefined : aviso });
+  const r = await sendWhatsappMedia(req.user!.storeId!, l.wa_id || l.tel, { buffer: saved.buffer, mime: saved.mime, tipo: saved.tipo }, String(caption || ''), String(nombre || ''), l.tel);
+  res.json({ ok: true, enviadoPorWhatsapp: r.ok, aviso: r.ok ? undefined : r.error });
 });
 
 // ── Asistente ─────────────────────────────────────────────────────────

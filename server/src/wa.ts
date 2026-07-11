@@ -1,6 +1,7 @@
 import { db, uid } from './db.js';
+import { mediaExt } from './media.js';
 
-const GRAPH = 'https://graph.facebook.com/v20.0';
+const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
 
 interface MediaInfo {
   tipo: string;
@@ -74,10 +75,11 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
     return sendViaQr(storeId, to, texto, pn);
   }
   try {
+    const numero = (pn || to).replace(/[^0-9]/g, '');
     const res = await fetch(`${GRAPH}/${cfg.phone_number_id}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${cfg.access_token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', to: to.replace(/[^0-9]/g, ''), type: 'text', text: { body: texto } }),
+      body: JSON.stringify({ messaging_product: 'whatsapp', to: numero, type: 'text', text: { body: texto } }),
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
@@ -86,6 +88,45 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
     return { ok: true };
   } catch {
     return { ok: false, error: 'No pudimos hablar con Meta.' };
+  }
+}
+
+/** Sube un adjunto a Meta y lo envía por su media ID (Cloud API). */
+async function cloudSendMedia(
+  phoneId: string,
+  token: string,
+  numero: string,
+  media: { buffer: Buffer; mime: string; tipo: string },
+  caption: string,
+  nombre: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    // 1) Subir el archivo y obtener su media ID.
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', media.mime);
+    form.append('file', new Blob([new Uint8Array(media.buffer)], { type: media.mime }), nombre || 'archivo.' + mediaExt(media.tipo, media.mime));
+    const up = await fetch(`${GRAPH}/${phoneId}/media`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    const upj = (await up.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
+    if (!up.ok || !upj.id) return { ok: false, error: upj.error?.message || 'Meta no aceptó el archivo.' };
+
+    // 2) Enviar el mensaje que referencia ese media ID.
+    const tw = media.tipo === 'image' ? 'image' : media.tipo === 'video' ? 'video' : media.tipo === 'audio' ? 'audio' : 'document';
+    const obj: Record<string, string> = { id: upj.id };
+    if (caption && tw !== 'audio') obj.caption = caption;
+    if (tw === 'document' && nombre) obj.filename = nombre;
+    const send = await fetch(`${GRAPH}/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to: numero, type: tw, [tw]: obj }),
+    });
+    if (!send.ok) {
+      const b = (await send.json().catch(() => ({}))) as { error?: { message?: string } };
+      return { ok: false, error: b.error?.message || 'Meta no aceptó el envío del adjunto.' };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'No pudimos hablar con Meta para enviar el adjunto.' };
   }
 }
 
@@ -98,24 +139,34 @@ export async function sendWhatsappMedia(
   nombre: string,
   pn?: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const cfg = db.prepare('SELECT conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
-    | { conectado: number; modo: string }
+  const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
+    | { phone_number_id: string; access_token: string; conectado: number; modo: string }
     | undefined;
   if (!cfg?.conectado) return { ok: false, error: 'WhatsApp no está conectado.' };
   if (cfg.modo === 'qr') {
     const { sendMediaViaQr } = await import('./waqr.js');
     return sendMediaViaQr(storeId, to, media, caption, nombre, pn);
   }
-  // Cloud API: el envío de adjuntos está en camino; por ahora mandamos el texto.
-  if (caption) return sendWhatsappText(storeId, to, caption);
-  return { ok: false, error: 'Enviar adjuntos por la API oficial está en camino.' };
+  const numero = (pn || to).replace(/[^0-9]/g, '');
+  return cloudSendMedia(cfg.phone_number_id, cfg.access_token, numero, media, caption, nombre);
 }
 
+interface WebhookMedia {
+  id?: string;
+  mime_type?: string;
+  caption?: string;
+  filename?: string;
+  voice?: boolean;
+}
 interface WebhookMessage {
   from: string;
   id: string;
   type: string;
   text?: { body: string };
+  image?: WebhookMedia;
+  video?: WebhookMedia;
+  audio?: WebhookMedia;
+  document?: WebhookMedia;
 }
 
 interface WebhookValue {
@@ -124,7 +175,27 @@ interface WebhookValue {
   messages?: WebhookMessage[];
 }
 
-/** Procesa el webhook de Meta: crea/actualiza el lead y guarda el mensaje entrante. */
+/** Descarga un adjunto de la Cloud API por su media ID y lo guarda en disco. */
+async function descargarMediaCloud(storeId: string, token: string, mediaId: string, tipo: string, mime: string): Promise<string | null> {
+  try {
+    const meta = await fetch(`${GRAPH}/${mediaId}`, { headers: { Authorization: `Bearer ${token}` } });
+    const mj = (await meta.json().catch(() => ({}))) as { url?: string };
+    if (!mj.url) return null;
+    const bin = await fetch(mj.url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!bin.ok) return null;
+    const buffer = Buffer.from(await bin.arrayBuffer());
+    const { mediaDir } = await import('./media.js');
+    const { writeFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const file = uid() + '.' + mediaExt(tipo, mime);
+    writeFileSync(path.join(mediaDir(storeId), file), buffer);
+    return '/api/media/' + storeId + '/' + file;
+  } catch {
+    return null;
+  }
+}
+
+/** Procesa el webhook de Meta: crea/actualiza el lead y guarda el mensaje entrante (texto o adjunto). */
 export function handleIncomingWebhook(body: unknown) {
   const entries = (body as { entry?: { changes?: { value?: WebhookValue }[] }[] })?.entry || [];
   for (const entry of entries) {
@@ -132,16 +203,26 @@ export function handleIncomingWebhook(body: unknown) {
       const value = change.value;
       const phoneNumberId = value?.metadata?.phone_number_id;
       if (!phoneNumberId || !value?.messages?.length) continue;
-      const store = db.prepare('SELECT store_id FROM whatsapp WHERE phone_number_id = ? AND conectado = 1').get(phoneNumberId) as
-        | { store_id: string }
+      const store = db.prepare('SELECT store_id, access_token FROM whatsapp WHERE phone_number_id = ? AND conectado = 1').get(phoneNumberId) as
+        | { store_id: string; access_token: string }
         | undefined;
       if (!store) continue;
 
       for (const msg of value.messages) {
-        if (msg.type !== 'text' || !msg.text?.body) continue;
         const waId = msg.from;
         const nombre = value.contacts?.find((c) => c.wa_id === waId)?.profile?.name || '';
-        saveIncomingMessage(store.store_id, waId, nombre, msg.text.body);
+        if (msg.type === 'text' && msg.text?.body) {
+          saveIncomingMessage(store.store_id, waId, nombre, msg.text.body);
+          continue;
+        }
+        const media = msg.image || msg.video || msg.audio || msg.document;
+        if (media?.id) {
+          const tipo = msg.type === 'image' ? 'image' : msg.type === 'video' ? 'video' : msg.type === 'audio' ? 'audio' : 'document';
+          const mime = media.mime_type || 'application/octet-stream';
+          void descargarMediaCloud(store.store_id, store.access_token, media.id, tipo, mime).then((url) => {
+            saveIncomingMessage(store.store_id, waId, nombre, media.caption || '', url ? { tipo, url, mime, nombre: media.filename || '' } : undefined);
+          });
+        }
       }
     }
   }
