@@ -373,6 +373,7 @@ export function useDealFlowState() {
   });
   const [loginError, setLoginError] = useState<string>('');
   const [apiMode, setApiMode] = useState<boolean>(false);
+  const [storeNombre, setStoreNombre] = useState<string>('');
   const [newAccountOpen, setNewAccountOpen] = useState(false);
   const [accForm, setAccForm] = useState({ nombre: '', correo: '', password: '', plan: 'Inicio' });
   const [accError, setAccError] = useState('');
@@ -919,6 +920,10 @@ export function useDealFlowState() {
         if (data.whatsapp.conectado) {
           setWaCfg({ wabaId: data.whatsapp.wabaId, phoneNumberId: data.whatsapp.phoneNumberId, numero: data.whatsapp.numero });
         }
+        if (data.store?.nombre) setStoreNombre(data.store.nombre);
+        // Datos reales de la tienda: nada de textos demo de "Luna Accesorios".
+        setAssistantText(data.assistant?.instrucciones || '');
+        setRules(data.assistant?.reglas || []);
         setApiLeadsState(mapApiLeads(data.leads));
         if (data.products) setProducts(mapApiProducts(data.products));
       });
@@ -1437,9 +1442,9 @@ export function useDealFlowState() {
     goAdmin,
     toggleMode,
     modeBtnLabel: isAdmin ? 'Volver al panel vendedor' : 'Panel de administración',
-    headerTitle: isAdmin ? 'DealFlow · Administración' : 'Luna Accesorios',
-    userLabel: isAdmin ? 'Equipo DealFlow' : 'Karla',
-    userInitials: isAdmin ? 'DF' : 'K',
+    headerTitle: isAdmin ? 'DealFlow · Administración' : apiMode ? storeNombre || 'Mi tienda' : 'Luna Accesorios',
+    userLabel: isAdmin ? 'Equipo DealFlow' : apiMode ? sessionUser?.nombre || 'Vendedor' : 'Karla',
+    userInitials: isAdmin ? 'DF' : apiMode ? initials(sessionUser?.nombre || 'V').toUpperCase() : 'K',
     navStyle,
 
     waConnected,

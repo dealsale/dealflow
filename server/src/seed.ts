@@ -19,6 +19,17 @@ export function seed() {
   }
   console.log(`[seed] Admin listo: ${adminEmail} (contraseña tomada de ADMIN_PASSWORD${process.env.ADMIN_PASSWORD ? '' : ' — usa la variable, hoy es admin123'})`);
 
+  // Con SEED_DEMO=0 se limpia la tienda demo si quedó de un arranque anterior
+  // (borra en cascada sus productos, leads, etc.). No toca tus tiendas reales.
+  if (process.env.SEED_DEMO === '0') {
+    const demo = db.prepare("SELECT id FROM stores WHERE correo = 'karla@lunaaccesorios.co'").get() as { id: string } | undefined;
+    if (demo) {
+      db.prepare('DELETE FROM stores WHERE id = ?').run(demo.id);
+      db.prepare("DELETE FROM users WHERE email = 'karla@lunaaccesorios.co'").run();
+      console.log('[seed] SEED_DEMO=0: tienda demo Luna Accesorios eliminada');
+    }
+  }
+
   const hasStores = (db.prepare('SELECT COUNT(*) AS n FROM stores').get() as { n: number }).n > 0;
   const hasPlans = (db.prepare('SELECT COUNT(*) AS n FROM plans').get() as { n: number }).n > 0;
   if (hasStores || hasPlans) return;

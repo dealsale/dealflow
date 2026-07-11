@@ -168,7 +168,9 @@ async function connect(storeId: string, session: Session): Promise<void> {
     sock.ev.on('messages.upsert', (ev) => {
       if (ev.type !== 'notify') return;
       for (const m of ev.messages) {
-        if (m.key.fromMe || !m.key.remoteJid || m.key.remoteJid.endsWith('@g.us') || m.key.remoteJid === 'status@broadcast') continue;
+        const jid = m.key.remoteJid;
+        // Ignora lo que no es un chat 1-a-1: grupos, canales/newsletters, difusiones y estados.
+        if (m.key.fromMe || !jid || jid.endsWith('@g.us') || jid.endsWith('@newsletter') || jid.endsWith('@broadcast')) continue;
         void handleIncoming(storeId, sock, m).catch((e) => console.error('[wa-qr] error mensaje entrante', e));
       }
     });
