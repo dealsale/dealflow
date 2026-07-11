@@ -4,6 +4,7 @@ import {
   IconAsistente,
   IconCRM,
   IconCuentas,
+  IconEquipo,
   IconIntegraciones,
   IconLeads,
   IconPedidos,
@@ -75,6 +76,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             'CRM',
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', marginLeft: 'auto', animation: 'dfpulse 1.8s infinite' }} />,
           )}
+          {item('equipo', <IconEquipo />, 'Equipo')}
           {item('integraciones', <IconIntegraciones />, 'Integraciones')}
         </nav>
       )}

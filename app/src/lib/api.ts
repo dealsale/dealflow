@@ -144,6 +144,17 @@ export const apiWaUnlink = () => req<{ conectado: boolean }>('/api/whatsapp', 'D
 export const apiWaQrStart = () => req<{ ok: true }>('/api/whatsapp/qr/start', 'POST');
 export const apiWaQrStatus = () => req<{ estado: string; qr: string | null; numero: string; error: string }>('/api/whatsapp/qr/status', 'GET');
 
+export interface TeamMember {
+  id: string;
+  nombre: string;
+  email: string;
+  esDueno: boolean;
+  esTu: boolean;
+}
+export const apiTeamList = () => req<{ team: TeamMember[] }>('/api/team', 'GET');
+export const apiTeamCreate = (b: { nombre: string; email: string; password: string }) => req<{ id: string }>('/api/team', 'POST', b);
+export const apiTeamDelete = (id: string) => req<{ ok: true }>(`/api/team/${id}`, 'DELETE');
+
 export const apiAdminOverview = () => req<{ stores: AdminStore[]; plans: AdminPlan[] }>('/api/admin/overview', 'GET');
 export const apiCreateStore = (b: { nombre: string; correo: string; password: string; plan: string }) =>
   req<{ storeId: string }>('/api/admin/stores', 'POST', b);

@@ -36,13 +36,16 @@ import {
   apiSendLeadMedia,
   apiSendLeadMessage,
   apiState,
+  apiTeamList,
+  apiTeamCreate,
+  apiTeamDelete,
   apiToggleStore,
   apiWaLinkCloud,
   apiWaQrStart,
   apiWaQrStatus,
   apiWaUnlink,
 } from '../lib/api';
-import type { ApiLead, ApiProduct } from '../lib/api';
+import type { ApiLead, ApiProduct, TeamMember } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -377,6 +380,11 @@ export function useDealFlowState() {
   const [apiMode, setApiMode] = useState<boolean>(false);
   const [storeNombre, setStoreNombre] = useState<string>('');
   const [waVerifyToken, setWaVerifyToken] = useState<string>('');
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [teamForm, setTeamFormState] = useState({ nombre: '', email: '', password: '' });
+  const [teamError, setTeamError] = useState('');
+  const [teamSaving, setTeamSaving] = useState(false);
+  const [armedDeleteTeamId, setArmedDeleteTeamId] = useState<string | null>(null);
   const [crmDeleteArmed, setCrmDeleteArmed] = useState<boolean>(false);
   const crmDeleteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [newAccountOpen, setNewAccountOpen] = useState(false);
@@ -1243,6 +1251,42 @@ export function useDealFlowState() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, isAdmin, sessionUser]);
 
+  async function reloadTeam() {
+    const { data } = await apiTeamList();
+    if (data) setTeam(data.team);
+  }
+  useEffect(() => {
+    if (apiMode && !isAdmin && sessionUser && section === 'equipo') void reloadTeam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, isAdmin, sessionUser, section]);
+
+  function addTeamMember() {
+    const nombre = teamForm.nombre.trim();
+    const email = teamForm.email.trim();
+    const password = teamForm.password;
+    if (!nombre || !email || !password) { setTeamError('Completa nombre, correo y contraseña.'); return; }
+    if (password.length < 6) { setTeamError('La contraseña debe tener al menos 6 caracteres.'); return; }
+    setTeamSaving(true);
+    setTeamError('');
+    void apiTeamCreate({ nombre, email, password }).then((r) => {
+      setTeamSaving(false);
+      if (r.error) { setTeamError(r.error); return; }
+      setTeamFormState({ nombre: '', email: '', password: '' });
+      void reloadTeam();
+    });
+  }
+
+  function removeTeamMember(id: string) {
+    if (armedDeleteTeamId !== id) {
+      setArmedDeleteTeamId(id);
+      setTimeout(() => setArmedDeleteTeamId((cur) => (cur === id ? null : cur)), 3500);
+      return;
+    }
+    setArmedDeleteTeamId(null);
+    setTeam((st) => st.filter((m) => m.id !== id));
+    void apiTeamDelete(id).then((r) => { if (r.error) { setTeamError(r.error); void reloadTeam(); } });
+  }
+
   function toggleAccount(id: number | string, activa: boolean) {
     setAccounts((st) => st.map((x) => (x.id === id ? { ...x, activa: !x.activa } : x)));
     if (apiMode) void apiToggleStore(String(id), !activa).then((r) => { if (r.error) void reloadAdmin(); });
@@ -1584,6 +1628,20 @@ export function useDealFlowState() {
     sendCrmMedia,
     crmSendWarn,
     clearCrmSendWarn: () => setCrmSendWarn(''),
+
+    // ── Equipo ──
+    team: team.map((m) => ({
+      ...m,
+      armed: armedDeleteTeamId === m.id,
+      remove: () => removeTeamMember(m.id),
+    })),
+    teamForm,
+    setTeamNombre: (v: string) => { setTeamFormState((f) => ({ ...f, nombre: v })); setTeamError(''); },
+    setTeamEmail: (v: string) => { setTeamFormState((f) => ({ ...f, email: v })); setTeamError(''); },
+    setTeamPassword: (v: string) => { setTeamFormState((f) => ({ ...f, password: v })); setTeamError(''); },
+    teamError,
+    teamSaving,
+    addTeamMember,
 
     products: productsDecorated,
     productRuleDraft,

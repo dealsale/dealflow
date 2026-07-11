@@ -151,6 +151,7 @@ export type VendedorSection =
   | 'pedidos'
   | 'leads'
   | 'crm'
+  | 'equipo'
   | 'integraciones';
 
 export type AdminSection = 'ventas' | 'planes' | 'cuentas';

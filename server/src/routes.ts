@@ -242,6 +242,36 @@ api.post('/leads/:id/reset', requireAuth, requireStore, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Equipo (usuarios de la tienda que pueden entrar y responder) ──────
+api.get('/team', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  const store = db.prepare('SELECT correo FROM stores WHERE id = ?').get(sid) as { correo: string } | undefined;
+  const users = db.prepare('SELECT id, nombre, email FROM users WHERE store_id = ? ORDER BY rowid').all(sid) as { id: string; nombre: string; email: string }[];
+  res.json({ team: users.map((u) => ({ id: u.id, nombre: u.nombre, email: u.email, esDueno: u.email === store?.correo, esTu: u.id === req.user!.id })) });
+});
+
+api.post('/team', requireAuth, requireStore, (req, res) => {
+  const { nombre, email, password } = req.body || {};
+  if (!nombre?.trim() || !email?.trim() || !password) return res.status(400).json({ error: 'Faltan el nombre, el correo o la contraseña.' });
+  if (String(password).length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+  const correo = String(email).toLowerCase().trim();
+  if (db.prepare('SELECT id FROM users WHERE email = ?').get(correo)) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
+  const id = uid();
+  db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)').run(id, correo, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', req.user!.storeId);
+  res.json({ id });
+});
+
+api.delete('/team/:id', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  if (req.params.id === req.user!.id) return res.status(400).json({ error: 'No puedes eliminar tu propio usuario.' });
+  const u = db.prepare('SELECT id, email FROM users WHERE id = ? AND store_id = ?').get(req.params.id, sid) as { id: string; email: string } | undefined;
+  if (!u) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  const store = db.prepare('SELECT correo FROM stores WHERE id = ?').get(sid) as { correo: string } | undefined;
+  if (u.email === store?.correo) return res.status(400).json({ error: 'No puedes eliminar al dueño de la tienda.' });
+  db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 api.post('/leads/:id/messages', requireAuth, requireStore, async (req, res) => {
   const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as
     | { id: string; tel: string; wa_id: string | null }

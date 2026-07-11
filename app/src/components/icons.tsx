@@ -124,6 +124,16 @@ export function IconCuentas() {
   );
 }
 
+export function IconEquipo() {
+  return (
+    <svg {...common}>
+      <circle cx="9" cy="8" r="3.2"></circle>
+      <path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path>
+      <path d="M16.5 5.2a3.2 3.2 0 0 1 0 6M18 13.5a5.5 5.5 0 0 1 2.5 4"></path>
+    </svg>
+  );
+}
+
 export function IconBell({ muted = false }: { muted?: boolean }) {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
