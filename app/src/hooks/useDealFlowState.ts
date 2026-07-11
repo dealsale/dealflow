@@ -1299,7 +1299,7 @@ export function useDealFlowState() {
       setMobileChatOpen(false);
       setCrmIntervening(false);
     },
-    crmTyping: !!(crmChat && crmChat.live && !crmIntervening),
+    crmTyping: !apiMode && !!(crmChat && crmChat.live && !crmIntervening),
     crmIntervening,
     crmNotIntervening: !crmIntervening,
     intervene: () => {

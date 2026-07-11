@@ -38,6 +38,14 @@ const silentLogger = {
   fatal() {},
 };
 
+
+/** Construye el JID: respeta @lid/@s.whatsapp.net; los números largos son LID. */
+function toJid(to: string): string {
+  if (to.includes('@')) return to;
+  const num = to.replace(/[^0-9]/g, '');
+  return num + (num.length >= 14 ? '@lid' : '@s.whatsapp.net');
+}
+
 function authDir(storeId: string) {
   return path.join(DATA_DIR, 'wa', storeId);
 }
@@ -198,10 +206,11 @@ export async function sendViaQr(storeId: string, to: string, texto: string): Pro
   const s = sessions.get(storeId);
   if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
   try {
-    const jid = to.includes('@') ? to : to.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+    const jid = toJid(to);
     await s.sock.sendMessage(jid, { text: texto });
     return { ok: true };
-  } catch {
+  } catch (e) {
+    console.error('[wa-qr] fallo enviando texto a', to, e);
     return { ok: false, error: 'No pudimos enviar el mensaje por WhatsApp.' };
   }
 }
@@ -216,13 +225,14 @@ export async function sendMediaViaQr(
   const s = sessions.get(storeId);
   if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
   try {
-    const jid = to.includes('@') ? to : to.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+    const jid = toJid(to);
     if (media.tipo === 'image') await s.sock.sendMessage(jid, { image: media.buffer, caption: caption || undefined });
     else if (media.tipo === 'video') await s.sock.sendMessage(jid, { video: media.buffer, caption: caption || undefined });
     else if (media.tipo === 'audio') await s.sock.sendMessage(jid, { audio: media.buffer, mimetype: media.mime });
     else await s.sock.sendMessage(jid, { document: media.buffer, mimetype: media.mime, fileName: nombre || 'archivo' });
     return { ok: true };
-  } catch {
+  } catch (e) {
+    console.error('[wa-qr] fallo enviando adjunto a', to, e);
     return { ok: false, error: 'No pudimos enviar el adjunto por WhatsApp.' };
   }
 }

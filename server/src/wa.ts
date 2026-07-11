@@ -10,7 +10,9 @@ interface MediaInfo {
 }
 
 function ensureLead(storeId: string, waId: string, nombre: string): string {
-  let lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND wa_id = ?').get(storeId, waId) as { id: string } | undefined;
+  const numPart = waId.split('@')[0];
+  let lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND (wa_id = ? OR wa_id = ?)').get(storeId, waId, numPart) as { id: string } | undefined;
+  if (lead) db.prepare('UPDATE leads SET wa_id = ? WHERE id = ?').run(waId, lead.id); // actualiza chats viejos a la dirección completa
   if (!lead) {
     const id = uid();
     db.prepare('INSERT INTO leads (id, store_id, nombre, tel, etapa, asignado, wa_id) VALUES (?,?,?,?,?,?,?)').run(
