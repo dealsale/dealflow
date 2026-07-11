@@ -250,7 +250,7 @@ api.post('/leads/:id/messages', requireAuth, requireStore, async (req, res) => {
   if (!texto) return res.status(400).json({ error: 'Escribe el mensaje primero.' });
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), l.id, 'vendedor', texto);
   db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
-  const wa = await sendWhatsappText(req.user!.storeId!, l.wa_id || l.tel, texto);
+  const wa = await sendWhatsappText(req.user!.storeId!, l.wa_id || l.tel, texto, l.tel);
   res.json({ ok: true, enviadoPorWhatsapp: wa.ok, aviso: wa.ok ? undefined : wa.error });
 });
 
@@ -272,7 +272,7 @@ api.post('/leads/:id/media', requireAuth, requireStore, async (req, res) => {
   let aviso: string | undefined;
   if (cfg?.modo === 'qr') {
     const { sendMediaViaQr } = await import('./waqr.js');
-    const r = await sendMediaViaQr(req.user!.storeId!, l.wa_id || l.tel, { buffer: saved.buffer, mime: saved.mime, tipo: saved.tipo }, String(caption || ''), String(nombre || ''));
+    const r = await sendMediaViaQr(req.user!.storeId!, l.wa_id || l.tel, { buffer: saved.buffer, mime: saved.mime, tipo: saved.tipo }, String(caption || ''), String(nombre || ''), l.tel);
     enviado = r.ok;
     aviso = r.error;
   } else {

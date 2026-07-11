@@ -47,24 +47,29 @@ function toJid(to: string): string {
 }
 
 /**
- * Resuelve la dirección real de envío. Los chats con privacidad LID (@lid) se
- * responden tal cual: WhatsApp mapea internamente ese identificador. Para un
- * número normal le preguntamos a WhatsApp cuál es su JID canónico (así evitamos
- * enviar a un número mal formado que "se acepta" pero nunca llega).
+ * Resuelve la dirección real de envío. Prioriza el NÚMERO real del contacto
+ * (pn): en Baileys 7.x, onWhatsApp devuelve el JID que WhatsApp sabe entregar
+ * (resolviendo el LID internamente). Enviar al @lid crudo "se acepta" pero a
+ * veces no llega; resolver por el número es lo confiable. El @lid solo se usa
+ * como último recurso cuando no tenemos número.
  */
-async function resolveSendJid(sock: WASocket, to: string): Promise<{ jid: string } | { error: string }> {
-  if (to.endsWith('@lid') || to.endsWith('@g.us')) return { jid: to };
-  const num = to.replace(/[^0-9]/g, '');
-  if (!num) return { error: 'No hay un número al que enviar.' };
-  try {
-    const found = await sock.onWhatsApp(num);
-    const hit = found?.find((f) => f.exists);
-    if (hit?.jid) return { jid: hit.jid };
-    // WhatsApp respondió y el número no tiene cuenta: no insistimos en silencio.
-    if (found && found.length) return { error: 'Ese número no tiene WhatsApp o no está disponible para recibir mensajes.' };
-  } catch {
-    // Sin red para verificar: seguimos con la heurística de siempre.
+async function resolveSendJid(sock: WASocket, to: string, pn?: string): Promise<{ jid: string } | { error: string }> {
+  // Número a consultar: el pn real, o el del destino si no es un @lid.
+  const num = (pn || '').replace(/[^0-9]/g, '') || (to.endsWith('@lid') ? '' : to.replace(/[^0-9]/g, ''));
+  if (num) {
+    try {
+      const found = await sock.onWhatsApp(num);
+      const hit = found?.find((f) => f.exists);
+      if (hit?.jid) return { jid: hit.jid };
+      if (found && found.length && !to.endsWith('@lid')) {
+        return { error: 'Ese número no tiene WhatsApp o no está disponible para recibir mensajes.' };
+      }
+    } catch {
+      // Sin red para verificar: seguimos con la heurística de abajo.
+    }
   }
+  if (to.endsWith('@lid') || to.endsWith('@g.us')) return { jid: to };
+  if (!num) return { error: 'No hay un número al que enviar.' };
   return { jid: toJid(to) };
 }
 
@@ -238,17 +243,17 @@ export function getQrStatus(storeId: string): { estado: Estado; qr: string | nul
   return { estado: s.estado, qr: s.qrDataUrl, numero: s.numero, error: s.error };
 }
 
-export async function sendViaQr(storeId: string, to: string, texto: string): Promise<{ ok: boolean; error?: string }> {
+export async function sendViaQr(storeId: string, to: string, texto: string, pn?: string): Promise<{ ok: boolean; error?: string }> {
   const s = sessions.get(storeId);
   if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
-  const r = await resolveSendJid(s.sock, to);
+  const r = await resolveSendJid(s.sock, to, pn);
   if ('error' in r) {
     console.warn(`[wa-qr] no envío texto a ${to}: ${r.error}`);
     return { ok: false, error: r.error };
   }
   try {
     await s.sock.sendMessage(r.jid, { text: texto });
-    console.log(`[wa-qr] texto enviado a ${r.jid} (destino original ${to})`);
+    console.log(`[wa-qr] texto enviado a ${r.jid} (destino ${to}${pn ? ' · ' + pn : ''})`);
     return { ok: true };
   } catch (e) {
     console.error('[wa-qr] fallo enviando texto a', r.jid, e);
@@ -262,10 +267,11 @@ export async function sendMediaViaQr(
   media: { buffer: Buffer; mime: string; tipo: string },
   caption: string,
   nombre: string,
+  pn?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const s = sessions.get(storeId);
   if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
-  const r = await resolveSendJid(s.sock, to);
+  const r = await resolveSendJid(s.sock, to, pn);
   if ('error' in r) {
     console.warn(`[wa-qr] no envío adjunto a ${to}: ${r.error}`);
     return { ok: false, error: r.error };

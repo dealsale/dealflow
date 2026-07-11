@@ -95,6 +95,7 @@ FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto esp
     const bruto = body.choices?.[0]?.message?.content?.trim();
     if (!bruto) return;
     const destino = lead.wa_id || lead.tel;
+    const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
 
     // La IA marca con ##MEDIA:Nombre## cuando el cliente pide un producto: enviamos su presentación (bloques/fotos/videos).
     const marca = /##\s*MEDIA:\s*([^#]+?)\s*##/i;
@@ -104,12 +105,12 @@ FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto esp
       const pedido = m[1].trim().toLowerCase();
       const prod = productRows.find((p) => String(p.nombre).trim().toLowerCase() === pedido)
         || productRows.find((p) => String(p.nombre).toLowerCase().includes(pedido) || pedido.includes(String(p.nombre).toLowerCase()));
-      if (prod) await enviarPresentacion(storeId, leadId, destino, prod);
+      if (prod) await enviarPresentacion(storeId, leadId, destino, prod, pn);
     }
 
     if (texto) {
       db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', texto);
-      const send = await sendWhatsappText(storeId, destino, texto);
+      const send = await sendWhatsappText(storeId, destino, texto, pn);
       if (send.ok) console.log('[ia] respuesta enviada por WhatsApp');
       else console.error('[ia] respuesta generada pero NO enviada:', send.error, '| destino:', destino);
     }
@@ -119,7 +120,7 @@ FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto esp
 }
 
 /** Envía una vez por chat la presentación de un producto: bloques (texto/imagen/video) o, si no hay, sus fotos y videos. */
-async function enviarPresentacion(storeId: string, leadId: string, destino: string, p: Record<string, unknown>) {
+async function enviarPresentacion(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string) {
   const pid = String(p.id);
   const yaEnviada = db.prepare('SELECT 1 FROM sent_presentations WHERE lead_id = ? AND product_id = ?').get(leadId, pid);
   if (yaEnviada) return;
@@ -143,12 +144,12 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
     if (b.tipo === 'texto') {
       if (!b.valor.trim()) continue;
       db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', b.valor);
-      const r = await sendWhatsappText(storeId, destino, b.valor);
+      const r = await sendWhatsappText(storeId, destino, b.valor, pn);
       if (r.ok) enviadas++;
     } else {
       const media = saveOutgoingMedia(storeId, b.valor, '');
       if (!media) continue;
-      const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '');
+      const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
       db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
         .run(uid(), leadId, 'bot', '', media.tipo, media.url, media.mime, null);
       if (r.ok) enviadas++;

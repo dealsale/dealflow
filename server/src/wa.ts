@@ -64,14 +64,14 @@ export async function verifyWhatsappCredentials(phoneNumberId: string, accessTok
 }
 
 /** Envía un mensaje de texto por la vía activa de la tienda (Cloud API o QR). */
-export async function sendWhatsappText(storeId: string, to: string, texto: string): Promise<{ ok: boolean; error?: string }> {
+export async function sendWhatsappText(storeId: string, to: string, texto: string, pn?: string): Promise<{ ok: boolean; error?: string }> {
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
     | { phone_number_id: string; access_token: string; conectado: number; modo: string }
     | undefined;
   if (!cfg?.conectado) return { ok: false, error: 'WhatsApp no está conectado.' };
   if (cfg.modo === 'qr') {
     const { sendViaQr } = await import('./waqr.js');
-    return sendViaQr(storeId, to, texto);
+    return sendViaQr(storeId, to, texto, pn);
   }
   try {
     const res = await fetch(`${GRAPH}/${cfg.phone_number_id}/messages`, {
@@ -96,6 +96,7 @@ export async function sendWhatsappMedia(
   media: { buffer: Buffer; mime: string; tipo: string },
   caption: string,
   nombre: string,
+  pn?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const cfg = db.prepare('SELECT conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
     | { conectado: number; modo: string }
@@ -103,7 +104,7 @@ export async function sendWhatsappMedia(
   if (!cfg?.conectado) return { ok: false, error: 'WhatsApp no está conectado.' };
   if (cfg.modo === 'qr') {
     const { sendMediaViaQr } = await import('./waqr.js');
-    return sendMediaViaQr(storeId, to, media, caption, nombre);
+    return sendMediaViaQr(storeId, to, media, caption, nombre, pn);
   }
   // Cloud API: el envío de adjuntos está en camino; por ahora mandamos el texto.
   if (caption) return sendWhatsappText(storeId, to, caption);
