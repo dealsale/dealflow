@@ -222,6 +222,25 @@ api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {
   res.json({ ok: true });
 });
 
+// Elimina el chat/contacto por completo (borra en cascada sus mensajes).
+api.delete('/leads/:id', requireAuth, requireStore, (req, res) => {
+  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
+  db.prepare('DELETE FROM leads WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// Reinicia la conversación: borra el historial, la deja en manos del asistente
+// y olvida qué presentaciones ya se enviaron (para que el bot empiece de cero).
+api.post('/leads/:id/reset', requireAuth, requireStore, (req, res) => {
+  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
+  db.prepare('DELETE FROM messages WHERE lead_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM sent_presentations WHERE lead_id = ?').run(req.params.id);
+  db.prepare("UPDATE leads SET asignado = 'Asistente (bot)', etapa = 'Explorando' WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+
 api.post('/leads/:id/messages', requireAuth, requireStore, async (req, res) => {
   const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as
     | { id: string; tel: string; wa_id: string | null }

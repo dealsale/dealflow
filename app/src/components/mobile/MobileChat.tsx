@@ -35,7 +35,30 @@ export function MobileChat({ df }: { df: DealFlowState }) {
             {chat.liveLabel} · atiende {chat.asignado}
           </div>
         </div>
+        <div
+          onClick={df.resetChat}
+          title="Reiniciar la conversación"
+          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94A3B8' }}
+        >
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
+          </svg>
+        </div>
+        <div
+          onClick={df.requestDeleteChat}
+          title="Eliminar este chat"
+          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: df.crmDeleteArmed ? '#F87171' : '#94A3B8' }}
+        >
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+          </svg>
+        </div>
       </div>
+      {df.crmDeleteArmed && (
+        <div style={{ background: '#FEF2F2', color: '#DC2626', fontSize: 13, fontWeight: 600, textAlign: 'center', padding: '8px 14px' }} onClick={df.requestDeleteChat}>
+          Toca de nuevo la papelera para eliminar este chat
+        </div>
+      )}
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {chat.mensajesDecorated.map((m, i) => (

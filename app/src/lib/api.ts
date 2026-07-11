@@ -135,6 +135,8 @@ export const apiSendLeadMessage = (id: string, texto: string) =>
 export const apiSendLeadMedia = (id: string, dataUrl: string, nombre: string, caption: string) =>
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/media`, 'POST', { dataUrl, nombre, caption });
 export const apiAssignLead = (id: string, asignado: string) => req<{ ok: true }>(`/api/leads/${id}`, 'PATCH', { asignado });
+export const apiDeleteLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}`, 'DELETE');
+export const apiResetLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}/reset`, 'POST');
 
 export const apiWaLinkCloud = (b: { wabaId: string; phoneNumberId: string; accessToken: string }) =>
   req<{ conectado: boolean; numero: string }>('/api/whatsapp', 'PUT', b);

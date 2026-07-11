@@ -31,6 +31,8 @@ import {
   apiLogin,
   apiLogout,
   apiMe,
+  apiDeleteLead,
+  apiResetLead,
   apiSendLeadMedia,
   apiSendLeadMessage,
   apiState,
@@ -374,6 +376,8 @@ export function useDealFlowState() {
   const [loginError, setLoginError] = useState<string>('');
   const [apiMode, setApiMode] = useState<boolean>(false);
   const [storeNombre, setStoreNombre] = useState<string>('');
+  const [crmDeleteArmed, setCrmDeleteArmed] = useState<boolean>(false);
+  const crmDeleteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [newAccountOpen, setNewAccountOpen] = useState(false);
   const [accForm, setAccForm] = useState({ nombre: '', correo: '', password: '', plan: 'Inicio' });
   const [accError, setAccError] = useState('');
@@ -1539,6 +1543,36 @@ export function useDealFlowState() {
     backToBot: () => {
       setCrmIntervening(false);
       if (apiMode) void apiAssignLead(String(crmSelectedId), 'Asistente (bot)');
+    },
+    crmDeleteArmed,
+    requestDeleteChat: () => {
+      if (!crmDeleteArmed) {
+        setCrmDeleteArmed(true);
+        clearTimeout(crmDeleteTimer.current);
+        crmDeleteTimer.current = setTimeout(() => setCrmDeleteArmed(false), 3500);
+        return;
+      }
+      clearTimeout(crmDeleteTimer.current);
+      setCrmDeleteArmed(false);
+      const id = crmSelectedId;
+      if (apiMode) void apiDeleteLead(String(id));
+      const restantesApi = (apiLeadsState || []).filter((l) => l.id !== id);
+      setApiLeadsState(apiLeadsState ? restantesApi : null);
+      setLeads((st) => st.filter((l) => l.id !== id));
+      const siguiente = restantesApi[0]?.id ?? leads.filter((l) => l.id !== id)[0]?.id;
+      if (siguiente !== undefined) {
+        setCrmSelectedId(siguiente);
+        setSelectedLeadId(siguiente);
+      }
+      setCrmIntervening(false);
+      setMobileChatOpen(false);
+    },
+    resetChat: () => {
+      const id = crmSelectedId;
+      if (apiMode) void apiResetLead(String(id));
+      setApiLeadsState((st) => (st || []).map((l) => (l.id === id ? { ...l, asignado: 'Asistente (bot)', etapa: 'Explorando', mensajes: [], ultimo: '', hora: '' } : l)));
+      setLeads((st) => st.map((l) => (l.id === id ? { ...l, asignado: 'Asistente (bot)', mensajes: [], ultimo: '' } : l)));
+      setCrmIntervening(false);
     },
     crmDraft,
     setCrmDraft,

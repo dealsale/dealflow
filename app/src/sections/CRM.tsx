@@ -41,9 +41,24 @@ export function CRM({ df }: { df: DealFlowState }) {
                 <span>{chat.liveLabel}</span>
               </div>
               <div style={{ flex: 1 }} />
-              <a href="#" style={{ fontSize: 13, fontWeight: 600 }}>
-                Abrir en WhatsApp
-              </a>
+              <button
+                onClick={df.resetChat}
+                title="Borra el historial y devuelve el chat al asistente"
+                style={{ background: '#fff', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}
+              >
+                Reiniciar
+              </button>
+              <button
+                onClick={df.requestDeleteChat}
+                title="Elimina este chat por completo"
+                style={
+                  df.crmDeleteArmed
+                    ? { background: '#DC2626', color: '#fff', border: '1px solid #DC2626', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }
+                    : { background: '#fff', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }
+                }
+              >
+                {df.crmDeleteArmed ? '¿Seguro? Sí, eliminar' : 'Eliminar'}
+              </button>
             </div>
 
             <div style={{ flex: 1, background: '#F8FAFC', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
