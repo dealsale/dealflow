@@ -128,7 +128,25 @@ export const apiPatchVariant = (id: string, patch: Record<string, unknown>) => r
 export const apiDeleteVariant = (id: string) => req<{ ok: true }>(`/api/variants/${id}`, 'DELETE');
 export const apiPutAssistant = (b: { instrucciones: string; reglas: string[] }) => req<{ ok: true }>('/api/assistant', 'PUT', b);
 
-export const apiState = () => req<{ store: { id: string; nombre: string; plan: string }; assistant: { instrucciones: string; reglas: string[] }; products: ApiProduct[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string }; leads: ApiLead[] }>('/api/state', 'GET');
+export interface ApiOrder {
+  id: string;
+  rowId: string;
+  cliente: string;
+  ciudad: string;
+  tel: string;
+  direccion: string;
+  estado: string;
+  transportadora: string;
+  guia?: string;
+  envio: number;
+  nota: string;
+  createdAt: string;
+  items: { qty: number; nombre: string; precio: number }[];
+}
+export const apiState = () => req<{ store: { id: string; nombre: string; plan: string }; assistant: { instrucciones: string; reglas: string[] }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string }; leads: ApiLead[] }>('/api/state', 'GET');
+export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET');
+export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
+export const apiOrderDropi = (rowId: string) => req<{ guia: string }>(`/api/orders/${rowId}/dropi`, 'POST');
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
 export const apiSendLeadMessage = (id: string, texto: string) =>
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/messages`, 'POST', { texto });

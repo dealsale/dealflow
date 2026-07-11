@@ -8,6 +8,8 @@ export interface OrderItem {
 
 export interface Order {
   id: string;
+  /** id de la fila en el servidor (para avanzar estado / Dropi en modo API) */
+  rowId?: string;
   cliente: string;
   ciudad: string;
   tel: string;

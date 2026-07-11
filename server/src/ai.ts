@@ -61,7 +61,11 @@ ${promos || '(ninguna)'}
 
 Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "tú", sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
 
-FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), y todavía no le hayas enviado su material, incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). El sistema enviará automáticamente las fotos y videos de ese producto; no describas que "no puedes enviar fotos". Usa el marcador una sola vez por producto.`;
+FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), y todavía no le hayas enviado su material, incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). El sistema enviará automáticamente las fotos y videos de ese producto; no describas que "no puedes enviar fotos". Usa el marcador una sola vez por producto.
+
+CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, el marcador:
+##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto, 1x Otro producto"##
+Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.`;
 
   const nombreMedia = (tipo: string) =>
     tipo === 'audio' ? 'una nota de voz' : tipo === 'image' ? 'una imagen' : tipo === 'video' ? 'un video' : 'un archivo';
@@ -101,14 +105,19 @@ FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto esp
 
     // La IA marca con ##MEDIA:Nombre## cuando el cliente pide un producto: enviamos su presentación (bloques/fotos/videos).
     const marca = /##\s*MEDIA:\s*([^#]+?)\s*##/i;
+    // El pedido va en su propia línea; capturamos hasta el fin de línea porque
+    // la dirección puede tener '#'. No dependemos de un cierre '##'.
+    const marcaPed = /##\s*PEDIDO\b([^\n]*)/i;
     const m = bruto.match(marca);
-    const texto = bruto.replace(new RegExp(marca, 'gi'), '').trim();
+    const mp = bruto.match(marcaPed);
+    const texto = bruto.replace(new RegExp(marca, 'gi'), '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').trim();
     if (m) {
       const pedido = m[1].trim().toLowerCase();
       const prod = productRows.find((p) => String(p.nombre).trim().toLowerCase() === pedido)
         || productRows.find((p) => String(p.nombre).toLowerCase().includes(pedido) || pedido.includes(String(p.nombre).toLowerCase()));
       if (prod) await enviarPresentacion(storeId, leadId, destino, prod, pn);
     }
+    if (mp) crearPedido(storeId, lead, mp[1], productRows);
 
     if (texto) {
       db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', texto);
@@ -119,6 +128,46 @@ FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto esp
   } catch (e) {
     console.error('[ia] error llamando a DeepSeek', e);
   }
+}
+
+function campoPedido(s: string, k: string): string {
+  // Primero el valor entre comillas (tolera el # de las direcciones colombianas),
+  // y si no, hasta el siguiente ';'.
+  const q = s.match(new RegExp(k + '\\s*[:=]\\s*"([^"]+)"', 'i'));
+  if (q) return q[1].trim();
+  const u = s.match(new RegExp(k + '\\s*[:=]\\s*([^;]+)', 'i'));
+  return u ? u[1].replace(/#+\s*$/, '').trim() : '';
+}
+
+/** Registra automáticamente el pedido cuando la IA cierra la venta (marcador ##PEDIDO##). */
+function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[]) {
+  const cliente = campoPedido(inner, 'cliente') || lead.nombre || 'Cliente';
+  const ciudad = campoPedido(inner, 'ciudad');
+  const direccion = campoPedido(inner, 'direccion');
+  const itemsRaw = campoPedido(inner, 'items');
+  const items = itemsRaw.split(',').map((s) => s.trim()).filter(Boolean).map((it) => {
+    const mm = it.match(/(\d+)\s*[xX×]\s*(.+)/);
+    const qty = mm ? parseInt(mm[1], 10) || 1 : 1;
+    const nom = (mm ? mm[2] : it).trim().toLowerCase();
+    const prod = productRows.find((p) => String(p.nombre).toLowerCase() === nom)
+      || productRows.find((p) => String(p.nombre).toLowerCase().includes(nom) || nom.includes(String(p.nombre).toLowerCase()));
+    return { qty, nombre: prod ? String(prod.nombre) : (mm ? mm[2] : it).trim(), precio: prod ? Number(prod.precio) : 0 };
+  }).filter((i) => i.nombre);
+  if (!items.length || (!direccion && !ciudad)) return; // datos insuficientes, esperamos
+
+  // Evita duplicados si la IA repite el marcador: un pedido "Nuevo" por número en los últimos 10 min.
+  const dup = db.prepare("SELECT id FROM orders WHERE store_id = ? AND tel = ? AND estado = 'Nuevo' AND created_at > datetime('now','-10 minutes')").get(storeId, lead.tel || '');
+  if (dup) { console.log(`[ia] pedido no creado: ya hay uno reciente para ${lead.tel}`); return; }
+
+  const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 1048) + 1;
+  const oid = uid();
+  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado) VALUES (?,?,?,?,?,?,?,?)')
+    .run(oid, storeId, numero, cliente, ciudad, lead.tel || '', direccion, 'Nuevo');
+  for (const it of items) {
+    db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
+  }
+  db.prepare("UPDATE leads SET etapa = 'Listo para comprar' WHERE id = ?").run(lead.id);
+  console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
 }
 
 /** Envía una vez por chat la presentación de un producto: bloques (texto/imagen/video) o, si no hay, sus fotos y videos. */

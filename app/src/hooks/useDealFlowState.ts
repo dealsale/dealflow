@@ -36,6 +36,9 @@ import {
   apiSendLeadMedia,
   apiSendLeadMessage,
   apiState,
+  apiOrders,
+  apiOrderAdvance,
+  apiOrderDropi,
   apiTeamList,
   apiTeamCreate,
   apiTeamDelete,
@@ -45,7 +48,7 @@ import {
   apiWaQrStatus,
   apiWaUnlink,
 } from '../lib/api';
-import type { ApiLead, ApiProduct, TeamMember } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, TeamMember } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -267,6 +270,25 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
   }));
 }
 
+const ESTADOS_PEDIDO = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado'];
+function mapApiOrders(items: ApiOrder[]): Order[] {
+  return items.map((o) => ({
+    id: o.id,
+    rowId: o.rowId,
+    cliente: o.cliente,
+    ciudad: o.ciudad,
+    tel: o.tel,
+    direccion: o.direccion,
+    estado: (ESTADOS_PEDIDO.includes(o.estado) ? o.estado : 'Nuevo') as Order['estado'],
+    hora: o.createdAt ? String(o.createdAt).slice(11, 16) : 'ahora',
+    transportadora: o.transportadora || 'Dropi',
+    guia: o.guia,
+    envio: o.envio || 0,
+    nota: o.nota || '',
+    items: o.items || [],
+  }));
+}
+
 function mapApiProducts(items: ApiProduct[]): Product[] {
   return items.map((p) => ({
     id: p.id,
@@ -476,17 +498,27 @@ export function useDealFlowState() {
   }
 
   function advanceOrder(id: string) {
+    let rowId: string | undefined;
     setOrders((prev) =>
       prev.map((o) => {
         const next = ESTADOS[o.estado].nextEstado;
-        return o.id === id && next ? { ...o, estado: next } : o;
+        if (o.id === id && next) { rowId = o.rowId; return { ...o, estado: next }; }
+        return o;
       }),
     );
+    if (apiMode && rowId) void apiOrderAdvance(rowId);
   }
 
   function sendToDropi(id: string) {
+    let rowId: string | undefined;
     const guia = String(402000 + Math.floor(Math.random() * 900) + 100);
-    setOrders((prev) => prev.map((o) => (o.id === id && !o.guia ? { ...o, guia } : o)));
+    setOrders((prev) => prev.map((o) => {
+      if (o.id === id && !o.guia) { rowId = o.rowId; return { ...o, guia }; }
+      return o;
+    }));
+    if (apiMode && rowId) void apiOrderDropi(rowId).then((r) => {
+      if (r.data?.guia) setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, guia: r.data!.guia } : o)));
+    });
   }
 
   function decorateOrder(o: Order): DecoratedOrder {
@@ -939,6 +971,7 @@ export function useDealFlowState() {
         setAssistantText(data.assistant?.instrucciones || '');
         setRules(data.assistant?.reglas || []);
         setApiLeadsState(mapApiLeads(data.leads));
+        if (data.orders) setOrders(mapApiOrders(data.orders));
         if (data.products) setProducts(mapApiProducts(data.products));
       });
     };
@@ -947,6 +980,9 @@ export function useDealFlowState() {
     const t = setInterval(() => {
       void apiLeads().then(({ data }) => {
         if (data) setApiLeadsState(mapApiLeads(data.leads));
+      });
+      void apiOrders().then(({ data }) => {
+        if (data) setOrders(mapApiOrders(data.orders));
       });
     }, 5000);
     return () => clearInterval(t);
