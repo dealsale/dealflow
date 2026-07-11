@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
 import type { CSSProperties, DragEvent } from 'react';
 
-/** Lee imágenes como data URLs para guardarlas en el estado. */
-export function readImagesAsDataUrls(files: File[]): Promise<string[]> {
-  const images = files.filter((f) => f.type.startsWith('image/'));
+/** Lee archivos de un tipo dado (image/, video/…) como data URLs. */
+export function readFilesAsDataUrls(files: File[], mimePrefix: string): Promise<string[]> {
+  const list = files.filter((f) => f.type.startsWith(mimePrefix));
   return Promise.all(
-    images.map(
+    list.map(
       (f) =>
         new Promise<string>((resolve, reject) => {
           const r = new FileReader();
@@ -17,7 +17,12 @@ export function readImagesAsDataUrls(files: File[]): Promise<string[]> {
   );
 }
 
-function useFilePick(onFiles: (files: File[]) => void) {
+/** Lee imágenes como data URLs para guardarlas en el estado. */
+export function readImagesAsDataUrls(files: File[]): Promise<string[]> {
+  return readFilesAsDataUrls(files, 'image/');
+}
+
+function useFilePick(onFiles: (files: File[]) => void, accept = 'image/*') {
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
 
@@ -38,7 +43,7 @@ function useFilePick(onFiles: (files: File[]) => void) {
     <input
       ref={inputRef}
       type="file"
-      accept="image/*"
+      accept={accept}
       multiple
       style={{ display: 'none' }}
       onChange={(e) => {
@@ -52,8 +57,8 @@ function useFilePick(onFiles: (files: File[]) => void) {
 }
 
 /** Casilla punteada "Subir foto": clic para elegir o arrastra y suelta. */
-export function PhotoDropTile({ size = 64, label = 'Subir foto', onFiles }: { size?: number; label?: string; onFiles: (files: File[]) => void }) {
-  const { open, over, dragProps, input } = useFilePick(onFiles);
+export function PhotoDropTile({ size = 64, label = 'Subir foto', accept = 'image/*', onFiles }: { size?: number; label?: string; accept?: string; onFiles: (files: File[]) => void }) {
+  const { open, over, dragProps, input } = useFilePick(onFiles, accept);
   return (
     <div
       onClick={open}
@@ -85,8 +90,8 @@ export function PhotoDropTile({ size = 64, label = 'Subir foto', onFiles }: { si
 }
 
 /** Chip "+ Foto" para variantes: clic para elegir o arrastra y suelta. */
-export function PhotoAddChip({ onFiles }: { onFiles: (files: File[]) => void }) {
-  const { open, over, dragProps, input } = useFilePick(onFiles);
+export function PhotoAddChip({ onFiles, label = '+ Foto', accept = 'image/*' }: { onFiles: (files: File[]) => void; label?: string; accept?: string }) {
+  const { open, over, dragProps, input } = useFilePick(onFiles, accept);
   return (
     <span
       onClick={open}
@@ -104,7 +109,7 @@ export function PhotoAddChip({ onFiles }: { onFiles: (files: File[]) => void }) 
         whiteSpace: 'nowrap',
       }}
     >
-      + Foto
+      {label}
       {input}
     </span>
   );

@@ -47,7 +47,8 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
     id: p.id, nombre: p.nombre, precio: p.precio, color: p.color, txt: p.txt,
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
     descripcion: p.descripcion || '', caracteristicas: p.caracteristicas || '', mensajeInicial: p.mensaje_inicial || '',
-    faqs: pj(p.faqs as string, []),
+    faqs: pj(p.faqs as string, []), testimonios: pj(p.testimonios as string, []), modosUso: p.modos_uso || '',
+    videos: pj(p.videos as string, []), mensajeBloques: pj(p.mensaje_bloques as string, []),
     variantes: (db.prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY orden').all(p.id as string) as Record<string, unknown>[]).map((v) => ({
       id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: pj(v.fotos_subidas as string, []),
     })),
@@ -117,7 +118,11 @@ function ownProduct(req: { user?: AuthUser }, id: string) {
 
 api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
-  const { nombre, precio, reglas, fotosSubidas, descripcion, caracteristicas, mensajeInicial, faqs } = req.body || {};
+  const { nombre, precio, reglas, fotosSubidas, descripcion, caracteristicas, mensajeInicial, faqs, testimonios, modosUso, videos, mensajeBloques } = req.body || {};
+  if (modosUso !== undefined) db.prepare('UPDATE products SET modos_uso = ? WHERE id = ?').run(String(modosUso), req.params.id);
+  if (Array.isArray(testimonios)) db.prepare('UPDATE products SET testimonios = ? WHERE id = ?').run(j(testimonios), req.params.id);
+  if (Array.isArray(videos)) db.prepare('UPDATE products SET videos = ? WHERE id = ?').run(j(videos), req.params.id);
+  if (Array.isArray(mensajeBloques)) db.prepare('UPDATE products SET mensaje_bloques = ? WHERE id = ?').run(j(mensajeBloques), req.params.id);
   if (nombre !== undefined) db.prepare('UPDATE products SET nombre = ? WHERE id = ?').run(String(nombre), req.params.id);
   if (descripcion !== undefined) db.prepare('UPDATE products SET descripcion = ? WHERE id = ?').run(String(descripcion), req.params.id);
   if (caracteristicas !== undefined) db.prepare('UPDATE products SET caracteristicas = ? WHERE id = ?').run(String(caracteristicas), req.params.id);

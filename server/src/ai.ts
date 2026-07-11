@@ -29,7 +29,11 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
       .map((v) => `${v.label} (${v.stock} disp.)`).join(', ');
     const reglas = pj<string[]>(p.reglas as string, []).map((r) => `  · Regla: ${r}`).join('\n');
     const faqs = pj<{ pregunta: string; respuesta: string }[]>(p.faqs as string, []).map((f) => `  · P: ${f.pregunta} → R: ${f.respuesta}`).join('\n');
-    const extra = [p.descripcion && `  Descripción: ${p.descripcion}`, p.caracteristicas && `  Características: ${p.caracteristicas}`, p.mensaje_inicial && `  Si preguntan por este producto, preséntalo así: ${p.mensaje_inicial}`]
+    const bloques = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, [])
+      .filter((b) => b.tipo === 'texto').map((b) => b.valor).join(' ');
+    const guion = bloques || (p.mensaje_inicial as string);
+    const extra = [p.descripcion && `  Descripción: ${p.descripcion}`, p.caracteristicas && `  Características: ${p.caracteristicas}`,
+      p.modos_uso && `  Modo de uso: ${p.modos_uso}`, guion && `  Si preguntan por este producto, preséntalo así: ${guion}`]
       .filter(Boolean).join('\n');
     return `- ${p.nombre}: $${Number(p.precio).toLocaleString('es-CO')} COP. Variantes: ${vars || 'única'}.${extra ? '\n' + extra : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
   }).join('\n');

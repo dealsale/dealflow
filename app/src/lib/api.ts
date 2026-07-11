@@ -110,6 +110,10 @@ export interface ApiProduct {
   caracteristicas: string;
   mensajeInicial: string;
   faqs: { pregunta: string; respuesta: string }[];
+  testimonios: string[];
+  modosUso: string;
+  videos: string[];
+  mensajeBloques: { tipo: string; valor: string }[];
   fotos: string[];
   fotosSubidas: string[];
   variantes: { id: string; label: string; stock: number; fotos: number; fotosSubidas: string[] }[];

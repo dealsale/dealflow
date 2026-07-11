@@ -13,7 +13,7 @@ import {
   WA_CODE,
   WEBHOOK_URL,
 } from '../data';
-import { readImagesAsDataUrls } from '../components/PhotoUpload';
+import { readFilesAsDataUrls, readImagesAsDataUrls } from '../components/PhotoUpload';
 import {
   apiAddVariant,
   apiAdminOverview,
@@ -59,6 +59,7 @@ import type {
   Promo,
   VendedorSection,
 } from '../types';
+import type { MensajeBloque } from '../types';
 
 export interface DecoratedOrder extends Order {
   totalFmt: string;
@@ -144,8 +145,19 @@ export interface DecoratedProduct extends Product {
   setDescripcion: (v: string) => void;
   setCaracteristicas: (v: string) => void;
   setMensajeInicial: (v: string) => void;
+  setModosUso: (v: string) => void;
   faqsDecoradas: { pregunta: string; respuesta: string; remove: () => void }[];
   addFaq: () => void;
+  testimoniosList: string[];
+  addTestimonios: (files: File[]) => void;
+  removeTestimonio: (index: number) => void;
+  videosList: string[];
+  addVideos: (files: File[]) => void;
+  removeVideo: (index: number) => void;
+  bloquesDecorados: (MensajeBloque & { remove: () => void })[];
+  addBloqueTexto: () => void;
+  addBloqueImagen: (files: File[]) => void;
+  addBloqueVideo: (files: File[]) => void;
   variantesDecorated: DecoratedVariante[];
 }
 
@@ -261,6 +273,10 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     caracteristicas: p.caracteristicas || '',
     mensajeInicial: p.mensajeInicial || '',
     faqs: p.faqs || [],
+    testimonios: p.testimonios || [],
+    modosUso: p.modosUso || '',
+    videos: p.videos || [],
+    mensajeBloques: (p.mensajeBloques || []).filter((b): b is MensajeBloque => b.tipo === 'texto' || b.tipo === 'imagen' || b.tipo === 'video'),
     fotos: p.fotos?.length ? p.fotos : undefined,
     fotosSubidas: p.fotosSubidas || [],
     variantes: p.variantes.map((v) => ({ id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: v.fotosSubidas || [] })),
@@ -313,6 +329,8 @@ export function useDealFlowState() {
   const [productRuleDraft, setProductRuleDraft] = useState<string>('');
   const [faqP, setFaqP] = useState('');
   const [faqR, setFaqR] = useState('');
+  const [bloqueTexto, setBloqueTexto] = useState('');
+  const [videoWarn, setVideoWarn] = useState('');
   const [newProductOpen, setNewProductOpen] = useState<boolean>(false);
   const [newProdNombre, setNewProdNombre] = useState<string>('');
   const [newProdPrecio, setNewProdPrecio] = useState<string>('');
@@ -953,6 +971,43 @@ export function useDealFlowState() {
     queuePatch(productId, { fotosSubidas: nuevas });
   }
 
+  /** Actualiza una lista (testimonios, videos, bloques) de un producto y la sincroniza. */
+  function patchProductList<K extends 'testimonios' | 'videos' | 'mensajeBloques'>(
+    productId: number | string,
+    key: K,
+    mutate: (actual: NonNullable<Product[K]>) => Product[K],
+  ) {
+    let nueva: Product[K] | undefined;
+    setProducts((st) => st.map((p) => {
+      if (p.id !== productId) return p;
+      nueva = mutate((p[key] || []) as NonNullable<Product[K]>);
+      return { ...p, [key]: nueva };
+    }));
+    queuePatch(productId, { [key]: nueva });
+  }
+
+  async function addTestimonios(productId: number | string, files: File[]) {
+    const urls = await readImagesAsDataUrls(files);
+    if (urls.length) patchProductList(productId, 'testimonios', (t) => [...t, ...urls]);
+  }
+
+  /** Descarta videos de más de 10 MB (el servidor acepta hasta 15 MB por guardado). */
+  function filtrarVideos(files: File[]): File[] {
+    const ok = files.filter((f) => !f.type.startsWith('video/') || f.size <= 10 * 1024 * 1024);
+    setVideoWarn(ok.length < files.length ? 'Los videos deben pesar máximo 10 MB. Sube una versión más liviana.' : '');
+    return ok;
+  }
+
+  async function addProductVideos(productId: number | string, files: File[]) {
+    const urls = await readFilesAsDataUrls(filtrarVideos(files), 'video/');
+    if (urls.length) patchProductList(productId, 'videos', (v) => [...v, ...urls]);
+  }
+
+  async function addBloqueMedia(productId: number | string, files: File[], tipo: 'imagen' | 'video') {
+    const urls = await readFilesAsDataUrls(tipo === 'video' ? filtrarVideos(files) : files, tipo === 'imagen' ? 'image/' : 'video/');
+    if (urls.length) patchProductList(productId, 'mensajeBloques', (b) => [...b, ...urls.map((valor) => ({ tipo, valor }))]);
+  }
+
   async function addVariantPhotos(productId: number | string, variantIndex: number, files: File[]) {
     const urls = await readImagesAsDataUrls(files);
     if (!urls.length) return;
@@ -1035,6 +1090,25 @@ export function useDealFlowState() {
         setDescripcion: (v: string) => updateProduct(p.id, { descripcion: v }),
         setCaracteristicas: (v: string) => updateProduct(p.id, { caracteristicas: v }),
         setMensajeInicial: (v: string) => updateProduct(p.id, { mensajeInicial: v }),
+        setModosUso: (v: string) => updateProduct(p.id, { modosUso: v }),
+        testimoniosList: p.testimonios || [],
+        addTestimonios: (files: File[]) => void addTestimonios(p.id, files),
+        removeTestimonio: (index: number) => patchProductList(p.id, 'testimonios', (t) => t.filter((_, j) => j !== index)),
+        videosList: p.videos || [],
+        addVideos: (files: File[]) => void addProductVideos(p.id, files),
+        removeVideo: (index: number) => patchProductList(p.id, 'videos', (v) => v.filter((_, j) => j !== index)),
+        bloquesDecorados: (p.mensajeBloques || []).map((b, i) => ({
+          ...b,
+          remove: () => patchProductList(p.id, 'mensajeBloques', (bl) => bl.filter((_, j) => j !== i)),
+        })),
+        addBloqueTexto: () => {
+          const t = bloqueTexto.trim();
+          if (!t) return;
+          patchProductList(p.id, 'mensajeBloques', (bl) => [...bl, { tipo: 'texto' as const, valor: t }]);
+          setBloqueTexto('');
+        },
+        addBloqueImagen: (files: File[]) => void addBloqueMedia(p.id, files, 'imagen'),
+        addBloqueVideo: (files: File[]) => void addBloqueMedia(p.id, files, 'video'),
         faqsDecoradas: (p.faqs || []).map((f, i) => ({
           ...f,
           remove: () => {
@@ -1077,7 +1151,7 @@ export function useDealFlowState() {
           };
         }),
       })),
-    [products, expandedProductId, productRuleDraft, savedProductId, variantLabel, variantStock, armedDeleteProductId, armedDeleteVariant],
+    [products, expandedProductId, productRuleDraft, savedProductId, variantLabel, variantStock, armedDeleteProductId, armedDeleteVariant, faqP, faqR, bloqueTexto],
   );
 
   const promosDecorated: DecoratedPromo[] = useMemo(
@@ -1455,6 +1529,9 @@ export function useDealFlowState() {
     setFaqP,
     faqR,
     setFaqR,
+    bloqueTexto,
+    setBloqueTexto,
+    videoWarn,
 
     newProductOpen,
     toggleNewProduct: () => {

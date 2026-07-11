@@ -36,6 +36,14 @@ export interface FaqItem {
   respuesta: string;
 }
 
+export type BloqueTipo = 'texto' | 'imagen' | 'video';
+
+/** Un bloque del mensaje inicial: texto, o una imagen/video como data URL. */
+export interface MensajeBloque {
+  tipo: BloqueTipo;
+  valor: string;
+}
+
 export interface Product {
   id: number | string;
   nombre: string;
@@ -48,6 +56,13 @@ export interface Product {
   caracteristicas?: string;
   mensajeInicial?: string;
   faqs?: FaqItem[];
+  /** Capturas de testimonios de clientes, como data URLs */
+  testimonios?: string[];
+  modosUso?: string;
+  /** Videos del producto, como data URLs */
+  videos?: string[];
+  /** Mensaje inicial como construcción de bloques (texto/imagen/video) */
+  mensajeBloques?: MensajeBloque[];
   fotos?: string[];
   /** Fotos principales subidas por el vendedor, como data URLs */
   fotosSubidas?: string[];

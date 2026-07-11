@@ -160,15 +160,65 @@ export function Productos({ df }: { df: DealFlowState }) {
                   </div>
                 </div>
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Mensaje inicial · cómo debe presentarlo el asistente</div>
+                  <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Modo de uso · cómo se usa el producto</div>
                   <textarea
                     className="df-input"
-                    value={p.mensajeInicial || ''}
-                    onChange={(e) => p.setMensajeInicial(e.target.value)}
+                    value={p.modosUso || ''}
+                    onChange={(e) => p.setModosUso(e.target.value)}
                     rows={2}
-                    placeholder="Ej: ¡Claro! Te cuento: 3 joggers por $109.900, envío gratis…"
+                    placeholder="Ej: Aplicar sobre la piel limpia, 2 veces al día…"
                     style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, resize: 'vertical' }}
                   />
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Mensaje inicial · constrúyelo con bloques: textos, imágenes y videos en orden
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                  {p.bloquesDecorados.map((b, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '9px 12px' }}>
+                      <span style={{ background: '#F1F5F9', color: '#64748B', borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace" }}>{i + 1}</span>
+                      <span style={{ color: '#94A3B8', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', width: 52, flexShrink: 0 }}>
+                        {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : 'Video'}
+                      </span>
+                      {b.tipo === 'texto' && <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>{b.valor}</span>}
+                      {b.tipo === 'imagen' && (
+                        <img src={b.valor} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(15,23,42,.1)' }} />
+                      )}
+                      {b.tipo === 'video' && <video src={b.valor} controls style={{ width: 180, maxWidth: '100%', borderRadius: 8, background: '#0F172A' }} />}
+                      {b.tipo !== 'texto' && <div style={{ flex: 1 }} />}
+                      <span onClick={b.remove} className="df-danger-hover" title="Quitar bloque" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>
+                        ✕
+                      </span>
+                    </div>
+                  ))}
+                  {p.bloquesDecorados.length === 0 && !!(p.mensajeInicial || '').trim() && (
+                    <div style={{ color: '#94A3B8', fontSize: 12, background: '#fff', border: '1px dashed #E2E8F0', borderRadius: 8, padding: '9px 12px' }}>
+                      Hoy el asistente usa este texto: “{p.mensajeInicial}”. Agrega bloques y los usará en su lugar.
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input
+                    className="df-input"
+                    value={df.bloqueTexto}
+                    onChange={(e) => df.setBloqueTexto(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') p.addBloqueTexto(); }}
+                    placeholder="Escribe un bloque de texto · ej: ¡Claro! Te cuento: 3 joggers por $109.900…"
+                    style={{ flex: 1, minWidth: 220, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                  />
+                  <button
+                    onClick={p.addBloqueTexto}
+                    className="df-btn-outline-green"
+                    style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    + Texto
+                  </button>
+                  <PhotoAddChip label="+ Imagen" onFiles={p.addBloqueImagen} />
+                  <PhotoAddChip label="+ Video" accept="video/*" onFiles={p.addBloqueVideo} />
+                </div>
+                <div style={{ color: '#94A3B8', fontSize: 12, marginBottom: 16 }}>
+                  Cuando un cliente pregunte por este producto, el asistente enviará estos bloques en orden, como mensajes de WhatsApp.
                 </div>
 
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
@@ -185,6 +235,36 @@ export function Productos({ df }: { df: DealFlowState }) {
                   ))}
                   <PhotoDropTile size={64} onFiles={p.addMainFotos} />
                 </div>
+
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Testimonios · capturas de clientes felices que el asistente puede enviar
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                  {p.testimoniosList.map((src, i) => (
+                    <UploadedThumb key={i} src={src} size={64} onRemove={() => p.removeTestimonio(i)} />
+                  ))}
+                  <PhotoDropTile size={64} label="Subir captura" onFiles={p.addTestimonios} />
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Videos del producto
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16, alignItems: 'flex-start' }}>
+                  {p.videosList.map((src, i) => (
+                    <div key={i} style={{ position: 'relative' }}>
+                      <video src={src} controls style={{ width: 180, borderRadius: 10, background: '#0F172A', display: 'block' }} />
+                      <span
+                        onClick={() => p.removeVideo(i)}
+                        title="Quitar video"
+                        style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: '#0F172A', color: '#fff', fontSize: 10, lineHeight: '18px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 1px 2px rgba(15,23,42,.3)' }}
+                      >
+                        ✕
+                      </span>
+                    </div>
+                  ))}
+                  <PhotoDropTile size={64} label="Subir video" accept="video/*" onFiles={p.addVideos} />
+                </div>
+                {df.videoWarn && <div style={{ color: '#DC2626', fontSize: 12, marginTop: -10, marginBottom: 16 }}>{df.videoWarn}</div>}
 
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Variantes · cada una con sus propias fotos
