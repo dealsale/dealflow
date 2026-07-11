@@ -17,7 +17,10 @@ function ensureLead(storeId: string, waId: string, nombre: string, tel?: string)
   let lead = db.prepare("SELECT id FROM leads WHERE store_id = ? AND (wa_id = ? OR wa_id = ? OR (? != '' AND tel = ?))")
     .get(storeId, waId, numPart, tel || '', tel || '') as { id: string } | undefined;
   if (lead) {
-    db.prepare('UPDATE leads SET wa_id = ? WHERE id = ?').run(waId, lead.id); // actualiza chats viejos a la dirección completa
+    // Actualiza a la dirección con la que llegó el mensaje, PERO nunca degrada
+    // un @lid (la dirección real del chat con privacidad LID, a la que sí se
+    // entregan las respuestas) a un número normal @s.whatsapp.net.
+    db.prepare("UPDATE leads SET wa_id = ? WHERE id = ? AND NOT (wa_id LIKE '%@lid' AND ? NOT LIKE '%@lid')").run(waId, lead.id, waId);
     if (tel) db.prepare("UPDATE leads SET tel = ? WHERE id = ? AND (tel = '' OR tel LIKE '+%@%' OR tel = ?)").run(tel, lead.id, '+' + numPart);
   }
   if (!lead) {
