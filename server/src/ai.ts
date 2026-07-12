@@ -88,7 +88,7 @@ ${promos || '(ninguna)'}
 
 Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "tú", sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
 
-FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico que tiene 📷 (ej: "foto en negro"). El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
+FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
 
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
 ##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto, 1x Otro producto"; total="180000"##
@@ -354,22 +354,20 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
   console.log(`[ia] presentación de "${p.nombre}" enviada (${enviadas}/${piezas.length} piezas)`);
 }
 
-/** Envía TODAS las fotos y videos del producto (cuando el cliente los pide). Sin candado: se puede repetir. */
+/**
+ * Envía las fotos y videos SUELTOS del producto (cuando el cliente los pide).
+ * NO usa los bloques del mensaje inicial: esos están reservados para el
+ * disparador, así una petición de fotos nunca reenvía el saludo. Sin candado.
+ */
 async function enviarMediaProducto(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string) {
   const fotos = pj<string[]>(p.fotos_subidas as string, []);
   const videos = pj<string[]>(p.videos as string, []);
-  let piezas: { tipo: string; valor: string }[] = [
+  const piezas: { tipo: string; valor: string }[] = [
     ...fotos.slice(0, 8).map((v) => ({ tipo: 'imagen', valor: v })),
     ...videos.slice(0, 3).map((v) => ({ tipo: 'video', valor: v })),
   ];
-  // Respaldo: si no hay fotos/videos sueltos, usa la multimedia de los bloques.
   if (!piezas.length) {
-    piezas = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, [])
-      .filter((b) => b.tipo !== 'texto')
-      .map((b) => ({ tipo: b.tipo, valor: b.valor }));
-  }
-  if (!piezas.length) {
-    console.log(`[ia] "${p.nombre}": el cliente pidió fotos pero no hay multimedia cargada`);
+    console.log(`[ia] "${p.nombre}": el cliente pidió fotos pero no hay fotos/videos sueltos cargados (solo en el mensaje inicial)`);
     return;
   }
   let enviadas = 0;
