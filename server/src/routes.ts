@@ -299,14 +299,6 @@ api.post('/plantillas/:id/instalar', requireAuth, requireStore, requireOwner, as
   res.json({ ok: true });
 });
 
-// Guarda la tienda actual (asistente + productos con su multimedia) como la plantilla.
-api.post('/plantillas/:id/publicar', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { publicarPlantilla } = await import('./plantillas.js');
-  const r = publicarPlantilla(req.user!.storeId!, req.params.id);
-  if (r.error) return res.status(400).json({ error: r.error });
-  res.json({ ok: true, productos: r.productos });
-});
-
 // ── Marketing con IA (copys y generación de imágenes) ────────────────
 api.post('/marketing/copy', requireAuth, requireStore, async (req, res) => {
   const { idea, plataforma, tono, objetivo } = req.body || {};

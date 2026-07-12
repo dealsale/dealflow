@@ -47,7 +47,6 @@ import {
   apiMarketingImagen,
   apiPlantillas,
   apiInstalarPlantilla,
-  apiPublicarPlantilla,
   apiToggleStore,
   apiWaLinkCloud,
   apiWaQrStart,
@@ -1468,16 +1467,6 @@ export function useDealFlowState() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser, section]);
 
-  function publicarPlantilla(id: string) {
-    setInstalando('publicar:' + id);
-    setPlantillaMsg('');
-    void apiPublicarPlantilla(id).then((r) => {
-      setInstalando(null);
-      if (r.error) { setPlantillaMsg(r.error); return; }
-      setPlantillaMsg('Plantilla actualizada con tu tienda actual (' + (r.data?.productos ?? 0) + ' productos). Las tiendas nuevas la instalarán tal cual.');
-      reloadPlantillas();
-    });
-  }
 
   function instalarPlantilla(id: string, force = false) {
     setInstalando(force ? 'reinstalar:' + id : id);
@@ -1866,7 +1855,6 @@ export function useDealFlowState() {
     instalando,
     plantillaMsg,
     instalarPlantilla,
-    publicarPlantilla,
 
     products: productsDecorated,
     productRuleDraft,

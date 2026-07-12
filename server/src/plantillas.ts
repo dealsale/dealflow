@@ -36,12 +36,12 @@ export const PLANTILLAS: Plantilla[] = [
   {
     id: 'ecommerce-v10',
     nombre: 'Ecomerce v.10',
-    descripcion: 'Deja tu asistente listo para vender ropa por WhatsApp en minutos: instrucciones, reglas de venta y un producto de ejemplo (Jogger Dama) ya configurado con tallas, colores, combos y mensaje inicial.',
+    descripcion: 'Deja tu asistente listo para vender ropa por WhatsApp en minutos: instrucciones, reglas de venta y los productos ya configurados con tallas, colores, combos, multimedia y mensaje inicial.',
     precio: 0,
     features: [
       'Instrucciones del asistente listas para vender',
-      'Reglas de venta (envío contra entrega, ciudad, combos)',
-      'Producto de ejemplo: Jogger Dama Bota Recta',
+      'Todas las reglas de venta ya cargadas',
+      'Productos de ejemplo con fotos, videos y mensajes',
       'Tallas, colores, combos y mensaje inicial incluidos',
     ],
   },
@@ -56,32 +56,57 @@ const ECOMMERCE_REGLAS = [
   'No inventes productos, precios ni promociones que no estén en el catálogo.',
 ];
 
-/** Un snapshot sirve para instalar solo si tiene al menos un producto o instrucciones. */
-function snapshotUtil(snap: { instrucciones?: string; productos?: string } | undefined): boolean {
-  if (!snap) return false;
-  const prods = pj<unknown[]>(snap.productos || '[]', []);
-  return (Array.isArray(prods) && prods.length > 0) || (snap.instrucciones || '').trim().length > 0;
+/**
+ * Tienda maestra de la que la plantilla toma su contenido EN VIVO (asistente +
+ * productos + multimedia). Se resuelve por la variable de entorno
+ * TEMPLATE_MASTER_STORE (id, correo o nombre) y, por defecto, por la tienda
+ * llamada "Samy Store".
+ */
+function tiendaMaestraId(): string | undefined {
+  const cfg = (process.env.TEMPLATE_MASTER_STORE || '').trim();
+  if (cfg) {
+    const r = db.prepare('SELECT id FROM stores WHERE id = ? OR correo = ? OR nombre = ? COLLATE NOCASE').get(cfg, cfg, cfg) as { id: string } | undefined;
+    if (r) return r.id;
+  }
+  const r = db.prepare("SELECT id FROM stores WHERE nombre = 'Samy Store' COLLATE NOCASE ORDER BY created_at LIMIT 1").get() as { id: string } | undefined;
+  return r?.id;
 }
 
-/** Guarda la tienda actual (asistente + productos con su multimedia) como el contenido de la plantilla. */
-export function publicarPlantilla(storeId: string, plantillaId: string): { ok?: boolean; error?: string; productos?: number } {
-  if (!PLANTILLAS.find((x) => x.id === plantillaId)) return { error: 'Plantilla no encontrada.' };
-  const a = (db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(storeId) as { instrucciones: string; reglas: string } | undefined) || { instrucciones: '', reglas: '[]' };
-  const productos = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at').all(storeId) as Record<string, unknown>[]).map((row) => ({
-    row,
-    variants: db.prepare('SELECT label, stock, fotos, fotos_subidas, orden FROM variants WHERE product_id = ? ORDER BY orden').all(row.id as string),
-  }));
-  // No dejamos guardar una tienda vacía: borraría la plantilla y dañaría a las tiendas que la instalen.
-  if (productos.length === 0 && !(a.instrucciones || '').trim()) {
-    return { error: 'Tu tienda está vacía (sin asistente ni productos). Configura tu asistente y agrega al menos un producto antes de guardar la plantilla.' };
-  }
+/**
+ * Copia EN VIVO el asistente y los productos (con su multimedia) de la tienda
+ * maestra hacia la tienda destino. Devuelve false si la maestra no tiene nada.
+ */
+function copiarDesdeTienda(from: string, to: string): boolean {
+  const a = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(from) as { instrucciones: string; reglas: string } | undefined;
+  const productos = db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at').all(from) as Record<string, unknown>[];
+  const tieneContenido = productos.length > 0 || (a?.instrucciones || '').trim().length > 0;
+  if (!tieneContenido) return false;
+
   db.prepare(
-    `INSERT INTO templates_content (template_id, source_store_id, instrucciones, reglas, productos, updated_at)
-     VALUES (?,?,?,?,?,datetime('now'))
-     ON CONFLICT(template_id) DO UPDATE SET source_store_id = excluded.source_store_id, instrucciones = excluded.instrucciones,
-       reglas = excluded.reglas, productos = excluded.productos, updated_at = datetime('now')`,
-  ).run(plantillaId, storeId, a.instrucciones, a.reglas, j(productos));
-  return { ok: true, productos: productos.length };
+    `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
+     ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
+  ).run(to, a?.instrucciones || '', a?.reglas || '[]');
+
+  for (const row of productos) {
+    const variants = db.prepare('SELECT label, stock, fotos, fotos_subidas, orden FROM variants WHERE product_id = ? ORDER BY orden').all(row.id as string) as Record<string, unknown>[];
+    const pid = uid();
+    db.prepare(
+      `INSERT INTO products (id, store_id, nombre, precio, color, txt, reglas, fotos, fotos_subidas, descripcion, caracteristicas, mensaje_inicial, faqs, testimonios, modos_uso, videos, mensaje_bloques, bundles, opciones, contenido_paquete, disparador, mensaje_inicial_activo)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      pid, to, row.nombre, row.precio, row.color || '#E0E7FF', row.txt || '#4338CA',
+      (row.reglas as string) || '[]', (row.fotos as string) || '[]', remapUrls(from, to, row.fotos_subidas),
+      row.descripcion || '', row.caracteristicas || '', row.mensaje_inicial || '', (row.faqs as string) || '[]',
+      remapUrls(from, to, row.testimonios), row.modos_uso || '', remapUrls(from, to, row.videos),
+      remapBloques(from, to, row.mensaje_bloques), (row.bundles as string) || '[]', remapOpciones(from, to, row.opciones),
+      row.contenido_paquete || '', row.disparador || '', row.mensaje_inicial_activo == null ? 1 : row.mensaje_inicial_activo,
+    );
+    for (const v of variants) {
+      db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, fotos_subidas, orden) VALUES (?,?,?,?,?,?,?)')
+        .run(uid(), pid, v.label, v.stock || 0, v.fotos || 0, remapUrls(from, to, v.fotos_subidas), v.orden || 0);
+    }
+  }
+  return true;
 }
 
 /** Instala una plantilla en la tienda: deja el asistente y los productos listos. */
@@ -91,53 +116,17 @@ export function instalarPlantilla(storeId: string, plantillaId: string, force = 
   const ya = db.prepare('SELECT 1 FROM installed_templates WHERE store_id = ? AND template_id = ?').get(storeId, plantillaId);
   if (ya && !force) return { yaInstalada: true, error: 'Esta plantilla ya está instalada en tu tienda.' };
 
-  // Si la plantilla fue publicada desde una tienda real, instalamos ESE contenido
-  // (asistente + productos), copiando la multimedia a esta tienda.
-  const snap = db.prepare('SELECT source_store_id, instrucciones, reglas, productos FROM templates_content WHERE template_id = ?').get(plantillaId) as
-    | { source_store_id: string; instrucciones: string; reglas: string; productos: string }
-    | undefined;
-  // Un snapshot vacío (una publicación fallida) nunca debe borrar el asistente ni dejar la tienda en blanco.
-  // Lo eliminamos y caemos a la plantilla de fábrica.
-  if (snap && !snapshotUtil(snap)) {
-    db.prepare('DELETE FROM templates_content WHERE template_id = ?').run(plantillaId);
-  }
-  if (snap && snapshotUtil(snap)) {
-    db.prepare(
-      `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
-       ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
-    ).run(storeId, snap.instrucciones, snap.reglas);
-    const from = snap.source_store_id;
-    const prods = pj<{ row: Record<string, unknown>; variants: Record<string, unknown>[] }[]>(snap.productos, []);
-    for (const { row, variants } of prods) {
-      const pid = uid();
-      db.prepare(
-        `INSERT INTO products (id, store_id, nombre, precio, color, txt, reglas, fotos, fotos_subidas, descripcion, caracteristicas, mensaje_inicial, faqs, testimonios, modos_uso, videos, mensaje_bloques, bundles, opciones, contenido_paquete, disparador, mensaje_inicial_activo)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ).run(
-        pid, storeId, row.nombre, row.precio, row.color || '#E0E7FF', row.txt || '#4338CA',
-        (row.reglas as string) || '[]', (row.fotos as string) || '[]', remapUrls(from, storeId, row.fotos_subidas),
-        row.descripcion || '', row.caracteristicas || '', row.mensaje_inicial || '', (row.faqs as string) || '[]',
-        remapUrls(from, storeId, row.testimonios), row.modos_uso || '', remapUrls(from, storeId, row.videos),
-        remapBloques(from, storeId, row.mensaje_bloques), (row.bundles as string) || '[]', remapOpciones(from, storeId, row.opciones),
-        row.contenido_paquete || '', row.disparador || '', row.mensaje_inicial_activo == null ? 1 : row.mensaje_inicial_activo,
-      );
-      for (const v of variants || []) {
-        db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, fotos_subidas, orden) VALUES (?,?,?,?,?,?,?)')
-          .run(uid(), pid, v.label, v.stock || 0, v.fotos || 0, remapUrls(from, storeId, v.fotos_subidas), v.orden || 0);
-      }
-    }
-    db.prepare('INSERT OR IGNORE INTO installed_templates (store_id, template_id) VALUES (?,?)').run(storeId, plantillaId);
-    return { ok: true };
-  }
+  // 1) Contenido EN VIVO de la tienda maestra (Samy Store): asistente + productos + multimedia.
+  const master = tiendaMaestraId();
+  const copiada = master && master !== storeId ? copiarDesdeTienda(master, storeId) : false;
 
-  if (plantillaId === 'ecommerce-v10') {
-    // 1) Asistente: instrucciones + reglas.
+  // 2) Respaldo: si no hay tienda maestra con contenido, usamos la plantilla de fábrica.
+  if (!copiada && plantillaId === 'ecommerce-v10') {
     db.prepare(
       `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
        ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
     ).run(storeId, ECOMMERCE_INSTRUCCIONES, j(ECOMMERCE_REGLAS));
 
-    // 2) Producto de ejemplo: Jogger Dama Bota Recta.
     const pid = uid();
     db.prepare(
       `INSERT INTO products (id, store_id, nombre, precio, color, txt, descripcion, caracteristicas, reglas, opciones, bundles, mensaje_bloques, contenido_paquete, disparador, mensaje_inicial_activo)

@@ -87,14 +87,6 @@ export function DealShop({ df }: { df: DealFlowState }) {
                 {df.instalando === p.id ? 'Instalando…' : 'Instalar con un clic'}
               </button>
             )}
-            <button
-              onClick={() => df.instalando !== 'publicar:' + p.id && df.publicarPlantilla(p.id)}
-              disabled={df.instalando === 'publicar:' + p.id}
-              title="Guarda tu tienda actual (asistente + productos con su multimedia) como esta plantilla"
-              style={{ width: '100%', background: '#fff', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 10, padding: '9px 16px', marginTop: 8, fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: df.instalando === 'publicar:' + p.id ? 'default' : 'pointer' }}
-            >
-              {df.instalando === 'publicar:' + p.id ? 'Guardando…' : 'Actualizar con mi tienda actual'}
-            </button>
           </div>
         ))}
       </div>
