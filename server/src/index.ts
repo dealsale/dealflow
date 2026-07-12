@@ -36,7 +36,7 @@ app.get('/salud', (_req, res) =>
 // otro host, como la URL de Railway, para no romper nada).
 const APP_DIST = process.env.APP_DIST || path.resolve(import.meta.dirname, '../../app/dist');
 const LANDING = process.env.LANDING_PATH || path.resolve(APP_DIST, '..', 'landing.html');
-const LANDING_HOSTS = (process.env.LANDING_HOSTS || 'zennku.sbs,www.zennku.sbs')
+const LANDING_HOSTS = (process.env.LANDING_HOSTS || 'dealflow.sbs,www.dealflow.sbs,zennku.sbs,www.zennku.sbs')
   .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
 if (existsSync(APP_DIST)) {
   app.use(express.static(APP_DIST, { index: false })); // sirve /logo.png y /assets/* en cualquier host
