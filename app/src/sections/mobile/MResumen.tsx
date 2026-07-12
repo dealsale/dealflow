@@ -5,7 +5,7 @@ const card: React.CSSProperties = { background: '#fff', border: '1px solid #E2E8
 export function MResumen({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="Móvil Resumen">
-      <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 14px' }}>Hola, Karla 👋</h1>
+      <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 14px' }}>Hola, {df.saludoNombre} 👋</h1>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
         <div onClick={() => df.go('pedidos')} style={{ ...card, cursor: 'pointer' }}>
           <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600 }}>Pedidos nuevos</div>

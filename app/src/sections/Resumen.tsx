@@ -25,7 +25,7 @@ const stepCircle = (bg: string, color: string): React.CSSProperties => ({
 export function Resumen({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="Resumen">
-      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Hola, Karla 👋</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Hola, {df.saludoNombre} 👋</h1>
       <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 22px' }}>Así va tu tienda hoy, martes 8 de julio.</p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 22 }}>
