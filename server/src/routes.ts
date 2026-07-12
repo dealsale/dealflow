@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db, j, pj, uid } from './db.js';
-import { clearAuthCookie, hashPassword, requireAdmin, requireAuth, requireStore, setAuthCookie, verifyPassword } from './auth.js';
+import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
 import { handleIncomingWebhook, sendWhatsappMedia, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
 import { mediaPath, saveOutgoingMedia, saveOutgoingMessage } from './media.js';
@@ -27,7 +27,7 @@ api.post('/auth/login', (req, res) => {
   }
   const user: AuthUser = { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id };
   setAuthCookie(res, user);
-  res.json({ user });
+  res.json({ user: { ...user, esDueno: esDuenoDeTienda(user) } });
 });
 
 api.post('/auth/logout', (_req, res) => {
@@ -36,7 +36,7 @@ api.post('/auth/logout', (_req, res) => {
 });
 
 api.get('/auth/me', requireAuth, (req, res) => {
-  res.json({ user: req.user });
+  res.json({ user: { ...req.user, esDueno: esDuenoDeTienda(req.user) } });
 });
 
 // ── Estado completo de la tienda (una llamada para pintar el panel) ───
@@ -304,14 +304,14 @@ api.post('/marketing/imagen', requireAuth, requireStore, async (req, res) => {
 });
 
 // ── Equipo (usuarios de la tienda que pueden entrar y responder) ──────
-api.get('/team', requireAuth, requireStore, (req, res) => {
+api.get('/team', requireAuth, requireStore, requireOwner, (req, res) => {
   const sid = req.user!.storeId!;
   const store = db.prepare('SELECT correo FROM stores WHERE id = ?').get(sid) as { correo: string } | undefined;
   const users = db.prepare('SELECT id, nombre, email FROM users WHERE store_id = ? ORDER BY rowid').all(sid) as { id: string; nombre: string; email: string }[];
   res.json({ team: users.map((u) => ({ id: u.id, nombre: u.nombre, email: u.email, esDueno: u.email === store?.correo, esTu: u.id === req.user!.id })) });
 });
 
-api.post('/team', requireAuth, requireStore, (req, res) => {
+api.post('/team', requireAuth, requireStore, requireOwner, (req, res) => {
   const { nombre, email, password } = req.body || {};
   if (!nombre?.trim() || !email?.trim() || !password) return res.status(400).json({ error: 'Faltan el nombre, el correo o la contraseña.' });
   if (String(password).length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
@@ -322,7 +322,7 @@ api.post('/team', requireAuth, requireStore, (req, res) => {
   res.json({ id });
 });
 
-api.delete('/team/:id', requireAuth, requireStore, (req, res) => {
+api.delete('/team/:id', requireAuth, requireStore, requireOwner, (req, res) => {
   const sid = req.user!.storeId!;
   if (req.params.id === req.user!.id) return res.status(400).json({ error: 'No puedes eliminar tu propio usuario.' });
   const u = db.prepare('SELECT id, email FROM users WHERE id = ? AND store_id = ?').get(req.params.id, sid) as { id: string; email: string } | undefined;
@@ -364,7 +364,7 @@ api.post('/leads/:id/media', requireAuth, requireStore, async (req, res) => {
 });
 
 // ── Asistente ─────────────────────────────────────────────────────────
-api.put('/assistant', requireAuth, requireStore, (req, res) => {
+api.put('/assistant', requireAuth, requireStore, requireOwner, (req, res) => {
   const { instrucciones, reglas } = req.body || {};
   db.prepare(
     `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
@@ -374,7 +374,7 @@ api.put('/assistant', requireAuth, requireStore, (req, res) => {
 });
 
 // ── WhatsApp (vinculación por WABA ID + token) ───────────────────────
-api.put('/whatsapp', requireAuth, requireStore, async (req, res) => {
+api.put('/whatsapp', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { wabaId, phoneNumberId, accessToken } = req.body || {};
   if (!wabaId?.trim() || !phoneNumberId?.trim() || !accessToken?.trim()) {
     return res.status(400).json({ error: 'Faltan datos: WABA ID, Phone Number ID y Access Token.' });
@@ -389,7 +389,7 @@ api.put('/whatsapp', requireAuth, requireStore, async (req, res) => {
   res.json({ conectado: true, numero: check.numero });
 });
 
-api.delete('/whatsapp', requireAuth, requireStore, async (req, res) => {
+api.delete('/whatsapp', requireAuth, requireStore, requireOwner, async (req, res) => {
   const sid = req.user!.storeId!;
   const cur = db.prepare('SELECT modo FROM whatsapp WHERE store_id = ?').get(sid) as { modo: string } | undefined;
   if (cur?.modo === 'qr') {
@@ -402,13 +402,13 @@ api.delete('/whatsapp', requireAuth, requireStore, async (req, res) => {
 });
 
 // ── WhatsApp por QR (Baileys) ─────────────────────────────────────────
-api.post('/whatsapp/qr/start', requireAuth, requireStore, async (req, res) => {
+api.post('/whatsapp/qr/start', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { startQrSession } = await import('./waqr.js');
   await startQrSession(req.user!.storeId!);
   res.json({ ok: true });
 });
 
-api.get('/whatsapp/qr/status', requireAuth, requireStore, async (req, res) => {
+api.get('/whatsapp/qr/status', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { getQrStatus } = await import('./waqr.js');
   res.json(getQrStatus(req.user!.storeId!));
 });

@@ -65,3 +65,16 @@ export function requireStore(req: Request, res: Response, next: NextFunction) {
   if (!req.user?.storeId) return res.status(403).json({ error: 'Tu usuario no tiene tienda asignada.' });
   next();
 }
+
+/** El dueño de la tienda es el usuario cuyo correo coincide con el de la tienda. */
+export function esDuenoDeTienda(user?: AuthUser): boolean {
+  if (!user?.storeId || user.role !== 'VENDEDOR') return false;
+  const s = db.prepare('SELECT correo FROM stores WHERE id = ?').get(user.storeId) as { correo: string } | undefined;
+  return !!s && s.correo === user.email;
+}
+
+/** Solo el dueño de la tienda (no los agentes) puede pasar. */
+export function requireOwner(req: Request, res: Response, next: NextFunction) {
+  if (!esDuenoDeTienda(req.user)) return res.status(403).json({ error: 'Solo el dueño de la tienda puede hacer esto.' });
+  next();
+}

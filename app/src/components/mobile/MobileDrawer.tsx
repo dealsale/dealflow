@@ -64,7 +64,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         </div>
 
         {df.isVendedor &&
-          VENDOR_ITEMS.map((m) => (
+          VENDOR_ITEMS.filter((m) => df.puedeVerSeccion(m.id)).map((m) => (
             <div key={m.id} onClick={() => df.go(m.id)} style={itemStyle(df.section === m.id)}>
               <span>{m.label}</span>
               {m.id === 'pedidos' && df.hasNewOrders && (

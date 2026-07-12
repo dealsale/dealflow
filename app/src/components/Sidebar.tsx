@@ -27,13 +27,14 @@ export function Sidebar({ df }: { df: DealFlowState }) {
     icon: React.ReactNode,
     label: string,
     extra?: React.ReactNode,
-  ) => (
-    <div key={id} onClick={() => df.go(id)} style={df.navStyle(vSection === id)}>
-      {icon}
-      <span>{label}</span>
-      {extra}
-    </div>
-  );
+  ) =>
+    df.puedeVerSeccion(id) ? (
+      <div key={id} onClick={() => df.go(id)} style={df.navStyle(vSection === id)}>
+        {icon}
+        <span>{label}</span>
+        {extra}
+      </div>
+    ) : null;
 
   const adminItem = (id: AdminSection, icon: React.ReactNode, label: string) => (
     <div key={id} onClick={() => df.goAdmin(id)} style={df.navStyle(aSection === id)}>

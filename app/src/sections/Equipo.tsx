@@ -24,11 +24,14 @@ export function Equipo({ df }: { df: DealFlowState }) {
                 {m.nombre}
                 {m.esDueno && <span style={{ fontSize: 11, fontWeight: 700, color: '#B45309', background: '#FEF3C7', borderRadius: 6, padding: '2px 8px' }}>Dueño</span>}
                 {m.esTu && !m.esDueno && <span style={{ fontSize: 11, fontWeight: 700, color: '#047857', background: '#D1FAE5', borderRadius: 6, padding: '2px 8px' }}>Tú</span>}
+                {!m.esDueno && <span style={{ fontSize: 11, fontWeight: 700, color: '#4338CA', background: '#E0E7FF', borderRadius: 6, padding: '2px 8px' }}>Agente</span>}
               </div>
               <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 1 }}>{m.email}</div>
             </div>
-            {m.esDueno || m.esTu ? (
+            {m.esDueno ? (
               <span style={{ color: '#94A3B8', fontSize: 12.5 }}>Acceso total</span>
+            ) : m.esTu ? (
+              <span style={{ color: '#94A3B8', fontSize: 12.5 }}>Este eres tú</span>
             ) : (
               <button
                 onClick={m.remove}
@@ -49,8 +52,11 @@ export function Equipo({ df }: { df: DealFlowState }) {
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Agregar persona al equipo</div>
-        <div style={{ color: '#94A3B8', fontSize: 12.5, marginBottom: 16 }}>Podrá entrar al panel, ver los chats y responder. Cuando responda, el chat queda a su nombre.</div>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Agregar agente al equipo</div>
+        <div style={{ color: '#94A3B8', fontSize: 12.5, marginBottom: 16 }}>
+          Entra con su propio correo y contraseña. Un <b style={{ color: '#4338CA' }}>agente</b> ve solo Resumen, Productos, CRM, Leads, Pedidos y Marketing.
+          No accede a la conexión de WhatsApp, al Asistente ni al Equipo. Cuando responde un chat, queda a su nombre.
+        </div>
         <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
           <div>
             <div style={label}>Nombre</div>

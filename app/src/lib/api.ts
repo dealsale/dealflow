@@ -4,6 +4,8 @@ export interface ApiUser {
   nombre: string;
   role: 'VENDEDOR' | 'ADMIN';
   storeId: string | null;
+  /** true si es el dueño de la tienda; false si es un agente con permisos limitados */
+  esDueno?: boolean;
 }
 
 /**

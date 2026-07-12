@@ -415,7 +415,7 @@ export function useDealFlowState() {
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
   const [soundOn, setSoundOn] = useState<boolean>(snap?.soundOn ?? true);
   const [orderQuery, setOrderQuery] = useState<string>('');
-  const [sessionUser, setSessionUser] = useState<{ nombre: string; email: string; role: 'vendedor' | 'admin' } | null>(() => {
+  const [sessionUser, setSessionUser] = useState<{ nombre: string; email: string; role: 'vendedor' | 'admin'; esDueno?: boolean } | null>(() => {
     try {
       const raw = localStorage.getItem('dealflow:session');
       return raw ? JSON.parse(raw) : null;
@@ -509,7 +509,13 @@ export function useDealFlowState() {
 
   const isAdmin = mode === 'admin';
 
+  // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
+  const AGENTE_SECCIONES: VendedorSection[] = ['resumen', 'productos', 'crm', 'leads', 'pedidos', 'marketing'];
+  const esAgente = apiMode && sessionUser?.role === 'vendedor' && sessionUser?.esDueno === false;
+  const puedeVerSeccion = (sec: VendedorSection) => !esAgente || AGENTE_SECCIONES.includes(sec);
+
   function go(id: VendedorSection) {
+    if (!puedeVerSeccion(id)) return; // el agente no entra a secciones bloqueadas
     setMode('vendedor');
     setSection(id);
     setSelectedOrderId(null);
@@ -838,8 +844,9 @@ export function useDealFlowState() {
     void apiMe().then(({ available, user }) => {
       setApiMode(available);
       if (available) {
-        setSessionUser(user ? { nombre: user.nombre, email: user.email, role: user.role === 'ADMIN' ? 'admin' : 'vendedor' } : null);
+        setSessionUser(user ? { nombre: user.nombre, email: user.email, role: user.role === 'ADMIN' ? 'admin' : 'vendedor', esDueno: user.esDueno } : null);
         if (user) setMode(user.role === 'ADMIN' ? 'admin' : 'vendedor');
+        if (user && user.role === 'VENDEDOR' && user.esDueno === false) setSection('crm'); // el agente arranca en su CRM
       }
     });
   }, []);
@@ -850,10 +857,10 @@ export function useDealFlowState() {
     'admin@dealflow.co': { password: 'admin123', nombre: 'Equipo DealFlow', role: 'admin' },
   };
 
-  function completeLogin(user: { nombre: string; email: string; role: 'vendedor' | 'admin' }) {
+  function completeLogin(user: { nombre: string; email: string; role: 'vendedor' | 'admin'; esDueno?: boolean }) {
     setSessionUser(user);
     setMode(user.role === 'admin' ? 'admin' : 'vendedor');
-    setSection('resumen');
+    setSection(user.role === 'vendedor' && user.esDueno === false ? 'crm' : 'resumen');
     setAdminSection('ventas');
     setLoginError('');
   }
@@ -875,7 +882,7 @@ export function useDealFlowState() {
         setLoginError(r.error || 'No pudimos iniciar sesión.');
         return;
       }
-      completeLogin({ nombre: r.user.nombre, email: r.user.email, role: r.user.role === 'ADMIN' ? 'admin' : 'vendedor' });
+      completeLogin({ nombre: r.user.nombre, email: r.user.email, role: r.user.role === 'ADMIN' ? 'admin' : 'vendedor', esDueno: r.user.esDueno });
       return;
     }
     const e = email.trim().toLowerCase();
@@ -1868,6 +1875,9 @@ export function useDealFlowState() {
     isLoggedIn: !!sessionUser,
     sessionUser,
     canAdmin: sessionUser?.role === 'admin',
+    esAgente,
+    esDueno: !esAgente && sessionUser?.role === 'vendedor',
+    puedeVerSeccion,
     apiMode,
     login: (email: string, password: string) => void login(email, password),
     logout,
