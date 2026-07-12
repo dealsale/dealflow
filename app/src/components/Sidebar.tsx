@@ -6,6 +6,7 @@ import {
   IconCuentas,
   IconEquipo,
   IconMarketing,
+  IconDealShop,
   IconIntegraciones,
   IconLeads,
   IconPedidos,
@@ -79,6 +80,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', marginLeft: 'auto', animation: 'dfpulse 1.8s infinite' }} />,
           )}
           {item('marketing', <IconMarketing />, 'Marketing IA')}
+          {item('dealshop', <IconDealShop />, 'DealShop')}
           {item('equipo', <IconEquipo />, 'Equipo')}
           {item('integraciones', <IconIntegraciones />, 'Integraciones')}
         </nav>

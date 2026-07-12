@@ -177,6 +177,17 @@ export interface TeamMember {
   esDueno: boolean;
   esTu: boolean;
 }
+export interface Plantilla {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  precio: number;
+  features: string[];
+  instalada: boolean;
+}
+export const apiPlantillas = () => req<{ plantillas: Plantilla[] }>('/api/plantillas', 'GET');
+export const apiInstalarPlantilla = (id: string) => req<{ ok: true }>(`/api/plantillas/${id}/instalar`, 'POST');
+
 export const apiMarketingCopy = (b: { idea: string; plataforma: string; tono: string; objetivo: string }) => req<{ copys: string[] }>('/api/marketing/copy', 'POST', b);
 export const apiMarketingImagen = (prompt: string) => req<{ url?: string; error?: string; sinConfigurar?: boolean }>('/api/marketing/imagen', 'POST', { prompt });
 

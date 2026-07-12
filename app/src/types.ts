@@ -176,6 +176,7 @@ export type VendedorSection =
   | 'crm'
   | 'equipo'
   | 'marketing'
+  | 'dealshop'
   | 'integraciones';
 
 export type AdminSection = 'ventas' | 'planes' | 'cuentas';

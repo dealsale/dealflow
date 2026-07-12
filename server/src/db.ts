@@ -114,6 +114,12 @@ CREATE TABLE IF NOT EXISTS plans (
   precio INTEGER NOT NULL,
   features TEXT NOT NULL DEFAULT '[]'
 );
+CREATE TABLE IF NOT EXISTS installed_templates (
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  template_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (store_id, template_id)
+);
 CREATE TABLE IF NOT EXISTS sent_presentations (
   lead_id TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,

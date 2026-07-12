@@ -45,13 +45,15 @@ import {
   apiTeamDelete,
   apiMarketingCopy,
   apiMarketingImagen,
+  apiPlantillas,
+  apiInstalarPlantilla,
   apiToggleStore,
   apiWaLinkCloud,
   apiWaQrStart,
   apiWaQrStatus,
   apiWaUnlink,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, TeamMember } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -440,6 +442,9 @@ export function useDealFlowState() {
   const [mkImgLoading, setMkImgLoading] = useState(false);
   const [mkImgError, setMkImgError] = useState('');
   const [mkCopied, setMkCopied] = useState<number | null>(null);
+  const [plantillas, setPlantillas] = useState<Plantilla[]>([]);
+  const [instalando, setInstalando] = useState<string | null>(null);
+  const [plantillaMsg, setPlantillaMsg] = useState('');
   const [teamForm, setTeamFormState] = useState({ nombre: '', email: '', password: '' });
   const [teamError, setTeamError] = useState('');
   const [teamSaving, setTeamSaving] = useState(false);
@@ -1454,6 +1459,29 @@ export function useDealFlowState() {
     setTimeout(() => setMkCopied((c) => (c === i ? null : c)), 1600);
   }
 
+  function reloadPlantillas() {
+    void apiPlantillas().then(({ data }) => { if (data) setPlantillas(data.plantillas); });
+  }
+  useEffect(() => {
+    if (apiMode && sessionUser && section === 'dealshop') reloadPlantillas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, sessionUser, section]);
+
+  function instalarPlantilla(id: string) {
+    setInstalando(id);
+    setPlantillaMsg('');
+    void apiInstalarPlantilla(id).then((r) => {
+      setInstalando(null);
+      if (r.error) { setPlantillaMsg(r.error); return; }
+      setPlantillaMsg('¡Plantilla instalada! Tu asistente y el producto de ejemplo ya están listos.');
+      reloadPlantillas();
+      void reloadProducts();
+      void apiState().then(({ data }) => {
+        if (data) { setAssistantText(data.assistant?.instrucciones || ''); setRules(data.assistant?.reglas || []); }
+      });
+    });
+  }
+
   function toggleAccount(id: number | string, activa: boolean) {
     setAccounts((st) => st.map((x) => (x.id === id ? { ...x, activa: !x.activa } : x)));
     if (apiMode) void apiToggleStore(String(id), !activa).then((r) => { if (r.error) void reloadAdmin(); });
@@ -1819,6 +1847,12 @@ export function useDealFlowState() {
     mkCopied, copiarCopy,
     mkImgPrompt, setMkImgPrompt,
     mkImgUrl, mkImgLoading, mkImgError, generarImagen,
+
+    // ── DealShop (plantillas) ──
+    plantillas,
+    instalando,
+    plantillaMsg,
+    instalarPlantilla,
 
     products: productsDecorated,
     productRuleDraft,

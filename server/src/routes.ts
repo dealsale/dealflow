@@ -285,6 +285,19 @@ api.post('/leads/:id/reset', requireAuth, requireStore, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── DealShop · plantillas de tienda ──────────────────────────────────
+api.get('/plantillas', requireAuth, requireStore, async (req, res) => {
+  const { listarPlantillas } = await import('./plantillas.js');
+  res.json({ plantillas: listarPlantillas(req.user!.storeId!) });
+});
+
+api.post('/plantillas/:id/instalar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { instalarPlantilla } = await import('./plantillas.js');
+  const r = instalarPlantilla(req.user!.storeId!, req.params.id);
+  if (r.error) return res.status(r.yaInstalada ? 409 : 400).json({ error: r.error });
+  res.json({ ok: true });
+});
+
 // ── Marketing con IA (copys y generación de imágenes) ────────────────
 api.post('/marketing/copy', requireAuth, requireStore, async (req, res) => {
   const { idea, plataforma, tono, objetivo } = req.body || {};
