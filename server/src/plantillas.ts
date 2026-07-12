@@ -57,10 +57,9 @@ const ECOMMERCE_REGLAS = [
 ];
 
 /**
- * Tienda maestra de la que la plantilla toma su contenido EN VIVO (asistente +
- * productos + multimedia). Se resuelve por la variable de entorno
- * TEMPLATE_MASTER_STORE (id, correo o nombre) y, por defecto, por la tienda
- * llamada "Samy Store".
+ * Tienda maestra desde la que se CONGELA (una sola vez) el contenido de la
+ * plantilla. Se resuelve por la variable de entorno TEMPLATE_MASTER_STORE
+ * (id, correo o nombre) y, por defecto, por la tienda llamada "Samy Store".
  */
 function tiendaMaestraId(): string | undefined {
   const cfg = (process.env.TEMPLATE_MASTER_STORE || '').trim();
@@ -72,41 +71,77 @@ function tiendaMaestraId(): string | undefined {
   return r?.id;
 }
 
-/**
- * Copia EN VIVO el asistente y los productos (con su multimedia) de la tienda
- * maestra hacia la tienda destino. Devuelve false si la maestra no tiene nada.
- */
-function copiarDesdeTienda(from: string, to: string): boolean {
-  const a = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(from) as { instrucciones: string; reglas: string } | undefined;
-  const productos = db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at').all(from) as Record<string, unknown>[];
-  const tieneContenido = productos.length > 0 || (a?.instrucciones || '').trim().length > 0;
-  if (!tieneContenido) return false;
+interface Snapshot { source_store_id: string; instrucciones: string; reglas: string; productos: string }
 
+/** ¿El snapshot congelado tiene contenido usable (al menos un producto o instrucciones)? */
+function snapshotUtil(snap: Snapshot | undefined): snap is Snapshot {
+  if (!snap) return false;
+  const prods = pj<unknown[]>(snap.productos || '[]', []);
+  return (Array.isArray(prods) && prods.length > 0) || (snap.instrucciones || '').trim().length > 0;
+}
+
+/**
+ * CONGELA la versión actual de la tienda maestra dentro de la plantilla.
+ * Guarda una copia (asistente + productos + variantes) que NO cambia después,
+ * aunque la tienda maestra agregue productos o creativos nuevos.
+ * Devuelve false si la maestra no tiene contenido.
+ */
+export function congelarPlantilla(templateId: string, masterId: string): boolean {
+  const a = (db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(masterId) as { instrucciones: string; reglas: string } | undefined) || { instrucciones: '', reglas: '[]' };
+  const productos = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at').all(masterId) as Record<string, unknown>[]).map((row) => ({
+    row,
+    variants: db.prepare('SELECT label, stock, fotos, fotos_subidas, orden FROM variants WHERE product_id = ? ORDER BY orden').all(row.id as string),
+  }));
+  if (productos.length === 0 && !(a.instrucciones || '').trim()) return false;
+  db.prepare(
+    `INSERT INTO templates_content (template_id, source_store_id, instrucciones, reglas, productos, updated_at)
+     VALUES (?,?,?,?,?,datetime('now'))
+     ON CONFLICT(template_id) DO UPDATE SET source_store_id = excluded.source_store_id, instrucciones = excluded.instrucciones,
+       reglas = excluded.reglas, productos = excluded.productos, updated_at = datetime('now')`,
+  ).run(templateId, masterId, a.instrucciones, a.reglas, j(productos));
+  return true;
+}
+
+/**
+ * Al arrancar el servidor: si la plantilla aún no está congelada y existe la
+ * tienda maestra con contenido, congela AHORA la versión actual. A partir de
+ * ese momento queda fija; los productos nuevos de la maestra no la afectan.
+ */
+export function congelarSiFalta() {
+  for (const p of PLANTILLAS) {
+    const snap = db.prepare('SELECT source_store_id, instrucciones, reglas, productos FROM templates_content WHERE template_id = ?').get(p.id) as Snapshot | undefined;
+    if (snapshotUtil(snap)) continue; // ya congelada
+    const master = tiendaMaestraId();
+    if (master) congelarPlantilla(p.id, master);
+  }
+}
+
+/** Aplica el snapshot congelado a la tienda destino, copiando su multimedia. */
+function aplicarSnapshot(snap: Snapshot, storeId: string) {
   db.prepare(
     `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
      ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
-  ).run(to, a?.instrucciones || '', a?.reglas || '[]');
-
-  for (const row of productos) {
-    const variants = db.prepare('SELECT label, stock, fotos, fotos_subidas, orden FROM variants WHERE product_id = ? ORDER BY orden').all(row.id as string) as Record<string, unknown>[];
+  ).run(storeId, snap.instrucciones, snap.reglas);
+  const from = snap.source_store_id;
+  const prods = pj<{ row: Record<string, unknown>; variants: Record<string, unknown>[] }[]>(snap.productos, []);
+  for (const { row, variants } of prods) {
     const pid = uid();
     db.prepare(
       `INSERT INTO products (id, store_id, nombre, precio, color, txt, reglas, fotos, fotos_subidas, descripcion, caracteristicas, mensaje_inicial, faqs, testimonios, modos_uso, videos, mensaje_bloques, bundles, opciones, contenido_paquete, disparador, mensaje_inicial_activo)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(
-      pid, to, row.nombre, row.precio, row.color || '#E0E7FF', row.txt || '#4338CA',
-      (row.reglas as string) || '[]', (row.fotos as string) || '[]', remapUrls(from, to, row.fotos_subidas),
+      pid, storeId, row.nombre, row.precio, row.color || '#E0E7FF', row.txt || '#4338CA',
+      (row.reglas as string) || '[]', (row.fotos as string) || '[]', remapUrls(from, storeId, row.fotos_subidas),
       row.descripcion || '', row.caracteristicas || '', row.mensaje_inicial || '', (row.faqs as string) || '[]',
-      remapUrls(from, to, row.testimonios), row.modos_uso || '', remapUrls(from, to, row.videos),
-      remapBloques(from, to, row.mensaje_bloques), (row.bundles as string) || '[]', remapOpciones(from, to, row.opciones),
+      remapUrls(from, storeId, row.testimonios), row.modos_uso || '', remapUrls(from, storeId, row.videos),
+      remapBloques(from, storeId, row.mensaje_bloques), (row.bundles as string) || '[]', remapOpciones(from, storeId, row.opciones),
       row.contenido_paquete || '', row.disparador || '', row.mensaje_inicial_activo == null ? 1 : row.mensaje_inicial_activo,
     );
-    for (const v of variants) {
+    for (const v of variants || []) {
       db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, fotos_subidas, orden) VALUES (?,?,?,?,?,?,?)')
-        .run(uid(), pid, v.label, v.stock || 0, v.fotos || 0, remapUrls(from, to, v.fotos_subidas), v.orden || 0);
+        .run(uid(), pid, v.label, v.stock || 0, v.fotos || 0, remapUrls(from, storeId, v.fotos_subidas), v.orden || 0);
     }
   }
-  return true;
 }
 
 /** Instala una plantilla en la tienda: deja el asistente y los productos listos. */
@@ -116,12 +151,20 @@ export function instalarPlantilla(storeId: string, plantillaId: string, force = 
   const ya = db.prepare('SELECT 1 FROM installed_templates WHERE store_id = ? AND template_id = ?').get(storeId, plantillaId);
   if (ya && !force) return { yaInstalada: true, error: 'Esta plantilla ya está instalada en tu tienda.' };
 
-  // 1) Contenido EN VIVO de la tienda maestra (Samy Store): asistente + productos + multimedia.
-  const master = tiendaMaestraId();
-  const copiada = master && master !== storeId ? copiarDesdeTienda(master, storeId) : false;
+  // Contenido CONGELADO de la plantilla (no cambia aunque la tienda maestra agregue productos después).
+  let snap = db.prepare('SELECT source_store_id, instrucciones, reglas, productos FROM templates_content WHERE template_id = ?').get(plantillaId) as Snapshot | undefined;
+  // Si todavía no está congelada, congelamos la versión ACTUAL de la maestra una sola vez.
+  if (!snapshotUtil(snap)) {
+    const master = tiendaMaestraId();
+    if (master && master !== storeId && congelarPlantilla(plantillaId, master)) {
+      snap = db.prepare('SELECT source_store_id, instrucciones, reglas, productos FROM templates_content WHERE template_id = ?').get(plantillaId) as Snapshot | undefined;
+    }
+  }
 
-  // 2) Respaldo: si no hay tienda maestra con contenido, usamos la plantilla de fábrica.
-  if (!copiada && plantillaId === 'ecommerce-v10') {
+  if (snapshotUtil(snap)) {
+    aplicarSnapshot(snap, storeId);
+  } else if (plantillaId === 'ecommerce-v10') {
+    // Respaldo de fábrica si no hay tienda maestra con contenido.
     db.prepare(
       `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
        ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,

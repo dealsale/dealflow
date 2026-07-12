@@ -6,8 +6,10 @@ import path from 'node:path';
 import { api, webhooks } from './routes.js';
 import { seed } from './seed.js';
 import { restoreQrSessions } from './waqr.js';
+import { congelarSiFalta } from './plantillas.js';
 
 seed();
+congelarSiFalta();
 restoreQrSessions();
 
 const app = express();
