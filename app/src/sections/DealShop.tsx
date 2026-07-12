@@ -46,25 +46,47 @@ export function DealShop({ df }: { df: DealFlowState }) {
             </div>
 
             <div style={{ flex: 1 }} />
-            <button
-              onClick={() => !p.instalada && df.instalando !== p.id && df.instalarPlantilla(p.id)}
-              disabled={p.instalada || df.instalando === p.id}
-              className={p.instalada ? undefined : 'df-btn-primary'}
-              style={{
-                width: '100%',
-                background: p.instalada ? '#F1F5F9' : '#059669',
-                color: p.instalada ? '#94A3B8' : '#fff',
-                border: 'none',
-                borderRadius: 10,
-                padding: '12px 16px',
-                fontFamily: 'inherit',
-                fontWeight: 700,
-                fontSize: 14,
-                cursor: p.instalada || df.instalando === p.id ? 'default' : 'pointer',
-              }}
-            >
-              {p.instalada ? '✓ Instalada' : df.instalando === p.id ? 'Instalando…' : 'Instalar con un clic'}
-            </button>
+            {p.instalada ? (
+              <button
+                onClick={() => df.instalando !== 'reinstalar:' + p.id && df.instalarPlantilla(p.id, true)}
+                disabled={df.instalando === 'reinstalar:' + p.id}
+                title="Vuelve a dejar tu asistente y el producto de ejemplo tal cual la plantilla (úsalo si tu tienda quedó vacía)."
+                style={{
+                  width: '100%',
+                  background: '#F1F5F9',
+                  color: '#334155',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: 10,
+                  padding: '12px 16px',
+                  fontFamily: 'inherit',
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: df.instalando === 'reinstalar:' + p.id ? 'default' : 'pointer',
+                }}
+              >
+                {df.instalando === 'reinstalar:' + p.id ? 'Reinstalando…' : '↻ Reinstalar plantilla'}
+              </button>
+            ) : (
+              <button
+                onClick={() => df.instalando !== p.id && df.instalarPlantilla(p.id)}
+                disabled={df.instalando === p.id}
+                className="df-btn-primary"
+                style={{
+                  width: '100%',
+                  background: '#059669',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '12px 16px',
+                  fontFamily: 'inherit',
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: df.instalando === p.id ? 'default' : 'pointer',
+                }}
+              >
+                {df.instalando === p.id ? 'Instalando…' : 'Instalar con un clic'}
+              </button>
+            )}
             <button
               onClick={() => df.instalando !== 'publicar:' + p.id && df.publicarPlantilla(p.id)}
               disabled={df.instalando === 'publicar:' + p.id}

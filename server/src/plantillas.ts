@@ -56,6 +56,13 @@ const ECOMMERCE_REGLAS = [
   'No inventes productos, precios ni promociones que no estén en el catálogo.',
 ];
 
+/** Un snapshot sirve para instalar solo si tiene al menos un producto o instrucciones. */
+function snapshotUtil(snap: { instrucciones?: string; productos?: string } | undefined): boolean {
+  if (!snap) return false;
+  const prods = pj<unknown[]>(snap.productos || '[]', []);
+  return (Array.isArray(prods) && prods.length > 0) || (snap.instrucciones || '').trim().length > 0;
+}
+
 /** Guarda la tienda actual (asistente + productos con su multimedia) como el contenido de la plantilla. */
 export function publicarPlantilla(storeId: string, plantillaId: string): { ok?: boolean; error?: string; productos?: number } {
   if (!PLANTILLAS.find((x) => x.id === plantillaId)) return { error: 'Plantilla no encontrada.' };
@@ -64,6 +71,10 @@ export function publicarPlantilla(storeId: string, plantillaId: string): { ok?: 
     row,
     variants: db.prepare('SELECT label, stock, fotos, fotos_subidas, orden FROM variants WHERE product_id = ? ORDER BY orden').all(row.id as string),
   }));
+  // No dejamos guardar una tienda vacía: borraría la plantilla y dañaría a las tiendas que la instalen.
+  if (productos.length === 0 && !(a.instrucciones || '').trim()) {
+    return { error: 'Tu tienda está vacía (sin asistente ni productos). Configura tu asistente y agrega al menos un producto antes de guardar la plantilla.' };
+  }
   db.prepare(
     `INSERT INTO templates_content (template_id, source_store_id, instrucciones, reglas, productos, updated_at)
      VALUES (?,?,?,?,?,datetime('now'))
@@ -74,18 +85,23 @@ export function publicarPlantilla(storeId: string, plantillaId: string): { ok?: 
 }
 
 /** Instala una plantilla en la tienda: deja el asistente y los productos listos. */
-export function instalarPlantilla(storeId: string, plantillaId: string): { ok?: boolean; error?: string; yaInstalada?: boolean } {
+export function instalarPlantilla(storeId: string, plantillaId: string, force = false): { ok?: boolean; error?: string; yaInstalada?: boolean } {
   const p = PLANTILLAS.find((x) => x.id === plantillaId);
   if (!p) return { error: 'Plantilla no encontrada.' };
   const ya = db.prepare('SELECT 1 FROM installed_templates WHERE store_id = ? AND template_id = ?').get(storeId, plantillaId);
-  if (ya) return { yaInstalada: true, error: 'Esta plantilla ya está instalada en tu tienda.' };
+  if (ya && !force) return { yaInstalada: true, error: 'Esta plantilla ya está instalada en tu tienda.' };
 
   // Si la plantilla fue publicada desde una tienda real, instalamos ESE contenido
   // (asistente + productos), copiando la multimedia a esta tienda.
   const snap = db.prepare('SELECT source_store_id, instrucciones, reglas, productos FROM templates_content WHERE template_id = ?').get(plantillaId) as
     | { source_store_id: string; instrucciones: string; reglas: string; productos: string }
     | undefined;
-  if (snap) {
+  // Un snapshot vacío (una publicación fallida) nunca debe borrar el asistente ni dejar la tienda en blanco.
+  // Lo eliminamos y caemos a la plantilla de fábrica.
+  if (snap && !snapshotUtil(snap)) {
+    db.prepare('DELETE FROM templates_content WHERE template_id = ?').run(plantillaId);
+  }
+  if (snap && snapshotUtil(snap)) {
     db.prepare(
       `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
        ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
@@ -110,7 +126,7 @@ export function instalarPlantilla(storeId: string, plantillaId: string): { ok?: 
           .run(uid(), pid, v.label, v.stock || 0, v.fotos || 0, remapUrls(from, storeId, v.fotos_subidas), v.orden || 0);
       }
     }
-    db.prepare('INSERT INTO installed_templates (store_id, template_id) VALUES (?,?)').run(storeId, plantillaId);
+    db.prepare('INSERT OR IGNORE INTO installed_templates (store_id, template_id) VALUES (?,?)').run(storeId, plantillaId);
     return { ok: true };
   }
 
@@ -146,7 +162,7 @@ export function instalarPlantilla(storeId: string, plantillaId: string): { ok?: 
     db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos) VALUES (?,?,?,?,0)').run(uid(), pid, 'Única', 0);
   }
 
-  db.prepare('INSERT INTO installed_templates (store_id, template_id) VALUES (?,?)').run(storeId, plantillaId);
+  db.prepare('INSERT OR IGNORE INTO installed_templates (store_id, template_id) VALUES (?,?)').run(storeId, plantillaId);
   return { ok: true };
 }
 

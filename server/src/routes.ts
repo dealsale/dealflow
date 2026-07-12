@@ -293,7 +293,8 @@ api.get('/plantillas', requireAuth, requireStore, async (req, res) => {
 
 api.post('/plantillas/:id/instalar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { instalarPlantilla } = await import('./plantillas.js');
-  const r = instalarPlantilla(req.user!.storeId!, req.params.id);
+  const force = !!(req.body && (req.body as { force?: boolean }).force);
+  const r = instalarPlantilla(req.user!.storeId!, req.params.id, force);
   if (r.error) return res.status(r.yaInstalada ? 409 : 400).json({ error: r.error });
   res.json({ ok: true });
 });

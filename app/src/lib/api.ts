@@ -186,7 +186,7 @@ export interface Plantilla {
   instalada: boolean;
 }
 export const apiPlantillas = () => req<{ plantillas: Plantilla[] }>('/api/plantillas', 'GET');
-export const apiInstalarPlantilla = (id: string) => req<{ ok: true }>(`/api/plantillas/${id}/instalar`, 'POST');
+export const apiInstalarPlantilla = (id: string, force = false) => req<{ ok: true }>(`/api/plantillas/${id}/instalar`, 'POST', force ? { force: true } : undefined);
 export const apiPublicarPlantilla = (id: string) => req<{ ok: true; productos: number }>(`/api/plantillas/${id}/publicar`, 'POST');
 
 export const apiMarketingCopy = (b: { idea: string; plataforma: string; tono: string; objetivo: string }) => req<{ copys: string[] }>('/api/marketing/copy', 'POST', b);

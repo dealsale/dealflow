@@ -1479,10 +1479,10 @@ export function useDealFlowState() {
     });
   }
 
-  function instalarPlantilla(id: string) {
-    setInstalando(id);
+  function instalarPlantilla(id: string, force = false) {
+    setInstalando(force ? 'reinstalar:' + id : id);
     setPlantillaMsg('');
-    void apiInstalarPlantilla(id).then((r) => {
+    void apiInstalarPlantilla(id, force).then((r) => {
       setInstalando(null);
       if (r.error) { setPlantillaMsg(r.error); return; }
       setPlantillaMsg('¡Plantilla instalada! Tu asistente y el producto de ejemplo ya están listos.');
