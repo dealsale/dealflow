@@ -60,7 +60,7 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
   }));
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, envio: o.envio, nota: o.nota, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
@@ -110,7 +110,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, envio: o.envio, nota: o.nota, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string),
   }));
   res.json({ orders });

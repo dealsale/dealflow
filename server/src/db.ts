@@ -146,6 +146,7 @@ addColumn('products', "opciones TEXT NOT NULL DEFAULT '[]'"); // [{nombre:'Color
 addColumn('products', "contenido_paquete TEXT NOT NULL DEFAULT ''");
 addColumn('products', "disparador TEXT NOT NULL DEFAULT ''");
 addColumn('products', 'mensaje_inicial_activo INTEGER NOT NULL DEFAULT 1');
+addColumn('orders', 'total INTEGER NOT NULL DEFAULT 0');
 addColumn('messages', "tipo TEXT NOT NULL DEFAULT 'texto'");
 addColumn('messages', 'media_url TEXT');
 addColumn('messages', 'media_mime TEXT');

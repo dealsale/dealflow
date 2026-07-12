@@ -21,6 +21,8 @@ export interface Order {
   guia?: string;
   envio: number;
   nota: string;
+  /** Total del pedido acordado por el asistente (si no hay precios por ítem) */
+  total?: number;
   items: OrderItem[];
 }
 

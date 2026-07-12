@@ -299,6 +299,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     guia: o.guia,
     envio: o.envio || 0,
     nota: o.nota || '',
+    total: o.total || 0,
     items: o.items || [],
   }));
 }
@@ -520,38 +521,34 @@ export function useDealFlowState() {
   }
 
   function advanceOrder(id: string) {
-    let rowId: string | undefined;
-    setOrders((prev) =>
-      prev.map((o) => {
-        const next = ESTADOS[o.estado].nextEstado;
-        if (o.id === id && next) { rowId = o.rowId; return { ...o, estado: next }; }
-        return o;
-      }),
-    );
-    if (apiMode && rowId) void apiOrderAdvance(rowId);
+    const o = ordersRef.current.find((x) => x.id === id);
+    if (!o) return;
+    const next = ESTADOS[o.estado].nextEstado;
+    if (!next) return;
+    setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, estado: next } : x)));
+    if (apiMode && o.rowId) void apiOrderAdvance(o.rowId).then((r) => { if (r.error) void apiOrders().then(({ data }) => { if (data) setOrders(mapApiOrders(data.orders)); }); });
   }
 
   function sendToDropi(id: string) {
-    let rowId: string | undefined;
+    const o = ordersRef.current.find((x) => x.id === id);
+    if (!o || o.guia) return;
     const guia = String(402000 + Math.floor(Math.random() * 900) + 100);
-    setOrders((prev) => prev.map((o) => {
-      if (o.id === id && !o.guia) { rowId = o.rowId; return { ...o, guia }; }
-      return o;
-    }));
-    if (apiMode && rowId) void apiOrderDropi(rowId).then((r) => {
-      if (r.data?.guia) setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, guia: r.data!.guia } : o)));
+    setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, guia } : x)));
+    if (apiMode && o.rowId) void apiOrderDropi(o.rowId).then((r) => {
+      if (r.data?.guia) setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, guia: r.data!.guia } : x)));
     });
   }
 
   function decorateOrder(o: Order): DecoratedOrder {
     const cfg = ESTADOS[o.estado];
-    const total = o.items.reduce((a, it) => a + it.qty * it.precio, 0) + o.envio;
+    // Total del pedido: el que acordó el asistente, o la suma si hay precios.
+    const total = o.total && o.total > 0 ? o.total : o.items.reduce((a, it) => a + it.qty * it.precio, 0) + o.envio;
     return {
       ...o,
       totalFmt: fmt(total),
       envioFmt: fmt(o.envio),
       itemsResumen: o.items.map((it) => it.qty + '× ' + it.nombre).join(' · '),
-      itemsDecorated: o.items.map((it) => ({ ...it, precioFmt: fmt(it.qty * it.precio) })),
+      itemsDecorated: o.items.map((it) => ({ ...it, precioFmt: it.precio > 0 ? fmt(it.qty * it.precio) : '' })),
       pillStyle: pill(cfg),
       hasNext: !!cfg.next,
       isDone: !cfg.next,

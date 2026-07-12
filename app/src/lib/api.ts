@@ -145,6 +145,7 @@ export interface ApiOrder {
   guia?: string;
   envio: number;
   nota: string;
+  total: number;
   createdAt: string;
   items: { qty: number; nombre: string; precio: number }[];
 }

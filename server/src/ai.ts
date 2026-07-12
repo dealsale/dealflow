@@ -91,7 +91,8 @@ Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "
 FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), y todavía no le hayas enviado su material, incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si pide la foto de una OPCIÓN específica que tiene 📷 (ej: "foto del jogger blanco"), usa ##MEDIA:Nombre del producto|Blanco##. El sistema enviará automáticamente las fotos y videos; no digas que "no puedes enviar fotos". Usa el marcador una sola vez por producto.
 
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
-##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto, 1x Otro producto"##
+##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto, 1x Otro producto"; total="180000"##
+El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.`;
 
   const nombreMedia = (tipo: string) =>
@@ -212,10 +213,11 @@ function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: s
   const dup = db.prepare("SELECT id FROM orders WHERE store_id = ? AND tel = ? AND estado = 'Nuevo' AND created_at > datetime('now','-10 minutes')").get(storeId, lead.tel || '');
   if (dup) { console.log(`[ia] pedido no creado: ya hay uno reciente para ${lead.tel}`); return; }
 
+  const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
   const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 1048) + 1;
   const oid = uid();
-  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado) VALUES (?,?,?,?,?,?,?,?)')
-    .run(oid, storeId, numero, cliente, ciudad, lead.tel || '', direccion, 'Nuevo');
+  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(oid, storeId, numero, cliente, ciudad, lead.tel || '', direccion, 'Nuevo', total);
   for (const it of items) {
     db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   }
