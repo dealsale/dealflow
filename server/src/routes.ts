@@ -411,11 +411,15 @@ api.put('/whatsapp', requireAuth, requireStore, requireOwner, async (req, res) =
   }
   const check = await verifyWhatsappCredentials(phoneNumberId.trim(), accessToken.trim());
   if (!check.ok) return res.status(400).json({ error: check.error });
+  // Un número solo puede estar ACTIVO en una tienda: si estaba conectado en otra,
+  // lo desconectamos ahí para que el webhook enrute a esta (la última en conectarlo).
+  db.prepare("UPDATE whatsapp SET conectado = 0 WHERE phone_number_id = ? AND store_id != ?").run(phoneNumberId.trim(), req.user!.storeId);
   db.prepare(
     `INSERT INTO whatsapp (store_id, waba_id, phone_number_id, access_token, numero, conectado, modo) VALUES (?,?,?,?,?,1,'cloud')
      ON CONFLICT(store_id) DO UPDATE SET waba_id = excluded.waba_id, phone_number_id = excluded.phone_number_id,
        access_token = excluded.access_token, numero = excluded.numero, conectado = 1, modo = 'cloud'`,
   ).run(req.user!.storeId, wabaId.trim(), phoneNumberId.trim(), accessToken.trim(), check.numero);
+  console.log(`[whatsapp] tienda ${req.user!.storeId} conectó phone_number_id=${phoneNumberId.trim()} (${check.numero})`);
   res.json({ conectado: true, numero: check.numero });
 });
 
