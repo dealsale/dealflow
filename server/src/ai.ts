@@ -172,19 +172,17 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     const m = bruto.match(marca);
     const mp = bruto.match(marcaPed);
     const texto = bruto.replace(new RegExp(marca, 'gi'), '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').trim();
-    if (m) {
-      const [prodName, valName] = m[1].split('|').map((s) => s.trim());
-      const pedido = norm(prodName);
-      // Coincidencia exacta primero. Si no hay exacta y varios productos coinciden
-      // parcialmente (ej. "jogger" con 3 joggers), NO adivinamos: dejamos que la IA
-      // pregunte cuál. Solo enviamos si hay una única coincidencia clara.
-      const exactas = productRows.filter((p) => norm(String(p.nombre)) === pedido);
-      const parciales = productRows.filter((p) => norm(String(p.nombre)).includes(pedido) || pedido.includes(norm(String(p.nombre))));
-      const prod = exactas[0] || (parciales.length === 1 ? parciales[0] : null);
+    // Base para resolver qué foto enviar: el marcador de la IA si lo puso; si NO
+    // lo puso pero el cliente pidió fotos explícitamente, usamos su mensaje (red
+    // de seguridad para la multimedia, igual que la del pedido).
+    const pidioMedia = ultimo?.tipo === 'texto' && pidioFotos(ultimo?.texto || '');
+    const baseMedia = m ? m[1].replace('|', ' ') : pidioMedia ? ultimo?.texto || '' : '';
+    if (baseMedia.trim()) {
+      const { prod, valName } = resolverProductoYColor(baseMedia, productRows);
       if (prod) {
         const foto = valName ? fotoDeOpcion(prod, valName) : null;
         if (foto) {
-          // Color con foto propia → esa foto.
+          // Color con foto propia → esa foto exacta.
           await enviarUnaFoto(storeId, leadId, destino, foto, pn);
         } else if (valName) {
           // Color sin foto propia → una sola imagen de referencia (catálogo de colores), nunca el saludo.
@@ -368,6 +366,60 @@ function fotoReferencia(p: Record<string, unknown>): string | null {
   if (fotos.length) return fotos[0];
   const img = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, []).find((b) => b.tipo === 'imagen');
   return img?.valor || null;
+}
+
+/** ¿El cliente está pidiendo fotos/imágenes/catálogo de un producto? */
+function pidioFotos(t: string): boolean {
+  return /\b(foto|fotos|imagen|imagenes|muestrame|muestra|enviame|mandame|ensename|catalogo|fotico|fotos?porfa)\b/.test(norm(t));
+}
+
+const STOP = new Set(['los', 'las', 'del', 'con', 'por', 'para', 'que', 'una', 'uno', 'unos', 'unas', 'mis', 'tus', 'sus', 'este', 'esta', 'esos', 'esas', 'porfa', 'hola', 'tienes', 'tiene', 'quiero', 'dame', 'foto', 'fotos', 'imagen', 'imagenes', 'muestrame', 'muestra', 'enviame', 'mandame', 'ver', 'the', 'and']);
+
+/** Palabras distintivas (nombre + disparador) que identifican a un producto. */
+function tokensProducto(p: Record<string, unknown>): Set<string> {
+  const txt = norm(String(p.nombre) + ' ' + String(p.disparador || ''));
+  return new Set(txt.split(' ').filter((w) => w.length >= 3 && !STOP.has(w)));
+}
+/** Igualdad tolerante a plurales: jogger↔joggers, negro↔negros. */
+function coincide(a: string, b: string): boolean {
+  return a === b || a === b + 's' || b === a + 's' || a === b + 'es' || b === a + 'es';
+}
+const enQuery = (t: string, qw: Set<string>) => [...qw].some((w) => coincide(t, w));
+
+/**
+ * Resuelve a qué producto (y opción/color) se refiere un texto, por coincidencia
+ * de PALABRAS distintivas del nombre y el disparador (los clientes lo nombran
+ * informal, ej. "jogger negro" para "Bota Recta Ambar" cuyo disparador menciona
+ * "jogger"). Si dos productos empatan (ambiguo), devuelve null para que la IA
+ * pregunte cuál.
+ */
+function resolverProductoYColor(query: string, productRows: Record<string, unknown>[]): { prod: Record<string, unknown> | null; valName: string } {
+  const q = norm(query);
+  const qw = new Set(q.split(' ').filter(Boolean));
+  let best: Record<string, unknown> | null = null;
+  let bestScore = 0;
+  let empate = false;
+  for (const p of productRows) {
+    const pn = norm(String(p.nombre));
+    const toks = tokensProducto(p);
+    if (!toks.size) continue;
+    let score = [...toks].filter((t) => enQuery(t, qw)).length; // # de palabras distintivas del producto presentes
+    if (pn.length >= 4 && q.includes(pn)) score += 5; // nombre completo tal cual: gana claro
+    if (score > bestScore + 1e-9) { best = p; bestScore = score; empate = false; }
+    else if (Math.abs(score - bestScore) < 1e-9 && score > 0) empate = true;
+  }
+  if (!best || bestScore < 1 || empate) return { prod: null, valName: '' };
+  // Color/valor de opción: el que aparezca en el texto (soporta valores de 1 o 2 palabras).
+  let valName = '';
+  for (const o of pj<{ valores: (string | { valor: string })[] }[]>(best.opciones as string, [])) {
+    for (const v of o.valores || []) {
+      const val = typeof v === 'string' ? v : v?.valor;
+      if (!val) continue;
+      const nv = norm(val);
+      if (enQuery(nv, qw) || (nv.includes(' ') && q.includes(nv))) valName = val;
+    }
+  }
+  return { prod: best, valName };
 }
 
 /** Busca la foto de una opción por su valor (ej: "Blanco"). */
