@@ -510,7 +510,7 @@ export function useDealFlowState() {
   const isAdmin = mode === 'admin';
 
   // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
-  const AGENTE_SECCIONES: VendedorSection[] = ['resumen', 'productos', 'crm', 'leads', 'pedidos', 'marketing'];
+  const AGENTE_SECCIONES: VendedorSection[] = ['productos', 'crm', 'leads', 'pedidos', 'marketing'];
   const esAgente = apiMode && sessionUser?.role === 'vendedor' && sessionUser?.esDueno === false;
   const puedeVerSeccion = (sec: VendedorSection) => !esAgente || AGENTE_SECCIONES.includes(sec);
 
