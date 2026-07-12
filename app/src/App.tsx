@@ -30,6 +30,34 @@ import { MPedidos } from './sections/mobile/MPedidos';
 import { MProductos } from './sections/mobile/MProductos';
 import { MResumen } from './sections/mobile/MResumen';
 
+function ImpersonationBanner({ df }: { df: DealFlowState }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+        background: '#78350F',
+        color: '#FEF3C7',
+        padding: '9px 16px',
+        fontFamily: "'Inter',system-ui,sans-serif",
+        fontSize: 13.5,
+        fontWeight: 600,
+      }}
+    >
+      <span>👀 Estás dentro de <b style={{ color: '#fff' }}>{df.tiendaImpersonada || 'una tienda'}</b> en modo soporte. Los cambios que hagas afectan a esta tienda real.</span>
+      <div style={{ flex: 1 }} />
+      <button
+        onClick={df.volverAlAdmin}
+        style={{ background: '#FEF3C7', color: '#78350F', border: 'none', borderRadius: 7, padding: '6px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+      >
+        ← Volver al panel de admin
+      </button>
+    </div>
+  );
+}
+
 function AdminContent({ df }: { df: DealFlowState }) {
   return (
     <>
@@ -125,7 +153,12 @@ function App() {
   const df = useDealFlowState();
   const isMobile = useIsMobile();
   if (!df.isLoggedIn) return <Login df={df} />;
-  return isMobile ? <MobileApp df={df} /> : <DesktopApp df={df} />;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+      {df.impersonando && <ImpersonationBanner df={df} />}
+      <div style={{ flex: 1, minHeight: 0 }}>{isMobile ? <MobileApp df={df} /> : <DesktopApp df={df} />}</div>
+    </div>
+  );
 }
 
 export default App;

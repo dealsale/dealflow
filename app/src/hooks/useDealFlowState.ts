@@ -48,12 +48,19 @@ import {
   apiPlantillas,
   apiInstalarPlantilla,
   apiToggleStore,
+  apiUpdateStore,
+  apiDeleteStore,
+  apiStoreDetalle,
+  apiImpersonate,
+  apiStopImpersonate,
+  apiUpdatePlan,
+  apiDeletePlan,
   apiWaLinkCloud,
   apiWaQrStart,
   apiWaQrStatus,
   apiWaUnlink,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -417,7 +424,7 @@ export function useDealFlowState() {
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
   const [soundOn, setSoundOn] = useState<boolean>(snap?.soundOn ?? true);
   const [orderQuery, setOrderQuery] = useState<string>('');
-  const [sessionUser, setSessionUser] = useState<{ nombre: string; email: string; role: 'vendedor' | 'admin'; esDueno?: boolean } | null>(() => {
+  const [sessionUser, setSessionUser] = useState<{ nombre: string; email: string; role: 'vendedor' | 'admin'; esDueno?: boolean; impersonando?: boolean; tiendaNombre?: string } | null>(() => {
     try {
       const raw = localStorage.getItem('dealflow:session');
       return raw ? JSON.parse(raw) : null;
@@ -456,6 +463,17 @@ export function useDealFlowState() {
   const [accError, setAccError] = useState('');
   const [accSaving, setAccSaving] = useState(false);
   const [accCreated, setAccCreated] = useState('');
+  // Admin: edición/detalle de cuentas y planes.
+  const [editStoreId, setEditStoreId] = useState<string | null>(null);
+  const [editStoreForm, setEditStoreForm] = useState({ nombre: '', correo: '', plan: '', password: '' });
+  const [editStoreMsg, setEditStoreMsg] = useState('');
+  const [armedDeleteStoreId, setArmedDeleteStoreId] = useState<string | null>(null);
+  const [detalleStore, setDetalleStore] = useState<AdminStoreDetalle | null>(null);
+  const [detalleLoading, setDetalleLoading] = useState(false);
+  const [editPlanId, setEditPlanId] = useState<string | null>(null);
+  const [editPlanForm, setEditPlanForm] = useState({ nombre: '', precio: '', features: '' });
+  const [armedDeletePlanId, setArmedDeletePlanId] = useState<string | null>(null);
+  const [planMsg, setPlanMsg] = useState('');
   const [waCfg, setWaCfg] = useState<{ wabaId: string; phoneNumberId: string; numero: string } | null>(snap?.waCfg ?? null);
   const [waForm, setWaForm] = useState({ wabaId: '', phoneNumberId: '', accessToken: '' });
   const [waLinking, setWaLinking] = useState(false);
@@ -849,7 +867,7 @@ export function useDealFlowState() {
     void apiMe().then(({ available, user }) => {
       setApiMode(available);
       if (available) {
-        setSessionUser(user ? { nombre: user.nombre, email: user.email, role: user.role === 'ADMIN' ? 'admin' : 'vendedor', esDueno: user.esDueno } : null);
+        setSessionUser(user ? { nombre: user.nombre, email: user.email, role: user.role === 'ADMIN' ? 'admin' : 'vendedor', esDueno: user.esDueno, impersonando: user.impersonando, tiendaNombre: user.tiendaNombre } : null);
         if (user) setMode(user.role === 'ADMIN' ? 'admin' : 'vendedor');
         if (user && user.role === 'VENDEDOR' && user.esDueno === false) setSection('crm'); // el agente arranca en su CRM
       }
@@ -1677,6 +1695,100 @@ export function useDealFlowState() {
     setTimeout(() => setAccCreated(''), 5000);
   }
 
+  // ── Admin: editar / eliminar / detalle / impersonar ──
+  function abrirEditarStore(id: string) {
+    const a = accounts.find((x) => String(x.id) === id);
+    if (!a) return;
+    setEditStoreId(id);
+    setEditStoreForm({ nombre: a.tienda, correo: a.correo, plan: a.plan, password: '' });
+    setEditStoreMsg('');
+    setDetalleStore(null);
+  }
+  function guardarEditarStore() {
+    if (!editStoreId) return;
+    const patch = {
+      nombre: editStoreForm.nombre.trim(),
+      correo: editStoreForm.correo.trim().toLowerCase(),
+      plan: editStoreForm.plan,
+      ...(editStoreForm.password ? { password: editStoreForm.password } : {}),
+    };
+    setEditStoreMsg('Guardando…');
+    void apiUpdateStore(editStoreId, patch).then((r) => {
+      if (r.error) { setEditStoreMsg(r.error); return; }
+      setEditStoreId(null);
+      setEditStoreMsg('');
+      void reloadAdmin();
+    });
+  }
+  function eliminarStore(id: string) {
+    if (armedDeleteStoreId !== id) {
+      setArmedDeleteStoreId(id);
+      setTimeout(() => setArmedDeleteStoreId((cur) => (cur === id ? null : cur)), 3500);
+      return;
+    }
+    setArmedDeleteStoreId(null);
+    setAccounts((st) => st.filter((x) => String(x.id) !== id));
+    void apiDeleteStore(id).then((r) => { if (r.error) void reloadAdmin(); });
+  }
+  function abrirDetalleStore(id: string) {
+    setDetalleLoading(true);
+    setDetalleStore(null);
+    setEditStoreId(null);
+    void apiStoreDetalle(id).then((r) => {
+      setDetalleLoading(false);
+      if (r.data) setDetalleStore(r.data.detalle);
+    });
+  }
+  function cerrarPanelStore() {
+    setDetalleStore(null);
+    setEditStoreId(null);
+  }
+  function entrarATienda(id: string) {
+    void apiImpersonate(id).then((r) => {
+      if (r.error) { setEditStoreMsg(r.error); return; }
+      window.location.reload();
+    });
+  }
+  function volverAlAdmin() {
+    void apiStopImpersonate().then((r) => {
+      if (r.error) return;
+      window.location.reload();
+    });
+  }
+
+  // ── Admin: editar / eliminar planes ──
+  function abrirEditarPlan(id: string) {
+    const p = plans.find((x) => String(x.id) === id);
+    if (!p) return;
+    setEditPlanId(id);
+    setEditPlanForm({ nombre: p.nombre, precio: String(p.precio), features: (p.features || []).join(', ') });
+    setPlanMsg('');
+  }
+  function guardarEditarPlan() {
+    if (!editPlanId) return;
+    const features = editPlanForm.features.split(',').map((x) => x.trim()).filter(Boolean);
+    setPlanMsg('Guardando…');
+    void apiUpdatePlan(editPlanId, { nombre: editPlanForm.nombre.trim(), precio: parseInt(editPlanForm.precio, 10) || 0, features }).then((r) => {
+      if (r.error) { setPlanMsg(r.error); return; }
+      setEditPlanId(null);
+      setPlanMsg('');
+      void reloadAdmin();
+    });
+  }
+  function eliminarPlan(id: string) {
+    if (armedDeletePlanId !== id) {
+      setArmedDeletePlanId(id);
+      setPlanMsg('');
+      setTimeout(() => setArmedDeletePlanId((cur) => (cur === id ? null : cur)), 3500);
+      return;
+    }
+    setArmedDeletePlanId(null);
+    void apiDeletePlan(id).then((r) => {
+      if (r.error) { setPlanMsg(r.error); return; }
+      void reloadAdmin();
+    });
+  }
+
   const waPill: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '6px', background: waConnected ? '#ECFDF5' : '#FEF2F2', border: '1px solid ' + (waConnected ? '#A7F3D0' : '#FECACA'), color: waConnected ? '#047857' : '#B91C1C', borderRadius: '999px', padding: '4px 11px', fontSize: '12px', fontWeight: 700 };
   const waDot: CSSProperties = { width: '8px', height: '8px', borderRadius: '50%', background: waConnected ? '#10B981' : '#EF4444' };
 
@@ -2007,6 +2119,33 @@ export function useDealFlowState() {
     accSaving,
     accCreated,
     crearCuenta,
+
+    // Admin: gestión de cuentas
+    abrirEditarStore,
+    guardarEditarStore,
+    editStoreId,
+    editStoreForm,
+    setEditStoreForm: (patch: Partial<typeof editStoreForm>) => setEditStoreForm((f) => ({ ...f, ...patch })),
+    editStoreMsg,
+    eliminarStore,
+    armedDeleteStoreId,
+    abrirDetalleStore,
+    cerrarPanelStore,
+    detalleStore,
+    detalleLoading,
+    entrarATienda,
+    volverAlAdmin,
+    impersonando: !!sessionUser?.impersonando,
+    tiendaImpersonada: sessionUser?.tiendaNombre || storeNombre || '',
+    // Admin: gestión de planes
+    abrirEditarPlan,
+    guardarEditarPlan,
+    editPlanId,
+    editPlanForm,
+    setEditPlanForm: (patch: Partial<typeof editPlanForm>) => setEditPlanForm((f) => ({ ...f, ...patch })),
+    eliminarPlan,
+    armedDeletePlanId,
+    planMsg,
 
     planNombre,
     setPlanNombre: (v: string) => {

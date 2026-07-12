@@ -12,6 +12,8 @@ export interface AuthUser {
   nombre: string;
   role: 'VENDEDOR' | 'ADMIN';
   storeId: string | null;
+  /** Si el admin está "entrando" a una tienda (impersonando), aquí va su id para poder volver. */
+  imp?: string;
 }
 
 declare global {

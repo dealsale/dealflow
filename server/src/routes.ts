@@ -36,7 +36,23 @@ api.post('/auth/logout', (_req, res) => {
 });
 
 api.get('/auth/me', requireAuth, (req, res) => {
-  res.json({ user: { ...req.user, esDueno: esDuenoDeTienda(req.user) } });
+  const impersonando = !!req.user!.imp;
+  const tiendaNombre = impersonando && req.user!.storeId
+    ? (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(req.user!.storeId) as { nombre: string } | undefined)?.nombre || ''
+    : '';
+  res.json({ user: { ...req.user, esDueno: esDuenoDeTienda(req.user), impersonando, tiendaNombre } });
+});
+
+// El admin vuelve a su panel después de "entrar" a una tienda (impersonar).
+api.post('/auth/stop-impersonate', requireAuth, (req, res) => {
+  const adminId = req.user!.imp;
+  if (!adminId) return res.status(400).json({ error: 'No estás dentro de ninguna tienda.' });
+  const row = db.prepare("SELECT id, email, nombre, role, store_id FROM users WHERE id = ? AND role = 'ADMIN'").get(adminId) as
+    | { id: string; email: string; nombre: string; role: 'VENDEDOR' | 'ADMIN'; store_id: string | null }
+    | undefined;
+  if (!row) return res.status(403).json({ error: 'No pudimos volver a tu sesión de administrador.' });
+  setAuthCookie(res, { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id });
+  res.json({ ok: true });
 });
 
 // ── Estado completo de la tienda (una llamada para pintar el panel) ───
@@ -453,10 +469,103 @@ api.post('/admin/plans', requireAuth, requireAdmin, (req, res) => {
 });
 
 api.patch('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
-  const s = db.prepare('SELECT id, activa FROM stores WHERE id = ?').get(req.params.id) as { id: string; activa: number } | undefined;
+  const s = db.prepare('SELECT id, nombre, correo, activa FROM stores WHERE id = ?').get(req.params.id) as
+    | { id: string; nombre: string; correo: string; activa: number }
+    | undefined;
   if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
-  const activa = req.body?.activa;
-  db.prepare('UPDATE stores SET activa = ? WHERE id = ?').run(activa === undefined ? (s.activa ? 0 : 1) : activa ? 1 : 0, req.params.id);
+  const { nombre, correo, plan, password, activa } = req.body || {};
+  // El usuario dueño de la tienda (su correo coincide con el de la tienda).
+  const dueno = db.prepare("SELECT id FROM users WHERE store_id = ? AND email = ?").get(s.id, s.correo) as { id: string } | undefined;
+
+  if (activa !== undefined) db.prepare('UPDATE stores SET activa = ? WHERE id = ?').run(activa ? 1 : 0, s.id);
+  if (typeof nombre === 'string' && nombre.trim()) {
+    db.prepare('UPDATE stores SET nombre = ? WHERE id = ?').run(nombre.trim(), s.id);
+    if (dueno) db.prepare('UPDATE users SET nombre = ? WHERE id = ?').run(nombre.trim(), dueno.id);
+  }
+  if (typeof correo === 'string' && correo.trim()) {
+    const nuevo = correo.toLowerCase().trim();
+    if (nuevo !== s.correo) {
+      const existe = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(nuevo, dueno?.id || '') as { id: string } | undefined;
+      if (existe) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
+      db.prepare('UPDATE stores SET correo = ? WHERE id = ?').run(nuevo, s.id);
+      if (dueno) db.prepare('UPDATE users SET email = ? WHERE id = ?').run(nuevo, dueno.id);
+    }
+  }
+  if (typeof plan === 'string' && plan.trim()) db.prepare('UPDATE stores SET plan = ? WHERE id = ?').run(plan.trim(), s.id);
+  if (typeof password === 'string' && password) {
+    if (password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+    if (dueno) db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), dueno.id);
+  }
+  res.json({ ok: true });
+});
+
+api.delete('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
+  const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+  if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
+  // El borrado en cascada (FK ON DELETE CASCADE) limpia usuarios, productos, pedidos, leads, etc.
+  db.prepare('DELETE FROM stores WHERE id = ?').run(s.id);
+  res.json({ ok: true });
+});
+
+// Detalle de una tienda para el admin.
+api.get('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
+  const id = req.params.id;
+  const s = db.prepare('SELECT * FROM stores WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+  if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
+  const wa = db.prepare('SELECT conectado, numero, modo FROM whatsapp WHERE store_id = ?').get(id) as { conectado: number; numero: string; modo: string } | undefined;
+  const productos = (db.prepare('SELECT COUNT(*) n FROM products WHERE store_id = ?').get(id) as { n: number }).n;
+  const leads = (db.prepare('SELECT COUNT(*) n FROM leads WHERE store_id = ?').get(id) as { n: number }).n;
+  const agentes = (db.prepare("SELECT COUNT(*) n FROM users WHERE store_id = ? AND email != ?").get(id, s.correo) as { n: number }).n;
+  const porEstado = db.prepare('SELECT estado, COUNT(*) n FROM orders WHERE store_id = ? GROUP BY estado').all(id) as { estado: string; n: number }[];
+  const pedidos = (db.prepare('SELECT COUNT(*) n FROM orders WHERE store_id = ?').get(id) as { n: number }).n;
+  const ventasMes = (db.prepare(
+    `SELECT COALESCE(SUM(oi.qty * oi.precio),0) t FROM order_items oi JOIN orders o ON o.id = oi.order_id
+     WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
+  ).get(id) as { t: number }).t;
+  const recientes = (db.prepare('SELECT numero, cliente, estado, total, created_at FROM orders WHERE store_id = ? ORDER BY numero DESC LIMIT 5').all(id) as Record<string, unknown>[])
+    .map((o) => ({ id: 'DF-' + o.numero, cliente: o.cliente, estado: o.estado, total: o.total, fecha: String(o.created_at).slice(0, 10) }));
+  res.json({
+    detalle: {
+      id: s.id, nombre: s.nombre, correo: s.correo, plan: s.plan, activa: !!s.activa, creada: String(s.created_at).slice(0, 10),
+      whatsapp: { conectado: !!wa?.conectado, numero: wa?.numero || '', modo: wa?.modo || 'cloud' },
+      productos, pedidos, leads, agentes, ventasMes, porEstado, recientes,
+    },
+  });
+});
+
+// Entrar a una tienda (impersonar) para dar soporte.
+api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) => {
+  const s = db.prepare('SELECT id, correo FROM stores WHERE id = ?').get(req.params.id) as { id: string; correo: string } | undefined;
+  if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
+  const dueno = db.prepare("SELECT id, email, nombre, role, store_id FROM users WHERE store_id = ? AND email = ?").get(s.id, s.correo) as
+    | { id: string; email: string; nombre: string; role: 'VENDEDOR' | 'ADMIN'; store_id: string | null }
+    | undefined;
+  if (!dueno) return res.status(404).json({ error: 'Esta tienda no tiene un dueño para entrar.' });
+  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: dueno.role, storeId: dueno.store_id, imp: req.user!.id });
+  res.json({ ok: true });
+});
+
+api.patch('/admin/plans/:id', requireAuth, requireAdmin, (req, res) => {
+  const p = db.prepare('SELECT id, nombre FROM plans WHERE id = ?').get(req.params.id) as { id: string; nombre: string } | undefined;
+  if (!p) return res.status(404).json({ error: 'Plan no encontrado.' });
+  const { nombre, precio, features } = req.body || {};
+  if (typeof nombre === 'string' && nombre.trim() && nombre.trim() !== p.nombre) {
+    const dup = db.prepare('SELECT id FROM plans WHERE nombre = ? AND id != ?').get(nombre.trim(), p.id);
+    if (dup) return res.status(409).json({ error: 'Ya existe un plan con ese nombre.' });
+    db.prepare('UPDATE plans SET nombre = ? WHERE id = ?').run(nombre.trim(), p.id);
+    db.prepare('UPDATE stores SET plan = ? WHERE plan = ?').run(nombre.trim(), p.nombre); // reasigna las tiendas de ese plan
+  }
+  if (precio !== undefined && Number(precio) >= 0) db.prepare('UPDATE plans SET precio = ? WHERE id = ?').run(Number(precio), p.id);
+  if (Array.isArray(features)) db.prepare('UPDATE plans SET features = ? WHERE id = ?').run(j(features), p.id);
+  res.json({ ok: true });
+});
+
+api.delete('/admin/plans/:id', requireAuth, requireAdmin, (req, res) => {
+  const p = db.prepare('SELECT id, nombre FROM plans WHERE id = ?').get(req.params.id) as { id: string; nombre: string } | undefined;
+  if (!p) return res.status(404).json({ error: 'Plan no encontrado.' });
+  const enUso = (db.prepare('SELECT COUNT(*) n FROM stores WHERE plan = ?').get(p.nombre) as { n: number }).n;
+  if (enUso > 0) return res.status(409).json({ error: `No puedes borrar "${p.nombre}": ${enUso} tienda(s) lo usan. Cámbialas de plan primero.` });
+  db.prepare('DELETE FROM plans WHERE id = ?').run(p.id);
   res.json({ ok: true });
 });
 

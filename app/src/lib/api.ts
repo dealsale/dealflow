@@ -6,6 +6,10 @@ export interface ApiUser {
   storeId: string | null;
   /** true si es el dueño de la tienda; false si es un agente con permisos limitados */
   esDueno?: boolean;
+  /** true si un admin está "entrando" a esta tienda (modo soporte) */
+  impersonando?: boolean;
+  /** nombre de la tienda cuando se está impersonando */
+  tiendaNombre?: string;
 }
 
 /**
@@ -199,4 +203,22 @@ export const apiAdminOverview = () => req<{ stores: AdminStore[]; plans: AdminPl
 export const apiCreateStore = (b: { nombre: string; correo: string; password: string; plan: string }) =>
   req<{ storeId: string }>('/api/admin/stores', 'POST', b);
 export const apiToggleStore = (id: string, activa: boolean) => req<{ ok: true }>(`/api/admin/stores/${id}`, 'PATCH', { activa });
+export const apiUpdateStore = (id: string, b: { nombre?: string; correo?: string; plan?: string; password?: string; activa?: boolean }) =>
+  req<{ ok: true }>(`/api/admin/stores/${id}`, 'PATCH', b);
+export const apiDeleteStore = (id: string) => req<{ ok: true }>(`/api/admin/stores/${id}`, 'DELETE');
+export const apiImpersonate = (id: string) => req<{ ok: true }>(`/api/admin/stores/${id}/impersonate`, 'POST');
+export const apiStopImpersonate = () => req<{ ok: true }>('/api/auth/stop-impersonate', 'POST');
+
+export interface AdminStoreDetalle {
+  id: string; nombre: string; correo: string; plan: string; activa: boolean; creada: string;
+  whatsapp: { conectado: boolean; numero: string; modo: string };
+  productos: number; pedidos: number; leads: number; agentes: number; ventasMes: number;
+  porEstado: { estado: string; n: number }[];
+  recientes: { id: string; cliente: string; estado: string; total: number; fecha: string }[];
+}
+export const apiStoreDetalle = (id: string) => req<{ detalle: AdminStoreDetalle }>(`/api/admin/stores/${id}`, 'GET');
+
 export const apiCreatePlan = (b: { nombre: string; precio: number; features: string[] }) => req<{ id: string }>('/api/admin/plans', 'POST', b);
+export const apiUpdatePlan = (id: string, b: { nombre?: string; precio?: number; features?: string[] }) =>
+  req<{ ok: true }>(`/api/admin/plans/${id}`, 'PATCH', b);
+export const apiDeletePlan = (id: string) => req<{ ok: true }>(`/api/admin/plans/${id}`, 'DELETE');
