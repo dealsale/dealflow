@@ -285,6 +285,24 @@ api.post('/leads/:id/reset', requireAuth, requireStore, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Marketing con IA (copys y generación de imágenes) ────────────────
+api.post('/marketing/copy', requireAuth, requireStore, async (req, res) => {
+  const { idea, plataforma, tono, objetivo } = req.body || {};
+  if (!String(idea || '').trim()) return res.status(400).json({ error: 'Escribe de qué es el anuncio.' });
+  const { generarCopys } = await import('./marketing.js');
+  const r = await generarCopys({ idea: String(idea), plataforma: String(plataforma || ''), tono: String(tono || ''), objetivo: String(objetivo || '') });
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ copys: r.copys });
+});
+
+api.post('/marketing/imagen', requireAuth, requireStore, async (req, res) => {
+  const { prompt } = req.body || {};
+  const { generarImagen } = await import('./marketing.js');
+  const r = await generarImagen(req.user!.storeId!, String(prompt || ''));
+  if (r.error) return res.status(r.sinConfigurar ? 200 : 400).json({ error: r.error, sinConfigurar: r.sinConfigurar });
+  res.json({ url: r.url });
+});
+
 // ── Equipo (usuarios de la tienda que pueden entrar y responder) ──────
 api.get('/team', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;

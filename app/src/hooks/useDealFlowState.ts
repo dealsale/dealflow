@@ -43,6 +43,8 @@ import {
   apiTeamList,
   apiTeamCreate,
   apiTeamDelete,
+  apiMarketingCopy,
+  apiMarketingImagen,
   apiToggleStore,
   apiWaLinkCloud,
   apiWaQrStart,
@@ -426,6 +428,18 @@ export function useDealFlowState() {
   const [storeNombre, setStoreNombre] = useState<string>('');
   const [waVerifyToken, setWaVerifyToken] = useState<string>('');
   const [team, setTeam] = useState<TeamMember[]>([]);
+  const [mkIdea, setMkIdea] = useState('');
+  const [mkPlataforma, setMkPlataforma] = useState('Instagram/Facebook');
+  const [mkTono, setMkTono] = useState('Cercano y vendedor');
+  const [mkObjetivo, setMkObjetivo] = useState('Que escriban por WhatsApp para comprar');
+  const [mkCopys, setMkCopys] = useState<string[]>([]);
+  const [mkLoading, setMkLoading] = useState(false);
+  const [mkError, setMkError] = useState('');
+  const [mkImgPrompt, setMkImgPrompt] = useState('');
+  const [mkImgUrl, setMkImgUrl] = useState('');
+  const [mkImgLoading, setMkImgLoading] = useState(false);
+  const [mkImgError, setMkImgError] = useState('');
+  const [mkCopied, setMkCopied] = useState<number | null>(null);
   const [teamForm, setTeamFormState] = useState({ nombre: '', email: '', password: '' });
   const [teamError, setTeamError] = useState('');
   const [teamSaving, setTeamSaving] = useState(false);
@@ -1407,6 +1421,32 @@ export function useDealFlowState() {
     void apiTeamDelete(id).then((r) => { if (r.error) { setTeamError(r.error); void reloadTeam(); } });
   }
 
+  function generarCopys() {
+    if (!mkIdea.trim()) { setMkError('Escribe de qué es el anuncio.'); return; }
+    setMkLoading(true); setMkError(''); setMkCopys([]);
+    void apiMarketingCopy({ idea: mkIdea, plataforma: mkPlataforma, tono: mkTono, objetivo: mkObjetivo }).then((r) => {
+      setMkLoading(false);
+      if (r.error) { setMkError(r.error); return; }
+      setMkCopys(r.data?.copys || []);
+    });
+  }
+
+  function generarImagen() {
+    if (!mkImgPrompt.trim()) { setMkImgError('Describe la imagen que quieres.'); return; }
+    setMkImgLoading(true); setMkImgError(''); setMkImgUrl('');
+    void apiMarketingImagen(mkImgPrompt).then((r) => {
+      setMkImgLoading(false);
+      if (r.data?.url) { setMkImgUrl(r.data.url); return; }
+      setMkImgError(r.data?.error || r.error || 'No se pudo generar la imagen.');
+    });
+  }
+
+  function copiarCopy(i: number, texto: string) {
+    try { navigator.clipboard?.writeText(texto); } catch { /* nada */ }
+    setMkCopied(i);
+    setTimeout(() => setMkCopied((c) => (c === i ? null : c)), 1600);
+  }
+
   function toggleAccount(id: number | string, activa: boolean) {
     setAccounts((st) => st.map((x) => (x.id === id ? { ...x, activa: !x.activa } : x)));
     if (apiMode) void apiToggleStore(String(id), !activa).then((r) => { if (r.error) void reloadAdmin(); });
@@ -1762,6 +1802,16 @@ export function useDealFlowState() {
     teamError,
     teamSaving,
     addTeamMember,
+
+    // ── Marketing IA ──
+    mkIdea, setMkIdea,
+    mkPlataforma, setMkPlataforma,
+    mkTono, setMkTono,
+    mkObjetivo, setMkObjetivo,
+    mkCopys, mkLoading, mkError, generarCopys,
+    mkCopied, copiarCopy,
+    mkImgPrompt, setMkImgPrompt,
+    mkImgUrl, mkImgLoading, mkImgError, generarImagen,
 
     products: productsDecorated,
     productRuleDraft,

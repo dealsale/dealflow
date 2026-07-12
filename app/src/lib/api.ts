@@ -175,6 +175,9 @@ export interface TeamMember {
   esDueno: boolean;
   esTu: boolean;
 }
+export const apiMarketingCopy = (b: { idea: string; plataforma: string; tono: string; objetivo: string }) => req<{ copys: string[] }>('/api/marketing/copy', 'POST', b);
+export const apiMarketingImagen = (prompt: string) => req<{ url?: string; error?: string; sinConfigurar?: boolean }>('/api/marketing/imagen', 'POST', { prompt });
+
 export const apiTeamList = () => req<{ team: TeamMember[] }>('/api/team', 'GET');
 export const apiTeamCreate = (b: { nombre: string; email: string; password: string }) => req<{ id: string }>('/api/team', 'POST', b);
 export const apiTeamDelete = (id: string) => req<{ ok: true }>(`/api/team/${id}`, 'DELETE');

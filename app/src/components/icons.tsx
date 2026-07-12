@@ -124,6 +124,15 @@ export function IconCuentas() {
   );
 }
 
+export function IconMarketing() {
+  return (
+    <svg {...common}>
+      <path d="M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1Z" />
+      <path d="M14 8a4 4 0 0 1 0 8M17 5a7 7 0 0 1 0 14" />
+    </svg>
+  );
+}
+
 export function IconEquipo() {
   return (
     <svg {...common}>
