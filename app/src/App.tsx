@@ -27,7 +27,6 @@ import { Ventas } from './sections/admin/Ventas';
 import { MCRM } from './sections/mobile/MCRM';
 import { MLeads } from './sections/mobile/MLeads';
 import { MPedidos } from './sections/mobile/MPedidos';
-import { MProductos } from './sections/mobile/MProductos';
 import { MResumen } from './sections/mobile/MResumen';
 
 function ImpersonationBanner({ df }: { df: DealFlowState }) {
@@ -129,7 +128,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
       <main style={{ flex: 1, overflowY: 'auto', padding: '18px 16px 90px' }}>
         {df.isVendedor && df.section === 'resumen' && <MResumen df={df} />}
         {df.isVendedor && df.section === 'pedidos' && <MPedidos df={df} />}
-        {df.isVendedor && df.section === 'productos' && <MProductos df={df} />}
+        {df.isVendedor && df.section === 'productos' && <Productos df={df} />}
         {df.isVendedor && df.section === 'crm' && <MCRM df={df} />}
         {df.isVendedor && df.section === 'leads' && <MLeads df={df} />}
         {df.isVendedor && df.section === 'asistente' && <Asistente df={df} />}

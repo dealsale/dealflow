@@ -120,4 +120,17 @@ textarea {
   .df-collapse {
     grid-template-columns: 1fr !important;
   }
+  /* Fila de producto: sin la columna de precio suelta (ya va bajo el nombre) y menos padding */
+  .df-prow {
+    grid-template-columns: 40px 1fr auto auto !important;
+    gap: 10px !important;
+    padding: 12px 12px !important;
+  }
+  .df-prow-price {
+    display: none !important;
+  }
+  /* Panel expandido del producto: sin la sangría de escritorio */
+  .df-pexp {
+    padding: 14px !important;
+  }
 }

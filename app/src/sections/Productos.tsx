@@ -160,21 +160,21 @@ export function Productos({ df }: { df: DealFlowState }) {
           <div key={p.id}>
             <div
               onClick={p.toggle}
-              className="df-row-hover"
+              className="df-row-hover df-prow"
               style={{ display: 'grid', gridTemplateColumns: '52px 1fr 120px 130px 24px', alignItems: 'center', gap: 14, padding: '12px 18px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
             >
               <div style={p.fotoStyle}>{p.iniciales}</div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{p.nombre}</div>
-                <div style={{ color: '#64748B', fontSize: 12, marginTop: 1 }}>{p.variantesLabel}</div>
+                <div style={{ color: '#64748B', fontSize: 12, marginTop: 1 }}>{p.precioFmt} · {p.variantesLabel}</div>
               </div>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{p.precioFmt}</div>
+              <div className="df-prow-price" style={{ fontWeight: 700, fontSize: 14 }}>{p.precioFmt}</div>
               <span style={p.stockPill}>{p.stockLabel}</span>
               <span style={{ color: '#94A3B8', fontSize: 12 }}>{p.chevron}</span>
             </div>
 
             {p.expanded && (
-              <div style={{ background: '#F8FAFC', borderBottom: '1px solid #F1F5F9', padding: '18px 18px 18px 84px' }}>
+              <div className="df-pexp" style={{ background: '#F8FAFC', borderBottom: '1px solid #F1F5F9', padding: '18px 18px 18px 84px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Datos del producto
                 </div>
