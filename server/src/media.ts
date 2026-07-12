@@ -1,6 +1,21 @@
 import path from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { db, uid } from './db.js';
+
+/** Convierte un audio (webm, mp4…) a ogg/opus, el formato de nota de voz de WhatsApp. Devuelve null si no hay ffmpeg. */
+export function audioAOgg(buffer: Buffer): Buffer | null {
+  try {
+    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-vn', '-c:a', 'libopus', '-b:a', '32k', '-f', 'ogg', 'pipe:1'], {
+      input: buffer,
+      maxBuffer: 60 * 1024 * 1024,
+    });
+    if (r.status === 0 && r.stdout && r.stdout.length > 0) return r.stdout;
+  } catch {
+    /* sin ffmpeg */
+  }
+  return null;
+}
 
 const DATA_DIR = process.env.DATA_DIR || './data';
 

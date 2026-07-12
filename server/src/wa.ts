@@ -1,5 +1,5 @@
 import { db, uid } from './db.js';
-import { mediaExt } from './media.js';
+import { mediaExt, audioAOgg } from './media.js';
 
 const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
 
@@ -143,6 +143,11 @@ export async function sendWhatsappMedia(
     | { phone_number_id: string; access_token: string; conectado: number; modo: string }
     | undefined;
   if (!cfg?.conectado) return { ok: false, error: 'WhatsApp no está conectado.' };
+  // Nota de voz: los navegadores graban en webm; WhatsApp la quiere en ogg/opus.
+  if (media.tipo === 'audio' && !media.mime.includes('ogg')) {
+    const ogg = audioAOgg(media.buffer);
+    if (ogg) media = { buffer: ogg, mime: 'audio/ogg; codecs=opus', tipo: 'audio' };
+  }
   if (cfg.modo === 'qr') {
     const { sendMediaViaQr } = await import('./waqr.js');
     return sendMediaViaQr(storeId, to, media, caption, nombre, pn);

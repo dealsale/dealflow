@@ -280,7 +280,7 @@ export async function sendMediaViaQr(
   try {
     if (media.tipo === 'image') await s.sock.sendMessage(jid, { image: media.buffer, caption: caption || undefined });
     else if (media.tipo === 'video') await s.sock.sendMessage(jid, { video: media.buffer, caption: caption || undefined });
-    else if (media.tipo === 'audio') await s.sock.sendMessage(jid, { audio: media.buffer, mimetype: media.mime });
+    else if (media.tipo === 'audio') await s.sock.sendMessage(jid, { audio: media.buffer, mimetype: media.mime, ptt: true });
     else await s.sock.sendMessage(jid, { document: media.buffer, mimetype: media.mime, fileName: nombre || 'archivo' });
     console.log(`[wa-qr] adjunto enviado a ${jid} (destino original ${to})`);
     return { ok: true };

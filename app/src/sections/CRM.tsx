@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
+import { VoiceRecorder } from '../components/VoiceRecorder';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 export function CRM({ df }: { df: DealFlowState }) {
@@ -100,6 +101,7 @@ export function CRM({ df }: { df: DealFlowState }) {
               {df.crmIntervening && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <AttachButton onFile={df.sendCrmMedia} size={40} />
+                  <VoiceRecorder onRecorded={df.sendCrmMedia} size={40} />
                   <input
                     className="df-input"
                     value={df.crmDraft}

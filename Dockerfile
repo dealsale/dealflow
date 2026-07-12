@@ -18,6 +18,8 @@ RUN npm run build
 FROM node:22-bookworm-slim
 ENV NODE_ENV=production
 WORKDIR /srv
+# ffmpeg: convierte las notas de voz grabadas a ogg/opus (formato de WhatsApp)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY server/package*.json ./
 RUN npm ci --omit=dev
 COPY --from=server-build /build/server/dist ./dist
