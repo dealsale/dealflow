@@ -211,7 +211,16 @@ export function handleIncomingWebhook(body: unknown) {
       const store = db.prepare('SELECT store_id, access_token FROM whatsapp WHERE phone_number_id = ? AND conectado = 1').get(phoneNumberId) as
         | { store_id: string; access_token: string }
         | undefined;
-      if (!store) continue;
+      if (!store) {
+        // Diagnóstico: llega un mensaje pero ningún número conectado coincide.
+        const otra = db.prepare('SELECT store_id, conectado FROM whatsapp WHERE phone_number_id = ?').get(phoneNumberId) as { store_id: string; conectado: number } | undefined;
+        console.warn(
+          `[webhook] mensaje para phone_number_id=${phoneNumberId} SIN tienda conectada.` +
+            (otra ? ` Existe en la tienda ${otra.store_id} pero conectado=${otra.conectado}.` : ' Ese número no está guardado en ninguna tienda (¿lo conectaste en el panel?).'),
+        );
+        continue;
+      }
+      console.log(`[webhook] mensaje entrante para phone_number_id=${phoneNumberId} → tienda ${store.store_id}`);
 
       for (const msg of value.messages) {
         const waId = msg.from;
