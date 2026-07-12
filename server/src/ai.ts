@@ -88,7 +88,7 @@ ${promos || '(ninguna)'}
 
 Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "tú", sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
 
-FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), y todavía no le hayas enviado su material, incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si pide la foto de una OPCIÓN específica que tiene 📷 (ej: "foto del jogger blanco"), usa ##MEDIA:Nombre del producto|Blanco##. El sistema enviará automáticamente las fotos y videos; no digas que "no puedes enviar fotos". Usa el marcador una sola vez por producto.
+FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico que tiene 📷 (ej: "foto en negro"). El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
 
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
 ##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto, 1x Otro producto"; total="180000"##
@@ -175,9 +175,11 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       const prod = productRows.find((p) => String(p.nombre).trim().toLowerCase() === pedido)
         || productRows.find((p) => String(p.nombre).toLowerCase().includes(pedido) || pedido.includes(String(p.nombre).toLowerCase()));
       if (prod) {
+        // Con color específico → esa foto. En general ("fotos"/"videos") → TODAS
+        // las fotos y videos del producto, siempre (sin candado de "ya enviado").
         const foto = valName ? fotoDeOpcion(prod, valName) : null;
         if (foto) await enviarUnaFoto(storeId, leadId, destino, foto, pn);
-        else await enviarPresentacion(storeId, leadId, destino, prod, pn);
+        else await enviarMediaProducto(storeId, leadId, destino, prod, pn);
       }
     }
     const pedidoCreado = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
@@ -185,8 +187,9 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     // Si se creó el pedido, el mensaje de confirmación ya lo mandó crearPedido;
     // no repetimos con el texto de la IA.
     if (texto && !pedidoCreado) {
-      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', texto);
-      const send = await sendWhatsappText(storeId, destino, texto, pn);
+      const textoFinal = rellenar(texto, lead);
+      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', textoFinal);
+      const send = await sendWhatsappText(storeId, destino, textoFinal, pn);
       if (send.ok) console.log('[ia] respuesta enviada por WhatsApp');
       else console.error('[ia] respuesta generada pero NO enviada:', send.error, '| destino:', destino);
     }
@@ -215,6 +218,16 @@ function desenvolver(s: string): string {
   const m = t.match(/^"?(?:text|mensaje|respuesta|reply|message|content)"?\s*:\s*"([\s\S]*)"\s*}?\s*$/i);
   if (m) return m[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim();
   return s;
+}
+
+/** Reemplaza placeholders tipo {{phone}} / {{nombre}} por los datos reales del cliente. */
+function rellenar(texto: string, lead: { nombre?: string; tel?: string }): string {
+  return texto
+    .replace(/\{\{\s*(phone|telefono|teléfono|celular|whatsapp|tel|numero|número)\s*\}\}/gi, lead.tel || '')
+    .replace(/\{\{\s*(nombre|name|cliente|client|customer)\s*\}\}/gi, lead.nombre || '')
+    .replace(/\{\{\s*[^}]*\}\}/g, '') // cualquier otro placeholder no resuelto: se quita
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 /** Quita comillas, barras invertidas, llaves y demás restos si la IA formatea de más. */
@@ -297,9 +310,14 @@ async function enviarUnaFoto(storeId: string, leadId: string, destino: string, v
 async function enviarPresentacion(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string) {
   if (Number(p.mensaje_inicial_activo) === 0) return; // mensaje inicial apagado para este producto
   const pid = String(p.id);
-  const yaEnviada = db.prepare('SELECT 1 FROM sent_presentations WHERE lead_id = ? AND product_id = ?').get(leadId, pid);
-  if (yaEnviada) return;
-  db.prepare('INSERT OR IGNORE INTO sent_presentations (lead_id, product_id) VALUES (?,?)').run(leadId, pid);
+  // Candado por TIEMPO: evita repetir la misma presentación en ráfaga (mismos
+  // minutos), pero permite volver a mostrarla más tarde (p. ej. una 2.ª compra).
+  const reciente = db.prepare("SELECT 1 FROM sent_presentations WHERE lead_id = ? AND product_id = ? AND created_at > datetime('now','-3 minutes')").get(leadId, pid);
+  if (reciente) return;
+  db.prepare(
+    `INSERT INTO sent_presentations (lead_id, product_id, created_at) VALUES (?,?,datetime('now'))
+     ON CONFLICT(lead_id, product_id) DO UPDATE SET created_at = datetime('now')`,
+  ).run(leadId, pid);
 
   const bloques = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, []);
   const fotos = pj<string[]>(p.fotos_subidas as string, []);
@@ -315,12 +333,14 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
     return;
   }
 
+  const lead = db.prepare('SELECT nombre, tel FROM leads WHERE id = ?').get(leadId) as { nombre: string; tel: string } | undefined;
   let enviadas = 0;
   for (const b of piezas) {
     if (b.tipo === 'texto') {
-      if (!b.valor.trim()) continue;
-      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', b.valor);
-      const r = await sendWhatsappText(storeId, destino, b.valor, pn);
+      const valor = rellenar(b.valor, lead || {});
+      if (!valor.trim()) continue;
+      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', valor);
+      const r = await sendWhatsappText(storeId, destino, valor, pn);
       if (r.ok) enviadas++;
     } else {
       const media = materializar(storeId, b.valor);
@@ -332,4 +352,34 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
     }
   }
   console.log(`[ia] presentación de "${p.nombre}" enviada (${enviadas}/${piezas.length} piezas)`);
+}
+
+/** Envía TODAS las fotos y videos del producto (cuando el cliente los pide). Sin candado: se puede repetir. */
+async function enviarMediaProducto(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string) {
+  const fotos = pj<string[]>(p.fotos_subidas as string, []);
+  const videos = pj<string[]>(p.videos as string, []);
+  let piezas: { tipo: string; valor: string }[] = [
+    ...fotos.slice(0, 8).map((v) => ({ tipo: 'imagen', valor: v })),
+    ...videos.slice(0, 3).map((v) => ({ tipo: 'video', valor: v })),
+  ];
+  // Respaldo: si no hay fotos/videos sueltos, usa la multimedia de los bloques.
+  if (!piezas.length) {
+    piezas = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, [])
+      .filter((b) => b.tipo !== 'texto')
+      .map((b) => ({ tipo: b.tipo, valor: b.valor }));
+  }
+  if (!piezas.length) {
+    console.log(`[ia] "${p.nombre}": el cliente pidió fotos pero no hay multimedia cargada`);
+    return;
+  }
+  let enviadas = 0;
+  for (const b of piezas) {
+    const media = materializar(storeId, b.valor);
+    if (!media) continue;
+    const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
+    db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
+      .run(uid(), leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+    if (r.ok) enviadas++;
+  }
+  console.log(`[ia] multimedia de "${p.nombre}" enviada a pedido (${enviadas}/${piezas.length})`);
 }
