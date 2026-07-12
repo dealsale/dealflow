@@ -175,11 +175,22 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       const prod = productRows.find((p) => String(p.nombre).trim().toLowerCase() === pedido)
         || productRows.find((p) => String(p.nombre).toLowerCase().includes(pedido) || pedido.includes(String(p.nombre).toLowerCase()));
       if (prod) {
-        // Con color específico → esa foto. En general ("fotos"/"videos") → TODAS
-        // las fotos y videos del producto, siempre (sin candado de "ya enviado").
         const foto = valName ? fotoDeOpcion(prod, valName) : null;
-        if (foto) await enviarUnaFoto(storeId, leadId, destino, foto, pn);
-        else await enviarMediaProducto(storeId, leadId, destino, prod, pn);
+        if (foto) {
+          // Color con foto propia → esa foto.
+          await enviarUnaFoto(storeId, leadId, destino, foto, pn);
+        } else if (valName) {
+          // Color sin foto propia → una sola imagen de referencia (catálogo de colores), nunca el saludo.
+          const ref = fotoReferencia(prod);
+          if (ref) await enviarUnaFoto(storeId, leadId, destino, ref, pn);
+        } else {
+          // Piden fotos en general → todas las fotos/videos sueltos; si no hay, el catálogo de referencia.
+          const enviadas = await enviarMediaProducto(storeId, leadId, destino, prod, pn);
+          if (!enviadas) {
+            const ref = fotoReferencia(prod);
+            if (ref) await enviarUnaFoto(storeId, leadId, destino, ref, pn);
+          }
+        }
       }
     }
     const pedidoCreado = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
@@ -288,6 +299,19 @@ function norm(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Imagen de referencia del producto (típicamente el catálogo de colores):
+ * la primera foto suelta y, si no hay, la primera imagen del mensaje inicial.
+ * Se usa cuando piden un color que no tiene su propia foto: mostramos UNA sola
+ * imagen de referencia, no todo el saludo.
+ */
+function fotoReferencia(p: Record<string, unknown>): string | null {
+  const fotos = pj<string[]>(p.fotos_subidas as string, []);
+  if (fotos.length) return fotos[0];
+  const img = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, []).find((b) => b.tipo === 'imagen');
+  return img?.valor || null;
+}
+
 /** Busca la foto de una opción por su valor (ej: "Blanco"). */
 function fotoDeOpcion(prod: Record<string, unknown>, valName: string): string | null {
   const v = norm(valName);
@@ -359,17 +383,14 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
  * NO usa los bloques del mensaje inicial: esos están reservados para el
  * disparador, así una petición de fotos nunca reenvía el saludo. Sin candado.
  */
-async function enviarMediaProducto(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string) {
+async function enviarMediaProducto(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string): Promise<number> {
   const fotos = pj<string[]>(p.fotos_subidas as string, []);
   const videos = pj<string[]>(p.videos as string, []);
   const piezas: { tipo: string; valor: string }[] = [
     ...fotos.slice(0, 8).map((v) => ({ tipo: 'imagen', valor: v })),
     ...videos.slice(0, 3).map((v) => ({ tipo: 'video', valor: v })),
   ];
-  if (!piezas.length) {
-    console.log(`[ia] "${p.nombre}": el cliente pidió fotos pero no hay fotos/videos sueltos cargados (solo en el mensaje inicial)`);
-    return;
-  }
+  if (!piezas.length) return 0;
   let enviadas = 0;
   for (const b of piezas) {
     const media = materializar(storeId, b.valor);
@@ -380,4 +401,5 @@ async function enviarMediaProducto(storeId: string, leadId: string, destino: str
     if (r.ok) enviadas++;
   }
   console.log(`[ia] multimedia de "${p.nombre}" enviada a pedido (${enviadas}/${piezas.length})`);
+  return enviadas;
 }
