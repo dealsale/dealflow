@@ -548,7 +548,7 @@ export function useDealFlowState() {
       totalFmt: fmt(total),
       envioFmt: fmt(o.envio),
       itemsResumen: o.items.map((it) => it.qty + '× ' + it.nombre).join(' · '),
-      itemsDecorated: o.items.map((it) => ({ ...it, precioFmt: it.precio > 0 ? fmt(it.qty * it.precio) : '' })),
+      itemsDecorated: o.items.map((it) => ({ ...it, precioFmt: '' })), // solo mostramos el total del pedido
       pillStyle: pill(cfg),
       hasNext: !!cfg.next,
       isDone: !cfg.next,

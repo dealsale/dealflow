@@ -219,13 +219,31 @@ api.delete('/promos/:id', requireAuth, requireStore, (req, res) => {
 });
 
 // ── Pedidos ───────────────────────────────────────────────────────────
-api.post('/orders/:rowId/advance', requireAuth, requireStore, (req, res) => {
-  const o = db.prepare('SELECT id, estado FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, req.user!.storeId) as { id: string; estado: string } | undefined;
+const MSG_ESTADO: Record<string, (n: number) => string> = {
+  Confirmado: (n) => `✅ ¡Tu pedido #DF-${n} quedó confirmado! Ya lo estamos preparando para enviártelo. 📦`,
+  Empacado: (n) => `📦 Tu pedido #DF-${n} ya está empacado y listo para salir. 🚀`,
+  Despachado: (n) => `🚚 ¡Tu pedido #DF-${n} va en camino! Pronto lo recibes. 🙌`,
+  Entregado: (n) => `🎉 Tu pedido #DF-${n} fue entregado. ¡Muchas gracias por tu compra! 💚`,
+};
+
+api.post('/orders/:rowId/advance', requireAuth, requireStore, async (req, res) => {
+  const o = db.prepare('SELECT id, estado, numero, tel FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, req.user!.storeId) as
+    | { id: string; estado: string; numero: number; tel: string }
+    | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const idx = ESTADOS.indexOf(o.estado as (typeof ESTADOS)[number]);
   if (idx < 0 || idx >= ESTADOS.length - 1) return res.status(400).json({ error: 'Este pedido ya está entregado.' });
-  db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(ESTADOS[idx + 1], o.id);
-  res.json({ estado: ESTADOS[idx + 1] });
+  const nuevo = ESTADOS[idx + 1];
+  db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, o.id);
+  res.json({ estado: nuevo });
+
+  // Avísale al cliente por WhatsApp del nuevo estado (y déjalo en el chat).
+  const msg = MSG_ESTADO[nuevo]?.(o.numero);
+  if (msg && o.tel) {
+    const lead = db.prepare("SELECT id, wa_id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(req.user!.storeId, o.tel) as { id: string; wa_id: string | null } | undefined;
+    if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
+    void sendWhatsappText(req.user!.storeId!, lead?.wa_id || o.tel, msg, o.tel).catch(() => {});
+  }
 });
 
 api.post('/orders/:rowId/dropi', requireAuth, requireStore, (req, res) => {

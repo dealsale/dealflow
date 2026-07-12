@@ -167,9 +167,11 @@ Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses lla
         else await enviarPresentacion(storeId, leadId, destino, prod, pn);
       }
     }
-    if (mp) crearPedido(storeId, lead, mp[1], productRows);
+    const pedidoCreado = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
 
-    if (texto) {
+    // Si se creó el pedido, el mensaje de confirmación ya lo mandó crearPedido;
+    // no repetimos con el texto de la IA.
+    if (texto && !pedidoCreado) {
       db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', texto);
       const send = await sendWhatsappText(storeId, destino, texto, pn);
       if (send.ok) console.log('[ia] respuesta enviada por WhatsApp');
@@ -193,8 +195,8 @@ function campoPedido(s: string, k: string): string {
   return u ? limpiarValor(u[1]) : '';
 }
 
-/** Registra automáticamente el pedido cuando la IA cierra la venta (marcador ##PEDIDO##). */
-function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[]) {
+/** Registra el pedido cuando la IA cierra la venta y le confirma al cliente. Devuelve true si lo creó. */
+async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<boolean> {
   const cliente = campoPedido(inner, 'cliente') || lead.nombre || 'Cliente';
   const ciudad = campoPedido(inner, 'ciudad');
   const direccion = campoPedido(inner, 'direccion');
@@ -207,11 +209,11 @@ function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: s
       || productRows.find((p) => String(p.nombre).toLowerCase().includes(nom) || nom.includes(String(p.nombre).toLowerCase()));
     return { qty, nombre: prod ? String(prod.nombre) : limpiarValor(mm ? mm[2] : it), precio: prod ? Number(prod.precio) : 0 };
   }).filter((i) => i.nombre);
-  if (!items.length || (!direccion && !ciudad)) return; // datos insuficientes, esperamos
+  if (!items.length || (!direccion && !ciudad)) return false; // datos insuficientes, esperamos
 
   // Evita duplicados si la IA repite el marcador: un pedido "Nuevo" por número en los últimos 10 min.
   const dup = db.prepare("SELECT id FROM orders WHERE store_id = ? AND tel = ? AND estado = 'Nuevo' AND created_at > datetime('now','-10 minutes')").get(storeId, lead.tel || '');
-  if (dup) { console.log(`[ia] pedido no creado: ya hay uno reciente para ${lead.tel}`); return; }
+  if (dup) { console.log(`[ia] pedido no creado: ya hay uno reciente para ${lead.tel}`); return false; }
 
   const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
   const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 1048) + 1;
@@ -223,6 +225,14 @@ function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: s
   }
   db.prepare("UPDATE leads SET etapa = 'Listo para comprar' WHERE id = ?").run(lead.id);
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
+
+  // Mensaje de confirmación al cliente.
+  const primerNombre = cliente.split(' ')[0];
+  const producto = items[0]?.nombre || 'tu pedido';
+  const confirmacion = `Tu pedido ya quedó registrado exitosamente 🎉\n\nTe llegará un mensaje de confirmación con el número de pedido y los detalles del envío en un momento 📲\n\n¡Gracias por tu compra, ${primerNombre}! Que disfrutes mucho tus ${producto} 🙌😊`;
+  db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', confirmacion);
+  await sendWhatsappText(storeId, destino, confirmacion, pn);
+  return true;
 }
 
 /** Normaliza texto: minúsculas, sin acentos ni signos, para comparar. */
@@ -259,20 +269,12 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
   const bloques = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, []);
   const fotos = pj<string[]>(p.fotos_subidas as string, []);
   const videos = pj<string[]>(p.videos as string, []);
-  // Reunimos TODO el material del producto (no solo los bloques): así, cuando
-  // el cliente pide fotos, sí le llegan las fotos aunque el mensaje inicial
-  // tenga un video. Orden: primero el texto de presentación, luego las
-  // imágenes y por último los videos.
-  const textos = bloques.filter((b) => b.tipo === 'texto');
-  const imgsBloque = bloques.filter((b) => b.tipo === 'imagen').map((b) => b.valor);
-  const vidsBloque = bloques.filter((b) => b.tipo === 'video').map((b) => b.valor);
-  const imagenes = [...imgsBloque, ...fotos.filter((f) => !imgsBloque.includes(f))].slice(0, 6);
-  const clips = [...vidsBloque, ...videos.filter((v) => !vidsBloque.includes(v))].slice(0, 2);
-  const piezas: { tipo: string; valor: string }[] = [
-    ...textos.map((b) => ({ tipo: 'texto', valor: b.valor })),
-    ...imagenes.map((v) => ({ tipo: 'imagen', valor: v })),
-    ...clips.map((v) => ({ tipo: 'video', valor: v })),
-  ];
+  // Si armaste el mensaje inicial con bloques, se envía EXACTAMENTE esa
+  // estructura (textos, imágenes y videos en tu orden), sin repetir con las
+  // fotos principales. Solo si no hay bloques usamos fotos + videos.
+  const piezas: { tipo: string; valor: string }[] = bloques.length
+    ? bloques.map((b) => ({ tipo: b.tipo, valor: b.valor }))
+    : [...fotos.slice(0, 6).map((v) => ({ tipo: 'imagen', valor: v })), ...videos.slice(0, 2).map((v) => ({ tipo: 'video', valor: v }))];
   if (!piezas.length) {
     console.log(`[ia] "${p.nombre}": el cliente lo pidió pero no hay fotos/videos cargados`);
     return;
