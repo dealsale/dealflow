@@ -118,16 +118,21 @@ Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses lla
   const destino = lead.wa_id || lead.tel;
   const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
 
-  // Disparador: si el mensaje del cliente menciona/coincide con un producto
-  // activo (típico de anuncios "Me interesan los X"), enviamos su estructura
-  // completa aunque la IA aún no responda.
+  // Disparador: SOLO cuando el mensaje del cliente coincide de verdad con la
+  // frase disparadora del producto (la de los anuncios). Un simple "hola" no
+  // dispara: exigimos que la mayoría de las palabras del disparador estén en
+  // el mensaje (o que sea idéntico), no que compartan una palabra suelta.
   if (ultimo?.tipo === 'texto' && ultimo.texto) {
+    const t = norm(ultimo.texto);
+    const tWords = new Set(t.split(' ').filter(Boolean));
     for (const p of productRows) {
       if (Number(p.mensaje_inicial_activo) === 0) continue;
-      const t = norm(ultimo.texto);
-      const nom = norm(String(p.nombre));
       const disp = norm(String(p.disparador || ''));
-      if ((nom.length >= 4 && t.includes(nom)) || (disp.length >= 6 && (t.includes(disp) || disp.includes(t)))) {
+      if (disp.length < 6) continue; // sin disparador configurado, no dispara
+      const dWords = disp.split(' ').filter((w) => w.length >= 3);
+      if (!dWords.length) continue;
+      const overlap = dWords.filter((w) => tWords.has(w)).length / dWords.length;
+      if (t === disp || t.includes(disp) || overlap >= 0.75) {
         await enviarPresentacion(storeId, leadId, destino, p, pn);
       }
     }
