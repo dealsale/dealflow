@@ -505,6 +505,7 @@ export function useDealFlowState() {
   productsRef.current = products;
   const soundOnRef = useRef(soundOn);
   soundOnRef.current = soundOn;
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
 
   // Simula la llegada de pedidos desde el asistente de WhatsApp: el primero
   // entra a los ~15 s y luego cada 35–70 s, con notificación y timbre.
@@ -1056,12 +1057,30 @@ export function useDealFlowState() {
     };
     if (!sessionUser) return;
     load();
+    // La primera carga siembra los pedidos conocidos SIN notificar (evita avisar
+    // de pedidos viejos al entrar). Luego, cada pedido nuevo dispara el pop-up.
+    let sembrado = false;
     const t = setInterval(() => {
       void apiLeads().then(({ data }) => {
         if (data) setApiLeadsState(mapApiLeads(data.leads));
       });
       void apiOrders().then(({ data }) => {
-        if (data) setOrders(mapApiOrders(data.orders));
+        if (!data) return;
+        const nuevos = mapApiOrders(data.orders);
+        if (!sembrado) {
+          nuevos.forEach((o) => knownOrderIdsRef.current.add(String(o.rowId ?? o.id)));
+          sembrado = true;
+        } else {
+          const recienLlegado = nuevos.find((o) => o.estado === 'Nuevo' && !knownOrderIdsRef.current.has(String(o.rowId ?? o.id)));
+          nuevos.forEach((o) => knownOrderIdsRef.current.add(String(o.rowId ?? o.id)));
+          if (recienLlegado) {
+            setIncomingOrder(recienLlegado);
+            clearTimeout(toastTimer.current);
+            toastTimer.current = setTimeout(() => setIncomingOrder(null), 8000);
+            if (soundOnRef.current) playOrderChime();
+          }
+        }
+        setOrders(nuevos);
       });
     }, 5000);
     return () => clearInterval(t);

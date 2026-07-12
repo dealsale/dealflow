@@ -88,12 +88,15 @@ ${promos || '(ninguna)'}
 
 Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "tú", sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
 
+PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma general y en el CATÁLOGO hay VARIOS productos que coinciden con ese nombre (por ejemplo pide "jogger" y existen "Jogger Bota Recta Hombre", "Jogger Bota Recta Dama", "Jogger Clásico", "Jogger Clásico Dama"), NO adivines ni elijas uno al azar: pregúntale al cliente CUÁL de esos modelos exactos quiere y NO envíes fotos ni pongas el marcador todavía. Solo cuando quede claro el modelo exacto, usa su NOMBRE EXACTO del catálogo en el marcador ##MEDIA##.
+
 FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
 
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
 ##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto, 1x Otro producto"; total="180000"##
 El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
+FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
 
 FORMATO DE TU RESPUESTA: responde SIEMPRE en texto plano, exactamente lo que verá el cliente. NUNCA respondas en formato JSON, NUNCA empieces con «text:» o «"text":», y NUNCA encierres toda tu respuesta entre comillas. Escribe el mensaje directo, nada más.
 
@@ -171,9 +174,13 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     const texto = bruto.replace(new RegExp(marca, 'gi'), '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').trim();
     if (m) {
       const [prodName, valName] = m[1].split('|').map((s) => s.trim());
-      const pedido = prodName.toLowerCase();
-      const prod = productRows.find((p) => String(p.nombre).trim().toLowerCase() === pedido)
-        || productRows.find((p) => String(p.nombre).toLowerCase().includes(pedido) || pedido.includes(String(p.nombre).toLowerCase()));
+      const pedido = norm(prodName);
+      // Coincidencia exacta primero. Si no hay exacta y varios productos coinciden
+      // parcialmente (ej. "jogger" con 3 joggers), NO adivinamos: dejamos que la IA
+      // pregunte cuál. Solo enviamos si hay una única coincidencia clara.
+      const exactas = productRows.filter((p) => norm(String(p.nombre)) === pedido);
+      const parciales = productRows.filter((p) => norm(String(p.nombre)).includes(pedido) || pedido.includes(norm(String(p.nombre))));
+      const prod = exactas[0] || (parciales.length === 1 ? parciales[0] : null);
       if (prod) {
         const foto = valName ? fotoDeOpcion(prod, valName) : null;
         if (foto) {
@@ -193,7 +200,15 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
         }
       }
     }
-    const pedidoCreado = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
+    let pedidoCreado = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
+
+    // RED DE SEGURIDAD: la IA mostró el "Resumen de tu pedido" y el cliente confirmó
+    // (sí/sisas/dale/correcto…), pero la IA NO puso el marcador. Tomamos el pedido
+    // del último resumen que envió la IA, para no perder ventas por un descuido del modelo.
+    if (!pedidoCreado && !mp && esAfirmacion(ultimo?.texto || '')) {
+      const inner = pedidoDesdeResumen(leadId);
+      if (inner) pedidoCreado = await crearPedido(storeId, lead, inner, productRows, destino, pn);
+    }
 
     // Si se creó el pedido, el mensaje de confirmación ya lo mandó crearPedido;
     // no repetimos con el texto de la IA.
@@ -252,6 +267,49 @@ function campoPedido(s: string, k: string): string {
   if (q) return limpiarValor(q[1]);
   const u = s.match(new RegExp(k + '\\s*[:=]\\s*([^;]+)', 'i'));
   return u ? limpiarValor(u[1]) : '';
+}
+
+/** ¿El cliente está confirmando (sí, sisas, dale, correcto…)? Mensajes cortos. */
+function esAfirmacion(t: string): boolean {
+  const s = norm(t);
+  if (!s || s.length > 45) return false;
+  const words = new Set(s.split(' ').filter(Boolean));
+  const yes = ['si', 'sisas', 'sisa', 'sip', 'sipi', 'claro', 'dale', 'dalee', 'listo', 'correcto', 'confirmo', 'confirmado', 'ok', 'oka', 'okay', 'okey', 'eso', 'vale', 'va', 'sale', 'perfecto', 'hagale', 'deacuerdo', 'acuerdo', 'positivo', 'afirmativo'];
+  if (yes.some((y) => words.has(y))) return true;
+  return /\b(si|sisas|dale|listo|correcto|confirm\w*|perfecto|de una|hagale|todo bien|esta bien|asi es)\b/.test(s);
+}
+
+/** Limpia un valor tomado del "Resumen de tu pedido": quita asteriscos y emojis del inicio. */
+function limpiarResumen(v: string): string {
+  return v.replace(/[*_`]/g, '').replace(/^[^\p{L}\p{N}$#]+/u, '').replace(/\s+$/g, '').replace(/[,;]+$/, '').trim();
+}
+/** Extrae un campo del resumen por su etiqueta (Nombre, Ciudad, Dirección…). */
+function campoResumen(txt: string, etiqueta: string): string {
+  const m = txt.match(new RegExp('\\*?\\s*' + etiqueta + '[^:*]*:\\*?\\s*([^*\\n]+)', 'i'));
+  return m ? limpiarResumen(m[1]) : '';
+}
+
+/**
+ * RED DE SEGURIDAD: reconstruye el pedido a partir del último "Resumen de tu
+ * pedido" que envió la IA, para cuando el cliente confirma pero la IA no puso
+ * el marcador ##PEDIDO##. Devuelve el "inner" listo para crearPedido, o ''.
+ */
+function pedidoDesdeResumen(leadId: string): string {
+  const rows = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'bot' AND texto != '' ORDER BY created_at DESC LIMIT 6").all(leadId) as { texto: string }[];
+  const resumen = rows.map((r) => r.texto).find((t) => /resumen/i.test(t) && /(direcc|total|ciudad)/i.test(t));
+  if (!resumen) return '';
+  const cliente = campoResumen(resumen, 'Nombre');
+  const ciudad = campoResumen(resumen, 'Ciudad');
+  const direccion = campoResumen(resumen, 'Direcci');
+  const total = (campoResumen(resumen, 'Total').match(/\d/g) || []).join('');
+  const prodField = campoResumen(resumen, 'Producto') || resumen;
+  const items: string[] = [];
+  const re = /(\d+)\s*[xX×]\s*([^—\-,\n*]+)/g;
+  let mm: RegExpExecArray | null;
+  while ((mm = re.exec(prodField))) items.push(`${mm[1]}x ${mm[2].trim()}`);
+  if (!items.length || (!direccion && !ciudad)) return '';
+  console.log(`[ia] pedido tomado del resumen (la IA no puso el marcador) para lead ${leadId}`);
+  return ` cliente="${cliente}"; ciudad="${ciudad}"; direccion="${direccion}"; items="${items.join(', ')}"; total="${total}"`;
 }
 
 /** Registra el pedido cuando la IA cierra la venta y le confirma al cliente. Devuelve true si lo creó. */
