@@ -93,7 +93,11 @@ FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto esp
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
 ##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto, 1x Otro producto"; total="180000"##
 El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
-Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.`;
+Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
+
+FORMATO DE TU RESPUESTA: responde SIEMPRE en texto plano, exactamente lo que verá el cliente. NUNCA respondas en formato JSON, NUNCA empieces con «text:» o «"text":», y NUNCA encierres toda tu respuesta entre comillas. Escribe el mensaje directo, nada más.
+
+OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó registrado", "ya está creado", "confirmado" o similar si en ESE MISMO mensaje no incluiste el marcador ##PEDIDO ...##. Si todavía te falta el nombre, la ciudad o la dirección exacta, pídelos primero y NO afirmes que el pedido quedó registrado. El mensaje de confirmación al cliente lo envía el sistema automáticamente, no lo escribas tú.`;
 
   const nombreMedia = (tipo: string) =>
     tipo === 'audio' ? 'una nota de voz' : tipo === 'image' ? 'una imagen' : tipo === 'video' ? 'un video' : 'un archivo';
@@ -101,7 +105,8 @@ Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses lla
     .reverse()
     .map((m) => ({
       role: m.de === 'cliente' ? ('user' as const) : ('assistant' as const),
-      content: m.texto || (m.tipo && m.tipo !== 'texto' ? `[el cliente envió ${nombreMedia(m.tipo)}]` : ''),
+      // Limpiamos respuestas viejas mal formateadas ("text": "...") para que el modelo no las copie.
+      content: (m.de === 'cliente' ? m.texto : desenvolver(m.texto || '')) || (m.tipo && m.tipo !== 'texto' ? `[el cliente envió ${nombreMedia(m.tipo)}]` : ''),
     }))
     .filter((m) => m.content);
 
@@ -149,8 +154,11 @@ Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses lla
       return;
     }
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const bruto = body.choices?.[0]?.message?.content?.trim();
-    if (!bruto) return;
+    const brutoRaw = body.choices?.[0]?.message?.content?.trim();
+    if (!brutoRaw) return;
+    // A veces DeepSeek envuelve su respuesta como JSON ("text": "..."). La
+    // desenvolvemos para no mandar esa basura al cliente ni contaminar el marcador.
+    const bruto = desenvolver(brutoRaw);
 
     // La IA marca con ##MEDIA:Nombre## cuando el cliente pide un producto; con
     // ##MEDIA:Nombre|Valor## pide la foto de una opción específica.
@@ -185,6 +193,28 @@ Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses lla
   } catch (e) {
     console.error('[ia] error llamando a DeepSeek', e);
   }
+}
+
+/**
+ * Si DeepSeek envuelve la respuesta como JSON ({"text":"..."}) o empieza con
+ * «text: "..."», recupera solo el mensaje real en texto plano. Si no hay
+ * envoltura, devuelve el texto tal cual.
+ */
+function desenvolver(s: string): string {
+  const t = s.trim();
+  if (t.startsWith('{') && t.endsWith('}')) {
+    try {
+      const o = JSON.parse(t) as Record<string, unknown>;
+      for (const k of ['text', 'mensaje', 'respuesta', 'reply', 'message', 'content']) {
+        if (typeof o[k] === 'string') return (o[k] as string).trim();
+      }
+    } catch {
+      /* no era JSON válido; seguimos abajo */
+    }
+  }
+  const m = t.match(/^"?(?:text|mensaje|respuesta|reply|message|content)"?\s*:\s*"([\s\S]*)"\s*}?\s*$/i);
+  if (m) return m[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim();
+  return s;
 }
 
 /** Quita comillas, barras invertidas, llaves y demás restos si la IA formatea de más. */
