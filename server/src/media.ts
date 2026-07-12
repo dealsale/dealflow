@@ -46,10 +46,12 @@ export function tipoDeMime(mime: string): 'image' | 'video' | 'audio' | 'documen
 
 /** Guarda un archivo saliente (data URL) en disco y devuelve su URL pública. */
 export function saveOutgoingMedia(storeId: string, dataUrl: string, nombre: string): { url: string; buffer: Buffer; mime: string; tipo: string } | null {
-  const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl);
-  if (!m) return null;
-  const mime = m[1];
-  const buffer = Buffer.from(m[2], 'base64');
+  // El data URL puede traer parámetros (ej: data:audio/webm;codecs=opus;base64,…);
+  // cortamos por ';base64,' para no romper con ese ';codecs=…' del medio.
+  const idx = dataUrl.indexOf(';base64,');
+  if (!dataUrl.startsWith('data:') || idx < 0) return null;
+  const mime = dataUrl.slice(5, idx).split(';')[0].trim() || 'application/octet-stream';
+  const buffer = Buffer.from(dataUrl.slice(idx + 8), 'base64');
   const tipo = tipoDeMime(mime);
   const file = uid() + '.' + mediaExt(tipo, mime);
   writeFileSync(path.join(mediaDir(storeId), file), buffer);
