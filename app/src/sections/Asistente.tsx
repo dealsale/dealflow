@@ -31,10 +31,14 @@ export function Asistente({ df }: { df: DealFlowState }) {
         <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Reglas</div>
           <div style={{ color: '#64748B', fontSize: 13, marginBottom: 12 }}>Se cumplen siempre, pase lo que pase.</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 600 }}>{df.rules.length} regla{df.rules.length === 1 ? '' : 's'}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, maxHeight: 340, overflowY: 'auto', paddingRight: 4 }}>
+            {df.rules.length === 0 && <div style={{ color: '#94A3B8', fontSize: 13, padding: '8px 2px' }}>Aún no hay reglas. Agrega la primera abajo.</div>}
             {df.rules.map((r, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
-                <span style={{ color: '#059669', fontWeight: 700, flexShrink: 0 }}>✓</span>
+                <span style={{ color: '#94A3B8', fontWeight: 700, flexShrink: 0, fontSize: 12, minWidth: 18 }}>{i + 1}</span>
                 <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>{r.texto}</span>
                 <span onClick={r.remove} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>
                   ✕

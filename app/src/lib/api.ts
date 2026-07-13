@@ -2,7 +2,7 @@ export interface ApiUser {
   id: string;
   email: string;
   nombre: string;
-  role: 'VENDEDOR' | 'ADMIN';
+  role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN';
   storeId: string | null;
   /** true si es el dueño de la tienda; false si es un agente con permisos limitados */
   esDueno?: boolean;
@@ -102,6 +102,7 @@ export interface ApiLead {
   tel: string;
   etapa: string;
   asignado: string;
+  etiqueta?: string;
   mensajes: ApiMensaje[];
 }
 
@@ -165,6 +166,7 @@ export const apiSendLeadMessage = (id: string, texto: string) =>
 export const apiSendLeadMedia = (id: string, dataUrl: string, nombre: string, caption: string) =>
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/media`, 'POST', { dataUrl, nombre, caption });
 export const apiAssignLead = (id: string, asignado: string) => req<{ ok: true }>(`/api/leads/${id}`, 'PATCH', { asignado });
+export const apiSetLeadEtiqueta = (id: string, etiqueta: string) => req<{ ok: true }>(`/api/leads/${id}`, 'PATCH', { etiqueta });
 export const apiDeleteLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}`, 'DELETE');
 export const apiResetLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}/reset`, 'POST');
 
@@ -217,6 +219,13 @@ export interface AdminStoreDetalle {
   recientes: { id: string; cliente: string; estado: string; total: number; fecha: string }[];
 }
 export const apiStoreDetalle = (id: string) => req<{ detalle: AdminStoreDetalle }>(`/api/admin/stores/${id}`, 'GET');
+
+// ── Superadmin ──
+export interface SuperStore {
+  id: string; tienda: string; correo: string; plan: string; ventas: number; activa: boolean; oculta: boolean;
+}
+export const apiSuperStores = () => req<{ stores: SuperStore[] }>('/api/superadmin/stores', 'GET');
+export const apiToggleHideStore = (id: string, oculta: boolean) => req<{ ok: true }>(`/api/superadmin/stores/${id}/hide`, 'PATCH', { oculta });
 
 export const apiCreatePlan = (b: { nombre: string; precio: number; features: string[] }) => req<{ id: string }>('/api/admin/plans', 'POST', b);
 export const apiUpdatePlan = (id: string, b: { nombre?: string; precio?: number; features?: string[] }) =>

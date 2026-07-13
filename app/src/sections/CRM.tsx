@@ -22,6 +22,7 @@ export function CRM({ df }: { df: DealFlowState }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontWeight: 600, fontSize: 14 }}>{c.nombre}</span>
+                  {c.etiquetaStyle && <span style={c.etiquetaStyle}>{c.etiqueta}</span>}
                   <span style={{ color: '#94A3B8', fontSize: 11.5, marginLeft: 'auto' }}>{c.hora}</span>
                 </div>
                 <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.ultimo}</div>
@@ -48,6 +49,17 @@ export function CRM({ df }: { df: DealFlowState }) {
                 <span>{chat.liveLabel}</span>
               </div>
               <div style={{ flex: 1 }} />
+              <select
+                value={chat.etiqueta || ''}
+                onChange={(e) => df.setLeadEtiqueta(chat.id, e.target.value)}
+                title="Etiqueta esta conversación"
+                style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: chat.etiqueta ? '#1E293B' : '#94A3B8', background: '#fff', cursor: 'pointer' }}
+              >
+                <option value="">🏷️ Sin etiqueta</option>
+                {df.etiquetasCrm.map((et) => (
+                  <option key={et} value={et}>{et}</option>
+                ))}
+              </select>
               <button
                 onClick={df.resetChat}
                 title="Borra el historial y devuelve el chat al asistente"

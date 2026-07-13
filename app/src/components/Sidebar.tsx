@@ -89,12 +89,18 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       {df.isAdmin && (
         <>
           <div style={{ color: '#64748B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 8px' }}>
-            Administración
+            {df.isSuperadmin ? 'Superadmin' : 'Administración'}
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {adminItem('ventas', <IconVentas />, 'Ventas')}
-            {adminItem('planes', <IconPlanes />, 'Planes')}
-            {adminItem('cuentas', <IconCuentas />, 'Cuentas')}
+            {df.isSuperadmin ? (
+              adminItem('superadmin', <IconCuentas />, 'Todas las tiendas')
+            ) : (
+              <>
+                {adminItem('ventas', <IconVentas />, 'Ventas')}
+                {adminItem('planes', <IconPlanes />, 'Planes')}
+                {adminItem('cuentas', <IconCuentas />, 'Cuentas')}
+              </>
+            )}
           </nav>
         </>
       )}

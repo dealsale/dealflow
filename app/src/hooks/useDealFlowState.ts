@@ -59,8 +59,11 @@ import {
   apiWaQrStart,
   apiWaQrStatus,
   apiWaUnlink,
+  apiSetLeadEtiqueta,
+  apiSuperStores,
+  apiToggleHideStore,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -79,6 +82,7 @@ import type {
   Promo,
   VendedorSection,
 } from '../types';
+import { COLOR_ETIQUETA, ETIQUETAS_CRM } from '../types';
 import type { Bundle, MensajeBloque } from '../types';
 
 export interface DecoratedOrder extends Order {
@@ -108,6 +112,7 @@ export interface DecoratedLead extends Lead {
   iniciales: string;
   avatarStyle: CSSProperties;
   etapaStyle: CSSProperties;
+  etiquetaStyle: CSSProperties | null;
   rowStyle: CSSProperties;
   select: () => void;
   mensajesDecorated: DecoratedMensaje[];
@@ -283,6 +288,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     hora: l.mensajes.length ? l.mensajes[l.mensajes.length - 1].hora : '',
     etapa: (ETAPAS_VALIDAS.includes(l.etapa) ? l.etapa : 'Explorando') as Lead['etapa'],
     asignado: l.asignado,
+    etiqueta: l.etiqueta || '',
     mensajes: l.mensajes.map((m) => ({
       de: (m.de === 'bot' || m.de === 'vendedor' ? m.de : 'cliente') as Mensaje['de'],
       texto: m.texto,
@@ -424,7 +430,7 @@ export function useDealFlowState() {
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
   const [soundOn, setSoundOn] = useState<boolean>(snap?.soundOn ?? true);
   const [orderQuery, setOrderQuery] = useState<string>('');
-  const [sessionUser, setSessionUser] = useState<{ nombre: string; email: string; role: 'vendedor' | 'admin'; esDueno?: boolean; impersonando?: boolean; tiendaNombre?: string } | null>(() => {
+  const [sessionUser, setSessionUser] = useState<{ nombre: string; email: string; role: 'vendedor' | 'admin' | 'superadmin'; esDueno?: boolean; impersonando?: boolean; tiendaNombre?: string } | null>(() => {
     try {
       const raw = localStorage.getItem('dealflow:session');
       return raw ? JSON.parse(raw) : null;
@@ -532,6 +538,7 @@ export function useDealFlowState() {
   }, [apiMode]);
 
   const isAdmin = mode === 'admin';
+  const isSuperadmin = sessionUser?.role === 'superadmin';
 
   // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
   const AGENTE_SECCIONES: VendedorSection[] = ['productos', 'crm', 'leads', 'pedidos', 'marketing'];
@@ -659,6 +666,9 @@ export function useDealFlowState() {
       iniciales: initials(l.nombre),
       avatarStyle: { width: '38px', height: '38px', borderRadius: '50%', background: bg, color: txt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px', flexShrink: 0 },
       etapaStyle: { ...pill(ETAPA_CFG[l.etapa]), marginTop: '5px', fontSize: '11px' },
+      etiquetaStyle: l.etiqueta && COLOR_ETIQUETA[l.etiqueta]
+        ? { display: 'inline-block', fontSize: '10.5px', fontWeight: 700, borderRadius: '5px', padding: '1px 7px', background: COLOR_ETIQUETA[l.etiqueta].bg, color: COLOR_ETIQUETA[l.etiqueta].color }
+        : null,
       rowStyle: { display: 'flex', gap: '11px', padding: '12px 14px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', background: selL ? '#ECFDF5' : '#fff', borderLeft: selL ? '3px solid #059669' : '3px solid transparent' },
       select: () => onSelect(l.id),
       mensajesDecorated: l.mensajes.map(decorateMensaje),
@@ -868,8 +878,10 @@ export function useDealFlowState() {
     void apiMe().then(({ available, user }) => {
       setApiMode(available);
       if (available) {
-        setSessionUser(user ? { nombre: user.nombre, email: user.email, role: user.role === 'ADMIN' ? 'admin' : 'vendedor', esDueno: user.esDueno, impersonando: user.impersonando, tiendaNombre: user.tiendaNombre } : null);
-        if (user) setMode(user.role === 'ADMIN' ? 'admin' : 'vendedor');
+        const rol = user ? (user.role === 'ADMIN' ? 'admin' : user.role === 'SUPERADMIN' ? 'superadmin' : 'vendedor') : 'vendedor';
+        setSessionUser(user ? { nombre: user.nombre, email: user.email, role: rol, esDueno: user.esDueno, impersonando: user.impersonando, tiendaNombre: user.tiendaNombre } : null);
+        if (user) setMode(rol === 'vendedor' ? 'vendedor' : 'admin');
+        if (rol === 'superadmin') setAdminSection('superadmin');
         if (user && user.role === 'VENDEDOR' && user.esDueno === false) setSection('crm'); // el agente arranca en su CRM
       }
     });
@@ -881,11 +893,11 @@ export function useDealFlowState() {
     'admin@dealflow.co': { password: 'admin123', nombre: 'Equipo DealFlow', role: 'admin' },
   };
 
-  function completeLogin(user: { nombre: string; email: string; role: 'vendedor' | 'admin'; esDueno?: boolean }) {
+  function completeLogin(user: { nombre: string; email: string; role: 'vendedor' | 'admin' | 'superadmin'; esDueno?: boolean }) {
     setSessionUser(user);
-    setMode(user.role === 'admin' ? 'admin' : 'vendedor');
+    setMode(user.role === 'vendedor' ? 'vendedor' : 'admin');
     setSection(user.role === 'vendedor' && user.esDueno === false ? 'crm' : 'resumen');
-    setAdminSection('ventas');
+    setAdminSection(user.role === 'superadmin' ? 'superadmin' : 'ventas');
     setLoginError('');
   }
 
@@ -906,7 +918,7 @@ export function useDealFlowState() {
         setLoginError(r.error || 'No pudimos iniciar sesión.');
         return;
       }
-      completeLogin({ nombre: r.user.nombre, email: r.user.email, role: r.user.role === 'ADMIN' ? 'admin' : 'vendedor', esDueno: r.user.esDueno });
+      completeLogin({ nombre: r.user.nombre, email: r.user.email, role: r.user.role === 'ADMIN' ? 'admin' : r.user.role === 'SUPERADMIN' ? 'superadmin' : 'vendedor', esDueno: r.user.esDueno });
       return;
     }
     const e = email.trim().toLowerCase();
@@ -1434,6 +1446,28 @@ export function useDealFlowState() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, isAdmin, sessionUser]);
 
+  // ── Superadmin: todas las tiendas + ocultar del admin ──
+  const [superStores, setSuperStores] = useState<SuperStore[]>([]);
+  async function reloadSuper() {
+    const { data } = await apiSuperStores();
+    if (data) setSuperStores(data.stores);
+  }
+  useEffect(() => {
+    if (apiMode && isSuperadmin && sessionUser && adminSection === 'superadmin') void reloadSuper();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, isSuperadmin, sessionUser, adminSection]);
+  function toggleHideStore(id: string, oculta: boolean) {
+    setSuperStores((st) => st.map((s) => (s.id === id ? { ...s, oculta: !oculta } : s)));
+    void apiToggleHideStore(id, !oculta).then((r) => { if (r.error) void reloadSuper(); });
+  }
+
+  // Etiqueta de conversación en el CRM (manual). La "Venta" también la pone el bot solo.
+  function setLeadEtiqueta(id: number | string, etiqueta: string) {
+    setApiLeadsState((st) => (st || []).map((l) => (l.id === id ? { ...l, etiqueta } : l)));
+    setLeads((st) => st.map((l) => (l.id === id ? { ...l, etiqueta } : l)));
+    if (apiMode) void apiSetLeadEtiqueta(String(id), etiqueta);
+  }
+
   async function reloadTeam() {
     const { data } = await apiTeamList();
     if (data) setTeam(data.team);
@@ -1815,6 +1849,11 @@ export function useDealFlowState() {
     mode,
     isAdmin,
     isVendedor: !isAdmin,
+    isSuperadmin,
+    superStores,
+    toggleHideStore,
+    setLeadEtiqueta,
+    etiquetasCrm: ETIQUETAS_CRM,
     section,
     adminSection,
     go,

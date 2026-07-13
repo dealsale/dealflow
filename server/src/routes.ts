@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db, j, pj, uid } from './db.js';
-import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, setAuthCookie, verifyPassword } from './auth.js';
+import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
 import { handleIncomingWebhook, sendWhatsappMedia, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
 import { mediaPath, saveOutgoingMedia, saveOutgoingMessage } from './media.js';
@@ -80,7 +80,7 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
-    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
+    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '',
     mensajes: (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime, media_nombre FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
       de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null,
     })),
@@ -113,7 +113,7 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
 api.get('/leads', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
-    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
+    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '',
     mensajes: (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime, media_nombre FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
       de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null,
     })),
@@ -276,9 +276,10 @@ api.post('/orders/:rowId/dropi', requireAuth, requireStore, (req, res) => {
 api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
   if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
-  const { asignado, etapa } = req.body || {};
+  const { asignado, etapa, etiqueta } = req.body || {};
   if (asignado) db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(String(asignado), req.params.id);
   if (etapa) db.prepare('UPDATE leads SET etapa = ? WHERE id = ?').run(String(etapa), req.params.id);
+  if (etiqueta !== undefined) db.prepare('UPDATE leads SET etiqueta = ? WHERE id = ?').run(String(etiqueta), req.params.id);
   res.json({ ok: true });
 });
 
@@ -449,7 +450,8 @@ api.get('/whatsapp/qr/status', requireAuth, requireStore, requireOwner, async (r
 
 // ── Admin ─────────────────────────────────────────────────────────────
 api.get('/admin/overview', requireAuth, requireAdmin, (_req, res) => {
-  const stores = (db.prepare('SELECT * FROM stores ORDER BY created_at').all() as Record<string, unknown>[]).map((s) => {
+  // Las tiendas ocultas (fantasma) no aparecen para el admin normal.
+  const stores = (db.prepare('SELECT * FROM stores WHERE COALESCE(oculta,0) = 0 ORDER BY created_at').all() as Record<string, unknown>[]).map((s) => {
     const ventas = db.prepare(
       `SELECT COALESCE(SUM(oi.qty * oi.precio), 0) + COALESCE((SELECT SUM(envio) FROM orders WHERE store_id = ? AND created_at >= date('now','start of month')), 0) AS total
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
@@ -459,7 +461,7 @@ api.get('/admin/overview', requireAuth, requireAdmin, (_req, res) => {
   });
   const plans = (db.prepare('SELECT * FROM plans').all() as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, features: pj(p.features as string, []),
-    cuentas: (db.prepare('SELECT COUNT(*) AS n FROM stores WHERE plan = ?').get(p.nombre) as { n: number }).n,
+    cuentas: (db.prepare('SELECT COUNT(*) AS n FROM stores WHERE plan = ? AND COALESCE(oculta,0) = 0').get(p.nombre) as { n: number }).n,
   }));
   res.json({ stores, plans });
 });
@@ -584,6 +586,26 @@ api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
   db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
   db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
   res.json({ storeId });
+});
+
+// ── Superadmin: ve TODAS las tiendas y puede ocultarlas del admin ─────
+api.get('/superadmin/stores', requireAuth, requireSuperAdmin, (_req, res) => {
+  const stores = (db.prepare('SELECT * FROM stores ORDER BY created_at').all() as Record<string, unknown>[]).map((s) => {
+    const ventas = (db.prepare(
+      `SELECT COALESCE(SUM(oi.qty * oi.precio),0) t FROM order_items oi JOIN orders o ON o.id = oi.order_id
+       WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
+    ).get(s.id) as { t: number }).t;
+    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas, activa: !!s.activa, oculta: !!s.oculta };
+  });
+  res.json({ stores });
+});
+
+api.patch('/superadmin/stores/:id/hide', requireAuth, requireSuperAdmin, (req, res) => {
+  const s = db.prepare('SELECT id, oculta FROM stores WHERE id = ?').get(req.params.id) as { id: string; oculta: number } | undefined;
+  if (!s) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const oculta = req.body?.oculta;
+  db.prepare('UPDATE stores SET oculta = ? WHERE id = ?').run(oculta === undefined ? (s.oculta ? 0 : 1) : oculta ? 1 : 0, s.id);
+  res.json({ ok: true });
 });
 
 // ── Archivos de conversaciones (imágenes, videos, etc.) ──────────────

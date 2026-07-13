@@ -19,6 +19,20 @@ export function seed() {
   }
   console.log(`[seed] Admin listo: ${adminEmail} (contraseña tomada de ADMIN_PASSWORD${process.env.ADMIN_PASSWORD ? '' : ' — usa la variable, hoy es admin123'})`);
 
+  // Superadmin: ve TODAS las tiendas (incluidas las ocultas). Contraseña por variable
+  // de entorno para no exponerla en el código.
+  const superEmail = (process.env.SUPERADMIN_EMAIL || 'superadmin@dealflow.sbs').toLowerCase().trim();
+  const superPassword = process.env.SUPERADMIN_PASSWORD || 'cambia-esto';
+  const superUser = db.prepare("SELECT id FROM users WHERE role = 'SUPERADMIN' ORDER BY rowid LIMIT 1").get() as { id: string } | undefined;
+  if (superUser) {
+    db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?').run(superEmail, hashPassword(superPassword), superUser.id);
+  } else {
+    db.prepare('INSERT INTO users (id, email, password_hash, nombre, role) VALUES (?,?,?,?,?)').run(
+      uid(), superEmail, hashPassword(superPassword), 'Superadmin', 'SUPERADMIN',
+    );
+  }
+  console.log(`[seed] Superadmin listo: ${superEmail} (contraseña de SUPERADMIN_PASSWORD${process.env.SUPERADMIN_PASSWORD ? '' : ' — NO configurada, hoy es "cambia-esto"'})`);
+
   // Con SEED_DEMO=0 se limpia la tienda demo si quedó de un arranque anterior
   // (borra en cascada sus productos, leads, etc.). No toca tus tiendas reales.
   if (process.env.SEED_DEMO === '0') {

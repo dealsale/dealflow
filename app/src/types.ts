@@ -134,6 +134,7 @@ export interface Lead {
   hora: string;
   etapa: Etapa;
   asignado: string;
+  etiqueta?: string;
   mensajes: Mensaje[];
 }
 
@@ -179,6 +180,17 @@ export type VendedorSection =
   | 'dealshop'
   | 'integraciones';
 
-export type AdminSection = 'ventas' | 'planes' | 'cuentas';
+export type AdminSection = 'ventas' | 'planes' | 'cuentas' | 'superadmin';
+
+/** Etiquetas de conversación en el CRM. '' = sin etiqueta. */
+export const ETIQUETAS_CRM = ['Seguimiento', 'Venta', 'Garantía', 'Reclamo', 'Mayorista', 'Postventa'] as const;
+export const COLOR_ETIQUETA: Record<string, { bg: string; color: string }> = {
+  Seguimiento: { bg: '#DBEAFE', color: '#1D4ED8' },
+  Venta: { bg: '#D1FAE5', color: '#047857' },
+  'Garantía': { bg: '#FEF3C7', color: '#B45309' },
+  Reclamo: { bg: '#FEE2E2', color: '#B91C1C' },
+  Mayorista: { bg: '#EDE9FE', color: '#6D28D9' },
+  Postventa: { bg: '#E0E7FF', color: '#4338CA' },
+};
 
 export type Mode = 'vendedor' | 'admin';

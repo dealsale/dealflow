@@ -10,7 +10,7 @@ export interface AuthUser {
   id: string;
   email: string;
   nombre: string;
-  role: 'VENDEDOR' | 'ADMIN';
+  role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN';
   storeId: string | null;
   /** Si el admin está "entrando" a una tienda (impersonando), aquí va su id para poder volver. */
   imp?: string;
@@ -59,7 +59,13 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Solo el equipo DealFlow puede entrar aquí.' });
+  // El superadmin también puede usar todo lo del admin.
+  if (req.user?.role !== 'ADMIN' && req.user?.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Solo el equipo DealFlow puede entrar aquí.' });
+  next();
+}
+
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Solo el superadmin puede entrar aquí.' });
   next();
 }
 

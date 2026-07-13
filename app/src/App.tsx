@@ -24,6 +24,7 @@ import { WhatsAppSection } from './sections/WhatsApp';
 import { Cuentas } from './sections/admin/Cuentas';
 import { Planes } from './sections/admin/Planes';
 import { Ventas } from './sections/admin/Ventas';
+import { Superadmin } from './sections/admin/Superadmin';
 import { MCRM } from './sections/mobile/MCRM';
 import { MLeads } from './sections/mobile/MLeads';
 import { MPedidos } from './sections/mobile/MPedidos';
@@ -58,6 +59,8 @@ function ImpersonationBanner({ df }: { df: DealFlowState }) {
 }
 
 function AdminContent({ df }: { df: DealFlowState }) {
+  // El superadmin solo tiene su panel de todas las tiendas.
+  if (df.isSuperadmin) return <Superadmin df={df} />;
   return (
     <>
       {df.adminSection === 'ventas' && <Ventas df={df} />}

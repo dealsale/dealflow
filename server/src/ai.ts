@@ -338,7 +338,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   for (const it of items) {
     db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   }
-  db.prepare("UPDATE leads SET etapa = 'Listo para comprar' WHERE id = ?").run(lead.id);
+  db.prepare("UPDATE leads SET etapa = 'Listo para comprar', etiqueta = 'Venta' WHERE id = ?").run(lead.id);
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
 
   // Mensaje de confirmación al cliente.
