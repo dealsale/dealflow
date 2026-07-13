@@ -143,15 +143,60 @@
     .steps,.features,.stats { grid-template-columns:1fr; }
     .stat + .stat { border-left:none; border-top:1px solid var(--line); padding-top:22px; } section { padding:60px 0; }
   }
+  /* ── Cursor cute en TODA la página ── */
+  body { cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M3 2l6.8 18.6 3-7.6 7.8-2.6z' fill='%2334D399' stroke='%23064E3B' stroke-width='1.5' stroke-linejoin='round'/%3E%3Ccircle cx='21.5' cy='4' r='1.2' fill='%23F59E0B'/%3E%3Crect x='21.1' y='4.8' width='0.9' height='1.6' fill='%23B45309'/%3E%3Crect x='16.5' y='6.4' width='10' height='8' rx='2.8' fill='%23FBBF24' stroke='%23854D0E' stroke-width='1.2'/%3E%3Ccircle cx='20' cy='10.2' r='1.1' fill='%23422006'/%3E%3Ccircle cx='23.4' cy='10.2' r='1.1' fill='%23422006'/%3E%3C/svg%3E") 3 2, auto; }
+  a, button, .btn { cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M3 2l6.8 18.6 3-7.6 7.8-2.6z' fill='%23FBBF24' stroke='%23854D0E' stroke-width='1.5' stroke-linejoin='round'/%3E%3Ccircle cx='21.5' cy='4' r='1.2' fill='%2334D399'/%3E%3Crect x='21.1' y='4.8' width='0.9' height='1.6' fill='%23064E3B'/%3E%3Crect x='16.5' y='6.4' width='10' height='8' rx='2.8' fill='%2334D399' stroke='%23064E3B' stroke-width='1.2'/%3E%3Ccircle cx='20' cy='10' r='1.1' fill='%23052018'/%3E%3Ccircle cx='23.4' cy='10' r='1.1' fill='%23052018'/%3E%3Cpath d='M20 12.2q1.7 1.3 3.4 0' stroke='%23052018' stroke-width='1' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") 3 2, pointer !important; }
+
+  /* ── Glow que sigue el mouse ── */
+  #cursorGlow { position:fixed; width:340px; height:340px; border-radius:50%; pointer-events:none; z-index:2;
+    background:radial-gradient(circle, rgba(52,211,153,.13), rgba(52,211,153,.05) 40%, transparent 70%);
+    transform:translate(-50%,-50%); left:-400px; top:-400px; mix-blend-mode:screen; }
+
+  /* ── Bots cute flotando ── */
+  .fbot { position:absolute; pointer-events:none; z-index:0; filter:drop-shadow(0 16px 26px rgba(0,0,0,.45)); animation:fbFloat var(--dur,7s) ease-in-out infinite; animation-delay:var(--del,0s); }
+  .fbot svg { display:block; }
+  .fbot .eye { transform-origin:center; transform-box:fill-box; animation:fbBlink 4.6s infinite; animation-delay:var(--bdel,0s); }
+  .fbot .arm { transform-origin:top center; transform-box:fill-box; animation:fbWave 3.8s ease-in-out infinite; }
+  .fbot .ant { animation:fbAnt 2s ease-in-out infinite; }
+  @keyframes fbFloat { 0%,100%{ transform:translateY(0) rotate(var(--rot,0deg)); } 50%{ transform:translateY(-18px) rotate(var(--rot,0deg)); } }
+  @keyframes fbBlink { 0%,91%,100%{ transform:scaleY(1); } 94%,97%{ transform:scaleY(.08); } }
+  @keyframes fbWave { 0%,100%{ transform:rotate(0); } 30%{ transform:rotate(-22deg); } 60%{ transform:rotate(10deg); } }
+  @keyframes fbAnt { 0%,100%{ opacity:.5; } 50%{ opacity:1; } }
+  .hero, .hero-copy, .cta-box { position:relative; }
+  .cta-box { overflow:visible; } /* deja asomar al bot que saluda encima */
+
+  /* ── Shimmer en el acento del título ── */
+  .hero h1 .accent { background-size:200% 100%; animation:shimmer 4s ease-in-out infinite; }
+  @keyframes shimmer { 0%,100%{ background-position:0% 50%; } 50%{ background-position:100% 50%; } }
+
+  /* ── Marquee de features ── */
+  .marquee { overflow:hidden; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:rgba(16,185,129,.03); padding:15px 0; position:relative; z-index:1; }
+  .marquee-track { display:flex; gap:44px; width:max-content; animation:marq 26s linear infinite; }
+  .marquee span { font-family:var(--mono); font-size:13px; letter-spacing:.06em; color:var(--muted); white-space:nowrap; display:inline-flex; align-items:center; gap:12px; }
+  .marquee b { color:var(--emerald-soft); font-weight:400; }
+  @keyframes marq { to { transform:translateX(-50%); } }
+
+  /* ── Teléfono con tilt 3D ── */
+  .phone { transition:transform .25s cubic-bezier(.2,.8,.3,1); transform-style:preserve-3d; will-change:transform; }
+
+  /* ── Botón magnético ── */
+  .btn-primary { will-change:transform; }
+
+  @media (pointer:coarse){ #cursorGlow { display:none; } }
+  @media (max-width:940px){ .fbot.hide-md { display:none; } }
   @media (prefers-reduced-motion:reduce){
     .msg,.order-chip { animation:none !important; opacity:1 !important; transform:none !important; }
     .reveal { transition:none; opacity:1; transform:none; } .typing i { animation:none; }
+    .fbot, .fbot .eye, .fbot .arm, .fbot .ant { animation:none !important; }
+    .hero h1 .accent { animation:none; } .marquee-track { animation:none; }
+    #cursorGlow { display:none; }
   }
 </style>
 </head>
 <body>
 <div class="bg-glow" aria-hidden="true"><span class="g1"></span><span class="g2"></span></div>
 <div class="grid-lines" aria-hidden="true"></div>
+<div id="cursorGlow" aria-hidden="true"></div>
 
 <header>
   <div class="wrap nav">
@@ -175,6 +220,12 @@
 <main>
   <div class="wrap">
     <div class="hero">
+      <div class="fbot hide-md" data-depth="18" style="top:26px; right:44.5%; --dur:7s; --rot:-6deg;">
+        <svg width="74" height="74" viewBox="0 0 64 64" fill="none"><circle class="ant" cx="32" cy="7" r="3.4" fill="#FDE68A"/><rect x="30.9" y="9" width="2.2" height="5" rx="1" fill="#064E3B"/><rect x="6" y="30" width="5" height="10" rx="2.5" fill="#064E3B"/><rect x="53" y="30" width="5" height="10" rx="2.5" fill="#064E3B"/><rect x="10" y="14" width="44" height="40" rx="15" fill="#34D399" stroke="#064E3B" stroke-width="2.4"/><rect x="16" y="21" width="32" height="24" rx="10" fill="#064E3B" opacity=".92"/><circle class="eye" cx="26" cy="32" r="3.4" fill="#A7F3D0"/><circle class="eye" cx="38" cy="32" r="3.4" fill="#A7F3D0"/><path d="M27 38.5q5 3.6 10 0" stroke="#A7F3D0" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="20.5" cy="37" r="2.4" fill="#FCA5A5" opacity=".85"/><circle cx="43.5" cy="37" r="2.4" fill="#FCA5A5" opacity=".85"/><g class="arm"><rect x="56" y="20" width="5.5" height="14" rx="2.75" fill="#34D399" stroke="#064E3B" stroke-width="1.8" transform="rotate(28 58 21)"/></g><rect x="20" y="54" width="8" height="6" rx="3" fill="#064E3B"/><rect x="36" y="54" width="8" height="6" rx="3" fill="#064E3B"/></svg>
+      </div>
+      <div class="fbot hide-md" data-depth="10" style="bottom:-10px; left:-64px; --dur:8.4s; --rot:5deg; --bdel:1.4s;">
+        <svg width="58" height="58" viewBox="0 0 64 64" fill="none"><circle class="ant" cx="32" cy="7" r="3.4" fill="#FDE68A"/><rect x="30.9" y="9" width="2.2" height="5" rx="1" fill="#78350F"/><rect x="6" y="30" width="5" height="10" rx="2.5" fill="#78350F"/><rect x="53" y="30" width="5" height="10" rx="2.5" fill="#78350F"/><rect x="10" y="14" width="44" height="40" rx="15" fill="#FBBF24" stroke="#78350F" stroke-width="2.4"/><rect x="16" y="21" width="32" height="24" rx="10" fill="#78350F" opacity=".92"/><circle class="eye" style="--bdel:1.4s" cx="26" cy="32" r="3.4" fill="#FDE68A"/><circle class="eye" style="--bdel:1.4s" cx="38" cy="32" r="3.4" fill="#FDE68A"/><path d="M27 38.5q5 3.6 10 0" stroke="#FDE68A" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="20.5" cy="37" r="2.4" fill="#FDA4AF" opacity=".85"/><circle cx="43.5" cy="37" r="2.4" fill="#FDA4AF" opacity=".85"/><g class="arm"><rect x="56" y="20" width="5.5" height="14" rx="2.75" fill="#FBBF24" stroke="#78350F" stroke-width="1.8" transform="rotate(28 58 21)"/></g><rect x="20" y="54" width="8" height="6" rx="3" fill="#78350F"/><rect x="36" y="54" width="8" height="6" rx="3" fill="#78350F"/></svg>
+      </div>
       <div class="hero-copy">
         <span class="hero-badge"><b>NUEVO</b> Ventas con inteligencia artificial</span>
         <h1>Tu vendedor estrella ahora atiende WhatsApp <span class="accent">solo</span>.</h1>
@@ -202,6 +253,12 @@
           <div class="chat-scroll" id="chatScroll"></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track" id="marqueeTrack">
+      <span><b>✦</b> Responde en segundos</span><span><b>✦</b> Envía fotos y videos</span><span><b>✦</b> Arma combos solo</span><span><b>✦</b> Crea el pedido</span><span><b>✦</b> Avisa el estado del envío</span><span><b>✦</b> CRM en vivo</span><span><b>✦</b> Despacho por Dropi</span><span><b>✦</b> Atiende 24/7</span>
     </div>
   </div>
 
@@ -258,7 +315,10 @@
   <section>
     <div class="wrap">
       <div class="cta-box reveal">
-        <h2>Empieza a vender mientras duermes.</h2>
+        <div class="fbot" style="top:-40px; left:50%; margin-left:-32px; --dur:5.6s;">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none"><circle class="ant" cx="32" cy="7" r="3.4" fill="#FDE68A"/><rect x="30.9" y="9" width="2.2" height="5" rx="1" fill="#1E3A8A"/><rect x="6" y="30" width="5" height="10" rx="2.5" fill="#1E3A8A"/><rect x="53" y="30" width="5" height="10" rx="2.5" fill="#1E3A8A"/><rect x="10" y="14" width="44" height="40" rx="15" fill="#93C5FD" stroke="#1E3A8A" stroke-width="2.4"/><rect x="16" y="21" width="32" height="24" rx="10" fill="#1E3A8A" opacity=".92"/><circle class="eye" style="--bdel:2s" cx="26" cy="32" r="3.4" fill="#DBEAFE"/><circle class="eye" style="--bdel:2s" cx="38" cy="32" r="3.4" fill="#DBEAFE"/><path d="M27 38.5q5 3.6 10 0" stroke="#DBEAFE" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="20.5" cy="37" r="2.4" fill="#F9A8D4" opacity=".85"/><circle cx="43.5" cy="37" r="2.4" fill="#F9A8D4" opacity=".85"/><g class="arm"><rect x="56" y="20" width="5.5" height="14" rx="2.75" fill="#93C5FD" stroke="#1E3A8A" stroke-width="1.8" transform="rotate(28 58 21)"/></g><rect x="20" y="54" width="8" height="6" rx="3" fill="#1E3A8A"/><rect x="36" y="54" width="8" height="6" rx="3" fill="#1E3A8A"/></svg>
+        </div>
+        <h2 style="margin-top:16px">Empieza a vender mientras duermes.</h2>
         <p>Conecta tu WhatsApp, carga tus productos y deja que la IA atienda, venda y despache por ti.</p>
         <div class="hero-cta">
           <a class="btn btn-primary to-app" href="/">Crear mi tienda →</a>
@@ -325,6 +385,51 @@
   }
   var io=new IntersectionObserver(function(entries){ entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }); },{threshold:.16});
   Array.prototype.forEach.call(document.querySelectorAll('.reveal'), function(el){ io.observe(el); });
+
+  // Marquee: duplica el contenido para el loop infinito.
+  var mt = document.getElementById('marqueeTrack');
+  if (mt) mt.innerHTML += mt.innerHTML;
+
+  var fine = window.matchMedia('(pointer: fine)').matches;
+  if (fine && !reduce) {
+    // Glow que sigue el mouse, con suavizado.
+    var glow = document.getElementById('cursorGlow');
+    var gx=-400, gy=-400, tx=gx, ty=gy;
+    document.addEventListener('mousemove', function(e){ tx=e.clientX; ty=e.clientY; }, {passive:true});
+    (function loop(){ gx+=(tx-gx)*0.12; gy+=(ty-gy)*0.12; if(glow){ glow.style.left=gx+'px'; glow.style.top=gy+'px'; } requestAnimationFrame(loop); })();
+
+    // Tilt 3D del teléfono.
+    var phone = document.querySelector('.phone');
+    if (phone) {
+      phone.addEventListener('mousemove', function(e){
+        var r = phone.getBoundingClientRect();
+        var px = (e.clientX - r.left)/r.width - .5, py = (e.clientY - r.top)/r.height - .5;
+        phone.style.transform = 'perspective(900px) rotateY('+(px*10)+'deg) rotateX('+(-py*8)+'deg) translateY(-3px)';
+      });
+      phone.addEventListener('mouseleave', function(){ phone.style.transform = ''; });
+    }
+
+    // Botones magnéticos: se acercan suavecito al cursor.
+    Array.prototype.forEach.call(document.querySelectorAll('.btn-primary'), function(b){
+      b.addEventListener('mousemove', function(e){
+        var r=b.getBoundingClientRect();
+        var mx=(e.clientX-r.left-r.width/2)*0.18, my=(e.clientY-r.top-r.height/2)*0.3;
+        b.style.transform='translate('+mx+'px,'+(my-2)+'px)';
+      });
+      b.addEventListener('mouseleave', function(){ b.style.transform=''; });
+    });
+
+    // Parallax de los bots del hero con el mouse.
+    var bots = document.querySelectorAll('.fbot[data-depth]');
+    document.addEventListener('mousemove', function(e){
+      var cx=window.innerWidth/2, cy=window.innerHeight/2;
+      Array.prototype.forEach.call(bots, function(bt){
+        var d=parseFloat(bt.getAttribute('data-depth'))||10;
+        bt.style.marginLeft=((e.clientX-cx)/cx*d)+'px';
+        bt.style.marginTop=((e.clientY-cy)/cy*d)+'px';
+      });
+    }, {passive:true});
+  }
 })();
 </script>
 </body>
