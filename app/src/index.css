@@ -108,12 +108,10 @@ textarea {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-  }
-}
+/* Nota: antes aquí se apagaban TODAS las animaciones cuando el sistema tenía
+   "reducir movimiento" activo, y eso dejaba el login y el preloader estáticos
+   en muchos Windows. Las animaciones de DealFlow son suaves, así que se
+   mantienen encendidas siempre. */
 
 /* En pantalla pequeña, las cuadrículas marcadas colapsan a una columna */
 @media (max-width: 767px) {

@@ -119,6 +119,7 @@ CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su N
 ##PEDIDO cliente="Nombre Apellido"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="2x Nombre exacto del producto (Talla M · Negro, Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
 El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
 En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar.
+El campo departamento es OBLIGATORIO: en Colombia hay ciudades con el mismo nombre en varios departamentos. Si el cliente no lo ha dicho, pregúntaselo antes de cerrar el pedido.
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
 FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
 
@@ -345,10 +346,17 @@ function pedidoDesdeResumen(leadId: string): string {
 /** Registra el pedido cuando la IA cierra la venta y le confirma al cliente. Devuelve true si lo creó. */
 async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<boolean> {
   const cliente = campoPedido(inner, 'cliente') || lead.nombre || 'Cliente';
-  const departamento = campoPedido(inner, 'departamento');
   const ciudad = campoPedido(inner, 'ciudad');
   const direccion = campoPedido(inner, 'direccion');
   const itemsRaw = campoPedido(inner, 'items');
+  // Departamento: si la IA no lo puso en el marcador, lo rescatamos del último
+  // "Resumen de tu pedido" del chat (hay ciudades repetidas entre departamentos).
+  let departamento = campoPedido(inner, 'departamento');
+  if (!departamento) {
+    const rows = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'bot' AND texto != '' ORDER BY created_at DESC LIMIT 8").all(lead.id) as { texto: string }[];
+    const resumen = rows.map((r) => r.texto).find((t) => /departamento/i.test(t));
+    if (resumen) departamento = campoResumen(resumen, 'Departamento');
+  }
   // Los ítems pueden traer el detalle entre paréntesis: "2x Bota Recta (Talla M · Negro, Gris)".
   // Separamos por comas SOLO fuera de paréntesis para no partir la lista de colores.
   const partes: string[] = [];

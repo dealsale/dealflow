@@ -157,14 +157,15 @@ function App() {
   const df = useDealFlowState();
   const isMobile = useIsMobile();
 
-  // Preloader de bots: se muestra un momento justo después de iniciar sesión.
+  // Preloader de bots: aparece al abrir la app con sesión activa y también
+  // justo después de iniciar sesión.
   const [splash, setSplash] = useState(false);
-  const prevLogged = useRef(df.isLoggedIn);
+  const prevLogged = useRef(false);
   useEffect(() => {
     if (df.isLoggedIn && !prevLogged.current) {
       setSplash(true);
       const t = setTimeout(() => setSplash(false), 2200);
-      prevLogged.current = df.isLoggedIn;
+      prevLogged.current = true;
       return () => clearTimeout(t);
     }
     prevLogged.current = df.isLoggedIn;

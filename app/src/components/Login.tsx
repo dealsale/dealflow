@@ -38,9 +38,6 @@ const CSS = `
 .df-lg-input { transition: border-color .2s, box-shadow .2s, transform .2s; }
 .df-lg-input:focus { outline:none; border-color:#34D399 !important; box-shadow:0 0 0 4px rgba(52,211,153,.18); }
 .df-lg-blob { position:absolute; border-radius:50%; filter:blur(80px); pointer-events:none; animation: dfBlob 11s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .df-lg-bot, .df-lg-spark, .df-lg-logo, .df-lg-eye, .df-lg-arm, .df-lg-ant, .df-lg-blob { animation: none !important; }
-}
 @media (max-width: 640px) { .df-lg-bot.hide-sm { display:none; } }
 `;
 
