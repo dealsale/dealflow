@@ -311,6 +311,14 @@ function fechaBogota(iso?: string): string {
   return isNaN(+d) ? hoy : d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
 }
 
+/** Hora local de Bogotá (HH:MM) a partir del datetime UTC del servidor. */
+function horaBogotaDe(iso: string): string {
+  const d = new Date(String(iso).replace(' ', 'T') + (String(iso).endsWith('Z') ? '' : 'Z'));
+  return isNaN(+d)
+    ? String(iso).slice(11, 16)
+    : d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' });
+}
+
 function mapApiOrders(items: ApiOrder[]): Order[] {
   return items.map((o) => ({
     id: o.id,
@@ -320,7 +328,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     tel: o.tel,
     direccion: o.direccion,
     estado: (ESTADOS_PEDIDO.includes(o.estado) ? o.estado : 'Nuevo') as Order['estado'],
-    hora: o.createdAt ? String(o.createdAt).slice(11, 16) : 'ahora',
+    hora: o.createdAt ? horaBogotaDe(o.createdAt) : 'ahora',
     fecha: fechaBogota(o.createdAt),
     transportadora: o.transportadora || 'Dropi',
     guia: o.guia,

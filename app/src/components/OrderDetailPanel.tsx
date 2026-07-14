@@ -18,6 +18,13 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748B', fontSize: 12.5, marginBottom: 14 }}>
+            <span>📅</span>
+            <span>
+              Pedido el <b style={{ color: '#1E293B' }}>{sel.fecha || 'hoy'}</b> a las <b style={{ color: '#1E293B' }}>{sel.hora}</b>
+            </span>
+          </div>
+
           <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Cliente</div>
           <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, marginBottom: 18 }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>{sel.cliente}</div>

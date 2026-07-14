@@ -93,8 +93,9 @@ PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma ge
 FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
 
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
-##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto, 1x Otro producto"; total="180000"##
+##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto (Talla M · Negro, Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
 El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
+En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar.
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
 FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
 
@@ -302,9 +303,16 @@ function pedidoDesdeResumen(leadId: string): string {
   const total = (campoResumen(resumen, 'Total').match(/\d/g) || []).join('');
   const prodField = campoResumen(resumen, 'Producto') || resumen;
   const items: string[] = [];
-  const re = /(\d+)\s*[xX×]\s*([^—\-,\n*]+)/g;
+  // Conserva el detalle (talla/color) que viene tras el nombre: "3 x Bota — Talla: L — Negro, Camel"
+  // se convierte en "3x Bota (Talla: L · Negro, Camel)" para que el pedido quede completo.
+  const re = /(\d+)\s*[xX×]\s*(.+?)(?=\s+\d+\s*[xX×]|$)/g;
   let mm: RegExpExecArray | null;
-  while ((mm = re.exec(prodField))) items.push(`${mm[1]}x ${mm[2].trim()}`);
+  while ((mm = re.exec(prodField))) {
+    const trozos = mm[2].split(/\s*[—–]\s*/).map((t) => t.trim()).filter(Boolean);
+    const base = trozos[0] || mm[2].trim();
+    const detalle = trozos.slice(1).join(' · ');
+    items.push(detalle ? `${mm[1]}x ${base} (${detalle})` : `${mm[1]}x ${base}`);
+  }
   if (!items.length || (!direccion && !ciudad)) return '';
   console.log(`[ia] pedido tomado del resumen (la IA no puso el marcador) para lead ${leadId}`);
   return ` cliente="${cliente}"; ciudad="${ciudad}"; direccion="${direccion}"; items="${items.join(', ')}"; total="${total}"`;
@@ -316,13 +324,26 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   const ciudad = campoPedido(inner, 'ciudad');
   const direccion = campoPedido(inner, 'direccion');
   const itemsRaw = campoPedido(inner, 'items');
-  const items = itemsRaw.split(',').map((s) => s.trim()).filter(Boolean).map((it) => {
+  // Los ítems pueden traer el detalle entre paréntesis: "2x Bota Recta (Talla M · Negro, Gris)".
+  // Separamos por comas SOLO fuera de paréntesis para no partir la lista de colores.
+  const partes: string[] = [];
+  let buf = '';
+  let dentro = 0;
+  for (const ch of itemsRaw) {
+    if (ch === '(') dentro++;
+    if (ch === ')') dentro = Math.max(0, dentro - 1);
+    if (ch === ',' && dentro === 0) { partes.push(buf); buf = ''; } else buf += ch;
+  }
+  if (buf.trim()) partes.push(buf);
+  const items = partes.map((s) => s.trim()).filter(Boolean).map((it) => {
     const mm = it.match(/(\d+)\s*[xX×]\s*(.+)/);
     const qty = mm ? parseInt(mm[1], 10) || 1 : 1;
-    const nom = limpiarValor(mm ? mm[2] : it).toLowerCase();
-    const prod = productRows.find((p) => String(p.nombre).toLowerCase() === nom)
-      || productRows.find((p) => String(p.nombre).toLowerCase().includes(nom) || nom.includes(String(p.nombre).toLowerCase()));
-    return { qty, nombre: prod ? String(prod.nombre) : limpiarValor(mm ? mm[2] : it), precio: prod ? Number(prod.precio) : 0 };
+    const completo = limpiarValor(mm ? mm[2] : it); // nombre CON el detalle (talla/color)
+    const base = completo.split('(')[0].split('—')[0].trim().toLowerCase(); // nombre solo, para buscar el precio
+    const prod = productRows.find((p) => String(p.nombre).toLowerCase() === base)
+      || productRows.find((p) => String(p.nombre).toLowerCase().includes(base) || base.includes(String(p.nombre).toLowerCase()));
+    // Guardamos el nombre COMPLETO (con talla y color): el vendedor lo necesita para despachar.
+    return { qty, nombre: completo, precio: prod ? Number(prod.precio) : 0 };
   }).filter((i) => i.nombre);
   if (!items.length || (!direccion && !ciudad)) return false; // datos insuficientes, esperamos
 
@@ -343,7 +364,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
 
   // Mensaje de confirmación al cliente.
   const primerNombre = cliente.split(' ')[0];
-  const producto = items[0]?.nombre || 'tu pedido';
+  const producto = (items[0]?.nombre || 'tu pedido').split('(')[0].split('—')[0].trim();
   const confirmacion = `Tu pedido ya quedó registrado exitosamente 🎉\n\nTe llegará un mensaje de confirmación con el número de pedido y los detalles del envío en un momento 📲\n\n¡Gracias por tu compra, ${primerNombre}! Que disfrutes mucho tus ${producto} 🙌😊`;
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', confirmacion);
   await sendWhatsappText(storeId, destino, confirmacion, pn);

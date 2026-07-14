@@ -11,6 +11,14 @@ export const webhooks = Router();
 
 const ESTADOS = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado'] as const;
 
+/** Hora local de Bogotá (GMT-5) a partir del datetime UTC que guarda SQLite. */
+function horaBogota(dt: unknown): string {
+  const d = new Date(String(dt || '').replace(' ', 'T') + 'Z');
+  return isNaN(+d)
+    ? String(dt || '').slice(11, 16)
+    : d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' });
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────
 api.post('/auth/login', (req, res) => {
   const { email, password } = req.body || {};
@@ -82,7 +90,7 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
     id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp',
     mensajes: (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime, media_nombre FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
-      de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null,
+      de: m.de, texto: m.texto, hora: horaBogota(m.created_at), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null,
     })),
   }));
   const assistant = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string } | undefined;
@@ -115,7 +123,7 @@ api.get('/leads', requireAuth, requireStore, (req, res) => {
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
     id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp',
     mensajes: (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime, media_nombre FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
-      de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null,
+      de: m.de, texto: m.texto, hora: horaBogota(m.created_at), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null,
     })),
   }));
   res.json({ leads });
@@ -621,7 +629,7 @@ api.get('/webchat/:storeId/messages', (req, res) => {
   const lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND wa_id = ?').get(store.id, 'web:' + session) as { id: string } | undefined;
   const mensajes = lead
     ? (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime FROM messages WHERE lead_id = ? ORDER BY created_at').all(lead.id) as Record<string, unknown>[]).map((m) => ({
-        de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null,
+        de: m.de, texto: m.texto, hora: horaBogota(m.created_at), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null,
       }))
     : [];
   res.json({ tienda: store.nombre, mensajes });
