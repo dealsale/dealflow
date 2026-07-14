@@ -267,15 +267,27 @@ export function Productos({ df }: { df: DealFlowState }) {
                     <span style={{ position: 'absolute', top: 2, left: p.mensajeInicialActivo !== false ? 19 : 2, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 2px rgba(15,23,42,.3)' }} />
                   </span>
                 </div>
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Disparador · si el primer mensaje se parece a esto, envía todo el mensaje inicial</div>
-                  <input
-                    className="df-input"
-                    value={p.disparador || ''}
-                    onChange={(e) => p.setDisparador(e.target.value)}
-                    placeholder="Ej: ¡Hola! Me interesan los Bota recta ámbar."
-                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 }}
-                  />
+                <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 10, marginBottom: 12 }}>
+                  <div>
+                    <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Disparador · si el primer mensaje se parece a esto, envía todo el mensaje inicial</div>
+                    <input
+                      className="df-input"
+                      value={p.disparador || ''}
+                      onChange={(e) => p.setDisparador(e.target.value)}
+                      placeholder="Ej: ¡Hola! Me interesan los Bota recta ámbar."
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>ID en Dropi · para crear la orden real al despachar</div>
+                    <input
+                      className="df-input"
+                      value={p.dropiId || ''}
+                      onChange={(e) => p.setDropiId(e.target.value)}
+                      placeholder="Ej: 123456"
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+                    />
+                  </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
                   {p.bloquesDecorados.map((b, i) => (
