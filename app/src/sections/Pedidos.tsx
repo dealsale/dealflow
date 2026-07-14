@@ -8,6 +8,14 @@ export function Pedidos({ df }: { df: DealFlowState }) {
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Pedidos</h1>
           <p style={{ color: '#64748B', fontSize: 14, margin: '4px 0 0' }}>Toca un pedido para ver el detalle, o avánzalo directo con el botón.</p>
         </div>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={df.exportarPedidos}
+          title="Descarga todos los pedidos en un archivo de Excel (CSV)"
+          style={{ background: '#fff', color: '#334155', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          ⬇ Exportar a Excel
+        </button>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>

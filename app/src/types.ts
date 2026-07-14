@@ -16,6 +16,8 @@ export interface Order {
   direccion: string;
   estado: EstadoPedido;
   hora: string;
+  /** Fecha del pedido en Bogotá (YYYY-MM-DD), para métricas de hoy/ayer. */
+  fecha?: string;
   transportadora: string;
   /** Número de guía generado al enviar el pedido a Dropi */
   guia?: string;

@@ -26,7 +26,7 @@ export function Resumen({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="Resumen">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Hola, {df.saludoNombre} 👋</h1>
-      <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 22px' }}>Así va tu tienda hoy, martes 8 de julio.</p>
+      <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 22px' }}>Así va tu tienda hoy, {df.resumenFecha}.</p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 22 }}>
         <div onClick={() => df.go('pedidos')} className="df-card-hover-amber" style={{ ...card, cursor: 'pointer' }}>
@@ -37,7 +37,7 @@ export function Resumen({ df }: { df: DealFlowState }) {
         <div style={card}>
           <div style={{ color: '#64748B', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Ventas de hoy</div>
           <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.03em' }}>{df.ventasHoy}</div>
-          <div style={{ color: '#059669', fontSize: 12, marginTop: 4, fontWeight: 600 }}>↑ 3 pedidos más que ayer</div>
+          <div style={{ color: df.ventasComparacionColor, fontSize: 12, marginTop: 4, fontWeight: 600 }}>{df.ventasComparacion}</div>
         </div>
         <div onClick={() => df.go('leads')} className="df-card-hover-green" style={{ ...card, cursor: 'pointer' }}>
           <div style={{ color: '#64748B', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Leads activos</div>
@@ -47,7 +47,7 @@ export function Resumen({ df }: { df: DealFlowState }) {
         <div onClick={() => df.go('productos')} className="df-card-hover-green" style={{ ...card, cursor: 'pointer' }}>
           <div style={{ color: '#64748B', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Productos</div>
           <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.03em' }}>{df.productCount}</div>
-          <div style={{ color: '#DC2626', fontSize: 12, marginTop: 4, fontWeight: 600 }}>1 agotado · 1 con poco stock</div>
+          <div style={{ color: '#64748B', fontSize: 12, marginTop: 4 }}>en tu catálogo, listos para la IA</div>
         </div>
       </div>
 

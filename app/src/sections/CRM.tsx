@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
 import { VoiceRecorder } from '../components/VoiceRecorder';
 import type { DealFlowState } from '../hooks/useDealFlowState';
@@ -6,17 +6,56 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 export function CRM({ df }: { df: DealFlowState }) {
   const chat = df.crmChat;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [filtroEtiqueta, setFiltroEtiqueta] = useState('');
+  const [busca, setBusca] = useState('');
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat?.tel, chat?.mensajesDecorated.length]);
+  const q = busca.trim().toLowerCase();
+  const chatsFiltrados = df.crmChats.filter(
+    (c) => (!filtroEtiqueta || c.etiqueta === filtroEtiqueta) && (!q || c.nombre.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)),
+  );
+  const chipStyle = (activo: boolean): React.CSSProperties => ({
+    border: '1px solid ' + (activo ? '#059669' : '#E2E8F0'),
+    background: activo ? '#ECFDF5' : '#fff',
+    color: activo ? '#047857' : '#64748B',
+    borderRadius: 999,
+    padding: '5px 11px',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  });
   return (
     <section data-screen-label="CRM">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>CRM · Chats en vivo</h1>
-      <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 18px' }}>Lo que pasa ahora mismo en tu WhatsApp. Entra a un chat si quieres tomar el control.</p>
+      <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 14px' }}>Lo que pasa ahora mismo en tu WhatsApp. Entra a un chat si quieres tomar el control.</p>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <input
+          className="df-input"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="🔍 Buscar por nombre o teléfono…"
+          style={{ border: '1px solid #E2E8F0', borderRadius: 999, padding: '8px 14px', fontFamily: 'inherit', fontSize: 13, width: 240 }}
+        />
+        <span onClick={() => setFiltroEtiqueta('')} style={chipStyle(!filtroEtiqueta)}>Todos</span>
+        {df.etiquetasCrm.map((et) => (
+          <span key={et} onClick={() => setFiltroEtiqueta(filtroEtiqueta === et ? '' : et)} style={chipStyle(filtroEtiqueta === et)}>
+            {et}
+          </span>
+        ))}
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
         <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
-          {df.crmChats.map((c) => (
+          {chatsFiltrados.length === 0 && (
+            <div style={{ padding: '28px 16px', textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>
+              Ningún chat coincide con el filtro.
+            </div>
+          )}
+          {chatsFiltrados.map((c) => (
             <div key={c.id} onClick={c.select} style={c.crmRowStyle}>
               <div style={c.avatarStyle}>{c.iniciales}</div>
               <div style={{ flex: 1, minWidth: 0 }}>

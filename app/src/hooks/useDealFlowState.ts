@@ -302,6 +302,14 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
 }
 
 const ESTADOS_PEDIDO = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado'];
+/** Fecha (YYYY-MM-DD) en Bogotá a partir del datetime UTC del servidor. */
+function fechaBogota(iso?: string): string {
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  if (!iso) return hoy;
+  const d = new Date(String(iso).replace(' ', 'T') + (String(iso).endsWith('Z') ? '' : 'Z'));
+  return isNaN(+d) ? hoy : d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+}
+
 function mapApiOrders(items: ApiOrder[]): Order[] {
   return items.map((o) => ({
     id: o.id,
@@ -312,6 +320,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     direccion: o.direccion,
     estado: (ESTADOS_PEDIDO.includes(o.estado) ? o.estado : 'Nuevo') as Order['estado'],
     hora: o.createdAt ? String(o.createdAt).slice(11, 16) : 'ahora',
+    fecha: fechaBogota(o.createdAt),
     transportadora: o.transportadora || 'Dropi',
     guia: o.guia,
     envio: o.envio || 0,
@@ -1574,8 +1583,21 @@ export function useDealFlowState() {
   );
 
   const newOrders = orders.filter((o) => o.estado === 'Nuevo');
-  const activeOrders = orders.filter((o) => o.estado !== 'Entregado');
-  const ventasHoy = activeOrders.reduce((a, o) => a + o.items.reduce((x, it) => x + it.qty * it.precio, 0), 0);
+  // Métricas REALES del día (zona horaria de Bogotá): total del pedido = total
+  // acordado por la IA o, si no, la suma de los ítems.
+  const totalPedido = (o: Order) => (o.total && o.total > 0 ? o.total : o.items.reduce((x, it) => x + it.qty * it.precio, 0));
+  const hoyStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const ayerStr = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const pedidosHoy = orders.filter((o) => (o.fecha || hoyStr) === hoyStr);
+  const pedidosAyer = orders.filter((o) => o.fecha === ayerStr);
+  const ventasHoy = pedidosHoy.reduce((a, o) => a + totalPedido(o), 0);
+  const difAyer = pedidosHoy.length - pedidosAyer.length;
+  const ventasComparacion = pedidosHoy.length === 0 && pedidosAyer.length === 0
+    ? 'aún sin pedidos hoy'
+    : difAyer > 0 ? `↑ ${difAyer} pedido${difAyer === 1 ? '' : 's'} más que ayer`
+    : difAyer < 0 ? `↓ ${-difAyer} pedido${difAyer === -1 ? '' : 's'} menos que ayer`
+    : 'igual que ayer';
+  const resumenFecha = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Bogota' });
 
   const filterList = ['Todos', ...ESTADO_ORDER];
   const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -1842,6 +1864,35 @@ export function useDealFlowState() {
     });
   }
 
+  // Exporta los pedidos a CSV para Excel (BOM UTF-8 + ';' que es el separador
+  // que Excel usa con configuración regional de Colombia).
+  function exportarPedidos() {
+    const lista = ordersRef.current;
+    if (!lista.length) return;
+    const esc = (v: unknown) => {
+      const s = String(v ?? '').replace(/"/g, '""');
+      return /[";\n]/.test(s) ? `"${s}"` : s;
+    };
+    const filas = [
+      ['Pedido', 'Fecha', 'Hora', 'Cliente', 'Teléfono', 'Ciudad', 'Dirección', 'Productos', 'Total', 'Envío', 'Estado', 'Transportadora', 'Guía', 'Nota'],
+      ...lista.map((o) => [
+        o.id, o.fecha || '', o.hora, o.cliente, o.tel, o.ciudad, o.direccion,
+        o.items.map((it) => `${it.qty}x ${it.nombre}`).join(' + '),
+        o.total && o.total > 0 ? o.total : o.items.reduce((x, it) => x + it.qty * it.precio, 0),
+        o.envio || 0, o.estado, o.transportadora, o.guia || '', o.nota || '',
+      ]),
+    ];
+    const csv = '\uFEFF' + filas.map((f) => f.map(esc).join(';')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pedidos-dealflow-${new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   const waPill: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '6px', background: waConnected ? '#ECFDF5' : '#FEF2F2', border: '1px solid ' + (waConnected ? '#A7F3D0' : '#FECACA'), color: waConnected ? '#047857' : '#B91C1C', borderRadius: '999px', padding: '4px 11px', fontSize: '12px', fontWeight: 700 };
   const waDot: CSSProperties = { width: '8px', height: '8px', borderRadius: '50%', background: waConnected ? '#10B981' : '#EF4444' };
 
@@ -1900,9 +1951,14 @@ export function useDealFlowState() {
     newOrdersCount: newOrders.length,
     hasNewOrders: newOrders.length > 0,
     ventasHoy: fmt(ventasHoy),
-    leadsCount: leads.length,
+    pedidosHoyCount: pedidosHoy.length,
+    ventasComparacion,
+    ventasComparacionColor: difAyer > 0 ? '#059669' : difAyer < 0 ? '#DC2626' : '#64748B',
+    resumenFecha,
+    leadsCount: leadsSource.length,
     productCount: products.length,
     recentOrders,
+    exportarPedidos,
 
     orderFilters,
     filter,
