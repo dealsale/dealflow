@@ -80,7 +80,7 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
-    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '',
+    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp',
     mensajes: (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime, media_nombre FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
       de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null,
     })),
@@ -113,7 +113,7 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
 api.get('/leads', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
-    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '',
+    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp',
     mensajes: (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime, media_nombre FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
       de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null,
     })),
@@ -586,6 +586,45 @@ api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
   db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
   db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
   res.json({ storeId });
+});
+
+// ── Canal WEB (webchat) ───────────────────────────────────────────────
+// Segundo canal de la tienda: sirve para probar la IA sin WhatsApp y como
+// chat para visitantes. Sin sesión: se identifica por storeId + session.
+const sesionLimpia = (s: unknown) => String(s || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+
+api.post('/webchat/:storeId/messages', async (req, res) => {
+  const store = db.prepare('SELECT id, activa FROM stores WHERE id = ?').get(req.params.storeId) as { id: string; activa: number } | undefined;
+  if (!store || !store.activa) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const session = sesionLimpia(req.body?.session);
+  const texto = String(req.body?.texto || '').trim().slice(0, 2000);
+  if (!session || session.length < 8 || !texto) return res.status(400).json({ error: 'Faltan la sesión o el mensaje.' });
+  const waId = 'web:' + session;
+  let lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND wa_id = ?').get(store.id, waId) as { id: string } | undefined;
+  if (!lead) {
+    const nombre = String(req.body?.nombre || '').trim().slice(0, 60) || 'Visitante Web';
+    const id = uid();
+    db.prepare("INSERT INTO leads (id, store_id, nombre, tel, wa_id, canal) VALUES (?,?,?,?,?, 'web')").run(id, store.id, nombre, waId, waId);
+    lead = { id };
+  }
+  db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'cliente', texto);
+  const { maybeAutoReply } = await import('./ai.js');
+  void maybeAutoReply(store.id, lead.id).catch((e) => console.error('[webchat] error IA', e));
+  res.json({ ok: true });
+});
+
+api.get('/webchat/:storeId/messages', (req, res) => {
+  const store = db.prepare('SELECT id, nombre, activa FROM stores WHERE id = ?').get(req.params.storeId) as { id: string; nombre: string; activa: number } | undefined;
+  if (!store || !store.activa) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const session = sesionLimpia(req.query.session);
+  if (!session) return res.status(400).json({ error: 'Falta la sesión.' });
+  const lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND wa_id = ?').get(store.id, 'web:' + session) as { id: string } | undefined;
+  const mensajes = lead
+    ? (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime FROM messages WHERE lead_id = ? ORDER BY created_at').all(lead.id) as Record<string, unknown>[]).map((m) => ({
+        de: m.de, texto: m.texto, hora: String(m.created_at).slice(11, 16), tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null,
+      }))
+    : [];
+  res.json({ tienda: store.nombre, mensajes });
 });
 
 // ── Superadmin: ve TODAS las tiendas y puede ocultarlas del admin ─────

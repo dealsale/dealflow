@@ -162,6 +162,7 @@ addColumn('products', "disparador TEXT NOT NULL DEFAULT ''");
 addColumn('products', 'mensaje_inicial_activo INTEGER NOT NULL DEFAULT 1');
 addColumn('orders', 'total INTEGER NOT NULL DEFAULT 0');
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
+addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal
 addColumn('sent_presentations', 'created_at TEXT');
 addColumn('messages', "tipo TEXT NOT NULL DEFAULT 'texto'");

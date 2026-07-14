@@ -61,6 +61,7 @@ export function CRM({ df }: { df: DealFlowState }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontWeight: 600, fontSize: 14 }}>{c.nombre}</span>
+                  {c.canal === 'web' && <span title="Llegó por el chat web" style={{ fontSize: 11 }}>🌐</span>}
                   {c.etiquetaStyle && <span style={c.etiquetaStyle}>{c.etiqueta}</span>}
                   <span style={{ color: '#94A3B8', fontSize: 11.5, marginLeft: 'auto' }}>{c.hora}</span>
                 </div>

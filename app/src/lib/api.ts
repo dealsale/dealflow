@@ -103,8 +103,15 @@ export interface ApiLead {
   etapa: string;
   asignado: string;
   etiqueta?: string;
+  canal?: string;
   mensajes: ApiMensaje[];
 }
+
+// ── Webchat (canal web, sin sesión de usuario) ──
+export const apiWebchatSend = (storeId: string, session: string, texto: string, nombre?: string) =>
+  req<{ ok: true }>(`/api/webchat/${storeId}/messages`, 'POST', { session, texto, nombre });
+export const apiWebchatList = (storeId: string, session: string) =>
+  req<{ tienda: string; mensajes: ApiMensaje[] }>(`/api/webchat/${storeId}/messages?session=${encodeURIComponent(session)}`, 'GET');
 
 export interface ApiProduct {
   id: string;

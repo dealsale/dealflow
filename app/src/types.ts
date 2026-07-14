@@ -137,6 +137,8 @@ export interface Lead {
   etapa: Etapa;
   asignado: string;
   etiqueta?: string;
+  /** Canal de la conversación: whatsapp (default) o web. */
+  canal?: string;
   mensajes: Mensaje[];
 }
 

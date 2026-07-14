@@ -289,6 +289,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     etapa: (ETAPAS_VALIDAS.includes(l.etapa) ? l.etapa : 'Explorando') as Lead['etapa'],
     asignado: l.asignado,
     etiqueta: l.etiqueta || '',
+    canal: l.canal || 'whatsapp',
     mensajes: l.mensajes.map((m) => ({
       de: (m.de === 'bot' || m.de === 'vendedor' ? m.de : 'cliente') as Mensaje['de'],
       texto: m.texto,
@@ -450,6 +451,7 @@ export function useDealFlowState() {
   const [loginError, setLoginError] = useState<string>('');
   const [apiMode, setApiMode] = useState<boolean>(false);
   const [storeNombre, setStoreNombre] = useState<string>('');
+  const [storeId, setStoreId] = useState<string>('');
   const [waVerifyToken, setWaVerifyToken] = useState<string>('');
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [mkIdea, setMkIdea] = useState('');
@@ -1067,6 +1069,7 @@ export function useDealFlowState() {
           setWaCfg({ wabaId: data.whatsapp.wabaId, phoneNumberId: data.whatsapp.phoneNumberId, numero: data.whatsapp.numero });
         }
         if (data.store?.nombre) setStoreNombre(data.store.nombre);
+        if (data.store?.id) setStoreId(data.store.id);
         if (data.whatsapp.verifyToken) setWaVerifyToken(data.whatsapp.verifyToken);
         // Datos reales de la tienda: nada de textos demo de "Luna Accesorios".
         setAssistantText(data.assistant?.instrucciones || '');
@@ -1907,6 +1910,7 @@ export function useDealFlowState() {
     etiquetasCrm: ETIQUETAS_CRM,
     section,
     adminSection,
+    storeId,
     go,
     goAdmin,
     toggleMode,

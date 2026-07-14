@@ -66,6 +66,9 @@ export async function verifyWhatsappCredentials(phoneNumberId: string, accessTok
 
 /** Envía un mensaje de texto por la vía activa de la tienda (Cloud API o QR). */
 export async function sendWhatsappText(storeId: string, to: string, texto: string, pn?: string): Promise<{ ok: boolean; error?: string }> {
+  // Canal WEB: el mensaje ya queda guardado en la BD y el chat web lo lee por
+  // polling; no hay nada que "enviar" fuera.
+  if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
     | { phone_number_id: string; access_token: string; conectado: number; modo: string }
     | undefined;
@@ -139,6 +142,8 @@ export async function sendWhatsappMedia(
   nombre: string,
   pn?: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  // Canal WEB: la multimedia ya queda en la BD (media_url) y el chat web la muestra.
+  if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
     | { phone_number_id: string; access_token: string; conectado: number; modo: string }
     | undefined;
