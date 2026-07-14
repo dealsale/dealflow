@@ -103,6 +103,15 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
             <span>{df.modeBtnLabel}</span>
           </div>
         )}
+        {df.pwaDisponible && (
+          <div
+            onClick={df.instalarPwa}
+            className="df-toggle-mode"
+            style={{ textAlign: 'center', padding: '12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: '#34D399', fontSize: 13, fontWeight: 700, border: '1px solid rgba(52,211,153,.35)', background: 'rgba(16,185,129,.08)' }}
+          >
+            📲 Instalar la app
+          </div>
+        )}
         <div
           onClick={df.logout}
           className="df-toggle-mode"

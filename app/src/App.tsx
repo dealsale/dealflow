@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import { Header } from './components/Header';
+import { BotPreloader } from './components/BotPreloader';
 import { Login } from './components/Login';
 import { OrderDetailPanel } from './components/OrderDetailPanel';
 import { OrderToast } from './components/OrderToast';
@@ -154,9 +156,24 @@ function MobileApp({ df }: { df: DealFlowState }) {
 function App() {
   const df = useDealFlowState();
   const isMobile = useIsMobile();
+
+  // Preloader de bots: se muestra un momento justo después de iniciar sesión.
+  const [splash, setSplash] = useState(false);
+  const prevLogged = useRef(df.isLoggedIn);
+  useEffect(() => {
+    if (df.isLoggedIn && !prevLogged.current) {
+      setSplash(true);
+      const t = setTimeout(() => setSplash(false), 2200);
+      prevLogged.current = df.isLoggedIn;
+      return () => clearTimeout(t);
+    }
+    prevLogged.current = df.isLoggedIn;
+  }, [df.isLoggedIn]);
+
   if (!df.isLoggedIn) return <Login df={df} />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+      {splash && <BotPreloader />}
       {df.impersonando && <ImpersonationBanner df={df} />}
       <div style={{ flex: 1, minHeight: 0 }}>{isMobile ? <MobileApp df={df} /> : <DesktopApp df={df} />}</div>
     </div>

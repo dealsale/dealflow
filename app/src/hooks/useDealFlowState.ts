@@ -468,6 +468,8 @@ export function useDealFlowState() {
   const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
   const [iaPredeterminada, setIaPredeterminada] = useState('deepseek');
   const [integracionMsg, setIntegracionMsg] = useState('');
+  // PWA: el navegador avisa cuándo se puede instalar (index.html captura el prompt).
+  const [pwaDisponible, setPwaDisponible] = useState<boolean>(() => typeof window !== 'undefined' && !!(window as unknown as { dfPwaPrompt?: unknown }).dfPwaPrompt);
   const [waVerifyToken, setWaVerifyToken] = useState<string>('');
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [mkIdea, setMkIdea] = useState('');
@@ -1489,6 +1491,28 @@ export function useDealFlowState() {
     void apiToggleHideStore(id, !oculta).then((r) => { if (r.error) void reloadSuper(); });
   }
 
+  // ── PWA: instalar la app ──
+  useEffect(() => {
+    const listo = () => setPwaDisponible(true);
+    const instalada = () => setPwaDisponible(false);
+    window.addEventListener('df-pwa-listo', listo);
+    window.addEventListener('df-pwa-instalada', instalada);
+    return () => {
+      window.removeEventListener('df-pwa-listo', listo);
+      window.removeEventListener('df-pwa-instalada', instalada);
+    };
+  }, []);
+  function instalarPwa() {
+    const w = window as unknown as { dfPwaPrompt?: { prompt: () => void; userChoice?: Promise<unknown> } };
+    const p = w.dfPwaPrompt;
+    if (!p) return;
+    p.prompt();
+    void p.userChoice?.then(() => {
+      w.dfPwaPrompt = undefined;
+      setPwaDisponible(false);
+    });
+  }
+
   // ── Integraciones por tienda (API keys propias + IA predeterminada) ──
   async function reloadIntegraciones() {
     const { data } = await apiIntegraciones();
@@ -2266,6 +2290,8 @@ export function useDealFlowState() {
     assistantSaved,
 
     integrations: integrationsDecorated,
+    pwaDisponible,
+    instalarPwa,
     integracionesCfg,
     iaPredeterminada,
     integracionMsg,

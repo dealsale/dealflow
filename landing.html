@@ -210,6 +210,7 @@
       <a href="#resultado">Resultado</a>
     </nav>
     <span class="nav-spacer"></span>
+    <a class="nav-ghost to-app-instalar" href="/" title="Instala DealFlow como aplicación en tu equipo o celular">📲 Instala la app</a>
     <a class="nav-ghost to-app" href="/">Entrar</a>
     <a class="btn btn-primary to-app" href="/">Empezar gratis</a>
   </div>
@@ -320,7 +321,7 @@
         <p>Conecta tu WhatsApp, carga tus productos y deja que la IA atienda, venda y despache por ti.</p>
         <div class="hero-cta">
           <a class="btn btn-primary to-app" href="/">Crear mi tienda →</a>
-          <a class="btn btn-ghost" href="#como">Ver una demo</a>
+          <a class="btn btn-ghost to-app-instalar" href="/">📲 Instala la app</a>
         </div>
       </div>
     </div>
@@ -347,6 +348,8 @@
   var h = location.hostname.replace(/^www\./,'');
   var appUrl = (h==='localhost'||h.indexOf('app.')===0||/^\d+\.\d+\.\d+\.\d+$/.test(h)) ? '/' : (location.protocol+'//app.'+h);
   Array.prototype.forEach.call(document.querySelectorAll('.to-app'), function(a){ a.href=appUrl; });
+  // "Instala la app": abre la app con ?instalar=1 para que muestre el aviso de instalación PWA.
+  Array.prototype.forEach.call(document.querySelectorAll('.to-app-instalar'), function(a){ a.href=appUrl+(appUrl.indexOf('?')>=0?'&':'?')+'instalar=1'; });
 
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var scroll = document.getElementById('chatScroll');

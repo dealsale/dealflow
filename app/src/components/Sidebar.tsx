@@ -106,6 +106,15 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       )}
 
       <div style={{ flex: 1 }} />
+      {df.pwaDisponible && (
+        <div
+          onClick={df.instalarPwa}
+          className="df-toggle-mode"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px', marginBottom: 6, borderRadius: 8, cursor: 'pointer', color: '#34D399', fontSize: 13, fontWeight: 700, border: '1px solid rgba(52,211,153,.35)', background: 'rgba(16,185,129,.08)' }}
+        >
+          📲 Instalar la app
+        </div>
+      )}
       {df.canAdmin && !df.apiMode && (
         <div
           onClick={df.toggleMode}

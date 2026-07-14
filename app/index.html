@@ -10,11 +10,32 @@
       rel="stylesheet"
     />
     <link rel="icon" type="image/png" href="/logo.png" />
-    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0A1B2E" />
     <title>DealFlow</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // PWA: registra el service worker y captura el aviso de instalación
+      // para que el botón "Instalar la app" pueda dispararlo cuando quieran.
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () {});
+        });
+      }
+      window.dfPwaPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.dfPwaPrompt = e;
+        window.dispatchEvent(new Event('df-pwa-listo'));
+      });
+      window.addEventListener('appinstalled', function () {
+        window.dfPwaPrompt = null;
+        window.dispatchEvent(new Event('df-pwa-instalada'));
+      });
+    </script>
   </body>
 </html>

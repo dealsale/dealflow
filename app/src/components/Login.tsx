@@ -20,6 +20,8 @@ const CSS = `
 @keyframes dfLogoBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes dfShake { 10%,90% { transform: translateX(-2px); } 20%,80% { transform: translateX(3px); } 30%,70% { transform: translateX(-5px); } 40%,60% { transform: translateX(5px); } 50% { transform: translateX(-3px); } }
 @keyframes dfBlob { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(30px,-20px) scale(1.12); } }
+@keyframes dfPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.45); } 50% { box-shadow: 0 0 0 12px rgba(52,211,153,0); } }
+.df-lg-pulse { animation: dfPulse 1.6s ease-out infinite; }
 .df-lg-bot { position:absolute; animation: dfFloat var(--dur,6s) ease-in-out infinite; animation-delay: var(--del,0s); filter: drop-shadow(0 14px 22px rgba(0,0,0,.35)); will-change: transform; }
 .df-lg-bot.alt { animation-name: dfFloat2; }
 .df-lg-eye { transform-origin: center; transform-box: fill-box; animation: dfBlink 4.4s infinite; animation-delay: var(--bdel,0s); }
@@ -127,6 +129,16 @@ export function Login({ df }: { df: DealFlowState }) {
       ].map((s, i) => (
         <span key={i} className="df-lg-spark" style={{ top: s.top, left: s.left, right: s.right, fontSize: s.fs, ['--dur' as never]: s.dur, ['--del' as never]: s.del }}>✦</span>
       ))}
+
+      {df.pwaDisponible && (
+        <button
+          onClick={df.instalarPwa}
+          className={`df-lg-btn${typeof location !== 'undefined' && location.search.includes('instalar=1') ? ' df-lg-pulse' : ''}`}
+          style={{ position: 'absolute', top: 16, right: 16, zIndex: 3, background: 'rgba(16,185,129,.14)', color: '#A7F3D0', border: '1px solid rgba(52,211,153,.4)', borderRadius: 999, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+        >
+          📲 Instalar la app
+        </button>
+      )}
 
       <div style={{ width: 384, maxWidth: '100%', position: 'relative', zIndex: 2 }}>
         <div className="df-lg-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 18 }}>
