@@ -25,12 +25,22 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
             </span>
           </div>
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Cliente</div>
-          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, marginBottom: 18 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>{sel.cliente}</div>
-            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: '#64748B', marginBottom: 8 }}>{sel.tel}</div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{sel.direccion}</div>
-            <div style={{ color: '#64748B', fontSize: 13 }}>{sel.ciudad}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Datos de envío</div>
+          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {[
+              { icono: '👤', k: 'Nombre', v: sel.cliente },
+              { icono: '📞', k: 'Contacto', v: sel.tel, mono: true },
+              { icono: '🏔️', k: 'Departamento', v: sel.departamento || '' },
+              { icono: '🏙️', k: 'Ciudad', v: sel.ciudad },
+              { icono: '🏡', k: 'Dirección', v: sel.direccion },
+              { icono: '💳', k: 'Método de pago', v: 'Contraentrega' },
+            ].filter((f) => f.v).map((f) => (
+              <div key={f.k} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13.5, lineHeight: 1.5 }}>
+                <span style={{ flexShrink: 0 }}>{f.icono}</span>
+                <span style={{ color: '#64748B', fontWeight: 600, minWidth: 118, flexShrink: 0 }}>{f.k}:</span>
+                <span style={{ fontWeight: f.k === 'Nombre' ? 700 : 500, fontFamily: f.mono ? "'JetBrains Mono',monospace" : undefined, fontSize: f.mono ? 12.5 : undefined }}>{f.v}</span>
+              </div>
+            ))}
           </div>
 
           <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Qué pidió</div>

@@ -161,6 +161,15 @@ addColumn('products', "contenido_paquete TEXT NOT NULL DEFAULT ''");
 addColumn('products', "disparador TEXT NOT NULL DEFAULT ''");
 addColumn('products', 'mensaje_inicial_activo INTEGER NOT NULL DEFAULT 1');
 addColumn('orders', 'total INTEGER NOT NULL DEFAULT 0');
+addColumn('orders', "departamento TEXT NOT NULL DEFAULT ''");
+addColumn('assistants', "ia_proveedor TEXT NOT NULL DEFAULT ''"); // deepseek | openai | grok ('' = el del servidor)
+db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL,
+  config TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (store_id, tipo)
+)`);
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
 addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal

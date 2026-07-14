@@ -107,6 +107,17 @@ export interface ApiLead {
   mensajes: ApiMensaje[];
 }
 
+// ── Integraciones por tienda ──
+export interface IntegracionConfigurada {
+  tipo: string;
+  campos: Record<string, string>; // valores enmascarados (••••1234)
+}
+export const apiIntegraciones = () => req<{ configuradas: IntegracionConfigurada[]; iaPredeterminada: string }>('/api/integraciones', 'GET');
+export const apiGuardarIntegracion = (tipo: string, config: Record<string, string>, predeterminada?: boolean) =>
+  req<{ ok: true }>(`/api/integraciones/${tipo}`, 'PUT', { config, predeterminada });
+export const apiEliminarIntegracion = (tipo: string) => req<{ ok: true }>(`/api/integraciones/${tipo}`, 'DELETE');
+export const apiSetIaPredeterminada = (proveedor: string) => req<{ ok: true }>('/api/integraciones-ia/predeterminada', 'PUT', { proveedor });
+
 // ── Webchat (canal web, sin sesión de usuario) ──
 export const apiWebchatSend = (storeId: string, session: string, texto: string, nombre?: string) =>
   req<{ ok: true }>(`/api/webchat/${storeId}/messages`, 'POST', { session, texto, nombre });
@@ -152,6 +163,7 @@ export interface ApiOrder {
   rowId: string;
   cliente: string;
   ciudad: string;
+  departamento?: string;
   tel: string;
   direccion: string;
   estado: string;

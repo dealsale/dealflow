@@ -83,7 +83,7 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
     id: p.id, tipo: p.tipo, titulo: p.titulo, desc: p.descripcion, vigencia: p.vigencia, activa: !!p.activa,
   }));
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
@@ -133,7 +133,7 @@ api.get('/leads', requireAuth, requireStore, (req, res) => {
 api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string),
   }));
@@ -329,7 +329,7 @@ api.post('/marketing/copy', requireAuth, requireStore, async (req, res) => {
   const { idea, plataforma, tono, objetivo } = req.body || {};
   if (!String(idea || '').trim()) return res.status(400).json({ error: 'Escribe de qué es el anuncio.' });
   const { generarCopys } = await import('./marketing.js');
-  const r = await generarCopys({ idea: String(idea), plataforma: String(plataforma || ''), tono: String(tono || ''), objetivo: String(objetivo || '') });
+  const r = await generarCopys(req.user!.storeId!, { idea: String(idea), plataforma: String(plataforma || ''), tono: String(tono || ''), objetivo: String(objetivo || '') });
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ copys: r.copys });
 });
@@ -594,6 +594,71 @@ api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
   db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
   db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
   res.json({ storeId });
+});
+
+// ── Integraciones por tienda (API keys propias) ───────────────────────
+const IA_TIPOS = ['deepseek', 'openai', 'grok'];
+
+api.get('/integraciones', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  const rows = db.prepare('SELECT tipo, config FROM store_integrations WHERE store_id = ?').all(sid) as { tipo: string; config: string }[];
+  const configuradas = rows.map((r) => {
+    const cfg = pj<Record<string, string>>(r.config, {});
+    // Nunca devolvemos las claves completas: solo los últimos 4 caracteres.
+    const resumen: Record<string, string> = {};
+    for (const [k, v] of Object.entries(cfg)) resumen[k] = v.length > 8 ? '••••' + v.slice(-4) : '••••';
+    return { tipo: r.tipo, campos: resumen };
+  });
+  const asst = db.prepare('SELECT ia_proveedor FROM assistants WHERE store_id = ?').get(sid) as { ia_proveedor: string } | undefined;
+  res.json({ configuradas, iaPredeterminada: (asst?.ia_proveedor || '').trim() || 'deepseek' });
+});
+
+api.put('/integraciones/:tipo', requireAuth, requireStore, requireOwner, (req, res) => {
+  const sid = req.user!.storeId!;
+  const tipo = String(req.params.tipo).toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30);
+  if (!tipo) return res.status(400).json({ error: 'Integración inválida.' });
+  const config: Record<string, string> = {};
+  const body = (req.body?.config || {}) as Record<string, unknown>;
+  for (const [k, v] of Object.entries(body)) {
+    const kk = String(k).slice(0, 40);
+    const vv = String(v ?? '').trim().slice(0, 500);
+    if (vv) config[kk] = vv;
+  }
+  if (!Object.keys(config).length) return res.status(400).json({ error: 'Completa los datos de la integración.' });
+  db.prepare(
+    `INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?,?,?,datetime('now'))
+     ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = datetime('now')`,
+  ).run(sid, tipo, j(config));
+  // Si es un proveedor de IA y lo marcan como agente predeterminado, se activa.
+  if (IA_TIPOS.includes(tipo) && req.body?.predeterminada) {
+    db.prepare(
+      `INSERT INTO assistants (store_id, ia_proveedor) VALUES (?,?)
+       ON CONFLICT(store_id) DO UPDATE SET ia_proveedor = excluded.ia_proveedor`,
+    ).run(sid, tipo);
+  }
+  res.json({ ok: true });
+});
+
+api.delete('/integraciones/:tipo', requireAuth, requireStore, requireOwner, (req, res) => {
+  const sid = req.user!.storeId!;
+  const tipo = String(req.params.tipo).toLowerCase();
+  db.prepare('DELETE FROM store_integrations WHERE store_id = ? AND tipo = ?').run(sid, tipo);
+  // Si era la IA predeterminada, vuelve al valor por defecto (DeepSeek del servidor).
+  const asst = db.prepare('SELECT ia_proveedor FROM assistants WHERE store_id = ?').get(sid) as { ia_proveedor: string } | undefined;
+  if (asst?.ia_proveedor === tipo) db.prepare("UPDATE assistants SET ia_proveedor = '' WHERE store_id = ?").run(sid);
+  res.json({ ok: true });
+});
+
+// Elegir el agente (proveedor de IA) predeterminado de la tienda.
+api.put('/integraciones-ia/predeterminada', requireAuth, requireStore, requireOwner, (req, res) => {
+  const sid = req.user!.storeId!;
+  const proveedor = String(req.body?.proveedor || '').toLowerCase();
+  if (!IA_TIPOS.includes(proveedor)) return res.status(400).json({ error: 'Proveedor de IA no soportado.' });
+  db.prepare(
+    `INSERT INTO assistants (store_id, ia_proveedor) VALUES (?,?)
+     ON CONFLICT(store_id) DO UPDATE SET ia_proveedor = excluded.ia_proveedor`,
+  ).run(sid, proveedor);
+  res.json({ ok: true });
 });
 
 // ── Canal WEB (webchat) ───────────────────────────────────────────────

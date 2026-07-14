@@ -62,6 +62,10 @@ import {
   apiSetLeadEtiqueta,
   apiSuperStores,
   apiToggleHideStore,
+  apiIntegraciones,
+  apiGuardarIntegracion,
+  apiEliminarIntegracion,
+  apiSetIaPredeterminada,
 } from '../lib/api';
 import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore } from '../lib/api';
 import { fmt } from '../lib/format';
@@ -330,6 +334,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     estado: (ESTADOS_PEDIDO.includes(o.estado) ? o.estado : 'Nuevo') as Order['estado'],
     hora: o.createdAt ? horaBogotaDe(o.createdAt) : 'ahora',
     fecha: fechaBogota(o.createdAt),
+    departamento: o.departamento || '',
     transportadora: o.transportadora || 'Dropi',
     guia: o.guia,
     envio: o.envio || 0,
@@ -460,6 +465,9 @@ export function useDealFlowState() {
   const [apiMode, setApiMode] = useState<boolean>(false);
   const [storeNombre, setStoreNombre] = useState<string>('');
   const [storeId, setStoreId] = useState<string>('');
+  const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
+  const [iaPredeterminada, setIaPredeterminada] = useState('deepseek');
+  const [integracionMsg, setIntegracionMsg] = useState('');
   const [waVerifyToken, setWaVerifyToken] = useState<string>('');
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [mkIdea, setMkIdea] = useState('');
@@ -1430,23 +1438,23 @@ export function useDealFlowState() {
   const integrationsDecorated: DecoratedIntegration[] = useMemo(
     () =>
       integrations.map((i) => {
-        const conectado = i.estado === 'conectado';
-        const pronto = i.estado === 'pronto';
+        // Conectada = la tienda guardó sus credenciales; WhatsApp/Meta usan el estado real del número.
+        const conectado = i.id === 'wa' || i.id === 'meta' ? waConnected : !!integracionesCfg[i.id];
         return {
           ...i,
           logoStyle: { width: '38px', height: '38px', borderRadius: '10px', background: i.logoBg, color: i.logoTxt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px' },
-          badgeLabel: conectado ? 'Conectado' : pronto ? 'Próximamente' : 'Disponible',
+          badgeLabel: conectado ? 'Conectada' : 'Disponible',
           badgeStyle: pill(conectado ? { color: '#047857', bg: '#D1FAE5' } : { color: '#64748B', bg: '#F1F5F9' }),
-          btnLabel: conectado ? 'Configurar' : pronto ? 'Avisarme cuando esté' : 'Conectar',
-          btnStyle: pronto
-            ? { background: '#fff', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }
-            : conectado
-              ? { background: '#fff', color: '#1E293B', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }
-              : { background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' },
-          action: () => {},
+          btnLabel: conectado ? 'Configurar' : 'Conectar',
+          btnStyle: conectado
+            ? { background: '#fff', color: '#1E293B', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }
+            : { background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' },
+          // WhatsApp/Meta se configuran en su propia sección; el resto abre su formulario en la tarjeta.
+          action: i.id === 'wa' || i.id === 'meta' ? () => go('whatsapp') : () => {},
         };
       }),
-    [integrations],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [integrations, integracionesCfg, waConnected],
   );
 
   const plansDecorated: DecoratedPlan[] = useMemo(
@@ -1479,6 +1487,36 @@ export function useDealFlowState() {
   function toggleHideStore(id: string, oculta: boolean) {
     setSuperStores((st) => st.map((s) => (s.id === id ? { ...s, oculta: !oculta } : s)));
     void apiToggleHideStore(id, !oculta).then((r) => { if (r.error) void reloadSuper(); });
+  }
+
+  // ── Integraciones por tienda (API keys propias + IA predeterminada) ──
+  async function reloadIntegraciones() {
+    const { data } = await apiIntegraciones();
+    if (!data) return;
+    const map: Record<string, Record<string, string>> = {};
+    for (const c of data.configuradas) map[c.tipo] = c.campos;
+    setIntegracionesCfg(map);
+    setIaPredeterminada(data.iaPredeterminada || 'deepseek');
+  }
+  useEffect(() => {
+    if (apiMode && sessionUser && !isAdmin && section === 'integraciones') void reloadIntegraciones();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, sessionUser, isAdmin, section]);
+  function guardarIntegracion(tipo: string, config: Record<string, string>, predeterminada?: boolean) {
+    setIntegracionMsg('Guardando…');
+    void apiGuardarIntegracion(tipo, config, predeterminada).then((r) => {
+      if (r.error) { setIntegracionMsg(r.error); return; }
+      setIntegracionMsg('✓ Integración guardada.');
+      setTimeout(() => setIntegracionMsg(''), 3500);
+      void reloadIntegraciones();
+    });
+  }
+  function eliminarIntegracion(tipo: string) {
+    void apiEliminarIntegracion(tipo).then(() => void reloadIntegraciones());
+  }
+  function elegirIaPredeterminada(proveedor: string) {
+    setIaPredeterminada(proveedor);
+    void apiSetIaPredeterminada(proveedor).then((r) => { if (r.error) { setIntegracionMsg(r.error); void reloadIntegraciones(); } });
   }
 
   // Etiqueta de conversación en el CRM (manual). La "Venta" también la pone el bot solo.
@@ -1885,9 +1923,9 @@ export function useDealFlowState() {
       return /[";\n]/.test(s) ? `"${s}"` : s;
     };
     const filas = [
-      ['Pedido', 'Fecha', 'Hora', 'Cliente', 'Teléfono', 'Ciudad', 'Dirección', 'Productos', 'Total', 'Envío', 'Estado', 'Transportadora', 'Guía', 'Nota'],
+      ['Pedido', 'Fecha', 'Hora', 'Cliente', 'Teléfono', 'Departamento', 'Ciudad', 'Dirección', 'Productos', 'Total', 'Envío', 'Estado', 'Transportadora', 'Guía', 'Nota'],
       ...lista.map((o) => [
-        o.id, o.fecha || '', o.hora, o.cliente, o.tel, o.ciudad, o.direccion,
+        o.id, o.fecha || '', o.hora, o.cliente, o.tel, o.departamento || '', o.ciudad, o.direccion,
         o.items.map((it) => `${it.qty}x ${it.nombre}`).join(' + '),
         o.total && o.total > 0 ? o.total : o.items.reduce((x, it) => x + it.qty * it.precio, 0),
         o.envio || 0, o.estado, o.transportadora, o.guia || '', o.nota || '',
@@ -2228,6 +2266,12 @@ export function useDealFlowState() {
     assistantSaved,
 
     integrations: integrationsDecorated,
+    integracionesCfg,
+    iaPredeterminada,
+    integracionMsg,
+    guardarIntegracion,
+    eliminarIntegracion,
+    elegirIaPredeterminada,
     plans: plansDecorated,
     accounts: accountsDecorated,
     planNames: plansDecorated.map((p) => p.nombre),

@@ -18,6 +18,7 @@ export interface Order {
   hora: string;
   /** Fecha del pedido en Bogotá (YYYY-MM-DD), para métricas de hoy/ayer. */
   fecha?: string;
+  departamento?: string;
   transportadora: string;
   /** Número de guía generado al enviar el pedido a Dropi */
   guia?: string;
@@ -152,6 +153,10 @@ export interface Integration {
   logoTxt: string;
   desc: string;
   estado: IntegrationEstado;
+  /** Campos que pide el formulario de configuración (API keys, tokens, IDs…). */
+  campos?: { key: string; label: string; placeholder?: string; secreto?: boolean }[];
+  /** true si es un proveedor de IA que puede ser el agente predeterminado. */
+  esIA?: boolean;
 }
 
 export interface Plan {

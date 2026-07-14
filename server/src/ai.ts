@@ -23,14 +23,37 @@ function materializar(storeId: string, valor: string): { buffer: Buffer; mime: s
   return { buffer: readFileSync(p), mime, tipo: tipoDeMime(mime), url: valor };
 }
 
+/** Proveedores de IA soportados (todos con API compatible de chat completions). */
+const PROVEEDORES_IA: Record<string, { url: string; model: string; env: string; nombre: string }> = {
+  deepseek: { url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', env: 'DEEPSEEK_API_KEY', nombre: 'DeepSeek' },
+  openai: { url: 'https://api.openai.com/v1/chat/completions', model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini', env: 'OPENAI_API_KEY', nombre: 'OpenAI' },
+  grok: { url: 'https://api.x.ai/v1/chat/completions', model: process.env.GROK_CHAT_MODEL || 'grok-3-mini', env: 'GROK_API_KEY', nombre: 'Grok (xAI)' },
+};
+
 /**
- * Si la tienda tiene IA disponible (DEEPSEEK_API_KEY) y el chat lo atiende
- * el asistente, genera la respuesta con el contexto de la tienda y la envía.
+ * Resuelve qué IA usa la tienda: su proveedor predeterminado con SU propia
+ * API key (Integraciones). Si no configuró nada, cae a DeepSeek con la clave
+ * del servidor (comportamiento de siempre).
+ */
+export function resolverIA(storeId: string): { url: string; model: string; key: string; proveedor: string } | null {
+  const asst = db.prepare('SELECT ia_proveedor FROM assistants WHERE store_id = ?').get(storeId) as { ia_proveedor: string } | undefined;
+  const proveedor = (asst?.ia_proveedor || '').trim() || 'deepseek';
+  const p = PROVEEDORES_IA[proveedor] || PROVEEDORES_IA.deepseek;
+  const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, proveedor) as { config: string } | undefined;
+  const propia = row ? (pj<Record<string, string>>(row.config, {}).apiKey || '').trim() : '';
+  const key = propia || process.env[p.env] || '';
+  if (!key) return null;
+  return { url: p.url, model: p.model, key, proveedor };
+}
+
+/**
+ * Si la tienda tiene IA disponible y el chat lo atiende el asistente,
+ * genera la respuesta con el contexto de la tienda y la envía.
  */
 export async function maybeAutoReply(storeId: string, leadId: string) {
-  const key = process.env.DEEPSEEK_API_KEY;
-  if (!key) {
-    console.log('[ia] DEEPSEEK_API_KEY no está configurada: el asistente no responde');
+  const ia = resolverIA(storeId);
+  if (!ia) {
+    console.log('[ia] sin IA configurada para la tienda (ni clave propia ni del servidor): el asistente no responde');
     return;
   }
   const lead = db.prepare('SELECT id, nombre, asignado, wa_id, tel FROM leads WHERE id = ?').get(leadId) as
@@ -93,7 +116,7 @@ PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma ge
 FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
 
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
-##PEDIDO cliente="Nombre Apellido"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre exacto del producto (Talla M · Negro, Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
+##PEDIDO cliente="Nombre Apellido"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="2x Nombre exacto del producto (Talla M · Negro, Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
 El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
 En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar.
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
@@ -148,13 +171,13 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   }
 
   try {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
+    const res = await fetch(ia.url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'system', content: systemFinal }, ...historia], max_tokens: 300, temperature: 0.7 }),
+      headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: systemFinal }, ...historia], max_tokens: 300, temperature: 0.7 }),
     });
     if (!res.ok) {
-      console.error('[ia] DeepSeek respondió', res.status, await res.text().catch(() => ''));
+      console.error(`[ia] ${ia.proveedor} respondió`, res.status, await res.text().catch(() => ''));
       return;
     }
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
@@ -219,7 +242,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       else console.error('[ia] respuesta generada pero NO enviada:', send.error, '| destino:', destino);
     }
   } catch (e) {
-    console.error('[ia] error llamando a DeepSeek', e);
+    console.error(`[ia] error llamando a ${ia.proveedor}`, e);
   }
 }
 
@@ -314,13 +337,15 @@ function pedidoDesdeResumen(leadId: string): string {
     items.push(detalle ? `${mm[1]}x ${base} (${detalle})` : `${mm[1]}x ${base}`);
   }
   if (!items.length || (!direccion && !ciudad)) return '';
+  const departamento = campoResumen(resumen, 'Departamento');
   console.log(`[ia] pedido tomado del resumen (la IA no puso el marcador) para lead ${leadId}`);
-  return ` cliente="${cliente}"; ciudad="${ciudad}"; direccion="${direccion}"; items="${items.join(', ')}"; total="${total}"`;
+  return ` cliente="${cliente}"; departamento="${departamento}"; ciudad="${ciudad}"; direccion="${direccion}"; items="${items.join(', ')}"; total="${total}"`;
 }
 
 /** Registra el pedido cuando la IA cierra la venta y le confirma al cliente. Devuelve true si lo creó. */
 async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<boolean> {
   const cliente = campoPedido(inner, 'cliente') || lead.nombre || 'Cliente';
+  const departamento = campoPedido(inner, 'departamento');
   const ciudad = campoPedido(inner, 'ciudad');
   const direccion = campoPedido(inner, 'direccion');
   const itemsRaw = campoPedido(inner, 'items');
@@ -354,8 +379,8 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
   const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 1048) + 1;
   const oid = uid();
-  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total) VALUES (?,?,?,?,?,?,?,?,?)')
-    .run(oid, storeId, numero, cliente, ciudad, lead.tel || '', direccion, 'Nuevo', total);
+  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .run(oid, storeId, numero, cliente, ciudad, lead.tel || '', direccion, 'Nuevo', total, departamento);
   for (const it of items) {
     db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   }

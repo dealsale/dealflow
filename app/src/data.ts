@@ -66,17 +66,17 @@ export const LEADS: Lead[] = [
 ];
 
 export const INTEGRATIONS: Integration[] = [
-  { id: 'meta', nombre: 'Meta Business', logoText: 'M', logoBg: '#E7F0FF', logoTxt: '#0866FF', desc: 'Tu WhatsApp Business API y tus catálogos de Facebook e Instagram, desde Meta.', estado: 'conectado' },
-  { id: 'wa', nombre: 'WhatsApp Business', logoText: 'WA', logoBg: '#DCFCE7', logoTxt: '#15803D', desc: 'El canal donde tu asistente atiende y vende. Se configura en la sección WhatsApp.', estado: 'conectado' },
-  { id: 'deepseek', nombre: 'DeepSeek', logoText: 'DS', logoBg: '#EAEEFF', logoTxt: '#4D6BFE', desc: 'El motor de inteligencia artificial que responde y cierra ventas por ti en los chats.', estado: 'conectado' },
-  { id: 'openai', nombre: 'OpenAI', logoText: 'AI', logoBg: '#E6F6F0', logoTxt: '#0A8F6E', desc: 'Genera imágenes con IA para tus anuncios. Conéctalo con tu clave de OpenAI.', estado: 'disponible' },
-  { id: 'grok', nombre: 'Grok (xAI)', logoText: 'G', logoBg: '#E8EAED', logoTxt: '#0F172A', desc: 'Motor de IA alternativo de xAI para respuestas y generación de contenido.', estado: 'pronto' },
-  { id: 'dropi', nombre: 'Dropi', logoText: 'Dr', logoBg: '#FEF3C7', logoTxt: '#B45309', desc: 'Envía tus pedidos a Dropi con un clic: genera la guía, asigna transportadora y sincroniza el estado del envío.', estado: 'conectado' },
-  { id: 'effi', nombre: 'Effi ERP', logoText: 'Ef', logoBg: '#EDE9FE', logoTxt: '#6D28D9', desc: 'Sincroniza inventario, pedidos y facturación con tu ERP Effi.', estado: 'pronto' },
-  { id: 'mastershop', nombre: 'Master Shop', logoText: 'MS', logoBg: '#FEF2E7', logoTxt: '#C2410C', desc: 'Conecta tu tienda Master Shop para sincronizar catálogo y pedidos.', estado: 'pronto' },
-  { id: 'shopify', nombre: 'Shopify', logoText: 'Sh', logoBg: '#EAF3E0', logoTxt: '#5E8E3E', desc: 'Sincroniza tu catálogo y tus pedidos con tu tienda Shopify.', estado: 'pronto' },
-  { id: 'ig', nombre: 'Instagram DM', logoText: 'IG', logoBg: '#FCE7F3', logoTxt: '#BE185D', desc: 'Que el asistente también responda los mensajes directos de Instagram.', estado: 'pronto' },
-  { id: 'mp', nombre: 'Mercado Pago', logoText: 'MP', logoBg: '#E0F2FE', logoTxt: '#0284C7', desc: 'Cobra con link de pago y confirma pedidos automáticamente al recibir el pago.', estado: 'pronto' },
+  { id: 'meta', nombre: 'Meta Business', logoText: 'M', logoBg: '#E7F0FF', logoTxt: '#0866FF', desc: 'Tu WhatsApp Business API y tus catálogos de Facebook e Instagram, desde Meta.', estado: 'disponible' },
+  { id: 'wa', nombre: 'WhatsApp Business', logoText: 'WA', logoBg: '#DCFCE7', logoTxt: '#15803D', desc: 'El canal donde tu asistente atiende y vende. Se configura en la sección WhatsApp.', estado: 'disponible' },
+  { id: 'deepseek', nombre: 'DeepSeek', logoText: 'DS', logoBg: '#EAEEFF', logoTxt: '#4D6BFE', desc: 'Motor de IA para responder y cerrar ventas. Pon tu propia API key y tu tienda paga solo lo que consume.', estado: 'disponible', esIA: true, campos: [{ key: 'apiKey', label: 'API Key de DeepSeek', placeholder: 'sk-…', secreto: true }] },
+  { id: 'openai', nombre: 'OpenAI', logoText: 'AI', logoBg: '#E6F6F0', logoTxt: '#0A8F6E', desc: 'IA para responder chats y generar imágenes de anuncios, con tu clave de OpenAI.', estado: 'disponible', esIA: true, campos: [{ key: 'apiKey', label: 'API Key de OpenAI', placeholder: 'sk-…', secreto: true }] },
+  { id: 'grok', nombre: 'Grok (xAI)', logoText: 'G', logoBg: '#E8EAED', logoTxt: '#0F172A', desc: 'Motor de IA de xAI para respuestas y generación de contenido, con tu propia clave.', estado: 'disponible', esIA: true, campos: [{ key: 'apiKey', label: 'API Key de xAI', placeholder: 'xai-…', secreto: true }] },
+  { id: 'dropi', nombre: 'Dropi', logoText: 'Dr', logoBg: '#FEF3C7', logoTxt: '#B45309', desc: 'Envía tus pedidos a Dropi: genera la guía, asigna transportadora y sincroniza el estado del envío.', estado: 'disponible', campos: [{ key: 'token', label: 'Token de la API de Dropi', secreto: true }] },
+  { id: 'effi', nombre: 'Effi ERP', logoText: 'Ef', logoBg: '#EDE9FE', logoTxt: '#6D28D9', desc: 'Sincroniza inventario, pedidos y facturación con tu ERP Effi.', estado: 'disponible', campos: [{ key: 'url', label: 'URL de tu Effi', placeholder: 'https://mi-empresa.effi.co' }, { key: 'apiKey', label: 'API Key', secreto: true }] },
+  { id: 'mastershop', nombre: 'Master Shop', logoText: 'MS', logoBg: '#FEF2E7', logoTxt: '#C2410C', desc: 'Conecta tu tienda Master Shop para sincronizar catálogo y pedidos.', estado: 'disponible', campos: [{ key: 'apiKey', label: 'API Key de Master Shop', secreto: true }] },
+  { id: 'shopify', nombre: 'Shopify', logoText: 'Sh', logoBg: '#EAF3E0', logoTxt: '#5E8E3E', desc: 'Sincroniza tu catálogo y tus pedidos con tu tienda Shopify.', estado: 'disponible', campos: [{ key: 'dominio', label: 'Dominio de la tienda', placeholder: 'mitienda.myshopify.com' }, { key: 'accessToken', label: 'Access Token', secreto: true }] },
+  { id: 'ig', nombre: 'Instagram DM', logoText: 'IG', logoBg: '#FCE7F3', logoTxt: '#BE185D', desc: 'Guarda tu token para que el asistente también responda los directos de Instagram.', estado: 'disponible', campos: [{ key: 'accessToken', label: 'Access Token de Instagram', secreto: true }] },
+  { id: 'mp', nombre: 'Mercado Pago', logoText: 'MP', logoBg: '#E0F2FE', logoTxt: '#0284C7', desc: 'Cobra con link de pago y confirma pedidos automáticamente al recibir el pago.', estado: 'disponible', campos: [{ key: 'publicKey', label: 'Public Key' }, { key: 'accessToken', label: 'Access Token', secreto: true }] },
 ];
 
 export const PLANS: Plan[] = [

@@ -184,11 +184,9 @@
 
   @media (pointer:coarse){ #cursorGlow { display:none; } }
   @media (max-width:940px){ .fbot.hide-md { display:none; } }
+  /* Con "reducir movimiento" activo en el sistema solo apagamos el glow que
+     sigue el mouse; el resto de animaciones son suaves y se mantienen. */
   @media (prefers-reduced-motion:reduce){
-    .msg,.order-chip { animation:none !important; opacity:1 !important; transform:none !important; }
-    .reveal { transition:none; opacity:1; transform:none; } .typing i { animation:none; }
-    .fbot, .fbot .eye, .fbot .arm, .fbot .ant { animation:none !important; }
-    .hero h1 .accent { animation:none; } .marquee-track { animation:none; }
     #cursorGlow { display:none; }
   }
 </style>
@@ -372,7 +370,7 @@
   }
   function typing(){ var t=document.createElement('div'); t.className='typing'; t.innerHTML='<i></i><i></i><i></i>'; return t; }
   function render(){ scroll.innerHTML=''; seq.forEach(function(it){ if(!it.typing) scroll.appendChild(bubble(it)); }); }
-  if(reduce){ render(); }
+  if(false){ render(); }
   else {
     var i=0;
     function step(){
@@ -391,7 +389,7 @@
   if (mt) mt.innerHTML += mt.innerHTML;
 
   var fine = window.matchMedia('(pointer: fine)').matches;
-  if (fine && !reduce) {
+  if (fine) {
     // Glow que sigue el mouse, con suavizado.
     var glow = document.getElementById('cursorGlow');
     var gx=-400, gy=-400, tx=gx, ty=gy;
