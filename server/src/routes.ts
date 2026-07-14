@@ -74,7 +74,7 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
     faqs: pj(p.faqs as string, []), testimonios: pj(p.testimonios as string, []), modosUso: p.modos_uso || '',
     videos: pj(p.videos as string, []), mensajeBloques: pj(p.mensaje_bloques as string, []),
     bundles: pj(p.bundles as string, []), opciones: pj(p.opciones as string, []),
-    contenidoPaquete: p.contenido_paquete || '', disparador: p.disparador || '', mensajeInicialActivo: p.mensaje_inicial_activo !== 0, dropiId: p.dropi_id || '',
+    contenidoPaquete: p.contenido_paquete || '', disparador: p.disparador || '', mensajeInicialActivo: p.mensaje_inicial_activo !== 0,
     variantes: (db.prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY orden').all(p.id as string) as Record<string, unknown>[]).map((v) => ({
       id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: pj(v.fotos_subidas as string, []),
     })),
@@ -165,13 +165,12 @@ function ownProduct(req: { user?: AuthUser }, id: string) {
 
 api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
-  const { nombre, precio, reglas, fotosSubidas, descripcion, caracteristicas, mensajeInicial, faqs, testimonios, modosUso, videos, mensajeBloques, bundles, opciones, contenidoPaquete, disparador, mensajeInicialActivo, dropiId } = req.body || {};
+  const { nombre, precio, reglas, fotosSubidas, descripcion, caracteristicas, mensajeInicial, faqs, testimonios, modosUso, videos, mensajeBloques, bundles, opciones, contenidoPaquete, disparador, mensajeInicialActivo } = req.body || {};
   if (Array.isArray(bundles)) db.prepare('UPDATE products SET bundles = ? WHERE id = ?').run(j(bundles), req.params.id);
   if (Array.isArray(opciones)) db.prepare('UPDATE products SET opciones = ? WHERE id = ?').run(j(opciones), req.params.id);
   if (contenidoPaquete !== undefined) db.prepare('UPDATE products SET contenido_paquete = ? WHERE id = ?').run(String(contenidoPaquete), req.params.id);
   if (disparador !== undefined) db.prepare('UPDATE products SET disparador = ? WHERE id = ?').run(String(disparador), req.params.id);
   if (mensajeInicialActivo !== undefined) db.prepare('UPDATE products SET mensaje_inicial_activo = ? WHERE id = ?').run(mensajeInicialActivo ? 1 : 0, req.params.id);
-  if (dropiId !== undefined) db.prepare('UPDATE products SET dropi_id = ? WHERE id = ?').run(String(dropiId).trim(), req.params.id);
   if (modosUso !== undefined) db.prepare('UPDATE products SET modos_uso = ? WHERE id = ?').run(String(modosUso), req.params.id);
   if (Array.isArray(testimonios)) db.prepare('UPDATE products SET testimonios = ? WHERE id = ?').run(j(testimonios), req.params.id);
   if (Array.isArray(videos)) db.prepare('UPDATE products SET videos = ? WHERE id = ?').run(j(videos), req.params.id);
@@ -271,36 +270,14 @@ api.post('/orders/:rowId/advance', requireAuth, requireStore, async (req, res) =
   }
 });
 
-api.post('/orders/:rowId/dropi', requireAuth, requireStore, async (req, res) => {
-  const sid = req.user!.storeId!;
-  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
+api.post('/orders/:rowId/dropi', requireAuth, requireStore, (req, res) => {
+  const o = db.prepare('SELECT id, guia FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, req.user!.storeId) as { id: string; guia: string | null } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   if (o.guia) return res.json({ guia: o.guia });
-
-  const items = (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string) as { qty: number; nombre: string; precio: number }[])
-    .map((it) => {
-      // Busca el producto por el nombre base (sin el detalle de talla/color) para tomar su ID en Dropi.
-      const base = it.nombre.split('(')[0].split('—')[0].trim().toLowerCase();
-      const prod = db.prepare('SELECT dropi_id FROM products WHERE store_id = ? AND LOWER(nombre) = ?').get(sid, base) as { dropi_id: string } | undefined
-        || db.prepare("SELECT dropi_id FROM products WHERE store_id = ? AND LOWER(nombre) LIKE '%' || ? || '%'").get(sid, base) as { dropi_id: string } | undefined;
-      return { qty: it.qty, nombre: it.nombre, dropiId: (prod?.dropi_id || '').trim() };
-    });
-
-  const total = Number(o.total) > 0 ? Number(o.total) : items.reduce((a, it) => a + it.qty * 0, 0);
-  const { crearOrdenDropi } = await import('./dropi.js');
-  const r = await crearOrdenDropi(sid, {
-    numero: Number(o.numero),
-    cliente: String(o.cliente || ''),
-    tel: String(o.tel || ''),
-    departamento: String(o.departamento || ''),
-    ciudad: String(o.ciudad || ''),
-    direccion: String(o.direccion || ''),
-    total,
-    items,
-  });
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  db.prepare("UPDATE orders SET guia = ?, transportadora = 'Dropi' WHERE id = ?").run(String(r.id), o.id);
-  res.json({ guia: String(r.id) });
+  // Integración real con Dropi pendiente: por ahora genera la guía localmente.
+  const guia = String(402000 + Math.floor(Math.random() * 900) + 100);
+  db.prepare('UPDATE orders SET guia = ? WHERE id = ?').run(guia, o.id);
+  res.json({ guia });
 });
 
 // ── Leads / CRM ───────────────────────────────────────────────────────

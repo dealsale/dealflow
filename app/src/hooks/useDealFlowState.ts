@@ -201,7 +201,6 @@ export interface DecoratedProduct extends Product {
   addOpcion: (nombre: string) => void;
   setContenidoPaquete: (v: string) => void;
   setDisparador: (v: string) => void;
-  setDropiId: (v: string) => void;
   toggleMensajeInicial: () => void;
   variantesDecorated: DecoratedVariante[];
 }
@@ -370,7 +369,6 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     contenidoPaquete: p.contenidoPaquete || '',
     disparador: p.disparador || '',
     mensajeInicialActivo: p.mensajeInicialActivo !== false,
-    dropiId: p.dropiId || '',
     fotos: p.fotos?.length ? p.fotos : undefined,
     fotosSubidas: p.fotosSubidas || [],
     variantes: p.variantes.map((v) => ({ id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: v.fotosSubidas || [] })),
@@ -1374,7 +1372,6 @@ export function useDealFlowState() {
         },
         setContenidoPaquete: (v: string) => updateProduct(p.id, { contenidoPaquete: v }),
         setDisparador: (v: string) => updateProduct(p.id, { disparador: v }),
-        setDropiId: (v: string) => updateProduct(p.id, { dropiId: v }),
         toggleMensajeInicial: () => updateProduct(p.id, { mensajeInicialActivo: !(p.mensajeInicialActivo !== false) }),
         faqsDecoradas: (p.faqs || []).map((f, i) => ({
           ...f,

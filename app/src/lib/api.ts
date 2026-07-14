@@ -144,7 +144,6 @@ export interface ApiProduct {
   contenidoPaquete: string;
   disparador: string;
   mensajeInicialActivo: boolean;
-  dropiId?: string;
   fotos: string[];
   fotosSubidas: string[];
   variantes: { id: string; label: string; stock: number; fotos: number; fotosSubidas: string[] }[];

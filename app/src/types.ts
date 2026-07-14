@@ -98,8 +98,6 @@ export interface Product {
   disparador?: string;
   /** Si el mensaje inicial (estructura completa) está encendido para este producto */
   mensajeInicialActivo?: boolean;
-  /** ID de este producto en Dropi (para crear la orden real al despachar) */
-  dropiId?: string;
   fotos?: string[];
   /** Fotos principales subidas por el vendedor, como data URLs */
   fotosSubidas?: string[];
