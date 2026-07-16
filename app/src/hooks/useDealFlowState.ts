@@ -67,7 +67,7 @@ import {
   apiEliminarIntegracion,
   apiSetIaPredeterminada,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -476,11 +476,14 @@ export function useDealFlowState() {
   const [mkPlataforma, setMkPlataforma] = useState('Instagram/Facebook');
   const [mkTono, setMkTono] = useState('Cercano y vendedor');
   const [mkObjetivo, setMkObjetivo] = useState('Que escriban por WhatsApp para comprar');
-  const [mkCopys, setMkCopys] = useState<string[]>([]);
+  const [mkCopys, setMkCopys] = useState<CopyAnuncio[]>([]);
+  const [mkCantidad, setMkCantidad] = useState(3);
+  const [mkImagen, setMkImagen] = useState(''); // foto del producto (opcional) para el copywriter
   const [mkLoading, setMkLoading] = useState(false);
   const [mkError, setMkError] = useState('');
   const [mkImgPrompt, setMkImgPrompt] = useState('');
-  const [mkImgUrl, setMkImgUrl] = useState('');
+  const [mkImgUrls, setMkImgUrls] = useState<string[]>([]);
+  const [mkImgCantidad, setMkImgCantidad] = useState(1);
   const [mkImgLoading, setMkImgLoading] = useState(false);
   const [mkImgError, setMkImgError] = useState('');
   const [mkCopied, setMkCopied] = useState<number | null>(null);
@@ -1587,22 +1590,28 @@ export function useDealFlowState() {
   }
 
   function generarCopys() {
-    if (!mkIdea.trim()) { setMkError('Escribe de qué es el anuncio.'); return; }
+    if (!mkIdea.trim() && !mkImagen) { setMkError('Escribe de qué es el anuncio o sube una imagen del producto.'); return; }
     setMkLoading(true); setMkError(''); setMkCopys([]);
-    void apiMarketingCopy({ idea: mkIdea, plataforma: mkPlataforma, tono: mkTono, objetivo: mkObjetivo }).then((r) => {
+    void apiMarketingCopy({ idea: mkIdea, plataforma: mkPlataforma, tono: mkTono, objetivo: mkObjetivo, cantidad: mkCantidad, imagen: mkImagen || undefined }).then((r) => {
       setMkLoading(false);
       if (r.error) { setMkError(r.error); return; }
       setMkCopys(r.data?.copys || []);
     });
   }
 
+  // Sube (y comprime) la foto del producto para que el copywriter la analice.
+  function setMkImagenFile(file: File | null) {
+    if (!file) { setMkImagen(''); return; }
+    void comprimirImagen(file).then(setMkImagen);
+  }
+
   function generarImagen() {
     if (!mkImgPrompt.trim()) { setMkImgError('Describe la imagen que quieres.'); return; }
-    setMkImgLoading(true); setMkImgError(''); setMkImgUrl('');
-    void apiMarketingImagen(mkImgPrompt).then((r) => {
+    setMkImgLoading(true); setMkImgError(''); setMkImgUrls([]);
+    void apiMarketingImagen(mkImgPrompt, mkImgCantidad).then((r) => {
       setMkImgLoading(false);
-      if (r.data?.url) { setMkImgUrl(r.data.url); return; }
-      setMkImgError(r.data?.error || r.error || 'No se pudo generar la imagen.');
+      if (r.data?.urls?.length) { setMkImgUrls(r.data.urls); return; }
+      setMkImgError(r.data?.error || r.error || 'No se pudieron generar las imágenes.');
     });
   }
 
@@ -1674,13 +1683,31 @@ export function useDealFlowState() {
 
   const filterList = ['Todos', ...ESTADO_ORDER];
   const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  // Filtro por fecha del pedido (zona horaria de Bogot\u00e1).
+  const [fechaFilter, setFechaFilter] = useState<'Todas' | 'Hoy' | 'Ayer' | '7 d\u00edas'>('Todas');
+  const hace7 = new Date(Date.now() - 6 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const pasaFecha = (o: Order) => {
+    const f = o.fecha || hoyStr;
+    if (fechaFilter === 'Hoy') return f === hoyStr;
+    if (fechaFilter === 'Ayer') return f === ayerStr;
+    if (fechaFilter === '7 d\u00edas') return f >= hace7;
+    return true;
+  };
   const filteredOrders: DecoratedOrder[] = useMemo(() => {
     const q = norm(orderQuery.trim());
     return orders
       .filter((o) => filter === 'Todos' || o.estado === filter)
-      .filter((o) => !q || norm(o.cliente).includes(q) || norm(o.id).includes(q))
+      .filter(pasaFecha)
+      .filter((o) => !q || norm(o.cliente).includes(q) || norm(o.id).includes(q) || o.items.some((it) => norm(it.nombre).includes(q)))
       .map(decorateOrder);
-  }, [orders, filter, orderQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, filter, orderQuery, fechaFilter]);
+  const orderDateFilters = (['Todas', 'Hoy', 'Ayer', '7 d\u00edas'] as const).map((f) => ({
+    key: f,
+    label: f,
+    active: fechaFilter === f,
+    set: () => setFechaFilter(f),
+  }));
   const recentOrders: DecoratedOrder[] = useMemo(() => orders.slice(0, 4).map(decorateOrder), [orders]);
   const selRaw = orders.find((o) => o.id === selectedOrderId) || null;
   const sel = selRaw ? decorateOrder(selRaw) : null;
@@ -2035,6 +2062,7 @@ export function useDealFlowState() {
     exportarPedidos,
 
     orderFilters,
+    orderDateFilters,
     filter,
     filteredOrders,
     noOrders: filteredOrders.length === 0,
@@ -2146,9 +2174,11 @@ export function useDealFlowState() {
     mkTono, setMkTono,
     mkObjetivo, setMkObjetivo,
     mkCopys, mkLoading, mkError, generarCopys,
+    mkCantidad, setMkCantidad,
+    mkImagen, setMkImagenFile,
     mkCopied, copiarCopy,
     mkImgPrompt, setMkImgPrompt,
-    mkImgUrl, mkImgLoading, mkImgError, generarImagen,
+    mkImgUrls, mkImgCantidad, setMkImgCantidad, mkImgLoading, mkImgError, generarImagen,
 
     // ── DealShop (plantillas) ──
     plantillas,

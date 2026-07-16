@@ -76,7 +76,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
           {item(
             'crm',
             <IconCRM />,
-            'CRM',
+            'Inbox',
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', marginLeft: 'auto', animation: 'dfpulse 1.8s infinite' }} />,
           )}
           {item('marketing', <IconMarketing />, 'Marketing IA')}

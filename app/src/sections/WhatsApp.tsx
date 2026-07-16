@@ -181,7 +181,7 @@ export function WhatsAppSection({ df }: { df: DealFlowState }) {
         <div style={{ ...card, marginBottom: 0, background: '#ECFDF5', borderColor: '#A7F3D0' }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: '#047857' }}>Listo para probar</div>
           <div style={{ color: '#047857', fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>
-            Escríbele un mensaje a tu número desde otro teléfono y aparecerá en <b>CRM · Chats en vivo</b>. Desde ahí puedes responder tú mismo.
+            Escríbele un mensaje a tu número desde otro teléfono y aparecerá en <b>Inbox · Chats en vivo</b>. Desde ahí puedes responder tú mismo.
           </div>
         </div>
       )}

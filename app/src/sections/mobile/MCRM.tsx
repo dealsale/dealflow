@@ -3,7 +3,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 export function MCRM({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="Móvil CRM">
-      <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>CRM · Chats en vivo</h1>
+      <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Inbox · Chats en vivo</h1>
       <p style={{ color: '#64748B', fontSize: 13, margin: '0 0 12px' }}>Toca un chat para verlo y tomar el control si quieres.</p>
       <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, overflow: 'hidden' }}>
         {df.crmChats.map((c) => (

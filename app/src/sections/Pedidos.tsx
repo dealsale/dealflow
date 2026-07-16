@@ -18,9 +18,23 @@ export function Pedidos({ df }: { df: DealFlowState }) {
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-        {df.orderFilters.map((f) => (
-          <span key={f.key} onClick={f.set} style={f.style}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{ color: '#94A3B8', fontSize: 12, fontWeight: 700 }}>📅 Fecha:</span>
+        {df.orderDateFilters.map((f) => (
+          <span
+            key={f.key}
+            onClick={f.set}
+            style={{
+              padding: '6px 13px',
+              borderRadius: 999,
+              fontSize: 12.5,
+              fontWeight: 600,
+              cursor: 'pointer',
+              background: f.active ? '#0F172A' : '#fff',
+              color: f.active ? '#fff' : '#64748B',
+              border: '1px solid ' + (f.active ? '#0F172A' : '#E2E8F0'),
+            }}
+          >
             {f.label}
           </span>
         ))}
@@ -29,9 +43,18 @@ export function Pedidos({ df }: { df: DealFlowState }) {
           className="df-input"
           value={df.orderQuery}
           onChange={(e) => df.setOrderQuery(e.target.value)}
-          placeholder="Buscar por cliente o número…"
-          style={{ width: 250, border: '1px solid #E2E8F0', borderRadius: 999, padding: '9px 16px', fontFamily: 'inherit', fontSize: 13, background: '#fff' }}
+          placeholder="🔍 Cliente, número o producto…"
+          style={{ width: 260, border: '1px solid #E2E8F0', borderRadius: 999, padding: '9px 16px', fontFamily: 'inherit', fontSize: 13, background: '#fff' }}
         />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+        <span style={{ color: '#94A3B8', fontSize: 12, fontWeight: 700 }}>Estado:</span>
+        {df.orderFilters.map((f) => (
+          <span key={f.key} onClick={f.set} style={f.style}>
+            {f.label}
+          </span>
+        ))}
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>

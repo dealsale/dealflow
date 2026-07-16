@@ -326,20 +326,25 @@ api.post('/plantillas/:id/instalar', requireAuth, requireStore, requireOwner, as
 
 // ── Marketing con IA (copys y generación de imágenes) ────────────────
 api.post('/marketing/copy', requireAuth, requireStore, async (req, res) => {
-  const { idea, plataforma, tono, objetivo } = req.body || {};
-  if (!String(idea || '').trim()) return res.status(400).json({ error: 'Escribe de qué es el anuncio.' });
+  const { idea, plataforma, tono, objetivo, cantidad, imagen } = req.body || {};
+  if (!String(idea || '').trim() && !String(imagen || '').startsWith('data:image')) {
+    return res.status(400).json({ error: 'Escribe de qué es el anuncio o sube una imagen del producto.' });
+  }
   const { generarCopys } = await import('./marketing.js');
-  const r = await generarCopys(req.user!.storeId!, { idea: String(idea), plataforma: String(plataforma || ''), tono: String(tono || ''), objetivo: String(objetivo || '') });
+  const r = await generarCopys(req.user!.storeId!, {
+    idea: String(idea || ''), plataforma: String(plataforma || ''), tono: String(tono || ''), objetivo: String(objetivo || ''),
+    cantidad: Number(cantidad) || 3, imagen: typeof imagen === 'string' ? imagen : undefined,
+  });
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ copys: r.copys });
 });
 
 api.post('/marketing/imagen', requireAuth, requireStore, async (req, res) => {
-  const { prompt } = req.body || {};
+  const { prompt, cantidad } = req.body || {};
   const { generarImagen } = await import('./marketing.js');
-  const r = await generarImagen(req.user!.storeId!, String(prompt || ''));
+  const r = await generarImagen(req.user!.storeId!, String(prompt || ''), Number(cantidad) || 1);
   if (r.error) return res.status(r.sinConfigurar ? 200 : 400).json({ error: r.error, sinConfigurar: r.sinConfigurar });
-  res.json({ url: r.url });
+  res.json({ urls: r.urls });
 });
 
 // ── Equipo (usuarios de la tienda que pueden entrar y responder) ──────
