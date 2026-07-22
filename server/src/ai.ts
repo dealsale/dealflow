@@ -64,6 +64,7 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
     console.log(`[ia] el chat lo atiende "${lead.asignado}": no respondo (usa "Devolver al asistente")`);
     return;
   }
+  const t0 = Date.now(); // para que el bot tarde ~4-5 s en responder (más humano)
 
   const assistant = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(storeId) as
     | { instrucciones: string; reglas: string }
@@ -237,6 +238,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     // no repetimos con el texto de la IA.
     if (texto && !pedidoCreado) {
       const textoFinal = rellenar(texto, lead);
+      await esperarRespuestaHumana(t0); // el bot tarda ~4-5 s en total (parece que "escribe")
       db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', textoFinal);
       const send = await sendWhatsappText(storeId, destino, textoFinal, pn);
       if (send.ok) console.log('[ia] respuesta enviada por WhatsApp');
@@ -420,6 +422,21 @@ function fotoReferencia(p: Record<string, unknown>): string | null {
   if (fotos.length) return fotos[0];
   const img = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, []).find((b) => b.tipo === 'imagen');
   return img?.valor || null;
+}
+
+const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/**
+ * Hace que el bot tarde entre BOT_DELAY_MIN y BOT_DELAY_MAX ms (por defecto 4–5 s)
+ * en responder, contando desde que llegó el mensaje. Si la IA ya se demoró más,
+ * no espera de más. Se siente natural, como si el vendedor estuviera escribiendo.
+ */
+async function esperarRespuestaHumana(desde: number): Promise<void> {
+  const min = Number(process.env.BOT_DELAY_MIN) || 4000;
+  const max = Number(process.env.BOT_DELAY_MAX) || 5000;
+  if (max <= 0) return;
+  const objetivo = min + Math.random() * Math.max(0, max - min);
+  const restante = objetivo - (Date.now() - desde);
+  if (restante > 0) await dormir(restante);
 }
 
 /** ¿El cliente está pidiendo fotos/imágenes/catálogo de un producto? */
