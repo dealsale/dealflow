@@ -164,12 +164,18 @@ export function Cuentas({ df }: { df: DealFlowState }) {
               <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '1.3fr 90px auto 44px', gap: 14, alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid #F1F5F9' }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.tienda}</div>
-                  <div style={{ color: '#94A3B8', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.correo} · Plan {a.plan}</div>
+                  <div style={{ color: '#94A3B8', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {a.correo} · Plan {a.plan}
+                    {a.planEstado === 'vencida' && <span style={{ color: '#B91C1C', fontWeight: 700 }}> · 💳 vencida</span>}
+                    {a.planEstado === 'activa' && a.planVence && <span style={{ color: '#059669', fontWeight: 700 }}> · 💳 al día ({a.planVence})</span>}
+                    {a.planEstado === 'prueba' && <span style={{ color: '#B45309', fontWeight: 700 }}> · 💳 prueba</span>}
+                  </div>
                 </div>
                 <span style={a.estadoStyle}>{a.estadoLabel}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <button onClick={() => df.abrirDetalleStore(id)} style={linkBtn('#334155')}>Detalle</button>
                   <button onClick={() => df.abrirEditarStore(id)} style={linkBtn('#334155')}>Editar</button>
+                  <button onClick={() => df.extenderSuscripcion(id, 30)} title="Marcar como pagada: extiende 30 días" style={linkBtn('#047857')}>+30 días</button>
                   <button onClick={() => df.entrarATienda(id)} style={linkBtn('#4338CA')}>Entrar</button>
                   <button onClick={() => df.eliminarStore(id)} style={linkBtn(armed ? '#DC2626' : '#B91C1C')}>{armed ? '¿Seguro?' : 'Eliminar'}</button>
                 </div>

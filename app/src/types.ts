@@ -174,6 +174,8 @@ export interface Account {
   plan: string;
   ventas: number;
   activa: boolean;
+  planEstado?: string;
+  planVence?: string | null;
 }
 
 export type VendedorSection =

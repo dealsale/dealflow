@@ -60,6 +60,43 @@ function ImpersonationBanner({ df }: { df: DealFlowState }) {
   );
 }
 
+function SuscripcionBanner({ df }: { df: DealFlowState }) {
+  const s = df.suscripcion;
+  if (!s || df.esAgente) return null;
+  const porVencer = s.diasRestantes !== null && s.diasRestantes >= 0 && s.diasRestantes <= 5;
+  const vencida = s.estado === 'vencida';
+  if (!vencida && !porVencer) return null;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+        background: vencida ? '#7F1D1D' : '#78350F',
+        color: '#FEF3C7',
+        padding: '9px 16px',
+        fontFamily: "'Inter',system-ui,sans-serif",
+        fontSize: 13.5,
+        fontWeight: 600,
+      }}
+    >
+      <span>
+        {vencida
+          ? `⚠️ Tu suscripción ${s.plan} está vencida. Renueva para seguir usando DealFlow.`
+          : `⏳ Tu suscripción ${s.plan} vence en ${s.diasRestantes} día${s.diasRestantes === 1 ? '' : 's'}.`}
+      </span>
+      <div style={{ flex: 1 }} />
+      <button
+        onClick={df.pagarSuscripcion}
+        style={{ background: '#FEF3C7', color: '#78350F', border: 'none', borderRadius: 7, padding: '6px 16px', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
+      >
+        Pagar ${s.precio.toLocaleString('es-CO')} →
+      </button>
+    </div>
+  );
+}
+
 function AdminContent({ df }: { df: DealFlowState }) {
   // El superadmin solo tiene su panel de todas las tiendas.
   if (df.isSuperadmin) return <Superadmin df={df} />;
@@ -176,6 +213,7 @@ function App() {
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
       {splash && <BotPreloader />}
       {df.impersonando && <ImpersonationBanner df={df} />}
+      {df.isVendedor && <SuscripcionBanner df={df} />}
       <div style={{ flex: 1, minHeight: 0 }}>{isMobile ? <MobileApp df={df} /> : <DesktopApp df={df} />}</div>
     </div>
   );

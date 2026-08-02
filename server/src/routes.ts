@@ -64,7 +64,7 @@ api.post('/auth/stop-impersonate', requireAuth, (req, res) => {
 });
 
 // ── Estado completo de la tienda (una llamada para pintar el panel) ───
-api.get('/state', requireAuth, requireStore, (req, res) => {
+api.get('/state', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const store = db.prepare('SELECT id, nombre, plan FROM stores WHERE id = ?').get(sid);
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
@@ -98,12 +98,14 @@ api.get('/state', requireAuth, requireStore, (req, res) => {
     | { waba_id: string; phone_number_id: string; numero: string; conectado: number; access_token: string; modo: string }
     | undefined;
 
+  const { estadoSuscripcion } = await import('./suscripcion.js');
   res.json({
     store,
     products,
     promos,
     orders,
     leads,
+    suscripcion: estadoSuscripcion(sid),
     assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []) },
     whatsapp: {
       conectado: !!wa?.conectado,
@@ -470,7 +472,7 @@ api.get('/admin/overview', requireAuth, requireAdmin, (_req, res) => {
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
        WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
     ).get(s.id, s.id) as { total: number };
-    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa };
+    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null };
   });
   const plans = (db.prepare('SELECT * FROM plans').all() as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, features: pj(p.features as string, []),
@@ -666,6 +668,31 @@ api.put('/integraciones-ia/predeterminada', requireAuth, requireStore, requireOw
   res.json({ ok: true });
 });
 
+// ── Suscripción (pago de las tiendas a DealFlow por Wompi) ────────────
+api.get('/suscripcion', requireAuth, requireStore, async (req, res) => {
+  const { estadoSuscripcion } = await import('./suscripcion.js');
+  res.json({ suscripcion: estadoSuscripcion(req.user!.storeId!) });
+});
+
+api.post('/suscripcion/checkout', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { crearCheckout } = await import('./suscripcion.js');
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+  const base = `${proto}://${req.get('host')}`;
+  const r = crearCheckout(req.user!.storeId!, req.user!.email, base);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ url: r.url });
+});
+
+api.post('/admin/stores/:id/suscripcion', requireAuth, requireAdmin, async (req, res) => {
+  const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+  if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
+  const { extenderManual } = await import('./suscripcion.js');
+  const dias = Number(req.body?.dias);
+  if (!Number.isFinite(dias) || dias === 0) return res.status(400).json({ error: 'Indica cuántos días extender.' });
+  extenderManual(s.id, dias);
+  res.json({ ok: true });
+});
+
 // ── Canal WEB (webchat) ───────────────────────────────────────────────
 // Segundo canal de la tienda: sirve para probar la IA sin WhatsApp y como
 // chat para visitantes. Sin sesión: se identifica por storeId + session.
@@ -750,6 +777,33 @@ webhooks.post('/whatsapp', (req, res) => {
     handleIncomingWebhook(req.body);
   } catch (e) {
     console.error('[webhook] error procesando entrada', e);
+  }
+  res.sendStatus(200);
+});
+
+// ── Webhook de Wompi: confirma el pago de la suscripción ──────────────
+webhooks.post('/wompi', async (req, res) => {
+  try {
+    const evento = (req.body || {}) as { event?: string; data?: { transaction?: Record<string, unknown> }; signature?: { checksum?: string; properties?: string[] }; timestamp?: number };
+    const tx = evento.data?.transaction;
+    if (evento.event === 'transaction.updated' && tx) {
+      // Validación de firma (si está configurado el secreto de eventos de Wompi).
+      const secret = process.env.WOMPI_EVENTS_SECRET;
+      let firmaOk = true;
+      if (secret && evento.signature?.properties) {
+        const { createHash } = await import('node:crypto');
+        const concat = evento.signature.properties.map((p) => p.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], tx as unknown)).join('');
+        const calc = createHash('sha256').update(`${concat}${evento.timestamp}${secret}`).digest('hex');
+        firmaOk = calc === evento.signature.checksum;
+        if (!firmaOk) console.warn('[wompi] firma inválida en el webhook — se ignora el evento');
+      }
+      if (firmaOk && tx.status === 'APPROVED' && tx.reference) {
+        const { aplicarPagoAprobado } = await import('./suscripcion.js');
+        aplicarPagoAprobado(String(tx.reference), String(tx.id || ''));
+      }
+    }
+  } catch (e) {
+    console.error('[wompi] error procesando webhook', e);
   }
   res.sendStatus(200);
 });

@@ -66,8 +66,11 @@ import {
   apiGuardarIntegracion,
   apiEliminarIntegracion,
   apiSetIaPredeterminada,
+  apiCheckoutSuscripcion,
+  apiExtenderSuscripcion,
+  apiSuscripcion,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -468,6 +471,8 @@ export function useDealFlowState() {
   const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
   const [iaPredeterminada, setIaPredeterminada] = useState('deepseek');
   const [integracionMsg, setIntegracionMsg] = useState('');
+  const [suscripcion, setSuscripcion] = useState<Suscripcion | null>(null);
+  const [suscMsg, setSuscMsg] = useState('');
   // PWA: el navegador avisa cuándo se puede instalar (index.html captura el prompt).
   const [pwaDisponible, setPwaDisponible] = useState<boolean>(() => typeof window !== 'undefined' && !!(window as unknown as { dfPwaPrompt?: unknown }).dfPwaPrompt);
   const [waVerifyToken, setWaVerifyToken] = useState<string>('');
@@ -1091,6 +1096,7 @@ export function useDealFlowState() {
         }
         if (data.store?.nombre) setStoreNombre(data.store.nombre);
         if (data.store?.id) setStoreId(data.store.id);
+        setSuscripcion(data.suscripcion ?? null);
         if (data.whatsapp.verifyToken) setWaVerifyToken(data.whatsapp.verifyToken);
         // Datos reales de la tienda: nada de textos demo de "Luna Accesorios".
         setAssistantText(data.assistant?.instrucciones || '');
@@ -1471,7 +1477,7 @@ export function useDealFlowState() {
   async function reloadAdmin() {
     const { data } = await apiAdminOverview();
     if (!data) return;
-    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa })));
+    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa, planEstado: s.planEstado, planVence: s.planVence })));
     setPlans(data.plans.map((p) => ({ id: p.id, nombre: p.nombre, precio: p.precio, cuentas: p.cuentas, features: p.features })));
   }
   useEffect(() => {
@@ -1515,6 +1521,28 @@ export function useDealFlowState() {
       setPwaDisponible(false);
     });
   }
+
+  // ── Suscripción de la tienda (pago a DealFlow) ──
+  function pagarSuscripcion() {
+    setSuscMsg('Abriendo el pago…');
+    void apiCheckoutSuscripcion().then((r) => {
+      if (r.error || !r.data?.url) { setSuscMsg(r.error || 'No pudimos abrir el pago. Intenta de nuevo.'); return; }
+      window.location.href = r.data.url; // redirige al checkout de la pasarela
+    });
+  }
+  function extenderSuscripcion(storeId: string, dias: number) {
+    void apiExtenderSuscripcion(storeId, dias).then((r) => { if (!r.error) void reloadAdmin(); });
+  }
+  // Cuando la tienda vuelve del pago (?pago=ok), refrescamos y avisamos.
+  useEffect(() => {
+    if (typeof location !== 'undefined' && location.search.includes('pago=ok')) {
+      setSuscMsg('¡Gracias! Estamos confirmando tu pago… tu plan se activa en unos segundos.');
+      history.replaceState(null, '', location.pathname);
+      const t = setInterval(() => { void apiSuscripcion().then(({ data }) => { if (data?.suscripcion) setSuscripcion(data.suscripcion); }); }, 3000);
+      setTimeout(() => clearInterval(t), 30000);
+      return () => clearInterval(t);
+    }
+  }, []);
 
   // ── Integraciones por tienda (API keys propias + IA predeterminada) ──
   async function reloadIntegraciones() {
@@ -2320,6 +2348,10 @@ export function useDealFlowState() {
     assistantSaved,
 
     integrations: integrationsDecorated,
+    suscripcion,
+    suscMsg,
+    pagarSuscripcion,
+    extenderSuscripcion,
     pwaDisponible,
     instalarPwa,
     integracionesCfg,

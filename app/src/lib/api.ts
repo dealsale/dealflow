@@ -77,6 +77,8 @@ export interface AdminStore {
   plan: string;
   ventas: number;
   activa: boolean;
+  planEstado?: string;
+  planVence?: string | null;
 }
 export interface AdminPlan {
   id: string;
@@ -106,6 +108,19 @@ export interface ApiLead {
   canal?: string;
   mensajes: ApiMensaje[];
 }
+
+// ── Suscripción (pago de la tienda a DealFlow) ──
+export interface Suscripcion {
+  plan: string;
+  precio: number;
+  estado: 'prueba' | 'activa' | 'vencida';
+  vence: string | null;
+  diasRestantes: number | null;
+  alDia: boolean;
+}
+export const apiSuscripcion = () => req<{ suscripcion: Suscripcion | null }>('/api/suscripcion', 'GET');
+export const apiCheckoutSuscripcion = () => req<{ url: string }>('/api/suscripcion/checkout', 'POST');
+export const apiExtenderSuscripcion = (id: string, dias: number) => req<{ ok: true }>(`/api/admin/stores/${id}/suscripcion`, 'POST', { dias });
 
 // ── Integraciones por tienda ──
 export interface IntegracionConfigurada {
@@ -175,7 +190,7 @@ export interface ApiOrder {
   createdAt: string;
   items: { qty: number; nombre: string; precio: number }[];
 }
-export const apiState = () => req<{ store: { id: string; nombre: string; plan: string }; assistant: { instrucciones: string; reglas: string[] }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string }; leads: ApiLead[] }>('/api/state', 'GET');
+export const apiState = () => req<{ store: { id: string; nombre: string; plan: string }; assistant: { instrucciones: string; reglas: string[] }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
 export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET');
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
 export const apiOrderDropi = (rowId: string) => req<{ guia: string }>(`/api/orders/${rowId}/dropi`, 'POST');

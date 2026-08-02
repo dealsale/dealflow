@@ -170,6 +170,21 @@ db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (store_id, tipo)
 )`);
+// Suscripción de cada tienda a DealFlow (la pagan las tiendas por usar la plataforma).
+addColumn('stores', "plan_estado TEXT NOT NULL DEFAULT 'prueba'"); // prueba | activa | vencida
+addColumn('stores', 'plan_vence TEXT'); // fecha ISO del próximo cobro (null = prueba sin fecha)
+db.exec(`CREATE TABLE IF NOT EXISTS pagos (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  plan TEXT NOT NULL DEFAULT '',
+  monto INTEGER NOT NULL DEFAULT 0,
+  referencia TEXT NOT NULL,
+  estado TEXT NOT NULL DEFAULT 'pendiente',
+  gateway TEXT NOT NULL DEFAULT 'wompi',
+  transaccion TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_pagos_ref ON pagos(referencia)');
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
 addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal
