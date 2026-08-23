@@ -183,8 +183,22 @@ const nuevaColInicial = addColumn('stores', 'inicial_pagado INTEGER NOT NULL DEF
 // Planes canónicos de DealFlow: Básico y Premium (valor inicial + renta mensual).
 export function ensurePlanesCanonicos(): void {
   const planes: [string, number, number, string[]][] = [
-    ['Básico', 2000000, 250000, ['Plataforma DealFlow completa', 'Asistente de ventas con IA', 'WhatsApp + CRM + pedidos', 'Renta mensual de $250.000']],
-    ['Premium', 2500000, 250000, ['Todo lo del plan Básico', 'Prioridad en soporte', 'Acompañamiento de configuración', 'Renta mensual de $250.000']],
+    ['Básico', 2000000, 250000, [
+      'Configuración completa del agente IA',
+      'WhatsApp Business, Instagram y Facebook Messenger',
+      'Respuestas automáticas inteligentes',
+      'Atención 24/7',
+      'Entrenamiento inicial del bot',
+      '30 días de soporte incluido',
+    ]],
+    ['Premium', 2500000, 250000, [
+      'Todo lo del plan Básico +',
+      'Primera campaña de marketing',
+      'Configuración de anuncios',
+      'Estrategia para conseguir clientes',
+      'Seguimiento personalizado',
+      'Optimización del bot durante el primer mes',
+    ]],
   ];
   for (const [nombre, precio, mensual, features] of planes) {
     const ex = db.prepare('SELECT id FROM plans WHERE nombre = ?').get(nombre) as { id: string } | undefined;

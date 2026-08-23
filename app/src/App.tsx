@@ -127,7 +127,7 @@ function Paywall({ df }: { df: DealFlowState }) {
 
   // Sin plan: elegir y comprar (valor inicial + renta).
   return (
-    <PaywallShell df={df} titulo="Elige tu plan para empezar" sub="Activa tu cuenta con el pago inicial. Después es una renta mensual de $250.000.">
+    <PaywallShell df={df} titulo="Elige tu plan para empezar" sub="Actívate con el pago de instalación única (incluye 30 días de servicio). Después, una renta mensual de $250.000.">
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
         {df.planes.length === 0 && <div style={{ color: '#64748B', fontSize: 14, textAlign: 'center', gridColumn: '1/-1' }}>Cargando planes…</div>}
         {df.planes.map((p, i) => {
@@ -136,10 +136,11 @@ function Paywall({ df }: { df: DealFlowState }) {
             <div key={p.nombre} style={{ border: premium ? '2px solid #059669' : '1px solid #E2E8F0', borderRadius: 16, padding: 22, background: '#fff', position: 'relative', display: 'flex', flexDirection: 'column' }}>
               {premium && <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: '#059669', color: '#fff', fontSize: 11, fontWeight: 800, padding: '3px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>RECOMENDADO</div>}
               <div style={{ fontSize: 17, fontWeight: 800, color: '#0F172A' }}>{p.nombre}</div>
-              <div style={{ margin: '10px 0 2px' }}>
+              <div style={{ margin: '10px 0 1px' }}>
                 <span style={{ fontSize: 30, fontWeight: 800, color: '#0F172A' }}>{money(p.precio)}</span>
-                <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}> inicial</span>
+                <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}> instalación única</span>
               </div>
+              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>Incluye 30 días de servicio</div>
               <div style={{ fontSize: 13.5, color: '#059669', fontWeight: 700, marginBottom: 14 }}>+ {money(p.mensual)} / mes de renta</div>
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                 {p.features.map((f) => (
