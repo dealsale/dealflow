@@ -713,9 +713,56 @@ api.post('/suscripcion/checkout', requireAuth, requireStore, requireOwner, async
   const { crearCheckout } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const base = `${proto}://${req.get('host')}`;
-  const r = crearCheckout(req.user!.storeId!, req.user!.email, base, req.body?.plan);
+  const r = crearCheckout(req.user!.storeId!, req.user!.email, base, req.body?.plan, req.body?.cupon);
   if (r.error) return res.status(400).json({ error: r.error });
-  res.json({ url: r.url });
+  res.json({ url: r.url, gratis: r.gratis });
+});
+
+// La tienda valida un cupón para ver el descuento antes de pagar.
+api.post('/suscripcion/cupon', requireAuth, requireStore, async (req, res) => {
+  const { validarCupon } = await import('./suscripcion.js');
+  res.json(validarCupon(String(req.body?.codigo || '')));
+});
+
+// ── Cupones de descuento (los administra el admin de DealFlow) ────────
+api.get('/admin/cupones', requireAuth, requireAdmin, (_req, res) => {
+  const cupones = (db.prepare('SELECT * FROM cupones ORDER BY created_at DESC').all() as Record<string, unknown>[]).map((c) => ({
+    id: c.id, codigo: c.codigo, descuento: c.descuento, activo: !!c.activo,
+    vence: c.vence || null, maxUsos: c.max_usos ?? null, usos: c.usos, nota: c.nota,
+  }));
+  res.json({ cupones });
+});
+
+api.post('/admin/cupones', requireAuth, requireAdmin, (req, res) => {
+  const codigo = String(req.body?.codigo || '').trim().toUpperCase().replace(/\s+/g, '');
+  const descuento = Math.round(Number(req.body?.descuento));
+  if (!codigo) return res.status(400).json({ error: 'Escribe un código para el cupón.' });
+  if (!Number.isFinite(descuento) || descuento < 1 || descuento > 100) return res.status(400).json({ error: 'El descuento debe estar entre 1% y 100%.' });
+  if (db.prepare('SELECT id FROM cupones WHERE codigo = ?').get(codigo)) return res.status(409).json({ error: 'Ya existe un cupón con ese código.' });
+  const vence = req.body?.vence ? String(req.body.vence).slice(0, 10) : null;
+  const maxUsos = req.body?.maxUsos != null && req.body.maxUsos !== '' ? Math.max(1, Math.round(Number(req.body.maxUsos))) : null;
+  const id = uid();
+  db.prepare('INSERT INTO cupones (id, codigo, descuento, activo, vence, max_usos, nota) VALUES (?,?,?,1,?,?,?)')
+    .run(id, codigo, descuento, vence, maxUsos, String(req.body?.nota || '').trim());
+  res.json({ id, codigo });
+});
+
+api.patch('/admin/cupones/:id', requireAuth, requireAdmin, (req, res) => {
+  const c = db.prepare('SELECT id FROM cupones WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+  if (!c) return res.status(404).json({ error: 'Cupón no encontrado.' });
+  if (req.body?.activo !== undefined) db.prepare('UPDATE cupones SET activo = ? WHERE id = ?').run(req.body.activo ? 1 : 0, c.id);
+  if (req.body?.descuento !== undefined) {
+    const d = Math.round(Number(req.body.descuento));
+    if (Number.isFinite(d) && d >= 1 && d <= 100) db.prepare('UPDATE cupones SET descuento = ? WHERE id = ?').run(d, c.id);
+  }
+  res.json({ ok: true });
+});
+
+api.delete('/admin/cupones/:id', requireAuth, requireAdmin, (req, res) => {
+  const c = db.prepare('SELECT id FROM cupones WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+  if (!c) return res.status(404).json({ error: 'Cupón no encontrado.' });
+  db.prepare('DELETE FROM cupones WHERE id = ?').run(c.id);
+  res.json({ ok: true });
 });
 
 api.post('/admin/stores/:id/suscripcion', requireAuth, requireAdmin, async (req, res) => {

@@ -76,36 +76,87 @@ function firmaIntegridad(referencia: string, montoCents: number, secret: string)
  *   (hay que pasar `planElegido`). Al aprobarse, activa la cuenta.
  * - Si ya pagó el inicial: cobra la RENTA mensual del plan actual (renovación).
  */
-export function crearCheckout(storeId: string, correo: string, redirectBase: string, planElegido?: string): { url?: string; error?: string } {
+export interface CuponValido {
+  valido: boolean;
+  descuento: number; // % 0-100
+  mensaje: string;
+  codigo?: string;
+}
+
+/** Valida un cupón por código: existe, activo, no vencido y con usos disponibles. */
+export function validarCupon(codigoRaw: string): CuponValido {
+  const codigo = (codigoRaw || '').trim().toUpperCase();
+  if (!codigo) return { valido: false, descuento: 0, mensaje: 'Escribe un código de cupón.' };
+  const c = db.prepare('SELECT codigo, descuento, activo, vence, max_usos, usos FROM cupones WHERE codigo = ?').get(codigo) as
+    | { codigo: string; descuento: number; activo: number; vence: string | null; max_usos: number | null; usos: number }
+    | undefined;
+  if (!c || !c.activo) return { valido: false, descuento: 0, mensaje: 'Ese cupón no existe o está inactivo.' };
+  if (c.vence && new Date(c.vence + 'T23:59:59Z').getTime() < Date.now()) return { valido: false, descuento: 0, mensaje: 'Ese cupón ya venció.' };
+  if (c.max_usos != null && c.usos >= c.max_usos) return { valido: false, descuento: 0, mensaje: 'Ese cupón ya alcanzó su límite de usos.' };
+  return { valido: true, descuento: c.descuento, mensaje: `Cupón aplicado: ${c.descuento}% de descuento.`, codigo: c.codigo };
+}
+
+function incrementarUsoCupon(codigo: string): void {
+  if (codigo) db.prepare('UPDATE cupones SET usos = usos + 1 WHERE codigo = ?').run(codigo);
+}
+
+/**
+ * Crea el pago y devuelve la URL del checkout de Wompi (o { gratis } si un cupón
+ * del 100% deja el monto en 0: en ese caso se activa la cuenta sin cobrar).
+ */
+export function crearCheckout(
+  storeId: string,
+  correo: string,
+  redirectBase: string,
+  planElegido?: string,
+  cuponRaw?: string,
+): { url?: string; error?: string; gratis?: boolean } {
   const pub = process.env.WOMPI_PUBLIC_KEY;
   const integrity = process.env.WOMPI_INTEGRITY;
-  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
   const sus = estadoSuscripcion(storeId);
   if (!sus) return { error: 'Tienda no encontrada.' };
 
   let tipo: 'inicial' | 'renta';
   let plan: string;
-  let monto: number;
+  let base: number;
   if (!sus.inicialPagado) {
     // Fase 1: activación. Debe elegir un plan.
     plan = (planElegido || '').trim();
     const info = plan ? planInfo(plan) : null;
     if (!plan || !info || info.precio <= 0) return { error: 'Elige un plan válido para activar tu cuenta.' };
     tipo = 'inicial';
-    monto = info.precio;
+    base = info.precio;
   } else {
     // Fase 2: renovación de la renta mensual.
     plan = sus.plan;
     tipo = 'renta';
-    monto = sus.mensual;
-    if (monto <= 0) return { error: 'Tu plan no tiene renta mensual configurada. Contacta al equipo DealFlow.' };
+    base = sus.mensual;
+    if (base <= 0) return { error: 'Tu plan no tiene renta mensual configurada. Contacta al equipo DealFlow.' };
   }
 
-  const referencia = `DF-${tipo === 'inicial' ? 'INI' : 'REN'}-${storeId.slice(0, 8)}-${Date.now()}`;
-  const montoCents = monto * 100;
-  db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo) VALUES (?,?,?,?,?,?,?,?)')
-    .run(uid(), storeId, plan, monto, referencia, 'pendiente', 'wompi', tipo);
+  // Cupón (opcional): aplica a instalación y renta por igual.
+  let cupon = '';
+  let descuento = 0;
+  if (cuponRaw && cuponRaw.trim()) {
+    const v = validarCupon(cuponRaw);
+    if (!v.valido) return { error: v.mensaje };
+    cupon = v.codigo || '';
+    descuento = v.descuento;
+  }
+  const monto = Math.max(0, Math.round(base * (100 - descuento) / 100));
 
+  const referencia = `DF-${tipo === 'inicial' ? 'INI' : 'REN'}-${storeId.slice(0, 8)}-${Date.now()}`;
+  db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo, cupon) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(uid(), storeId, plan, monto, referencia, 'pendiente', 'wompi', tipo, cupon);
+
+  // Cupón de regalo del 100% (o monto 0): activa sin pasar por la pasarela.
+  if (monto <= 0) {
+    aplicarPagoAprobado(referencia, 'CUPON-GRATIS');
+    return { gratis: true };
+  }
+
+  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
+  const montoCents = monto * 100;
   const params = new URLSearchParams({
     'public-key': pub,
     currency: 'COP',
@@ -120,12 +171,13 @@ export function crearCheckout(storeId: string, correo: string, redirectBase: str
 
 /** Marca un pago como aprobado: activa la cuenta (inicial) y/o extiende la renta +30 días. */
 export function aplicarPagoAprobado(referencia: string, transaccion?: string): boolean {
-  const pago = db.prepare('SELECT id, store_id, estado, tipo, plan FROM pagos WHERE referencia = ?').get(referencia) as
-    | { id: string; store_id: string; estado: string; tipo: string; plan: string }
+  const pago = db.prepare('SELECT id, store_id, estado, tipo, plan, cupon FROM pagos WHERE referencia = ?').get(referencia) as
+    | { id: string; store_id: string; estado: string; tipo: string; plan: string; cupon: string }
     | undefined;
   if (!pago) return false;
   if (pago.estado === 'aprobado') return true; // idempotente (Wompi puede reintentar el webhook)
   db.prepare('UPDATE pagos SET estado = ?, transaccion = ? WHERE id = ?').run('aprobado', transaccion || null, pago.id);
+  if (pago.cupon) incrementarUsoCupon(pago.cupon);
 
   const s = db.prepare('SELECT plan_vence FROM stores WHERE id = ?').get(pago.store_id) as { plan_vence: string | null } | undefined;
   // Extiende desde hoy o desde el vencimiento futuro (si aún no vence, acumula).

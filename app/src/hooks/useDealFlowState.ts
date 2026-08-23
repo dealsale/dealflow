@@ -71,8 +71,13 @@ import {
   apiSuscripcion,
   apiPlanes,
   apiRegistro,
+  apiValidarCupon,
+  apiCupones,
+  apiCrearCupon,
+  apiToggleCupon,
+  apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -476,6 +481,8 @@ export function useDealFlowState() {
   const [suscripcion, setSuscripcion] = useState<Suscripcion | null>(null);
   const [suscMsg, setSuscMsg] = useState('');
   const [planes, setPlanes] = useState<PlanPublico[]>([]);
+  const [cupones, setCupones] = useState<Cupon[]>([]);
+  const [cuponMsg, setCuponMsg] = useState('');
   // PWA: el navegador avisa cuándo se puede instalar (index.html captura el prompt).
   const [pwaDisponible, setPwaDisponible] = useState<boolean>(() => typeof window !== 'undefined' && !!(window as unknown as { dfPwaPrompt?: unknown }).dfPwaPrompt);
   const [waVerifyToken, setWaVerifyToken] = useState<string>('');
@@ -1539,13 +1546,34 @@ export function useDealFlowState() {
 
   // ── Suscripción de la tienda (pago a DealFlow) ──
   // Sin plan → se pasa el plan elegido (cobra el valor inicial). Con plan activo → renovación de renta.
-  function pagarSuscripcion(plan?: string) {
+  // Se puede pasar un cupón; si el cupón deja el monto en 0 (100%), activa gratis sin pasar por Wompi.
+  function pagarSuscripcion(plan?: string, cupon?: string) {
     setSuscMsg('Abriendo el pago…');
-    void apiCheckoutSuscripcion(plan).then((r) => {
-      if (r.error || !r.data?.url) { setSuscMsg(r.error || 'No pudimos abrir el pago. Intenta de nuevo.'); return; }
-      window.location.href = r.data.url; // redirige al checkout de la pasarela
+    void apiCheckoutSuscripcion(plan, cupon).then((r) => {
+      if (r.error) { setSuscMsg(r.error); return; }
+      if (r.data?.gratis) {
+        setSuscMsg('¡Listo! Tu cupón activó la cuenta. Cargando tu tienda…');
+        setTimeout(() => location.reload(), 1200); // recarga ya desbloqueada
+        return;
+      }
+      if (r.data?.url) { window.location.href = r.data.url; return; } // redirige al checkout
+      setSuscMsg('No pudimos abrir el pago. Intenta de nuevo.');
     });
   }
+  // Valida un cupón y devuelve el descuento para previsualizar el precio en el muro de pago.
+  function validarCupon(codigo: string) { return apiValidarCupon(codigo); }
+
+  // ── Cupones (gestión del admin de DealFlow) ──
+  async function reloadCupones() { const { data } = await apiCupones(); if (data) setCupones(data.cupones); }
+  function crearCupon(codigo: string, descuento: number, vence: string | null, maxUsos: number | null, nota: string) {
+    setCuponMsg('');
+    void apiCrearCupon(codigo, descuento, vence, maxUsos, nota).then((r) => {
+      if (r.error) { setCuponMsg(r.error); return; }
+      void reloadCupones();
+    });
+  }
+  function toggleCupon(id: string, activo: boolean) { void apiToggleCupon(id, activo).then((r) => { if (!r.error) void reloadCupones(); }); }
+  function eliminarCupon(id: string) { void apiEliminarCupon(id).then((r) => { if (!r.error) void reloadCupones(); }); }
   function extenderSuscripcion(storeId: string, dias: number) {
     void apiExtenderSuscripcion(storeId, dias).then((r) => { if (!r.error) void reloadAdmin(); });
   }
@@ -2376,7 +2404,15 @@ export function useDealFlowState() {
     suscMsg,
     planes,
     pagarSuscripcion,
+    validarCupon,
     extenderSuscripcion,
+    cupones,
+    cuponMsg,
+    reloadCupones,
+    crearCupon,
+    toggleCupon,
+    eliminarCupon,
+    clearCuponMsg: () => setCuponMsg(''),
     pwaDisponible,
     instalarPwa,
     integracionesCfg,

@@ -25,6 +25,7 @@ import { Resumen } from './sections/Resumen';
 import { WhatsAppSection } from './sections/WhatsApp';
 import { Cuentas } from './sections/admin/Cuentas';
 import { Planes } from './sections/admin/Planes';
+import { Cupones } from './sections/admin/Cupones';
 import { Ventas } from './sections/admin/Ventas';
 import { Superadmin } from './sections/admin/Superadmin';
 import { MCRM } from './sections/mobile/MCRM';
@@ -100,6 +101,47 @@ function Paywall({ df }: { df: DealFlowState }) {
   const vencida = s?.estado === 'vencida';
   const cargando = suscMsgEsPago(df.suscMsg);
 
+  // Cupón: se aplica tanto a la instalación como a la renta.
+  const [cuponInput, setCuponInput] = useState('');
+  const [cupon, setCupon] = useState<{ codigo: string; descuento: number } | null>(null);
+  const [cuponMsg, setCuponMsg] = useState('');
+  const conDesc = (base: number) => (cupon ? Math.max(0, Math.round(base * (100 - cupon.descuento) / 100)) : base);
+  const aplicarCupon = () => {
+    const code = cuponInput.trim();
+    if (!code) return;
+    setCuponMsg('Validando…');
+    void df.validarCupon(code).then((r) => {
+      if (r.error || !r.data?.valido) { setCupon(null); setCuponMsg(r.data?.mensaje || r.error || 'Cupón inválido.'); return; }
+      setCupon({ codigo: r.data.codigo || code.toUpperCase(), descuento: r.data.descuento });
+      setCuponMsg(r.data.mensaje);
+    });
+  };
+  const quitarCupon = () => { setCupon(null); setCuponInput(''); setCuponMsg(''); };
+  const codigoCupon = cupon?.codigo;
+
+  const cuponBox = (
+    <div style={{ marginTop: 20, borderTop: '1px solid #E2E8F0', paddingTop: 16 }}>
+      {!cupon ? (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' }}>
+          <input
+            value={cuponInput}
+            onChange={(e) => setCuponInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') aplicarCupon(); }}
+            placeholder="¿Tienes un cupón? Escríbelo aquí"
+            style={{ flex: '1 1 220px', maxWidth: 300, border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13.5, textTransform: 'uppercase' }}
+          />
+          <button onClick={aplicarCupon} style={{ background: '#0F172A', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Aplicar</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', color: '#047857', fontSize: 13.5, fontWeight: 700 }}>
+          🎁 Cupón <b>{cupon.codigo}</b> · {cupon.descuento}% de descuento
+          <button onClick={quitarCupon} style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline' }}>quitar</button>
+        </div>
+      )}
+      {cuponMsg && !cupon && <div style={{ textAlign: 'center', color: '#B91C1C', fontSize: 12.5, marginTop: 8 }}>{cuponMsg}</div>}
+    </div>
+  );
+
   // Un agente (no dueño) no paga: solo ve el aviso de cuenta suspendida.
   if (df.esAgente) {
     return (
@@ -112,15 +154,21 @@ function Paywall({ df }: { df: DealFlowState }) {
   }
 
   if (vencida) {
+    const rentaBase = s?.mensual || 0;
+    const renta = conDesc(rentaBase);
     return (
       <PaywallShell df={df} titulo="Tu renta mensual venció" sub={`Renueva tu plan ${s?.plan} para volver a entrar a tu tienda.`}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 13, color: '#64748B', marginBottom: 6 }}>Renta mensual · plan {s?.plan}</div>
-          <div style={{ fontSize: 34, fontWeight: 800, color: '#0F172A', marginBottom: 16 }}>{money(s?.mensual || 0)}<span style={{ fontSize: 15, fontWeight: 600, color: '#64748B' }}> /mes</span></div>
-          <button onClick={() => df.pagarSuscripcion()} disabled={cargando} className="df-pw-btn" style={pwBtn}>
-            {cargando ? 'Abriendo el pago…' : `Pagar renta ${money(s?.mensual || 0)} →`}
+          <div style={{ fontSize: 34, fontWeight: 800, color: '#0F172A', marginBottom: 16 }}>
+            {cupon && <span style={{ fontSize: 18, fontWeight: 600, color: '#94A3B8', textDecoration: 'line-through', marginRight: 8 }}>{money(rentaBase)}</span>}
+            {money(renta)}<span style={{ fontSize: 15, fontWeight: 600, color: '#64748B' }}> /mes</span>
+          </div>
+          <button onClick={() => df.pagarSuscripcion(undefined, codigoCupon)} disabled={cargando} className="df-pw-btn" style={pwBtn}>
+            {cargando ? 'Abriendo el pago…' : renta <= 0 ? 'Renovar gratis con el cupón →' : `Pagar renta ${money(renta)} →`}
           </button>
         </div>
+        {cuponBox}
       </PaywallShell>
     );
   }
@@ -137,11 +185,12 @@ function Paywall({ df }: { df: DealFlowState }) {
               {premium && <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: '#059669', color: '#fff', fontSize: 11, fontWeight: 800, padding: '3px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>RECOMENDADO</div>}
               <div style={{ fontSize: 17, fontWeight: 800, color: '#0F172A' }}>{p.nombre}</div>
               <div style={{ margin: '10px 0 1px' }}>
-                <span style={{ fontSize: 30, fontWeight: 800, color: '#0F172A' }}>{money(p.precio)}</span>
+                {cupon && <span style={{ fontSize: 17, fontWeight: 600, color: '#94A3B8', textDecoration: 'line-through', marginRight: 7 }}>{money(p.precio)}</span>}
+                <span style={{ fontSize: 30, fontWeight: 800, color: cupon ? '#047857' : '#0F172A' }}>{money(conDesc(p.precio))}</span>
                 <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}> instalación única</span>
               </div>
-              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>Incluye 30 días de servicio</div>
-              <div style={{ fontSize: 13.5, color: '#059669', fontWeight: 700, marginBottom: 14 }}>+ {money(p.mensual)} / mes de renta</div>
+              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>Incluye 30 días de servicio{cupon ? ` · cupón ${cupon.descuento}% aplicado` : ''}</div>
+              <div style={{ fontSize: 13.5, color: '#059669', fontWeight: 700, marginBottom: 14 }}>+ {money(conDesc(p.mensual))} / mes de renta</div>
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                 {p.features.map((f) => (
                   <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13, color: '#334155', lineHeight: 1.4 }}>
@@ -151,17 +200,18 @@ function Paywall({ df }: { df: DealFlowState }) {
                 ))}
               </ul>
               <button
-                onClick={() => df.pagarSuscripcion(p.nombre)}
+                onClick={() => df.pagarSuscripcion(p.nombre, codigoCupon)}
                 disabled={cargando}
                 className="df-pw-btn"
                 style={{ ...pwBtn, background: premium ? 'linear-gradient(135deg,#34D399,#059669)' : '#0F172A' }}
               >
-                {cargando ? 'Abriendo…' : `Comprar ${p.nombre}`}
+                {cargando ? 'Abriendo…' : conDesc(p.precio) <= 0 ? `Activar ${p.nombre} gratis` : `Comprar ${p.nombre}`}
               </button>
             </div>
           );
         })}
       </div>
+      {cuponBox}
     </PaywallShell>
   );
 }
@@ -218,6 +268,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
       {df.adminSection === 'ventas' && <Ventas df={df} />}
       {df.adminSection === 'planes' && <Planes df={df} />}
       {df.adminSection === 'cuentas' && <Cuentas df={df} />}
+      {df.adminSection === 'cupones' && <Cupones df={df} />}
     </>
   );
 }

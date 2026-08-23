@@ -126,10 +126,28 @@ export interface PlanPublico {
   mensual: number; // renta mensual
   features: string[];
 }
+export interface Cupon {
+  id: string;
+  codigo: string;
+  descuento: number;
+  activo: boolean;
+  vence: string | null;
+  maxUsos: number | null;
+  usos: number;
+  nota: string;
+}
 export const apiSuscripcion = () => req<{ suscripcion: Suscripcion | null }>('/api/suscripcion', 'GET');
 export const apiPlanes = () => req<{ planes: PlanPublico[] }>('/api/planes', 'GET');
-export const apiCheckoutSuscripcion = (plan?: string) => req<{ url: string }>('/api/suscripcion/checkout', 'POST', plan ? { plan } : {});
+export const apiCheckoutSuscripcion = (plan?: string, cupon?: string) =>
+  req<{ url?: string; gratis?: boolean }>('/api/suscripcion/checkout', 'POST', { ...(plan ? { plan } : {}), ...(cupon ? { cupon } : {}) });
+export const apiValidarCupon = (codigo: string) => req<{ valido: boolean; descuento: number; mensaje: string; codigo?: string }>('/api/suscripcion/cupon', 'POST', { codigo });
 export const apiExtenderSuscripcion = (id: string, dias: number) => req<{ ok: true }>(`/api/admin/stores/${id}/suscripcion`, 'POST', { dias });
+// Cupones (admin)
+export const apiCupones = () => req<{ cupones: Cupon[] }>('/api/admin/cupones', 'GET');
+export const apiCrearCupon = (codigo: string, descuento: number, vence: string | null, maxUsos: number | null, nota: string) =>
+  req<{ id: string; codigo: string }>('/api/admin/cupones', 'POST', { codigo, descuento, vence, maxUsos, nota });
+export const apiToggleCupon = (id: string, activo: boolean) => req<{ ok: true }>(`/api/admin/cupones/${id}`, 'PATCH', { activo });
+export const apiEliminarCupon = (id: string) => req<{ ok: true }>(`/api/admin/cupones/${id}`, 'DELETE');
 export async function apiRegistro(nombre: string, negocio: string, correo: string, password: string): Promise<{ user?: ApiUser; error?: string }> {
   try {
     const r = await fetch('/api/auth/registro', {

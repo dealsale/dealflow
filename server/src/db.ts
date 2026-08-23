@@ -231,6 +231,20 @@ db.exec(`CREATE TABLE IF NOT EXISTS pagos (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_pagos_ref ON pagos(referencia)');
 addColumn('pagos', "tipo TEXT NOT NULL DEFAULT 'renta'"); // inicial | renta
+addColumn('pagos', "cupon TEXT NOT NULL DEFAULT ''"); // código de cupón usado en este pago (si hubo)
+// Cupones de descuento que crea el admin de DealFlow para el pago de los planes
+// (aplican a la instalación y a la renta). 100% = gratis (activa sin cobrar).
+db.exec(`CREATE TABLE IF NOT EXISTS cupones (
+  id TEXT PRIMARY KEY,
+  codigo TEXT NOT NULL UNIQUE,
+  descuento INTEGER NOT NULL DEFAULT 0,
+  activo INTEGER NOT NULL DEFAULT 1,
+  vence TEXT,
+  max_usos INTEGER,
+  usos INTEGER NOT NULL DEFAULT 0,
+  nota TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
 addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal
