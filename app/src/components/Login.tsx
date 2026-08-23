@@ -81,10 +81,16 @@ function CuteBot({ body, dark, cheek, size, style, className, blinkDelay = '0s',
 }
 
 export function Login({ df }: { df: DealFlowState }) {
+  const [modo, setModo] = useState<'login' | 'registro'>('login');
+  const [nombre, setNombre] = useState('');
+  const [negocio, setNegocio] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const entrar = () => df.login(email, password);
+  const esRegistro = modo === 'registro';
+  const entrar = () => (esRegistro ? df.registrar(nombre, negocio, email, password) : df.login(email, password));
+  const cambiarModo = () => { setModo(esRegistro ? 'login' : 'registro'); df.clearLoginError(); };
+  const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontSize: 14, marginBottom: 12, minHeight: 44, background: '#fff' };
 
   return (
     <div
@@ -154,8 +160,30 @@ export function Login({ df }: { df: DealFlowState }) {
             boxShadow: '0 30px 80px -20px rgba(0,0,0,.55), 0 0 0 1px rgba(16,185,129,.08)',
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: 19, marginBottom: 2, letterSpacing: '-0.01em' }}>¡Hola de nuevo! 👋</div>
-          <div style={{ color: '#64748B', fontSize: 13, marginBottom: 20 }}>Tu tienda y tu asistente de WhatsApp te están esperando.</div>
+          <div style={{ fontWeight: 800, fontSize: 19, marginBottom: 2, letterSpacing: '-0.01em' }}>{esRegistro ? 'Crea tu cuenta 🚀' : '¡Hola de nuevo! 👋'}</div>
+          <div style={{ color: '#64748B', fontSize: 13, marginBottom: 20 }}>{esRegistro ? 'Regístrate y activa tu plan para empezar a vender.' : 'Tu tienda y tu asistente de WhatsApp te están esperando.'}</div>
+
+          {esRegistro && (
+            <>
+              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Tu nombre</div>
+              <input
+                className="df-lg-input"
+                value={nombre}
+                onChange={(e) => { setNombre(e.target.value); df.clearLoginError(); }}
+                placeholder="Ej: Camila Torres"
+                autoComplete="name"
+                style={inputStyle}
+              />
+              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre de tu tienda</div>
+              <input
+                className="df-lg-input"
+                value={negocio}
+                onChange={(e) => { setNegocio(e.target.value); df.clearLoginError(); }}
+                placeholder="Ej: Luna Accesorios"
+                style={inputStyle}
+              />
+            </>
+          )}
 
           <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Correo</div>
           <input
@@ -167,7 +195,7 @@ export function Login({ df }: { df: DealFlowState }) {
             }}
             placeholder="tucorreo@tienda.co"
             autoComplete="username"
-            style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontSize: 14, marginBottom: 12, minHeight: 44, background: '#fff' }}
+            style={inputStyle}
           />
           <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Contraseña</div>
           <input
@@ -181,9 +209,9 @@ export function Login({ df }: { df: DealFlowState }) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') entrar();
             }}
-            placeholder="••••••••"
-            autoComplete="current-password"
-            style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontSize: 14, marginBottom: 14, minHeight: 44, background: '#fff' }}
+            placeholder={esRegistro ? 'Mínimo 6 caracteres' : '••••••••'}
+            autoComplete={esRegistro ? 'new-password' : 'current-password'}
+            style={{ ...inputStyle, marginBottom: 14 }}
           />
           {df.loginError && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: '#DC2626', fontSize: 13, marginBottom: 12, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '9px 12px' }}>
@@ -208,8 +236,18 @@ export function Login({ df }: { df: DealFlowState }) {
               boxShadow: '0 10px 26px -10px rgba(16,185,129,.5)',
             }}
           >
-            Entrar a mi tienda →
+            {esRegistro ? 'Crear mi cuenta →' : 'Entrar a mi tienda →'}
           </button>
+
+          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#64748B' }}>
+            {esRegistro ? '¿Ya tienes cuenta?' : '¿Aún no tienes cuenta?'}{' '}
+            <button
+              onClick={cambiarModo}
+              style={{ background: 'transparent', border: 'none', color: '#059669', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer', padding: 0 }}
+            >
+              {esRegistro ? 'Inicia sesión' : 'Regístrate gratis'}
+            </button>
+          </div>
         </div>
 
         {!df.apiMode && (

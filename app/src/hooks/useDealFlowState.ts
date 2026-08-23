@@ -69,8 +69,10 @@ import {
   apiCheckoutSuscripcion,
   apiExtenderSuscripcion,
   apiSuscripcion,
+  apiPlanes,
+  apiRegistro,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -473,6 +475,7 @@ export function useDealFlowState() {
   const [integracionMsg, setIntegracionMsg] = useState('');
   const [suscripcion, setSuscripcion] = useState<Suscripcion | null>(null);
   const [suscMsg, setSuscMsg] = useState('');
+  const [planes, setPlanes] = useState<PlanPublico[]>([]);
   // PWA: el navegador avisa cuándo se puede instalar (index.html captura el prompt).
   const [pwaDisponible, setPwaDisponible] = useState<boolean>(() => typeof window !== 'undefined' && !!(window as unknown as { dfPwaPrompt?: unknown }).dfPwaPrompt);
   const [waVerifyToken, setWaVerifyToken] = useState<string>('');
@@ -969,6 +972,18 @@ export function useDealFlowState() {
       localStorage.setItem('dealflow:session', JSON.stringify(user));
     } catch { /* sin almacenamiento */ }
     completeLogin(user);
+  }
+
+  async function registrar(nombre: string, negocio: string, email: string, password: string) {
+    let usarApi = apiMode;
+    if (!usarApi) {
+      const me = await apiMe();
+      if (me.available) { usarApi = true; setApiMode(true); }
+    }
+    if (!usarApi) { setLoginError('El registro solo está disponible en la app en vivo.'); return; }
+    const r = await apiRegistro(nombre.trim(), negocio.trim(), email.trim().toLowerCase(), password);
+    if (r.error || !r.user) { setLoginError(r.error || 'No pudimos crear tu cuenta.'); return; }
+    completeLogin({ nombre: r.user.nombre, email: r.user.email, role: 'vendedor', esDueno: true });
   }
 
   function logout() {
@@ -1523,9 +1538,10 @@ export function useDealFlowState() {
   }
 
   // ── Suscripción de la tienda (pago a DealFlow) ──
-  function pagarSuscripcion() {
+  // Sin plan → se pasa el plan elegido (cobra el valor inicial). Con plan activo → renovación de renta.
+  function pagarSuscripcion(plan?: string) {
     setSuscMsg('Abriendo el pago…');
-    void apiCheckoutSuscripcion().then((r) => {
+    void apiCheckoutSuscripcion(plan).then((r) => {
       if (r.error || !r.data?.url) { setSuscMsg(r.error || 'No pudimos abrir el pago. Intenta de nuevo.'); return; }
       window.location.href = r.data.url; // redirige al checkout de la pasarela
     });
@@ -1533,6 +1549,13 @@ export function useDealFlowState() {
   function extenderSuscripcion(storeId: string, dias: number) {
     void apiExtenderSuscripcion(storeId, dias).then((r) => { if (!r.error) void reloadAdmin(); });
   }
+  // Carga los planes disponibles cuando la tienda está bloqueada (para el muro de pago).
+  useEffect(() => {
+    if (suscripcion?.bloqueado && planes.length === 0) {
+      void apiPlanes().then(({ data }) => { if (data?.planes) setPlanes(data.planes); });
+    }
+  }, [suscripcion?.bloqueado, planes.length]);
+
   // Cuando la tienda vuelve del pago (?pago=ok), refrescamos y avisamos.
   useEffect(() => {
     if (typeof location !== 'undefined' && location.search.includes('pago=ok')) {
@@ -2274,6 +2297,7 @@ export function useDealFlowState() {
     puedeVerSeccion,
     apiMode,
     login: (email: string, password: string) => void login(email, password),
+    registrar: (nombre: string, negocio: string, email: string, password: string) => void registrar(nombre, negocio, email, password),
     logout,
     loginError,
     clearLoginError: () => setLoginError(''),
@@ -2350,6 +2374,7 @@ export function useDealFlowState() {
     integrations: integrationsDecorated,
     suscripcion,
     suscMsg,
+    planes,
     pagarSuscripcion,
     extenderSuscripcion,
     pwaDisponible,

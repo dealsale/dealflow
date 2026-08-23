@@ -63,9 +63,9 @@ function ImpersonationBanner({ df }: { df: DealFlowState }) {
 function SuscripcionBanner({ df }: { df: DealFlowState }) {
   const s = df.suscripcion;
   if (!s || df.esAgente) return null;
-  const porVencer = s.diasRestantes !== null && s.diasRestantes >= 0 && s.diasRestantes <= 5;
-  const vencida = s.estado === 'vencida';
-  if (!vencida && !porVencer) return null;
+  // El vencido total ya está tapado por el muro de pago; aquí solo avisamos cuando está por vencer.
+  const porVencer = s.estado === 'activa' && s.diasRestantes !== null && s.diasRestantes >= 0 && s.diasRestantes <= 5;
+  if (!porVencer) return null;
   return (
     <div
       style={{
@@ -73,7 +73,7 @@ function SuscripcionBanner({ df }: { df: DealFlowState }) {
         alignItems: 'center',
         gap: 12,
         flexWrap: 'wrap',
-        background: vencida ? '#7F1D1D' : '#78350F',
+        background: '#78350F',
         color: '#FEF3C7',
         padding: '9px 16px',
         fontFamily: "'Inter',system-ui,sans-serif",
@@ -81,18 +81,130 @@ function SuscripcionBanner({ df }: { df: DealFlowState }) {
         fontWeight: 600,
       }}
     >
-      <span>
-        {vencida
-          ? `⚠️ Tu suscripción ${s.plan} está vencida. Renueva para seguir usando DealFlow.`
-          : `⏳ Tu suscripción ${s.plan} vence en ${s.diasRestantes} día${s.diasRestantes === 1 ? '' : 's'}.`}
-      </span>
+      <span>⏳ Tu renta mensual (plan {s.plan}) vence en {s.diasRestantes} día{s.diasRestantes === 1 ? '' : 's'}.</span>
       <div style={{ flex: 1 }} />
       <button
-        onClick={df.pagarSuscripcion}
+        onClick={() => df.pagarSuscripcion()}
         style={{ background: '#FEF3C7', color: '#78350F', border: 'none', borderRadius: 7, padding: '6px 16px', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
       >
-        Pagar ${s.precio.toLocaleString('es-CO')} →
+        Pagar renta ${s.mensual.toLocaleString('es-CO')} →
       </button>
+    </div>
+  );
+}
+
+/** Muro de pago: se muestra cuando la tienda no ha pagado el valor inicial o venció la renta. */
+function Paywall({ df }: { df: DealFlowState }) {
+  const s = df.suscripcion;
+  const money = (n: number) => '$' + (n || 0).toLocaleString('es-CO');
+  const vencida = s?.estado === 'vencida';
+  const cargando = suscMsgEsPago(df.suscMsg);
+
+  // Un agente (no dueño) no paga: solo ve el aviso de cuenta suspendida.
+  if (df.esAgente) {
+    return (
+      <PaywallShell df={df} titulo="Cuenta en pausa" sub="El dueño de la tienda debe ponerse al día con el pago para reactivar el acceso.">
+        <div style={{ color: '#334155', fontSize: 14, lineHeight: 1.6, textAlign: 'center' }}>
+          Escríbele al dueño de la cuenta para que renueve la suscripción de DealFlow. En cuanto pague, tu acceso vuelve automáticamente.
+        </div>
+      </PaywallShell>
+    );
+  }
+
+  if (vencida) {
+    return (
+      <PaywallShell df={df} titulo="Tu renta mensual venció" sub={`Renueva tu plan ${s?.plan} para volver a entrar a tu tienda.`}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: '#64748B', marginBottom: 6 }}>Renta mensual · plan {s?.plan}</div>
+          <div style={{ fontSize: 34, fontWeight: 800, color: '#0F172A', marginBottom: 16 }}>{money(s?.mensual || 0)}<span style={{ fontSize: 15, fontWeight: 600, color: '#64748B' }}> /mes</span></div>
+          <button onClick={() => df.pagarSuscripcion()} disabled={cargando} className="df-pw-btn" style={pwBtn}>
+            {cargando ? 'Abriendo el pago…' : `Pagar renta ${money(s?.mensual || 0)} →`}
+          </button>
+        </div>
+      </PaywallShell>
+    );
+  }
+
+  // Sin plan: elegir y comprar (valor inicial + renta).
+  return (
+    <PaywallShell df={df} titulo="Elige tu plan para empezar" sub="Activa tu cuenta con el pago inicial. Después es una renta mensual de $250.000.">
+      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
+        {df.planes.length === 0 && <div style={{ color: '#64748B', fontSize: 14, textAlign: 'center', gridColumn: '1/-1' }}>Cargando planes…</div>}
+        {df.planes.map((p, i) => {
+          const premium = i === df.planes.length - 1 && df.planes.length > 1;
+          return (
+            <div key={p.nombre} style={{ border: premium ? '2px solid #059669' : '1px solid #E2E8F0', borderRadius: 16, padding: 22, background: '#fff', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+              {premium && <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: '#059669', color: '#fff', fontSize: 11, fontWeight: 800, padding: '3px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>RECOMENDADO</div>}
+              <div style={{ fontSize: 17, fontWeight: 800, color: '#0F172A' }}>{p.nombre}</div>
+              <div style={{ margin: '10px 0 2px' }}>
+                <span style={{ fontSize: 30, fontWeight: 800, color: '#0F172A' }}>{money(p.precio)}</span>
+                <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}> inicial</span>
+              </div>
+              <div style={{ fontSize: 13.5, color: '#059669', fontWeight: 700, marginBottom: 14 }}>+ {money(p.mensual)} / mes de renta</div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                {p.features.map((f) => (
+                  <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13, color: '#334155', lineHeight: 1.4 }}>
+                    <span style={{ color: '#059669', fontWeight: 800 }}>✓</span>
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={() => df.pagarSuscripcion(p.nombre)}
+                disabled={cargando}
+                className="df-pw-btn"
+                style={{ ...pwBtn, background: premium ? 'linear-gradient(135deg,#34D399,#059669)' : '#0F172A' }}
+              >
+                {cargando ? 'Abriendo…' : `Comprar ${p.nombre}`}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </PaywallShell>
+  );
+}
+
+const pwBtn: React.CSSProperties = {
+  width: '100%',
+  background: 'linear-gradient(135deg,#34D399,#059669)',
+  color: '#fff',
+  border: 'none',
+  borderRadius: 12,
+  padding: '13px 18px',
+  fontFamily: 'inherit',
+  fontWeight: 800,
+  fontSize: 15,
+  cursor: 'pointer',
+  boxShadow: '0 10px 26px -12px rgba(16,185,129,.5)',
+};
+
+function suscMsgEsPago(msg: string) {
+  return msg === 'Abriendo el pago…';
+}
+
+function PaywallShell({ df, titulo, sub, children }: { df: DealFlowState; titulo: string; sub: string; children: React.ReactNode }) {
+  return (
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(158deg,#071120 0%,#0A1B2E 46%,#07271F 100%)', fontFamily: "'Inter',system-ui,sans-serif", padding: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+        <span style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em', color: '#F1F5F9' }}>DealFlow</span>
+      </div>
+      <div style={{ width: 720, maxWidth: '100%', background: 'rgba(255,255,255,.97)', borderRadius: 22, padding: 30, boxShadow: '0 30px 80px -20px rgba(0,0,0,.55)' }}>
+        <div style={{ textAlign: 'center', marginBottom: 22 }}>
+          <div style={{ fontWeight: 800, fontSize: 22, color: '#0F172A', letterSpacing: '-0.01em' }}>{titulo}</div>
+          <div style={{ color: '#64748B', fontSize: 14, marginTop: 6, maxWidth: 460, marginInline: 'auto', lineHeight: 1.5 }}>{sub}</div>
+        </div>
+        {children}
+        {df.suscMsg && !suscMsgEsPago(df.suscMsg) && (
+          <div style={{ marginTop: 16, textAlign: 'center', color: '#B91C1C', fontSize: 13, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '9px 12px' }}>{df.suscMsg}</div>
+        )}
+        <div style={{ textAlign: 'center', marginTop: 18 }}>
+          <button onClick={df.logout} style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Cerrar sesión</button>
+        </div>
+      </div>
+      <div style={{ color: 'rgba(226,232,240,.5)', fontSize: 12, marginTop: 16, textAlign: 'center', maxWidth: 440, lineHeight: 1.5 }}>
+        Pago seguro con Wompi (Bancolombia). Tu cuenta se activa automáticamente al confirmarse el pago.
+      </div>
     </div>
   );
 }
@@ -209,6 +321,15 @@ function App() {
   }, [df.isLoggedIn]);
 
   if (!df.isLoggedIn) return <Login df={df} />;
+  // Muro de pago: la tienda no accede a nada hasta activar su plan (pagar el inicial) o ponerse al día con la renta.
+  if (df.isVendedor && df.suscripcion?.bloqueado) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+        {df.impersonando && <ImpersonationBanner df={df} />}
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}><Paywall df={df} /></div>
+      </div>
+    );
+  }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
       {splash && <BotPreloader />}

@@ -29,38 +29,25 @@ export function Resumen({ df }: { df: DealFlowState }) {
       <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 18px' }}>Así va tu tienda hoy, {df.resumenFecha}.</p>
 
       {df.suscripcion && !df.esAgente && (
-        <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 18, borderLeft: '4px solid ' + (df.suscripcion.estado === 'vencida' ? '#DC2626' : df.suscripcion.estado === 'prueba' ? '#F59E0B' : '#059669') }}>
+        <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 18, borderLeft: '4px solid #059669' }}>
           <div>
             <div style={{ fontSize: 12.5, color: '#64748B', fontWeight: 600 }}>Tu suscripción</div>
             <div style={{ fontSize: 16, fontWeight: 800 }}>
               Plan {df.suscripcion.plan}
-              <span
-                style={{
-                  marginLeft: 8,
-                  fontSize: 11.5,
-                  fontWeight: 700,
-                  borderRadius: 6,
-                  padding: '2px 8px',
-                  color: df.suscripcion.estado === 'vencida' ? '#B91C1C' : df.suscripcion.estado === 'prueba' ? '#B45309' : '#047857',
-                  background: df.suscripcion.estado === 'vencida' ? '#FEE2E2' : df.suscripcion.estado === 'prueba' ? '#FEF3C7' : '#D1FAE5',
-                }}
-              >
-                {df.suscripcion.estado === 'vencida' ? 'Vencida' : df.suscripcion.estado === 'prueba' ? 'Prueba' : 'Activa'}
-              </span>
+              <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, borderRadius: 6, padding: '2px 8px', color: '#047857', background: '#D1FAE5' }}>Activa</span>
             </div>
             <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 3 }}>
-              {df.suscripcion.vence
-                ? `${df.suscripcion.estado === 'vencida' ? 'Venció' : 'Próximo pago'}: ${df.suscripcion.vence}${df.suscripcion.diasRestantes !== null && df.suscripcion.diasRestantes >= 0 ? ` · en ${df.suscripcion.diasRestantes} días` : ''}`
-                : 'En periodo de prueba'}
+              Renta ${df.suscripcion.mensual.toLocaleString('es-CO')}/mes
+              {df.suscripcion.vence ? ` · próximo pago: ${df.suscripcion.vence}${df.suscripcion.diasRestantes !== null && df.suscripcion.diasRestantes >= 0 ? ` (en ${df.suscripcion.diasRestantes} días)` : ''}` : ''}
             </div>
           </div>
           <div style={{ flex: 1 }} />
           <button
-            onClick={df.pagarSuscripcion}
+            onClick={() => df.pagarSuscripcion()}
             className="df-btn-primary"
             style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 10, padding: '11px 20px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
           >
-            {df.suscripcion.estado === 'activa' ? 'Pagar próximo mes' : 'Pagar / Renovar'} · ${df.suscripcion.precio.toLocaleString('es-CO')}
+            Pagar renta · ${df.suscripcion.mensual.toLocaleString('es-CO')}
           </button>
         </div>
       )}

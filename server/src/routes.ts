@@ -38,6 +38,34 @@ api.post('/auth/login', (req, res) => {
   res.json({ user: { ...user, esDueno: esDuenoDeTienda(user) } });
 });
 
+// Auto-registro público: cualquiera crea su cuenta. Queda SIN plan (bloqueada)
+// hasta que compre el valor inicial de un plan.
+api.post('/auth/registro', (req, res) => {
+  const { nombre, negocio, correo, password } = req.body || {};
+  if (!nombre?.trim() || !correo?.trim() || !password) {
+    return res.status(400).json({ error: 'Escribe tu nombre, tu correo y una contraseña.' });
+  }
+  if (String(password).length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+  const email = String(correo).toLowerCase().trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Escribe un correo válido.' });
+  if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
+
+  const storeId = uid();
+  const nombreTienda = (negocio?.trim() || nombre.trim());
+  // Nace sin plan: plan_estado 'sin_plan', inicial_pagado 0. Activa=1 para poder entrar y ver el muro de pago.
+  db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, inicial_pagado, activa) VALUES (?,?,?,?, 'sin_plan', 0, 1)")
+    .run(storeId, nombreTienda, email, '');
+  const userId = uid();
+  db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)')
+    .run(userId, email, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', storeId);
+  db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
+  db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
+
+  const user: AuthUser = { id: userId, email, nombre: nombre.trim(), role: 'VENDEDOR', storeId };
+  setAuthCookie(res, user);
+  res.json({ user: { ...user, esDueno: true } });
+});
+
 api.post('/auth/logout', (_req, res) => {
   clearAuthCookie(res);
   res.json({ ok: true });
@@ -591,12 +619,14 @@ api.delete('/admin/plans/:id', requireAuth, requireAdmin, (req, res) => {
 });
 
 api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
-  const { nombre, correo, plan = 'Inicio', password } = req.body || {};
+  const { nombre, correo, plan = 'Básico', password } = req.body || {};
   if (!nombre?.trim() || !correo?.trim() || !password) return res.status(400).json({ error: 'Faltan el nombre de la tienda, el correo o la contraseña.' });
   const email = String(correo).toLowerCase().trim();
   if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
   const storeId = uid();
-  db.prepare('INSERT INTO stores (id, nombre, correo, plan) VALUES (?,?,?,?)').run(storeId, nombre.trim(), email, String(plan));
+  // Las tiendas creadas por el admin quedan activadas (el admin las da de alta ya pagadas).
+  db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, plan_vence, inicial_pagado) VALUES (?,?,?,?, 'activa', date('now','+30 days'), 1)")
+    .run(storeId, nombre.trim(), email, String(plan));
   db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)').run(uid(), email, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', storeId);
   db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
   db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
@@ -669,6 +699,11 @@ api.put('/integraciones-ia/predeterminada', requireAuth, requireStore, requireOw
 });
 
 // ── Suscripción (pago de las tiendas a DealFlow por Wompi) ────────────
+api.get('/planes', requireAuth, async (_req, res) => {
+  const { listarPlanes } = await import('./suscripcion.js');
+  res.json({ planes: listarPlanes() });
+});
+
 api.get('/suscripcion', requireAuth, requireStore, async (req, res) => {
   const { estadoSuscripcion } = await import('./suscripcion.js');
   res.json({ suscripcion: estadoSuscripcion(req.user!.storeId!) });
@@ -678,7 +713,7 @@ api.post('/suscripcion/checkout', requireAuth, requireStore, requireOwner, async
   const { crearCheckout } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const base = `${proto}://${req.get('host')}`;
-  const r = crearCheckout(req.user!.storeId!, req.user!.email, base);
+  const r = crearCheckout(req.user!.storeId!, req.user!.email, base, req.body?.plan);
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ url: r.url });
 });

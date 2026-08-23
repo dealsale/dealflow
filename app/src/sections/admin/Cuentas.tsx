@@ -168,7 +168,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                     {a.correo} · Plan {a.plan}
                     {a.planEstado === 'vencida' && <span style={{ color: '#B91C1C', fontWeight: 700 }}> · 💳 vencida</span>}
                     {a.planEstado === 'activa' && a.planVence && <span style={{ color: '#059669', fontWeight: 700 }}> · 💳 al día ({a.planVence})</span>}
-                    {a.planEstado === 'prueba' && <span style={{ color: '#B45309', fontWeight: 700 }}> · 💳 prueba</span>}
+                    {a.planEstado === 'sin_plan' && <span style={{ color: '#B45309', fontWeight: 700 }}> · 💳 sin plan (bloqueada)</span>}
                   </div>
                 </div>
                 <span style={a.estadoStyle}>{a.estadoLabel}</span>

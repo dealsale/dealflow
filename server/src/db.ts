@@ -141,10 +141,13 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_phone ON whatsapp(phone_number_id);
 `);
 
 // Migraciones suaves: agregar columnas nuevas sin romper bases existentes.
-function addColumn(table: string, colDef: string) {
+// Devuelve true solo si la columna se acaba de crear (útil para backfills únicos).
+function addColumn(table: string, colDef: string): boolean {
   const col = colDef.split(' ')[0];
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  if (!cols.some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDef}`);
+  if (cols.some((c) => c.name === col)) return false;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDef}`);
+  return true;
 }
 addColumn('whatsapp', "modo TEXT NOT NULL DEFAULT 'cloud'");
 addColumn('products', "descripcion TEXT NOT NULL DEFAULT ''");
@@ -171,8 +174,36 @@ db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (
   PRIMARY KEY (store_id, tipo)
 )`);
 // Suscripción de cada tienda a DealFlow (la pagan las tiendas por usar la plataforma).
-addColumn('stores', "plan_estado TEXT NOT NULL DEFAULT 'prueba'"); // prueba | activa | vencida
-addColumn('stores', 'plan_vence TEXT'); // fecha ISO del próximo cobro (null = prueba sin fecha)
+// Modelo: valor INICIAL una sola vez (activa la cuenta) + RENTA mensual recurrente.
+addColumn('stores', "plan_estado TEXT NOT NULL DEFAULT 'prueba'"); // sin_plan | activa | vencida
+addColumn('stores', 'plan_vence TEXT'); // fecha ISO del próximo cobro de la renta
+addColumn('plans', 'mensual INTEGER NOT NULL DEFAULT 0'); // renta mensual (precio = valor inicial una vez)
+const nuevaColInicial = addColumn('stores', 'inicial_pagado INTEGER NOT NULL DEFAULT 0'); // 1 = ya pagó el valor inicial
+
+// Planes canónicos de DealFlow: Básico y Premium (valor inicial + renta mensual).
+export function ensurePlanesCanonicos(): void {
+  const planes: [string, number, number, string[]][] = [
+    ['Básico', 2000000, 250000, ['Plataforma DealFlow completa', 'Asistente de ventas con IA', 'WhatsApp + CRM + pedidos', 'Renta mensual de $250.000']],
+    ['Premium', 2500000, 250000, ['Todo lo del plan Básico', 'Prioridad en soporte', 'Acompañamiento de configuración', 'Renta mensual de $250.000']],
+  ];
+  for (const [nombre, precio, mensual, features] of planes) {
+    const ex = db.prepare('SELECT id FROM plans WHERE nombre = ?').get(nombre) as { id: string } | undefined;
+    if (ex) db.prepare('UPDATE plans SET precio = ?, mensual = ?, features = ? WHERE id = ?').run(precio, mensual, JSON.stringify(features), ex.id);
+    else db.prepare('INSERT INTO plans (id, nombre, precio, mensual, features) VALUES (?,?,?,?,?)').run(crypto.randomUUID(), nombre, precio, mensual, JSON.stringify(features));
+  }
+}
+if (nuevaColInicial) {
+  const hayTiendas = (db.prepare('SELECT COUNT(*) AS n FROM stores').get() as { n: number }).n > 0;
+  if (hayTiendas) {
+    // Migración única al activar el modelo de valor inicial + renta:
+    // las tiendas que ya existían siguen con acceso (se consideran "al día").
+    db.exec('UPDATE stores SET inicial_pagado = 1 WHERE COALESCE(inicial_pagado,0) = 0');
+    ensurePlanesCanonicos();
+    // Mueve tiendas de planes viejos (Inicio/Crecimiento/Pro) a Premium y limpia esos planes.
+    db.exec("UPDATE stores SET plan = 'Premium' WHERE plan IN ('Inicio','Crecimiento','Pro')");
+    db.exec("DELETE FROM plans WHERE nombre IN ('Inicio','Crecimiento','Pro')");
+  }
+}
 db.exec(`CREATE TABLE IF NOT EXISTS pagos (
   id TEXT PRIMARY KEY,
   store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
@@ -185,6 +216,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS pagos (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_pagos_ref ON pagos(referencia)');
+addColumn('pagos', "tipo TEXT NOT NULL DEFAULT 'renta'"); // inicial | renta
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
 addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal

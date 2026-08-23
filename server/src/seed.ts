@@ -1,4 +1,4 @@
-import { db, j, uid } from './db.js';
+import { db, ensurePlanesCanonicos, j, uid } from './db.js';
 import { hashPassword } from './auth.js';
 
 /**
@@ -44,21 +44,17 @@ export function seed() {
     }
   }
 
-  const hasStores = (db.prepare('SELECT COUNT(*) AS n FROM stores').get() as { n: number }).n > 0;
-  const hasPlans = (db.prepare('SELECT COUNT(*) AS n FROM plans').get() as { n: number }).n > 0;
-  if (hasStores || hasPlans) return;
+  // Planes canónicos de DealFlow (Básico + Premium) — idempotente en cada arranque.
+  ensurePlanesCanonicos();
 
-  for (const [nombre, precio, features] of [
-    ['Inicio', 49900, ['1 número de WhatsApp', 'Hasta 100 pedidos al mes', 'Asistente con catálogo y promos']],
-    ['Crecimiento', 99900, ['1 número de WhatsApp', 'Pedidos ilimitados', 'Flujos y asignación de chats', 'Integración con Dropi']],
-    ['Pro', 199900, ['3 números de WhatsApp', 'Todo lo de Crecimiento', 'Varios usuarios por cuenta', 'Acceso por API']],
-  ] as [string, number, string[]][]) {
-    db.prepare('INSERT INTO plans (id, nombre, precio, features) VALUES (?,?,?,?)').run(uid(), nombre, precio, j(features));
-  }
+  const hasStores = (db.prepare('SELECT COUNT(*) AS n FROM stores').get() as { n: number }).n > 0;
+  if (hasStores) return;
 
   if (process.env.SEED_DEMO !== '0') {
     const storeId = uid();
-    db.prepare('INSERT INTO stores (id, nombre, correo, plan) VALUES (?,?,?,?)').run(storeId, 'Luna Accesorios', 'karla@lunaaccesorios.co', 'Crecimiento');
+    // La tienda demo arranca ya activada (valor inicial pagado) para no chocar con la compuerta de plan.
+    db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, plan_vence, inicial_pagado) VALUES (?,?,?,?, 'activa', date('now','+30 days'), 1)")
+      .run(storeId, 'Luna Accesorios', 'karla@lunaaccesorios.co', 'Premium');
     db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)').run(
       uid(), 'karla@lunaaccesorios.co', hashPassword('demo123'), 'Karla', 'VENDEDOR', storeId,
     );

@@ -112,15 +112,39 @@ export interface ApiLead {
 // ── Suscripción (pago de la tienda a DealFlow) ──
 export interface Suscripcion {
   plan: string;
-  precio: number;
-  estado: 'prueba' | 'activa' | 'vencida';
+  precioInicial: number; // valor inicial (una vez)
+  mensual: number; // renta mensual
+  estado: 'sin_plan' | 'activa' | 'vencida';
+  inicialPagado: boolean;
   vence: string | null;
   diasRestantes: number | null;
-  alDia: boolean;
+  bloqueado: boolean; // true = la tienda no puede usar la plataforma todavía
+}
+export interface PlanPublico {
+  nombre: string;
+  precio: number; // valor inicial
+  mensual: number; // renta mensual
+  features: string[];
 }
 export const apiSuscripcion = () => req<{ suscripcion: Suscripcion | null }>('/api/suscripcion', 'GET');
-export const apiCheckoutSuscripcion = () => req<{ url: string }>('/api/suscripcion/checkout', 'POST');
+export const apiPlanes = () => req<{ planes: PlanPublico[] }>('/api/planes', 'GET');
+export const apiCheckoutSuscripcion = (plan?: string) => req<{ url: string }>('/api/suscripcion/checkout', 'POST', plan ? { plan } : {});
 export const apiExtenderSuscripcion = (id: string, dias: number) => req<{ ok: true }>(`/api/admin/stores/${id}/suscripcion`, 'POST', { dias });
+export async function apiRegistro(nombre: string, negocio: string, correo: string, password: string): Promise<{ user?: ApiUser; error?: string }> {
+  try {
+    const r = await fetch('/api/auth/registro', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre, negocio, correo, password }),
+    });
+    const b = (await r.json()) as { user?: ApiUser; error?: string };
+    if (!r.ok) return { error: b.error || 'No pudimos crear tu cuenta. Intenta de nuevo.' };
+    return { user: b.user };
+  } catch {
+    return { error: 'No pudimos hablar con el servidor. Revisa tu conexión.' };
+  }
+}
 
 // ── Integraciones por tienda ──
 export interface IntegracionConfigurada {
