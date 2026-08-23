@@ -245,6 +245,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS cupones (
   nota TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
+// Cupón de precio fijo: si monto_fijo no es NULL, el pago cuesta ese valor exacto
+// (ej: $1.000) en vez de aplicar un porcentaje.
+addColumn('cupones', 'monto_fijo INTEGER');
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
 addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal

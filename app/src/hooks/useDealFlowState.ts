@@ -77,7 +77,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -1565,9 +1565,9 @@ export function useDealFlowState() {
 
   // ── Cupones (gestión del admin de DealFlow) ──
   async function reloadCupones() { const { data } = await apiCupones(); if (data) setCupones(data.cupones); }
-  function crearCupon(codigo: string, descuento: number, vence: string | null, maxUsos: number | null, nota: string) {
+  function crearCupon(nuevo: NuevoCupon) {
     setCuponMsg('');
-    void apiCrearCupon(codigo, descuento, vence, maxUsos, nota).then((r) => {
+    void apiCrearCupon(nuevo).then((r) => {
       if (r.error) { setCuponMsg(r.error); return; }
       void reloadCupones();
     });

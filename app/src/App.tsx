@@ -101,18 +101,23 @@ function Paywall({ df }: { df: DealFlowState }) {
   const vencida = s?.estado === 'vencida';
   const cargando = suscMsgEsPago(df.suscMsg);
 
-  // Cupón: se aplica tanto a la instalación como a la renta.
+  // Cupón: se aplica tanto a la instalación como a la renta. Puede ser % o precio fijo.
   const [cuponInput, setCuponInput] = useState('');
-  const [cupon, setCupon] = useState<{ codigo: string; descuento: number } | null>(null);
+  const [cupon, setCupon] = useState<{ codigo: string; descuento: number; montoFijo: number | null } | null>(null);
   const [cuponMsg, setCuponMsg] = useState('');
-  const conDesc = (base: number) => (cupon ? Math.max(0, Math.round(base * (100 - cupon.descuento) / 100)) : base);
+  const conDesc = (base: number) => {
+    if (!cupon) return base;
+    if (cupon.montoFijo != null) return Math.max(0, cupon.montoFijo); // precio fijo: paga solo eso
+    return Math.max(0, Math.round(base * (100 - cupon.descuento) / 100));
+  };
+  const etiquetaCupon = cupon ? (cupon.montoFijo != null ? (cupon.montoFijo <= 0 ? 'gratis' : `paga solo ${money(cupon.montoFijo)}`) : `${cupon.descuento}% de descuento`) : '';
   const aplicarCupon = () => {
     const code = cuponInput.trim();
     if (!code) return;
     setCuponMsg('Validando…');
     void df.validarCupon(code).then((r) => {
       if (r.error || !r.data?.valido) { setCupon(null); setCuponMsg(r.data?.mensaje || r.error || 'Cupón inválido.'); return; }
-      setCupon({ codigo: r.data.codigo || code.toUpperCase(), descuento: r.data.descuento });
+      setCupon({ codigo: r.data.codigo || code.toUpperCase(), descuento: r.data.descuento, montoFijo: r.data.montoFijo });
       setCuponMsg(r.data.mensaje);
     });
   };
@@ -134,7 +139,7 @@ function Paywall({ df }: { df: DealFlowState }) {
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', color: '#047857', fontSize: 13.5, fontWeight: 700 }}>
-          🎁 Cupón <b>{cupon.codigo}</b> · {cupon.descuento}% de descuento
+          🎁 Cupón <b>{cupon.codigo}</b> · {etiquetaCupon}
           <button onClick={quitarCupon} style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline' }}>quitar</button>
         </div>
       )}
@@ -189,7 +194,7 @@ function Paywall({ df }: { df: DealFlowState }) {
                 <span style={{ fontSize: 30, fontWeight: 800, color: cupon ? '#047857' : '#0F172A' }}>{money(conDesc(p.precio))}</span>
                 <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}> instalación única</span>
               </div>
-              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>Incluye 30 días de servicio{cupon ? ` · cupón ${cupon.descuento}% aplicado` : ''}</div>
+              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>Incluye 30 días de servicio{cupon ? ` · cupón: ${etiquetaCupon}` : ''}</div>
               <div style={{ fontSize: 13.5, color: '#059669', fontWeight: 700, marginBottom: 14 }}>+ {money(conDesc(p.mensual))} / mes de renta</div>
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                 {p.features.map((f) => (

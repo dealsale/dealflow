@@ -3,7 +3,9 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function Cupones({ df }: { df: DealFlowState }) {
   const [codigo, setCodigo] = useState('');
+  const [tipo, setTipo] = useState<'porcentaje' | 'monto'>('porcentaje');
   const [descuento, setDescuento] = useState('');
+  const [montoFijo, setMontoFijo] = useState('');
   const [vence, setVence] = useState('');
   const [maxUsos, setMaxUsos] = useState('');
   const [nota, setNota] = useState('');
@@ -12,8 +14,16 @@ export function Cupones({ df }: { df: DealFlowState }) {
   useEffect(() => { void df.reloadCupones(); }, []);
 
   const crear = () => {
-    df.crearCupon(codigo, Number(descuento), vence || null, maxUsos ? Number(maxUsos) : null, nota);
-    setCodigo(''); setDescuento(''); setVence(''); setMaxUsos(''); setNota('');
+    df.crearCupon({
+      codigo,
+      tipo,
+      descuento: tipo === 'porcentaje' ? Number(descuento) : undefined,
+      montoFijo: tipo === 'monto' ? Number(montoFijo || 0) : undefined,
+      vence: vence || null,
+      maxUsos: maxUsos ? Number(maxUsos) : null,
+      nota,
+    });
+    setCodigo(''); setDescuento(''); setMontoFijo(''); setVence(''); setMaxUsos(''); setNota('');
   };
 
   const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 };
@@ -26,15 +36,37 @@ export function Cupones({ df }: { df: DealFlowState }) {
       {/* Crear cupón */}
       <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', maxWidth: 820, marginBottom: 22 }}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>Crear cupón</div>
+        {/* Tipo de cupón */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Tipo de cupón</div>
+          <div style={{ display: 'inline-flex', border: '1px solid #E2E8F0', borderRadius: 9, overflow: 'hidden' }}>
+            {(['porcentaje', 'monto'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => { setTipo(t); df.clearCuponMsg(); }}
+                style={{ background: tipo === t ? '#059669' : '#fff', color: tipo === t ? '#fff' : '#334155', border: 'none', padding: '8px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+              >
+                {t === 'porcentaje' ? 'Por porcentaje (%)' : 'Precio fijo ($)'}
+              </button>
+            ))}
+          </div>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 12 }}>
           <div>
             <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Código</div>
             <input value={codigo} onChange={(e) => { setCodigo(e.target.value.toUpperCase()); df.clearCuponMsg(); }} placeholder="Ej: BIENVENIDA" style={{ ...inp, textTransform: 'uppercase', fontFamily: "'JetBrains Mono',monospace" }} />
           </div>
-          <div>
-            <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Descuento (%)</div>
-            <input value={descuento} onChange={(e) => { setDescuento(e.target.value.replace(/[^0-9]/g, '').slice(0, 3)); df.clearCuponMsg(); }} placeholder="Ej: 50 · 100 = gratis" style={{ ...inp, fontFamily: "'JetBrains Mono',monospace" }} />
-          </div>
+          {tipo === 'porcentaje' ? (
+            <div>
+              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Descuento (%)</div>
+              <input value={descuento} onChange={(e) => { setDescuento(e.target.value.replace(/[^0-9]/g, '').slice(0, 3)); df.clearCuponMsg(); }} placeholder="Ej: 50 · 100 = gratis" style={{ ...inp, fontFamily: "'JetBrains Mono',monospace" }} />
+            </div>
+          ) : (
+            <div>
+              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Precio a pagar (COP)</div>
+              <input value={montoFijo} onChange={(e) => { setMontoFijo(e.target.value.replace(/[^0-9]/g, '')); df.clearCuponMsg(); }} placeholder="Ej: 1000 · 0 = gratis" style={{ ...inp, fontFamily: "'JetBrains Mono',monospace" }} />
+            </div>
+          )}
           <div>
             <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Vence (opcional)</div>
             <input type="date" value={vence} onChange={(e) => setVence(e.target.value)} style={inp} />
@@ -63,7 +95,9 @@ export function Cupones({ df }: { df: DealFlowState }) {
         {df.cupones.map((c) => (
           <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1.3fr 80px 1fr 90px auto', gap: 12, alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid #F1F5F9' }}>
             <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 13.5 }}>{c.codigo}{c.nota ? <span style={{ display: 'block', fontFamily: 'inherit', fontWeight: 400, fontSize: 11.5, color: '#94A3B8' }}>{c.nota}</span> : null}</span>
-            <span style={{ fontWeight: 800, color: c.descuento === 100 ? '#7C3AED' : '#047857' }}>{c.descuento}%</span>
+            <span style={{ fontWeight: 800, color: '#047857', fontSize: c.montoFijo != null ? 12.5 : 14 }}>
+              {c.montoFijo != null ? (c.montoFijo <= 0 ? 'GRATIS' : '$' + c.montoFijo.toLocaleString('es-CO')) : c.descuento + '%'}
+            </span>
             <span style={{ fontSize: 12.5, color: '#64748B' }}>
               {c.vence ? `Vence ${c.vence}` : 'Sin vencimiento'}<br />
               Usos: {c.usos}{c.maxUsos != null ? ` / ${c.maxUsos}` : ' (ilimitado)'}

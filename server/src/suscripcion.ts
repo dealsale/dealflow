@@ -78,22 +78,29 @@ function firmaIntegridad(referencia: string, montoCents: number, secret: string)
  */
 export interface CuponValido {
   valido: boolean;
-  descuento: number; // % 0-100
+  descuento: number; // % 0-100 (0 si el cupón es de precio fijo)
+  montoFijo: number | null; // si no es null, el pago cuesta este valor exacto
   mensaje: string;
   codigo?: string;
 }
 
+const cop = (n: number) => '$' + n.toLocaleString('es-CO');
+
 /** Valida un cupón por código: existe, activo, no vencido y con usos disponibles. */
 export function validarCupon(codigoRaw: string): CuponValido {
   const codigo = (codigoRaw || '').trim().toUpperCase();
-  if (!codigo) return { valido: false, descuento: 0, mensaje: 'Escribe un código de cupón.' };
-  const c = db.prepare('SELECT codigo, descuento, activo, vence, max_usos, usos FROM cupones WHERE codigo = ?').get(codigo) as
-    | { codigo: string; descuento: number; activo: number; vence: string | null; max_usos: number | null; usos: number }
+  const fail = (mensaje: string): CuponValido => ({ valido: false, descuento: 0, montoFijo: null, mensaje });
+  if (!codigo) return fail('Escribe un código de cupón.');
+  const c = db.prepare('SELECT codigo, descuento, monto_fijo, activo, vence, max_usos, usos FROM cupones WHERE codigo = ?').get(codigo) as
+    | { codigo: string; descuento: number; monto_fijo: number | null; activo: number; vence: string | null; max_usos: number | null; usos: number }
     | undefined;
-  if (!c || !c.activo) return { valido: false, descuento: 0, mensaje: 'Ese cupón no existe o está inactivo.' };
-  if (c.vence && new Date(c.vence + 'T23:59:59Z').getTime() < Date.now()) return { valido: false, descuento: 0, mensaje: 'Ese cupón ya venció.' };
-  if (c.max_usos != null && c.usos >= c.max_usos) return { valido: false, descuento: 0, mensaje: 'Ese cupón ya alcanzó su límite de usos.' };
-  return { valido: true, descuento: c.descuento, mensaje: `Cupón aplicado: ${c.descuento}% de descuento.`, codigo: c.codigo };
+  if (!c || !c.activo) return fail('Ese cupón no existe o está inactivo.');
+  if (c.vence && new Date(c.vence + 'T23:59:59Z').getTime() < Date.now()) return fail('Ese cupón ya venció.');
+  if (c.max_usos != null && c.usos >= c.max_usos) return fail('Ese cupón ya alcanzó su límite de usos.');
+  if (c.monto_fijo != null) {
+    return { valido: true, descuento: 0, montoFijo: c.monto_fijo, codigo: c.codigo, mensaje: c.monto_fijo <= 0 ? 'Cupón aplicado: ¡gratis!' : `Cupón aplicado: precio especial de ${cop(c.monto_fijo)}.` };
+  }
+  return { valido: true, descuento: c.descuento, montoFijo: null, codigo: c.codigo, mensaje: `Cupón aplicado: ${c.descuento}% de descuento.` };
 }
 
 function incrementarUsoCupon(codigo: string): void {
@@ -135,15 +142,15 @@ export function crearCheckout(
   }
 
   // Cupón (opcional): aplica a instalación y renta por igual.
+  // Puede ser por porcentaje o de precio fijo (paga solo $X).
   let cupon = '';
-  let descuento = 0;
+  let monto = base;
   if (cuponRaw && cuponRaw.trim()) {
     const v = validarCupon(cuponRaw);
     if (!v.valido) return { error: v.mensaje };
     cupon = v.codigo || '';
-    descuento = v.descuento;
+    monto = v.montoFijo != null ? Math.max(0, Math.round(v.montoFijo)) : Math.max(0, Math.round(base * (100 - v.descuento) / 100));
   }
-  const monto = Math.max(0, Math.round(base * (100 - descuento) / 100));
 
   const referencia = `DF-${tipo === 'inicial' ? 'INI' : 'REN'}-${storeId.slice(0, 8)}-${Date.now()}`;
   db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo, cupon) VALUES (?,?,?,?,?,?,?,?,?)')
