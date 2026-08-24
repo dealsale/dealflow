@@ -724,6 +724,14 @@ api.post('/suscripcion/cupon', requireAuth, requireStore, async (req, res) => {
   res.json(validarCupon(String(req.body?.codigo || '')));
 });
 
+// Al volver del pago: verifica la transacción directamente con Wompi y activa
+// la cuenta si fue aprobada (red de seguridad si el webhook no llegó).
+api.post('/suscripcion/verificar', requireAuth, requireStore, async (req, res) => {
+  const { verificarTransaccion } = await import('./suscripcion.js');
+  const r = await verificarTransaccion(req.user!.storeId!, String(req.body?.id || ''));
+  res.json(r);
+});
+
 // ── Cupones de descuento (los administra el admin de DealFlow) ────────
 api.get('/admin/cupones', requireAuth, requireAdmin, (_req, res) => {
   const cupones = (db.prepare('SELECT * FROM cupones ORDER BY created_at DESC').all() as Record<string, unknown>[]).map((c) => ({

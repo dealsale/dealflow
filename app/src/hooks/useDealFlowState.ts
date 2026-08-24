@@ -72,6 +72,7 @@ import {
   apiPlanes,
   apiRegistro,
   apiValidarCupon,
+  apiVerificarPago,
   apiCupones,
   apiCrearCupon,
   apiToggleCupon,
@@ -1584,15 +1585,25 @@ export function useDealFlowState() {
     }
   }, [suscripcion?.bloqueado, planes.length]);
 
-  // Cuando la tienda vuelve del pago (?pago=ok), refrescamos y avisamos.
+  // Cuando la tienda vuelve del pago (?pago=ok&id=<tx>), verificamos con Wompi y refrescamos.
   useEffect(() => {
-    if (typeof location !== 'undefined' && location.search.includes('pago=ok')) {
-      setSuscMsg('¡Gracias! Estamos confirmando tu pago… tu plan se activa en unos segundos.');
-      history.replaceState(null, '', location.pathname);
-      const t = setInterval(() => { void apiSuscripcion().then(({ data }) => { if (data?.suscripcion) setSuscripcion(data.suscripcion); }); }, 3000);
-      setTimeout(() => clearInterval(t), 30000);
-      return () => clearInterval(t);
-    }
+    if (typeof location === 'undefined') return;
+    const params = new URLSearchParams(location.search);
+    if (params.get('pago') !== 'ok') return;
+    const txId = params.get('id') || ''; // Wompi agrega el id de la transacción a la URL de retorno
+    setSuscMsg('¡Gracias! Estamos confirmando tu pago… tu plan se activa en unos segundos.');
+    history.replaceState(null, '', location.pathname);
+    const refrescar = () => apiSuscripcion().then(({ data }) => {
+      if (data?.suscripcion) {
+        setSuscripcion(data.suscripcion);
+        if (!data.suscripcion.bloqueado) location.reload(); // ya activa → carga la app completa
+      }
+    });
+    // Red de seguridad: preguntamos directo a Wompi si la transacción fue aprobada (no depende del webhook).
+    if (txId) void apiVerificarPago(txId).then(() => void refrescar());
+    const t = setInterval(() => void refrescar(), 3000);
+    setTimeout(() => clearInterval(t), 30000);
+    return () => clearInterval(t);
   }, []);
 
   // ── Integraciones por tienda (API keys propias + IA predeterminada) ──

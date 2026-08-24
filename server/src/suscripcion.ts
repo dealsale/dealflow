@@ -204,6 +204,41 @@ export function aplicarPagoAprobado(referencia: string, transaccion?: string): b
   return true;
 }
 
+/** Base de la API de Wompi según el tipo de llave (prod vs sandbox). */
+function wompiApiBase(): string {
+  if (process.env.WOMPI_API_URL) return process.env.WOMPI_API_URL.replace(/\/$/, '');
+  const pub = process.env.WOMPI_PUBLIC_KEY || '';
+  return pub.startsWith('pub_prod') ? 'https://production.wompi.co/v1' : 'https://sandbox.wompi.co/v1';
+}
+
+/**
+ * Verifica una transacción directamente con Wompi (por el id que Wompi agrega a
+ * la URL de retorno) y activa la cuenta si fue APROBADA. Es la red de seguridad
+ * para que la activación NO dependa solo del webhook.
+ */
+export async function verificarTransaccion(storeId: string, txId: string): Promise<{ activado: boolean; estado?: string }> {
+  if (!txId) return { activado: false };
+  try {
+    const r = await fetch(`${wompiApiBase()}/transactions/${encodeURIComponent(txId)}`);
+    if (!r.ok) { console.warn(`[wompi] verificar tx ${txId}: HTTP ${r.status}`); return { activado: false }; }
+    const body = (await r.json()) as { data?: { status?: string; reference?: string } };
+    const tx = body.data;
+    if (!tx?.reference) return { activado: false, estado: tx?.status };
+    if (tx.status === 'APPROVED') {
+      // Seguridad: la referencia debe pertenecer a la tienda que consulta.
+      const pago = db.prepare('SELECT store_id FROM pagos WHERE referencia = ?').get(tx.reference) as { store_id: string } | undefined;
+      if (pago && pago.store_id === storeId) {
+        aplicarPagoAprobado(tx.reference, txId);
+        return { activado: true, estado: tx.status };
+      }
+    }
+    return { activado: false, estado: tx.status };
+  } catch (e) {
+    console.error('[wompi] verificarTransaccion error', e);
+    return { activado: false };
+  }
+}
+
 /** Extiende manualmente la renta (admin), sin pasar por la pasarela. Marca la cuenta activa. */
 export function extenderManual(storeId: string, dias: number): void {
   const s = db.prepare('SELECT plan_vence FROM stores WHERE id = ?').get(storeId) as { plan_vence: string | null } | undefined;

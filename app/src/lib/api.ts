@@ -151,6 +151,7 @@ export const apiPlanes = () => req<{ planes: PlanPublico[] }>('/api/planes', 'GE
 export const apiCheckoutSuscripcion = (plan?: string, cupon?: string) =>
   req<{ url?: string; gratis?: boolean }>('/api/suscripcion/checkout', 'POST', { ...(plan ? { plan } : {}), ...(cupon ? { cupon } : {}) });
 export const apiValidarCupon = (codigo: string) => req<{ valido: boolean; descuento: number; montoFijo: number | null; mensaje: string; codigo?: string }>('/api/suscripcion/cupon', 'POST', { codigo });
+export const apiVerificarPago = (id: string) => req<{ activado: boolean; estado?: string }>('/api/suscripcion/verificar', 'POST', { id });
 export const apiExtenderSuscripcion = (id: string, dias: number) => req<{ ok: true }>(`/api/admin/stores/${id}/suscripcion`, 'POST', { dias });
 // Cupones (admin)
 export const apiCupones = () => req<{ cupones: Cupon[] }>('/api/admin/cupones', 'GET');
