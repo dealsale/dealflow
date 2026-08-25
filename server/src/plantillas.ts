@@ -18,10 +18,12 @@ const remapUrls = (from: string, to: string, str: unknown) =>
   j(pj<string[]>(str as string, []).map((u) => copiarMediaUrl(from, to, u)));
 const remapBloques = (from: string, to: string, str: unknown) =>
   j(pj<{ tipo: string; valor: string }[]>(str as string, []).map((b) => (b.tipo === 'texto' ? b : { ...b, valor: copiarMediaUrl(from, to, b.valor) })));
-const remapOpciones = (from: string, to: string, str: unknown) =>
+// Las plantillas NO traen fotos pegadas a cada color/opción: son del catálogo de
+// la tienda maestra. Cada tienda pone las suyas, así que al instalar se quitan.
+const remapOpciones = (_from: string, _to: string, str: unknown) =>
   j(pj<{ nombre: string; valores: (string | { valor: string; foto?: string })[] }[]>(str as string, []).map((o) => ({
     ...o,
-    valores: (o.valores || []).map((v) => (typeof v === 'string' ? { valor: v } : v.foto ? { ...v, foto: copiarMediaUrl(from, to, v.foto) } : v)),
+    valores: (o.valores || []).map((v) => (typeof v === 'string' ? { valor: v } : { valor: v.valor })),
   })));
 
 export interface Plantilla {
