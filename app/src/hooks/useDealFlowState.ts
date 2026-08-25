@@ -45,6 +45,9 @@ import {
   apiTeamDelete,
   apiMarketingCopy,
   apiMarketingImagen,
+  apiHistorialMarketing,
+  apiFavoritoMarketing,
+  apiBorrarMarketing,
   apiCreditos,
   apiRecargarCreditos,
   apiDarCreditos,
@@ -81,7 +84,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -512,6 +515,10 @@ export function useDealFlowState() {
   const [mkImgLoading, setMkImgLoading] = useState(false);
   const [mkImgError, setMkImgError] = useState('');
   const [mkCopied, setMkCopied] = useState<number | null>(null);
+  const [mkFormato, setMkFormato] = useState('anuncio'); // anuncio | historia | organico | producto
+  const [mkTamano, setMkTamano] = useState('feed'); // feed | historia | horizontal
+  const [mkTab, setMkTab] = useState<'crear' | 'historial'>('crear');
+  const [mkHistorial, setMkHistorial] = useState<MarketingItem[]>([]);
   const [plantillas, setPlantillas] = useState<Plantilla[]>([]);
   const [instalando, setInstalando] = useState<string | null>(null);
   const [plantillaMsg, setPlantillaMsg] = useState('');
@@ -1703,14 +1710,25 @@ export function useDealFlowState() {
     void apiDarCreditos(storeId, cantidad).then((r) => { if (!r.error) void reloadAdmin(); });
   }
 
+  async function reloadHistorialMk() { const { data } = await apiHistorialMarketing(); if (data) setMkHistorial(data.items); }
+  function favoritoMk(id: string, favorito: boolean) {
+    setMkHistorial((h) => h.map((it) => (it.id === id ? { ...it, favorito } : it)));
+    void apiFavoritoMarketing(id, favorito);
+  }
+  function borrarMk(id: string) {
+    setMkHistorial((h) => h.filter((it) => it.id !== id));
+    void apiBorrarMarketing(id);
+  }
+
   function generarCopys() {
     if (!mkIdea.trim() && !mkImagen) { setMkError('Escribe de qué es el anuncio o sube una imagen del producto.'); return; }
     setMkLoading(true); setMkError(''); setMkCopys([]);
-    void apiMarketingCopy({ idea: mkIdea, plataforma: mkPlataforma, tono: mkTono, objetivo: mkObjetivo, cantidad: mkCantidad, imagen: mkImagen || undefined }).then((r) => {
+    void apiMarketingCopy({ idea: mkIdea, plataforma: mkPlataforma, tono: mkTono, objetivo: mkObjetivo, cantidad: mkCantidad, imagen: mkImagen || undefined, formato: mkFormato }).then((r) => {
       setMkLoading(false);
       if (r.data?.sinCreditos || r.error) { setMkError(r.data?.error || r.error || 'No se pudo generar.'); if (r.data?.sinCreditos) setMkSinCreditos(true); return; }
       setMkCopys(r.data?.copys || []);
       if (typeof r.data?.creditos === 'number') setCreditos(r.data.creditos);
+      void reloadHistorialMk();
     });
   }
 
@@ -1723,11 +1741,12 @@ export function useDealFlowState() {
   function generarImagen() {
     if (!mkImgPrompt.trim()) { setMkImgError('Describe la imagen que quieres.'); return; }
     setMkImgLoading(true); setMkImgError(''); setMkImgUrls([]);
-    void apiMarketingImagen(mkImgPrompt, mkImgCantidad).then((r) => {
+    void apiMarketingImagen(mkImgPrompt, mkImgCantidad, mkTamano).then((r) => {
       setMkImgLoading(false);
       if (r.data?.urls?.length) {
         setMkImgUrls(r.data.urls);
         if (typeof r.data.creditos === 'number') setCreditos(r.data.creditos);
+        void reloadHistorialMk();
         return;
       }
       if (r.data?.sinCreditos) setMkSinCreditos(true);
@@ -2124,6 +2143,7 @@ export function useDealFlowState() {
     userLabel: isAdmin ? 'Equipo DealFlow' : apiMode ? sessionUser?.nombre || 'Vendedor' : 'Karla',
     userInitials: isAdmin ? 'DF' : apiMode ? initials(sessionUser?.nombre || 'V').toUpperCase() : 'K',
     saludoNombre: apiMode ? (sessionUser?.nombre?.split(' ')[0] || 'Vendedor') : 'Karla',
+    storeNombre: storeNombre || 'Tu tienda',
     navStyle,
 
     waConnected,
@@ -2287,6 +2307,10 @@ export function useDealFlowState() {
     mkCopied, copiarCopy,
     mkImgPrompt, setMkImgPrompt,
     mkImgUrls, mkImgCantidad, setMkImgCantidad, mkImgLoading, mkImgError, generarImagen,
+    mkFormato, setMkFormato,
+    mkTamano, setMkTamano,
+    mkTab, setMkTab,
+    mkHistorial, reloadHistorialMk, favoritoMk, borrarMk,
 
     // ── Créditos del Marketing IA ──
     creditos,

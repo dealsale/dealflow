@@ -262,6 +262,18 @@ db.exec(`CREATE TABLE IF NOT EXISTS creditos_mov (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_credmov_store ON creditos_mov(store_id)');
+
+// Historial del Marketing IA: guarda cada copy/imagen generado para reusar.
+db.exec(`CREATE TABLE IF NOT EXISTS marketing_items (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL,              -- copy | imagen
+  contenido TEXT NOT NULL DEFAULT '{}',  -- JSON: copy {titulo,descripcion,texto,hashtags} | imagen {url}
+  meta TEXT NOT NULL DEFAULT '{}',       -- JSON: formato, plataforma, prompt, tamano…
+  favorito INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_mkitems_store ON marketing_items(store_id, created_at)');
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
 addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal

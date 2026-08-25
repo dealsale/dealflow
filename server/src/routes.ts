@@ -365,28 +365,48 @@ api.post('/marketing/copy', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const { COSTO, saldo, cobrar } = await import('./creditos.js');
   if (saldo(sid) < COSTO.texto) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos para generar textos. Recarga para continuar.`, sinCreditos: true });
-  const { generarCopys } = await import('./marketing.js');
+  const { generarCopys, guardarItem } = await import('./marketing.js');
+  const formato = String(req.body?.formato || 'anuncio');
   const r = await generarCopys(sid, {
     idea: String(idea || ''), plataforma: String(plataforma || ''), tono: String(tono || ''), objetivo: String(objetivo || ''),
-    cantidad: Number(cantidad) || 3, imagen: typeof imagen === 'string' ? imagen : undefined,
+    cantidad: Number(cantidad) || 3, imagen: typeof imagen === 'string' ? imagen : undefined, formato,
   });
   if (r.error) return res.status(400).json({ error: r.error });
   cobrar(sid, COSTO.texto, 'Generación de textos'); // solo se cobra si salió bien
+  for (const c of r.copys || []) guardarItem(sid, 'copy', c, { formato, plataforma: String(plataforma || ''), idea: String(idea || '') });
   res.json({ copys: r.copys, creditos: saldo(sid) });
 });
 
 api.post('/marketing/imagen', requireAuth, requireStore, async (req, res) => {
-  const { prompt, cantidad } = req.body || {};
+  const { prompt, cantidad, tamano } = req.body || {};
   const sid = req.user!.storeId!;
   const n = Math.min(5, Math.max(1, Number(cantidad) || 1));
   const { COSTO, saldo, cobrar } = await import('./creditos.js');
   const costo = COSTO.imagen * n;
   if (saldo(sid) < costo) return res.status(402).json({ error: `Necesitas ${costo} créditos para generar ${n} imagen${n > 1 ? 'es' : ''}. Recarga para continuar.`, sinCreditos: true });
-  const { generarImagen } = await import('./marketing.js');
-  const r = await generarImagen(sid, String(prompt || ''), n);
+  const { generarImagen, guardarItem } = await import('./marketing.js');
+  const tam = String(tamano || 'feed');
+  const r = await generarImagen(sid, String(prompt || ''), n, tam);
   if (r.error) return res.status(r.sinConfigurar ? 200 : 400).json({ error: r.error, sinConfigurar: r.sinConfigurar });
   cobrar(sid, costo, `Generación de ${n} imagen${n > 1 ? 'es' : ''}`); // solo si salió bien
+  for (const url of r.urls || []) guardarItem(sid, 'imagen', { url }, { tamano: tam, prompt: String(prompt || '') });
   res.json({ urls: r.urls, creditos: saldo(sid) });
+});
+
+// Historial del Marketing IA (guardar/reusar).
+api.get('/marketing/historial', requireAuth, requireStore, async (req, res) => {
+  const { listarHistorial } = await import('./marketing.js');
+  res.json({ items: listarHistorial(req.user!.storeId!) });
+});
+api.patch('/marketing/historial/:id', requireAuth, requireStore, async (req, res) => {
+  const { favoritoItem } = await import('./marketing.js');
+  favoritoItem(req.user!.storeId!, req.params.id, !!req.body?.favorito);
+  res.json({ ok: true });
+});
+api.delete('/marketing/historial/:id', requireAuth, requireStore, async (req, res) => {
+  const { borrarItem } = await import('./marketing.js');
+  borrarItem(req.user!.storeId!, req.params.id);
+  res.json({ ok: true });
 });
 
 // ── Créditos del Marketing IA (saldo, paquetes, recarga por Wompi) ────

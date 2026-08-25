@@ -286,10 +286,23 @@ export interface CopyAnuncio {
   descripcion: string;
   texto: string;
 }
-export const apiMarketingCopy = (b: { idea: string; plataforma: string; tono: string; objetivo: string; cantidad: number; imagen?: string }) =>
+export const apiMarketingCopy = (b: { idea: string; plataforma: string; tono: string; objetivo: string; cantidad: number; imagen?: string; formato?: string }) =>
   req<{ copys: CopyAnuncio[]; creditos?: number; error?: string; sinCreditos?: boolean }>('/api/marketing/copy', 'POST', b);
-export const apiMarketingImagen = (prompt: string, cantidad: number) =>
-  req<{ urls?: string[]; creditos?: number; error?: string; sinConfigurar?: boolean; sinCreditos?: boolean }>('/api/marketing/imagen', 'POST', { prompt, cantidad });
+export const apiMarketingImagen = (prompt: string, cantidad: number, tamano?: string) =>
+  req<{ urls?: string[]; creditos?: number; error?: string; sinConfigurar?: boolean; sinCreditos?: boolean }>('/api/marketing/imagen', 'POST', { prompt, cantidad, tamano });
+
+// ── Historial del Marketing IA ──
+export interface MarketingItem {
+  id: string;
+  tipo: 'copy' | 'imagen';
+  favorito: boolean;
+  fecha: string;
+  contenido: { titulo?: string; descripcion?: string; texto?: string; hashtags?: string; url?: string };
+  meta: { formato?: string; plataforma?: string; idea?: string; tamano?: string; prompt?: string };
+}
+export const apiHistorialMarketing = () => req<{ items: MarketingItem[] }>('/api/marketing/historial', 'GET');
+export const apiFavoritoMarketing = (id: string, favorito: boolean) => req<{ ok: true }>(`/api/marketing/historial/${id}`, 'PATCH', { favorito });
+export const apiBorrarMarketing = (id: string) => req<{ ok: true }>(`/api/marketing/historial/${id}`, 'DELETE');
 
 // ── Créditos del Marketing IA ──
 export interface PaqueteCreditos { id: string; nombre: string; creditos: number; precio: number }
