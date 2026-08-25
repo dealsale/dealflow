@@ -98,7 +98,21 @@ export function Productos({ df }: { df: DealFlowState }) {
 
       {df.newProductOpen && (
         <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>Nuevo producto</div>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>Nuevo {df.newProdTipo === 'servicio' ? 'servicio' : 'producto'}</div>
+
+          {/* Producto físico o servicio */}
+          <div style={{ display: 'inline-flex', border: '1px solid #E2E8F0', borderRadius: 9, overflow: 'hidden', marginBottom: 14 }}>
+            {(['producto', 'servicio'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => df.setNewProdTipo(t)}
+                style={{ background: df.newProdTipo === t ? '#059669' : '#fff', color: df.newProdTipo === t ? '#fff' : '#334155', border: 'none', padding: '8px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+              >
+                {t === 'producto' ? '📦 Producto' : '🧩 Servicio'}
+              </button>
+            ))}
+          </div>
+
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 12, marginBottom: 14 }}>
             <div>
               <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre</div>
@@ -106,28 +120,42 @@ export function Productos({ df }: { df: DealFlowState }) {
                 className="df-input"
                 value={df.newProdNombre}
                 onChange={(e) => df.setNewProdNombre(e.target.value)}
-                placeholder="Ej: Chaqueta bomber"
+                placeholder={df.newProdTipo === 'servicio' ? 'Ej: Corte de cabello' : 'Ej: Chaqueta bomber'}
                 style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
               />
             </div>
             <div>
-              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Precio (COP)</div>
+              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Precio (COP){df.newProdTipo === 'servicio' ? ' · 0 = gratis' : ''}</div>
               <input
                 className="df-input"
                 value={df.newProdPrecio}
                 onChange={(e) => df.setNewProdPrecio(e.target.value)}
-                placeholder="Ej: 79900"
+                placeholder={df.newProdTipo === 'servicio' ? 'Ej: 25000' : 'Ej: 79900'}
                 style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
               />
             </div>
           </div>
+
+          {df.newProdTipo === 'servicio' && (
+            <div style={{ marginBottom: 14, maxWidth: 240 }}>
+              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Duración (opcional)</div>
+              <input
+                className="df-input"
+                value={df.newProdDuracion}
+                onChange={(e) => df.setNewProdDuracion(e.target.value)}
+                placeholder="Ej: 30 min, 1 h, mensual"
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
+              />
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button
               onClick={df.crearProducto}
               className="df-btn-primary"
               style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
             >
-              Crear producto
+              Crear {df.newProdTipo === 'servicio' ? 'servicio' : 'producto'}
             </button>
             <button
               onClick={df.toggleNewProduct}
@@ -165,8 +193,11 @@ export function Productos({ df }: { df: DealFlowState }) {
             >
               <div style={p.fotoStyle}>{p.iniciales}</div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{p.nombre}</div>
-                <div style={{ color: '#64748B', fontSize: 12, marginTop: 1 }}>{p.precioFmt} · {p.variantesLabel}</div>
+                <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
+                  {p.nombre}
+                  {p.tipo === 'servicio' && <span style={{ fontSize: 10.5, fontWeight: 800, color: '#4338CA', background: '#E0E7FF', borderRadius: 5, padding: '1px 6px' }}>🧩 SERVICIO</span>}
+                </div>
+                <div style={{ color: '#64748B', fontSize: 12, marginTop: 1 }}>{p.precioFmt}{p.tipo === 'servicio' ? (p.duracion ? ' · ' + p.duracion : '') : ' · ' + p.variantesLabel}</div>
               </div>
               <div className="df-prow-price" style={{ fontWeight: 700, fontSize: 14 }}>{p.precioFmt}</div>
               <span style={p.stockPill}>{p.stockLabel}</span>

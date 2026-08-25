@@ -150,8 +150,15 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
       p.modos_uso && `  Modo de uso: ${p.modos_uso}`, opciones && `  Opciones disponibles (📷 = tiene foto propia):\n${opciones}`,
       guion && `  Si preguntan por este producto, preséntalo así: ${guion}`]
       .filter(Boolean).join('\n');
+    const esServicio = p.tipo === 'servicio';
+    const precioTxt = Number(p.precio) > 0 ? `$${Number(p.precio).toLocaleString('es-CO')} COP` : 'gratis';
+    if (esServicio) {
+      // Un servicio: precio + duración, sin stock ni variantes.
+      const dur = p.duracion ? ` · duración: ${p.duracion}` : '';
+      return `- ${p.nombre} (servicio): ${precioTxt}${dur}.${extra ? '\n' + extra : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
+    }
     const variantesTxt = opciones ? '' : ` Variantes: ${vars || 'única'}.`;
-    return `- ${p.nombre}: $${Number(p.precio).toLocaleString('es-CO')} COP.${variantesTxt}${extra ? '\n' + extra : ''}${combos ? '\n' + combos : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
+    return `- ${p.nombre}: ${precioTxt}.${variantesTxt}${extra ? '\n' + extra : ''}${combos ? '\n' + combos : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
   }).join('\n');
   const promos = (db.prepare('SELECT titulo, descripcion FROM promos WHERE store_id = ? AND activa = 1').all(storeId) as { titulo: string; descripcion: string }[])
     .map((p) => `- ${p.titulo}: ${p.descripcion}`).join('\n');

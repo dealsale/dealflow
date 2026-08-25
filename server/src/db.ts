@@ -274,6 +274,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS marketing_items (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_mkitems_store ON marketing_items(store_id, created_at)');
+
+// Catálogo: producto físico o servicio. Y de qué plantilla vino (para desinstalar).
+addColumn('products', "tipo TEXT NOT NULL DEFAULT 'producto'"); // producto | servicio
+addColumn('products', "duracion TEXT NOT NULL DEFAULT ''"); // solo servicios (ej: "30 min")
+addColumn('products', "plantilla_id TEXT NOT NULL DEFAULT ''"); // plantilla que lo instaló ('' = creado por la tienda)
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
 addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal

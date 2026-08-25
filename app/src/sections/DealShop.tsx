@@ -1,6 +1,12 @@
+import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
+const ICONO: Record<string, string> = {
+  'ecommerce-v10': '🛍️', 'soporte-tecnico': '🛠️', 'atencion-cliente': '💬', reservas: '📅', educacion: '🎓',
+};
+
 export function DealShop({ df }: { df: DealFlowState }) {
+  const [desinst, setDesinst] = useState<{ id: string; nombre: string } | null>(null);
   return (
     <section data-screen-label="DealShop">
       <div style={{ marginBottom: 18 }}>
@@ -20,8 +26,8 @@ export function DealShop({ df }: { df: DealFlowState }) {
         {df.plantillas.map((p) => (
           <div key={p.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: 22, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{ width: 46, height: 46, borderRadius: 12, background: 'linear-gradient(140deg,#34D399,#059669)', color: '#052018', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18 }}>
-                🛍️
+              <div style={{ width: 46, height: 46, borderRadius: 12, background: 'linear-gradient(140deg,#34D399,#059669)', color: '#052018', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 20 }}>
+                {ICONO[p.id] || '🛍️'}
               </div>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.01em' }}>{p.nombre}</div>
@@ -66,7 +72,16 @@ export function DealShop({ df }: { df: DealFlowState }) {
               >
                 {df.instalando === 'reinstalar:' + p.id ? 'Reinstalando…' : '↻ Reinstalar plantilla'}
               </button>
-            ) : (
+            ) : null}
+            {p.instalada && (
+              <button
+                onClick={() => setDesinst({ id: p.id, nombre: p.nombre })}
+                style={{ width: '100%', background: 'transparent', color: '#B91C1C', border: 'none', borderRadius: 10, padding: '9px 16px', marginTop: 6, fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+              >
+                Desinstalar
+              </button>
+            )}
+            {!p.instalada && (
               <button
                 onClick={() => df.instalando !== p.id && df.instalarPlantilla(p.id)}
                 disabled={df.instalando === p.id}
@@ -94,6 +109,32 @@ export function DealShop({ df }: { df: DealFlowState }) {
       <div style={{ color: '#94A3B8', fontSize: 12.5, marginTop: 16 }}>
         Pronto habrá más plantillas (algunas premium) para distintos tipos de negocio.
       </div>
+
+      {desinst && (
+        <div onClick={() => setDesinst(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 26, width: 440, maxWidth: '100%', boxShadow: '0 30px 80px -20px rgba(0,0,0,.5)' }}>
+            <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 6 }}>Desinstalar «{desinst.nombre}»</div>
+            <div style={{ color: '#64748B', fontSize: 13.5, lineHeight: 1.6, marginBottom: 20 }}>
+              ¿Quieres borrar también los <b>productos/servicios</b> que trajo esta plantilla? En ambos casos se limpian el prompt, las reglas y las instrucciones del asistente.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                onClick={() => { df.desinstalarPlantilla(desinst.id, true); setDesinst(null); }}
+                style={{ background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+              >
+                🗑️ Sí, borrar todo (asistente + productos)
+              </button>
+              <button
+                onClick={() => { df.desinstalarPlantilla(desinst.id, false); setDesinst(null); }}
+                style={{ background: '#fff', color: '#0F172A', border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+              >
+                No, solo quitar el asistente (conserva mis productos)
+              </button>
+              <button onClick={() => setDesinst(null)} style={{ background: 'transparent', color: '#64748B', border: 'none', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: '4px' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

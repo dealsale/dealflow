@@ -53,6 +53,7 @@ import {
   apiDarCreditos,
   apiPlantillas,
   apiInstalarPlantilla,
+  apiDesinstalarPlantilla,
   apiToggleStore,
   apiUpdateStore,
   apiDeleteStore,
@@ -370,6 +371,8 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     stock: p.variantes.reduce((a, v) => a + v.stock, 0),
     color: p.color || '#E0E7FF',
     txt: p.txt || '#4338CA',
+    tipo: p.tipo || 'producto',
+    duracion: p.duracion || '',
     reglas: p.reglas || [],
     descripcion: p.descripcion || '',
     caracteristicas: p.caracteristicas || '',
@@ -449,6 +452,8 @@ export function useDealFlowState() {
   const [newProdNombre, setNewProdNombre] = useState<string>('');
   const [newProdPrecio, setNewProdPrecio] = useState<string>('');
   const [newProdStock, setNewProdStock] = useState<string>('');
+  const [newProdTipo, setNewProdTipo] = useState<'producto' | 'servicio'>('producto');
+  const [newProdDuracion, setNewProdDuracion] = useState<string>('');
   const [newProdError, setNewProdError] = useState<boolean>(false);
   const [variantFormOpen, setVariantFormOpen] = useState<boolean>(false);
   const [variantLabel, setVariantLabel] = useState<string>('');
@@ -770,14 +775,15 @@ export function useDealFlowState() {
 
   function crearProducto() {
     const nombre = newProdNombre.trim();
-    const precio = parseInt(newProdPrecio, 10);
+    const esServicio = newProdTipo === 'servicio';
+    const precio = parseInt(newProdPrecio, 10) || 0;
     const stock = parseInt(newProdStock, 10) || 0;
-    if (!nombre || !precio) {
+    if (!nombre || (!esServicio && !precio)) { // un servicio puede ser gratis
       setNewProdError(true);
       return;
     }
     if (apiMode) {
-      void apiCreateProduct({ nombre, precio, stock }).then((r) => {
+      void apiCreateProduct({ nombre, precio, stock, tipo: newProdTipo, duracion: esServicio ? newProdDuracion : '' }).then((r) => {
         if (r.error || !r.data) {
           setNewProdError(true);
           return;
@@ -786,6 +792,8 @@ export function useDealFlowState() {
         setNewProdNombre('');
         setNewProdPrecio('');
         setNewProdStock('');
+        setNewProdDuracion('');
+        setNewProdTipo('producto');
         setNewProdError(false);
         setNewProductOpen(false);
       });
@@ -1784,6 +1792,21 @@ export function useDealFlowState() {
     });
   }
 
+  function desinstalarPlantilla(id: string, borrarDatos: boolean) {
+    setInstalando('desinstalar:' + id);
+    setPlantillaMsg('');
+    void apiDesinstalarPlantilla(id, borrarDatos).then((r) => {
+      setInstalando(null);
+      if (r.error) { setPlantillaMsg(r.error); return; }
+      setPlantillaMsg(borrarDatos ? `Plantilla desinstalada. Se borraron ${r.data?.borrados || 0} ítem(s).` : 'Plantilla desinstalada. Tus productos se conservaron.');
+      reloadPlantillas();
+      void reloadProducts();
+      void apiState().then(({ data }) => {
+        if (data) { setAssistantText(data.assistant?.instrucciones || ''); setRules(data.assistant?.reglas || []); }
+      });
+    });
+  }
+
   function toggleAccount(id: number | string, activa: boolean) {
     setAccounts((st) => st.map((x) => (x.id === id ? { ...x, activa: !x.activa } : x)));
     if (apiMode) void apiToggleStore(String(id), !activa).then((r) => { if (r.error) void reloadAdmin(); });
@@ -2328,6 +2351,7 @@ export function useDealFlowState() {
     instalando,
     plantillaMsg,
     instalarPlantilla,
+    desinstalarPlantilla,
 
     products: productsDecorated,
     productRuleDraft,
@@ -2364,6 +2388,10 @@ export function useDealFlowState() {
     },
     newProdStock,
     setNewProdStock: (v: string) => setNewProdStock(v.replace(/[^0-9]/g, '')),
+    newProdTipo,
+    setNewProdTipo,
+    newProdDuracion,
+    setNewProdDuracion,
     newProdError,
     crearProducto,
 

@@ -99,6 +99,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const store = db.prepare('SELECT id, nombre, plan FROM stores WHERE id = ?').get(sid);
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, color: p.color, txt: p.txt,
+    tipo: p.tipo || 'producto', duracion: p.duracion || '', plantillaId: p.plantilla_id || '',
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
     descripcion: p.descripcion || '', caracteristicas: p.caracteristicas || '', mensajeInicial: p.mensaje_inicial || '',
     faqs: pj(p.faqs as string, []), testimonios: pj(p.testimonios as string, []), modosUso: p.modos_uso || '',
@@ -183,11 +184,14 @@ api.post('/upload', requireAuth, requireStore, (req, res) => {
 
 // ── Productos ─────────────────────────────────────────────────────────
 api.post('/products', requireAuth, requireStore, (req, res) => {
-  const { nombre, precio, stock = 0, color = '#E0E7FF', txt = '#4338CA' } = req.body || {};
-  if (!nombre?.trim() || !Number(precio)) return res.status(400).json({ error: 'Falta el nombre o el precio.' });
+  const { nombre, precio, stock = 0, color = '#E0E7FF', txt = '#4338CA', tipo = 'producto', duracion = '' } = req.body || {};
+  // Un servicio puede ser gratis ($0); un producto exige precio.
+  const esServicio = tipo === 'servicio';
+  if (!nombre?.trim() || (!esServicio && !Number(precio))) return res.status(400).json({ error: 'Falta el nombre o el precio.' });
   const id = uid();
-  db.prepare('INSERT INTO products (id, store_id, nombre, precio, color, txt) VALUES (?,?,?,?,?,?)').run(id, req.user!.storeId, nombre.trim(), Number(precio), color, txt);
-  db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos) VALUES (?,?,?,?,0)').run(uid(), id, 'Única', Number(stock) || 0);
+  db.prepare('INSERT INTO products (id, store_id, nombre, precio, color, txt, tipo, duracion) VALUES (?,?,?,?,?,?,?,?)')
+    .run(id, req.user!.storeId, nombre.trim(), Number(precio) || 0, color, txt, esServicio ? 'servicio' : 'producto', esServicio ? String(duracion || '') : '');
+  db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos) VALUES (?,?,?,?,0)').run(uid(), id, 'Única', esServicio ? 0 : Number(stock) || 0);
   res.json({ id });
 });
 
@@ -211,6 +215,7 @@ api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   if (descripcion !== undefined) db.prepare('UPDATE products SET descripcion = ? WHERE id = ?').run(String(descripcion), req.params.id);
   if (caracteristicas !== undefined) db.prepare('UPDATE products SET caracteristicas = ? WHERE id = ?').run(String(caracteristicas), req.params.id);
   if (mensajeInicial !== undefined) db.prepare('UPDATE products SET mensaje_inicial = ? WHERE id = ?').run(String(mensajeInicial), req.params.id);
+  if (req.body?.duracion !== undefined) db.prepare('UPDATE products SET duracion = ? WHERE id = ?').run(String(req.body.duracion), req.params.id);
   if (Array.isArray(faqs)) db.prepare('UPDATE products SET faqs = ? WHERE id = ?').run(j(faqs), req.params.id);
   if (precio !== undefined) db.prepare('UPDATE products SET precio = ? WHERE id = ?').run(Number(precio) || 0, req.params.id);
   if (Array.isArray(reglas)) db.prepare('UPDATE products SET reglas = ? WHERE id = ?').run(j(reglas), req.params.id);
@@ -354,6 +359,14 @@ api.post('/plantillas/:id/instalar', requireAuth, requireStore, requireOwner, as
   const r = instalarPlantilla(req.user!.storeId!, req.params.id, force);
   if (r.error) return res.status(r.yaInstalada ? 409 : 400).json({ error: r.error });
   res.json({ ok: true });
+});
+
+api.post('/plantillas/:id/desinstalar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { desinstalarPlantilla } = await import('./plantillas.js');
+  const borrarDatos = !!(req.body && (req.body as { borrarDatos?: boolean }).borrarDatos);
+  const r = desinstalarPlantilla(req.user!.storeId!, req.params.id, borrarDatos);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, borrados: r.borrados });
 });
 
 // ── Marketing con IA (copys y generación de imágenes) ────────────────

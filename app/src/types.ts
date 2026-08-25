@@ -76,6 +76,8 @@ export interface Product {
   stock: number;
   color: string;
   txt: string;
+  tipo?: 'producto' | 'servicio';
+  duracion?: string;
   reglas: string[];
   descripcion?: string;
   caracteristicas?: string;

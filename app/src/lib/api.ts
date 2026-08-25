@@ -198,6 +198,9 @@ export interface ApiProduct {
   precio: number;
   color: string;
   txt: string;
+  tipo?: 'producto' | 'servicio';
+  duracion?: string;
+  plantillaId?: string;
   reglas: string[];
   descripcion: string;
   caracteristicas: string;
@@ -218,7 +221,7 @@ export interface ApiProduct {
 }
 
 export const apiUpload = (dataUrl: string, nombre?: string) => req<{ url: string }>('/api/upload', 'POST', { dataUrl, nombre });
-export const apiCreateProduct = (b: { nombre: string; precio: number; stock: number }) => req<{ id: string }>('/api/products', 'POST', b);
+export const apiCreateProduct = (b: { nombre: string; precio: number; stock: number; tipo?: string; duracion?: string }) => req<{ id: string }>('/api/products', 'POST', b);
 export const apiPatchProduct = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/products/${id}`, 'PATCH', patch);
 export const apiDeleteProduct = (id: string) => req<{ ok: true }>(`/api/products/${id}`, 'DELETE');
 export const apiAddVariant = (productId: string, b: { label: string; stock: number }) => req<{ id: string }>(`/api/products/${productId}/variants`, 'POST', b);
@@ -280,6 +283,7 @@ export interface Plantilla {
 }
 export const apiPlantillas = () => req<{ plantillas: Plantilla[] }>('/api/plantillas', 'GET');
 export const apiInstalarPlantilla = (id: string, force = false) => req<{ ok: true }>(`/api/plantillas/${id}/instalar`, 'POST', force ? { force: true } : undefined);
+export const apiDesinstalarPlantilla = (id: string, borrarDatos: boolean) => req<{ ok: true; borrados?: number }>(`/api/plantillas/${id}/desinstalar`, 'POST', { borrarDatos });
 
 export interface CopyAnuncio {
   titulo: string;
