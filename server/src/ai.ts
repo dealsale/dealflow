@@ -46,12 +46,73 @@ export function resolverIA(storeId: string): { url: string; model: string; key: 
   return { url: p.url, model: p.model, key, proveedor };
 }
 
+/** Llave de un proveedor concreto de la tienda (o del servidor como respaldo). */
+function keyProveedor(storeId: string, prov: 'deepseek' | 'openai'): string {
+  const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, prov) as { config: string } | undefined;
+  const propia = row ? (pj<Record<string, string>>(row.config, {}).apiKey || '').trim() : '';
+  return propia || process.env[prov === 'openai' ? 'OPENAI_API_KEY' : 'DEEPSEEK_API_KEY'] || '';
+}
+
+/**
+ * IA híbrida (optimiza el gasto): DeepSeek escribe los textos (más barato); si la
+ * tienda no tiene DeepSeek, cae a su proveedor elegido.
+ */
+function resolverTexto(storeId: string): { url: string; model: string; key: string; proveedor: string } | null {
+  const key = keyProveedor(storeId, 'deepseek');
+  if (key) return { url: PROVEEDORES_IA.deepseek.url, model: PROVEEDORES_IA.deepseek.model, key, proveedor: 'deepseek' };
+  return resolverIA(storeId);
+}
+
+/** Transcribe una nota de voz con OpenAI (Whisper). Devuelve '' si no se puede. */
+async function transcribirAudio(storeId: string, mediaUrl: string): Promise<string> {
+  const key = keyProveedor(storeId, 'openai');
+  if (!key) return '';
+  const media = materializar(storeId, mediaUrl);
+  if (!media) return '';
+  try {
+    const form = new FormData();
+    form.append('file', new Blob([new Uint8Array(media.buffer)], { type: media.mime || 'audio/ogg' }), 'audio.ogg');
+    form.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1');
+    form.append('language', 'es');
+    const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form,
+    });
+    if (!res.ok) { console.error('[ia] transcripción falló', res.status, await res.text().catch(() => '')); return ''; }
+    const b = (await res.json()) as { text?: string };
+    return (b.text || '').trim();
+  } catch (e) { console.error('[ia] error transcribiendo audio', e); return ''; }
+}
+
+/** Describe una imagen con OpenAI (visión). Devuelve '' si no se puede. */
+async function entenderImagen(storeId: string, mediaUrl: string): Promise<string> {
+  const key = keyProveedor(storeId, 'openai');
+  if (!key) return '';
+  const media = materializar(storeId, mediaUrl);
+  if (!media || media.tipo !== 'image') return '';
+  try {
+    const dataUrl = `data:${media.mime};base64,${media.buffer.toString('base64')}`;
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini', max_tokens: 150,
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: 'Un cliente envió esta imagen por WhatsApp a una tienda. En español y en 1-2 frases, di qué se ve y qué podría querer (ej: un producto del catálogo, un comprobante de pago, una talla, una captura). Sé concreto y breve.' },
+          { type: 'image_url', image_url: { url: dataUrl } },
+        ] }],
+      }),
+    });
+    if (!res.ok) { console.error('[ia] visión falló', res.status); return ''; }
+    const b = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    return (b.choices?.[0]?.message?.content || '').trim();
+  } catch (e) { console.error('[ia] error viendo imagen', e); return ''; }
+}
+
 /**
  * Si la tienda tiene IA disponible y el chat lo atiende el asistente,
  * genera la respuesta con el contexto de la tienda y la envía.
  */
 export async function maybeAutoReply(storeId: string, leadId: string) {
-  const ia = resolverIA(storeId);
+  const ia = resolverTexto(storeId); // DeepSeek escribe (o el proveedor de la tienda)
   if (!ia) {
     console.log('[ia] sin IA configurada para la tienda (ni clave propia ni del servidor): el asistente no responde');
     return;
@@ -95,6 +156,23 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   const promos = (db.prepare('SELECT titulo, descripcion FROM promos WHERE store_id = ? AND activa = 1').all(storeId) as { titulo: string; descripcion: string }[])
     .map((p) => `- ${p.titulo}: ${p.descripcion}`).join('\n');
   const reglas = pj<string[]>(assistant?.reglas || '[]', []).map((r) => `- ${r}`).join('\n');
+
+  // IA híbrida: DeepSeek no oye ni ve. Si el cliente mandó una nota de voz o una
+  // foto SIN texto, usamos OpenAI para convertirla a texto y guardarlo en el
+  // propio mensaje, para que la IA de texto pueda responderla.
+  const umedia = db.prepare("SELECT id, texto, tipo, media_url FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(leadId) as
+    | { id: string; texto: string; tipo: string; media_url: string | null }
+    | undefined;
+  if (umedia && umedia.media_url && !String(umedia.texto || '').trim() && (umedia.tipo === 'audio' || umedia.tipo === 'image')) {
+    const reconocido = umedia.tipo === 'audio'
+      ? await transcribirAudio(storeId, umedia.media_url)
+      : await entenderImagen(storeId, umedia.media_url);
+    if (reconocido) {
+      const guardar = umedia.tipo === 'audio' ? reconocido : `[El cliente envió una foto: ${reconocido}]`;
+      db.prepare('UPDATE messages SET texto = ? WHERE id = ?').run(guardar, umedia.id);
+      console.log(`[ia] ${umedia.tipo} → texto (OpenAI): ${reconocido.slice(0, 90)}`);
+    }
+  }
 
   const system = `Eres el asistente de ventas por WhatsApp de la tienda "${store?.nombre || 'la tienda'}".
 ${assistant?.instrucciones || 'Atiende con calidez y ayuda a cerrar la venta.'}

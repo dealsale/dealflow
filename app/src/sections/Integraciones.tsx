@@ -20,10 +20,9 @@ export function Integraciones({ df }: { df: DealFlowState }) {
       <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 8px' }}>
         Conecta DealFlow con las herramientas que ya usas. Cada tienda pone sus propias claves y paga solo lo que consume.
       </p>
-      <p style={{ color: '#64748B', fontSize: 13, margin: '0 0 18px' }}>
-        🤖 Agente de IA actual: <b style={{ color: '#047857' }}>{df.iaPredeterminada === 'openai' ? 'OpenAI' : df.iaPredeterminada === 'grok' ? 'Grok (xAI)' : 'DeepSeek'}</b>
-        {' '}— conéctale su API key y elige cuál responde tus chats.
-      </p>
+      <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '11px 14px', fontSize: 13, color: '#166534', margin: '0 0 18px', lineHeight: 1.6 }}>
+        🧠 <b>Tu asistente usa dos IA para ahorrar:</b> conecta <b>DeepSeek</b> (escribe los textos, más económico) y <b>OpenAI</b> (transcribe las notas de voz y entiende las imágenes de tus clientes). Con las dos, tu asistente lee, oye y ve.
+      </div>
       {df.integracionMsg && (
         <div style={{ background: df.integracionMsg.startsWith('✓') ? '#ECFDF5' : '#FEF2F2', border: '1px solid ' + (df.integracionMsg.startsWith('✓') ? '#A7F3D0' : '#FECACA'), color: df.integracionMsg.startsWith('✓') ? '#047857' : '#B91C1C', borderRadius: 10, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
           {df.integracionMsg}
