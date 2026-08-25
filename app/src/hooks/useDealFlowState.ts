@@ -254,8 +254,9 @@ export interface DecoratedAccount extends Account {
 export interface OrderFilterOption {
   key: string;
   label: string;
+  count: number;
+  active: boolean;
   set: () => void;
-  style: CSSProperties;
 }
 
 const CLIENTES_ENTRANTES = [
@@ -1831,25 +1832,13 @@ export function useDealFlowState() {
   const selRaw = orders.find((o) => o.id === selectedOrderId) || null;
   const sel = selRaw ? decorateOrder(selRaw) : null;
 
-  const orderFilters: OrderFilterOption[] = filterList.map((f) => {
-    const active = filter === f;
-    const count = f === 'Todos' ? orders.length : orders.filter((o) => o.estado === f).length;
-    return {
-      key: f,
-      label: f + ' (' + count + ')',
-      set: () => setFilter(f),
-      style: {
-        padding: '7px 14px',
-        borderRadius: '999px',
-        fontSize: '13px',
-        fontWeight: 600,
-        cursor: 'pointer',
-        background: active ? '#0F172A' : '#fff',
-        color: active ? '#fff' : '#64748B',
-        border: '1px solid ' + (active ? '#0F172A' : '#E2E8F0'),
-      },
-    };
-  });
+  const orderFilters: OrderFilterOption[] = filterList.map((f) => ({
+    key: f,
+    label: f,
+    count: f === 'Todos' ? orders.length : orders.filter((o) => o.estado === f).length,
+    active: filter === f,
+    set: () => setFilter(f),
+  }));
 
   function assignLead(v: string) {
     setLeads((st) => st.map((l) => (l.id === selectedLeadId ? { ...l, asignado: v } : l)));

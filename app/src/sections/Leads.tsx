@@ -1,14 +1,39 @@
+import { useState } from 'react';
+import { SearchInput, Chip, ChipRow } from '../components/Filters';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 export function Leads({ df }: { df: DealFlowState }) {
   const lead = df.lead;
+  const [busca, setBusca] = useState('');
+  const [etapa, setEtapa] = useState('');
+  const etapas = Array.from(new Set(df.leads.map((l) => l.etapa).filter(Boolean)));
+  const q = busca.trim().toLowerCase();
+  const leadsFiltrados = df.leads.filter(
+    (l) => (!etapa || l.etapa === etapa) && (!q || l.nombre.toLowerCase().includes(q) || (l.ultimo || '').toLowerCase().includes(q)),
+  );
   return (
     <section data-screen-label="Leads">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Leads</h1>
-      <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 18px' }}>Conversaciones abiertas. Asígnalas o envíalas a un flujo.</p>
+      <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 14px' }}>Conversaciones abiertas. Asígnalas o envíalas a un flujo.</p>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por nombre o mensaje…" width={240} />
+        {etapas.length > 0 && (
+          <ChipRow>
+            <Chip active={!etapa} onClick={() => setEtapa('')}>Todos</Chip>
+            {etapas.map((e) => (
+              <Chip key={e} active={etapa === e} onClick={() => setEtapa(etapa === e ? '' : e)} count={df.leads.filter((l) => l.etapa === e).length}>{e}</Chip>
+            ))}
+          </ChipRow>
+        )}
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
         <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
-          {df.leads.map((l) => (
+          {leadsFiltrados.length === 0 && (
+            <div style={{ padding: '28px 16px', textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>Ningún lead coincide con el filtro.</div>
+          )}
+          {leadsFiltrados.map((l) => (
             <div key={l.id} onClick={l.select} style={l.rowStyle}>
               <div style={l.avatarStyle}>{l.iniciales}</div>
               <div style={{ flex: 1, minWidth: 0 }}>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
 import { VoiceRecorder } from '../components/VoiceRecorder';
+import { SearchInput, Chip, ChipRow } from '../components/Filters';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 export function CRM({ df }: { df: DealFlowState }) {
@@ -16,36 +17,20 @@ export function CRM({ df }: { df: DealFlowState }) {
   const chatsFiltrados = df.crmChats.filter(
     (c) => (!filtroEtiqueta || c.etiqueta === filtroEtiqueta) && (!q || c.nombre.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)),
   );
-  const chipStyle = (activo: boolean): React.CSSProperties => ({
-    border: '1px solid ' + (activo ? '#059669' : '#E2E8F0'),
-    background: activo ? '#ECFDF5' : '#fff',
-    color: activo ? '#047857' : '#64748B',
-    borderRadius: 999,
-    padding: '5px 11px',
-    fontSize: 12,
-    fontWeight: 700,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-  });
+  const cuentaEtiqueta = (et: string) => df.crmChats.filter((c) => c.etiqueta === et).length;
   return (
     <section data-screen-label="CRM">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Inbox · Chats en vivo</h1>
       <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 14px' }}>Lo que pasa ahora mismo en tu WhatsApp. Entra a un chat si quieres tomar el control.</p>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <input
-          className="df-input"
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="🔍 Buscar por nombre o teléfono…"
-          style={{ border: '1px solid #E2E8F0', borderRadius: 999, padding: '8px 14px', fontFamily: 'inherit', fontSize: 13, width: 240 }}
-        />
-        <span onClick={() => setFiltroEtiqueta('')} style={chipStyle(!filtroEtiqueta)}>Todos</span>
-        {df.etiquetasCrm.map((et) => (
-          <span key={et} onClick={() => setFiltroEtiqueta(filtroEtiqueta === et ? '' : et)} style={chipStyle(filtroEtiqueta === et)}>
-            {et}
-          </span>
-        ))}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por nombre o teléfono…" width={240} />
+        <ChipRow>
+          <Chip active={!filtroEtiqueta} onClick={() => setFiltroEtiqueta('')}>Todos</Chip>
+          {df.etiquetasCrm.map((et) => (
+            <Chip key={et} active={filtroEtiqueta === et} onClick={() => setFiltroEtiqueta(filtroEtiqueta === et ? '' : et)} count={cuentaEtiqueta(et)}>{et}</Chip>
+          ))}
+        </ChipRow>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
