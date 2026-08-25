@@ -169,6 +169,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                     {a.planEstado === 'vencida' && <span style={{ color: '#B91C1C', fontWeight: 700 }}> · 💳 vencida</span>}
                     {a.planEstado === 'activa' && a.planVence && <span style={{ color: '#059669', fontWeight: 700 }}> · 💳 al día ({a.planVence})</span>}
                     {a.planEstado === 'sin_plan' && <span style={{ color: '#B45309', fontWeight: 700 }}> · 💳 sin plan (bloqueada)</span>}
+                    <span style={{ color: '#7C3AED', fontWeight: 700 }}> · 🎨 {(a.creditos ?? 0).toLocaleString('es-CO')} créditos</span>
                   </div>
                 </div>
                 <span style={a.estadoStyle}>{a.estadoLabel}</span>
@@ -176,6 +177,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                   <button onClick={() => df.abrirDetalleStore(id)} style={linkBtn('#334155')}>Detalle</button>
                   <button onClick={() => df.abrirEditarStore(id)} style={linkBtn('#334155')}>Editar</button>
                   <button onClick={() => df.extenderSuscripcion(id, 30)} title="Marcar como pagada: extiende 30 días" style={linkBtn('#047857')}>+30 días</button>
+                  <button onClick={() => { const v = prompt('¿Cuántos créditos dar? (negativo para quitar)'); if (v) df.darCreditos(id, Number(v)); }} title="Dar o quitar créditos del Marketing IA" style={linkBtn('#7C3AED')}>+ Créditos</button>
                   <button onClick={() => df.entrarATienda(id)} style={linkBtn('#4338CA')}>Entrar</button>
                   <button onClick={() => df.eliminarStore(id)} style={linkBtn(armed ? '#DC2626' : '#B91C1C')}>{armed ? '¿Seguro?' : 'Eliminar'}</button>
                 </div>

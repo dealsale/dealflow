@@ -60,6 +60,8 @@ api.post('/auth/registro', (req, res) => {
     .run(userId, email, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', storeId);
   db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
   db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
+  // Créditos de bienvenida para probar el Marketing IA.
+  void import('./creditos.js').then(({ abonar, CREDITOS_BIENVENIDA }) => abonar(storeId, CREDITOS_BIENVENIDA, 'Créditos de bienvenida'));
 
   const user: AuthUser = { id: userId, email, nombre: nombre.trim(), role: 'VENDEDOR', storeId };
   setAuthCookie(res, user);
@@ -360,21 +362,57 @@ api.post('/marketing/copy', requireAuth, requireStore, async (req, res) => {
   if (!String(idea || '').trim() && !String(imagen || '').startsWith('data:image')) {
     return res.status(400).json({ error: 'Escribe de qué es el anuncio o sube una imagen del producto.' });
   }
+  const sid = req.user!.storeId!;
+  const { COSTO, saldo, cobrar } = await import('./creditos.js');
+  if (saldo(sid) < COSTO.texto) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos para generar textos. Recarga para continuar.`, sinCreditos: true });
   const { generarCopys } = await import('./marketing.js');
-  const r = await generarCopys(req.user!.storeId!, {
+  const r = await generarCopys(sid, {
     idea: String(idea || ''), plataforma: String(plataforma || ''), tono: String(tono || ''), objetivo: String(objetivo || ''),
     cantidad: Number(cantidad) || 3, imagen: typeof imagen === 'string' ? imagen : undefined,
   });
   if (r.error) return res.status(400).json({ error: r.error });
-  res.json({ copys: r.copys });
+  cobrar(sid, COSTO.texto, 'Generación de textos'); // solo se cobra si salió bien
+  res.json({ copys: r.copys, creditos: saldo(sid) });
 });
 
 api.post('/marketing/imagen', requireAuth, requireStore, async (req, res) => {
   const { prompt, cantidad } = req.body || {};
+  const sid = req.user!.storeId!;
+  const n = Math.min(5, Math.max(1, Number(cantidad) || 1));
+  const { COSTO, saldo, cobrar } = await import('./creditos.js');
+  const costo = COSTO.imagen * n;
+  if (saldo(sid) < costo) return res.status(402).json({ error: `Necesitas ${costo} créditos para generar ${n} imagen${n > 1 ? 'es' : ''}. Recarga para continuar.`, sinCreditos: true });
   const { generarImagen } = await import('./marketing.js');
-  const r = await generarImagen(req.user!.storeId!, String(prompt || ''), Number(cantidad) || 1);
+  const r = await generarImagen(sid, String(prompt || ''), n);
   if (r.error) return res.status(r.sinConfigurar ? 200 : 400).json({ error: r.error, sinConfigurar: r.sinConfigurar });
-  res.json({ urls: r.urls });
+  cobrar(sid, costo, `Generación de ${n} imagen${n > 1 ? 'es' : ''}`); // solo si salió bien
+  res.json({ urls: r.urls, creditos: saldo(sid) });
+});
+
+// ── Créditos del Marketing IA (saldo, paquetes, recarga por Wompi) ────
+api.get('/creditos', requireAuth, requireStore, async (req, res) => {
+  const { saldo, movimientos, PAQUETES, COSTO } = await import('./creditos.js');
+  res.json({ saldo: saldo(req.user!.storeId!), movimientos: movimientos(req.user!.storeId!), paquetes: PAQUETES, costo: COSTO });
+});
+
+api.post('/creditos/recargar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { crearRecargaCheckout } = await import('./suscripcion.js');
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+  const base = `${proto}://${req.get('host')}`;
+  const r = crearRecargaCheckout(req.user!.storeId!, req.user!.email, base, String(req.body?.paquete || ''));
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ url: r.url });
+});
+
+api.post('/admin/stores/:id/creditos', requireAuth, requireAdmin, async (req, res) => {
+  const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+  if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
+  const cantidad = Math.round(Number(req.body?.cantidad));
+  if (!Number.isFinite(cantidad) || cantidad === 0) return res.status(400).json({ error: 'Indica cuántos créditos dar (o quitar con negativo).' });
+  const { abonar, cobrar } = await import('./creditos.js');
+  if (cantidad > 0) abonar(s.id, cantidad, 'Ajuste del administrador');
+  else cobrar(s.id, -cantidad, 'Ajuste del administrador');
+  res.json({ ok: true });
 });
 
 // ── Equipo (usuarios de la tienda que pueden entrar y responder) ──────
@@ -500,7 +538,7 @@ api.get('/admin/overview', requireAuth, requireAdmin, (_req, res) => {
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
        WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
     ).get(s.id, s.id) as { total: number };
-    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null };
+    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, creditos: s.creditos || 0 };
   });
   const plans = (db.prepare('SELECT * FROM plans').all() as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, features: pj(p.features as string, []),

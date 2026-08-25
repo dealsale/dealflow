@@ -176,6 +176,7 @@ export interface Account {
   activa: boolean;
   planEstado?: string;
   planVence?: string | null;
+  creditos?: number;
 }
 
 export type VendedorSection =

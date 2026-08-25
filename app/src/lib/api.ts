@@ -79,6 +79,7 @@ export interface AdminStore {
   activa: boolean;
   planEstado?: string;
   planVence?: string | null;
+  creditos?: number;
 }
 export interface AdminPlan {
   id: string;
@@ -286,9 +287,16 @@ export interface CopyAnuncio {
   texto: string;
 }
 export const apiMarketingCopy = (b: { idea: string; plataforma: string; tono: string; objetivo: string; cantidad: number; imagen?: string }) =>
-  req<{ copys: CopyAnuncio[] }>('/api/marketing/copy', 'POST', b);
+  req<{ copys: CopyAnuncio[]; creditos?: number; error?: string; sinCreditos?: boolean }>('/api/marketing/copy', 'POST', b);
 export const apiMarketingImagen = (prompt: string, cantidad: number) =>
-  req<{ urls?: string[]; error?: string; sinConfigurar?: boolean }>('/api/marketing/imagen', 'POST', { prompt, cantidad });
+  req<{ urls?: string[]; creditos?: number; error?: string; sinConfigurar?: boolean; sinCreditos?: boolean }>('/api/marketing/imagen', 'POST', { prompt, cantidad });
+
+// ── Créditos del Marketing IA ──
+export interface PaqueteCreditos { id: string; nombre: string; creditos: number; precio: number }
+export interface MovimientoCredito { delta: number; motivo: string; fecha: string }
+export const apiCreditos = () => req<{ saldo: number; movimientos: MovimientoCredito[]; paquetes: PaqueteCreditos[]; costo: { texto: number; imagen: number } }>('/api/creditos', 'GET');
+export const apiRecargarCreditos = (paquete: string) => req<{ url: string }>('/api/creditos/recargar', 'POST', { paquete });
+export const apiDarCreditos = (storeId: string, cantidad: number) => req<{ ok: true }>(`/api/admin/stores/${storeId}/creditos`, 'POST', { cantidad });
 
 export const apiTeamList = () => req<{ team: TeamMember[] }>('/api/team', 'GET');
 export const apiTeamCreate = (b: { nombre: string; email: string; password: string }) => req<{ id: string }>('/api/team', 'POST', b);

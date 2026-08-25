@@ -248,6 +248,20 @@ db.exec(`CREATE TABLE IF NOT EXISTS cupones (
 // Cupón de precio fijo: si monto_fijo no es NULL, el pago cuesta ese valor exacto
 // (ej: $1.000) en vez de aplicar un porcentaje.
 addColumn('cupones', 'monto_fijo INTEGER');
+
+// Créditos del Marketing IA (texto/imágenes con OpenAI). Saldo por tienda,
+// historial de movimientos, y cuántos créditos otorga un pago de recarga.
+addColumn('stores', 'creditos INTEGER NOT NULL DEFAULT 0');
+addColumn('pagos', 'creditos INTEGER NOT NULL DEFAULT 0'); // créditos que suma este pago (recargas)
+db.exec(`CREATE TABLE IF NOT EXISTS creditos_mov (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  delta INTEGER NOT NULL,
+  motivo TEXT NOT NULL DEFAULT '',
+  referencia TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_credmov_store ON creditos_mov(store_id)');
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
 addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal

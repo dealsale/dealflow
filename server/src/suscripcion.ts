@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { db, uid } from './db.js';
+import { PAQUETES, abonar } from './creditos.js';
 
 /**
  * Suscripción de las tiendas a DealFlow. Modelo de dos fases:
@@ -176,15 +177,52 @@ export function crearCheckout(
   return { url: `${CHECKOUT}?${params.toString()}` };
 }
 
-/** Marca un pago como aprobado: activa la cuenta (inicial) y/o extiende la renta +30 días. */
+/**
+ * Crea un pago de RECARGA de créditos del Marketing IA y devuelve la URL de Wompi.
+ * Al aprobarse, se suman los créditos del paquete al saldo de la tienda.
+ */
+export function crearRecargaCheckout(storeId: string, correo: string, redirectBase: string, paqueteId: string): { url?: string; error?: string } {
+  const pub = process.env.WOMPI_PUBLIC_KEY;
+  const integrity = process.env.WOMPI_INTEGRITY;
+  const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(storeId) as { id: string } | undefined;
+  if (!s) return { error: 'Tienda no encontrada.' };
+  const paq = PAQUETES.find((p) => p.id === paqueteId);
+  if (!paq) return { error: 'Elige un paquete de recarga válido.' };
+  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
+
+  const referencia = `DF-CRE-${storeId.slice(0, 8)}-${Date.now()}`;
+  db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo, creditos) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(uid(), storeId, paq.id, paq.precio, referencia, 'pendiente', 'wompi', 'creditos', paq.creditos);
+
+  const montoCents = paq.precio * 100;
+  const params = new URLSearchParams({
+    'public-key': pub,
+    currency: 'COP',
+    'amount-in-cents': String(montoCents),
+    reference: referencia,
+    'redirect-url': `${redirectBase}/?pago=ok`,
+    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+  });
+  if (correo) params.set('customer-data:email', correo);
+  return { url: `${CHECKOUT}?${params.toString()}` };
+}
+
+/** Marca un pago como aprobado: activa la cuenta / extiende la renta / suma créditos. */
 export function aplicarPagoAprobado(referencia: string, transaccion?: string): boolean {
-  const pago = db.prepare('SELECT id, store_id, estado, tipo, plan, cupon FROM pagos WHERE referencia = ?').get(referencia) as
-    | { id: string; store_id: string; estado: string; tipo: string; plan: string; cupon: string }
+  const pago = db.prepare('SELECT id, store_id, estado, tipo, plan, cupon, creditos FROM pagos WHERE referencia = ?').get(referencia) as
+    | { id: string; store_id: string; estado: string; tipo: string; plan: string; cupon: string; creditos: number }
     | undefined;
   if (!pago) return false;
   if (pago.estado === 'aprobado') return true; // idempotente (Wompi puede reintentar el webhook)
   db.prepare('UPDATE pagos SET estado = ?, transaccion = ? WHERE id = ?').run('aprobado', transaccion || null, pago.id);
   if (pago.cupon) incrementarUsoCupon(pago.cupon);
+
+  // Recarga de créditos del Marketing IA: suma al saldo y no toca el plan.
+  if (pago.tipo === 'creditos') {
+    abonar(pago.store_id, pago.creditos, 'Recarga de créditos', referencia);
+    console.log(`[creditos] recarga aprobada ${referencia} → tienda ${pago.store_id} +${pago.creditos} créditos`);
+    return true;
+  }
 
   const s = db.prepare('SELECT plan_vence FROM stores WHERE id = ?').get(pago.store_id) as { plan_vence: string | null } | undefined;
   // Extiende desde hoy o desde el vencimiento futuro (si aún no vence, acumula).

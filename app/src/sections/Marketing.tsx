@@ -1,5 +1,36 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
+
+function CreditosBar({ df }: { df: DealFlowState }) {
+  const bajo = df.creditos < df.costoCreditos.imagen; // no alcanza ni para 1 imagen
+  return (
+    <div style={{ background: df.mkSinCreditos || bajo ? '#FFF7ED' : '#F0FDF4', border: '1px solid ' + (df.mkSinCreditos || bajo ? '#FED7AA' : '#BBF7D0'), borderRadius: 12, padding: '14px 18px', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+      <div>
+        <div style={{ fontSize: 12.5, color: '#64748B', fontWeight: 600 }}>Créditos del Marketing IA</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: '#0F172A' }}>{df.creditos.toLocaleString('es-CO')} <span style={{ fontSize: 13, fontWeight: 600, color: '#64748B' }}>créditos</span></div>
+        <div style={{ fontSize: 11.5, color: '#94A3B8' }}>Textos: {df.costoCreditos.texto} cr · Imagen: {df.costoCreditos.imagen} cr c/u</div>
+      </div>
+      <div style={{ flex: 1 }} />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {df.paquetesCreditos.map((p, i) => (
+          <button
+            key={p.id}
+            onClick={() => df.recargarCreditos(p.id)}
+            title={`${p.creditos.toLocaleString('es-CO')} créditos`}
+            style={{ background: i === 1 ? 'linear-gradient(135deg,#34D399,#059669)' : '#fff', color: i === 1 ? '#fff' : '#0F172A', border: '1px solid ' + (i === 1 ? 'transparent' : '#E2E8F0'), borderRadius: 10, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', textAlign: 'center', lineHeight: 1.3 }}
+          >
+            {p.nombre}<br /><span style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>{p.creditos.toLocaleString('es-CO')} cr · ${p.precio.toLocaleString('es-CO')}</span>
+          </button>
+        ))}
+      </div>
+      {(df.mkSinCreditos || bajo) && (
+        <div style={{ width: '100%', color: '#9A3412', fontSize: 12.5, fontWeight: 600 }}>
+          {df.mkSinCreditos ? 'Te quedaste sin créditos suficientes. Recarga para seguir generando.' : 'Tu saldo está bajo. Recarga para no quedarte sin generar.'}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const label = { color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 };
 const input = { width: '100%', boxSizing: 'border-box' as const, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 };
@@ -36,12 +67,15 @@ function Cantidad({ valor, onChange, color }: { valor: number; onChange: (n: num
 
 export function Marketing({ df }: { df: DealFlowState }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { void df.reloadCreditos(); }, []);
   return (
     <section data-screen-label="Marketing">
       <div style={{ marginBottom: 18 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Marketing con IA</h1>
         <p style={{ color: '#64748B', fontSize: 14, margin: '4px 0 0' }}>Tu copywriter con IA: anuncios completos para Facebook e imágenes para redes, sin salir de DealFlow.</p>
       </div>
+
+      <CreditosBar df={df} />
 
       <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
         {/* ── Copys ── */}

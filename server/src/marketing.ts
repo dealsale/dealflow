@@ -1,5 +1,4 @@
 import { saveOutgoingMedia } from './media.js';
-import { db, pj } from './db.js';
 
 export interface CopyAnuncio {
   titulo: string;
@@ -13,17 +12,15 @@ export interface CopyAnuncio {
  * imagen del producto (la analiza si el proveedor soporta visión — OpenAI).
  */
 export async function generarCopys(
-  storeId: string,
+  _storeId: string,
   input: { idea: string; plataforma: string; tono: string; objetivo: string; cantidad?: number; imagen?: string },
 ): Promise<{ copys?: CopyAnuncio[]; error?: string }> {
-  const { resolverIA } = await import('./ai.js');
-  const ia = resolverIA(storeId);
-  if (!ia) return { error: 'Configura tu IA en Integraciones (DeepSeek, OpenAI o Grok) para generar copys.' };
+  // El Marketing IA usa SIEMPRE la cuenta de OpenAI de DealFlow (se cobra por créditos).
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return { error: 'El Marketing IA no está disponible ahora mismo. (Falta configurar OpenAI en el servidor.)' };
+  const ia = { url: 'https://api.openai.com/v1/chat/completions', model: process.env.OPENAI_MARKETING_MODEL || 'gpt-4o-mini', key };
   const n = Math.min(5, Math.max(1, Number(input.cantidad) || 3));
   const conImagen = !!input.imagen && input.imagen.startsWith('data:image');
-  if (conImagen && ia.proveedor !== 'openai') {
-    return { error: 'Para generar copys desde una imagen, tu agente debe ser OpenAI (Integraciones → OpenAI → "Usar como agente"). Con DeepSeek o Grok, describe el producto en texto.' };
-  }
 
   const system = `Eres un copywriter senior especializado en anuncios de Facebook e Instagram para ecommerce con pago contra entrega en Colombia. Escribes con gancho (hook fuerte en la primera línea), beneficios concretos, prueba social cuando aplica, urgencia sin sonar falso y llamado a la acción claro (normalmente escribir al WhatsApp o pedir ya). Emojis con moderación y español colombiano cercano.
 Cada COPY es un anuncio completo de Facebook con tres partes:
@@ -80,20 +77,18 @@ Objetivo: ${input.objetivo || 'que escriban por WhatsApp para comprar'}`;
   }
 }
 
-/** Genera una imagen con OpenAI (si está configurada OPENAI_API_KEY) y la guarda. */
+/** Genera una imagen con la cuenta OpenAI de DealFlow (calidad media) y la guarda. */
 export async function generarImagen(storeId: string, prompt: string, cantidad = 1): Promise<{ urls?: string[]; error?: string; sinConfigurar?: boolean }> {
-  // Primero la clave de OpenAI de la TIENDA (Integraciones); si no, la del servidor.
-  const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'openai'").get(storeId) as { config: string } | undefined;
-  const propia = row ? (pj<Record<string, string>>(row.config, {}).apiKey || '').trim() : '';
-  const key = propia || process.env.OPENAI_API_KEY;
-  if (!key) return { sinConfigurar: true, error: 'Para generar imágenes conecta OpenAI en Integraciones (con tu API key).' };
+  // El Marketing IA usa SIEMPRE la cuenta de OpenAI de DealFlow (se cobra por créditos).
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return { sinConfigurar: true, error: 'El Marketing IA no está disponible ahora mismo. (Falta configurar OpenAI en el servidor.)' };
   if (!prompt.trim()) return { error: 'Describe la imagen que quieres.' };
   const n = Math.min(5, Math.max(1, Number(cantidad) || 1));
   try {
     const res = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1', prompt, n, size: '1024x1024' }),
+      body: JSON.stringify({ model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1', prompt, n, size: '1024x1024', quality: process.env.OPENAI_IMAGE_QUALITY || 'medium' }),
     });
     const body = (await res.json().catch(() => ({}))) as { data?: { b64_json?: string; url?: string }[]; error?: { message?: string } };
     if (!res.ok) return { error: body.error?.message || 'OpenAI no aceptó la solicitud.' };

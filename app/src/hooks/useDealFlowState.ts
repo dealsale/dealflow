@@ -45,6 +45,9 @@ import {
   apiTeamDelete,
   apiMarketingCopy,
   apiMarketingImagen,
+  apiCreditos,
+  apiRecargarCreditos,
+  apiDarCreditos,
   apiPlantillas,
   apiInstalarPlantilla,
   apiToggleStore,
@@ -78,7 +81,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -484,6 +487,10 @@ export function useDealFlowState() {
   const [planes, setPlanes] = useState<PlanPublico[]>([]);
   const [cupones, setCupones] = useState<Cupon[]>([]);
   const [cuponMsg, setCuponMsg] = useState('');
+  const [creditos, setCreditos] = useState(0);
+  const [creditosMov, setCreditosMov] = useState<MovimientoCredito[]>([]);
+  const [paquetesCreditos, setPaquetesCreditos] = useState<PaqueteCreditos[]>([]);
+  const [costoCreditos, setCostoCreditos] = useState<{ texto: number; imagen: number }>({ texto: 2, imagen: 20 });
   // PWA: el navegador avisa cuándo se puede instalar (index.html captura el prompt).
   const [pwaDisponible, setPwaDisponible] = useState<boolean>(() => typeof window !== 'undefined' && !!(window as unknown as { dfPwaPrompt?: unknown }).dfPwaPrompt);
   const [waVerifyToken, setWaVerifyToken] = useState<string>('');
@@ -497,6 +504,7 @@ export function useDealFlowState() {
   const [mkImagen, setMkImagen] = useState(''); // foto del producto (opcional) para el copywriter
   const [mkLoading, setMkLoading] = useState(false);
   const [mkError, setMkError] = useState('');
+  const [mkSinCreditos, setMkSinCreditos] = useState(false);
   const [mkImgPrompt, setMkImgPrompt] = useState('');
   const [mkImgUrls, setMkImgUrls] = useState<string[]>([]);
   const [mkImgCantidad, setMkImgCantidad] = useState(1);
@@ -1500,7 +1508,7 @@ export function useDealFlowState() {
   async function reloadAdmin() {
     const { data } = await apiAdminOverview();
     if (!data) return;
-    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa, planEstado: s.planEstado, planVence: s.planVence })));
+    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa, planEstado: s.planEstado, planVence: s.planVence, creditos: s.creditos })));
     setPlans(data.plans.map((p) => ({ id: p.id, nombre: p.nombre, precio: p.precio, cuentas: p.cuentas, features: p.features })));
   }
   useEffect(() => {
@@ -1679,13 +1687,29 @@ export function useDealFlowState() {
     void apiTeamDelete(id).then((r) => { if (r.error) { setTeamError(r.error); void reloadTeam(); } });
   }
 
+  // ── Créditos del Marketing IA ──
+  async function reloadCreditos() {
+    const { data } = await apiCreditos();
+    if (data) { setCreditos(data.saldo); setCreditosMov(data.movimientos); setPaquetesCreditos(data.paquetes); setCostoCreditos(data.costo); }
+  }
+  function recargarCreditos(paquete: string) {
+    void apiRecargarCreditos(paquete).then((r) => {
+      if (r.error || !r.data?.url) { setMkError(r.error || 'No pudimos abrir la recarga.'); return; }
+      window.location.href = r.data.url; // checkout de Wompi
+    });
+  }
+  function darCreditos(storeId: string, cantidad: number) {
+    void apiDarCreditos(storeId, cantidad).then((r) => { if (!r.error) void reloadAdmin(); });
+  }
+
   function generarCopys() {
     if (!mkIdea.trim() && !mkImagen) { setMkError('Escribe de qué es el anuncio o sube una imagen del producto.'); return; }
     setMkLoading(true); setMkError(''); setMkCopys([]);
     void apiMarketingCopy({ idea: mkIdea, plataforma: mkPlataforma, tono: mkTono, objetivo: mkObjetivo, cantidad: mkCantidad, imagen: mkImagen || undefined }).then((r) => {
       setMkLoading(false);
-      if (r.error) { setMkError(r.error); return; }
+      if (r.data?.sinCreditos || r.error) { setMkError(r.data?.error || r.error || 'No se pudo generar.'); if (r.data?.sinCreditos) setMkSinCreditos(true); return; }
       setMkCopys(r.data?.copys || []);
+      if (typeof r.data?.creditos === 'number') setCreditos(r.data.creditos);
     });
   }
 
@@ -1700,7 +1724,12 @@ export function useDealFlowState() {
     setMkImgLoading(true); setMkImgError(''); setMkImgUrls([]);
     void apiMarketingImagen(mkImgPrompt, mkImgCantidad).then((r) => {
       setMkImgLoading(false);
-      if (r.data?.urls?.length) { setMkImgUrls(r.data.urls); return; }
+      if (r.data?.urls?.length) {
+        setMkImgUrls(r.data.urls);
+        if (typeof r.data.creditos === 'number') setCreditos(r.data.creditos);
+        return;
+      }
+      if (r.data?.sinCreditos) setMkSinCreditos(true);
       setMkImgError(r.data?.error || r.error || 'No se pudieron generar las imágenes.');
     });
   }
@@ -2269,6 +2298,17 @@ export function useDealFlowState() {
     mkCopied, copiarCopy,
     mkImgPrompt, setMkImgPrompt,
     mkImgUrls, mkImgCantidad, setMkImgCantidad, mkImgLoading, mkImgError, generarImagen,
+
+    // ── Créditos del Marketing IA ──
+    creditos,
+    creditosMov,
+    paquetesCreditos,
+    costoCreditos,
+    mkSinCreditos,
+    reloadCreditos,
+    recargarCreditos,
+    darCreditos,
+    limpiarSinCreditos: () => setMkSinCreditos(false),
 
     // ── DealShop (plantillas) ──
     plantillas,
