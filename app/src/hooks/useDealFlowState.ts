@@ -54,6 +54,9 @@ import {
   apiPlantillas,
   apiInstalarPlantilla,
   apiDesinstalarPlantilla,
+  apiMisTiendas,
+  apiCambiarTienda,
+  apiCrearTienda,
   apiToggleStore,
   apiUpdateStore,
   apiDeleteStore,
@@ -85,7 +88,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem, MiTienda } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -493,6 +496,7 @@ export function useDealFlowState() {
   const [integracionMsg, setIntegracionMsg] = useState('');
   const [suscripcion, setSuscripcion] = useState<Suscripcion | null>(null);
   const [suscMsg, setSuscMsg] = useState('');
+  const [misTiendas, setMisTiendas] = useState<MiTienda[]>([]);
   const [planes, setPlanes] = useState<PlanPublico[]>([]);
   const [cupones, setCupones] = useState<Cupon[]>([]);
   const [cuponMsg, setCuponMsg] = useState('');
@@ -1588,6 +1592,19 @@ export function useDealFlowState() {
   // Valida un cupón y devuelve el descuento para previsualizar el precio en el muro de pago.
   function validarCupon(codigo: string) { return apiValidarCupon(codigo); }
 
+  // ── Multi-tienda por cuenta ──
+  async function reloadMisTiendas() { const { data } = await apiMisTiendas(); if (data) setMisTiendas(data.tiendas); }
+  function cambiarTienda(id: string) {
+    void apiCambiarTienda(id).then((r) => { if (!r.error) location.reload(); }); // recarga con la tienda activa nueva
+  }
+  function crearTienda(nombre: string) {
+    setSuscMsg('Creando tu tienda…');
+    void apiCrearTienda(nombre).then((r) => {
+      if (r.error) { setSuscMsg(r.error); return; }
+      location.reload(); // aterriza en la tienda nueva (pendiente de pago)
+    });
+  }
+
   // ── Cupones (gestión del admin de DealFlow) ──
   async function reloadCupones() { const { data } = await apiCupones(); if (data) setCupones(data.cupones); }
   function crearCupon(nuevo: NuevoCupon) {
@@ -1608,6 +1625,12 @@ export function useDealFlowState() {
       void apiPlanes().then(({ data }) => { if (data?.planes) setPlanes(data.planes); });
     }
   }, [suscripcion?.bloqueado, planes.length]);
+
+  // Carga "mis tiendas" (multi-tienda) cuando hay sesión de vendedor.
+  useEffect(() => {
+    if (apiMode && sessionUser?.role === 'vendedor' && sessionUser?.esDueno !== false) void reloadMisTiendas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, sessionUser]);
 
   // Cuando la tienda vuelve del pago (?pago=ok&id=<tx>), verificamos con Wompi y refrescamos.
   useEffect(() => {
@@ -2494,6 +2517,9 @@ export function useDealFlowState() {
     integrations: integrationsDecorated,
     suscripcion,
     suscMsg,
+    misTiendas,
+    cambiarTienda,
+    crearTienda,
     planes,
     pagarSuscripcion,
     validarCupon,

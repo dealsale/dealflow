@@ -279,6 +279,35 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_mkitems_store ON marketing_items(store_i
 addColumn('products', "tipo TEXT NOT NULL DEFAULT 'producto'"); // producto | servicio
 addColumn('products', "duracion TEXT NOT NULL DEFAULT ''"); // solo servicios (ej: "30 min")
 addColumn('products', "plantilla_id TEXT NOT NULL DEFAULT ''"); // plantilla que lo instaló ('' = creado por la tienda)
+
+// Multi-tienda: un dueño puede tener varias tiendas (mismo correo). Para eso hay
+// que quitar el UNIQUE de stores.correo. Además, quién es el dueño (owner_user_id).
+addColumn('stores', "owner_user_id TEXT NOT NULL DEFAULT ''");
+(function quitarUniqueCorreo() {
+  const idx = db.prepare('PRAGMA index_list(stores)').all() as { name: string; unique: number; origin: string }[];
+  const tieneUnique = idx.some((i) => i.unique && i.origin === 'u' && (db.prepare(`PRAGMA index_info("${i.name}")`).all() as { name: string }[]).some((c) => c.name === 'correo'));
+  if (!tieneUnique) return;
+  const cols = db.prepare('PRAGMA table_info(stores)').all() as { name: string; type: string; notnull: number; dflt_value: unknown; pk: number }[];
+  const defs = cols.map((c) => {
+    let d = `"${c.name}" ${c.type || 'TEXT'}`;
+    if (c.pk) d += ' PRIMARY KEY';
+    if (c.notnull) d += ' NOT NULL';
+    if (c.dflt_value !== null && c.dflt_value !== undefined) d += ` DEFAULT (${c.dflt_value})`;
+    return d;
+  }).join(', ');
+  const names = cols.map((c) => `"${c.name}"`).join(', ');
+  db.pragma('foreign_keys = OFF');
+  db.exec('BEGIN');
+  db.exec(`CREATE TABLE stores_new (${defs})`);
+  db.exec(`INSERT INTO stores_new (${names}) SELECT ${names} FROM stores`);
+  db.exec('DROP TABLE stores');
+  db.exec('ALTER TABLE stores_new RENAME TO stores');
+  db.exec('COMMIT');
+  db.pragma('foreign_keys = ON');
+  console.log('[db] stores.correo ya no es único (multi-tienda por cuenta habilitado)');
+})();
+// Backfill: el dueño de cada tienda es el usuario VENDEDOR cuyo correo coincide.
+db.exec("UPDATE stores SET owner_user_id = (SELECT id FROM users WHERE users.email = stores.correo AND users.role = 'VENDEDOR' ORDER BY rowid LIMIT 1) WHERE COALESCE(owner_user_id,'') = ''");
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
 addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal

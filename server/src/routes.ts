@@ -52,10 +52,10 @@ api.post('/auth/registro', (req, res) => {
 
   const storeId = uid();
   const nombreTienda = (negocio?.trim() || nombre.trim());
-  // Nace sin plan: plan_estado 'sin_plan', inicial_pagado 0. Activa=1 para poder entrar y ver el muro de pago.
-  db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, inicial_pagado, activa) VALUES (?,?,?,?, 'sin_plan', 0, 1)")
-    .run(storeId, nombreTienda, email, '');
   const userId = uid();
+  // Nace sin plan: plan_estado 'sin_plan', inicial_pagado 0. Activa=1 para poder entrar y ver el muro de pago.
+  db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, inicial_pagado, activa, owner_user_id) VALUES (?,?,?,?, 'sin_plan', 0, 1, ?)")
+    .run(storeId, nombreTienda, email, '', userId);
   db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)')
     .run(userId, email, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', storeId);
   db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
@@ -91,6 +91,45 @@ api.post('/auth/stop-impersonate', requireAuth, (req, res) => {
   if (!row) return res.status(403).json({ error: 'No pudimos volver a tu sesión de administrador.' });
   setAuthCookie(res, { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id });
   res.json({ ok: true });
+});
+
+// ── Multi-tienda por cuenta (un dueño puede tener varias tiendas) ─────
+api.get('/mis-tiendas', requireAuth, requireStore, async (req, res) => {
+  if (!esDuenoDeTienda(req.user)) return res.json({ tiendas: [] });
+  const { estadoSuscripcion } = await import('./suscripcion.js');
+  const stores = db.prepare('SELECT id, nombre FROM stores WHERE owner_user_id = ? OR (owner_user_id = \'\' AND correo = ?) ORDER BY created_at').all(req.user!.id, req.user!.email) as { id: string; nombre: string }[];
+  const tiendas = stores.map((s) => {
+    const sus = estadoSuscripcion(s.id);
+    return { id: s.id, nombre: s.nombre, activa: s.id === req.user!.storeId, estado: sus?.estado || 'activa', bloqueada: !!sus?.bloqueado };
+  });
+  res.json({ tiendas });
+});
+
+api.post('/cambiar-tienda/:id', requireAuth, requireStore, (req, res) => {
+  if (!esDuenoDeTienda(req.user)) return res.status(403).json({ error: 'Solo el dueño puede cambiar de tienda.' });
+  const s = db.prepare('SELECT id, correo, owner_user_id FROM stores WHERE id = ?').get(req.params.id) as { id: string; correo: string; owner_user_id: string } | undefined;
+  const esMia = !!s && (s.owner_user_id === req.user!.id || s.correo === req.user!.email);
+  if (!esMia) return res.status(404).json({ error: 'Esa tienda no es tuya.' });
+  db.prepare('UPDATE users SET store_id = ? WHERE id = ?').run(s.id, req.user!.id);
+  setAuthCookie(res, { id: req.user!.id, email: req.user!.email, nombre: req.user!.nombre, role: req.user!.role, storeId: s.id });
+  res.json({ ok: true });
+});
+
+api.post('/crear-tienda', requireAuth, requireStore, (req, res) => {
+  if (!esDuenoDeTienda(req.user)) return res.status(403).json({ error: 'Solo el dueño puede crear tiendas.' });
+  const nombre = String(req.body?.nombre || '').trim();
+  if (!nombre) return res.status(400).json({ error: 'Ponle un nombre a la nueva tienda.' });
+  const storeId = uid();
+  // Tienda extra: sin instalación, plana 250k/mes. Nace pendiente de la primera renta (estado vencida).
+  db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, plan_vence, inicial_pagado, activa, owner_user_id) VALUES (?,?,?, 'Básico', 'vencida', date('now','-40 day'), 1, 1, ?)")
+    .run(storeId, nombre, req.user!.email, req.user!.id);
+  db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
+  db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
+  void import('./creditos.js').then(({ abonar, CREDITOS_BIENVENIDA }) => abonar(storeId, CREDITOS_BIENVENIDA, 'Créditos de bienvenida'));
+  // Deja al dueño parado en la tienda nueva.
+  db.prepare('UPDATE users SET store_id = ? WHERE id = ?').run(storeId, req.user!.id);
+  setAuthCookie(res, { id: req.user!.id, email: req.user!.email, nombre: req.user!.nombre, role: req.user!.role, storeId });
+  res.json({ ok: true, storeId });
 });
 
 // ── Estado completo de la tienda (una llamada para pintar el panel) ───

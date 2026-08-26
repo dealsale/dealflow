@@ -285,6 +285,12 @@ export const apiPlantillas = () => req<{ plantillas: Plantilla[] }>('/api/planti
 export const apiInstalarPlantilla = (id: string, force = false) => req<{ ok: true }>(`/api/plantillas/${id}/instalar`, 'POST', force ? { force: true } : undefined);
 export const apiDesinstalarPlantilla = (id: string, borrarDatos: boolean) => req<{ ok: true; borrados?: number }>(`/api/plantillas/${id}/desinstalar`, 'POST', { borrarDatos });
 
+// ── Multi-tienda por cuenta ──
+export interface MiTienda { id: string; nombre: string; activa: boolean; estado: string; bloqueada: boolean }
+export const apiMisTiendas = () => req<{ tiendas: MiTienda[] }>('/api/mis-tiendas', 'GET');
+export const apiCambiarTienda = (id: string) => req<{ ok: true }>(`/api/cambiar-tienda/${id}`, 'POST');
+export const apiCrearTienda = (nombre: string) => req<{ ok: true; storeId: string }>('/api/crear-tienda', 'POST', { nombre });
+
 export interface CopyAnuncio {
   titulo: string;
   descripcion: string;

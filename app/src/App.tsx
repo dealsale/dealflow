@@ -254,6 +254,18 @@ function PaywallShell({ df, titulo, sub, children }: { df: DealFlowState; titulo
         {df.suscMsg && !suscMsgEsPago(df.suscMsg) && (
           <div style={{ marginTop: 16, textAlign: 'center', color: '#B91C1C', fontSize: 13, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '9px 12px' }}>{df.suscMsg}</div>
         )}
+        {df.misTiendas.length > 1 && (
+          <div style={{ marginTop: 18, borderTop: '1px solid #E2E8F0', paddingTop: 14, textAlign: 'center' }}>
+            <div style={{ fontSize: 12, color: '#94A3B8', fontWeight: 600, marginBottom: 8 }}>IR A OTRA DE MIS TIENDAS</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {df.misTiendas.filter((t) => !t.activa).map((t) => (
+                <button key={t.id} onClick={() => df.cambiarTienda(t.id)} style={{ background: '#F1F5F9', color: '#334155', border: 'none', borderRadius: 999, padding: '7px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
+                  {t.nombre}{t.bloqueada ? ' · pago pendiente' : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div style={{ textAlign: 'center', marginTop: 18 }}>
           <button onClick={df.logout} style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Cerrar sesión</button>
         </div>
