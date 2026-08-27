@@ -192,6 +192,7 @@ export type VendedorSection =
   | 'equipo'
   | 'marketing'
   | 'dealshop'
+  | 'flujos'
   | 'integraciones';
 
 export type AdminSection = 'ventas' | 'planes' | 'cuentas' | 'cupones' | 'superadmin';

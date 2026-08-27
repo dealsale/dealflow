@@ -285,6 +285,25 @@ export const apiPlantillas = () => req<{ plantillas: Plantilla[] }>('/api/planti
 export const apiInstalarPlantilla = (id: string, force = false) => req<{ ok: true }>(`/api/plantillas/${id}/instalar`, 'POST', force ? { force: true } : undefined);
 export const apiDesinstalarPlantilla = (id: string, borrarDatos: boolean) => req<{ ok: true; borrados?: number }>(`/api/plantillas/${id}/desinstalar`, 'POST', { borrarDatos });
 
+// ── Flujos (constructor de chatbot) ──
+export type NodoTipo = 'mensaje' | 'pregunta' | 'opciones' | 'condicion' | 'accion' | 'fin';
+export interface FlujoNodo {
+  id: string;
+  tipo: NodoTipo;
+  x: number;
+  y: number;
+  data: Record<string, unknown>;
+  next?: string | null;
+}
+export interface FlujoDisparador { tipo: 'palabra' | 'lead_nuevo' | 'manual'; palabras: string[] }
+export interface Flujo { id: string; nombre: string; activo: boolean; disparador: FlujoDisparador; nodos: FlujoNodo[] }
+export interface FlujoResumen { id: string; nombre: string; activo: boolean; disparador: FlujoDisparador; nodos: number }
+export const apiFlujos = () => req<{ flujos: FlujoResumen[] }>('/api/flujos', 'GET');
+export const apiFlujo = (id: string) => req<{ flujo: Flujo }>(`/api/flujos/${id}`, 'GET');
+export const apiCrearFlujo = (nombre: string) => req<{ id: string }>('/api/flujos', 'POST', { nombre });
+export const apiGuardarFlujo = (id: string, patch: Partial<Flujo>) => req<{ ok: true }>(`/api/flujos/${id}`, 'PUT', patch);
+export const apiEliminarFlujo = (id: string) => req<{ ok: true }>(`/api/flujos/${id}`, 'DELETE');
+
 // ── Multi-tienda por cuenta ──
 export interface MiTienda { id: string; nombre: string; activa: boolean; estado: string; bloqueada: boolean }
 export const apiMisTiendas = () => req<{ tiendas: MiTienda[] }>('/api/mis-tiendas', 'GET');

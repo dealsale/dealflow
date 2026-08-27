@@ -57,6 +57,11 @@ import {
   apiMisTiendas,
   apiCambiarTienda,
   apiCrearTienda,
+  apiFlujos,
+  apiFlujo,
+  apiCrearFlujo,
+  apiGuardarFlujo,
+  apiEliminarFlujo,
   apiToggleStore,
   apiUpdateStore,
   apiDeleteStore,
@@ -88,7 +93,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem, MiTienda } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem, MiTienda, FlujoResumen, Flujo } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -497,6 +502,7 @@ export function useDealFlowState() {
   const [suscripcion, setSuscripcion] = useState<Suscripcion | null>(null);
   const [suscMsg, setSuscMsg] = useState('');
   const [misTiendas, setMisTiendas] = useState<MiTienda[]>([]);
+  const [flujos, setFlujos] = useState<FlujoResumen[]>([]);
   const [planes, setPlanes] = useState<PlanPublico[]>([]);
   const [cupones, setCupones] = useState<Cupon[]>([]);
   const [cuponMsg, setCuponMsg] = useState('');
@@ -1592,6 +1598,13 @@ export function useDealFlowState() {
   // Valida un cupón y devuelve el descuento para previsualizar el precio en el muro de pago.
   function validarCupon(codigo: string) { return apiValidarCupon(codigo); }
 
+  // ── Flujos (constructor de chatbot) ──
+  async function reloadFlujos() { const { data } = await apiFlujos(); if (data) setFlujos(data.flujos); }
+  function crearFlujo(nombre: string) { return apiCrearFlujo(nombre).then((r) => { void reloadFlujos(); return r.data?.id; }); }
+  function eliminarFlujo(id: string) { void apiEliminarFlujo(id).then(() => void reloadFlujos()); }
+  function cargarFlujo(id: string) { return apiFlujo(id).then((r) => r.data?.flujo); }
+  function guardarFlujo(id: string, patch: Partial<Flujo>) { return apiGuardarFlujo(id, patch).then((r) => { void reloadFlujos(); return !r.error; }); }
+
   // ── Multi-tienda por cuenta ──
   async function reloadMisTiendas() { const { data } = await apiMisTiendas(); if (data) setMisTiendas(data.tiendas); }
   function cambiarTienda(id: string) {
@@ -2515,6 +2528,12 @@ export function useDealFlowState() {
     assistantSaved,
 
     integrations: integrationsDecorated,
+    flujos,
+    reloadFlujos,
+    crearFlujo,
+    eliminarFlujo,
+    cargarFlujo,
+    guardarFlujo,
     suscripcion,
     suscMsg,
     misTiendas,

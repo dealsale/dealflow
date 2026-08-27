@@ -263,6 +263,19 @@ db.exec(`CREATE TABLE IF NOT EXISTS creditos_mov (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_credmov_store ON creditos_mov(store_id)');
 
+// Flujos (chatbot builder): cada flujo es un grafo de nodos que guía la conversación.
+db.exec(`CREATE TABLE IF NOT EXISTS flows (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  activo INTEGER NOT NULL DEFAULT 0,
+  disparador TEXT NOT NULL DEFAULT '{}',
+  nodos TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_flows_store ON flows(store_id)');
+
 // Historial del Marketing IA: guarda cada copy/imagen generado para reusar.
 db.exec(`CREATE TABLE IF NOT EXISTS marketing_items (
   id TEXT PRIMARY KEY,
