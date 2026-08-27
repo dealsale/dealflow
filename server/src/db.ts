@@ -275,6 +275,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS flows (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_flows_store ON flows(store_id)');
+// Estado del flujo activo por lead (qué flujo corre, en qué nodo y variables).
+addColumn('leads', "flow_id TEXT NOT NULL DEFAULT ''");
+addColumn('leads', "flow_nodo TEXT NOT NULL DEFAULT ''");
+addColumn('leads', "flow_vars TEXT NOT NULL DEFAULT '{}'");
 
 // Historial del Marketing IA: guarda cada copy/imagen generado para reusar.
 db.exec(`CREATE TABLE IF NOT EXISTS marketing_items (

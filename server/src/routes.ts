@@ -447,6 +447,17 @@ api.delete('/flujos/:id', requireAuth, requireStore, requireOwner, (req, res) =>
   res.json({ ok: true });
 });
 
+// Enviar un flujo manualmente a un lead (desde el Inbox).
+api.post('/flujos/:id/enviar', requireAuth, requireStore, async (req, res) => {
+  const leadId = String(req.body?.leadId || '');
+  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(leadId, req.user!.storeId) as { id: string } | undefined;
+  if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
+  const { lanzarFlujoManual } = await import('./flujoEngine.js');
+  const r = await lanzarFlujoManual(req.user!.storeId!, leadId, req.params.id);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+
 // ── Marketing con IA (copys y generación de imágenes) ────────────────
 api.post('/marketing/copy', requireAuth, requireStore, async (req, res) => {
   const { idea, plataforma, tono, objetivo, cantidad, imagen } = req.body || {};
@@ -962,8 +973,13 @@ api.post('/webchat/:storeId/messages', async (req, res) => {
     lead = { id };
   }
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'cliente', texto);
-  const { maybeAutoReply } = await import('./ai.js');
-  void maybeAutoReply(store.id, lead.id).catch((e) => console.error('[webchat] error IA', e));
+  void (async () => {
+    try {
+      const { procesarFlujo } = await import('./flujoEngine.js');
+      const manejado = await procesarFlujo(store.id, lead!.id);
+      if (!manejado) { const { maybeAutoReply } = await import('./ai.js'); await maybeAutoReply(store.id, lead!.id); }
+    } catch (e) { console.error('[webchat] error flujo/IA', e); }
+  })();
   res.json({ ok: true });
 });
 
