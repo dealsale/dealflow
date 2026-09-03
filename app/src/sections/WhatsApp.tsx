@@ -56,10 +56,45 @@ export function WhatsAppSection({ df }: { df: DealFlowState }) {
 
       {!df.waConnected && (
         <>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+            {df.waSignup?.disponible && (
+              <MethodTab active={df.waMethod === 'auto'} onClick={() => df.setWaMethod('auto')} titulo="Conexión automática" sub="Un clic con Facebook · recomendado" />
+            )}
             <MethodTab active={df.waMethod === 'qr'} onClick={() => df.setWaMethod('qr')} titulo="Por código QR" sub="Rápido, escaneas como WhatsApp Web" />
             <MethodTab active={df.waMethod === 'cloud'} onClick={() => df.setWaMethod('cloud')} titulo="Por API oficial" sub="WABA ID + Access Token de Meta" />
           </div>
+
+          {df.waMethod === 'auto' && (
+            <div style={card}>
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Conectar con Facebook</div>
+              <div style={{ color: '#64748B', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
+                Se abre una ventana de Facebook donde eliges tu cuenta de WhatsApp Business y tu número. Nosotros hacemos el resto:
+                sin crear apps, sin tokens y sin configurar nada en Meta.
+              </div>
+              <ol style={{ color: '#475569', fontSize: 13, lineHeight: 1.9, margin: '0 0 16px', paddingLeft: 18 }}>
+                <li>Inicia sesión con el Facebook del negocio.</li>
+                <li>Elige (o crea) tu cuenta de WhatsApp Business.</li>
+                <li>Registra el número y confirma el código que te llega.</li>
+              </ol>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button
+                  onClick={df.conectarConFacebook}
+                  disabled={df.waLinking}
+                  className="df-btn-primary"
+                  style={{ background: '#1877F2', color: '#fff', border: 'none', borderRadius: 8, padding: '12px 20px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: df.waLinking ? 'default' : 'pointer', opacity: df.waLinking ? 0.7 : 1, display: 'inline-flex', alignItems: 'center', gap: 9 }}
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
+                    <path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.96h-1.51c-1.49 0-1.96.93-1.96 1.89v2.26h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z" />
+                  </svg>
+                  {df.waLinking ? 'Conectando con Meta…' : 'Conectar con Facebook'}
+                </button>
+                {df.waError && <span style={{ color: '#DC2626', fontSize: 13, flex: 1, minWidth: 200 }}>{df.waError}</span>}
+              </div>
+              <div style={{ color: '#94A3B8', fontSize: 12, marginTop: 14, lineHeight: 1.6 }}>
+                Necesitas un número que <b>no</b> tenga WhatsApp activo hoy (o dalo de baja antes). Si tu bloqueador de anuncios está encendido, la ventana de Facebook no abrirá.
+              </div>
+            </div>
+          )}
 
           {df.waMethod === 'qr' && (
             <div style={card}>
@@ -156,7 +191,16 @@ export function WhatsAppSection({ df }: { df: DealFlowState }) {
         </>
       )}
 
-      {df.waConnected && df.waModo === 'cloud' && (
+      {df.waConnected && df.waModo === 'cloud' && df.waSignupAuto && (
+        <div style={{ ...card, marginBottom: 0, background: '#ECFDF5', borderColor: '#A7F3D0' }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#047857' }}>Todo listo · no tienes que configurar nada en Meta</div>
+          <div style={{ color: '#047857', fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>
+            Tu número quedó conectado a la API oficial y ya recibe mensajes. Escríbele desde otro teléfono y aparecerá en <b>Inbox · Chats en vivo</b>.
+          </div>
+        </div>
+      )}
+
+      {df.waConnected && df.waModo === 'cloud' && !df.waSignupAuto && (
         <div style={{ ...card, marginBottom: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Webhook en Meta · se configura una sola vez</div>
           <div style={{ color: '#64748B', fontSize: 13, marginBottom: 14 }}>En tu app de Meta → WhatsApp → Configuration, pega estos dos datos y suscríbete al campo «messages».</div>

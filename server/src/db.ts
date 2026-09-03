@@ -150,6 +150,7 @@ function addColumn(table: string, colDef: string): boolean {
   return true;
 }
 addColumn('whatsapp', "modo TEXT NOT NULL DEFAULT 'cloud'");
+addColumn('whatsapp', "pin TEXT NOT NULL DEFAULT ''"); // PIN de 2 pasos del número (Embedded Signup)
 addColumn('products', "descripcion TEXT NOT NULL DEFAULT ''");
 addColumn('products', "caracteristicas TEXT NOT NULL DEFAULT ''");
 addColumn('products', "mensaje_inicial TEXT NOT NULL DEFAULT ''");

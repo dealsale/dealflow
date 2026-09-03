@@ -164,8 +164,8 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     })),
   }));
   const assistant = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string } | undefined;
-  const wa = db.prepare('SELECT waba_id, phone_number_id, numero, conectado, access_token, modo FROM whatsapp WHERE store_id = ?').get(sid) as
-    | { waba_id: string; phone_number_id: string; numero: string; conectado: number; access_token: string; modo: string }
+  const wa = db.prepare('SELECT waba_id, phone_number_id, numero, conectado, access_token, modo, pin FROM whatsapp WHERE store_id = ?').get(sid) as
+    | { waba_id: string; phone_number_id: string; numero: string; conectado: number; access_token: string; modo: string; pin: string }
     | undefined;
 
   const { estadoSuscripcion } = await import('./suscripcion.js');
@@ -185,6 +185,10 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
       numero: wa?.numero || '',
       tokenGuardado: !!wa?.access_token,
       verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || 'dealflow-verify',
+      // Datos públicos del popup de Facebook (no son secretos; el secret nunca sale del servidor).
+      signup: (await import('./metaSignup.js')).metaSignupConfig(),
+      // Conectado por el flujo automático: el webhook ya quedó puesto, la tienda no configura nada.
+      signupAuto: !!wa?.pin,
     },
   });
 });
@@ -605,6 +609,17 @@ api.put('/assistant', requireAuth, requireStore, requireOwner, (req, res) => {
      ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
   ).run(req.user!.storeId, String(instrucciones || ''), j(Array.isArray(reglas) ? reglas : []));
   res.json({ ok: true });
+});
+
+// ── WhatsApp: conexión en un clic (Embedded Signup de Meta) ──────────
+// El popup de Facebook nos devuelve un código y los IDs del número elegido;
+// aquí completamos el alta contra Meta sin que la tienda toque nada técnico.
+api.post('/whatsapp/embedded', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { code, wabaId, phoneNumberId } = req.body || {};
+  const { conectarPorSignup } = await import('./metaSignup.js');
+  const r = await conectarPorSignup(req.user!.storeId!, String(code || '').trim(), String(wabaId || '').trim(), String(phoneNumberId || '').trim());
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ conectado: true, numero: r.numero, aviso: r.aviso });
 });
 
 // ── WhatsApp (vinculación por WABA ID + token) ───────────────────────

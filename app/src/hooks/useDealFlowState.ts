@@ -74,6 +74,7 @@ import {
   apiWaQrStart,
   apiWaQrStatus,
   apiWaUnlink,
+  apiWaEmbedded,
   apiSetLeadEtiqueta,
   apiSuperStores,
   apiToggleHideStore,
@@ -93,7 +94,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem, MiTienda, FlujoResumen, Flujo } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem, MiTienda, FlujoResumen, Flujo, MetaSignupCfg } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -563,7 +564,10 @@ export function useDealFlowState() {
   const [waForm, setWaForm] = useState({ wabaId: '', phoneNumberId: '', accessToken: '' });
   const [waLinking, setWaLinking] = useState(false);
   const [waError, setWaError] = useState('');
-  const [waMethod, setWaMethod] = useState<'qr' | 'cloud'>('qr');
+  const [waMethod, setWaMethod] = useState<'qr' | 'cloud' | 'auto'>('qr');
+  // Conexión en un clic con Meta (Embedded Signup); null = el servidor no la tiene configurada.
+  const [waSignup, setWaSignup] = useState<MetaSignupCfg | null>(null);
+  const [waSignupAuto, setWaSignupAuto] = useState(false); // conectada por el flujo automático
   const [waModo, setWaModo] = useState<'cloud' | 'qr'>('cloud');
   const [qrEstado, setQrEstado] = useState<'inactivo' | 'iniciando' | 'qr' | 'conectado' | 'error'>('inactivo');
   const [qrImg, setQrImg] = useState<string>('');
@@ -1040,6 +1044,28 @@ export function useDealFlowState() {
     setMenuOpen(false);
   }
 
+  /** Conexión en un clic: popup de Facebook y el servidor termina el alta con Meta. */
+  async function conectarConFacebook() {
+    if (!waSignup?.disponible) return;
+    setWaError('');
+    setWaLinking(true);
+    try {
+      const { abrirSignupMeta } = await import('../lib/metaSignup');
+      const datos = await abrirSignupMeta(waSignup.appId, waSignup.configId);
+      const r = await apiWaEmbedded(datos);
+      if (r.error || !r.data) throw new Error(r.error || 'No pudimos completar la conexión con Meta.');
+      setWaModo('cloud');
+      setWaConnected(true);
+      setWaSignupAuto(true);
+      setWaCfg({ wabaId: datos.wabaId, phoneNumberId: datos.phoneNumberId, numero: r.data.numero });
+      if (r.data.aviso) setWaError(r.data.aviso);
+    } catch (e) {
+      setWaError(e instanceof Error ? e.message : 'No pudimos completar la conexión.');
+    } finally {
+      setWaLinking(false);
+    }
+  }
+
   function vincularWa() {
     if (!waForm.wabaId.trim() || !waForm.phoneNumberId.trim() || !waForm.accessToken.trim()) {
       setWaError('Faltan datos: WABA ID, Phone Number ID y Access Token.');
@@ -1155,6 +1181,10 @@ export function useDealFlowState() {
         if (data.store?.id) setStoreId(data.store.id);
         setSuscripcion(data.suscripcion ?? null);
         if (data.whatsapp.verifyToken) setWaVerifyToken(data.whatsapp.verifyToken);
+        setWaSignup(data.whatsapp.signup ?? null);
+        setWaSignupAuto(!!data.whatsapp.signupAuto);
+        // Si la conexión en un clic está lista, es la opción que se ofrece primero.
+        if (data.whatsapp.signup?.disponible && !data.whatsapp.conectado) setWaMethod((m) => (m === 'qr' ? 'auto' : m));
         // Datos reales de la tienda: nada de textos demo de "Luna Accesorios".
         setAssistantText(data.assistant?.instrucciones || '');
         setRules(data.assistant?.reglas || []);
@@ -2468,6 +2498,9 @@ export function useDealFlowState() {
     waError,
     vincularWa,
     desvincularWa,
+    waSignup,
+    waSignupAuto,
+    conectarConFacebook: () => void conectarConFacebook(),
     waMethod,
     setWaMethod,
     waModo,

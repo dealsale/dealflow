@@ -246,7 +246,7 @@ export interface ApiOrder {
   createdAt: string;
   items: { qty: number; nombre: string; precio: number }[];
 }
-export const apiState = () => req<{ store: { id: string; nombre: string; plan: string }; assistant: { instrucciones: string; reglas: string[] }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
+export const apiState = () => req<{ store: { id: string; nombre: string; plan: string }; assistant: { instrucciones: string; reglas: string[] }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
 export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET');
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
 export const apiOrderDropi = (rowId: string) => req<{ guia: string }>(`/api/orders/${rowId}/dropi`, 'POST');
@@ -263,6 +263,10 @@ export const apiResetLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}/
 export const apiWaLinkCloud = (b: { wabaId: string; phoneNumberId: string; accessToken: string }) =>
   req<{ conectado: boolean; numero: string }>('/api/whatsapp', 'PUT', b);
 export const apiWaUnlink = () => req<{ conectado: boolean }>('/api/whatsapp', 'DELETE');
+/** Conexión en un clic: datos que devuelve el popup de Facebook (Embedded Signup). */
+export interface MetaSignupCfg { disponible: boolean; appId: string; configId: string }
+export const apiWaEmbedded = (b: { code: string; wabaId: string; phoneNumberId: string }) =>
+  req<{ conectado: boolean; numero: string; aviso?: string }>('/api/whatsapp/embedded', 'POST', b);
 export const apiWaQrStart = () => req<{ ok: true }>('/api/whatsapp/qr/start', 'POST');
 export const apiWaQrStatus = () => req<{ estado: string; qr: string | null; numero: string; error: string }>('/api/whatsapp/qr/status', 'GET');
 
