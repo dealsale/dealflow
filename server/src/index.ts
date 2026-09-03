@@ -14,7 +14,16 @@ restoreQrSessions();
 
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '25mb' })); // fotos/videos viajan como data URLs
+// Guardamos el cuerpo crudo de los webhooks para poder validar su firma HMAC
+// (Meta y Wompi firman el JSON tal cual llegó; reserializarlo cambiaría la firma).
+app.use(
+  express.json({
+    limit: '25mb', // fotos/videos viajan como data URLs
+    verify: (req, _res, buf) => {
+      if ((req.url || '').startsWith('/webhooks/')) (req as { rawBody?: Buffer }).rawBody = buf;
+    },
+  }),
+);
 app.use(cookieParser());
 
 if (process.env.NODE_ENV !== 'production') {

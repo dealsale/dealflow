@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid } from './db.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
@@ -1050,6 +1051,20 @@ api.get('/media/:storeId/:file', requireAuth, requireStore, (req, res) => {
 });
 
 // ── Webhook de Meta (una sola URL para todas las tiendas) ────────────
+/** Compara la firma X-Hub-Signature-256 de Meta con la calculada, sin filtrar tiempos. */
+function firmaMetaValida(secret: string, raw: Buffer | undefined, firma: string): boolean {
+  if (!raw || !firma.startsWith('sha256=')) return false;
+  try {
+    const esperado = createHmac('sha256', secret).update(raw).digest('hex');
+    const recibido = firma.slice('sha256='.length);
+    const a = Buffer.from(esperado, 'hex');
+    const b = Buffer.from(recibido, 'hex');
+    return a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
 webhooks.get('/whatsapp', (req, res) => {
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'dealflow-verify';
   if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === verifyToken) {
@@ -1059,6 +1074,18 @@ webhooks.get('/whatsapp', (req, res) => {
 });
 
 webhooks.post('/whatsapp', (req, res) => {
+  // Verificamos que el mensaje venga de verdad de Meta: firma HMAC-SHA256 del
+  // cuerpo crudo con el App Secret. Sin esto, cualquiera que conozca la URL
+  // podría inyectar mensajes falsos en el Inbox de una tienda.
+  const secret = process.env.META_APP_SECRET;
+  if (secret) {
+    const firma = String(req.headers['x-hub-signature-256'] || '');
+    const raw = (req as { rawBody?: Buffer }).rawBody;
+    if (!firmaMetaValida(secret, raw, firma)) {
+      console.warn('[webhook] firma de Meta inválida o ausente — se ignora la entrada');
+      return res.sendStatus(403);
+    }
+  }
   // Meta exige responder rápido: procesamos y contestamos 200 siempre.
   try {
     handleIncomingWebhook(req.body);
