@@ -622,6 +622,13 @@ api.post('/whatsapp/embedded', requireAuth, requireStore, requireOwner, async (r
   res.json({ conectado: true, numero: r.numero, aviso: r.aviso });
 });
 
+// Chequeo del número contra Meta (calidad, límites, verificación) + enlaces al
+// panel de Meta, incluido el de facturación: cada tienda pone su propio pago.
+api.get('/whatsapp/estado', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { estadoNumero } = await import('./waEstado.js');
+  res.json(await estadoNumero(req.user!.storeId!));
+});
+
 // ── WhatsApp (vinculación por WABA ID + token) ───────────────────────
 api.put('/whatsapp', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { wabaId, phoneNumberId, accessToken } = req.body || {};

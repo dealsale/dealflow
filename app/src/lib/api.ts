@@ -267,6 +267,24 @@ export const apiWaUnlink = () => req<{ conectado: boolean }>('/api/whatsapp', 'D
 export interface MetaSignupCfg { disponible: boolean; appId: string; configId: string }
 export const apiWaEmbedded = (b: { code: string; wabaId: string; phoneNumberId: string }) =>
   req<{ conectado: boolean; numero: string; aviso?: string }>('/api/whatsapp/embedded', 'POST', b);
+
+/** Chequeo del número contra Meta + enlaces rápidos al panel de Meta. */
+export interface EnlaceRapido { id: string; titulo: string; sub: string; url: string }
+export interface EstadoNumero {
+  disponible: boolean;
+  motivo?: string;
+  semaforo: 'ok' | 'aviso' | 'problema' | 'desconocido';
+  titulo: string;
+  numero: string;
+  nombreVerificado: string;
+  calidad: string;
+  limite: string;
+  verificado: boolean;
+  revisionCuenta: string;
+  avisos: string[];
+  enlaces: EnlaceRapido[];
+}
+export const apiWaEstado = () => req<EstadoNumero>('/api/whatsapp/estado', 'GET');
 export const apiWaQrStart = () => req<{ ok: true }>('/api/whatsapp/qr/start', 'POST');
 export const apiWaQrStatus = () => req<{ estado: string; qr: string | null; numero: string; error: string }>('/api/whatsapp/qr/status', 'GET');
 

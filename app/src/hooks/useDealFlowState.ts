@@ -75,6 +75,7 @@ import {
   apiWaQrStatus,
   apiWaUnlink,
   apiWaEmbedded,
+  apiWaEstado,
   apiSetLeadEtiqueta,
   apiSuperStores,
   apiToggleHideStore,
@@ -94,7 +95,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem, MiTienda, FlujoResumen, Flujo, MetaSignupCfg } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem, MiTienda, FlujoResumen, Flujo, MetaSignupCfg, EstadoNumero } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -568,6 +569,8 @@ export function useDealFlowState() {
   // Conexión en un clic con Meta (Embedded Signup); null = el servidor no la tiene configurada.
   const [waSignup, setWaSignup] = useState<MetaSignupCfg | null>(null);
   const [waSignupAuto, setWaSignupAuto] = useState(false); // conectada por el flujo automático
+  const [waEstado, setWaEstado] = useState<EstadoNumero | null>(null);
+  const [waEstadoCargando, setWaEstadoCargando] = useState(false);
   const [waModo, setWaModo] = useState<'cloud' | 'qr'>('cloud');
   const [qrEstado, setQrEstado] = useState<'inactivo' | 'iniciando' | 'qr' | 'conectado' | 'error'>('inactivo');
   const [qrImg, setQrImg] = useState<string>('');
@@ -1042,6 +1045,15 @@ export function useDealFlowState() {
     setSection('resumen');
     setSelectedOrderId(null);
     setMenuOpen(false);
+  }
+
+  /** Le pregunta a Meta cómo está el número (calidad, límites, verificación). */
+  async function revisarNumero() {
+    if (!apiMode) return;
+    setWaEstadoCargando(true);
+    const r = await apiWaEstado();
+    setWaEstado(r.data ?? null);
+    setWaEstadoCargando(false);
   }
 
   /** Conexión en un clic: popup de Facebook y el servidor termina el alta con Meta. */
@@ -2500,6 +2512,9 @@ export function useDealFlowState() {
     desvincularWa,
     waSignup,
     waSignupAuto,
+    waEstado,
+    waEstadoCargando,
+    revisarNumero: () => void revisarNumero(),
     conectarConFacebook: () => void conectarConFacebook(),
     waMethod,
     setWaMethod,

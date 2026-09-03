@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { WA_NUMBER } from '../data';
 
@@ -24,8 +25,126 @@ function MethodTab({ active, onClick, titulo, sub }: { active: boolean; onClick:
   );
 }
 
+const SEMAFORO = {
+  ok: { punto: '#10B981', fondo: '#ECFDF5', borde: '#A7F3D0', texto: '#047857' },
+  aviso: { punto: '#F59E0B', fondo: '#FFFBEB', borde: '#FDE68A', texto: '#B45309' },
+  problema: { punto: '#EF4444', fondo: '#FEF2F2', borde: '#FECACA', texto: '#B91C1C' },
+  desconocido: { punto: '#94A3B8', fondo: '#F8FAFC', borde: '#E2E8F0', texto: '#475569' },
+} as const;
+
+const CALIDAD: Record<string, string> = { GREEN: 'Alta', YELLOW: 'Media', RED: 'Baja' };
+const LIMITE: Record<string, string> = {
+  TIER_50: '50 clientes nuevos al día',
+  TIER_250: '250 clientes nuevos al día',
+  TIER_1K: '1.000 clientes nuevos al día',
+  TIER_10K: '10.000 clientes nuevos al día',
+  TIER_100K: '100.000 clientes nuevos al día',
+  TIER_UNLIMITED: 'Sin límite',
+};
+
+function Dato({ titulo, valor }: { titulo: string; valor: string }) {
+  return (
+    <div>
+      <div style={{ color: '#64748B', fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>{titulo}</div>
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1E293B', marginTop: 3 }}>{valor}</div>
+    </div>
+  );
+}
+
+/** Semáforo del número + enlaces al panel de Meta (ahí ponen su método de pago). */
+function EstadoNumeroCard({ df }: { df: DealFlowState }) {
+  const est = df.waEstado;
+  const c = SEMAFORO[est?.semaforo ?? 'desconocido'];
+  const enlaces = est?.enlaces ?? [];
+
+  return (
+    <>
+      <div style={{ ...card, background: c.fondo, borderColor: c.borde }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ width: 12, height: 12, borderRadius: '50%', background: c.punto, marginTop: 4, flexShrink: 0, boxShadow: `0 0 0 4px ${c.punto}22` }} />
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: c.texto }}>
+              {df.waEstadoCargando && !est ? 'Consultando a Meta…' : est?.disponible ? est.titulo : 'Estado del número'}
+            </div>
+            <div style={{ color: c.texto, fontSize: 13, marginTop: 3, lineHeight: 1.6, opacity: 0.9 }}>
+              {est?.disponible
+                ? est.semaforo === 'ok'
+                  ? 'Tu número está verificado, con buena calidad y sin restricciones de Meta.'
+                  : 'Revisa los puntos de abajo para que tu número siga vendiendo sin problemas.'
+                : est?.motivo || 'Aquí te decimos si Meta tiene tu número limitado o con algo pendiente.'}
+            </div>
+          </div>
+          <button
+            onClick={df.revisarNumero}
+            disabled={df.waEstadoCargando}
+            style={{ background: '#fff', border: `1px solid ${c.borde}`, color: c.texto, borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: df.waEstadoCargando ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+          >
+            {df.waEstadoCargando ? 'Revisando…' : 'Revisar ahora'}
+          </button>
+        </div>
+
+        {est?.disponible && (
+          <>
+            <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginTop: 16, paddingTop: 16, borderTop: `1px solid ${c.borde}` }}>
+              <Dato titulo="Verificación" valor={est.verificado ? 'Verificado' : 'Pendiente'} />
+              <Dato titulo="Calidad" valor={CALIDAD[est.calidad] || 'Sin datos aún'} />
+              <Dato titulo="Puedes escribirle a" valor={LIMITE[est.limite] || 'Sin datos aún'} />
+              {est.nombreVerificado && <Dato titulo="Nombre que ven" valor={est.nombreVerificado} />}
+            </div>
+            {est.avisos.length > 0 && (
+              <ul style={{ margin: '14px 0 0', paddingLeft: 18, color: c.texto, fontSize: 13, lineHeight: 1.75 }}>
+                {est.avisos.map((a, i) => <li key={i}>{a}</li>)}
+              </ul>
+            )}
+          </>
+        )}
+      </div>
+
+      {enlaces.length > 0 && (
+        <div style={card}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Enlaces rápidos a Meta</div>
+          <div style={{ color: '#64748B', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
+            Meta te cobra a ti directamente la mensajería, así que el <b>método de pago va en tu propia cuenta</b>. Aquí llegas de un clic.
+          </div>
+          <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 10 }}>
+            {enlaces.map((e) => (
+              <a
+                key={e.id}
+                href={e.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'block', textDecoration: 'none', borderRadius: 10, padding: '12px 14px',
+                  border: '1px solid ' + (e.id === 'pago' ? '#BFDBFE' : '#E2E8F0'),
+                  background: e.id === 'pago' ? '#EFF6FF' : '#fff',
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 13.5, color: e.id === 'pago' ? '#1D4ED8' : '#1E293B', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {e.titulo}
+                  <span style={{ color: '#94A3B8', fontSize: 12 }}>↗</span>
+                </div>
+                <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 3, lineHeight: 1.5 }}>{e.sub}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function WhatsAppSection({ df }: { df: DealFlowState }) {
-  const numero = df.waCfg?.numero || WA_NUMBER;
+  // El chequeo trae el número tal como lo tiene Meta; ese manda sobre el guardado.
+  const numero = df.waEstado?.numero || df.waCfg?.numero || WA_NUMBER;
+  const { waConnected, waModo } = df;
+
+  // Al abrir la pantalla con el número conectado, preguntamos por su estado.
+  // Por ref: la función se recrea en cada render y dispararía el efecto en bucle.
+  const revisar = useRef(df.revisarNumero);
+  revisar.current = df.revisarNumero;
+  useEffect(() => {
+    if (waConnected && waModo === 'cloud') revisar.current();
+  }, [waConnected, waModo]);
 
   return (
     <section data-screen-label="WhatsApp" style={{ maxWidth: 720 }}>
@@ -191,14 +310,7 @@ export function WhatsAppSection({ df }: { df: DealFlowState }) {
         </>
       )}
 
-      {df.waConnected && df.waModo === 'cloud' && df.waSignupAuto && (
-        <div style={{ ...card, marginBottom: 0, background: '#ECFDF5', borderColor: '#A7F3D0' }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#047857' }}>Todo listo · no tienes que configurar nada en Meta</div>
-          <div style={{ color: '#047857', fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>
-            Tu número quedó conectado a la API oficial y ya recibe mensajes. Escríbele desde otro teléfono y aparecerá en <b>Inbox · Chats en vivo</b>.
-          </div>
-        </div>
-      )}
+      {df.waConnected && df.waModo === 'cloud' && <EstadoNumeroCard df={df} />}
 
       {df.waConnected && df.waModo === 'cloud' && !df.waSignupAuto && (
         <div style={{ ...card, marginBottom: 0 }}>
