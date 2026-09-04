@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { db, j } from './db.js';
 import { obtener as obtenerCampana } from './campanas.js';
+import { mediaPath } from './media.js';
 
 /**
  * Publicación en el Administrador de anuncios del CLIENTE.
@@ -127,6 +129,47 @@ const OBJETIVO_META: Record<string, string> = {
 };
 
 /**
+ * Sube el creativo a la biblioteca de la cuenta publicitaria y devuelve su
+ * hash. Se envían los bytes porque nuestras imágenes viven tras la sesión
+ * (/api/media) y los servidores de Meta no pueden descargarlas por URL.
+ */
+async function subirImagen(act: string, token: string, storeId: string, urlCreativo: string): Promise<{ hash: string } | { error: string }> {
+  const archivo = urlCreativo.split('/').pop() || '';
+  if (!archivo) return { error: 'El creativo no tiene un archivo válido.' };
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(mediaPath(storeId, archivo));
+  } catch {
+    return { error: 'No encontramos el archivo del creativo. Genéralo de nuevo en el paso 2.' };
+  }
+  const form = new FormData();
+  form.append('access_token', token);
+  form.append('filename', new Blob([new Uint8Array(bytes)], { type: 'image/png' }), archivo);
+  try {
+    const res = await fetch(`${GRAPH}/${act}/adimages`, { method: 'POST', body: form });
+    const body = (await res.json().catch(() => ({}))) as { images?: Record<string, { hash?: string }>; error?: { message?: string } };
+    if (!res.ok) return { error: body.error?.message || 'Meta no aceptó la imagen del anuncio.' };
+    const hash = Object.values(body.images || {})[0]?.hash;
+    if (!hash) return { error: 'Meta no devolvió la imagen subida.' };
+    return { hash };
+  } catch {
+    return { error: 'No pudimos subir la imagen a Meta.' };
+  }
+}
+
+/** A dónde manda el anuncio: al WhatsApp de la tienda, o a su tienda web. */
+function destinoDelAnuncio(storeId: string, objetivo: string): { enlace: string } | { error: string } {
+  if (objetivo === 'mensajes') {
+    const wa = db.prepare('SELECT numero FROM whatsapp WHERE store_id = ? AND conectado = 1').get(storeId) as { numero: string } | undefined;
+    const num = (wa?.numero || '').replace(/\D/g, '');
+    // Sin número no hay a dónde mandar al cliente: mejor decirlo que publicar algo roto.
+    if (!num) return { error: 'Para anuncios que llevan a WhatsApp necesitas tener tu número conectado en la sección WhatsApp.' };
+    return { enlace: `https://wa.me/${num}` };
+  }
+  return { enlace: process.env.PUBLIC_URL || 'https://dealflow.sbs' };
+}
+
+/**
  * Crea la campaña completa en Meta, siempre EN PAUSA. `presupuesto` es el
  * diario en la moneda de la cuenta (lo convertimos a centavos, como pide Meta).
  */
@@ -146,6 +189,11 @@ export async function publicar(
 
   const presupuesto = Math.round(Number(opciones.presupuesto) || 0);
   if (presupuesto < 1000) return { error: 'El presupuesto diario mínimo es 1.000 (en la moneda de tu cuenta).' };
+
+  // Se valida el destino antes de crear nada en Meta, para no dejar campañas
+  // a medias si resulta que falta el número de WhatsApp.
+  const destino = destinoDelAnuncio(storeId, c.objetivo);
+  if ('error' in destino) return { error: destino.error };
 
   const act = f.ad_account_id.startsWith('act_') ? f.ad_account_id : `act_${f.ad_account_id}`;
   const token = f.access_token;
@@ -184,9 +232,12 @@ export async function publicar(
   });
   if (!adset.ok || !adset.body.id) return { error: adset.body.error?.message || 'Meta rechazó la creación del conjunto de anuncios.' };
 
-  // 3) Creativo con la imagen y los textos elegidos.
-  const base = process.env.PUBLIC_URL || '';
-  const imagenUrl = creativo.startsWith('http') ? creativo : `${base}${creativo}`;
+  // 3) Subimos la imagen a Meta y usamos su hash. Nuestras URLs /api/media
+  // están protegidas por sesión, así que Meta no podría descargarlas: hay que
+  // enviarle los bytes.
+  const subida = await subirImagen(act, token, storeId, creativo);
+  if ('error' in subida) return { error: subida.error };
+
   const creative = await post<{ id?: string }>(`${act}/adcreatives`, {
     name: `${c.nombre} · creativo`,
     object_story_spec: {
@@ -195,13 +246,13 @@ export async function publicar(
         message: texto,
         name: titulo,
         description: descripcion,
-        picture: imagenUrl,
-        link: c.objetivo === 'mensajes' ? `https://wa.me/` : (base || 'https://facebook.com'),
-        call_to_action: { type: c.objetivo === 'mensajes' ? 'MESSAGE_PAGE' : 'LEARN_MORE' },
+        image_hash: subida.hash,
+        link: destino.enlace,
+        call_to_action: { type: c.objetivo === 'mensajes' ? 'WHATSAPP_MESSAGE' : 'LEARN_MORE' },
       },
     },
   });
-  if (!creative.ok || !creative.body.id) return { error: creative.body.error?.message || 'Meta rechazó el creativo. Revisa que la imagen sea accesible públicamente.' };
+  if (!creative.ok || !creative.body.id) return { error: creative.body.error?.message || 'Meta rechazó el creativo.' };
 
   // 4) El anuncio, también en pausa.
   const ad = await post<{ id?: string }>(`${act}/ads`, {
