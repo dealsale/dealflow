@@ -413,56 +413,6 @@ api.post('/plantillas/:id/desinstalar', requireAuth, requireStore, requireOwner,
   res.json({ ok: true, borrados: r.borrados });
 });
 
-// ── Flujos (constructor de chatbot) ──────────────────────────────────
-api.get('/flujos', requireAuth, requireStore, (req, res) => {
-  const rows = db.prepare('SELECT id, nombre, activo, disparador, nodos FROM flows WHERE store_id = ? ORDER BY created_at DESC').all(req.user!.storeId) as Record<string, unknown>[];
-  res.json({ flujos: rows.map((f) => ({ id: f.id, nombre: f.nombre, activo: !!f.activo, disparador: pj(f.disparador as string, {}), nodos: pj(f.nodos as string, []).length })) });
-});
-
-api.get('/flujos/:id', requireAuth, requireStore, (req, res) => {
-  const f = db.prepare('SELECT * FROM flows WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as Record<string, unknown> | undefined;
-  if (!f) return res.status(404).json({ error: 'Flujo no encontrado.' });
-  res.json({ flujo: { id: f.id, nombre: f.nombre, activo: !!f.activo, disparador: pj(f.disparador as string, { tipo: 'palabra', palabras: [] }), nodos: pj(f.nodos as string, []) } });
-});
-
-api.post('/flujos', requireAuth, requireStore, requireOwner, (req, res) => {
-  const nombre = String(req.body?.nombre || '').trim() || 'Flujo sin nombre';
-  const id = uid();
-  // Nodo inicial por defecto (un mensaje de bienvenida) para arrancar.
-  const nodos = [{ id: uid(), tipo: 'mensaje', x: 60, y: 80, data: { texto: '¡Hola! 👋 ¿En qué te puedo ayudar?' }, next: null }];
-  db.prepare("INSERT INTO flows (id, store_id, nombre, disparador, nodos) VALUES (?,?,?,?,?)")
-    .run(id, req.user!.storeId, nombre, j({ tipo: 'palabra', palabras: [] }), j(nodos));
-  res.json({ id });
-});
-
-api.put('/flujos/:id', requireAuth, requireStore, requireOwner, (req, res) => {
-  const f = db.prepare('SELECT id FROM flows WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as { id: string } | undefined;
-  if (!f) return res.status(404).json({ error: 'Flujo no encontrado.' });
-  const { nombre, activo, disparador, nodos } = req.body || {};
-  if (nombre !== undefined) db.prepare('UPDATE flows SET nombre = ? WHERE id = ?').run(String(nombre).trim() || 'Flujo sin nombre', f.id);
-  if (activo !== undefined) db.prepare('UPDATE flows SET activo = ? WHERE id = ?').run(activo ? 1 : 0, f.id);
-  if (disparador !== undefined) db.prepare('UPDATE flows SET disparador = ? WHERE id = ?').run(j(disparador), f.id);
-  if (Array.isArray(nodos)) db.prepare('UPDATE flows SET nodos = ? WHERE id = ?').run(j(nodos), f.id);
-  db.prepare("UPDATE flows SET updated_at = datetime('now') WHERE id = ?").run(f.id);
-  res.json({ ok: true });
-});
-
-api.delete('/flujos/:id', requireAuth, requireStore, requireOwner, (req, res) => {
-  db.prepare('DELETE FROM flows WHERE id = ? AND store_id = ?').run(req.params.id, req.user!.storeId);
-  res.json({ ok: true });
-});
-
-// Enviar un flujo manualmente a un lead (desde el Inbox).
-api.post('/flujos/:id/enviar', requireAuth, requireStore, async (req, res) => {
-  const leadId = String(req.body?.leadId || '');
-  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(leadId, req.user!.storeId) as { id: string } | undefined;
-  if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
-  const { lanzarFlujoManual } = await import('./flujoEngine.js');
-  const r = await lanzarFlujoManual(req.user!.storeId!, leadId, req.params.id);
-  if (r.error) return res.status(400).json({ error: r.error });
-  res.json({ ok: true });
-});
-
 // ── Marketing con IA (copys y generación de imágenes) ────────────────
 api.post('/marketing/copy', requireAuth, requireStore, async (req, res) => {
   const { idea, plataforma, tono, objetivo, cantidad, imagen } = req.body || {};
@@ -998,10 +948,9 @@ api.post('/webchat/:storeId/messages', async (req, res) => {
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'cliente', texto);
   void (async () => {
     try {
-      const { procesarFlujo } = await import('./flujoEngine.js');
-      const manejado = await procesarFlujo(store.id, lead!.id);
-      if (!manejado) { const { maybeAutoReply } = await import('./ai.js'); await maybeAutoReply(store.id, lead!.id); }
-    } catch (e) { console.error('[webchat] error flujo/IA', e); }
+      const { maybeAutoReply } = await import('./ai.js');
+      await maybeAutoReply(store.id, lead!.id);
+    } catch (e) { console.error('[webchat] error IA', e); }
   })();
   res.json({ ok: true });
 });

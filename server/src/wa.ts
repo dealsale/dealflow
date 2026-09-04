@@ -45,14 +45,12 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
   db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)').run(
     uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null,
   );
-  // Primero un flujo del chatbot (si algún flujo lo maneja, toma el control y la
-  // IA no responde). Si ningún flujo lo maneja, responde el asistente de IA.
+  // Responde el asistente de IA.
   void (async () => {
     try {
-      const { procesarFlujo } = await import('./flujoEngine.js');
-      const manejado = await procesarFlujo(storeId, leadId);
-      if (!manejado) { const a = await import('./ai.js'); await a.maybeAutoReply(storeId, leadId); }
-    } catch (e) { console.error('[flujo/ia] error procesando entrante', e); }
+      const a = await import('./ai.js');
+      await a.maybeAutoReply(storeId, leadId);
+    } catch (e) { console.error('[ia] error procesando entrante', e); }
   })();
   return leadId;
 }

@@ -57,12 +57,6 @@ import {
   apiMisTiendas,
   apiCambiarTienda,
   apiCrearTienda,
-  apiFlujos,
-  apiEnviarFlujo,
-  apiFlujo,
-  apiCrearFlujo,
-  apiGuardarFlujo,
-  apiEliminarFlujo,
   apiToggleStore,
   apiUpdateStore,
   apiDeleteStore,
@@ -96,7 +90,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem, MiTienda, FlujoResumen, Flujo, MetaSignupCfg, EstadoNumero } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem, MiTienda, MetaSignupCfg, EstadoNumero } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -435,10 +429,9 @@ export function useDealFlowState() {
   const [crmIntervening, setCrmIntervening] = useState<boolean>(false);
   const [crmDraft, setCrmDraft] = useState<string>('');
   const [copied, setCopied] = useState<'webhook' | 'code' | 'guia' | null>(null);
-  const [flowMsg, setFlowMsg] = useState<string | null>(null);
+  const [avisoLead, setAvisoLead] = useState<string | null>(null);
   const [ruleDraft, setRuleDraft] = useState<string>('');
   const [assistantSaved, setAssistantSaved] = useState<boolean>(false);
-  const [flowSel, setFlowSel] = useState<string>('Recuperar carrito');
   const [planNombre, setPlanNombre] = useState<string>('');
   const [planPrecio, setPlanPrecio] = useState<string>('');
   const [planDesc, setPlanDesc] = useState<string>('');
@@ -505,7 +498,6 @@ export function useDealFlowState() {
   const [suscripcion, setSuscripcion] = useState<Suscripcion | null>(null);
   const [suscMsg, setSuscMsg] = useState('');
   const [misTiendas, setMisTiendas] = useState<MiTienda[]>([]);
-  const [flujos, setFlujos] = useState<FlujoResumen[]>([]);
   const [planes, setPlanes] = useState<PlanPublico[]>([]);
   const [cupones, setCupones] = useState<Cupon[]>([]);
   const [cuponMsg, setCuponMsg] = useState('');
@@ -766,7 +758,7 @@ export function useDealFlowState() {
   const leadsSource = apiMode && apiLeadsState ? apiLeadsState : leads;
 
   const leadsDecorated = useMemo(
-    () => leadsSource.map((l, i) => decorateLead(l, i, selectedLeadId, (id) => { setSelectedLeadId(id); setFlowMsg(null); })),
+    () => leadsSource.map((l, i) => decorateLead(l, i, selectedLeadId, (id) => { setSelectedLeadId(id); setAvisoLead(null); })),
     [leadsSource, selectedLeadId],
   );
   const lead = leadsDecorated.find((l) => l.id === selectedLeadId) || null;
@@ -1641,20 +1633,6 @@ export function useDealFlowState() {
   // Valida un cupón y devuelve el descuento para previsualizar el precio en el muro de pago.
   function validarCupon(codigo: string) { return apiValidarCupon(codigo); }
 
-  // ── Flujos (constructor de chatbot) ──
-  async function reloadFlujos() { const { data } = await apiFlujos(); if (data) setFlujos(data.flujos); }
-  function crearFlujo(nombre: string) { return apiCrearFlujo(nombre).then((r) => { void reloadFlujos(); return r.data?.id; }); }
-  function eliminarFlujo(id: string) { void apiEliminarFlujo(id).then(() => void reloadFlujos()); }
-  function cargarFlujo(id: string) { return apiFlujo(id).then((r) => r.data?.flujo); }
-  function guardarFlujo(id: string, patch: Partial<Flujo>) { return apiGuardarFlujo(id, patch).then((r) => { void reloadFlujos(); return !r.error; }); }
-  /** Lanza un flujo a un lead desde el Inbox y refresca el chat. */
-  function lanzarFlujo(flujoId: string, leadId: string) {
-    return apiEnviarFlujo(flujoId, leadId).then((r) => {
-      if (!r.error) void apiLeads().then(({ data }) => { if (data) setApiLeadsState(mapApiLeads(data.leads)); });
-      return r.error || '';
-    });
-  }
-
   // ── Multi-tienda por cuenta ──
   async function reloadMisTiendas() { const { data } = await apiMisTiendas(); if (data) setMisTiendas(data.tiendas); }
   function cambiarTienda(id: string) {
@@ -1970,11 +1948,7 @@ export function useDealFlowState() {
 
   function assignLead(v: string) {
     setLeads((st) => st.map((l) => (l.id === selectedLeadId ? { ...l, asignado: v } : l)));
-    setFlowMsg('Chat asignado a ' + v + ' ✓');
-  }
-
-  function sendFlow() {
-    setFlowMsg((lead ? lead.nombre : 'El lead') + ' entró al flujo «' + flowSel + '» ✓');
+    setAvisoLead('Chat asignado a ' + v + ' ✓');
   }
 
   function addRule() {
@@ -2319,11 +2293,8 @@ export function useDealFlowState() {
     lead,
     leadAsignado: lead ? lead.asignado : 'Asistente (bot)',
     assignLead,
-    flowSel,
-    setFlowSel,
-    sendFlow,
-    flowMsg: flowMsg || '',
-    hasFlowMsg: !!flowMsg,
+    avisoLead: avisoLead || '',
+    hasAvisoLead: !!avisoLead,
 
     crmChats,
     hasCrmChat: !!crmChat,
@@ -2584,13 +2555,6 @@ export function useDealFlowState() {
     assistantSaved,
 
     integrations: integrationsDecorated,
-    flujos,
-    reloadFlujos,
-    crearFlujo,
-    eliminarFlujo,
-    cargarFlujo,
-    guardarFlujo,
-    lanzarFlujo,
     suscripcion,
     suscMsg,
     misTiendas,

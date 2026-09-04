@@ -81,7 +81,7 @@ export const INTEGRATIONS: Integration[] = [
 
 export const PLANS: Plan[] = [
   { id: 1, nombre: 'Inicio', precio: 49900, cuentas: 52, features: ['1 número de WhatsApp', 'Hasta 100 pedidos al mes', 'Asistente con catálogo y promos'] },
-  { id: 2, nombre: 'Crecimiento', precio: 99900, cuentas: 48, features: ['1 número de WhatsApp', 'Pedidos ilimitados', 'Flujos y asignación de chats', 'Integración con Dropi'] },
+  { id: 2, nombre: 'Crecimiento', precio: 99900, cuentas: 48, features: ['1 número de WhatsApp', 'Pedidos ilimitados', 'Asignación de chats', 'Integración con Dropi'] },
   { id: 3, nombre: 'Pro', precio: 199900, cuentas: 18, features: ['3 números de WhatsApp', 'Todo lo de Crecimiento', 'Varios usuarios por cuenta', 'Acceso por API'] },
 ];
 

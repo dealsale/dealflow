@@ -14,7 +14,7 @@ export function Leads({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="Leads">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Leads</h1>
-      <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 14px' }}>Conversaciones abiertas. Asígnalas o envíalas a un flujo.</p>
+      <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 14px' }}>Conversaciones abiertas. Asígnalas a un agente o al asistente.</p>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
         <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por nombre o mensaje…" width={240} />
@@ -87,29 +87,7 @@ export function Leads({ df }: { df: DealFlowState }) {
                   <option value="Andrés">Andrés</option>
                 </select>
               </div>
-              <div style={{ flex: 1, minWidth: 240 }}>
-                <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Enviar a un flujo</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <select
-                    value={df.flowSel}
-                    onChange={(e) => df.setFlowSel(e.target.value)}
-                    style={{ flex: 1, border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 10px', fontFamily: 'inherit', fontSize: 13, color: '#1E293B', background: '#fff', cursor: 'pointer' }}
-                  >
-                    <option value="Recuperar carrito">Recuperar carrito</option>
-                    <option value="Confirmar pago">Confirmar pago</option>
-                    <option value="Seguimiento de envío">Seguimiento de envío</option>
-                    <option value="Postventa">Postventa</option>
-                  </select>
-                  <button
-                    onClick={df.sendFlow}
-                    className="df-btn-primary"
-                    style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
-                  >
-                    Enviar
-                  </button>
-                </div>
-              </div>
-              {df.hasFlowMsg && <div style={{ width: '100%', color: '#059669', fontSize: 13, fontWeight: 600 }}>{df.flowMsg}</div>}
+              {df.hasAvisoLead && <div style={{ width: '100%', color: '#059669', fontSize: 13, fontWeight: 600 }}>{df.avisoLead}</div>}
             </div>
           </div>
         )}
