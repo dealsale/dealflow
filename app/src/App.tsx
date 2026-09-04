@@ -162,8 +162,16 @@ function Paywall({ df }: { df: DealFlowState }) {
   if (vencida) {
     const rentaBase = s?.mensual || 0;
     const renta = conDesc(rentaBase);
+    // Tienda extra recién creada (nunca pagó): no "venció", solo falta activarla.
+    const nueva = !!s?.primeraVez;
     return (
-      <PaywallShell df={df} titulo="Tu renta mensual venció" sub={`Renueva tu plan ${s?.plan} para volver a entrar a tu tienda.`}>
+      <PaywallShell
+        df={df}
+        titulo={nueva ? 'Activa tu nueva tienda' : 'Tu renta mensual venció'}
+        sub={nueva
+          ? `Esta tienda extra usa el plan ${s?.plan}. Paga la primera renta mensual y queda lista al instante (sin instalación).`
+          : `Renueva tu plan ${s?.plan} para volver a entrar a tu tienda.`}
+      >
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 13, color: '#64748B', marginBottom: 6 }}>Renta mensual · plan {s?.plan}</div>
           <div style={{ fontSize: 34, fontWeight: 800, color: '#0F172A', marginBottom: 16 }}>
@@ -171,7 +179,11 @@ function Paywall({ df }: { df: DealFlowState }) {
             {money(renta)}<span style={{ fontSize: 15, fontWeight: 600, color: '#64748B' }}> /mes</span>
           </div>
           <button onClick={() => df.pagarSuscripcion(undefined, codigoCupon)} disabled={cargando} className="df-pw-btn" style={pwBtn}>
-            {cargando ? 'Abriendo el pago…' : renta <= 0 ? 'Renovar gratis con el cupón →' : `Pagar renta ${money(renta)} →`}
+            {cargando
+              ? 'Abriendo el pago…'
+              : renta <= 0
+                ? (nueva ? 'Activar gratis con el cupón →' : 'Renovar gratis con el cupón →')
+                : (nueva ? `Activar por ${money(renta)} →` : `Pagar renta ${money(renta)} →`)}
           </button>
         </div>
         {cuponBox}

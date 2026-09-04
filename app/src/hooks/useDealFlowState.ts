@@ -58,6 +58,7 @@ import {
   apiCambiarTienda,
   apiCrearTienda,
   apiFlujos,
+  apiEnviarFlujo,
   apiFlujo,
   apiCrearFlujo,
   apiGuardarFlujo,
@@ -1646,6 +1647,13 @@ export function useDealFlowState() {
   function eliminarFlujo(id: string) { void apiEliminarFlujo(id).then(() => void reloadFlujos()); }
   function cargarFlujo(id: string) { return apiFlujo(id).then((r) => r.data?.flujo); }
   function guardarFlujo(id: string, patch: Partial<Flujo>) { return apiGuardarFlujo(id, patch).then((r) => { void reloadFlujos(); return !r.error; }); }
+  /** Lanza un flujo a un lead desde el Inbox y refresca el chat. */
+  function lanzarFlujo(flujoId: string, leadId: string) {
+    return apiEnviarFlujo(flujoId, leadId).then((r) => {
+      if (!r.error) void apiLeads().then(({ data }) => { if (data) setApiLeadsState(mapApiLeads(data.leads)); });
+      return r.error || '';
+    });
+  }
 
   // ── Multi-tienda por cuenta ──
   async function reloadMisTiendas() { const { data } = await apiMisTiendas(); if (data) setMisTiendas(data.tiendas); }
@@ -2582,6 +2590,7 @@ export function useDealFlowState() {
     eliminarFlujo,
     cargarFlujo,
     guardarFlujo,
+    lanzarFlujo,
     suscripcion,
     suscMsg,
     misTiendas,

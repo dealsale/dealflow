@@ -120,6 +120,7 @@ export interface Suscripcion {
   vence: string | null;
   diasRestantes: number | null;
   bloqueado: boolean; // true = la tienda no puede usar la plataforma todavía
+  primeraVez: boolean; // true = nunca tuvo pago aprobado (tienda nueva, no "vencida" real)
 }
 export interface PlanPublico {
   nombre: string;
@@ -325,6 +326,8 @@ export const apiFlujo = (id: string) => req<{ flujo: Flujo }>(`/api/flujos/${id}
 export const apiCrearFlujo = (nombre: string) => req<{ id: string }>('/api/flujos', 'POST', { nombre });
 export const apiGuardarFlujo = (id: string, patch: Partial<Flujo>) => req<{ ok: true }>(`/api/flujos/${id}`, 'PUT', patch);
 export const apiEliminarFlujo = (id: string) => req<{ ok: true }>(`/api/flujos/${id}`, 'DELETE');
+/** Lanza un flujo manualmente a un lead desde el Inbox. */
+export const apiEnviarFlujo = (id: string, leadId: string) => req<{ ok: true }>(`/api/flujos/${id}/enviar`, 'POST', { leadId });
 
 // ── Multi-tienda por cuenta ──
 export interface MiTienda { id: string; nombre: string; activa: boolean; estado: string; bloqueada: boolean }

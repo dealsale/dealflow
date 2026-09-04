@@ -9,10 +9,26 @@ export function CRM({ df }: { df: DealFlowState }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [filtroEtiqueta, setFiltroEtiqueta] = useState('');
   const [busca, setBusca] = useState('');
+  const [flujoMsg, setFlujoMsg] = useState('');
+  const flujosActivos = df.flujos.filter((f) => f.activo && f.nodos > 0);
+  // Cargamos los flujos una vez para poder lanzarlos desde el chat.
+  const cargaFlujos = useRef(df.reloadFlujos);
+  cargaFlujos.current = df.reloadFlujos;
+  useEffect(() => { void cargaFlujos.current(); }, []);
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat?.tel, chat?.mensajesDecorated.length]);
+  // Al cambiar de chat, limpiamos el aviso del flujo.
+  useEffect(() => { setFlujoMsg(''); }, [chat?.id]);
+  const lanzarFlujo = (flujoId: string) => {
+    if (!flujoId || !chat) return;
+    const nombre = flujosActivos.find((f) => f.id === flujoId)?.nombre || 'el flujo';
+    setFlujoMsg('Lanzando…');
+    void df.lanzarFlujo(flujoId, String(chat.id)).then((err) => {
+      setFlujoMsg(err ? err : `▶ Se lanzó «${nombre}» en este chat.`);
+    });
+  };
   const q = busca.trim().toLowerCase();
   const chatsFiltrados = df.crmChats.filter(
     (c) => (!filtroEtiqueta || c.etiqueta === filtroEtiqueta) && (!q || c.nombre.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)),
@@ -85,6 +101,19 @@ export function CRM({ df }: { df: DealFlowState }) {
                   <option key={et} value={et}>{et}</option>
                 ))}
               </select>
+              {flujosActivos.length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) => { lanzarFlujo(e.target.value); e.target.value = ''; }}
+                  title="Envía uno de tus chatbots a este cliente ahora mismo"
+                  style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: '#1E293B', background: '#fff', cursor: 'pointer' }}
+                >
+                  <option value="">▶ Lanzar flujo…</option>
+                  {flujosActivos.map((f) => (
+                    <option key={f.id} value={f.id}>{f.nombre}</option>
+                  ))}
+                </select>
+              )}
               <button
                 onClick={df.resetChat}
                 title="Borra el historial y devuelve el chat al asistente"
@@ -167,6 +196,11 @@ export function CRM({ df }: { df: DealFlowState }) {
               {df.crmSendWarn && (
                 <div style={{ color: '#B45309', fontSize: 12.5, marginTop: 8 }}>
                   Guardado en el CRM, pero no salió por WhatsApp: {df.crmSendWarn}
+                </div>
+              )}
+              {flujoMsg && (
+                <div style={{ color: flujoMsg.startsWith('▶') ? '#047857' : flujoMsg === 'Lanzando…' ? '#64748B' : '#B91C1C', fontSize: 12.5, marginTop: 8 }}>
+                  {flujoMsg}
                 </div>
               )}
             </div>

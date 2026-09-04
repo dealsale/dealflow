@@ -31,6 +31,8 @@ export interface EstadoSuscripcion {
   diasRestantes: number | null;
   /** true si la tienda NO puede usar la plataforma (falta pagar el inicial o venció la renta). */
   bloqueado: boolean;
+  /** true si la tienda nunca ha tenido un pago aprobado (es nueva, no "vencida" de verdad). */
+  primeraVez: boolean;
 }
 
 function planInfo(nombrePlan: string): { precio: number; mensual: number } {
@@ -63,7 +65,9 @@ export function estadoSuscripcion(storeId: string): EstadoSuscripcion | null {
     if (diasRestantes < 0) estado = 'vencida';
   }
   const bloqueado = !inicialPagado || estado === 'vencida';
-  return { plan: s.plan, precioInicial: precio, mensual, estado, inicialPagado, vence: s.plan_vence, diasRestantes, bloqueado };
+  const pagos = (db.prepare("SELECT COUNT(*) n FROM pagos WHERE store_id = ? AND estado = 'aprobado'").get(storeId) as { n: number }).n;
+  const primeraVez = pagos === 0;
+  return { plan: s.plan, precioInicial: precio, mensual, estado, inicialPagado, vence: s.plan_vence, diasRestantes, bloqueado, primeraVez };
 }
 
 /** Firma de integridad que exige el checkout de Wompi: SHA256(referencia+monto+moneda+secreto). */
@@ -279,8 +283,14 @@ export async function verificarTransaccion(storeId: string, txId: string): Promi
 
 /** Extiende manualmente la renta (admin), sin pasar por la pasarela. Marca la cuenta activa. */
 export function extenderManual(storeId: string, dias: number): void {
-  const s = db.prepare('SELECT plan_vence FROM stores WHERE id = ?').get(storeId) as { plan_vence: string | null } | undefined;
+  const s = db.prepare('SELECT plan, plan_vence FROM stores WHERE id = ?').get(storeId) as { plan: string; plan_vence: string | null } | undefined;
   const base = s?.plan_vence && new Date(s.plan_vence).getTime() > Date.now() ? new Date(s.plan_vence) : new Date();
   base.setDate(base.getDate() + dias);
-  db.prepare("UPDATE stores SET inicial_pagado = 1, plan_estado = 'activa', plan_vence = ? WHERE id = ?").run(base.toISOString().slice(0, 10), storeId);
+  // Si la tienda no tenía un plan real (nunca pagó el inicial), le asignamos uno
+  // para que la renta no aparezca en $0. Preferimos el plan más económico.
+  const tienePlan = !!s?.plan && !!db.prepare('SELECT 1 FROM plans WHERE nombre = ?').get(s.plan);
+  const plan = tienePlan
+    ? s!.plan
+    : (db.prepare('SELECT nombre FROM plans ORDER BY precio LIMIT 1').get() as { nombre: string } | undefined)?.nombre || s?.plan || '';
+  db.prepare("UPDATE stores SET plan = ?, inicial_pagado = 1, plan_estado = 'activa', plan_vence = ? WHERE id = ?").run(plan, base.toISOString().slice(0, 10), storeId);
 }
