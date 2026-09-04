@@ -35,8 +35,20 @@ app.use('/webhooks', webhooks);
 app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
+    // Marca de build para saber qué versión está en vivo (sube al desplegar).
+    build: '2026-09-04-meta-signup',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
+    // Diagnóstico de la conexión en un clic: SOLO dice si las variables están
+    // puestas (true/false), nunca su valor. Las tres deben estar en true para
+    // que aparezca el botón "Conexión automática".
+    metaSignup: {
+      appId: !!process.env.META_APP_ID,
+      appSecret: !!process.env.META_APP_SECRET,
+      configId: !!process.env.META_CONFIG_ID,
+      listo: !!(process.env.META_APP_ID && process.env.META_APP_SECRET && process.env.META_CONFIG_ID),
+    },
+    verifyToken: !!process.env.WHATSAPP_VERIFY_TOKEN,
   }),
 );
 
