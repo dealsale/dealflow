@@ -264,17 +264,36 @@ db.exec(`CREATE TABLE IF NOT EXISTS creditos_mov (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_credmov_store ON creditos_mov(store_id)');
 
-// Historial del Marketing IA: guarda cada copy/imagen generado para reusar.
-db.exec(`CREATE TABLE IF NOT EXISTS marketing_items (
+// Campañas del Marketing IA: se arman en 3 pasos (producto → creativos → textos)
+// y se pueden publicar en el Administrador de anuncios del cliente.
+db.exec(`CREATE TABLE IF NOT EXISTS campanas (
   id TEXT PRIMARY KEY,
   store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
-  tipo TEXT NOT NULL,              -- copy | imagen
-  contenido TEXT NOT NULL DEFAULT '{}',  -- JSON: copy {titulo,descripcion,texto,hashtags} | imagen {url}
-  meta TEXT NOT NULL DEFAULT '{}',       -- JSON: formato, plataforma, prompt, tamano…
-  favorito INTEGER NOT NULL DEFAULT 0,
+  nombre TEXT NOT NULL,
+  estado TEXT NOT NULL DEFAULT 'borrador',   -- borrador | lista | publicada
+  paso INTEGER NOT NULL DEFAULT 1,           -- hasta qué paso llegó (1..4)
+  objetivo TEXT NOT NULL DEFAULT 'mensajes', -- mensajes | ventas | trafico | reconocimiento
+  brief TEXT,                                -- JSON: lo que la IA entendió del producto
+  creativos TEXT NOT NULL DEFAULT '[]',      -- JSON: urls de las imágenes
+  copys TEXT,                                -- JSON: {textos,titulos,descripciones}
+  publicacion TEXT,                          -- JSON: ids de Meta cuando se publica
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_campanas_store ON campanas(store_id, updated_at)');
+
+// Conexión al Administrador de anuncios de Meta (una cuenta publicitaria por tienda).
+db.exec(`CREATE TABLE IF NOT EXISTS ads_cuentas (
+  store_id TEXT PRIMARY KEY REFERENCES stores(id) ON DELETE CASCADE,
+  ad_account_id TEXT NOT NULL DEFAULT '',
+  ad_account_nombre TEXT NOT NULL DEFAULT '',
+  page_id TEXT NOT NULL DEFAULT '',
+  page_nombre TEXT NOT NULL DEFAULT '',
+  access_token TEXT NOT NULL DEFAULT '',
+  moneda TEXT NOT NULL DEFAULT '',
+  conectada INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
-db.exec('CREATE INDEX IF NOT EXISTS idx_mkitems_store ON marketing_items(store_id, created_at)');
 
 // Catálogo: producto físico o servicio. Y de qué plantilla vino (para desinstalar).
 addColumn('products', "tipo TEXT NOT NULL DEFAULT 'producto'"); // producto | servicio

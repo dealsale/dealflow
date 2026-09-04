@@ -314,28 +314,48 @@ export const apiMisTiendas = () => req<{ tiendas: MiTienda[] }>('/api/mis-tienda
 export const apiCambiarTienda = (id: string) => req<{ ok: true }>(`/api/cambiar-tienda/${id}`, 'POST');
 export const apiCrearTienda = (nombre: string) => req<{ ok: true; storeId: string }>('/api/crear-tienda', 'POST', { nombre });
 
-export interface CopyAnuncio {
-  titulo: string;
-  descripcion: string;
-  texto: string;
+// ── Campañas del Marketing IA ──
+export interface Brief {
+  producto: string; descripcion: string; precio: string; publico: string;
+  dolores: string[]; beneficios: string[]; angulos: string[];
+  propuesta: string; ideasCreativo: string[];
 }
-export const apiMarketingCopy = (b: { idea: string; plataforma: string; tono: string; objetivo: string; cantidad: number; imagen?: string; formato?: string }) =>
-  req<{ copys: CopyAnuncio[]; creditos?: number; error?: string; sinCreditos?: boolean }>('/api/marketing/copy', 'POST', b);
-export const apiMarketingImagen = (prompt: string, cantidad: number, tamano?: string) =>
-  req<{ urls?: string[]; creditos?: number; error?: string; sinConfigurar?: boolean; sinCreditos?: boolean }>('/api/marketing/imagen', 'POST', { prompt, cantidad, tamano });
+export interface CopysAnuncio { textos: string[]; titulos: string[]; descripciones: string[] }
+export interface Campana {
+  id: string; nombre: string; estado: string; paso: number; objetivo: string;
+  brief: Brief | null; creativos: string[]; copys: CopysAnuncio | null;
+  publicacion: Record<string, unknown> | null; fecha: string;
+}
+export interface CuentaAds {
+  conectada: boolean; adAccountId: string; adAccountNombre: string;
+  pageId: string; pageNombre: string; moneda: string;
+}
+export interface OpcionesAds {
+  cuentas: { id: string; nombre: string; moneda: string }[];
+  paginas: { id: string; nombre: string }[];
+}
+type ConCreditos<T> = T & { creditos?: number; error?: string; sinCreditos?: boolean };
 
-// ── Historial del Marketing IA ──
-export interface MarketingItem {
-  id: string;
-  tipo: 'copy' | 'imagen';
-  favorito: boolean;
-  fecha: string;
-  contenido: { titulo?: string; descripcion?: string; texto?: string; hashtags?: string; url?: string };
-  meta: { formato?: string; plataforma?: string; idea?: string; tamano?: string; prompt?: string };
-}
-export const apiHistorialMarketing = () => req<{ items: MarketingItem[] }>('/api/marketing/historial', 'GET');
-export const apiFavoritoMarketing = (id: string, favorito: boolean) => req<{ ok: true }>(`/api/marketing/historial/${id}`, 'PATCH', { favorito });
-export const apiBorrarMarketing = (id: string) => req<{ ok: true }>(`/api/marketing/historial/${id}`, 'DELETE');
+export const apiCampanas = () => req<{ campanas: Campana[]; ads: CuentaAds }>('/api/campanas', 'GET');
+export const apiCampana = (id: string) => req<{ campana: Campana }>(`/api/campanas/${id}`, 'GET');
+export const apiCrearCampana = (nombre: string, objetivo: string) => req<{ id: string }>('/api/campanas', 'POST', { nombre, objetivo });
+export const apiGuardarCampana = (id: string, patch: { nombre?: string; brief?: Brief; creativos?: string[]; copys?: CopysAnuncio }) =>
+  req<{ ok: true }>(`/api/campanas/${id}`, 'PUT', patch);
+export const apiBorrarCampana = (id: string) => req<{ ok: true }>(`/api/campanas/${id}`, 'DELETE');
+// Los tres pasos
+export const apiCampanaProducto = (id: string, b: { idea: string; precio?: string; publico?: string; imagen?: string }) =>
+  req<ConCreditos<{ brief: Brief }>>(`/api/campanas/${id}/producto`, 'POST', b);
+export const apiCampanaCreativos = (id: string, b: { instruccion?: string; cantidad?: number; tamano?: string }) =>
+  req<ConCreditos<{ creativos: string[] }>>(`/api/campanas/${id}/creativos`, 'POST', b);
+export const apiCampanaTextos = (id: string, b: { tono?: string; cantidad?: number }) =>
+  req<ConCreditos<{ copys: CopysAnuncio }>>(`/api/campanas/${id}/textos`, 'POST', b);
+// Administrador de anuncios del cliente
+export const apiAdsConectar = (code: string) => req<{ opciones: OpcionesAds }>('/api/ads/conectar', 'POST', { code });
+export const apiAdsSeleccionar = (b: { adAccountId: string; adAccountNombre: string; moneda: string; pageId: string; pageNombre: string }) =>
+  req<{ ads: CuentaAds }>('/api/ads/seleccionar', 'POST', b);
+export const apiAdsDesconectar = () => req<{ ads: CuentaAds }>('/api/ads', 'DELETE');
+export const apiPublicarCampana = (id: string, b: { presupuesto: number; textoIdx?: number; tituloIdx?: number; descripcionIdx?: number; creativoIdx?: number }) =>
+  req<{ ok: true; ids: Record<string, string> }>(`/api/campanas/${id}/publicar`, 'POST', b);
 
 // ── Créditos del Marketing IA ──
 export interface PaqueteCreditos { id: string; nombre: string; creditos: number; precio: number }

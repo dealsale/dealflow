@@ -413,57 +413,121 @@ api.post('/plantillas/:id/desinstalar', requireAuth, requireStore, requireOwner,
   res.json({ ok: true, borrados: r.borrados });
 });
 
-// ── Marketing con IA (copys y generación de imágenes) ────────────────
-api.post('/marketing/copy', requireAuth, requireStore, async (req, res) => {
-  const { idea, plataforma, tono, objetivo, cantidad, imagen } = req.body || {};
-  if (!String(idea || '').trim() && !String(imagen || '').startsWith('data:image')) {
-    return res.status(400).json({ error: 'Escribe de qué es el anuncio o sube una imagen del producto.' });
+// ── Campañas con IA (producto → creativos → textos → publicar) ───────
+api.get('/campanas', requireAuth, requireStore, async (req, res) => {
+  const { listar } = await import('./campanas.js');
+  const { estadoCuenta } = await import('./metaAds.js');
+  res.json({ campanas: listar(req.user!.storeId!), ads: estadoCuenta(req.user!.storeId!) });
+});
+
+api.get('/campanas/:id', requireAuth, requireStore, async (req, res) => {
+  const { obtener } = await import('./campanas.js');
+  const c = obtener(req.user!.storeId!, req.params.id);
+  if (!c) return res.status(404).json({ error: 'Campaña no encontrada.' });
+  res.json({ campana: c });
+});
+
+api.post('/campanas', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { crear } = await import('./campanas.js');
+  res.json({ id: crear(req.user!.storeId!, String(req.body?.nombre || ''), String(req.body?.objetivo || 'mensajes')) });
+});
+
+api.put('/campanas/:id', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { renombrar, guardarPartes } = await import('./campanas.js');
+  const sid = req.user!.storeId!;
+  if (req.body?.nombre !== undefined) renombrar(sid, req.params.id, String(req.body.nombre));
+  const { brief, creativos, copys } = req.body || {};
+  if (brief || creativos || copys) {
+    if (!guardarPartes(sid, req.params.id, { brief, creativos, copys })) return res.status(404).json({ error: 'Campaña no encontrada.' });
   }
+  res.json({ ok: true });
+});
+
+api.delete('/campanas/:id', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { borrar } = await import('./campanas.js');
+  borrar(req.user!.storeId!, req.params.id);
+  res.json({ ok: true });
+});
+
+// Paso 1: la IA estudia el producto y arma el brief.
+api.post('/campanas/:id/producto', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const { COSTO, saldo, cobrar } = await import('./creditos.js');
-  if (saldo(sid) < COSTO.texto) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos para generar textos. Recarga para continuar.`, sinCreditos: true });
-  const { generarCopys, guardarItem } = await import('./marketing.js');
-  const formato = String(req.body?.formato || 'anuncio');
-  const r = await generarCopys(sid, {
-    idea: String(idea || ''), plataforma: String(plataforma || ''), tono: String(tono || ''), objetivo: String(objetivo || ''),
-    cantidad: Number(cantidad) || 3, imagen: typeof imagen === 'string' ? imagen : undefined, formato,
+  if (saldo(sid) < COSTO.texto) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos. Recarga para continuar.`, sinCreditos: true });
+  const { analizarProducto } = await import('./campanas.js');
+  const { idea, precio, imagen, publico } = req.body || {};
+  const r = await analizarProducto(sid, req.params.id, {
+    idea: String(idea || ''), precio: String(precio || ''), publico: String(publico || ''),
+    imagen: typeof imagen === 'string' ? imagen : undefined,
   });
   if (r.error) return res.status(400).json({ error: r.error });
-  cobrar(sid, COSTO.texto, 'Generación de textos'); // solo se cobra si salió bien
-  for (const c of r.copys || []) guardarItem(sid, 'copy', c, { formato, plataforma: String(plataforma || ''), idea: String(idea || '') });
+  cobrar(sid, COSTO.texto, 'Estudio del producto'); // solo si salió bien
+  res.json({ brief: r.brief, creditos: saldo(sid) });
+});
+
+// Paso 2: creativos (imágenes) a partir del brief.
+api.post('/campanas/:id/creativos', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const n = Math.min(4, Math.max(1, Number(req.body?.cantidad) || 1));
+  const { COSTO, saldo, cobrar } = await import('./creditos.js');
+  const costo = COSTO.imagen * n;
+  if (saldo(sid) < costo) return res.status(402).json({ error: `Necesitas ${costo} créditos para ${n} creativo${n > 1 ? 's' : ''}. Recarga para continuar.`, sinCreditos: true });
+  const { crearCreativos } = await import('./campanas.js');
+  const r = await crearCreativos(sid, req.params.id, {
+    instruccion: String(req.body?.instruccion || ''), cantidad: n, tamano: String(req.body?.tamano || 'feed'),
+  });
+  if (r.error) return res.status(400).json({ error: r.error });
+  cobrar(sid, costo, `Creativos del anuncio (${n})`);
+  res.json({ creativos: r.creativos, creditos: saldo(sid) });
+});
+
+// Paso 3: textos principales, títulos y descripciones (estructura de Meta).
+api.post('/campanas/:id/textos', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const { COSTO, saldo, cobrar } = await import('./creditos.js');
+  if (saldo(sid) < COSTO.texto) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos. Recarga para continuar.`, sinCreditos: true });
+  const { crearTextos } = await import('./campanas.js');
+  const r = await crearTextos(sid, req.params.id, { tono: String(req.body?.tono || ''), cantidad: Number(req.body?.cantidad) || 4 });
+  if (r.error) return res.status(400).json({ error: r.error });
+  cobrar(sid, COSTO.texto, 'Textos del anuncio');
   res.json({ copys: r.copys, creditos: saldo(sid) });
 });
 
-api.post('/marketing/imagen', requireAuth, requireStore, async (req, res) => {
-  const { prompt, cantidad, tamano } = req.body || {};
-  const sid = req.user!.storeId!;
-  const n = Math.min(5, Math.max(1, Number(cantidad) || 1));
-  const { COSTO, saldo, cobrar } = await import('./creditos.js');
-  const costo = COSTO.imagen * n;
-  if (saldo(sid) < costo) return res.status(402).json({ error: `Necesitas ${costo} créditos para generar ${n} imagen${n > 1 ? 'es' : ''}. Recarga para continuar.`, sinCreditos: true });
-  const { generarImagen, guardarItem } = await import('./marketing.js');
-  const tam = String(tamano || 'feed');
-  const r = await generarImagen(sid, String(prompt || ''), n, tam);
-  if (r.error) return res.status(r.sinConfigurar ? 200 : 400).json({ error: r.error, sinConfigurar: r.sinConfigurar });
-  cobrar(sid, costo, `Generación de ${n} imagen${n > 1 ? 'es' : ''}`); // solo si salió bien
-  for (const url of r.urls || []) guardarItem(sid, 'imagen', { url }, { tamano: tam, prompt: String(prompt || '') });
-  res.json({ urls: r.urls, creditos: saldo(sid) });
+// ── Administrador de anuncios del cliente (Meta Marketing API) ────────
+api.post('/ads/conectar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { opcionesDeConexion } = await import('./metaAds.js');
+  const r = await opcionesDeConexion(req.user!.storeId!, String(req.body?.code || ''));
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ opciones: r.opciones });
 });
 
-// Historial del Marketing IA (guardar/reusar).
-api.get('/marketing/historial', requireAuth, requireStore, async (req, res) => {
-  const { listarHistorial } = await import('./marketing.js');
-  res.json({ items: listarHistorial(req.user!.storeId!) });
+api.post('/ads/seleccionar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { guardarSeleccion, estadoCuenta } = await import('./metaAds.js');
+  const b = req.body || {};
+  const r = guardarSeleccion(req.user!.storeId!, {
+    adAccountId: String(b.adAccountId || ''), adAccountNombre: String(b.adAccountNombre || ''), moneda: String(b.moneda || ''),
+    pageId: String(b.pageId || ''), pageNombre: String(b.pageNombre || ''),
+  });
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ ads: estadoCuenta(req.user!.storeId!) });
 });
-api.patch('/marketing/historial/:id', requireAuth, requireStore, async (req, res) => {
-  const { favoritoItem } = await import('./marketing.js');
-  favoritoItem(req.user!.storeId!, req.params.id, !!req.body?.favorito);
-  res.json({ ok: true });
+
+api.delete('/ads', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { desconectar, estadoCuenta } = await import('./metaAds.js');
+  desconectar(req.user!.storeId!);
+  res.json({ ads: estadoCuenta(req.user!.storeId!) });
 });
-api.delete('/marketing/historial/:id', requireAuth, requireStore, async (req, res) => {
-  const { borrarItem } = await import('./marketing.js');
-  borrarItem(req.user!.storeId!, req.params.id);
-  res.json({ ok: true });
+
+api.post('/campanas/:id/publicar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { publicar } = await import('./metaAds.js');
+  const b = req.body || {};
+  const r = await publicar(req.user!.storeId!, req.params.id, {
+    presupuesto: Number(b.presupuesto) || 0,
+    textoIdx: Number(b.textoIdx) || 0, tituloIdx: Number(b.tituloIdx) || 0,
+    descripcionIdx: Number(b.descripcionIdx) || 0, creativoIdx: Number(b.creativoIdx) || 0,
+  });
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, ids: r.ids });
 });
 
 // ── Créditos del Marketing IA (saldo, paquetes, recarga por Wompi) ────

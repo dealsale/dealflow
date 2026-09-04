@@ -42,6 +42,25 @@ function cargarSdk(appId: string): Promise<FbSdk> {
   return cargando;
 }
 
+/**
+ * Login normal con Facebook pidiendo permisos concretos (lo usa el
+ * Administrador de anuncios). Devuelve el código para que el servidor lo
+ * canjee por el token del negocio.
+ */
+export async function abrirLoginMeta(appId: string, permisos: string[]): Promise<string> {
+  const FB = await cargarSdk(appId);
+  return new Promise<string>((resolve, reject) => {
+    FB.login(
+      (r) => {
+        const code = r.authResponse?.code;
+        if (!code) return reject(new Error('No autorizaste la conexión con Facebook.'));
+        resolve(code);
+      },
+      { scope: permisos.join(','), response_type: 'code', override_default_response_type: true },
+    );
+  });
+}
+
 export interface DatosSignup { code: string; wabaId: string; phoneNumberId: string }
 
 export async function abrirSignupMeta(appId: string, configId: string): Promise<DatosSignup> {

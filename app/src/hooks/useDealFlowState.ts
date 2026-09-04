@@ -43,11 +43,18 @@ import {
   apiTeamList,
   apiTeamCreate,
   apiTeamDelete,
-  apiMarketingCopy,
-  apiMarketingImagen,
-  apiHistorialMarketing,
-  apiFavoritoMarketing,
-  apiBorrarMarketing,
+  apiCampanas,
+  apiCampana,
+  apiCrearCampana,
+  apiGuardarCampana,
+  apiBorrarCampana,
+  apiCampanaProducto,
+  apiCampanaCreativos,
+  apiCampanaTextos,
+  apiAdsConectar,
+  apiAdsSeleccionar,
+  apiAdsDesconectar,
+  apiPublicarCampana,
   apiCreditos,
   apiRecargarCreditos,
   apiDarCreditos,
@@ -90,7 +97,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, CopyAnuncio, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MarketingItem, MiTienda, MetaSignupCfg, EstadoNumero } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -509,26 +516,15 @@ export function useDealFlowState() {
   const [pwaDisponible, setPwaDisponible] = useState<boolean>(() => typeof window !== 'undefined' && !!(window as unknown as { dfPwaPrompt?: unknown }).dfPwaPrompt);
   const [waVerifyToken, setWaVerifyToken] = useState<string>('');
   const [team, setTeam] = useState<TeamMember[]>([]);
-  const [mkIdea, setMkIdea] = useState('');
-  const [mkPlataforma, setMkPlataforma] = useState('Instagram/Facebook');
-  const [mkTono, setMkTono] = useState('Cercano y vendedor');
-  const [mkObjetivo, setMkObjetivo] = useState('Que escriban por WhatsApp para comprar');
-  const [mkCopys, setMkCopys] = useState<CopyAnuncio[]>([]);
-  const [mkCantidad, setMkCantidad] = useState(3);
-  const [mkImagen, setMkImagen] = useState(''); // foto del producto (opcional) para el copywriter
+  // ── Campañas del Marketing IA ──
+  const [campanas, setCampanas] = useState<Campana[]>([]);
+  const [campana, setCampana] = useState<Campana | null>(null);
+  const [adsCuenta, setAdsCuenta] = useState<CuentaAds | null>(null);
+  const [adsOpciones, setAdsOpciones] = useState<OpcionesAds | null>(null);
   const [mkLoading, setMkLoading] = useState(false);
   const [mkError, setMkError] = useState('');
   const [mkSinCreditos, setMkSinCreditos] = useState(false);
-  const [mkImgPrompt, setMkImgPrompt] = useState('');
-  const [mkImgUrls, setMkImgUrls] = useState<string[]>([]);
-  const [mkImgCantidad, setMkImgCantidad] = useState(1);
-  const [mkImgLoading, setMkImgLoading] = useState(false);
-  const [mkImgError, setMkImgError] = useState('');
-  const [mkCopied, setMkCopied] = useState<number | null>(null);
-  const [mkFormato, setMkFormato] = useState('anuncio'); // anuncio | historia | organico | producto
-  const [mkTamano, setMkTamano] = useState('feed'); // feed | historia | horizontal
-  const [mkTab, setMkTab] = useState<'crear' | 'historial'>('crear');
-  const [mkHistorial, setMkHistorial] = useState<MarketingItem[]>([]);
+  const [mkCopied, setMkCopied] = useState<string | null>(null);
   const [plantillas, setPlantillas] = useState<Plantilla[]>([]);
   const [instalando, setInstalando] = useState<string | null>(null);
   const [plantillaMsg, setPlantillaMsg] = useState('');
@@ -1782,54 +1778,110 @@ export function useDealFlowState() {
     void apiDarCreditos(storeId, cantidad).then((r) => { if (!r.error) void reloadAdmin(); });
   }
 
-  async function reloadHistorialMk() { const { data } = await apiHistorialMarketing(); if (data) setMkHistorial(data.items); }
-  function favoritoMk(id: string, favorito: boolean) {
-    setMkHistorial((h) => h.map((it) => (it.id === id ? { ...it, favorito } : it)));
-    void apiFavoritoMarketing(id, favorito);
+  async function reloadCampanas() {
+    const { data } = await apiCampanas();
+    if (data) { setCampanas(data.campanas); setAdsCuenta(data.ads); }
   }
-  function borrarMk(id: string) {
-    setMkHistorial((h) => h.filter((it) => it.id !== id));
-    void apiBorrarMarketing(id);
+  async function abrirCampana(id: string) {
+    setMkError('');
+    const { data } = await apiCampana(id);
+    setCampana(data?.campana || null);
   }
-
-  function generarCopys() {
-    if (!mkIdea.trim() && !mkImagen) { setMkError('Escribe de qué es el anuncio o sube una imagen del producto.'); return; }
-    setMkLoading(true); setMkError(''); setMkCopys([]);
-    void apiMarketingCopy({ idea: mkIdea, plataforma: mkPlataforma, tono: mkTono, objetivo: mkObjetivo, cantidad: mkCantidad, imagen: mkImagen || undefined, formato: mkFormato }).then((r) => {
-      setMkLoading(false);
-      if (r.data?.sinCreditos || r.error) { setMkError(r.data?.error || r.error || 'No se pudo generar.'); if (r.data?.sinCreditos) setMkSinCreditos(true); return; }
-      setMkCopys(r.data?.copys || []);
-      if (typeof r.data?.creditos === 'number') setCreditos(r.data.creditos);
-      void reloadHistorialMk();
+  function cerrarCampana() { setCampana(null); setMkError(''); }
+  function crearCampana(nombre: string, objetivo: string) {
+    return apiCrearCampana(nombre, objetivo).then(async (r) => {
+      if (r.data?.id) { await reloadCampanas(); await abrirCampana(r.data.id); }
+      return r.data?.id;
     });
   }
-
-  // Sube (y comprime) la foto del producto para que el copywriter la analice.
-  function setMkImagenFile(file: File | null) {
-    if (!file) { setMkImagen(''); return; }
-    void comprimirImagen(file).then(setMkImagen);
+  function borrarCampana(id: string) {
+    void apiBorrarCampana(id).then(() => { setCampana((c) => (c?.id === id ? null : c)); void reloadCampanas(); });
+  }
+  function renombrarCampana(id: string, nombre: string) {
+    setCampana((c) => (c && c.id === id ? { ...c, nombre } : c));
+    void apiGuardarCampana(id, { nombre }).then(() => void reloadCampanas());
+  }
+  /** Guarda ediciones manuales del dueño sobre lo generado. */
+  function editarCampana(id: string, patch: { brief?: Brief; creativos?: string[]; copys?: CopysAnuncio }) {
+    setCampana((c) => (c && c.id === id ? { ...c, ...patch } : c));
+    void apiGuardarCampana(id, patch);
   }
 
-  function generarImagen() {
-    if (!mkImgPrompt.trim()) { setMkImgError('Describe la imagen que quieres.'); return; }
-    setMkImgLoading(true); setMkImgError(''); setMkImgUrls([]);
-    void apiMarketingImagen(mkImgPrompt, mkImgCantidad, mkTamano).then((r) => {
-      setMkImgLoading(false);
-      if (r.data?.urls?.length) {
-        setMkImgUrls(r.data.urls);
-        if (typeof r.data.creditos === 'number') setCreditos(r.data.creditos);
-        void reloadHistorialMk();
-        return;
-      }
+  // Manejo común de las tres llamadas de IA (créditos y errores).
+  function trasPaso<T extends { creditos?: number; error?: string; sinCreditos?: boolean }>(
+    r: { data?: T; error?: string },
+    aplicar: (d: T) => void,
+  ) {
+    setMkLoading(false);
+    if (r.error || !r.data || r.data.error) {
+      setMkError(r.data?.error || r.error || 'No se pudo generar. Intenta de nuevo.');
       if (r.data?.sinCreditos) setMkSinCreditos(true);
-      setMkImgError(r.data?.error || r.error || 'No se pudieron generar las imágenes.');
+      return;
+    }
+    aplicar(r.data);
+    if (typeof r.data.creditos === 'number') setCreditos(r.data.creditos);
+    void reloadCampanas();
+  }
+
+  function pasoProducto(id: string, b: { idea: string; precio?: string; publico?: string; imagen?: string }) {
+    setMkLoading(true); setMkError('');
+    void apiCampanaProducto(id, b).then((r) =>
+      trasPaso(r, (d) => setCampana((c) => (c ? { ...c, brief: d.brief, paso: Math.max(c.paso, 2) } : c))),
+    );
+  }
+  function pasoCreativos(id: string, b: { instruccion?: string; cantidad?: number; tamano?: string }) {
+    setMkLoading(true); setMkError('');
+    void apiCampanaCreativos(id, b).then((r) =>
+      trasPaso(r, (d) => setCampana((c) => (c ? { ...c, creativos: d.creativos, paso: Math.max(c.paso, 3) } : c))),
+    );
+  }
+  function pasoTextos(id: string, b: { tono?: string; cantidad?: number }) {
+    setMkLoading(true); setMkError('');
+    void apiCampanaTextos(id, b).then((r) =>
+      trasPaso(r, (d) => setCampana((c) => (c ? { ...c, copys: d.copys, paso: Math.max(c.paso, 4), estado: 'lista' } : c))),
+    );
+  }
+
+  // ── Administrador de anuncios del cliente ──
+  async function conectarAds() {
+    if (!waSignup?.disponible) { setMkError('La conexión con Meta no está configurada en el servidor.'); return; }
+    setMkError(''); setMkLoading(true);
+    try {
+      const { abrirLoginMeta } = await import('../lib/metaSignup');
+      const code = await abrirLoginMeta(waSignup.appId, ['ads_management', 'ads_read', 'business_management', 'pages_show_list']);
+      const r = await apiAdsConectar(code);
+      setMkLoading(false);
+      if (r.error || !r.data) { setMkError(r.error || 'No pudimos leer tus cuentas publicitarias.'); return; }
+      setAdsOpciones(r.data.opciones);
+    } catch (e) {
+      setMkLoading(false);
+      setMkError(e instanceof Error ? e.message : 'No pudimos conectar con Meta.');
+    }
+  }
+  function elegirCuentaAds(sel: { adAccountId: string; adAccountNombre: string; moneda: string; pageId: string; pageNombre: string }) {
+    void apiAdsSeleccionar(sel).then((r) => {
+      if (r.error || !r.data) { setMkError(r.error || 'No pudimos guardar la cuenta.'); return; }
+      setAdsCuenta(r.data.ads); setAdsOpciones(null);
+    });
+  }
+  function desconectarAds() {
+    void apiAdsDesconectar().then((r) => { if (r.data) setAdsCuenta(r.data.ads); });
+  }
+  function publicarCampana(id: string, b: { presupuesto: number; textoIdx?: number; tituloIdx?: number; descripcionIdx?: number; creativoIdx?: number }) {
+    setMkLoading(true); setMkError('');
+    return apiPublicarCampana(id, b).then((r) => {
+      setMkLoading(false);
+      if (r.error || !r.data) { setMkError(r.error || 'Meta no aceptó la publicación.'); return false; }
+      setCampana((c) => (c && c.id === id ? { ...c, estado: 'publicada' } : c));
+      void reloadCampanas();
+      return true;
     });
   }
 
-  function copiarCopy(i: number, texto: string) {
+  function copiarCopy(clave: string, texto: string) {
     try { navigator.clipboard?.writeText(texto); } catch { /* nada */ }
-    setMkCopied(i);
-    setTimeout(() => setMkCopied((c) => (c === i ? null : c)), 1600);
+    setMkCopied(clave);
+    setTimeout(() => setMkCopied((c) => (c === clave ? null : c)), 1600);
   }
 
   function reloadPlantillas() {
@@ -2377,27 +2429,17 @@ export function useDealFlowState() {
     addTeamMember,
 
     // ── Marketing IA ──
-    mkIdea, setMkIdea,
-    mkPlataforma, setMkPlataforma,
-    mkTono, setMkTono,
-    mkObjetivo, setMkObjetivo,
-    mkCopys, mkLoading, mkError, generarCopys,
-    mkCantidad, setMkCantidad,
-    mkImagen, setMkImagenFile,
+    campanas, campana, reloadCampanas, abrirCampana, cerrarCampana,
+    crearCampana, borrarCampana, renombrarCampana, editarCampana,
+    pasoProducto, pasoCreativos, pasoTextos,
+    mkLoading, mkError, setMkError,
     mkCopied, copiarCopy,
-    mkImgPrompt, setMkImgPrompt,
-    mkImgUrls, mkImgCantidad, setMkImgCantidad, mkImgLoading, mkImgError, generarImagen,
-    mkFormato, setMkFormato,
-    mkTamano, setMkTamano,
-    mkTab, setMkTab,
-    mkHistorial, reloadHistorialMk, favoritoMk, borrarMk,
-
-    // ── Créditos del Marketing IA ──
+    adsCuenta, adsOpciones, conectarAds, elegirCuentaAds, desconectarAds, publicarCampana,
+    mkSinCreditos,
     creditos,
     creditosMov,
     paquetesCreditos,
     costoCreditos,
-    mkSinCreditos,
     reloadCreditos,
     recargarCreditos,
     darCreditos,
