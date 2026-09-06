@@ -1537,8 +1537,8 @@ export function useDealFlowState() {
   const integrationsDecorated: DecoratedIntegration[] = useMemo(
     () =>
       integrations.map((i) => {
-        // Conectada = la tienda guardó sus credenciales; WhatsApp/Meta usan el estado real del número.
-        const conectado = i.id === 'wa' || i.id === 'meta' ? waConnected : !!integracionesCfg[i.id];
+        // Conectada = la tienda guardó sus credenciales; WhatsApp usa el estado del número y Meta Ads su cuenta publicitaria.
+        const conectado = i.id === 'wa' ? waConnected : i.especial === 'meta-ads' ? !!adsCuenta?.conectada : !!integracionesCfg[i.id];
         return {
           ...i,
           logoStyle: { width: '38px', height: '38px', borderRadius: '10px', background: i.logoBg, color: i.logoTxt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px' },
@@ -1548,12 +1548,12 @@ export function useDealFlowState() {
           btnStyle: conectado
             ? { background: '#fff', color: '#1E293B', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }
             : { background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: '13px', cursor: 'pointer' },
-          // WhatsApp/Meta se configuran en su propia sección; el resto abre su formulario en la tarjeta.
-          action: i.id === 'wa' || i.id === 'meta' ? () => go('whatsapp') : () => {},
+          // WhatsApp se configura en su propia sección; el resto abre su formulario en la tarjeta.
+          action: i.id === 'wa' ? () => go('whatsapp') : () => {},
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [integrations, integracionesCfg, waConnected],
+    [integrations, integracionesCfg, waConnected, adsCuenta],
   );
 
   const plansDecorated: DecoratedPlan[] = useMemo(

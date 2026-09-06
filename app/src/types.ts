@@ -159,6 +159,10 @@ export interface Integration {
   campos?: { key: string; label: string; placeholder?: string; secreto?: boolean }[];
   /** true si es un proveedor de IA que puede ser el agente predeterminado. */
   esIA?: boolean;
+  /** Grupo para agrupar las tarjetas en la sección. */
+  grupo?: 'ia' | 'canales' | 'envios' | 'publicidad';
+  /** true si se conecta por un flujo especial (popup de Facebook), no por formulario. */
+  especial?: 'meta-ads';
 }
 
 export interface Plan {

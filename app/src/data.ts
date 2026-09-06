@@ -66,17 +66,15 @@ export const LEADS: Lead[] = [
 ];
 
 export const INTEGRATIONS: Integration[] = [
-  { id: 'meta', nombre: 'Meta Business', logoText: 'M', logoBg: '#E7F0FF', logoTxt: '#0866FF', desc: 'Tu WhatsApp Business API y tus catálogos de Facebook e Instagram, desde Meta.', estado: 'disponible' },
-  { id: 'wa', nombre: 'WhatsApp Business', logoText: 'WA', logoBg: '#DCFCE7', logoTxt: '#15803D', desc: 'El canal donde tu asistente atiende y vende. Se configura en la sección WhatsApp.', estado: 'disponible' },
-  { id: 'deepseek', nombre: 'DeepSeek', logoText: 'DS', logoBg: '#EAEEFF', logoTxt: '#4D6BFE', desc: 'IA principal: escribe las respuestas de tu asistente (textos). Es la más económica. Pon tu API key y tu tienda paga solo lo que consume.', estado: 'disponible', esIA: true, campos: [{ key: 'apiKey', label: 'API Key de DeepSeek', placeholder: 'sk-…', secreto: true }] },
-  { id: 'openai', nombre: 'OpenAI', logoText: 'AI', logoBg: '#E6F6F0', logoTxt: '#0A8F6E', desc: 'Le da oído y vista a tu asistente: transcribe las notas de voz y entiende las imágenes que mandan tus clientes. Conéctala junto con DeepSeek.', estado: 'disponible', esIA: true, campos: [{ key: 'apiKey', label: 'API Key de OpenAI', placeholder: 'sk-…', secreto: true }] },
-  { id: 'grok', nombre: 'Grok (xAI)', logoText: 'G', logoBg: '#E8EAED', logoTxt: '#0F172A', desc: 'Motor de IA de xAI para respuestas y generación de contenido, con tu propia clave.', estado: 'disponible', esIA: true, campos: [{ key: 'apiKey', label: 'API Key de xAI', placeholder: 'xai-…', secreto: true }] },
-  { id: 'dropi', nombre: 'Dropi', logoText: 'Dr', logoBg: '#FEF3C7', logoTxt: '#B45309', desc: 'Envía tus pedidos a Dropi: genera la guía, asigna transportadora y sincroniza el estado del envío.', estado: 'disponible', campos: [{ key: 'token', label: 'Token de la API de Dropi', secreto: true }] },
-  { id: 'effi', nombre: 'Effi ERP', logoText: 'Ef', logoBg: '#EDE9FE', logoTxt: '#6D28D9', desc: 'Sincroniza inventario, pedidos y facturación con tu ERP Effi.', estado: 'disponible', campos: [{ key: 'url', label: 'URL de tu Effi', placeholder: 'https://mi-empresa.effi.co' }, { key: 'apiKey', label: 'API Key', secreto: true }] },
-  { id: 'mastershop', nombre: 'Master Shop', logoText: 'MS', logoBg: '#FEF2E7', logoTxt: '#C2410C', desc: 'Conecta tu tienda Master Shop para sincronizar catálogo y pedidos.', estado: 'disponible', campos: [{ key: 'apiKey', label: 'API Key de Master Shop', secreto: true }] },
-  { id: 'shopify', nombre: 'Shopify', logoText: 'Sh', logoBg: '#EAF3E0', logoTxt: '#5E8E3E', desc: 'Sincroniza tu catálogo y tus pedidos con tu tienda Shopify.', estado: 'disponible', campos: [{ key: 'dominio', label: 'Dominio de la tienda', placeholder: 'mitienda.myshopify.com' }, { key: 'accessToken', label: 'Access Token', secreto: true }] },
-  { id: 'ig', nombre: 'Instagram DM', logoText: 'IG', logoBg: '#FCE7F3', logoTxt: '#BE185D', desc: 'Guarda tu token para que el asistente también responda los directos de Instagram.', estado: 'disponible', campos: [{ key: 'accessToken', label: 'Access Token de Instagram', secreto: true }] },
-  { id: 'mp', nombre: 'Mercado Pago', logoText: 'MP', logoBg: '#E0F2FE', logoTxt: '#0284C7', desc: 'Cobra con link de pago y confirma pedidos automáticamente al recibir el pago.', estado: 'disponible', campos: [{ key: 'publicKey', label: 'Public Key' }, { key: 'accessToken', label: 'Access Token', secreto: true }] },
+  // Inteligencia artificial del asistente
+  { id: 'deepseek', nombre: 'DeepSeek', logoText: 'DS', logoBg: '#EAEEFF', logoTxt: '#4D6BFE', grupo: 'ia', desc: 'IA principal: escribe las respuestas de tu asistente (textos). Es la más económica. Pon tu API key y tu tienda paga solo lo que consume.', estado: 'disponible', esIA: true, campos: [{ key: 'apiKey', label: 'API Key de DeepSeek', placeholder: 'sk-…', secreto: true }] },
+  { id: 'openai', nombre: 'OpenAI', logoText: 'AI', logoBg: '#E6F6F0', logoTxt: '#0A8F6E', grupo: 'ia', desc: 'Le da oído y vista a tu asistente: transcribe las notas de voz y entiende las imágenes que mandan tus clientes. Conéctala junto con DeepSeek.', estado: 'disponible', esIA: true, campos: [{ key: 'apiKey', label: 'API Key de OpenAI', placeholder: 'sk-…', secreto: true }] },
+  // Canales
+  { id: 'wa', nombre: 'WhatsApp Business', logoText: 'WA', logoBg: '#DCFCE7', logoTxt: '#15803D', grupo: 'canales', desc: 'El canal donde tu asistente atiende y vende. Se configura en la sección WhatsApp.', estado: 'disponible' },
+  // Envíos
+  { id: 'dropi', nombre: 'Dropi', logoText: 'Dr', logoBg: '#FEF3C7', logoTxt: '#B45309', grupo: 'envios', desc: 'Envía tus pedidos a Dropi: genera la guía, asigna transportadora y sincroniza el estado del envío.', estado: 'disponible', campos: [{ key: 'token', label: 'Token de la API de Dropi', secreto: true }] },
+  // Publicidad
+  { id: 'meta-ads', nombre: 'Administrador de anuncios', logoText: 'f', logoBg: '#E7F0FF', logoTxt: '#0866FF', grupo: 'publicidad', especial: 'meta-ads', desc: 'Conecta tu cuenta publicitaria de Meta para publicar campañas desde el Marketing IA. Tú pagas la pauta directo a Meta.', estado: 'disponible' },
 ];
 
 export const PLANS: Plan[] = [
