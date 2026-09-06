@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 const ICONO: Record<string, string> = {
-  'ecommerce-v10': '🛍️', 'soporte-tecnico': '🛠️', 'atencion-cliente': '💬', reservas: '📅', educacion: '🎓',
+  'ecommerce-v10': '🛍️',
 };
 
 export function DealShop({ df }: { df: DealFlowState }) {

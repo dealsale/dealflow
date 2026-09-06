@@ -47,34 +47,6 @@ export const PLANTILLAS: Plantilla[] = [
       'Tallas, colores, combos y mensaje inicial incluidos',
     ],
   },
-  {
-    id: 'soporte-tecnico',
-    nombre: 'Soporte técnico',
-    descripcion: 'Un agente que diagnostica problemas con preguntas, da pasos de solución y escala a un técnico cuando hace falta. Trae servicios de soporte listos.',
-    precio: 0,
-    features: ['Diagnóstico guiado paso a paso', 'Escala a un técnico y toma datos', 'Servicios de soporte de ejemplo'],
-  },
-  {
-    id: 'atencion-cliente',
-    nombre: 'Atención al cliente',
-    descripcion: 'Responde dudas frecuentes, estado de pedidos, cambios, devoluciones y garantías, y pasa el chat a un agente cuando el caso lo necesita.',
-    precio: 0,
-    features: ['Preguntas frecuentes y estado de pedidos', 'Cambios, devoluciones y garantías', 'Deriva a un agente humano'],
-  },
-  {
-    id: 'reservas',
-    nombre: 'Reservas / Booking',
-    descripcion: 'Muestra tus servicios con duración y precio, agenda la cita, toma los datos y confirma. Ideal para salones, consultorios y servicios con cita.',
-    precio: 0,
-    features: ['Agenda citas por chat', 'Servicios con duración y precio', 'Toma datos y confirma la reserva'],
-  },
-  {
-    id: 'educacion',
-    nombre: 'Educación',
-    descripcion: 'Informa sobre cursos, horarios y precios, resuelve dudas e inscribe alumnos. Trae cursos de ejemplo listos para editar.',
-    precio: 0,
-    features: ['Info de cursos, horarios y precios', 'Inscribe alumnos por chat', 'Ofrece la clase demo gratis'],
-  },
 ];
 
 const ECOMMERCE_INSTRUCCIONES = `Eres el asistente de ventas de una tienda de ropa que vende por WhatsApp en Colombia. Atiende con calidez, en tono cercano de "tú", con respuestas cortas y claras. Tu meta es ayudar al cliente a elegir y cerrar la venta sin presionar. Presenta el producto que le interesa, resuelve dudas de tallas, colores y envío, ofrece los combos cuando pidan 2 o más, y cuando el cliente confirme que quiere comprar, pídele nombre, ciudad y dirección para registrar el pedido. El envío es contra entrega (paga al recibir).`;
@@ -88,91 +60,6 @@ const ECOMMERCE_REGLAS = [
 
 // Plantillas de asistente basadas en SERVICIOS (soporte, atención, reservas, educación).
 // Contenido de fábrica: instrucciones + reglas + servicios de ejemplo.
-interface Servicio { nombre: string; precio: number; duracion?: string; descripcion?: string; disparador?: string; mensajeInicial?: string }
-interface Fabrica { instrucciones: string; reglas: string[]; servicios: Servicio[] }
-
-const FABRICA: Record<string, Fabrica> = {
-  'soporte-tecnico': {
-    instrucciones: 'Eres el asistente de soporte técnico de la tienda. Atiende con paciencia y en lenguaje claro. Cuando alguien reporte una falla, primero pregúntale: qué equipo o producto es, qué estaba haciendo y qué mensaje o problema ve. Luego da pasos de solución numerados y sencillos, de a uno, y confirma si funcionó antes de seguir. Si tras los pasos no se resuelve, ofrece agendar Soporte remoto o una Visita técnica y toma su nombre y teléfono. No prometas soluciones que no existan.',
-    reglas: [
-      'Pide siempre el modelo/versión del equipo y una descripción de la falla antes de dar una solución.',
-      'Da los pasos de a uno y confirma si funcionó antes de continuar.',
-      'Si no se resuelve en el chat, ofrece Soporte remoto o Visita técnica y toma nombre y contacto.',
-      'Si es un caso de garantía, explica el proceso y qué necesita el cliente.',
-    ],
-    servicios: [
-      { nombre: 'Diagnóstico gratis', precio: 0, duracion: '20 min', descripcion: 'Revisamos tu caso y te decimos qué tiene, sin costo.', mensajeInicial: '¡Hola! Cuéntame qué equipo es y qué falla estás viendo, y te ayudo a resolverlo. 🙂' },
-      { nombre: 'Soporte remoto', precio: 30000, duracion: '45 min', descripcion: 'Nos conectamos a tu equipo y resolvemos el problema a distancia.' },
-      { nombre: 'Visita técnica a domicilio', precio: 60000, duracion: '1 h', descripcion: 'Un técnico va a tu ubicación a revisar y reparar.' },
-      { nombre: 'Plan de mantenimiento mensual', precio: 80000, duracion: 'mensual', descripcion: 'Revisiones y soporte prioritario todos los meses.' },
-    ],
-  },
-  'atencion-cliente': {
-    instrucciones: 'Eres el asistente de atención al cliente de la tienda. Responde con amabilidad y resuelve rápido. Ayuda con: estado de pedidos (pide el número de pedido o el documento), cambios y devoluciones (explica la política), garantías y preguntas frecuentes. Si el caso necesita a una persona o el cliente está molesto, ofrece pasar el chat a un agente y toma sus datos. Respuestas cortas y claras.',
-    reglas: [
-      'Para el estado de un pedido, pide el número de pedido o el documento del cliente.',
-      'Explica la política de cambios y devoluciones antes de prometer uno.',
-      'Si el cliente está molesto o el caso es delicado, ofrece pasarlo a un agente humano.',
-      'No inventes políticas ni tiempos de entrega que no conozcas.',
-    ],
-    servicios: [
-      { nombre: 'Estado de mi pedido', precio: 0, descripcion: 'Consulta en qué va tu pedido con tu número o documento.', mensajeInicial: '¡Hola! ¿En qué te ayudo? Puedo ver el estado de tu pedido, gestionar cambios o pasarte con un agente. 🙂' },
-      { nombre: 'Cambios y devoluciones', precio: 0, descripcion: 'Te explicamos cómo cambiar o devolver un producto.' },
-      { nombre: 'Garantía', precio: 0, descripcion: 'Revisamos tu caso de garantía y el proceso a seguir.' },
-      { nombre: 'Hablar con un agente', precio: 0, descripcion: 'Te pasamos con una persona del equipo.' },
-    ],
-  },
-  reservas: {
-    instrucciones: 'Eres el asistente de reservas de la tienda. Muestra los servicios disponibles con su duración y precio, pregunta qué día y hora le sirve al cliente, confirma la reserva y toma su nombre y teléfono. Sé claro con los tiempos. Si piden algo fuera de lo que ofreces, dilo con amabilidad y sugiere una alternativa.',
-    reglas: [
-      'Muestra siempre la duración y el precio del servicio antes de agendar.',
-      'Confirma día, hora, nombre y teléfono antes de dar la reserva por hecha.',
-      'No agendes dos citas a la misma hora.',
-      'Explica la política de cancelación si el cliente pregunta.',
-    ],
-    servicios: [
-      { nombre: 'Cita de valoración', precio: 0, duracion: '20 min', descripcion: 'Primera cita para conocer lo que necesitas.', mensajeInicial: '¡Hola! 😊 ¿Qué servicio te gustaría reservar y para qué día? Te digo horarios disponibles.' },
-      { nombre: 'Corte de cabello', precio: 25000, duracion: '30 min', descripcion: 'Corte y peinado.' },
-      { nombre: 'Manicure', precio: 35000, duracion: '45 min', descripcion: 'Manicure completo.' },
-      { nombre: 'Peinado para evento', precio: 60000, duracion: '1 h', descripcion: 'Peinado especial para tu evento.' },
-    ],
-  },
-  educacion: {
-    instrucciones: 'Eres el asistente de un centro educativo. Informa sobre los cursos: de qué tratan, a quién van dirigidos, horarios, precio y forma de pago. Resuelve dudas e inscribe a los interesados tomando su nombre, contacto y el curso que quieren. Sé claro y motivador, sin exagerar resultados.',
-    reglas: [
-      'Da la información exacta de cada curso (horario, precio, requisitos).',
-      'Ofrece la clase demo gratis a quien esté indeciso.',
-      'Para inscribir, toma nombre, contacto y el curso que quiere.',
-      'No prometas certificaciones o resultados que la institución no ofrezca.',
-    ],
-    servicios: [
-      { nombre: 'Clase demo gratis', precio: 0, duracion: '1 h', descripcion: 'Una clase de prueba para que conozcas cómo enseñamos.', mensajeInicial: '¡Hola! 🎓 ¿Qué te gustaría aprender? Te cuento los cursos, horarios y precios, y puedes empezar con una clase demo gratis.' },
-      { nombre: 'Curso de Inglés Básico', precio: 150000, duracion: 'mensual', descripcion: 'Nivel principiante, clases 2 veces por semana.' },
-      { nombre: 'Diplomado en Marketing Digital', precio: 600000, descripcion: 'Programa completo con certificado.' },
-      { nombre: 'Mensualidad', precio: 120000, duracion: 'mensual', descripcion: 'Pago mensual del programa en el que estés inscrito.' },
-    ],
-  },
-};
-
-/** Aplica una plantilla de servicios (contenido de fábrica) a la tienda. */
-function aplicarFabrica(plantillaId: string, storeId: string, fab: Fabrica) {
-  db.prepare(
-    `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
-     ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
-  ).run(storeId, fab.instrucciones, j(fab.reglas));
-  for (const s of fab.servicios) {
-    const pid = uid();
-    db.prepare(
-      `INSERT INTO products (id, store_id, tipo, plantilla_id, nombre, precio, duracion, color, txt, descripcion, mensaje_bloques, disparador, mensaje_inicial_activo)
-       VALUES (?,?, 'servicio', ?, ?, ?, ?, '#E0E7FF', '#4338CA', ?, ?, ?, 1)`,
-    ).run(
-      pid, storeId, plantillaId, s.nombre, s.precio, s.duracion || '', s.descripcion || '',
-      j(s.mensajeInicial ? [{ tipo: 'texto', valor: s.mensajeInicial }] : []), s.disparador || '',
-    );
-    db.prepare("INSERT INTO variants (id, product_id, label, stock, fotos) VALUES (?,?,?,0,0)").run(uid(), pid, 'Única');
-  }
-}
-
 /**
  * Tienda maestra desde la que se CONGELA (una sola vez) el contenido de la
  * plantilla. Se resuelve por la variable de entorno TEMPLATE_MASTER_STORE
@@ -267,14 +154,6 @@ export function instalarPlantilla(storeId: string, plantillaId: string, force = 
   if (!p) return { error: 'Plantilla no encontrada.' };
   const ya = db.prepare('SELECT 1 FROM installed_templates WHERE store_id = ? AND template_id = ?').get(storeId, plantillaId);
   if (ya && !force) return { yaInstalada: true, error: 'Esta plantilla ya está instalada en tu tienda.' };
-
-  // Las plantillas de servicios (soporte, atención, reservas, educación) usan su
-  // contenido de fábrica; NO se copian de la tienda maestra (esa es de ropa).
-  if (FABRICA[plantillaId]) {
-    aplicarFabrica(plantillaId, storeId, FABRICA[plantillaId]);
-    db.prepare('INSERT OR IGNORE INTO installed_templates (store_id, template_id) VALUES (?,?)').run(storeId, plantillaId);
-    return { ok: true };
-  }
 
   // Contenido CONGELADO de la plantilla (no cambia aunque la tienda maestra agregue productos después).
   let snap = db.prepare('SELECT source_store_id, instrucciones, reglas, productos FROM templates_content WHERE template_id = ?').get(plantillaId) as Snapshot | undefined;
