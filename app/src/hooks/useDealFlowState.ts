@@ -199,7 +199,7 @@ export interface DecoratedProduct extends Product {
   uploadedMain: string[];
   addMainFotos: (files: File[]) => void;
   removeMainFoto: (index: number) => void;
-  reglasDecoradas: { texto: string; remove: () => void }[];
+  reglasDecoradas: { texto: string; remove: () => void; editar: (nuevo: string) => void }[];
   addRegla: () => void;
   save: () => void;
   saved: boolean;
@@ -1437,6 +1437,11 @@ export function useDealFlowState() {
             setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, reglas: nuevas } : x)));
             queuePatch(p.id, { reglas: nuevas });
           },
+          editar: (nuevo: string) => {
+            const nuevas = p.reglas.map((t, j) => (j === i ? nuevo : t));
+            setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, reglas: nuevas } : x)));
+            queuePatch(p.id, { reglas: nuevas });
+          },
         })),
         addRegla: () => {
           const t = productRuleDraft.trim();
@@ -1567,7 +1572,11 @@ export function useDealFlowState() {
   );
 
   const rulesDecorated = useMemo(
-    () => rules.map((texto, i) => ({ texto, remove: () => setRules((st) => st.filter((_, j) => j !== i)) })),
+    () => rules.map((texto, i) => ({
+      texto,
+      remove: () => setRules((st) => st.filter((_, j) => j !== i)),
+      editar: (nuevo: string) => setRules((st) => st.map((t, j) => (j === i ? nuevo : t))),
+    })),
     [rules],
   );
 

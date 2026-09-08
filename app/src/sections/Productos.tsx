@@ -476,9 +476,17 @@ export function Productos({ df }: { df: DealFlowState }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
                   {p.reglasDecoradas.map((r, i) => (
                     <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
-                      <span style={{ color: '#059669', fontWeight: 700, flexShrink: 0 }}>✓</span>
-                      <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>{r.texto}</span>
-                      <span onClick={r.remove} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>
+                      <span style={{ color: '#059669', fontWeight: 700, flexShrink: 0, marginTop: 6 }}>✓</span>
+                      <textarea
+                        value={r.texto}
+                        onChange={(e) => r.editar(e.target.value)}
+                        rows={1}
+                        className="df-input"
+                        style={{ flex: 1, fontSize: 13, lineHeight: 1.5, border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', resize: 'vertical', color: '#1E293B' }}
+                        onFocus={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                        onBlur={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
+                      />
+                      <span onClick={r.remove} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, marginTop: 6 }}>
                         ✕
                       </span>
                     </div>
