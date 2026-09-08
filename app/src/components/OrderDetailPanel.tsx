@@ -70,6 +70,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
             </div>
           )}
 
+          {!sel.enviadoEffi && (<>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Envío con Dropi</div>
           <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: sel.hasGuia ? 10 : 0 }}>
@@ -115,6 +116,32 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
                 </button>
               </div>
             )}
+          </div>
+
+          </>)}
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Despacho con Effi</div>
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#EDE9FE', color: '#6D28D9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>Ef</div>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Effi</span>
+              <span style={{ display: 'inline-block', background: sel.enviadoEffi ? '#EDE9FE' : '#F1F5F9', color: sel.enviadoEffi ? '#6D28D9' : '#64748B', borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>
+                {sel.enviadoEffi ? 'En Effi' : 'Sin enviar'}
+              </span>
+              <div style={{ flex: 1 }} />
+              {!sel.enviadoEffi ? (
+                <button onClick={sel.enviarEffi} style={{ background: '#6D28D9', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}>Enviar a Effi</button>
+              ) : (
+                <button onClick={sel.sincronizarEffi} style={{ background: '#fff', border: '1px solid #DDD6FE', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: '#6D28D9', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sincronizar estado</button>
+              )}
+            </div>
+            {sel.enviadoEffi && sel.hasGuia && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
+                <div style={{ flex: 1, background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: '#1E293B' }}>Guía {sel.guia}</div>
+                <button onClick={() => df.copyGuia(sel.guia!)} className="df-copy-btn" style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: '#1E293B', cursor: 'pointer', whiteSpace: 'nowrap' }}>{df.guiaBtnLabel}</button>
+              </div>
+            )}
+            {df.effiMsg && <div style={{ marginTop: 10, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? '#6D28D9' : df.effiMsg.includes('…') ? '#64748B' : '#B91C1C' }}>{df.effiMsg}</div>}
           </div>
 
           <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 10 }}>Avance</div>

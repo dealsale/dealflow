@@ -166,6 +166,7 @@ addColumn('products', "disparador TEXT NOT NULL DEFAULT ''");
 addColumn('products', 'mensaje_inicial_activo INTEGER NOT NULL DEFAULT 1');
 addColumn('orders', 'total INTEGER NOT NULL DEFAULT 0');
 addColumn('orders', "departamento TEXT NOT NULL DEFAULT ''");
+addColumn('orders', "woo_id TEXT NOT NULL DEFAULT ''"); // id del pedido en WooCommerce (puente a Effi)
 addColumn('assistants', "ia_proveedor TEXT NOT NULL DEFAULT ''"); // deepseek | openai | grok ('' = el del servidor)
 db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (
   store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
@@ -299,6 +300,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS ads_cuentas (
 addColumn('products', "tipo TEXT NOT NULL DEFAULT 'producto'"); // producto | servicio
 addColumn('products', "duracion TEXT NOT NULL DEFAULT ''"); // solo servicios (ej: "30 min")
 addColumn('products', "plantilla_id TEXT NOT NULL DEFAULT ''"); // plantilla que lo instaló ('' = creado por la tienda)
+addColumn('products', "sku TEXT NOT NULL DEFAULT ''"); // SKU para mapear con el producto en WooCommerce/Effi
 
 // Multi-tienda: un dueño puede tener varias tiendas (mismo correo). Para eso hay
 // que quitar el UNIQUE de stores.correo. Además, quién es el dueño (owner_user_id).

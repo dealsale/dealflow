@@ -230,6 +230,19 @@ export function Productos({ df }: { df: DealFlowState }) {
                   </div>
                 </div>
 
+                <div style={{ marginBottom: 16, maxWidth: 560 }}>
+                  <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>
+                    SKU <span style={{ fontWeight: 400, color: '#94A3B8' }}>· para casar este producto con Effi/WooCommerce (opcional)</span>
+                  </div>
+                  <input
+                    className="df-input"
+                    value={p.sku || ''}
+                    onChange={(e) => p.setSku(e.target.value)}
+                    placeholder="Ej: FAJA-NEGRA-M"
+                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+                  />
+                </div>
+
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Información del producto · la usa el asistente para vender
                 </div>

@@ -40,6 +40,10 @@ import {
   apiOrders,
   apiOrderAdvance,
   apiOrderDropi,
+  apiOrderEffi,
+  apiOrderEffiSync,
+  apiWooVerificar,
+  apiWooSyncInventario,
   apiTeamList,
   apiTeamCreate,
   apiTeamDelete,
@@ -133,6 +137,9 @@ export interface DecoratedOrder extends Order {
   advance: () => void;
   open: () => void;
   sendToDropi: () => void;
+  enviarEffi: () => void;
+  sincronizarEffi: () => void;
+  enviadoEffi: boolean;
   timeline: { estado: string; dotStyle: CSSProperties; labelStyle: CSSProperties }[];
 }
 
@@ -201,6 +208,7 @@ export interface DecoratedProduct extends Product {
   deleteArmed: boolean;
   setNombre: (v: string) => void;
   setPrecio: (v: string) => void;
+  setSku: (v: string) => void;
   setDescripcion: (v: string) => void;
   setCaracteristicas: (v: string) => void;
   setMensajeInicial: (v: string) => void;
@@ -368,6 +376,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     departamento: o.departamento || '',
     transportadora: o.transportadora || 'Dropi',
     guia: o.guia,
+    wooId: o.wooId || '',
     envio: o.envio || 0,
     nota: o.nota || '',
     total: o.total || 0,
@@ -385,6 +394,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     txt: p.txt || '#4338CA',
     tipo: p.tipo || 'producto',
     duracion: p.duracion || '',
+    sku: p.sku || '',
     reglas: p.reglas || [],
     descripcion: p.descripcion || '',
     caracteristicas: p.caracteristicas || '',
@@ -665,6 +675,29 @@ export function useDealFlowState() {
     });
   }
 
+  // Envía el pedido a Effi (creándolo en WooCommerce). Devuelve un aviso para la UI.
+  const [effiMsg, setEffiMsg] = useState('');
+  function enviarAEffi(id: string) {
+    const o = ordersRef.current.find((x) => x.id === id);
+    if (!o?.rowId) return;
+    setEffiMsg('Enviando a Effi…');
+    void apiOrderEffi(o.rowId).then((r) => {
+      if (r.error || !r.data) { setEffiMsg(r.error || 'No se pudo enviar a Effi.'); return; }
+      setEffiMsg(r.data.aviso || '✓ Pedido enviado a Effi. La guía llega cuando Effi lo despache.');
+      setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, transportadora: 'Effi' } : x)));
+    });
+  }
+  function sincronizarEffi(id: string) {
+    const o = ordersRef.current.find((x) => x.id === id);
+    if (!o?.rowId) return;
+    setEffiMsg('Consultando a Effi…');
+    void apiOrderEffiSync(o.rowId).then((r) => {
+      if (r.error || !r.data) { setEffiMsg(r.error || 'No se pudo sincronizar.'); return; }
+      setEffiMsg(`Estado en Effi: ${r.data.estado || 'sin cambios'}${r.data.guia ? ` · guía ${r.data.guia}` : ''}`);
+      if (r.data.guia) setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, guia: r.data!.guia } : x)));
+    });
+  }
+
   function decorateOrder(o: Order): DecoratedOrder {
     const cfg = ESTADOS[o.estado];
     // Total del pedido: el que acordó el asistente, o la suma si hay precios.
@@ -687,6 +720,9 @@ export function useDealFlowState() {
         setSection('pedidos');
       },
       sendToDropi: () => sendToDropi(o.id),
+      enviarEffi: () => enviarAEffi(o.id),
+      sincronizarEffi: () => sincronizarEffi(o.id),
+      enviadoEffi: !!o.wooId,
       timeline: ESTADO_ORDER.map((est) => {
         const done = ESTADO_ORDER.indexOf(est) <= ESTADO_ORDER.indexOf(o.estado);
         return {
@@ -1386,6 +1422,7 @@ export function useDealFlowState() {
         deleteArmed: armedDeleteProductId === p.id,
         setNombre: (v: string) => updateProduct(p.id, { nombre: v }),
         setPrecio: (v: string) => updateProduct(p.id, { precio: parseInt(v.replace(/[^0-9]/g, ''), 10) || 0 }),
+        setSku: (v: string) => updateProduct(p.id, { sku: v }),
         fotosMain: (p.fotos || ['Principal', 'Detalle']).map((fl) => ({
           label: fl,
           tileStyle: { width: '64px', height: '64px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontSize: '10px', fontWeight: 600, paddingBottom: '5px', boxSizing: 'border-box' },
@@ -1714,6 +1751,23 @@ export function useDealFlowState() {
   }
   function eliminarIntegracion(tipo: string) {
     void apiEliminarIntegracion(tipo).then(() => void reloadIntegraciones());
+  }
+  // WooCommerce (puente a Effi): probar conexión y sincronizar inventario.
+  function verificarWoo() {
+    setIntegracionMsg('Probando la conexión con WooCommerce…');
+    void apiWooVerificar().then((r) => {
+      setIntegracionMsg(r.error ? r.error : '✓ Conexión con WooCommerce correcta.');
+      setTimeout(() => setIntegracionMsg(''), 4000);
+    });
+  }
+  function sincronizarInventarioWoo() {
+    setIntegracionMsg('Sincronizando inventario desde WooCommerce…');
+    void apiWooSyncInventario().then((r) => {
+      if (r.error || !r.data) { setIntegracionMsg(r.error || 'No se pudo sincronizar.'); return; }
+      setIntegracionMsg(`✓ Inventario sincronizado (${r.data.actualizados} productos).`);
+      if (apiMode) void reloadProducts();
+      setTimeout(() => setIntegracionMsg(''), 4500);
+    });
   }
   function elegirIaPredeterminada(proveedor: string) {
     setIaPredeterminada(proveedor);
@@ -2618,6 +2672,9 @@ export function useDealFlowState() {
     integracionesCfg,
     iaPredeterminada,
     integracionMsg,
+    effiMsg,
+    verificarWoo,
+    sincronizarInventarioWoo,
     guardarIntegracion,
     eliminarIntegracion,
     elegirIaPredeterminada,

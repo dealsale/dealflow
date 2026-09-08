@@ -22,6 +22,8 @@ export interface Order {
   transportadora: string;
   /** Número de guía generado al enviar el pedido a Dropi */
   guia?: string;
+  /** id del pedido en WooCommerce (si ya se envió a Effi) */
+  wooId?: string;
   envio: number;
   nota: string;
   /** Total del pedido acordado por el asistente (si no hay precios por ítem) */
@@ -78,6 +80,8 @@ export interface Product {
   txt: string;
   tipo?: 'producto' | 'servicio';
   duracion?: string;
+  /** SKU para mapear con WooCommerce/Effi */
+  sku?: string;
   reglas: string[];
   descripcion?: string;
   caracteristicas?: string;
@@ -162,7 +166,7 @@ export interface Integration {
   /** Grupo para agrupar las tarjetas en la sección. */
   grupo?: 'ia' | 'canales' | 'envios' | 'publicidad';
   /** true si se conecta por un flujo especial (popup de Facebook), no por formulario. */
-  especial?: 'meta-ads';
+  especial?: 'meta-ads' | 'woo';
 }
 
 export interface Plan {

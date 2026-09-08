@@ -188,14 +188,22 @@ export function Integraciones({ df }: { df: DealFlowState }) {
                       </div>
                     )}
 
-                    <button
-                      onClick={() => (i.campos ? abrir(i.id) : i.action())}
-                      style={conectado && !abiertaEsta
-                        ? { background: '#fff', color: '#1E293B', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', alignSelf: 'flex-start' }
-                        : { ...btnPrimary, alignSelf: 'flex-start' }}
-                    >
-                      {abiertaEsta ? 'Cerrar' : i.id === 'wa' ? 'Ir a WhatsApp' : conectado ? 'Configurar' : 'Conectar'}
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => (i.campos ? abrir(i.id) : i.action())}
+                        style={conectado && !abiertaEsta
+                          ? { background: '#fff', color: '#1E293B', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }
+                          : btnPrimary}
+                      >
+                        {abiertaEsta ? 'Cerrar' : i.id === 'wa' ? 'Ir a WhatsApp' : conectado ? 'Configurar' : 'Conectar'}
+                      </button>
+                      {i.especial === 'woo' && conectado && !abiertaEsta && (
+                        <>
+                          <button onClick={df.verificarWoo} style={{ background: '#fff', color: '#334155', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Probar conexión</button>
+                          <button onClick={df.sincronizarInventarioWoo} style={{ background: '#fff', color: '#6D28D9', border: '1px solid #DDD6FE', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Sincronizar inventario</button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 );
               })}

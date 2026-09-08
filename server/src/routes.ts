@@ -139,7 +139,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const store = db.prepare('SELECT id, nombre, plan FROM stores WHERE id = ?').get(sid);
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, color: p.color, txt: p.txt,
-    tipo: p.tipo || 'producto', duracion: p.duracion || '', plantillaId: p.plantilla_id || '',
+    tipo: p.tipo || 'producto', duracion: p.duracion || '', sku: p.sku || '', plantillaId: p.plantilla_id || '',
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
     descripcion: p.descripcion || '', caracteristicas: p.caracteristicas || '', mensajeInicial: p.mensaje_inicial || '',
     faqs: pj(p.faqs as string, []), testimonios: pj(p.testimonios as string, []), modosUso: p.modos_uso || '',
@@ -155,7 +155,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   }));
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
@@ -211,7 +211,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string),
   }));
   res.json({ orders });
@@ -260,6 +260,7 @@ api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   if (caracteristicas !== undefined) db.prepare('UPDATE products SET caracteristicas = ? WHERE id = ?').run(String(caracteristicas), req.params.id);
   if (mensajeInicial !== undefined) db.prepare('UPDATE products SET mensaje_inicial = ? WHERE id = ?').run(String(mensajeInicial), req.params.id);
   if (req.body?.duracion !== undefined) db.prepare('UPDATE products SET duracion = ? WHERE id = ?').run(String(req.body.duracion), req.params.id);
+  if (req.body?.sku !== undefined) db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(String(req.body.sku).trim(), req.params.id);
   if (Array.isArray(faqs)) db.prepare('UPDATE products SET faqs = ? WHERE id = ?').run(j(faqs), req.params.id);
   if (precio !== undefined) db.prepare('UPDATE products SET precio = ? WHERE id = ?').run(Number(precio) || 0, req.params.id);
   if (Array.isArray(reglas)) db.prepare('UPDATE products SET reglas = ? WHERE id = ?').run(j(reglas), req.params.id);
@@ -359,6 +360,54 @@ api.post('/orders/:rowId/dropi', requireAuth, requireStore, (req, res) => {
   const guia = String(402000 + Math.floor(Math.random() * 900) + 100);
   db.prepare('UPDATE orders SET guia = ? WHERE id = ?').run(guia, o.id);
   res.json({ guia });
+});
+
+// ── Effi (vía WooCommerce): crea el pedido en Woo para que Effi lo despache ──
+api.post('/orders/:rowId/effi', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (o.woo_id) return res.json({ ok: true, guia: o.guia || '', wooId: o.woo_id, aviso: 'Este pedido ya se envió a Effi.' });
+  const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id) as { qty: number; nombre: string; precio: number }[];
+  // Mapa nombre-de-ítem → SKU del producto (para casar con WooCommerce/Effi).
+  const skus: Record<string, string> = {};
+  for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(sid) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
+  const { crearPedido } = await import('./woocommerce.js');
+  const r = await crearPedido(sid, {
+    cliente: String(o.cliente || ''), ciudad: String(o.ciudad || ''), departamento: String(o.departamento || ''),
+    tel: String(o.tel || ''), direccion: String(o.direccion || ''), nota: String(o.nota || ''), envio: Number(o.envio || 0),
+  }, items, skus);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  db.prepare("UPDATE orders SET woo_id = ?, transportadora = 'Effi' WHERE id = ?").run(r.wooId, o.id);
+  res.json({ ok: true, wooId: r.wooId, numeroWoo: r.numero });
+});
+
+// Sincroniza estado y guía del pedido desde WooCommerce (que Effi actualiza).
+api.post('/orders/:rowId/effi/sync', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT id, woo_id FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; woo_id: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (!o.woo_id) return res.status(400).json({ error: 'Este pedido aún no se ha enviado a Effi.' });
+  const { estadoPedido } = await import('./woocommerce.js');
+  const r = await estadoPedido(sid, o.woo_id);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  if (r.guia) db.prepare('UPDATE orders SET guia = ? WHERE id = ?').run(r.guia, o.id);
+  res.json({ estado: r.estado, guia: r.guia });
+});
+
+// WooCommerce: verificar conexión y sincronizar inventario.
+api.post('/woo/verificar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { verificar } = await import('./woocommerce.js');
+  const r = await verificar(req.user!.storeId!);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+
+api.post('/woo/inventario/sync', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { sincronizarInventario } = await import('./woocommerce.js');
+  const r = await sincronizarInventario(req.user!.storeId!);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json({ actualizados: r.actualizados });
 });
 
 // ── Leads / CRM ───────────────────────────────────────────────────────
