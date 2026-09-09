@@ -177,6 +177,71 @@ export async function inventario(storeId: string): Promise<{ items: ItemInventar
   }
 }
 
+/**
+ * Empuja el catálogo de DealFlow a WooCommerce: crea los productos que no
+ * existen y actualiza los que ya están (casando por SKU). Solo sincroniza los
+ * que tienen SKU (sin SKU no hay forma de casarlos sin duplicar en cada envío).
+ */
+export async function empujarProductos(storeId: string): Promise<{ creados: number; actualizados: number; omitidos: number } | { error: string }> {
+  const c = credenciales(storeId);
+  if (!c) return { error: 'Conecta WooCommerce en Integraciones.' };
+
+  const prods = db.prepare('SELECT id, nombre, precio, descripcion, sku FROM products WHERE store_id = ?').all(storeId) as
+    { id: string; nombre: string; precio: number; descripcion: string; sku: string }[];
+  const conSku = prods.filter((p) => (p.sku || '').trim());
+  const omitidos = prods.length - conSku.length;
+  if (!conSku.length) return { error: 'Ningún producto tiene SKU. Ponle SKU a tus productos (en Productos) para poder sincronizarlos.' };
+
+  const stockDe = (id: string) => (db.prepare('SELECT COALESCE(SUM(stock),0) s FROM variants WHERE product_id = ?').get(id) as { s: number }).s;
+
+  // Mapa sku → id en WooCommerce (para decidir crear vs. actualizar).
+  const map: Record<string, number> = {};
+  try {
+    for (let page = 1; page <= 10; page++) {
+      const r = await woo<{ id: number; sku: string }[]>(c, '/products', undefined, { per_page: '100', page: String(page), _fields: 'id,sku' });
+      if (!r.ok) return { error: r.body.message || 'No pudimos leer los productos de WooCommerce.' };
+      if (!Array.isArray(r.body) || !r.body.length) break;
+      for (const p of r.body) if (p.sku) map[p.sku] = p.id;
+      if (r.body.length < 100) break;
+    }
+  } catch {
+    return { error: 'No pudimos leer los productos de WooCommerce.' };
+  }
+
+  const crear: Record<string, unknown>[] = [];
+  const actualizar: Record<string, unknown>[] = [];
+  for (const p of conSku) {
+    const base = { name: p.nombre, regular_price: String(p.precio || 0), description: p.descripcion || '', manage_stock: true, stock_quantity: stockDe(p.id) };
+    const wid = map[p.sku.trim()];
+    if (wid) actualizar.push({ id: wid, ...base });
+    else crear.push({ sku: p.sku.trim(), type: 'simple', status: 'publish', ...base });
+  }
+
+  const enTrozos = (arr: Record<string, unknown>[]) => {
+    const out: Record<string, unknown>[][] = [];
+    for (let i = 0; i < arr.length; i += 100) out.push(arr.slice(i, i + 100));
+    return out;
+  };
+
+  let creados = 0;
+  let actualizados = 0;
+  try {
+    for (const grupo of enTrozos(crear)) {
+      const r = await woo<{ create?: { id?: number }[] }>(c, '/products/batch', { method: 'POST', body: JSON.stringify({ create: grupo }) });
+      if (!r.ok) return { error: r.body.message || 'WooCommerce rechazó la creación de productos.' };
+      creados += (r.body.create || []).filter((x) => x.id).length;
+    }
+    for (const grupo of enTrozos(actualizar)) {
+      const r = await woo<{ update?: { id?: number }[] }>(c, '/products/batch', { method: 'POST', body: JSON.stringify({ update: grupo }) });
+      if (!r.ok) return { error: r.body.message || 'WooCommerce rechazó la actualización de productos.' };
+      actualizados += (r.body.update || []).filter((x) => x.id).length;
+    }
+  } catch {
+    return { error: 'No pudimos sincronizar los productos con WooCommerce.' };
+  }
+  return { creados, actualizados, omitidos };
+}
+
 /** Actualiza el stock local (products.stock por SKU) con lo que dice WooCommerce. */
 export async function sincronizarInventario(storeId: string): Promise<{ actualizados: number } | { error: string }> {
   const inv = await inventario(storeId);

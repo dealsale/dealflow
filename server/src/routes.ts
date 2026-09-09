@@ -410,6 +410,14 @@ api.post('/woo/inventario/sync', requireAuth, requireStore, requireOwner, async 
   res.json({ actualizados: r.actualizados });
 });
 
+// Empuja el catálogo de DealFlow a WooCommerce (crea/actualiza por SKU).
+api.post('/woo/productos/sync', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { empujarProductos } = await import('./woocommerce.js');
+  const r = await empujarProductos(req.user!.storeId!);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+
 // ── Leads / CRM ───────────────────────────────────────────────────────
 api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);

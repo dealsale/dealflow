@@ -44,6 +44,7 @@ import {
   apiOrderEffiSync,
   apiWooVerificar,
   apiWooSyncInventario,
+  apiWooSyncProductos,
   apiTeamList,
   apiTeamCreate,
   apiTeamDelete,
@@ -1778,6 +1779,16 @@ export function useDealFlowState() {
       setTimeout(() => setIntegracionMsg(''), 4500);
     });
   }
+  // Empuja el catálogo de DealFlow a WooCommerce (para que Effi lo despache).
+  function sincronizarProductosWoo() {
+    setIntegracionMsg('Enviando tus productos a WooCommerce…');
+    void apiWooSyncProductos().then((r) => {
+      if (r.error || !r.data) { setIntegracionMsg(r.error || 'No se pudieron sincronizar los productos.'); return; }
+      const { creados, actualizados, omitidos } = r.data;
+      setIntegracionMsg(`✓ Productos sincronizados: ${creados} creados, ${actualizados} actualizados${omitidos ? ` · ${omitidos} sin SKU omitidos` : ''}.`);
+      setTimeout(() => setIntegracionMsg(''), 6000);
+    });
+  }
   function elegirIaPredeterminada(proveedor: string) {
     setIaPredeterminada(proveedor);
     void apiSetIaPredeterminada(proveedor).then((r) => { if (r.error) { setIntegracionMsg(r.error); void reloadIntegraciones(); } });
@@ -2684,6 +2695,7 @@ export function useDealFlowState() {
     effiMsg,
     verificarWoo,
     sincronizarInventarioWoo,
+    sincronizarProductosWoo,
     guardarIntegracion,
     eliminarIntegracion,
     elegirIaPredeterminada,
