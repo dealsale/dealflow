@@ -2,6 +2,48 @@ import { useState } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 
+/** Bloques del mensaje inicial, con arrastrar-para-reordenar. */
+function BloquesInicial({ p }: { p: DecoratedProduct }) {
+  const [drag, setDrag] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  if (!p.bloquesDecorados.length) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {p.bloquesDecorados.map((b, i) => {
+        const esObjetivo = over === i && drag !== null && drag !== i;
+        return (
+          <div
+            key={i}
+            draggable
+            onDragStart={() => setDrag(i)}
+            onDragEnter={() => setOver(i)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => { if (drag !== null) p.moverBloque(drag, i); setDrag(null); setOver(null); }}
+            onDragEnd={() => { setDrag(null); setOver(null); }}
+            style={{
+              display: 'flex', gap: 10, alignItems: 'center', background: '#fff',
+              border: '1px solid ' + (esObjetivo ? '#059669' : '#E2E8F0'),
+              boxShadow: esObjetivo ? '0 -2px 0 #059669 inset' : 'none',
+              borderRadius: 10, padding: '9px 12px', opacity: drag === i ? 0.4 : 1,
+            }}
+          >
+            <span title="Arrastra para reordenar" style={{ color: '#CBD5E1', fontSize: 16, flexShrink: 0, cursor: 'grab', lineHeight: 1 }}>⠿</span>
+            <span style={{ background: '#F1F5F9', color: '#64748B', borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace" }}>{i + 1}</span>
+            <span style={{ color: '#94A3B8', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', width: 52, flexShrink: 0 }}>
+              {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : 'Video'}
+            </span>
+            {b.tipo === 'texto' && <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>{b.valor}</span>}
+            {b.tipo === 'imagen' && <img src={b.valor} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(15,23,42,.1)' }} />}
+            {b.tipo === 'video' && <video src={b.valor} controls style={{ width: 180, maxWidth: '100%', borderRadius: 8, background: '#0F172A' }} />}
+            {b.tipo !== 'texto' && <div style={{ flex: 1 }} />}
+            <span onClick={b.remove} className="df-danger-hover" title="Quitar bloque" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>✕</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Editor de opciones del producto: grupos como Color (Negro, Azul…) y Talla (S, M, L…). */
 function OpcionesEditor({ p }: { p: DecoratedProduct }) {
   const [nuevoGrupo, setNuevoGrupo] = useState('');
@@ -322,23 +364,7 @@ export function Productos({ df }: { df: DealFlowState }) {
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-                  {p.bloquesDecorados.map((b, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '9px 12px' }}>
-                      <span style={{ background: '#F1F5F9', color: '#64748B', borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace" }}>{i + 1}</span>
-                      <span style={{ color: '#94A3B8', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', width: 52, flexShrink: 0 }}>
-                        {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : 'Video'}
-                      </span>
-                      {b.tipo === 'texto' && <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>{b.valor}</span>}
-                      {b.tipo === 'imagen' && (
-                        <img src={b.valor} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(15,23,42,.1)' }} />
-                      )}
-                      {b.tipo === 'video' && <video src={b.valor} controls style={{ width: 180, maxWidth: '100%', borderRadius: 8, background: '#0F172A' }} />}
-                      {b.tipo !== 'texto' && <div style={{ flex: 1 }} />}
-                      <span onClick={b.remove} className="df-danger-hover" title="Quitar bloque" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>
-                        ✕
-                      </span>
-                    </div>
-                  ))}
+                  <BloquesInicial p={p} />
                   {p.bloquesDecorados.length === 0 && !!(p.mensajeInicial || '').trim() && (
                     <div style={{ color: '#94A3B8', fontSize: 12, background: '#fff', border: '1px dashed #E2E8F0', borderRadius: 8, padding: '9px 12px' }}>
                       Hoy el asistente usa este texto: “{p.mensajeInicial}”. Agrega bloques y los usará en su lugar.

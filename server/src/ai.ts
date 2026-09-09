@@ -624,24 +624,36 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
   }
 
   const lead = db.prepare('SELECT nombre, tel FROM leads WHERE id = ?').get(leadId) as { nombre: string; tel: string } | undefined;
+  // Pausa entre piezas para que WhatsApp ENTREGUE en el orden en que se armó el
+  // mensaje inicial. Sin esta pausa, los mensajes salen en el mismo segundo y
+  // WhatsApp los reordena (los videos suelen adelantarse al texto).
+  const gap = Number(process.env.BOT_MSG_GAP) || 1200;
   let enviadas = 0;
+  let idx = 0;
   for (const b of piezas) {
+    let ok = false;
     if (b.tipo === 'texto') {
       const valor = rellenar(b.valor, lead || {});
-      if (!valor.trim()) continue;
-      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', valor);
-      const r = await sendWhatsappText(storeId, destino, valor, pn);
-      if (r.ok) enviadas++;
+      if (valor.trim()) {
+        db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', valor);
+        const r = await sendWhatsappText(storeId, destino, valor, pn);
+        ok = r.ok;
+      }
     } else {
       const media = materializar(storeId, b.valor);
-      if (!media) continue;
-      const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
-      db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
-        .run(uid(), leadId, 'bot', '', media.tipo, media.url, media.mime, null);
-      if (r.ok) enviadas++;
+      if (media) {
+        const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
+        db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
+          .run(uid(), leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+        ok = r.ok;
+      }
     }
+    if (ok) enviadas++;
+    // Espera entre piezas (no después de la última) para conservar el orden.
+    if (ok && gap > 0 && idx < piezas.length - 1) await dormir(gap);
+    idx++;
   }
-  console.log(`[ia] presentación de "${p.nombre}" enviada (${enviadas}/${piezas.length} piezas)`);
+  console.log(`[ia] presentación de "${p.nombre}" enviada (${enviadas}/${piezas.length} piezas, en orden)`);
 }
 
 /**

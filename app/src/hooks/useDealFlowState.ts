@@ -223,6 +223,7 @@ export interface DecoratedProduct extends Product {
   addVideos: (files: File[]) => void;
   removeVideo: (index: number) => void;
   bloquesDecorados: (MensajeBloque & { remove: () => void })[];
+  moverBloque: (from: number, to: number) => void;
   addBloqueTexto: () => void;
   addBloqueImagen: (files: File[]) => void;
   addBloqueVideo: (files: File[]) => void;
@@ -1466,6 +1467,14 @@ export function useDealFlowState() {
           ...b,
           remove: () => patchProductList(p.id, 'mensajeBloques', (bl) => bl.filter((_, j) => j !== i)),
         })),
+        moverBloque: (from: number, to: number) =>
+          patchProductList(p.id, 'mensajeBloques', (bl) => {
+            if (from === to || from < 0 || to < 0 || from >= bl.length || to >= bl.length) return bl;
+            const copia = [...bl];
+            const [x] = copia.splice(from, 1);
+            copia.splice(to, 0, x);
+            return copia;
+          }),
         addBloqueTexto: () => {
           const t = bloqueTexto.trim();
           if (!t) return;
