@@ -241,6 +241,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   // frase disparadora del producto (la de los anuncios). Un simple "hola" no
   // dispara: exigimos que la mayoría de las palabras del disparador estén en
   // el mensaje (o que sea idéntico), no que compartan una palabra suelta.
+  let presentacionEnviada = false;
   if (ultimo?.tipo === 'texto' && ultimo.texto) {
     const t = norm(ultimo.texto);
     const tWords = new Set(t.split(' ').filter(Boolean));
@@ -252,10 +253,15 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       if (!dWords.length) continue;
       const overlap = dWords.filter((w) => tWords.has(w)).length / dWords.length;
       if (t === disp || t.includes(disp) || overlap >= 0.75) {
-        await enviarPresentacion(storeId, leadId, destino, p, pn);
+        if (await enviarPresentacion(storeId, leadId, destino, p, pn)) presentacionEnviada = true;
       }
     }
   }
+
+  // Si el disparador ya envió el mensaje inicial completo, la conversación
+  // termina en el último bloque de esa estructura: NO llamamos a la IA para
+  // que no agregue una pregunta redundante encima de la presentación.
+  if (presentacionEnviada) return;
 
   try {
     const res = await fetch(ia.url, {
@@ -596,14 +602,19 @@ async function enviarUnaFoto(storeId: string, leadId: string, destino: string, v
   console.log(`[ia] foto de opción enviada`);
 }
 
-/** Envía una vez por chat la presentación de un producto: bloques (texto/imagen/video) o, si no hay, sus fotos y videos. */
-async function enviarPresentacion(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string) {
-  if (Number(p.mensaje_inicial_activo) === 0) return; // mensaje inicial apagado para este producto
+/**
+ * Envía una vez por chat la presentación de un producto: bloques
+ * (texto/imagen/video) o, si no hay, sus fotos y videos.
+ * Devuelve true si realmente envió la presentación (para que la IA NO agregue
+ * una respuesta encima y el chat termine en el último bloque del mensaje inicial).
+ */
+async function enviarPresentacion(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string): Promise<boolean> {
+  if (Number(p.mensaje_inicial_activo) === 0) return false; // mensaje inicial apagado para este producto
   const pid = String(p.id);
   // Candado por TIEMPO: evita repetir la misma presentación en ráfaga (mismos
   // minutos), pero permite volver a mostrarla más tarde (p. ej. una 2.ª compra).
   const reciente = db.prepare("SELECT 1 FROM sent_presentations WHERE lead_id = ? AND product_id = ? AND created_at > datetime('now','-3 minutes')").get(leadId, pid);
-  if (reciente) return;
+  if (reciente) return false;
   db.prepare(
     `INSERT INTO sent_presentations (lead_id, product_id, created_at) VALUES (?,?,datetime('now'))
      ON CONFLICT(lead_id, product_id) DO UPDATE SET created_at = datetime('now')`,
@@ -620,7 +631,7 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
     : [...fotos.slice(0, 6).map((v) => ({ tipo: 'imagen', valor: v })), ...videos.slice(0, 2).map((v) => ({ tipo: 'video', valor: v }))];
   if (!piezas.length) {
     console.log(`[ia] "${p.nombre}": el cliente lo pidió pero no hay fotos/videos cargados`);
-    return;
+    return false;
   }
 
   const lead = db.prepare('SELECT nombre, tel FROM leads WHERE id = ?').get(leadId) as { nombre: string; tel: string } | undefined;
@@ -654,6 +665,7 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
     idx++;
   }
   console.log(`[ia] presentación de "${p.nombre}" enviada (${enviadas}/${piezas.length} piezas, en orden)`);
+  return enviadas > 0;
 }
 
 /**
