@@ -117,8 +117,8 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
     console.log('[ia] sin IA configurada para la tienda (ni clave propia ni del servidor): el asistente no responde');
     return;
   }
-  const lead = db.prepare('SELECT id, nombre, asignado, wa_id, tel FROM leads WHERE id = ?').get(leadId) as
-    | { id: string; nombre: string; asignado: string; wa_id: string | null; tel: string }
+  const lead = db.prepare('SELECT id, nombre, asignado, wa_id, tel, pendiente_info FROM leads WHERE id = ?').get(leadId) as
+    | { id: string; nombre: string; asignado: string; wa_id: string | null; tel: string; pendiente_info: string }
     | undefined;
   if (!lead) return;
   if (!/asistente|bot/i.test(lead.asignado)) {
@@ -236,6 +236,15 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
 
   const destino = lead.wa_id || lead.tel;
   const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
+  const activos = productRows.filter((p) => Number(p.mensaje_inicial_activo) !== 0);
+  const nombreCorto = lead.nombre ? ' ' + String(lead.nombre).split(' ')[0] : '';
+  // Envía un mensaje del bot al cliente (lo guarda y lo manda por WhatsApp).
+  const responder = async (texto: string) => {
+    const tt = rellenar(texto, lead);
+    db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', tt);
+    await sendWhatsappText(storeId, destino, tt, pn);
+  };
+  const limpiarPendiente = () => db.prepare("UPDATE leads SET pendiente_info = '' WHERE id = ?").run(leadId);
 
   // Disparador: SOLO cuando el mensaje del cliente coincide de verdad con la
   // frase disparadora del producto (la de los anuncios). Un simple "hola" no
@@ -245,8 +254,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   if (ultimo?.tipo === 'texto' && ultimo.texto) {
     const t = norm(ultimo.texto);
     const tWords = new Set(t.split(' ').filter(Boolean));
-    for (const p of productRows) {
-      if (Number(p.mensaje_inicial_activo) === 0) continue;
+    for (const p of activos) {
       const disp = norm(String(p.disparador || ''));
       if (disp.length < 6) continue; // sin disparador configurado, no dispara
       const dWords = disp.split(' ').filter((w) => w.length >= 3);
@@ -261,7 +269,46 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   // Si el disparador ya envió el mensaje inicial completo, la conversación
   // termina en el último bloque de esa estructura: NO llamamos a la IA para
   // que no agregue una pregunta redundante encima de la presentación.
-  if (presentacionEnviada) return;
+  if (presentacionEnviada) { limpiarPendiente(); return; }
+
+  // Disparador interno "Más información": el CTA de los anuncios no coincide con
+  // el disparador específico. Cuando el cliente lo toca, el bot está OBLIGADO a
+  // preguntarle sobre CUÁL producto/servicio quiere info; cuando el cliente lo
+  // elige (o dice que sí), se dispara el mensaje inicial tal cual.
+  if (ultimo?.tipo === 'texto' && String(ultimo.texto || '').trim() && activos.length) {
+    const t = String(ultimo.texto);
+
+    if (lead.pendiente_info) {
+      // Ya le preguntamos: intentamos identificar el producto elegido.
+      let elegido = identificarProducto(t, activos);
+      // Si le propusimos UN producto y solo dijo "sí/dale/eso", ese es.
+      if (!elegido && lead.pendiente_info !== 'ASK' && esAfirmacion(t)) {
+        elegido = activos.find((p) => String(p.id) === lead.pendiente_info) || null;
+      }
+      limpiarPendiente(); // salimos del estado pase lo que pase (no quedar pegados)
+      if (elegido && (await enviarPresentacion(storeId, leadId, destino, elegido, pn))) return;
+      // Si no lo identificamos, seguimos al flujo normal de IA (que puede ayudar).
+    } else if (esMasInfo(t)) {
+      const directo = identificarProducto(t, activos); // ¿nombró el producto en el mismo mensaje?
+      if (directo) {
+        if (await enviarPresentacion(storeId, leadId, destino, directo, pn)) return;
+        // Lo nombró pero no hay piezas que enviar: que la IA atienda.
+      } else {
+        // Obligatorio: preguntar sobre cuál producto/servicio quiere la información.
+        await esperarRespuestaHumana(t0);
+        if (activos.length === 1) {
+          db.prepare('UPDATE leads SET pendiente_info = ? WHERE id = ?').run(String(activos[0].id), leadId);
+          await responder(`¡Hola${nombreCorto}! 😊 Con gusto te doy toda la información. ¿Te interesa nuestro ${String(activos[0].nombre)}?`);
+        } else {
+          const lista = activos.slice(0, 6).map((p) => `• ${String(p.nombre)}`).join('\n');
+          const extra = activos.length > 6 ? '\n\nO dime cuál viste en el anuncio 🙂' : '';
+          db.prepare("UPDATE leads SET pendiente_info = 'ASK' WHERE id = ?").run(leadId);
+          await responder(`¡Hola${nombreCorto}! 😊 ¡Claro! ¿Sobre cuál de estos quieres información?\n\n${lista}${extra}`);
+        }
+        return;
+      }
+    }
+  }
 
   try {
     const res = await fetch(ia.url, {
@@ -393,6 +440,46 @@ function esAfirmacion(t: string): boolean {
   const yes = ['si', 'sisas', 'sisa', 'sip', 'sipi', 'claro', 'dale', 'dalee', 'listo', 'correcto', 'confirmo', 'confirmado', 'ok', 'oka', 'okay', 'okey', 'eso', 'vale', 'va', 'sale', 'perfecto', 'hagale', 'deacuerdo', 'acuerdo', 'positivo', 'afirmativo'];
   if (yes.some((y) => words.has(y))) return true;
   return /\b(si|sisas|dale|listo|correcto|confirm\w*|perfecto|de una|hagale|todo bien|esta bien|asi es)\b/.test(s);
+}
+
+/**
+ * Detecta el CTA genérico de los anuncios ("Más información", "Info", "Me
+ * interesa"…), que NO coincide con el disparador específico de ningún producto.
+ * Solo mensajes cortos: una frase larga con "más información sobre el envío" no
+ * debe activar el disparador interno de producto.
+ */
+function esMasInfo(t: string): boolean {
+  const s = norm(t);
+  if (!s || s.split(' ').length > 5) return false;
+  if (/\b(mas)\s+(info\w*|detalle\w*)\b/.test(s)) return true;
+  if (/\binformacion\b/.test(s)) return true;
+  if (/\b(me interesa|quiero saber|quiero mas|deseo informacion|necesito informacion|mas detalles)\b/.test(s)) return true;
+  return ['info', 'mas info', 'interesado', 'interesada', 'informes'].includes(s);
+}
+
+/**
+ * Intenta identificar de qué producto habla el cliente, casando su mensaje con
+ * el NOMBRE o el disparador de cada producto activo. Devuelve null si no hay una
+ * coincidencia clara o si hay empate entre dos productos (para no adivinar).
+ */
+function identificarProducto(t: string, activos: Record<string, unknown>[]): Record<string, unknown> | null {
+  const tn = norm(t);
+  if (!tn) return null;
+  const tWords = new Set(tn.split(' ').filter(Boolean));
+  const puntuar = (cand: string): number => {
+    const cn = norm(cand);
+    if (cn.length < 3) return 0;
+    if (tn.includes(cn)) return 1;
+    const words = cn.split(' ').filter((w) => w.length >= 3);
+    if (!words.length) return 0;
+    return words.filter((w) => tWords.has(w)).length / words.length;
+  };
+  const scored = activos
+    .map((p) => ({ p, s: Math.max(puntuar(String(p.nombre || '')), puntuar(String(p.disparador || ''))) }))
+    .sort((a, b) => b.s - a.s);
+  if (!scored.length || scored[0].s < 0.6) return null;
+  if (scored[1] && scored[1].s >= scored[0].s - 0.01) return null; // empate → no adivinar
+  return scored[0].p;
 }
 
 /** Limpia un valor tomado del "Resumen de tu pedido": quita asteriscos y emojis del inicio. */

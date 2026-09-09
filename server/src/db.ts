@@ -332,6 +332,9 @@ addColumn('stores', "owner_user_id TEXT NOT NULL DEFAULT ''");
 db.exec("UPDATE stores SET owner_user_id = (SELECT id FROM users WHERE users.email = stores.correo AND users.role = 'VENDEDOR' ORDER BY rowid LIMIT 1) WHERE COALESCE(owner_user_id,'') = ''");
 addColumn('leads', "etiqueta TEXT NOT NULL DEFAULT ''"); // Seguimiento, Venta, Garantía…
 addColumn('leads', "canal TEXT NOT NULL DEFAULT 'whatsapp'"); // whatsapp | web (multicanal)
+// Disparador interno de "Más información": '' = nada; 'ASK' = le preguntamos cuál
+// producto y esperamos su respuesta; <id> = le propusimos ese producto y esperamos su sí.
+addColumn('leads', "pendiente_info TEXT NOT NULL DEFAULT ''");
 addColumn('stores', 'oculta INTEGER NOT NULL DEFAULT 0'); // tienda fantasma: invisible para el admin normal
 addColumn('sent_presentations', 'created_at TEXT');
 addColumn('messages', "tipo TEXT NOT NULL DEFAULT 'texto'");
