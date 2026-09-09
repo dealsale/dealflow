@@ -124,6 +124,12 @@ import type {
 import { COLOR_ETIQUETA, ETIQUETAS_CRM } from '../types';
 import type { Bundle, MensajeBloque } from '../types';
 
+/** Piezas de un bloque de imagen/video (normaliza el `valor` antiguo de una sola pieza). */
+function mediaDeBloque(b: MensajeBloque): string[] {
+  if (Array.isArray(b.valores) && b.valores.length) return b.valores;
+  return b.valor ? [b.valor] : [];
+}
+
 export interface DecoratedOrder extends Order {
   totalFmt: string;
   envioFmt: string;
@@ -222,7 +228,13 @@ export interface DecoratedProduct extends Product {
   videosList: string[];
   addVideos: (files: File[]) => void;
   removeVideo: (index: number) => void;
-  bloquesDecorados: (MensajeBloque & { remove: () => void })[];
+  bloquesDecorados: (MensajeBloque & {
+    mediaLista: string[];
+    remove: () => void;
+    addMedia: (files: File[]) => void;
+    removeMedia: (mediaIndex: number) => void;
+    moverMedia: (from: number, to: number) => void;
+  })[];
   moverBloque: (from: number, to: number) => void;
   addBloqueTexto: () => void;
   addBloqueImagen: (files: File[]) => void;
@@ -1361,9 +1373,20 @@ export function useDealFlowState() {
     if (urls.length) patchProductList(productId, 'videos', (v) => [...v, ...urls]);
   }
 
+  // Crea UN bloque nuevo con todas las piezas subidas (varias imágenes en un
+  // bloque de imagen, varios videos en uno de video).
   async function addBloqueMedia(productId: number | string, files: File[], tipo: 'imagen' | 'video') {
     const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, tipo === 'imagen' ? 'image/' : 'video/');
-    if (urls.length) patchProductList(productId, 'mensajeBloques', (b) => [...b, ...urls.map((valor) => ({ tipo, valor }))]);
+    if (urls.length) patchProductList(productId, 'mensajeBloques', (b) => [...b, { tipo, valores: urls }]);
+  }
+
+  // Agrega más piezas a un bloque de imagen/video ya existente.
+  async function addMediaABloque(productId: number | string, index: number, files: File[], tipo: 'imagen' | 'video') {
+    const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, tipo === 'imagen' ? 'image/' : 'video/');
+    if (!urls.length) return;
+    patchProductList(productId, 'mensajeBloques', (bl) =>
+      bl.map((b, j) => (j === index ? { ...b, valores: [...mediaDeBloque(b), ...urls], valor: undefined } : b)),
+    );
   }
 
   async function addVariantPhotos(productId: number | string, variantIndex: number, files: File[]) {
@@ -1465,7 +1488,32 @@ export function useDealFlowState() {
         removeVideo: (index: number) => patchProductList(p.id, 'videos', (v) => v.filter((_, j) => j !== index)),
         bloquesDecorados: (p.mensajeBloques || []).map((b, i) => ({
           ...b,
+          mediaLista: mediaDeBloque(b),
           remove: () => patchProductList(p.id, 'mensajeBloques', (bl) => bl.filter((_, j) => j !== i)),
+          addMedia: (files: File[]) => {
+            if (b.tipo === 'imagen' || b.tipo === 'video') void addMediaABloque(p.id, i, files, b.tipo);
+          },
+          // Quita una pieza del bloque; si queda vacío, elimina el bloque entero.
+          removeMedia: (mediaIndex: number) =>
+            patchProductList(p.id, 'mensajeBloques', (bl) =>
+              bl.flatMap((bloque, j) => {
+                if (j !== i) return [bloque];
+                const restantes = mediaDeBloque(bloque).filter((_, k) => k !== mediaIndex);
+                return restantes.length ? [{ ...bloque, valores: restantes, valor: undefined }] : [];
+              }),
+            ),
+          // Mueve una pieza dentro del bloque (reordenar imágenes/videos).
+          moverMedia: (from: number, to: number) =>
+            patchProductList(p.id, 'mensajeBloques', (bl) =>
+              bl.map((bloque, j) => {
+                if (j !== i) return bloque;
+                const piezas = [...mediaDeBloque(bloque)];
+                if (from === to || from < 0 || to < 0 || from >= piezas.length || to >= piezas.length) return bloque;
+                const [x] = piezas.splice(from, 1);
+                piezas.splice(to, 0, x);
+                return { ...bloque, valores: piezas, valor: undefined };
+              }),
+            ),
         })),
         moverBloque: (from: number, to: number) =>
           patchProductList(p.id, 'mensajeBloques', (bl) => {

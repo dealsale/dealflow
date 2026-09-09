@@ -17,7 +17,13 @@ function copiarMediaUrl(from: string, to: string, url: unknown): unknown {
 const remapUrls = (from: string, to: string, str: unknown) =>
   j(pj<string[]>(str as string, []).map((u) => copiarMediaUrl(from, to, u)));
 const remapBloques = (from: string, to: string, str: unknown) =>
-  j(pj<{ tipo: string; valor: string }[]>(str as string, []).map((b) => (b.tipo === 'texto' ? b : { ...b, valor: copiarMediaUrl(from, to, b.valor) })));
+  j(pj<{ tipo: string; valor?: string; valores?: string[] }[]>(str as string, []).map((b) => {
+    if (b.tipo === 'texto') return b;
+    const out: { tipo: string; valor?: string; valores?: string[] } = { ...b };
+    if (Array.isArray(b.valores)) out.valores = b.valores.map((u) => copiarMediaUrl(from, to, u) as string);
+    if (typeof b.valor === 'string') out.valor = copiarMediaUrl(from, to, b.valor) as string;
+    return out;
+  }));
 // Las plantillas NO traen fotos pegadas a cada color/opción: son del catálogo de
 // la tienda maestra. Cada tienda pone las suyas, así que al instalar se quitan.
 const remapOpciones = (_from: string, _to: string, str: unknown) =>

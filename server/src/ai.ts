@@ -137,8 +137,8 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
       .map((v) => `${v.label} (${v.stock} disp.)`).join(', ');
     const reglas = pj<string[]>(p.reglas as string, []).map((r) => `  · Regla: ${r}`).join('\n');
     const faqs = pj<{ pregunta: string; respuesta: string }[]>(p.faqs as string, []).map((f) => `  · P: ${f.pregunta} → R: ${f.respuesta}`).join('\n');
-    const bloques = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, [])
-      .filter((b) => b.tipo === 'texto').map((b) => b.valor).join(' ');
+    const bloques = pj<{ tipo: string; valor?: string }[]>(p.mensaje_bloques as string, [])
+      .filter((b) => b.tipo === 'texto').map((b) => b.valor || '').join(' ');
     const guion = bloques || (p.mensaje_inicial as string);
     const combos = pj<{ cantidad: number; precio: number; etiqueta?: string }[]>(p.bundles as string, [])
       .map((b) => `  · Combo: ${b.cantidad} por $${Number(b.precio).toLocaleString('es-CO')} COP${b.etiqueta ? ` (${b.etiqueta})` : ''}`).join('\n');
@@ -511,8 +511,8 @@ function norm(s: string): string {
 function fotoReferencia(p: Record<string, unknown>): string | null {
   const fotos = pj<string[]>(p.fotos_subidas as string, []);
   if (fotos.length) return fotos[0];
-  const img = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, []).find((b) => b.tipo === 'imagen');
-  return img?.valor || null;
+  const img = pj<{ tipo: string; valor?: string; valores?: string[] }[]>(p.mensaje_bloques as string, []).find((b) => b.tipo === 'imagen');
+  return img?.valores?.[0] || img?.valor || null;
 }
 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -620,14 +620,20 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
      ON CONFLICT(lead_id, product_id) DO UPDATE SET created_at = datetime('now')`,
   ).run(leadId, pid);
 
-  const bloques = pj<{ tipo: string; valor: string }[]>(p.mensaje_bloques as string, []);
+  const bloques = pj<{ tipo: string; valor?: string; valores?: string[] }[]>(p.mensaje_bloques as string, []);
   const fotos = pj<string[]>(p.fotos_subidas as string, []);
   const videos = pj<string[]>(p.videos as string, []);
   // Si armaste el mensaje inicial con bloques, se envía EXACTAMENTE esa
   // estructura (textos, imágenes y videos en tu orden), sin repetir con las
-  // fotos principales. Solo si no hay bloques usamos fotos + videos.
+  // fotos principales. Un bloque de imagen/video puede traer VARIAS piezas
+  // (valores[]); se envía una tras otra, en orden. Solo si no hay bloques
+  // usamos fotos + videos.
   const piezas: { tipo: string; valor: string }[] = bloques.length
-    ? bloques.map((b) => ({ tipo: b.tipo, valor: b.valor }))
+    ? bloques.flatMap((b) => {
+        if (b.tipo === 'texto') return [{ tipo: 'texto', valor: b.valor || '' }];
+        const lista = Array.isArray(b.valores) && b.valores.length ? b.valores : b.valor ? [b.valor] : [];
+        return lista.map((v) => ({ tipo: b.tipo, valor: v }));
+      })
     : [...fotos.slice(0, 6).map((v) => ({ tipo: 'imagen', valor: v })), ...videos.slice(0, 2).map((v) => ({ tipo: 'video', valor: v }))];
   if (!piezas.length) {
     console.log(`[ia] "${p.nombre}": el cliente lo pidió pero no hay fotos/videos cargados`);

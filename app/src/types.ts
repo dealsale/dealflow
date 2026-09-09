@@ -65,10 +65,16 @@ export interface Bundle {
 
 export type BloqueTipo = 'texto' | 'imagen' | 'video';
 
-/** Un bloque del mensaje inicial: texto, o una imagen/video como data URL. */
+/**
+ * Un bloque del mensaje inicial. Un bloque de texto trae `valor`; uno de
+ * imagen/video puede traer VARIAS piezas en `valores` (varias imágenes en el
+ * mismo bloque de imagen, varios videos en el de video). `valor` se conserva
+ * para bloques antiguos de una sola pieza.
+ */
 export interface MensajeBloque {
   tipo: BloqueTipo;
-  valor: string;
+  valor?: string;
+  valores?: string[];
 }
 
 export interface Product {

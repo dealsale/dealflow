@@ -2,6 +2,40 @@ import { useState } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 
+type BloqueDecorado = DecoratedProduct['bloquesDecorados'][number];
+
+/** Contenido de un bloque de imagen/video: varias piezas, cada una con quitar y mover. */
+function MediaEnBloque({ b }: { b: BloqueDecorado }) {
+  const esVideo = b.tipo === 'video';
+  return (
+    <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+      {b.mediaLista.map((src, k) => (
+        <div key={k} style={{ position: 'relative', flexShrink: 0 }}>
+          {esVideo
+            ? <video src={src} controls style={{ width: 150, maxWidth: '100%', borderRadius: 8, background: '#0F172A', display: 'block' }} />
+            : <img src={src} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(15,23,42,.1)', display: 'block' }} />}
+          <span
+            onClick={() => b.removeMedia(k)}
+            title="Quitar esta pieza"
+            style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: '#0F172A', color: '#fff', fontSize: 11, lineHeight: '18px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }}
+          >✕</span>
+          <div style={{ position: 'absolute', bottom: 3, left: 3, display: 'flex', gap: 3 }}>
+            {k > 0 && (
+              <span onClick={() => b.moverMedia(k, k - 1)} title="Mover a la izquierda"
+                style={{ width: 18, height: 18, borderRadius: 5, background: 'rgba(15,23,42,.72)', color: '#fff', fontSize: 11, lineHeight: '18px', textAlign: 'center', cursor: 'pointer' }}>◀</span>
+            )}
+            {k < b.mediaLista.length - 1 && (
+              <span onClick={() => b.moverMedia(k, k + 1)} title="Mover a la derecha"
+                style={{ width: 18, height: 18, borderRadius: 5, background: 'rgba(15,23,42,.72)', color: '#fff', fontSize: 11, lineHeight: '18px', textAlign: 'center', cursor: 'pointer' }}>▶</span>
+            )}
+          </div>
+        </div>
+      ))}
+      <PhotoAddChip label={esVideo ? '+ Video' : '+ Imagen'} accept={esVideo ? 'video/*' : undefined} onFiles={b.addMedia} />
+    </div>
+  );
+}
+
 /** Bloques del mensaje inicial, con arrastrar-para-reordenar. */
 function BloquesInicial({ p }: { p: DecoratedProduct }) {
   const [drag, setDrag] = useState<number | null>(null);
@@ -33,10 +67,8 @@ function BloquesInicial({ p }: { p: DecoratedProduct }) {
               {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : 'Video'}
             </span>
             {b.tipo === 'texto' && <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>{b.valor}</span>}
-            {b.tipo === 'imagen' && <img src={b.valor} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(15,23,42,.1)' }} />}
-            {b.tipo === 'video' && <video src={b.valor} controls style={{ width: 180, maxWidth: '100%', borderRadius: 8, background: '#0F172A' }} />}
-            {b.tipo !== 'texto' && <div style={{ flex: 1 }} />}
-            <span onClick={b.remove} className="df-danger-hover" title="Quitar bloque" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>✕</span>
+            {b.tipo !== 'texto' && <MediaEnBloque b={b} />}
+            <span onClick={b.remove} className="df-danger-hover" title={b.tipo === 'texto' ? 'Quitar bloque' : 'Quitar el bloque completo'} style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, alignSelf: 'flex-start' }}>✕</span>
           </div>
         );
       })}
