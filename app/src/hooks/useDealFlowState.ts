@@ -138,6 +138,25 @@ function mediaDeBloque(b: MensajeBloque): string[] {
   return b.valor ? [b.valor] : [];
 }
 
+/**
+ * Imagen de previsualización de un producto: la primera foto principal; si no
+ * hay, la primera imagen del mensaje inicial; si no, la primera foto de una
+ * opción. Devuelve null si el producto no tiene ninguna imagen.
+ */
+function previewDeProducto(p: Product): string | null {
+  const fotos = p.fotosSubidas || [];
+  if (fotos.length) return fotos[0];
+  for (const b of p.mensajeBloques || []) {
+    if (b.tipo === 'imagen') { const m = mediaDeBloque(b); if (m.length) return m[0]; }
+  }
+  for (const o of p.opciones || []) {
+    for (const v of o.valores || []) {
+      if (typeof v !== 'string' && v.foto) return v.foto;
+    }
+  }
+  return null;
+}
+
 export interface DecoratedOrder extends Order {
   totalFmt: string;
   envioFmt: string;
@@ -203,6 +222,7 @@ export interface DecoratedVariante {
 export interface DecoratedProduct extends Product {
   iniciales: string;
   fotoStyle: CSSProperties;
+  previewImg: string | null;
   precioFmt: string;
   variantesLabel: string;
   stockLabel: string;
@@ -1433,6 +1453,7 @@ export function useDealFlowState() {
         ...p,
         iniciales: initials(p.nombre).toUpperCase(),
         fotoStyle: { width: '44px', height: '44px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' },
+        previewImg: previewDeProducto(p),
         precioFmt: fmt(p.precio),
         variantesLabel: (p.opciones && p.opciones.length)
           ? p.opciones.filter((o) => o.valores.length).map((o) => o.nombre + ': ' + o.valores.map((v) => v.valor).join(', ')).join('  ·  ') || 'Opciones sin valores'

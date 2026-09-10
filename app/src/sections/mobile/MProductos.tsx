@@ -73,7 +73,9 @@ export function MProductos({ df }: { df: DealFlowState }) {
         {df.products.map((p) => (
           <div key={p.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
             <div onClick={p.toggle} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 14px', cursor: 'pointer' }}>
-              <div style={{ ...p.fotoStyle, width: 46, height: 46, flexShrink: 0 }}>{p.iniciales}</div>
+              {p.previewImg
+                ? <img src={p.previewImg} alt="" style={{ width: 46, height: 46, borderRadius: 10, objectFit: 'cover', flexShrink: 0, border: '1px solid rgba(15,23,42,.08)' }} />
+                : <div style={{ ...p.fotoStyle, width: 46, height: 46, flexShrink: 0 }}>{p.iniciales}</div>}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 14.5 }}>{p.nombre}</div>
                 <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 1 }}>

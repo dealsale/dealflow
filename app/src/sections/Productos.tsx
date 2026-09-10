@@ -564,7 +564,9 @@ export function Productos({ df }: { df: DealFlowState }) {
               className="df-row-hover df-prow"
               style={{ display: 'grid', gridTemplateColumns: '52px 1fr 120px 130px 24px', alignItems: 'center', gap: 14, padding: '12px 18px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
             >
-              <div style={p.fotoStyle}>{p.iniciales}</div>
+              {p.previewImg
+                ? <img src={p.previewImg} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover', border: '1px solid rgba(15,23,42,.08)' }} />
+                : <div style={p.fotoStyle}>{p.iniciales}</div>}
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
                   {p.nombre}
