@@ -590,7 +590,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
       for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(storeId) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
       const r = await woo.crearPedido(storeId, { cliente, ciudad, departamento, tel: lead.tel || '', direccion, nota: '', envio: 0 }, items, skus);
       if ('error' in r) console.warn(`[woo] pedido DF-${numero} NO se envió a WooCommerce: ${r.error}`);
-      else { db.prepare("UPDATE orders SET woo_id = ?, transportadora = 'Effi' WHERE id = ?").run(r.wooId, oid); console.log(`[woo] pedido DF-${numero} enviado a WooCommerce (#${r.numero})`); }
+      else { db.prepare("UPDATE orders SET woo_id = ?, transportadora = 'WooCommerce' WHERE id = ?").run(r.wooId, oid); console.log(`[woo] pedido DF-${numero} enviado a WooCommerce (#${r.numero})`); }
     } catch (e) { console.error('[woo] error auto-enviando pedido', e); }
   })();
 

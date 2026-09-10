@@ -120,17 +120,17 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
 
           </>)}
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Despacho con Effi</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Despacho por WooCommerce (Effi / Dropi)</div>
           <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#EDE9FE', color: '#6D28D9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>Ef</div>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>Effi</span>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#EDE9FE', color: '#6D28D9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>Wo</div>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>WooCommerce</span>
               <span style={{ display: 'inline-block', background: sel.enviadoEffi ? '#EDE9FE' : '#F1F5F9', color: sel.enviadoEffi ? '#6D28D9' : '#64748B', borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>
-                {sel.enviadoEffi ? 'En Effi' : 'Sin enviar'}
+                {sel.enviadoEffi ? 'Enviado' : 'Sin enviar'}
               </span>
               <div style={{ flex: 1 }} />
               {!sel.enviadoEffi ? (
-                <button onClick={sel.enviarEffi} style={{ background: '#6D28D9', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}>Enviar a Effi</button>
+                <button onClick={sel.enviarEffi} style={{ background: '#6D28D9', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}>Enviar a WooCommerce</button>
               ) : (
                 <button onClick={sel.sincronizarEffi} style={{ background: '#fff', border: '1px solid #DDD6FE', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: '#6D28D9', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sincronizar estado</button>
               )}

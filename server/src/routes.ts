@@ -378,7 +378,7 @@ api.post('/orders/:rowId/effi', requireAuth, requireStore, requireOwner, async (
     tel: String(o.tel || ''), direccion: String(o.direccion || ''), nota: String(o.nota || ''), envio: Number(o.envio || 0),
   }, items, skus);
   if ('error' in r) return res.status(400).json({ error: r.error });
-  db.prepare("UPDATE orders SET woo_id = ?, transportadora = 'Effi' WHERE id = ?").run(r.wooId, o.id);
+  db.prepare("UPDATE orders SET woo_id = ?, transportadora = 'WooCommerce' WHERE id = ?").run(r.wooId, o.id);
   res.json({ ok: true, wooId: r.wooId, numeroWoo: r.numero });
 });
 

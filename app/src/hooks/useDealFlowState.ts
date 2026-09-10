@@ -771,20 +771,20 @@ export function useDealFlowState() {
   function enviarAEffi(id: string) {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o?.rowId) return;
-    setEffiMsg('Enviando a Effi…');
+    setEffiMsg('Enviando a WooCommerce…');
     void apiOrderEffi(o.rowId).then((r) => {
-      if (r.error || !r.data) { setEffiMsg(r.error || 'No se pudo enviar a Effi.'); return; }
-      setEffiMsg(r.data.aviso || '✓ Pedido enviado a Effi. La guía llega cuando Effi lo despache.');
-      setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, transportadora: 'Effi' } : x)));
+      if (r.error || !r.data) { setEffiMsg(r.error || 'No se pudo enviar a WooCommerce.'); return; }
+      setEffiMsg(r.data.aviso || '✓ Pedido enviado a WooCommerce. Effi/Dropi genera la guía al despacharlo.');
+      setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, transportadora: 'WooCommerce' } : x)));
     });
   }
   function sincronizarEffi(id: string) {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o?.rowId) return;
-    setEffiMsg('Consultando a Effi…');
+    setEffiMsg('Consultando WooCommerce…');
     void apiOrderEffiSync(o.rowId).then((r) => {
       if (r.error || !r.data) { setEffiMsg(r.error || 'No se pudo sincronizar.'); return; }
-      setEffiMsg(`Estado en Effi: ${r.data.estado || 'sin cambios'}${r.data.guia ? ` · guía ${r.data.guia}` : ''}`);
+      setEffiMsg(`Estado: ${r.data.estado || 'sin cambios'}${r.data.guia ? ` · guía ${r.data.guia}` : ''}`);
       if (r.data.guia) setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, guia: r.data!.guia } : x)));
     });
   }
