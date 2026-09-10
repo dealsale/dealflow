@@ -80,8 +80,22 @@ export async function crearPedido(
   const feeLines: Record<string, unknown>[] = [];
   const sinMapear: string[] = [];
 
+  // El nombre del ítem trae talla/color ("Jogger jaspeado (Talla M · Negro)"),
+  // pero el SKU está por el nombre base del producto: casamos de forma flexible.
+  const nombresProd = Object.keys(skusPorNombre);
+  const skuDeItem = (nombreItem: string): string => {
+    if (skusPorNombre[nombreItem]) return skusPorNombre[nombreItem].trim();
+    const base = nombreItem.split('(')[0].split('—')[0].trim();
+    if (skusPorNombre[base]) return skusPorNombre[base].trim();
+    const bajo = nombreItem.toLowerCase();
+    const m = nombresProd
+      .filter((n) => n && (bajo.startsWith(n.toLowerCase()) || bajo.includes(n.toLowerCase())))
+      .sort((a, b) => b.length - a.length)[0];
+    return m ? skusPorNombre[m].trim() : '';
+  };
+
   for (const it of items) {
-    const sku = (skusPorNombre[it.nombre] || '').trim();
+    const sku = skuDeItem(it.nombre);
     let productId = 0;
     if (sku) {
       try {
@@ -177,20 +191,38 @@ export async function inventario(storeId: string): Promise<{ items: ItemInventar
   }
 }
 
+/** Genera un SKU legible y único a partir del nombre y el id del producto. */
+function skuAuto(nombre: string, id: string): string {
+  const slug = (nombre || 'PRODUCTO')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 22) || 'PRODUCTO';
+  return `${slug}-${id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 5).toUpperCase()}`;
+}
+
 /**
  * Empuja el catálogo de DealFlow a WooCommerce: crea los productos que no
- * existen y actualiza los que ya están (casando por SKU). Solo sincroniza los
- * que tienen SKU (sin SKU no hay forma de casarlos sin duplicar en cada envío).
+ * existen y actualiza los que ya están (casando por SKU). A los productos que no
+ * tengan SKU les genera uno automáticamente (y lo guarda), para que la
+ * sincronización funcione sin tener que ponerlo a mano.
  */
-export async function empujarProductos(storeId: string): Promise<{ creados: number; actualizados: number; omitidos: number } | { error: string }> {
+export async function empujarProductos(storeId: string): Promise<{ creados: number; actualizados: number; skusGenerados: number } | { error: string }> {
   const c = credenciales(storeId);
   if (!c) return { error: 'Conecta WooCommerce en Integraciones.' };
 
   const prods = db.prepare('SELECT id, nombre, precio, descripcion, sku FROM products WHERE store_id = ?').all(storeId) as
     { id: string; nombre: string; precio: number; descripcion: string; sku: string }[];
-  const conSku = prods.filter((p) => (p.sku || '').trim());
-  const omitidos = prods.length - conSku.length;
-  if (!conSku.length) return { error: 'Ningún producto tiene SKU. Ponle SKU a tus productos (en Productos) para poder sincronizarlos.' };
+  if (!prods.length) return { error: 'No tienes productos para enviar. Crea productos en la sección Productos.' };
+
+  // A los productos sin SKU les asignamos uno automáticamente y lo guardamos.
+  let skusGenerados = 0;
+  for (const p of prods) {
+    if (!(p.sku || '').trim()) {
+      p.sku = skuAuto(p.nombre, p.id);
+      db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(p.sku, p.id);
+      skusGenerados++;
+    }
+  }
+  const conSku = prods;
 
   const stockDe = (id: string) => (db.prepare('SELECT COALESCE(SUM(stock),0) s FROM variants WHERE product_id = ?').get(id) as { s: number }).s;
 
@@ -239,7 +271,7 @@ export async function empujarProductos(storeId: string): Promise<{ creados: numb
   } catch {
     return { error: 'No pudimos sincronizar los productos con WooCommerce.' };
   }
-  return { creados, actualizados, omitidos };
+  return { creados, actualizados, skusGenerados };
 }
 
 /** Actualiza el stock local (products.stock por SKU) con lo que dice WooCommerce. */

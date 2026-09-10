@@ -578,6 +578,22 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   db.prepare("UPDATE leads SET etapa = 'Listo para comprar', etiqueta = 'Venta' WHERE id = ?").run(lead.id);
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
 
+  // Si la tienda tiene WooCommerce conectado, enviamos el pedido allí AUTOMÁTICAMENTE
+  // (Effi/Dropi lo despachan desde WooCommerce). No bloquea la respuesta del bot y
+  // es idempotente: si falla, el pedido igual queda en DealFlow y se puede reenviar
+  // a mano desde el detalle del pedido.
+  void (async () => {
+    try {
+      const woo = await import('./woocommerce.js');
+      if (!woo.credenciales(storeId)) return; // WooCommerce no conectado
+      const skus: Record<string, string> = {};
+      for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(storeId) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
+      const r = await woo.crearPedido(storeId, { cliente, ciudad, departamento, tel: lead.tel || '', direccion, nota: '', envio: 0 }, items, skus);
+      if ('error' in r) console.warn(`[woo] pedido DF-${numero} NO se envió a WooCommerce: ${r.error}`);
+      else { db.prepare("UPDATE orders SET woo_id = ?, transportadora = 'Effi' WHERE id = ?").run(r.wooId, oid); console.log(`[woo] pedido DF-${numero} enviado a WooCommerce (#${r.numero})`); }
+    } catch (e) { console.error('[woo] error auto-enviando pedido', e); }
+  })();
+
   // Mensaje de confirmación al cliente.
   const primerNombre = cliente.split(' ')[0];
   const producto = (items[0]?.nombre || 'tu pedido').split('(')[0].split('—')[0].trim();

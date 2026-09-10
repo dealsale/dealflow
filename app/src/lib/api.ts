@@ -260,7 +260,7 @@ export const apiOrderEffi = (rowId: string) => req<{ ok: true; wooId: string; nu
 export const apiOrderEffiSync = (rowId: string) => req<{ estado: string; guia: string }>(`/api/orders/${rowId}/effi/sync`, 'POST');
 export const apiWooVerificar = () => req<{ ok: true }>('/api/woo/verificar', 'POST');
 export const apiWooSyncInventario = () => req<{ actualizados: number }>('/api/woo/inventario/sync', 'POST');
-export const apiWooSyncProductos = () => req<{ creados: number; actualizados: number; omitidos: number }>('/api/woo/productos/sync', 'POST');
+export const apiWooSyncProductos = () => req<{ creados: number; actualizados: number; skusGenerados: number }>('/api/woo/productos/sync', 'POST');
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
 export const apiSendLeadMessage = (id: string, texto: string) =>
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/messages`, 'POST', { texto });

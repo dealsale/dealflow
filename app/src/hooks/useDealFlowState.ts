@@ -1982,9 +1982,9 @@ export function useDealFlowState() {
     setIntegracionMsg('Enviando tus productos a WooCommerce…');
     void apiWooSyncProductos().then((r) => {
       if (r.error || !r.data) { setIntegracionMsg(r.error || 'No se pudieron sincronizar los productos.'); return; }
-      const { creados, actualizados, omitidos } = r.data;
-      setIntegracionMsg(`✓ Productos sincronizados: ${creados} creados, ${actualizados} actualizados${omitidos ? ` · ${omitidos} sin SKU omitidos` : ''}.`);
-      setTimeout(() => setIntegracionMsg(''), 6000);
+      const { creados, actualizados, skusGenerados } = r.data;
+      setIntegracionMsg(`✓ Productos sincronizados: ${creados} creados, ${actualizados} actualizados en WooCommerce${skusGenerados ? ` · ${skusGenerados} SKU generados automáticamente` : ''}.`);
+      setTimeout(() => setIntegracionMsg(''), 7000);
     });
   }
   function elegirIaPredeterminada(proveedor: string) {
