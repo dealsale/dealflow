@@ -86,6 +86,14 @@ import {
   apiSetLeadEtiqueta,
   apiSuperStores,
   apiToggleHideStore,
+  apiBiblioteca,
+  apiImportarBiblioteca,
+  apiCheckoutBiblioteca,
+  apiSuperBiblioteca,
+  apiSuperStoreProducts,
+  apiSuperBibliotecaFromProduct,
+  apiSuperBibliotecaPatch,
+  apiSuperBibliotecaDelete,
   apiIntegraciones,
   apiGuardarIntegracion,
   apiEliminarIntegracion,
@@ -102,7 +110,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -1692,6 +1700,63 @@ export function useDealFlowState() {
     void apiToggleHideStore(id, !oculta).then((r) => { if (r.error) void reloadSuper(); });
   }
 
+  // ── Biblioteca de productos (tienda cliente) ──
+  const [bibliotecaItems, setBibliotecaItems] = useState<LibraryItem[]>([]);
+  const [bibliotecaMsg, setBibliotecaMsg] = useState('');
+  async function reloadBiblioteca() {
+    const { data } = await apiBiblioteca();
+    if (data) setBibliotecaItems(data.productos);
+  }
+  useEffect(() => {
+    if (apiMode && sessionUser && section === 'biblioteca') void reloadBiblioteca();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, sessionUser, section]);
+  function importarDeBiblioteca(id: string) {
+    setBibliotecaMsg('');
+    void apiImportarBiblioteca(id).then((r) => {
+      if (r.error) { setBibliotecaMsg(r.error); return; }
+      if (r.data?.requierePago) {
+        // Producto de pago: abrimos el checkout de Wompi.
+        void apiCheckoutBiblioteca(id).then((c) => {
+          if (c.error || !c.data?.url) { setBibliotecaMsg(c.error || 'No pudimos abrir el pago.'); return; }
+          window.location.href = c.data.url;
+        });
+        return;
+      }
+      setBibliotecaMsg('✓ Producto importado a tu catálogo. Ya lo puedes editar en Productos.');
+      void reloadBiblioteca();
+      void reloadProducts();
+    });
+  }
+
+  // ── Biblioteca de productos (superadmin) ──
+  const [superBiblioteca, setSuperBiblioteca] = useState<LibraryAdminItem[]>([]);
+  const [superStoreProducts, setSuperStoreProducts] = useState<SuperStoreProduct[]>([]);
+  async function reloadSuperBiblioteca() {
+    const { data } = await apiSuperBiblioteca();
+    if (data) setSuperBiblioteca(data.productos);
+  }
+  useEffect(() => {
+    if (apiMode && isSuperadmin && sessionUser && adminSection === 'superadmin') void reloadSuperBiblioteca();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, isSuperadmin, sessionUser, adminSection]);
+  function cargarProductosDeTienda(storeId: string) {
+    setSuperStoreProducts([]);
+    if (!storeId) return;
+    void apiSuperStoreProducts(storeId).then(({ data }) => { if (data) setSuperStoreProducts(data.productos); });
+  }
+  function enviarProductoABiblioteca(productId: string, gratis: boolean, precioImportacion: number) {
+    void apiSuperBibliotecaFromProduct(productId, gratis, precioImportacion).then((r) => { if (!r.error) void reloadSuperBiblioteca(); });
+  }
+  function actualizarBibliotecaItem(id: string, patch: { nombre?: string; gratis?: boolean; precioImportacion?: number; activo?: boolean }) {
+    setSuperBiblioteca((st) => st.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+    void apiSuperBibliotecaPatch(id, patch).then((r) => { if (r.error) void reloadSuperBiblioteca(); });
+  }
+  function eliminarBibliotecaItem(id: string) {
+    setSuperBiblioteca((st) => st.filter((p) => p.id !== id));
+    void apiSuperBibliotecaDelete(id).then((r) => { if (r.error) void reloadSuperBiblioteca(); });
+  }
+
   // ── PWA: instalar la app ──
   useEffect(() => {
     const listo = () => setPwaDisponible(true);
@@ -2396,6 +2461,16 @@ export function useDealFlowState() {
     isSuperadmin,
     superStores,
     toggleHideStore,
+    // ── Biblioteca de productos ──
+    bibliotecaItems,
+    bibliotecaMsg,
+    importarDeBiblioteca,
+    superBiblioteca,
+    superStoreProducts,
+    cargarProductosDeTienda,
+    enviarProductoABiblioteca,
+    actualizarBibliotecaItem,
+    eliminarBibliotecaItem,
     setLeadEtiqueta,
     etiquetasCrm: ETIQUETAS_CRM,
     section,

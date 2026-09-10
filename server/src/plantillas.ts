@@ -1,36 +1,4 @@
-import { existsSync, copyFileSync } from 'node:fs';
 import { db, uid, j, pj } from './db.js';
-import { mediaPath } from './media.js';
-
-/** Copia un archivo de media de una tienda a otra y devuelve la nueva URL. */
-function copiarMediaUrl(from: string, to: string, url: unknown): unknown {
-  if (typeof url !== 'string' || !url.startsWith('/api/media/')) return url;
-  const m = url.match(/\/api\/media\/[^/]+\/([^/?#]+)/);
-  if (!m) return url;
-  const src = mediaPath(from, m[1]);
-  if (!existsSync(src)) return url;
-  const ext = m[1].includes('.') ? m[1].split('.').pop() : 'bin';
-  const file = uid() + '.' + ext;
-  try { copyFileSync(src, mediaPath(to, file)); } catch { return url; }
-  return '/api/media/' + to + '/' + file;
-}
-const remapUrls = (from: string, to: string, str: unknown) =>
-  j(pj<string[]>(str as string, []).map((u) => copiarMediaUrl(from, to, u)));
-const remapBloques = (from: string, to: string, str: unknown) =>
-  j(pj<{ tipo: string; valor?: string; valores?: string[] }[]>(str as string, []).map((b) => {
-    if (b.tipo === 'texto') return b;
-    const out: { tipo: string; valor?: string; valores?: string[] } = { ...b };
-    if (Array.isArray(b.valores)) out.valores = b.valores.map((u) => copiarMediaUrl(from, to, u) as string);
-    if (typeof b.valor === 'string') out.valor = copiarMediaUrl(from, to, b.valor) as string;
-    return out;
-  }));
-// Las plantillas NO traen fotos pegadas a cada color/opción: son del catálogo de
-// la tienda maestra. Cada tienda pone las suyas, así que al instalar se quitan.
-const remapOpciones = (_from: string, _to: string, str: unknown) =>
-  j(pj<{ nombre: string; valores: (string | { valor: string; foto?: string })[] }[]>(str as string, []).map((o) => ({
-    ...o,
-    valores: (o.valores || []).map((v) => (typeof v === 'string' ? { valor: v } : { valor: v.valor })),
-  })));
 
 export interface Plantilla {
   id: string;
@@ -44,13 +12,13 @@ export const PLANTILLAS: Plantilla[] = [
   {
     id: 'ecommerce-v10',
     nombre: 'Ecomerce v.10',
-    descripcion: 'Deja tu asistente listo para vender ropa por WhatsApp en minutos: instrucciones, reglas de venta y los productos ya configurados con tallas, colores, combos, multimedia y mensaje inicial.',
+    descripcion: 'Deja tu asistente listo para vender ropa por WhatsApp en minutos: instrucciones y reglas de venta profesionales. Los productos los agregas tú desde la Biblioteca de productos (unos gratis, otros de pago único) o creando los tuyos.',
     precio: 0,
     features: [
       'Instrucciones del asistente listas para vender',
       'Todas las reglas de venta ya cargadas',
-      'Productos de ejemplo con fotos, videos y mensajes',
-      'Tallas, colores, combos y mensaje inicial incluidos',
+      'Tono y flujo de cierre profesional para ropa',
+      'Luego importa productos desde la Biblioteca',
     ],
   },
 ];
@@ -126,32 +94,16 @@ export function congelarSiFalta() {
   }
 }
 
-/** Aplica el snapshot congelado a la tienda destino, copiando su multimedia. */
-function aplicarSnapshot(snap: Snapshot, storeId: string, plantillaId: string) {
+/**
+ * Aplica el snapshot congelado a la tienda destino. Instala SOLO el asistente
+ * (instrucciones y reglas): las plantillas ya NO instalan productos. Los
+ * productos se agregan después desde la Biblioteca de productos del admin.
+ */
+function aplicarSnapshot(snap: Snapshot, storeId: string, _plantillaId: string) {
   db.prepare(
     `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
      ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
   ).run(storeId, snap.instrucciones, snap.reglas);
-  const from = snap.source_store_id;
-  const prods = pj<{ row: Record<string, unknown>; variants: Record<string, unknown>[] }[]>(snap.productos, []);
-  for (const { row, variants } of prods) {
-    const pid = uid();
-    db.prepare(
-      `INSERT INTO products (id, store_id, plantilla_id, nombre, precio, color, txt, reglas, fotos, fotos_subidas, descripcion, caracteristicas, mensaje_inicial, faqs, testimonios, modos_uso, videos, mensaje_bloques, bundles, opciones, contenido_paquete, disparador, mensaje_inicial_activo)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      pid, storeId, plantillaId, row.nombre, row.precio, row.color || '#E0E7FF', row.txt || '#4338CA',
-      (row.reglas as string) || '[]', (row.fotos as string) || '[]', remapUrls(from, storeId, row.fotos_subidas),
-      row.descripcion || '', row.caracteristicas || '', row.mensaje_inicial || '', (row.faqs as string) || '[]',
-      remapUrls(from, storeId, row.testimonios), row.modos_uso || '', remapUrls(from, storeId, row.videos),
-      remapBloques(from, storeId, row.mensaje_bloques), (row.bundles as string) || '[]', remapOpciones(from, storeId, row.opciones),
-      row.contenido_paquete || '', row.disparador || '', row.mensaje_inicial_activo == null ? 1 : row.mensaje_inicial_activo,
-    );
-    for (const v of variants || []) {
-      db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, fotos_subidas, orden) VALUES (?,?,?,?,?,?,?)')
-        .run(uid(), pid, v.label, v.stock || 0, v.fotos || 0, remapUrls(from, storeId, v.fotos_subidas), v.orden || 0);
-    }
-  }
 }
 
 /** Instala una plantilla en la tienda: deja el asistente y los productos listos. */
@@ -174,34 +126,12 @@ export function instalarPlantilla(storeId: string, plantillaId: string, force = 
   if (snapshotUtil(snap)) {
     aplicarSnapshot(snap, storeId, plantillaId);
   } else if (plantillaId === 'ecommerce-v10') {
-    // Respaldo de fábrica si no hay tienda maestra con contenido.
+    // Respaldo de fábrica si no hay tienda maestra con contenido: solo el
+    // asistente (instrucciones + reglas). Los productos van por la Biblioteca.
     db.prepare(
       `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
        ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
     ).run(storeId, ECOMMERCE_INSTRUCCIONES, j(ECOMMERCE_REGLAS));
-
-    const pid = uid();
-    db.prepare(
-      `INSERT INTO products (id, store_id, plantilla_id, nombre, precio, color, txt, descripcion, caracteristicas, reglas, opciones, bundles, mensaje_bloques, contenido_paquete, disparador, mensaje_inicial_activo)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`,
-    ).run(
-      pid, storeId, plantillaId, 'Jogger Dama Bota Recta', 59900, '#F3E8FF', '#7E22CE',
-      'Jogger de dama bota recta, en tela suave tipo licra-algodón que estiliza la figura. Cómodo para el día a día y para salir, con tiro alto que marca la cintura.',
-      'Tela: 95% algodón, 5% licra. Tiro alto. Bolsillos laterales. Pretina ancha que no aprieta. Horma que estiliza.',
-      j(['Si piden 2 o más, ofrece el combo "2 joggers por $99.900" sin que lo pidan.', 'Confirma talla y color antes de cerrar el pedido.']),
-      j([
-        { nombre: 'Talla', valores: [{ valor: 'S' }, { valor: 'M' }, { valor: 'L' }, { valor: 'XL' }] },
-        { nombre: 'Color', valores: [{ valor: 'Negro' }, { valor: 'Gris' }, { valor: 'Beige' }] },
-      ]),
-      j([
-        { cantidad: 2, precio: 99900, etiqueta: 'El más pedido' },
-        { cantidad: 3, precio: 139900 },
-      ]),
-      j([{ tipo: 'texto', valor: '¡Hola! 😊 Mira nuestro Jogger Dama Bota Recta, el más pedido: tiro alto, súper cómodo y estiliza la figura. Está en $59.900, y si llevas 2 te salen en $99.900 🔥 ¿Te digo las tallas y colores disponibles?' }]),
-      '1 jogger dama en la talla y color que elijas, empacado con cuidado. Envío contra entrega.',
-      '¡Hola! Me interesan los joggers de dama.',
-    );
-    db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos) VALUES (?,?,?,?,0)').run(uid(), pid, 'Única', 0);
   }
 
   db.prepare('INSERT OR IGNORE INTO installed_templates (store_id, template_id) VALUES (?,?)').run(storeId, plantillaId);

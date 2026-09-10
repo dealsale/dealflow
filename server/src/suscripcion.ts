@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { db, uid } from './db.js';
 import { PAQUETES, abonar } from './creditos.js';
+import { getLibraryProduct, importarLibraryEnTienda } from './biblioteca.js';
 
 /**
  * Suscripción de las tiendas a DealFlow. Modelo de dos fases:
@@ -211,6 +212,40 @@ export function crearRecargaCheckout(storeId: string, correo: string, redirectBa
   return { url: `${CHECKOUT}?${params.toString()}` };
 }
 
+/**
+ * Crea el pago de un producto de la Biblioteca (pago único) y devuelve la URL de
+ * Wompi. El id del producto de biblioteca se guarda en `plan`; al aprobarse el
+ * pago, `aplicarPagoAprobado` lo importa a la tienda.
+ */
+export function crearCheckoutBiblioteca(storeId: string, correo: string, redirectBase: string, libId: string): { url?: string; error?: string } {
+  const pub = process.env.WOMPI_PUBLIC_KEY;
+  const integrity = process.env.WOMPI_INTEGRITY;
+  const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(storeId) as { id: string } | undefined;
+  if (!s) return { error: 'Tienda no encontrada.' };
+  const lib = getLibraryProduct(libId);
+  if (!lib || !lib.activo) return { error: 'Producto de biblioteca no disponible.' };
+  if (lib.gratis) return { error: 'Este producto es gratis: puedes importarlo sin pagar.' };
+  const monto = Math.max(0, Math.round(lib.precio_importacion || 0));
+  if (monto <= 0) return { error: 'Este producto no tiene precio de importación configurado.' };
+  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
+
+  const referencia = `DF-BIB-${storeId.slice(0, 8)}-${Date.now()}`;
+  db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo) VALUES (?,?,?,?,?,?,?,?)')
+    .run(uid(), storeId, libId, monto, referencia, 'pendiente', 'wompi', 'biblioteca');
+
+  const montoCents = monto * 100;
+  const params = new URLSearchParams({
+    'public-key': pub,
+    currency: 'COP',
+    'amount-in-cents': String(montoCents),
+    reference: referencia,
+    'redirect-url': `${redirectBase}/?pago=ok`,
+    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+  });
+  if (correo) params.set('customer-data:email', correo);
+  return { url: `${CHECKOUT}?${params.toString()}` };
+}
+
 /** Marca un pago como aprobado: activa la cuenta / extiende la renta / suma créditos. */
 export function aplicarPagoAprobado(referencia: string, transaccion?: string): boolean {
   const pago = db.prepare('SELECT id, store_id, estado, tipo, plan, cupon, creditos FROM pagos WHERE referencia = ?').get(referencia) as
@@ -225,6 +260,15 @@ export function aplicarPagoAprobado(referencia: string, transaccion?: string): b
   if (pago.tipo === 'creditos') {
     abonar(pago.store_id, pago.creditos, 'Recarga de créditos', referencia);
     console.log(`[creditos] recarga aprobada ${referencia} → tienda ${pago.store_id} +${pago.creditos} créditos`);
+    return true;
+  }
+
+  // Compra de un producto de la Biblioteca: lo importa a la tienda (el id del
+  // producto de biblioteca viaja en la columna `plan`). No toca el plan/renta.
+  if (pago.tipo === 'biblioteca') {
+    const r = importarLibraryEnTienda(pago.plan, pago.store_id, true);
+    if ('error' in r) console.error(`[biblioteca] pago aprobado ${referencia} pero no se pudo importar:`, r.error);
+    else console.log(`[biblioteca] compra aprobada ${referencia} → tienda ${pago.store_id} importó ${pago.plan}`);
     return true;
   }
 

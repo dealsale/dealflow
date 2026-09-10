@@ -21,6 +21,7 @@ import { Productos } from './sections/Productos';
 import { Equipo } from './sections/Equipo';
 import { Marketing } from './sections/Marketing';
 import { DealShop } from './sections/DealShop';
+import { Biblioteca } from './sections/Biblioteca';
 import { Resumen } from './sections/Resumen';
 import { WhatsAppSection } from './sections/WhatsApp';
 import { Cuentas } from './sections/admin/Cuentas';
@@ -329,6 +330,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
           {df.isVendedor && df.section === 'equipo' && <Equipo df={df} />}
           {df.isVendedor && df.section === 'marketing' && <Marketing df={df} />}
           {df.isVendedor && df.section === 'dealshop' && <DealShop df={df} />}
+          {df.isVendedor && df.section === 'biblioteca' && <Biblioteca df={df} />}
           {df.isVendedor && df.section === 'pedidos' && <Pedidos df={df} />}
           {df.isVendedor && df.section === 'leads' && <Leads df={df} />}
           {df.isVendedor && df.section === 'crm' && <CRM df={df} />}
@@ -371,6 +373,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
         {df.isVendedor && df.section === 'equipo' && <Equipo df={df} />}
         {df.isVendedor && df.section === 'marketing' && <Marketing df={df} />}
         {df.isVendedor && df.section === 'dealshop' && <DealShop df={df} />}
+        {df.isVendedor && df.section === 'biblioteca' && <Biblioteca df={df} />}
         {df.isVendedor && df.section === 'integraciones' && <Integraciones df={df} />}
         {df.isAdmin && <AdminContent df={df} />}
       </main>

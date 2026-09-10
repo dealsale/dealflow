@@ -1110,12 +1110,90 @@ api.patch('/superadmin/stores/:id/hide', requireAuth, requireSuperAdmin, (req, r
   res.json({ ok: true });
 });
 
+// ── Biblioteca de productos (superadmin) ─────────────────────────────
+api.get('/superadmin/biblioteca', requireAuth, requireSuperAdmin, async (_req, res) => {
+  const { listarBibliotecaAdmin } = await import('./biblioteca.js');
+  res.json({ productos: listarBibliotecaAdmin() });
+});
+
+// Lista los productos de una tienda (para elegir cuál clonar a la biblioteca).
+api.get('/superadmin/stores/:storeId/products', requireAuth, requireSuperAdmin, (req, res) => {
+  const rows = db.prepare('SELECT id, nombre, precio, tipo FROM products WHERE store_id = ? ORDER BY created_at').all(req.params.storeId) as
+    { id: string; nombre: string; precio: number; tipo: string }[];
+  res.json({ productos: rows });
+});
+
+api.post('/superadmin/biblioteca/from-product', requireAuth, requireSuperAdmin, async (req, res) => {
+  const { agregarProductoABiblioteca } = await import('./biblioteca.js');
+  const { productId, gratis, precioImportacion } = req.body || {};
+  const r = agregarProductoABiblioteca(String(productId || ''), { gratis: !!gratis, precioImportacion: Number(precioImportacion) || 0 });
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+
+api.patch('/superadmin/biblioteca/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+  const { actualizarLibraryProduct } = await import('./biblioteca.js');
+  const { nombre, gratis, precioImportacion, activo } = req.body || {};
+  const r = actualizarLibraryProduct(req.params.id, {
+    nombre: typeof nombre === 'string' ? nombre : undefined,
+    gratis: typeof gratis === 'boolean' ? gratis : undefined,
+    precioImportacion: typeof precioImportacion === 'number' ? precioImportacion : undefined,
+    activo: typeof activo === 'boolean' ? activo : undefined,
+  });
+  if (!r.ok) return res.status(404).json({ error: 'Producto de biblioteca no encontrado.' });
+  res.json({ ok: true });
+});
+
+api.delete('/superadmin/biblioteca/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+  const { eliminarLibraryProduct } = await import('./biblioteca.js');
+  eliminarLibraryProduct(req.params.id);
+  res.json({ ok: true });
+});
+
+// ── Biblioteca de productos (tienda cliente) ─────────────────────────
+api.get('/biblioteca', requireAuth, requireStore, async (req, res) => {
+  const { listarBiblioteca } = await import('./biblioteca.js');
+  res.json({ productos: listarBiblioteca(req.user!.storeId!) });
+});
+
+// Importa un producto: gratis o ya adquirido → lo clona ya; de pago sin adquirir → pide pago.
+api.post('/biblioteca/:id/importar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { getLibraryProduct, yaAdquirido, importarLibraryEnTienda } = await import('./biblioteca.js');
+  const lib = getLibraryProduct(req.params.id);
+  if (!lib || !lib.activo) return res.status(404).json({ error: 'Producto de biblioteca no disponible.' });
+  const storeId = req.user!.storeId!;
+  if (!lib.gratis && !yaAdquirido(storeId, req.params.id)) {
+    return res.json({ requierePago: true, precio: lib.precio_importacion });
+  }
+  const r = importarLibraryEnTienda(req.params.id, storeId, !lib.gratis);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, productId: r.productId });
+});
+
+// Inicia el pago único de un producto de biblioteca de pago.
+api.post('/biblioteca/:id/checkout', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { crearCheckoutBiblioteca } = await import('./suscripcion.js');
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+  const base = `${proto}://${req.get('host')}`;
+  const r = crearCheckoutBiblioteca(req.user!.storeId!, req.user!.email, base, req.params.id);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ url: r.url });
+});
+
 // ── Archivos de conversaciones (imágenes, videos, etc.) ──────────────
 // Servidos bajo /api/media para que la sesión (cookie) los proteja: cada
 // tienda solo ve los suyos.
 api.get('/media/:storeId/:file', requireAuth, requireStore, (req, res) => {
   if (req.params.storeId !== req.user!.storeId) return res.status(403).end();
   const file = mediaPath(req.params.storeId, req.params.file);
+  if (!existsSync(file)) return res.status(404).end();
+  res.sendFile(file);
+});
+
+// Multimedia de la Biblioteca: visible para CUALQUIER tienda autenticada
+// (para poder mostrar las fotos de los productos antes de importarlos).
+api.get('/library/media/:file', requireAuth, requireStore, (req, res) => {
+  const file = mediaPath('__biblioteca__', req.params.file);
   if (!existsSync(file)) return res.status(404).end();
   res.sendFile(file);
 });

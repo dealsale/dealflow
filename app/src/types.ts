@@ -206,6 +206,7 @@ export type VendedorSection =
   | 'equipo'
   | 'marketing'
   | 'dealshop'
+  | 'biblioteca'
   | 'integraciones';
 
 export type AdminSection = 'ventas' | 'planes' | 'cuentas' | 'cupones' | 'superadmin';

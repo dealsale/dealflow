@@ -128,6 +128,32 @@ CREATE TABLE IF NOT EXISTS installed_templates (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (store_id, template_id)
 );
+-- Biblioteca de productos del administrador: productos ya armados (con reglas,
+-- fotos, estructura) que cada tienda puede importar. Unos gratis, otros de pago
+-- único. El snapshot guarda el producto completo (misma forma que templates).
+CREATE TABLE IF NOT EXISTS library_products (
+  id TEXT PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  precio INTEGER NOT NULL DEFAULT 0,
+  gratis INTEGER NOT NULL DEFAULT 1,
+  precio_importacion INTEGER NOT NULL DEFAULT 0,
+  activo INTEGER NOT NULL DEFAULT 1,
+  source_store_id TEXT NOT NULL DEFAULT '',
+  snapshot TEXT NOT NULL DEFAULT '{}',
+  orden INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- Qué producto de la biblioteca ha adquirido/importado cada tienda (para no
+-- volver a cobrar un producto de pago que ya se compró).
+CREATE TABLE IF NOT EXISTS library_imports (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  library_product_id TEXT NOT NULL,
+  product_id TEXT NOT NULL DEFAULT '',
+  pagado INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (store_id, library_product_id)
+);
 CREATE TABLE IF NOT EXISTS sent_presentations (
   lead_id TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,

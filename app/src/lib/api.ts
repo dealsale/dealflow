@@ -402,6 +402,27 @@ export interface SuperStore {
 export const apiSuperStores = () => req<{ stores: SuperStore[] }>('/api/superadmin/stores', 'GET');
 export const apiToggleHideStore = (id: string, oculta: boolean) => req<{ ok: true }>(`/api/superadmin/stores/${id}/hide`, 'PATCH', { oculta });
 
+// ── Biblioteca de productos ──
+export interface LibraryItem {
+  id: string; nombre: string; precio: number; gratis: boolean; precioImportacion: number; portada: string | null; adquirido: boolean;
+}
+export interface LibraryAdminItem {
+  id: string; nombre: string; precio: number; gratis: boolean; precioImportacion: number; activo: boolean; portada: string | null; importos: number;
+}
+export interface SuperStoreProduct { id: string; nombre: string; precio: number; tipo: string }
+
+export const apiBiblioteca = () => req<{ productos: LibraryItem[] }>('/api/biblioteca', 'GET');
+export const apiImportarBiblioteca = (id: string) => req<{ ok?: true; productId?: string; requierePago?: boolean; precio?: number }>(`/api/biblioteca/${id}/importar`, 'POST');
+export const apiCheckoutBiblioteca = (id: string) => req<{ url: string }>(`/api/biblioteca/${id}/checkout`, 'POST');
+
+export const apiSuperBiblioteca = () => req<{ productos: LibraryAdminItem[] }>('/api/superadmin/biblioteca', 'GET');
+export const apiSuperStoreProducts = (storeId: string) => req<{ productos: SuperStoreProduct[] }>(`/api/superadmin/stores/${storeId}/products`, 'GET');
+export const apiSuperBibliotecaFromProduct = (productId: string, gratis: boolean, precioImportacion: number) =>
+  req<{ id: string }>('/api/superadmin/biblioteca/from-product', 'POST', { productId, gratis, precioImportacion });
+export const apiSuperBibliotecaPatch = (id: string, patch: { nombre?: string; gratis?: boolean; precioImportacion?: number; activo?: boolean }) =>
+  req<{ ok: true }>(`/api/superadmin/biblioteca/${id}`, 'PATCH', patch);
+export const apiSuperBibliotecaDelete = (id: string) => req<{ ok: true }>(`/api/superadmin/biblioteca/${id}`, 'DELETE');
+
 export const apiCreatePlan = (b: { nombre: string; precio: number; features: string[] }) => req<{ id: string }>('/api/admin/plans', 'POST', b);
 export const apiUpdatePlan = (id: string, b: { nombre?: string; precio?: number; features?: string[] }) =>
   req<{ ok: true }>(`/api/admin/plans/${id}`, 'PATCH', b);

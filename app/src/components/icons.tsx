@@ -133,6 +133,16 @@ export function IconDealShop() {
   );
 }
 
+export function IconBiblioteca() {
+  return (
+    <svg {...common}>
+      <path d="M4 5v14a1 1 0 0 0 1 1h3V4H5a1 1 0 0 0-1 1Z" />
+      <path d="M8 4h4v16H8z" />
+      <path d="M13.5 4.6 16 4l3.9 14.5-2.5.7z" />
+    </svg>
+  );
+}
+
 export function IconMarketing() {
   return (
     <svg {...common}>
