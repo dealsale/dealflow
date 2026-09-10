@@ -70,7 +70,7 @@ export async function verifyWhatsappCredentials(phoneNumberId: string, accessTok
 }
 
 /** Envía un mensaje de texto por la vía activa de la tienda (Cloud API o QR). */
-export async function sendWhatsappText(storeId: string, to: string, texto: string, pn?: string): Promise<{ ok: boolean; error?: string }> {
+export async function sendWhatsappText(storeId: string, to: string, texto: string, pn?: string): Promise<{ ok: boolean; error?: string; wamid?: string }> {
   // Canal WEB: el mensaje ya queda guardado en la BD y el chat web lo lee por
   // polling; no hay nada que "enviar" fuera.
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
@@ -89,11 +89,9 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
       headers: { Authorization: `Bearer ${cfg.access_token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ messaging_product: 'whatsapp', to: numero, type: 'text', text: { body: texto } }),
     });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      return { ok: false, error: body.error?.message || 'Meta no aceptó el mensaje.' };
-    }
-    return { ok: true };
+    const body = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: { message?: string } };
+    if (!res.ok) return { ok: false, error: body.error?.message || 'Meta no aceptó el mensaje.' };
+    return { ok: true, wamid: body.messages?.[0]?.id };
   } catch {
     return { ok: false, error: 'No pudimos hablar con Meta.' };
   }
@@ -107,7 +105,7 @@ async function cloudSendMedia(
   media: { buffer: Buffer; mime: string; tipo: string },
   caption: string,
   nombre: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; wamid?: string }> {
   try {
     // 1) Subir el archivo y obtener su media ID.
     const form = new FormData();
@@ -128,11 +126,9 @@ async function cloudSendMedia(
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ messaging_product: 'whatsapp', to: numero, type: tw, [tw]: obj }),
     });
-    if (!send.ok) {
-      const b = (await send.json().catch(() => ({}))) as { error?: { message?: string } };
-      return { ok: false, error: b.error?.message || 'Meta no aceptó el envío del adjunto.' };
-    }
-    return { ok: true };
+    const b = (await send.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: { message?: string } };
+    if (!send.ok) return { ok: false, error: b.error?.message || 'Meta no aceptó el envío del adjunto.' };
+    return { ok: true, wamid: b.messages?.[0]?.id };
   } catch {
     return { ok: false, error: 'No pudimos hablar con Meta para enviar el adjunto.' };
   }
@@ -146,7 +142,7 @@ export async function sendWhatsappMedia(
   caption: string,
   nombre: string,
   pn?: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; wamid?: string }> {
   // Canal WEB: la multimedia ya queda en la BD (media_url) y el chat web la muestra.
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
@@ -184,10 +180,44 @@ interface WebhookMessage {
   document?: WebhookMedia;
 }
 
+interface WebhookStatus {
+  id?: string; // el wamid del mensaje que enviamos
+  status?: string; // sent | delivered | read | failed
+  recipient_id?: string;
+}
 interface WebhookValue {
   metadata?: { phone_number_id?: string };
   contacts?: { profile?: { name?: string }; wa_id?: string }[];
   messages?: WebhookMessage[];
+  statuses?: WebhookStatus[];
+}
+
+// Orden de avance de un estado saliente (nunca retrocede: read no vuelve a delivered).
+const RANK_ESTADO: Record<string, number> = { enviado: 1, entregado: 2, visto: 3 };
+
+/**
+ * Marca un mensaje saliente recién enviado por la Cloud API: guarda su wamid y
+ * lo deja en 'enviado'. Si el envío falló, lo deja en 'fallido'. Los envíos por
+ * web/QR (sin wamid) no llevan estado (no hay acuses de la Cloud API).
+ */
+export function marcarEnviado(rowId: string, r: { ok: boolean; wamid?: string }) {
+  if (!rowId) return;
+  if (r.ok && r.wamid) db.prepare("UPDATE messages SET wa_msg_id = ?, estado = 'enviado' WHERE id = ?").run(r.wamid, rowId);
+  else if (!r.ok) db.prepare("UPDATE messages SET estado = 'fallido' WHERE id = ?").run(rowId);
+}
+
+/** Aplica un acuse de estado de Meta (sent/delivered/read/failed) a nuestro mensaje. */
+function actualizarEstadoMensaje(wamid?: string, metaStatus?: string) {
+  if (!wamid || !metaStatus) return;
+  const nuevo = metaStatus === 'read' ? 'visto' : metaStatus === 'delivered' ? 'entregado' : metaStatus === 'sent' ? 'enviado' : metaStatus === 'failed' ? 'fallido' : '';
+  if (!nuevo) return;
+  const row = db.prepare('SELECT id, estado FROM messages WHERE wa_msg_id = ?').get(wamid) as { id: string; estado: string } | undefined;
+  if (!row) return;
+  if (nuevo === 'fallido') { db.prepare("UPDATE messages SET estado = 'fallido' WHERE id = ?").run(row.id); return; }
+  if (row.estado === 'fallido') return; // no revivir un envío fallido
+  if ((RANK_ESTADO[nuevo] || 0) > (RANK_ESTADO[row.estado] || 0)) {
+    db.prepare('UPDATE messages SET estado = ? WHERE id = ?').run(nuevo, row.id);
+  }
 }
 
 /** Descarga un adjunto de la Cloud API por su media ID y lo guarda en disco. */
@@ -217,6 +247,8 @@ export function handleIncomingWebhook(body: unknown) {
     for (const change of entry.changes || []) {
       const value = change.value;
       const phoneNumberId = value?.metadata?.phone_number_id;
+      // Acuses de entrega/lectura de los mensajes que ENVIAMOS (no traen `messages`).
+      for (const st of value?.statuses || []) actualizarEstadoMensaje(st.id, st.status);
       if (!phoneNumberId || !value?.messages?.length) continue;
       const store = db.prepare('SELECT store_id, access_token FROM whatsapp WHERE phone_number_id = ? AND conectado = 1').get(phoneNumberId) as
         | { store_id: string; access_token: string }

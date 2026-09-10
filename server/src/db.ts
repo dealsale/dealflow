@@ -367,6 +367,12 @@ addColumn('messages', "tipo TEXT NOT NULL DEFAULT 'texto'");
 addColumn('messages', 'media_url TEXT');
 addColumn('messages', 'media_mime TEXT');
 addColumn('messages', 'media_nombre TEXT');
+// Estado de entrega de los mensajes SALIENTES por la Cloud API de WhatsApp.
+// wa_msg_id = el id (wamid) que devuelve Meta al enviar; estado = '' | enviado |
+// entregado | visto | fallido. Los mensajes entrantes y del chat web quedan en ''.
+addColumn('messages', 'wa_msg_id TEXT');
+addColumn('messages', "estado TEXT NOT NULL DEFAULT ''");
+db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wamid ON messages(wa_msg_id)');
 
 export const uid = () => crypto.randomUUID();
 export const j = (v: unknown) => JSON.stringify(v);

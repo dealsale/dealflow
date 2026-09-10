@@ -59,8 +59,10 @@ export function saveOutgoingMedia(storeId: string, dataUrl: string, nombre: stri
 }
 
 /** Registra un mensaje saliente con adjunto en la conversación. */
-export function saveOutgoingMessage(leadId: string, texto: string, tipo: string, mediaUrl: string | null, mime: string | null, nombre: string | null) {
+export function saveOutgoingMessage(leadId: string, texto: string, tipo: string, mediaUrl: string | null, mime: string | null, nombre: string | null): string {
+  const id = uid();
   db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)').run(
-    uid(), leadId, 'vendedor', texto, tipo, mediaUrl, mime, nombre,
+    id, leadId, 'vendedor', texto, tipo, mediaUrl, mime, nombre,
   );
+  return id;
 }

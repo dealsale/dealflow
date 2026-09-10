@@ -134,6 +134,8 @@ export interface Mensaje {
   texto: string;
   hora: string;
   createdAt?: string;
+  /** Estado de entrega (salientes Cloud API): '' | enviado | entregado | visto | fallido. */
+  estado?: string;
   tipo?: string;
   mediaUrl?: string | null;
   mediaMime?: string | null;

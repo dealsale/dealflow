@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { db, pj, uid } from './db.js';
-import { sendWhatsappText, sendWhatsappMedia } from './wa.js';
+import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
 import { saveOutgoingMedia, mediaPath, tipoDeMime } from './media.js';
 
 const MIME_POR_EXT: Record<string, string> = {
@@ -241,8 +241,9 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   // Envía un mensaje del bot al cliente (lo guarda y lo manda por WhatsApp).
   const responder = async (texto: string) => {
     const tt = rellenar(texto, lead);
-    db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', tt);
-    await sendWhatsappText(storeId, destino, tt, pn);
+    const mid = uid();
+    db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, leadId, 'bot', tt);
+    marcarEnviado(mid, await sendWhatsappText(storeId, destino, tt, pn));
   };
   const limpiarPendiente = () => db.prepare("UPDATE leads SET pendiente_info = '' WHERE id = ?").run(leadId);
 
@@ -377,8 +378,10 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     if (texto && !pedidoCreado) {
       const textoFinal = rellenar(texto, lead);
       await esperarRespuestaHumana(t0); // el bot tarda ~4-5 s en total (parece que "escribe")
-      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', textoFinal);
+      const mid = uid();
+      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, leadId, 'bot', textoFinal);
       const send = await sendWhatsappText(storeId, destino, textoFinal, pn);
+      marcarEnviado(mid, send);
       if (send.ok) console.log('[ia] respuesta enviada por WhatsApp');
       else console.error('[ia] respuesta generada pero NO enviada:', send.error, '| destino:', destino);
     }
@@ -579,8 +582,9 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   const primerNombre = cliente.split(' ')[0];
   const producto = (items[0]?.nombre || 'tu pedido').split('(')[0].split('—')[0].trim();
   const confirmacion = `Tu pedido ya quedó registrado exitosamente 🎉\n\nTe llegará un mensaje de confirmación con el número de pedido y los detalles del envío en un momento 📲\n\n¡Gracias por tu compra, ${primerNombre}! Que disfrutes mucho tus ${producto} 🙌😊`;
-  db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', confirmacion);
-  await sendWhatsappText(storeId, destino, confirmacion, pn);
+  const midConf = uid();
+  db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(midConf, lead.id, 'bot', confirmacion);
+  marcarEnviado(midConf, await sendWhatsappText(storeId, destino, confirmacion, pn));
   return true;
 }
 
@@ -683,9 +687,11 @@ function fotoDeOpcion(prod: Record<string, unknown>, valName: string): string | 
 async function enviarUnaFoto(storeId: string, leadId: string, destino: string, valor: string, pn?: string) {
   const media = materializar(storeId, valor);
   if (!media) return;
-  await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
+  const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
+  const mid = uid();
   db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
-    .run(uid(), leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+    .run(mid, leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+  marcarEnviado(mid, r);
   console.log(`[ia] foto de opción enviada`);
 }
 
@@ -739,16 +745,20 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
     if (b.tipo === 'texto') {
       const valor = rellenar(b.valor, lead || {});
       if (valor.trim()) {
-        db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), leadId, 'bot', valor);
+        const mid = uid();
+        db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, leadId, 'bot', valor);
         const r = await sendWhatsappText(storeId, destino, valor, pn);
+        marcarEnviado(mid, r);
         ok = r.ok;
       }
     } else {
       const media = materializar(storeId, b.valor);
       if (media) {
         const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
+        const mid = uid();
         db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
-          .run(uid(), leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+          .run(mid, leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+        marcarEnviado(mid, r);
         ok = r.ok;
       }
     }
@@ -779,8 +789,10 @@ async function enviarMediaProducto(storeId: string, leadId: string, destino: str
     const media = materializar(storeId, b.valor);
     if (!media) continue;
     const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
+    const mid = uid();
     db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
-      .run(uid(), leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+      .run(mid, leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+    marcarEnviado(mid, r);
     if (r.ok) enviadas++;
   }
   console.log(`[ia] multimedia de "${p.nombre}" enviada a pedido (${enviadas}/${piezas.length})`);

@@ -94,6 +94,7 @@ export interface ApiMensaje {
   texto: string;
   hora: string;
   createdAt?: string;
+  estado?: string;
   tipo?: string;
   mediaUrl?: string | null;
   mediaMime?: string | null;

@@ -155,7 +155,10 @@ export function CRM({ df }: { df: DealFlowState }) {
                     <div style={m.rowStyle}>
                       <div style={m.bubbleStyle}>
                         <MediaContent m={m} />
-                        <span style={m.horaStyle}>{m.hora}</span>
+                        <span style={m.horaStyle}>
+                          {m.hora}
+                          {m.estadoInfo && <span title={m.estadoInfo.titulo} style={{ color: m.estadoInfo.color, marginLeft: 5, fontWeight: 700 }}>{m.estadoInfo.texto}</span>}
+                        </span>
                       </div>
                     </div>
                   </div>

@@ -185,6 +185,8 @@ export interface DecoratedMensaje extends Mensaje {
   fecha: string;
   /** Etiqueta legible de la fecha para separadores ("Hoy", "Ayer", "10 sept 2026"). */
   fechaEtiqueta: string;
+  /** Indicador de estado del mensaje saliente (✓ / ✓✓ / visto / falló); null si no aplica. */
+  estadoInfo: { texto: string; color: string; titulo: string } | null;
 }
 
 export interface DecoratedLead extends Lead {
@@ -389,6 +391,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
       texto: m.texto,
       hora: m.hora,
       createdAt: m.createdAt,
+      estado: m.estado,
       tipo: m.tipo,
       mediaUrl: m.mediaUrl,
       mediaMime: m.mediaMime,
@@ -422,6 +425,24 @@ function etiquetaFecha(iso?: string): string {
   const d = new Date(String(iso).replace(' ', 'T') + (String(iso).endsWith('Z') ? '' : 'Z'));
   if (isNaN(+d)) return f;
   return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' });
+}
+
+/**
+ * Indicador de estado de un mensaje SALIENTE (bot/vendedor), estilo WhatsApp:
+ * ✓ enviado · ✓✓ entregado · ✓✓ (azul) visto · ⚠ no enviado. Los mensajes del
+ * cliente, del chat web o sin estado no muestran nada.
+ */
+function estadoDeMensaje(m: Mensaje): { texto: string; color: string; titulo: string } | null {
+  if (m.de === 'cliente' || !m.estado) return null;
+  const vend = m.de === 'vendedor'; // burbuja verde con texto blanco
+  const gris = vend ? 'rgba(255,255,255,.85)' : '#94A3B8';
+  switch (m.estado) {
+    case 'enviado': return { texto: '✓', color: gris, titulo: 'Enviado' };
+    case 'entregado': return { texto: '✓✓', color: gris, titulo: 'Entregado' };
+    case 'visto': return { texto: '✓✓', color: '#38BDF8', titulo: 'Visto' };
+    case 'fallido': return { texto: '⚠ no enviado', color: vend ? '#FECACA' : '#DC2626', titulo: 'No se pudo enviar' };
+    default: return null;
+  }
 }
 
 /** Hora local de Bogotá (HH:MM) a partir del datetime UTC del servidor. */
@@ -838,6 +859,7 @@ export function useDealFlowState() {
       },
       fecha: m.createdAt ? fechaBogota(m.createdAt) : '',
       fechaEtiqueta: etiquetaFecha(m.createdAt),
+      estadoInfo: estadoDeMensaje(m),
     };
   }
 
