@@ -374,6 +374,31 @@ addColumn('messages', 'wa_msg_id TEXT');
 addColumn('messages', "estado TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wamid ON messages(wa_msg_id)');
 
+// Marcadores de migraciones de datos que solo deben correr una vez.
+db.exec("CREATE TABLE IF NOT EXISTS app_flags (clave TEXT PRIMARY KEY, ts TEXT NOT NULL DEFAULT (datetime('now')))");
+
+// Backfill (una sola vez, todas las tiendas): a los mensajes SALIENTES antiguos
+// sin estado no les llegó nunca el acuse de Meta (se enviaron antes de esta
+// función y no hay forma de recuperar el estado real). Inferimos: 'visto' si el
+// cliente escribió DESPUÉS del mensaje (claramente lo leyó), y 'enviado' si no.
+// Los chats por web no se tocan (no tienen acuses).
+{
+  const flag = 'backfill_estado_msgs_v1';
+  if (!db.prepare('SELECT 1 FROM app_flags WHERE clave = ?').get(flag)) {
+    const r = db.prepare(
+      `UPDATE messages
+         SET estado = CASE WHEN EXISTS (
+             SELECT 1 FROM messages c
+             WHERE c.lead_id = messages.lead_id AND c.de = 'cliente' AND c.created_at > messages.created_at
+           ) THEN 'visto' ELSE 'enviado' END
+       WHERE estado = '' AND de IN ('bot','vendedor')
+         AND lead_id IN (SELECT id FROM leads WHERE COALESCE(canal,'') <> 'web' AND COALESCE(wa_id,'') NOT LIKE 'web:%')`,
+    ).run();
+    db.prepare('INSERT INTO app_flags (clave) VALUES (?)').run(flag);
+    console.log(`[migración] estados de mensajes antiguos rellenados: ${r.changes} mensajes`);
+  }
+}
+
 export const uid = () => crypto.randomUUID();
 export const j = (v: unknown) => JSON.stringify(v);
 export const pj = <T,>(s: string, fallback: T): T => {
