@@ -1,8 +1,9 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
-import { SearchInput, Chip, ChipRow } from '../components/Filters';
+import { SearchInput, FilterSelect } from '../components/Filters';
 
 export function Pedidos({ df }: { df: DealFlowState }) {
   const fechaActiva = df.orderDateFilters.find((f) => f.active)?.key || 'Todas';
+  const estadoActivo = df.orderFilters.find((f) => f.active)?.key || (df.orderFilters[0]?.key ?? '');
   return (
     <section data-screen-label="Pedidos">
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
@@ -21,23 +22,19 @@ export function Pedidos({ df }: { df: DealFlowState }) {
       </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-        <ChipRow>
-          {df.orderFilters.map((f) => (
-            <Chip key={f.key} active={f.active} onClick={f.set} count={f.count}>{f.label}</Chip>
-          ))}
-        </ChipRow>
-        <div style={{ flex: 1 }} />
-        <select
-          value={fechaActiva}
-          onChange={(e) => df.orderDateFilters.find((f) => f.key === e.target.value)?.set()}
-          title="Filtrar por fecha"
-          style={{ border: '1px solid #E2E8F0', borderRadius: 999, padding: '8px 12px', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, color: '#475569', background: '#fff', cursor: 'pointer' }}
-        >
-          {df.orderDateFilters.map((f) => (
-            <option key={f.key} value={f.key}>📅 {f.label === 'Todas' ? 'Todas las fechas' : f.label}</option>
-          ))}
-        </select>
         <SearchInput value={df.orderQuery} onChange={df.setOrderQuery} placeholder="Cliente, número o producto…" width={240} />
+        <FilterSelect
+          label="Estado"
+          value={estadoActivo}
+          onChange={(k) => df.orderFilters.find((f) => f.key === k)?.set()}
+          options={df.orderFilters.map((f) => ({ value: f.key, label: f.label, count: f.count }))}
+        />
+        <FilterSelect
+          label="Fecha"
+          value={fechaActiva}
+          onChange={(k) => df.orderDateFilters.find((f) => f.key === k)?.set()}
+          options={df.orderDateFilters.map((f) => ({ value: f.key, label: f.label === 'Todas' ? 'Todas' : f.label }))}
+        />
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SearchInput, Chip, ChipRow } from '../components/Filters';
+import { SearchInput, FilterSelect } from '../components/Filters';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 export function Leads({ df }: { df: DealFlowState }) {
@@ -19,12 +19,12 @@ export function Leads({ df }: { df: DealFlowState }) {
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
         <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por nombre o mensaje…" width={240} />
         {etapas.length > 0 && (
-          <ChipRow>
-            <Chip active={!etapa} onClick={() => setEtapa('')}>Todos</Chip>
-            {etapas.map((e) => (
-              <Chip key={e} active={etapa === e} onClick={() => setEtapa(etapa === e ? '' : e)} count={df.leads.filter((l) => l.etapa === e).length}>{e}</Chip>
-            ))}
-          </ChipRow>
+          <FilterSelect
+            label="Etapa"
+            value={etapa}
+            onChange={setEtapa}
+            options={[{ value: '', label: 'Todas' }, ...etapas.map((e) => ({ value: e, label: e, count: df.leads.filter((l) => l.etapa === e).length }))]}
+          />
         )}
       </div>
 

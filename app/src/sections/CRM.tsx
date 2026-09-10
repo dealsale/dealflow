@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
 import { VoiceRecorder } from '../components/VoiceRecorder';
-import { SearchInput, Chip, ChipRow } from '../components/Filters';
+import { SearchInput, FilterSelect } from '../components/Filters';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 export function CRM({ df }: { df: DealFlowState }) {
@@ -9,7 +9,7 @@ export function CRM({ df }: { df: DealFlowState }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [filtroEtiqueta, setFiltroEtiqueta] = useState('');
   const [busca, setBusca] = useState('');
-  const [rangoFecha, setRangoFecha] = useState<'Todas' | 'Hoy' | 'Ayer' | '7 días'>('Todas');
+  const [rangoFecha, setRangoFecha] = useState<'Todas' | 'Hoy' | 'Ayer' | '7 días' | 'Personalizado'>('Todas');
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   useEffect(() => {
@@ -21,10 +21,10 @@ export function CRM({ df }: { df: DealFlowState }) {
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const ayer = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const hace7 = new Date(Date.now() - 6 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-  const rangoCustom = !!(desde || hasta);
+  const custom = rangoFecha === 'Personalizado';
   const pasaFecha = (fechaISO: string) => {
-    if (!fechaISO) return rangoFecha === 'Todas' && !rangoCustom; // chats sin fecha: solo en "Todas"
-    if (rangoCustom) return (!desde || fechaISO >= desde) && (!hasta || fechaISO <= hasta);
+    if (custom) return !!fechaISO && (!desde || fechaISO >= desde) && (!hasta || fechaISO <= hasta);
+    if (!fechaISO) return rangoFecha === 'Todas'; // chats sin fecha: solo en "Todas"
     if (rangoFecha === 'Hoy') return fechaISO === hoy;
     if (rangoFecha === 'Ayer') return fechaISO === ayer;
     if (rangoFecha === '7 días') return fechaISO >= hace7;
@@ -39,34 +39,36 @@ export function CRM({ df }: { df: DealFlowState }) {
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Inbox · Chats en vivo</h1>
       <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 14px' }}>Lo que pasa ahora mismo en tu WhatsApp. Entra a un chat si quieres tomar el control.</p>
 
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por nombre o teléfono…" width={240} />
-        <ChipRow>
-          <Chip active={!filtroEtiqueta} onClick={() => setFiltroEtiqueta('')}>Todos</Chip>
-          {df.etiquetasCrm.map((et) => (
-            <Chip key={et} active={filtroEtiqueta === et} onClick={() => setFiltroEtiqueta(filtroEtiqueta === et ? '' : et)} count={cuentaEtiqueta(et)}>{et}</Chip>
-          ))}
-        </ChipRow>
-      </div>
-
-      {/* Filtro por fecha de los chats (por la fecha del último mensaje) */}
+      {/* Todos los filtros en una sola fila compacta: búsqueda + menús desplegables. */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: '#64748B' }}>Fecha:</span>
-        <ChipRow>
-          {(['Todas', 'Hoy', 'Ayer', '7 días'] as const).map((r) => (
-            <Chip key={r} active={!rangoCustom && rangoFecha === r} onClick={() => { setDesde(''); setHasta(''); setRangoFecha(r); }}>{r}</Chip>
-          ))}
-        </ChipRow>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <input type="date" value={desde} max={hasta || undefined} onChange={(e) => setDesde(e.target.value)} title="Desde"
-            style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '6px 9px', fontFamily: 'inherit', fontSize: 12.5, color: '#334155' }} />
-          <span style={{ color: '#94A3B8', fontSize: 12 }}>→</span>
-          <input type="date" value={hasta} min={desde || undefined} onChange={(e) => setHasta(e.target.value)} title="Hasta"
-            style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '6px 9px', fontFamily: 'inherit', fontSize: 12.5, color: '#334155' }} />
-          {rangoCustom && (
-            <span onClick={() => { setDesde(''); setHasta(''); }} title="Quitar el rango" style={{ cursor: 'pointer', color: '#94A3B8', fontSize: 13, padding: '2px 4px' }}>✕</span>
-          )}
-        </div>
+        <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por nombre o teléfono…" width={240} />
+        <FilterSelect
+          label="Etiqueta"
+          value={filtroEtiqueta}
+          onChange={setFiltroEtiqueta}
+          options={[{ value: '', label: 'Todas' }, ...df.etiquetasCrm.map((et) => ({ value: et, label: et, count: cuentaEtiqueta(et) }))]}
+        />
+        <FilterSelect
+          label="Fecha"
+          value={rangoFecha}
+          onChange={(v) => { if (v !== 'Personalizado') { setDesde(''); setHasta(''); } setRangoFecha(v as typeof rangoFecha); }}
+          options={[
+            { value: 'Todas', label: 'Todas' },
+            { value: 'Hoy', label: 'Hoy' },
+            { value: 'Ayer', label: 'Ayer' },
+            { value: '7 días', label: 'Últimos 7 días' },
+            { value: 'Personalizado', label: 'Rango personalizado…' },
+          ]}
+        />
+        {custom && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="date" value={desde} max={hasta || undefined} onChange={(e) => setDesde(e.target.value)} title="Desde"
+              style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, color: '#334155' }} />
+            <span style={{ color: '#94A3B8', fontSize: 12 }}>→</span>
+            <input type="date" value={hasta} min={desde || undefined} onChange={(e) => setHasta(e.target.value)} title="Hasta"
+              style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, color: '#334155' }} />
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
