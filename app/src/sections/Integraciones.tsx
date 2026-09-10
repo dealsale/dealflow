@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { Dropdown } from '../components/Dropdown';
 
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13 };
 
@@ -46,17 +47,13 @@ function MetaAdsCard({ df, i }: { df: DealFlowState; i: DealFlowState['integrati
         <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 9 }}>
           <div>
             <div style={lbl}>Cuenta publicitaria</div>
-            <select value={cuenta} onChange={(e) => setCuenta(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-              <option value="">Elige una…</option>
-              {ops.cuentas.map((a) => <option key={a.id} value={a.id}>{a.nombre} ({a.moneda})</option>)}
-            </select>
+            <Dropdown value={cuenta} onChange={setCuenta} placeholder="Elige una…"
+              options={[{ value: '', label: 'Elige una…' }, ...ops.cuentas.map((a) => ({ value: a.id, label: `${a.nombre} (${a.moneda})` }))]} />
           </div>
           <div>
             <div style={lbl}>Página de Facebook</div>
-            <select value={pagina} onChange={(e) => setPagina(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-              <option value="">Elige una…</option>
-              {ops.paginas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </select>
+            <Dropdown value={pagina} onChange={setPagina} placeholder="Elige una…"
+              options={[{ value: '', label: 'Elige una…' }, ...ops.paginas.map((p) => ({ value: p.id, label: p.nombre }))]} />
           </div>
           <button
             onClick={() => {

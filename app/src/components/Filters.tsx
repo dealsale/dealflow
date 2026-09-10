@@ -1,4 +1,5 @@
 /** Filtros unificados y livianos para Pedidos, Leads y Chat. */
+import { Dropdown } from './Dropdown';
 
 export function SearchInput({ value, onChange, placeholder, width }: { value: string; onChange: (v: string) => void; placeholder: string; width?: number | string }) {
   return (
@@ -49,8 +50,8 @@ export function ChipRow({ children }: { children: React.ReactNode }) {
 
 /**
  * Menú desplegable de filtro compacto: "Etiqueta ▾", "Fecha ▾", etc. Se pinta
- * oscuro cuando hay un filtro activo (valor distinto a la primera opción). Sirve
- * para agrupar muchos filtros en poco espacio en vez de una fila larga de chips.
+ * oscuro cuando hay un filtro activo (valor distinto a la primera opción). Usa
+ * el Dropdown moderno (panel flotante, no el <select> del sistema).
  */
 export function FilterSelect({ label, value, onChange, options, active }: {
   label: string;
@@ -59,29 +60,5 @@ export function FilterSelect({ label, value, onChange, options, active }: {
   options: { value: string; label: string; count?: number }[];
   active?: boolean;
 }) {
-  const isActive = active ?? (options.length > 0 && value !== options[0].value);
-  return (
-    <label
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, boxSizing: 'border-box',
-        border: '1px solid ' + (isActive ? '#0F172A' : '#E2E8F0'),
-        background: isActive ? '#0F172A' : '#fff', color: isActive ? '#fff' : '#475569',
-        borderRadius: 999, padding: '0 10px 0 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-      }}
-    >
-      <span style={{ color: isActive ? 'rgba(255,255,255,.7)' : '#94A3B8', whiteSpace: 'nowrap' }}>{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ border: 'none', background: 'transparent', color: 'inherit', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: '6px 0', outline: 'none', appearance: 'none', WebkitAppearance: 'none', maxWidth: 190 }}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value} style={{ color: '#1E293B', background: '#fff', fontWeight: 600 }}>
-            {o.label}{o.count != null ? ` (${o.count})` : ''}
-          </option>
-        ))}
-      </select>
-      <span aria-hidden style={{ fontSize: 9, opacity: 0.7, marginLeft: -3 }}>▼</span>
-    </label>
-  );
+  return <Dropdown variant="pill" label={label} value={value} onChange={onChange} options={options} active={active} />;
 }

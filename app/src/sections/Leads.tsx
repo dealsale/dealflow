@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SearchInput, FilterSelect } from '../components/Filters';
+import { Dropdown } from '../components/Dropdown';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 export function Leads({ df }: { df: DealFlowState }) {
@@ -77,15 +78,16 @@ export function Leads({ df }: { df: DealFlowState }) {
             <div style={{ padding: '14px 18px', borderTop: '1px solid #F1F5F9', display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div>
                 <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Asignar a</div>
-                <select
+                <Dropdown
+                  width={190}
                   value={df.leadAsignado}
-                  onChange={(e) => df.assignLead(e.target.value)}
-                  style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 10px', fontFamily: 'inherit', fontSize: 13, color: '#1E293B', background: '#fff', cursor: 'pointer' }}
-                >
-                  <option value="Asistente (bot)">Asistente (bot)</option>
-                  <option value="Karla">Karla</option>
-                  <option value="Andrés">Andrés</option>
-                </select>
+                  onChange={(v) => df.assignLead(v)}
+                  options={[
+                    { value: 'Asistente (bot)', label: 'Asistente (bot)' },
+                    { value: 'Karla', label: 'Karla' },
+                    { value: 'Andrés', label: 'Andrés' },
+                  ]}
+                />
               </div>
               {df.hasAvisoLead && <div style={{ width: '100%', color: '#059669', fontSize: 13, fontWeight: 600 }}>{df.avisoLead}</div>}
             </div>

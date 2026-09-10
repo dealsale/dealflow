@@ -1,5 +1,6 @@
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
+import { Dropdown } from '../../components/Dropdown';
 
 const labelStyle: React.CSSProperties = { color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 };
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 };
@@ -43,9 +44,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
             </div>
             <div>
               <div style={labelStyle}>Plan</div>
-              <select value={df.accForm.plan} onChange={(e) => df.setAccForm({ plan: e.target.value })} style={{ ...inputStyle, cursor: 'pointer', background: '#fff' }}>
-                {df.planNames.map((p) => (<option key={p} value={p}>{p}</option>))}
-              </select>
+              <Dropdown value={df.accForm.plan} onChange={(v) => df.setAccForm({ plan: v })} options={df.planNames.map((p) => ({ value: p, label: p }))} />
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -79,9 +78,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
             <div>
               <div style={labelStyle}>Plan</div>
-              <select value={df.editStoreForm.plan} onChange={(e) => df.setEditStoreForm({ plan: e.target.value })} style={{ ...inputStyle, cursor: 'pointer', background: '#fff' }}>
-                {df.planNames.map((p) => (<option key={p} value={p}>{p}</option>))}
-              </select>
+              <Dropdown value={df.editStoreForm.plan} onChange={(v) => df.setEditStoreForm({ plan: v })} options={df.planNames.map((p) => ({ value: p, label: p }))} />
             </div>
             <div>
               <div style={labelStyle}>Nueva contraseña (opcional)</div>

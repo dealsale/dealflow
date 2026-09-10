@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import type { Campana } from '../lib/api';
+import { Dropdown } from '../components/Dropdown';
 import { comprimirImagen } from '../components/PhotoUpload';
 
 const card: React.CSSProperties = { background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 };
@@ -199,17 +200,15 @@ function PasoCreativos({ df, c }: { df: DealFlowState; c: Campana }) {
         <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
           <div>
             <div style={label}>Formato</div>
-            <select value={tamano} onChange={(e) => setTamano(e.target.value)} style={{ ...input, cursor: 'pointer' }}>
-              <option value="feed">Cuadrado · feed</option>
-              <option value="historia">Vertical · historias y reels</option>
-              <option value="horizontal">Horizontal · ancho</option>
-            </select>
+            <Dropdown value={tamano} onChange={setTamano} options={[
+              { value: 'feed', label: 'Cuadrado · feed' },
+              { value: 'historia', label: 'Vertical · historias y reels' },
+              { value: 'horizontal', label: 'Horizontal · ancho' },
+            ]} />
           </div>
           <div>
             <div style={label}>Cuántos</div>
-            <select value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} style={{ ...input, cursor: 'pointer' }}>
-              {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+            <Dropdown value={String(cantidad)} onChange={(v) => setCantidad(Number(v))} options={[1, 2, 3, 4].map((n) => ({ value: String(n), label: String(n) }))} />
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -268,19 +267,11 @@ function PasoTextos({ df, c }: { df: DealFlowState; c: Campana }) {
         <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
           <div>
             <div style={label}>Tono</div>
-            <select value={tono} onChange={(e) => setTono(e.target.value)} style={{ ...input, cursor: 'pointer' }}>
-              <option>Cercano y vendedor</option>
-              <option>Directo y sin rodeos</option>
-              <option>Elegante y premium</option>
-              <option>Divertido y juvenil</option>
-              <option>Serio y profesional</option>
-            </select>
+            <Dropdown value={tono} onChange={setTono} options={['Cercano y vendedor', 'Directo y sin rodeos', 'Elegante y premium', 'Divertido y juvenil', 'Serio y profesional'].map((t) => ({ value: t, label: t }))} />
           </div>
           <div>
             <div style={label}>Variantes de cada uno</div>
-            <select value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} style={{ ...input, cursor: 'pointer' }}>
-              {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+            <Dropdown value={String(cantidad)} onChange={(v) => setCantidad(Number(v))} options={[2, 3, 4, 5, 6].map((n) => ({ value: String(n), label: String(n) }))} />
           </div>
         </div>
         <button
@@ -324,17 +315,13 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
         <div style={{ color: '#64748B', fontSize: 13, marginBottom: 14 }}>Estas son las cuentas y páginas de tu Facebook.</div>
         <div style={{ marginBottom: 12 }}>
           <div style={label}>Cuenta publicitaria</div>
-          <select value={cuenta} onChange={(e) => setCuenta(e.target.value)} style={{ ...input, cursor: 'pointer' }}>
-            <option value="">Elige una…</option>
-            {ops.cuentas.map((a) => <option key={a.id} value={a.id}>{a.nombre} ({a.moneda})</option>)}
-          </select>
+          <Dropdown value={cuenta} onChange={setCuenta} placeholder="Elige una…"
+            options={[{ value: '', label: 'Elige una…' }, ...ops.cuentas.map((a) => ({ value: a.id, label: `${a.nombre} (${a.moneda})` }))]} />
         </div>
         <div style={{ marginBottom: 14 }}>
           <div style={label}>Página de Facebook (el anuncio sale a nombre de ella)</div>
-          <select value={pagina} onChange={(e) => setPagina(e.target.value)} style={{ ...input, cursor: 'pointer' }}>
-            <option value="">Elige una…</option>
-            {ops.paginas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </select>
+          <Dropdown value={pagina} onChange={setPagina} placeholder="Elige una…"
+            options={[{ value: '', label: 'Elige una…' }, ...ops.paginas.map((p) => ({ value: p.id, label: p.nombre }))]} />
         </div>
         <button
           onClick={() => {
@@ -376,9 +363,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
   const opcion = (arr: string[], i: number, set: (n: number) => void, titulo: string) => (
     <div style={{ marginBottom: 12 }}>
       <div style={label}>{titulo}</div>
-      <select value={i} onChange={(e) => set(Number(e.target.value))} style={{ ...input, cursor: 'pointer' }}>
-        {arr.map((t, k) => <option key={k} value={k}>{t.slice(0, 70)}{t.length > 70 ? '…' : ''}</option>)}
-      </select>
+      <Dropdown value={String(i)} onChange={(v) => set(Number(v))} options={arr.map((t, k) => ({ value: String(k), label: t.slice(0, 70) + (t.length > 70 ? '…' : '') }))} />
     </div>
   );
 

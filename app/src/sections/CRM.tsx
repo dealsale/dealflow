@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
 import { VoiceRecorder } from '../components/VoiceRecorder';
 import { SearchInput, FilterSelect } from '../components/Filters';
+import { Dropdown } from '../components/Dropdown';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 export function CRM({ df }: { df: DealFlowState }) {
@@ -112,17 +113,14 @@ export function CRM({ df }: { df: DealFlowState }) {
                 <span>{chat.liveLabel}</span>
               </div>
               <div style={{ flex: 1 }} />
-              <select
-                value={chat.etiqueta || ''}
-                onChange={(e) => df.setLeadEtiqueta(chat.id, e.target.value)}
-                title="Etiqueta esta conversación"
-                style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: chat.etiqueta ? '#1E293B' : '#94A3B8', background: '#fff', cursor: 'pointer' }}
-              >
-                <option value="">🏷️ Sin etiqueta</option>
-                {df.etiquetasCrm.map((et) => (
-                  <option key={et} value={et}>{et}</option>
-                ))}
-              </select>
+              <div style={{ width: 170 }}>
+                <Dropdown
+                  ariaLabel="Etiqueta esta conversación"
+                  value={chat.etiqueta || ''}
+                  onChange={(v) => df.setLeadEtiqueta(chat.id, v)}
+                  options={[{ value: '', label: '🏷️ Sin etiqueta' }, ...df.etiquetasCrm.map((et) => ({ value: et, label: et }))]}
+                />
+              </div>
               <button
                 onClick={df.resetChat}
                 title="Borra el historial y devuelve el chat al asistente"

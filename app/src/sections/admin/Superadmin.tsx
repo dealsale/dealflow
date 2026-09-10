@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
+import { Dropdown } from '../../components/Dropdown';
 
 /** Panel del superadmin: todas las tiendas + la Biblioteca de productos. */
 export function Superadmin({ df }: { df: DealFlowState }) {
@@ -93,19 +94,24 @@ function BibliotecaAdmin({ df }: { df: DealFlowState }) {
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ minWidth: 220 }}>
             <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Tienda</div>
-            <select value={tiendaSel} onChange={(e) => elegirTienda(e.target.value)}
-              style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, background: '#fff' }}>
-              <option value="">Elige una tienda…</option>
-              {df.superStores.map((s) => <option key={s.id} value={s.id}>{s.tienda}</option>)}
-            </select>
+            <Dropdown
+              value={tiendaSel}
+              onChange={elegirTienda}
+              placeholder="Elige una tienda…"
+              options={[{ value: '', label: 'Elige una tienda…' }, ...df.superStores.map((s) => ({ value: s.id, label: s.tienda }))]}
+            />
           </div>
           <div style={{ minWidth: 220 }}>
             <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Producto</div>
-            <select value={prodSel} onChange={(e) => setProdSel(e.target.value)} disabled={!tiendaSel}
-              style={{ width: '100%', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, background: tiendaSel ? '#fff' : '#F8FAFC' }}>
-              <option value="">{tiendaSel ? (df.superStoreProducts.length ? 'Elige un producto…' : 'Esta tienda no tiene productos') : 'Primero elige la tienda'}</option>
-              {df.superStoreProducts.map((p) => <option key={p.id} value={p.id}>{p.nombre} · {fmt(p.precio)}</option>)}
-            </select>
+            <Dropdown
+              value={prodSel}
+              onChange={setProdSel}
+              placeholder={tiendaSel ? (df.superStoreProducts.length ? 'Elige un producto…' : 'Esta tienda no tiene productos') : 'Primero elige la tienda'}
+              options={[
+                { value: '', label: tiendaSel ? (df.superStoreProducts.length ? 'Elige un producto…' : 'Esta tienda no tiene productos') : 'Primero elige la tienda' },
+                ...df.superStoreProducts.map((p) => ({ value: p.id, label: `${p.nombre} · ${fmt(p.precio)}` })),
+              ]}
+            />
           </div>
           <div>
             <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Tipo</div>
