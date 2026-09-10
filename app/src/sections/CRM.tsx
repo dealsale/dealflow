@@ -9,13 +9,29 @@ export function CRM({ df }: { df: DealFlowState }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [filtroEtiqueta, setFiltroEtiqueta] = useState('');
   const [busca, setBusca] = useState('');
+  const [rangoFecha, setRangoFecha] = useState<'Todas' | 'Hoy' | 'Ayer' | '7 días'>('Todas');
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat?.tel, chat?.mensajesDecorated.length]);
   const q = busca.trim().toLowerCase();
+
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const ayer = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const hace7 = new Date(Date.now() - 6 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const rangoCustom = !!(desde || hasta);
+  const pasaFecha = (fechaISO: string) => {
+    if (!fechaISO) return rangoFecha === 'Todas' && !rangoCustom; // chats sin fecha: solo en "Todas"
+    if (rangoCustom) return (!desde || fechaISO >= desde) && (!hasta || fechaISO <= hasta);
+    if (rangoFecha === 'Hoy') return fechaISO === hoy;
+    if (rangoFecha === 'Ayer') return fechaISO === ayer;
+    if (rangoFecha === '7 días') return fechaISO >= hace7;
+    return true;
+  };
   const chatsFiltrados = df.crmChats.filter(
-    (c) => (!filtroEtiqueta || c.etiqueta === filtroEtiqueta) && (!q || c.nombre.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)),
+    (c) => (!filtroEtiqueta || c.etiqueta === filtroEtiqueta) && (!q || c.nombre.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)) && pasaFecha(c.fechaISO),
   );
   const cuentaEtiqueta = (et: string) => df.crmChats.filter((c) => c.etiqueta === et).length;
   return (
@@ -33,6 +49,26 @@ export function CRM({ df }: { df: DealFlowState }) {
         </ChipRow>
       </div>
 
+      {/* Filtro por fecha de los chats (por la fecha del último mensaje) */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: '#64748B' }}>Fecha:</span>
+        <ChipRow>
+          {(['Todas', 'Hoy', 'Ayer', '7 días'] as const).map((r) => (
+            <Chip key={r} active={!rangoCustom && rangoFecha === r} onClick={() => { setDesde(''); setHasta(''); setRangoFecha(r); }}>{r}</Chip>
+          ))}
+        </ChipRow>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input type="date" value={desde} max={hasta || undefined} onChange={(e) => setDesde(e.target.value)} title="Desde"
+            style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '6px 9px', fontFamily: 'inherit', fontSize: 12.5, color: '#334155' }} />
+          <span style={{ color: '#94A3B8', fontSize: 12 }}>→</span>
+          <input type="date" value={hasta} min={desde || undefined} onChange={(e) => setHasta(e.target.value)} title="Hasta"
+            style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '6px 9px', fontFamily: 'inherit', fontSize: 12.5, color: '#334155' }} />
+          {rangoCustom && (
+            <span onClick={() => { setDesde(''); setHasta(''); }} title="Quitar el rango" style={{ cursor: 'pointer', color: '#94A3B8', fontSize: 13, padding: '2px 4px' }}>✕</span>
+          )}
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
         <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
           {chatsFiltrados.length === 0 && (
@@ -48,7 +84,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                   <span style={{ fontWeight: 600, fontSize: 14 }}>{c.nombre}</span>
                   {c.canal === 'web' && <span title="Llegó por el chat web" style={{ fontSize: 11 }}>🌐</span>}
                   {c.etiquetaStyle && <span style={c.etiquetaStyle}>{c.etiqueta}</span>}
-                  <span style={{ color: '#94A3B8', fontSize: 11.5, marginLeft: 'auto' }}>{c.hora}</span>
+                  <span style={{ color: '#94A3B8', fontSize: 11.5, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
                 </div>
                 <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.ultimo}</div>
                 <div style={c.liveStyle}>
@@ -106,14 +142,25 @@ export function CRM({ df }: { df: DealFlowState }) {
             </div>
 
             <div ref={scrollRef} style={{ flex: 1, background: '#F8FAFC', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
-              {chat.mensajesDecorated.map((m, i) => (
-                <div key={i} style={m.rowStyle}>
-                  <div style={m.bubbleStyle}>
-                    <MediaContent m={m} />
-                    <span style={m.horaStyle}>{m.hora}</span>
+              {chat.mensajesDecorated.map((m, i) => {
+                const prev = chat.mensajesDecorated[i - 1];
+                const nuevoDia = !!m.fecha && m.fecha !== (prev?.fecha || '');
+                return (
+                  <div key={i}>
+                    {nuevoDia && (
+                      <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0 10px' }}>
+                        <span style={{ background: '#E2E8F0', color: '#475569', fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '3px 12px' }}>{m.fechaEtiqueta}</span>
+                      </div>
+                    )}
+                    <div style={m.rowStyle}>
+                      <div style={m.bubbleStyle}>
+                        <MediaContent m={m} />
+                        <span style={m.horaStyle}>{m.hora}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {df.crmTyping && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <div style={{ background: '#D1FAE5', border: '1px solid #A7F3D0', borderRadius: '12px 12px 4px 12px', padding: '9px 14px', fontSize: 13, color: '#047857' }}>

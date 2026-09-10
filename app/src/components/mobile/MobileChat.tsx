@@ -68,14 +68,25 @@ export function MobileChat({ df }: { df: DealFlowState }) {
       )}
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {chat.mensajesDecorated.map((m, i) => (
-          <div key={i} style={m.rowStyle}>
-            <div style={{ ...m.bubbleStyle, maxWidth: '80%' }}>
-              <MediaContent m={m} />
-              <span style={m.horaStyle}>{m.hora}</span>
+        {chat.mensajesDecorated.map((m, i) => {
+          const prev = chat.mensajesDecorated[i - 1];
+          const nuevoDia = !!m.fecha && m.fecha !== (prev?.fecha || '');
+          return (
+            <div key={i}>
+              {nuevoDia && (
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0 10px' }}>
+                  <span style={{ background: '#E2E8F0', color: '#475569', fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '3px 12px' }}>{m.fechaEtiqueta}</span>
+                </div>
+              )}
+              <div style={m.rowStyle}>
+                <div style={{ ...m.bubbleStyle, maxWidth: '80%' }}>
+                  <MediaContent m={m} />
+                  <span style={m.horaStyle}>{m.hora}</span>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {df.crmTyping && (
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <div style={{ background: '#D1FAE5', border: '1px solid #A7F3D0', borderRadius: '12px 12px 4px 12px', padding: '9px 14px', fontSize: 13, color: '#047857' }}>

@@ -181,6 +181,10 @@ export interface DecoratedMensaje extends Mensaje {
   rowStyle: CSSProperties;
   bubbleStyle: CSSProperties;
   horaStyle: CSSProperties;
+  /** Fecha (YYYY-MM-DD, Bogotá) del mensaje; vacío si no hay timestamp. */
+  fecha: string;
+  /** Etiqueta legible de la fecha para separadores ("Hoy", "Ayer", "10 sept 2026"). */
+  fechaEtiqueta: string;
 }
 
 export interface DecoratedLead extends Lead {
@@ -199,6 +203,10 @@ export interface DecoratedCrmChat extends DecoratedLead {
   liveStyle: CSSProperties;
   liveDot: CSSProperties;
   crmRowStyle: CSSProperties;
+  /** Fecha (YYYY-MM-DD, Bogotá) del último mensaje, para filtrar por fechas. */
+  fechaISO: string;
+  /** Lo que se muestra a la derecha del nombre: hora si es hoy, si no la fecha. */
+  fechaHoraLabel: string;
 }
 
 export interface DecoratedVariante {
@@ -371,6 +379,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     tel: l.tel,
     ultimo: l.mensajes.length ? l.mensajes[l.mensajes.length - 1].texto : '',
     hora: l.mensajes.length ? l.mensajes[l.mensajes.length - 1].hora : '',
+    ultimoIso: l.mensajes.length ? l.mensajes[l.mensajes.length - 1].createdAt : undefined,
     etapa: (ETAPAS_VALIDAS.includes(l.etapa) ? l.etapa : 'Explorando') as Lead['etapa'],
     asignado: l.asignado,
     etiqueta: l.etiqueta || '',
@@ -379,6 +388,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
       de: (m.de === 'bot' || m.de === 'vendedor' ? m.de : 'cliente') as Mensaje['de'],
       texto: m.texto,
       hora: m.hora,
+      createdAt: m.createdAt,
       tipo: m.tipo,
       mediaUrl: m.mediaUrl,
       mediaMime: m.mediaMime,
@@ -394,6 +404,24 @@ function fechaBogota(iso?: string): string {
   if (!iso) return hoy;
   const d = new Date(String(iso).replace(' ', 'T') + (String(iso).endsWith('Z') ? '' : 'Z'));
   return isNaN(+d) ? hoy : d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+}
+
+/** Fecha (YYYY-MM-DD) de HOY en Bogotá. */
+function hoyBogota(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+}
+
+/** Etiqueta legible de una fecha: "Hoy", "Ayer" o "10 sept 2026" (Bogotá). */
+function etiquetaFecha(iso?: string): string {
+  if (!iso) return '';
+  const f = fechaBogota(iso);
+  const hoy = hoyBogota();
+  const ayer = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  if (f === hoy) return 'Hoy';
+  if (f === ayer) return 'Ayer';
+  const d = new Date(String(iso).replace(' ', 'T') + (String(iso).endsWith('Z') ? '' : 'Z'));
+  if (isNaN(+d)) return f;
+  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' });
 }
 
 /** Hora local de Bogotá (HH:MM) a partir del datetime UTC del servidor. */
@@ -808,6 +836,8 @@ export function useDealFlowState() {
         marginTop: '3px',
         textAlign: 'right',
       },
+      fecha: m.createdAt ? fechaBogota(m.createdAt) : '',
+      fechaEtiqueta: etiquetaFecha(m.createdAt),
     };
   }
 
@@ -844,9 +874,12 @@ export function useDealFlowState() {
         // En modo servidor, "en vivo" = el bot lo atiende; en demo, los dos primeros.
         const live = apiMode && apiLeadsState ? l.asignado.includes('bot') || l.asignado.includes('Asistente') : l.id === 1 || l.id === 2;
         const selC = l.id === crmSelectedId;
+        const fechaISO = l.ultimoIso ? fechaBogota(l.ultimoIso) : '';
         return {
           ...d,
           live,
+          fechaISO,
+          fechaHoraLabel: l.ultimoIso ? (fechaISO === hoyBogota() ? l.hora : etiquetaFecha(l.ultimoIso)) : l.hora,
           liveLabel: live ? 'En vivo' : 'Esperando',
           liveStyle: { display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 700, color: live ? '#047857' : '#94A3B8', marginTop: '5px' },
           liveDot: { width: '7px', height: '7px', borderRadius: '50%', background: live ? '#10B981' : '#CBD5E1', animation: live ? 'dfpulse 1.8s infinite' : 'none', flexShrink: 0 },

@@ -93,6 +93,7 @@ export interface ApiMensaje {
   de: string;
   texto: string;
   hora: string;
+  createdAt?: string;
   tipo?: string;
   mediaUrl?: string | null;
   mediaMime?: string | null;

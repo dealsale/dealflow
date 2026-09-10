@@ -12,7 +12,7 @@ export function MCRM({ df }: { df: DealFlowState }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'baseline' }}>
                 <span style={{ fontWeight: 600, fontSize: 14 }}>{c.nombre}</span>
-                <span style={{ color: '#94A3B8', fontSize: 11, marginLeft: 'auto' }}>{c.hora}</span>
+                <span style={{ color: '#94A3B8', fontSize: 11, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
               </div>
               <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.ultimo}</div>
               <div style={c.liveStyle}>

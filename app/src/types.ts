@@ -133,6 +133,7 @@ export interface Mensaje {
   de: MensajeDe;
   texto: string;
   hora: string;
+  createdAt?: string;
   tipo?: string;
   mediaUrl?: string | null;
   mediaMime?: string | null;
@@ -147,6 +148,8 @@ export interface Lead {
   tel: string;
   ultimo: string;
   hora: string;
+  /** ISO (UTC) del último mensaje, para mostrar/filtrar por fecha. */
+  ultimoIso?: string;
   etapa: Etapa;
   asignado: string;
   etiqueta?: string;
