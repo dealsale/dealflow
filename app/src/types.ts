@@ -130,6 +130,7 @@ export interface Promo {
 export type MensajeDe = 'cliente' | 'bot' | 'vendedor';
 
 export interface Mensaje {
+  id?: string;
   de: MensajeDe;
   texto: string;
   hora: string;

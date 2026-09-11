@@ -4,8 +4,8 @@ import { db, j, pj, uid } from './db.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
 import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
-import { mediaPath, saveOutgoingMedia, saveOutgoingMessage } from './media.js';
-import { existsSync } from 'node:fs';
+import { mediaPath, saveOutgoingMedia, saveOutgoingMessage, tipoDeMime } from './media.js';
+import { existsSync, readFileSync } from 'node:fs';
 
 export const api = Router();
 export const webhooks = Router();
@@ -160,8 +160,8 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   }));
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
     id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp',
-    mensajes: (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
-      de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at, tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
+    mensajes: (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
+      id: m.id, de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at, tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
     })),
   }));
   const assistant = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string } | undefined;
@@ -199,8 +199,8 @@ api.get('/leads', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
     id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp',
-    mensajes: (db.prepare('SELECT de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
-      de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at, tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
+    mensajes: (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
+      id: m.id, de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at, tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
     })),
   }));
   res.json({ leads });
@@ -674,6 +674,29 @@ api.post('/leads/:id/media', requireAuth, requireStore, async (req, res) => {
   const r = await sendWhatsappMedia(req.user!.storeId!, l.wa_id || l.tel, { buffer: saved.buffer, mime: saved.mime, tipo: saved.tipo }, String(caption || ''), String(nombre || ''), l.tel);
   marcarEnviado(mid, r);
   res.json({ ok: true, enviadoPorWhatsapp: r.ok, aviso: r.ok ? undefined : r.error });
+});
+
+// Reintenta enviar un mensaje SALIENTE que falló (o cualquiera del bot/vendedor).
+api.post('/messages/:id/reenviar', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const m = db.prepare(
+    'SELECT m.id, m.de, m.texto, m.tipo, m.media_url, m.media_mime, l.wa_id, l.tel FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.id = ? AND l.store_id = ?',
+  ).get(req.params.id, sid) as { id: string; de: string; texto: string; tipo: string; media_url: string | null; media_mime: string | null; wa_id: string | null; tel: string } | undefined;
+  if (!m) return res.status(404).json({ error: 'Mensaje no encontrado.' });
+  if (m.de === 'cliente') return res.status(400).json({ error: 'Solo se pueden reenviar los mensajes que envías tú.' });
+  const destino = m.wa_id || m.tel;
+
+  let r: { ok: boolean; error?: string; wamid?: string };
+  if (m.tipo && m.tipo !== 'texto' && m.media_url) {
+    const archivo = mediaPath(sid, String(m.media_url).split('/').pop() || '');
+    if (!existsSync(archivo)) return res.status(400).json({ error: 'No encontramos el archivo del mensaje para reenviarlo.' });
+    const mime = m.media_mime || 'application/octet-stream';
+    r = await sendWhatsappMedia(sid, destino, { buffer: readFileSync(archivo), mime, tipo: tipoDeMime(mime) }, m.texto || '', '', m.tel);
+  } else {
+    r = await sendWhatsappText(sid, destino, m.texto || '', m.tel);
+  }
+  marcarEnviado(m.id, r); // actualiza wa_msg_id + estado (enviado / fallido)
+  res.json({ ok: r.ok, estado: r.ok ? 'enviado' : 'fallido', error: r.ok ? undefined : r.error });
 });
 
 // ── Asistente ─────────────────────────────────────────────────────────

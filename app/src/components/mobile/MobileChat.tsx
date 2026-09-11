@@ -84,6 +84,11 @@ export function MobileChat({ df }: { df: DealFlowState }) {
                   <span style={m.horaStyle}>
                     {m.hora}
                     {m.estadoInfo && <span title={m.estadoInfo.titulo} style={{ color: m.estadoInfo.color, marginLeft: 5, fontWeight: 700 }}>{m.estadoInfo.texto}</span>}
+                    {m.estado === 'fallido' && m.id && (
+                      <span onClick={() => df.reenviarMensaje(m.id!)} style={{ marginLeft: 8, cursor: 'pointer', fontWeight: 700, color: m.de === 'vendedor' ? '#fff' : '#DC2626', textDecoration: 'underline' }}>
+                        {df.reenviandoMsg === m.id ? 'Reenviando…' : '↻ Reenviar'}
+                      </span>
+                    )}
                   </span>
                 </div>
               </div>

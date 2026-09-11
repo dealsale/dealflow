@@ -90,6 +90,7 @@ export interface AdminPlan {
 }
 
 export interface ApiMensaje {
+  id?: string;
   de: string;
   texto: string;
   hora: string;
@@ -265,6 +266,7 @@ export const apiWooSyncProductos = () => req<{ creados: number; actualizados: nu
 export interface EventoLog { nivel: string; evento: string; detalle: string; leadId: string | null; createdAt: string }
 export const apiLogs = () => req<{ logs: EventoLog[] }>('/api/logs', 'GET');
 export const apiClearLogs = () => req<{ ok: true }>('/api/logs', 'DELETE');
+export const apiReenviarMensaje = (id: string) => req<{ ok: boolean; estado: string; error?: string }>(`/api/messages/${id}/reenviar`, 'POST');
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
 export const apiSendLeadMessage = (id: string, texto: string) =>
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/messages`, 'POST', { texto });

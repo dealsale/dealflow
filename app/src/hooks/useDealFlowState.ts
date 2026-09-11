@@ -88,6 +88,7 @@ import {
   apiToggleHideStore,
   apiLogs,
   apiClearLogs,
+  apiReenviarMensaje,
   apiBiblioteca,
   apiImportarBiblioteca,
   apiCheckoutBiblioteca,
@@ -389,6 +390,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     etiqueta: l.etiqueta || '',
     canal: l.canal || 'whatsapp',
     mensajes: l.mensajes.map((m) => ({
+      id: m.id,
       de: (m.de === 'bot' || m.de === 'vendedor' ? m.de : 'cliente') as Mensaje['de'],
       texto: m.texto,
       hora: m.hora,
@@ -1818,6 +1820,22 @@ export function useDealFlowState() {
   function cerrarLogs() { setLogsOpen(false); }
   function limpiarLogs() { setLogs([]); void apiClearLogs().then(() => reloadLogs()); }
 
+  // Reintenta enviar un mensaje que falló. Marca el mensaje como "reenviando…"
+  // mientras tanto y refresca desde el servidor al terminar.
+  const [reenviandoMsg, setReenviandoMsg] = useState<string | null>(null);
+  function reenviarMensaje(id: string) {
+    if (!id) return;
+    setReenviandoMsg(id);
+    void apiReenviarMensaje(id).then((r) => {
+      setReenviandoMsg(null);
+      if (!r.error && r.data) {
+        // Refleja el nuevo estado al instante y refresca desde el servidor.
+        setApiLeadsState((st) => (st || []).map((l) => ({ ...l, mensajes: l.mensajes.map((m) => (m.id === id ? { ...m, estado: r.data!.estado } : m)) })));
+      }
+      void apiLeads().then(({ data }) => { if (data) setApiLeadsState(mapApiLeads(data.leads)); });
+    });
+  }
+
   // ── Biblioteca de productos (superadmin) ──
   const [superBiblioteca, setSuperBiblioteca] = useState<LibraryAdminItem[]>([]);
   const [superStoreProducts, setSuperStoreProducts] = useState<SuperStoreProduct[]>([]);
@@ -2557,6 +2575,8 @@ export function useDealFlowState() {
     cerrarLogs,
     reloadLogs,
     limpiarLogs,
+    reenviarMensaje,
+    reenviandoMsg,
     // ── Biblioteca de productos ──
     bibliotecaItems,
     bibliotecaMsg,
