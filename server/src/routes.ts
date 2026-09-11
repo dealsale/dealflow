@@ -1183,6 +1183,17 @@ api.post('/biblioteca/:id/checkout', requireAuth, requireStore, requireOwner, as
   res.json({ url: r.url });
 });
 
+// ── Registro de actividad / errores de la tienda (diagnóstico del Inbox) ──
+api.get('/logs', requireAuth, requireStore, (req, res) => {
+  const rows = db.prepare('SELECT nivel, evento, detalle, lead_id, created_at FROM event_log WHERE store_id = ? ORDER BY id DESC LIMIT 200').all(req.user!.storeId) as
+    { nivel: string; evento: string; detalle: string; lead_id: string | null; created_at: string }[];
+  res.json({ logs: rows.map((r) => ({ nivel: r.nivel, evento: r.evento, detalle: r.detalle, leadId: r.lead_id || null, createdAt: r.created_at })) });
+});
+api.delete('/logs', requireAuth, requireStore, requireOwner, (req, res) => {
+  db.prepare('DELETE FROM event_log WHERE store_id = ?').run(req.user!.storeId);
+  res.json({ ok: true });
+});
+
 // ── Archivos de conversaciones (imágenes, videos, etc.) ──────────────
 // Servidos bajo /api/media para que la sesión (cookie) los proteja: cada
 // tienda solo ve los suyos.

@@ -374,6 +374,19 @@ addColumn('messages', 'wa_msg_id TEXT');
 addColumn('messages', "estado TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wamid ON messages(wa_msg_id)');
 
+// Registro de actividad/errores por tienda (diagnóstico del Inbox): quién
+// disparó un flujo, si un envío falló y por qué, pedidos creados, etc.
+db.exec(`CREATE TABLE IF NOT EXISTS event_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_id TEXT NOT NULL,
+  nivel TEXT NOT NULL DEFAULT 'info',
+  evento TEXT NOT NULL DEFAULT '',
+  detalle TEXT NOT NULL DEFAULT '',
+  lead_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_eventlog_store ON event_log(store_id, id)');
+
 // Marcadores de migraciones de datos que solo deben correr una vez.
 db.exec("CREATE TABLE IF NOT EXISTS app_flags (clave TEXT PRIMARY KEY, ts TEXT NOT NULL DEFAULT (datetime('now')))");
 
@@ -408,3 +421,17 @@ export const pj = <T,>(s: string, fallback: T): T => {
     return fallback;
   }
 };
+
+/**
+ * Registra un evento en el log de la tienda (diagnóstico del Inbox). Nunca
+ * lanza: si algo falla al registrar, no debe romper el flujo de mensajes.
+ * Conserva solo los últimos 300 eventos por tienda.
+ */
+export function registrarLog(storeId: string, nivel: 'info' | 'warn' | 'error', evento: string, detalle: string, leadId?: string | null) {
+  if (!storeId) return;
+  try {
+    db.prepare('INSERT INTO event_log (store_id, nivel, evento, detalle, lead_id) VALUES (?,?,?,?,?)')
+      .run(storeId, nivel, String(evento || '').slice(0, 60), String(detalle || '').slice(0, 500), leadId || null);
+    db.prepare('DELETE FROM event_log WHERE store_id = ? AND id NOT IN (SELECT id FROM event_log WHERE store_id = ? ORDER BY id DESC LIMIT 300)').run(storeId, storeId);
+  } catch { /* el log nunca debe tumbar el flujo */ }
+}

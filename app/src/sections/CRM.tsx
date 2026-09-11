@@ -3,6 +3,7 @@ import { AttachButton, MediaContent } from '../components/MediaBubble';
 import { VoiceRecorder } from '../components/VoiceRecorder';
 import { SearchInput, FilterSelect } from '../components/Filters';
 import { Dropdown } from '../components/Dropdown';
+import { ActivityLog } from '../components/ActivityLog';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 export function CRM({ df }: { df: DealFlowState }) {
@@ -70,7 +71,18 @@ export function CRM({ df }: { df: DealFlowState }) {
               style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, color: '#334155' }} />
           </div>
         )}
+        <div style={{ flex: 1 }} />
+        {/* Botón discreto: registro de actividad / errores de la tienda. */}
+        <button
+          onClick={df.abrirLogs}
+          title="Ver el registro de actividad y errores (diagnóstico)"
+          style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 6px' }}
+        >
+          🩺 Registro
+        </button>
       </div>
+
+      <ActivityLog df={df} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
         <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>

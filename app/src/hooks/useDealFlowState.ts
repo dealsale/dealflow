@@ -86,6 +86,8 @@ import {
   apiSetLeadEtiqueta,
   apiSuperStores,
   apiToggleHideStore,
+  apiLogs,
+  apiClearLogs,
   apiBiblioteca,
   apiImportarBiblioteca,
   apiCheckoutBiblioteca,
@@ -110,7 +112,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -1805,6 +1807,17 @@ export function useDealFlowState() {
     });
   }
 
+  // ── Registro de actividad / errores (diagnóstico del Inbox) ──
+  const [logs, setLogs] = useState<EventoLog[]>([]);
+  const [logsOpen, setLogsOpen] = useState(false);
+  async function reloadLogs() {
+    const { data } = await apiLogs();
+    if (data) setLogs(data.logs);
+  }
+  function abrirLogs() { setLogsOpen(true); void reloadLogs(); }
+  function cerrarLogs() { setLogsOpen(false); }
+  function limpiarLogs() { setLogs([]); void apiClearLogs().then(() => reloadLogs()); }
+
   // ── Biblioteca de productos (superadmin) ──
   const [superBiblioteca, setSuperBiblioteca] = useState<LibraryAdminItem[]>([]);
   const [superStoreProducts, setSuperStoreProducts] = useState<SuperStoreProduct[]>([]);
@@ -2537,6 +2550,13 @@ export function useDealFlowState() {
     isSuperadmin,
     superStores,
     toggleHideStore,
+    // ── Registro de actividad ──
+    logs,
+    logsOpen,
+    abrirLogs,
+    cerrarLogs,
+    reloadLogs,
+    limpiarLogs,
     // ── Biblioteca de productos ──
     bibliotecaItems,
     bibliotecaMsg,

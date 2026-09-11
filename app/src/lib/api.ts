@@ -261,6 +261,10 @@ export const apiOrderEffiSync = (rowId: string) => req<{ estado: string; guia: s
 export const apiWooVerificar = () => req<{ ok: true }>('/api/woo/verificar', 'POST');
 export const apiWooSyncInventario = () => req<{ actualizados: number }>('/api/woo/inventario/sync', 'POST');
 export const apiWooSyncProductos = () => req<{ creados: number; actualizados: number; skusGenerados: number }>('/api/woo/productos/sync', 'POST');
+
+export interface EventoLog { nivel: string; evento: string; detalle: string; leadId: string | null; createdAt: string }
+export const apiLogs = () => req<{ logs: EventoLog[] }>('/api/logs', 'GET');
+export const apiClearLogs = () => req<{ ok: true }>('/api/logs', 'DELETE');
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
 export const apiSendLeadMessage = (id: string, texto: string) =>
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/messages`, 'POST', { texto });

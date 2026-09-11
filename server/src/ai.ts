@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { db, pj, uid } from './db.js';
+import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
 import { saveOutgoingMedia, mediaPath, tipoDeMime } from './media.js';
 
@@ -115,6 +115,7 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   const ia = resolverTexto(storeId); // DeepSeek escribe (o el proveedor de la tienda)
   if (!ia) {
     console.log('[ia] sin IA configurada para la tienda (ni clave propia ni del servidor): el asistente no responde');
+    registrarLog(storeId, 'warn', 'ia', 'El asistente NO respondió: no hay IA configurada (falta la API key de DeepSeek/OpenAI en Integraciones).', leadId);
     return;
   }
   const lead = db.prepare('SELECT id, nombre, asignado, wa_id, tel, pendiente_info FROM leads WHERE id = ?').get(leadId) as
@@ -318,7 +319,9 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: systemFinal }, ...historia], max_tokens: 300, temperature: 0.7 }),
     });
     if (!res.ok) {
-      console.error(`[ia] ${ia.proveedor} respondió`, res.status, await res.text().catch(() => ''));
+      const detalle = await res.text().catch(() => '');
+      console.error(`[ia] ${ia.proveedor} respondió`, res.status, detalle);
+      registrarLog(storeId, 'error', 'ia', `La IA (${ia.proveedor}) falló (HTTP ${res.status}). Revisa la API key o el saldo. ${String(detalle).slice(0, 160)}`, leadId);
       return;
     }
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
@@ -382,11 +385,12 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, leadId, 'bot', textoFinal);
       const send = await sendWhatsappText(storeId, destino, textoFinal, pn);
       marcarEnviado(mid, send);
-      if (send.ok) console.log('[ia] respuesta enviada por WhatsApp');
+      if (send.ok) { console.log('[ia] respuesta enviada por WhatsApp'); registrarLog(storeId, 'info', 'respuesta', 'El asistente respondió al cliente.', leadId); }
       else console.error('[ia] respuesta generada pero NO enviada:', send.error, '| destino:', destino);
     }
   } catch (e) {
     console.error(`[ia] error llamando a ${ia.proveedor}`, e);
+    registrarLog(storeId, 'error', 'ia', `Error inesperado generando la respuesta del asistente: ${String((e as Error)?.message || e).slice(0, 160)}`, leadId);
   }
 }
 
@@ -577,6 +581,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   }
   db.prepare("UPDATE leads SET etapa = 'Listo para comprar', etiqueta = 'Venta' WHERE id = ?").run(lead.id);
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
+  registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} creado para ${cliente} (${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`, lead.id);
 
   // Si la tienda tiene WooCommerce conectado, enviamos el pedido allí AUTOMÁTICAMENTE
   // (Effi/Dropi lo despachan desde WooCommerce). No bloquea la respuesta del bot y
@@ -784,6 +789,8 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
     idx++;
   }
   console.log(`[ia] presentación de "${p.nombre}" enviada (${enviadas}/${piezas.length} piezas, en orden)`);
+  if (enviadas > 0) registrarLog(storeId, 'info', 'disparador', `Mensaje inicial de "${p.nombre}" enviado (${enviadas} de ${piezas.length} piezas).`, leadId);
+  else registrarLog(storeId, 'warn', 'disparador', `Se activó "${p.nombre}" pero NO se envió ninguna pieza del mensaje inicial (revisa la conexión de WhatsApp).`, leadId);
   return enviadas > 0;
 }
 

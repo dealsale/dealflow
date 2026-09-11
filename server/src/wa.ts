@@ -1,4 +1,4 @@
-import { db, uid } from './db.js';
+import { db, uid, registrarLog } from './db.js';
 import { mediaExt, audioAOgg } from './media.js';
 
 const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
@@ -77,7 +77,10 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
     | { phone_number_id: string; access_token: string; conectado: number; modo: string }
     | undefined;
-  if (!cfg?.conectado) return { ok: false, error: 'WhatsApp no está conectado.' };
+  if (!cfg?.conectado) {
+    registrarLog(storeId, 'error', 'envio', `No se envió el mensaje a ${to}: WhatsApp no está conectado.`);
+    return { ok: false, error: 'WhatsApp no está conectado.' };
+  }
   if (cfg.modo === 'qr') {
     const { sendViaQr } = await import('./waqr.js');
     return sendViaQr(storeId, to, texto, pn);
@@ -90,9 +93,14 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
       body: JSON.stringify({ messaging_product: 'whatsapp', to: numero, type: 'text', text: { body: texto } }),
     });
     const body = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: { message?: string } };
-    if (!res.ok) return { ok: false, error: body.error?.message || 'Meta no aceptó el mensaje.' };
+    if (!res.ok) {
+      const msg = body.error?.message || 'Meta no aceptó el mensaje.';
+      registrarLog(storeId, 'error', 'envio', `Meta rechazó el mensaje a ${to}: ${msg}`);
+      return { ok: false, error: msg };
+    }
     return { ok: true, wamid: body.messages?.[0]?.id };
   } catch {
+    registrarLog(storeId, 'error', 'envio', `No pudimos conectar con Meta para enviar a ${to}.`);
     return { ok: false, error: 'No pudimos hablar con Meta.' };
   }
 }
@@ -148,7 +156,10 @@ export async function sendWhatsappMedia(
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
     | { phone_number_id: string; access_token: string; conectado: number; modo: string }
     | undefined;
-  if (!cfg?.conectado) return { ok: false, error: 'WhatsApp no está conectado.' };
+  if (!cfg?.conectado) {
+    registrarLog(storeId, 'error', 'envio', `No se envió el adjunto a ${to}: WhatsApp no está conectado.`);
+    return { ok: false, error: 'WhatsApp no está conectado.' };
+  }
   // Nota de voz: los navegadores graban en webm; WhatsApp la quiere en ogg/opus.
   if (media.tipo === 'audio' && !media.mime.includes('ogg')) {
     const ogg = audioAOgg(media.buffer);
@@ -159,7 +170,9 @@ export async function sendWhatsappMedia(
     return sendMediaViaQr(storeId, to, media, caption, nombre, pn);
   }
   const numero = (pn || to).replace(/[^0-9]/g, '');
-  return cloudSendMedia(cfg.phone_number_id, cfg.access_token, numero, media, caption, nombre);
+  const r = await cloudSendMedia(cfg.phone_number_id, cfg.access_token, numero, media, caption, nombre);
+  if (!r.ok) registrarLog(storeId, 'error', 'envio', `No se pudo enviar el adjunto a ${to}: ${r.error || 'error de Meta'}`);
+  return r;
 }
 
 interface WebhookMedia {
