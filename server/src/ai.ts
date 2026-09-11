@@ -198,7 +198,7 @@ ${promos || '(ninguna)'}
 
 Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "tú", sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
 
-PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma general y en el CATÁLOGO hay VARIOS productos que coinciden con ese nombre (por ejemplo pide "jogger" y existen "Jogger Bota Recta Hombre", "Jogger Bota Recta Dama", "Jogger Clásico", "Jogger Clásico Dama"), NO adivines ni elijas uno al azar: pregúntale al cliente CUÁL de esos modelos exactos quiere y NO envíes fotos ni pongas el marcador todavía. Solo cuando quede claro el modelo exacto, usa su NOMBRE EXACTO del catálogo en el marcador ##MEDIA##.
+PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma general y en el CATÁLOGO hay VARIOS productos que coinciden con ese nombre (por ejemplo pide "jogger" y existen "Jogger Bota Recta Hombre", "Jogger Bota Recta Dama", "Jogger Clásico", "Jogger Clásico Dama"), NO adivines ni elijas uno al azar: pregúntale al cliente CUÁL de esos modelos exactos quiere y NO envíes fotos ni pongas el marcador todavía. Solo cuando quede claro el modelo exacto, usa su NOMBRE EXACTO del catálogo en el marcador con el formato ##MEDIA:Nombre exacto del producto## (siempre con dos puntos y el nombre; nunca "##MEDIA" suelto).
 
 FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
 
@@ -331,22 +331,33 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     // desenvolvemos para no mandar esa basura al cliente ni contaminar el marcador.
     const bruto = desenvolver(brutoRaw);
 
-    // La IA marca con ##MEDIA:Nombre## cuando el cliente pide un producto; con
-    // ##MEDIA:Nombre|Valor## pide la foto de una opción específica.
-    const marca = /##\s*MEDIA:\s*([^#]+?)\s*##/i;
+    // La IA marca cuándo debe enviar fotos. Toleramos TODAS las variantes para que
+    // el marcador NUNCA se le escape crudo al cliente: ##MEDIA:Nombre##,
+    // ##MEDIA:Nombre|Valor##, ##MEDIA## e incluso "##media" suelto (sin nombre ni cierre).
+    // El nombre solo se toma tras ':' (así "##media" suelto no se traga la frase de cierre).
+    const marca = /##\s*MEDIA\b\s*(?::\s*([^#\n]*))?\s*(?:##)?/i;
+    const marcaStrip = /##\s*MEDIA\b\s*(?::\s*[^#\n]*)?\s*(?:##)?/gi;
     // El pedido va en su propia línea; capturamos hasta el fin de línea porque
     // la dirección puede tener '#'. No dependemos de un cierre '##'.
     const marcaPed = /##\s*PEDIDO\b([^\n]*)/i;
     const m = bruto.match(marca);
     const mp = bruto.match(marcaPed);
-    const texto = bruto.replace(new RegExp(marca, 'gi'), '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').trim();
-    // Base para resolver qué foto enviar: el marcador de la IA si lo puso; si NO
-    // lo puso pero el cliente pidió fotos explícitamente, usamos su mensaje (red
-    // de seguridad para la multimedia, igual que la del pedido).
+    const texto = bruto.replace(marcaStrip, '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').replace(/[ \t]{2,}/g, ' ').trim();
+    // ¿Enviamos fotos? Sí si la IA puso el marcador (con o sin nombre) o si el
+    // cliente pidió fotos explícitamente (red de seguridad, igual que la del pedido).
+    const nombreMarca = m && m[1] ? m[1].replace('|', ' ').trim() : '';
     const pidioMedia = ultimo?.tipo === 'texto' && pidioFotos(ultimo?.texto || '');
-    const baseMedia = m ? m[1].replace('|', ' ') : pidioMedia ? ultimo?.texto || '' : '';
-    if (baseMedia.trim()) {
-      const { prod, valName } = resolverProductoYColor(baseMedia, productRows);
+    if (m || pidioMedia) {
+      // De QUÉ producto: el nombre del marcador; si no trae nombre, el texto del
+      // cliente; si aún no resuelve, el último producto hablado en el chat; y si la
+      // tienda tiene un solo producto activo, ese.
+      const r0 = resolverProductoYColor(nombreMarca || ultimo?.texto || '', productRows);
+      let prod = r0.prod;
+      const valName = r0.valName;
+      if (!prod) {
+        const contexto = historia.map((h) => h.content).filter(Boolean).join(' ');
+        prod = resolverProductoYColor(contexto, productRows).prod || (activos.length === 1 ? activos[0] : null);
+      }
       if (prod) {
         const foto = valName ? fotoDeOpcion(prod, valName) : null;
         if (foto) {

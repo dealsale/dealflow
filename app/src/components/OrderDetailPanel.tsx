@@ -81,6 +81,10 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
                   <div style={{ flex: 1 }} />
                   <button onClick={sel.sincronizarEffi} style={{ background: '#fff', border: '1px solid #DDD6FE', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: '#6D28D9', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sincronizar estado</button>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                  <span style={{ color: '#94A3B8', fontSize: 12 }}>¿Algo salió mal en {sel.despachoProveedor === 'dropi' ? 'Dropi' : 'Effi'}?</span>
+                  <button onClick={() => sel.reenviarDespacho((sel.despachoProveedor === 'dropi' ? 'dropi' : 'effi'))} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: '#B45309', cursor: 'pointer', whiteSpace: 'nowrap' }}>↻ Volver a enviar</button>
+                </div>
                 {sel.hasGuia && (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
                     <div style={{ flex: 1, background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: '#1E293B' }}>Guía {sel.guia}</div>

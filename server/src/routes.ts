@@ -373,9 +373,12 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
   const sid = req.user!.storeId!;
   const prov = wooProv(req.body?.proveedor);
   if (!prov) return res.status(400).json({ error: 'Elige el proveedor (Dropi o Effi).' });
+  // reintentar = volver a enviarlo aunque ya tenga woo_id (algo salió mal en el
+  // proveedor y el dueño quiere reenviarlo). Crea un pedido NUEVO en WooCommerce.
+  const reintentar = req.body?.reintentar === true;
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  if (o.woo_id) return res.json({ ok: true, guia: o.guia || '', wooId: o.woo_id, proveedor: o.despacho_proveedor || prov, aviso: 'Este pedido ya fue despachado.' });
+  if (o.woo_id && !reintentar) return res.json({ ok: true, guia: o.guia || '', wooId: o.woo_id, proveedor: o.despacho_proveedor || prov, aviso: 'Este pedido ya fue despachado.' });
   const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id) as { qty: number; nombre: string; precio: number }[];
   const skus: Record<string, string> = {};
   for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(sid) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
@@ -387,8 +390,9 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
   }, items, skus, prov);
   if ('error' in r) return res.status(400).json({ error: r.error });
   const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';
-  db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ? WHERE id = ?').run(r.wooId, prov, nombreProv, o.id);
-  res.json({ ok: true, wooId: r.wooId, numeroWoo: r.numero, proveedor: prov });
+  // Al reenviar reseteamos la guía vieja (el pedido nuevo trae la suya cuando el proveedor la genere).
+  db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ?, guia = ? WHERE id = ?').run(r.wooId, prov, nombreProv, reintentar ? '' : String(o.guia || ''), o.id);
+  res.json({ ok: true, wooId: r.wooId, numeroWoo: r.numero, proveedor: prov, reenviado: reintentar });
 });
 
 // Sincroniza estado y guía del pedido desde el WooCommerce del proveedor usado.

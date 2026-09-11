@@ -176,6 +176,7 @@ export interface DecoratedOrder extends Order {
   open: () => void;
   sendToDropi: () => void;
   despachar: (proveedor: 'dropi' | 'effi') => void;
+  reenviarDespacho: (proveedor: 'dropi' | 'effi') => void;
   sincronizarEffi: () => void;
   despachado: boolean;
   despachoProveedor: string;
@@ -775,15 +776,15 @@ export function useDealFlowState() {
 
   // Despacha el pedido por el proveedor elegido (creándolo en su WooCommerce).
   const [effiMsg, setEffiMsg] = useState('');
-  function despacharPedido(id: string, proveedor: 'dropi' | 'effi') {
+  function despacharPedido(id: string, proveedor: 'dropi' | 'effi', reintentar = false) {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o?.rowId) return;
     const nombre = proveedor === 'dropi' ? 'Dropi' : 'Effi';
-    setEffiMsg(`Enviando a ${nombre}…`);
-    void apiOrderDespachar(o.rowId, proveedor).then((r) => {
+    setEffiMsg(reintentar ? `Volviendo a enviar a ${nombre}…` : `Enviando a ${nombre}…`);
+    void apiOrderDespachar(o.rowId, proveedor, reintentar).then((r) => {
       if (r.error || !r.data) { setEffiMsg(r.error || `No se pudo enviar a ${nombre}.`); return; }
-      setEffiMsg(r.data.aviso || `✓ Pedido enviado a ${nombre}. La guía llega cuando lo despachen.`);
-      setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, despachoProveedor: proveedor, transportadora: nombre } : x)));
+      setEffiMsg(r.data.aviso || `✓ Pedido ${reintentar ? 'reenviado' : 'enviado'} a ${nombre}. La guía llega cuando lo despachen.`);
+      setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, despachoProveedor: proveedor, transportadora: nombre, guia: reintentar ? '' : x.guia } : x)));
     });
   }
   function sincronizarEffi(id: string) {
@@ -820,6 +821,7 @@ export function useDealFlowState() {
       },
       sendToDropi: () => sendToDropi(o.id),
       despachar: (proveedor: 'dropi' | 'effi') => despacharPedido(o.id, proveedor),
+      reenviarDespacho: (proveedor: 'dropi' | 'effi') => despacharPedido(o.id, proveedor, true),
       sincronizarEffi: () => sincronizarEffi(o.id),
       despachado: !!o.wooId,
       despachoProveedor: o.despachoProveedor || '',
