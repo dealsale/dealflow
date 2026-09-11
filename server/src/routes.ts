@@ -383,6 +383,7 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
   const r = await crearPedido(sid, {
     cliente: String(o.cliente || ''), ciudad: String(o.ciudad || ''), departamento: String(o.departamento || ''),
     tel: String(o.tel || ''), direccion: String(o.direccion || ''), nota: String(o.nota || ''), envio: Number(o.envio || 0),
+    total: Number(o.total || 0),
   }, items, skus, prov);
   if ('error' in r) return res.status(400).json({ error: r.error });
   const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';

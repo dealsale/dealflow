@@ -72,7 +72,7 @@ export async function verificar(storeId: string, prov?: WooProv): Promise<{ ok: 
 }
 
 interface ItemPedido { qty: number; nombre: string; precio: number }
-interface Pedido { cliente: string; ciudad: string; departamento: string; tel: string; direccion: string; nota: string; envio: number }
+interface Pedido { cliente: string; ciudad: string; departamento: string; tel: string; direccion: string; nota: string; envio: number; total?: number }
 
 const money = (cents: number) => (cents / 1).toFixed(2); // los precios ya vienen en pesos enteros
 
@@ -109,7 +109,30 @@ export async function crearPedido(
     return m ? skusPorNombre[m].trim() : '';
   };
 
-  for (const it of items) {
+  // El pedido se negocia por un TOTAL (combos, descuentos), no por precio de
+  // catálogo. Lo que la integración (Dropi/Effi) necesita es la CANTIDAD de cada
+  // producto y un precio unitario coherente = total de la línea ÷ cantidad. Así
+  // que repartimos el total de productos entre las líneas (proporcional a su peso)
+  // y le damos a cada línea su total; WooCommerce calcula el unitario (total ÷ qty).
+  const totalItemsCatalogo = items.reduce((a, it) => a + Math.max(0, it.qty) * Math.max(0, it.precio), 0);
+  const totalNegociado = order.total && order.total > 0 ? order.total : 0;
+  // El total negociado suele incluir el envío; lo restamos para quedarnos con el de productos.
+  const totalProductos = totalNegociado > order.envio ? totalNegociado - order.envio : (totalNegociado || totalItemsCatalogo);
+  // Peso de cada línea para repartir: por su valor de catálogo, o por cantidad si no hay precios.
+  const pesos = items.map((it) => (totalItemsCatalogo > 0 ? Math.max(0, it.qty * it.precio) : Math.max(1, it.qty)));
+  const sumaPesos = pesos.reduce((a, b) => a + b, 0) || 1;
+  // Total (en pesos enteros) que le toca a CADA línea; el remanente va a la última
+  // para que la suma cuadre exactamente con el total negociado.
+  const totalLinea: number[] = [];
+  let repartido = 0;
+  for (let i = 0; i < items.length; i++) {
+    const t = i === items.length - 1 ? totalProductos - repartido : Math.round((totalProductos * pesos[i]) / sumaPesos);
+    totalLinea[i] = Math.max(0, t);
+    repartido += totalLinea[i];
+  }
+
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
     const sku = skuDeItem(it.nombre);
     let productId = 0;
     if (sku) {
@@ -119,10 +142,13 @@ export async function crearPedido(
       } catch { /* si falla la búsqueda, cae al fallback */ }
     }
     if (productId) {
-      lineItems.push({ product_id: productId, quantity: it.qty });
+      // Línea real con cantidad y su total: WooCommerce muestra el unitario = total ÷ qty.
+      // Mandamos subtotal y total (a nivel de LÍNEA, todas las unidades) para respetar
+      // el precio negociado en vez del precio de catálogo del producto.
+      lineItems.push({ product_id: productId, quantity: it.qty, subtotal: money(totalLinea[i]), total: money(totalLinea[i]) });
     } else {
-      // Sin producto en Woo: lo mandamos como cargo con el total, y lo anotamos.
-      feeLines.push({ name: `${it.qty}× ${it.nombre}`, total: money(it.precio * it.qty) });
+      // Sin producto en Woo (SKU sin casar): va como cargo con el total de la línea, y se anota.
+      feeLines.push({ name: `${it.qty}× ${it.nombre}`, total: money(totalLinea[i]) });
       sinMapear.push(`${it.qty}× ${it.nombre}`);
     }
   }
