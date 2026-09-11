@@ -16,9 +16,18 @@ import { db, pj } from './db.js';
 
 interface Cred { base: string; ck: string; cs: string }
 
-/** Lee las credenciales de WooCommerce que guardó la tienda. */
-export function credenciales(storeId: string): Cred | null {
-  const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'woocommerce'").get(storeId) as { config: string } | undefined;
+/** Cada tienda puede tener DOS WooCommerce independientes: uno para Dropi y otro para Effi. */
+export type WooProv = 'dropi' | 'effi';
+export const WOO_PROVEEDORES: WooProv[] = ['dropi', 'effi'];
+
+/**
+ * Lee las credenciales del WooCommerce de un proveedor (dropi/effi). Cada uno
+ * se guarda como una integración aparte (woocommerce_dropi / woocommerce_effi).
+ * Si no se pasa proveedor, usa la integración genérica 'woocommerce' (legado).
+ */
+export function credenciales(storeId: string, prov?: WooProv): Cred | null {
+  const tipo = prov ? `woocommerce_${prov}` : 'woocommerce';
+  const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, tipo) as { config: string } | undefined;
   if (!row) return null;
   const cfg = pj<Record<string, string>>(row.config, {});
   const url = String(cfg.url || '').trim().replace(/\/+$/, '');
@@ -28,6 +37,11 @@ export function credenciales(storeId: string): Cred | null {
   // Normaliza a la base de la API REST.
   const base = /\/wp-json\/wc\/v3$/.test(url) ? url : `${url.replace(/\/wp-json.*$/, '')}/wp-json/wc/v3`;
   return { base, ck, cs };
+}
+
+/** Proveedores (dropi/effi) que tienen WooCommerce conectado en esta tienda. */
+export function proveedoresConectados(storeId: string): WooProv[] {
+  return WOO_PROVEEDORES.filter((p) => credenciales(storeId, p));
 }
 
 function url(c: Cred, ruta: string, params: Record<string, string> = {}): string {
@@ -45,8 +59,8 @@ async function woo<T>(c: Cred, ruta: string, init?: RequestInit, params?: Record
 }
 
 /** Verifica que las credenciales sirvan (pide 1 pedido). */
-export async function verificar(storeId: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = credenciales(storeId);
+export async function verificar(storeId: string, prov?: WooProv): Promise<{ ok: true } | { ok: false; error: string }> {
+  const c = credenciales(storeId, prov);
   if (!c) return { ok: false, error: 'Faltan los datos de WooCommerce (URL, Consumer Key y Secret).' };
   try {
     const r = await woo<unknown[]>(c, '/orders', undefined, { per_page: '1' });
@@ -72,8 +86,9 @@ export async function crearPedido(
   order: Pedido,
   items: ItemPedido[],
   skusPorNombre: Record<string, string>,
+  prov?: WooProv,
 ): Promise<{ wooId: string; numero: string } | { error: string }> {
-  const c = credenciales(storeId);
+  const c = credenciales(storeId, prov);
   if (!c) return { error: 'Conecta WooCommerce en Integraciones antes de enviar pedidos.' };
 
   const lineItems: Record<string, unknown>[] = [];
@@ -157,8 +172,8 @@ function extraerGuia(meta: { key?: string; value?: unknown }[]): string {
 }
 
 /** Lee el estado y la guía de un pedido en Woo (que Effi va actualizando). */
-export async function estadoPedido(storeId: string, wooId: string): Promise<{ estado: string; guia: string } | { error: string }> {
-  const c = credenciales(storeId);
+export async function estadoPedido(storeId: string, wooId: string, prov?: WooProv): Promise<{ estado: string; guia: string } | { error: string }> {
+  const c = credenciales(storeId, prov);
   if (!c) return { error: 'Conecta WooCommerce en Integraciones.' };
   try {
     const r = await woo<{ status: string; meta_data: { key?: string; value?: unknown }[] }>(c, `/orders/${encodeURIComponent(wooId)}`);
@@ -172,8 +187,8 @@ export async function estadoPedido(storeId: string, wooId: string): Promise<{ es
 export interface ItemInventario { sku: string; nombre: string; stock: number | null }
 
 /** Trae el inventario de WooCommerce (para sincronizar el stock por SKU). */
-export async function inventario(storeId: string): Promise<{ items: ItemInventario[] } | { error: string }> {
-  const c = credenciales(storeId);
+export async function inventario(storeId: string, prov?: WooProv): Promise<{ items: ItemInventario[] } | { error: string }> {
+  const c = credenciales(storeId, prov);
   if (!c) return { error: 'Conecta WooCommerce en Integraciones.' };
   try {
     const items: ItemInventario[] = [];
@@ -205,8 +220,8 @@ function skuAuto(nombre: string, id: string): string {
  * tengan SKU les genera uno automáticamente (y lo guarda), para que la
  * sincronización funcione sin tener que ponerlo a mano.
  */
-export async function empujarProductos(storeId: string): Promise<{ creados: number; actualizados: number; skusGenerados: number } | { error: string }> {
-  const c = credenciales(storeId);
+export async function empujarProductos(storeId: string, prov?: WooProv): Promise<{ creados: number; actualizados: number; skusGenerados: number } | { error: string }> {
+  const c = credenciales(storeId, prov);
   if (!c) return { error: 'Conecta WooCommerce en Integraciones.' };
 
   const prods = db.prepare('SELECT id, nombre, precio, descripcion, sku FROM products WHERE store_id = ?').all(storeId) as
@@ -275,8 +290,8 @@ export async function empujarProductos(storeId: string): Promise<{ creados: numb
 }
 
 /** Actualiza el stock local (products.stock por SKU) con lo que dice WooCommerce. */
-export async function sincronizarInventario(storeId: string): Promise<{ actualizados: number } | { error: string }> {
-  const inv = await inventario(storeId);
+export async function sincronizarInventario(storeId: string, prov?: WooProv): Promise<{ actualizados: number } | { error: string }> {
+  const inv = await inventario(storeId, prov);
   if ('error' in inv) return inv;
   let actualizados = 0;
   const upd = db.prepare('UPDATE variants SET stock = ? WHERE product_id IN (SELECT id FROM products WHERE store_id = ? AND sku = ? AND sku != \'\')');

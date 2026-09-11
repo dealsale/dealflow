@@ -22,8 +22,10 @@ export interface Order {
   transportadora: string;
   /** Número de guía generado al enviar el pedido a Dropi */
   guia?: string;
-  /** id del pedido en WooCommerce (si ya se envió a Effi) */
+  /** id del pedido en WooCommerce (si ya se despachó) */
   wooId?: string;
+  /** proveedor por el que se despachó: 'dropi' | 'effi' */
+  despachoProveedor?: string;
   envio: number;
   nota: string;
   /** Total del pedido acordado por el asistente (si no hay precios por ítem) */

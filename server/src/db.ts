@@ -192,7 +192,8 @@ addColumn('products', "disparador TEXT NOT NULL DEFAULT ''");
 addColumn('products', 'mensaje_inicial_activo INTEGER NOT NULL DEFAULT 1');
 addColumn('orders', 'total INTEGER NOT NULL DEFAULT 0');
 addColumn('orders', "departamento TEXT NOT NULL DEFAULT ''");
-addColumn('orders', "woo_id TEXT NOT NULL DEFAULT ''"); // id del pedido en WooCommerce (puente a Effi)
+addColumn('orders', "woo_id TEXT NOT NULL DEFAULT ''"); // id del pedido en WooCommerce (puente a Effi/Dropi)
+addColumn('orders', "despacho_proveedor TEXT NOT NULL DEFAULT ''"); // dropi | effi: a cuál WooCommerce se envió el pedido
 addColumn('assistants', "ia_proveedor TEXT NOT NULL DEFAULT ''"); // deepseek | openai | grok ('' = el del servidor)
 db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (
   store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,

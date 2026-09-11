@@ -40,8 +40,9 @@ import {
   apiOrders,
   apiOrderAdvance,
   apiOrderDropi,
-  apiOrderEffi,
-  apiOrderEffiSync,
+  apiOrderDespachar,
+  apiOrderDespacharSync,
+  apiWooProveedores,
   apiWooVerificar,
   apiWooSyncInventario,
   apiWooSyncProductos,
@@ -174,9 +175,10 @@ export interface DecoratedOrder extends Order {
   advance: () => void;
   open: () => void;
   sendToDropi: () => void;
-  enviarEffi: () => void;
+  despachar: (proveedor: 'dropi' | 'effi') => void;
   sincronizarEffi: () => void;
-  enviadoEffi: boolean;
+  despachado: boolean;
+  despachoProveedor: string;
   timeline: { estado: string; dotStyle: CSSProperties; labelStyle: CSSProperties }[];
 }
 
@@ -472,6 +474,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     transportadora: o.transportadora || 'Dropi',
     guia: o.guia,
     wooId: o.wooId || '',
+    despachoProveedor: o.despachoProveedor || '',
     envio: o.envio || 0,
     nota: o.nota || '',
     total: o.total || 0,
@@ -770,23 +773,24 @@ export function useDealFlowState() {
     });
   }
 
-  // Envía el pedido a Effi (creándolo en WooCommerce). Devuelve un aviso para la UI.
+  // Despacha el pedido por el proveedor elegido (creándolo en su WooCommerce).
   const [effiMsg, setEffiMsg] = useState('');
-  function enviarAEffi(id: string) {
+  function despacharPedido(id: string, proveedor: 'dropi' | 'effi') {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o?.rowId) return;
-    setEffiMsg('Enviando a WooCommerce…');
-    void apiOrderEffi(o.rowId).then((r) => {
-      if (r.error || !r.data) { setEffiMsg(r.error || 'No se pudo enviar a WooCommerce.'); return; }
-      setEffiMsg(r.data.aviso || '✓ Pedido enviado a WooCommerce. Effi/Dropi genera la guía al despacharlo.');
-      setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, transportadora: 'WooCommerce' } : x)));
+    const nombre = proveedor === 'dropi' ? 'Dropi' : 'Effi';
+    setEffiMsg(`Enviando a ${nombre}…`);
+    void apiOrderDespachar(o.rowId, proveedor).then((r) => {
+      if (r.error || !r.data) { setEffiMsg(r.error || `No se pudo enviar a ${nombre}.`); return; }
+      setEffiMsg(r.data.aviso || `✓ Pedido enviado a ${nombre}. La guía llega cuando lo despachen.`);
+      setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, despachoProveedor: proveedor, transportadora: nombre } : x)));
     });
   }
   function sincronizarEffi(id: string) {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o?.rowId) return;
-    setEffiMsg('Consultando WooCommerce…');
-    void apiOrderEffiSync(o.rowId).then((r) => {
+    setEffiMsg('Consultando estado…');
+    void apiOrderDespacharSync(o.rowId).then((r) => {
       if (r.error || !r.data) { setEffiMsg(r.error || 'No se pudo sincronizar.'); return; }
       setEffiMsg(`Estado: ${r.data.estado || 'sin cambios'}${r.data.guia ? ` · guía ${r.data.guia}` : ''}`);
       if (r.data.guia) setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, guia: r.data!.guia } : x)));
@@ -815,9 +819,10 @@ export function useDealFlowState() {
         setSection('pedidos');
       },
       sendToDropi: () => sendToDropi(o.id),
-      enviarEffi: () => enviarAEffi(o.id),
+      despachar: (proveedor: 'dropi' | 'effi') => despacharPedido(o.id, proveedor),
       sincronizarEffi: () => sincronizarEffi(o.id),
-      enviadoEffi: !!o.wooId,
+      despachado: !!o.wooId,
+      despachoProveedor: o.despachoProveedor || '',
       timeline: ESTADO_ORDER.map((est) => {
         const done = ESTADO_ORDER.indexOf(est) <= ESTADO_ORDER.indexOf(o.estado);
         return {
@@ -1991,27 +1996,40 @@ export function useDealFlowState() {
   function eliminarIntegracion(tipo: string) {
     void apiEliminarIntegracion(tipo).then(() => void reloadIntegraciones());
   }
-  // WooCommerce (puente a Effi): probar conexión y sincronizar inventario.
-  function verificarWoo() {
-    setIntegracionMsg('Probando la conexión con WooCommerce…');
-    void apiWooVerificar().then((r) => {
-      setIntegracionMsg(r.error ? r.error : '✓ Conexión con WooCommerce correcta.');
+  // Proveedores WooCommerce conectados (dropi/effi) para mostrar los botones de despacho.
+  const [wooProveedores, setWooProveedores] = useState<string[]>([]);
+  async function reloadWooProveedores() {
+    const { data } = await apiWooProveedores();
+    if (data) setWooProveedores(data.proveedores);
+  }
+  useEffect(() => {
+    if (apiMode && sessionUser) void reloadWooProveedores();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, sessionUser]);
+
+  // WooCommerce por proveedor (Dropi/Effi): probar conexión, inventario, productos.
+  const nombreProv = (p: string) => (p === 'dropi' ? 'Dropi' : 'Effi');
+  function verificarWoo(proveedor: string) {
+    setIntegracionMsg(`Probando la conexión con WooCommerce (${nombreProv(proveedor)})…`);
+    void apiWooVerificar(proveedor).then((r) => {
+      setIntegracionMsg(r.error ? r.error : `✓ Conexión con WooCommerce (${nombreProv(proveedor)}) correcta.`);
+      void reloadWooProveedores();
       setTimeout(() => setIntegracionMsg(''), 4000);
     });
   }
-  function sincronizarInventarioWoo() {
-    setIntegracionMsg('Sincronizando inventario desde WooCommerce…');
-    void apiWooSyncInventario().then((r) => {
+  function sincronizarInventarioWoo(proveedor: string) {
+    setIntegracionMsg(`Sincronizando inventario desde WooCommerce (${nombreProv(proveedor)})…`);
+    void apiWooSyncInventario(proveedor).then((r) => {
       if (r.error || !r.data) { setIntegracionMsg(r.error || 'No se pudo sincronizar.'); return; }
       setIntegracionMsg(`✓ Inventario sincronizado (${r.data.actualizados} productos).`);
       if (apiMode) void reloadProducts();
       setTimeout(() => setIntegracionMsg(''), 4500);
     });
   }
-  // Empuja el catálogo de DealFlow a WooCommerce (para que Effi lo despache).
-  function sincronizarProductosWoo() {
-    setIntegracionMsg('Enviando tus productos a WooCommerce…');
-    void apiWooSyncProductos().then((r) => {
+  // Empuja el catálogo de DealFlow al WooCommerce del proveedor elegido.
+  function sincronizarProductosWoo(proveedor: string) {
+    setIntegracionMsg(`Enviando tus productos a WooCommerce (${nombreProv(proveedor)})…`);
+    void apiWooSyncProductos(proveedor).then((r) => {
       if (r.error || !r.data) { setIntegracionMsg(r.error || 'No se pudieron sincronizar los productos.'); return; }
       const { creados, actualizados, skusGenerados } = r.data;
       setIntegracionMsg(`✓ Productos sincronizados: ${creados} creados, ${actualizados} actualizados en WooCommerce${skusGenerados ? ` · ${skusGenerados} SKU generados automáticamente` : ''}.`);
@@ -2944,6 +2962,7 @@ export function useDealFlowState() {
     verificarWoo,
     sincronizarInventarioWoo,
     sincronizarProductosWoo,
+    wooProveedores,
     guardarIntegracion,
     eliminarIntegracion,
     elegirIaPredeterminada,

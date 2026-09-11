@@ -590,12 +590,21 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   void (async () => {
     try {
       const woo = await import('./woocommerce.js');
-      if (!woo.credenciales(storeId)) return; // WooCommerce no conectado
+      const provs = woo.proveedoresConectados(storeId);
+      // Con un solo proveedor conectado, enviamos automático. Con dos, el dueño
+      // elige por pedido (Enviar por Dropi / Enviar por Effi) desde el detalle.
+      if (provs.length !== 1) {
+        if (provs.length === 0) console.log('[woo] pedido no auto-enviado: no hay WooCommerce conectado');
+        else console.log('[woo] pedido no auto-enviado: hay 2 proveedores, se elige a mano');
+        return;
+      }
+      const prov = provs[0];
       const skus: Record<string, string> = {};
       for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(storeId) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
-      const r = await woo.crearPedido(storeId, { cliente, ciudad, departamento, tel: lead.tel || '', direccion, nota: '', envio: 0 }, items, skus);
-      if ('error' in r) console.warn(`[woo] pedido DF-${numero} NO se envió a WooCommerce: ${r.error}`);
-      else { db.prepare("UPDATE orders SET woo_id = ?, transportadora = 'WooCommerce' WHERE id = ?").run(r.wooId, oid); console.log(`[woo] pedido DF-${numero} enviado a WooCommerce (#${r.numero})`); }
+      const r = await woo.crearPedido(storeId, { cliente, ciudad, departamento, tel: lead.tel || '', direccion, nota: '', envio: 0 }, items, skus, prov);
+      const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';
+      if ('error' in r) { console.warn(`[woo] pedido DF-${numero} NO se envió a ${nombreProv}: ${r.error}`); registrarLog(storeId, 'error', 'despacho', `El pedido DF-${numero} no se pudo enviar a ${nombreProv}: ${r.error}`, lead.id); }
+      else { db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ? WHERE id = ?').run(r.wooId, prov, nombreProv, oid); console.log(`[woo] pedido DF-${numero} enviado a ${nombreProv} (#${r.numero})`); registrarLog(storeId, 'info', 'despacho', `Pedido DF-${numero} enviado a ${nombreProv} (WooCommerce #${r.numero}).`, lead.id); }
     } catch (e) { console.error('[woo] error auto-enviando pedido', e); }
   })();
 

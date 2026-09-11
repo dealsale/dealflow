@@ -196,9 +196,9 @@ export function Integraciones({ df }: { df: DealFlowState }) {
                       </button>
                       {i.especial === 'woo' && conectado && !abiertaEsta && (
                         <>
-                          <button onClick={df.verificarWoo} style={{ background: '#fff', color: '#334155', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Probar conexión</button>
-                          <button onClick={df.sincronizarProductosWoo} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Enviar productos →</button>
-                          <button onClick={df.sincronizarInventarioWoo} style={{ background: '#fff', color: '#6D28D9', border: '1px solid #DDD6FE', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Traer inventario</button>
+                          <button onClick={() => df.verificarWoo(i.id.replace('woocommerce_', ''))} style={{ background: '#fff', color: '#334155', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Probar conexión</button>
+                          <button onClick={() => df.sincronizarProductosWoo(i.id.replace('woocommerce_', ''))} style={{ background: '#6D28D9', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Enviar productos →</button>
+                          <button onClick={() => df.sincronizarInventarioWoo(i.id.replace('woocommerce_', ''))} style={{ background: '#fff', color: '#6D28D9', border: '1px solid #DDD6FE', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Traer inventario</button>
                         </>
                       )}
                     </div>

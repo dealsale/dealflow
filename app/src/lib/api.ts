@@ -246,6 +246,7 @@ export interface ApiOrder {
   transportadora: string;
   guia?: string;
   wooId?: string;
+  despachoProveedor?: string;
   envio: number;
   nota: string;
   total: number;
@@ -257,11 +258,12 @@ export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET')
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
 export const apiOrderDropi = (rowId: string) => req<{ guia: string }>(`/api/orders/${rowId}/dropi`, 'POST');
 // Effi (vía WooCommerce)
-export const apiOrderEffi = (rowId: string) => req<{ ok: true; wooId: string; numeroWoo: string; aviso?: string }>(`/api/orders/${rowId}/effi`, 'POST');
-export const apiOrderEffiSync = (rowId: string) => req<{ estado: string; guia: string }>(`/api/orders/${rowId}/effi/sync`, 'POST');
-export const apiWooVerificar = () => req<{ ok: true }>('/api/woo/verificar', 'POST');
-export const apiWooSyncInventario = () => req<{ actualizados: number }>('/api/woo/inventario/sync', 'POST');
-export const apiWooSyncProductos = () => req<{ creados: number; actualizados: number; skusGenerados: number }>('/api/woo/productos/sync', 'POST');
+export const apiOrderDespachar = (rowId: string, proveedor: string) => req<{ ok: true; wooId: string; numeroWoo: string; proveedor: string; aviso?: string }>(`/api/orders/${rowId}/despachar`, 'POST', { proveedor });
+export const apiOrderDespacharSync = (rowId: string) => req<{ estado: string; guia: string }>(`/api/orders/${rowId}/despachar/sync`, 'POST');
+export const apiWooProveedores = () => req<{ proveedores: string[] }>('/api/woo/proveedores', 'GET');
+export const apiWooVerificar = (proveedor: string) => req<{ ok: true }>('/api/woo/verificar', 'POST', { proveedor });
+export const apiWooSyncInventario = (proveedor: string) => req<{ actualizados: number }>('/api/woo/inventario/sync', 'POST', { proveedor });
+export const apiWooSyncProductos = (proveedor: string) => req<{ creados: number; actualizados: number; skusGenerados: number }>('/api/woo/productos/sync', 'POST', { proveedor });
 
 export interface EventoLog { nivel: string; evento: string; detalle: string; leadId: string | null; createdAt: string }
 export const apiLogs = () => req<{ logs: EventoLog[] }>('/api/logs', 'GET');

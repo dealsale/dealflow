@@ -155,7 +155,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   }));
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', despachoProveedor: o.despacho_proveedor || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
@@ -211,7 +211,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', despachoProveedor: o.despacho_proveedor || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string),
   }));
   res.json({ orders });
@@ -363,57 +363,70 @@ api.post('/orders/:rowId/dropi', requireAuth, requireStore, (req, res) => {
 });
 
 // ── Effi (vía WooCommerce): crea el pedido en Woo para que Effi lo despache ──
-api.post('/orders/:rowId/effi', requireAuth, requireStore, requireOwner, async (req, res) => {
+// Normaliza el proveedor recibido del cliente.
+function wooProv(v: unknown): 'dropi' | 'effi' | undefined {
+  return v === 'dropi' ? 'dropi' : v === 'effi' ? 'effi' : undefined;
+}
+
+// Despacha un pedido a WooCommerce por el proveedor elegido (Dropi o Effi).
+api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const sid = req.user!.storeId!;
+  const prov = wooProv(req.body?.proveedor);
+  if (!prov) return res.status(400).json({ error: 'Elige el proveedor (Dropi o Effi).' });
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  if (o.woo_id) return res.json({ ok: true, guia: o.guia || '', wooId: o.woo_id, aviso: 'Este pedido ya se envió a Effi.' });
+  if (o.woo_id) return res.json({ ok: true, guia: o.guia || '', wooId: o.woo_id, proveedor: o.despacho_proveedor || prov, aviso: 'Este pedido ya fue despachado.' });
   const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id) as { qty: number; nombre: string; precio: number }[];
-  // Mapa nombre-de-ítem → SKU del producto (para casar con WooCommerce/Effi).
   const skus: Record<string, string> = {};
   for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(sid) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
   const { crearPedido } = await import('./woocommerce.js');
   const r = await crearPedido(sid, {
     cliente: String(o.cliente || ''), ciudad: String(o.ciudad || ''), departamento: String(o.departamento || ''),
     tel: String(o.tel || ''), direccion: String(o.direccion || ''), nota: String(o.nota || ''), envio: Number(o.envio || 0),
-  }, items, skus);
+  }, items, skus, prov);
   if ('error' in r) return res.status(400).json({ error: r.error });
-  db.prepare("UPDATE orders SET woo_id = ?, transportadora = 'WooCommerce' WHERE id = ?").run(r.wooId, o.id);
-  res.json({ ok: true, wooId: r.wooId, numeroWoo: r.numero });
+  const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';
+  db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ? WHERE id = ?').run(r.wooId, prov, nombreProv, o.id);
+  res.json({ ok: true, wooId: r.wooId, numeroWoo: r.numero, proveedor: prov });
 });
 
-// Sincroniza estado y guía del pedido desde WooCommerce (que Effi actualiza).
-api.post('/orders/:rowId/effi/sync', requireAuth, requireStore, async (req, res) => {
+// Sincroniza estado y guía del pedido desde el WooCommerce del proveedor usado.
+api.post('/orders/:rowId/despachar/sync', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
-  const o = db.prepare('SELECT id, woo_id FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; woo_id: string } | undefined;
+  const o = db.prepare('SELECT id, woo_id, despacho_proveedor FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; woo_id: string; despacho_proveedor: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  if (!o.woo_id) return res.status(400).json({ error: 'Este pedido aún no se ha enviado a Effi.' });
+  if (!o.woo_id) return res.status(400).json({ error: 'Este pedido aún no se ha despachado.' });
   const { estadoPedido } = await import('./woocommerce.js');
-  const r = await estadoPedido(sid, o.woo_id);
+  const r = await estadoPedido(sid, o.woo_id, wooProv(o.despacho_proveedor));
   if ('error' in r) return res.status(400).json({ error: r.error });
   if (r.guia) db.prepare('UPDATE orders SET guia = ? WHERE id = ?').run(r.guia, o.id);
   res.json({ estado: r.estado, guia: r.guia });
 });
 
-// WooCommerce: verificar conexión y sincronizar inventario.
+// Qué proveedores WooCommerce tiene conectados la tienda (para mostrar los botones).
+api.get('/woo/proveedores', requireAuth, requireStore, async (req, res) => {
+  const { proveedoresConectados } = await import('./woocommerce.js');
+  res.json({ proveedores: proveedoresConectados(req.user!.storeId!) });
+});
+
+// WooCommerce por proveedor: verificar conexión, inventario y productos.
 api.post('/woo/verificar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { verificar } = await import('./woocommerce.js');
-  const r = await verificar(req.user!.storeId!);
+  const r = await verificar(req.user!.storeId!, wooProv(req.body?.proveedor));
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json({ ok: true });
 });
 
 api.post('/woo/inventario/sync', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { sincronizarInventario } = await import('./woocommerce.js');
-  const r = await sincronizarInventario(req.user!.storeId!);
+  const r = await sincronizarInventario(req.user!.storeId!, wooProv(req.body?.proveedor));
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ actualizados: r.actualizados });
 });
 
-// Empuja el catálogo de DealFlow a WooCommerce (crea/actualiza por SKU).
 api.post('/woo/productos/sync', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { empujarProductos } = await import('./woocommerce.js');
-  const r = await empujarProductos(req.user!.storeId!);
+  const r = await empujarProductos(req.user!.storeId!, wooProv(req.body?.proveedor));
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
 });
