@@ -87,7 +87,7 @@ export async function crearPedido(
   items: ItemPedido[],
   skusPorNombre: Record<string, string>,
   prov?: WooProv,
-): Promise<{ wooId: string; numero: string } | { error: string }> {
+): Promise<{ wooId: string; numero: string; sinMapear: string[]; mapeados: number } | { error: string }> {
   const c = credenciales(storeId, prov);
   if (!c) return { error: 'Conecta WooCommerce en Integraciones antes de enviar pedidos.' };
 
@@ -172,7 +172,9 @@ export async function crearPedido(
   try {
     const r = await woo<{ id: number; number: string }>(c, '/orders', { method: 'POST', body: JSON.stringify(payload) });
     if (!r.ok || !r.body.id) return { error: r.body.message || 'WooCommerce no aceptó el pedido.' };
-    return { wooId: String(r.body.id), numero: String(r.body.number || r.body.id) };
+    // sinMapear = ítems que NO casaron con un producto por SKU: van como "cargo" y el
+    // proveedor (Dropi/Effi) NO los va a despachar. mapeados = líneas de producto reales.
+    return { wooId: String(r.body.id), numero: String(r.body.number || r.body.id), sinMapear, mapeados: lineItems.length };
   } catch {
     return { error: 'No pudimos crear el pedido en WooCommerce.' };
   }

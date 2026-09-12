@@ -783,7 +783,12 @@ export function useDealFlowState() {
     setEffiMsg(reintentar ? `Volviendo a enviar a ${nombre}…` : `Enviando a ${nombre}…`);
     void apiOrderDespachar(o.rowId, proveedor, reintentar).then((r) => {
       if (r.error || !r.data) { setEffiMsg(r.error || `No se pudo enviar a ${nombre}.`); return; }
-      setEffiMsg(r.data.aviso || `✓ Pedido ${reintentar ? 'reenviado' : 'enviado'} a ${nombre}. La guía llega cuando lo despachen.`);
+      const noMap = r.data.sinMapear || [];
+      if (noMap.length) {
+        setEffiMsg(`⚠ El pedido llegó a WooCommerce, pero ${noMap.length} producto(s) NO coinciden por SKU con un producto de ${nombre}, así que ${nombre} NO los va a despachar: ${noMap.join(', ')}. Ponles el mismo SKU del producto de ${nombre} en Productos y vuelve a enviar.`);
+      } else {
+        setEffiMsg(r.data.aviso || `✓ Pedido ${reintentar ? 'reenviado' : 'enviado'} a ${nombre}. La guía llega cuando lo despachen.`);
+      }
       setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, despachoProveedor: proveedor, transportadora: nombre, guia: reintentar ? '' : x.guia } : x)));
     });
   }

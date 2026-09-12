@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { db, j, pj, uid } from './db.js';
+import { db, j, pj, uid, registrarLog } from './db.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
 import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
@@ -392,7 +392,15 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
   const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';
   // Al reenviar reseteamos la guía vieja (el pedido nuevo trae la suya cuando el proveedor la genere).
   db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ?, guia = ? WHERE id = ?').run(r.wooId, prov, nombreProv, reintentar ? '' : String(o.guia || ''), o.id);
-  res.json({ ok: true, wooId: r.wooId, numeroWoo: r.numero, proveedor: prov, reenviado: reintentar });
+  const numDF = `DF-${String(o.numero || '')}`;
+  if (r.sinMapear.length) {
+    // Diagnóstico clave: si un ítem no casó por SKU, quedó como "cargo" y el proveedor NO lo despachará.
+    registrarLog(sid, 'warn', 'despacho',
+      `${numDF} llegó a WooCommerce, pero ${r.sinMapear.length} producto(s) NO coinciden por SKU con un producto de ${nombreProv} y NO se van a despachar: ${r.sinMapear.join(', ')}. Ponles el MISMO SKU del producto de ${nombreProv} en la sección Productos.`);
+  } else {
+    registrarLog(sid, 'info', 'despacho', `${numDF} enviado a ${nombreProv} (WooCommerce #${r.numero}) con ${r.mapeados} producto(s) mapeado(s) por SKU.`);
+  }
+  res.json({ ok: true, wooId: r.wooId, numeroWoo: r.numero, proveedor: prov, reenviado: reintentar, sinMapear: r.sinMapear, mapeados: r.mapeados });
 });
 
 // Sincroniza estado y guía del pedido desde el WooCommerce del proveedor usado.

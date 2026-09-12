@@ -258,7 +258,7 @@ export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET')
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
 export const apiOrderDropi = (rowId: string) => req<{ guia: string }>(`/api/orders/${rowId}/dropi`, 'POST');
 // Effi (vía WooCommerce)
-export const apiOrderDespachar = (rowId: string, proveedor: string, reintentar = false) => req<{ ok: true; wooId: string; numeroWoo: string; proveedor: string; aviso?: string; reenviado?: boolean }>(`/api/orders/${rowId}/despachar`, 'POST', { proveedor, reintentar });
+export const apiOrderDespachar = (rowId: string, proveedor: string, reintentar = false) => req<{ ok: true; wooId: string; numeroWoo: string; proveedor: string; aviso?: string; reenviado?: boolean; sinMapear?: string[]; mapeados?: number }>(`/api/orders/${rowId}/despachar`, 'POST', { proveedor, reintentar });
 export const apiOrderDespacharSync = (rowId: string) => req<{ estado: string; guia: string }>(`/api/orders/${rowId}/despachar/sync`, 'POST');
 export const apiWooProveedores = () => req<{ proveedores: string[] }>('/api/woo/proveedores', 'GET');
 export const apiWooVerificar = (proveedor: string) => req<{ ok: true }>('/api/woo/verificar', 'POST', { proveedor });
