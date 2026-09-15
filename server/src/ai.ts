@@ -616,15 +616,15 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   void (async () => {
     try {
       const woo = await import('./woocommerce.js');
-      const provs = woo.proveedoresConectados(storeId);
-      // Con un solo proveedor conectado, enviamos automático. Con dos, el dueño
-      // elige por pedido (Enviar por Dropi / Enviar por Effi) desde el detalle.
-      if (provs.length !== 1) {
-        if (provs.length === 0) console.log('[woo] pedido no auto-enviado: no hay WooCommerce conectado');
-        else console.log('[woo] pedido no auto-enviado: hay 2 proveedores, se elige a mano');
+      // Auto-despacho SIN botón: el proveedor preferido de la tienda (aunque haya dos
+      // conectados) o, si no hay preferido, el único conectado. Con dos y sin preferido,
+      // el dueño elige por pedido desde el detalle.
+      const prov = woo.proveedorAutoDespacho(storeId);
+      if (!prov) {
+        if (woo.proveedoresConectados(storeId).length === 0) console.log('[woo] pedido no auto-enviado: no hay WooCommerce conectado');
+        else console.log('[woo] pedido no auto-enviado: hay 2 proveedores y no hay preferido, se elige a mano');
         return;
       }
-      const prov = provs[0];
       const skus: Record<string, string> = {};
       for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(storeId) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
       const r = await woo.crearPedido(storeId, { cliente, ciudad, departamento, tel: lead.tel || '', direccion, nota: '', envio: 0, total }, items, skus, prov);

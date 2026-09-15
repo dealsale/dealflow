@@ -209,6 +209,33 @@ export function Integraciones({ df }: { df: DealFlowState }) {
           </div>
         );
       })}
+
+      {/* Despacho automático: a qué proveedor mandar los pedidos SIN botón. */}
+      {df.wooProveedores.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: 18, marginTop: 4, maxWidth: 620 }}>
+          <div style={{ fontWeight: 800, fontSize: 15 }}>Despacho automático</div>
+          <div style={{ color: '#64748B', fontSize: 13, margin: '4px 0 12px' }}>
+            Cuando el bot cierre una venta, el pedido se envía solo (sin botón) al proveedor que elijas aquí. Su WooCommerce debe estar conectado.
+          </div>
+          <div style={{ maxWidth: 320 }}>
+            <Dropdown
+              ariaLabel="Proveedor de despacho automático"
+              value={df.wooPreferido}
+              onChange={df.elegirWooPreferido}
+              options={[
+                { value: '', label: 'Preguntar por cada pedido' },
+                ...(df.wooProveedores.includes('effi') ? [{ value: 'effi', label: 'Effi (automático)' }] : []),
+                ...(df.wooProveedores.includes('dropi') ? [{ value: 'dropi', label: 'Dropi (automático)' }] : []),
+              ]}
+            />
+          </div>
+          {df.wooPreferido && (
+            <div style={{ marginTop: 10, fontSize: 12.5, color: '#047857', background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 8, padding: '8px 11px' }}>
+              ✓ Los pedidos nuevos se enviarán automáticamente a <b>{df.wooPreferido === 'effi' ? 'Effi' : 'Dropi'}</b> (a su WooCommerce). Desde ahí, {df.wooPreferido === 'effi' ? 'Effi' : 'Dropi'} los recoge según su configuración.
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

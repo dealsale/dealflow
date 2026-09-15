@@ -472,10 +472,23 @@ api.post('/orders/:rowId/despachar/sync', requireAuth, requireStore, async (req,
   res.json({ estado: r.estado, guia: r.guia });
 });
 
-// Qué proveedores WooCommerce tiene conectados la tienda (para mostrar los botones).
+// Qué proveedores WooCommerce tiene conectados la tienda (para mostrar los botones)
+// y cuál es el preferido para auto-despacho (sin botón).
 api.get('/woo/proveedores', requireAuth, requireStore, async (req, res) => {
-  const { proveedoresConectados } = await import('./woocommerce.js');
-  res.json({ proveedores: proveedoresConectados(req.user!.storeId!) });
+  const { proveedoresConectados, proveedorPreferido } = await import('./woocommerce.js');
+  const sid = req.user!.storeId!;
+  res.json({ proveedores: proveedoresConectados(sid), preferido: proveedorPreferido(sid) || '' });
+});
+
+// Define el proveedor por el que se despacha AUTOMÁTICAMENTE (sin botón). '' = preguntar por pedido.
+api.post('/woo/preferido', requireAuth, requireStore, requireOwner, (req, res) => {
+  const sid = req.user!.storeId!;
+  const prov = wooProv(req.body?.proveedor) || '';
+  db.prepare(
+    `INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?, 'despacho_pref', ?, datetime('now'))
+     ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = datetime('now')`,
+  ).run(sid, JSON.stringify({ proveedor: prov }));
+  res.json({ ok: true, preferido: prov });
 });
 
 // WooCommerce por proveedor: verificar conexión, inventario y productos.

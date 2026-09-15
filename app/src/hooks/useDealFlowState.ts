@@ -45,6 +45,7 @@ import {
   apiOrderDespachar,
   apiOrderDespacharSync,
   apiWooProveedores,
+  apiWooPreferido,
   apiWooVerificar,
   apiWooSyncInventario,
   apiWooSyncProductos,
@@ -2062,9 +2063,15 @@ export function useDealFlowState() {
   }
   // Proveedores WooCommerce conectados (dropi/effi) para mostrar los botones de despacho.
   const [wooProveedores, setWooProveedores] = useState<string[]>([]);
+  const [wooPreferido, setWooPreferido] = useState<string>('');
   async function reloadWooProveedores() {
     const { data } = await apiWooProveedores();
-    if (data) setWooProveedores(data.proveedores);
+    if (data) { setWooProveedores(data.proveedores); setWooPreferido(data.preferido || ''); }
+  }
+  // Define el proveedor de auto-despacho (sin botón). '' = preguntar por pedido.
+  function elegirWooPreferido(proveedor: string) {
+    setWooPreferido(proveedor); // optimista
+    void apiWooPreferido(proveedor).then((r) => { if (r.error) void reloadWooProveedores(); });
   }
   useEffect(() => {
     if (apiMode && sessionUser) void reloadWooProveedores();
@@ -3050,6 +3057,8 @@ export function useDealFlowState() {
     sincronizarInventarioWoo,
     sincronizarProductosWoo,
     wooProveedores,
+    wooPreferido,
+    elegirWooPreferido,
     guardarIntegracion,
     eliminarIntegracion,
     elegirIaPredeterminada,

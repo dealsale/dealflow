@@ -44,6 +44,30 @@ export function proveedoresConectados(storeId: string): WooProv[] {
   return WOO_PROVEEDORES.filter((p) => credenciales(storeId, p));
 }
 
+/**
+ * Proveedor por el que se despacha AUTOMÁTICAMENTE (sin botón), aunque haya dos
+ * conectados. Se guarda como integración tipo 'despacho_pref' con {proveedor}.
+ * Devuelve null si no hay preferido configurado o si el preferido no está conectado.
+ */
+export function proveedorPreferido(storeId: string): WooProv | null {
+  const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'despacho_pref'").get(storeId) as { config: string } | undefined;
+  const prov = row ? String(pj<Record<string, string>>(row.config, {}).proveedor || '') : '';
+  if ((prov === 'dropi' || prov === 'effi') && credenciales(storeId, prov)) return prov;
+  return null;
+}
+
+/**
+ * Decide a qué proveedor auto-despachar un pedido nuevo (sin botón):
+ *  - el PREFERIDO si está conectado; si no,
+ *  - el único conectado (si solo hay uno); si hay dos y no hay preferido, null (se elige a mano).
+ */
+export function proveedorAutoDespacho(storeId: string): WooProv | null {
+  const pref = proveedorPreferido(storeId);
+  if (pref) return pref;
+  const provs = proveedoresConectados(storeId);
+  return provs.length === 1 ? provs[0] : null;
+}
+
 function url(c: Cred, ruta: string, params: Record<string, string> = {}): string {
   const u = new URL(`${c.base}${ruta}`);
   u.searchParams.set('consumer_key', c.ck);
