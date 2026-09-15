@@ -1,9 +1,22 @@
+import { useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
+import { Dropdown } from '../../components/Dropdown';
+import { ManualOrderModal } from '../../components/ManualOrderModal';
 
 export function MPedidos({ df }: { df: DealFlowState }) {
+  const [nuevoOpen, setNuevoOpen] = useState(false);
   return (
     <section data-screen-label="Móvil Pedidos">
-      <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 12px' }}>Pedidos</h1>
+      <ManualOrderModal df={df} open={nuevoOpen} onClose={() => { setNuevoOpen(false); df.setCrearPedidoMsg(''); }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 12px' }}>
+        <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: 0, flex: 1 }}>Pedidos</h1>
+        <button
+          onClick={() => setNuevoOpen(true)}
+          style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', minHeight: 40, whiteSpace: 'nowrap' }}
+        >
+          ＋ Crear
+        </button>
+      </div>
       <input
         className="df-input"
         value={df.orderQuery}
@@ -56,19 +69,16 @@ export function MPedidos({ df }: { df: DealFlowState }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontWeight: 800, fontSize: 16 }}>{o.totalFmt}</span>
               <div style={{ flex: 1 }} />
-              {o.hasNext && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    o.advance();
-                  }}
-                  className="df-btn-amber"
-                  style={{ background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', minHeight: 44 }}
-                >
-                  {o.advanceLabel}
-                </button>
-              )}
-              {o.isDone && <span style={{ color: '#059669', fontSize: 13, fontWeight: 600 }}>✓ Completado</span>}
+              {/* Estado seleccionable (incluye Cancelado), sin flujo forzado. */}
+              <div onClick={(e) => e.stopPropagation()}>
+                <Dropdown
+                  ariaLabel="Cambiar estado del pedido"
+                  value={o.estado}
+                  onChange={(v) => o.setEstado(v as typeof o.estado)}
+                  options={o.estadosDisponibles.map((e) => ({ value: e, label: e }))}
+                  width={155}
+                />
+              </div>
             </div>
           </div>
         ))}

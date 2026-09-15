@@ -11,6 +11,10 @@ body,
 #root {
   height: 100%;
   margin: 0;
+  /* Una sola barra de scroll: la app maneja su propio desplazamiento interno
+     (el <main>). Sin esto aparecen DOS barras (la de la página y la del panel)
+     y el botón flotante queda tapado a la mitad. */
+  overflow: hidden;
 }
 
 body {

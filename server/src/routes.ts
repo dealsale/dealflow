@@ -330,7 +330,12 @@ const MSG_ESTADO: Record<string, (n: number) => string> = {
   Empacado: (n) => `📦 Tu pedido #DF-${n} ya está empacado y listo para salir. 🚀`,
   Despachado: (n) => `🚚 ¡Tu pedido #DF-${n} va en camino! Pronto lo recibes. 🙌`,
   Entregado: (n) => `🎉 Tu pedido #DF-${n} fue entregado. ¡Muchas gracias por tu compra! 💚`,
+  Cancelado: (n) => `❌ Tu pedido #DF-${n} fue cancelado. Si fue un error o quieres retomarlo, escríbenos y con gusto te ayudamos. 🙏`,
 };
+
+// Todos los estados posibles (incluye Cancelado). El dueño puede cambiar de
+// cualquiera a cualquiera; no es un flujo forzado sin retroceso.
+const ESTADOS_VALIDOS = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado', 'Cancelado'] as const;
 
 api.post('/orders/:rowId/advance', requireAuth, requireStore, async (req, res) => {
   const o = db.prepare('SELECT id, estado, numero, tel FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, req.user!.storeId) as
@@ -350,6 +355,57 @@ api.post('/orders/:rowId/advance', requireAuth, requireStore, async (req, res) =
     if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
     void sendWhatsappText(req.user!.storeId!, lead?.wa_id || o.tel, msg, o.tel).catch(() => {});
   }
+});
+
+// Cambia el estado del pedido a CUALQUIER estado (seleccionable, se puede
+// retroceder e incluye Cancelado). Avisa al cliente si el estado tiene mensaje.
+api.post('/orders/:rowId/estado', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const nuevo = String(req.body?.estado || '').trim();
+  if (!ESTADOS_VALIDOS.includes(nuevo as (typeof ESTADOS_VALIDOS)[number])) return res.status(400).json({ error: 'Estado no válido.' });
+  const o = db.prepare('SELECT id, estado, numero, tel FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as
+    | { id: string; estado: string; numero: number; tel: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (o.estado === nuevo) return res.json({ estado: nuevo });
+  db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, o.id);
+  res.json({ estado: nuevo });
+  // Solo notificamos cuando el estado tiene un mensaje pensado para el cliente.
+  const msg = MSG_ESTADO[nuevo]?.(o.numero);
+  if (msg && o.tel) {
+    const lead = db.prepare("SELECT id, wa_id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(sid, o.tel) as { id: string; wa_id: string | null } | undefined;
+    if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
+    void sendWhatsappText(sid, lead?.wa_id || o.tel, msg, o.tel).catch(() => {});
+  }
+});
+
+// Crea un pedido MANUALMENTE (logística manual): el dueño mete los datos del
+// cliente y elige productos/variantes. No se autoenvía a WooCommerce; se despacha
+// a mano desde el detalle. Queda en estado "Nuevo".
+api.post('/orders', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  const b = req.body || {};
+  const cliente = String(b.cliente || '').trim();
+  type ItemIn = { qty: number; nombre: string; precio: number };
+  const crudos: { qty?: unknown; nombre?: unknown; precio?: unknown }[] = Array.isArray(b.items) ? b.items : [];
+  const limpios: ItemIn[] = crudos
+    .map((it): ItemIn => ({
+      qty: Math.max(1, parseInt(String(it.qty), 10) || 1),
+      nombre: String(it.nombre || '').trim(),
+      precio: Math.max(0, Math.round(Number(it.precio) || 0)),
+    }))
+    .filter((it) => it.nombre);
+  if (!cliente) return res.status(400).json({ error: 'Falta el nombre del cliente.' });
+  if (!limpios.length) return res.status(400).json({ error: 'Agrega al menos un producto al pedido.' });
+  const envio = Math.max(0, Math.round(Number(b.envio) || 0));
+  const totalItems = limpios.reduce((a, it) => a + it.qty * it.precio, 0);
+  const total = b.total != null && Number(b.total) > 0 ? Math.round(Number(b.total)) : totalItems + envio;
+  const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(sid) as { n: number | null }).n || 1048) + 1;
+  const oid = uid();
+  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, envio, nota) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(oid, sid, numero, cliente, String(b.ciudad || ''), String(b.tel || ''), String(b.direccion || ''), 'Nuevo', total, String(b.departamento || ''), envio, String(b.nota || ''));
+  for (const it of limpios) db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
+  registrarLog(sid, 'info', 'pedido', `Pedido manual DF-${numero} creado para ${cliente} (${limpios.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`);
+  res.json({ ok: true, id: 'DF-' + numero, rowId: oid });
 });
 
 api.post('/orders/:rowId/dropi', requireAuth, requireStore, (req, res) => {
@@ -1234,7 +1290,12 @@ api.post('/biblioteca/:id/checkout', requireAuth, requireStore, requireOwner, as
 
 // ── Registro de actividad / errores de la tienda (diagnóstico del Inbox) ──
 api.get('/logs', requireAuth, requireStore, (req, res) => {
-  const rows = db.prepare('SELECT nivel, evento, detalle, lead_id, created_at FROM event_log WHERE store_id = ? ORDER BY id DESC LIMIT 200').all(req.user!.storeId) as
+  const sid = req.user!.storeId!;
+  // Con ?leadId=... devolvemos SOLO el registro de ese chat; sin él, todo el de la tienda.
+  const leadId = typeof req.query.leadId === 'string' ? req.query.leadId.trim() : '';
+  const rows = (leadId
+    ? db.prepare('SELECT nivel, evento, detalle, lead_id, created_at FROM event_log WHERE store_id = ? AND lead_id = ? ORDER BY id DESC LIMIT 200').all(sid, leadId)
+    : db.prepare('SELECT nivel, evento, detalle, lead_id, created_at FROM event_log WHERE store_id = ? ORDER BY id DESC LIMIT 200').all(sid)) as
     { nivel: string; evento: string; detalle: string; lead_id: string | null; created_at: string }[];
   res.json({ logs: rows.map((r) => ({ nivel: r.nivel, evento: r.evento, detalle: r.detalle, leadId: r.lead_id || null, createdAt: r.created_at })) });
 });

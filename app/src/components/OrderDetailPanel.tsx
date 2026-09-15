@@ -1,4 +1,5 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { Dropdown } from './Dropdown';
 
 export function OrderDetailPanel({ df }: { df: DealFlowState }) {
   if (!df.hasSelectedOrder || !df.sel) return null;
@@ -120,16 +121,14 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
         </div>
 
         <div style={{ padding: '16px 20px', borderTop: '1px solid #E2E8F0' }}>
-          {df.selHasNext && (
-            <button
-              onClick={df.selAdvance}
-              className="df-btn-amber"
-              style={{ width: '100%', background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 10, padding: 14, fontFamily: 'inherit', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
-            >
-              {df.selAdvanceLabel}
-            </button>
-          )}
-          {df.selIsDone && <div style={{ textAlign: 'center', color: '#059669', fontWeight: 700, fontSize: 14 }}>✓ Pedido entregado. Nada pendiente.</div>}
+          {/* Estado seleccionable: cambiar a cualquiera (incluye Cancelado), sin flujo forzado. */}
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', marginBottom: 7 }}>Estado del pedido</div>
+          <Dropdown
+            ariaLabel="Cambiar estado del pedido"
+            value={sel.estado}
+            onChange={(v) => sel.setEstado(v as typeof sel.estado)}
+            options={sel.estadosDisponibles.map((e) => ({ value: e, label: e }))}
+          />
         </div>
       </div>
     </div>

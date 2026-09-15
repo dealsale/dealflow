@@ -39,6 +39,8 @@ import {
   apiUpload,
   apiOrders,
   apiOrderAdvance,
+  apiOrderEstado,
+  apiCrearPedido,
   apiOrderDropi,
   apiOrderDespachar,
   apiOrderDespacharSync,
@@ -118,10 +120,11 @@ import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDe
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
-import { AVATAR_COLORS, ESTADOS, ESTADO_ORDER, ETAPA_CFG, initials, pill, stockPillCfg, swatch } from '../lib/style';
+import { AVATAR_COLORS, ESTADOS, ESTADO_ORDER, ESTADOS_TODOS, ETAPA_CFG, initials, pill, stockPillCfg, swatch } from '../lib/style';
 import type {
   Account,
   AdminSection,
+  EstadoPedido,
   Integration,
   Lead,
   Mensaje,
@@ -173,6 +176,8 @@ export interface DecoratedOrder extends Order {
   hasNota: boolean;
   hasGuia: boolean;
   advance: () => void;
+  setEstado: (estado: EstadoPedido) => void;
+  estadosDisponibles: EstadoPedido[];
   open: () => void;
   sendToDropi: () => void;
   despachar: (proveedor: 'dropi' | 'effi') => void;
@@ -407,7 +412,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
   }));
 }
 
-const ESTADOS_PEDIDO = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado'];
+const ESTADOS_PEDIDO = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado', 'Cancelado'];
 /** Fecha (YYYY-MM-DD) en Bogotá a partir del datetime UTC del servidor. */
 function fechaBogota(iso?: string): string {
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
@@ -772,6 +777,27 @@ export function useDealFlowState() {
     if (apiMode && o.rowId) void apiOrderAdvance(o.rowId).then((r) => { if (r.error) void apiOrders().then(({ data }) => { if (data) setOrders(mapApiOrders(data.orders)); }); });
   }
 
+  // Cambia el estado del pedido a CUALQUIER estado (seleccionable, con retroceso
+  // y con Cancelado). Optimista: refleja de una y refresca del servidor si falla.
+  function cambiarEstadoPedido(id: string, estado: EstadoPedido) {
+    const o = ordersRef.current.find((x) => x.id === id);
+    if (!o || o.estado === estado) return;
+    setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, estado } : x)));
+    if (apiMode && o.rowId) void apiOrderEstado(o.rowId, estado).then((r) => { if (r.error) void apiOrders().then(({ data }) => { if (data) setOrders(mapApiOrders(data.orders)); }); });
+  }
+
+  // Crea un pedido MANUALMENTE (logística manual). Devuelve el id creado o ''.
+  const [crearPedidoMsg, setCrearPedidoMsg] = useState('');
+  async function crearPedidoManual(body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: { qty: number; nombre: string; precio: number }[] }): Promise<string> {
+    setCrearPedidoMsg('Creando el pedido…');
+    const r = await apiCrearPedido(body);
+    if (r.error || !r.data) { setCrearPedidoMsg(r.error || 'No se pudo crear el pedido.'); return ''; }
+    setCrearPedidoMsg('');
+    const { data } = await apiOrders();
+    if (data) setOrders(mapApiOrders(data.orders));
+    return r.data.id;
+  }
+
   function sendToDropi(id: string) {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o || o.guia) return;
@@ -828,6 +854,9 @@ export function useDealFlowState() {
       hasNota: !!o.nota,
       hasGuia: !!o.guia,
       advance: () => advanceOrder(o.id),
+      // Estado seleccionable: cambiar a cualquiera (incluye Cancelado).
+      setEstado: (estado: EstadoPedido) => cambiarEstadoPedido(o.id, estado),
+      estadosDisponibles: ESTADOS_TODOS,
       open: () => {
         setSelectedOrderId(o.id);
         setSection('pedidos');
@@ -1830,13 +1859,25 @@ export function useDealFlowState() {
   }
 
   // ── Registro de actividad / errores (diagnóstico del Inbox) ──
+  // Puede ser GENERAL (toda la tienda) o POR CHAT (solo de ese lead).
   const [logs, setLogs] = useState<EventoLog[]>([]);
   const [logsOpen, setLogsOpen] = useState(false);
+  const [logsLeadId, setLogsLeadId] = useState<string>('');
+  const [logsTitulo, setLogsTitulo] = useState<string>('');
+  const logsLeadRef = useRef<string>('');
+  logsLeadRef.current = logsLeadId;
   async function reloadLogs() {
-    const { data } = await apiLogs();
+    const { data } = await apiLogs(logsLeadRef.current || undefined);
     if (data) setLogs(data.logs);
   }
-  function abrirLogs() { setLogsOpen(true); void reloadLogs(); }
+  // abrirLogs() sin argumentos = registro general; con leadId = solo ese chat.
+  function abrirLogs(leadId?: string, titulo?: string) {
+    setLogsLeadId(leadId || '');
+    logsLeadRef.current = leadId || '';
+    setLogsTitulo(leadId ? (titulo || 'este chat') : '');
+    setLogsOpen(true);
+    void reloadLogs();
+  }
   function cerrarLogs() { setLogsOpen(false); }
   function limpiarLogs() { setLogs([]); void apiClearLogs().then(() => reloadLogs()); }
 
@@ -2295,7 +2336,7 @@ export function useDealFlowState() {
     : 'igual que ayer';
   const resumenFecha = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Bogota' });
 
-  const filterList = ['Todos', ...ESTADO_ORDER];
+  const filterList = ['Todos', ...ESTADOS_TODOS];
   const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   // Filtro por fecha del pedido (zona horaria de Bogot\u00e1).
   const [fechaFilter, setFechaFilter] = useState<'Todas' | 'Hoy' | 'Ayer' | '7 d\u00edas'>('Todas');
@@ -2604,10 +2645,15 @@ export function useDealFlowState() {
     // ── Registro de actividad ──
     logs,
     logsOpen,
+    logsLeadId,
+    logsTitulo,
     abrirLogs,
     cerrarLogs,
     reloadLogs,
     limpiarLogs,
+    crearPedidoManual,
+    crearPedidoMsg,
+    setCrearPedidoMsg,
     reenviarMensaje,
     reenviandoMsg,
     // ── Biblioteca de productos ──

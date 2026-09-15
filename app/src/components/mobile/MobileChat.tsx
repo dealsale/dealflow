@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { AttachButton, MediaContent } from '../MediaBubble';
 import { VoiceRecorder } from '../VoiceRecorder';
+import { ActivityLog } from '../ActivityLog';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function MobileChat({ df }: { df: DealFlowState }) {
@@ -41,6 +42,13 @@ export function MobileChat({ df }: { df: DealFlowState }) {
             <span style={chat.liveDot} />
             {chat.liveLabel} · atiende {chat.asignado}
           </div>
+        </div>
+        <div
+          onClick={() => df.abrirLogs(String(chat.id), chat.nombre)}
+          title="Registro de actividad de este chat"
+          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94A3B8', fontSize: 18 }}
+        >
+          🩺
         </div>
         <div
           onClick={df.resetChat}
@@ -139,6 +147,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
           </>
         )}
       </div>
+      <ActivityLog df={df} />
     </div>
   );
 }

@@ -94,6 +94,14 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         )}
 
         <div style={{ flex: 1 }} />
+        <div
+          onClick={df.toggleFloatingNav}
+          className="df-toggle-mode"
+          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px', borderRadius: 8, cursor: 'pointer', color: df.floatingNav ? '#34D399' : '#94A3B8', fontSize: 13, fontWeight: 600, border: '1px solid #1E293B' }}
+        >
+          <span style={{ fontSize: 15 }}>◉</span>
+          <span>Botón flotante de menú: {df.floatingNav ? 'activado' : 'desactivado'}</span>
+        </div>
         {df.canAdmin && !df.apiMode && (
           <div
             onClick={df.toggleMode}

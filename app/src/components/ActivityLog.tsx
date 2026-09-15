@@ -37,8 +37,10 @@ export function ActivityLog({ df }: { df: DealFlowState }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: '1px solid #F1F5F9' }}>
           <span style={{ fontSize: 16 }}>🩺</span>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 15 }}>Registro de actividad</div>
-            <div style={{ color: '#94A3B8', fontSize: 12 }}>Lo que pasó en tu tienda: flujos, respuestas y errores de envío.</div>
+            <div style={{ fontWeight: 800, fontSize: 15 }}>{df.logsLeadId ? 'Registro del chat' : 'Registro de actividad'}</div>
+            <div style={{ color: '#94A3B8', fontSize: 12 }}>
+              {df.logsLeadId ? `Solo de: ${df.logsTitulo}. Flujos, respuestas y errores de este chat.` : 'Toda tu tienda: flujos, respuestas y errores de envío.'}
+            </div>
           </div>
           <div style={{ flex: 1 }} />
           <span onClick={df.cerrarLogs} title="Cerrar" style={{ cursor: 'pointer', color: '#94A3B8', fontSize: 18, padding: 4, lineHeight: 1 }}>✕</span>

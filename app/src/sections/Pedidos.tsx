@@ -1,17 +1,28 @@
+import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { SearchInput, FilterSelect } from '../components/Filters';
+import { Dropdown } from '../components/Dropdown';
+import { ManualOrderModal } from '../components/ManualOrderModal';
 
 export function Pedidos({ df }: { df: DealFlowState }) {
+  const [nuevoOpen, setNuevoOpen] = useState(false);
   const fechaActiva = df.orderDateFilters.find((f) => f.active)?.key || 'Todas';
   const estadoActivo = df.orderFilters.find((f) => f.active)?.key || (df.orderFilters[0]?.key ?? '');
   return (
     <section data-screen-label="Pedidos">
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+      <ManualOrderModal df={df} open={nuevoOpen} onClose={() => { setNuevoOpen(false); df.setCrearPedidoMsg(''); }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Pedidos</h1>
-          <p style={{ color: '#64748B', fontSize: 14, margin: '4px 0 0' }}>Toca un pedido para ver el detalle, o avánzalo directo con el botón.</p>
+          <p style={{ color: '#64748B', fontSize: 14, margin: '4px 0 0' }}>Toca un pedido para ver el detalle o cambiarle el estado.</p>
         </div>
         <div style={{ flex: 1 }} />
+        <button
+          onClick={() => setNuevoOpen(true)}
+          style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          ＋ Crear pedido
+        </button>
         <button
           onClick={df.exportarPedidos}
           title="Descarga todos los pedidos en un archivo de Excel (CSV)"
@@ -54,20 +65,15 @@ export function Pedidos({ df }: { df: DealFlowState }) {
             </div>
             <span style={{ fontWeight: 700, fontSize: 14 }}>{o.totalFmt}</span>
             <span style={o.pillStyle}>{o.estado}</span>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              {o.hasNext && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    o.advance();
-                  }}
-                  className="df-btn-amber"
-                  style={{ background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', minWidth: 150 }}
-                >
-                  {o.advanceLabel}
-                </button>
-              )}
-              {o.isDone && <span style={{ color: '#059669', fontSize: 13, fontWeight: 600 }}>✓ Completado</span>}
+            {/* Estado seleccionable: cambia a cualquiera (incluye Cancelado), sin flujo forzado. */}
+            <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Dropdown
+                ariaLabel="Cambiar estado del pedido"
+                value={o.estado}
+                onChange={(v) => o.setEstado(v as typeof o.estado)}
+                options={o.estadosDisponibles.map((e) => ({ value: e, label: e }))}
+                width={160}
+              />
             </div>
           </div>
         ))}

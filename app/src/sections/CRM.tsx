@@ -72,13 +72,13 @@ export function CRM({ df }: { df: DealFlowState }) {
           </div>
         )}
         <div style={{ flex: 1 }} />
-        {/* Botón discreto: registro de actividad / errores de la tienda. */}
+        {/* Registro GENERAL de la tienda (todos los chats). El de un chat puntual está dentro del chat. */}
         <button
-          onClick={df.abrirLogs}
-          title="Ver el registro de actividad y errores (diagnóstico)"
+          onClick={() => df.abrirLogs()}
+          title="Ver el registro de actividad y errores de toda la tienda"
           style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 6px' }}
         >
-          🩺 Registro
+          🩺 Registro general
         </button>
       </div>
 
@@ -133,6 +133,13 @@ export function CRM({ df }: { df: DealFlowState }) {
                   options={[{ value: '', label: '🏷️ Sin etiqueta' }, ...df.etiquetasCrm.map((et) => ({ value: et, label: et }))]}
                 />
               </div>
+              <button
+                onClick={() => df.abrirLogs(String(chat.id), chat.nombre)}
+                title="Ver el registro de actividad de ESTE chat"
+                style={{ background: '#fff', color: '#475569', border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                🩺 Registro
+              </button>
               <button
                 onClick={df.resetChat}
                 title="Borra el historial y devuelve el chat al asistente"

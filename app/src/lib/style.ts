@@ -30,9 +30,13 @@ export const ESTADOS: Record<EstadoPedido, EstadoCfg> = {
   Empacado: { color: '#B45309', bg: '#FEF3C7', next: 'Despachar', nextEstado: 'Despachado' },
   Despachado: { color: '#0E7490', bg: '#CFFAFE', next: 'Marcar entregado', nextEstado: 'Entregado' },
   Entregado: { color: '#047857', bg: '#D1FAE5', next: null, nextEstado: null },
+  Cancelado: { color: '#B91C1C', bg: '#FEE2E2', next: null, nextEstado: null },
 };
 
+// Progresión "normal" (para la línea de tiempo). Cancelado va aparte: no es un paso.
 export const ESTADO_ORDER: EstadoPedido[] = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado'];
+// Todos los estados que el dueño puede elegir a mano (incluye Cancelado).
+export const ESTADOS_TODOS: EstadoPedido[] = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado', 'Cancelado'];
 
 export function swatch(label: string, fallback: string): string {
   const l = label.toLowerCase();

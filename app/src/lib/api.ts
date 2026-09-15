@@ -256,6 +256,10 @@ export interface ApiOrder {
 export const apiState = () => req<{ store: { id: string; nombre: string; plan: string }; assistant: { instrucciones: string; reglas: string[] }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
 export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET');
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
+export const apiOrderEstado = (rowId: string, estado: string) => req<{ estado: string }>(`/api/orders/${rowId}/estado`, 'POST', { estado });
+export interface CrearPedidoItem { qty: number; nombre: string; precio: number }
+export const apiCrearPedido = (body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: CrearPedidoItem[] }) =>
+  req<{ ok: true; id: string; rowId: string }>('/api/orders', 'POST', body);
 export const apiOrderDropi = (rowId: string) => req<{ guia: string }>(`/api/orders/${rowId}/dropi`, 'POST');
 // Effi (vía WooCommerce)
 export const apiOrderDespachar = (rowId: string, proveedor: string, reintentar = false) => req<{ ok: true; wooId: string; numeroWoo: string; proveedor: string; aviso?: string; reenviado?: boolean; sinMapear?: string[]; mapeados?: number }>(`/api/orders/${rowId}/despachar`, 'POST', { proveedor, reintentar });
@@ -266,7 +270,7 @@ export const apiWooSyncInventario = (proveedor: string) => req<{ actualizados: n
 export const apiWooSyncProductos = (proveedor: string) => req<{ creados: number; actualizados: number; skusGenerados: number }>('/api/woo/productos/sync', 'POST', { proveedor });
 
 export interface EventoLog { nivel: string; evento: string; detalle: string; leadId: string | null; createdAt: string }
-export const apiLogs = () => req<{ logs: EventoLog[] }>('/api/logs', 'GET');
+export const apiLogs = (leadId?: string) => req<{ logs: EventoLog[] }>(`/api/logs${leadId ? `?leadId=${encodeURIComponent(leadId)}` : ''}`, 'GET');
 export const apiClearLogs = () => req<{ ok: true }>('/api/logs', 'DELETE');
 export const apiReenviarMensaje = (id: string) => req<{ ok: boolean; estado: string; error?: string }>(`/api/messages/${id}/reenviar`, 'POST');
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');

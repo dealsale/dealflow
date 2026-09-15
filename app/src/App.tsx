@@ -380,6 +380,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
         {df.isAdmin && <AdminContent df={df} />}
       </main>
 
+      {df.floatingNav && <FloatingNav df={df} />}
       <MobileDrawer df={df} />
       <MobileChat df={df} />
       <MobileOrderSheet df={df} />
