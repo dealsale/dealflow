@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { CSSProperties, ReactNode } from 'react';
 
 export interface DropdownOption {
@@ -30,20 +31,49 @@ export function Dropdown({
 }) {
   const [open, setOpen] = useState(false);
   const [arriba, setArriba] = useState(false); // abrir hacia arriba si no cabe abajo
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; width: number }>({ left: 0, width: 0 });
   const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  // Coloca el panel flotante respecto al botón (posición fija, en un portal), para
+  // que NUNCA lo recorte un contenedor con overflow:hidden (ej: la tarjeta de pedidos).
+  const recalcular = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const haciaArriba = window.innerHeight - r.bottom < 280 && r.top > 280;
+    setArriba(haciaArriba);
+    setPos({
+      left: r.left,
+      width: r.width,
+      top: haciaArriba ? undefined : r.bottom + 6,
+      bottom: haciaArriba ? window.innerHeight - r.top + 6 : undefined,
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
-    const cerrar = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const cerrar = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || popRef.current?.contains(t)) return;
+      setOpen(false);
+    };
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    // Al hacer scroll o cambiar el tamaño, reubicamos el panel (o lo cerramos si el botón desaparece).
+    const reubicar = () => recalcular();
     document.addEventListener('mousedown', cerrar);
     document.addEventListener('keydown', esc);
-    return () => { document.removeEventListener('mousedown', cerrar); document.removeEventListener('keydown', esc); };
+    window.addEventListener('resize', reubicar);
+    window.addEventListener('scroll', reubicar, true);
+    return () => {
+      document.removeEventListener('mousedown', cerrar);
+      document.removeEventListener('keydown', esc);
+      window.removeEventListener('resize', reubicar);
+      window.removeEventListener('scroll', reubicar, true);
+    };
   }, [open]);
 
   const abrir = () => {
-    const r = ref.current?.getBoundingClientRect();
-    if (r) setArriba(window.innerHeight - r.bottom < 260 && r.top > 260);
+    if (!open) recalcular();
     setOpen((o) => !o);
   };
 
@@ -75,12 +105,13 @@ export function Dropdown({
         <span aria-hidden style={{ fontSize: 10, opacity: 0.6, transition: 'transform .15s', transform: open ? 'rotate(180deg)' : 'none', marginLeft: pill ? -1 : 0 }}>▾</span>
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
+          ref={popRef}
           role="listbox"
           style={{
-            position: 'absolute', zIndex: 1000, left: 0, minWidth: '100%',
-            [arriba ? 'bottom' : 'top']: 'calc(100% + 6px)',
+            position: 'fixed', zIndex: 3000, left: pos.left, minWidth: pos.width,
+            ...(arriba ? { bottom: pos.bottom } : { top: pos.top }),
             background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12,
             boxShadow: '0 10px 30px rgba(15,23,42,.14), 0 2px 6px rgba(15,23,42,.06)',
             padding: 5, maxHeight: 260, overflowY: 'auto',
@@ -108,7 +139,8 @@ export function Dropdown({
               </div>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

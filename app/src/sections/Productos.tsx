@@ -54,27 +54,41 @@ function BloquesInicial({ p }: { p: DecoratedProduct }) {
         return (
           <div
             key={i}
-            draggable
-            onDragStart={() => setDrag(i)}
             onDragEnter={() => setOver(i)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => { if (drag !== null) p.moverBloque(drag, i); setDrag(null); setOver(null); }}
             onDragEnd={() => { setDrag(null); setOver(null); }}
             style={{
-              display: 'flex', gap: 10, alignItems: 'center', background: '#fff',
+              display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fff',
               border: '1px solid ' + (esObjetivo ? '#059669' : '#E2E8F0'),
               boxShadow: esObjetivo ? '0 -2px 0 #059669 inset' : 'none',
               borderRadius: 10, padding: '9px 12px', opacity: drag === i ? 0.4 : 1,
             }}
           >
-            <span title="Arrastra para reordenar" style={{ color: '#CBD5E1', fontSize: 16, flexShrink: 0, cursor: 'grab', lineHeight: 1 }}>⠿</span>
-            <span style={{ background: '#F1F5F9', color: '#64748B', borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace" }}>{i + 1}</span>
-            <span style={{ color: '#94A3B8', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', width: 52, flexShrink: 0 }}>
+            {/* La manija (⠿) es lo único arrastrable: así se puede editar el texto sin disparar el arrastre. */}
+            <span
+              draggable
+              onDragStart={() => setDrag(i)}
+              title="Arrastra para reordenar"
+              style={{ color: '#CBD5E1', fontSize: 16, flexShrink: 0, cursor: 'grab', lineHeight: 1, marginTop: 6 }}
+            >⠿</span>
+            <span style={{ background: '#F1F5F9', color: '#64748B', borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace", marginTop: 4 }}>{i + 1}</span>
+            <span style={{ color: '#94A3B8', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', width: 52, flexShrink: 0, marginTop: 5 }}>
               {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : 'Video'}
             </span>
-            {b.tipo === 'texto' && <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>{b.valor}</span>}
-            {b.tipo !== 'texto' && <MediaEnBloque b={b} />}
-            <span onClick={b.remove} className="df-danger-hover" title={b.tipo === 'texto' ? 'Quitar bloque' : 'Quitar el bloque completo'} style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, alignSelf: 'flex-start' }}>✕</span>
+            {b.tipo === 'texto' ? (
+              <textarea
+                value={b.valor || ''}
+                onChange={(e) => b.editText(e.target.value)}
+                rows={1}
+                placeholder="Escribe el texto de este bloque…"
+                style={{ flex: 1, minWidth: 0, resize: 'vertical', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5, minHeight: 38 }}
+              />
+            ) : (
+              <MediaEnBloque b={b} />
+            )}
+            <span onClick={b.duplicate} className="df-copy-hover" title="Duplicar este bloque (copiar y pegar)" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 2, alignSelf: 'flex-start', marginTop: 4 }}>⧉</span>
+            <span onClick={b.remove} className="df-danger-hover" title={b.tipo === 'texto' ? 'Quitar bloque' : 'Quitar el bloque completo'} style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, alignSelf: 'flex-start', marginTop: 4 }}>✕</span>
           </div>
         );
       })}

@@ -113,6 +113,9 @@ textarea {
   border-color: #059669 !important;
   color: #059669 !important;
 }
+.df-copy-hover:hover {
+  color: #059669 !important;
+}
 .df-input:focus {
   outline: none;
   border-color: #059669 !important;

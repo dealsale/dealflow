@@ -280,6 +280,8 @@ export interface DecoratedProduct extends Product {
   bloquesDecorados: (MensajeBloque & {
     mediaLista: string[];
     remove: () => void;
+    editText: (valor: string) => void;
+    duplicate: () => void;
     addMedia: (files: File[]) => void;
     removeMedia: (mediaIndex: number) => void;
     moverMedia: (from: number, to: number) => void;
@@ -1627,6 +1629,12 @@ export function useDealFlowState() {
           ...b,
           mediaLista: mediaDeBloque(b),
           remove: () => patchProductList(p.id, 'mensajeBloques', (bl) => bl.filter((_, j) => j !== i)),
+          // Edita el texto de un bloque de texto (edición en línea).
+          editText: (valor: string) =>
+            patchProductList(p.id, 'mensajeBloques', (bl) => bl.map((bloque, j) => (j === i ? { ...bloque, valor } : bloque))),
+          // Duplica el bloque (copiar/pegar): inserta una copia justo después.
+          duplicate: () =>
+            patchProductList(p.id, 'mensajeBloques', (bl) => bl.flatMap((bloque, j) => (j === i ? [bloque, { ...bloque }] : [bloque]))),
           addMedia: (files: File[]) => {
             if (b.tipo === 'imagen' || b.tipo === 'video') void addMediaABloque(p.id, i, files, b.tipo);
           },
