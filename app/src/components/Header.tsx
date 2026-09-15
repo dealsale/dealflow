@@ -50,6 +50,18 @@ function StoreSwitcher({ df }: { df: DealFlowState }) {
 export function Header({ df }: { df: DealFlowState }) {
   return (
     <header style={{ background: '#fff', borderBottom: '1px solid #E2E8F0', padding: '0 28px', height: 58, display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+      <span
+        onClick={df.toggleSidebar}
+        className="df-hamburger"
+        title={df.sidebarVisible ? 'Ocultar el menú lateral' : 'Mostrar el menú lateral'}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, marginLeft: -6, borderRadius: 8, cursor: 'pointer', color: '#475569', flexShrink: 0 }}
+      >
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </span>
       {df.isVendedor && !df.esAgente ? <StoreSwitcher df={df} /> : <span style={{ fontWeight: 700, fontSize: 15 }}>{df.headerTitle}</span>}
       {df.isVendedor && (
         <span style={df.waPill}>
@@ -59,6 +71,17 @@ export function Header({ df }: { df: DealFlowState }) {
       )}
       <div style={{ flex: 1 }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span
+          onClick={df.toggleFloatingNav}
+          className="df-close-hover"
+          title={df.floatingNav ? 'Botón flotante de menú: activado. Toca para desactivarlo.' : 'Botón flotante de menú: desactivado. Toca para activarlo.'}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, cursor: 'pointer', color: df.floatingNav ? '#059669' : '#CBD5E1' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />
+          </svg>
+        </span>
         <span
           onClick={df.toggleSound}
           className="df-close-hover"

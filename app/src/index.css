@@ -85,6 +85,26 @@ textarea {
   color: #fff !important;
   background: #1e293b !important;
 }
+/* Botón flotante del menú: semitransparente en reposo, opaco al pasar el mouse. */
+.df-floatnav {
+  opacity: 0.33;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.df-floatnav:hover,
+.df-floatnav.df-floatnav-open {
+  opacity: 1;
+}
+.df-floatnav:hover {
+  transform: translateY(-2px);
+}
+.df-hamburger:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+.df-floatnav-item:hover {
+  background: #1e293b !important;
+  color: #fff !important;
+}
 .df-copy-btn:hover {
   border-color: #059669 !important;
   color: #059669 !important;

@@ -555,6 +555,14 @@ export function useDealFlowState() {
   const [waConnected, setWaConnected] = useState<boolean>(snap?.waConnected ?? true);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [mobileChatOpen, setMobileChatOpen] = useState<boolean>(false);
+  // Vista web: mostrar/ocultar el menú lateral y activar un botón flotante de menú.
+  // Se recuerdan en el navegador (por dispositivo).
+  const [sidebarVisible, setSidebarVisible] = useState<boolean>(() => {
+    try { return localStorage.getItem('dealflow:sidebar') !== '0'; } catch { return true; }
+  });
+  const [floatingNav, setFloatingNav] = useState<boolean>(() => {
+    try { return localStorage.getItem('dealflow:floatnav') === '1'; } catch { return false; }
+  });
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? ASSISTANT_TEXT_DEFAULT);
   const [rules, setRules] = useState<string[]>(snap?.rules ?? RULES_DEFAULT);
   const [orders, setOrders] = useState<Order[]>(snap?.orders ?? ORDERS);
@@ -2902,6 +2910,24 @@ export function useDealFlowState() {
       setSoundOn((s) => {
         if (!s) playOrderChime();
         return !s;
+      });
+    },
+
+    // Menú lateral (vista web): mostrar/ocultar + botón flotante opcional.
+    sidebarVisible,
+    toggleSidebar: () => {
+      setSidebarVisible((v) => {
+        const nv = !v;
+        try { localStorage.setItem('dealflow:sidebar', nv ? '1' : '0'); } catch { /* modo privado */ }
+        return nv;
+      });
+    },
+    floatingNav,
+    toggleFloatingNav: () => {
+      setFloatingNav((v) => {
+        const nv = !v;
+        try { localStorage.setItem('dealflow:floatnav', nv ? '1' : '0'); } catch { /* modo privado */ }
+        return nv;
       });
     },
 

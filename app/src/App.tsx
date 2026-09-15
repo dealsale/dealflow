@@ -5,6 +5,7 @@ import { Login } from './components/Login';
 import { OrderDetailPanel } from './components/OrderDetailPanel';
 import { OrderToast } from './components/OrderToast';
 import { Sidebar } from './components/Sidebar';
+import { FloatingNav } from './components/FloatingNav';
 import { MobileChat } from './components/mobile/MobileChat';
 import { MobileDrawer } from './components/mobile/MobileDrawer';
 import { MobileHeader } from './components/mobile/MobileHeader';
@@ -318,7 +319,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
         overflow: 'hidden',
       }}
     >
-      <Sidebar df={df} />
+      {df.sidebarVisible && <Sidebar df={df} />}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <Header df={df} />
@@ -339,6 +340,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
         </main>
       </div>
 
+      {df.floatingNav && <FloatingNav df={df} />}
       <OrderDetailPanel df={df} />
       <OrderToast df={df} />
     </div>
