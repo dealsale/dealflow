@@ -193,6 +193,8 @@ MUY IMPORTANTE: cada producto puede tener sus PROPIAS reglas (aparecen como "· 
 CATÁLOGO (precios en COP):
 ${products || '(sin productos cargados aún)'}
 
+FUENTE DE VERDAD: el CATÁLOGO de arriba es la ÚNICA fuente válida y ES EL ACTUAL de esta tienda (el dueño lo edita y cambia con el tiempo). Si mensajes anteriores de este chat mencionan productos, precios, combos o textos que YA NO están en este catálogo, IGNÓRALOS por completo: quedaron viejos. NUNCA mezcles información de un producto con otro; responde solo con los datos del producto exacto por el que preguntan, tal como aparece hoy en el catálogo.
+
 PROMOS ACTIVAS:
 ${promos || '(ninguna)'}
 
@@ -256,15 +258,28 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   if (ultimo?.tipo === 'texto' && ultimo.texto) {
     const t = norm(ultimo.texto);
     const tWords = new Set(t.split(' ').filter(Boolean));
-    for (const p of activos) {
-      const disp = norm(String(p.disparador || ''));
-      if (disp.length < 6) continue; // sin disparador configurado, no dispara
-      const dWords = disp.split(' ').filter((w) => w.length >= 3);
-      if (!dWords.length) continue;
-      const overlap = dWords.filter((w) => tWords.has(w)).length / dWords.length;
-      if (t === disp || t.includes(disp) || overlap >= 0.75) {
-        if (await enviarPresentacion(storeId, leadId, destino, p, pn)) presentacionEnviada = true;
-      }
+    // Puntuamos CADA producto por su disparador y disparamos SOLO el mejor. Antes
+    // se disparaban TODOS los que pasaran el umbral, así que "blusas Noelia" podía
+    // enviar también el flujo de "blusas Sara". Ahora gana uno solo.
+    const candidatos = activos
+      .map((p) => {
+        const disp = norm(String(p.disparador || ''));
+        if (disp.length < 6) return { p, score: 0 }; // sin disparador configurado, no dispara
+        const dWords = disp.split(' ').filter((w) => w.length >= 3);
+        if (!dWords.length) return { p, score: 0 };
+        const overlap = dWords.filter((w) => tWords.has(w)).length / dWords.length;
+        // Exacto o contenido = máxima; si no, el % de palabras del disparador presentes.
+        const score = t === disp || t.includes(disp) ? 1 + disp.length / 10000 : overlap;
+        return { p, score };
+      })
+      .filter((c) => c.score >= 0.75)
+      .sort((a, b) => b.score - a.score);
+    const mejor = candidatos[0];
+    // Si dos productos DISTINTOS quedan casi empatados (dos "blusas" parecidas), NO
+    // disparamos ninguno: dejamos que la IA pregunte cuál, en vez de enviar los dos.
+    const ambiguo = !!(mejor && candidatos[1] && candidatos[1].score >= mejor.score - 0.1 && String(candidatos[1].p.id) !== String(mejor.p.id));
+    if (mejor && !ambiguo) {
+      if (await enviarPresentacion(storeId, leadId, destino, mejor.p, pn)) presentacionEnviada = true;
     }
   }
 
