@@ -14,19 +14,19 @@ export function Pedidos({ df }: { df: DealFlowState }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Pedidos</h1>
-          <p style={{ color: '#64748B', fontSize: 14, margin: '4px 0 0' }}>Toca un pedido para ver el detalle o cambiarle el estado.</p>
+          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Toca un pedido para ver el detalle o cambiarle el estado.</p>
         </div>
         <div style={{ flex: 1 }} />
         <button
           onClick={() => setNuevoOpen(true)}
-          style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
           ＋ Crear pedido
         </button>
         <button
           onClick={df.exportarPedidos}
           title="Descarga todos los pedidos en un archivo de Excel (CSV)"
-          style={{ background: '#fff', color: '#334155', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          style={{ background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
           ⬇ Exportar a Excel
         </button>
@@ -48,20 +48,20 @@ export function Pedidos({ df }: { df: DealFlowState }) {
         />
       </div>
 
-      <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+      <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
         {df.filteredOrders.map((o) => (
           <div
             key={o.id}
             onClick={o.open}
             className="df-row-hover"
-            style={{ display: 'grid', gridTemplateColumns: '82px 1fr 110px 116px 170px', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
+            style={{ display: 'grid', gridTemplateColumns: '82px 1fr 110px 116px 170px', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}
           >
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: '#64748B' }}>{o.id}</span>
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-muted)' }}>{o.id}</span>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>
-                {o.cliente} <span style={{ color: '#94A3B8', fontWeight: 400, fontSize: 12 }}>· {o.ciudad}</span>
+                {o.cliente} <span style={{ color: 'var(--df-text-faint)', fontWeight: 400, fontSize: 12 }}>· {o.ciudad}</span>
               </div>
-              <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.itemsResumen}</div>
+              <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.itemsResumen}</div>
             </div>
             <span style={{ fontWeight: 700, fontSize: 14 }}>{o.totalFmt}</span>
             <span style={o.pillStyle}>{o.estado}</span>
@@ -78,7 +78,7 @@ export function Pedidos({ df }: { df: DealFlowState }) {
           </div>
         ))}
         {df.noOrders && (
-          <div style={{ padding: 36, textAlign: 'center', color: '#64748B', fontSize: 14 }}>
+          <div style={{ padding: 36, textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 14 }}>
             {df.orderQuery.trim()
               ? `No encontramos pedidos para «${df.orderQuery.trim()}». Revisa el nombre o el número.`
               : 'No hay pedidos en este estado.'}

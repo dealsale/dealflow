@@ -43,7 +43,7 @@ function ImpersonationBanner({ df }: { df: DealFlowState }) {
         alignItems: 'center',
         gap: 12,
         flexWrap: 'wrap',
-        background: '#78350F',
+        background: 'var(--df-alert-brown)',
         color: '#FEF3C7',
         padding: '9px 16px',
         fontFamily: "'Inter',system-ui,sans-serif",
@@ -55,7 +55,7 @@ function ImpersonationBanner({ df }: { df: DealFlowState }) {
       <div style={{ flex: 1 }} />
       <button
         onClick={df.volverAlAdmin}
-        style={{ background: '#FEF3C7', color: '#78350F', border: 'none', borderRadius: 7, padding: '6px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+        style={{ background: 'var(--df-warning-subtle)', color: 'var(--df-alert-brown)', border: 'none', borderRadius: 7, padding: '6px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
       >
         ← Volver al panel de admin
       </button>
@@ -76,7 +76,7 @@ function SuscripcionBanner({ df }: { df: DealFlowState }) {
         alignItems: 'center',
         gap: 12,
         flexWrap: 'wrap',
-        background: '#78350F',
+        background: 'var(--df-alert-brown)',
         color: '#FEF3C7',
         padding: '9px 16px',
         fontFamily: "'Inter',system-ui,sans-serif",
@@ -88,7 +88,7 @@ function SuscripcionBanner({ df }: { df: DealFlowState }) {
       <div style={{ flex: 1 }} />
       <button
         onClick={() => df.pagarSuscripcion()}
-        style={{ background: '#FEF3C7', color: '#78350F', border: 'none', borderRadius: 7, padding: '6px 16px', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
+        style={{ background: 'var(--df-warning-subtle)', color: 'var(--df-alert-brown)', border: 'none', borderRadius: 7, padding: '6px 16px', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
       >
         Pagar renta ${s.mensual.toLocaleString('es-CO')} →
       </button>
@@ -127,7 +127,7 @@ function Paywall({ df }: { df: DealFlowState }) {
   const codigoCupon = cupon?.codigo;
 
   const cuponBox = (
-    <div style={{ marginTop: 20, borderTop: '1px solid #E2E8F0', paddingTop: 16 }}>
+    <div style={{ marginTop: 20, borderTop: '1px solid var(--df-border)', paddingTop: 16 }}>
       {!cupon ? (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' }}>
           <input
@@ -135,17 +135,17 @@ function Paywall({ df }: { df: DealFlowState }) {
             onChange={(e) => setCuponInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') aplicarCupon(); }}
             placeholder="¿Tienes un cupón? Escríbelo aquí"
-            style={{ flex: '1 1 220px', maxWidth: 300, border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13.5, textTransform: 'uppercase' }}
+            style={{ flex: '1 1 220px', maxWidth: 300, border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13.5, textTransform: 'uppercase' }}
           />
           <button onClick={aplicarCupon} style={{ background: '#0F172A', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Aplicar</button>
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', color: '#047857', fontSize: 13.5, fontWeight: 700 }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', color: 'var(--df-brand-dark)', fontSize: 13.5, fontWeight: 700 }}>
           🎁 Cupón <b>{cupon.codigo}</b> · {etiquetaCupon}
-          <button onClick={quitarCupon} style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline' }}>quitar</button>
+          <button onClick={quitarCupon} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-faint)', fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline' }}>quitar</button>
         </div>
       )}
-      {cuponMsg && !cupon && <div style={{ textAlign: 'center', color: '#B91C1C', fontSize: 12.5, marginTop: 8 }}>{cuponMsg}</div>}
+      {cuponMsg && !cupon && <div style={{ textAlign: 'center', color: 'var(--df-danger-dark)', fontSize: 12.5, marginTop: 8 }}>{cuponMsg}</div>}
     </div>
   );
 
@@ -153,7 +153,7 @@ function Paywall({ df }: { df: DealFlowState }) {
   if (df.esAgente) {
     return (
       <PaywallShell df={df} titulo="Cuenta en pausa" sub="El dueño de la tienda debe ponerse al día con el pago para reactivar el acceso.">
-        <div style={{ color: '#334155', fontSize: 14, lineHeight: 1.6, textAlign: 'center' }}>
+        <div style={{ color: 'var(--df-text-body)', fontSize: 14, lineHeight: 1.6, textAlign: 'center' }}>
           Escríbele al dueño de la cuenta para que renueve la suscripción de DealFlow. En cuanto pague, tu acceso vuelve automáticamente.
         </div>
       </PaywallShell>
@@ -174,10 +174,10 @@ function Paywall({ df }: { df: DealFlowState }) {
           : `Renueva tu plan ${s?.plan} para volver a entrar a tu tienda.`}
       >
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 13, color: '#64748B', marginBottom: 6 }}>Renta mensual · plan {s?.plan}</div>
-          <div style={{ fontSize: 34, fontWeight: 800, color: '#0F172A', marginBottom: 16 }}>
-            {cupon && <span style={{ fontSize: 18, fontWeight: 600, color: '#94A3B8', textDecoration: 'line-through', marginRight: 8 }}>{money(rentaBase)}</span>}
-            {money(renta)}<span style={{ fontSize: 15, fontWeight: 600, color: '#64748B' }}> /mes</span>
+          <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 6 }}>Renta mensual · plan {s?.plan}</div>
+          <div style={{ fontSize: 34, fontWeight: 800, color: 'var(--df-text)', marginBottom: 16 }}>
+            {cupon && <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--df-text-faint)', textDecoration: 'line-through', marginRight: 8 }}>{money(rentaBase)}</span>}
+            {money(renta)}<span style={{ fontSize: 15, fontWeight: 600, color: 'var(--df-text-muted)' }}> /mes</span>
           </div>
           <button onClick={() => df.pagarSuscripcion(undefined, codigoCupon)} disabled={cargando} className="df-pw-btn" style={pwBtn}>
             {cargando
@@ -196,24 +196,24 @@ function Paywall({ df }: { df: DealFlowState }) {
   return (
     <PaywallShell df={df} titulo="Elige tu plan para empezar" sub="Actívate con el pago de instalación única (incluye 30 días de servicio). Después, una renta mensual de $250.000.">
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
-        {df.planes.length === 0 && <div style={{ color: '#64748B', fontSize: 14, textAlign: 'center', gridColumn: '1/-1' }}>Cargando planes…</div>}
+        {df.planes.length === 0 && <div style={{ color: 'var(--df-text-muted)', fontSize: 14, textAlign: 'center', gridColumn: '1/-1' }}>Cargando planes…</div>}
         {df.planes.map((p, i) => {
           const premium = i === df.planes.length - 1 && df.planes.length > 1;
           return (
-            <div key={p.nombre} style={{ border: premium ? '2px solid #059669' : '1px solid #E2E8F0', borderRadius: 16, padding: 22, background: '#fff', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              {premium && <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: '#059669', color: '#fff', fontSize: 11, fontWeight: 800, padding: '3px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>RECOMENDADO</div>}
-              <div style={{ fontSize: 17, fontWeight: 800, color: '#0F172A' }}>{p.nombre}</div>
+            <div key={p.nombre} style={{ border: premium ? '2px solid var(--df-brand)' : '1px solid var(--df-border)', borderRadius: 16, padding: 22, background: 'var(--df-surface)', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+              {premium && <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: 'var(--df-brand)', color: '#fff', fontSize: 11, fontWeight: 800, padding: '3px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>RECOMENDADO</div>}
+              <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--df-text)' }}>{p.nombre}</div>
               <div style={{ margin: '10px 0 1px' }}>
-                {cupon && <span style={{ fontSize: 17, fontWeight: 600, color: '#94A3B8', textDecoration: 'line-through', marginRight: 7 }}>{money(p.precio)}</span>}
-                <span style={{ fontSize: 30, fontWeight: 800, color: cupon ? '#047857' : '#0F172A' }}>{money(conDesc(p.precio))}</span>
-                <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}> instalación única</span>
+                {cupon && <span style={{ fontSize: 17, fontWeight: 600, color: 'var(--df-text-faint)', textDecoration: 'line-through', marginRight: 7 }}>{money(p.precio)}</span>}
+                <span style={{ fontSize: 30, fontWeight: 800, color: cupon ? 'var(--df-brand-dark)' : '#0F172A' }}>{money(conDesc(p.precio))}</span>
+                <span style={{ fontSize: 13, color: 'var(--df-text-muted)', fontWeight: 600 }}> instalación única</span>
               </div>
-              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>Incluye 30 días de servicio{cupon ? ` · cupón: ${etiquetaCupon}` : ''}</div>
-              <div style={{ fontSize: 13.5, color: '#059669', fontWeight: 700, marginBottom: 14 }}>+ {money(conDesc(p.mensual))} / mes de renta</div>
+              <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 8 }}>Incluye 30 días de servicio{cupon ? ` · cupón: ${etiquetaCupon}` : ''}</div>
+              <div style={{ fontSize: 13.5, color: 'var(--df-brand)', fontWeight: 700, marginBottom: 14 }}>+ {money(conDesc(p.mensual))} / mes de renta</div>
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                 {p.features.map((f) => (
-                  <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13, color: '#334155', lineHeight: 1.4 }}>
-                    <span style={{ color: '#059669', fontWeight: 800 }}>✓</span>
+                  <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13, color: 'var(--df-text-body)', lineHeight: 1.4 }}>
+                    <span style={{ color: 'var(--df-brand)', fontWeight: 800 }}>✓</span>
                     <span>{f}</span>
                   </li>
                 ))}
@@ -222,7 +222,7 @@ function Paywall({ df }: { df: DealFlowState }) {
                 onClick={() => df.pagarSuscripcion(p.nombre, codigoCupon)}
                 disabled={cargando}
                 className="df-pw-btn"
-                style={{ ...pwBtn, background: premium ? 'linear-gradient(135deg,#34D399,#059669)' : '#0F172A' }}
+                style={{ ...pwBtn, background: premium ? 'linear-gradient(135deg,var(--df-brand-light),var(--df-brand))' : '#0F172A' }}
               >
                 {cargando ? 'Abriendo…' : conDesc(p.precio) <= 0 ? `Activar ${p.nombre} gratis` : `Comprar ${p.nombre}`}
               </button>
@@ -237,7 +237,7 @@ function Paywall({ df }: { df: DealFlowState }) {
 
 const pwBtn: React.CSSProperties = {
   width: '100%',
-  background: 'linear-gradient(135deg,#34D399,#059669)',
+  background: 'linear-gradient(135deg,var(--df-brand-light),var(--df-brand))',
   color: '#fff',
   border: 'none',
   borderRadius: 12,
@@ -261,19 +261,19 @@ function PaywallShell({ df, titulo, sub, children }: { df: DealFlowState; titulo
       </div>
       <div style={{ width: 720, maxWidth: '100%', background: 'rgba(255,255,255,.97)', borderRadius: 22, padding: 30, boxShadow: '0 30px 80px -20px rgba(0,0,0,.55)' }}>
         <div style={{ textAlign: 'center', marginBottom: 22 }}>
-          <div style={{ fontWeight: 800, fontSize: 22, color: '#0F172A', letterSpacing: '-0.01em' }}>{titulo}</div>
-          <div style={{ color: '#64748B', fontSize: 14, marginTop: 6, maxWidth: 460, marginInline: 'auto', lineHeight: 1.5 }}>{sub}</div>
+          <div style={{ fontWeight: 800, fontSize: 22, color: 'var(--df-text)', letterSpacing: '-0.01em' }}>{titulo}</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 14, marginTop: 6, maxWidth: 460, marginInline: 'auto', lineHeight: 1.5 }}>{sub}</div>
         </div>
         {children}
         {df.suscMsg && !suscMsgEsPago(df.suscMsg) && (
-          <div style={{ marginTop: 16, textAlign: 'center', color: '#B91C1C', fontSize: 13, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '9px 12px' }}>{df.suscMsg}</div>
+          <div style={{ marginTop: 16, textAlign: 'center', color: 'var(--df-danger-dark)', fontSize: 13, background: 'var(--df-danger-subtle)', border: '1px solid var(--df-danger-border)', borderRadius: 10, padding: '9px 12px' }}>{df.suscMsg}</div>
         )}
         {df.misTiendas.length > 1 && (
-          <div style={{ marginTop: 18, borderTop: '1px solid #E2E8F0', paddingTop: 14, textAlign: 'center' }}>
-            <div style={{ fontSize: 12, color: '#94A3B8', fontWeight: 600, marginBottom: 8 }}>IR A OTRA DE MIS TIENDAS</div>
+          <div style={{ marginTop: 18, borderTop: '1px solid var(--df-border)', paddingTop: 14, textAlign: 'center' }}>
+            <div style={{ fontSize: 12, color: 'var(--df-text-faint)', fontWeight: 600, marginBottom: 8 }}>IR A OTRA DE MIS TIENDAS</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
               {df.misTiendas.filter((t) => !t.activa).map((t) => (
-                <button key={t.id} onClick={() => df.cambiarTienda(t.id)} style={{ background: '#F1F5F9', color: '#334155', border: 'none', borderRadius: 999, padding: '7px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
+                <button key={t.id} onClick={() => df.cambiarTienda(t.id)} style={{ background: 'var(--df-surface-2)', color: 'var(--df-text-body)', border: 'none', borderRadius: 999, padding: '7px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
                   {t.nombre}{t.bloqueada ? ' · pago pendiente' : ''}
                 </button>
               ))}
@@ -281,7 +281,7 @@ function PaywallShell({ df, titulo, sub, children }: { df: DealFlowState; titulo
           </div>
         )}
         <div style={{ textAlign: 'center', marginTop: 18 }}>
-          <button onClick={df.logout} style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Cerrar sesión</button>
+          <button onClick={df.logout} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-faint)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Cerrar sesión</button>
         </div>
       </div>
       <div style={{ color: 'rgba(226,232,240,.5)', fontSize: 12, marginTop: 16, textAlign: 'center', maxWidth: 440, lineHeight: 1.5 }}>
@@ -303,7 +303,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
       {df.adminSection === 'biblioteca' && (
         <section data-screen-label="Biblioteca admin">
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Biblioteca de productos</h1>
-          <p style={{ color: '#64748B', fontSize: 14, margin: '4px 0 16px' }}>Crea productos (con toda su estructura) que las tiendas pueden importar. Elige si son gratis o de pago y si el cliente puede editarlos o quedan bloqueados.</p>
+          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 16px' }}>Crea productos (con toda su estructura) que las tiendas pueden importar. Elige si son gratis o de pago y si el cliente puede editarlos o quedan bloqueados.</p>
           <BibliotecaAdmin df={df} />
         </section>
       )}
@@ -321,8 +321,8 @@ function DesktopApp({ df }: { df: DealFlowState }) {
         height: '100%',
         minHeight: 600,
         fontFamily: "'Inter',system-ui,sans-serif",
-        background: '#F8FAFC',
-        color: '#1E293B',
+        background: 'var(--df-bg)',
+        color: 'var(--df-text-strong)',
         overflow: 'hidden',
       }}
     >
@@ -364,8 +364,8 @@ function MobileApp({ df }: { df: DealFlowState }) {
         width: '100%',
         height: '100%',
         fontFamily: "'Inter',system-ui,sans-serif",
-        background: '#F8FAFC',
-        color: '#1E293B',
+        background: 'var(--df-bg)',
+        color: 'var(--df-text-strong)',
         overflow: 'hidden',
       }}
     >

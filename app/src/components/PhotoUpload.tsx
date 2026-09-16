@@ -105,15 +105,15 @@ export function PhotoDropTile({ size = 64, label = 'Subir foto', accept = 'image
       style={{
         width: size,
         height: size,
-        border: '1px dashed ' + (over ? '#059669' : '#CBD5E1'),
-        background: over ? '#ECFDF5' : 'transparent',
+        border: '1px dashed ' + (over ? 'var(--df-brand)' : 'var(--df-border-strong)'),
+        background: over ? 'var(--df-brand-subtle-2)' : 'transparent',
         borderRadius: 10,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 1,
-        color: over ? '#059669' : '#64748B',
+        color: over ? 'var(--df-brand)' : 'var(--df-text-muted)',
         fontSize: size < 64 ? 9.5 : 10.5,
         fontWeight: 600,
         cursor: 'pointer',
@@ -136,9 +136,9 @@ export function PhotoAddChip({ onFiles, label = '+ Foto', accept = 'image/*' }: 
       {...dragProps}
       className={over ? '' : 'df-upload-tile'}
       style={{
-        border: '1px dashed ' + (over ? '#059669' : '#CBD5E1'),
-        background: over ? '#ECFDF5' : 'transparent',
-        color: over ? '#059669' : '#64748B',
+        border: '1px dashed ' + (over ? 'var(--df-brand)' : 'var(--df-border-strong)'),
+        background: over ? 'var(--df-brand-subtle-2)' : 'transparent',
+        color: over ? 'var(--df-brand)' : 'var(--df-text-muted)',
         borderRadius: 6,
         padding: '4px 9px',
         fontSize: 12,

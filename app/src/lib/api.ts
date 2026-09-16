@@ -10,6 +10,8 @@ export interface ApiUser {
   impersonando?: boolean;
   /** nombre de la tienda cuando se está impersonando */
   tiendaNombre?: string;
+  /** Foto de perfil (URL), opcional. */
+  foto?: string;
 }
 
 /**
@@ -52,6 +54,30 @@ export async function apiLogin(email: string, password: string): Promise<{ user?
 export function apiLogout() {
   void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
 }
+
+export async function apiUpdateMe(nombre: string): Promise<{ user?: ApiUser; error?: string }> {
+  try {
+    const r = await fetch('/api/me', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nombre }) });
+    const b = (await r.json()) as { user?: ApiUser; error?: string };
+    if (!r.ok) return { error: b.error || 'No pudimos guardar el nombre.' };
+    return { user: b.user };
+  } catch {
+    return { error: 'No pudimos hablar con el servidor. Revisa tu conexión.' };
+  }
+}
+
+export async function apiUploadAvatar(dataUrl: string): Promise<{ foto?: string; user?: ApiUser; error?: string }> {
+  try {
+    const r = await fetch('/api/me/foto', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataUrl }) });
+    const b = (await r.json()) as { foto?: string; user?: ApiUser; error?: string };
+    if (!r.ok) return { error: b.error || 'No pudimos subir la foto.' };
+    return { foto: b.foto, user: b.user };
+  } catch {
+    return { error: 'No pudimos hablar con el servidor. Revisa tu conexión.' };
+  }
+}
+
+export const apiChangePassword = (actual: string, nueva: string) => req<{ ok: true }>('/api/me/password', 'POST', { actual, nueva });
 
 async function req<T>(url: string, method: string, body?: unknown): Promise<{ data?: T; error?: string }> {
   try {

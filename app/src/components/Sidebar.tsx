@@ -61,14 +61,14 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             'whatsapp',
             <IconWhatsApp />,
             'WhatsApp',
-            df.waConnected && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', marginLeft: 'auto' }} />,
+            df.waConnected && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)', marginLeft: 'auto' }} />,
           )}
           {item(
             'pedidos',
             <IconPedidos />,
             'Pedidos',
             df.hasNewOrders && (
-              <span style={{ marginLeft: 'auto', background: '#F59E0B', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 7px' }}>
+              <span style={{ marginLeft: 'auto', background: 'var(--df-warning-mid)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 7px' }}>
                 {df.newOrdersCount}
               </span>
             ),
@@ -78,7 +78,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             'crm',
             <IconCRM />,
             'Inbox',
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', marginLeft: 'auto', animation: 'dfpulse 1.8s infinite' }} />,
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)', marginLeft: 'auto', animation: 'dfpulse 1.8s infinite' }} />,
           )}
           {item('marketing', <IconMarketing />, 'Marketing IA')}
           {item('biblioteca', <IconBiblioteca />, 'Biblioteca')}
@@ -90,7 +90,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
 
       {df.isAdmin && (
         <>
-          <div style={{ color: '#64748B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 8px' }}>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 8px' }}>
             {df.isSuperadmin ? 'Superadmin' : 'Administración'}
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -114,7 +114,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
         <div
           onClick={df.instalarPwa}
           className="df-toggle-mode"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px', marginBottom: 6, borderRadius: 8, cursor: 'pointer', color: '#34D399', fontSize: 13, fontWeight: 700, border: '1px solid rgba(52,211,153,.35)', background: 'rgba(16,185,129,.08)' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px', marginBottom: 6, borderRadius: 8, cursor: 'pointer', color: 'var(--df-brand-light)', fontSize: 13, fontWeight: 700, border: '1px solid rgba(52,211,153,.35)', background: 'rgba(16,185,129,.08)' }}
         >
           📲 Instalar la app
         </div>
@@ -123,7 +123,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
         <div
           onClick={df.toggleMode}
           className="df-toggle-mode"
-          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', color: '#94A3B8', fontSize: 13, fontWeight: 600, border: '1px solid #1E293B' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 13, fontWeight: 600, border: '1px solid var(--df-text-strong)' }}
         >
           <IconToggleMode />
           <span>{df.modeBtnLabel}</span>
@@ -132,7 +132,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       <div
         onClick={df.logout}
         className="df-toggle-mode"
-        style={{ textAlign: 'center', padding: '9px 12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: '#94A3B8', fontSize: 12.5, fontWeight: 600 }}
+        style={{ textAlign: 'center', padding: '9px 12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 12.5, fontWeight: 600 }}
       >
         Cerrar sesión
       </div>
@@ -140,7 +140,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       <div
         onClick={df.resetDemo}
         className="df-toggle-mode"
-        style={{ textAlign: 'center', padding: '9px 12px', borderRadius: 8, cursor: 'pointer', color: '#64748B', fontSize: 12, fontWeight: 600 }}
+        style={{ textAlign: 'center', padding: '9px 12px', borderRadius: 8, cursor: 'pointer', color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600 }}
         title="Vuelve a los datos de muestra originales"
       >
         ↺ Restablecer demo

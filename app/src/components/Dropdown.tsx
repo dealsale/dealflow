@@ -84,12 +84,12 @@ export function Dropdown({
   const triggerStyle: CSSProperties = pill
     ? {
         display: 'inline-flex', alignItems: 'center', gap: 7, height: 34, boxSizing: 'border-box',
-        border: '1px solid ' + (isActive ? '#0F172A' : '#E2E8F0'), background: isActive ? '#0F172A' : '#fff',
-        color: isActive ? '#fff' : '#475569', borderRadius: 999, padding: '0 11px 0 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+        border: '1px solid ' + (isActive ? '#0F172A' : 'var(--df-border)'), background: isActive ? '#0F172A' : 'var(--df-surface)',
+        color: isActive ? '#fff' : 'var(--df-text-secondary)', borderRadius: 999, padding: '0 11px 0 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
       }
     : {
         display: 'flex', alignItems: 'center', gap: 8, width: '100%', boxSizing: 'border-box', minHeight: 40,
-        border: '1px solid ' + (open ? '#0F172A' : '#E2E8F0'), background: '#fff', color: '#1E293B',
+        border: '1px solid ' + (open ? '#0F172A' : 'var(--df-border)'), background: 'var(--df-surface)', color: 'var(--df-text-strong)',
         borderRadius: 10, padding: '9px 12px', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
         boxShadow: open ? '0 0 0 3px rgba(15,23,42,.06)' : 'none', transition: 'border-color .15s, box-shadow .15s', textAlign: 'left',
       };
@@ -97,8 +97,8 @@ export function Dropdown({
   return (
     <div ref={ref} style={{ position: 'relative', display: pill ? 'inline-block' : 'block', width: pill ? undefined : (width ?? '100%') }}>
       <button type="button" onClick={abrir} aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel || label} style={triggerStyle}>
-        {label && <span style={{ color: pill ? (isActive ? 'rgba(255,255,255,.7)' : '#94A3B8') : '#94A3B8', whiteSpace: 'nowrap', fontWeight: 600 }}>{label}</span>}
-        <span style={{ flex: pill ? undefined : 1, fontWeight: pill ? 700 : 600, color: sel ? 'inherit' : '#94A3B8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {label && <span style={{ color: pill ? (isActive ? 'rgba(255,255,255,.7)' : 'var(--df-text-faint)') : 'var(--df-text-faint)', whiteSpace: 'nowrap', fontWeight: 600 }}>{label}</span>}
+        <span style={{ flex: pill ? undefined : 1, fontWeight: pill ? 700 : 600, color: sel ? 'inherit' : 'var(--df-text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {sel ? sel.label : (placeholder || 'Selecciona…')}
           {sel?.count != null ? ` (${sel.count})` : ''}
         </span>
@@ -112,7 +112,7 @@ export function Dropdown({
           style={{
             position: 'fixed', zIndex: 3000, left: pos.left, minWidth: pos.width,
             ...(arriba ? { bottom: pos.bottom } : { top: pos.top }),
-            background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12,
+            background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12,
             boxShadow: '0 10px 30px rgba(15,23,42,.14), 0 2px 6px rgba(15,23,42,.06)',
             padding: 5, maxHeight: 260, overflowY: 'auto',
           }}
@@ -128,14 +128,14 @@ export function Dropdown({
                 className="df-dd-item"
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
-                  fontSize: 13, fontWeight: activa ? 700 : 500, color: activa ? '#047857' : '#334155',
-                  background: activa ? '#ECFDF5' : 'transparent', whiteSpace: 'nowrap',
+                  fontSize: 13, fontWeight: activa ? 700 : 500, color: activa ? 'var(--df-brand-dark)' : 'var(--df-text-body)',
+                  background: activa ? 'var(--df-brand-subtle-2)' : 'transparent', whiteSpace: 'nowrap',
                 }}
               >
                 {o.icon && <span style={{ flexShrink: 0, display: 'inline-flex' }}>{o.icon}</span>}
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</span>
-                {o.count != null && <span style={{ fontSize: 11, fontWeight: 700, color: activa ? '#059669' : '#94A3B8', background: activa ? '#D1FAE5' : '#F1F5F9', borderRadius: 999, padding: '0 7px' }}>{o.count}</span>}
-                {activa && <span style={{ color: '#059669', fontWeight: 800, flexShrink: 0 }}>✓</span>}
+                {o.count != null && <span style={{ fontSize: 11, fontWeight: 700, color: activa ? 'var(--df-brand)' : 'var(--df-text-faint)', background: activa ? 'var(--df-brand-subtle)' : 'var(--df-surface-2)', borderRadius: 999, padding: '0 7px' }}>{o.count}</span>}
+                {activa && <span style={{ color: 'var(--df-brand)', fontWeight: 800, flexShrink: 0 }}>✓</span>}
               </div>
             );
           })}

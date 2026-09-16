@@ -7,9 +7,9 @@ import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState'
 type BloqueDecorado = DecoratedProduct['bloquesDecorados'][number];
 
 // Título de sección resaltado en negro (para diferenciar los grupos del editor).
-const TITULO_NEGRO: CSSProperties = { fontSize: 13.5, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.01em', margin: '2px 0 10px' };
+const TITULO_NEGRO: CSSProperties = { fontSize: 13.5, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '-0.01em', margin: '2px 0 10px' };
 // Subtítulo dentro de un grupo (jerarquía secundaria, en gris).
-const SUBLABEL: CSSProperties = { fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 8px' };
+const SUBLABEL: CSSProperties = { fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 8px' };
 
 /** Contenido de un bloque de imagen/video: varias piezas, cada una con quitar y mover. */
 function MediaEnBloque({ b }: { b: BloqueDecorado }) {
@@ -60,9 +60,9 @@ function BloquesInicial({ p }: { p: DecoratedProduct }) {
             onDrop={() => { if (drag !== null) p.moverBloque(drag, i); setDrag(null); setOver(null); }}
             onDragEnd={() => { setDrag(null); setOver(null); }}
             style={{
-              display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fff',
-              border: '1px solid ' + (esObjetivo ? '#059669' : '#E2E8F0'),
-              boxShadow: esObjetivo ? '0 -2px 0 #059669 inset' : 'none',
+              display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-surface)',
+              border: '1px solid ' + (esObjetivo ? 'var(--df-brand)' : 'var(--df-border)'),
+              boxShadow: esObjetivo ? '0 -2px 0 var(--df-brand) inset' : 'none',
               borderRadius: 10, padding: '9px 12px', opacity: drag === i ? 0.4 : 1,
             }}
           >
@@ -71,10 +71,10 @@ function BloquesInicial({ p }: { p: DecoratedProduct }) {
               draggable
               onDragStart={() => setDrag(i)}
               title="Arrastra para reordenar"
-              style={{ color: '#CBD5E1', fontSize: 16, flexShrink: 0, cursor: 'grab', lineHeight: 1, marginTop: 6 }}
+              style={{ color: 'var(--df-border-strong)', fontSize: 16, flexShrink: 0, cursor: 'grab', lineHeight: 1, marginTop: 6 }}
             >⠿</span>
-            <span style={{ background: '#F1F5F9', color: '#64748B', borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace", marginTop: 4 }}>{i + 1}</span>
-            <span style={{ color: '#94A3B8', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', width: 52, flexShrink: 0, marginTop: 5 }}>
+            <span style={{ background: 'var(--df-surface-2)', color: 'var(--df-text-muted)', borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace", marginTop: 4 }}>{i + 1}</span>
+            <span style={{ color: 'var(--df-text-faint)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', width: 52, flexShrink: 0, marginTop: 5 }}>
               {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : 'Video'}
             </span>
             {b.tipo === 'texto' ? (
@@ -82,13 +82,13 @@ function BloquesInicial({ p }: { p: DecoratedProduct }) {
                 value={b.valor || ''}
                 onChange={(v) => b.editText(v)}
                 placeholder="Escribe el texto de este bloque…"
-                style={{ flex: 1, minWidth: 0, border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5, minHeight: 38, boxSizing: 'border-box' }}
+                style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5, minHeight: 38, boxSizing: 'border-box' }}
               />
             ) : (
               <MediaEnBloque b={b} />
             )}
-            <span onClick={b.duplicate} className="df-copy-hover" title="Duplicar este bloque (copiar y pegar)" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 2, alignSelf: 'flex-start', marginTop: 4 }}>⧉</span>
-            <span onClick={b.remove} className="df-danger-hover" title={b.tipo === 'texto' ? 'Quitar bloque' : 'Quitar el bloque completo'} style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, alignSelf: 'flex-start', marginTop: 4 }}>✕</span>
+            <span onClick={b.duplicate} className="df-copy-hover" title="Duplicar este bloque (copiar y pegar)" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 2, alignSelf: 'flex-start', marginTop: 4 }}>⧉</span>
+            <span onClick={b.remove} className="df-danger-hover" title={b.tipo === 'texto' ? 'Quitar bloque' : 'Quitar el bloque completo'} style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, alignSelf: 'flex-start', marginTop: 4 }}>✕</span>
           </div>
         );
       })}
@@ -106,27 +106,27 @@ function OpcionesEditor({ p }: { p: DecoratedProduct }) {
     <div style={{ marginBottom: 4 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
         {p.opcionesDecoradas.map((o, gi) => (
-          <div key={gi} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 14px' }}>
+          <div key={gi} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
               <span style={{ fontSize: 13.5, fontWeight: 700 }}>{o.nombre}</span>
-              <span style={{ color: '#94A3B8', fontSize: 12 }}>· {o.valores.length} {o.valores.length === 1 ? 'opción' : 'opciones'}</span>
+              <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>· {o.valores.length} {o.valores.length === 1 ? 'opción' : 'opciones'}</span>
               <div style={{ flex: 1 }} />
-              <span onClick={o.remove} className="df-danger-hover" title="Quitar este grupo" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>✕</span>
+              <span onClick={o.remove} className="df-danger-hover" title="Quitar este grupo" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>✕</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
               {o.valores.map((val, vi) => (
-                <div key={vi} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: '#F1F5F9', borderRadius: 10, padding: '5px 8px' }}>
+                <div key={vi} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'var(--df-surface-2)', borderRadius: 10, padding: '5px 8px' }}>
                   {val.foto && <img src={val.foto} alt="" style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover', border: '1px solid rgba(15,23,42,.1)' }} />}
                   <span style={{ fontSize: 13, fontWeight: 500 }}>{val.valor}</span>
                   {val.foto ? (
-                    <span onClick={() => o.removeValorFoto(vi)} className="df-danger-hover" title="Quitar la foto de esta opción" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 11 }}>quitar foto</span>
+                    <span onClick={() => o.removeValorFoto(vi)} className="df-danger-hover" title="Quitar la foto de esta opción" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 11 }}>quitar foto</span>
                   ) : (
                     <PhotoAddChip label="+ foto" onFiles={(files) => o.setValorFoto(vi, files)} />
                   )}
-                  <span onClick={() => o.removeValor(vi)} className="df-danger-hover" title="Quitar" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}>✕</span>
+                  <span onClick={() => o.removeValor(vi)} className="df-danger-hover" title="Quitar" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}>✕</span>
                 </div>
               ))}
-              {o.valores.length === 0 && <span style={{ color: '#94A3B8', fontSize: 12.5 }}>Aún no agregas opciones a este grupo.</span>}
+              {o.valores.length === 0 && <span style={{ color: 'var(--df-text-faint)', fontSize: 12.5 }}>Aún no agregas opciones a este grupo.</span>}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
@@ -135,12 +135,12 @@ function OpcionesEditor({ p }: { p: DecoratedProduct }) {
                 onChange={(e) => setDraft(gi, e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { o.addValor(valorDrafts[gi] || ''); setDraft(gi, ''); } }}
                 placeholder={`Agregar a ${o.nombre}… (ej: ${o.nombre.toLowerCase().includes('tall') ? 'M' : 'Negro'})`}
-                style={{ flex: 1, minWidth: 140, border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                style={{ flex: 1, minWidth: 140, border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 }}
               />
               <button
                 onClick={() => { o.addValor(valorDrafts[gi] || ''); setDraft(gi, ''); }}
                 className="df-btn-outline-green"
-                style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
               >
                 Agregar
               </button>
@@ -155,17 +155,17 @@ function OpcionesEditor({ p }: { p: DecoratedProduct }) {
           onChange={(e) => setNuevoGrupo(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { p.addOpcion(nuevoGrupo); setNuevoGrupo(''); } }}
           placeholder="Nuevo grupo · ej: Color, Talla, Sabor…"
-          style={{ flex: 1, minWidth: 180, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
+          style={{ flex: 1, minWidth: 180, border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
         />
         <button
           onClick={() => { p.addOpcion(nuevoGrupo); setNuevoGrupo(''); }}
           className="df-btn-outline-green"
-          style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
           + Agregar grupo
         </button>
       </div>
-      <div style={{ color: '#94A3B8', fontSize: 12 }}>
+      <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
         Crea un grupo por cada tipo de opción: uno "Color" con Negro, Azul… y otro "Talla" con S, M, L… El asistente se las ofrece al cliente.
       </div>
     </div>
@@ -185,8 +185,8 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
   openGroups: Record<string, boolean>;
   toggleGroup: (k: string) => void;
 }) {
-  const inputStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 };
-  const label: CSSProperties = { color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 };
+  const inputStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 };
+  const label: CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
 
   const grupos: { id: string; titulo: string; body: ReactNode }[] = [
     {
@@ -205,7 +205,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             </div>
           </div>
           <div style={{ maxWidth: 560 }}>
-            <div style={label}>SKU <span style={{ fontWeight: 400, color: '#94A3B8' }}>· para casar este producto con Effi/WooCommerce (opcional)</span></div>
+            <div style={label}>SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· para casar este producto con Effi/WooCommerce (opcional)</span></div>
             <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: FAJA-NEGRA-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
           </div>
         </>
@@ -216,7 +216,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
       titulo: 'Información',
       body: (
         <>
-          <div style={{ color: '#94A3B8', fontSize: 12, marginBottom: 10 }}>La usa el asistente para vender.</div>
+          <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>La usa el asistente para vender.</div>
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <div>
               <div style={label}>Descripción</div>
@@ -246,17 +246,17 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
       body: (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <span style={{ color: '#94A3B8', fontSize: 12 }}>Fotos, textos y videos que se envían solos cuando el cliente pregunta por el producto.</span>
+            <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>Fotos, textos y videos que se envían solos cuando el cliente pregunta por el producto.</span>
             <div style={{ flex: 1 }} />
-            <span style={{ fontSize: 12, color: p.mensajeInicialActivo !== false ? '#059669' : '#94A3B8', fontWeight: 600 }}>
+            <span style={{ fontSize: 12, color: p.mensajeInicialActivo !== false ? 'var(--df-brand)' : 'var(--df-text-faint)', fontWeight: 600 }}>
               {p.mensajeInicialActivo !== false ? 'Encendido' : 'Apagado'}
             </span>
             <span
               onClick={p.toggleMensajeInicial}
               title="Encender o apagar el envío automático del mensaje inicial"
-              style={{ width: 40, height: 23, borderRadius: 999, background: p.mensajeInicialActivo !== false ? '#059669' : '#CBD5E1', position: 'relative', cursor: 'pointer', transition: 'background .2s', flexShrink: 0 }}
+              style={{ width: 40, height: 23, borderRadius: 999, background: p.mensajeInicialActivo !== false ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', cursor: 'pointer', transition: 'background .2s', flexShrink: 0 }}
             >
-              <span style={{ position: 'absolute', top: 2, left: p.mensajeInicialActivo !== false ? 19 : 2, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 2px rgba(15,23,42,.3)' }} />
+              <span style={{ position: 'absolute', top: 2, left: p.mensajeInicialActivo !== false ? 19 : 2, width: 19, height: 19, borderRadius: '50%', background: 'var(--df-surface)', transition: 'left .2s', boxShadow: '0 1px 2px rgba(15,23,42,.3)' }} />
             </span>
           </div>
           <div style={{ marginBottom: 12 }}>
@@ -266,18 +266,18 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
             <BloquesInicial p={p} />
             {p.bloquesDecorados.length === 0 && !!(p.mensajeInicial || '').trim() && (
-              <div style={{ color: '#94A3B8', fontSize: 12, background: '#fff', border: '1px dashed #E2E8F0', borderRadius: 8, padding: '9px 12px' }}>
+              <div style={{ color: 'var(--df-text-faint)', fontSize: 12, background: 'var(--df-surface)', border: '1px dashed var(--df-border)', borderRadius: 8, padding: '9px 12px' }}>
                 Hoy el asistente usa este texto: “{p.mensajeInicial}”. Agrega bloques y los usará en su lugar.
               </div>
             )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input className="df-input" value={df.bloqueTexto} onChange={(e) => df.setBloqueTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') p.addBloqueTexto(); }} placeholder="Escribe un bloque de texto · ej: ¡Claro! Te cuento: 3 joggers por $109.900…" style={{ flex: 1, minWidth: 220, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
-            <button onClick={p.addBloqueTexto} className="df-btn-outline-green" style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Texto</button>
+            <input className="df-input" value={df.bloqueTexto} onChange={(e) => df.setBloqueTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') p.addBloqueTexto(); }} placeholder="Escribe un bloque de texto · ej: ¡Claro! Te cuento: 3 joggers por $109.900…" style={{ flex: 1, minWidth: 220, border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
+            <button onClick={p.addBloqueTexto} className="df-btn-outline-green" style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Texto</button>
             <PhotoAddChip label="+ Imagen" onFiles={p.addBloqueImagen} />
             <PhotoAddChip label="+ Video" accept="video/*" onFiles={p.addBloqueVideo} />
           </div>
-          <div style={{ color: '#94A3B8', fontSize: 12 }}>
+          <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
             Cuando un cliente pregunte por este producto, el asistente enviará estos bloques en orden, como mensajes de WhatsApp.
           </div>
         </>
@@ -288,25 +288,25 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
       titulo: 'Combos',
       body: (
         <>
-          <div style={{ color: '#94A3B8', fontSize: 12, marginBottom: 10 }}>Llevar varias unidades por un precio especial.</div>
+          <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Llevar varias unidades por un precio especial.</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
             {p.bundlesDecorados.map((b, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '9px 12px' }}>
-                <span style={{ background: '#FEF3C7', color: '#B45309', borderRadius: 6, padding: '3px 9px', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{b.cantidad} unidades</span>
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '9px 12px' }}>
+                <span style={{ background: 'var(--df-warning-subtle)', color: 'var(--df-warning)', borderRadius: 6, padding: '3px 9px', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{b.cantidad} unidades</span>
                 <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{b.precioFmt}</span>
-                {b.etiqueta && <span style={{ fontSize: 12, color: '#64748B' }}>· {b.etiqueta}</span>}
+                {b.etiqueta && <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>· {b.etiqueta}</span>}
                 <div style={{ flex: 1 }} />
-                <span onClick={b.remove} className="df-danger-hover" title="Quitar combo" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>✕</span>
+                <span onClick={b.remove} className="df-danger-hover" title="Quitar combo" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>✕</span>
               </div>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input className="df-input" value={df.bundleCantidad} onChange={(e) => df.setBundleCantidad(e.target.value)} placeholder="Cantidad · ej: 3" style={{ width: 120, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }} />
-            <input className="df-input" value={df.bundlePrecio} onChange={(e) => df.setBundlePrecio(e.target.value)} placeholder="Precio total (COP) · ej: 109900" style={{ width: 200, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }} />
-            <input className="df-input" value={df.bundleEtiqueta} onChange={(e) => df.setBundleEtiqueta(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') p.addBundle(); }} placeholder="Etiqueta opcional · ej: ¡El más pedido!" style={{ flex: 1, minWidth: 160, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
-            <button onClick={p.addBundle} className="df-btn-outline-green" style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Agregar combo</button>
+            <input className="df-input" value={df.bundleCantidad} onChange={(e) => df.setBundleCantidad(e.target.value)} placeholder="Cantidad · ej: 3" style={{ width: 120, border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }} />
+            <input className="df-input" value={df.bundlePrecio} onChange={(e) => df.setBundlePrecio(e.target.value)} placeholder="Precio total (COP) · ej: 109900" style={{ width: 200, border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }} />
+            <input className="df-input" value={df.bundleEtiqueta} onChange={(e) => df.setBundleEtiqueta(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') p.addBundle(); }} placeholder="Etiqueta opcional · ej: ¡El más pedido!" style={{ flex: 1, minWidth: 160, border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
+            <button onClick={p.addBundle} className="df-btn-outline-green" style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Agregar combo</button>
           </div>
-          <div style={{ color: '#94A3B8', fontSize: 12 }}>
+          <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
             El asistente ofrece estos combos para subir el ticket (ej: 3 por $109.900 en vez de $180.000).
           </div>
         </>
@@ -323,7 +323,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             {p.uploadedMain.map((src, i) => (<UploadedThumb key={i} src={src} size={64} onRemove={() => p.removeMainFoto(i)} />))}
             <PhotoDropTile size={64} onFiles={p.addMainFotos} />
           </div>
-          {df.mediaWarn && <div style={{ color: '#DC2626', fontSize: 12, marginBottom: 12 }}>{df.mediaWarn}</div>}
+          {df.mediaWarn && <div style={{ color: 'var(--df-danger)', fontSize: 12, marginBottom: 12 }}>{df.mediaWarn}</div>}
           <div style={{ ...SUBLABEL, marginTop: 16 }}>Testimonios · capturas de clientes felices que el asistente puede enviar</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
             {p.testimoniosList.map((src, i) => (<UploadedThumb key={i} src={src} size={64} onRemove={() => p.removeTestimonio(i)} />))}
@@ -339,7 +339,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             ))}
             <PhotoDropTile size={64} label="Subir video" accept="video/*" onFiles={p.addVideos} />
           </div>
-          {df.videoWarn && <div style={{ color: '#DC2626', fontSize: 12, marginTop: 8 }}>{df.videoWarn}</div>}
+          {df.videoWarn && <div style={{ color: 'var(--df-danger)', fontSize: 12, marginTop: 8 }}>{df.videoWarn}</div>}
         </>
       ),
     },
@@ -348,7 +348,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
       titulo: 'Variantes',
       body: (
         <>
-          <div style={{ color: '#94A3B8', fontSize: 12, marginBottom: 10 }}>Color, Talla… El asistente las ofrece al cliente.</div>
+          <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Color, Talla… El asistente las ofrece al cliente.</div>
           <OpcionesEditor p={p} />
         </>
       ),
@@ -361,53 +361,53 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           <div style={SUBLABEL}>Reglas para el asistente · agrega todas las que necesites</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
             {p.reglasDecoradas.map((r, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
-                <span style={{ color: '#059669', fontWeight: 700, flexShrink: 0, marginTop: 6 }}>✓</span>
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px' }}>
+                <span style={{ color: 'var(--df-brand)', fontWeight: 700, flexShrink: 0, marginTop: 6 }}>✓</span>
                 <AutoTextarea
                   value={r.texto}
                   onChange={(v) => r.editar(v)}
-                  style={{ flex: 1, fontSize: 13, lineHeight: 1.5, border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', color: '#1E293B' }}
-                  onFocus={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                  style={{ flex: 1, fontSize: 13, lineHeight: 1.5, border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', color: 'var(--df-text-strong)' }}
+                  onFocus={(e) => { e.currentTarget.style.background = 'var(--df-bg)'; e.currentTarget.style.borderColor = 'var(--df-border)'; }}
                   onBlur={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
                 />
-                <span onClick={r.remove} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, marginTop: 6 }}>✕</span>
+                <span onClick={r.remove} className="df-danger-hover" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, marginTop: 6 }}>✕</span>
               </div>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
-            <input className="df-input" value={df.productRuleDraft} onChange={(e) => df.setProductRuleDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') p.addRegla(); }} placeholder="Escribe una regla nueva para este producto…" style={{ flex: 1, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
-            <button onClick={p.addRegla} className="df-btn-outline-green" style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Agregar regla</button>
+            <input className="df-input" value={df.productRuleDraft} onChange={(e) => df.setProductRuleDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') p.addRegla(); }} placeholder="Escribe una regla nueva para este producto…" style={{ flex: 1, border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
+            <button onClick={p.addRegla} className="df-btn-outline-green" style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Agregar regla</button>
           </div>
           <div style={SUBLABEL}>Preguntas frecuentes · el asistente responde con esto</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
             {p.faqsDecoradas.map((f, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px' }}>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <input
                     value={f.pregunta}
                     onChange={(e) => f.editar('pregunta', e.target.value)}
                     placeholder="Pregunta"
-                    style={{ fontSize: 13, fontWeight: 600, border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', color: '#1E293B' }}
-                    onFocus={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                    style={{ fontSize: 13, fontWeight: 600, border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', color: 'var(--df-text-strong)' }}
+                    onFocus={(e) => { e.currentTarget.style.background = 'var(--df-bg)'; e.currentTarget.style.borderColor = 'var(--df-border)'; }}
                     onBlur={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
                   />
                   <AutoTextarea
                     value={f.respuesta}
                     onChange={(v) => f.editar('respuesta', v)}
                     placeholder="Respuesta"
-                    style={{ fontSize: 13, color: '#64748B', border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', lineHeight: 1.5 }}
-                    onFocus={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = '#1E293B'; }}
-                    onBlur={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = '#64748B'; }}
+                    style={{ fontSize: 13, color: 'var(--df-text-muted)', border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', lineHeight: 1.5 }}
+                    onFocus={(e) => { e.currentTarget.style.background = 'var(--df-bg)'; e.currentTarget.style.borderColor = 'var(--df-border)'; e.currentTarget.style.color = 'var(--df-text-strong)'; }}
+                    onBlur={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = 'var(--df-text-muted)'; }}
                   />
                 </div>
-                <span onClick={f.remove} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, marginTop: 6 }}>✕</span>
+                <span onClick={f.remove} className="df-danger-hover" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, marginTop: 6 }}>✕</span>
               </div>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input className="df-input" value={df.faqP} onChange={(e) => df.setFaqP(e.target.value)} placeholder="Pregunta · ej: ¿Hacen envíos a Pasto?" style={{ flex: 1, minWidth: 180, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
-            <input className="df-input" value={df.faqR} onChange={(e) => df.setFaqR(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') p.addFaq(); }} placeholder="Respuesta" style={{ flex: 1, minWidth: 180, border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
-            <button onClick={p.addFaq} className="df-btn-outline-green" style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Agregar</button>
+            <input className="df-input" value={df.faqP} onChange={(e) => df.setFaqP(e.target.value)} placeholder="Pregunta · ej: ¿Hacen envíos a Pasto?" style={{ flex: 1, minWidth: 180, border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
+            <input className="df-input" value={df.faqR} onChange={(e) => df.setFaqR(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') p.addFaq(); }} placeholder="Respuesta" style={{ flex: 1, minWidth: 180, border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
+            <button onClick={p.addFaq} className="df-btn-outline-green" style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Agregar</button>
           </div>
         </>
       ),
@@ -415,10 +415,10 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
   ];
 
   return (
-    <div className="df-pexp" style={{ background: '#F8FAFC', borderBottom: '1px solid #F1F5F9', padding: '18px 18px 18px 84px' }}>
+    <div className="df-pexp" style={{ background: 'var(--df-bg)', borderBottom: '1px solid var(--df-border)', padding: '18px 18px 18px 84px' }}>
       {p.bloqueado && (
         <>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#FEF9C3', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
             <span style={{ fontSize: 18 }}>🔒</span>
             <div style={{ fontSize: 13, color: '#854D0E', lineHeight: 1.5 }}>
               <b>Producto de la biblioteca.</b> Su estructura (mensaje inicial, reglas, descripción, combos, variantes) está <b>bloqueada</b> para proteger la venta con el bot. Solo puedes ajustar el <b>precio</b> y el <b>SKU</b> de tu tienda.
@@ -426,11 +426,11 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           </div>
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16, maxWidth: 560 }}>
             <div>
-              <div style={label}>Precio (COP) <span style={{ fontWeight: 400, color: '#94A3B8' }}>· tu precio de venta</span></div>
+              <div style={label}>Precio (COP) <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· tu precio de venta</span></div>
               <input className="df-input" value={String(p.precio)} onChange={(e) => p.setPrecio(e.target.value)} style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
             </div>
             <div>
-              <div style={label}>SKU <span style={{ fontWeight: 400, color: '#94A3B8' }}>· para Effi/WooCommerce</span></div>
+              <div style={label}>SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· para Effi/WooCommerce</span></div>
               <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: BODY-NEGRO-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
             </div>
           </div>
@@ -447,11 +447,11 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
               <div
                 onClick={() => toggleGroup(key)}
                 className="df-row-hover"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '11px 14px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '11px 14px', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10 }}
               >
-                <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.01em' }}>{g.titulo}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '-0.01em' }}>{g.titulo}</span>
                 <div style={{ flex: 1 }} />
-                <span style={{ color: '#94A3B8', fontSize: 13, display: 'inline-block', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
+                <span style={{ color: 'var(--df-text-faint)', fontSize: 13, display: 'inline-block', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
               </div>
             ) : (
               <div style={TITULO_NEGRO}>{g.titulo}</div>
@@ -467,15 +467,15 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           onClick={p.requestDelete}
           style={
             p.deleteArmed
-              ? { background: '#DC2626', color: '#fff', border: '1px solid #DC2626', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }
-              : { background: '#fff', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }
+              ? { background: 'var(--df-danger)', color: '#fff', border: '1px solid var(--df-danger)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }
+              : { background: 'var(--df-surface)', color: 'var(--df-danger)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }
           }
         >
           {p.deleteArmed ? '¿Seguro? Sí, eliminar' : 'Eliminar producto'}
         </button>
         <div style={{ flex: 1 }} />
-        {p.saved && <span style={{ color: '#059669', fontSize: 13, fontWeight: 600 }}>✓ Producto guardado. El asistente ya lo ofrece así.</span>}
-        <button onClick={p.save} className="df-btn-primary" style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Guardar producto</button>
+        {p.saved && <span style={{ color: 'var(--df-brand)', fontSize: 13, fontWeight: 600 }}>✓ Producto guardado. El asistente ya lo ofrece así.</span>}
+        <button onClick={p.save} className="df-btn-primary" style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Guardar producto</button>
       </div>
     </div>
   );
@@ -504,7 +504,7 @@ export function Productos({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="Productos">
       {duplicados.length > 0 && (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#FEF9C3', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
           <span style={{ fontSize: 18 }}>⚠️</span>
           <div style={{ fontSize: 13, color: '#854D0E', lineHeight: 1.5 }}>
             <b>Hay productos duplicados</b> (mismo disparador o nombre). El bot puede enviar la versión vieja/importada en vez de la que editaste. Deja <b>solo uno</b> de cada grupo y elimina el repetido:
@@ -515,16 +515,16 @@ export function Productos({ df }: { df: DealFlowState }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Productos</h1>
-          <p style={{ color: '#64748B', fontSize: 14, margin: '4px 0 0' }}>{df.productCount} productos en tu catálogo. Toca uno para editarlo.</p>
+          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>{df.productCount} productos en tu catálogo. Toca uno para editarlo.</p>
         </div>
         <div style={{ flex: 1 }} />
         {/* Switch de vista: normal (todo abierto) o agrupada (secciones acordeón) */}
-        <div style={{ display: 'inline-flex', border: '1px solid #E2E8F0', borderRadius: 9, overflow: 'hidden' }} title="Cómo se ve el editor del producto">
+        <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }} title="Cómo se ve el editor del producto">
           {(['normal', 'agrupada'] as const).map((v) => (
             <button
               key={v}
               onClick={() => cambiarVista(v)}
-              style={{ background: vista === v ? '#0F172A' : '#fff', color: vista === v ? '#fff' : '#334155', border: 'none', padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
+              style={{ background: vista === v ? '#0F172A' : 'var(--df-surface)', color: vista === v ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
             >
               {v === 'normal' ? 'Vista normal' : 'Vista agrupada'}
             </button>
@@ -533,23 +533,23 @@ export function Productos({ df }: { df: DealFlowState }) {
         <button
           onClick={df.toggleNewProduct}
           className="df-btn-primary"
-          style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+          style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
         >
           + Nuevo producto
         </button>
       </div>
 
       {df.newProductOpen && (
-        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 }}>
+        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>Nuevo {df.newProdTipo === 'servicio' ? 'servicio' : 'producto'}</div>
 
           {/* Producto físico o servicio */}
-          <div style={{ display: 'inline-flex', border: '1px solid #E2E8F0', borderRadius: 9, overflow: 'hidden', marginBottom: 14 }}>
+          <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden', marginBottom: 14 }}>
             {(['producto', 'servicio'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => df.setNewProdTipo(t)}
-                style={{ background: df.newProdTipo === t ? '#059669' : '#fff', color: df.newProdTipo === t ? '#fff' : '#334155', border: 'none', padding: '8px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                style={{ background: df.newProdTipo === t ? 'var(--df-brand)' : 'var(--df-surface)', color: df.newProdTipo === t ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
               >
                 {t === 'producto' ? '📦 Producto' : '🧩 Servicio'}
               </button>
@@ -558,36 +558,36 @@ export function Productos({ df }: { df: DealFlowState }) {
 
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 12, marginBottom: 14 }}>
             <div>
-              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre</div>
+              <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre</div>
               <input
                 className="df-input"
                 value={df.newProdNombre}
                 onChange={(e) => df.setNewProdNombre(e.target.value)}
                 placeholder={df.newProdTipo === 'servicio' ? 'Ej: Corte de cabello' : 'Ej: Chaqueta bomber'}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
               />
             </div>
             <div>
-              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Precio (COP){df.newProdTipo === 'servicio' ? ' · 0 = gratis' : ''}</div>
+              <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Precio (COP){df.newProdTipo === 'servicio' ? ' · 0 = gratis' : ''}</div>
               <input
                 className="df-input"
                 value={df.newProdPrecio}
                 onChange={(e) => df.setNewProdPrecio(e.target.value)}
                 placeholder={df.newProdTipo === 'servicio' ? 'Ej: 25000' : 'Ej: 79900'}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
               />
             </div>
           </div>
 
           {df.newProdTipo === 'servicio' && (
             <div style={{ marginBottom: 14, maxWidth: 240 }}>
-              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Duración (opcional)</div>
+              <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Duración (opcional)</div>
               <input
                 className="df-input"
                 value={df.newProdDuracion}
                 onChange={(e) => df.setNewProdDuracion(e.target.value)}
                 placeholder="Ej: 30 min, 1 h, mensual"
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
               />
             </div>
           )}
@@ -596,43 +596,43 @@ export function Productos({ df }: { df: DealFlowState }) {
             <button
               onClick={df.crearProducto}
               className="df-btn-primary"
-              style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+              style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
             >
               Crear {df.newProdTipo === 'servicio' ? 'servicio' : 'producto'}
             </button>
             <button
               onClick={df.toggleNewProduct}
-              style={{ background: '#fff', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+              style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
             >
               Cancelar
             </button>
-            {df.newProdError && <span style={{ color: '#DC2626', fontSize: 13 }}>Falta el nombre o el precio. Complétalos y vuelve a intentar.</span>}
+            {df.newProdError && <span style={{ color: 'var(--df-danger)', fontSize: 13 }}>Falta el nombre o el precio. Complétalos y vuelve a intentar.</span>}
           </div>
-          <div style={{ color: '#94A3B8', fontSize: 12, marginTop: 10 }}>Al abrirlo agregas fotos, videos, opciones (Color, Talla…), combos y reglas.</div>
+          <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginTop: 10 }}>Al abrirlo agregas fotos, videos, opciones (Color, Talla…), combos y reglas.</div>
         </div>
       )}
 
       {df.products.length === 0 && !df.newProductOpen && (
-        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '40px 24px', boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: '40px 24px', boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
           <div style={{ fontSize: 15, fontWeight: 600 }}>Aún no tienes productos.</div>
-          <div style={{ color: '#64748B', fontSize: 13.5 }}>Crea el primero y el asistente empieza a ofrecerlo en WhatsApp.</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 13.5 }}>Crea el primero y el asistente empieza a ofrecerlo en WhatsApp.</div>
           <button
             onClick={df.toggleNewProduct}
             className="df-btn-primary"
-            style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+            style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
           >
             + Crear mi primer producto
           </button>
         </div>
       )}
 
-      <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: df.products.length === 0 ? 'none' : 'block' }}>
+      <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: df.products.length === 0 ? 'none' : 'block' }}>
         {df.products.map((p) => (
           <div key={p.id}>
             <div
               onClick={p.toggle}
               className="df-row-hover df-prow"
-              style={{ display: 'grid', gridTemplateColumns: '52px 1fr 120px 130px 24px', alignItems: 'center', gap: 14, padding: '12px 18px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
+              style={{ display: 'grid', gridTemplateColumns: '52px 1fr 120px 130px 24px', alignItems: 'center', gap: 14, padding: '12px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}
             >
               {p.previewImg
                 ? <img src={p.previewImg} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover', border: '1px solid rgba(15,23,42,.08)' }} />
@@ -640,14 +640,14 @@ export function Productos({ df }: { df: DealFlowState }) {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
                   {p.nombre}
-                  {p.tipo === 'servicio' && <span style={{ fontSize: 10.5, fontWeight: 800, color: '#4338CA', background: '#E0E7FF', borderRadius: 5, padding: '1px 6px' }}>🧩 SERVICIO</span>}
-                  {p.bloqueado && <span title="Producto de la biblioteca: estructura bloqueada" style={{ fontSize: 10.5, fontWeight: 800, color: '#854D0E', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 5, padding: '1px 6px' }}>🔒 BIBLIOTECA</span>}
+                  {p.tipo === 'servicio' && <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--df-indigo)', background: 'var(--df-indigo-subtle)', borderRadius: 5, padding: '1px 6px' }}>🧩 SERVICIO</span>}
+                  {p.bloqueado && <span title="Producto de la biblioteca: estructura bloqueada" style={{ fontSize: 10.5, fontWeight: 800, color: '#854D0E', background: '#FEF9C3', border: '1px solid var(--df-warning-border)', borderRadius: 5, padding: '1px 6px' }}>🔒 BIBLIOTECA</span>}
                 </div>
-                <div style={{ color: '#64748B', fontSize: 12, marginTop: 1 }}>{p.precioFmt}{p.tipo === 'servicio' ? (p.duracion ? ' · ' + p.duracion : '') : ' · ' + p.variantesLabel}</div>
+                <div style={{ color: 'var(--df-text-muted)', fontSize: 12, marginTop: 1 }}>{p.precioFmt}{p.tipo === 'servicio' ? (p.duracion ? ' · ' + p.duracion : '') : ' · ' + p.variantesLabel}</div>
               </div>
               <div className="df-prow-price" style={{ fontWeight: 700, fontSize: 14 }}>{p.precioFmt}</div>
               <span style={p.stockPill}>{p.stockLabel}</span>
-              <span style={{ color: '#94A3B8', fontSize: 12 }}>{p.chevron}</span>
+              <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>{p.chevron}</span>
             </div>
 
             {p.expanded && <ProductoEditor p={p} df={df} vista={vista} openGroups={openGroups} toggleGroup={toggleGroup} />}

@@ -25,12 +25,12 @@ export interface EstadoCfg extends PillColor {
 }
 
 export const ESTADOS: Record<EstadoPedido, EstadoCfg> = {
-  Nuevo: { color: '#1D4ED8', bg: '#DBEAFE', next: 'Confirmar', nextEstado: 'Confirmado' },
-  Confirmado: { color: '#6D28D9', bg: '#EDE9FE', next: 'Empacar', nextEstado: 'Empacado' },
-  Empacado: { color: '#B45309', bg: '#FEF3C7', next: 'Despachar', nextEstado: 'Despachado' },
+  Nuevo: { color: 'var(--df-info)', bg: 'var(--df-info-subtle)', next: 'Confirmar', nextEstado: 'Confirmado' },
+  Confirmado: { color: 'var(--df-purple)', bg: 'var(--df-purple-subtle)', next: 'Empacar', nextEstado: 'Empacado' },
+  Empacado: { color: 'var(--df-warning)', bg: 'var(--df-warning-subtle)', next: 'Despachar', nextEstado: 'Despachado' },
   Despachado: { color: '#0E7490', bg: '#CFFAFE', next: 'Marcar entregado', nextEstado: 'Entregado' },
-  Entregado: { color: '#047857', bg: '#D1FAE5', next: null, nextEstado: null },
-  Cancelado: { color: '#B91C1C', bg: '#FEE2E2', next: null, nextEstado: null },
+  Entregado: { color: 'var(--df-brand-dark)', bg: 'var(--df-brand-subtle)', next: null, nextEstado: null },
+  Cancelado: { color: 'var(--df-danger-dark)', bg: 'var(--df-danger-subtle-2)', next: null, nextEstado: null },
 };
 
 // Progresión "normal" (para la línea de tiempo). Cancelado va aparte: no es un paso.
@@ -40,35 +40,35 @@ export const ESTADOS_TODOS: EstadoPedido[] = ['Nuevo', 'Confirmado', 'Empacado',
 
 export function swatch(label: string, fallback: string): string {
   const l = label.toLowerCase();
-  if (l.includes('verde')) return '#34D399';
-  if (l.includes('negr')) return '#334155';
-  if (l.includes('blanco')) return '#E2E8F0';
+  if (l.includes('verde')) return 'var(--df-brand-light)';
+  if (l.includes('negr')) return 'var(--df-text-body)';
+  if (l.includes('blanco')) return 'var(--df-border)';
   if (l.includes('azul claro')) return '#93C5FD';
-  if (l.includes('azul')) return '#1D4ED8';
+  if (l.includes('azul')) return 'var(--df-info)';
   if (l.includes('camel')) return '#D6A45C';
   if (l.includes('beige')) return '#E7D8BF';
-  if (l.includes('dorado')) return '#FBBF24';
+  if (l.includes('dorado')) return 'var(--df-warning-light)';
   return fallback;
 }
 
 export function stockPillCfg(st: number): PillColor {
-  if (st === 0) return { color: '#B91C1C', bg: '#FEE2E2' };
-  if (st <= 5) return { color: '#B45309', bg: '#FEF3C7' };
-  return { color: '#047857', bg: '#D1FAE5' };
+  if (st === 0) return { color: 'var(--df-danger-dark)', bg: 'var(--df-danger-subtle-2)' };
+  if (st <= 5) return { color: 'var(--df-warning)', bg: 'var(--df-warning-subtle)' };
+  return { color: 'var(--df-brand-dark)', bg: 'var(--df-brand-subtle)' };
 }
 
 export const ETAPA_CFG: Record<Etapa, PillColor> = {
-  Explorando: { color: '#475569', bg: '#F1F5F9' },
-  Cotizando: { color: '#1D4ED8', bg: '#DBEAFE' },
-  'Listo para comprar': { color: '#047857', bg: '#D1FAE5' },
+  Explorando: { color: 'var(--df-text-secondary)', bg: 'var(--df-surface-2)' },
+  Cotizando: { color: 'var(--df-info)', bg: 'var(--df-info-subtle)' },
+  'Listo para comprar': { color: 'var(--df-brand-dark)', bg: 'var(--df-brand-subtle)' },
   Postventa: { color: '#0E7490', bg: '#CFFAFE' },
 };
 
 export const AVATAR_COLORS: [string, string][] = [
-  ['#E0E7FF', '#4338CA'],
+  ['var(--df-indigo-subtle)', 'var(--df-indigo)'],
   ['#FCE7F3', '#BE185D'],
-  ['#DCFCE7', '#15803D'],
-  ['#FEF3C7', '#B45309'],
+  ['var(--df-green-subtle)', 'var(--df-green-700)'],
+  ['var(--df-warning-subtle)', 'var(--df-warning)'],
   ['#CFFAFE', '#0E7490'],
 ];
 

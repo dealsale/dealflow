@@ -10,14 +10,14 @@ export function MProductos({ df }: { df: DealFlowState }) {
         <button
           onClick={df.toggleNewProduct}
           className="df-btn-primary"
-          style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 10, padding: '11px 15px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', minHeight: 44 }}
+          style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '11px 15px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', minHeight: 44 }}
         >
           + Nuevo
         </button>
       </div>
 
       {df.newProductOpen && (
-        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: 14, marginBottom: 10 }}>
+        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 14, marginBottom: 10 }}>
           <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 10 }}>Nuevo producto</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
             <input
@@ -25,7 +25,7 @@ export function MProductos({ df }: { df: DealFlowState }) {
               value={df.newProdNombre}
               onChange={(e) => df.setNewProdNombre(e.target.value)}
               placeholder="Nombre · ej: Chaqueta bomber"
-              style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13, minHeight: 44 }}
+              style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13, minHeight: 44 }}
             />
             <div style={{ display: 'flex', gap: 10 }}>
               <input
@@ -33,22 +33,22 @@ export function MProductos({ df }: { df: DealFlowState }) {
                 value={df.newProdPrecio}
                 onChange={(e) => df.setNewProdPrecio(e.target.value)}
                 placeholder="Precio (COP)"
-                style={{ flex: 1, minWidth: 0, border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
+                style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
               />
               <input
                 className="df-input"
                 value={df.newProdStock}
                 onChange={(e) => df.setNewProdStock(e.target.value)}
                 placeholder="Stock"
-                style={{ width: 90, border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
+                style={{ width: 90, border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
               />
             </div>
           </div>
-          {df.newProdError && <div style={{ color: '#DC2626', fontSize: 13, marginBottom: 10 }}>Falta el nombre o el precio. Complétalos y vuelve a intentar.</div>}
+          {df.newProdError && <div style={{ color: 'var(--df-danger)', fontSize: 13, marginBottom: 10 }}>Falta el nombre o el precio. Complétalos y vuelve a intentar.</div>}
           <button
             onClick={df.crearProducto}
             className="df-btn-primary"
-            style={{ width: '100%', background: '#059669', color: '#fff', border: 'none', borderRadius: 10, padding: 13, fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+            style={{ width: '100%', background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: 13, fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
           >
             Crear producto
           </button>
@@ -56,13 +56,13 @@ export function MProductos({ df }: { df: DealFlowState }) {
       )}
 
       {df.products.length === 0 && !df.newProductOpen && (
-        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: '32px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: '32px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
           <div style={{ fontSize: 15, fontWeight: 600 }}>Aún no tienes productos.</div>
-          <div style={{ color: '#64748B', fontSize: 13 }}>Crea el primero y el asistente empieza a ofrecerlo en WhatsApp.</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Crea el primero y el asistente empieza a ofrecerlo en WhatsApp.</div>
           <button
             onClick={df.toggleNewProduct}
             className="df-btn-primary"
-            style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', minHeight: 44 }}
+            style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', minHeight: 44 }}
           >
             + Crear mi primer producto
           </button>
@@ -71,24 +71,24 @@ export function MProductos({ df }: { df: DealFlowState }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {df.products.map((p) => (
-          <div key={p.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+          <div key={p.id} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
             <div onClick={p.toggle} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 14px', cursor: 'pointer' }}>
               {p.previewImg
                 ? <img src={p.previewImg} alt="" style={{ width: 46, height: 46, borderRadius: 10, objectFit: 'cover', flexShrink: 0, border: '1px solid rgba(15,23,42,.08)' }} />
                 : <div style={{ ...p.fotoStyle, width: 46, height: 46, flexShrink: 0 }}>{p.iniciales}</div>}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 14.5 }}>{p.nombre}</div>
-                <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 1 }}>
+                <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, marginTop: 1 }}>
                   {p.precioFmt} · {p.variantesLabel}
                 </div>
               </div>
               <span style={p.stockPill}>{p.stockLabel}</span>
-              <span style={{ color: '#94A3B8', fontSize: 11 }}>{p.chevron}</span>
+              <span style={{ color: 'var(--df-text-faint)', fontSize: 11 }}>{p.chevron}</span>
             </div>
 
             {p.expanded && (
-              <div style={{ background: '#F8FAFC', borderTop: '1px solid #F1F5F9', padding: 14 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+              <div style={{ background: 'var(--df-bg)', borderTop: '1px solid var(--df-border)', padding: 14 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Datos del producto
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -96,17 +96,17 @@ export function MProductos({ df }: { df: DealFlowState }) {
                     className="df-input"
                     value={p.nombre}
                     onChange={(e) => p.setNombre(e.target.value)}
-                    style={{ flex: 1, minWidth: 0, border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, minHeight: 44, boxSizing: 'border-box' }}
+                    style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, minHeight: 44, boxSizing: 'border-box' }}
                   />
                   <input
                     className="df-input"
                     value={String(p.precio)}
                     onChange={(e) => p.setPrecio(e.target.value)}
-                    style={{ width: 100, border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
+                    style={{ width: 100, border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
                   />
                 </div>
 
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Fotos principales · las envía el asistente
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -121,31 +121,31 @@ export function MProductos({ df }: { df: DealFlowState }) {
                   <PhotoDropTile size={58} label="Subir" onFiles={p.addMainFotos} />
                 </div>
 
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Variantes · cada una con sus fotos
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
                   {p.variantesDecorated.map((v, i) => (
                     <div
                       key={i}
-                      style={{ display: 'flex', alignItems: 'center', gap: 9, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px', minHeight: 44, boxSizing: 'border-box' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', minHeight: 44, boxSizing: 'border-box' }}
                     >
                       <span style={v.swatchStyle} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ ...v.labelStyle, minWidth: 0 }}>{v.label}</div>
-                        <div style={{ color: '#64748B', fontSize: 11.5 }}>
+                        <div style={{ color: 'var(--df-text-muted)', fontSize: 11.5 }}>
                           {v.stockLabel} · {v.fotosLabel}
                         </div>
                       </div>
                       <span
                         onClick={v.decStock}
-                        style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: v.stock > 0 ? '#64748B' : '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, cursor: v.stock > 0 ? 'pointer' : 'default', userSelect: 'none', flexShrink: 0 }}
+                        style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid var(--df-border)', background: 'var(--df-surface)', color: v.stock > 0 ? 'var(--df-text-muted)' : 'var(--df-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, cursor: v.stock > 0 ? 'pointer' : 'default', userSelect: 'none', flexShrink: 0 }}
                       >
                         −
                       </span>
                       <span
                         onClick={v.incStock}
-                        style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, cursor: 'pointer', userSelect: 'none', flexShrink: 0 }}
+                        style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid var(--df-border)', background: 'var(--df-surface)', color: 'var(--df-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, cursor: 'pointer', userSelect: 'none', flexShrink: 0 }}
                       >
                         +
                       </span>
@@ -161,14 +161,14 @@ export function MProductos({ df }: { df: DealFlowState }) {
                       {v.deleteArmed ? (
                         <span
                           onClick={v.requestDelete}
-                          style={{ background: '#DC2626', color: '#fff', borderRadius: 8, padding: '7px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                          style={{ background: 'var(--df-danger)', color: '#fff', borderRadius: 8, padding: '7px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
                         >
                           Sí, quitar
                         </span>
                       ) : (
                         <span
                           onClick={v.requestDelete}
-                          style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}
+                          style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}
                         >
                           ✕
                         </span>
@@ -179,7 +179,7 @@ export function MProductos({ df }: { df: DealFlowState }) {
                     <span
                       onClick={df.openVariantForm}
                       className="df-upload-tile"
-                      style={{ alignSelf: 'flex-start', background: '#fff', border: '1px dashed #CBD5E1', color: '#64748B', borderRadius: 8, padding: '9px 12px', fontSize: 13, cursor: 'pointer' }}
+                      style={{ alignSelf: 'flex-start', background: 'var(--df-surface)', border: '1px dashed var(--df-border-strong)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 12px', fontSize: 13, cursor: 'pointer' }}
                     >
                       + Agregar variante
                     </span>
@@ -192,27 +192,27 @@ export function MProductos({ df }: { df: DealFlowState }) {
                           onChange={(e) => df.setVariantLabel(e.target.value)}
                           placeholder="Talla · Color (ej: M · Rojo)"
                           autoFocus
-                          style={{ flex: 1, minWidth: 0, border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
+                          style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
                         />
                         <input
                           className="df-input"
                           value={df.variantStock}
                           onChange={(e) => df.setVariantStock(e.target.value)}
                           placeholder="Stock"
-                          style={{ width: 80, border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
+                          style={{ width: 80, border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
                         />
                       </div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button
                           onClick={p.addVariante}
                           className="df-btn-outline-green"
-                          style={{ flex: 1, background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}
+                          style={{ flex: 1, background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}
                         >
                           Agregar variante
                         </button>
                         <button
                           onClick={df.cancelVariantForm}
-                          style={{ background: '#fff', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}
+                          style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}
                         >
                           Cancelar
                         </button>
@@ -220,19 +220,19 @@ export function MProductos({ df }: { df: DealFlowState }) {
                     </div>
                   )}
                 </div>
-                <div style={{ color: '#94A3B8', fontSize: 11.5, marginBottom: 12 }}>
+                <div style={{ color: 'var(--df-text-faint)', fontSize: 11.5, marginBottom: 12 }}>
                   Si el cliente elige un color o talla, el asistente envía solo las fotos de esa variante.
                 </div>
 
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
                   Reglas para el asistente
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
                   {p.reglasDecoradas.map((r, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px' }}>
-                      <span style={{ color: '#059669', fontWeight: 700, flexShrink: 0 }}>✓</span>
+                    <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px' }}>
+                      <span style={{ color: 'var(--df-brand)', fontWeight: 700, flexShrink: 0 }}>✓</span>
                       <span style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>{r.texto}</span>
-                      <span onClick={r.remove} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 4 }}>
+                      <span onClick={r.remove} className="df-danger-hover" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 4 }}>
                         ✕
                       </span>
                     </div>
@@ -247,12 +247,12 @@ export function MProductos({ df }: { df: DealFlowState }) {
                       if (e.key === 'Enter') p.addRegla();
                     }}
                     placeholder="Regla nueva…"
-                    style={{ flex: 1, minWidth: 0, border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
+                    style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13, minHeight: 44, boxSizing: 'border-box' }}
                   />
                   <button
                     onClick={p.addRegla}
                     className="df-btn-outline-green"
-                    style={{ background: '#fff', color: '#059669', border: '1px solid #059669', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 44 }}
+                    style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 44 }}
                   >
                     Agregar
                   </button>
@@ -260,17 +260,17 @@ export function MProductos({ df }: { df: DealFlowState }) {
                 <button
                   onClick={p.save}
                   className="df-btn-primary"
-                  style={{ width: '100%', background: '#059669', color: '#fff', border: 'none', borderRadius: 10, padding: 13, fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+                  style={{ width: '100%', background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: 13, fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
                 >
                   Guardar producto
                 </button>
-                {p.saved && <div style={{ textAlign: 'center', color: '#059669', fontSize: 13, fontWeight: 600, marginTop: 8 }}>✓ Producto guardado. El asistente ya lo ofrece así.</div>}
+                {p.saved && <div style={{ textAlign: 'center', color: 'var(--df-brand)', fontSize: 13, fontWeight: 600, marginTop: 8 }}>✓ Producto guardado. El asistente ya lo ofrece así.</div>}
                 <button
                   onClick={p.requestDelete}
                   style={
                     p.deleteArmed
-                      ? { width: '100%', background: '#DC2626', color: '#fff', border: '1px solid #DC2626', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', marginTop: 8 }
-                      : { width: '100%', background: '#fff', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', marginTop: 8 }
+                      ? { width: '100%', background: 'var(--df-danger)', color: '#fff', border: '1px solid var(--df-danger)', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', marginTop: 8 }
+                      : { width: '100%', background: 'var(--df-surface)', color: 'var(--df-danger)', border: '1px solid var(--df-danger-border)', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', marginTop: 8 }
                   }
                 >
                   {p.deleteArmed ? '¿Seguro? Sí, eliminar' : 'Eliminar producto'}

@@ -36,7 +36,7 @@ function itemStyle(active: boolean): CSSProperties {
     cursor: 'pointer',
     fontSize: 14.5,
     fontWeight: active ? 600 : 500,
-    color: active ? '#fff' : '#94A3B8',
+    color: active ? '#fff' : 'var(--df-text-faint)',
     background: active ? 'rgba(5,150,105,.32)' : 'transparent',
   };
 }
@@ -71,19 +71,19 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
             <div key={m.id} onClick={() => df.go(m.id)} style={itemStyle(df.section === m.id)}>
               <span>{m.label}</span>
               {m.id === 'pedidos' && df.hasNewOrders && (
-                <span style={{ marginLeft: 'auto', background: '#F59E0B', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 7px' }}>
+                <span style={{ marginLeft: 'auto', background: 'var(--df-warning-mid)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 7px' }}>
                   {df.newOrdersCount}
                 </span>
               )}
               {m.id === 'crm' && df.liveCount > 0 && (
-                <span style={{ marginLeft: 'auto', width: 7, height: 7, borderRadius: '50%', background: '#10B981', animation: 'dfpulse 1.8s infinite' }} />
+                <span style={{ marginLeft: 'auto', width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)', animation: 'dfpulse 1.8s infinite' }} />
               )}
             </div>
           ))}
 
         {df.isAdmin && (
           <>
-            <div style={{ color: '#64748B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 8px' }}>
+            <div style={{ color: 'var(--df-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 8px' }}>
               Administración
             </div>
             {ADMIN_ITEMS.map((m) => (
@@ -98,7 +98,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         <div
           onClick={df.toggleFloatingNav}
           className="df-toggle-mode"
-          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px', borderRadius: 8, cursor: 'pointer', color: df.floatingNav ? '#34D399' : '#94A3B8', fontSize: 13, fontWeight: 600, border: '1px solid #1E293B' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px', borderRadius: 8, cursor: 'pointer', color: df.floatingNav ? 'var(--df-brand-light)' : 'var(--df-text-faint)', fontSize: 13, fontWeight: 600, border: '1px solid var(--df-text-strong)' }}
         >
           <span style={{ fontSize: 15 }}>◉</span>
           <span>Botón flotante de menú: {df.floatingNav ? 'activado' : 'desactivado'}</span>
@@ -107,7 +107,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
           <div
             onClick={df.toggleMode}
             className="df-toggle-mode"
-            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px', borderRadius: 8, cursor: 'pointer', color: '#94A3B8', fontSize: 13, fontWeight: 600, border: '1px solid #1E293B' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px', borderRadius: 8, cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 13, fontWeight: 600, border: '1px solid var(--df-text-strong)' }}
           >
             <IconToggleMode />
             <span>{df.modeBtnLabel}</span>
@@ -117,7 +117,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
           <div
             onClick={df.instalarPwa}
             className="df-toggle-mode"
-            style={{ textAlign: 'center', padding: '12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: '#34D399', fontSize: 13, fontWeight: 700, border: '1px solid rgba(52,211,153,.35)', background: 'rgba(16,185,129,.08)' }}
+            style={{ textAlign: 'center', padding: '12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: 'var(--df-brand-light)', fontSize: 13, fontWeight: 700, border: '1px solid rgba(52,211,153,.35)', background: 'rgba(16,185,129,.08)' }}
           >
             📲 Instalar la app
           </div>
@@ -125,7 +125,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         <div
           onClick={df.logout}
           className="df-toggle-mode"
-          style={{ textAlign: 'center', padding: '11px 12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: '#94A3B8', fontSize: 12.5, fontWeight: 600 }}
+          style={{ textAlign: 'center', padding: '11px 12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 12.5, fontWeight: 600 }}
         >
           Cerrar sesión
         </div>
@@ -133,7 +133,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         <div
           onClick={df.resetDemo}
           className="df-toggle-mode"
-          style={{ textAlign: 'center', padding: '11px 12px', borderRadius: 8, cursor: 'pointer', color: '#64748B', fontSize: 12.5, fontWeight: 600 }}
+          style={{ textAlign: 'center', padding: '11px 12px', borderRadius: 8, cursor: 'pointer', color: 'var(--df-text-muted)', fontSize: 12.5, fontWeight: 600 }}
         >
           ↺ Restablecer demo
         </div>

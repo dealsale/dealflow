@@ -14,7 +14,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
   if (!df.mobileChatOpen || !chat) return null;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 55, background: '#F8FAFC', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'absolute', inset: 0, zIndex: 55, background: 'var(--df-bg)', display: 'flex', flexDirection: 'column' }}>
       <div
         style={{
           background: '#0F172A',
@@ -38,7 +38,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
         <div style={chat.avatarStyle}>{chat.iniciales}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 14.5 }}>{chat.nombre}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: '#94A3B8' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--df-text-faint)' }}>
             <span style={chat.liveDot} />
             {chat.liveLabel} · atiende {chat.asignado}
           </div>
@@ -46,14 +46,14 @@ export function MobileChat({ df }: { df: DealFlowState }) {
         <div
           onClick={() => df.abrirLogs(String(chat.id), chat.nombre)}
           title="Registro de actividad de este chat"
-          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94A3B8', fontSize: 18 }}
+          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 18 }}
         >
           🩺
         </div>
         <div
           onClick={df.resetChat}
           title="Reiniciar la conversación"
-          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94A3B8' }}
+          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--df-text-faint)' }}
         >
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
@@ -62,7 +62,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
         <div
           onClick={df.requestDeleteChat}
           title="Eliminar este chat"
-          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: df.crmDeleteArmed ? '#F87171' : '#94A3B8' }}
+          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: df.crmDeleteArmed ? '#F87171' : 'var(--df-text-faint)' }}
         >
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
@@ -70,7 +70,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
         </div>
       </div>
       {df.crmDeleteArmed && (
-        <div style={{ background: '#FEF2F2', color: '#DC2626', fontSize: 13, fontWeight: 600, textAlign: 'center', padding: '8px 14px' }} onClick={df.requestDeleteChat}>
+        <div style={{ background: 'var(--df-danger-subtle)', color: 'var(--df-danger)', fontSize: 13, fontWeight: 600, textAlign: 'center', padding: '8px 14px' }} onClick={df.requestDeleteChat}>
           Toca de nuevo la papelera para eliminar este chat
         </div>
       )}
@@ -83,7 +83,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
             <div key={i}>
               {nuevoDia && (
                 <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0 10px' }}>
-                  <span style={{ background: '#E2E8F0', color: '#475569', fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '3px 12px' }}>{m.fechaEtiqueta}</span>
+                  <span style={{ background: 'var(--df-border)', color: 'var(--df-text-secondary)', fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '3px 12px' }}>{m.fechaEtiqueta}</span>
                 </div>
               )}
               <div style={m.rowStyle}>
@@ -93,7 +93,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
                     {m.hora}
                     {m.estadoInfo && <span title={m.estadoInfo.titulo} style={{ color: m.estadoInfo.color, marginLeft: 5, fontWeight: 700 }}>{m.estadoInfo.texto}</span>}
                     {m.estado === 'fallido' && m.id && (
-                      <span onClick={() => df.reenviarMensaje(m.id!)} style={{ marginLeft: 8, cursor: 'pointer', fontWeight: 700, color: m.de === 'vendedor' ? '#fff' : '#DC2626', textDecoration: 'underline' }}>
+                      <span onClick={() => df.reenviarMensaje(m.id!)} style={{ marginLeft: 8, cursor: 'pointer', fontWeight: 700, color: m.de === 'vendedor' ? '#fff' : 'var(--df-danger)', textDecoration: 'underline' }}>
                         {df.reenviandoMsg === m.id ? 'Reenviando…' : '↻ Reenviar'}
                       </span>
                     )}
@@ -105,14 +105,14 @@ export function MobileChat({ df }: { df: DealFlowState }) {
         })}
         {df.crmTyping && (
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <div style={{ background: '#D1FAE5', border: '1px solid #A7F3D0', borderRadius: '12px 12px 4px 12px', padding: '9px 14px', fontSize: 13, color: '#047857' }}>
+            <div style={{ background: 'var(--df-brand-subtle)', border: '1px solid var(--df-brand-border)', borderRadius: '12px 12px 4px 12px', padding: '9px 14px', fontSize: 13, color: 'var(--df-brand-dark)' }}>
               El asistente está escribiendo…
             </div>
           </div>
         )}
       </div>
 
-      <div style={{ padding: '12px 14px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)', borderTop: '1px solid #E2E8F0', background: '#fff' }}>
+      <div style={{ padding: '12px 14px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)', borderTop: '1px solid var(--df-border)', background: 'var(--df-surface)' }}>
         {df.crmNotIntervening && (
           <button
             onClick={df.intervene}
@@ -131,17 +131,17 @@ export function MobileChat({ df }: { df: DealFlowState }) {
                 value={df.crmDraft}
                 onChange={(e) => df.setCrmDraft(e.target.value)}
                 placeholder="Escribe tu mensaje…"
-                style={{ flex: 1, minWidth: 0, border: '1px solid #E2E8F0', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontSize: 14, minHeight: 44, boxSizing: 'border-box' }}
+                style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontSize: 14, minHeight: 44, boxSizing: 'border-box' }}
               />
               <button
                 onClick={df.sendCrm}
                 className="df-btn-primary"
-                style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', minHeight: 44 }}
+                style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', minHeight: 44 }}
               >
                 Enviar
               </button>
             </div>
-            <div onClick={df.backToBot} style={{ textAlign: 'center', color: '#64748B', fontSize: 13, fontWeight: 600, marginTop: 10, cursor: 'pointer' }}>
+            <div onClick={df.backToBot} style={{ textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 13, fontWeight: 600, marginTop: 10, cursor: 'pointer' }}>
               Devolver al asistente
             </div>
           </>

@@ -14,6 +14,8 @@ export interface AuthUser {
   storeId: string | null;
   /** Si el admin está "entrando" a una tienda (impersonando), aquí va su id para poder volver. */
   imp?: string;
+  /** Foto de perfil (URL), opcional. */
+  foto?: string;
 }
 
 declare global {

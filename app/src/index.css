@@ -1,5 +1,124 @@
+/* ════════════════════════════════════════════════════════════════════
+   TEMA: variables de color. 'light' (por defecto, valores originales de
+   siempre) y 'dark' ("Dark System": navy/glass con acentos neón). Se elige
+   con el atributo data-theme en <html> (ver ProfileMenu / useDealFlowState).
+   TODO el color de la app pasa por estas variables — así un solo interruptor
+   cambia diseño, tarjetas, textos y bordes en toda la aplicación.
+   ════════════════════════════════════════════════════════════════════ */
 :root {
   color-scheme: light;
+
+  /* Superficies / neutros */
+  --df-surface: #fff;
+  --df-bg: #F8FAFC;
+  --df-surface-2: #F1F5F9;
+  --df-border: #E2E8F0;
+  --df-border-strong: #CBD5E1;
+  --df-text: #0F172A;
+  --df-text-strong: #1E293B;
+  --df-text-body: #334155;
+  --df-text-secondary: #475569;
+  --df-text-muted: #64748B;
+  --df-text-faint: #94A3B8;
+
+  /* Marca (verde esmeralda) */
+  --df-brand: #059669;
+  --df-brand-dark: #047857;
+  --df-brand-mid: #10B981;
+  --df-brand-light: #34D399;
+  --df-brand-border: #A7F3D0;
+  --df-brand-subtle: #D1FAE5;
+  --df-brand-subtle-2: #ECFDF5;
+  --df-brand-subtle-3: #F0FDF4;
+  --df-brand-deep: #064E3B;
+  --df-green-subtle: #DCFCE7;
+  --df-green-700: #15803D;
+
+  /* Púrpura / índigo (Effi, acentos) */
+  --df-purple: #6D28D9;
+  --df-indigo: #4338CA;
+  --df-purple-subtle: #EDE9FE;
+  --df-purple-border: #DDD6FE;
+  --df-indigo-subtle: #E0E7FF;
+  --df-info: #1D4ED8;
+  --df-info-subtle: #DBEAFE;
+
+  /* Peligro (rojo) */
+  --df-danger: #DC2626;
+  --df-danger-dark: #B91C1C;
+  --df-danger-border: #FECACA;
+  --df-danger-subtle: #FEF2F2;
+  --df-danger-subtle-2: #FEE2E2;
+  --df-danger-mid: #EF4444;
+  --df-danger-light: #FCA5A5;
+
+  /* Advertencia (ámbar) */
+  --df-warning: #B45309;
+  --df-warning-border: #FDE68A;
+  --df-warning-mid: #F59E0B;
+  --df-warning-subtle-2: #FFFBEB;
+  --df-warning-light: #FBBF24;
+  --df-warning-subtle: #FEF3C7;
+
+  /* Banner de aviso (fijo, no cambia con el tema) */
+  --df-alert-brown: #78350F;
+
+  /* Flourish del Dark System: en claro, sin efectos de más. */
+  --df-glow: none;
+  --df-page-bg: var(--df-bg);
+  --df-noise-opacity: 0;
+}
+
+/* "Dark System": la app SIEMPRE fija data-theme="light" o "dark" en <html>
+   (ver useDealFlowState → theme), según lo que haya elegido el usuario en
+   el menú de perfil (por defecto: claro). Un solo atributo, un solo bloque. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --df-surface: #121A2E;
+  --df-bg: #05070D;
+  --df-surface-2: #18213A;
+  --df-border: #232F4D;
+  --df-border-strong: #374873;
+  --df-text: #F3F6FC;
+  --df-text-strong: #E7ECF7;
+  --df-text-body: #C9D3E8;
+  --df-text-secondary: #AAB8D6;
+  --df-text-muted: #93A2C4;
+  --df-text-faint: #8493B5;
+  --df-brand: #10B981;
+  --df-brand-dark: #34D399;
+  --df-brand-mid: #34D399;
+  --df-brand-light: #6EE7B7;
+  --df-brand-border: rgba(16, 185, 129, 0.35);
+  --df-brand-subtle: rgba(16, 185, 129, 0.16);
+  --df-brand-subtle-2: rgba(16, 185, 129, 0.1);
+  --df-brand-subtle-3: rgba(16, 185, 129, 0.08);
+  --df-brand-deep: #a7f3d0;
+  --df-green-subtle: rgba(16, 185, 129, 0.14);
+  --df-green-700: #4ade80;
+  --df-purple: #a78bfa;
+  --df-indigo: #818cf8;
+  --df-purple-subtle: rgba(124, 58, 237, 0.16);
+  --df-purple-border: rgba(167, 139, 250, 0.35);
+  --df-indigo-subtle: rgba(129, 140, 248, 0.14);
+  --df-info: #60a5fa;
+  --df-info-subtle: rgba(96, 165, 250, 0.14);
+  --df-danger: #f87171;
+  --df-danger-dark: #fca5a5;
+  --df-danger-border: rgba(248, 113, 113, 0.35);
+  --df-danger-subtle: rgba(248, 113, 113, 0.1);
+  --df-danger-subtle-2: rgba(248, 113, 113, 0.16);
+  --df-danger-mid: #f87171;
+  --df-danger-light: #fca5a5;
+  --df-warning: #fbbf24;
+  --df-warning-border: rgba(251, 191, 36, 0.35);
+  --df-warning-mid: #fbbf24;
+  --df-warning-subtle-2: rgba(251, 191, 36, 0.08);
+  --df-warning-light: #fcd34d;
+  --df-warning-subtle: rgba(251, 191, 36, 0.14);
+  --df-glow: 0 0 0 1px rgba(96, 165, 250, 0.15), 0 8px 30px -8px rgba(59, 130, 246, 0.35);
+  --df-page-bg: radial-gradient(circle at 12% 0%, #101a35 0%, transparent 45%), radial-gradient(circle at 88% 8%, #1a1035 0%, transparent 40%), var(--df-bg);
+  --df-noise-opacity: 0.05;
 }
 
 * {
@@ -18,19 +137,49 @@ body,
 }
 
 body {
+  background: var(--df-page-bg);
+  color: var(--df-text);
   font-family: 'Inter', system-ui, sans-serif;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Todo lo que use estas variables transiciona suave al cambiar de tema. */
+*,
+*::before,
+*::after {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Barra de scroll: discreta en claro, con brillo sutil en Dark System. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--df-border-strong);
+  border-radius: 999px;
+}
+:root[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #2f3f66;
+}
+::selection {
+  background: var(--df-brand);
+  color: #fff;
 }
 
 a {
-  color: #059669;
+  color: var(--df-brand);
   text-decoration: none;
 }
 a:hover {
-  color: #047857;
+  color: var(--df-brand-dark);
 }
 
 ::placeholder {
-  color: #94a3b8;
+  color: var(--df-text-faint);
 }
 
 button,
@@ -54,36 +203,36 @@ textarea {
 
 /* ── hover utilities (values match DealFlow App.dc.html style-hover attrs) ── */
 .df-btn-primary:hover {
-  background: #047857 !important;
+  background: var(--df-brand-dark) !important;
 }
 .df-btn-outline-green:hover {
-  background: #ecfdf5 !important;
+  background: var(--df-brand-subtle-2) !important;
 }
 .df-btn-amber:hover {
   background: #d97706 !important;
 }
 .df-card-hover-amber:hover {
-  border-color: #f59e0b !important;
+  border-color: var(--df-warning-mid) !important;
 }
 .df-card-hover-green:hover {
-  border-color: #059669 !important;
+  border-color: var(--df-brand) !important;
 }
 .df-row-hover:hover {
-  background: #f8fafc !important;
+  background: var(--df-bg) !important;
 }
 /* Ítems del menú desplegable moderno (Dropdown): resalte suave al pasar el mouse. */
 .df-dd-item:hover {
-  background: #f1f5f9 !important;
+  background: var(--df-surface-2) !important;
 }
 .df-danger-hover:hover {
-  color: #dc2626 !important;
+  color: var(--df-danger) !important;
 }
 .df-upload-tile:hover {
-  border-color: #059669 !important;
-  color: #059669 !important;
+  border-color: var(--df-brand) !important;
+  color: var(--df-brand) !important;
 }
 .df-close-hover:hover {
-  color: #1e293b !important;
+  color: var(--df-text-strong) !important;
 }
 .df-toggle-mode:hover {
   color: #fff !important;
@@ -102,24 +251,34 @@ textarea {
   transform: translateY(-2px);
 }
 .df-hamburger:hover {
-  background: #f1f5f9 !important;
-  color: #0f172a !important;
+  background: var(--df-surface-2) !important;
+  color: var(--df-text) !important;
 }
 .df-floatnav-item:hover {
   background: #1e293b !important;
   color: #fff !important;
 }
 .df-copy-btn:hover {
-  border-color: #059669 !important;
-  color: #059669 !important;
+  border-color: var(--df-brand) !important;
+  color: var(--df-brand) !important;
 }
 .df-copy-hover:hover {
-  color: #059669 !important;
+  color: var(--df-brand) !important;
 }
 .df-input:focus {
   outline: none;
-  border-color: #059669 !important;
+  border-color: var(--df-brand) !important;
   box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
+}
+:root[data-theme='dark'] .df-input:focus {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22), var(--df-glow);
+}
+
+/* Dark System: brillo sutil en los botones de acción al pasar el mouse. */
+:root[data-theme='dark'] .df-btn-primary,
+:root[data-theme='dark'] .df-btn-amber,
+:root[data-theme='dark'] .df-btn-outline-green {
+  box-shadow: var(--df-glow);
 }
 
 @keyframes dfspin {

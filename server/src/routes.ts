@@ -25,8 +25,8 @@ function horaBogota(dt: unknown): string {
 api.post('/auth/login', (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'Escribe tu correo y tu contraseña.' });
-  const row = db.prepare('SELECT id, email, password_hash, nombre, role, store_id FROM users WHERE email = ?').get(String(email).toLowerCase().trim()) as
-    | { id: string; email: string; password_hash: string; nombre: string; role: 'VENDEDOR' | 'ADMIN'; store_id: string | null }
+  const row = db.prepare('SELECT id, email, password_hash, nombre, role, store_id, foto FROM users WHERE email = ?').get(String(email).toLowerCase().trim()) as
+    | { id: string; email: string; password_hash: string; nombre: string; role: 'VENDEDOR' | 'ADMIN'; store_id: string | null; foto: string }
     | undefined;
   if (!row || !verifyPassword(String(password), row.password_hash)) {
     return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
@@ -35,7 +35,7 @@ api.post('/auth/login', (req, res) => {
     const store = db.prepare('SELECT activa FROM stores WHERE id = ?').get(row.store_id) as { activa: number } | undefined;
     if (!store?.activa) return res.status(403).json({ error: 'Tu cuenta está desactivada. Escríbenos para reactivarla.' });
   }
-  const user: AuthUser = { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id };
+  const user: AuthUser = { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id, foto: row.foto || undefined };
   setAuthCookie(res, user);
   res.json({ user: { ...user, esDueno: esDuenoDeTienda(user) } });
 });
@@ -83,15 +83,65 @@ api.get('/auth/me', requireAuth, (req, res) => {
   res.json({ user: { ...req.user, esDueno: esDuenoDeTienda(req.user), impersonando, tiendaNombre } });
 });
 
+// ── Perfil de la cuenta (cualquier rol: vendedor, admin o superadmin) ──
+// Cambia el nombre visible. Reemite la cookie para que el cambio se vea de inmediato.
+api.patch('/me', requireAuth, (req, res) => {
+  const nombre = String(req.body?.nombre || '').trim();
+  if (!nombre) return res.status(400).json({ error: 'Escribe tu nombre.' });
+  if (nombre.length > 60) return res.status(400).json({ error: 'El nombre es muy largo.' });
+  db.prepare('UPDATE users SET nombre = ? WHERE id = ?').run(nombre, req.user!.id);
+  const user: AuthUser = { ...req.user!, nombre };
+  setAuthCookie(res, user);
+  res.json({ user: { ...user, esDueno: esDuenoDeTienda(user) } });
+});
+
+// Foto de perfil: se guarda en un espacio propio de "cuentas" (no depende de la
+// tienda), así sirve igual para VENDEDOR, ADMIN o SUPERADMIN.
+api.post('/me/foto', requireAuth, (req, res) => {
+  const { dataUrl } = req.body || {};
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return res.status(400).json({ error: 'Sube una imagen válida.' });
+  const saved = saveOutgoingMedia('__cuentas__', dataUrl, 'avatar');
+  if (!saved) return res.status(400).json({ error: 'No pudimos guardar la foto.' });
+  const url = saved.url.replace('/api/media/__cuentas__/', '/api/me/media/');
+  db.prepare('UPDATE users SET foto = ? WHERE id = ?').run(url, req.user!.id);
+  const user: AuthUser = { ...req.user!, foto: url };
+  setAuthCookie(res, user);
+  res.json({ ok: true, foto: url, user: { ...user, esDueno: esDuenoDeTienda(user) } });
+});
+
+// Sirve las fotos de perfil (cualquier usuario autenticado puede verlas, como en
+// cualquier avatar de equipo; no es información sensible).
+api.get('/me/media/:file', requireAuth, (req, res) => {
+  const file = mediaPath('__cuentas__', req.params.file);
+  if (!existsSync(file)) return res.status(404).end();
+  res.sendFile(file);
+});
+
+// Cambiar la contraseña. Solo para cuentas de tienda (VENDEDOR): la de
+// ADMIN/SUPERADMIN se sincroniza siempre desde ADMIN_PASSWORD/SUPERADMIN_PASSWORD
+// en cada arranque, así que cambiarla aquí se perdería en el próximo despliegue.
+api.post('/me/password', requireAuth, (req, res) => {
+  if (req.user!.role !== 'VENDEDOR') {
+    return res.status(400).json({ error: 'Esta cuenta usa una contraseña fija por variable de entorno (ADMIN_PASSWORD/SUPERADMIN_PASSWORD). Pide al equipo técnico cambiarla ahí.' });
+  }
+  const { actual, nueva } = req.body || {};
+  if (!actual || !nueva) return res.status(400).json({ error: 'Escribe tu contraseña actual y la nueva.' });
+  if (String(nueva).length < 6) return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user!.id) as { password_hash: string } | undefined;
+  if (!row || !verifyPassword(String(actual), row.password_hash)) return res.status(401).json({ error: 'Tu contraseña actual no es correcta.' });
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(nueva)), req.user!.id);
+  res.json({ ok: true });
+});
+
 // El admin vuelve a su panel después de "entrar" a una tienda (impersonar).
 api.post('/auth/stop-impersonate', requireAuth, (req, res) => {
   const adminId = req.user!.imp;
   if (!adminId) return res.status(400).json({ error: 'No estás dentro de ninguna tienda.' });
-  const row = db.prepare("SELECT id, email, nombre, role, store_id FROM users WHERE id = ? AND role = 'ADMIN'").get(adminId) as
-    | { id: string; email: string; nombre: string; role: 'VENDEDOR' | 'ADMIN'; store_id: string | null }
+  const row = db.prepare("SELECT id, email, nombre, role, store_id, foto FROM users WHERE id = ? AND role = 'ADMIN'").get(adminId) as
+    | { id: string; email: string; nombre: string; role: 'VENDEDOR' | 'ADMIN'; store_id: string | null; foto: string }
     | undefined;
   if (!row) return res.status(403).json({ error: 'No pudimos volver a tu sesión de administrador.' });
-  setAuthCookie(res, { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id });
+  setAuthCookie(res, { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id, foto: row.foto || undefined });
   res.json({ ok: true });
 });
 
@@ -113,7 +163,7 @@ api.post('/cambiar-tienda/:id', requireAuth, requireStore, (req, res) => {
   const esMia = !!s && (s.owner_user_id === req.user!.id || s.correo === req.user!.email);
   if (!esMia) return res.status(404).json({ error: 'Esa tienda no es tuya.' });
   db.prepare('UPDATE users SET store_id = ? WHERE id = ?').run(s.id, req.user!.id);
-  setAuthCookie(res, { id: req.user!.id, email: req.user!.email, nombre: req.user!.nombre, role: req.user!.role, storeId: s.id });
+  setAuthCookie(res, { ...req.user!, storeId: s.id });
   res.json({ ok: true });
 });
 
@@ -130,7 +180,7 @@ api.post('/crear-tienda', requireAuth, requireStore, (req, res) => {
   void import('./creditos.js').then(({ abonar, CREDITOS_BIENVENIDA }) => abonar(storeId, CREDITOS_BIENVENIDA, 'Créditos de bienvenida'));
   // Deja al dueño parado en la tienda nueva.
   db.prepare('UPDATE users SET store_id = ? WHERE id = ?').run(storeId, req.user!.id);
-  setAuthCookie(res, { id: req.user!.id, email: req.user!.email, nombre: req.user!.nombre, role: req.user!.role, storeId });
+  setAuthCookie(res, { ...req.user!, storeId });
   res.json({ ok: true, storeId });
 });
 

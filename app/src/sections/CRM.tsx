@@ -39,7 +39,7 @@ export function CRM({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="CRM">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Inbox · Chats en vivo</h1>
-      <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 14px' }}>Lo que pasa ahora mismo en tu WhatsApp. Entra a un chat si quieres tomar el control.</p>
+      <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 14px' }}>Lo que pasa ahora mismo en tu WhatsApp. Entra a un chat si quieres tomar el control.</p>
 
       {/* Todos los filtros en una sola fila compacta: búsqueda + menús desplegables. */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
@@ -65,10 +65,10 @@ export function CRM({ df }: { df: DealFlowState }) {
         {custom && (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input type="date" value={desde} max={hasta || undefined} onChange={(e) => setDesde(e.target.value)} title="Desde"
-              style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, color: '#334155' }} />
-            <span style={{ color: '#94A3B8', fontSize: 12 }}>→</span>
+              style={{ border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, color: 'var(--df-text-body)' }} />
+            <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>→</span>
             <input type="date" value={hasta} min={desde || undefined} onChange={(e) => setHasta(e.target.value)} title="Hasta"
-              style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, color: '#334155' }} />
+              style={{ border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, color: 'var(--df-text-body)' }} />
           </div>
         )}
         <div style={{ flex: 1 }} />
@@ -76,7 +76,7 @@ export function CRM({ df }: { df: DealFlowState }) {
         <button
           onClick={() => df.abrirLogs()}
           title="Ver el registro de actividad y errores de toda la tienda"
-          style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 6px' }}
+          style={{ background: 'transparent', border: 'none', color: 'var(--df-text-faint)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 6px' }}
         >
           🩺 Registro general
         </button>
@@ -85,9 +85,9 @@ export function CRM({ df }: { df: DealFlowState }) {
       <ActivityLog df={df} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
-        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
           {chatsFiltrados.length === 0 && (
-            <div style={{ padding: '28px 16px', textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>
+            <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--df-text-faint)', fontSize: 13 }}>
               Ningún chat coincide con el filtro.
             </div>
           )}
@@ -99,18 +99,18 @@ export function CRM({ df }: { df: DealFlowState }) {
                   <span style={{ fontWeight: 600, fontSize: 14 }}>{c.nombre}</span>
                   {c.canal === 'web' && <span title="Llegó por el chat web" style={{ fontSize: 11 }}>🌐</span>}
                   {c.etiquetaStyle && <span style={c.etiquetaStyle}>{c.etiqueta}</span>}
-                  <span style={{ color: c.sinResponder ? '#059669' : '#94A3B8', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11.5, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
+                  <span style={{ color: c.sinResponder ? 'var(--df-brand)' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11.5, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ color: c.sinResponder ? '#0F172A' : '#64748B', fontWeight: c.sinResponder ? 600 : 400, fontSize: 12.5, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{c.ultimo}</div>
+                  <div style={{ color: c.sinResponder ? 'var(--df-text)' : 'var(--df-text-muted)', fontWeight: c.sinResponder ? 600 : 400, fontSize: 12.5, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{c.ultimo}</div>
                   {c.sinResponder > 0 && (
-                    <span title={`${c.sinResponder} mensaje(s) sin responder`} style={{ flexShrink: 0, minWidth: 18, height: 18, borderRadius: 999, background: '#10B981', color: '#fff', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>{c.sinResponder}</span>
+                    <span title={`${c.sinResponder} mensaje(s) sin responder`} style={{ flexShrink: 0, minWidth: 18, height: 18, borderRadius: 999, background: 'var(--df-brand-mid)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>{c.sinResponder}</span>
                   )}
                 </div>
                 <div style={c.liveStyle}>
                   <span style={c.liveDot} />
                   <span>{c.liveLabel}</span>
-                  <span style={{ color: '#94A3B8', fontWeight: 500 }}>· atiende {c.asignado}</span>
+                  <span style={{ color: 'var(--df-text-faint)', fontWeight: 500 }}>· atiende {c.asignado}</span>
                 </div>
               </div>
             </div>
@@ -118,12 +118,12 @@ export function CRM({ df }: { df: DealFlowState }) {
         </div>
 
         {chat && (
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', height: 'min(70vh, 620px)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid #F1F5F9' }}>
+          <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', height: 'min(70vh, 620px)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--df-border)' }}>
               <div style={chat.avatarStyle}>{chat.iniciales}</div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{chat.nombre}</div>
-                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: '#64748B' }}>{chat.tel}</div>
+                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-muted)' }}>{chat.tel}</div>
               </div>
               <div style={chat.liveStyle}>
                 <span style={chat.liveDot} />
@@ -141,14 +141,14 @@ export function CRM({ df }: { df: DealFlowState }) {
               <button
                 onClick={() => df.abrirLogs(String(chat.id), chat.nombre)}
                 title="Ver el registro de actividad de ESTE chat"
-                style={{ background: '#fff', color: '#475569', border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                style={{ background: 'var(--df-surface)', color: 'var(--df-text-secondary)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}
               >
                 🩺 Registro
               </button>
               <button
                 onClick={df.resetChat}
                 title="Borra el historial y devuelve el chat al asistente"
-                style={{ background: '#fff', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}
+                style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}
               >
                 Reiniciar
               </button>
@@ -157,15 +157,15 @@ export function CRM({ df }: { df: DealFlowState }) {
                 title="Elimina este chat por completo"
                 style={
                   df.crmDeleteArmed
-                    ? { background: '#DC2626', color: '#fff', border: '1px solid #DC2626', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }
-                    : { background: '#fff', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }
+                    ? { background: 'var(--df-danger)', color: '#fff', border: '1px solid var(--df-danger)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }
+                    : { background: 'var(--df-surface)', color: 'var(--df-danger)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }
                 }
               >
                 {df.crmDeleteArmed ? '¿Seguro? Sí, eliminar' : 'Eliminar'}
               </button>
             </div>
 
-            <div ref={scrollRef} style={{ flex: 1, background: '#F8FAFC', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+            <div ref={scrollRef} style={{ flex: 1, background: 'var(--df-bg)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
               {chat.mensajesDecorated.map((m, i) => {
                 const prev = chat.mensajesDecorated[i - 1];
                 const nuevoDia = !!m.fecha && m.fecha !== (prev?.fecha || '');
@@ -173,7 +173,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                   <div key={i}>
                     {nuevoDia && (
                       <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0 10px' }}>
-                        <span style={{ background: '#E2E8F0', color: '#475569', fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '3px 12px' }}>{m.fechaEtiqueta}</span>
+                        <span style={{ background: 'var(--df-border)', color: 'var(--df-text-secondary)', fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '3px 12px' }}>{m.fechaEtiqueta}</span>
                       </div>
                     )}
                     <div style={m.rowStyle}>
@@ -186,7 +186,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                             <span
                               onClick={() => df.reenviarMensaje(m.id!)}
                               title="Reenviar este mensaje"
-                              style={{ marginLeft: 8, cursor: 'pointer', fontWeight: 700, color: m.de === 'vendedor' ? '#fff' : '#DC2626', textDecoration: 'underline' }}
+                              style={{ marginLeft: 8, cursor: 'pointer', fontWeight: 700, color: m.de === 'vendedor' ? '#fff' : 'var(--df-danger)', textDecoration: 'underline' }}
                             >
                               {df.reenviandoMsg === m.id ? 'Reenviando…' : '↻ Reenviar'}
                             </span>
@@ -199,17 +199,17 @@ export function CRM({ df }: { df: DealFlowState }) {
               })}
               {df.crmTyping && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <div style={{ background: '#D1FAE5', border: '1px solid #A7F3D0', borderRadius: '12px 12px 4px 12px', padding: '9px 14px', fontSize: 13, color: '#047857' }}>
+                  <div style={{ background: 'var(--df-brand-subtle)', border: '1px solid var(--df-brand-border)', borderRadius: '12px 12px 4px 12px', padding: '9px 14px', fontSize: 13, color: 'var(--df-brand-dark)' }}>
                     El asistente está escribiendo…
                   </div>
                 </div>
               )}
             </div>
 
-            <div style={{ padding: '14px 18px', borderTop: '1px solid #F1F5F9' }}>
+            <div style={{ padding: '14px 18px', borderTop: '1px solid var(--df-border)' }}>
               {df.crmNotIntervening && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ color: '#64748B', fontSize: 13, flex: 1 }}>El asistente está atendiendo este chat.</span>
+                  <span style={{ color: 'var(--df-text-muted)', fontSize: 13, flex: 1 }}>El asistente está atendiendo este chat.</span>
                   <button
                     onClick={df.intervene}
                     style={{ background: '#0F172A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
@@ -230,25 +230,25 @@ export function CRM({ df }: { df: DealFlowState }) {
                       if (e.key === 'Enter') df.sendCrm();
                     }}
                     placeholder="Escribe tu mensaje…"
-                    style={{ flex: 1, border: '1px solid #E2E8F0', borderRadius: 8, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                    style={{ flex: 1, border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13 }}
                   />
                   <button
                     onClick={df.sendCrm}
                     className="df-btn-primary"
-                    style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                    style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
                   >
                     Enviar
                   </button>
                   <button
                     onClick={df.backToBot}
-                    style={{ background: '#fff', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 8, padding: '11px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
                   >
                     Devolver al asistente
                   </button>
                 </div>
               )}
               {df.crmSendWarn && (
-                <div style={{ color: '#B45309', fontSize: 12.5, marginTop: 8 }}>
+                <div style={{ color: 'var(--df-warning)', fontSize: 12.5, marginTop: 8 }}>
                   Guardado en el CRM, pero no salió por WhatsApp: {df.crmSendWarn}
                 </div>
               )}

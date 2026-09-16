@@ -38,7 +38,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
       style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 8, cursor: 'pointer',
         fontSize: 13.5, fontWeight: active ? 600 : 500,
-        color: active ? '#fff' : '#94A3B8', background: active ? 'rgba(5,150,105,.32)' : 'transparent',
+        color: active ? '#fff' : 'var(--df-text-faint)', background: active ? 'rgba(5,150,105,.32)' : 'transparent',
       }}
     >
       {icon}
@@ -60,7 +60,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
           <div
             style={{
               position: 'absolute', left: 0, bottom: 66, zIndex: 45, width: 224, maxHeight: '72vh', overflowY: 'auto',
-              background: '#0F172A', border: '1px solid #1E293B', borderRadius: 14, padding: 8,
+              background: '#0F172A', border: '1px solid var(--df-text-strong)', borderRadius: 14, padding: 8,
               boxShadow: '0 26px 60px -18px rgba(0,0,0,.65)', display: 'flex', flexDirection: 'column', gap: 2,
             }}
           >
@@ -69,12 +69,12 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                 {item('resumen', <IconResumen />, 'Resumen')}
                 {item('productos', <IconProductos />, 'Productos')}
                 {item('asistente', <IconAsistente />, 'Asistente')}
-                {item('whatsapp', <IconWhatsApp />, 'WhatsApp', df.waConnected && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981' }} />)}
+                {item('whatsapp', <IconWhatsApp />, 'WhatsApp', df.waConnected && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)' }} />)}
                 {item('pedidos', <IconPedidos />, 'Pedidos', df.hasNewOrders && (
-                  <span style={{ background: '#F59E0B', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 7px' }}>{df.newOrdersCount}</span>
+                  <span style={{ background: 'var(--df-warning-mid)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 7px' }}>{df.newOrdersCount}</span>
                 ))}
                 {item('leads', <IconLeads />, 'Leads')}
-                {item('crm', <IconCRM />, 'Inbox', <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', animation: 'dfpulse 1.8s infinite' }} />)}
+                {item('crm', <IconCRM />, 'Inbox', <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)', animation: 'dfpulse 1.8s infinite' }} />)}
                 {item('marketing', <IconMarketing />, 'Marketing IA')}
                 {item('biblioteca', <IconBiblioteca />, 'Biblioteca')}
                 {item('dealshop', <IconDealShop />, 'DealShop')}
@@ -84,7 +84,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
             )}
             {df.isAdmin && (
               <>
-                <div style={{ color: '#64748B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 6px' }}>
+                <div style={{ color: 'var(--df-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 6px' }}>
                   {df.isSuperadmin ? 'Superadmin' : 'Administración'}
                 </div>
                 {df.isSuperadmin ? (

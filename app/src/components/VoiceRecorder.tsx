@@ -57,7 +57,7 @@ export function VoiceRecorder({ onRecorded, size = 40 }: { onRecorded: (f: File)
         onClick={start}
         className="df-close-hover"
         title="Grabar nota de voz"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, minWidth: size, borderRadius: 8, cursor: 'pointer', color: '#64748B', flexShrink: 0 }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, minWidth: size, borderRadius: 8, cursor: 'pointer', color: 'var(--df-text-muted)', flexShrink: 0 }}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
           <rect x="9" y="3" width="6" height="11" rx="3" />
@@ -68,18 +68,18 @@ export function VoiceRecorder({ onRecorded, size = 40 }: { onRecorded: (f: File)
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '4px 8px', height: size, boxSizing: 'border-box' }}>
-      <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#DC2626', animation: 'dfpulse 1.2s infinite', flexShrink: 0 }} />
-      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: '#DC2626', fontWeight: 600, minWidth: 40 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-danger-subtle)', border: '1px solid var(--df-danger-border)', borderRadius: 10, padding: '4px 8px', height: size, boxSizing: 'border-box' }}>
+      <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--df-danger)', animation: 'dfpulse 1.2s infinite', flexShrink: 0 }} />
+      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: 'var(--df-danger)', fontWeight: 600, minWidth: 40 }}>
         {mm}:{ss}
       </span>
-      <span onClick={() => stop(true)} title="Cancelar" className="df-close-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 13, padding: '0 4px' }}>
+      <span onClick={() => stop(true)} title="Cancelar" className="df-close-hover" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 13, padding: '0 4px' }}>
         Cancelar
       </span>
       <span
         onClick={() => stop(false)}
         title="Enviar nota de voz"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: '50%', background: '#059669', color: '#fff', cursor: 'pointer', flexShrink: 0 }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: '50%', background: 'var(--df-brand)', color: '#fff', cursor: 'pointer', flexShrink: 0 }}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}>
           <path d="M5 12l5 5L20 6" />

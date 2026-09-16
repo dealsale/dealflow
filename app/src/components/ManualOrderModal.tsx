@@ -74,24 +74,24 @@ export function ManualOrderModal({ df, open, onClose }: { df: DealFlowState; ope
     }
   };
 
-  const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13.5 };
-  const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#64748B', marginBottom: 5, display: 'block' };
+  const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13.5 };
+  const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 5, display: 'block' };
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', width: 'min(640px, 100%)', maxHeight: '88vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(15,23,42,.3)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px', borderBottom: '1px solid #F1F5F9' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--df-surface)', width: 'min(640px, 100%)', maxHeight: '88vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(15,23,42,.3)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px', borderBottom: '1px solid var(--df-border)' }}>
           <span style={{ fontSize: 18 }}>🧾</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, fontSize: 16 }}>Crear pedido manual</div>
-            <div style={{ color: '#94A3B8', fontSize: 12 }}>Para pedidos que no llegaron por el bot (logística manual).</div>
+            <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>Para pedidos que no llegaron por el bot (logística manual).</div>
           </div>
-          <span onClick={onClose} title="Cerrar" style={{ cursor: 'pointer', color: '#94A3B8', fontSize: 20, padding: 4, lineHeight: 1 }}>✕</span>
+          <span onClick={onClose} title="Cerrar" style={{ cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 20, padding: 4, lineHeight: 1 }}>✕</span>
         </div>
 
         <div style={{ overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#0F172A', letterSpacing: '.04em', textTransform: 'uppercase' }}>Datos del cliente</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Datos del cliente</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div><label style={lbl}>Nombre *</label><input value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Nombre y apellido" style={inp} /></div>
@@ -101,19 +101,19 @@ export function ManualOrderModal({ df, open, onClose }: { df: DealFlowState; ope
             <div style={{ gridColumn: '1 / -1' }}><label style={lbl}>Dirección</label><input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Calle 1 #2-3, apto…" style={inp} /></div>
           </div>
 
-          <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#0F172A', letterSpacing: '.04em', textTransform: 'uppercase' }}>Productos</span>
+          <div style={{ borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Productos</span>
           </div>
           {filas.map((f, i) => {
             const p = productos.find((x) => String(x.id) === f.productId);
             return (
-              <div key={i} style={{ border: '1px solid #E2E8F0', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, background: '#F8FAFC' }}>
+              <div key={i} style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--df-bg)' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <div style={{ flex: 1 }}>
                     <Dropdown ariaLabel="Producto" value={f.productId} onChange={(v) => elegirProducto(i, v)} options={opcionesProducto} placeholder="Selecciona un producto…" />
                   </div>
                   {filas.length > 1 && (
-                    <button onClick={() => quitarFila(i)} title="Quitar" style={{ background: '#fff', border: '1px solid #FECACA', color: '#DC2626', borderRadius: 8, width: 36, height: 36, cursor: 'pointer', fontSize: 15, flexShrink: 0 }}>✕</button>
+                    <button onClick={() => quitarFila(i)} title="Quitar" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-danger-border)', color: 'var(--df-danger)', borderRadius: 8, width: 36, height: 36, cursor: 'pointer', fontSize: 15, flexShrink: 0 }}>✕</button>
                   )}
                 </div>
                 {p && (p.opciones || []).length > 0 && (
@@ -135,33 +135,33 @@ export function ManualOrderModal({ df, open, onClose }: { df: DealFlowState; ope
                   <div style={{ width: 90 }}><label style={lbl}>Cantidad</label><input type="number" min={1} value={f.qty} onChange={(e) => setFila(i, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })} style={inp} /></div>
                   <div style={{ flex: 1 }}><label style={lbl}>Precio unitario</label><input type="number" min={0} value={f.precio} onChange={(e) => setFila(i, { precio: Math.max(0, parseInt(e.target.value, 10) || 0) })} style={inp} /></div>
                   <div style={{ textAlign: 'right', paddingBottom: 10, minWidth: 90 }}>
-                    <div style={{ fontSize: 11, color: '#94A3B8' }}>Subtotal</div>
+                    <div style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>Subtotal</div>
                     <div style={{ fontWeight: 700, fontSize: 14 }}>{fmt(Math.max(1, f.qty) * Math.max(0, f.precio))}</div>
                   </div>
                 </div>
               </div>
             );
           })}
-          <button onClick={agregarFila} style={{ alignSelf: 'flex-start', background: '#fff', border: '1px dashed #CBD5E1', color: '#475569', borderRadius: 10, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Agregar otro producto</button>
+          <button onClick={agregarFila} style={{ alignSelf: 'flex-start', background: 'var(--df-surface)', border: '1px dashed var(--df-border-strong)', color: 'var(--df-text-secondary)', borderRadius: 10, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Agregar otro producto</button>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
             <div><label style={lbl}>Envío</label><input type="number" min={0} value={envio} onChange={(e) => setEnvio(e.target.value)} placeholder="0" style={inp} /></div>
             <div style={{ textAlign: 'right', alignSelf: 'end' }}>
-              <div style={{ fontSize: 12, color: '#64748B' }}>Total del pedido</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#0F172A' }}>{fmt(total)}</div>
+              <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Total del pedido</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--df-text)' }}>{fmt(total)}</div>
             </div>
           </div>
           <div><label style={lbl}>Nota (opcional)</label><input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Punto de referencia, indicaciones…" style={inp} /></div>
 
           {(error || df.crearPedidoMsg) && (
-            <div style={{ color: error ? '#B91C1C' : '#64748B', fontSize: 13, background: error ? '#FEF2F2' : '#F8FAFC', border: `1px solid ${error ? '#FECACA' : '#E2E8F0'}`, borderRadius: 10, padding: '9px 12px' }}>{error || df.crearPedidoMsg}</div>
+            <div style={{ color: error ? 'var(--df-danger-dark)' : 'var(--df-text-muted)', fontSize: 13, background: error ? 'var(--df-danger-subtle)' : 'var(--df-bg)', border: `1px solid ${error ? 'var(--df-danger-border)' : 'var(--df-border)'}`, borderRadius: 10, padding: '9px 12px' }}>{error || df.crearPedidoMsg}</div>
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 10, padding: '14px 20px', borderTop: '1px solid #F1F5F9' }}>
+        <div style={{ display: 'flex', gap: 10, padding: '14px 20px', borderTop: '1px solid var(--df-border)' }}>
           <div style={{ flex: 1 }} />
-          <button onClick={onClose} style={{ background: '#fff', border: '1px solid #E2E8F0', color: '#475569', borderRadius: 10, padding: '11px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={guardar} style={{ background: '#059669', border: 'none', color: '#fff', borderRadius: 10, padding: '11px 22px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Crear pedido</button>
+          <button onClick={onClose} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-secondary)', borderRadius: 10, padding: '11px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={guardar} style={{ background: 'var(--df-brand)', border: 'none', color: '#fff', borderRadius: 10, padding: '11px 22px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Crear pedido</button>
         </div>
       </div>
     </div>

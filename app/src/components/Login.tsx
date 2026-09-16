@@ -27,7 +27,7 @@ const CSS = `
 .df-lg-eye { transform-origin: center; transform-box: fill-box; animation: dfBlink 4.4s infinite; animation-delay: var(--bdel,0s); }
 .df-lg-arm { transform-origin: top center; transform-box: fill-box; animation: dfWave 3.6s ease-in-out infinite; animation-delay: var(--wdel,.6s); }
 .df-lg-ant { animation: dfAntena 2s ease-in-out infinite; }
-.df-lg-spark { position:absolute; color:#FDE68A; animation: dfTwinkle var(--dur,3s) ease-in-out infinite; animation-delay: var(--del,0s); user-select:none; pointer-events:none; }
+.df-lg-spark { position:absolute; color:var(--df-warning-border); animation: dfTwinkle var(--dur,3s) ease-in-out infinite; animation-delay: var(--del,0s); user-select:none; pointer-events:none; }
 .df-lg-card { animation: dfCardIn .6s cubic-bezier(.2,.8,.25,1.1) both .1s; }
 .df-lg-card.err { animation: dfShake .5s both; }
 .df-lg-logo { animation: dfLogoBob 3.4s ease-in-out infinite; }
@@ -36,7 +36,7 @@ const CSS = `
 .df-lg-btn::after { content:""; position:absolute; top:0; left:-80%; width:50%; height:100%; background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent); transform:skewX(-20deg); transition:left .5s; }
 .df-lg-btn:hover::after { left:130%; }
 .df-lg-input { transition: border-color .2s, box-shadow .2s, transform .2s; }
-.df-lg-input:focus { outline:none; border-color:#34D399 !important; box-shadow:0 0 0 4px rgba(52,211,153,.18); }
+.df-lg-input:focus { outline:none; border-color:var(--df-brand-light) !important; box-shadow:0 0 0 4px rgba(52,211,153,.18); }
 .df-lg-blob { position:absolute; border-radius:50%; filter:blur(80px); pointer-events:none; animation: dfBlob 11s ease-in-out infinite; }
 @media (max-width: 640px) { .df-lg-bot.hide-sm { display:none; } }
 `;
@@ -50,7 +50,7 @@ function CuteBot({ body, dark, cheek, size, style, className, blinkDelay = '0s',
     <div className={`df-lg-bot ${className || ''}`} style={style} aria-hidden="true">
       <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
         {/* antena */}
-        <circle className="df-lg-ant" cx="32" cy="7" r="3.4" fill="#FDE68A" />
+        <circle className="df-lg-ant" cx="32" cy="7" r="3.4" fill="var(--df-warning-border)" />
         <rect x="30.9" y="9" width="2.2" height="5" rx="1" fill={dark} />
         {/* orejitas */}
         <rect x="6" y="30" width="5" height="10" rx="2.5" fill={dark} />
@@ -61,10 +61,10 @@ function CuteBot({ body, dark, cheek, size, style, className, blinkDelay = '0s',
         {/* carita (pantalla) */}
         <rect x="16" y="21" width="32" height="24" rx="10" fill={dark} opacity=".92" />
         {/* ojos */}
-        <circle className="df-lg-eye" style={{ ['--bdel' as never]: blinkDelay }} cx="26" cy="32" r="3.4" fill="#A7F3D0" />
-        <circle className="df-lg-eye" style={{ ['--bdel' as never]: blinkDelay }} cx="38" cy="32" r="3.4" fill="#A7F3D0" />
+        <circle className="df-lg-eye" style={{ ['--bdel' as never]: blinkDelay }} cx="26" cy="32" r="3.4" fill="var(--df-brand-border)" />
+        <circle className="df-lg-eye" style={{ ['--bdel' as never]: blinkDelay }} cx="38" cy="32" r="3.4" fill="var(--df-brand-border)" />
         {/* sonrisa */}
-        <path d="M27 38.5q5 3.6 10 0" stroke="#A7F3D0" strokeWidth="2" strokeLinecap="round" fill="none" />
+        <path d="M27 38.5q5 3.6 10 0" stroke="var(--df-brand-border)" strokeWidth="2" strokeLinecap="round" fill="none" />
         {/* cachetes */}
         <circle cx="20.5" cy="37" r="2.4" fill={cheek} opacity=".85" />
         <circle cx="43.5" cy="37" r="2.4" fill={cheek} opacity=".85" />
@@ -90,7 +90,7 @@ export function Login({ df }: { df: DealFlowState }) {
   const esRegistro = modo === 'registro';
   const entrar = () => (esRegistro ? df.registrar(nombre, negocio, email, password) : df.login(email, password));
   const cambiarModo = () => { setModo(esRegistro ? 'login' : 'registro'); df.clearLoginError(); };
-  const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontSize: 14, marginBottom: 12, minHeight: 44, background: '#fff' };
+  const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontSize: 14, marginBottom: 12, minHeight: 44, background: 'var(--df-surface)' };
 
   return (
     <div
@@ -102,7 +102,7 @@ export function Login({ df }: { df: DealFlowState }) {
         justifyContent: 'center',
         background: 'linear-gradient(158deg,#071120 0%,#0A1B2E 46%,#07271F 100%)',
         fontFamily: "'Inter',system-ui,sans-serif",
-        color: '#1E293B',
+        color: 'var(--df-text-strong)',
         padding: 16,
         position: 'relative',
         overflow: 'hidden',
@@ -115,11 +115,11 @@ export function Login({ df }: { df: DealFlowState }) {
       <div className="df-lg-blob" style={{ width: 380, height: 380, bottom: -120, left: -110, background: 'radial-gradient(circle, rgba(245,158,11,.16), transparent 70%)', animationDelay: '-5s' }} />
 
       {/* bots cute flotando */}
-      <CuteBot body="#34D399" dark="#064E3B" cheek="#FCA5A5" size={92} style={{ top: '12%', left: '9%', ['--dur' as never]: '6.5s' }} blinkDelay="0s" waveDelay=".4s" />
-      <CuteBot body="#FBBF24" dark="#78350F" cheek="#FDA4AF" size={68} className="alt" style={{ top: '64%', left: '16%', ['--dur' as never]: '7.5s', ['--rot' as never]: '-7deg' }} blinkDelay="1.2s" waveDelay="1.4s" />
+      <CuteBot body="var(--df-brand-light)" dark="var(--df-brand-deep)" cheek="var(--df-danger-light)" size={92} style={{ top: '12%', left: '9%', ['--dur' as never]: '6.5s' }} blinkDelay="0s" waveDelay=".4s" />
+      <CuteBot body="var(--df-warning-light)" dark="var(--df-alert-brown)" cheek="#FDA4AF" size={68} className="alt" style={{ top: '64%', left: '16%', ['--dur' as never]: '7.5s', ['--rot' as never]: '-7deg' }} blinkDelay="1.2s" waveDelay="1.4s" />
       <CuteBot body="#93C5FD" dark="#1E3A8A" cheek="#F9A8D4" size={76} style={{ top: '18%', right: '11%', ['--dur' as never]: '8s', ['--rot' as never]: '6deg' }} blinkDelay="2.1s" waveDelay="2s" />
-      <CuteBot body="#F9A8D4" dark="#831843" cheek="#FDE68A" size={60} className="alt hide-sm" style={{ bottom: '14%', right: '17%', ['--dur' as never]: '6s', ['--rot' as never]: '-5deg' }} blinkDelay="3s" waveDelay=".9s" />
-      <CuteBot body="#C4B5FD" dark="#4C1D95" cheek="#FCA5A5" size={54} className="hide-sm" style={{ bottom: '30%', left: '38%', ['--dur' as never]: '9s', ['--rot' as never]: '4deg', opacity: 0.5 }} blinkDelay="1.7s" waveDelay="2.6s" />
+      <CuteBot body="#F9A8D4" dark="#831843" cheek="var(--df-warning-border)" size={60} className="alt hide-sm" style={{ bottom: '14%', right: '17%', ['--dur' as never]: '6s', ['--rot' as never]: '-5deg' }} blinkDelay="3s" waveDelay=".9s" />
+      <CuteBot body="#C4B5FD" dark="#4C1D95" cheek="var(--df-danger-light)" size={54} className="hide-sm" style={{ bottom: '30%', left: '38%', ['--dur' as never]: '9s', ['--rot' as never]: '4deg', opacity: 0.5 }} blinkDelay="1.7s" waveDelay="2.6s" />
 
       {/* sparkles */}
       {[
@@ -137,7 +137,7 @@ export function Login({ df }: { df: DealFlowState }) {
         <button
           onClick={df.instalarPwa}
           className={`df-lg-btn${typeof location !== 'undefined' && location.search.includes('instalar=1') ? ' df-lg-pulse' : ''}`}
-          style={{ position: 'absolute', top: 16, right: 16, zIndex: 3, background: 'rgba(16,185,129,.14)', color: '#A7F3D0', border: '1px solid rgba(52,211,153,.4)', borderRadius: 999, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+          style={{ position: 'absolute', top: 16, right: 16, zIndex: 3, background: 'rgba(16,185,129,.14)', color: 'var(--df-brand-border)', border: '1px solid rgba(52,211,153,.4)', borderRadius: 999, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
         >
           📲 Instalar la app
         </button>
@@ -161,11 +161,11 @@ export function Login({ df }: { df: DealFlowState }) {
           }}
         >
           <div style={{ fontWeight: 800, fontSize: 19, marginBottom: 2, letterSpacing: '-0.01em' }}>{esRegistro ? 'Crea tu cuenta 🚀' : '¡Hola de nuevo! 👋'}</div>
-          <div style={{ color: '#64748B', fontSize: 13, marginBottom: 20 }}>{esRegistro ? 'Regístrate y activa tu plan para empezar a vender.' : 'Tu tienda y tu asistente de WhatsApp te están esperando.'}</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 20 }}>{esRegistro ? 'Regístrate y activa tu plan para empezar a vender.' : 'Tu tienda y tu asistente de WhatsApp te están esperando.'}</div>
 
           {esRegistro && (
             <>
-              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Tu nombre</div>
+              <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Tu nombre</div>
               <input
                 className="df-lg-input"
                 value={nombre}
@@ -174,7 +174,7 @@ export function Login({ df }: { df: DealFlowState }) {
                 autoComplete="name"
                 style={inputStyle}
               />
-              <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre de tu tienda</div>
+              <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre de tu tienda</div>
               <input
                 className="df-lg-input"
                 value={negocio}
@@ -185,7 +185,7 @@ export function Login({ df }: { df: DealFlowState }) {
             </>
           )}
 
-          <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Correo</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Correo</div>
           <input
             className="df-lg-input"
             value={email}
@@ -197,7 +197,7 @@ export function Login({ df }: { df: DealFlowState }) {
             autoComplete="username"
             style={inputStyle}
           />
-          <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Contraseña</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Contraseña</div>
           <input
             className="df-lg-input"
             type="password"
@@ -214,7 +214,7 @@ export function Login({ df }: { df: DealFlowState }) {
             style={{ ...inputStyle, marginBottom: 14 }}
           />
           {df.loginError && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: '#DC2626', fontSize: 13, marginBottom: 12, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '9px 12px' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--df-danger)', fontSize: 13, marginBottom: 12, background: 'var(--df-danger-subtle)', border: '1px solid var(--df-danger-border)', borderRadius: 10, padding: '9px 12px' }}>
               <span>🤖</span>
               <span>{df.loginError}</span>
             </div>
@@ -224,7 +224,7 @@ export function Login({ df }: { df: DealFlowState }) {
             className="df-lg-btn"
             style={{
               width: '100%',
-              background: 'linear-gradient(135deg,#34D399,#059669)',
+              background: 'linear-gradient(135deg,var(--df-brand-light),var(--df-brand))',
               color: '#fff',
               border: 'none',
               borderRadius: 12,
@@ -239,11 +239,11 @@ export function Login({ df }: { df: DealFlowState }) {
             {esRegistro ? 'Crear mi cuenta →' : 'Entrar a mi tienda →'}
           </button>
 
-          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#64748B' }}>
+          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: 'var(--df-text-muted)' }}>
             {esRegistro ? '¿Ya tienes cuenta?' : '¿Aún no tienes cuenta?'}{' '}
             <button
               onClick={cambiarModo}
-              style={{ background: 'transparent', border: 'none', color: '#059669', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer', padding: 0 }}
+              style={{ background: 'transparent', border: 'none', color: 'var(--df-brand)', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer', padding: 0 }}
             >
               {esRegistro ? 'Inicia sesión' : 'Regístrate gratis'}
             </button>
@@ -251,7 +251,7 @@ export function Login({ df }: { df: DealFlowState }) {
         </div>
 
         {!df.apiMode && (
-          <div style={{ background: 'rgba(16,185,129,.1)', border: '1px solid rgba(52,211,153,.35)', borderRadius: 12, padding: '12px 16px', marginTop: 14, fontSize: 12.5, color: '#A7F3D0', lineHeight: 1.7 }}>
+          <div style={{ background: 'rgba(16,185,129,.1)', border: '1px solid rgba(52,211,153,.35)', borderRadius: 12, padding: '12px 16px', marginTop: 14, fontSize: 12.5, color: 'var(--df-brand-border)', lineHeight: 1.7 }}>
             <div style={{ fontWeight: 700, marginBottom: 2 }}>Cuentas de la demo</div>
             Vendedora: <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>karla@lunaaccesorios.co · demo123</span>
             <br />

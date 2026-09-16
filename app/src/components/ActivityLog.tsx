@@ -9,9 +9,9 @@ function cuando(iso: string): string {
 }
 
 const COLOR: Record<string, { dot: string; bg: string; txt: string }> = {
-  error: { dot: '#DC2626', bg: '#FEF2F2', txt: '#B91C1C' },
-  warn: { dot: '#D97706', bg: '#FFFBEB', txt: '#B45309' },
-  info: { dot: '#059669', bg: '#F0FDF4', txt: '#047857' },
+  error: { dot: 'var(--df-danger)', bg: 'var(--df-danger-subtle)', txt: 'var(--df-danger-dark)' },
+  warn: { dot: '#D97706', bg: 'var(--df-warning-subtle-2)', txt: 'var(--df-warning)' },
+  info: { dot: 'var(--df-brand)', bg: 'var(--df-brand-subtle-3)', txt: 'var(--df-brand-dark)' },
 };
 
 /**
@@ -32,51 +32,51 @@ export function ActivityLog({ df }: { df: DealFlowState }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ background: '#fff', width: 'min(680px, 100%)', maxHeight: '82vh', borderRadius: 14, boxShadow: '0 20px 60px rgba(15,23,42,.3)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        style={{ background: 'var(--df-surface)', width: 'min(680px, 100%)', maxHeight: '82vh', borderRadius: 14, boxShadow: '0 20px 60px rgba(15,23,42,.3)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: '1px solid #F1F5F9' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: '1px solid var(--df-border)' }}>
           <span style={{ fontSize: 16 }}>🩺</span>
           <div>
             <div style={{ fontWeight: 800, fontSize: 15 }}>{df.logsLeadId ? 'Registro del chat' : 'Registro de actividad'}</div>
-            <div style={{ color: '#94A3B8', fontSize: 12 }}>
+            <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
               {df.logsLeadId ? `Solo de: ${df.logsTitulo}. Flujos, respuestas y errores de este chat.` : 'Toda tu tienda: flujos, respuestas y errores de envío.'}
             </div>
           </div>
           <div style={{ flex: 1 }} />
-          <span onClick={df.cerrarLogs} title="Cerrar" style={{ cursor: 'pointer', color: '#94A3B8', fontSize: 18, padding: 4, lineHeight: 1 }}>✕</span>
+          <span onClick={df.cerrarLogs} title="Cerrar" style={{ cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 18, padding: 4, lineHeight: 1 }}>✕</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderBottom: '1px solid #F1F5F9', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderBottom: '1px solid var(--df-border)', flexWrap: 'wrap' }}>
           <button
             onClick={() => setSoloErrores(false)}
-            style={{ border: '1px solid ' + (!soloErrores ? '#0F172A' : '#E2E8F0'), background: !soloErrores ? '#0F172A' : '#fff', color: !soloErrores ? '#fff' : '#475569', borderRadius: 999, padding: '5px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}
+            style={{ border: '1px solid ' + (!soloErrores ? '#0F172A' : 'var(--df-border)'), background: !soloErrores ? '#0F172A' : 'var(--df-surface)', color: !soloErrores ? '#fff' : 'var(--df-text-secondary)', borderRadius: 999, padding: '5px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}
           >Todo</button>
           <button
             onClick={() => setSoloErrores(true)}
-            style={{ border: '1px solid ' + (soloErrores ? '#DC2626' : '#E2E8F0'), background: soloErrores ? '#DC2626' : '#fff', color: soloErrores ? '#fff' : '#475569', borderRadius: 999, padding: '5px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}
+            style={{ border: '1px solid ' + (soloErrores ? 'var(--df-danger)' : 'var(--df-border)'), background: soloErrores ? 'var(--df-danger)' : 'var(--df-surface)', color: soloErrores ? '#fff' : 'var(--df-text-secondary)', borderRadius: 999, padding: '5px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}
           >Solo errores{errores ? ` (${errores})` : ''}</button>
           <div style={{ flex: 1 }} />
-          <button onClick={df.reloadLogs} style={{ border: '1px solid #E2E8F0', background: '#fff', color: '#334155', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>↻ Actualizar</button>
-          <button onClick={df.limpiarLogs} className="df-danger-hover" style={{ border: '1px solid #FECACA', background: '#fff', color: '#B91C1C', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Limpiar</button>
+          <button onClick={df.reloadLogs} style={{ border: '1px solid var(--df-border)', background: 'var(--df-surface)', color: 'var(--df-text-body)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>↻ Actualizar</button>
+          <button onClick={df.limpiarLogs} className="df-danger-hover" style={{ border: '1px solid var(--df-danger-border)', background: 'var(--df-surface)', color: 'var(--df-danger-dark)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Limpiar</button>
         </div>
 
         <div style={{ overflowY: 'auto', padding: '8px 12px' }}>
           {items.length === 0 ? (
-            <div style={{ padding: '36px 16px', textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>
+            <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--df-text-faint)', fontSize: 13 }}>
               {soloErrores ? 'Sin errores registrados. 🎉' : 'Aún no hay actividad registrada.'}
             </div>
           ) : (
             items.map((l, i) => {
               const c = COLOR[l.nivel] || COLOR.info;
               return (
-                <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 8px', borderBottom: '1px solid #F8FAFC', alignItems: 'flex-start' }}>
+                <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 8px', borderBottom: '1px solid var(--df-bg)', alignItems: 'flex-start' }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: c.dot, marginTop: 6, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', color: c.txt, background: c.bg, borderRadius: 5, padding: '1px 7px' }}>{l.evento || l.nivel}</span>
-                      <span style={{ color: '#94A3B8', fontSize: 11.5 }}>{cuando(l.createdAt)}</span>
+                      <span style={{ color: 'var(--df-text-faint)', fontSize: 11.5 }}>{cuando(l.createdAt)}</span>
                     </div>
-                    <div style={{ fontSize: 13, color: '#334155', marginTop: 3, lineHeight: 1.45 }}>{l.detalle}</div>
+                    <div style={{ fontSize: 13, color: 'var(--df-text-body)', marginTop: 3, lineHeight: 1.45 }}>{l.detalle}</div>
                   </div>
                 </div>
               );

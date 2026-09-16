@@ -4,11 +4,11 @@ import type { Campana } from '../lib/api';
 import { Dropdown } from '../components/Dropdown';
 import { comprimirImagen } from '../components/PhotoUpload';
 
-const card: React.CSSProperties = { background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 };
-const label: React.CSSProperties = { color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 };
-const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13.5 };
-const btn: React.CSSProperties = { background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' };
-const btnGris: React.CSSProperties = { background: '#fff', color: '#334155', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' };
+const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 };
+const label: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
+const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13.5 };
+const btn: React.CSSProperties = { background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' };
+const btnGris: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' };
 
 const OBJETIVOS = [
   { id: 'mensajes', nombre: 'Mensajes a WhatsApp', sub: 'Que te escriban para comprar' },
@@ -26,7 +26,7 @@ function Chips({ titulo, items }: { titulo: string; items: string[] }) {
       <div style={label}>{titulo}</div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {items.map((t, i) => (
-          <span key={i} style={{ background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: 999, padding: '5px 11px', fontSize: 12.5, color: '#334155' }}>{t}</span>
+          <span key={i} style={{ background: 'var(--df-surface-2)', border: '1px solid var(--df-border)', borderRadius: 999, padding: '5px 11px', fontSize: 12.5, color: 'var(--df-text-body)' }}>{t}</span>
         ))}
       </div>
     </div>
@@ -47,14 +47,14 @@ function Pasos({ paso, onIr }: { paso: number; onIr: (n: number) => void }) {
             onClick={() => onIr(n)}
             style={{
               flex: '1 1 130px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
-              border: '1px solid ' + (activo ? '#059669' : '#E2E8F0'),
-              background: activo ? '#ECFDF5' : '#fff', borderRadius: 10, padding: '10px 12px',
+              border: '1px solid ' + (activo ? 'var(--df-brand)' : 'var(--df-border)'),
+              background: activo ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', borderRadius: 10, padding: '10px 12px',
             }}
           >
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: hecho ? '#059669' : activo ? '#047857' : '#94A3B8' }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: hecho ? 'var(--df-brand)' : activo ? 'var(--df-brand-dark)' : 'var(--df-text-faint)' }}>
               {hecho ? '✓ LISTO' : `PASO ${n}`}
             </div>
-            <div style={{ fontWeight: 700, fontSize: 13.5, color: activo ? '#047857' : '#1E293B' }}>{p}</div>
+            <div style={{ fontWeight: 700, fontSize: 13.5, color: activo ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}>{p}</div>
           </button>
         );
       })}
@@ -69,7 +69,7 @@ function ListaCopys({ df, titulo, ayuda, items, onCambio }: {
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{titulo}</div>
-      <div style={{ color: '#64748B', fontSize: 12.5, marginBottom: 8 }}>{ayuda}</div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, marginBottom: 8 }}>{ayuda}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.map((t, i) => {
           const clave = titulo + i;
@@ -104,7 +104,7 @@ function PasoProducto({ df, c }: { df: DealFlowState; c: Campana }) {
     <>
       <div style={card}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Cuéntale a la IA qué vendes</div>
-        <div style={{ color: '#64748B', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
+        <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
           Antes de crear nada, la IA estudia tu producto: a quién le sirve, qué problema resuelve y con qué ángulos se vende mejor.
         </div>
         <div style={{ marginBottom: 12 }}>
@@ -135,7 +135,7 @@ function PasoProducto({ df, c }: { df: DealFlowState; c: Campana }) {
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void comprimirImagen(f).then(setImagen); }}
             style={{ fontSize: 13 }}
           />
-          {imagen && <img src={imagen} alt="" style={{ marginTop: 10, height: 80, borderRadius: 8, border: '1px solid #E2E8F0' }} />}
+          {imagen && <img src={imagen} alt="" style={{ marginTop: 10, height: 80, borderRadius: 8, border: '1px solid var(--df-border)' }} />}
         </div>
         <button
           onClick={() => df.pasoProducto(c.id, { idea, precio, publico, imagen: imagen || undefined })}
@@ -147,15 +147,15 @@ function PasoProducto({ df, c }: { df: DealFlowState; c: Campana }) {
       </div>
 
       {b && (
-        <div style={{ ...card, borderColor: '#A7F3D0', background: '#F0FDF4' }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: '#047857', marginBottom: 10 }}>Esto entendió la IA</div>
+        <div style={{ ...card, borderColor: 'var(--df-brand-border)', background: 'var(--df-brand-subtle-3)' }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--df-brand-dark)', marginBottom: 10 }}>Esto entendió la IA</div>
           <div style={{ fontSize: 14, marginBottom: 4 }}><b>{b.producto}</b></div>
-          <div style={{ color: '#334155', fontSize: 13.5, lineHeight: 1.6 }}>{b.descripcion}</div>
-          {b.propuesta && <div style={{ marginTop: 10, fontSize: 13.5, color: '#047857', fontStyle: 'italic' }}>“{b.propuesta}”</div>}
+          <div style={{ color: 'var(--df-text-body)', fontSize: 13.5, lineHeight: 1.6 }}>{b.descripcion}</div>
+          {b.propuesta && <div style={{ marginTop: 10, fontSize: 13.5, color: 'var(--df-brand-dark)', fontStyle: 'italic' }}>“{b.propuesta}”</div>}
           {b.publico && (
             <div style={{ marginTop: 12 }}>
               <div style={label}>PÚBLICO OBJETIVO</div>
-              <div style={{ fontSize: 13.5, color: '#334155' }}>{b.publico}</div>
+              <div style={{ fontSize: 13.5, color: 'var(--df-text-body)' }}>{b.publico}</div>
             </div>
           )}
           <Chips titulo="PROBLEMAS QUE RESUELVE" items={b.dolores} />
@@ -180,7 +180,7 @@ function PasoCreativos({ df, c }: { df: DealFlowState; c: Campana }) {
     <>
       <div style={card}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Crea los creativos del anuncio</div>
-        <div style={{ color: '#64748B', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
+        <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
           Las imágenes se generan a partir de lo que la IA entendió de <b>{c.brief.producto}</b>, así hablan del mismo producto.
         </div>
         {c.brief.ideasCreativo.length > 0 && (
@@ -219,7 +219,7 @@ function PasoCreativos({ df, c }: { df: DealFlowState; c: Campana }) {
           >
             {df.mkLoading ? 'Creando…' : `Generar ${cantidad} creativo${cantidad > 1 ? 's' : ''} →`}
           </button>
-          <span style={{ color: '#64748B', fontSize: 12.5 }}>Cuesta {costo} créditos · tienes {df.creditos}</span>
+          <span style={{ color: 'var(--df-text-muted)', fontSize: 12.5 }}>Cuesta {costo} créditos · tienes {df.creditos}</span>
         </div>
       </div>
 
@@ -229,11 +229,11 @@ function PasoCreativos({ df, c }: { df: DealFlowState; c: Campana }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12 }}>
             {c.creativos.map((url, i) => (
               <div key={i} style={{ position: 'relative' }}>
-                <img src={url} alt="" style={{ width: '100%', borderRadius: 10, border: '1px solid #E2E8F0', display: 'block' }} />
+                <img src={url} alt="" style={{ width: '100%', borderRadius: 10, border: '1px solid var(--df-border)', display: 'block' }} />
                 <button
                   onClick={() => df.editarCampana(c.id, { creativos: c.creativos.filter((_, k) => k !== i) })}
                   title="Quitar este creativo"
-                  style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,255,255,.94)', border: '1px solid #E2E8F0', borderRadius: 7, padding: '3px 8px', fontFamily: 'inherit', fontSize: 12, color: '#B91C1C', cursor: 'pointer' }}
+                  style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,255,255,.94)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '3px 8px', fontFamily: 'inherit', fontSize: 12, color: 'var(--df-danger-dark)', cursor: 'pointer' }}
                 >
                   ✕
                 </button>
@@ -261,7 +261,7 @@ function PasoTextos({ df, c }: { df: DealFlowState; c: Campana }) {
     <>
       <div style={card}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Escribe los textos del anuncio</div>
-        <div style={{ color: '#64748B', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
+        <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
           Con la estructura exacta de Meta: <b>texto principal</b>, <b>título</b> y <b>descripción</b>. Cada uno con un ángulo distinto para que pruebes cuál vende más.
         </div>
         <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
@@ -288,7 +288,7 @@ function PasoTextos({ df, c }: { df: DealFlowState; c: Campana }) {
           <ListaCopys df={df} titulo="Textos principales" ayuda="El cuerpo del anuncio. Lo primero que lee tu cliente." items={copys.textos} onCambio={set('textos')} />
           <ListaCopys df={df} titulo="Títulos" ayuda="El titular en negrita, bajo la imagen. Máximo 40 caracteres." items={copys.titulos} onCambio={set('titulos')} />
           <ListaCopys df={df} titulo="Descripciones" ayuda="La línea de apoyo bajo el título. Máximo 30 caracteres." items={copys.descripciones} onCambio={set('descripciones')} />
-          <div style={{ color: '#94A3B8', fontSize: 12.5 }}>Puedes editar cualquiera aquí mismo: se guarda solo.</div>
+          <div style={{ color: 'var(--df-text-faint)', fontSize: 12.5 }}>Puedes editar cualquiera aquí mismo: se guarda solo.</div>
         </div>
       )}
     </>
@@ -312,7 +312,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
     return (
       <div style={card}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Elige dónde publicar</div>
-        <div style={{ color: '#64748B', fontSize: 13, marginBottom: 14 }}>Estas son las cuentas y páginas de tu Facebook.</div>
+        <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14 }}>Estas son las cuentas y páginas de tu Facebook.</div>
         <div style={{ marginBottom: 12 }}>
           <div style={label}>Cuenta publicitaria</div>
           <Dropdown value={cuenta} onChange={setCuenta} placeholder="Elige una…"
@@ -334,7 +334,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
         >
           Guardar y conectar
         </button>
-        {df.mkError && <div style={{ color: '#B91C1C', fontSize: 13, marginTop: 10 }}>{df.mkError}</div>}
+        {df.mkError && <div style={{ color: 'var(--df-danger-dark)', fontSize: 13, marginTop: 10 }}>{df.mkError}</div>}
       </div>
     );
   }
@@ -344,13 +344,13 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
     return (
       <div style={card}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Conecta tu Administrador de anuncios</div>
-        <div style={{ color: '#64748B', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
+        <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
           Conecta tu cuenta publicitaria de Meta para publicar desde aquí. <b>Tú pagas la pauta directamente a Meta</b> con tu propio método de pago.
         </div>
         <button onClick={df.conectarAds} disabled={df.mkLoading} style={{ ...btn, background: '#1877F2', opacity: df.mkLoading ? 0.7 : 1 }}>
           {df.mkLoading ? 'Conectando…' : 'Conectar con Facebook'}
         </button>
-        {df.mkError && <div style={{ color: '#B91C1C', fontSize: 13, marginTop: 10 }}>{df.mkError}</div>}
+        {df.mkError && <div style={{ color: 'var(--df-danger-dark)', fontSize: 13, marginTop: 10 }}>{df.mkError}</div>}
       </div>
     );
   }
@@ -369,12 +369,12 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
 
   return (
     <>
-      <div style={{ ...card, background: '#F0FDF4', borderColor: '#A7F3D0' }}>
+      <div style={{ ...card, background: 'var(--df-brand-subtle-3)', borderColor: 'var(--df-brand-border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: '#047857' }}>✓ Conectado a {ads.adAccountNombre}</span>
-          {ads.pageNombre && <span style={{ color: '#047857', fontSize: 13 }}>· página {ads.pageNombre}</span>}
+          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--df-brand-dark)' }}>✓ Conectado a {ads.adAccountNombre}</span>
+          {ads.pageNombre && <span style={{ color: 'var(--df-brand-dark)', fontSize: 13 }}>· página {ads.pageNombre}</span>}
           <div style={{ flex: 1 }} />
-          <button onClick={df.desconectarAds} style={{ ...btnGris, color: '#B91C1C', borderColor: '#FECACA' }}>Desconectar</button>
+          <button onClick={df.desconectarAds} style={{ ...btnGris, color: 'var(--df-danger-dark)', borderColor: 'var(--df-danger-border)' }}>Desconectar</button>
         </div>
       </div>
 
@@ -386,7 +386,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
             {c.creativos.map((url, i) => (
               <img
                 key={i} src={url} alt="" onClick={() => setSel((s) => ({ ...s, creativo: i }))}
-                style={{ width: 76, height: 76, objectFit: 'cover', borderRadius: 8, cursor: 'pointer', border: '3px solid ' + (sel.creativo === i ? '#059669' : '#E2E8F0') }}
+                style={{ width: 76, height: 76, objectFit: 'cover', borderRadius: 8, cursor: 'pointer', border: '3px solid ' + (sel.creativo === i ? 'var(--df-brand)' : 'var(--df-border)') }}
               />
             ))}
           </div>
@@ -399,7 +399,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
           <input type="number" value={presupuesto} onChange={(e) => setPresupuesto(Number(e.target.value))} min={1000} step={1000} style={{ ...input, maxWidth: 220 }} />
         </div>
 
-        <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '12px 14px', marginBottom: 14, color: '#B45309', fontSize: 13, lineHeight: 1.6 }}>
+        <div style={{ background: 'var(--df-warning-subtle-2)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 14, color: 'var(--df-warning)', fontSize: 13, lineHeight: 1.6 }}>
           ⚠️ El anuncio se crea <b>en pausa</b>. No se gasta ni un peso hasta que tú entres a tu Administrador de anuncios y le des play.
         </div>
 
@@ -414,9 +414,9 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
         >
           {df.mkLoading ? 'Publicando en Meta…' : 'Publicar en mi Administrador de anuncios →'}
         </button>
-        {df.mkError && <div style={{ color: '#B91C1C', fontSize: 13, marginTop: 10 }}>{df.mkError}</div>}
+        {df.mkError && <div style={{ color: 'var(--df-danger-dark)', fontSize: 13, marginTop: 10 }}>{df.mkError}</div>}
         {publicado && (
-          <div style={{ marginTop: 12, color: '#047857', fontSize: 13.5, fontWeight: 600 }}>
+          <div style={{ marginTop: 12, color: 'var(--df-brand-dark)', fontSize: 13.5, fontWeight: 600 }}>
             ✓ ¡Listo! La campaña quedó creada en pausa dentro de tu Administrador de anuncios.
           </div>
         )}
@@ -434,7 +434,7 @@ function ListaCampanas({ df }: { df: DealFlowState }) {
     <>
       <div style={card}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Nueva campaña</div>
-        <div style={{ color: '#64748B', fontSize: 13, marginBottom: 14 }}>
+        <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14 }}>
           La IA te guía en 3 pasos: primero estudia tu producto, luego crea las imágenes y al final escribe los textos.
         </div>
         <div style={{ marginBottom: 12 }}>
@@ -449,12 +449,12 @@ function ListaCampanas({ df }: { df: DealFlowState }) {
                 key={o.id} onClick={() => setObjetivo(o.id)}
                 style={{
                   cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', borderRadius: 10, padding: '9px 13px',
-                  border: '1px solid ' + (objetivo === o.id ? '#059669' : '#E2E8F0'),
-                  background: objetivo === o.id ? '#ECFDF5' : '#fff',
+                  border: '1px solid ' + (objetivo === o.id ? 'var(--df-brand)' : 'var(--df-border)'),
+                  background: objetivo === o.id ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)',
                 }}
               >
-                <div style={{ fontWeight: 700, fontSize: 13, color: objetivo === o.id ? '#047857' : '#1E293B' }}>{o.nombre}</div>
-                <div style={{ color: '#64748B', fontSize: 12 }}>{o.sub}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: objetivo === o.id ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}>{o.nombre}</div>
+                <div style={{ color: 'var(--df-text-muted)', fontSize: 12 }}>{o.sub}</div>
               </button>
             ))}
           </div>
@@ -467,23 +467,23 @@ function ListaCampanas({ df }: { df: DealFlowState }) {
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>Tus campañas</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {df.campanas.map((c) => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12, border: '1px solid #E2E8F0', borderRadius: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12, border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
                 {c.creativos[0] && <img src={c.creativos[0]} alt="" style={{ width: 42, height: 42, objectFit: 'cover', borderRadius: 7 }} />}
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{c.nombre}</div>
-                  <div style={{ color: '#64748B', fontSize: 12.5 }}>
+                  <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5 }}>
                     Paso {Math.min(c.paso, 4)} de 4 · {c.creativos.length} creativo{c.creativos.length === 1 ? '' : 's'}
                   </div>
                 </div>
                 <span style={{
                   fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '4px 10px',
-                  background: c.estado === 'publicada' ? '#DCFCE7' : c.estado === 'lista' ? '#DBEAFE' : '#F1F5F9',
-                  color: c.estado === 'publicada' ? '#047857' : c.estado === 'lista' ? '#1D4ED8' : '#64748B',
+                  background: c.estado === 'publicada' ? 'var(--df-green-subtle)' : c.estado === 'lista' ? 'var(--df-info-subtle)' : 'var(--df-surface-2)',
+                  color: c.estado === 'publicada' ? 'var(--df-brand-dark)' : c.estado === 'lista' ? 'var(--df-info)' : 'var(--df-text-muted)',
                 }}>
                   {c.estado === 'publicada' ? 'Publicada' : c.estado === 'lista' ? 'Lista' : 'Borrador'}
                 </span>
                 <button onClick={() => void df.abrirCampana(c.id)} style={btnGris}>Abrir</button>
-                <button onClick={() => df.borrarCampana(c.id)} style={{ ...btnGris, color: '#B91C1C', borderColor: '#FECACA' }}>Eliminar</button>
+                <button onClick={() => df.borrarCampana(c.id)} style={{ ...btnGris, color: 'var(--df-danger-dark)', borderColor: 'var(--df-danger-border)' }}>Eliminar</button>
               </div>
             ))}
           </div>
@@ -509,20 +509,20 @@ export function Marketing({ df }: { df: DealFlowState }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <div style={{ flex: 1, minWidth: 220 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Marketing IA</h1>
-          <p style={{ color: '#64748B', fontSize: 14, margin: 0 }}>
+          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>
             {c ? 'Arma tu campaña paso a paso y publícala en Meta.' : 'Crea campañas completas: la IA estudia tu producto, crea los creativos y escribe los anuncios.'}
           </p>
         </div>
-        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '9px 14px', textAlign: 'center' }}>
-          <div style={{ color: '#64748B', fontSize: 11.5, fontWeight: 600 }}>CRÉDITOS</div>
-          <div style={{ fontWeight: 800, fontSize: 17, color: df.creditos > 20 ? '#047857' : '#B45309' }}>{df.creditos}</div>
+        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '9px 14px', textAlign: 'center' }}>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600 }}>CRÉDITOS</div>
+          <div style={{ fontWeight: 800, fontSize: 17, color: df.creditos > 20 ? 'var(--df-brand-dark)' : 'var(--df-warning)' }}>{df.creditos}</div>
         </div>
       </div>
 
       {df.mkSinCreditos && (
-        <div style={{ ...card, background: '#FFFBEB', borderColor: '#FDE68A' }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#B45309' }}>Te quedaste sin créditos</div>
-          <div style={{ color: '#B45309', fontSize: 13, marginTop: 4 }}>Recarga desde la sección de créditos para seguir generando.</div>
+        <div style={{ ...card, background: 'var(--df-warning-subtle-2)', borderColor: 'var(--df-warning-border)' }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--df-warning)' }}>Te quedaste sin créditos</div>
+          <div style={{ color: 'var(--df-warning)', fontSize: 13, marginTop: 4 }}>Recarga desde la sección de créditos para seguir generando.</div>
         </div>
       )}
 
@@ -542,7 +542,7 @@ export function Marketing({ df }: { df: DealFlowState }) {
           <Pasos paso={paso} onIr={setPaso} />
 
           {df.mkError && paso !== 4 && (
-            <div style={{ ...card, background: '#FEF2F2', borderColor: '#FECACA', color: '#B91C1C', fontSize: 13.5 }}>{df.mkError}</div>
+            <div style={{ ...card, background: 'var(--df-danger-subtle)', borderColor: 'var(--df-danger-border)', color: 'var(--df-danger-dark)', fontSize: 13.5 }}>{df.mkError}</div>
           )}
 
           {paso === 1 && <PasoProducto df={df} c={c} />}

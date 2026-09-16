@@ -20,7 +20,7 @@ function MiniBot({ color, dark, dur, del }: { color: string; dark: string; dur: 
   return (
     <div className="dfpl-mini" style={{ ['--dur' as never]: dur, ['--del' as never]: del }}>
       <svg width="22" height="22" viewBox="0 0 64 64" fill="none">
-        <circle cx="32" cy="7" r="4" fill="#FDE68A" />
+        <circle cx="32" cy="7" r="4" fill="var(--df-warning-border)" />
         <rect x="10" y="14" width="44" height="40" rx="15" fill={color} stroke={dark} strokeWidth="3" />
         <rect x="16" y="21" width="32" height="24" rx="10" fill={dark} opacity=".9" />
         <circle cx="26" cy="33" r="4" fill="#fff" />
@@ -57,31 +57,31 @@ export function BotPreloader() {
         { top: '68%', left: '16%', fs: 14, del: '1.1s' },
         { top: '74%', right: '24%', fs: 17, del: '.3s' },
       ].map((s, i) => (
-        <span key={i} style={{ position: 'absolute', top: s.top, left: s.left, right: s.right, fontSize: s.fs, color: '#FDE68A', animation: `dfplTwinkle 2.6s ease-in-out ${s.del} infinite` }}>✦</span>
+        <span key={i} style={{ position: 'absolute', top: s.top, left: s.left, right: s.right, fontSize: s.fs, color: 'var(--df-warning-border)', animation: `dfplTwinkle 2.6s ease-in-out ${s.del} infinite` }}>✦</span>
       ))}
 
       {/* bot principal saltando + mini-bots orbitando */}
       <div style={{ position: 'relative', width: 200, height: 190, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <MiniBot color="#FBBF24" dark="#78350F" dur="3.6s" del="0s" />
+        <MiniBot color="var(--df-warning-light)" dark="var(--df-alert-brown)" dur="3.6s" del="0s" />
         <MiniBot color="#93C5FD" dark="#1E3A8A" dur="3.6s" del="-1.2s" />
         <MiniBot color="#F9A8D4" dark="#831843" dur="3.6s" del="-2.4s" />
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ animation: 'dfplJump 1.5s cubic-bezier(.3,.9,.4,1) infinite', filter: 'drop-shadow(0 18px 26px rgba(0,0,0,.45))' }}>
             <svg width="104" height="104" viewBox="0 0 64 64" fill="none">
-              <circle cx="32" cy="7" r="3.6" fill="#FDE68A" style={{ animation: 'dfplAnt 1.4s ease-in-out infinite' }} />
-              <rect x="30.9" y="9" width="2.2" height="5" rx="1" fill="#064E3B" />
-              <rect x="6" y="30" width="5" height="10" rx="2.5" fill="#064E3B" />
-              <rect x="53" y="30" width="5" height="10" rx="2.5" fill="#064E3B" />
-              <rect x="10" y="14" width="44" height="40" rx="15" fill="#34D399" stroke="#064E3B" strokeWidth="2.4" />
-              <rect x="16" y="21" width="32" height="24" rx="10" fill="#064E3B" opacity=".92" />
-              <circle className="dfpl-eye" cx="26" cy="32" r="3.6" fill="#A7F3D0" />
-              <circle className="dfpl-eye" cx="38" cy="32" r="3.6" fill="#A7F3D0" />
-              <path d="M26.5 38.8q5.5 4 11 0" stroke="#A7F3D0" strokeWidth="2.2" strokeLinecap="round" fill="none" />
-              <circle cx="20.5" cy="37" r="2.5" fill="#FCA5A5" opacity=".85" />
-              <circle cx="43.5" cy="37" r="2.5" fill="#FCA5A5" opacity=".85" />
-              <rect x="20" y="54" width="8" height="6" rx="3" fill="#064E3B" />
-              <rect x="36" y="54" width="8" height="6" rx="3" fill="#064E3B" />
+              <circle cx="32" cy="7" r="3.6" fill="var(--df-warning-border)" style={{ animation: 'dfplAnt 1.4s ease-in-out infinite' }} />
+              <rect x="30.9" y="9" width="2.2" height="5" rx="1" fill="var(--df-brand-deep)" />
+              <rect x="6" y="30" width="5" height="10" rx="2.5" fill="var(--df-brand-deep)" />
+              <rect x="53" y="30" width="5" height="10" rx="2.5" fill="var(--df-brand-deep)" />
+              <rect x="10" y="14" width="44" height="40" rx="15" fill="var(--df-brand-light)" stroke="var(--df-brand-deep)" strokeWidth="2.4" />
+              <rect x="16" y="21" width="32" height="24" rx="10" fill="var(--df-brand-deep)" opacity=".92" />
+              <circle className="dfpl-eye" cx="26" cy="32" r="3.6" fill="var(--df-brand-border)" />
+              <circle className="dfpl-eye" cx="38" cy="32" r="3.6" fill="var(--df-brand-border)" />
+              <path d="M26.5 38.8q5.5 4 11 0" stroke="var(--df-brand-border)" strokeWidth="2.2" strokeLinecap="round" fill="none" />
+              <circle cx="20.5" cy="37" r="2.5" fill="var(--df-danger-light)" opacity=".85" />
+              <circle cx="43.5" cy="37" r="2.5" fill="var(--df-danger-light)" opacity=".85" />
+              <rect x="20" y="54" width="8" height="6" rx="3" fill="var(--df-brand-deep)" />
+              <rect x="36" y="54" width="8" height="6" rx="3" fill="var(--df-brand-deep)" />
             </svg>
           </div>
           <div style={{ width: 74, height: 10, borderRadius: '50%', background: 'rgba(0,0,0,.5)', filter: 'blur(4px)', marginTop: 2, animation: 'dfplShadow 1.5s cubic-bezier(.3,.9,.4,1) infinite' }} />
@@ -96,12 +96,12 @@ export function BotPreloader() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#8CA0AE', fontSize: 13.5, marginTop: 12 }}>
         <span>Despertando a tus bots vendedores</span>
         {[0, 1, 2].map((i) => (
-          <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: '#34D399', display: 'inline-block', animation: `dfplDots 1.2s ease-in-out ${i * 0.18}s infinite` }} />
+          <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--df-brand-light)', display: 'inline-block', animation: `dfplDots 1.2s ease-in-out ${i * 0.18}s infinite` }} />
         ))}
       </div>
 
       <div style={{ position: 'relative', width: 220, height: 4, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden', marginTop: 16 }}>
-        <span style={{ position: 'absolute', top: 0, width: '40%', height: '100%', borderRadius: 999, background: 'linear-gradient(90deg,transparent,#34D399,#FBBF24,transparent)', animation: 'dfplBar 1.15s ease-in-out infinite' }} />
+        <span style={{ position: 'absolute', top: 0, width: '40%', height: '100%', borderRadius: 999, background: 'linear-gradient(90deg,transparent,var(--df-brand-light),var(--df-warning-light),transparent)', animation: 'dfplBar 1.15s ease-in-out infinite' }} />
       </div>
     </div>
   );
