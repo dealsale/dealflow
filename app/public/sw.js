@@ -22,3 +22,30 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
   }
 });
+
+// Web Push: muestra la notificación aunque la app esté cerrada.
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { titulo: 'DealFlow', cuerpo: e.data ? e.data.text() : '' }; }
+  const titulo = d.titulo || 'DealFlow';
+  const opciones = {
+    body: d.cuerpo || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: d.tipo || 'dealflow',
+    data: (d.data && d.data.url) ? d.data : { url: '/' },
+  };
+  e.waitUntil(self.registration.showNotification(titulo, opciones));
+});
+
+// Al tocar la notificación, enfoca la app (o la abre).
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const destino = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cli) => {
+      for (const c of cli) { if ('focus' in c) return c.focus(); }
+      if (self.clients.openWindow) return self.clients.openWindow(destino);
+    }),
+  );
+});

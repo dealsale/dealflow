@@ -414,6 +414,10 @@ api.post('/orders', requireAuth, requireStore, (req, res) => {
     .run(oid, sid, numero, cliente, String(b.ciudad || ''), String(b.tel || ''), String(b.direccion || ''), 'Nuevo', total, String(b.departamento || ''), envio, String(b.nota || ''));
   for (const it of limpios) db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   registrarLog(sid, 'info', 'pedido', `Pedido manual DF-${numero} creado para ${cliente} (${limpios.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`);
+  {
+    const nprod = limpios.reduce((a, i) => a + i.qty, 0);
+    void import('./push.js').then((p) => p.enviarPush(sid, 'pedidos', `Nuevo pedido DF-${numero} 🛒`, `${cliente} · $${total.toLocaleString('es-CO')} · ${nprod} producto${nprod === 1 ? '' : 's'}`, { url: '/' })).catch(() => {});
+  }
   res.json({ ok: true, id: 'DF-' + numero, rowId: oid });
 });
 
@@ -1190,13 +1194,19 @@ api.post('/webchat/:storeId/messages', async (req, res) => {
   if (!session || session.length < 8 || !texto) return res.status(400).json({ error: 'Faltan la sesión o el mensaje.' });
   const waId = 'web:' + session;
   let lead = db.prepare('SELECT id FROM leads WHERE store_id = ? AND wa_id = ?').get(store.id, waId) as { id: string } | undefined;
+  let contactoNuevo = false;
   if (!lead) {
     const nombre = String(req.body?.nombre || '').trim().slice(0, 60) || 'Visitante Web';
     const id = uid();
     db.prepare("INSERT INTO leads (id, store_id, nombre, tel, wa_id, canal) VALUES (?,?,?,?,?, 'web')").run(id, store.id, nombre, waId, waId);
     lead = { id };
+    contactoNuevo = true;
   }
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'cliente', texto);
+  if (contactoNuevo) {
+    const quien = String(req.body?.nombre || '').trim().split(' ')[0] || 'Un cliente';
+    void import('./push.js').then((p) => p.enviarPush(store.id, 'contactos', 'Nuevo contacto 👋', `${quien} le escribió a tu tienda.`, { url: '/' })).catch(() => {});
+  }
   void (async () => {
     try {
       const { maybeAutoReply } = await import('./ai.js');
@@ -1324,6 +1334,26 @@ api.get('/logs', requireAuth, requireStore, (req, res) => {
 });
 api.delete('/logs', requireAuth, requireStore, requireOwner, (req, res) => {
   db.prepare('DELETE FROM event_log WHERE store_id = ?').run(req.user!.storeId);
+  res.json({ ok: true });
+});
+
+// ── Web Push (notificaciones con la app cerrada) ─────────────────────
+// Llave pública VAPID para que el navegador se suscriba (y si el push está listo).
+api.get('/push/vapid', requireAuth, requireStore, async (_req, res) => {
+  const { vapidPublicKey, pushDisponible } = await import('./push.js');
+  res.json({ key: vapidPublicKey(), disponible: pushDisponible() });
+});
+// Guarda/actualiza la suscripción del navegador con sus preferencias de tipo.
+api.post('/push/subscribe', requireAuth, requireStore, async (req, res) => {
+  const { guardarSuscripcion } = await import('./push.js');
+  const ok = guardarSuscripcion(req.user!.storeId!, req.body?.sub || {}, req.body?.prefs || {});
+  if (!ok) return res.status(400).json({ error: 'Suscripción inválida.' });
+  res.json({ ok: true });
+});
+// Elimina la suscripción (al desactivar las notificaciones).
+api.post('/push/unsubscribe', requireAuth, requireStore, async (req, res) => {
+  const { eliminarSuscripcion } = await import('./push.js');
+  eliminarSuscripcion(String(req.body?.endpoint || ''));
   res.json({ ok: true });
 });
 

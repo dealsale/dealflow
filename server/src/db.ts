@@ -374,6 +374,19 @@ addColumn('messages', 'media_nombre TEXT');
 addColumn('messages', 'wa_msg_id TEXT');
 addColumn('messages', "estado TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wamid ON messages(wa_msg_id)');
+// Suscripciones de Web Push (notificaciones con la app cerrada). Una por navegador/
+// dispositivo; guarda qué tipos quiere recibir (pedidos / contactos nuevos).
+db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  pedidos INTEGER NOT NULL DEFAULT 1,
+  contactos INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_push_store ON push_subscriptions(store_id)');
 // Biblioteca: el admin elige por producto si el cliente puede editarlo (1) o no (0).
 // Por defecto editable, para no bloquear nada sin que el admin lo decida.
 addColumn('library_products', 'editable INTEGER NOT NULL DEFAULT 1');

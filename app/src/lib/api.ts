@@ -273,6 +273,10 @@ export const apiWooSyncProductos = (proveedor: string) => req<{ creados: number;
 
 export interface EventoLog { nivel: string; evento: string; detalle: string; leadId: string | null; createdAt: string }
 export const apiLogs = (leadId?: string) => req<{ logs: EventoLog[] }>(`/api/logs${leadId ? `?leadId=${encodeURIComponent(leadId)}` : ''}`, 'GET');
+// Web Push
+export const apiPushVapid = () => req<{ key: string; disponible: boolean }>('/api/push/vapid', 'GET');
+export const apiPushSubscribe = (sub: unknown, prefs: { pedidos: boolean; contactos: boolean }) => req<{ ok: true }>('/api/push/subscribe', 'POST', { sub, prefs });
+export const apiPushUnsubscribe = (endpoint: string) => req<{ ok: true }>('/api/push/unsubscribe', 'POST', { endpoint });
 export const apiClearLogs = () => req<{ ok: true }>('/api/logs', 'DELETE');
 export const apiReenviarMensaje = (id: string) => req<{ ok: boolean; estado: string; error?: string }>(`/api/messages/${id}/reenviar`, 'POST');
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');

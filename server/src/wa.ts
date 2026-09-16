@@ -10,7 +10,7 @@ interface MediaInfo {
   nombre: string;
 }
 
-function ensureLead(storeId: string, waId: string, nombre: string, tel?: string): string {
+function ensureLead(storeId: string, waId: string, nombre: string, tel?: string): { id: string; nuevo: boolean } {
   const numPart = waId.split('@')[0];
   const telMostrar = tel || '+' + numPart; // número legible para el CRM (el @lid no sirve de teléfono)
   // Se busca por la dirección completa, por el número pelado (chats viejos) y
@@ -24,16 +24,18 @@ function ensureLead(storeId: string, waId: string, nombre: string, tel?: string)
     db.prepare("UPDATE leads SET wa_id = ? WHERE id = ? AND NOT (wa_id LIKE '%@lid' AND ? NOT LIKE '%@lid')").run(waId, lead.id, waId);
     if (tel) db.prepare("UPDATE leads SET tel = ? WHERE id = ? AND (tel = '' OR tel LIKE '+%@%' OR tel = ?)").run(tel, lead.id, '+' + numPart);
   }
+  let nuevo = false;
   if (!lead) {
     const id = uid();
     db.prepare('INSERT INTO leads (id, store_id, nombre, tel, etapa, asignado, wa_id) VALUES (?,?,?,?,?,?,?)').run(
       id, storeId, nombre || telMostrar, telMostrar, 'Explorando', 'Asistente (bot)', waId,
     );
     lead = { id };
+    nuevo = true;
   } else if (nombre) {
     db.prepare('UPDATE leads SET nombre = ? WHERE id = ? AND (nombre = ? OR nombre = ?)').run(nombre, lead.id, '+' + numPart, waId);
   }
-  return lead.id;
+  return { id: lead.id, nuevo };
 }
 
 /**
@@ -41,10 +43,15 @@ function ensureLead(storeId: string, waId: string, nombre: string, tel?: string)
  * La usan tanto el webhook de la Cloud API como la sesión por QR.
  */
 export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo, tel?: string) {
-  const leadId = ensureLead(storeId, waId, nombre, tel);
+  const { id: leadId, nuevo } = ensureLead(storeId, waId, nombre, tel);
   db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)').run(
     uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null,
   );
+  // Contacto NUEVO: notifica al dueño por Web Push (si lo tiene activado).
+  if (nuevo) {
+    const quien = (nombre || '').trim().split(' ')[0] || 'Un cliente';
+    void import('./push.js').then((p) => p.enviarPush(storeId, 'contactos', 'Nuevo contacto 👋', `${quien} le escribió a tu tienda.`, { url: '/' })).catch(() => {});
+  }
   // Responde el asistente de IA.
   void (async () => {
     try {

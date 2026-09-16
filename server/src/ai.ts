@@ -618,6 +618,11 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   db.prepare("UPDATE leads SET etapa = 'Listo para comprar', etiqueta = 'Venta' WHERE id = ?").run(lead.id);
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
   registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} creado para ${cliente} (${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`, lead.id);
+  // Notifica al dueño por Web Push (app cerrada) con un resumen corto del pedido.
+  {
+    const nprod = items.reduce((a, i) => a + i.qty, 0);
+    void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido DF-${numero} 🛒`, `${cliente} · $${total.toLocaleString('es-CO')} · ${nprod} producto${nprod === 1 ? '' : 's'}`, { url: '/' })).catch(() => {});
+  }
 
   // Si la tienda tiene WooCommerce conectado, enviamos el pedido allí AUTOMÁTICAMENTE
   // (Effi/Dropi lo despachan desde WooCommerce). No bloquea la respuesta del bot y

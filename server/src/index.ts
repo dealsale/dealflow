@@ -36,7 +36,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-09-16-notificaciones-capa1',
+    build: '2026-09-16-webpush-capa2',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de la conexión en un clic: SOLO dice si las variables están
@@ -49,6 +49,8 @@ app.get('/salud', (_req, res) =>
       listo: !!(process.env.META_APP_ID && process.env.META_APP_SECRET && process.env.META_CONFIG_ID),
     },
     verifyToken: !!process.env.WHATSAPP_VERIFY_TOKEN,
+    // Web Push listo cuando ambas llaves VAPID están puestas (nunca muestra su valor).
+    webPush: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
   }),
 );
 

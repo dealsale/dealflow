@@ -92,6 +92,9 @@ import {
   apiToggleHideStore,
   apiLogs,
   apiClearLogs,
+  apiPushVapid,
+  apiPushSubscribe,
+  apiPushUnsubscribe,
   apiReenviarMensaje,
   apiBiblioteca,
   apiImportarBiblioteca,
@@ -744,6 +747,33 @@ export function useDealFlowState() {
   function guardarNotifPrefs(next: { on: boolean; pedidos: boolean; contactos: boolean }) {
     setNotifPrefs(next);
     try { localStorage.setItem('dealflow:notif', JSON.stringify(next)); } catch { /* modo privado */ }
+    void sincronizarPush(next);
+  }
+  // Convierte la llave VAPID (base64url) al formato que pide pushManager.subscribe.
+  function urlBase64ToUint8Array(base64: string): Uint8Array {
+    const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+    const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(b64);
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+  // Suscribe/da de baja el Web Push según las preferencias (para recibir avisos
+  // con la app CERRADA). Si el navegador no soporta push, no pasa nada.
+  async function sincronizarPush(prefs: { on: boolean; pedidos: boolean; contactos: boolean }) {
+    if (!apiMode || typeof navigator === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const actual = await reg.pushManager.getSubscription();
+      if (!prefs.on || Notification.permission !== 'granted') {
+        if (actual) { await apiPushUnsubscribe(actual.endpoint); await actual.unsubscribe().catch(() => {}); }
+        return;
+      }
+      const { data } = await apiPushVapid();
+      if (!data?.disponible || !data.key) return; // el servidor aún no tiene VAPID configurado
+      const sub = actual || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(data.key) as BufferSource });
+      await apiPushSubscribe(sub.toJSON(), { pedidos: prefs.pedidos, contactos: prefs.contactos });
+    } catch (e) { console.warn('[push] no se pudo sincronizar', e); }
   }
   // Activa/desactiva las notificaciones. Al activar, pide el permiso del navegador.
   async function toggleNotificaciones() {
