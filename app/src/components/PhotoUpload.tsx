@@ -29,33 +29,46 @@ export function readImagesAsDataUrls(files: File[]): Promise<string[]> {
  */
 export function comprimirImagen(file: File, max = 1600, quality = 0.85): Promise<string> {
   return new Promise((resolve) => {
-    const fallback = () => {
+    const rawFallback = () => {
       const r = new FileReader();
       r.onload = () => resolve(r.result as string);
       r.onerror = () => resolve('');
       r.readAsDataURL(file);
+    };
+    const dibujarYComprimir = (source: CanvasImageSource, w: number, h: number) => {
+      let width = w;
+      let height = h;
+      if (width > max || height > max) {
+        if (width >= height) { height = Math.round((height * max) / width); width = max; }
+        else { width = Math.round((width * max) / height); height = max; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { rawFallback(); return; }
+      ctx.drawImage(source, 0, 0, width, height);
+      try { resolve(canvas.toDataURL('image/jpeg', quality)); } catch { rawFallback(); }
+    };
+    // Camino alterno: createImageBitmap decodifica formatos que <img> a veces
+    // no puede (por ejemplo, ciertas fotos HEIC de iPhone) — antes de rendirnos
+    // y mandar el archivo tal cual (que puede pesar varios MB y fallar al subir).
+    const viaImageBitmap = () => {
+      if (typeof createImageBitmap !== 'function') { rawFallback(); return; }
+      createImageBitmap(file)
+        .then((bmp) => { dibujarYComprimir(bmp, bmp.width, bmp.height); bmp.close?.(); })
+        .catch(rawFallback);
     };
     try {
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
         URL.revokeObjectURL(url);
-        let { width, height } = img;
-        if (width > max || height > max) {
-          if (width >= height) { height = Math.round((height * max) / width); width = max; }
-          else { width = Math.round((width * max) / height); height = max; }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { fallback(); return; }
-        ctx.drawImage(img, 0, 0, width, height);
-        try { resolve(canvas.toDataURL('image/jpeg', quality)); } catch { fallback(); }
+        dibujarYComprimir(img, img.width, img.height);
       };
-      img.onerror = () => { URL.revokeObjectURL(url); fallback(); };
+      img.onerror = () => { URL.revokeObjectURL(url); viaImageBitmap(); };
       img.src = url;
     } catch {
-      fallback();
+      viaImageBitmap();
     }
   });
 }

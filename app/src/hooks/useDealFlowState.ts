@@ -677,14 +677,15 @@ export function useDealFlowState() {
   const [apiMode, setApiMode] = useState<boolean>(false);
   const [storeNombre, setStoreNombre] = useState<string>('');
   const [storeId, setStoreId] = useState<string>('');
-  // Tema Premium: solo lo puede elegir la tienda si el Admin se lo habilitó.
-  // Si se lo quitan mientras lo tenía puesto, la devolvemos a Dark System (nunca
-  // la dejamos atascada en un tema que ya no puede elegir).
+  // Tema Premium: solo lo puede elegir la tienda si el Admin se lo habilitó —
+  // EXCEPTO el propio Admin/Superadmin, que siempre lo tiene disponible (además
+  // de Claro/Dark System) en su propia cuenta.
   const [premiumHabilitado, setPremiumHabilitado] = useState(false);
+  const premiumPermitido = premiumHabilitado || sessionUser?.role === 'admin' || sessionUser?.role === 'superadmin';
   useEffect(() => {
-    if (theme === 'premium' && !premiumHabilitado && apiMode) setThemeState('dark');
+    if (theme === 'premium' && !premiumPermitido && apiMode) setThemeState('dark');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [premiumHabilitado]);
+  }, [premiumPermitido]);
   const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
   const [iaPredeterminada, setIaPredeterminada] = useState('deepseek');
   const [integracionMsg, setIntegracionMsg] = useState('');
@@ -774,6 +775,11 @@ export function useDealFlowState() {
   soundOnRef.current = soundOn;
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
   const knownLeadIdsRef = useRef<Set<string>>(new Set());
+  // "Firma" de la última tanda de leads/pedidos que sí se puso en pantalla:
+  // evita rehacer todo el Inbox/Pedidos cada 5s cuando el sondeo trae
+  // exactamente lo mismo de antes (rendimiento — ver el setInterval de abajo).
+  const lastLeadsSigRef = useRef<string>('');
+  const lastOrdersSigRef = useRef<string>('');
   const notifPrefsRef = useRef(notifPrefs);
   notifPrefsRef.current = notifPrefs;
 
@@ -1401,6 +1407,15 @@ export function useDealFlowState() {
     setPerfilMsg('');
     try {
       const dataUrl = await comprimirImagen(file, 480, 0.85);
+      if (!dataUrl) { setPerfilMsg('No pudimos leer esa foto. Intenta con otra.'); return; }
+      // Salvavidas: si el navegador no pudo comprimirla (formatos raros, ej. HEIC
+      // de iPhone), comprimirImagen manda el archivo tal cual — puede pesar varios
+      // MB y el servidor/proxy la rechaza con un error que antes se veía como
+      // "problema de conexión". Mejor avisar claro ANTES de intentar subirla.
+      if (dataUrl.length > 4_000_000) {
+        setPerfilMsg('Esa foto pesa mucho y no la pudimos comprimir (a veces pasa con fotos HEIC de iPhone). Prueba con otra foto o cambia el formato de la cámara a "Más compatible" en Ajustes → Cámara → Formatos.');
+        return;
+      }
       const r = await apiUploadAvatar(dataUrl);
       if (r.error || !r.foto) { setPerfilMsg(r.error || 'No pudimos subir la foto.'); return; }
       setSessionUser((u) => (u ? { ...u, foto: r.foto } : u));
@@ -1605,7 +1620,13 @@ export function useDealFlowState() {
             }
           }
         }
-        setApiLeadsState(leads);
+        // Si el sondeo trae exactamente lo mismo de antes, no tocamos el estado:
+        // así el Inbox no se vuelve a pintar entero cada 5s sin necesidad.
+        const sig = JSON.stringify(leads);
+        if (sig !== lastLeadsSigRef.current) {
+          lastLeadsSigRef.current = sig;
+          setApiLeadsState(leads);
+        }
       });
       void apiOrders().then(({ data }) => {
         if (!data) return;
@@ -1627,7 +1648,12 @@ export function useDealFlowState() {
             notificar('pedidos', `Nuevo pedido ${recienLlegado.id} 🛒`, `${recienLlegado.cliente} · ${d.totalFmt} · ${nprod} producto${nprod === 1 ? '' : 's'}`, recienLlegado.id);
           }
         }
-        setOrders(nuevos);
+        // Mismo criterio que arriba: sin cambios reales, no repintamos Pedidos.
+        const sig = JSON.stringify(nuevos);
+        if (sig !== lastOrdersSigRef.current) {
+          lastOrdersSigRef.current = sig;
+          setOrders(nuevos);
+        }
       });
     }, 5000);
     return () => clearInterval(t);
@@ -3284,10 +3310,11 @@ export function useDealFlowState() {
       });
     },
 
-    // Tema visual: 'light' | 'dark' ("Dark System") | 'premium' (si el Admin lo habilitó).
+    // Tema visual: 'light' | 'dark' ("Dark System") | 'premium' (si el Admin lo habilitó,
+    // o siempre para las cuentas de Admin/Superadmin).
     theme,
     setTheme,
-    premiumHabilitado,
+    premiumHabilitado: premiumPermitido,
 
     // Perfil de la cuenta: nombre, foto, contraseña.
     actualizarNombrePerfil,

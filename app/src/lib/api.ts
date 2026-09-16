@@ -69,6 +69,13 @@ export async function apiUpdateMe(nombre: string): Promise<{ user?: ApiUser; err
 export async function apiUploadAvatar(dataUrl: string): Promise<{ foto?: string; user?: ApiUser; error?: string }> {
   try {
     const r = await fetch('/api/me/foto', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataUrl }) });
+    const ct = r.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      // El servidor (o un proxy delante) rechazó la petición antes de que
+      // nuestro código respondiera JSON — lo típico cuando la foto pesa
+      // demasiado. Mensaje claro en vez del genérico "revisa tu conexión".
+      return { error: r.status === 413 || r.status === 0 ? 'Esa foto pesa demasiado para subirla. Prueba con una más liviana.' : 'El servidor rechazó la foto. Prueba con una más liviana o en otro formato.' };
+    }
     const b = (await r.json()) as { foto?: string; user?: ApiUser; error?: string };
     if (!r.ok) return { error: b.error || 'No pudimos subir la foto.' };
     return { foto: b.foto, user: b.user };
