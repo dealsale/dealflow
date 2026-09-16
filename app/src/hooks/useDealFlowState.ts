@@ -221,6 +221,8 @@ export interface DecoratedCrmChat extends DecoratedLead {
   fechaISO: string;
   /** Lo que se muestra a la derecha del nombre: hora si es hoy, si no la fecha. */
   fechaHoraLabel: string;
+  /** Mensajes del cliente sin responder al final del chat (badge tipo WhatsApp). */
+  sinResponder: number;
 }
 
 export interface DecoratedVariante {
@@ -270,7 +272,7 @@ export interface DecoratedProduct extends Product {
   setCaracteristicas: (v: string) => void;
   setMensajeInicial: (v: string) => void;
   setModosUso: (v: string) => void;
-  faqsDecoradas: { pregunta: string; respuesta: string; remove: () => void }[];
+  faqsDecoradas: { pregunta: string; respuesta: string; remove: () => void; editar: (campo: 'pregunta' | 'respuesta', valor: string) => void }[];
   addFaq: () => void;
   testimoniosList: string[];
   addTestimonios: (files: File[]) => void;
@@ -957,9 +959,18 @@ export function useDealFlowState() {
         const live = apiMode && apiLeadsState ? l.asignado.includes('bot') || l.asignado.includes('Asistente') : l.id === 1 || l.id === 2;
         const selC = l.id === crmSelectedId;
         const fechaISO = l.ultimoIso ? fechaBogota(l.ultimoIso) : '';
+        // Sin responder = mensajes seguidos del cliente al final (nadie —bot ni
+        // vendedor— ha contestado después). Si el chat está abierto, no molesta el badge.
+        let sinResponder = 0;
+        for (let k = l.mensajes.length - 1; k >= 0; k--) {
+          if (l.mensajes[k].de === 'cliente') sinResponder++;
+          else break;
+        }
+        if (selC) sinResponder = 0;
         return {
           ...d,
           live,
+          sinResponder,
           fechaISO,
           fechaHoraLabel: l.ultimoIso ? (fechaISO === hoyBogota() ? l.hora : etiquetaFecha(l.ultimoIso)) : l.hora,
           liveLabel: live ? 'En vivo' : 'Esperando',
@@ -1724,6 +1735,12 @@ export function useDealFlowState() {
           ...f,
           remove: () => {
             const nuevas = (p.faqs || []).filter((_, j) => j !== i);
+            setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, faqs: nuevas } : x)));
+            queuePatch(p.id, { faqs: nuevas });
+          },
+          // Edición en línea de la pregunta y/o la respuesta.
+          editar: (campo: 'pregunta' | 'respuesta', valor: string) => {
+            const nuevas = (p.faqs || []).map((x, j) => (j === i ? { ...x, [campo]: valor } : x));
             setProducts((st) => st.map((x) => (x.id === p.id ? { ...x, faqs: nuevas } : x)));
             queuePatch(p.id, { faqs: nuevas });
           },

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
+import { AutoTextarea } from '../components/AutoTextarea';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 
 type BloqueDecorado = DecoratedProduct['bloquesDecorados'][number];
@@ -77,12 +78,11 @@ function BloquesInicial({ p }: { p: DecoratedProduct }) {
               {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : 'Video'}
             </span>
             {b.tipo === 'texto' ? (
-              <textarea
+              <AutoTextarea
                 value={b.valor || ''}
-                onChange={(e) => b.editText(e.target.value)}
-                rows={1}
+                onChange={(v) => b.editText(v)}
                 placeholder="Escribe el texto de este bloque…"
-                style={{ flex: 1, minWidth: 0, resize: 'vertical', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5, minHeight: 38 }}
+                style={{ flex: 1, minWidth: 0, border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5, minHeight: 38, boxSizing: 'border-box' }}
               />
             ) : (
               <MediaEnBloque b={b} />
@@ -220,21 +220,21 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <div>
               <div style={label}>Descripción</div>
-              <textarea className="df-input" value={p.descripcion || ''} onChange={(e) => p.setDescripcion(e.target.value)} rows={3} placeholder="Qué es, para quién, por qué es bueno…" style={{ ...inputStyle, resize: 'vertical' }} />
+              <AutoTextarea value={p.descripcion || ''} onChange={p.setDescripcion} minRows={3} placeholder="Qué es, para quién, por qué es bueno…" style={{ ...inputStyle }} />
             </div>
             <div>
               <div style={label}>Características</div>
-              <textarea className="df-input" value={p.caracteristicas || ''} onChange={(e) => p.setCaracteristicas(e.target.value)} rows={3} placeholder="Material, medidas, cuidados…" style={{ ...inputStyle, resize: 'vertical' }} />
+              <AutoTextarea value={p.caracteristicas || ''} onChange={p.setCaracteristicas} minRows={3} placeholder="Material, medidas, cuidados…" style={{ ...inputStyle }} />
             </div>
           </div>
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <div style={label}>Modo de uso · cómo se usa el producto</div>
-              <textarea className="df-input" value={p.modosUso || ''} onChange={(e) => p.setModosUso(e.target.value)} rows={2} placeholder="Ej: Aplicar sobre la piel limpia, 2 veces al día…" style={{ ...inputStyle, resize: 'vertical' }} />
+              <AutoTextarea value={p.modosUso || ''} onChange={p.setModosUso} minRows={2} placeholder="Ej: Aplicar sobre la piel limpia, 2 veces al día…" style={{ ...inputStyle }} />
             </div>
             <div>
               <div style={label}>Contenido del paquete · qué le llega al cliente</div>
-              <textarea className="df-input" value={p.contenidoPaquete || ''} onChange={(e) => p.setContenidoPaquete(e.target.value)} rows={2} placeholder="Ej: 1 jogger, 1 bolsa de regalo y guía de tallas." style={{ ...inputStyle, resize: 'vertical' }} />
+              <AutoTextarea value={p.contenidoPaquete || ''} onChange={p.setContenidoPaquete} minRows={2} placeholder="Ej: 1 jogger, 1 bolsa de regalo y guía de tallas." style={{ ...inputStyle }} />
             </div>
           </div>
         </>
@@ -363,12 +363,10 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             {p.reglasDecoradas.map((r, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
                 <span style={{ color: '#059669', fontWeight: 700, flexShrink: 0, marginTop: 6 }}>✓</span>
-                <textarea
+                <AutoTextarea
                   value={r.texto}
-                  onChange={(e) => r.editar(e.target.value)}
-                  rows={1}
-                  className="df-input"
-                  style={{ flex: 1, fontSize: 13, lineHeight: 1.5, border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', resize: 'vertical', color: '#1E293B' }}
+                  onChange={(v) => r.editar(v)}
+                  style={{ flex: 1, fontSize: 13, lineHeight: 1.5, border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', color: '#1E293B' }}
                   onFocus={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
                   onBlur={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
                 />
@@ -384,11 +382,25 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
             {p.faqsDecoradas.map((f, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{f.pregunta}</div>
-                  <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>{f.respuesta}</div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <input
+                    value={f.pregunta}
+                    onChange={(e) => f.editar('pregunta', e.target.value)}
+                    placeholder="Pregunta"
+                    style={{ fontSize: 13, fontWeight: 600, border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', color: '#1E293B' }}
+                    onFocus={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                    onBlur={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
+                  />
+                  <AutoTextarea
+                    value={f.respuesta}
+                    onChange={(v) => f.editar('respuesta', v)}
+                    placeholder="Respuesta"
+                    style={{ fontSize: 13, color: '#64748B', border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', lineHeight: 1.5 }}
+                    onFocus={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = '#1E293B'; }}
+                    onBlur={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = '#64748B'; }}
+                  />
                 </div>
-                <span onClick={f.remove} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}>✕</span>
+                <span onClick={f.remove} className="df-danger-hover" style={{ color: '#94A3B8', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, marginTop: 6 }}>✕</span>
               </div>
             ))}
           </div>
