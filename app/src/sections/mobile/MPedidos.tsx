@@ -1,17 +1,13 @@
-import { useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../../components/Dropdown';
-import { ManualOrderModal } from '../../components/ManualOrderModal';
 
 export function MPedidos({ df }: { df: DealFlowState }) {
-  const [nuevoOpen, setNuevoOpen] = useState(false);
   return (
     <section data-screen-label="Móvil Pedidos">
-      <ManualOrderModal df={df} open={nuevoOpen} onClose={() => { setNuevoOpen(false); df.setCrearPedidoMsg(''); }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 12px' }}>
         <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: 0, flex: 1 }}>Pedidos</h1>
         <button
-          onClick={() => setNuevoOpen(true)}
+          onClick={() => df.abrirCrearPedido()}
           style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', minHeight: 40, whiteSpace: 'nowrap' }}
         >
           ＋ Crear

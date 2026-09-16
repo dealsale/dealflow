@@ -77,6 +77,7 @@ import {
   apiCambiarTienda,
   apiCrearTienda,
   apiToggleStore,
+  apiTogglePremiumTema,
   apiUpdateStore,
   apiDeleteStore,
   apiStoreDetalle,
@@ -91,6 +92,8 @@ import {
   apiWaEmbedded,
   apiWaEstado,
   apiSetLeadEtiqueta,
+  apiSetLeadAsignado,
+  apiSetLeadNotaInterna,
   apiSuperStores,
   apiToggleHideStore,
   apiLogs,
@@ -359,6 +362,7 @@ export interface DecoratedAccount extends Account {
   switchStyle: CSSProperties;
   knobStyle: CSSProperties;
   toggle: () => void;
+  togglePremium: () => void;
 }
 
 export interface OrderFilterOption {
@@ -420,6 +424,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     asignado: l.asignado,
     etiqueta: l.etiqueta || '',
     canal: l.canal || 'whatsapp',
+    notaInterna: l.notaInterna || '',
     mensajes: l.mensajes.map((m) => ({
       id: m.id,
       de: (m.de === 'bot' || m.de === 'vendedor' ? m.de : 'cliente') as Mensaje['de'],
@@ -592,16 +597,20 @@ export function useDealFlowState() {
   const [floatingNav, setFloatingNav] = useState<boolean>(() => {
     try { return localStorage.getItem('dealflow:floatnav') === '1'; } catch { return false; }
   });
-  // Tema visual: 'light' (por defecto) o 'dark' ("Dark System"). Se recuerda por
-  // dispositivo y se aplica como atributo data-theme en <html> (ver index.css).
-  const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
-    try { return localStorage.getItem('dealflow:theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
+  // Tema visual: 'light' (por defecto), 'dark' ("Dark System") o 'premium'
+  // (look neón/glass, solo si el Admin lo habilitó para esta tienda). Se
+  // recuerda por dispositivo y se aplica como atributo data-theme en <html>.
+  const [theme, setThemeState] = useState<'light' | 'dark' | 'premium'>(() => {
+    try {
+      const v = localStorage.getItem('dealflow:theme');
+      return v === 'dark' || v === 'premium' ? v : 'light';
+    } catch { return 'light'; }
   });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem('dealflow:theme', theme); } catch { /* modo privado */ }
   }, [theme]);
-  function setTheme(t: 'light' | 'dark') { setThemeState(t); }
+  function setTheme(t: 'light' | 'dark' | 'premium') { setThemeState(t); }
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? ASSISTANT_TEXT_DEFAULT);
   const [rules, setRules] = useState<string[]>(snap?.rules ?? RULES_DEFAULT);
   const [orders, setOrders] = useState<Order[]>(snap?.orders ?? ORDERS);
@@ -661,6 +670,14 @@ export function useDealFlowState() {
   const [apiMode, setApiMode] = useState<boolean>(false);
   const [storeNombre, setStoreNombre] = useState<string>('');
   const [storeId, setStoreId] = useState<string>('');
+  // Tema Premium: solo lo puede elegir la tienda si el Admin se lo habilitó.
+  // Si se lo quitan mientras lo tenía puesto, la devolvemos a Dark System (nunca
+  // la dejamos atascada en un tema que ya no puede elegir).
+  const [premiumHabilitado, setPremiumHabilitado] = useState(false);
+  useEffect(() => {
+    if (theme === 'premium' && !premiumHabilitado && apiMode) setThemeState('dark');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [premiumHabilitado]);
   const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
   const [iaPredeterminada, setIaPredeterminada] = useState('deepseek');
   const [integracionMsg, setIntegracionMsg] = useState('');
@@ -889,6 +906,20 @@ export function useDealFlowState() {
     if (!o || o.estado === estado) return;
     setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, estado } : x)));
     if (apiMode && o.rowId) void apiOrderEstado(o.rowId, estado).then((r) => { if (r.error) void apiOrders().then(({ data }) => { if (data) setOrders(mapApiOrders(data.orders)); }); });
+  }
+
+  // Crear pedido manual: un solo modal global (antes vivía duplicado dentro de
+  // Pedidos/MPedidos), para poder abrirlo también desde el Inbox con el
+  // cliente del chat ya puesto.
+  const [crearPedidoAbierto, setCrearPedidoAbierto] = useState(false);
+  const [crearPedidoPrefill, setCrearPedidoPrefill] = useState<{ cliente?: string; tel?: string } | null>(null);
+  function abrirCrearPedido(prefill?: { cliente?: string; tel?: string }) {
+    setCrearPedidoPrefill(prefill || null);
+    setCrearPedidoAbierto(true);
+  }
+  function cerrarCrearPedido() {
+    setCrearPedidoAbierto(false);
+    setCrearPedidoMsg('');
   }
 
   // Crea un pedido MANUALMENTE (logística manual). Devuelve el id creado o ''.
@@ -1528,6 +1559,7 @@ export function useDealFlowState() {
         }
         if (data.store?.nombre) setStoreNombre(data.store.nombre);
         if (data.store?.id) setStoreId(data.store.id);
+        setPremiumHabilitado(!!data.store?.temaPremium);
         setSuscripcion(data.suscripcion ?? null);
         if (data.whatsapp.verifyToken) setWaVerifyToken(data.whatsapp.verifyToken);
         setWaSignup(data.whatsapp.signup ?? null);
@@ -2001,7 +2033,7 @@ export function useDealFlowState() {
   async function reloadAdmin() {
     const { data } = await apiAdminOverview();
     if (!data) return;
-    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa, planEstado: s.planEstado, planVence: s.planVence, creditos: s.creditos })));
+    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa, planEstado: s.planEstado, planVence: s.planVence, creditos: s.creditos, temaPremium: s.temaPremium })));
     setPlans(data.plans.map((p) => ({ id: p.id, nombre: p.nombre, precio: p.precio, cuentas: p.cuentas, features: p.features })));
   }
   useEffect(() => {
@@ -2309,12 +2341,32 @@ export function useDealFlowState() {
     if (apiMode) void apiSetLeadEtiqueta(String(id), etiqueta);
   }
 
+  // Asignar el chat a un miembro del equipo desde el Inbox (acción rápida).
+  function asignarChatCrm(id: number | string, asignado: string) {
+    setApiLeadsState((st) => (st || []).map((l) => (l.id === id ? { ...l, asignado } : l)));
+    setLeads((st) => st.map((l) => (l.id === id ? { ...l, asignado } : l)));
+    if (apiMode) void apiSetLeadAsignado(String(id), asignado);
+  }
+
+  // Nota interna del chat (solo la ve el equipo). Se guarda al salir del campo.
+  const [notaInternaMsg, setNotaInternaMsg] = useState('');
+  function guardarNotaInterna(id: number | string, notaInterna: string) {
+    setApiLeadsState((st) => (st || []).map((l) => (l.id === id ? { ...l, notaInterna } : l)));
+    setLeads((st) => st.map((l) => (l.id === id ? { ...l, notaInterna } : l)));
+    if (apiMode) {
+      void apiSetLeadNotaInterna(String(id), notaInterna).then((r) => {
+        setNotaInternaMsg(r.error ? 'No se pudo guardar la nota.' : '✓ Nota guardada');
+        setTimeout(() => setNotaInternaMsg(''), 2000);
+      });
+    }
+  }
+
   async function reloadTeam() {
     const { data } = await apiTeamList();
     if (data) setTeam(data.team);
   }
   useEffect(() => {
-    if (apiMode && !isAdmin && sessionUser && section === 'equipo') void reloadTeam();
+    if (apiMode && !isAdmin && sessionUser && (section === 'equipo' || section === 'crm')) void reloadTeam();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, isAdmin, sessionUser, section]);
 
@@ -2510,6 +2562,12 @@ export function useDealFlowState() {
     if (apiMode) void apiToggleStore(String(id), !activa).then((r) => { if (r.error) void reloadAdmin(); });
   }
 
+  // Tema Premium (look neón/glass): lo enciende/apaga el Admin por tienda, como upsell.
+  function togglePremiumTema(id: number | string, actual: boolean) {
+    setAccounts((st) => st.map((x) => (x.id === id ? { ...x, temaPremium: !x.temaPremium } : x)));
+    if (apiMode) void apiTogglePremiumTema(String(id), !actual).then((r) => { if (r.error) void reloadAdmin(); });
+  }
+
   const accountsDecorated: DecoratedAccount[] = useMemo(
     () =>
       accounts.map((a) => ({
@@ -2520,6 +2578,7 @@ export function useDealFlowState() {
         switchStyle: { width: '40px', height: '23px', borderRadius: '999px', background: a.activa ? 'var(--df-brand)' : 'var(--df-border-strong)', padding: '2.5px', cursor: 'pointer', transition: 'background .15s', boxSizing: 'border-box' },
         knobStyle: { width: '18px', height: '18px', borderRadius: '50%', background: 'var(--df-surface)', transform: a.activa ? 'translateX(17px)' : 'translateX(0)', transition: 'transform .15s', boxShadow: '0 1px 2px rgba(15,23,42,.25)' },
         toggle: () => toggleAccount(a.id, a.activa),
+        togglePremium: () => togglePremiumTema(a.id, !!a.temaPremium),
       })),
     [accounts, apiMode],
   );
@@ -2859,6 +2918,10 @@ export function useDealFlowState() {
     crearPedidoManual,
     crearPedidoMsg,
     setCrearPedidoMsg,
+    crearPedidoAbierto,
+    crearPedidoPrefill,
+    abrirCrearPedido,
+    cerrarCrearPedido,
     reenviarMensaje,
     reenviandoMsg,
     // ── Biblioteca de productos ──
@@ -2872,6 +2935,9 @@ export function useDealFlowState() {
     actualizarBibliotecaItem,
     eliminarBibliotecaItem,
     setLeadEtiqueta,
+    asignarChatCrm,
+    guardarNotaInterna,
+    notaInternaMsg,
     etiquetasCrm: ETIQUETAS_CRM,
     section,
     adminSection,
@@ -3190,9 +3256,10 @@ export function useDealFlowState() {
       });
     },
 
-    // Tema visual: 'light' | 'dark' ("Dark System").
+    // Tema visual: 'light' | 'dark' ("Dark System") | 'premium' (si el Admin lo habilitó).
     theme,
     setTheme,
+    premiumHabilitado,
 
     // Perfil de la cuenta: nombre, foto, contraseña.
     actualizarNombrePerfil,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { fmt } from '../lib/format';
@@ -15,7 +15,7 @@ interface Fila {
  * pide el bot) y OBLIGA a elegir producto + variantes + cantidad. Sirve para la
  * logística manual (pedidos que no llegaron por el bot).
  */
-export function ManualOrderModal({ df, open, onClose }: { df: DealFlowState; open: boolean; onClose: () => void }) {
+export function ManualOrderModal({ df, open, onClose, prefill }: { df: DealFlowState; open: boolean; onClose: () => void; prefill?: { cliente?: string; tel?: string } | null }) {
   const [cliente, setCliente] = useState('');
   const [tel, setTel] = useState('');
   const [departamento, setDepartamento] = useState('');
@@ -25,6 +25,19 @@ export function ManualOrderModal({ df, open, onClose }: { df: DealFlowState; ope
   const [envio, setEnvio] = useState('');
   const [filas, setFilas] = useState<Fila[]>([{ productId: '', opciones: {}, qty: 1, precio: 0 }]);
   const [error, setError] = useState('');
+
+  // El modal vive montado siempre (para poder abrirlo desde el Inbox con el
+  // cliente ya puesto): cada vez que se abre, arranca limpio con el prefill.
+  useEffect(() => {
+    if (open) {
+      setCliente(prefill?.cliente || '');
+      setTel(prefill?.tel || '');
+      setDepartamento(''); setCiudad(''); setDireccion(''); setNota(''); setEnvio('');
+      setFilas([{ productId: '', opciones: {}, qty: 1, precio: 0 }]);
+      setError('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const productos = df.products;
   const opcionesProducto = [{ value: '', label: 'Selecciona un producto…' }, ...productos.map((p) => ({ value: String(p.id), label: `${p.nombre} · ${fmt(p.precio)}` }))];

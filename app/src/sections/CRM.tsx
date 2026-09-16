@@ -6,6 +6,8 @@ import { Dropdown } from '../components/Dropdown';
 import { ActivityLog } from '../components/ActivityLog';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
+type EstadoPill = 'todos' | 'noleidos' | 'envivo' | 'esperando';
+
 export function CRM({ df }: { df: DealFlowState }) {
   const chat = df.crmChat;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -14,10 +16,15 @@ export function CRM({ df }: { df: DealFlowState }) {
   const [rangoFecha, setRangoFecha] = useState<'Todas' | 'Hoy' | 'Ayer' | '7 días' | 'Personalizado'>('Todas');
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
+  const [estadoPill, setEstadoPill] = useState<EstadoPill>('todos');
+  const [nota, setNota] = useState('');
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat?.tel, chat?.mensajesDecorated.length]);
+  useEffect(() => {
+    setNota(chat?.notaInterna || '');
+  }, [chat?.id]);
   const q = busca.trim().toLowerCase();
 
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
@@ -32,14 +39,47 @@ export function CRM({ df }: { df: DealFlowState }) {
     if (rangoFecha === '7 días') return fechaISO >= hace7;
     return true;
   };
+  const pasaEstado = (c: (typeof df.crmChats)[number]) => {
+    if (estadoPill === 'noleidos') return c.sinResponder > 0;
+    if (estadoPill === 'envivo') return c.live;
+    if (estadoPill === 'esperando') return !c.live;
+    return true;
+  };
   const chatsFiltrados = df.crmChats.filter(
-    (c) => (!filtroEtiqueta || c.etiqueta === filtroEtiqueta) && (!q || c.nombre.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)) && pasaFecha(c.fechaISO),
+    (c) => (!filtroEtiqueta || c.etiqueta === filtroEtiqueta) && (!q || c.nombre.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)) && pasaFecha(c.fechaISO) && pasaEstado(c),
   );
   const cuentaEtiqueta = (et: string) => df.crmChats.filter((c) => c.etiqueta === et).length;
+  const pillsEstado: { key: EstadoPill; label: string; count: number }[] = [
+    { key: 'todos', label: 'Todos', count: df.crmChats.length },
+    { key: 'noleidos', label: 'No leídos', count: df.crmChats.filter((c) => c.sinResponder > 0).length },
+    { key: 'esperando', label: 'Esperando', count: df.crmChats.filter((c) => !c.live).length },
+    { key: 'envivo', label: 'En vivo', count: df.crmChats.filter((c) => c.live).length },
+  ];
   return (
     <section data-screen-label="CRM">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Inbox · Chats en vivo</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 14px' }}>Lo que pasa ahora mismo en tu WhatsApp. Entra a un chat si quieres tomar el control.</p>
+
+      {/* Estado del chat, de un vistazo: cuántos, cuántos sin leer, cuántos esperan. */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        {pillsEstado.map((p) => {
+          const activo = estadoPill === p.key;
+          return (
+            <button
+              key={p.key}
+              onClick={() => setEstadoPill(p.key)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7, border: '1px solid ' + (activo ? 'var(--df-brand)' : 'var(--df-border)'),
+                background: activo ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', color: activo ? 'var(--df-brand-dark)' : 'var(--df-text-secondary)',
+                borderRadius: 999, padding: '6px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
+              }}
+            >
+              {p.label}
+              <span style={{ background: activo ? 'var(--df-brand)' : 'var(--df-surface-2)', color: activo ? '#fff' : 'var(--df-text-muted)', borderRadius: 999, padding: '1px 7px', fontSize: 11, fontWeight: 800 }}>{p.count}</span>
+            </button>
+          );
+        })}
+      </div>
 
       {/* Todos los filtros en una sola fila compacta: búsqueda + menús desplegables. */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
@@ -84,8 +124,8 @@ export function CRM({ df }: { df: DealFlowState }) {
 
       <ActivityLog df={df} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
-        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: chat ? '340px 1fr 280px' : '360px 1fr', gap: 14, alignItems: 'start' }}>
+        <div style={{ minWidth: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
           {chatsFiltrados.length === 0 && (
             <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--df-text-faint)', fontSize: 13 }}>
               Ningún chat coincide con el filtro.
@@ -118,7 +158,8 @@ export function CRM({ df }: { df: DealFlowState }) {
         </div>
 
         {chat && (
-          <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', height: 'min(70vh, 620px)' }}>
+          <>
+          <div style={{ minWidth: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', height: 'min(70vh, 620px)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--df-border)' }}>
               <div style={chat.avatarStyle}>{chat.iniciales}</div>
               <div>
@@ -130,14 +171,6 @@ export function CRM({ df }: { df: DealFlowState }) {
                 <span>{chat.liveLabel}</span>
               </div>
               <div style={{ flex: 1 }} />
-              <div style={{ width: 170 }}>
-                <Dropdown
-                  ariaLabel="Etiqueta esta conversación"
-                  value={chat.etiqueta || ''}
-                  onChange={(v) => df.setLeadEtiqueta(chat.id, v)}
-                  options={[{ value: '', label: '🏷️ Sin etiqueta' }, ...df.etiquetasCrm.map((et) => ({ value: et, label: et }))]}
-                />
-              </div>
               <button
                 onClick={() => df.abrirLogs(String(chat.id), chat.nombre)}
                 title="Ver el registro de actividad de ESTE chat"
@@ -254,6 +287,73 @@ export function CRM({ df }: { df: DealFlowState }) {
               )}
             </div>
           </div>
+
+          {/* Panel del cliente: quién es, en qué va y accesos directos a las acciones típicas. */}
+          <div style={{ minWidth: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', gap: 16, padding: 16, height: 'min(70vh, 620px)', overflowY: 'auto' }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase', marginBottom: 10 }}>Información del cliente</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={chat.avatarStyle}>{chat.iniciales}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.nombre}</div>
+                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-muted)' }}>{chat.tel}</div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase', marginBottom: 8 }}>Etiqueta</div>
+              <Dropdown
+                ariaLabel="Etiqueta esta conversación"
+                value={chat.etiqueta || ''}
+                onChange={(v) => df.setLeadEtiqueta(chat.id, v)}
+                options={[{ value: '', label: '🏷️ Sin etiqueta' }, ...df.etiquetasCrm.map((et) => ({ value: et, label: et }))]}
+              />
+            </div>
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase', marginBottom: 8 }}>Acciones rápidas</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <button
+                  onClick={() => { df.setOrderQuery(chat.tel); df.go('pedidos'); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
+                >
+                  🛒 Ver pedidos de este cliente
+                </button>
+                <button
+                  onClick={() => df.abrirCrearPedido({ cliente: chat.nombre, tel: chat.tel })}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
+                >
+                  🧾 Crear pedido para él/ella
+                </button>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginBottom: 5 }}>Asignar a…</div>
+                <Dropdown
+                  ariaLabel="Asignar este chat a"
+                  value={chat.asignado}
+                  onChange={(v) => df.asignarChatCrm(chat.id, v)}
+                  options={df.team.map((m) => ({ value: m.nombre, label: m.nombre }))}
+                  placeholder={chat.asignado}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase', marginBottom: 8 }}>Notas internas</div>
+              <textarea
+                className="df-input"
+                value={nota}
+                onChange={(e) => setNota(e.target.value)}
+                onBlur={() => { if (chat && nota !== (chat.notaInterna || '')) df.guardarNotaInterna(chat.id, nota); }}
+                placeholder="Solo la ve tu equipo, nunca el cliente…"
+                rows={5}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: 10, fontFamily: 'inherit', fontSize: 12.5, lineHeight: 1.5, resize: 'vertical' }}
+              />
+              {df.notaInternaMsg && <div style={{ fontSize: 11.5, color: 'var(--df-brand-dark)', marginTop: 4 }}>{df.notaInternaMsg}</div>}
+            </div>
+          </div>
+          </>
         )}
       </div>
     </section>

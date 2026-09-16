@@ -1,30 +1,39 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
-/** Avatar redondo: la foto de perfil si hay, si no las iniciales. */
-function Avatar({ foto, iniciales, size }: { foto: string; iniciales: string; size: number }) {
-  return foto ? (
+/** Avatar redondo: la foto de perfil si hay, si no las iniciales. En el tema
+ * Premium lleva un anillo de gradiente (detalle exclusivo de ese tema). */
+function Avatar({ foto, iniciales, size, premium }: { foto: string; iniciales: string; size: number; premium?: boolean }) {
+  const inner = foto ? (
     <img src={foto} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', display: 'block', flexShrink: 0 }} />
   ) : (
     <div style={{ width: size, height: size, borderRadius: '50%', background: 'var(--df-brand)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.4, fontWeight: 700, flexShrink: 0 }}>
       {iniciales}
     </div>
   );
+  if (!premium) return inner;
+  return (
+    <div style={{ width: size + 4, height: size + 4, borderRadius: '50%', background: 'linear-gradient(135deg,#2563EB,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 12px rgba(124,58,237,.55)' }}>
+      {inner}
+    </div>
+  );
 }
 
-/** Botones de dos opciones (usados para elegir el tema). */
-function Pills<T extends string>({ value, options, onChange }: { value: T; options: { v: T; label: string; icon?: string }[]; onChange: (v: T) => void }) {
+/** Botones de opciones (usados para elegir el tema). Una opción puede pedir un
+ * fondo de gradiente propio cuando está activa (el pill "Premium"). */
+function Pills<T extends string>({ value, options, onChange }: { value: T; options: { v: T; label: string; icon?: string; gradient?: string }[]; onChange: (v: T) => void }) {
   return (
-    <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
       {options.map((o) => (
         <button
           key={o.v}
           onClick={() => onChange(o.v)}
           style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: value === o.v ? 'var(--df-text)' : 'var(--df-surface)',
-            color: value === o.v ? 'var(--df-surface)' : 'var(--df-text-secondary)',
-            border: 'none', padding: '8px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: value === o.v ? (o.gradient || 'var(--df-text)') : 'var(--df-surface)',
+            color: value === o.v ? (o.gradient ? '#fff' : 'var(--df-surface)') : 'var(--df-text-secondary)',
+            border: '1px solid ' + (value === o.v ? 'transparent' : 'var(--df-border)'), borderRadius: 8,
+            padding: '7px 11px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
           {o.icon && <span>{o.icon}</span>}
@@ -112,10 +121,12 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
     if (v && v !== df.sessionUser?.nombre) void df.actualizarNombrePerfil(v);
   };
 
+  const premium = df.theme === 'premium';
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <div onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', padding: '4px 6px', borderRadius: 10 }} className={onDarkBar ? undefined : 'df-row-hover'}>
-        <Avatar foto={df.userFoto} iniciales={df.userInitials} size={32} />
+        <Avatar foto={df.userFoto} iniciales={df.userInitials} size={32} premium={premium} />
         {!onDarkBar && (
           <div style={{ lineHeight: 1.25, display: window.innerWidth < 720 ? 'none' : 'block' }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--df-text)' }}>{df.userLabel}</div>
@@ -128,9 +139,10 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
       {open && (
         <div
           style={{
-            position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 296, zIndex: 61,
-            background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14,
-            boxShadow: '0 24px 60px -18px rgba(0,0,0,.35)', overflow: 'hidden',
+            position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 312, zIndex: 61,
+            background: 'var(--df-surface)', border: premium ? '1px solid rgba(148,163,253,.35)' : '1px solid var(--df-border)', borderRadius: 14,
+            boxShadow: premium ? '0 24px 60px -18px rgba(0,0,0,.5), 0 0 0 1px rgba(124,58,237,.15), 0 0 26px rgba(99,102,241,.25)' : '0 24px 60px -18px rgba(0,0,0,.35)',
+            overflow: 'hidden', backdropFilter: premium ? 'saturate(180%) blur(20px)' : undefined, WebkitBackdropFilter: premium ? 'saturate(180%) blur(20px)' : undefined,
           }}
         >
           {/* Encabezado: avatar (clic para cambiar foto) + nombre editable + correo */}
@@ -140,7 +152,7 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
               title="Cambiar foto de perfil"
               style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}
             >
-              <Avatar foto={df.userFoto} iniciales={df.userInitials} size={52} />
+              <Avatar foto={df.userFoto} iniciales={df.userInitials} size={52} premium={premium} />
               <div style={{ position: 'absolute', bottom: -2, right: -2, width: 20, height: 20, borderRadius: '50%', background: 'var(--df-text)', color: 'var(--df-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, border: '2px solid var(--df-surface)' }}>
                 📷
               </div>
@@ -189,8 +201,12 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
               options={[
                 { v: 'light', label: 'Claro', icon: '☀️' },
                 { v: 'dark', label: 'Dark System', icon: '🌙' },
+                ...(df.premiumHabilitado ? [{ v: 'premium' as const, label: 'Premium', icon: '💎', gradient: 'linear-gradient(135deg,#6D28D9,#2563EB)' }] : []),
               ]}
             />
+            {!df.premiumHabilitado && (
+              <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)' }}>💎 El tema Premium es exclusivo: pregúntale a tu administrador de DealFlow si te lo puede habilitar.</div>
+            )}
           </div>
 
           {/* Cambiar contraseña */}

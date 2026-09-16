@@ -175,6 +175,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                   <button onClick={() => df.abrirEditarStore(id)} style={linkBtn('var(--df-text-body)')}>Editar</button>
                   <button onClick={() => df.extenderSuscripcion(id, 30)} title="Marcar como pagada: extiende 30 días" style={linkBtn('var(--df-brand-dark)')}>+30 días</button>
                   <button onClick={() => { const v = prompt('¿Cuántos créditos dar? (negativo para quitar)'); if (v) df.darCreditos(id, Number(v)); }} title="Dar o quitar créditos del Marketing IA" style={linkBtn('#7C3AED')}>+ Créditos</button>
+                  <button onClick={a.togglePremium} title={a.temaPremium ? 'Quitarle el tema Premium a esta tienda' : 'Darle el tema Premium a esta tienda (upsell)'} style={linkBtn(a.temaPremium ? '#D946EF' : 'var(--df-text-faint)')}>💎 {a.temaPremium ? 'Premium ON' : 'Premium'}</button>
                   <button onClick={() => df.entrarATienda(id)} style={linkBtn('var(--df-indigo)')}>Entrar</button>
                   <button onClick={() => df.eliminarStore(id)} style={linkBtn(armed ? 'var(--df-danger)' : 'var(--df-danger-dark)')}>{armed ? '¿Seguro?' : 'Eliminar'}</button>
                 </div>

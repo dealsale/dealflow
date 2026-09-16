@@ -121,6 +121,91 @@
   --df-noise-opacity: 0.05;
 }
 
+/* "Premium": tema exclusivo (lo habilita el Admin por tienda, ver Cuentas).
+   Vidrio + neón sobre un fondo animado de resplandores azul/púrpura/rosa —
+   mismas variables --df-*, así que hereda automáticamente todo lo que ya
+   está construido sobre ellas, más algunos extras solo de este tema. */
+:root[data-theme='premium'] {
+  color-scheme: dark;
+  --df-surface: rgba(24, 29, 58, 0.72);
+  --df-bg: #060814;
+  --df-surface-2: rgba(255, 255, 255, 0.06);
+  --df-border: rgba(148, 163, 253, 0.18);
+  --df-border-strong: rgba(148, 163, 253, 0.34);
+  --df-text: #F5F7FF;
+  --df-text-strong: #FFFFFF;
+  --df-text-body: #D9DDF7;
+  --df-text-secondary: #B9C1EC;
+  --df-text-muted: #99A2D6;
+  --df-text-faint: #7C86BA;
+  --df-brand: #1FD8A8;
+  --df-brand-dark: #4DF0C4;
+  --df-brand-mid: #2DE6BA;
+  --df-brand-light: #86F5DA;
+  --df-brand-border: rgba(31, 216, 168, 0.4);
+  --df-brand-subtle: rgba(31, 216, 168, 0.16);
+  --df-brand-subtle-2: rgba(31, 216, 168, 0.1);
+  --df-brand-subtle-3: rgba(31, 216, 168, 0.08);
+  --df-brand-deep: #b6ffe9;
+  --df-green-subtle: rgba(31, 216, 168, 0.14);
+  --df-green-700: #4ade80;
+  --df-purple: #B79BFF;
+  --df-indigo: #8B93FF;
+  --df-purple-subtle: rgba(139, 92, 246, 0.22);
+  --df-purple-border: rgba(183, 155, 255, 0.42);
+  --df-indigo-subtle: rgba(99, 102, 241, 0.2);
+  --df-info: #60A5FA;
+  --df-info-subtle: rgba(96, 165, 250, 0.18);
+  --df-danger: #FB7185;
+  --df-danger-dark: #FDA4AF;
+  --df-danger-border: rgba(251, 113, 133, 0.4);
+  --df-danger-subtle: rgba(251, 113, 133, 0.12);
+  --df-danger-subtle-2: rgba(251, 113, 133, 0.18);
+  --df-danger-mid: #FB7185;
+  --df-danger-light: #FDA4AF;
+  --df-warning: #FBBF24;
+  --df-warning-border: rgba(251, 191, 36, 0.4);
+  --df-warning-mid: #FBBF24;
+  --df-warning-subtle-2: rgba(251, 191, 36, 0.1);
+  --df-warning-light: #FCD34D;
+  --df-warning-subtle: rgba(251, 191, 36, 0.16);
+  --df-glow: 0 0 0 1px rgba(139, 146, 255, 0.3), 0 10px 34px -6px rgba(124, 58, 237, 0.55);
+  --df-page-bg: #060814;
+  --df-noise-opacity: 0.08;
+  /* Extras exclusivos de este tema (no existen en claro/Dark System). */
+  --df-premium-grad: linear-gradient(135deg, #4338CA 0%, #7C3AED 55%, #2563EB 100%);
+  --df-premium-blur: saturate(180%) blur(20px);
+}
+
+/* Lienzo animado del tema Premium: lo llevan los contenedores raíz de la app
+   (ver App.tsx). Tres resplandores radiales que derivan muy despacio — el
+   "diseño con animaciones" que pidió el negocio, sin tocar cada componente. */
+@keyframes dfpremiumdrift {
+  0% { background-position: 8% -6%, 96% 4%, 34% 106%; }
+  50% { background-position: 16% 2%, 88% 14%, 28% 96%; }
+  100% { background-position: 8% -6%, 96% 4%, 34% 106%; }
+}
+.df-premium-canvas {
+  background-color: #060814;
+  background-repeat: no-repeat;
+  background-image:
+    radial-gradient(900px circle, rgba(37, 99, 235, .4), transparent 55%),
+    radial-gradient(780px circle, rgba(139, 92, 246, .36), transparent 52%),
+    radial-gradient(720px circle, rgba(236, 72, 153, .18), transparent 55%);
+  animation: dfpremiumdrift 26s ease-in-out infinite;
+}
+/* Vidrio esmerilado en la barra superior: dejamos ver (borroso) el resplandor de atrás. */
+:root[data-theme='premium'] header {
+  backdrop-filter: var(--df-premium-blur);
+  -webkit-backdrop-filter: var(--df-premium-blur);
+}
+:root[data-theme='premium'] ::-webkit-scrollbar-thumb {
+  background: #4C4FA0;
+}
+:root[data-theme='premium'] .df-input:focus {
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.28), var(--df-glow);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -274,10 +359,13 @@ textarea {
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22), var(--df-glow);
 }
 
-/* Dark System: brillo sutil en los botones de acción al pasar el mouse. */
+/* Dark System / Premium: brillo sutil en los botones de acción al pasar el mouse. */
 :root[data-theme='dark'] .df-btn-primary,
 :root[data-theme='dark'] .df-btn-amber,
-:root[data-theme='dark'] .df-btn-outline-green {
+:root[data-theme='dark'] .df-btn-outline-green,
+:root[data-theme='premium'] .df-btn-primary,
+:root[data-theme='premium'] .df-btn-amber,
+:root[data-theme='premium'] .df-btn-outline-green {
   box-shadow: var(--df-glow);
 }
 

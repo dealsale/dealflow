@@ -4,6 +4,7 @@ import { BotPreloader } from './components/BotPreloader';
 import { Login } from './components/Login';
 import { OrderDetailPanel } from './components/OrderDetailPanel';
 import { OrderToast } from './components/OrderToast';
+import { ManualOrderModal } from './components/ManualOrderModal';
 import { Sidebar } from './components/Sidebar';
 import { FloatingNav } from './components/FloatingNav';
 import { MobileChat } from './components/mobile/MobileChat';
@@ -314,6 +315,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
 function DesktopApp({ df }: { df: DealFlowState }) {
   return (
     <div
+      className={df.theme === 'premium' ? 'df-premium-canvas' : undefined}
       style={{
         position: 'relative',
         display: 'flex',
@@ -321,7 +323,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
         height: '100%',
         minHeight: 600,
         fontFamily: "'Inter',system-ui,sans-serif",
-        background: 'var(--df-bg)',
+        background: df.theme === 'premium' ? undefined : 'var(--df-bg)',
         color: 'var(--df-text-strong)',
         overflow: 'hidden',
       }}
@@ -350,6 +352,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
       {df.floatingNav && <FloatingNav df={df} />}
       <OrderDetailPanel df={df} />
       <OrderToast df={df} />
+      <ManualOrderModal df={df} open={df.crearPedidoAbierto} onClose={df.cerrarCrearPedido} prefill={df.crearPedidoPrefill} />
     </div>
   );
 }
@@ -357,6 +360,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
 function MobileApp({ df }: { df: DealFlowState }) {
   return (
     <div
+      className={df.theme === 'premium' ? 'df-premium-canvas' : undefined}
       style={{
         position: 'relative',
         display: 'flex',
@@ -364,7 +368,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
         width: '100%',
         height: '100%',
         fontFamily: "'Inter',system-ui,sans-serif",
-        background: 'var(--df-bg)',
+        background: df.theme === 'premium' ? undefined : 'var(--df-bg)',
         color: 'var(--df-text-strong)',
         overflow: 'hidden',
       }}
@@ -392,6 +396,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
       <MobileChat df={df} />
       <MobileOrderSheet df={df} />
       <OrderToast df={df} mobile />
+      <ManualOrderModal df={df} open={df.crearPedidoAbierto} onClose={df.cerrarCrearPedido} prefill={df.crearPedidoPrefill} />
     </div>
   );
 }

@@ -162,6 +162,8 @@ export interface Lead {
   etiqueta?: string;
   /** Canal de la conversación: whatsapp (default) o web. */
   canal?: string;
+  /** Nota interna del equipo sobre este chat (nunca la ve el cliente). */
+  notaInterna?: string;
   mensajes: Mensaje[];
 }
 
@@ -203,6 +205,7 @@ export interface Account {
   planEstado?: string;
   planVence?: string | null;
   creditos?: number;
+  temaPremium?: boolean;
 }
 
 export type VendedorSection =

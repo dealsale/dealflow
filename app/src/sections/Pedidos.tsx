@@ -1,16 +1,12 @@
-import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { SearchInput, FilterSelect } from '../components/Filters';
 import { Dropdown } from '../components/Dropdown';
-import { ManualOrderModal } from '../components/ManualOrderModal';
 
 export function Pedidos({ df }: { df: DealFlowState }) {
-  const [nuevoOpen, setNuevoOpen] = useState(false);
   const fechaActiva = df.orderDateFilters.find((f) => f.active)?.key || 'Todas';
   const estadoActivo = df.orderFilters.find((f) => f.active)?.key || (df.orderFilters[0]?.key ?? '');
   return (
     <section data-screen-label="Pedidos">
-      <ManualOrderModal df={df} open={nuevoOpen} onClose={() => { setNuevoOpen(false); df.setCrearPedidoMsg(''); }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Pedidos</h1>
@@ -18,7 +14,7 @@ export function Pedidos({ df }: { df: DealFlowState }) {
         </div>
         <div style={{ flex: 1 }} />
         <button
-          onClick={() => setNuevoOpen(true)}
+          onClick={() => df.abrirCrearPedido()}
           style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
           ＋ Crear pedido

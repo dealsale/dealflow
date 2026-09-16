@@ -106,6 +106,7 @@ export interface AdminStore {
   planEstado?: string;
   planVence?: string | null;
   creditos?: number;
+  temaPremium?: boolean;
 }
 export interface AdminPlan {
   id: string;
@@ -136,6 +137,7 @@ export interface ApiLead {
   asignado: string;
   etiqueta?: string;
   canal?: string;
+  notaInterna?: string;
   mensajes: ApiMensaje[];
 }
 
@@ -280,7 +282,7 @@ export interface ApiOrder {
   createdAt: string;
   items: { qty: number; nombre: string; precio: number }[];
 }
-export const apiState = () => req<{ store: { id: string; nombre: string; plan: string }; assistant: { instrucciones: string; reglas: string[] }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
+export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean }; assistant: { instrucciones: string; reglas: string[] }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
 export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET');
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
 export const apiOrderEstado = (rowId: string, estado: string) => req<{ estado: string }>(`/api/orders/${rowId}/estado`, 'POST', { estado });
@@ -312,6 +314,8 @@ export const apiSendLeadMedia = (id: string, dataUrl: string, nombre: string, ca
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/media`, 'POST', { dataUrl, nombre, caption });
 export const apiAssignLead = (id: string, asignado: string) => req<{ ok: true }>(`/api/leads/${id}`, 'PATCH', { asignado });
 export const apiSetLeadEtiqueta = (id: string, etiqueta: string) => req<{ ok: true }>(`/api/leads/${id}`, 'PATCH', { etiqueta });
+export const apiSetLeadAsignado = (id: string, asignado: string) => req<{ ok: true }>(`/api/leads/${id}`, 'PATCH', { asignado });
+export const apiSetLeadNotaInterna = (id: string, notaInterna: string) => req<{ ok: true }>(`/api/leads/${id}`, 'PATCH', { notaInterna });
 export const apiDeleteLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}`, 'DELETE');
 export const apiResetLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}/reset`, 'POST');
 
@@ -426,6 +430,7 @@ export const apiAdminOverview = () => req<{ stores: AdminStore[]; plans: AdminPl
 export const apiCreateStore = (b: { nombre: string; correo: string; password: string; plan: string }) =>
   req<{ storeId: string }>('/api/admin/stores', 'POST', b);
 export const apiToggleStore = (id: string, activa: boolean) => req<{ ok: true }>(`/api/admin/stores/${id}`, 'PATCH', { activa });
+export const apiTogglePremiumTema = (id: string, temaPremium: boolean) => req<{ ok: true }>(`/api/admin/stores/${id}`, 'PATCH', { temaPremium });
 export const apiUpdateStore = (id: string, b: { nombre?: string; correo?: string; plan?: string; password?: string; activa?: boolean }) =>
   req<{ ok: true }>(`/api/admin/stores/${id}`, 'PATCH', b);
 export const apiDeleteStore = (id: string) => req<{ ok: true }>(`/api/admin/stores/${id}`, 'DELETE');

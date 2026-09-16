@@ -187,7 +187,8 @@ api.post('/crear-tienda', requireAuth, requireStore, (req, res) => {
 // ── Estado completo de la tienda (una llamada para pintar el panel) ───
 api.get('/state', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
-  const store = db.prepare('SELECT id, nombre, plan FROM stores WHERE id = ?').get(sid);
+  const storeRow = db.prepare('SELECT id, nombre, plan, tema_premium FROM stores WHERE id = ?').get(sid) as { id: string; nombre: string; plan: string; tema_premium: number };
+  const store = { id: storeRow.id, nombre: storeRow.nombre, plan: storeRow.plan, temaPremium: !!storeRow.tema_premium };
   const bloqueados = productosBloqueados(sid); // productos de biblioteca gratuitos (estructura no editable)
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
@@ -211,7 +212,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
-    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp',
+    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp', notaInterna: l.nota_interna || '',
     mensajes: (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
       id: m.id, de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at, tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
     })),
@@ -250,7 +251,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
 api.get('/leads', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
-    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp',
+    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp', notaInterna: l.nota_interna || '',
     mensajes: (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
       id: m.id, de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at, tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
     })),
@@ -580,10 +581,11 @@ api.post('/woo/productos/sync', requireAuth, requireStore, requireOwner, async (
 api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
   if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
-  const { asignado, etapa, etiqueta } = req.body || {};
+  const { asignado, etapa, etiqueta, notaInterna } = req.body || {};
   if (asignado) db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(String(asignado), req.params.id);
   if (etapa) db.prepare('UPDATE leads SET etapa = ? WHERE id = ?').run(String(etapa), req.params.id);
   if (etiqueta !== undefined) db.prepare('UPDATE leads SET etiqueta = ? WHERE id = ?').run(String(etiqueta), req.params.id);
+  if (notaInterna !== undefined) db.prepare('UPDATE leads SET nota_interna = ? WHERE id = ?').run(String(notaInterna).slice(0, 2000), req.params.id);
   res.json({ ok: true });
 });
 
@@ -938,7 +940,7 @@ api.get('/admin/overview', requireAuth, requireAdmin, (_req, res) => {
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
        WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
     ).get(s.id, s.id) as { total: number };
-    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, creditos: s.creditos || 0 };
+    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, creditos: s.creditos || 0, temaPremium: !!s.tema_premium };
   });
   const plans = (db.prepare('SELECT * FROM plans').all() as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, features: pj(p.features as string, []),
@@ -960,11 +962,12 @@ api.patch('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
     | { id: string; nombre: string; correo: string; activa: number }
     | undefined;
   if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
-  const { nombre, correo, plan, password, activa } = req.body || {};
+  const { nombre, correo, plan, password, activa, temaPremium } = req.body || {};
   // El usuario dueño de la tienda (su correo coincide con el de la tienda).
   const dueno = db.prepare("SELECT id FROM users WHERE store_id = ? AND email = ?").get(s.id, s.correo) as { id: string } | undefined;
 
   if (activa !== undefined) db.prepare('UPDATE stores SET activa = ? WHERE id = ?').run(activa ? 1 : 0, s.id);
+  if (temaPremium !== undefined) db.prepare('UPDATE stores SET tema_premium = ? WHERE id = ?').run(temaPremium ? 1 : 0, s.id);
   if (typeof nombre === 'string' && nombre.trim()) {
     db.prepare('UPDATE stores SET nombre = ? WHERE id = ?').run(nombre.trim(), s.id);
     if (dueno) db.prepare('UPDATE users SET nombre = ? WHERE id = ?').run(nombre.trim(), dueno.id);

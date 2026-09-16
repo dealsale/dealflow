@@ -393,6 +393,12 @@ addColumn('library_products', 'editable INTEGER NOT NULL DEFAULT 1');
 // Perfil del usuario: foto de perfil (URL /api/media/... o /api/me/media/...).
 addColumn('users', "foto TEXT NOT NULL DEFAULT ''");
 
+// Tema Premium: look neón/glass exclusivo. Lo habilita el Admin/Superadmin
+// por tienda (upsell), no lo activa el cliente por su cuenta.
+addColumn('stores', 'tema_premium INTEGER NOT NULL DEFAULT 0');
+// Nota interna del chat (solo la ve el equipo, nunca el cliente).
+addColumn('leads', "nota_interna TEXT NOT NULL DEFAULT ''");
+
 // Registro de actividad/errores por tienda (diagnóstico del Inbox): quién
 // disparó un flujo, si un envío falló y por qué, pedidos creados, etc.
 db.exec(`CREATE TABLE IF NOT EXISTS event_log (
