@@ -363,6 +363,10 @@ export interface DecoratedAccount extends Account {
   knobStyle: CSSProperties;
   toggle: () => void;
   togglePremium: () => void;
+  /** Columna de facturación: fecha de vencimiento + cuántos días faltan (o pasaron). */
+  facturacionFecha: string;
+  facturacionDias: string;
+  facturacionColor: string;
 }
 
 export interface OrderFilterOption {
@@ -2570,16 +2574,37 @@ export function useDealFlowState() {
 
   const accountsDecorated: DecoratedAccount[] = useMemo(
     () =>
-      accounts.map((a) => ({
-        ...a,
-        ventasFmt: a.ventas > 0 ? fmt(a.ventas) : '—',
-        estadoLabel: a.activa ? 'Activa' : 'Inactiva',
-        estadoStyle: pill(a.activa ? { color: 'var(--df-brand-dark)', bg: 'var(--df-brand-subtle)' } : { color: 'var(--df-danger-dark)', bg: 'var(--df-danger-subtle-2)' }),
-        switchStyle: { width: '40px', height: '23px', borderRadius: '999px', background: a.activa ? 'var(--df-brand)' : 'var(--df-border-strong)', padding: '2.5px', cursor: 'pointer', transition: 'background .15s', boxSizing: 'border-box' },
-        knobStyle: { width: '18px', height: '18px', borderRadius: '50%', background: 'var(--df-surface)', transform: a.activa ? 'translateX(17px)' : 'translateX(0)', transition: 'transform .15s', boxShadow: '0 1px 2px rgba(15,23,42,.25)' },
-        toggle: () => toggleAccount(a.id, a.activa),
-        togglePremium: () => togglePremiumTema(a.id, !!a.temaPremium),
-      })),
+      accounts.map((a) => {
+        // Columna de facturación: cuándo vence la renta y cuántos días faltan (o pasaron).
+        const venceMs = a.planVence ? new Date(a.planVence + 'T00:00:00').getTime() : null;
+        const diffDias = venceMs != null ? Math.ceil((venceMs - Date.now()) / 86400000) : null;
+        let facturacionFecha = a.planVence || '—';
+        let facturacionDias = '';
+        let facturacionColor = 'var(--df-text-muted)';
+        if (a.planEstado === 'sin_plan') {
+          facturacionFecha = 'Sin plan';
+          facturacionColor = 'var(--df-warning)';
+        } else if (a.planEstado === 'vencida') {
+          facturacionColor = 'var(--df-danger-dark)';
+          facturacionDias = diffDias != null && diffDias < 0 ? `Vencida hace ${-diffDias} día${-diffDias === 1 ? '' : 's'}` : 'Vencida';
+        } else if (diffDias != null) {
+          facturacionColor = diffDias <= 5 ? 'var(--df-warning)' : 'var(--df-brand-dark)';
+          facturacionDias = diffDias >= 0 ? `Vence en ${diffDias} día${diffDias === 1 ? '' : 's'}` : `Vencida hace ${-diffDias} día${-diffDias === 1 ? '' : 's'}`;
+        }
+        return {
+          ...a,
+          ventasFmt: a.ventas > 0 ? fmt(a.ventas) : '—',
+          estadoLabel: a.activa ? 'Activa' : 'Inactiva',
+          estadoStyle: pill(a.activa ? { color: 'var(--df-brand-dark)', bg: 'var(--df-brand-subtle)' } : { color: 'var(--df-danger-dark)', bg: 'var(--df-danger-subtle-2)' }),
+          switchStyle: { width: '40px', height: '23px', borderRadius: '999px', background: a.activa ? 'var(--df-brand)' : 'var(--df-border-strong)', padding: '2.5px', cursor: 'pointer', transition: 'background .15s', boxSizing: 'border-box' },
+          knobStyle: { width: '18px', height: '18px', borderRadius: '50%', background: 'var(--df-surface)', transform: a.activa ? 'translateX(17px)' : 'translateX(0)', transition: 'transform .15s', boxShadow: '0 1px 2px rgba(15,23,42,.25)' },
+          toggle: () => toggleAccount(a.id, a.activa),
+          togglePremium: () => togglePremiumTema(a.id, !!a.temaPremium),
+          facturacionFecha,
+          facturacionDias,
+          facturacionColor,
+        };
+      }),
     [accounts, apiMode],
   );
 

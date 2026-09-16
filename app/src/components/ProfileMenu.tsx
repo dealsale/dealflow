@@ -230,6 +230,17 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
             )}
           </div>
 
+          {df.pwaDisponible && (
+            <div
+              onClick={() => { setOpen(false); df.instalarPwa(); }}
+              className="df-row-hover"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 16px', fontSize: 13, fontWeight: 700, color: 'var(--df-brand-dark)', cursor: 'pointer', borderBottom: '1px solid var(--df-border)' }}
+            >
+              <span>📲</span>
+              <span>Instalar la app</span>
+            </div>
+          )}
+
           <div
             onClick={() => { setOpen(false); df.logout(); }}
             className="df-danger-hover"
