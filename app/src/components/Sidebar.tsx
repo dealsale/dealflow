@@ -102,6 +102,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
                 {adminItem('planes', <IconPlanes />, 'Planes')}
                 {adminItem('cuentas', <IconCuentas />, 'Cuentas')}
                 {adminItem('cupones', <span style={{ fontSize: 16 }}>🎁</span>, 'Cupones')}
+                {adminItem('biblioteca', <IconBiblioteca />, 'Biblioteca')}
               </>
             )}
           </nav>

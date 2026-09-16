@@ -1221,7 +1221,7 @@ api.get('/webchat/:storeId/messages', (req, res) => {
 });
 
 // ── Superadmin: ve TODAS las tiendas y puede ocultarlas del admin ─────
-api.get('/superadmin/stores', requireAuth, requireSuperAdmin, (_req, res) => {
+api.get('/superadmin/stores', requireAuth, requireAdmin, (_req, res) => {
   const stores = (db.prepare('SELECT * FROM stores ORDER BY created_at').all() as Record<string, unknown>[]).map((s) => {
     const ventas = (db.prepare(
       `SELECT COALESCE(SUM(oi.qty * oi.precio),0) t FROM order_items oi JOIN orders o ON o.id = oi.order_id
@@ -1241,40 +1241,41 @@ api.patch('/superadmin/stores/:id/hide', requireAuth, requireSuperAdmin, (req, r
 });
 
 // ── Biblioteca de productos (superadmin) ─────────────────────────────
-api.get('/superadmin/biblioteca', requireAuth, requireSuperAdmin, async (_req, res) => {
+api.get('/superadmin/biblioteca', requireAuth, requireAdmin, async (_req, res) => {
   const { listarBibliotecaAdmin } = await import('./biblioteca.js');
   res.json({ productos: listarBibliotecaAdmin() });
 });
 
 // Lista los productos de una tienda (para elegir cuál clonar a la biblioteca).
-api.get('/superadmin/stores/:storeId/products', requireAuth, requireSuperAdmin, (req, res) => {
+api.get('/superadmin/stores/:storeId/products', requireAuth, requireAdmin, (req, res) => {
   const rows = db.prepare('SELECT id, nombre, precio, tipo FROM products WHERE store_id = ? ORDER BY created_at').all(req.params.storeId) as
     { id: string; nombre: string; precio: number; tipo: string }[];
   res.json({ productos: rows });
 });
 
-api.post('/superadmin/biblioteca/from-product', requireAuth, requireSuperAdmin, async (req, res) => {
+api.post('/superadmin/biblioteca/from-product', requireAuth, requireAdmin, async (req, res) => {
   const { agregarProductoABiblioteca } = await import('./biblioteca.js');
-  const { productId, gratis, precioImportacion } = req.body || {};
-  const r = agregarProductoABiblioteca(String(productId || ''), { gratis: !!gratis, precioImportacion: Number(precioImportacion) || 0 });
+  const { productId, gratis, precioImportacion, editable } = req.body || {};
+  const r = agregarProductoABiblioteca(String(productId || ''), { gratis: !!gratis, precioImportacion: Number(precioImportacion) || 0, editable: editable !== false });
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
 });
 
-api.patch('/superadmin/biblioteca/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+api.patch('/superadmin/biblioteca/:id', requireAuth, requireAdmin, async (req, res) => {
   const { actualizarLibraryProduct } = await import('./biblioteca.js');
-  const { nombre, gratis, precioImportacion, activo } = req.body || {};
+  const { nombre, gratis, precioImportacion, activo, editable } = req.body || {};
   const r = actualizarLibraryProduct(req.params.id, {
     nombre: typeof nombre === 'string' ? nombre : undefined,
     gratis: typeof gratis === 'boolean' ? gratis : undefined,
     precioImportacion: typeof precioImportacion === 'number' ? precioImportacion : undefined,
     activo: typeof activo === 'boolean' ? activo : undefined,
+    editable: typeof editable === 'boolean' ? editable : undefined,
   });
   if (!r.ok) return res.status(404).json({ error: 'Producto de biblioteca no encontrado.' });
   res.json({ ok: true });
 });
 
-api.delete('/superadmin/biblioteca/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+api.delete('/superadmin/biblioteca/:id', requireAuth, requireAdmin, async (req, res) => {
   const { eliminarLibraryProduct } = await import('./biblioteca.js');
   eliminarLibraryProduct(req.params.id);
   res.json({ ok: true });

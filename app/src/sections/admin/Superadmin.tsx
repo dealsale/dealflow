@@ -72,16 +72,17 @@ function Tiendas({ df }: { df: DealFlowState }) {
   );
 }
 
-function BibliotecaAdmin({ df }: { df: DealFlowState }) {
+export function BibliotecaAdmin({ df }: { df: DealFlowState }) {
   const [tiendaSel, setTiendaSel] = useState('');
   const [prodSel, setProdSel] = useState('');
   const [gratis, setGratis] = useState(true);
   const [precio, setPrecio] = useState('');
+  const [editable, setEditable] = useState(true); // ¿el cliente podrá editar su estructura?
 
   const elegirTienda = (id: string) => { setTiendaSel(id); setProdSel(''); df.cargarProductosDeTienda(id); };
   const enviar = () => {
     if (!prodSel) return;
-    df.enviarProductoABiblioteca(prodSel, gratis, gratis ? 0 : parseInt(precio.replace(/[^0-9]/g, ''), 10) || 0);
+    df.enviarProductoABiblioteca(prodSel, gratis, gratis ? 0 : parseInt(precio.replace(/[^0-9]/g, ''), 10) || 0, editable);
     setProdSel(''); setPrecio('');
   };
 
@@ -129,6 +130,15 @@ function BibliotecaAdmin({ df }: { df: DealFlowState }) {
                 style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }} />
             </div>
           )}
+          <div>
+            <div style={{ color: '#64748B', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Edición del cliente</div>
+            <div style={{ display: 'inline-flex', border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden' }}>
+              {([[true, 'Editable'], [false, '🔒 Bloqueado']] as const).map(([e, label]) => (
+                <button key={label} onClick={() => setEditable(e)}
+                  style={{ background: editable === e ? '#0F172A' : '#fff', color: editable === e ? '#fff' : '#334155', border: 'none', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{label}</button>
+              ))}
+            </div>
+          </div>
           <button onClick={enviar} disabled={!prodSel} className="df-btn-primary"
             style={{ background: prodSel ? '#6D28D9' : '#C4B5FD', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: prodSel ? 'pointer' : 'default' }}>
             Enviar a biblioteca
@@ -161,6 +171,11 @@ function BibliotecaAdmin({ df }: { df: DealFlowState }) {
                       style={{ width: 100, border: '1px solid #E2E8F0', borderRadius: 7, padding: '5px 8px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 }} />
                   )}
                 </div>
+                <button onClick={() => df.actualizarBibliotecaItem(p.id, { editable: !p.editable })}
+                  title={p.editable ? 'Los clientes pueden editar su estructura' : 'Estructura bloqueada: el cliente no puede editarla'}
+                  style={{ alignSelf: 'flex-start', border: '1px solid ' + (p.editable ? '#E2E8F0' : '#FDE68A'), background: p.editable ? '#fff' : '#FFFBEB', color: p.editable ? '#334155' : '#B45309', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                  {p.editable ? 'Editable' : '🔒 Bloqueado'}
+                </button>
                 <div style={{ color: '#94A3B8', fontSize: 12 }}>{p.importos} {p.importos === 1 ? 'tienda lo importó' : 'tiendas lo importaron'}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button onClick={() => df.actualizarBibliotecaItem(p.id, { activo: !p.activo })}

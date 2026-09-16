@@ -374,6 +374,9 @@ addColumn('messages', 'media_nombre TEXT');
 addColumn('messages', 'wa_msg_id TEXT');
 addColumn('messages', "estado TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wamid ON messages(wa_msg_id)');
+// Biblioteca: el admin elige por producto si el cliente puede editarlo (1) o no (0).
+// Por defecto editable, para no bloquear nada sin que el admin lo decida.
+addColumn('library_products', 'editable INTEGER NOT NULL DEFAULT 1');
 
 // Registro de actividad/errores por tienda (diagnóstico del Inbox): quién
 // disparó un flujo, si un envío falló y por qué, pedidos creados, etc.

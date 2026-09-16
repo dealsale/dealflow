@@ -1834,9 +1834,11 @@ export function useDealFlowState() {
     if (data) setSuperStores(data.stores);
   }
   useEffect(() => {
-    if (apiMode && isSuperadmin && sessionUser && adminSection === 'superadmin') void reloadSuper();
+    // La lista de tiendas se usa tanto en el panel del superadmin como en la
+    // biblioteca del administrador (para clonar productos desde una tienda).
+    if (apiMode && sessionUser && (adminSection === 'superadmin' || adminSection === 'biblioteca')) void reloadSuper();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiMode, isSuperadmin, sessionUser, adminSection]);
+  }, [apiMode, sessionUser, adminSection]);
   function toggleHideStore(id: string, oculta: boolean) {
     setSuperStores((st) => st.map((s) => (s.id === id ? { ...s, oculta: !oculta } : s)));
     void apiToggleHideStore(id, !oculta).then((r) => { if (r.error) void reloadSuper(); });
@@ -1918,18 +1920,20 @@ export function useDealFlowState() {
     if (data) setSuperBiblioteca(data.productos);
   }
   useEffect(() => {
-    if (apiMode && isSuperadmin && sessionUser && adminSection === 'superadmin') void reloadSuperBiblioteca();
+    // La biblioteca la gestiona el administrador (sección 'biblioteca') y también
+    // el superadmin (sección 'superadmin').
+    if (apiMode && sessionUser && (adminSection === 'superadmin' || adminSection === 'biblioteca')) void reloadSuperBiblioteca();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiMode, isSuperadmin, sessionUser, adminSection]);
+  }, [apiMode, sessionUser, adminSection]);
   function cargarProductosDeTienda(storeId: string) {
     setSuperStoreProducts([]);
     if (!storeId) return;
     void apiSuperStoreProducts(storeId).then(({ data }) => { if (data) setSuperStoreProducts(data.productos); });
   }
-  function enviarProductoABiblioteca(productId: string, gratis: boolean, precioImportacion: number) {
-    void apiSuperBibliotecaFromProduct(productId, gratis, precioImportacion).then((r) => { if (!r.error) void reloadSuperBiblioteca(); });
+  function enviarProductoABiblioteca(productId: string, gratis: boolean, precioImportacion: number, editable = true) {
+    void apiSuperBibliotecaFromProduct(productId, gratis, precioImportacion, editable).then((r) => { if (!r.error) void reloadSuperBiblioteca(); });
   }
-  function actualizarBibliotecaItem(id: string, patch: { nombre?: string; gratis?: boolean; precioImportacion?: number; activo?: boolean }) {
+  function actualizarBibliotecaItem(id: string, patch: { nombre?: string; gratis?: boolean; precioImportacion?: number; activo?: boolean; editable?: boolean }) {
     setSuperBiblioteca((st) => st.map((p) => (p.id === id ? { ...p, ...patch } : p)));
     void apiSuperBibliotecaPatch(id, patch).then((r) => { if (r.error) void reloadSuperBiblioteca(); });
   }

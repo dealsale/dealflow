@@ -23,6 +23,7 @@ const ADMIN_ITEMS: { id: AdminSection; label: string }[] = [
   { id: 'ventas', label: 'Ventas' },
   { id: 'planes', label: 'Planes' },
   { id: 'cuentas', label: 'Cuentas' },
+  { id: 'biblioteca', label: 'Biblioteca' },
 ];
 
 function itemStyle(active: boolean): CSSProperties {

@@ -29,7 +29,7 @@ import { Cuentas } from './sections/admin/Cuentas';
 import { Planes } from './sections/admin/Planes';
 import { Cupones } from './sections/admin/Cupones';
 import { Ventas } from './sections/admin/Ventas';
-import { Superadmin } from './sections/admin/Superadmin';
+import { Superadmin, BibliotecaAdmin } from './sections/admin/Superadmin';
 import { MCRM } from './sections/mobile/MCRM';
 import { MLeads } from './sections/mobile/MLeads';
 import { MPedidos } from './sections/mobile/MPedidos';
@@ -300,6 +300,13 @@ function AdminContent({ df }: { df: DealFlowState }) {
       {df.adminSection === 'planes' && <Planes df={df} />}
       {df.adminSection === 'cuentas' && <Cuentas df={df} />}
       {df.adminSection === 'cupones' && <Cupones df={df} />}
+      {df.adminSection === 'biblioteca' && (
+        <section data-screen-label="Biblioteca admin">
+          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Biblioteca de productos</h1>
+          <p style={{ color: '#64748B', fontSize: 14, margin: '4px 0 16px' }}>Crea productos (con toda su estructura) que las tiendas pueden importar. Elige si son gratis o de pago y si el cliente puede editarlos o quedan bloqueados.</p>
+          <BibliotecaAdmin df={df} />
+        </section>
+      )}
     </>
   );
 }

@@ -423,7 +423,7 @@ export interface LibraryItem {
   id: string; nombre: string; precio: number; gratis: boolean; precioImportacion: number; portada: string | null; adquirido: boolean;
 }
 export interface LibraryAdminItem {
-  id: string; nombre: string; precio: number; gratis: boolean; precioImportacion: number; activo: boolean; portada: string | null; importos: number;
+  id: string; nombre: string; precio: number; gratis: boolean; precioImportacion: number; activo: boolean; editable: boolean; portada: string | null; importos: number;
 }
 export interface SuperStoreProduct { id: string; nombre: string; precio: number; tipo: string }
 
@@ -433,9 +433,9 @@ export const apiCheckoutBiblioteca = (id: string) => req<{ url: string }>(`/api/
 
 export const apiSuperBiblioteca = () => req<{ productos: LibraryAdminItem[] }>('/api/superadmin/biblioteca', 'GET');
 export const apiSuperStoreProducts = (storeId: string) => req<{ productos: SuperStoreProduct[] }>(`/api/superadmin/stores/${storeId}/products`, 'GET');
-export const apiSuperBibliotecaFromProduct = (productId: string, gratis: boolean, precioImportacion: number) =>
-  req<{ id: string }>('/api/superadmin/biblioteca/from-product', 'POST', { productId, gratis, precioImportacion });
-export const apiSuperBibliotecaPatch = (id: string, patch: { nombre?: string; gratis?: boolean; precioImportacion?: number; activo?: boolean }) =>
+export const apiSuperBibliotecaFromProduct = (productId: string, gratis: boolean, precioImportacion: number, editable: boolean) =>
+  req<{ id: string }>('/api/superadmin/biblioteca/from-product', 'POST', { productId, gratis, precioImportacion, editable });
+export const apiSuperBibliotecaPatch = (id: string, patch: { nombre?: string; gratis?: boolean; precioImportacion?: number; activo?: boolean; editable?: boolean }) =>
   req<{ ok: true }>(`/api/superadmin/biblioteca/${id}`, 'PATCH', patch);
 export const apiSuperBibliotecaDelete = (id: string) => req<{ ok: true }>(`/api/superadmin/biblioteca/${id}`, 'DELETE');
 

@@ -64,7 +64,7 @@ interface Snapshot {
  */
 export function agregarProductoABiblioteca(
   productId: string,
-  opts: { gratis: boolean; precioImportacion: number },
+  opts: { gratis: boolean; precioImportacion: number; editable?: boolean },
 ): { id: string } | { error: string } {
   const row = db.prepare('SELECT * FROM products WHERE id = ?').get(productId) as Record<string, unknown> | undefined;
   if (!row) return { error: 'Producto no encontrado.' };
@@ -86,9 +86,9 @@ export function agregarProductoABiblioteca(
   const id = uid();
   const orden = (db.prepare('SELECT COALESCE(MAX(orden),0)+1 n FROM library_products').get() as { n: number }).n;
   db.prepare(
-    `INSERT INTO library_products (id, nombre, precio, gratis, precio_importacion, activo, source_store_id, snapshot, orden)
-     VALUES (?,?,?,?,?,1,?,?,?)`,
-  ).run(id, String(row.nombre), Number(row.precio) || 0, opts.gratis ? 1 : 0, opts.gratis ? 0 : Math.max(0, Math.round(opts.precioImportacion || 0)), LIB, j(snapshot), orden);
+    `INSERT INTO library_products (id, nombre, precio, gratis, precio_importacion, activo, source_store_id, snapshot, orden, editable)
+     VALUES (?,?,?,?,?,1,?,?,?,?)`,
+  ).run(id, String(row.nombre), Number(row.precio) || 0, opts.gratis ? 1 : 0, opts.gratis ? 0 : Math.max(0, Math.round(opts.precioImportacion || 0)), LIB, j(snapshot), orden, opts.editable === false ? 0 : 1);
   return { id };
 }
 
@@ -138,18 +138,23 @@ export function yaAdquirido(storeId: string, libId: string): boolean {
 
 /**
  * ¿Este producto tiene la ESTRUCTURA bloqueada (no editable)?
- *
- * POR AHORA: nada se bloquea automáticamente — TODOS los productos (importados o no)
- * son editables. El bloqueo será una elección manual del administrador por producto,
- * más adelante (biblioteca del admin). Se deja el punto único para activarlo luego.
+ * Lo decide el ADMIN por producto en la biblioteca (library_products.editable = 0).
+ * Por defecto editable = 1, así nada se bloquea salvo que el admin lo elija.
  */
-export function esImportBloqueado(_productId: string): boolean {
-  return false;
+export function esImportBloqueado(productId: string): boolean {
+  const row = db.prepare(
+    `SELECT lp.editable AS editable FROM library_imports li JOIN library_products lp ON lp.id = li.library_product_id WHERE li.product_id = ?`,
+  ).get(productId) as { editable: number } | undefined;
+  return !!row && row.editable === 0;
 }
 
-/** Ids de productos de la tienda con la estructura bloqueada. Por ahora: ninguno. */
-export function productosBloqueados(_storeId: string): Set<string> {
-  return new Set();
+/** Ids de productos de la tienda cuya estructura bloqueó el admin (editable = 0). */
+export function productosBloqueados(storeId: string): Set<string> {
+  const rows = db.prepare(
+    `SELECT li.product_id AS product_id FROM library_imports li JOIN library_products lp ON lp.id = li.library_product_id
+     WHERE li.store_id = ? AND lp.editable = 0 AND li.product_id != ''`,
+  ).all(storeId) as { product_id: string }[];
+  return new Set(rows.map((r) => r.product_id));
 }
 
 export function getLibraryProduct(libId: string) {
@@ -185,8 +190,8 @@ export function listarBiblioteca(storeId: string) {
 
 /** Lista la biblioteca completa para el superadmin. */
 export function listarBibliotecaAdmin() {
-  const rows = db.prepare('SELECT id, nombre, precio, gratis, precio_importacion, activo, snapshot, created_at FROM library_products ORDER BY orden, created_at').all() as
-    { id: string; nombre: string; precio: number; gratis: number; precio_importacion: number; activo: number; snapshot: string; created_at: string }[];
+  const rows = db.prepare('SELECT id, nombre, precio, gratis, precio_importacion, activo, editable, snapshot, created_at FROM library_products ORDER BY orden, created_at').all() as
+    { id: string; nombre: string; precio: number; gratis: number; precio_importacion: number; activo: number; editable: number; snapshot: string; created_at: string }[];
   return rows.map((r) => ({
     id: r.id,
     nombre: r.nombre,
@@ -194,18 +199,20 @@ export function listarBibliotecaAdmin() {
     gratis: !!r.gratis,
     precioImportacion: r.precio_importacion,
     activo: !!r.activo,
+    editable: r.editable !== 0,
     portada: portada(r.snapshot),
     importos: (db.prepare('SELECT COUNT(*) n FROM library_imports WHERE library_product_id = ?').get(r.id) as { n: number }).n,
   }));
 }
 
-export function actualizarLibraryProduct(id: string, patch: { nombre?: string; gratis?: boolean; precioImportacion?: number; activo?: boolean }): { ok: boolean } {
+export function actualizarLibraryProduct(id: string, patch: { nombre?: string; gratis?: boolean; precioImportacion?: number; activo?: boolean; editable?: boolean }): { ok: boolean } {
   const lib = db.prepare('SELECT id FROM library_products WHERE id = ?').get(id) as { id: string } | undefined;
   if (!lib) return { ok: false };
   if (typeof patch.nombre === 'string') db.prepare('UPDATE library_products SET nombre = ? WHERE id = ?').run(patch.nombre.trim() || 'Producto', id);
   if (typeof patch.gratis === 'boolean') db.prepare('UPDATE library_products SET gratis = ? WHERE id = ?').run(patch.gratis ? 1 : 0, id);
   if (typeof patch.precioImportacion === 'number') db.prepare('UPDATE library_products SET precio_importacion = ? WHERE id = ?').run(Math.max(0, Math.round(patch.precioImportacion)), id);
   if (typeof patch.activo === 'boolean') db.prepare('UPDATE library_products SET activo = ? WHERE id = ?').run(patch.activo ? 1 : 0, id);
+  if (typeof patch.editable === 'boolean') db.prepare('UPDATE library_products SET editable = ? WHERE id = ?').run(patch.editable ? 1 : 0, id);
   return { ok: true };
 }
 
