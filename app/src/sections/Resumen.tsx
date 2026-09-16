@@ -37,8 +37,8 @@ export function Resumen({ df }: { df: DealFlowState }) {
             className="df-row-hover"
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 18, cursor: 'pointer' }}
           >
-            <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', fontWeight: 600 }}>Tu plan activo</span>
-            <span style={{ fontSize: 16, fontWeight: 800 }}>{df.suscripcion.plan}</span>
+            <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', fontWeight: 600 }}>Tu plan:</span>
+            <span style={{ fontSize: 18, fontWeight: 800 }}>{df.suscripcion.plan}</span>
             <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 6, padding: '2px 8px', color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)' }}>Activa</span>
             <div style={{ flex: 1 }} />
             <span style={{ fontSize: 10, color: 'var(--df-text-faint)', transform: suscAbierta ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</span>
