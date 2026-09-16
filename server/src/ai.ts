@@ -14,11 +14,21 @@ function materializar(storeId: string, valor: string): { buffer: Buffer; mime: s
     const s = saveOutgoingMedia(storeId, valor, '');
     return s ? { buffer: s.buffer, mime: s.mime, tipo: s.tipo, url: s.url } : null;
   }
-  const mm = valor.match(/\/api\/media\/[^/]+\/([^/?#]+)/);
-  if (!mm) return null;
-  const p = mediaPath(storeId, mm[1]);
+  // Resolvemos la URL al archivo real HONRANDO el espacio (tienda) que trae la URL:
+  //  - /api/media/<store>/<file>  → carpeta de ESA tienda (no la actual)
+  //  - /api/library/media/<file>  → espacio de la biblioteca (__biblioteca__)
+  // Antes se ignoraba el <store> de la URL y se leía siempre en la tienda actual,
+  // por lo que un producto importado (con archivos en otro espacio) no resolvía.
+  const mStore = valor.match(/\/api\/media\/([^/?#]+)\/([^/?#]+)/);
+  const mLib = valor.match(/\/api\/library\/media\/([^/?#]+)/);
+  const espacio = mStore ? mStore[1] : mLib ? '__biblioteca__' : '';
+  const file = mStore ? mStore[2] : mLib ? mLib[1] : '';
+  if (!file) return null;
+  // Primero en el espacio que dice la URL; si no está, probamos la tienda actual (respaldo).
+  let p = mediaPath(espacio, file);
+  if (!existsSync(p)) p = mediaPath(storeId, file);
   if (!existsSync(p)) return null;
-  const ext = (mm[1].split('.').pop() || '').toLowerCase();
+  const ext = (file.split('.').pop() || '').toLowerCase();
   const mime = MIME_POR_EXT[ext] || 'application/octet-stream';
   return { buffer: readFileSync(p), mime, tipo: tipoDeMime(mime), url: valor };
 }
