@@ -948,7 +948,10 @@ export function useDealFlowState() {
 
   const crmChats: DecoratedCrmChat[] = useMemo(
     () =>
-      leadsSource.map((l, i) => {
+      // Orden tipo WhatsApp: el chat con actividad más reciente va PRIMERO.
+      [...leadsSource]
+      .sort((a, b) => String(b.ultimoIso || '').localeCompare(String(a.ultimoIso || '')))
+      .map((l, i) => {
         const d = decorateLead(l, i, crmSelectedId, (id) => { setCrmSelectedId(id); setCrmIntervening(false); setCrmSendWarn(''); });
         // En modo servidor, "en vivo" = el bot lo atiende; en demo, los dos primeros.
         const live = apiMode && apiLeadsState ? l.asignado.includes('bot') || l.asignado.includes('Asistente') : l.id === 1 || l.id === 2;
