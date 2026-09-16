@@ -611,8 +611,15 @@ export function useDealFlowState() {
     } catch { return 'light'; }
   });
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    // El fundido suave de colores al cambiar de tema se activa SOLO estos ~300ms
+    // (clase df-theme-fade, ver index.css) — así el resto del tiempo ningún
+    // elemento paga el costo de tener transition puesta (rendimiento).
+    const root = document.documentElement;
+    root.classList.add('df-theme-fade');
+    root.dataset.theme = theme;
+    const t = setTimeout(() => root.classList.remove('df-theme-fade'), 320);
     try { localStorage.setItem('dealflow:theme', theme); } catch { /* modo privado */ }
+    return () => clearTimeout(t);
   }, [theme]);
   function setTheme(t: 'light' | 'dark' | 'premium') { setThemeState(t); }
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? ASSISTANT_TEXT_DEFAULT);

@@ -75,7 +75,7 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
   --df-surface: #121A2E;
-  --df-bg: #05070D;
+  --df-bg: #0A0F1C;
   --df-surface-2: #18213A;
   --df-border: #232F4D;
   --df-border-strong: #374873;
@@ -179,20 +179,32 @@
 
 /* Lienzo animado del tema Premium: lo llevan los contenedores raíz de la app
    (ver App.tsx). Tres resplandores radiales que derivan muy despacio — el
-   "diseño con animaciones" que pidió el negocio, sin tocar cada componente. */
+   "diseño con animaciones" que pidió el negocio, sin tocar cada componente.
+   Animamos "transform" (no la posición del fondo) para que el navegador lo
+   mueva en la tarjeta gráfica en vez de repintar la pantalla en cada cuadro:
+   mismo efecto visual, muchísimo más liviano. */
 @keyframes dfpremiumdrift {
-  0% { background-position: 8% -6%, 96% 4%, 34% 106%; }
-  50% { background-position: 16% 2%, 88% 14%, 28% 96%; }
-  100% { background-position: 8% -6%, 96% 4%, 34% 106%; }
+  0% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(2.5%, 2%, 0); }
+  100% { transform: translate3d(0, 0, 0); }
 }
 .df-premium-canvas {
+  position: relative;
   background-color: #060814;
+}
+.df-premium-canvas::before {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
   background-repeat: no-repeat;
   background-image:
-    radial-gradient(900px circle, rgba(37, 99, 235, .4), transparent 55%),
-    radial-gradient(780px circle, rgba(139, 92, 246, .36), transparent 52%),
-    radial-gradient(720px circle, rgba(236, 72, 153, .18), transparent 55%);
+    radial-gradient(900px circle at 30% 28%, rgba(37, 99, 235, .4), transparent 55%),
+    radial-gradient(780px circle at 78% 32%, rgba(139, 92, 246, .36), transparent 52%),
+    radial-gradient(720px circle at 42% 88%, rgba(236, 72, 153, .18), transparent 55%);
   animation: dfpremiumdrift 26s ease-in-out infinite;
+  will-change: transform;
 }
 /* Vidrio esmerilado en la barra superior: dejamos ver (borroso) el resplandor de atrás. */
 :root[data-theme='premium'] header {
@@ -228,11 +240,42 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* Todo lo que use estas variables transiciona suave al cambiar de tema. */
-*,
-*::before,
-*::after {
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+/* Rendimiento: ANTES esta transición estaba puesta en TODOS los elementos de
+   la app (selector *), todo el tiempo — el navegador tenía que vigilar 4
+   propiedades en cada nodo del DOM en cada repintado, así estuviera quieto.
+   Eso es lo que sentían lento incluso en equipos potentes. Ahora la suavidad
+   al pasar el mouse vive solo en los elementos que de verdad la usan (los
+   mismos de siempre — botones, filas, tarjetas), y el fundido de colores al
+   CAMBIAR de tema se activa solo esa fracción de segundo (clase
+   .df-theme-fade, ver useDealFlowState). Visualmente es idéntico; el costo
+   permanente de fondo desaparece. */
+a,
+button,
+input,
+select,
+textarea,
+.df-btn-primary,
+.df-btn-outline-green,
+.df-btn-amber,
+.df-card-hover-amber,
+.df-card-hover-green,
+.df-row-hover,
+.df-dd-item,
+.df-danger-hover,
+.df-upload-tile,
+.df-close-hover,
+.df-copy-hover,
+.df-copy-btn,
+.df-toggle-mode,
+.df-hamburger,
+.df-floatnav-item {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.df-theme-fade,
+.df-theme-fade *,
+.df-theme-fade *::before,
+.df-theme-fade *::after {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
 }
 
 /* Barra de scroll: discreta en claro, con brillo sutil en Dark System. */
