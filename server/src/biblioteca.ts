@@ -138,23 +138,19 @@ export function yaAdquirido(storeId: string, libId: string): boolean {
 
 /**
  * ¿Este producto tiene la ESTRUCTURA bloqueada (no editable)?
- * Lo decide el ADMIN por producto en la biblioteca (library_products.editable = 0).
- * Por defecto editable = 1, así nada se bloquea salvo que el admin lo elija.
+ *
+ * ENFORCEMENT DESACTIVADO A PROPÓSITO: hoy NADA se bloquea, para GARANTIZAR que
+ * las ediciones de cada tienda siempre se guarden y el bot use la estructura
+ * editada de cada tienda (multitienda). El flag `editable` de la biblioteca se
+ * sigue guardando para reactivar el bloqueo en el futuro, pero no se aplica aún.
  */
-export function esImportBloqueado(productId: string): boolean {
-  const row = db.prepare(
-    `SELECT lp.editable AS editable FROM library_imports li JOIN library_products lp ON lp.id = li.library_product_id WHERE li.product_id = ?`,
-  ).get(productId) as { editable: number } | undefined;
-  return !!row && row.editable === 0;
+export function esImportBloqueado(_productId: string): boolean {
+  return false;
 }
 
-/** Ids de productos de la tienda cuya estructura bloqueó el admin (editable = 0). */
-export function productosBloqueados(storeId: string): Set<string> {
-  const rows = db.prepare(
-    `SELECT li.product_id AS product_id FROM library_imports li JOIN library_products lp ON lp.id = li.library_product_id
-     WHERE li.store_id = ? AND lp.editable = 0 AND li.product_id != ''`,
-  ).all(storeId) as { product_id: string }[];
-  return new Set(rows.map((r) => r.product_id));
+/** Ids de productos con estructura bloqueada. Enforcement desactivado: ninguno. */
+export function productosBloqueados(_storeId: string): Set<string> {
+  return new Set();
 }
 
 export function getLibraryProduct(libId: string) {

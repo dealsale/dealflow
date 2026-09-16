@@ -489,8 +489,29 @@ export function Productos({ df }: { df: DealFlowState }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const toggleGroup = (k: string) => setOpenGroups((o) => ({ ...o, [k]: !o[k] }));
 
+  // Detecta productos que comparten el MISMO disparador (o el mismo nombre): el bot
+  // se confunde y puede enviar la versión equivocada. Suele pasar al importar un
+  // producto de la biblioteca que la tienda ya tenía → queda duplicado.
+  const norm = (s?: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  const claves = new Map<string, string[]>();
+  for (const p of df.products) {
+    const clave = norm(p.disparador) || 'n:' + norm(p.nombre);
+    if (!clave || clave === 'n:') continue;
+    claves.set(clave, [...(claves.get(clave) || []), p.nombre]);
+  }
+  const duplicados = [...claves.values()].filter((v) => v.length > 1);
+
   return (
     <section data-screen-label="Productos">
+      {duplicados.length > 0 && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+          <span style={{ fontSize: 18 }}>⚠️</span>
+          <div style={{ fontSize: 13, color: '#854D0E', lineHeight: 1.5 }}>
+            <b>Hay productos duplicados</b> (mismo disparador o nombre). El bot puede enviar la versión vieja/importada en vez de la que editaste. Deja <b>solo uno</b> de cada grupo y elimina el repetido:
+            <div style={{ marginTop: 4 }}>{duplicados.map((g, i) => <div key={i}>• {g.join('  ·  ')}</div>)}</div>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Productos</h1>
