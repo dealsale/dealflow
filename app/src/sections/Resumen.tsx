@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 const card: React.CSSProperties = {
@@ -23,32 +24,41 @@ const stepCircle = (bg: string, color: string): React.CSSProperties => ({
 });
 
 export function Resumen({ df }: { df: DealFlowState }) {
+  const [suscAbierta, setSuscAbierta] = useState(false);
   return (
     <section data-screen-label="Resumen">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Hola, {df.saludoNombre} 👋</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 18px' }}>Así va tu tienda hoy, {df.resumenFecha}.</p>
 
       {df.suscripcion && !df.esAgente && (
-        <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 18, borderLeft: '4px solid var(--df-brand)' }}>
-          <div>
-            <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', fontWeight: 600 }}>Tu suscripción</div>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>
-              Plan {df.suscripcion.plan}
-              <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, borderRadius: 6, padding: '2px 8px', color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)' }}>Activa</span>
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginTop: 3 }}>
-              Renta ${df.suscripcion.mensual.toLocaleString('es-CO')}/mes
-              {df.suscripcion.vence ? ` · próximo pago: ${df.suscripcion.vence}${df.suscripcion.diasRestantes !== null && df.suscripcion.diasRestantes >= 0 ? ` (en ${df.suscripcion.diasRestantes} días)` : ''}` : ''}
-            </div>
-          </div>
-          <div style={{ flex: 1 }} />
-          <button
-            onClick={() => df.pagarSuscripcion()}
-            className="df-btn-primary"
-            style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '11px 20px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+        <div style={{ ...card, padding: 0, marginBottom: 18, borderLeft: '4px solid var(--df-brand)', overflow: 'hidden' }}>
+          <div
+            onClick={() => setSuscAbierta((v) => !v)}
+            className="df-row-hover"
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 18, cursor: 'pointer' }}
           >
-            Pagar renta · ${df.suscripcion.mensual.toLocaleString('es-CO')}
-          </button>
+            <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', fontWeight: 600 }}>Tu plan activo</span>
+            <span style={{ fontSize: 16, fontWeight: 800 }}>{df.suscripcion.plan}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 6, padding: '2px 8px', color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)' }}>Activa</span>
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, color: 'var(--df-text-faint)', transform: suscAbierta ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</span>
+          </div>
+          {suscAbierta && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '0 18px 18px' }}>
+              <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>
+                Renta ${df.suscripcion.mensual.toLocaleString('es-CO')}/mes
+                {df.suscripcion.vence ? ` · próximo pago: ${df.suscripcion.vence}${df.suscripcion.diasRestantes !== null && df.suscripcion.diasRestantes >= 0 ? ` (en ${df.suscripcion.diasRestantes} días)` : ''}` : ''}
+              </div>
+              <div style={{ flex: 1 }} />
+              <button
+                onClick={() => df.pagarSuscripcion()}
+                className="df-btn-primary"
+                style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '11px 20px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+              >
+                Pagar renta · ${df.suscripcion.mensual.toLocaleString('es-CO')}
+              </button>
+            </div>
+          )}
         </div>
       )}
       {df.suscMsg && (
