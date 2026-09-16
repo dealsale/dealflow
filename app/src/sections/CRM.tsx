@@ -18,12 +18,14 @@ export function CRM({ df }: { df: DealFlowState }) {
   const [hasta, setHasta] = useState('');
   const [estadoPill, setEstadoPill] = useState<EstadoPill>('todos');
   const [nota, setNota] = useState('');
+  const [panelCliente, setPanelCliente] = useState(false);
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat?.tel, chat?.mensajesDecorated.length]);
   useEffect(() => {
     setNota(chat?.notaInterna || '');
+    setPanelCliente(false);
   }, [chat?.id]);
   const q = busca.trim().toLowerCase();
 
@@ -124,7 +126,7 @@ export function CRM({ df }: { df: DealFlowState }) {
 
       <ActivityLog df={df} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: chat ? '340px 1fr 280px' : '360px 1fr', gap: 14, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
         <div style={{ minWidth: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
           {chatsFiltrados.length === 0 && (
             <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--df-text-faint)', fontSize: 13 }}>
@@ -158,13 +160,21 @@ export function CRM({ df }: { df: DealFlowState }) {
         </div>
 
         {chat && (
-          <>
+          <div style={{ position: 'relative', minWidth: 0 }}>
           <div style={{ minWidth: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', height: 'min(70vh, 620px)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--df-border)' }}>
-              <div style={chat.avatarStyle}>{chat.iniciales}</div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{chat.nombre}</div>
-                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-muted)' }}>{chat.tel}</div>
+              <div
+                onClick={() => setPanelCliente((v) => !v)}
+                title="Ver información del cliente"
+                className="df-row-hover"
+                style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', borderRadius: 8, padding: '4px 6px', margin: '-4px -6px' }}
+              >
+                <div style={chat.avatarStyle}>{chat.iniciales}</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{chat.nombre}</div>
+                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-muted)' }}>{chat.tel}</div>
+                </div>
+                <span style={{ fontSize: 10, color: 'var(--df-text-faint)', transform: panelCliente ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</span>
               </div>
               <div style={chat.liveStyle}>
                 <span style={chat.liveDot} />
@@ -288,10 +298,18 @@ export function CRM({ df }: { df: DealFlowState }) {
             </div>
           </div>
 
-          {/* Panel del cliente: quién es, en qué va y accesos directos a las acciones típicas. */}
-          <div style={{ minWidth: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', gap: 16, padding: 16, height: 'min(70vh, 620px)', overflowY: 'auto' }}>
+          {/* Panel del cliente: se despliega al hacer clic en el nombre, flotando SOBRE
+              el chat (no le quita ancho) — se cierra con la ✕, clic afuera o el nombre de nuevo. */}
+          {panelCliente && (
+            <>
+              <div onClick={() => setPanelCliente(false)} style={{ position: 'absolute', inset: 0, zIndex: 24 }} />
+              <div style={{ position: 'absolute', top: 0, right: 0, width: 280, zIndex: 25, minWidth: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 20px 50px -15px rgba(0,0,0,.35)', display: 'flex', flexDirection: 'column', gap: 16, padding: 16, height: 'min(70vh, 620px)', overflowY: 'auto' }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase', marginBottom: 10 }}>Información del cliente</div>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase' }}>Información del cliente</div>
+                <div style={{ flex: 1 }} />
+                <span onClick={() => setPanelCliente(false)} title="Cerrar" style={{ cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 15, lineHeight: 1 }}>✕</span>
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={chat.avatarStyle}>{chat.iniciales}</div>
                 <div style={{ minWidth: 0 }}>
@@ -352,8 +370,10 @@ export function CRM({ df }: { df: DealFlowState }) {
               />
               {df.notaInternaMsg && <div style={{ fontSize: 11.5, color: 'var(--df-brand-dark)', marginTop: 4 }}>{df.notaInternaMsg}</div>}
             </div>
+              </div>
+            </>
+          )}
           </div>
-          </>
         )}
       </div>
     </section>
