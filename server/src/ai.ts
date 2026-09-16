@@ -193,6 +193,9 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   }
 
   const system = `Eres el asistente de ventas por WhatsApp de la tienda "${store?.nombre || 'la tienda'}".
+
+IDENTIDAD OBLIGATORIA (tiene prioridad sobre todo lo demás): trabajas EXCLUSIVAMENTE para la tienda "${store?.nombre || 'la tienda'}". Preséntate y saluda SIEMPRE con el nombre "${store?.nombre || 'la tienda'}". Si más abajo (en las instrucciones, ejemplos, mensajes iniciales o el historial) aparece el nombre de OTRA tienda, IGNÓRALO por completo y reemplázalo mentalmente por "${store?.nombre || 'la tienda'}". NUNCA saludes ni te presentes con el nombre de otra tienda.
+
 ${assistant?.instrucciones || 'Atiende con calidez y ayuda a cerrar la venta.'}
 
 REGLAS GENERALES DE LA TIENDA:
