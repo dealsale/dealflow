@@ -404,6 +404,28 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
 
   return (
     <div className="df-pexp" style={{ background: '#F8FAFC', borderBottom: '1px solid #F1F5F9', padding: '18px 18px 18px 84px' }}>
+      {p.bloqueado && (
+        <>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+            <span style={{ fontSize: 18 }}>🔒</span>
+            <div style={{ fontSize: 13, color: '#854D0E', lineHeight: 1.5 }}>
+              <b>Producto de la biblioteca.</b> Su estructura (mensaje inicial, reglas, descripción, combos, variantes) está <b>bloqueada</b> para proteger la venta con el bot. Solo puedes ajustar el <b>precio</b> y el <b>SKU</b> de tu tienda.
+            </div>
+          </div>
+          <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16, maxWidth: 560 }}>
+            <div>
+              <div style={label}>Precio (COP) <span style={{ fontWeight: 400, color: '#94A3B8' }}>· tu precio de venta</span></div>
+              <input className="df-input" value={String(p.precio)} onChange={(e) => p.setPrecio(e.target.value)} style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
+            </div>
+            <div>
+              <div style={label}>SKU <span style={{ fontWeight: 400, color: '#94A3B8' }}>· para Effi/WooCommerce</span></div>
+              <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: BODY-NEGRO-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
+            </div>
+          </div>
+        </>
+      )}
+      {/* Cuando está bloqueado, la estructura se muestra como REFERENCIA (no editable). */}
+      <div style={p.bloqueado ? { pointerEvents: 'none', opacity: 0.6, userSelect: 'none' } : undefined}>
       {grupos.map((g) => {
         const key = `${p.id}::${g.id}`;
         const abierto = vista === 'normal' || !!openGroups[key];
@@ -426,6 +448,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           </div>
         );
       })}
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
         <button
@@ -585,6 +608,7 @@ export function Productos({ df }: { df: DealFlowState }) {
                 <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
                   {p.nombre}
                   {p.tipo === 'servicio' && <span style={{ fontSize: 10.5, fontWeight: 800, color: '#4338CA', background: '#E0E7FF', borderRadius: 5, padding: '1px 6px' }}>🧩 SERVICIO</span>}
+                  {p.bloqueado && <span title="Producto de la biblioteca: estructura bloqueada" style={{ fontSize: 10.5, fontWeight: 800, color: '#854D0E', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 5, padding: '1px 6px' }}>🔒 BIBLIOTECA</span>}
                 </div>
                 <div style={{ color: '#64748B', fontSize: 12, marginTop: 1 }}>{p.precioFmt}{p.tipo === 'servicio' ? (p.duracion ? ' · ' + p.duracion : '') : ' · ' + p.variantesLabel}</div>
               </div>

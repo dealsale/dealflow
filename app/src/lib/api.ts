@@ -205,6 +205,7 @@ export interface ApiProduct {
   tipo?: 'producto' | 'servicio';
   duracion?: string;
   sku?: string;
+  bloqueado?: boolean;
   plantillaId?: string;
   reglas: string[];
   descripcion: string;

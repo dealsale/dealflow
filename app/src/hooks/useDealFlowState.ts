@@ -502,6 +502,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     tipo: p.tipo || 'producto',
     duracion: p.duracion || '',
     sku: p.sku || '',
+    bloqueado: !!p.bloqueado,
     reglas: p.reglas || [],
     descripcion: p.descripcion || '',
     caracteristicas: p.caracteristicas || '',

@@ -136,6 +136,22 @@ export function yaAdquirido(storeId: string, libId: string): boolean {
   return !!db.prepare('SELECT 1 FROM library_imports WHERE store_id = ? AND library_product_id = ?').get(storeId, libId);
 }
 
+/**
+ * ¿Este producto es un import de la biblioteca con la ESTRUCTURA bloqueada?
+ * Regla: importado y NO pagado → bloqueado (no editable). Los de pago sí se editan.
+ * Bloquear evita que el cliente dañe el mensaje inicial y culpe al bot.
+ */
+export function esImportBloqueado(productId: string): boolean {
+  const row = db.prepare('SELECT pagado FROM library_imports WHERE product_id = ?').get(productId) as { pagado: number } | undefined;
+  return !!row && !row.pagado;
+}
+
+/** Ids de productos de la tienda con la estructura bloqueada (import gratuito de biblioteca). */
+export function productosBloqueados(storeId: string): Set<string> {
+  const rows = db.prepare('SELECT product_id FROM library_imports WHERE store_id = ? AND pagado = 0').all(storeId) as { product_id: string }[];
+  return new Set(rows.map((r) => r.product_id));
+}
+
 export function getLibraryProduct(libId: string) {
   return db.prepare('SELECT id, nombre, precio, gratis, precio_importacion, activo FROM library_products WHERE id = ?').get(libId) as
     | { id: string; nombre: string; precio: number; gratis: number; precio_importacion: number; activo: number }

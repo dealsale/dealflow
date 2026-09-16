@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog } from './db.js';
+import { esImportBloqueado, productosBloqueados } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
 import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
@@ -137,8 +138,9 @@ api.post('/crear-tienda', requireAuth, requireStore, (req, res) => {
 api.get('/state', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const store = db.prepare('SELECT id, nombre, plan FROM stores WHERE id = ?').get(sid);
+  const bloqueados = productosBloqueados(sid); // productos de biblioteca gratuitos (estructura no editable)
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
-    id: p.id, nombre: p.nombre, precio: p.precio, color: p.color, txt: p.txt,
+    id: p.id, nombre: p.nombre, precio: p.precio, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
     tipo: p.tipo || 'producto', duracion: p.duracion || '', sku: p.sku || '', plantillaId: p.plantilla_id || '',
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
     descripcion: p.descripcion || '', caracteristicas: p.caracteristicas || '', mensajeInicial: p.mensaje_inicial || '',
@@ -245,6 +247,13 @@ function ownProduct(req: { user?: AuthUser }, id: string) {
 
 api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  // Producto de biblioteca gratuito: la ESTRUCTURA está bloqueada (para que el
+  // cliente no la dañe). Solo dejamos cambiar el precio y el SKU de su tienda.
+  if (esImportBloqueado(req.params.id)) {
+    if (req.body?.precio !== undefined) db.prepare('UPDATE products SET precio = ? WHERE id = ?').run(Number(req.body.precio) || 0, req.params.id);
+    if (req.body?.sku !== undefined) db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(String(req.body.sku).trim(), req.params.id);
+    return res.json({ ok: true, bloqueado: true });
+  }
   const { nombre, precio, reglas, fotosSubidas, descripcion, caracteristicas, mensajeInicial, faqs, testimonios, modosUso, videos, mensajeBloques, bundles, opciones, contenidoPaquete, disparador, mensajeInicialActivo } = req.body || {};
   if (Array.isArray(bundles)) db.prepare('UPDATE products SET bundles = ? WHERE id = ?').run(j(bundles), req.params.id);
   if (Array.isArray(opciones)) db.prepare('UPDATE products SET opciones = ? WHERE id = ?').run(j(opciones), req.params.id);
