@@ -137,19 +137,19 @@ export function yaAdquirido(storeId: string, libId: string): boolean {
 }
 
 /**
- * ¿Este producto es un import de la biblioteca con la ESTRUCTURA bloqueada?
- * Regla: importado y NO pagado → bloqueado (no editable). Los de pago sí se editan.
- * Bloquear evita que el cliente dañe el mensaje inicial y culpe al bot.
+ * ¿Este producto tiene la ESTRUCTURA bloqueada (no editable)?
+ *
+ * POR AHORA: nada se bloquea automáticamente — TODOS los productos (importados o no)
+ * son editables. El bloqueo será una elección manual del administrador por producto,
+ * más adelante (biblioteca del admin). Se deja el punto único para activarlo luego.
  */
-export function esImportBloqueado(productId: string): boolean {
-  const row = db.prepare('SELECT pagado FROM library_imports WHERE product_id = ?').get(productId) as { pagado: number } | undefined;
-  return !!row && !row.pagado;
+export function esImportBloqueado(_productId: string): boolean {
+  return false;
 }
 
-/** Ids de productos de la tienda con la estructura bloqueada (import gratuito de biblioteca). */
-export function productosBloqueados(storeId: string): Set<string> {
-  const rows = db.prepare('SELECT product_id FROM library_imports WHERE store_id = ? AND pagado = 0').all(storeId) as { product_id: string }[];
-  return new Set(rows.map((r) => r.product_id));
+/** Ids de productos de la tienda con la estructura bloqueada. Por ahora: ninguno. */
+export function productosBloqueados(_storeId: string): Set<string> {
+  return new Set();
 }
 
 export function getLibraryProduct(libId: string) {
