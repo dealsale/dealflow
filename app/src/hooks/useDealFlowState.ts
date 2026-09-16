@@ -594,6 +594,12 @@ export function useDealFlowState() {
   const [newProdTipo, setNewProdTipo] = useState<'producto' | 'servicio'>('producto');
   const [newProdDuracion, setNewProdDuracion] = useState<string>('');
   const [newProdError, setNewProdError] = useState<boolean>(false);
+  // Notificaciones del navegador (web/PWA): activar/desactivar y qué tipos recibir.
+  const [notifPrefs, setNotifPrefs] = useState<{ on: boolean; pedidos: boolean; contactos: boolean }>(() => {
+    try { return { on: false, pedidos: true, contactos: true, ...JSON.parse(localStorage.getItem('dealflow:notif') || '{}') }; }
+    catch { return { on: false, pedidos: true, contactos: true }; }
+  });
+  const [notifPermiso, setNotifPermiso] = useState<string>(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
   const [variantFormOpen, setVariantFormOpen] = useState<boolean>(false);
   const [variantLabel, setVariantLabel] = useState<string>('');
   const [variantStock, setVariantStock] = useState<string>('');
@@ -715,6 +721,44 @@ export function useDealFlowState() {
   const soundOnRef = useRef(soundOn);
   soundOnRef.current = soundOn;
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
+  const knownLeadIdsRef = useRef<Set<string>>(new Set());
+  const notifPrefsRef = useRef(notifPrefs);
+  notifPrefsRef.current = notifPrefs;
+
+  /** Muestra una notificación del navegador si el tipo está activado y hay permiso. */
+  function notificar(tipo: 'pedidos' | 'contactos', titulo: string, cuerpo: string, tag?: string) {
+    const p = notifPrefsRef.current;
+    if (!p.on || !p[tipo]) return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const opts = { body: cuerpo, icon: '/icon-192.png', badge: '/icon-192.png', tag: tag || tipo } as NotificationOptions;
+    try {
+      // En PWA/móvil el service worker es más confiable; si no, notificación directa.
+      if ('serviceWorker' in navigator) {
+        void navigator.serviceWorker.ready.then((reg) => reg.showNotification(titulo, opts)).catch(() => { try { new Notification(titulo, opts); } catch { /* no-op */ } });
+      } else {
+        new Notification(titulo, opts);
+      }
+    } catch { /* el navegador no soporta notificaciones */ }
+  }
+
+  function guardarNotifPrefs(next: { on: boolean; pedidos: boolean; contactos: boolean }) {
+    setNotifPrefs(next);
+    try { localStorage.setItem('dealflow:notif', JSON.stringify(next)); } catch { /* modo privado */ }
+  }
+  // Activa/desactiva las notificaciones. Al activar, pide el permiso del navegador.
+  async function toggleNotificaciones() {
+    if (notifPrefsRef.current.on) { guardarNotifPrefs({ ...notifPrefsRef.current, on: false }); return; }
+    let permiso = typeof Notification !== 'undefined' ? Notification.permission : 'denied';
+    if (permiso === 'default' && typeof Notification !== 'undefined') {
+      permiso = await Notification.requestPermission();
+      setNotifPermiso(permiso);
+    }
+    if (permiso !== 'granted') { setNotifPermiso(permiso); guardarNotifPrefs({ ...notifPrefsRef.current, on: false }); return; }
+    guardarNotifPrefs({ ...notifPrefsRef.current, on: true });
+  }
+  function setNotifTipo(tipo: 'pedidos' | 'contactos', val: boolean) {
+    guardarNotifPrefs({ ...notifPrefsRef.current, [tipo]: val });
+  }
 
   // Simula la llegada de pedidos desde el asistente de WhatsApp: el primero
   // entra a los ~15 s y luego cada 35–70 s, con notificación y timbre.
@@ -1403,9 +1447,26 @@ export function useDealFlowState() {
     // La primera carga siembra los pedidos conocidos SIN notificar (evita avisar
     // de pedidos viejos al entrar). Luego, cada pedido nuevo dispara el pop-up.
     let sembrado = false;
+    let sembradoLeads = false;
     const t = setInterval(() => {
       void apiLeads().then(({ data }) => {
-        if (data) setApiLeadsState(mapApiLeads(data.leads));
+        if (!data) return;
+        const leads = mapApiLeads(data.leads);
+        // Contacto nuevo = lead con id que no habíamos visto (después de la primera
+        // carga). La primera carga solo siembra, para no avisar de contactos viejos.
+        if (!sembradoLeads) {
+          leads.forEach((l) => knownLeadIdsRef.current.add(String(l.id)));
+          sembradoLeads = true;
+        } else {
+          for (const l of leads) {
+            if (!knownLeadIdsRef.current.has(String(l.id))) {
+              knownLeadIdsRef.current.add(String(l.id));
+              const nombre = (l.nombre || 'Un cliente').split(' ')[0];
+              notificar('contactos', 'Nuevo contacto 👋', `${nombre} le escribió a tu tienda.`, `lead-${l.id}`);
+            }
+          }
+        }
+        setApiLeadsState(leads);
       });
       void apiOrders().then(({ data }) => {
         if (!data) return;
@@ -1421,6 +1482,10 @@ export function useDealFlowState() {
             clearTimeout(toastTimer.current);
             toastTimer.current = setTimeout(() => setIncomingOrder(null), 8000);
             if (soundOnRef.current) playOrderChime();
+            // Notificación de pedido con resumen corto.
+            const d = decorateOrder(recienLlegado);
+            const nprod = recienLlegado.items.reduce((a, it) => a + it.qty, 0);
+            notificar('pedidos', `Nuevo pedido ${recienLlegado.id} 🛒`, `${recienLlegado.cliente} · ${d.totalFmt} · ${nprod} producto${nprod === 1 ? '' : 's'}`, recienLlegado.id);
           }
         }
         setOrders(nuevos);
@@ -2998,6 +3063,12 @@ export function useDealFlowState() {
         return !s;
       });
     },
+
+    // Notificaciones del navegador (web/PWA).
+    notifPrefs,
+    notifPermiso,
+    toggleNotificaciones,
+    setNotifTipo,
 
     // Menú lateral (vista web): mostrar/ocultar + botón flotante opcional.
     sidebarVisible,

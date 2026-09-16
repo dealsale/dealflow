@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
-import { IconBell } from './icons';
+import { NotificationsMenu } from './NotificationsMenu';
 
 /** Selector de tienda: cambia entre las tiendas del dueño y permite crear otra. */
 function StoreSwitcher({ df }: { df: DealFlowState }) {
@@ -82,14 +82,7 @@ export function Header({ df }: { df: DealFlowState }) {
             <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />
           </svg>
         </span>
-        <span
-          onClick={df.toggleSound}
-          className="df-close-hover"
-          title={df.soundOn ? 'Sonido de pedidos: activado. Toca para silenciar.' : 'Sonido de pedidos: silenciado. Toca para activarlo.'}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, cursor: 'pointer', color: df.soundOn ? '#64748B' : '#CBD5E1' }}
-        >
-          <IconBell muted={!df.soundOn} />
-        </span>
+        <NotificationsMenu df={df} />
         <span style={{ color: '#64748B', fontSize: 13 }}>{df.userLabel}</span>
         <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#059669', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700 }}>
           {df.userInitials}
