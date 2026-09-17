@@ -83,6 +83,7 @@ import {
   apiDeleteStore,
   apiStoreDetalle,
   apiImpersonate,
+  apiEntrarBiblioteca,
   apiStopImpersonate,
   apiUpdatePlan,
   apiDeletePlan,
@@ -2935,6 +2936,14 @@ export function useDealFlowState() {
       window.location.reload();
     });
   }
+  // Entra a la tienda interna "master" para crear/editar productos de la biblioteca
+  // con el editor completo (se sale con "Volver al panel de admin").
+  function entrarBiblioteca() {
+    void apiEntrarBiblioteca().then((r) => {
+      if (r.error) return;
+      window.location.reload();
+    });
+  }
 
   // ── Admin: editar / eliminar planes ──
   function abrirEditarPlan(id: string) {
@@ -3476,6 +3485,7 @@ export function useDealFlowState() {
     detalleLoading,
     entrarATienda,
     volverAlAdmin,
+    entrarBiblioteca,
     impersonando: !!sessionUser?.impersonando,
     tiendaImpersonada: sessionUser?.tiendaNombre || storeNombre || '',
     // Admin: gestión de planes

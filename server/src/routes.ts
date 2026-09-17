@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog } from './db.js';
-import { esImportBloqueado, productosBloqueados } from './biblioteca.js';
+import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
 import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
@@ -327,6 +327,7 @@ api.post('/products', requireAuth, requireStore, (req, res) => {
   db.prepare('INSERT INTO products (id, store_id, nombre, precio, color, txt, tipo, duracion) VALUES (?,?,?,?,?,?,?,?)')
     .run(id, req.user!.storeId, nombre.trim(), Number(precio) || 0, color, txt, esServicio ? 'servicio' : 'producto', esServicio ? String(duracion || '') : '');
   db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos) VALUES (?,?,?,?,0)').run(uid(), id, 'Única', esServicio ? 0 : Number(stock) || 0);
+  if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(id); // producto de biblioteca
   res.json({ id });
 });
 
@@ -364,11 +365,13 @@ api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   if (precio !== undefined) db.prepare('UPDATE products SET precio = ? WHERE id = ?').run(Number(precio) || 0, req.params.id);
   if (Array.isArray(reglas)) db.prepare('UPDATE products SET reglas = ? WHERE id = ?').run(j(reglas), req.params.id);
   if (Array.isArray(fotosSubidas)) db.prepare('UPDATE products SET fotos_subidas = ? WHERE id = ?').run(j(fotosSubidas), req.params.id);
+  if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(req.params.id); // producto de biblioteca
   res.json({ ok: true });
 });
 
 api.delete('/products/:id', requireAuth, requireStore, (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  if (req.user!.storeId === MASTER_STORE_ID) eliminarLibraryDeMaster(req.params.id); // quita su entrada de biblioteca
   db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
@@ -380,15 +383,17 @@ api.post('/products/:id/variants', requireAuth, requireStore, (req, res) => {
   const orden = (db.prepare('SELECT COALESCE(MAX(orden),0)+1 AS o FROM variants WHERE product_id = ?').get(req.params.id) as { o: number }).o;
   const id = uid();
   db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, orden) VALUES (?,?,?,?,0,?)').run(id, req.params.id, label.trim(), Number(stock) || 0, orden);
+  if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(req.params.id);
   res.json({ id });
 });
 
 api.patch('/variants/:id', requireAuth, requireStore, (req, res) => {
-  const v = db.prepare('SELECT v.id FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(req.params.id, req.user!.storeId);
+  const v = db.prepare('SELECT v.id, v.product_id FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(req.params.id, req.user!.storeId) as { id: string; product_id: string } | undefined;
   if (!v) return res.status(404).json({ error: 'Variante no encontrada.' });
   const { stock, fotosSubidas } = req.body || {};
   if (stock !== undefined) db.prepare('UPDATE variants SET stock = ? WHERE id = ?').run(Math.max(0, Number(stock) || 0), req.params.id);
   if (Array.isArray(fotosSubidas)) db.prepare('UPDATE variants SET fotos_subidas = ? WHERE id = ?').run(j(fotosSubidas), req.params.id);
+  if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(v.product_id);
   res.json({ ok: true });
 });
 
@@ -1329,7 +1334,8 @@ api.get('/webchat/:storeId/messages', (req, res) => {
 
 // ── Superadmin: ve TODAS las tiendas y puede ocultarlas del admin ─────
 api.get('/superadmin/stores', requireAuth, requireAdmin, (_req, res) => {
-  const stores = (db.prepare('SELECT * FROM stores ORDER BY created_at').all() as Record<string, unknown>[]).map((s) => {
+  // Excluimos la tienda interna "master" de la biblioteca (no es una tienda real).
+  const stores = (db.prepare('SELECT * FROM stores WHERE id != ? ORDER BY created_at').all(MASTER_STORE_ID) as Record<string, unknown>[]).map((s) => {
     const ventas = (db.prepare(
       `SELECT COALESCE(SUM(oi.qty * oi.precio),0) t FROM order_items oi JOIN orders o ON o.id = oi.order_id
        WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
@@ -1366,6 +1372,16 @@ api.post('/superadmin/biblioteca/from-product', requireAuth, requireAdmin, async
   const r = agregarProductoABiblioteca(String(productId || ''), { gratis: !!gratis, precioImportacion: Number(precioImportacion) || 0, editable: editable !== false });
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
+});
+
+// Entrar a la "Biblioteca de productos" para crear/editar con el editor completo:
+// impersonamos la tienda master interna (el admin vuelve con "Volver al panel").
+api.post('/superadmin/biblioteca/entrar', requireAuth, requireAdmin, (req, res) => {
+  asegurarMasterStore();
+  const dueno = duenoMasterStore();
+  if (!dueno) return res.status(500).json({ error: 'No pudimos preparar la biblioteca.' });
+  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: 'VENDEDOR', storeId: dueno.store_id, imp: req.user!.id });
+  res.json({ ok: true });
 });
 
 api.patch('/superadmin/biblioteca/:id', requireAuth, requireAdmin, async (req, res) => {

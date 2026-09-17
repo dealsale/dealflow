@@ -90,9 +90,21 @@ export function BibliotecaAdmin({ df }: { df: DealFlowState }) {
 
   return (
     <>
+      {/* Crear un producto NUEVO directamente en la biblioteca (con el editor completo) */}
+      <div style={{ background: 'var(--df-brand-subtle)', border: '1px solid var(--df-brand)', borderRadius: 12, padding: 16, marginBottom: 16, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: 'var(--df-brand-dark)' }}>Crear productos directamente en la biblioteca</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5 }}>Entra al taller de la biblioteca y crea/edita productos con el editor completo (fotos, reglas, mensaje inicial, opciones, combos). No hace falta crearlos en una tienda ni importarlos: quedan listos aquí para que las tiendas los importen. Sales con “← Volver al panel de admin”.</div>
+        </div>
+        <button onClick={df.entrarBiblioteca}
+          style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 9, padding: '11px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          ✏️ Crear / editar productos
+        </button>
+      </div>
+
       {/* Agregar producto a la biblioteca desde una tienda */}
       <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Agregar un producto a la biblioteca</div>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Agregar un producto a la biblioteca desde una tienda</div>
         <div style={{ color: 'var(--df-text-faint)', fontSize: 12.5, marginBottom: 12 }}>Elige una tienda y uno de sus productos: se clona completo (reglas, fotos, estructura) a la biblioteca.</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ minWidth: 220 }}>

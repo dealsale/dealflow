@@ -459,6 +459,7 @@ export const apiUpdateStore = (id: string, b: { nombre?: string; correo?: string
 export const apiDeleteStore = (id: string) => req<{ ok: true }>(`/api/admin/stores/${id}`, 'DELETE');
 export const apiImpersonate = (id: string) => req<{ ok: true }>(`/api/admin/stores/${id}/impersonate`, 'POST');
 export const apiStopImpersonate = () => req<{ ok: true }>('/api/auth/stop-impersonate', 'POST');
+export const apiEntrarBiblioteca = () => req<{ ok: true }>('/api/superadmin/biblioteca/entrar', 'POST');
 
 export interface AdminStoreDetalle {
   id: string; nombre: string; correo: string; plan: string; activa: boolean; creada: string;

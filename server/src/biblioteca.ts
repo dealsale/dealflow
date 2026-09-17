@@ -1,6 +1,11 @@
 import { existsSync, copyFileSync } from 'node:fs';
 import { db, uid, j, pj } from './db.js';
+import { hashPassword } from './auth.js';
 import { mediaPath } from './media.js';
+
+/** Tienda "master" (interna) donde el admin crea productos que viven SOLO en la biblioteca. */
+export const MASTER_STORE_ID = '__bibmaster__';
+const MASTER_EMAIL = 'biblioteca@dealflow.internal';
 
 /**
  * Biblioteca de productos del administrador.
@@ -59,6 +64,33 @@ interface Snapshot {
 }
 
 /**
+ * Construye el snapshot de un producto. Si `copiarMediaA` está definido, copia su
+ * multimedia a ese espacio (para clones que deben sobrevivir a la tienda origen);
+ * si no, deja las URLs tal cual (para productos "master" que siguen vivos).
+ */
+function snapshotDesdeProducto(productId: string, copiarMediaA?: string): { snapshot: Snapshot; row: Record<string, unknown> } | null {
+  const row = db.prepare('SELECT * FROM products WHERE id = ?').get(productId) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  const src = String(row.store_id);
+  const variants = db.prepare('SELECT label, stock, fotos, fotos_subidas, orden FROM variants WHERE product_id = ? ORDER BY orden').all(productId) as Record<string, unknown>[];
+  if (!copiarMediaA) {
+    // Sin copiar: el snapshot referencia la multimedia de la tienda origen (master).
+    return { snapshot: { row: { ...row }, variants: variants.map((v) => ({ ...v })) }, row };
+  }
+  const out = copiarMediaA === LIB ? aLib : aStore(copiarMediaA);
+  const rowLib: Record<string, unknown> = {
+    ...row,
+    fotos_subidas: remapUrls(row.fotos_subidas, src, copiarMediaA, out),
+    testimonios: remapUrls(row.testimonios, src, copiarMediaA, out),
+    videos: remapUrls(row.videos, src, copiarMediaA, out),
+    mensaje_bloques: remapBloques(row.mensaje_bloques, src, copiarMediaA, out),
+    opciones: remapOpciones(row.opciones, src, copiarMediaA, out),
+  };
+  const variantsLib = variants.map((v) => ({ ...v, fotos_subidas: remapUrls(v.fotos_subidas, src, copiarMediaA, out) }));
+  return { snapshot: { row: rowLib, variants: variantsLib }, row };
+}
+
+/**
  * Clona un producto existente de una tienda hacia la biblioteca del admin,
  * copiando su multimedia al espacio de la biblioteca. Devuelve el id creado.
  */
@@ -66,23 +98,9 @@ export function agregarProductoABiblioteca(
   productId: string,
   opts: { gratis: boolean; precioImportacion: number; editable?: boolean },
 ): { id: string } | { error: string } {
-  const row = db.prepare('SELECT * FROM products WHERE id = ?').get(productId) as Record<string, unknown> | undefined;
-  if (!row) return { error: 'Producto no encontrado.' };
-  const src = String(row.store_id);
-  const variants = db.prepare('SELECT label, stock, fotos, fotos_subidas, orden FROM variants WHERE product_id = ? ORDER BY orden').all(productId) as Record<string, unknown>[];
-
-  // Copiamos la multimedia del producto (tienda origen → biblioteca).
-  const rowLib: Record<string, unknown> = {
-    ...row,
-    fotos_subidas: remapUrls(row.fotos_subidas, src, LIB, aLib),
-    testimonios: remapUrls(row.testimonios, src, LIB, aLib),
-    videos: remapUrls(row.videos, src, LIB, aLib),
-    mensaje_bloques: remapBloques(row.mensaje_bloques, src, LIB, aLib),
-    opciones: remapOpciones(row.opciones, src, LIB, aLib),
-  };
-  const variantsLib = variants.map((v) => ({ ...v, fotos_subidas: remapUrls(v.fotos_subidas, src, LIB, aLib) }));
-  const snapshot: Snapshot = { row: rowLib, variants: variantsLib };
-
+  const built = snapshotDesdeProducto(productId, LIB);
+  if (!built) return { error: 'Producto no encontrado.' };
+  const { snapshot, row } = built;
   const id = uid();
   const orden = (db.prepare('SELECT COALESCE(MAX(orden),0)+1 n FROM library_products').get() as { n: number }).n;
   db.prepare(
@@ -92,14 +110,71 @@ export function agregarProductoABiblioteca(
   return { id };
 }
 
+/**
+ * Crea (si hace falta) la tienda "master" interna de la biblioteca, con un dueño
+ * oculto que el admin impersona para editar los productos de la biblioteca con el
+ * editor completo. Es idempotente.
+ */
+export function asegurarMasterStore(): void {
+  const existe = db.prepare('SELECT id FROM stores WHERE id = ?').get(MASTER_STORE_ID);
+  if (!existe) {
+    db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, inicial_pagado, activa, oculta) VALUES (?,?,?, 'Interno', 'activa', 1, 1, 1)")
+      .run(MASTER_STORE_ID, 'Biblioteca de productos DealFlow', MASTER_EMAIL);
+    db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(MASTER_STORE_ID);
+    try { db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(MASTER_STORE_ID); } catch { /* tabla opcional */ }
+  }
+  const dueno = db.prepare('SELECT id FROM users WHERE store_id = ?').get(MASTER_STORE_ID);
+  if (!dueno) {
+    db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)')
+      .run(uid(), MASTER_EMAIL, hashPassword(uid() + uid()), 'Biblioteca DealFlow', 'VENDEDOR', MASTER_STORE_ID);
+  }
+}
+
+/** El dueño (oculto) de la tienda master, para impersonarlo. */
+export function duenoMasterStore(): { id: string; email: string; nombre: string; role: string; store_id: string } | undefined {
+  return db.prepare('SELECT id, email, nombre, role, store_id FROM users WHERE store_id = ?').get(MASTER_STORE_ID) as
+    | { id: string; email: string; nombre: string; role: string; store_id: string }
+    | undefined;
+}
+
+/**
+ * Mantiene la entrada de biblioteca al día con el producto "master" del que nace.
+ * Se llama tras crear/editar un producto en la tienda master.
+ */
+export function sincronizarSnapshotMaster(productId: string): void {
+  const built = snapshotDesdeProducto(productId); // sin copiar media: sigue viva en la master
+  if (!built) return;
+  const { snapshot, row } = built;
+  const existing = db.prepare('SELECT id FROM library_products WHERE master_product_id = ?').get(productId) as { id: string } | undefined;
+  if (existing) {
+    db.prepare('UPDATE library_products SET nombre = ?, precio = ?, snapshot = ? WHERE master_product_id = ?')
+      .run(String(row.nombre), Number(row.precio) || 0, j(snapshot), productId);
+  } else {
+    const id = uid();
+    const orden = (db.prepare('SELECT COALESCE(MAX(orden),0)+1 n FROM library_products').get() as { n: number }).n;
+    // Nace gratis y activo; el admin ajusta gratis/precio/visibilidad desde la lista.
+    db.prepare(
+      `INSERT INTO library_products (id, nombre, precio, gratis, precio_importacion, activo, source_store_id, snapshot, orden, editable, master_product_id)
+       VALUES (?,?,?,1,0,1,?,?,?,1,?)`,
+    ).run(id, String(row.nombre), Number(row.precio) || 0, MASTER_STORE_ID, j(snapshot), orden, productId);
+  }
+}
+
+/** Al borrar un producto master, quita su entrada de la biblioteca. */
+export function eliminarLibraryDeMaster(productId: string): void {
+  db.prepare('DELETE FROM library_products WHERE master_product_id = ?').run(productId);
+}
+
 /** Clona un producto de la biblioteca dentro de una tienda cliente (copiando su multimedia). */
 export function importarLibraryEnTienda(libId: string, storeId: string, pagado: boolean): { productId: string } | { error: string } {
-  const lib = db.prepare('SELECT id, snapshot FROM library_products WHERE id = ?').get(libId) as { id: string; snapshot: string } | undefined;
+  const lib = db.prepare('SELECT id, snapshot, source_store_id FROM library_products WHERE id = ?').get(libId) as { id: string; snapshot: string; source_store_id: string } | undefined;
   if (!lib) return { error: 'Producto de biblioteca no encontrado.' };
   const snap = pj<Snapshot>(lib.snapshot, { row: {}, variants: [] });
   const row = snap.row || {};
   if (!row.nombre) return { error: 'Este producto de la biblioteca está incompleto.' };
 
+  // Espacio de media de origen: LIB para clones, la tienda master para los creados por el admin.
+  const src = lib.source_store_id || LIB;
   const out = aStore(storeId);
   const pid = uid();
   db.prepare(
@@ -107,10 +182,10 @@ export function importarLibraryEnTienda(libId: string, storeId: string, pagado: 
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     pid, storeId, '', row.nombre, Number(row.precio) || 0, row.color || '#E0E7FF', row.txt || '#4338CA',
-    (row.reglas as string) || '[]', (row.fotos as string) || '[]', remapUrls(row.fotos_subidas, LIB, storeId, out),
+    (row.reglas as string) || '[]', (row.fotos as string) || '[]', remapUrls(row.fotos_subidas, src, storeId, out),
     row.descripcion || '', row.caracteristicas || '', row.mensaje_inicial || '', (row.faqs as string) || '[]',
-    remapUrls(row.testimonios, LIB, storeId, out), row.modos_uso || '', remapUrls(row.videos, LIB, storeId, out),
-    remapBloques(row.mensaje_bloques, LIB, storeId, out), (row.bundles as string) || '[]', remapOpciones(row.opciones, LIB, storeId, out),
+    remapUrls(row.testimonios, src, storeId, out), row.modos_uso || '', remapUrls(row.videos, src, storeId, out),
+    remapBloques(row.mensaje_bloques, src, storeId, out), (row.bundles as string) || '[]', remapOpciones(row.opciones, src, storeId, out),
     row.contenido_paquete || '', row.disparador || '', row.mensaje_inicial_activo == null ? 1 : row.mensaje_inicial_activo,
     row.tipo || 'producto', row.duracion || '', row.sku || '',
   );
@@ -118,7 +193,7 @@ export function importarLibraryEnTienda(libId: string, storeId: string, pagado: 
   if (variants.length) {
     for (const v of variants) {
       db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, fotos_subidas, orden) VALUES (?,?,?,?,?,?,?)')
-        .run(uid(), pid, v.label || 'Única', 0, v.fotos || 0, remapUrls(v.fotos_subidas, LIB, storeId, out), v.orden || 0);
+        .run(uid(), pid, v.label || 'Única', 0, v.fotos || 0, remapUrls(v.fotos_subidas, src, storeId, out), v.orden || 0);
     }
   } else {
     db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos) VALUES (?,?,?,?,0)').run(uid(), pid, 'Única', 0);
@@ -213,6 +288,12 @@ export function actualizarLibraryProduct(id: string, patch: { nombre?: string; g
 }
 
 export function eliminarLibraryProduct(id: string): { ok: boolean } {
+  // Si nació como producto "master" (creado por el admin), borramos también ese producto.
+  const lib = db.prepare('SELECT master_product_id FROM library_products WHERE id = ?').get(id) as { master_product_id: string } | undefined;
+  if (lib?.master_product_id) {
+    db.prepare('DELETE FROM variants WHERE product_id = ?').run(lib.master_product_id);
+    db.prepare('DELETE FROM products WHERE id = ?').run(lib.master_product_id);
+  }
   db.prepare('DELETE FROM library_products WHERE id = ?').run(id);
   return { ok: true };
 }

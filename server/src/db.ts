@@ -392,6 +392,9 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_push_store ON push_subscriptions(store_i
 // Biblioteca: el admin elige por producto si el cliente puede editarlo (1) o no (0).
 // Por defecto editable, para no bloquear nada sin que el admin lo decida.
 addColumn('library_products', 'editable INTEGER NOT NULL DEFAULT 1');
+// Producto de biblioteca creado directamente por el admin (vive como producto real
+// en la tienda "master" de la biblioteca). '' = clonado desde una tienda (snapshot fijo).
+addColumn('library_products', "master_product_id TEXT NOT NULL DEFAULT ''");
 // Perfil del usuario: foto de perfil (URL /api/media/... o /api/me/media/...).
 addColumn('users', "foto TEXT NOT NULL DEFAULT ''");
 
