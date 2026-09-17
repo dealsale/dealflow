@@ -146,6 +146,12 @@ export interface ApiLead {
   canal?: string;
   notaInterna?: string;
   mensajes: ApiMensaje[];
+  // Solo en modo resumen (sondeo liviano del Inbox): el servidor manda estos
+  // en vez de todos los mensajes de cada chat.
+  ultimo?: string;
+  ultimoIso?: string | null;
+  hora?: string;
+  sinResponder?: number;
 }
 
 // ── Suscripción (pago de la tienda a DealFlow) ──
@@ -315,6 +321,12 @@ export const apiPushUnsubscribe = (endpoint: string) => req<{ ok: true }>('/api/
 export const apiClearLogs = () => req<{ ok: true }>('/api/logs', 'DELETE');
 export const apiReenviarMensaje = (id: string) => req<{ ok: boolean; estado: string; error?: string }>(`/api/messages/${id}/reenviar`, 'POST');
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
+// Sondeo liviano del Inbox: resumen de todos los chats (sin todos sus mensajes),
+// y la conversación completa solo del chat abierto (`abierto`).
+export const apiLeadsResumen = (abierto?: string) =>
+  req<{ leads: ApiLead[] }>(`/api/leads?resumen=1${abierto ? `&abierto=${encodeURIComponent(abierto)}` : ''}`, 'GET');
+// Conversación completa de un chat (al abrirlo).
+export const apiLeadMensajes = (id: string) => req<{ mensajes: ApiMensaje[] }>(`/api/leads/${id}/mensajes`, 'GET');
 export const apiSendLeadMessage = (id: string, texto: string) =>
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/messages`, 'POST', { texto });
 export const apiSendLeadMedia = (id: string, dataUrl: string, nombre: string, caption: string) =>

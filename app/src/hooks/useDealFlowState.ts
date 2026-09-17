@@ -26,7 +26,8 @@ import {
   apiPatchVariant,
   apiPutAssistant,
   apiCreateStore,
-  apiLeads,
+  apiLeadsResumen,
+  apiLeadMensajes,
   // apiAssignLead disponible para asignación desde el CRM (próximo)
   apiLogin,
   apiLogout,
@@ -421,26 +422,33 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     id: l.id,
     nombre: l.nombre,
     tel: l.tel,
-    ultimo: l.mensajes.length ? l.mensajes[l.mensajes.length - 1].texto : '',
-    hora: l.mensajes.length ? l.mensajes[l.mensajes.length - 1].hora : '',
-    ultimoIso: l.mensajes.length ? l.mensajes[l.mensajes.length - 1].createdAt : undefined,
+    // En modo resumen el servidor manda ultimo/hora/ultimoIso/sinResponder
+    // directamente (sin todos los mensajes). Si no, se derivan del último mensaje.
+    ultimo: l.ultimo !== undefined ? l.ultimo : (l.mensajes.length ? l.mensajes[l.mensajes.length - 1].texto : ''),
+    hora: l.hora !== undefined ? l.hora : (l.mensajes.length ? l.mensajes[l.mensajes.length - 1].hora : ''),
+    ultimoIso: l.ultimoIso !== undefined ? (l.ultimoIso || undefined) : (l.mensajes.length ? l.mensajes[l.mensajes.length - 1].createdAt : undefined),
+    sinResponder: l.sinResponder,
     etapa: (ETAPAS_VALIDAS.includes(l.etapa) ? l.etapa : 'Explorando') as Lead['etapa'],
     asignado: l.asignado,
     etiqueta: l.etiqueta || '',
     canal: l.canal || 'whatsapp',
     notaInterna: l.notaInterna || '',
-    mensajes: l.mensajes.map((m) => ({
-      id: m.id,
-      de: (m.de === 'bot' || m.de === 'vendedor' ? m.de : 'cliente') as Mensaje['de'],
-      texto: m.texto,
-      hora: m.hora,
-      createdAt: m.createdAt,
-      estado: m.estado,
-      tipo: m.tipo,
-      mediaUrl: m.mediaUrl,
-      mediaMime: m.mediaMime,
-      mediaNombre: m.mediaNombre,
-    })),
+    mensajes: mapApiMensajes(l.mensajes),
+  }));
+}
+
+function mapApiMensajes(mensajes: ApiLead['mensajes']): Mensaje[] {
+  return mensajes.map((m) => ({
+    id: m.id,
+    de: (m.de === 'bot' || m.de === 'vendedor' ? m.de : 'cliente') as Mensaje['de'],
+    texto: m.texto,
+    hora: m.hora,
+    createdAt: m.createdAt,
+    estado: m.estado,
+    tipo: m.tipo,
+    mediaUrl: m.mediaUrl,
+    mediaMime: m.mediaMime,
+    mediaNombre: m.mediaNombre,
   }));
 }
 
@@ -580,6 +588,10 @@ export function useDealFlowState() {
   const [expandedProductId, setExpandedProductId] = useState<number | string | null>(7);
   const [selectedLeadId, setSelectedLeadId] = useState<number | string>(1);
   const [crmSelectedId, setCrmSelectedId] = useState<number | string>(1);
+  // El sondeo liviano necesita saber qué chat está abierto (para traer SOLO ese
+  // con su conversación completa); un ref para leerlo desde el intervalo.
+  const crmSelectedIdRef = useRef<number | string>(1);
+  crmSelectedIdRef.current = crmSelectedId;
   const [crmIntervening, setCrmIntervening] = useState<boolean>(false);
   const [crmDraft, setCrmDraft] = useState<string>('');
   const [copied, setCopied] = useState<'webhook' | 'code' | 'guia' | null>(null);
@@ -1086,7 +1098,7 @@ export function useDealFlowState() {
   const leadsSource = apiMode && apiLeadsState ? apiLeadsState : leads;
 
   const leadsDecorated = useMemo(
-    () => leadsSource.map((l, i) => decorateLead(l, i, selectedLeadId, (id) => { setSelectedLeadId(id); setAvisoLead(null); })),
+    () => leadsSource.map((l, i) => decorateLead(l, i, selectedLeadId, (id) => { setSelectedLeadId(id); setAvisoLead(null); cargarMensajesChat(id); })),
     [leadsSource, selectedLeadId],
   );
   const lead = leadsDecorated.find((l) => l.id === selectedLeadId) || null;
@@ -1097,17 +1109,21 @@ export function useDealFlowState() {
       [...leadsSource]
       .sort((a, b) => String(b.ultimoIso || '').localeCompare(String(a.ultimoIso || '')))
       .map((l, i) => {
-        const d = decorateLead(l, i, crmSelectedId, (id) => { setCrmSelectedId(id); setCrmIntervening(false); setCrmSendWarn(''); });
+        const d = decorateLead(l, i, crmSelectedId, (id) => { setCrmSelectedId(id); setCrmIntervening(false); setCrmSendWarn(''); cargarMensajesChat(id); });
         // En modo servidor, "en vivo" = el bot lo atiende; en demo, los dos primeros.
         const live = apiMode && apiLeadsState ? l.asignado.includes('bot') || l.asignado.includes('Asistente') : l.id === 1 || l.id === 2;
         const selC = l.id === crmSelectedId;
         const fechaISO = l.ultimoIso ? fechaBogota(l.ultimoIso) : '';
         // Sin responder = mensajes seguidos del cliente al final (nadie —bot ni
-        // vendedor— ha contestado después). Si el chat está abierto, no molesta el badge.
-        let sinResponder = 0;
-        for (let k = l.mensajes.length - 1; k >= 0; k--) {
-          if (l.mensajes[k].de === 'cliente') sinResponder++;
-          else break;
+        // vendedor— ha contestado después). En modo resumen lo calcula el servidor
+        // (l.sinResponder); si no, se cuenta de los mensajes. Si el chat está abierto, no molesta el badge.
+        let sinResponder = l.sinResponder;
+        if (sinResponder === undefined) {
+          sinResponder = 0;
+          for (let k = l.mensajes.length - 1; k >= 0; k--) {
+            if (l.mensajes[k].de === 'cliente') sinResponder++;
+            else break;
+          }
         }
         if (selC) sinResponder = 0;
         return {
@@ -1567,6 +1583,31 @@ export function useDealFlowState() {
     return () => clearInterval(t);
   }, [apiMode, qrEstado]);
 
+  // Aplica un resumen de leads CONSERVANDO los mensajes que ya teníamos de cada
+  // chat (el resumen solo trae los del chat abierto, para ahorrar datos).
+  function aplicarResumenLeads(leads: Lead[]) {
+    setApiLeadsState((prev) => {
+      const antes = new Map((prev || []).map((l) => [String(l.id), l]));
+      return leads.map((l) => (l.mensajes.length ? l : { ...l, mensajes: antes.get(String(l.id))?.mensajes || [] }));
+    });
+  }
+  // Refresca la lista del Inbox de forma liviana (usado tras una acción).
+  function refrescarLeadsLiviano() {
+    if (!apiMode) return;
+    void apiLeadsResumen(crmSelectedIdRef.current != null ? String(crmSelectedIdRef.current) : undefined).then(({ data }) => {
+      if (data) aplicarResumenLeads(mapApiLeads(data.leads));
+    });
+  }
+  // Al abrir un chat, trae su conversación completa al instante (sin esperar el sondeo).
+  function cargarMensajesChat(id: number | string) {
+    if (!apiMode) return;
+    void apiLeadMensajes(String(id)).then(({ data }) => {
+      if (!data) return;
+      const msgs = mapApiMensajes(data.mensajes);
+      setApiLeadsState((prev) => (prev || []).map((l) => (String(l.id) === String(id) ? { ...l, mensajes: msgs } : l)));
+    });
+  }
+
   // En modo servidor, el panel del vendedor carga WhatsApp real y los leads,
   // y refresca el CRM cada 5 s para ver los mensajes que van llegando.
   useEffect(() => {
@@ -1603,11 +1644,13 @@ export function useDealFlowState() {
     let sembrado = false;
     let sembradoLeads = false;
     const t = setInterval(() => {
-      void apiLeads().then(({ data }) => {
+      // Sondeo LIVIANO: solo el resumen de cada chat (último mensaje + sin
+      // responder), y la conversación completa SOLO del chat abierto. Antes esto
+      // descargaba TODOS los mensajes de TODOS los chats cada 5s (varios MB),
+      // que era lo que ponía lento todo el Inbox.
+      void apiLeadsResumen(crmSelectedIdRef.current != null ? String(crmSelectedIdRef.current) : undefined).then(({ data }) => {
         if (!data) return;
         const leads = mapApiLeads(data.leads);
-        // Contacto nuevo = lead con id que no habíamos visto (después de la primera
-        // carga). La primera carga solo siembra, para no avisar de contactos viejos.
         if (!sembradoLeads) {
           leads.forEach((l) => knownLeadIdsRef.current.add(String(l.id)));
           sembradoLeads = true;
@@ -1620,12 +1663,12 @@ export function useDealFlowState() {
             }
           }
         }
-        // Si el sondeo trae exactamente lo mismo de antes, no tocamos el estado:
-        // así el Inbox no se vuelve a pintar entero cada 5s sin necesidad.
+        // La firma es barata: en resumen los mensajes vienen vacíos (salvo el chat
+        // abierto), así que casi no hay texto que serializar.
         const sig = JSON.stringify(leads);
         if (sig !== lastLeadsSigRef.current) {
           lastLeadsSigRef.current = sig;
-          setApiLeadsState(leads);
+          aplicarResumenLeads(leads);
         }
       });
       void apiOrders().then(({ data }) => {
@@ -2155,7 +2198,7 @@ export function useDealFlowState() {
         // Refleja el nuevo estado al instante y refresca desde el servidor.
         setApiLeadsState((st) => (st || []).map((l) => ({ ...l, mensajes: l.mensajes.map((m) => (m.id === id ? { ...m, estado: r.data!.estado } : m)) })));
       }
-      void apiLeads().then(({ data }) => { if (data) setApiLeadsState(mapApiLeads(data.leads)); });
+      refrescarLeadsLiviano();
     });
   }
 
@@ -2724,7 +2767,7 @@ export function useDealFlowState() {
       );
       void apiSendLeadMessage(String(crmSelectedId), txt).then((r) => {
         if (r.data && !r.data.enviadoPorWhatsapp && r.data.aviso) setCrmSendWarn(r.data.aviso);
-        void apiLeads().then(({ data }) => { if (data) setApiLeadsState(mapApiLeads(data.leads)); });
+        refrescarLeadsLiviano();
       });
       return;
     }
@@ -2749,7 +2792,7 @@ export function useDealFlowState() {
         );
         void apiSendLeadMedia(String(crmSelectedId), dataUrl, file.name, '').then((r) => {
           if (r.data && !r.data.enviadoPorWhatsapp && r.data.aviso) setCrmSendWarn(r.data.aviso);
-          void apiLeads().then(({ data }) => { if (data) setApiLeadsState(mapApiLeads(data.leads)); });
+          refrescarLeadsLiviano();
         });
       } else {
         // Demo: solo lo muestra localmente.

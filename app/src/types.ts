@@ -164,6 +164,8 @@ export interface Lead {
   canal?: string;
   /** Nota interna del equipo sobre este chat (nunca la ve el cliente). */
   notaInterna?: string;
+  /** Mensajes seguidos del cliente al final (lo calcula el servidor en modo resumen). */
+  sinResponder?: number;
   mensajes: Mensaje[];
 }
 

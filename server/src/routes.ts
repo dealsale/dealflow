@@ -211,12 +211,10 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', despachoProveedor: o.despacho_proveedor || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
-  const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
-    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp', notaInterna: l.nota_interna || '',
-    mensajes: (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
-      id: m.id, de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at, tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
-    })),
-  }));
+  // Resumen (sin todos los mensajes de cada chat): la carga inicial del panel no
+  // debe descargar la conversación completa de cientos de chats. Cada chat carga
+  // sus mensajes al abrirlo (GET /leads/:id/mensajes).
+  const leads = listarLeads(sid, true);
   const assistant = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string } | undefined;
   const wa = db.prepare('SELECT waba_id, phone_number_id, numero, conectado, access_token, modo, pin FROM whatsapp WHERE store_id = ?').get(sid) as
     | { waba_id: string; phone_number_id: string; numero: string; conectado: number; access_token: string; modo: string; pin: string }
@@ -247,16 +245,56 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   });
 });
 
+// Mensajes completos de un lead (para el conversación).
+const mapMensaje = (m: Record<string, unknown>) => ({
+  id: m.id, de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at,
+  tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
+});
+const mensajesDe = (leadId: string) =>
+  (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado FROM messages WHERE lead_id = ? ORDER BY created_at').all(leadId) as Record<string, unknown>[]).map(mapMensaje);
+
+/**
+ * Lista de leads para el Inbox. En modo `resumen` NO trae todos los mensajes de
+ * cada chat (eso pesa MB y volvía lento el Inbox al recargarse cada pocos
+ * segundos): solo el último mensaje + cuántos van sin responder. Solo el chat
+ * ABIERTO trae su conversación completa, para que se actualice en vivo.
+ */
+function listarLeads(sid: string, resumen: boolean, abierto?: string) {
+  const rows = db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[];
+  return rows.map((l) => {
+    const base = {
+      id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
+      etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp', notaInterna: l.nota_interna || '',
+    };
+    if (!resumen) return { ...base, mensajes: mensajesDe(l.id as string) };
+    const ult = db.prepare('SELECT texto, created_at FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1').get(l.id as string) as Record<string, unknown> | undefined;
+    const cola = db.prepare('SELECT de FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 40').all(l.id as string) as Record<string, unknown>[];
+    let sinResponder = 0;
+    for (const m of cola) { if (m.de === 'cliente') sinResponder++; else break; }
+    const esAbierto = !!abierto && String(l.id) === String(abierto);
+    return {
+      ...base,
+      mensajes: esAbierto ? mensajesDe(l.id as string) : [],
+      ultimo: ult ? ult.texto : '', ultimoIso: ult ? ult.created_at : null,
+      hora: ult ? horaBogota(ult.created_at) : '', sinResponder,
+    };
+  });
+}
+
 // Leads en vivo (para que el CRM refresque sin recargar toda la tienda).
+// ?resumen=1 → liviano (sin todos los mensajes); &abierto=<id> → ese chat sí completo.
 api.get('/leads', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
-  const leads = (db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((l) => ({
-    id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp', notaInterna: l.nota_interna || '',
-    mensajes: (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado FROM messages WHERE lead_id = ? ORDER BY created_at').all(l.id as string) as Record<string, unknown>[]).map((m) => ({
-      id: m.id, de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at, tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
-    })),
-  }));
-  res.json({ leads });
+  const resumen = req.query.resumen === '1';
+  const abierto = typeof req.query.abierto === 'string' ? req.query.abierto : undefined;
+  res.json({ leads: listarLeads(sid, resumen, abierto) });
+});
+
+// Conversación completa de UN chat (al abrirlo, para no depender del sondeo).
+api.get('/leads/:id/mensajes', requireAuth, requireStore, (req, res) => {
+  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
+  res.json({ mensajes: mensajesDe(req.params.id) });
 });
 
 // Pedidos en vivo (para refrescar sin recargar toda la tienda).
