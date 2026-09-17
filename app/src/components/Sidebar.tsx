@@ -107,17 +107,13 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             {df.isSuperadmin ? 'Superadmin' : 'Administración'}
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {df.isSuperadmin ? (
-              adminItem('superadmin', <IconCuentas />, 'Todas las tiendas')
-            ) : (
-              <>
-                {adminItem('ventas', <IconVentas />, 'Ventas')}
-                {adminItem('planes', <IconPlanes />, 'Planes')}
-                {adminItem('cuentas', <IconCuentas />, 'Cuentas')}
-                {adminItem('cupones', <span style={{ fontSize: 16 }}>🎁</span>, 'Cupones')}
-                {adminItem('biblioteca', <IconBiblioteca />, 'Biblioteca')}
-              </>
-            )}
+            {/* El superadmin ve TODO lo del admin y, además, "Todas las tiendas". */}
+            {df.isSuperadmin && adminItem('superadmin', <span style={{ fontSize: 16 }}>🌐</span>, 'Todas las tiendas')}
+            {adminItem('ventas', <IconVentas />, 'Ventas')}
+            {adminItem('planes', <IconPlanes />, 'Planes')}
+            {adminItem('cuentas', <IconCuentas />, 'Cuentas')}
+            {adminItem('cupones', <span style={{ fontSize: 16 }}>🎁</span>, 'Cupones')}
+            {adminItem('biblioteca', <IconBiblioteca />, 'Biblioteca')}
           </nav>
         </>
       )}

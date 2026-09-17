@@ -293,10 +293,11 @@ function PaywallShell({ df, titulo, sub, children }: { df: DealFlowState; titulo
 }
 
 function AdminContent({ df }: { df: DealFlowState }) {
-  // El superadmin solo tiene su panel de todas las tiendas.
-  if (df.isSuperadmin) return <Superadmin df={df} />;
+  // El superadmin tiene TODO lo del admin (ventas, planes, cuentas, cupones,
+  // biblioteca) y además su panel de "Todas las tiendas" (visibilidad).
   return (
     <>
+      {df.adminSection === 'superadmin' && df.isSuperadmin && <Superadmin df={df} />}
       {df.adminSection === 'ventas' && <Ventas df={df} />}
       {df.adminSection === 'planes' && <Planes df={df} />}
       {df.adminSection === 'cuentas' && <Cuentas df={df} />}

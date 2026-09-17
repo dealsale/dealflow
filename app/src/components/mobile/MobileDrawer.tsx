@@ -85,8 +85,14 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         {df.isAdmin && (
           <>
             <div style={{ color: 'var(--df-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 8px' }}>
-              Administración
+              {df.isSuperadmin ? 'Superadmin' : 'Administración'}
             </div>
+            {/* El superadmin ve TODO lo del admin y, además, "Todas las tiendas". */}
+            {df.isSuperadmin && (
+              <div onClick={() => df.goAdmin('superadmin')} style={itemStyle(df.adminSection === 'superadmin')}>
+                <span>🌐 Todas las tiendas</span>
+              </div>
+            )}
             {ADMIN_ITEMS.map((m) => (
               <div key={m.id} onClick={() => df.goAdmin(m.id)} style={itemStyle(df.adminSection === m.id)}>
                 <span>{m.label}</span>
