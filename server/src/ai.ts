@@ -138,8 +138,8 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   }
   const t0 = Date.now(); // para que el bot tarde ~4-5 s en responder (más humano)
 
-  const assistant = db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(storeId) as
-    | { instrucciones: string; reglas: string }
+  const assistant = db.prepare('SELECT instrucciones, reglas, nombre FROM assistants WHERE store_id = ?').get(storeId) as
+    | { instrucciones: string; reglas: string; nombre: string }
     | undefined;
   const store = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined;
   const productRows = db.prepare('SELECT * FROM products WHERE store_id = ?').all(storeId) as Record<string, unknown>[];
@@ -192,9 +192,15 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
     }
   }
 
-  const system = `Eres el asistente de ventas por WhatsApp de la tienda "${store?.nombre || 'la tienda'}".
+  const marca = store?.nombre || 'la tienda';
+  const asistenteNombre = (assistant?.nombre || '').trim();
+  const identidad = asistenteNombre
+    ? `IDENTIDAD OBLIGATORIA (tiene prioridad sobre todo lo demás): te llamas "${asistenteNombre}" y atiendes por WhatsApp en nombre de "${marca}". Preséntate y saluda SIEMPRE como "${asistenteNombre}" (de ${marca}). NUNCA uses otro nombre propio ni el de otra marca; si más abajo aparece otro, ignóralo.`
+    : `IDENTIDAD OBLIGATORIA (tiene prioridad sobre todo lo demás): trabajas EXCLUSIVAMENTE para la tienda "${marca}". Preséntate y saluda SIEMPRE con el nombre "${marca}". Si más abajo (en las instrucciones, ejemplos, mensajes iniciales o el historial) aparece el nombre de OTRA tienda, IGNÓRALO por completo y reemplázalo mentalmente por "${marca}". NUNCA saludes ni te presentes con el nombre de otra tienda.`;
 
-IDENTIDAD OBLIGATORIA (tiene prioridad sobre todo lo demás): trabajas EXCLUSIVAMENTE para la tienda "${store?.nombre || 'la tienda'}". Preséntate y saluda SIEMPRE con el nombre "${store?.nombre || 'la tienda'}". Si más abajo (en las instrucciones, ejemplos, mensajes iniciales o el historial) aparece el nombre de OTRA tienda, IGNÓRALO por completo y reemplázalo mentalmente por "${store?.nombre || 'la tienda'}". NUNCA saludes ni te presentes con el nombre de otra tienda.
+  const system = `Eres ${asistenteNombre ? `"${asistenteNombre}", el asistente por WhatsApp de "${marca}"` : `el asistente de ventas por WhatsApp de la tienda "${marca}"`}.
+
+${identidad}
 
 ${assistant?.instrucciones || 'Atiende con calidez y ayuda a cerrar la venta.'}
 

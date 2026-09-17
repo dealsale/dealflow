@@ -197,6 +197,8 @@ addColumn('orders', "despacho_proveedor TEXT NOT NULL DEFAULT ''"); // dropi | e
 addColumn('orders', 'guia_avisada INTEGER NOT NULL DEFAULT 0'); // 1 = ya le avisamos la guía al cliente por WhatsApp
 addColumn('orders', "estado_woo TEXT NOT NULL DEFAULT ''"); // último estado leído del WooCommerce del proveedor (diagnóstico)
 addColumn('assistants', "ia_proveedor TEXT NOT NULL DEFAULT ''"); // deepseek | openai | grok ('' = el del servidor)
+// Nombre propio del asistente (ej: "Sky"). Si está vacío, se usa el nombre de la tienda.
+addColumn('assistants', "nombre TEXT NOT NULL DEFAULT ''");
 db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (
   store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
   tipo TEXT NOT NULL,

@@ -117,6 +117,17 @@ export function Asistente({ df }: { df: DealFlowState }) {
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 18px' }}>Dile en palabras normales cómo debe vender. Él se encarga del resto.</p>
       <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 14, alignItems: 'start' }}>
         <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Nombre del asistente</div>
+            <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 8 }}>Con este nombre se presenta al cliente (ej: Sky). Si lo dejas vacío, usa el nombre de tu tienda.</div>
+            <input
+              className="df-input"
+              value={df.assistantNombre}
+              onChange={(e) => df.setAssistantNombre(e.target.value)}
+              placeholder="Ej: Sky"
+              style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 14 }}
+            />
+          </div>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Cómo debe vender</div>
           <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 12 }}>Escríbelo como se lo dirías a un empleado nuevo.</div>
           <textarea

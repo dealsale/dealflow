@@ -635,6 +635,7 @@ export function useDealFlowState() {
   }, [theme]);
   function setTheme(t: 'light' | 'dark' | 'premium') { setThemeState(t); }
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? ASSISTANT_TEXT_DEFAULT);
+  const [assistantNombre, setAssistantNombre] = useState<string>('');
   const [rules, setRules] = useState<string[]>(snap?.rules ?? RULES_DEFAULT);
   const [orders, setOrders] = useState<Order[]>(snap?.orders ?? ORDERS);
   const [products, setProducts] = useState<Product[]>(snap?.products ?? PRODUCTS);
@@ -1635,6 +1636,7 @@ export function useDealFlowState() {
         if (data.whatsapp.signup?.disponible && !data.whatsapp.conectado) setWaMethod((m) => (m === 'qr' ? 'auto' : m));
         // Datos reales de la tienda: nada de textos demo de "Luna Accesorios".
         setAssistantText(data.assistant?.instrucciones || '');
+        setAssistantNombre(data.assistant?.nombre || '');
         setRules(data.assistant?.reglas || []);
         setApiLeadsState(mapApiLeads(data.leads));
         if (data.orders) setOrders(mapApiOrders(data.orders));
@@ -2755,7 +2757,7 @@ export function useDealFlowState() {
   }
 
   function saveAssistant() {
-    if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules });
+    if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre });
     setAssistantSaved(true);
     clearTimeout(assistantTimer.current);
     assistantTimer.current = setTimeout(() => setAssistantSaved(false), 2500);
@@ -3415,6 +3417,11 @@ export function useDealFlowState() {
     assistantText,
     setAssistantText: (v: string) => {
       setAssistantText(v);
+      setAssistantSaved(false);
+    },
+    assistantNombre,
+    setAssistantNombre: (v: string) => {
+      setAssistantNombre(v);
       setAssistantSaved(false);
     },
     saveAssistant,
