@@ -219,7 +219,8 @@ export function Cuentas({ df }: { df: DealFlowState }) {
           Aún no hay tiendas. Crea la primera con «+ Nueva cuenta».
         </div>
       ) : (
-        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+        <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
+        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)', minWidth: 620 }}>
           {df.accounts.map((a) => {
             const id = String(a.id);
             const armed = df.armedDeleteStoreId === id;
@@ -252,6 +253,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
               </div>
             );
           })}
+        </div>
         </div>
       )}
     </section>

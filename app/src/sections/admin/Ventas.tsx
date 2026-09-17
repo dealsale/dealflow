@@ -38,7 +38,8 @@ export function Ventas({ df }: { df: DealFlowState }) {
         </div>
       </div>
 
-      <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+      <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
+      <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)', minWidth: 560 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 110px', gap: 14, padding: '11px 18px', borderBottom: '1px solid var(--df-border)', color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
           <span>Tienda</span>
           <span>Plan</span>
@@ -56,6 +57,7 @@ export function Ventas({ df }: { df: DealFlowState }) {
             <span style={a.estadoStyle}>{a.estadoLabel}</span>
           </div>
         ))}
+      </div>
       </div>
     </section>
   );

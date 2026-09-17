@@ -87,7 +87,8 @@ export function Cupones({ df }: { df: DealFlowState }) {
       </div>
 
       {/* Lista de cupones */}
-      <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', maxWidth: 820, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto', paddingBottom: 2, maxWidth: 820 }}>
+      <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', overflow: 'hidden', minWidth: 620 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 80px 1fr 90px auto', gap: 12, padding: '11px 18px', background: 'var(--df-bg)', borderBottom: '1px solid var(--df-border)', fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>
           <span>Código</span><span>Desc.</span><span>Vence / usos</span><span>Estado</span><span style={{ textAlign: 'right' }}>Acciones</span>
         </div>
@@ -114,6 +115,7 @@ export function Cupones({ df }: { df: DealFlowState }) {
             </span>
           </div>
         ))}
+      </div>
       </div>
     </section>
   );
