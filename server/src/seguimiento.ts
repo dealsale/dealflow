@@ -4,10 +4,11 @@ import { sendWhatsappText, marcarEnviado } from './wa.js';
 /**
  * Seguimiento automático ("¿sigues ahí?"): si el cliente no responde, el bot le
  * vuelve a escribir para reactivar la conversación y aprovechar la ventana de
- * 24 h de Meta. Tres recordatorios escalonados: 5, 15 y 30 minutos.
+ * 24 h de Meta. Es comportamiento propio del asistente (un buen agente de ventas
+ * siempre hace seguimiento): NO hay que activarlo, corre solo. Tres recordatorios
+ * escalonados: 5 minutos, 30 minutos y 1 hora sin respuesta.
  *
  * Reglas de seguridad:
- *  - Solo tiendas con el seguimiento ENCENDIDO (assistants.seguimiento = 1).
  *  - Solo chats que atiende el asistente (no pisa a un agente humano).
  *  - Solo si el ÚLTIMO mensaje es nuestro (esperamos al cliente) y el cliente
  *    escribió hace menos de 24 h (fuera de esa ventana Meta no deja texto libre).
@@ -17,8 +18,8 @@ import { sendWhatsappText, marcarEnviado } from './wa.js';
 // Umbrales de cada recordatorio (en minutos) y el nivel que representan.
 const TIERS: { nivel: number; min: number }[] = [
   { nivel: 1, min: 5 },
-  { nivel: 2, min: 15 },
-  { nivel: 3, min: 30 },
+  { nivel: 2, min: 30 },
+  { nivel: 3, min: 60 },
 ];
 
 function mensajeSeguimiento(nivel: number, nombre: string): string {
@@ -29,7 +30,7 @@ function mensajeSeguimiento(nivel: number, nombre: string): string {
 }
 
 interface LeadSeg {
-  id: string; nombre: string; wa_id: string | null; tel: string; canal: string;
+  id: string; store_id: string; nombre: string; wa_id: string | null; tel: string; canal: string;
   asignado: string; seguimiento_nivel: number; ultimo_de: string | null;
   idle_min: number | null; ventana_min: number | null;
 }
@@ -41,46 +42,44 @@ export async function correrSeguimiento(): Promise<void> {
   if (corriendo) return;
   corriendo = true;
   try {
-    const tiendas = db.prepare('SELECT store_id FROM assistants WHERE seguimiento = 1').all() as { store_id: string }[];
-    for (const t of tiendas) {
-      const leads = db.prepare(
-        `SELECT l.id, l.nombre, l.wa_id, l.tel, l.canal, l.asignado, l.seguimiento_nivel,
-                (SELECT de FROM messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1) AS ultimo_de,
-                (julianday('now') - julianday((SELECT created_at FROM messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1))) * 1440 AS idle_min,
-                (julianday('now') - julianday((SELECT created_at FROM messages WHERE lead_id = l.id AND de = 'cliente' ORDER BY created_at DESC LIMIT 1))) * 1440 AS ventana_min
-           FROM leads l
-          WHERE l.store_id = ?
-            AND COALESCE(l.seguimiento_nivel,0) < 3
-            AND EXISTS (SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.created_at > datetime('now','-1 day'))`,
-      ).all(t.store_id) as LeadSeg[];
+    // Corre para TODAS las tiendas (es comportamiento propio del asistente, no una
+    // opción). El filtro real es por chat: que lo atienda el asistente, etc.
+    const leads = db.prepare(
+      `SELECT l.id, l.store_id, l.nombre, l.wa_id, l.tel, l.canal, l.asignado, l.seguimiento_nivel,
+              (SELECT de FROM messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1) AS ultimo_de,
+              (julianday('now') - julianday((SELECT created_at FROM messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1))) * 1440 AS idle_min,
+              (julianday('now') - julianday((SELECT created_at FROM messages WHERE lead_id = l.id AND de = 'cliente' ORDER BY created_at DESC LIMIT 1))) * 1440 AS ventana_min
+         FROM leads l
+        WHERE COALESCE(l.seguimiento_nivel,0) < 3
+          AND EXISTS (SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.created_at > datetime('now','-1 day'))`,
+    ).all() as LeadSeg[];
 
-      for (const l of leads) {
-        // El chat lo debe atender el asistente (no un humano).
-        if (l.asignado && !/asistente|bot/i.test(l.asignado)) continue;
-        // El último mensaje debe ser nuestro (esperamos respuesta del cliente).
-        if (l.ultimo_de !== 'bot' && l.ultimo_de !== 'vendedor') continue;
-        if (l.ventana_min == null) continue; // el cliente nunca escribió
-        // Ventana de 24 h de Meta (no aplica al chat web).
-        if (l.canal !== 'web' && l.ventana_min >= 24 * 60) continue;
+    for (const l of leads) {
+      // El chat lo debe atender el asistente (no un humano).
+      if (l.asignado && !/asistente|bot/i.test(l.asignado)) continue;
+      // El último mensaje debe ser nuestro (esperamos respuesta del cliente).
+      if (l.ultimo_de !== 'bot' && l.ultimo_de !== 'vendedor') continue;
+      if (l.ventana_min == null) continue; // el cliente nunca escribió
+      // Ventana de 24 h de Meta (no aplica al chat web).
+      if (l.canal !== 'web' && l.ventana_min >= 24 * 60) continue;
 
-        // El silencio se mide desde el ÚLTIMO mensaje del cliente (los recordatorios
-        // que enviamos, al ser mensajes del bot, no reinician ese reloj). Así 5/15/30
-        // cuentan desde que el cliente dejó de responder. Enviamos solo el recordatorio
-        // más avanzado que corresponda (si el proceso estuvo caído, no van los tres seguidos).
-        let objetivo = 0;
-        for (const tier of TIERS) if (l.ventana_min >= tier.min) objetivo = tier.nivel;
-        if (objetivo <= (l.seguimiento_nivel || 0)) continue;
+      // El silencio se mide desde el ÚLTIMO mensaje del cliente (los recordatorios
+      // que enviamos, al ser mensajes del bot, no reinician ese reloj). Así 5/30/60
+      // cuentan desde que el cliente dejó de responder. Enviamos solo el recordatorio
+      // más avanzado que corresponda (si el proceso estuvo caído, no van los tres seguidos).
+      let objetivo = 0;
+      for (const tier of TIERS) if (l.ventana_min >= tier.min) objetivo = tier.nivel;
+      if (objetivo <= (l.seguimiento_nivel || 0)) continue;
 
-        const texto = mensajeSeguimiento(objetivo, l.nombre);
-        const destino = l.wa_id || l.tel;
-        const pn = l.tel;
-        try {
-          const mid = uid();
-          db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, l.id, texto);
-          marcarEnviado(mid, await sendWhatsappText(t.store_id, destino, texto, pn));
-        } catch { /* si falla el envío, igual marcamos el nivel para no reintentar en bucle */ }
-        db.prepare('UPDATE leads SET seguimiento_nivel = ? WHERE id = ?').run(objetivo, l.id);
-      }
+      const texto = mensajeSeguimiento(objetivo, l.nombre);
+      const destino = l.wa_id || l.tel;
+      const pn = l.tel;
+      try {
+        const mid = uid();
+        db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, l.id, texto);
+        marcarEnviado(mid, await sendWhatsappText(l.store_id, destino, texto, pn));
+      } catch { /* si falla el envío, igual marcamos el nivel para no reintentar en bucle */ }
+      db.prepare('UPDATE leads SET seguimiento_nivel = ? WHERE id = ?').run(objetivo, l.id);
     }
   } finally {
     corriendo = false;
@@ -95,5 +94,5 @@ export function reiniciarSeguimiento(leadId: string): void {
 /** Arranca el ciclo en segundo plano (cada minuto). */
 export function iniciarSeguimiento(): void {
   setInterval(() => { void correrSeguimiento(); }, 60_000);
-  console.log('[seguimiento] recordatorios automáticos activos (5/15/30 min) para tiendas que lo enciendan');
+  console.log('[seguimiento] recordatorios automáticos activos (5 min / 30 min / 1 h) en todos los chats del asistente');
 }
