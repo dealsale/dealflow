@@ -258,6 +258,39 @@ export async function inventario(storeId: string, prov?: WooProv): Promise<{ ite
   }
 }
 
+export interface ProductoWoo { id: number; nombre: string; sku: string; stock: number | null; precio: string }
+type WooProductoRaw = { id?: number; name?: string; sku?: string; stock_quantity?: number | null; price?: string };
+
+/**
+ * Busca productos en el WooCommerce del proveedor (Effi/Dropi) para vincular el
+ * SKU desde la ficha del producto: primero por SKU exacto (el "código" de Effi),
+ * y si no aparece, por texto (nombre o parte del código). Devuelve nombre y
+ * stock para que el dueño confirme que es el producto correcto.
+ */
+export async function buscarProductos(storeId: string, q: string, prov?: WooProv): Promise<{ productos: ProductoWoo[]; proveedor: WooProv } | { error: string }> {
+  // Si no nos dicen el proveedor, preferimos Effi; si no, el primero conectado.
+  const proveedor: WooProv | undefined = prov || (credenciales(storeId, 'effi') ? 'effi' : proveedoresConectados(storeId)[0]);
+  const c = proveedor ? credenciales(storeId, proveedor) : null;
+  if (!c || !proveedor) return { error: 'Conecta primero tu WooCommerce (Effi o Dropi) en Integraciones.' };
+  const query = (q || '').trim();
+  if (!query) return { productos: [], proveedor };
+  const mapear = (arr: WooProductoRaw[]): ProductoWoo[] =>
+    arr.map((p) => ({ id: Number(p.id), nombre: String(p.name || ''), sku: String(p.sku || ''), stock: p.stock_quantity ?? null, precio: String(p.price || '') }));
+  try {
+    // 1) Coincidencia exacta por SKU (el código pegado).
+    const porSku = await woo<WooProductoRaw[]>(c, '/products', undefined, { sku: query, per_page: '5' });
+    const productos: ProductoWoo[] = porSku.ok && Array.isArray(porSku.body) ? mapear(porSku.body) : [];
+    // 2) Si no hubo match exacto, buscamos por texto (nombre o código parcial).
+    if (!productos.length) {
+      const porTexto = await woo<WooProductoRaw[]>(c, '/products', undefined, { search: query, per_page: '8' });
+      if (porTexto.ok && Array.isArray(porTexto.body)) productos.push(...mapear(porTexto.body));
+    }
+    return { productos, proveedor };
+  } catch {
+    return { error: 'No pudimos consultar tu WooCommerce. Revisa la conexión en Integraciones.' };
+  }
+}
+
 /** Genera un SKU legible y único a partir del nombre y el id del producto. */
 function skuAuto(nombre: string, id: string): string {
   const slug = (nombre || 'PRODUCTO')

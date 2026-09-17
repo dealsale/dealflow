@@ -312,6 +312,9 @@ export const apiWooPreferido = (proveedor: string) => req<{ ok: true; preferido:
 export const apiWooVerificar = (proveedor: string) => req<{ ok: true }>('/api/woo/verificar', 'POST', { proveedor });
 export const apiWooSyncInventario = (proveedor: string) => req<{ actualizados: number }>('/api/woo/inventario/sync', 'POST', { proveedor });
 export const apiWooSyncProductos = (proveedor: string) => req<{ creados: number; actualizados: number; skusGenerados: number }>('/api/woo/productos/sync', 'POST', { proveedor });
+export interface ProductoWoo { id: number; nombre: string; sku: string; stock: number | null; precio: string }
+export const apiWooBuscarProductos = (q: string, proveedor = '') =>
+  req<{ productos: ProductoWoo[]; proveedor: string }>(`/api/woo/productos/buscar?q=${encodeURIComponent(q)}${proveedor ? `&proveedor=${proveedor}` : ''}`, 'GET');
 
 export interface EventoLog { nivel: string; evento: string; detalle: string; leadId: string | null; createdAt: string }
 export const apiLogs = (leadId?: string) => req<{ logs: EventoLog[] }>(`/api/logs${leadId ? `?leadId=${encodeURIComponent(leadId)}` : ''}`, 'GET');

@@ -611,6 +611,15 @@ api.post('/woo/productos/sync', requireAuth, requireStore, requireOwner, async (
   res.json(r);
 });
 
+// Busca productos en el WooCommerce conectado (por código/SKU o nombre) para
+// vincular el SKU desde la ficha del producto. Solo lectura → basta requireStore.
+api.get('/woo/productos/buscar', requireAuth, requireStore, async (req, res) => {
+  const { buscarProductos } = await import('./woocommerce.js');
+  const r = await buscarProductos(req.user!.storeId!, String(req.query.q || ''), wooProv(req.query.proveedor));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+
 // ── Leads / CRM ───────────────────────────────────────────────────────
 api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);

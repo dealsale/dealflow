@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
 import { AutoTextarea } from '../components/AutoTextarea';
+import { apiWooBuscarProductos, type ProductoWoo } from '../lib/api';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 
 type BloqueDecorado = DecoratedProduct['bloquesDecorados'][number];
@@ -173,6 +174,101 @@ function OpcionesEditor({ p }: { p: DecoratedProduct }) {
 }
 
 /**
+ * Buscador para vincular el SKU con un producto real del WooCommerce de Effi/Dropi.
+ * El dueño pega el código (o el nombre), lo buscamos en su tienda, le mostramos
+ * nombre + stock para que confirme, y con un clic le dejamos el SKU correcto.
+ * Solo aparece si hay un WooCommerce (Effi/Dropi) conectado.
+ */
+function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
+  const [abierto, setAbierto] = useState(false);
+  const [q, setQ] = useState(p.sku || '');
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState('');
+  const [buscado, setBuscado] = useState(false);
+  const [resultados, setResultados] = useState<ProductoWoo[]>([]);
+  const [vinculado, setVinculado] = useState<ProductoWoo | null>(null);
+
+  if (!df.wooProveedores.length) return null; // sin WooCommerce conectado, no aplica
+  const nombreProv = df.wooProveedores.includes('effi') ? 'Effi' : 'Dropi';
+
+  const buscar = () => {
+    const query = q.trim();
+    if (!query) return;
+    setCargando(true); setError(''); setBuscado(true); setVinculado(null);
+    void apiWooBuscarProductos(query).then((r) => {
+      setCargando(false);
+      if (r.error || !r.data) { setError(r.error || 'No pudimos buscar.'); setResultados([]); return; }
+      setResultados(r.data.productos);
+    });
+  };
+  const vincular = (prod: ProductoWoo) => { p.setSku(prod.sku); setVinculado(prod); setResultados([]); };
+
+  const btnMini: CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 8, padding: '8px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-purple)', cursor: 'pointer', whiteSpace: 'nowrap' };
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      {!abierto ? (
+        <button onClick={() => setAbierto(true)} style={btnMini}>🔎 Buscar en {nombreProv} por código</button>
+      ) : (
+        <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, background: 'var(--df-bg)' }}>
+          <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8 }}>
+            Pega el <b>código del producto en {nombreProv}</b> (o escribe su nombre) y vincúlalo. Así te queda el SKU exacto y {nombreProv} sí lo despacha.
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              className="df-input"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') buscar(); }}
+              placeholder="Código o nombre del producto"
+              style={{ flex: 1, minWidth: 180, boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+            />
+            <button onClick={buscar} disabled={cargando} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: cargando ? 'default' : 'pointer', opacity: cargando ? 0.7 : 1 }}>{cargando ? 'Buscando…' : 'Buscar'}</button>
+          </div>
+
+          {error && <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-danger-dark)' }}>{error}</div>}
+
+          {!!resultados.length && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {resultados.map((prod) => (
+                <div key={prod.id} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prod.nombre || '(producto sin nombre)'}</div>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 1 }}>
+                      SKU: {prod.sku || '— sin SKU en ' + nombreProv} · stock: {prod.stock ?? '—'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => vincular(prod)}
+                    disabled={!prod.sku}
+                    title={prod.sku ? '' : `Este producto no tiene SKU en ${nombreProv}; ponle uno allá primero.`}
+                    style={{ ...btnMini, opacity: prod.sku ? 1 : 0.5, cursor: prod.sku ? 'pointer' : 'not-allowed' }}
+                  >Vincular</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {buscado && !cargando && !error && !resultados.length && !vinculado && (
+            <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>No encontramos ese producto en {nombreProv}. Revisa el código o busca por el nombre.</div>
+          )}
+
+          {vinculado && (
+            <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--df-brand-subtle)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '9px 12px' }}>
+              <span style={{ fontSize: 15 }}>✓</span>
+              <div style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', lineHeight: 1.5 }}>
+                Vinculado con {nombreProv}: <b>{vinculado.nombre || '(sin nombre)'}</b> · stock <b>{vinculado.stock ?? '—'}</b>.<br />
+                <span style={{ color: 'var(--df-text-muted)' }}>Acuérdate de <b>Guardar</b> el producto para que quede.</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Editor desplegado de un producto. Se muestra de dos formas según `vista`:
  * - 'normal': todos los grupos abiertos, uno tras otro (como una ficha larga).
  * - 'agrupada': cada grupo es un acordeón; se despliega al hacer clic en su
@@ -207,6 +303,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           <div style={{ maxWidth: 560 }}>
             <div style={label}>SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· para casar este producto con Effi/WooCommerce (opcional)</span></div>
             <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: FAJA-NEGRA-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
+            <VincularSkuEffi p={p} df={df} />
           </div>
         </>
       ),
@@ -434,6 +531,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
               <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: BODY-NEGRO-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
             </div>
           </div>
+          <div style={{ maxWidth: 560, marginBottom: 16 }}><VincularSkuEffi p={p} df={df} /></div>
         </>
       )}
       {/* Cuando está bloqueado, la estructura se muestra como REFERENCIA (no editable). */}
