@@ -194,6 +194,26 @@ export function Asistente({ df }: { df: DealFlowState }) {
         </div>
       </div>
 
+      {/* Seguimiento automático: re-engancha al cliente que dejó de responder. */}
+      <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginTop: 14, display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Seguimiento automático 💬</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5 }}>
+            Si el cliente deja de responder, el asistente le vuelve a escribir para retomar la conversación:
+            un recordatorio a los <b>5</b>, otro a los <b>15</b> y otro a los <b>30 minutos</b>. Se envían solo
+            dentro de la ventana de 24 h de WhatsApp y se detienen apenas el cliente responde.
+          </div>
+        </div>
+        <div
+          onClick={df.toggleSeguimientoAuto}
+          role="switch"
+          aria-checked={df.seguimientoAuto}
+          style={{ width: 52, height: 30, borderRadius: 999, background: df.seguimientoAuto ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .15s' }}
+        >
+          <div style={{ position: 'absolute', top: 3, left: df.seguimientoAuto ? 25 : 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />
+        </div>
+      </div>
+
       {df.apiMode && df.storeId && <PruebaAsistente storeId={df.storeId} />}
     </section>
   );

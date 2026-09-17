@@ -216,7 +216,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   // debe descargar la conversación completa de cientos de chats. Cada chat carga
   // sus mensajes al abrirlo (GET /leads/:id/mensajes).
   const leads = listarLeads(sid, true);
-  const assistant = db.prepare('SELECT instrucciones, reglas, nombre FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string; nombre: string } | undefined;
+  const assistant = db.prepare('SELECT instrucciones, reglas, nombre, seguimiento FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string; nombre: string; seguimiento: number } | undefined;
   const wa = db.prepare('SELECT waba_id, phone_number_id, numero, conectado, access_token, modo, pin FROM whatsapp WHERE store_id = ?').get(sid) as
     | { waba_id: string; phone_number_id: string; numero: string; conectado: number; access_token: string; modo: string; pin: string }
     | undefined;
@@ -229,7 +229,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     orders,
     leads,
     suscripcion: estadoSuscripcion(sid),
-    assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []), nombre: assistant?.nombre || '' },
+    assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []), nombre: assistant?.nombre || '', seguimiento: !!assistant?.seguimiento },
     whatsapp: {
       conectado: !!wa?.conectado,
       modo: wa?.modo || 'cloud',
@@ -911,11 +911,11 @@ api.post('/messages/:id/reenviar', requireAuth, requireStore, async (req, res) =
 
 // ── Asistente ─────────────────────────────────────────────────────────
 api.put('/assistant', requireAuth, requireStore, requireOwner, (req, res) => {
-  const { instrucciones, reglas, nombre } = req.body || {};
+  const { instrucciones, reglas, nombre, seguimiento } = req.body || {};
   db.prepare(
-    `INSERT INTO assistants (store_id, instrucciones, reglas, nombre) VALUES (?,?,?,?)
-     ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas, nombre = excluded.nombre`,
-  ).run(req.user!.storeId, String(instrucciones || ''), j(Array.isArray(reglas) ? reglas : []), String(nombre || '').trim());
+    `INSERT INTO assistants (store_id, instrucciones, reglas, nombre, seguimiento) VALUES (?,?,?,?,?)
+     ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas, nombre = excluded.nombre, seguimiento = excluded.seguimiento`,
+  ).run(req.user!.storeId, String(instrucciones || ''), j(Array.isArray(reglas) ? reglas : []), String(nombre || '').trim(), seguimiento ? 1 : 0);
   res.json({ ok: true });
 });
 
@@ -1306,6 +1306,7 @@ api.post('/webchat/:storeId/messages', async (req, res) => {
     contactoNuevo = true;
   }
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'cliente', texto);
+  db.prepare('UPDATE leads SET seguimiento_nivel = 0 WHERE id = ?').run(lead.id); // el cliente respondió
   if (contactoNuevo) {
     const quien = String(req.body?.nombre || '').trim().split(' ')[0] || 'Un cliente';
     void import('./push.js').then((p) => p.enviarPush(store.id, 'contactos', 'Nuevo contacto 👋', `${quien} le escribió a tu tienda.`, { url: '/' })).catch(() => {});

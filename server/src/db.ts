@@ -199,6 +199,12 @@ addColumn('orders', "estado_woo TEXT NOT NULL DEFAULT ''"); // último estado le
 addColumn('assistants', "ia_proveedor TEXT NOT NULL DEFAULT ''"); // deepseek | openai | grok ('' = el del servidor)
 // Nombre propio del asistente (ej: "Sky"). Si está vacío, se usa el nombre de la tienda.
 addColumn('assistants', "nombre TEXT NOT NULL DEFAULT ''");
+// Seguimiento automático: si el cliente no responde, el bot le vuelve a escribir
+// (recordatorios a los 5/15/30 min, dentro de la ventana de 24h de Meta). 0 = apagado.
+addColumn('assistants', 'seguimiento INTEGER NOT NULL DEFAULT 0');
+// Nivel de recordatorio ya enviado a un lead (0=ninguno, 1=5min, 2=15min, 3=30min).
+// Se reinicia a 0 cuando el cliente vuelve a escribir.
+addColumn('leads', 'seguimiento_nivel INTEGER NOT NULL DEFAULT 0');
 db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (
   store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
   tipo TEXT NOT NULL,

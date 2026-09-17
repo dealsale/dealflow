@@ -47,6 +47,8 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
   db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)').run(
     uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null,
   );
+  // El cliente respondió: reinicia el contador de recordatorios de seguimiento.
+  db.prepare('UPDATE leads SET seguimiento_nivel = 0 WHERE id = ?').run(leadId);
   // Contacto NUEVO: notifica al dueño por Web Push (si lo tiene activado).
   if (nuevo) {
     const quien = (nombre || '').trim().split(' ')[0] || 'Un cliente';

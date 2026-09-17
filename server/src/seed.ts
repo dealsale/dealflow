@@ -72,7 +72,7 @@ export function asegurarCuentaSky() {
   db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)').run(
     uid(), email, hashPassword(password), 'Equipo DealFlow', 'VENDEDOR', storeId,
   );
-  db.prepare('INSERT INTO assistants (store_id, instrucciones, reglas, nombre) VALUES (?,?,?,?)').run(
+  db.prepare('INSERT INTO assistants (store_id, instrucciones, reglas, nombre, seguimiento) VALUES (?,?,?,?,1)').run(
     storeId, SKY_INSTRUCCIONES, j(SKY_REGLAS), 'Sky',
   );
   try { db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId); } catch { /* tabla opcional */ }
