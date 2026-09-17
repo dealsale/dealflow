@@ -80,7 +80,11 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
                   <span style={{ fontWeight: 700, fontSize: 14 }}>Enviado por {sel.despachoProveedor === 'dropi' ? 'Dropi' : 'Effi'}</span>
                   <span style={{ display: 'inline-block', background: 'var(--df-brand-subtle)', color: 'var(--df-brand-dark)', borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>En WooCommerce</span>
                   <div style={{ flex: 1 }} />
-                  <button onClick={sel.sincronizarEffi} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-purple)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sincronizar estado</button>
+                  <button onClick={sel.sincronizarEffi} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-purple)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Actualizar ahora</button>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>
+                  Estado en {sel.despachoProveedor === 'dropi' ? 'Dropi' : 'Effi'}: <b style={{ color: 'var(--df-text-strong)' }}>{sel.estadoWoo || 'esperando que lo procesen…'}</b>
+                  <span style={{ display: 'block', color: 'var(--df-text-faint)', fontSize: 11.5, marginTop: 2 }}>Se actualiza solo cada pocos minutos. Cuando salga la guía, le avisamos al cliente por WhatsApp.</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
                   <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>¿Algo salió mal en {sel.despachoProveedor === 'dropi' ? 'Dropi' : 'Effi'}?</span>

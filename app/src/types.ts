@@ -26,6 +26,8 @@ export interface Order {
   wooId?: string;
   /** proveedor por el que se despachó: 'dropi' | 'effi' */
   despachoProveedor?: string;
+  /** último estado leído del WooCommerce del proveedor (Effi/Dropi) */
+  estadoWoo?: string;
   envio: number;
   nota: string;
   /** Total del pedido acordado por el asistente (si no hay precios por ítem) */

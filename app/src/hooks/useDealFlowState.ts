@@ -521,6 +521,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     guia: o.guia,
     wooId: o.wooId || '',
     despachoProveedor: o.despachoProveedor || '',
+    estadoWoo: o.estadoWoo || '',
     envio: o.envio || 0,
     nota: o.nota || '',
     total: o.total || 0,

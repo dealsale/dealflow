@@ -289,6 +289,7 @@ export interface ApiOrder {
   guia?: string;
   wooId?: string;
   despachoProveedor?: string;
+  estadoWoo?: string;
   envio: number;
   nota: string;
   total: number;

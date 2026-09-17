@@ -61,7 +61,11 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                   <div style={{ width: 28, height: 28, borderRadius: 8, background: sel.despachoProveedor === 'dropi' ? 'var(--df-warning-subtle)' : 'var(--df-purple-subtle)', color: sel.despachoProveedor === 'dropi' ? 'var(--df-warning)' : 'var(--df-purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11.5, flexShrink: 0 }}>{sel.despachoProveedor === 'dropi' ? 'Dr' : 'Ef'}</div>
                   <div style={{ flex: 1, fontWeight: 700, fontSize: 13.5 }}>Enviado por {sel.despachoProveedor === 'dropi' ? 'Dropi' : 'Effi'}</div>
-                  <button onClick={sel.sincronizarEffi} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-purple)', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 40 }}>Sincronizar</button>
+                  <button onClick={sel.sincronizarEffi} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-purple)', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 40 }}>Actualizar</button>
+                </div>
+                <div style={{ marginTop: 7, fontSize: 12, color: 'var(--df-text-muted)' }}>
+                  Estado en {sel.despachoProveedor === 'dropi' ? 'Dropi' : 'Effi'}: <b style={{ color: 'var(--df-text-strong)' }}>{sel.estadoWoo || 'esperando…'}</b>
+                  <span style={{ display: 'block', color: 'var(--df-text-faint)', fontSize: 11, marginTop: 2 }}>Se actualiza solo. Al salir la guía, le avisamos al cliente por WhatsApp.</span>
                 </div>
                 {sel.hasGuia && (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 9 }}>

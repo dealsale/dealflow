@@ -208,7 +208,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   }));
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', despachoProveedor: o.despacho_proveedor || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
   // Resumen (sin todos los mensajes de cada chat): la carga inicial del panel no
@@ -302,7 +302,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', despachoProveedor: o.despacho_proveedor || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string),
   }));
   res.json({ orders });
@@ -562,15 +562,11 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
 });
 
 // Sincroniza estado y guía del pedido desde el WooCommerce del proveedor usado.
+// Reutiliza la misma lógica del sync automático (actualiza estado, guía y avisa al cliente).
 api.post('/orders/:rowId/despachar/sync', requireAuth, requireStore, async (req, res) => {
-  const sid = req.user!.storeId!;
-  const o = db.prepare('SELECT id, woo_id, despacho_proveedor FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; woo_id: string; despacho_proveedor: string } | undefined;
-  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  if (!o.woo_id) return res.status(400).json({ error: 'Este pedido aún no se ha despachado.' });
-  const { estadoPedido } = await import('./woocommerce.js');
-  const r = await estadoPedido(sid, o.woo_id, wooProv(o.despacho_proveedor));
+  const { sincronizarPedido } = await import('./syncWoo.js');
+  const r = await sincronizarPedido(req.user!.storeId!, req.params.rowId);
   if ('error' in r) return res.status(400).json({ error: r.error });
-  if (r.guia) db.prepare('UPDATE orders SET guia = ? WHERE id = ?').run(r.guia, o.id);
   res.json({ estado: r.estado, guia: r.guia });
 });
 
