@@ -27,28 +27,11 @@ export function MobileHeader({ df }: { df: DealFlowState }) {
           <line x1="4" y1="17" x2="20" y2="17"></line>
         </svg>
       </div>
-      <img src={logo} alt="DealFlow" style={{ width: 28, height: 25, objectFit: 'contain' }} />
+      <img src={logo} alt="DealFlow" style={{ width: 28, height: 25, objectFit: 'contain', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>{df.headerTitle}</div>
+        <div style={{ fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{df.headerTitle}</div>
       </div>
       <NotificationsMenu df={df} />
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          background: df.waConnected ? 'rgba(16,185,129,.15)' : 'rgba(239,68,68,.15)',
-          border: '1px solid ' + (df.waConnected ? 'rgba(16,185,129,.4)' : 'rgba(239,68,68,.4)'),
-          color: df.waConnected ? '#6EE7B7' : 'var(--df-danger-light)',
-          borderRadius: 999,
-          padding: '4px 10px',
-          fontSize: 11.5,
-          fontWeight: 700,
-        }}
-      >
-        <span style={{ width: 7, height: 7, borderRadius: '50%', background: df.waConnected ? 'var(--df-brand-mid)' : 'var(--df-danger-mid)' }} />
-        {df.waConnected ? 'Conectado' : 'Sin conexión'}
-      </span>
       <ProfileMenu df={df} onDarkBar />
     </header>
   );

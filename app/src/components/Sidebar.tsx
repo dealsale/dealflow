@@ -148,13 +148,6 @@ export function Sidebar({ df }: { df: DealFlowState }) {
           <span>{df.modeBtnLabel}</span>
         </div>
       )}
-      <div
-        onClick={df.logout}
-        className="df-toggle-mode"
-        style={{ textAlign: 'center', padding: '9px 12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 12.5, fontWeight: 600 }}
-      >
-        Cerrar sesión
-      </div>
       {!df.apiMode && (
       <div
         onClick={df.resetDemo}

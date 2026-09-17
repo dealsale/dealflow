@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 /** Avatar redondo: la foto de perfil si hay, si no las iniciales. En el tema
- * Premium lleva un anillo de gradiente (detalle exclusivo de ese tema). */
-function Avatar({ foto, iniciales, size, premium }: { foto: string; iniciales: string; size: number; premium?: boolean }) {
+ * Premium lleva un anillo de gradiente (detalle exclusivo de ese tema).
+ * `waEstado`: en el header móvil, un puntico de estado del WhatsApp encima del
+ * avatar (verde parpadeando = conectado) — así nos ahorramos el pill de texto
+ * "Conectado/Sin conexión" que no cabía junto al nombre de la tienda. */
+function Avatar({ foto, iniciales, size, premium, waEstado }: { foto: string; iniciales: string; size: number; premium?: boolean; waEstado?: boolean }) {
   const inner = foto ? (
     <img src={foto} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', display: 'block', flexShrink: 0 }} />
   ) : (
@@ -11,10 +14,23 @@ function Avatar({ foto, iniciales, size, premium }: { foto: string; iniciales: s
       {iniciales}
     </div>
   );
-  if (!premium) return inner;
-  return (
+  const conElAro = premium ? (
     <div style={{ width: size + 4, height: size + 4, borderRadius: '50%', background: 'linear-gradient(135deg,#2563EB,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 12px rgba(124,58,237,.55)' }}>
       {inner}
+    </div>
+  ) : inner;
+  if (waEstado === undefined) return conElAro;
+  return (
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      {conElAro}
+      <span
+        title={waEstado ? 'WhatsApp conectado' : 'WhatsApp sin conexión'}
+        style={{
+          position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: '50%',
+          background: waEstado ? 'var(--df-brand-mid)' : 'var(--df-danger-mid)',
+          border: '2px solid #0F172A', animation: waEstado ? 'dfpulse 1.8s infinite' : 'none',
+        }}
+      />
     </div>
   );
 }
@@ -126,7 +142,7 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <div onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', padding: '4px 6px', borderRadius: 10 }} className={onDarkBar ? undefined : 'df-row-hover'}>
-        <Avatar foto={df.userFoto} iniciales={df.userInitials} size={32} premium={premium} />
+        <Avatar foto={df.userFoto} iniciales={df.userInitials} size={32} premium={premium} waEstado={onDarkBar ? df.waConnected : undefined} />
         {!onDarkBar && (
           <div style={{ lineHeight: 1.25, display: window.innerWidth < 720 ? 'none' : 'block' }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--df-text)' }}>{df.userLabel}</div>
@@ -228,6 +244,16 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
                 </div>
               )
             )}
+          </div>
+
+          <div
+            onClick={df.toggleFloatingNav}
+            className="df-row-hover"
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 16px', fontSize: 13, fontWeight: 700, color: df.floatingNav ? 'var(--df-brand-dark)' : 'var(--df-text)', cursor: 'pointer', borderBottom: '1px solid var(--df-border)' }}
+          >
+            <span>◉</span>
+            <span style={{ flex: 1 }}>Menú flotante</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: df.floatingNav ? 'var(--df-brand-dark)' : 'var(--df-text-faint)' }}>{df.floatingNav ? 'Activado' : 'Desactivado'}</span>
           </div>
 
           {df.pwaDisponible && (

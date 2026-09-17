@@ -95,14 +95,6 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         )}
 
         <div style={{ flex: 1 }} />
-        <div
-          onClick={df.toggleFloatingNav}
-          className="df-toggle-mode"
-          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px', borderRadius: 8, cursor: 'pointer', color: df.floatingNav ? 'var(--df-brand-light)' : 'var(--df-text-faint)', fontSize: 13, fontWeight: 600, border: '1px solid var(--df-text-strong)' }}
-        >
-          <span style={{ fontSize: 15 }}>◉</span>
-          <span>Botón flotante de menú: {df.floatingNav ? 'activado' : 'desactivado'}</span>
-        </div>
         {df.canAdmin && !df.apiMode && (
           <div
             onClick={df.toggleMode}
@@ -113,22 +105,6 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
             <span>{df.modeBtnLabel}</span>
           </div>
         )}
-        {df.pwaDisponible && (
-          <div
-            onClick={df.instalarPwa}
-            className="df-toggle-mode"
-            style={{ textAlign: 'center', padding: '12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: 'var(--df-brand-light)', fontSize: 13, fontWeight: 700, border: '1px solid rgba(52,211,153,.35)', background: 'rgba(16,185,129,.08)' }}
-          >
-            📲 Instalar la app
-          </div>
-        )}
-        <div
-          onClick={df.logout}
-          className="df-toggle-mode"
-          style={{ textAlign: 'center', padding: '11px 12px', marginTop: 6, borderRadius: 8, cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 12.5, fontWeight: 600 }}
-        >
-          Cerrar sesión
-        </div>
         {!df.apiMode && (
         <div
           onClick={df.resetDemo}
