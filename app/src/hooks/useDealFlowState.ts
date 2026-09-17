@@ -583,7 +583,22 @@ function navStyle(active: boolean): CSSProperties {
 }
 
 export function useDealFlowState() {
-  const [snap] = useState(loadSnapshot);
+  // ¿El panel lo sirve el backend real? Lo recordamos en localStorage para saberlo
+  // SÍNCRONAMENTE al recargar (apiMode se confirma async y llegaría tarde). Cuando
+  // hay backend NO sembramos datos de la demo (ni el snapshot ni los de ejemplo):
+  // así al recargar no parpadea una tienda vieja/aleatoria; se muestra vacío hasta
+  // que llega /state. El snapshot es solo para el modo demo (sin backend).
+  const bootServed = (() => { try { return localStorage.getItem('dealflow:apimode') === '1'; } catch { return false; } })();
+  const [snap] = useState(() => (bootServed ? null : loadSnapshot()));
+  // Valores iniciales: los de ejemplo en demo, vacíos cuando hay backend real.
+  const DEF_ORDERS = bootServed ? [] : ORDERS;
+  const DEF_PRODUCTS = bootServed ? [] : PRODUCTS;
+  const DEF_PROMOS = bootServed ? [] : PROMOS;
+  const DEF_LEADS = bootServed ? [] : LEADS;
+  const DEF_PLANS = bootServed ? [] : PLANS;
+  const DEF_ACCOUNTS = bootServed ? [] : ACCOUNTS;
+  const DEF_ASSISTANT = bootServed ? '' : ASSISTANT_TEXT_DEFAULT;
+  const DEF_RULES = bootServed ? [] : RULES_DEFAULT;
   const [mode, setMode] = useState<Mode>('vendedor');
   const [section, setSection] = useState<VendedorSection>('resumen');
   const [adminSection, setAdminSection] = useState<AdminSection>('ventas');
@@ -606,7 +621,7 @@ export function useDealFlowState() {
   const [planPrecio, setPlanPrecio] = useState<string>('');
   const [planDesc, setPlanDesc] = useState<string>('');
   const [planError, setPlanError] = useState<boolean>(false);
-  const [waConnected, setWaConnected] = useState<boolean>(snap?.waConnected ?? true);
+  const [waConnected, setWaConnected] = useState<boolean>(snap?.waConnected ?? !bootServed);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [mobileChatOpen, setMobileChatOpen] = useState<boolean>(false);
   // Vista web: mostrar/ocultar el menú lateral y activar un botón flotante de menú.
@@ -634,11 +649,11 @@ export function useDealFlowState() {
     try { localStorage.setItem('dealflow:theme', theme); } catch { /* modo privado */ }
   }, [theme]);
   function setTheme(t: 'light' | 'dark' | 'premium') { setThemeState(t); }
-  const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? ASSISTANT_TEXT_DEFAULT);
+  const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? DEF_ASSISTANT);
   const [assistantNombre, setAssistantNombre] = useState<string>('');
-  const [rules, setRules] = useState<string[]>(snap?.rules ?? RULES_DEFAULT);
-  const [orders, setOrders] = useState<Order[]>(snap?.orders ?? ORDERS);
-  const [products, setProducts] = useState<Product[]>(snap?.products ?? PRODUCTS);
+  const [rules, setRules] = useState<string[]>(snap?.rules ?? DEF_RULES);
+  const [orders, setOrders] = useState<Order[]>(snap?.orders ?? DEF_ORDERS);
+  const [products, setProducts] = useState<Product[]>(snap?.products ?? DEF_PRODUCTS);
   const [productRuleDraft, setProductRuleDraft] = useState<string>('');
   const [faqP, setFaqP] = useState('');
   const [faqR, setFaqR] = useState('');
@@ -671,11 +686,11 @@ export function useDealFlowState() {
   const [promoDesc, setPromoDesc] = useState<string>('');
   const [promoVigencia, setPromoVigencia] = useState<string>('');
   const [promoError, setPromoError] = useState<boolean>(false);
-  const [promos, setPromos] = useState<Promo[]>(snap?.promos ?? PROMOS);
-  const [leads, setLeads] = useState<Lead[]>(snap?.leads ?? LEADS);
+  const [promos, setPromos] = useState<Promo[]>(snap?.promos ?? DEF_PROMOS);
+  const [leads, setLeads] = useState<Lead[]>(snap?.leads ?? DEF_LEADS);
   const [integrations] = useState<Integration[]>(INTEGRATIONS);
-  const [plans, setPlans] = useState<Plan[]>(snap?.plans ?? PLANS);
-  const [accounts, setAccounts] = useState<Account[]>(snap?.accounts ?? ACCOUNTS);
+  const [plans, setPlans] = useState<Plan[]>(snap?.plans ?? DEF_PLANS);
+  const [accounts, setAccounts] = useState<Account[]>(snap?.accounts ?? DEF_ACCOUNTS);
   const [armedDeleteProductId, setArmedDeleteProductId] = useState<number | string | null>(null);
   const [armedDeletePromoId, setArmedDeletePromoId] = useState<number | string | null>(null);
   const [armedDeleteVariant, setArmedDeleteVariant] = useState<{ productId: number | string; index: number } | null>(null);
@@ -771,10 +786,13 @@ export function useDealFlowState() {
   const [apiLeadsState, setApiLeadsState] = useState<Lead[] | null>(null);
   const [crmSendWarn, setCrmSendWarn] = useState('');
 
-  // Guarda los datos de la demo en el navegador: los cambios sobreviven al refrescar.
+  // Guarda los datos SOLO en modo demo (sin backend). Con backend real no se guarda:
+  // los datos de una tienda no deben quedar cacheados y reaparecer al recargar (era
+  // el origen del bug de "entra a una tienda aleatoria con nombres cambiados").
   useEffect(() => {
+    if (apiMode) return;
     saveSnapshot({ orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected, soundOn, waCfg });
-  }, [orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected, soundOn, waCfg]);
+  }, [apiMode, orders, products, promos, leads, rules, assistantText, plans, accounts, waConnected, soundOn, waCfg]);
 
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const assistantTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -1323,6 +1341,12 @@ export function useDealFlowState() {
   useEffect(() => {
     void apiMe().then(({ available, user }) => {
       setApiMode(available);
+      // Recuerda si hay backend (para el próximo arranque) y purga el snapshot de la
+      // demo, que en modo servidor no debe usarse nunca.
+      try {
+        if (available) { localStorage.setItem('dealflow:apimode', '1'); clearSnapshot(); }
+        else localStorage.removeItem('dealflow:apimode');
+      } catch { /* modo privado */ }
       if (available) {
         const rol = user ? (user.role === 'ADMIN' ? 'admin' : user.role === 'SUPERADMIN' ? 'superadmin' : 'vendedor') : 'vendedor';
         setSessionUser(user ? { nombre: user.nombre, email: user.email, role: rol, esDueno: user.esDueno, impersonando: user.impersonando, tiendaNombre: user.tiendaNombre, foto: user.foto } : null);
@@ -1396,6 +1420,7 @@ export function useDealFlowState() {
     if (apiMode) apiLogout();
     try {
       localStorage.removeItem('dealflow:session');
+      clearSnapshot(); // que no quede data de una tienda cacheada tras salir
     } catch { /* nada */ }
     setSessionUser(null);
     setMode('vendedor');
