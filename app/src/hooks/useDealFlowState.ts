@@ -290,6 +290,8 @@ export interface DecoratedProduct extends Product {
   setNombre: (v: string) => void;
   setPrecio: (v: string) => void;
   setSku: (v: string) => void;
+  setTipo: (v: 'producto' | 'servicio') => void;
+  setDuracion: (v: string) => void;
   setDescripcion: (v: string) => void;
   setCaracteristicas: (v: string) => void;
   setMensajeInicial: (v: string) => void;
@@ -1877,6 +1879,8 @@ export function useDealFlowState() {
         setNombre: (v: string) => updateProduct(p.id, { nombre: v }),
         setPrecio: (v: string) => updateProduct(p.id, { precio: parseInt(v.replace(/[^0-9]/g, ''), 10) || 0 }),
         setSku: (v: string) => updateProduct(p.id, { sku: v }),
+        setTipo: (v: 'producto' | 'servicio') => updateProduct(p.id, { tipo: v }),
+        setDuracion: (v: string) => updateProduct(p.id, { duracion: v }),
         fotosMain: (p.fotos || ['Principal', 'Detalle']).map((fl) => ({
           label: fl,
           tileStyle: { width: '64px', height: '64px', borderRadius: '10px', background: p.color, color: p.txt, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontSize: '10px', fontWeight: 600, paddingBottom: '5px', boxSizing: 'border-box' },

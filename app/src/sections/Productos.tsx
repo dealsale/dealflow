@@ -290,6 +290,30 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
       titulo: 'Producto',
       body: (
         <>
+          {/* Cambiar entre producto físico y servicio (sin tener que borrar y volver a subir). */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={label}>Tipo</div>
+            <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }}>
+              {(['producto', 'servicio'] as const).map((t) => {
+                const activo = (p.tipo || 'producto') === t;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => p.setTipo(t)}
+                    style={{ background: activo ? 'var(--df-brand)' : 'var(--df-surface)', color: activo ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                  >
+                    {t === 'producto' ? '📦 Producto' : '🧩 Servicio'}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {(p.tipo || 'producto') === 'servicio' && (
+            <div style={{ marginBottom: 14, maxWidth: 260 }}>
+              <div style={label}>Duración <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· opcional</span></div>
+              <input className="df-input" value={p.duracion || ''} onChange={(e) => p.setDuracion(e.target.value)} placeholder="Ej: 45 minutos" style={inputStyle} />
+            </div>
+          )}
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 10, marginBottom: 14, maxWidth: 560 }}>
             <div>
               <div style={label}>Nombre</div>

@@ -357,6 +357,7 @@ api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   if (descripcion !== undefined) db.prepare('UPDATE products SET descripcion = ? WHERE id = ?').run(String(descripcion), req.params.id);
   if (caracteristicas !== undefined) db.prepare('UPDATE products SET caracteristicas = ? WHERE id = ?').run(String(caracteristicas), req.params.id);
   if (mensajeInicial !== undefined) db.prepare('UPDATE products SET mensaje_inicial = ? WHERE id = ?').run(String(mensajeInicial), req.params.id);
+  if (req.body?.tipo !== undefined) db.prepare('UPDATE products SET tipo = ? WHERE id = ?').run(req.body.tipo === 'servicio' ? 'servicio' : 'producto', req.params.id);
   if (req.body?.duracion !== undefined) db.prepare('UPDATE products SET duracion = ? WHERE id = ?').run(String(req.body.duracion), req.params.id);
   if (req.body?.sku !== undefined) db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(String(req.body.sku).trim(), req.params.id);
   if (Array.isArray(faqs)) db.prepare('UPDATE products SET faqs = ? WHERE id = ?').run(j(faqs), req.params.id);
