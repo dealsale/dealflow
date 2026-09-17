@@ -118,6 +118,63 @@ async function entenderImagen(storeId: string, mediaUrl: string): Promise<string
 }
 
 /**
+ * Redacta con IA un mensaje de SEGUIMIENTO (re-enganche) usando el contexto real
+ * del chat: retoma lo último que se habló, como un buen vendedor. Devuelve '' si
+ * no hay IA o falla (el llamador usa un texto de respaldo). `nivel` marca la
+ * urgencia: 1 ≈ 5 min, 2 ≈ 30 min, 3 ≈ 1 h sin respuesta.
+ */
+export async function generarSeguimientoIA(storeId: string, leadId: string, nivel: number): Promise<string> {
+  const ia = resolverTexto(storeId);
+  if (!ia) return '';
+  const assistant = db.prepare('SELECT instrucciones, nombre FROM assistants WHERE store_id = ?').get(storeId) as { instrucciones: string; nombre: string } | undefined;
+  const store = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined;
+  const lead = db.prepare('SELECT nombre FROM leads WHERE id = ?').get(leadId) as { nombre: string } | undefined;
+  const marca = store?.nombre || 'la tienda';
+  const nombreAsist = (assistant?.nombre || '').trim();
+  const productos = (db.prepare('SELECT nombre, precio FROM products WHERE store_id = ? LIMIT 40').all(storeId) as { nombre: string; precio: number }[])
+    .map((p) => `- ${p.nombre}: ${Number(p.precio) > 0 ? '$' + Number(p.precio).toLocaleString('es-CO') + ' COP' : 'gratis'}`).join('\n');
+  const historia = (db.prepare('SELECT de, texto, tipo FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 12').all(leadId) as { de: string; texto: string; tipo: string }[])
+    .reverse()
+    .map((m) => ({ role: m.de === 'cliente' ? ('user' as const) : ('assistant' as const), content: (m.texto || '').trim() || (m.tipo && m.tipo !== 'texto' ? `[${m.tipo === 'audio' ? 'nota de voz' : m.tipo === 'image' ? 'foto' : 'archivo'}]` : '') }))
+    .filter((m) => m.content);
+  if (!historia.length) return '';
+
+  const urgencia = nivel <= 1
+    ? 'Lleva unos 5 minutos sin responder. Escríbele algo breve y cálido para saber si sigue ahí y ofrecerle ayuda con lo que estaban viendo.'
+    : nivel === 2
+      ? 'Lleva ~30 minutos sin responder. Retómalo con un mensaje breve que aporte valor (resuelve la posible duda o recuérdale el beneficio del producto que le interesaba) e invítalo a continuar.'
+      : 'Lleva ~1 hora sin responder. Es un último intento amable: recuérdale que puedes ayudarle a completar su compra cuando quiera, sin presionar.';
+
+  const system = `Eres ${nombreAsist ? `"${nombreAsist}", el asistente de ventas por WhatsApp de "${marca}". Te presentas como ${nombreAsist}` : `el asistente de ventas por WhatsApp de "${marca}"`}.
+${assistant?.instrucciones || ''}
+
+CATÁLOGO (solo como contexto; NO inventes precios que no estén aquí):
+${productos || '(sin productos cargados)'}
+
+TAREA — ESCRIBIR UN MENSAJE DE SEGUIMIENTO: El cliente${lead?.nombre ? ' (' + String(lead.nombre).split(' ')[0] + ')' : ''} dejó de responder. ${urgencia}
+Reglas:
+- Escribe UN SOLO mensaje corto (1-2 frases), natural y humano, como un buen vendedor que retoma la conversación por WhatsApp.
+- Básate en lo ÚLTIMO que hablaron (revisa el historial) y retoma ESE tema o producto puntual.
+- NO vuelvas a saludar con "hola" si ya venían conversando; continúa la charla donde quedó.
+- NO inventes precios, promociones ni datos que no estén en el catálogo.
+- Que NO suene robótico ni repita mensajes anteriores. Evita el genérico "¿sigues ahí?" si puedes ser específico.
+- Responde SOLO con el texto del mensaje, sin comillas ni explicaciones.`;
+
+  try {
+    const res = await fetch(ia.url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: system }, ...historia], max_tokens: 160, temperature: 0.85 }),
+    });
+    if (!res.ok) return '';
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    let txt = (body.choices?.[0]?.message?.content || '').trim();
+    txt = txt.replace(/^["'“”]+|["'“”]+$/g, '').trim(); // quita comillas envolventes
+    return txt.slice(0, 500);
+  } catch { return ''; }
+}
+
+/**
  * Si la tienda tiene IA disponible y el chat lo atiende el asistente,
  * genera la respuesta con el contexto de la tienda y la envía.
  */

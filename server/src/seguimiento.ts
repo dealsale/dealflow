@@ -71,7 +71,14 @@ export async function correrSeguimiento(): Promise<void> {
       for (const tier of TIERS) if (l.ventana_min >= tier.min) objetivo = tier.nivel;
       if (objetivo <= (l.seguimiento_nivel || 0)) continue;
 
-      const texto = mensajeSeguimiento(objetivo, l.nombre);
+      // La IA redacta el recordatorio con el contexto del chat (retoma lo último
+      // que hablaron). Si no hay IA o falla, usamos un texto de respaldo.
+      let texto = '';
+      try {
+        const { generarSeguimientoIA } = await import('./ai.js');
+        texto = await generarSeguimientoIA(l.store_id, l.id, objetivo);
+      } catch { /* usamos el respaldo */ }
+      if (!texto) texto = mensajeSeguimiento(objetivo, l.nombre);
       const destino = l.wa_id || l.tel;
       const pn = l.tel;
       try {
