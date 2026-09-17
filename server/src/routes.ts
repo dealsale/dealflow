@@ -137,8 +137,9 @@ api.post('/me/password', requireAuth, (req, res) => {
 api.post('/auth/stop-impersonate', requireAuth, (req, res) => {
   const adminId = req.user!.imp;
   if (!adminId) return res.status(400).json({ error: 'No estás dentro de ninguna tienda.' });
-  const row = db.prepare("SELECT id, email, nombre, role, store_id, foto FROM users WHERE id = ? AND role = 'ADMIN'").get(adminId) as
-    | { id: string; email: string; nombre: string; role: 'VENDEDOR' | 'ADMIN'; store_id: string | null; foto: string }
+  // Puede volver tanto un ADMIN como un SUPERADMIN (antes solo ADMIN: el superadmin quedaba atrapado).
+  const row = db.prepare("SELECT id, email, nombre, role, store_id, foto FROM users WHERE id = ? AND role IN ('ADMIN','SUPERADMIN')").get(adminId) as
+    | { id: string; email: string; nombre: string; role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN'; store_id: string | null; foto: string }
     | undefined;
   if (!row) return res.status(403).json({ error: 'No pudimos volver a tu sesión de administrador.' });
   setAuthCookie(res, { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id, foto: row.foto || undefined });

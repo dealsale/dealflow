@@ -76,7 +76,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
 
       {/* Panel de edición de una tienda */}
       {df.editStoreId && (
-        <div style={{ background: 'var(--df-surface)', border: '1px solid #C7D2FE', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 }}>
+        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>Editar tienda</div>
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
@@ -119,7 +119,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                   <button
                     onClick={() => { if (creditosDelta) { df.darCreditos(df.editStoreId!, Number(creditosDelta)); setAjusteMsg('✓ Créditos ajustados'); setCreditosDelta(''); } }}
                     disabled={!creditosDelta}
-                    style={{ background: 'var(--df-surface)', border: '1px solid #DDD6FE', color: '#7C3AED', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: creditosDelta ? 'pointer' : 'default', opacity: creditosDelta ? 1 : 0.5, whiteSpace: 'nowrap' }}
+                    style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: creditosDelta ? 'pointer' : 'default', opacity: creditosDelta ? 1 : 0.5, whiteSpace: 'nowrap' }}
                   >
                     Ajustar
                   </button>
@@ -230,7 +230,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                   <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.tienda}</div>
                   <div style={{ color: 'var(--df-text-faint)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {a.correo} · Plan {a.plan}
-                    <span style={{ color: '#7C3AED', fontWeight: 700 }}> · 🎨 {(a.creditos ?? 0).toLocaleString('es-CO')} créditos</span>
+                    <span style={{ color: 'var(--df-purple)', fontWeight: 700 }}> · 🎨 {(a.creditos ?? 0).toLocaleString('es-CO')} créditos</span>
                   </div>
                 </div>
                 <div style={{ minWidth: 0 }}>
@@ -239,7 +239,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                   <span style={a.estadoStyle}>{a.estadoLabel}</span>
-                  {a.temaPremium && <span title="Tema Premium habilitado" style={{ fontSize: 10.5, fontWeight: 700, color: '#D946EF' }}>💎 Premium</span>}
+                  {a.temaPremium && <span title="Tema Premium habilitado" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-purple)' }}>💎 Premium</span>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <button onClick={() => df.abrirDetalleStore(id)} style={linkBtn('var(--df-text-body)')}>Detalle</button>

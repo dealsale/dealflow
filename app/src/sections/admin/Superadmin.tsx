@@ -53,7 +53,7 @@ function Tiendas({ df }: { df: DealFlowState }) {
             <span>Tienda</span><span>Plan</span><span>Ventas del mes</span><span>Estado</span><span>Visibilidad</span>
           </div>
           {df.superStores.map((s) => (
-            <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 130px 120px 160px', gap: 14, alignItems: 'center', padding: '13px 18px', borderBottom: '1px solid var(--df-border)', background: s.oculta ? '#FAF5FF' : 'var(--df-surface)' }}>
+            <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 130px 120px 160px', gap: 14, alignItems: 'center', padding: '13px 18px', borderBottom: '1px solid var(--df-border)', background: s.oculta ? 'var(--df-purple-subtle)' : 'var(--df-surface)' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.tienda}</div>
                 <div style={{ color: 'var(--df-text-faint)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.correo}</div>
@@ -176,7 +176,7 @@ export function BibliotecaAdmin({ df }: { df: DealFlowState }) {
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{p.nombre}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={() => df.actualizarBibliotecaItem(p.id, { gratis: !p.gratis })}
-                    style={{ border: '1px solid ' + (p.gratis ? 'var(--df-brand-border)' : 'var(--df-purple-border)'), background: p.gratis ? 'var(--df-brand-subtle-2)' : '#F5F3FF', color: p.gratis ? 'var(--df-brand-dark)' : 'var(--df-purple)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    style={{ border: '1px solid ' + (p.gratis ? 'var(--df-brand-border)' : 'var(--df-purple-border)'), background: p.gratis ? 'var(--df-brand-subtle-2)' : 'var(--df-purple-subtle)', color: p.gratis ? 'var(--df-brand-dark)' : 'var(--df-purple)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                     {p.gratis ? 'Gratis' : 'De pago'}
                   </button>
                   {!p.gratis && (

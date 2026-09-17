@@ -14,7 +14,7 @@ export function Planes({ df }: { df: DealFlowState }) {
           const armed = df.armedDeletePlanId === String(pl.id);
           const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, marginBottom: 8 };
           return (
-            <div key={pl.id} style={{ background: 'var(--df-surface)', border: '1px solid ' + (editing ? '#C7D2FE' : 'var(--df-border)'), borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+            <div key={pl.id} style={{ background: 'var(--df-surface)', border: '1px solid ' + (editing ? 'var(--df-purple-border)' : 'var(--df-border)'), borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
               {editing ? (
                 <>
                   <input className="df-input" value={df.editPlanForm.nombre} onChange={(e) => df.setEditPlanForm({ nombre: e.target.value })} placeholder="Nombre" style={inp} />

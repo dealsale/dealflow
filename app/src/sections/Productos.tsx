@@ -539,9 +539,9 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
     <div className="df-pexp" style={{ background: 'var(--df-bg)', borderBottom: '1px solid var(--df-border)', padding: '18px 18px 18px 84px' }}>
       {p.bloqueado && (
         <>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#FEF9C3', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
             <span style={{ fontSize: 18 }}>🔒</span>
-            <div style={{ fontSize: 13, color: '#854D0E', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, color: 'var(--df-warning)', lineHeight: 1.5 }}>
               <b>Producto de la biblioteca.</b> Su estructura (mensaje inicial, reglas, descripción, combos, variantes) está <b>bloqueada</b> para proteger la venta con el bot. Solo puedes ajustar el <b>precio</b> y el <b>SKU</b> de tu tienda.
             </div>
           </div>
@@ -626,9 +626,9 @@ export function Productos({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="Productos">
       {duplicados.length > 0 && (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#FEF9C3', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
           <span style={{ fontSize: 18 }}>⚠️</span>
-          <div style={{ fontSize: 13, color: '#854D0E', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: 'var(--df-warning)', lineHeight: 1.5 }}>
             <b>Hay productos duplicados</b> (mismo disparador o nombre). El bot puede enviar la versión vieja/importada en vez de la que editaste. Deja <b>solo uno</b> de cada grupo y elimina el repetido:
             <div style={{ marginTop: 4 }}>{duplicados.map((g, i) => <div key={i}>• {g.join('  ·  ')}</div>)}</div>
           </div>
@@ -763,7 +763,7 @@ export function Productos({ df }: { df: DealFlowState }) {
                 <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
                   {p.nombre}
                   {p.tipo === 'servicio' && <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--df-indigo)', background: 'var(--df-indigo-subtle)', borderRadius: 5, padding: '1px 6px' }}>🧩 SERVICIO</span>}
-                  {p.bloqueado && <span title="Producto de la biblioteca: estructura bloqueada" style={{ fontSize: 10.5, fontWeight: 800, color: '#854D0E', background: '#FEF9C3', border: '1px solid var(--df-warning-border)', borderRadius: 5, padding: '1px 6px' }}>🔒 BIBLIOTECA</span>}
+                  {p.bloqueado && <span title="Producto de la biblioteca: estructura bloqueada" style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 5, padding: '1px 6px' }}>🔒 BIBLIOTECA</span>}
                 </div>
                 <div style={{ color: 'var(--df-text-muted)', fontSize: 12, marginTop: 1 }}>{p.precioFmt}{p.tipo === 'servicio' ? (p.duracion ? ' · ' + p.duracion : '') : ' · ' + p.variantesLabel}</div>
               </div>
