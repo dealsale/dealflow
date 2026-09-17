@@ -4,6 +4,7 @@ import { VoiceRecorder } from '../components/VoiceRecorder';
 import { SearchInput, FilterSelect } from '../components/Filters';
 import { Dropdown } from '../components/Dropdown';
 import { ActivityLog } from '../components/ActivityLog';
+import { useLazyList } from '../hooks/useLazyList';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 type EstadoPill = 'todos' | 'noleidos' | 'envivo' | 'esperando';
@@ -50,6 +51,13 @@ export function CRM({ df }: { df: DealFlowState }) {
   const chatsFiltrados = df.crmChats.filter(
     (c) => (!filtroEtiqueta || c.etiqueta === filtroEtiqueta) && (!q || c.nombre.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)) && pasaFecha(c.fechaISO) && pasaEstado(c),
   );
+  // Carga por tandas: solo montamos los primeros ~15 chats y vamos agregando al
+  // bajar (ver useLazyList). Con muchos chats esto es lo que evita la lentitud.
+  const { count: visibles, rootRef: listaRef } = useLazyList(
+    chatsFiltrados.length,
+    `${q}|${filtroEtiqueta}|${rangoFecha}|${desde}|${hasta}|${estadoPill}`,
+  );
+  const chatsVisibles = chatsFiltrados.slice(0, visibles);
   const cuentaEtiqueta = (et: string) => df.crmChats.filter((c) => c.etiqueta === et).length;
   const pillsEstado: { key: EstadoPill; label: string; count: number }[] = [
     { key: 'todos', label: 'Todos', count: df.crmChats.length },
@@ -127,13 +135,13 @@ export function CRM({ df }: { df: DealFlowState }) {
       <ActivityLog df={df} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }}>
-        <div style={{ minWidth: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+        <div ref={listaRef} style={{ minWidth: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'auto', maxHeight: 'min(70vh, 620px)', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
           {chatsFiltrados.length === 0 && (
             <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--df-text-faint)', fontSize: 13 }}>
               Ningún chat coincide con el filtro.
             </div>
           )}
-          {chatsFiltrados.map((c) => (
+          {chatsVisibles.map((c) => (
             <div key={c.id} onClick={c.select} style={c.crmRowStyle}>
               <div style={c.avatarStyle}>{c.iniciales}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -157,6 +165,11 @@ export function CRM({ df }: { df: DealFlowState }) {
               </div>
             </div>
           ))}
+          {chatsFiltrados.length > visibles && (
+            <div style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--df-text-faint)', fontSize: 12 }}>
+              Baja para ver {chatsFiltrados.length - visibles} chat{chatsFiltrados.length - visibles === 1 ? '' : 's'} más…
+            </div>
+          )}
         </div>
 
         {chat && (
