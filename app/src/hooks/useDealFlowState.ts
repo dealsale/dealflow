@@ -17,7 +17,6 @@ import { comprimirImagen, readFilesAsDataUrls } from '../components/PhotoUpload'
 import {
   apiAddVariant,
   apiAdminOverview,
-  apiAssignLead,
   apiCreatePlan,
   apiCreateProduct,
   apiDeleteProduct,
@@ -28,7 +27,6 @@ import {
   apiCreateStore,
   apiLeadsResumen,
   apiLeadMensajes,
-  // apiAssignLead disponible para asignación desde el CRM (próximo)
   apiLogin,
   apiLogout,
   apiMe,
@@ -611,7 +609,6 @@ export function useDealFlowState() {
   // con su conversación completa); un ref para leerlo desde el intervalo.
   const crmSelectedIdRef = useRef<number | string>(1);
   crmSelectedIdRef.current = crmSelectedId;
-  const [crmIntervening, setCrmIntervening] = useState<boolean>(false);
   const [crmDraft, setCrmDraft] = useState<string>('');
   const [copied, setCopied] = useState<'webhook' | 'code' | 'guia' | null>(null);
   const [avisoLead, setAvisoLead] = useState<string | null>(null);
@@ -1132,7 +1129,7 @@ export function useDealFlowState() {
       [...leadsSource]
       .sort((a, b) => String(b.ultimoIso || '').localeCompare(String(a.ultimoIso || '')))
       .map((l, i) => {
-        const d = decorateLead(l, i, crmSelectedId, (id) => { setCrmSelectedId(id); setCrmIntervening(false); setCrmSendWarn(''); cargarMensajesChat(id); });
+        const d = decorateLead(l, i, crmSelectedId, (id) => { setCrmSelectedId(id); setCrmSendWarn(''); cargarMensajesChat(id); });
         // En modo servidor, "en vivo" = el bot lo atiende; en demo, los dos primeros.
         const live = apiMode && apiLeadsState ? l.asignado.includes('bot') || l.asignado.includes('Asistente') : l.id === 1 || l.id === 2;
         const selC = l.id === crmSelectedId;
@@ -1164,6 +1161,8 @@ export function useDealFlowState() {
     [leadsSource, crmSelectedId, apiMode, apiLeadsState],
   );
   const crmChat = crmChats.find((c) => c.id === crmSelectedId) || null;
+  // ¿El chat seleccionado lo atiende el asistente? (fuente de verdad: su "asignado")
+  const crmChatBot = crmChat ? /asistente|bot/i.test(String(crmChat.asignado || '')) : true;
 
   function crearProducto() {
     const nombre = newProdNombre.trim();
@@ -3171,23 +3170,21 @@ export function useDealFlowState() {
     mobileChatOpen,
     openMobileChat: (id: number | string) => {
       setCrmSelectedId(id);
-      setCrmIntervening(false);
       setMobileChatOpen(true);
     },
     closeMobileChat: () => {
       setMobileChatOpen(false);
-      setCrmIntervening(false);
     },
-    crmTyping: !apiMode && !!(crmChat && crmChat.live && !crmIntervening),
-    crmIntervening,
-    crmNotIntervening: !crmIntervening,
+    // El estado de intervención se DERIVA del chat real (su "asignado"), no de un
+    // booleano suelto: así queda guardado y no se desincroniza al cambiar de chat.
+    crmTyping: !apiMode && !!(crmChat && crmChat.live && crmChatBot),
+    crmIntervening: !!crmChat && !crmChatBot,
+    crmNotIntervening: !crmChat || crmChatBot,
     intervene: () => {
-      setCrmIntervening(true);
-      if (apiMode) void apiAssignLead(String(crmSelectedId), sessionUser?.nombre || 'Vendedor');
+      if (crmSelectedId != null) asignarChatCrm(crmSelectedId, sessionUser?.nombre || 'Vendedor');
     },
     backToBot: () => {
-      setCrmIntervening(false);
-      if (apiMode) void apiAssignLead(String(crmSelectedId), 'Asistente (bot)');
+      if (crmSelectedId != null) asignarChatCrm(crmSelectedId, 'Asistente (bot)');
     },
     crmDeleteArmed,
     requestDeleteChat: () => {
@@ -3209,7 +3206,6 @@ export function useDealFlowState() {
         setCrmSelectedId(siguiente);
         setSelectedLeadId(siguiente);
       }
-      setCrmIntervening(false);
       setMobileChatOpen(false);
     },
     resetChat: () => {
@@ -3217,7 +3213,6 @@ export function useDealFlowState() {
       if (apiMode) void apiResetLead(String(id));
       setApiLeadsState((st) => (st || []).map((l) => (l.id === id ? { ...l, asignado: 'Asistente (bot)', etapa: 'Explorando', mensajes: [], ultimo: '', hora: '' } : l)));
       setLeads((st) => st.map((l) => (l.id === id ? { ...l, asignado: 'Asistente (bot)', mensajes: [], ultimo: '' } : l)));
-      setCrmIntervening(false);
     },
     crmDraft,
     setCrmDraft,
