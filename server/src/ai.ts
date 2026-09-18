@@ -117,6 +117,17 @@ async function entenderImagen(storeId: string, mediaUrl: string): Promise<string
   } catch (e) { console.error('[ia] error viendo imagen', e); return ''; }
 }
 
+/** Convierte el estilo/tono elegido por la tienda en una instrucción para la IA. */
+function estiloDirectiva(estiloRaw?: string): string {
+  const e = pj<{ trato?: string; emojis?: boolean; largo?: string }>(estiloRaw || '', {});
+  const partes = [
+    e.trato === 'usted' ? 'trata al cliente de "usted"' : 'trata al cliente de "tú", cercano',
+    e.emojis === false ? 'no uses emojis' : 'usa algunos emojis con moderación',
+    e.largo === 'detallado' ? 'da respuestas algo más detalladas cuando ayude a la venta' : 'respuestas breves (1-3 frases)',
+  ];
+  return `ESTILO Y TONO (respétalo): ${partes.join('; ')}.`;
+}
+
 /**
  * Redacta con IA un mensaje de SEGUIMIENTO (re-enganche) usando el contexto real
  * del chat: retoma lo último que se habló, como un buen vendedor. Devuelve '' si
@@ -126,7 +137,7 @@ async function entenderImagen(storeId: string, mediaUrl: string): Promise<string
 export async function generarSeguimientoIA(storeId: string, leadId: string, nivel: number): Promise<string> {
   const ia = resolverTexto(storeId);
   if (!ia) return '';
-  const assistant = db.prepare('SELECT instrucciones, nombre FROM assistants WHERE store_id = ?').get(storeId) as { instrucciones: string; nombre: string } | undefined;
+  const assistant = db.prepare('SELECT instrucciones, nombre, estilo FROM assistants WHERE store_id = ?').get(storeId) as { instrucciones: string; nombre: string; estilo: string } | undefined;
   const store = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined;
   const lead = db.prepare('SELECT nombre FROM leads WHERE id = ?').get(leadId) as { nombre: string } | undefined;
   const marca = store?.nombre || 'la tienda';
@@ -147,6 +158,8 @@ export async function generarSeguimientoIA(storeId: string, leadId: string, nive
 
   const system = `Eres ${nombreAsist ? `"${nombreAsist}", el asistente de ventas por WhatsApp de "${marca}". Te presentas como ${nombreAsist}` : `el asistente de ventas por WhatsApp de "${marca}"`}.
 ${assistant?.instrucciones || ''}
+
+${estiloDirectiva(assistant?.estilo)}
 
 CATÁLOGO (solo como contexto; NO inventes precios que no estén aquí):
 ${productos || '(sin productos cargados)'}
@@ -209,8 +222,8 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   }
   const t0 = Date.now(); // para que el bot tarde ~4-5 s en responder (más humano)
 
-  const assistant = db.prepare('SELECT instrucciones, reglas, nombre FROM assistants WHERE store_id = ?').get(storeId) as
-    | { instrucciones: string; reglas: string; nombre: string }
+  const assistant = db.prepare('SELECT instrucciones, reglas, nombre, estilo FROM assistants WHERE store_id = ?').get(storeId) as
+    | { instrucciones: string; reglas: string; nombre: string; estilo: string }
     | undefined;
   const store = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined;
   const productRows = db.prepare('SELECT * FROM products WHERE store_id = ?').all(storeId) as Record<string, unknown>[];
@@ -288,7 +301,8 @@ FUENTE DE VERDAD: el CATÁLOGO de arriba es la ÚNICA fuente válida y ES EL ACT
 PROMOS ACTIVAS:
 ${promos || '(ninguna)'}
 
-Estás chateando por WhatsApp: respuestas cortas (1-3 frases), tono cercano de "tú", sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
+Estás chateando por WhatsApp; sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
+${estiloDirectiva(assistant?.estilo)}
 
 PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma general y en el CATÁLOGO hay VARIOS productos que coinciden con ese nombre (por ejemplo pide "jogger" y existen "Jogger Bota Recta Hombre", "Jogger Bota Recta Dama", "Jogger Clásico", "Jogger Clásico Dama"), NO adivines ni elijas uno al azar: pregúntale al cliente CUÁL de esos modelos exactos quiere y NO envíes fotos ni pongas el marcador todavía. Solo cuando quede claro el modelo exacto, usa su NOMBRE EXACTO del catálogo en el marcador con el formato ##MEDIA:Nombre exacto del producto## (siempre con dos puntos y el nombre; nunca "##MEDIA" suelto).
 

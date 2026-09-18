@@ -665,6 +665,7 @@ export function useDealFlowState() {
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? DEF_ASSISTANT);
   const [assistantNombre, setAssistantNombre] = useState<string>('');
   const [seguimientoActivo, setSeguimientoActivo] = useState<boolean>(true); // el mensaje automático de actividad viene encendido
+  const [estilo, setEstilo] = useState<{ trato: 'tu' | 'usted'; emojis: boolean; largo: 'corto' | 'detallado' }>({ trato: 'tu', emojis: true, largo: 'corto' });
   const [rules, setRules] = useState<string[]>(snap?.rules ?? DEF_RULES);
   const [orders, setOrders] = useState<Order[]>(snap?.orders ?? DEF_ORDERS);
   const [products, setProducts] = useState<Product[]>(snap?.products ?? DEF_PRODUCTS);
@@ -1680,6 +1681,11 @@ export function useDealFlowState() {
         setAssistantText(data.assistant?.instrucciones || '');
         setAssistantNombre(data.assistant?.nombre || '');
         setSeguimientoActivo(data.assistant?.seguimientoActivo !== false);
+        setEstilo({
+          trato: data.assistant?.estilo?.trato === 'usted' ? 'usted' : 'tu',
+          emojis: data.assistant?.estilo?.emojis !== false,
+          largo: data.assistant?.estilo?.largo === 'detallado' ? 'detallado' : 'corto',
+        });
         setRules(data.assistant?.reglas || []);
         setApiLeadsState(mapApiLeads(data.leads));
         if (data.orders) setOrders(mapApiOrders(data.orders));
@@ -2800,7 +2806,7 @@ export function useDealFlowState() {
   }
 
   function saveAssistant() {
-    if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre, seguimientoActivo });
+    if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre, seguimientoActivo, estilo });
     setAssistantSaved(true);
     clearTimeout(assistantTimer.current);
     assistantTimer.current = setTimeout(() => setAssistantSaved(false), 2500);
@@ -3484,7 +3490,14 @@ export function useDealFlowState() {
     toggleSeguimientoActivo: () => {
       const nuevo = !seguimientoActivo;
       setSeguimientoActivo(nuevo);
-      if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre, seguimientoActivo: nuevo });
+      if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre, seguimientoActivo: nuevo, estilo });
+    },
+    estilo,
+    // Cambia un aspecto del tono/estilo y lo guarda al instante.
+    setEstiloCampo: (patch: Partial<{ trato: 'tu' | 'usted'; emojis: boolean; largo: 'corto' | 'detallado' }>) => {
+      const nuevo = { ...estilo, ...patch };
+      setEstilo(nuevo);
+      if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre, seguimientoActivo, estilo: nuevo });
     },
     saveAssistant,
     assistantSaved,

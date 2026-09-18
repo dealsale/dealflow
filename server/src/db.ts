@@ -208,6 +208,8 @@ addColumn('leads', 'seguimiento_nivel INTEGER NOT NULL DEFAULT 0');
 // Interruptor del seguimiento automático por tienda. Viene ENCENDIDO por defecto
 // (0 = encendido); la tienda puede apagarlo desde la sección Asistente (1 = apagado).
 addColumn('assistants', 'seguimiento_off INTEGER NOT NULL DEFAULT 0');
+// Estilo/tono del asistente (JSON): { trato:'tu'|'usted', emojis:bool, largo:'corto'|'detallado' }.
+addColumn('assistants', "estilo TEXT NOT NULL DEFAULT ''");
 db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (
   store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
   tipo TEXT NOT NULL,

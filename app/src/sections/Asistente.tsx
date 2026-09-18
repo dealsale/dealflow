@@ -3,6 +3,26 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import { apiWebchatList, apiWebchatSend } from '../lib/api';
 import type { ApiMensaje } from '../lib/api';
 
+/** Grupo de opciones tipo segmento para el tono/estilo del asistente. */
+function SegChips<T extends string | boolean>({ label, value, opciones, onPick }: { label: string; value: T; opciones: { v: T; t: string }[]; onPick: (v: T) => void }) {
+  return (
+    <div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{label}</div>
+      <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }}>
+        {opciones.map((o) => {
+          const activo = value === o.v;
+          return (
+            <button key={String(o.v)} onClick={() => onPick(o.v)}
+              style={{ background: activo ? 'var(--df-brand)' : 'var(--df-surface)', color: activo ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
+              {o.t}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** Chat de prueba: habla con TU asistente por el canal web, sin gastar WhatsApp. */
 function PruebaAsistente({ storeId }: { storeId: string }) {
   const key = 'df:test-session:' + storeId;
@@ -128,8 +148,23 @@ export function Asistente({ df }: { df: DealFlowState }) {
               style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 14 }}
             />
           </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Tono y estilo</div>
+            <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 10 }}>Ajusta cómo suena el asistente. Se aplica a todas sus respuestas (incluido el seguimiento).</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              <SegChips label="Trato" value={df.estilo.trato}
+                opciones={[{ v: 'tu', t: 'Tú (cercano)' }, { v: 'usted', t: 'Usted (formal)' }]}
+                onPick={(v) => df.setEstiloCampo({ trato: v })} />
+              <SegChips label="Emojis" value={df.estilo.emojis}
+                opciones={[{ v: true, t: 'Con emojis' }, { v: false, t: 'Sin emojis' }]}
+                onPick={(v) => df.setEstiloCampo({ emojis: v })} />
+              <SegChips label="Respuestas" value={df.estilo.largo}
+                opciones={[{ v: 'corto', t: 'Cortas' }, { v: 'detallado', t: 'Detalladas' }]}
+                onPick={(v) => df.setEstiloCampo({ largo: v })} />
+            </div>
+          </div>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Cómo debe vender</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 12 }}>Escríbelo como se lo dirías a un empleado nuevo.</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 12 }}>Escríbelo como se lo dirías a un empleado nuevo. Aquí controlas al 100% cómo responde.</div>
           <textarea
             className="df-input"
             value={df.assistantText}
