@@ -160,13 +160,23 @@ Reglas:
 - Que NO suene robótico ni repita mensajes anteriores. Evita el genérico "¿sigues ahí?" si puedes ser específico.
 - Responde SOLO con el texto del mensaje, sin comillas ni explicaciones.
 
+CRÍTICO — TÚ ERES ${nombreAsist ? `"${nombreAsist}", el` : 'el'} VENDEDOR, NO el cliente: escribe SIEMPRE en tu propia voz, dirigiéndote al cliente. JAMÁS respondas como si fueras el cliente ni contestes en su nombre. Si el último mensaje del historial es una pregunta que TÚ hiciste (ej: "¿qué color prefieres?"), NO la respondas por él: escríbele un recordatorio para que ÉL la conteste (ej: "¿Ya pensaste qué color prefieres? 😊"). Nunca escribas algo que solo diría el cliente (ej: "lo quiero café").
+
 MUY IMPORTANTE — CUÁNDO NO ESCRIBIR: si la conversación YA ESTÁ CERRADA no hay que insistir. Eso incluye: la venta ya se concretó o el pedido ya quedó registrado, el cliente ya confirmó la compra, ya se despidió o solo dio las gracias, dijo que no le interesa, o no queda nada útil por decir. En esos casos responde EXACTAMENTE con la palabra "NADA" (en mayúsculas) y nada más.`;
+
+  // Cerramos con un turno de "usuario" que es una INSTRUCCIÓN del sistema (no el
+  // cliente). Así el modelo produce el siguiente turno como ASISTENTE y no completa
+  // la conversación poniéndose en la piel del cliente.
+  const directiva = {
+    role: 'user' as const,
+    content: `[INSTRUCCIÓN DEL SISTEMA — no es un mensaje del cliente] El cliente lleva un rato sin responder. Escribe TÚ, ${nombreAsist || 'el asistente'}, UN solo mensaje de seguimiento (como vendedor, hacia el cliente) retomando lo último que hablaron. Recuerda: nunca respondas en nombre del cliente. Si la conversación ya está cerrada, responde solo "NADA".`,
+  };
 
   try {
     const res = await fetch(ia.url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: system }, ...historia], max_tokens: 160, temperature: 0.85 }),
+      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: system }, ...historia, directiva], max_tokens: 160, temperature: 0.8 }),
     });
     if (!res.ok) return '';
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };

@@ -61,6 +61,14 @@ const remapOpciones = (str: unknown, src: string, dst: string, outUrl: (f: strin
 interface Snapshot {
   row: Record<string, unknown>;
   variants: Record<string, unknown>[];
+  /** Nombre de la tienda de origen, para neutralizarlo al importar en otra tienda. */
+  origen?: string;
+}
+
+/** Nombre de la tienda dueña de un producto (para neutralizarlo al importar). */
+function nombreTiendaDeProducto(storeId: string): string {
+  const s = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined;
+  return (s?.nombre || '').trim();
 }
 
 /**
@@ -73,9 +81,10 @@ function snapshotDesdeProducto(productId: string, copiarMediaA?: string): { snap
   if (!row) return null;
   const src = String(row.store_id);
   const variants = db.prepare('SELECT label, stock, fotos, fotos_subidas, orden FROM variants WHERE product_id = ? ORDER BY orden').all(productId) as Record<string, unknown>[];
+  const origen = nombreTiendaDeProducto(src);
   if (!copiarMediaA) {
     // Sin copiar: el snapshot referencia la multimedia de la tienda origen (master).
-    return { snapshot: { row: { ...row }, variants: variants.map((v) => ({ ...v })) }, row };
+    return { snapshot: { row: { ...row }, variants: variants.map((v) => ({ ...v })), origen }, row };
   }
   const out = copiarMediaA === LIB ? aLib : aStore(copiarMediaA);
   const rowLib: Record<string, unknown> = {
@@ -87,7 +96,7 @@ function snapshotDesdeProducto(productId: string, copiarMediaA?: string): { snap
     opciones: remapOpciones(row.opciones, src, copiarMediaA, out),
   };
   const variantsLib = variants.map((v) => ({ ...v, fotos_subidas: remapUrls(v.fotos_subidas, src, copiarMediaA, out) }));
-  return { snapshot: { row: rowLib, variants: variantsLib }, row };
+  return { snapshot: { row: rowLib, variants: variantsLib, origen }, row };
 }
 
 /**
@@ -172,6 +181,17 @@ export function importarLibraryEnTienda(libId: string, storeId: string, pagado: 
   const snap = pj<Snapshot>(lib.snapshot, { row: {}, variants: [] });
   const row = snap.row || {};
   if (!row.nombre) return { error: 'Este producto de la biblioteca está incompleto.' };
+
+  // Neutraliza el nombre de la tienda de ORIGEN en los textos: si el producto traía
+  // "Bienvenido a Tienda A" y lo importa la Tienda B, se reemplaza por "Tienda B".
+  // Así no se filtra información de otra tienda dentro del mensaje inicial/estructura.
+  const destinoNombre = nombreTiendaDeProducto(storeId);
+  const origenNombre = (snap.origen || '').trim();
+  if (origenNombre && destinoNombre && origenNombre.toLowerCase() !== destinoNombre.toLowerCase()) {
+    const re = new RegExp(origenNombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const CAMPOS = ['nombre', 'descripcion', 'caracteristicas', 'mensaje_inicial', 'faqs', 'reglas', 'mensaje_bloques', 'contenido_paquete', 'modos_uso', 'disparador', 'opciones'];
+    for (const k of CAMPOS) if (typeof row[k] === 'string') row[k] = (row[k] as string).replace(re, destinoNombre);
+  }
 
   // Espacio de media de origen: LIB para clones, la tienda master para los creados por el admin.
   const src = lib.source_store_id || LIB;
