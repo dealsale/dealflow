@@ -50,9 +50,14 @@ export function Pedidos({ df }: { df: DealFlowState }) {
             key={o.id}
             onClick={o.open}
             className="df-row-hover"
-            style={{ display: 'grid', gridTemplateColumns: '82px 1fr 110px 116px 170px', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}
+            style={{ display: 'grid', gridTemplateColumns: '104px 1fr 110px 116px 170px', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}
           >
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-muted)' }}>{o.id}</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-muted)' }}>{o.id}</div>
+              {(o.fechaLabel || o.hora) && (
+                <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 2, whiteSpace: 'nowrap' }}>{o.fechaLabel}{o.fechaLabel && o.hora ? ' · ' : ''}{o.hora}</div>
+              )}
+            </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>
                 {o.cliente} <span style={{ color: 'var(--df-text-faint)', fontWeight: 400, fontSize: 12 }}>· {o.ciudad}</span>

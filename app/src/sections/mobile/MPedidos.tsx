@@ -56,7 +56,7 @@ export function MPedidos({ df }: { df: DealFlowState }) {
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'var(--df-text-muted)' }}>{o.id}</span>
               <span style={o.pillStyle}>{o.estado}</span>
               <div style={{ flex: 1 }} />
-              <span style={{ color: 'var(--df-text-faint)', fontSize: 11.5 }}>{o.hora}</span>
+              <span style={{ color: 'var(--df-text-faint)', fontSize: 11.5, whiteSpace: 'nowrap' }}>{o.fechaLabel}{o.fechaLabel && o.hora ? ' · ' : ''}{o.hora}</span>
             </div>
             <div style={{ fontWeight: 700, fontSize: 15 }}>
               {o.cliente} <span style={{ color: 'var(--df-text-faint)', fontWeight: 400, fontSize: 12.5 }}>· {o.ciudad}</span>

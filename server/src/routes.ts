@@ -216,7 +216,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   // debe descargar la conversación completa de cientos de chats. Cada chat carga
   // sus mensajes al abrirlo (GET /leads/:id/mensajes).
   const leads = listarLeads(sid, true);
-  const assistant = db.prepare('SELECT instrucciones, reglas, nombre, seguimiento FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string; nombre: string; seguimiento: number } | undefined;
+  const assistant = db.prepare('SELECT instrucciones, reglas, nombre, seguimiento_off FROM assistants WHERE store_id = ?').get(sid) as { instrucciones: string; reglas: string; nombre: string; seguimiento_off: number } | undefined;
   const wa = db.prepare('SELECT waba_id, phone_number_id, numero, conectado, access_token, modo, pin FROM whatsapp WHERE store_id = ?').get(sid) as
     | { waba_id: string; phone_number_id: string; numero: string; conectado: number; access_token: string; modo: string; pin: string }
     | undefined;
@@ -229,7 +229,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     orders,
     leads,
     suscripcion: estadoSuscripcion(sid),
-    assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []), nombre: assistant?.nombre || '', seguimiento: !!assistant?.seguimiento },
+    assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []), nombre: assistant?.nombre || '', seguimientoActivo: !assistant?.seguimiento_off },
     whatsapp: {
       conectado: !!wa?.conectado,
       modo: wa?.modo || 'cloud',
@@ -922,11 +922,13 @@ api.post('/messages/:id/reenviar', requireAuth, requireStore, async (req, res) =
 
 // ── Asistente ─────────────────────────────────────────────────────────
 api.put('/assistant', requireAuth, requireStore, requireOwner, (req, res) => {
-  const { instrucciones, reglas, nombre, seguimiento } = req.body || {};
+  const { instrucciones, reglas, nombre, seguimientoActivo } = req.body || {};
+  // seguimientoActivo por defecto true (encendido); se guarda como seguimiento_off invertido.
+  const off = seguimientoActivo === false ? 1 : 0;
   db.prepare(
-    `INSERT INTO assistants (store_id, instrucciones, reglas, nombre, seguimiento) VALUES (?,?,?,?,?)
-     ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas, nombre = excluded.nombre, seguimiento = excluded.seguimiento`,
-  ).run(req.user!.storeId, String(instrucciones || ''), j(Array.isArray(reglas) ? reglas : []), String(nombre || '').trim(), seguimiento ? 1 : 0);
+    `INSERT INTO assistants (store_id, instrucciones, reglas, nombre, seguimiento_off) VALUES (?,?,?,?,?)
+     ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas, nombre = excluded.nombre, seguimiento_off = excluded.seguimiento_off`,
+  ).run(req.user!.storeId, String(instrucciones || ''), j(Array.isArray(reglas) ? reglas : []), String(nombre || '').trim(), off);
   res.json({ ok: true });
 });
 

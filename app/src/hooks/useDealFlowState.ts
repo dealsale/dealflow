@@ -178,6 +178,8 @@ function previewDeProducto(p: Product): string | null {
 export interface DecoratedOrder extends Order {
   totalFmt: string;
   envioFmt: string;
+  /** Fecha legible del pedido ("Hoy", "Ayer", "17 sept 2026"). */
+  fechaLabel: string;
   itemsResumen: string;
   itemsDecorated: (OrderItem & { precioFmt: string })[];
   pillStyle: CSSProperties;
@@ -481,6 +483,18 @@ function etiquetaFecha(iso?: string): string {
   return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' });
 }
 
+/** Etiqueta legible a partir de una fecha 'YYYY-MM-DD' (Bogotá): "Hoy", "Ayer" o "17 sept 2026". */
+function etiquetaFechaYMD(ymd?: string): string {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return '';
+  const hoy = hoyBogota();
+  const ayer = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  if (ymd === hoy) return 'Hoy';
+  if (ymd === ayer) return 'Ayer';
+  // Mediodía UTC para que el formateo no corra la fecha por zona horaria.
+  const d = new Date(ymd + 'T12:00:00Z');
+  return isNaN(+d) ? ymd : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 /**
  * Indicador de estado de un mensaje SALIENTE (bot/vendedor), estilo WhatsApp:
  * ✓ enviado · ✓✓ entregado · ✓✓ (azul) visto · ⚠ no enviado. Los mensajes del
@@ -650,6 +664,7 @@ export function useDealFlowState() {
   function setTheme(t: 'light' | 'dark' | 'premium') { setThemeState(t); }
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? DEF_ASSISTANT);
   const [assistantNombre, setAssistantNombre] = useState<string>('');
+  const [seguimientoActivo, setSeguimientoActivo] = useState<boolean>(true); // el mensaje automático de actividad viene encendido
   const [rules, setRules] = useState<string[]>(snap?.rules ?? DEF_RULES);
   const [orders, setOrders] = useState<Order[]>(snap?.orders ?? DEF_ORDERS);
   const [products, setProducts] = useState<Product[]>(snap?.products ?? DEF_PRODUCTS);
@@ -1028,6 +1043,7 @@ export function useDealFlowState() {
       ...o,
       totalFmt: fmt(total),
       envioFmt: fmt(o.envio),
+      fechaLabel: etiquetaFechaYMD(o.fecha),
       itemsResumen: o.items.map((it) => it.qty + '× ' + it.nombre).join(' · '),
       itemsDecorated: o.items.map((it) => ({ ...it, precioFmt: '' })), // solo mostramos el total del pedido
       pillStyle: pill(cfg),
@@ -1663,6 +1679,7 @@ export function useDealFlowState() {
         // Datos reales de la tienda: nada de textos demo de "Luna Accesorios".
         setAssistantText(data.assistant?.instrucciones || '');
         setAssistantNombre(data.assistant?.nombre || '');
+        setSeguimientoActivo(data.assistant?.seguimientoActivo !== false);
         setRules(data.assistant?.reglas || []);
         setApiLeadsState(mapApiLeads(data.leads));
         if (data.orders) setOrders(mapApiOrders(data.orders));
@@ -2783,7 +2800,7 @@ export function useDealFlowState() {
   }
 
   function saveAssistant() {
-    if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre });
+    if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre, seguimientoActivo });
     setAssistantSaved(true);
     clearTimeout(assistantTimer.current);
     assistantTimer.current = setTimeout(() => setAssistantSaved(false), 2500);
@@ -3461,6 +3478,13 @@ export function useDealFlowState() {
     setAssistantNombre: (v: string) => {
       setAssistantNombre(v);
       setAssistantSaved(false);
+    },
+    seguimientoActivo,
+    // El interruptor de actividad automática se guarda al instante.
+    toggleSeguimientoActivo: () => {
+      const nuevo = !seguimientoActivo;
+      setSeguimientoActivo(nuevo);
+      if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre, seguimientoActivo: nuevo });
     },
     saveAssistant,
     assistantSaved,

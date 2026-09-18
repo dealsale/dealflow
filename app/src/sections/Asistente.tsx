@@ -194,10 +194,26 @@ export function Asistente({ df }: { df: DealFlowState }) {
         </div>
       </div>
 
-      {/* El seguimiento automático (5 min / 30 min / 1 h) es propio del asistente:
-          corre solo en todos los chats, no hay que activarlo. */}
-      <div style={{ background: 'var(--df-brand-subtle-2)', border: '1px solid var(--df-brand-border)', borderRadius: 12, padding: '14px 18px', boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginTop: 14, color: 'var(--df-text-body)', fontSize: 13, lineHeight: 1.5 }}>
-        <b style={{ color: 'var(--df-brand-dark)' }}>💬 Seguimiento automático incluido.</b> Si el cliente deja de responder, el asistente le vuelve a escribir solo para retomar la conversación: a los <b>5 minutos</b>, a los <b>30 minutos</b> y a la <b>1 hora</b>. Se detiene apenas el cliente responde y respeta la ventana de 24 h de WhatsApp.
+      {/* Seguimiento automático: la tienda puede encenderlo o apagarlo. */}
+      <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginTop: 14, display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Mensaje automático de actividad 💬</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5 }}>
+            Si el cliente deja de responder, el asistente le vuelve a escribir solo para retomar la conversación:
+            a los <b>5 minutos</b>, a los <b>30 minutos</b> y a la <b>1 hora</b>. Redacta el mensaje según lo que
+            estaban hablando, se detiene apenas el cliente responde y respeta la ventana de 24 h de WhatsApp.
+            <span style={{ display: 'block', marginTop: 6, color: 'var(--df-text-faint)' }}>Si no lo quieres, apágalo aquí.</span>
+          </div>
+        </div>
+        <div
+          onClick={df.toggleSeguimientoActivo}
+          role="switch"
+          aria-checked={df.seguimientoActivo}
+          title={df.seguimientoActivo ? 'Encendido' : 'Apagado'}
+          style={{ width: 52, height: 30, borderRadius: 999, background: df.seguimientoActivo ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .15s' }}
+        >
+          <div style={{ position: 'absolute', top: 3, left: df.seguimientoActivo ? 25 : 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />
+        </div>
       </div>
 
       {df.apiMode && df.storeId && <PruebaAsistente storeId={df.storeId} />}
