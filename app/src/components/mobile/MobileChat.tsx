@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { AttachButton, MediaContent } from '../MediaBubble';
 import { VoiceRecorder } from '../VoiceRecorder';
 import { ActivityLog } from '../ActivityLog';
+import { FlujosButton } from '../../sections/CRM';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function MobileChat({ df }: { df: DealFlowState }) {
@@ -125,6 +126,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
           <>
             <div style={{ display: 'flex', gap: 8 }}>
               <AttachButton onFile={df.sendCrmMedia} size={44} />
+              <FlujosButton df={df} size={44} />
               <VoiceRecorder onRecorded={df.sendCrmMedia} size={44} />
               <input
                 className="df-input"
@@ -145,6 +147,9 @@ export function MobileChat({ df }: { df: DealFlowState }) {
               Devolver al asistente
             </div>
           </>
+        )}
+        {df.flujoMsg && (
+          <div style={{ textAlign: 'center', color: df.flujoMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.flujoMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)', fontSize: 12.5, marginTop: 8 }}>{df.flujoMsg}</div>
         )}
       </div>
       <ActivityLog df={df} />

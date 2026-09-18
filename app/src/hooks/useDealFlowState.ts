@@ -35,6 +35,7 @@ import {
   apiChangePassword,
   apiDeleteLead,
   apiResetLead,
+  apiEnviarFlujoInicial,
   apiSendLeadMedia,
   apiSendLeadMessage,
   apiState,
@@ -610,6 +611,7 @@ export function useDealFlowState() {
   const crmSelectedIdRef = useRef<number | string>(1);
   crmSelectedIdRef.current = crmSelectedId;
   const [crmDraft, setCrmDraft] = useState<string>('');
+  const [flujoMsg, setFlujoMsg] = useState<string>(''); // aviso del menú de "Flujos" del inbox
   const [copied, setCopied] = useState<'webhook' | 'code' | 'guia' | null>(null);
   const [avisoLead, setAvisoLead] = useState<string | null>(null);
   const [ruleDraft, setRuleDraft] = useState<string>('');
@@ -3185,6 +3187,22 @@ export function useDealFlowState() {
     },
     backToBot: () => {
       if (crmSelectedId != null) asignarChatCrm(crmSelectedId, 'Asistente (bot)');
+    },
+    // Lista mínima de productos (id + nombre) para el menú de "Flujos" del inbox.
+    flujoProductos: productsDecorated.map((p) => ({ id: p.id, nombre: p.nombre })),
+    flujoMsg,
+    // Dispara manualmente el mensaje inicial de un producto en el chat actual y deja
+    // al asistente esperando la respuesta (para cuando Meta/el disparador falla).
+    enviarFlujoInicial: (productId: number | string) => {
+      if (crmSelectedId == null || !apiMode) return;
+      setFlujoMsg('Enviando mensaje inicial…');
+      void apiEnviarFlujoInicial(String(crmSelectedId), String(productId)).then((r) => {
+        if (r.error) { setFlujoMsg(r.error); return; }
+        setFlujoMsg('✓ Mensaje inicial enviado. El asistente queda esperando la respuesta.');
+        cargarMensajesChat(crmSelectedId);
+        refrescarLeadsLiviano();
+        setTimeout(() => setFlujoMsg(''), 4000);
+      });
     },
     crmDeleteArmed,
     requestDeleteChat: () => {

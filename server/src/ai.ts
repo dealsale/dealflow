@@ -861,13 +861,14 @@ async function enviarUnaFoto(storeId: string, leadId: string, destino: string, v
  * Devuelve true si realmente envió la presentación (para que la IA NO agregue
  * una respuesta encima y el chat termine en el último bloque del mensaje inicial).
  */
-async function enviarPresentacion(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string): Promise<boolean> {
-  if (Number(p.mensaje_inicial_activo) === 0) return false; // mensaje inicial apagado para este producto
+async function enviarPresentacion(storeId: string, leadId: string, destino: string, p: Record<string, unknown>, pn?: string, forzar = false): Promise<boolean> {
+  if (!forzar && Number(p.mensaje_inicial_activo) === 0) return false; // mensaje inicial apagado para este producto
   const pid = String(p.id);
   // Candado por TIEMPO: evita repetir la misma presentación en ráfaga (mismos
   // minutos), pero permite volver a mostrarla más tarde (p. ej. una 2.ª compra).
+  // Un envío MANUAL (forzar) desde el inbox se salta el candado.
   const reciente = db.prepare("SELECT 1 FROM sent_presentations WHERE lead_id = ? AND product_id = ? AND created_at > datetime('now','-3 minutes')").get(leadId, pid);
-  if (reciente) return false;
+  if (!forzar && reciente) return false;
   db.prepare(
     `INSERT INTO sent_presentations (lead_id, product_id, created_at) VALUES (?,?,datetime('now'))
      ON CONFLICT(lead_id, product_id) DO UPDATE SET created_at = datetime('now')`,
@@ -931,6 +932,26 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
   if (enviadas > 0) registrarLog(storeId, 'info', 'disparador', `Mensaje inicial de "${p.nombre}" enviado (${enviadas} de ${piezas.length} piezas).`, leadId);
   else registrarLog(storeId, 'warn', 'disparador', `Se activó "${p.nombre}" pero NO se envió ninguna pieza del mensaje inicial (revisa la conexión de WhatsApp).`, leadId);
   return enviadas > 0;
+}
+
+/**
+ * Envío MANUAL del mensaje inicial de un producto desde el inbox (útil cuando el
+ * disparador de Meta falla o hay que reactivar el chat a mano). Envía la
+ * presentación completa y deja el chat en manos del asistente, esperando la
+ * respuesta del cliente.
+ */
+export async function enviarMensajeInicialManual(storeId: string, leadId: string, productId: string): Promise<{ ok: boolean; error?: string }> {
+  const p = db.prepare('SELECT * FROM products WHERE id = ? AND store_id = ?').get(productId, storeId) as Record<string, unknown> | undefined;
+  if (!p) return { ok: false, error: 'Producto no encontrado en esta tienda.' };
+  const lead = db.prepare('SELECT wa_id, tel FROM leads WHERE id = ? AND store_id = ?').get(leadId, storeId) as { wa_id: string | null; tel: string } | undefined;
+  if (!lead) return { ok: false, error: 'Chat no encontrado.' };
+  const destino = lead.wa_id || lead.tel;
+  const enviado = await enviarPresentacion(storeId, leadId, destino, p, lead.tel, true);
+  if (!enviado) return { ok: false, error: 'Este producto no tiene mensaje inicial cargado (fotos/textos).' };
+  // El bot queda a cargo, esperando la respuesta del cliente. Se reinicia el
+  // contador de seguimiento para no encimar recordatorios.
+  db.prepare("UPDATE leads SET asignado = 'Asistente (bot)', seguimiento_nivel = 0 WHERE id = ?").run(leadId);
+  return { ok: true };
 }
 
 /**

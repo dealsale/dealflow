@@ -341,6 +341,7 @@ export const apiSetLeadAsignado = (id: string, asignado: string) => req<{ ok: tr
 export const apiSetLeadNotaInterna = (id: string, notaInterna: string) => req<{ ok: true }>(`/api/leads/${id}`, 'PATCH', { notaInterna });
 export const apiDeleteLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}`, 'DELETE');
 export const apiResetLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}/reset`, 'POST');
+export const apiEnviarFlujoInicial = (id: string, productId: string) => req<{ ok: true }>(`/api/leads/${id}/flujo-inicial`, 'POST', { productId });
 
 export const apiWaLinkCloud = (b: { wabaId: string; phoneNumberId: string; accessToken: string }) =>
   req<{ conectado: boolean; numero: string }>('/api/whatsapp', 'PUT', b);

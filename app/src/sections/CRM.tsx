@@ -9,6 +9,61 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 
 type EstadoPill = 'todos' | 'noleidos' | 'envivo' | 'esperando';
 
+/**
+ * Botón de "Flujos" del inbox: dispara manualmente un flujo. El principal es el
+ * "Mensaje inicial": despliega los productos y, al elegir uno, envía su
+ * presentación al cliente y deja al asistente esperando la respuesta.
+ */
+export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: number }) {
+  const [open, setOpen] = useState(false);
+  const [verProductos, setVerProductos] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setVerProductos(false); } };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  const item: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 9, width: '100%', background: 'transparent', border: 'none', borderRadius: 8, padding: '9px 10px', cursor: 'pointer', color: 'var(--df-text-strong)' };
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="Enviar un flujo (ej: mensaje inicial)"
+        style={{ width: size, height: size, borderRadius: 10, border: '1px solid var(--df-border)', background: open ? 'var(--df-surface-2)' : 'var(--df-surface)', color: 'var(--df-brand)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}
+      >⚡</button>
+      {open && (
+        <div style={{ position: 'absolute', bottom: size + 8, left: 0, width: 268, maxHeight: 320, overflowY: 'auto', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 10px 34px rgba(15,23,42,.28)', zIndex: 60, padding: 6 }}>
+          {!verProductos ? (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-faint)', textTransform: 'uppercase', letterSpacing: '.04em', padding: '8px 10px 6px' }}>Flujos</div>
+              <button onClick={() => setVerProductos(true)} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                <span style={{ fontSize: 17 }}>📣</span>
+                <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>Mensaje inicial</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Envía la presentación de un producto</div>
+                </div>
+                <span style={{ color: 'var(--df-text-faint)' }}>›</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setVerProductos(false)} style={{ ...item, fontWeight: 700, fontSize: 12.5, color: 'var(--df-text-muted)' }}>‹ Elige el producto</button>
+              {df.flujoProductos.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes productos aún.</div>}
+              {df.flujoProductos.map((p) => (
+                <button key={p.id} onClick={() => { df.enviarFlujoInicial(p.id); setOpen(false); setVerProductos(false); }} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <span style={{ fontSize: 15 }}>🛍️</span>
+                  <span style={{ flex: 1, textAlign: 'left', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</span>
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CRM({ df }: { df: DealFlowState }) {
   const chat = df.crmChat;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -277,6 +332,7 @@ export function CRM({ df }: { df: DealFlowState }) {
               {df.crmIntervening && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <AttachButton onFile={df.sendCrmMedia} size={40} />
+                  <FlujosButton df={df} size={40} />
                   <VoiceRecorder onRecorded={df.sendCrmMedia} size={40} />
                   <input
                     className="df-input"
@@ -306,6 +362,11 @@ export function CRM({ df }: { df: DealFlowState }) {
               {df.crmSendWarn && (
                 <div style={{ color: 'var(--df-warning)', fontSize: 12.5, marginTop: 8 }}>
                   Guardado en el CRM, pero no salió por WhatsApp: {df.crmSendWarn}
+                </div>
+              )}
+              {df.flujoMsg && (
+                <div style={{ color: df.flujoMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.flujoMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)', fontSize: 12.5, marginTop: 8 }}>
+                  {df.flujoMsg}
                 </div>
               )}
             </div>

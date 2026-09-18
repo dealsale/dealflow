@@ -868,6 +868,17 @@ api.post('/leads/:id/messages', requireAuth, requireStore, async (req, res) => {
   res.json({ ok: true, enviadoPorWhatsapp: wa.ok, aviso: wa.ok ? undefined : wa.error });
 });
 
+// Disparar MANUALMENTE el mensaje inicial de un producto en este chat (flujo).
+// Envía la presentación y deja el chat esperando al cliente (a cargo del asistente).
+api.post('/leads/:id/flujo-inicial', requireAuth, requireStore, async (req, res) => {
+  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
+  const { enviarMensajeInicialManual } = await import('./ai.js');
+  const r = await enviarMensajeInicialManual(req.user!.storeId!, req.params.id, String(req.body?.productId || ''));
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+
 // Enviar un adjunto (imagen, video, audio o archivo) al lead.
 api.post('/leads/:id/media', requireAuth, requireStore, async (req, res) => {
   const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as
