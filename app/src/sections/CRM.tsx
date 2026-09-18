@@ -203,6 +203,8 @@ export function CRM({ df }: { df: DealFlowState }) {
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontWeight: 600, fontSize: 14 }}>{c.nombre}</span>
                   {c.canal === 'web' && <span title="Llegó por el chat web" style={{ fontSize: 11 }}>🌐</span>}
+                  {c.canal === 'messenger' && <span title="Facebook Messenger" style={{ fontSize: 11 }}>💬</span>}
+                  {c.canal === 'instagram' && <span title="Instagram DM" style={{ fontSize: 11 }}>📸</span>}
                   {c.etiquetaStyle && <span style={c.etiquetaStyle}>{c.etiqueta}</span>}
                   <span style={{ color: c.sinResponder ? 'var(--df-brand)' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11.5, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
                 </div>

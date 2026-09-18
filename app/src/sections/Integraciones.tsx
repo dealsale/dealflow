@@ -82,6 +82,33 @@ function MetaAdsCard({ df, i }: { df: DealFlowState; i: DealFlowState['integrati
   );
 }
 
+/** Tarjeta de canales de Meta: Messenger + Instagram DM (conexión en un clic). */
+function MetaCanalesCard({ df }: { df: DealFlowState }) {
+  const e = df.metaEstado;
+  const on = e.messenger || e.instagram;
+  return (
+    <div style={cardBase(on)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 9, background: 'linear-gradient(135deg,#0084FF,#E1306C)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>💬</div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Messenger e Instagram</div>
+        <div style={{ flex: 1 }} />
+        <Estado on={on} />
+      </div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, flex: 1 }}>Recibe y responde los mensajes directos de Facebook Messenger e Instagram desde el mismo Inbox, atendidos por tu asistente.</div>
+      {on && (
+        <div style={{ background: 'var(--df-brand-subtle-3)', border: '1px solid var(--df-brand-border)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: 'var(--df-brand-dark)' }}>
+          ✓ {e.paginas.join(', ')} · Messenger{e.instagram ? ' + Instagram' : ''}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={df.conectarMeta} disabled={df.metaLoading} style={{ ...btnPrimary, opacity: df.metaLoading ? 0.7 : 1 }}>{df.metaLoading ? 'Conectando…' : on ? 'Reconectar' : 'Conectar con Facebook'}</button>
+        {on && <button onClick={df.desconectarMeta} style={{ background: 'transparent', border: '1px solid var(--df-border)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Desconectar</button>}
+      </div>
+      {df.metaMsg && <div style={{ fontSize: 12.5, color: df.metaMsg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)' }}>{df.metaMsg}</div>}
+    </div>
+  );
+}
+
 const lbl: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600, marginBottom: 4 };
 const cardBase = (on: boolean): React.CSSProperties => ({ background: 'var(--df-surface)', border: '1px solid ' + (on ? 'var(--df-brand-border)' : 'var(--df-border)'), borderRadius: 12, padding: 18, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', gap: 10 });
 const btnPrimary: React.CSSProperties = { background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
@@ -129,6 +156,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
               <p style={{ color: 'var(--df-text-faint)', fontSize: 12.5, margin: '2px 0 0' }}>{g.sub}</p>
             </div>
             <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, alignItems: 'start' }}>
+              {g.id === 'canales' && <MetaCanalesCard df={df} />}
               {items.map((i) => {
                 if (i.especial === 'meta-ads') return <MetaAdsCard key={i.id} df={df} i={i} />;
                 const abiertaEsta = abierta === i.id;

@@ -64,6 +64,9 @@ import {
   apiCampanaCreativos,
   apiCampanaTextos,
   apiAdsConectar,
+  apiMetaEstado,
+  apiMetaConectar,
+  apiMetaDesconectar,
   apiAdsSeleccionar,
   apiAdsDesconectar,
   apiPublicarCampana,
@@ -2401,9 +2404,37 @@ export function useDealFlowState() {
     setIaPredeterminada(data.iaPredeterminada || 'deepseek');
   }
   useEffect(() => {
-    if (apiMode && sessionUser && !isAdmin && section === 'integraciones') void reloadIntegraciones();
+    if (apiMode && sessionUser && !isAdmin && section === 'integraciones') { void reloadIntegraciones(); void reloadMetaEstado(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser, isAdmin, section]);
+
+  // ── Canales Meta: Messenger + Instagram DM ──
+  const [metaEstado, setMetaEstado] = useState<{ messenger: boolean; instagram: boolean; paginas: string[] }>({ messenger: false, instagram: false, paginas: [] });
+  const [metaMsg, setMetaMsg] = useState('');
+  const [metaLoading, setMetaLoading] = useState(false);
+  async function reloadMetaEstado() {
+    const { data } = await apiMetaEstado();
+    if (data) setMetaEstado(data);
+  }
+  async function conectarMeta() {
+    if (!waSignup?.disponible) { setMetaMsg('La conexión con Meta no está configurada en el servidor.'); return; }
+    setMetaMsg(''); setMetaLoading(true);
+    try {
+      const { abrirLoginMeta } = await import('../lib/metaSignup');
+      const code = await abrirLoginMeta(waSignup.appId, ['pages_show_list', 'pages_messaging', 'pages_manage_metadata', 'pages_read_engagement', 'instagram_basic', 'instagram_manage_messages', 'business_management']);
+      const r = await apiMetaConectar(code);
+      setMetaLoading(false);
+      if (r.error || !r.data) { setMetaMsg(r.error || 'No pudimos conectar tus páginas.'); return; }
+      setMetaMsg(`✓ Conectadas ${r.data.paginas.length} página(s).`);
+      void reloadMetaEstado();
+    } catch (e) {
+      setMetaLoading(false);
+      setMetaMsg(e instanceof Error ? e.message : 'No pudimos conectar con Meta.');
+    }
+  }
+  function desconectarMeta() {
+    void apiMetaDesconectar().then(() => { setMetaMsg(''); void reloadMetaEstado(); });
+  }
   function guardarIntegracion(tipo: string, config: Record<string, string>, predeterminada?: boolean) {
     setIntegracionMsg('Guardando…');
     void apiGuardarIntegracion(tipo, config, predeterminada).then((r) => {
@@ -3283,6 +3314,7 @@ export function useDealFlowState() {
     mkLoading, mkError, setMkError,
     mkCopied, copiarCopy,
     adsCuenta, adsOpciones, conectarAds, elegirCuentaAds, desconectarAds, publicarCampana,
+    metaEstado, metaMsg, metaLoading, conectarMeta, desconectarMeta,
     mkSinCreditos,
     creditos,
     creditosMov,

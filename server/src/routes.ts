@@ -933,6 +933,28 @@ api.put('/assistant', requireAuth, requireStore, requireOwner, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Meta Messaging: Messenger + Instagram DM ─────────────────────────
+api.get('/meta/estado', requireAuth, requireStore, async (req, res) => {
+  const { metaConectado } = await import('./meta.js');
+  res.json(metaConectado(req.user!.storeId!));
+});
+
+// Alta en un clic: recibe el `code` del popup de Facebook y conecta las páginas.
+api.post('/meta/conectar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { conectarPaginasMeta } = await import('./meta.js');
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'Falta el código de autorización de Meta.' });
+  const r = await conectarPaginasMeta(req.user!.storeId!, String(code));
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, paginas: r.paginas });
+});
+
+// Desconectar Messenger/Instagram.
+api.delete('/meta', requireAuth, requireStore, requireOwner, (req, res) => {
+  db.prepare("DELETE FROM store_integrations WHERE store_id = ? AND tipo = 'meta_paginas'").run(req.user!.storeId);
+  res.json({ ok: true });
+});
+
 // ── WhatsApp: conexión en un clic (Embedded Signup de Meta) ──────────
 // El popup de Facebook nos devuelve un código y los IDs del número elegido;
 // aquí completamos el alta contra Meta sin que la tienda toque nada técnico.
@@ -1541,8 +1563,15 @@ webhooks.post('/whatsapp', (req, res) => {
     }
   }
   // Meta exige responder rápido: procesamos y contestamos 200 siempre.
+  // La MISMA URL recibe WhatsApp, Messenger (page) e Instagram (instagram);
+  // se enruta por el campo `object`.
   try {
-    handleIncomingWebhook(req.body);
+    const obj = (req.body as { object?: string })?.object;
+    if (obj === 'page' || obj === 'instagram') {
+      void import('./meta.js').then((m) => m.handleMetaWebhook(obj, req.body)).catch((e) => console.error('[webhook] meta', e));
+    } else {
+      handleIncomingWebhook(req.body);
+    }
   } catch (e) {
     console.error('[webhook] error procesando entrada', e);
   }
