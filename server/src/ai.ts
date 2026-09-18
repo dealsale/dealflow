@@ -158,7 +158,9 @@ Reglas:
 - NO vuelvas a saludar con "hola" si ya venían conversando; continúa la charla donde quedó.
 - NO inventes precios, promociones ni datos que no estén en el catálogo.
 - Que NO suene robótico ni repita mensajes anteriores. Evita el genérico "¿sigues ahí?" si puedes ser específico.
-- Responde SOLO con el texto del mensaje, sin comillas ni explicaciones.`;
+- Responde SOLO con el texto del mensaje, sin comillas ni explicaciones.
+
+MUY IMPORTANTE — CUÁNDO NO ESCRIBIR: si la conversación YA ESTÁ CERRADA no hay que insistir. Eso incluye: la venta ya se concretó o el pedido ya quedó registrado, el cliente ya confirmó la compra, ya se despidió o solo dio las gracias, dijo que no le interesa, o no queda nada útil por decir. En esos casos responde EXACTAMENTE con la palabra "NADA" (en mayúsculas) y nada más.`;
 
   try {
     const res = await fetch(ia.url, {
@@ -170,6 +172,8 @@ Reglas:
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     let txt = (body.choices?.[0]?.message?.content || '').trim();
     txt = txt.replace(/^["'“”]+|["'“”]+$/g, '').trim(); // quita comillas envolventes
+    // La IA decide que no hay que insistir (conversación cerrada / venta hecha).
+    if (/^nada[.!]?$/i.test(txt)) return 'NADA';
     return txt.slice(0, 500);
   } catch { return ''; }
 }

@@ -31,7 +31,7 @@ function mensajeSeguimiento(nivel: number, nombre: string): string {
 
 interface LeadSeg {
   id: string; store_id: string; nombre: string; wa_id: string | null; tel: string; canal: string;
-  asignado: string; seguimiento_nivel: number; ultimo_de: string | null;
+  asignado: string; etiqueta: string; seguimiento_nivel: number; ultimo_de: string | null;
   idle_min: number | null; ventana_min: number | null;
 }
 
@@ -45,12 +45,17 @@ export async function correrSeguimiento(): Promise<void> {
     // Corre para TODAS las tiendas (es comportamiento propio del asistente, no una
     // opción). El filtro real es por chat: que lo atienda el asistente, etc.
     const leads = db.prepare(
-      `SELECT l.id, l.store_id, l.nombre, l.wa_id, l.tel, l.canal, l.asignado, l.seguimiento_nivel,
+      `SELECT l.id, l.store_id, l.nombre, l.wa_id, l.tel, l.canal, l.asignado, l.etiqueta, l.seguimiento_nivel,
               (SELECT de FROM messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1) AS ultimo_de,
               (julianday('now') - julianday((SELECT created_at FROM messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1))) * 1440 AS idle_min,
               (julianday('now') - julianday((SELECT created_at FROM messages WHERE lead_id = l.id AND de = 'cliente' ORDER BY created_at DESC LIMIT 1))) * 1440 AS ventana_min
          FROM leads l
         WHERE COALESCE(l.seguimiento_nivel,0) < 3
+          -- La venta ya cerrada NO se persigue (el bot marca 'Venta' y crea el pedido al cerrar).
+          AND COALESCE(l.etiqueta,'') != 'Venta'
+          AND NOT EXISTS (
+            SELECT 1 FROM orders o WHERE o.store_id = l.store_id AND COALESCE(o.tel,'') != ''
+              AND replace(replace(replace(o.tel,' ',''),'+',''),'-','') LIKE '%' || substr(replace(replace(replace(l.tel,' ',''),'+',''),'-',''), -10))
           AND EXISTS (SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.created_at > datetime('now','-1 day'))`,
     ).all() as LeadSeg[];
 
@@ -72,13 +77,17 @@ export async function correrSeguimiento(): Promise<void> {
       if (objetivo <= (l.seguimiento_nivel || 0)) continue;
 
       // La IA redacta el recordatorio con el contexto del chat (retoma lo último
-      // que hablaron). Si no hay IA o falla, usamos un texto de respaldo.
-      let texto = '';
+      // que hablaron) y decide si vale la pena escribir. Si no hay IA o falla,
+      // usamos un texto de respaldo.
+      let generado = '';
       try {
         const { generarSeguimientoIA } = await import('./ai.js');
-        texto = await generarSeguimientoIA(l.store_id, l.id, objetivo);
+        generado = await generarSeguimientoIA(l.store_id, l.id, objetivo);
       } catch { /* usamos el respaldo */ }
-      if (!texto) texto = mensajeSeguimiento(objetivo, l.nombre);
+      // 'NADA' = la IA considera que la conversación ya está cerrada (venta hecha,
+      // el cliente se despidió, etc.): no molestamos más y detenemos el seguimiento.
+      if (generado === 'NADA') { db.prepare('UPDATE leads SET seguimiento_nivel = 3 WHERE id = ?').run(l.id); continue; }
+      const texto = generado || mensajeSeguimiento(objetivo, l.nombre);
       const destino = l.wa_id || l.tel;
       const pn = l.tel;
       try {
