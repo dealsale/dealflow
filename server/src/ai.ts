@@ -194,6 +194,7 @@ MUY IMPORTANTE — CUÁNDO NO ESCRIBIR: si la conversación YA ESTÁ CERRADA no 
     if (!res.ok) return '';
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     let txt = (body.choices?.[0]?.message?.content || '').trim();
+    txt = desenvolver(txt); // si vino como JSON o dentro de ```…```, saca solo el texto
     txt = txt.replace(/^["'“”]+|["'“”]+$/g, '').trim(); // quita comillas envolventes
     // La IA decide que no hay que insistir (conversación cerrada / venta hecha).
     if (/^nada[.!]?$/i.test(txt)) return 'NADA';
@@ -303,6 +304,8 @@ ${promos || '(ninguna)'}
 
 Estás chateando por WhatsApp; sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
 ${estiloDirectiva(assistant?.estilo)}
+
+FORMATO DE RESPUESTA (OBLIGATORIO): responde SIEMPRE en texto plano normal, como se escribe por WhatsApp. NUNCA respondas en JSON, ni uses llaves { } ni bloques de código con acentos graves (\`\`\`). No incluyas campos como "text" u "order". Para registrar un pedido usa EXCLUSIVAMENTE el marcador ##PEDIDO en su propia línea, tal como se indica; jamás escribas el pedido como JSON.
 
 PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma general y en el CATÁLOGO hay VARIOS productos que coinciden con ese nombre (por ejemplo pide "jogger" y existen "Jogger Bota Recta Hombre", "Jogger Bota Recta Dama", "Jogger Clásico", "Jogger Clásico Dama"), NO adivines ni elijas uno al azar: pregúntale al cliente CUÁL de esos modelos exactos quiere y NO envíes fotos ni pongas el marcador todavía. Solo cuando quede claro el modelo exacto, usa su NOMBRE EXACTO del catálogo en el marcador con el formato ##MEDIA:Nombre exacto del producto## (siempre con dos puntos y el nombre; nunca "##MEDIA" suelto).
 
@@ -435,7 +438,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     const res = await fetch(ia.url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: systemFinal }, ...historia], max_tokens: 300, temperature: 0.7 }),
+      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: systemFinal }, ...historia], max_tokens: 700, temperature: 0.7 }),
     });
     if (!res.ok) {
       const detalle = await res.text().catch(() => '');
@@ -461,7 +464,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     const marcaPed = /##\s*PEDIDO\b([^\n]*)/i;
     const m = bruto.match(marca);
     const mp = bruto.match(marcaPed);
-    const texto = bruto.replace(marcaStrip, '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').replace(/[ \t]{2,}/g, ' ').trim();
+    const texto = bruto.replace(marcaStrip, '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').replace(/```+/g, '').replace(/[ \t]{2,}/g, ' ').trim();
     // ¿Enviamos fotos? Sí si la IA puso el marcador (con o sin nombre) o si el
     // cliente pidió fotos explícitamente (red de seguridad, igual que la del pedido).
     const nombreMarca = m && m[1] ? m[1].replace('|', ' ').trim() : '';
@@ -529,20 +532,42 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
  * «text: "..."», recupera solo el mensaje real en texto plano. Si no hay
  * envoltura, devuelve el texto tal cual.
  */
-function desenvolver(s: string): string {
-  const t = s.trim();
-  if (t.startsWith('{') && t.endsWith('}')) {
-    try {
-      const o = JSON.parse(t) as Record<string, unknown>;
-      for (const k of ['text', 'mensaje', 'respuesta', 'reply', 'message', 'content']) {
-        if (typeof o[k] === 'string') return (o[k] as string).trim();
-      }
-    } catch {
-      /* no era JSON válido; seguimos abajo */
+const CLAVES_TEXTO = 'text|mensaje|respuesta|reply|message|content';
+function desescapar(v: string): string {
+  return v.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '').replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim();
+}
+/**
+ * A veces la IA envuelve su respuesta como JSON ("text": "...") o dentro de un
+ * bloque de código ```json ... ```; y a veces ese JSON llega CORTADO (por el
+ * límite de tokens). Aquí SIEMPRE sacamos solo el texto para el cliente y NUNCA
+ * dejamos escapar llaves/JSON/backticks crudos.
+ */
+export function desenvolver(s: string): string {
+  let t = s.trim();
+  // 1) Quitar cercos de código markdown: ```json ... ``` o ``` ... ``` (aunque el
+  //    cierre falte porque la respuesta se cortó).
+  const conCerco = t.match(/^```(?:json|txt|text)?\s*([\s\S]*?)\s*```$/i);
+  if (conCerco) t = conCerco[1].trim();
+  else if (/^```/.test(t)) t = t.replace(/^```(?:json|txt|text)?\s*/i, '').trim();
+
+  const pareceJson = t.startsWith('{') || new RegExp('^"?(?:' + CLAVES_TEXTO + ')"?\\s*:', 'i').test(t);
+  if (pareceJson) {
+    // 2a) Intento de parseo completo (JSON bien formado).
+    if (t.startsWith('{') && t.endsWith('}')) {
+      try {
+        const o = JSON.parse(t) as Record<string, unknown>;
+        for (const k of ['text', 'mensaje', 'respuesta', 'reply', 'message', 'content']) {
+          if (typeof o[k] === 'string') return (o[k] as string).trim();
+        }
+      } catch { /* seguimos con extracción tolerante */ }
     }
+    // 2b) JSON cortado o con más campos (ej: {"text":"...","order":{...}): sacamos
+    //     el valor de "text" aunque después venga "order". Soporta escapes.
+    const m = t.match(new RegExp('"?(?:' + CLAVES_TEXTO + ')"?\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"', 'i'));
+    if (m) return desescapar(m[1]);
+    // 2c) Empezaba como JSON pero no pudimos sacar el texto: NO mandamos el crudo.
+    return '';
   }
-  const m = t.match(/^"?(?:text|mensaje|respuesta|reply|message|content)"?\s*:\s*"([\s\S]*)"\s*}?\s*$/i);
-  if (m) return m[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim();
   return s;
 }
 
