@@ -1109,6 +1109,35 @@ api.get('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
+// Onboarding: configura de un tirón el asistente de una tienda (nombre, tono,
+// instrucciones, reglas) y crea sus productos por nombre. Para dar de alta un
+// cliente desde su cuestionario. No pisa lo que no se envíe.
+api.post('/admin/stores/:id/onboarding', requireAuth, requireAdmin, (req, res) => {
+  const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+  if (!s) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const sid = req.params.id;
+  const { nombre, estilo, instrucciones, reglas, productos } = req.body || {};
+  const reglasArr = Array.isArray(reglas) ? reglas.map((r) => String(r).trim()).filter(Boolean) : [];
+  const estiloJson = estilo && typeof estilo === 'object' ? j(estilo) : '';
+  db.prepare(
+    `INSERT INTO assistants (store_id, instrucciones, reglas, nombre, estilo) VALUES (?,?,?,?,?)
+     ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas, nombre = excluded.nombre, estilo = excluded.estilo`,
+  ).run(sid, String(instrucciones || ''), j(reglasArr), String(nombre || '').trim(), estiloJson);
+  // Productos por nombre (salta los que ya existan por nombre).
+  let creados = 0;
+  for (const raw of Array.isArray(productos) ? productos : []) {
+    const nom = String(raw || '').trim();
+    if (!nom) continue;
+    const existe = db.prepare('SELECT 1 FROM products WHERE store_id = ? AND lower(nombre) = lower(?)').get(sid, nom);
+    if (existe) continue;
+    const pid = uid();
+    db.prepare("INSERT INTO products (id, store_id, nombre, precio, tipo) VALUES (?,?,?,0,'producto')").run(pid, sid, nom);
+    db.prepare("INSERT INTO variants (id, product_id, label, stock, fotos) VALUES (?,?, 'Única', 0, 0)").run(uid(), pid);
+    creados++;
+  }
+  res.json({ ok: true, productosCreados: creados });
+});
+
 // Entrar a una tienda (impersonar) para dar soporte.
 api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) => {
   const s = db.prepare('SELECT id, correo FROM stores WHERE id = ?').get(req.params.id) as { id: string; correo: string } | undefined;

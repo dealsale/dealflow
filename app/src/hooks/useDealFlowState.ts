@@ -85,6 +85,7 @@ import {
   apiDeleteStore,
   apiStoreDetalle,
   apiImpersonate,
+  apiOnboardingTienda,
   apiEntrarBiblioteca,
   apiStopImpersonate,
   apiUpdatePlan,
@@ -3600,6 +3601,8 @@ export function useDealFlowState() {
     entrarATienda,
     volverAlAdmin,
     entrarBiblioteca,
+    // Onboarding: configura el asistente + crea productos de una tienda (para dar de alta un cliente).
+    onboardingAsistente: (storeId: string, body: { nombre?: string; estilo?: { trato?: string; emojis?: boolean; largo?: string }; instrucciones?: string; reglas?: string[]; productos?: string[] }) => apiOnboardingTienda(storeId, body),
     impersonando: !!sessionUser?.impersonando,
     tiendaImpersonada: sessionUser?.tiendaNombre || storeNombre || '',
     // Admin: gestión de planes

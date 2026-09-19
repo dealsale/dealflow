@@ -5,23 +5,103 @@ import { Dropdown } from '../../components/Dropdown';
 
 /** Panel del superadmin: todas las tiendas + la Biblioteca de productos. */
 export function Superadmin({ df }: { df: DealFlowState }) {
-  const [tab, setTab] = useState<'tiendas' | 'biblioteca'>('tiendas');
+  const [tab, setTab] = useState<'tiendas' | 'biblioteca' | 'onboarding'>('tiendas');
+  const TABS: { id: typeof tab; label: string }[] = [
+    { id: 'tiendas', label: 'Todas las tiendas' },
+    { id: 'biblioteca', label: 'Biblioteca de productos' },
+    { id: 'onboarding', label: 'Onboarding de asistente' },
+  ];
   return (
     <section data-screen-label="Superadmin">
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Superadmin</h1>
-        <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Gestiona todas las tiendas y la biblioteca de productos que los clientes pueden importar.</p>
+        <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Gestiona todas las tiendas, la biblioteca de productos y el alta de asistentes.</p>
       </div>
-      <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden', marginBottom: 18 }}>
-        {(['tiendas', 'biblioteca'] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{ background: tab === t ? '#0F172A' : 'var(--df-surface)', color: tab === t ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-            {t === 'tiendas' ? 'Todas las tiendas' : 'Biblioteca de productos'}
+      <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden', marginBottom: 18, flexWrap: 'wrap' }}>
+        {TABS.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ background: tab === t.id ? '#0F172A' : 'var(--df-surface)', color: tab === t.id ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            {t.label}
           </button>
         ))}
       </div>
-      {tab === 'tiendas' ? <Tiendas df={df} /> : <BibliotecaAdmin df={df} />}
+      {tab === 'tiendas' && <Tiendas df={df} />}
+      {tab === 'biblioteca' && <BibliotecaAdmin df={df} />}
+      {tab === 'onboarding' && <OnboardingAsistente df={df} />}
     </section>
+  );
+}
+
+/** Alta de un cliente: configura el asistente (nombre, tono, instrucciones, reglas) y crea sus productos. */
+function OnboardingAsistente({ df }: { df: DealFlowState }) {
+  const [tienda, setTienda] = useState('');
+  const [nombre, setNombre] = useState('');
+  const [trato, setTrato] = useState<'tu' | 'usted'>('usted');
+  const [emojis, setEmojis] = useState(true);
+  const [largo, setLargo] = useState<'corto' | 'detallado'>('corto');
+  const [instrucciones, setInstrucciones] = useState('');
+  const [reglasTxt, setReglasTxt] = useState('');
+  const [productosTxt, setProductosTxt] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const aplicar = () => {
+    if (!tienda) { setMsg('Elige una tienda primero.'); return; }
+    setBusy(true); setMsg('Aplicando…');
+    const reglas = reglasTxt.split('\n').map((r) => r.trim()).filter(Boolean);
+    const productos = productosTxt.split('\n').map((p) => p.trim()).filter(Boolean);
+    void df.onboardingAsistente(tienda, { nombre: nombre.trim(), estilo: { trato, emojis, largo }, instrucciones, reglas, productos }).then((r) => {
+      setBusy(false);
+      if (r.error || !r.data) { setMsg(r.error || 'No se pudo aplicar.'); return; }
+      setMsg(`✓ Asistente configurado. ${r.data.productosCreados} producto(s) creado(s).`);
+    });
+  };
+
+  const lblO: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
+  const ta: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5, resize: 'vertical' };
+  const seg = (val: string, on: boolean, onClick: () => void) => (
+    <button onClick={onClick} style={{ background: on ? 'var(--df-brand)' : 'var(--df-surface)', color: on ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{val}</button>
+  );
+
+  return (
+    <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Da de alta un cliente desde su cuestionario: elige la tienda, pega la configuración y aplícala. Los productos se crean por nombre (sin duplicar los que ya existan). No borra lo que dejes vacío.</div>
+      <div style={{ maxWidth: 380 }}>
+        <div style={lblO}>Tienda</div>
+        <Dropdown value={tienda} onChange={setTienda} placeholder="Elige la tienda…"
+          options={[{ value: '', label: 'Elige la tienda…' }, ...df.superStores.map((s) => ({ value: s.id, label: `${s.tienda} · ${s.correo}` }))]} />
+      </div>
+      <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, maxWidth: 560 }}>
+        <div>
+          <div style={lblO}>Nombre del asistente</div>
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Alexander" style={{ ...ta, resize: 'none' }} />
+        </div>
+        <div>
+          <div style={lblO}>Tono</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 8, overflow: 'hidden' }}>{seg('Tú', trato === 'tu', () => setTrato('tu'))}{seg('Usted', trato === 'usted', () => setTrato('usted'))}</div>
+            <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 8, overflow: 'hidden' }}>{seg('Emojis', emojis, () => setEmojis(true))}{seg('Sin', !emojis, () => setEmojis(false))}</div>
+            <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 8, overflow: 'hidden' }}>{seg('Cortas', largo === 'corto', () => setLargo('corto'))}{seg('Detalladas', largo === 'detallado', () => setLargo('detallado'))}</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style={lblO}>Instrucciones (cómo debe vender)</div>
+        <textarea value={instrucciones} onChange={(e) => setInstrucciones(e.target.value)} rows={8} style={ta} placeholder="Pega aquí las instrucciones del asistente…" />
+      </div>
+      <div>
+        <div style={lblO}>Reglas (una por línea)</div>
+        <textarea value={reglasTxt} onChange={(e) => setReglasTxt(e.target.value)} rows={6} style={ta} placeholder="Una regla por línea…" />
+      </div>
+      <div>
+        <div style={lblO}>Productos (uno por línea, solo el nombre)</div>
+        <textarea value={productosTxt} onChange={(e) => setProductosTxt(e.target.value)} rows={6} style={ta} placeholder="Un producto por línea…" />
+      </div>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <button onClick={aplicar} disabled={busy} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 20px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>Aplicar configuración</button>
+        {msg && <span style={{ fontSize: 13, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</span>}
+      </div>
+    </div>
   );
 }
 

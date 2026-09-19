@@ -462,6 +462,8 @@ export const apiTogglePremiumTema = (id: string, temaPremium: boolean) => req<{ 
 export const apiUpdateStore = (id: string, b: { nombre?: string; correo?: string; plan?: string; password?: string; activa?: boolean }) =>
   req<{ ok: true }>(`/api/admin/stores/${id}`, 'PATCH', b);
 export const apiDeleteStore = (id: string) => req<{ ok: true }>(`/api/admin/stores/${id}`, 'DELETE');
+export const apiOnboardingTienda = (id: string, body: { nombre?: string; estilo?: { trato?: string; emojis?: boolean; largo?: string }; instrucciones?: string; reglas?: string[]; productos?: string[] }) =>
+  req<{ ok: true; productosCreados: number }>(`/api/admin/stores/${id}/onboarding`, 'POST', body);
 export const apiImpersonate = (id: string) => req<{ ok: true }>(`/api/admin/stores/${id}/impersonate`, 'POST');
 export const apiStopImpersonate = () => req<{ ok: true }>('/api/auth/stop-impersonate', 'POST');
 export const apiEntrarBiblioteca = () => req<{ ok: true }>('/api/superadmin/biblioteca/entrar', 'POST');
