@@ -310,6 +310,83 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   res.json({ orders });
 });
 
+// ── Estadísticas / Rendimiento ────────────────────────────────────────
+// Agregaciones de chats, campañas (anuncios) y ventas en un rango de fechas.
+// Fechas en zona horaria de Colombia (created_at se guarda en UTC → -5h).
+api.get('/stats', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }); // YYYY-MM-DD
+  const reFecha = /^\d{4}-\d{2}-\d{2}$/;
+  let desde = String(req.query.desde || '');
+  let hasta = String(req.query.hasta || '');
+  if (!reFecha.test(desde)) desde = hoy;
+  if (!reFecha.test(hasta)) hasta = hoy;
+  if (desde > hasta) [desde, hasta] = [hasta, desde];
+  // BETWEEN sobre la fecha local (Bogotá) del registro.
+  const F = "date(created_at, '-5 hours')";
+  const FO = "date(o.created_at, '-5 hours')";
+
+  const num = (r: unknown) => Number((r as { n?: number })?.n || 0);
+  const chats = num(db.prepare(`SELECT COUNT(*) n FROM leads WHERE store_id = ? AND ${F} BETWEEN ? AND ?`).get(sid, desde, hasta));
+  const chatsAnuncio = num(db.prepare(`SELECT COUNT(*) n FROM leads WHERE store_id = ? AND ad_id != '' AND ${F} BETWEEN ? AND ?`).get(sid, desde, hasta));
+  const pedidos = num(db.prepare(`SELECT COUNT(*) n FROM orders o WHERE store_id = ? AND ${FO} BETWEEN ? AND ?`).get(sid, desde, hasta));
+  const ventasItems = Number((db.prepare(
+    `SELECT COALESCE(SUM(oi.qty * oi.precio),0) t FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ?`,
+  ).get(sid, desde, hasta) as { t: number }).t);
+  const ventasEnvio = Number((db.prepare(
+    `SELECT COALESCE(SUM(envio),0) t FROM orders o WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ?`,
+  ).get(sid, desde, hasta) as { t: number }).t);
+  const ventas = ventasItems + ventasEnvio;
+
+  // Chats por canal.
+  const porCanal = (db.prepare(
+    `SELECT COALESCE(NULLIF(canal,''),'whatsapp') canal, COUNT(*) n FROM leads WHERE store_id = ? AND ${F} BETWEEN ? AND ? GROUP BY canal ORDER BY n DESC`,
+  ).all(sid, desde, hasta) as { canal: string; n: number }[]);
+
+  // Top anuncios por cantidad de chats.
+  const topRaw = (db.prepare(
+    `SELECT ad_id, MAX(ad_ref) ref, COUNT(*) n FROM leads WHERE store_id = ? AND ad_id != '' AND ${F} BETWEEN ? AND ? GROUP BY ad_id ORDER BY n DESC LIMIT 12`,
+  ).all(sid, desde, hasta) as { ad_id: string; ref: string; n: number }[]);
+  const topAnuncios = topRaw.map((r) => {
+    const a = pj<{ titular?: string; canal?: string; url?: string }>(r.ref || '', {});
+    return { id: r.ad_id, titular: a.titular || 'Anuncio', canal: a.canal || '', url: a.url || '', chats: r.n };
+  });
+
+  // Series diarias (para los gráficos): chats, pedidos y ventas por día.
+  const serieChats = new Map<string, number>();
+  for (const r of db.prepare(`SELECT ${F} d, COUNT(*) n FROM leads WHERE store_id = ? AND ${F} BETWEEN ? AND ? GROUP BY d`).all(sid, desde, hasta) as { d: string; n: number }[]) serieChats.set(r.d, r.n);
+  const seriePedidos = new Map<string, number>();
+  for (const r of db.prepare(`SELECT ${FO} d, COUNT(*) n FROM orders o WHERE store_id = ? AND ${FO} BETWEEN ? AND ? GROUP BY d`).all(sid, desde, hasta) as { d: string; n: number }[]) seriePedidos.set(r.d, r.n);
+  const serieVentas = new Map<string, number>();
+  for (const r of db.prepare(`SELECT ${FO} d, COALESCE(SUM(oi.qty*oi.precio),0) v FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ? GROUP BY d`).all(sid, desde, hasta) as { d: string; v: number }[]) serieVentas.set(r.d, r.v);
+  for (const r of db.prepare(`SELECT ${FO} d, COALESCE(SUM(envio),0) v FROM orders o WHERE store_id = ? AND ${FO} BETWEEN ? AND ? GROUP BY d`).all(sid, desde, hasta) as { d: string; v: number }[]) serieVentas.set(r.d, (serieVentas.get(r.d) || 0) + r.v);
+
+  // Lista continua de días del rango (con ceros donde no hubo actividad). Tope 366.
+  const dias: { fecha: string; chats: number; pedidos: number; ventas: number }[] = [];
+  const dIni = new Date(desde + 'T12:00:00Z');
+  const dFin = new Date(hasta + 'T12:00:00Z');
+  for (let t = dIni.getTime(), i = 0; t <= dFin.getTime() && i < 366; t += 86400000, i++) {
+    const f = new Date(t).toISOString().slice(0, 10);
+    dias.push({ fecha: f, chats: serieChats.get(f) || 0, pedidos: seriePedidos.get(f) || 0, ventas: serieVentas.get(f) || 0 });
+  }
+
+  res.json({
+    rango: { desde, hasta },
+    totales: {
+      chats,
+      chatsAnuncio,
+      chatsOrganicos: Math.max(0, chats - chatsAnuncio),
+      pedidos,
+      ventas,
+      ticketPromedio: pedidos ? Math.round(ventas / pedidos) : 0,
+      conversion: chats ? Math.round((pedidos / chats) * 1000) / 10 : 0, // % con 1 decimal
+    },
+    serie: dias,
+    porCanal,
+    topAnuncios,
+  });
+});
+
 // Sube un archivo (foto/video) y devuelve su enlace, para guardarlo liviano en el producto.
 api.post('/upload', requireAuth, requireStore, (req, res) => {
   const { dataUrl, nombre } = req.body || {};

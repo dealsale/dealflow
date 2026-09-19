@@ -434,6 +434,10 @@ textarea {
   .df-collapse {
     grid-template-columns: 1fr !important;
   }
+  /* KPIs de Estadísticas: 4 columnas en escritorio → 2 en celular. */
+  .df-stats-kpis {
+    grid-template-columns: 1fr 1fr !important;
+  }
   /* Fila de producto: sin la columna de precio suelta (ya va bajo el nombre) y menos padding */
   .df-prow {
     grid-template-columns: 40px 1fr auto auto !important;

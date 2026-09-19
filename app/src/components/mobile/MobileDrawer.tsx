@@ -6,6 +6,7 @@ import { IconToggleMode } from '../icons';
 
 const VENDOR_ITEMS: { id: VendedorSection; label: string }[] = [
   { id: 'resumen', label: 'Resumen' },
+  { id: 'estadisticas', label: 'Estadísticas' },
   { id: 'productos', label: 'Productos' },
   { id: 'asistente', label: 'Asistente' },
   { id: 'whatsapp', label: 'WhatsApp' },

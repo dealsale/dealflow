@@ -84,6 +84,7 @@ import {
   apiUpdateStore,
   apiDeleteStore,
   apiStoreDetalle,
+  apiStats,
   apiImpersonate,
   apiOnboardingTienda,
   apiEntrarBiblioteca,
@@ -131,7 +132,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -620,6 +621,42 @@ export function useDealFlowState() {
   const [mode, setMode] = useState<Mode>('vendedor');
   const [section, setSection] = useState<VendedorSection>('resumen');
   const [adminSection, setAdminSection] = useState<AdminSection>('ventas');
+  // ── Estadísticas / Rendimiento ──
+  type StatsPreset = 'hoy' | 'ayer' | '7d' | '30d' | 'mes' | 'mesPasado' | 'rango';
+  const [statsPreset, setStatsPreset] = useState<StatsPreset>('7d');
+  const [statsRango, setStatsRango] = useState<{ desde: string; hasta: string }>(() => {
+    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    const hace6 = new Date(Date.now() - 6 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    return { desde: hace6, hasta: hoy };
+  });
+  const [stats, setStats] = useState<Estadisticas | null>(null);
+  const [statsCargando, setStatsCargando] = useState(false);
+  const rangoDePreset = (preset: StatsPreset): { desde: string; hasta: string } => {
+    const bog = (t: number) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    const hoy = bog(Date.now());
+    const ayer = bog(Date.now() - 86400000);
+    if (preset === 'hoy') return { desde: hoy, hasta: hoy };
+    if (preset === 'ayer') return { desde: ayer, hasta: ayer };
+    if (preset === '7d') return { desde: bog(Date.now() - 6 * 86400000), hasta: hoy };
+    if (preset === '30d') return { desde: bog(Date.now() - 29 * 86400000), hasta: hoy };
+    if (preset === 'mes') return { desde: hoy.slice(0, 7) + '-01', hasta: hoy };
+    if (preset === 'mesPasado') {
+      const [y, m] = hoy.split('-').map(Number);
+      const ini = new Date(y, m - 2, 1);
+      const fin = new Date(y, m - 1, 0);
+      const f = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return { desde: f(ini), hasta: f(fin) };
+    }
+    return statsRango; // 'rango' personalizado: usa lo que ya está
+  };
+  const elegirStatsPreset = (preset: StatsPreset) => {
+    setStatsPreset(preset);
+    if (preset !== 'rango') setStatsRango(rangoDePreset(preset));
+  };
+  const setStatsFechas = (desde: string, hasta: string) => {
+    setStatsPreset('rango');
+    setStatsRango({ desde, hasta });
+  };
   const [filter, setFilter] = useState<string>('Todos');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [expandedProductId, setExpandedProductId] = useState<number | string | null>(7);
@@ -2179,6 +2216,20 @@ export function useDealFlowState() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, isAdmin, sessionUser]);
 
+  // Estadísticas: carga cuando se entra a la pestaña o cambia el rango de fechas.
+  useEffect(() => {
+    if (!apiMode || !sessionUser || section !== 'estadisticas') return;
+    let vivo = true;
+    setStatsCargando(true);
+    void apiStats(statsRango.desde, statsRango.hasta).then((r) => {
+      if (!vivo) return;
+      setStatsCargando(false);
+      if (r.data) setStats(r.data);
+    });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, sessionUser, section, statsRango.desde, statsRango.hasta]);
+
   // ── Superadmin: todas las tiendas + ocultar del admin ──
   const [superStores, setSuperStores] = useState<SuperStore[]>([]);
   async function reloadSuper() {
@@ -3164,6 +3215,13 @@ export function useDealFlowState() {
     section,
     adminSection,
     storeId,
+    // Estadísticas / Rendimiento
+    stats,
+    statsCargando,
+    statsPreset,
+    statsRango,
+    elegirStatsPreset,
+    setStatsFechas,
     go,
     goAdmin,
     toggleMode,

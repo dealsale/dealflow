@@ -478,6 +478,25 @@ export const apiUpdateStore = (id: string, b: { nombre?: string; correo?: string
 export const apiDeleteStore = (id: string) => req<{ ok: true }>(`/api/admin/stores/${id}`, 'DELETE');
 export const apiOnboardingTienda = (id: string, body: { nombre?: string; estilo?: { trato?: string; emojis?: boolean; largo?: string }; instrucciones?: string; reglas?: string[]; productos?: string[] }) =>
   req<{ ok: true; productosCreados: number }>(`/api/admin/stores/${id}/onboarding`, 'POST', body);
+// ── Estadísticas / Rendimiento ──
+export interface Estadisticas {
+  rango: { desde: string; hasta: string };
+  totales: {
+    chats: number;
+    chatsAnuncio: number;
+    chatsOrganicos: number;
+    pedidos: number;
+    ventas: number;
+    ticketPromedio: number;
+    conversion: number;
+  };
+  serie: { fecha: string; chats: number; pedidos: number; ventas: number }[];
+  porCanal: { canal: string; n: number }[];
+  topAnuncios: { id: string; titular: string; canal: string; url: string; chats: number }[];
+}
+export const apiStats = (desde: string, hasta: string) =>
+  req<Estadisticas>(`/api/stats?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, 'GET');
+
 export const apiImpersonate = (id: string) => req<{ ok: true }>(`/api/admin/stores/${id}/impersonate`, 'POST');
 export const apiStopImpersonate = () => req<{ ok: true }>('/api/auth/stop-impersonate', 'POST');
 export const apiEntrarBiblioteca = () => req<{ ok: true }>('/api/superadmin/biblioteca/entrar', 'POST');
