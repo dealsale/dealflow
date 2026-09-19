@@ -34,6 +34,11 @@
   --df-green-subtle: #DCFCE7;
   --df-green-700: #15803D;
 
+  /* Tarjeta destacada "Ventas del mes" del resumen (motivante). */
+  --df-hero-grad: linear-gradient(135deg, #059669 0%, #047857 100%);
+  --df-hero-fg: #ffffff;
+  --df-hero-chip: rgba(255, 255, 255, 0.16);
+
   /* Púrpura / índigo (Effi, acentos) */
   --df-purple: #6D28D9;
   --df-indigo: #4338CA;
@@ -96,6 +101,10 @@
   --df-brand-deep: #a7f3d0;
   --df-green-subtle: rgba(16, 185, 129, 0.14);
   --df-green-700: #4ade80;
+  /* Hero "Ventas del mes": verdes más profundos para que el texto blanco resalte. */
+  --df-hero-grad: linear-gradient(135deg, #047857 0%, #065f46 100%);
+  --df-hero-fg: #ffffff;
+  --df-hero-chip: rgba(255, 255, 255, 0.14);
   --df-purple: #a78bfa;
   --df-indigo: #818cf8;
   --df-purple-subtle: rgba(124, 58, 237, 0.16);
@@ -149,6 +158,11 @@
   --df-brand-deep: #b6ffe9;
   --df-green-subtle: rgba(31, 216, 168, 0.14);
   --df-green-700: #4ade80;
+  /* Hero "Ventas del mes": en premium el neón satura; usamos un teal profundo
+     translúcido (glass) con texto claro, acorde al look del tema. */
+  --df-hero-grad: linear-gradient(135deg, rgba(20, 120, 98, 0.55) 0%, rgba(12, 78, 66, 0.62) 100%);
+  --df-hero-fg: #eafff8;
+  --df-hero-chip: rgba(31, 216, 168, 0.16);
   --df-purple: #B79BFF;
   --df-indigo: #8B93FF;
   --df-purple-subtle: rgba(139, 92, 246, 0.22);

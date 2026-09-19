@@ -2771,9 +2771,11 @@ export function useDealFlowState() {
   );
 
   const newOrders = orders.filter((o) => o.estado === 'Nuevo');
-  // Métricas REALES del día (zona horaria de Bogotá): total del pedido = total
-  // acordado por la IA o, si no, la suma de los ítems.
-  const totalPedido = (o: Order) => (o.total && o.total > 0 ? o.total : o.items.reduce((x, it) => x + it.qty * it.precio, 0));
+  // Valor de un pedido = suma de sus productos (cantidad × precio) + el envío.
+  // Se calcula igual que el panel de administrador (SUM(qty*precio) + envío) para
+  // que "ventas de hoy/del mes" concuerden con lo que ve el admin y reflejen el
+  // total de TODOS los productos, no el total suelto que a veces registra la IA.
+  const totalPedido = (o: Order) => o.items.reduce((x, it) => x + it.qty * it.precio, 0) + (o.envio || 0);
   const hoyStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const ayerStr = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const pedidosHoy = orders.filter((o) => (o.fecha || hoyStr) === hoyStr);
