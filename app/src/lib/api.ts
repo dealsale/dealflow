@@ -136,6 +136,19 @@ export interface ApiMensaje {
   mediaNombre?: string | null;
 }
 
+// Anuncio del que llegó un chat (atribución de campaña). Solo viene cuando el
+// cliente entró por una pauta (Click-to-WhatsApp / Click-to-Messenger/Instagram).
+export interface Anuncio {
+  id: string;
+  titular: string;
+  texto: string;
+  media: string;
+  mediaTipo: string;
+  url: string;
+  canal: string;
+  ts: string;
+}
+
 export interface ApiLead {
   id: string;
   nombre: string;
@@ -145,6 +158,7 @@ export interface ApiLead {
   etiqueta?: string;
   canal?: string;
   notaInterna?: string;
+  anuncio?: Anuncio | null;
   mensajes: ApiMensaje[];
   // Solo en modo resumen (sondeo liviano del Inbox): el servidor manda estos
   // en vez de todos los mensajes de cada chat.

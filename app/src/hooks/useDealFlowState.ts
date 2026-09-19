@@ -441,6 +441,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     etiqueta: l.etiqueta || '',
     canal: l.canal || 'whatsapp',
     notaInterna: l.notaInterna || '',
+    anuncio: l.anuncio || null,
     mensajes: mapApiMensajes(l.mensajes),
   }));
 }

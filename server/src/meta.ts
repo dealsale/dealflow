@@ -1,4 +1,5 @@
 import { db, uid, pj, registrarLog } from './db.js';
+import { guardarAdEnLead, refDesdeMeta, type MetaReferral } from './campana.js';
 
 /**
  * Canales de Meta Messaging: Facebook Messenger e Instagram DM.
@@ -77,16 +78,34 @@ export function handleMetaWebhook(object: 'page' | 'instagram', body: unknown): 
   for (const entry of b.entry || []) {
     const routeId = String(entry.id || '');
     for (const m of entry.messaging || []) {
-      const msg = m as { sender?: { id?: string }; message?: { text?: string; is_echo?: boolean; attachments?: { type?: string }[] }; read?: unknown; delivery?: unknown };
-      if (!msg.message || msg.message.is_echo) continue; // ecos de lo que enviamos nosotros: ignorar
+      const msg = m as {
+        sender?: { id?: string };
+        message?: { text?: string; is_echo?: boolean; attachments?: { type?: string }[]; referral?: MetaReferral };
+        referral?: MetaReferral;
+        postback?: { referral?: MetaReferral };
+        read?: unknown;
+        delivery?: unknown;
+      };
       const psid = String(msg.sender?.id || '');
       if (!psid || !routeId) continue;
       const destinatario = resolverPagina(routeId);
       if (!destinatario) { console.warn(`[meta] mensaje para una página no conectada (${routeId})`); continue; }
+      // Anuncio del que vino (pauta Click-to-Messenger/Instagram): puede llegar como
+      // evento propio de referral, dentro del mensaje o en un postback.
+      const ad = refDesdeMeta(msg.referral || msg.message?.referral || msg.postback?.referral, canal);
+      // Evento de referral SIN mensaje (el clic al anuncio llega antes que el texto):
+      // solo registramos de qué anuncio vino y esperamos el mensaje real.
+      if (ad && !msg.message) {
+        try { guardarAdEnLead(asegurarLeadMeta(destinatario.storeId, canal, routeId, psid, ''), ad); }
+        catch (e) { console.error('[meta] error guardando anuncio', e); }
+        continue;
+      }
+      if (!msg.message || msg.message.is_echo) continue; // ecos de lo que enviamos nosotros: ignorar
       const texto = String(msg.message.text || '').trim() || (msg.message.attachments?.length ? '[el cliente envió un archivo]' : '');
       if (!texto) continue;
       try {
         const leadId = asegurarLeadMeta(destinatario.storeId, canal, routeId, psid, '');
+        if (ad) guardarAdEnLead(leadId, ad);
         db.prepare('UPDATE leads SET seguimiento_nivel = 0 WHERE id = ?').run(leadId);
         db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'cliente', ?)").run(uid(), leadId, texto);
         void (async () => {
@@ -151,7 +170,7 @@ export async function conectarPaginasMeta(storeId: string, code: string): Promis
       try {
         await fetch(`${GRAPH}/${p.id}/subscribed_apps?access_token=${encodeURIComponent(p.access_token)}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscribed_fields: 'messages,messaging_postbacks,message_reactions,feed' }),
+          body: JSON.stringify({ subscribed_fields: 'messages,messaging_postbacks,messaging_referrals,message_reactions,feed' }),
         });
       } catch { /* seguimos: al menos guardamos la página */ }
       paginas.push({ pageId: p.id, nombre: p.name, token: p.access_token, igId: p.instagram_business_account?.id });

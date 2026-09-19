@@ -266,6 +266,7 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
     const base = {
       id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
       etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp', notaInterna: l.nota_interna || '',
+      anuncio: l.ad_ref ? pj<Record<string, unknown>>(l.ad_ref as string, null as never) : null,
     };
     if (!resumen) return { ...base, mensajes: mensajesDe(l.id as string) };
     const ult = db.prepare('SELECT texto, created_at FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1').get(l.id as string) as Record<string, unknown> | undefined;

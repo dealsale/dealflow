@@ -416,6 +416,13 @@ addColumn('users', "foto TEXT NOT NULL DEFAULT ''");
 addColumn('stores', 'tema_premium INTEGER NOT NULL DEFAULT 0');
 // Nota interna del chat (solo la ve el equipo, nunca el cliente).
 addColumn('leads', "nota_interna TEXT NOT NULL DEFAULT ''");
+// Atribución de campaña: cuando un chat entra por un anuncio (pauta Click-to-WhatsApp
+// o Click-to-Messenger/Instagram), Meta pega el "referral" en el primer mensaje. Lo
+// guardamos para saber de qué anuncio llegó cada cliente. ad_id sirve para el resumen
+// "chats por anuncio"; ad_ref guarda el detalle (titular, texto, miniatura, link) en JSON.
+addColumn('leads', "ad_id TEXT NOT NULL DEFAULT ''");
+addColumn('leads', "ad_ref TEXT NOT NULL DEFAULT ''");
+db.exec('CREATE INDEX IF NOT EXISTS idx_leads_ad ON leads(store_id, ad_id)');
 
 // Registro de actividad/errores por tienda (diagnóstico del Inbox): quién
 // disparó un flujo, si un envío falló y por qué, pedidos creados, etc.

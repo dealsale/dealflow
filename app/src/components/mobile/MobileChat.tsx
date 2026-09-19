@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { AttachButton, MediaContent } from '../MediaBubble';
 import { VoiceRecorder } from '../VoiceRecorder';
 import { ActivityLog } from '../ActivityLog';
-import { FlujosButton } from '../../sections/CRM';
+import { FlujosButton, AnuncioCard } from '../../sections/CRM';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function MobileChat({ df }: { df: DealFlowState }) {
@@ -77,6 +77,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
       )}
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {chat.anuncio && (chat.anuncio.titular || chat.anuncio.id || chat.anuncio.url) && <AnuncioCard anuncio={chat.anuncio} />}
         {chat.mensajesDecorated.map((m, i) => {
           const prev = chat.mensajesDecorated[i - 1];
           const nuevoDia = !!m.fecha && m.fecha !== (prev?.fecha || '');

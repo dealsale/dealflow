@@ -166,9 +166,23 @@ export interface Lead {
   canal?: string;
   /** Nota interna del equipo sobre este chat (nunca la ve el cliente). */
   notaInterna?: string;
+  /** Anuncio del que llegó el chat (atribución de campaña); null si es orgánico. */
+  anuncio?: Anuncio | null;
   /** Mensajes seguidos del cliente al final (lo calcula el servidor en modo resumen). */
   sinResponder?: number;
   mensajes: Mensaje[];
+}
+
+/** Anuncio del que vino un chat (pauta Click-to-WhatsApp / Messenger / Instagram). */
+export interface Anuncio {
+  id: string;
+  titular: string;
+  texto: string;
+  media: string;
+  mediaTipo: string;
+  url: string;
+  canal: string;
+  ts: string;
 }
 
 export type IntegrationEstado = 'conectado' | 'pronto' | 'disponible';

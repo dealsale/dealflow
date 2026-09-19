@@ -1,5 +1,6 @@
 import { db, uid, registrarLog } from './db.js';
 import { mediaExt, audioAOgg } from './media.js';
+import { guardarAdEnLead, refDesdeWhatsapp, type AdRef } from './campana.js';
 
 const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
 
@@ -42,8 +43,10 @@ function ensureLead(storeId: string, waId: string, nombre: string, tel?: string)
  * Guarda un mensaje entrante (texto y/o adjunto). Crea el lead si no existe.
  * La usan tanto el webhook de la Cloud API como la sesión por QR.
  */
-export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo, tel?: string) {
+export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo, tel?: string, ad?: AdRef | null) {
   const { id: leadId, nuevo } = ensureLead(storeId, waId, nombre, tel);
+  // Atribución de campaña: si el mensaje entró por un anuncio, lo guardamos en el lead.
+  if (ad) guardarAdEnLead(leadId, ad);
   db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)').run(
     uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null,
   );
@@ -205,6 +208,7 @@ interface WebhookMessage {
   video?: WebhookMedia;
   audio?: WebhookMedia;
   document?: WebhookMedia;
+  referral?: import('./campana.js').WhatsappReferral;
 }
 
 interface WebhookStatus {
@@ -294,8 +298,9 @@ export function handleIncomingWebhook(body: unknown) {
       for (const msg of value.messages) {
         const waId = msg.from;
         const nombre = value.contacts?.find((c) => c.wa_id === waId)?.profile?.name || '';
+        const ad = refDesdeWhatsapp(msg.referral); // anuncio del que vino (si es una pauta)
         if (msg.type === 'text' && msg.text?.body) {
-          saveIncomingMessage(store.store_id, waId, nombre, msg.text.body);
+          saveIncomingMessage(store.store_id, waId, nombre, msg.text.body, undefined, undefined, ad);
           continue;
         }
         const media = msg.image || msg.video || msg.audio || msg.document;
@@ -303,7 +308,7 @@ export function handleIncomingWebhook(body: unknown) {
           const tipo = msg.type === 'image' ? 'image' : msg.type === 'video' ? 'video' : msg.type === 'audio' ? 'audio' : 'document';
           const mime = media.mime_type || 'application/octet-stream';
           void descargarMediaCloud(store.store_id, store.access_token, media.id, tipo, mime).then((url) => {
-            saveIncomingMessage(store.store_id, waId, nombre, media.caption || '', url ? { tipo, url, mime, nombre: media.filename || '' } : undefined);
+            saveIncomingMessage(store.store_id, waId, nombre, media.caption || '', url ? { tipo, url, mime, nombre: media.filename || '' } : undefined, undefined, ad);
           });
         }
       }

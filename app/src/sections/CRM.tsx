@@ -6,8 +6,33 @@ import { Dropdown } from '../components/Dropdown';
 import { ActivityLog } from '../components/ActivityLog';
 import { useLazyList } from '../hooks/useLazyList';
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import type { Anuncio } from '../types';
 
 type EstadoPill = 'todos' | 'noleidos' | 'envivo' | 'esperando';
+
+/**
+ * Etiqueta de atribución de campaña: muestra de qué anuncio (pauta) llegó el chat,
+ * con miniatura y un botón para abrir el anuncio directo. Solo aparece cuando el
+ * cliente entró por una pauta (Click-to-WhatsApp / Messenger / Instagram).
+ */
+export function AnuncioCard({ anuncio }: { anuncio: Anuncio }) {
+  const titulo = anuncio.titular || 'Anuncio de campaña';
+  return (
+    <div style={{ display: 'flex', alignSelf: 'center', gap: 10, alignItems: 'center', maxWidth: 460, width: '100%', background: 'var(--df-brand-subtle)', border: '1px solid var(--df-brand-border)', borderRadius: 10, padding: 10, marginBottom: 4 }}>
+      {anuncio.media && (
+        <img src={anuncio.media} alt="" style={{ width: 46, height: 46, borderRadius: 8, objectFit: 'cover', flexShrink: 0, background: 'var(--df-surface-2)' }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+      )}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-brand-dark)', letterSpacing: '0.02em' }}>📢 Vino del anuncio</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--df-text-body)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={titulo}>{titulo}</div>
+        {anuncio.texto && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{anuncio.texto}</div>}
+      </div>
+      {anuncio.url && (
+        <a href={anuncio.url} target="_blank" rel="noreferrer" style={{ flexShrink: 0, textDecoration: 'none', background: 'var(--df-brand)', color: '#fff', borderRadius: 8, padding: '7px 12px', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>Ver anuncio</a>
+      )}
+    </div>
+  );
+}
 
 /**
  * Botón de "Flujos" del inbox: dispara manualmente un flujo. El principal es el
@@ -205,6 +230,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                   {c.canal === 'web' && <span title="Llegó por el chat web" style={{ fontSize: 11 }}>🌐</span>}
                   {c.canal === 'messenger' && <span title="Facebook Messenger" style={{ fontSize: 11 }}>💬</span>}
                   {c.canal === 'instagram' && <span title="Instagram DM" style={{ fontSize: 11 }}>📸</span>}
+                  {c.anuncio && (c.anuncio.titular || c.anuncio.id || c.anuncio.url) && <span title={`Vino del anuncio: ${c.anuncio.titular || 'campaña'}`} style={{ fontSize: 11 }}>📢</span>}
                   {c.etiquetaStyle && <span style={c.etiquetaStyle}>{c.etiqueta}</span>}
                   <span style={{ color: c.sinResponder ? 'var(--df-brand)' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11.5, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
                 </div>
@@ -279,6 +305,7 @@ export function CRM({ df }: { df: DealFlowState }) {
             </div>
 
             <div ref={scrollRef} style={{ flex: 1, background: 'var(--df-bg)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+              {chat.anuncio && (chat.anuncio.titular || chat.anuncio.id || chat.anuncio.url) && <AnuncioCard anuncio={chat.anuncio} />}
               {chat.mensajesDecorated.map((m, i) => {
                 const prev = chat.mensajesDecorated[i - 1];
                 const nuevoDia = !!m.fecha && m.fecha !== (prev?.fecha || '');
