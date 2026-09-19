@@ -2787,6 +2787,31 @@ export function useDealFlowState() {
     : 'igual que ayer';
   const resumenFecha = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Bogota' });
 
+  // ── Métricas del MES (motivante del resumen) ──
+  const mesStr = hoyStr.slice(0, 7); // 'YYYY-MM' del mes en curso (Bogotá)
+  const mesNombre = new Date(hoyStr + 'T12:00:00').toLocaleDateString('es-CO', { month: 'long', timeZone: 'America/Bogota' });
+  const [anioAct, mesAct] = mesStr.split('-').map(Number);
+  const dPrev = new Date(anioAct, mesAct - 2, 1); // mes anterior (mesAct es 1-based)
+  const mesAntStr = `${dPrev.getFullYear()}-${String(dPrev.getMonth() + 1).padStart(2, '0')}`;
+  const pedidosMesArr = orders.filter((o) => (o.fecha || hoyStr).slice(0, 7) === mesStr);
+  const pedidosMesAntArr = orders.filter((o) => (o.fecha || '').slice(0, 7) === mesAntStr);
+  const ventasMesRaw = pedidosMesArr.reduce((a, o) => a + totalPedido(o), 0);
+  const ventasMesAntRaw = pedidosMesAntArr.reduce((a, o) => a + totalPedido(o), 0);
+  const pedidosMesCount = pedidosMesArr.length;
+  const ticketPromRaw = pedidosMesCount ? Math.round(ventasMesRaw / pedidosMesCount) : 0;
+  const difMesPct = ventasMesAntRaw > 0 ? Math.round(((ventasMesRaw - ventasMesAntRaw) / ventasMesAntRaw) * 100) : null;
+  const ventasMesComparacion =
+    ventasMesRaw === 0 ? 'aún sin ventas este mes'
+    : difMesPct === null ? '¡tu primer mes con ventas! 🎉'
+    : difMesPct > 0 ? `↑ ${difMesPct}% vs. ${mesAntStr === mesStr ? 'el mes pasado' : 'el mes pasado'}`
+    : difMesPct < 0 ? `↓ ${-difMesPct}% vs. el mes pasado`
+    : 'igual que el mes pasado';
+  // Producto estrella del mes: el más pedido (por unidades).
+  const conteoProd = new Map<string, number>();
+  for (const o of pedidosMesArr) for (const it of o.items) conteoProd.set(it.nombre, (conteoProd.get(it.nombre) || 0) + (it.qty || 0));
+  let prodTopNombre = ''; let prodTopQty = 0;
+  for (const [n, q] of conteoProd) if (q > prodTopQty) { prodTopNombre = n; prodTopQty = q; }
+
   const filterList = ['Todos', ...ESTADOS_TODOS];
   const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   // Filtro por fecha del pedido (zona horaria de Bogot\u00e1).
@@ -3188,6 +3213,15 @@ export function useDealFlowState() {
     ventasComparacion,
     ventasComparacionColor: difAyer > 0 ? 'var(--df-brand)' : difAyer < 0 ? 'var(--df-danger)' : 'var(--df-text-muted)',
     resumenFecha,
+    // Métricas del mes (motivante del resumen).
+    mesNombre,
+    ventasMes: fmt(ventasMesRaw),
+    ventasMesComparacion,
+    ventasMesComparacionColor: difMesPct === null ? 'var(--df-brand)' : difMesPct > 0 ? 'var(--df-brand)' : difMesPct < 0 ? 'var(--df-danger)' : 'var(--df-text-muted)',
+    pedidosMesCount,
+    ticketPromedio: fmt(ticketPromRaw),
+    productoTopMes: prodTopNombre,
+    productoTopUnidades: prodTopQty,
     leadsCount: leadsSource.length,
     productCount: products.length,
     recentOrders,

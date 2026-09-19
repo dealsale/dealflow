@@ -65,6 +65,41 @@ export function Resumen({ df }: { df: DealFlowState }) {
         <div style={{ background: 'var(--df-brand-subtle-2)', border: '1px solid var(--df-brand-border)', color: 'var(--df-brand-dark)', borderRadius: 10, padding: '11px 14px', fontSize: 13, marginBottom: 18 }}>{df.suscMsg}</div>
       )}
 
+      {/* Motivante: total de ventas del mes + estadísticas clave. */}
+      <div
+        style={{
+          ...card,
+          marginBottom: 14,
+          background: 'linear-gradient(135deg, var(--df-brand) 0%, var(--df-brand-dark) 100%)',
+          border: 'none',
+          color: '#fff',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'capitalize', opacity: 0.9 }}>Ventas de {df.mesNombre}</div>
+            <div style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.05, marginTop: 2 }}>{df.ventasMes}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, opacity: 0.95 }}>{df.ventasMesComparacion}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ background: 'rgba(255,255,255,.16)', borderRadius: 10, padding: '10px 14px', minWidth: 120 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.9 }}>🧾 Pedidos del mes</div>
+              <div style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{df.pedidosMesCount}</div>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,.16)', borderRadius: 10, padding: '10px 14px', minWidth: 120 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.9 }}>🎯 Ticket promedio</div>
+              <div style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{df.ticketPromedio}</div>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,.16)', borderRadius: 10, padding: '10px 14px', minWidth: 140, maxWidth: 200 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.9 }}>⭐ Producto estrella</div>
+              <div style={{ fontSize: 15, fontWeight: 800, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={df.productoTopMes || undefined}>
+                {df.productoTopMes ? `${df.productoTopMes} (${df.productoTopUnidades})` : '—'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 22 }}>
         <div onClick={() => df.go('pedidos')} className="df-card-hover-amber" style={{ ...card, cursor: 'pointer' }}>
           <div style={{ color: 'var(--df-text-muted)', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Pedidos nuevos</div>
