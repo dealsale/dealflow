@@ -2822,11 +2822,11 @@ export function useDealFlowState() {
   );
 
   const newOrders = orders.filter((o) => o.estado === 'Nuevo');
-  // Valor de un pedido = suma de sus productos (cantidad × precio) + el envío.
-  // Se calcula igual que el panel de administrador (SUM(qty*precio) + envío) para
-  // que "ventas de hoy/del mes" concuerden con lo que ve el admin y reflejen el
-  // total de TODOS los productos, no el total suelto que a veces registra la IA.
-  const totalPedido = (o: Order) => o.items.reduce((x, it) => x + it.qty * it.precio, 0) + (o.envio || 0);
+  // Valor de un pedido = el TOTAL que realmente paga el cliente (o.total). Ese total
+  // ya contempla combos y promos (ej. "3 x $99.900"), así que NO se puede recalcular
+  // como cantidad × precio (eso triplicaría un combo). Solo si no hay total guardado
+  // se cae a la suma de los ítems + envío. Es el mismo valor que muestra Pedidos.
+  const totalPedido = (o: Order) => (o.total && o.total > 0 ? o.total : o.items.reduce((x, it) => x + it.qty * it.precio, 0) + (o.envio || 0));
   const hoyStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const ayerStr = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const pedidosHoy = orders.filter((o) => (o.fecha || hoyStr) === hoyStr);

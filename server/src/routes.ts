@@ -326,17 +326,17 @@ api.get('/stats', requireAuth, requireStore, (req, res) => {
   const F = "date(created_at, '-5 hours')";
   const FO = "date(o.created_at, '-5 hours')";
 
+  // Valor real de un pedido = el TOTAL que paga el cliente (o.total), que ya
+  // contempla combos/promos (ej. "3 x $99.900"). Solo si no hay total guardado se
+  // cae a la suma de ítems + envío. NUNCA cantidad × precio (triplicaría un combo).
+  const VAL = "(CASE WHEN o.total > 0 THEN o.total ELSE COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio END)";
   const num = (r: unknown) => Number((r as { n?: number })?.n || 0);
   const chats = num(db.prepare(`SELECT COUNT(*) n FROM leads WHERE store_id = ? AND ${F} BETWEEN ? AND ?`).get(sid, desde, hasta));
   const chatsAnuncio = num(db.prepare(`SELECT COUNT(*) n FROM leads WHERE store_id = ? AND ad_id != '' AND ${F} BETWEEN ? AND ?`).get(sid, desde, hasta));
   const pedidos = num(db.prepare(`SELECT COUNT(*) n FROM orders o WHERE store_id = ? AND ${FO} BETWEEN ? AND ?`).get(sid, desde, hasta));
-  const ventasItems = Number((db.prepare(
-    `SELECT COALESCE(SUM(oi.qty * oi.precio),0) t FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ?`,
+  const ventas = Number((db.prepare(
+    `SELECT COALESCE(SUM(${VAL}),0) t FROM orders o WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ?`,
   ).get(sid, desde, hasta) as { t: number }).t);
-  const ventasEnvio = Number((db.prepare(
-    `SELECT COALESCE(SUM(envio),0) t FROM orders o WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ?`,
-  ).get(sid, desde, hasta) as { t: number }).t);
-  const ventas = ventasItems + ventasEnvio;
 
   // Chats por canal.
   const porCanal = (db.prepare(
@@ -365,7 +365,7 @@ api.get('/stats', requireAuth, requireStore, (req, res) => {
   const pedidosPorAd = new Map<string, number>();
   let ventasAnuncioTotal = 0;
   for (const o of db.prepare(
-    `SELECT o.ad_id adId, o.ad_ref adRef, o.tel tel, COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio val FROM orders o WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ?`,
+    `SELECT o.ad_id adId, o.ad_ref adRef, o.tel tel, ${VAL} val FROM orders o WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ?`,
   ).all(sid, desde, hasta) as { adId: string; adRef: string; tel: string; val: number }[]) {
     const ad = o.adId || telAAd.get(normTel(o.tel));
     if (!ad) continue;
@@ -396,8 +396,7 @@ api.get('/stats', requireAuth, requireStore, (req, res) => {
   const seriePedidos = new Map<string, number>();
   for (const r of db.prepare(`SELECT ${FO} d, COUNT(*) n FROM orders o WHERE store_id = ? AND ${FO} BETWEEN ? AND ? GROUP BY d`).all(sid, desde, hasta) as { d: string; n: number }[]) seriePedidos.set(r.d, r.n);
   const serieVentas = new Map<string, number>();
-  for (const r of db.prepare(`SELECT ${FO} d, COALESCE(SUM(oi.qty*oi.precio),0) v FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ? GROUP BY d`).all(sid, desde, hasta) as { d: string; v: number }[]) serieVentas.set(r.d, r.v);
-  for (const r of db.prepare(`SELECT ${FO} d, COALESCE(SUM(envio),0) v FROM orders o WHERE store_id = ? AND ${FO} BETWEEN ? AND ? GROUP BY d`).all(sid, desde, hasta) as { d: string; v: number }[]) serieVentas.set(r.d, (serieVentas.get(r.d) || 0) + r.v);
+  for (const r of db.prepare(`SELECT ${FO} d, COALESCE(SUM(${VAL}),0) v FROM orders o WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ? GROUP BY d`).all(sid, desde, hasta) as { d: string; v: number }[]) serieVentas.set(r.d, r.v);
 
   // Lista continua de días del rango (con ceros donde no hubo actividad). Tope 366.
   const dias: { fecha: string; chats: number; pedidos: number; ventas: number }[] = [];
@@ -1144,10 +1143,9 @@ api.get('/admin/overview', requireAuth, requireAdmin, (_req, res) => {
   // Las tiendas ocultas (fantasma) no aparecen para el admin normal.
   const stores = (db.prepare('SELECT * FROM stores WHERE COALESCE(oculta,0) = 0 ORDER BY created_at').all() as Record<string, unknown>[]).map((s) => {
     const ventas = db.prepare(
-      `SELECT COALESCE(SUM(oi.qty * oi.precio), 0) + COALESCE((SELECT SUM(envio) FROM orders WHERE store_id = ? AND created_at >= date('now','start of month')), 0) AS total
-       FROM order_items oi JOIN orders o ON o.id = oi.order_id
-       WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
-    ).get(s.id, s.id) as { total: number };
+      `SELECT COALESCE(SUM(CASE WHEN o.total > 0 THEN o.total ELSE COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio END), 0) AS total
+       FROM orders o WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
+    ).get(s.id) as { total: number };
     return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, creditos: s.creditos || 0, temaPremium: !!s.tema_premium };
   });
   const plans = (db.prepare('SELECT * FROM plans').all() as Record<string, unknown>[]).map((p) => ({
@@ -1217,8 +1215,8 @@ api.get('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
   const porEstado = db.prepare('SELECT estado, COUNT(*) n FROM orders WHERE store_id = ? GROUP BY estado').all(id) as { estado: string; n: number }[];
   const pedidos = (db.prepare('SELECT COUNT(*) n FROM orders WHERE store_id = ?').get(id) as { n: number }).n;
   const ventasMes = (db.prepare(
-    `SELECT COALESCE(SUM(oi.qty * oi.precio),0) t FROM order_items oi JOIN orders o ON o.id = oi.order_id
-     WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
+    `SELECT COALESCE(SUM(CASE WHEN o.total > 0 THEN o.total ELSE COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio END),0) t
+     FROM orders o WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
   ).get(id) as { t: number }).t;
   const recientes = (db.prepare('SELECT numero, cliente, estado, total, created_at FROM orders WHERE store_id = ? ORDER BY numero DESC LIMIT 5').all(id) as Record<string, unknown>[])
     .map((o) => ({ id: 'DF-' + o.numero, cliente: o.cliente, estado: o.estado, total: o.total, fecha: String(o.created_at).slice(0, 10) }));
@@ -1526,8 +1524,8 @@ api.get('/superadmin/stores', requireAuth, requireAdmin, (_req, res) => {
   // Excluimos la tienda interna "master" de la biblioteca (no es una tienda real).
   const stores = (db.prepare('SELECT * FROM stores WHERE id != ? ORDER BY created_at').all(MASTER_STORE_ID) as Record<string, unknown>[]).map((s) => {
     const ventas = (db.prepare(
-      `SELECT COALESCE(SUM(oi.qty * oi.precio),0) t FROM order_items oi JOIN orders o ON o.id = oi.order_id
-       WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
+      `SELECT COALESCE(SUM(CASE WHEN o.total > 0 THEN o.total ELSE COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio END),0) t
+       FROM orders o WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
     ).get(s.id) as { t: number }).t;
     return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas, activa: !!s.activa, oculta: !!s.oculta };
   });
