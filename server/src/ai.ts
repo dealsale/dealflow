@@ -729,8 +729,10 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
   const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 1048) + 1;
   const oid = uid();
-  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento) VALUES (?,?,?,?,?,?,?,?,?,?)')
-    .run(oid, storeId, numero, cliente, ciudad, lead.tel || '', direccion, 'Nuevo', total, departamento);
+  // Atribución exacta: copiamos el anuncio del que vino este chat al pedido.
+  const adLead = db.prepare('SELECT ad_id, ad_ref FROM leads WHERE id = ?').get(lead.id) as { ad_id: string; ad_ref: string } | undefined;
+  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, ad_id, ad_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(oid, storeId, numero, cliente, ciudad, lead.tel || '', direccion, 'Nuevo', total, departamento, adLead?.ad_id || '', adLead?.ad_ref || '');
   for (const it of items) {
     db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   }

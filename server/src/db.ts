@@ -423,6 +423,11 @@ addColumn('leads', "nota_interna TEXT NOT NULL DEFAULT ''");
 addColumn('leads', "ad_id TEXT NOT NULL DEFAULT ''");
 addColumn('leads', "ad_ref TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_leads_ad ON leads(store_id, ad_id)');
+// Atribución de venta: el pedido guarda el anuncio del que vino su cliente en el
+// momento de crearse (enlace exacto al chat), no por adivinar el teléfono después.
+addColumn('orders', "ad_id TEXT NOT NULL DEFAULT ''");
+addColumn('orders', "ad_ref TEXT NOT NULL DEFAULT ''");
+db.exec('CREATE INDEX IF NOT EXISTS idx_orders_ad ON orders(store_id, ad_id)');
 
 // Registro de actividad/errores por tienda (diagnóstico del Inbox): quién
 // disparó un flujo, si un envío falló y por qué, pedidos creados, etc.

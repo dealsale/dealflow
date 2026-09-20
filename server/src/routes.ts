@@ -358,15 +358,18 @@ api.get('/stats', requireAuth, requireStore, (req, res) => {
     const k = normTel(l.tel) || normTel(l.wa_id);
     if (k.length >= 7) telAAd.set(k, l.ad_id); // el último que clicó ese anuncio con ese teléfono
   }
-  // Ventas atribuidas: cada pedido del rango se asigna al anuncio del que vino su cliente (por teléfono).
+  // Ventas atribuidas: cada pedido del rango se asigna al anuncio del que vino su
+  // cliente. Se usa el anuncio guardado en el pedido (enlace exacto al chat) y, si
+  // el pedido es viejo y no lo tiene, se cae al emparejamiento por teléfono.
   const ventasPorAd = new Map<string, number>();
   const pedidosPorAd = new Map<string, number>();
   let ventasAnuncioTotal = 0;
   for (const o of db.prepare(
-    `SELECT o.tel tel, COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio val FROM orders o WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ?`,
-  ).all(sid, desde, hasta) as { tel: string; val: number }[]) {
-    const ad = telAAd.get(normTel(o.tel));
+    `SELECT o.ad_id adId, o.ad_ref adRef, o.tel tel, COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio val FROM orders o WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ?`,
+  ).all(sid, desde, hasta) as { adId: string; adRef: string; tel: string; val: number }[]) {
+    const ad = o.adId || telAAd.get(normTel(o.tel));
     if (!ad) continue;
+    if (o.adRef && !refDeAd.has(ad)) refDeAd.set(ad, o.adRef); // por si el anuncio ya no tiene chats en el rango
     ventasPorAd.set(ad, (ventasPorAd.get(ad) || 0) + o.val);
     pedidosPorAd.set(ad, (pedidosPorAd.get(ad) || 0) + 1);
     ventasAnuncioTotal += o.val;
@@ -620,8 +623,13 @@ api.post('/orders', requireAuth, requireStore, (req, res) => {
   const total = b.total != null && Number(b.total) > 0 ? Math.round(Number(b.total)) : totalItems + envio;
   const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(sid) as { n: number | null }).n || 1048) + 1;
   const oid = uid();
-  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, envio, nota) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(oid, sid, numero, cliente, String(b.ciudad || ''), String(b.tel || ''), String(b.direccion || ''), 'Nuevo', total, String(b.departamento || ''), envio, String(b.nota || ''));
+  // Atribución: si hay un chat con ese teléfono que vino de un anuncio, lo copiamos.
+  const telNorm = String(b.tel || '').replace(/\D/g, '').slice(-10);
+  const adLead = telNorm.length >= 7
+    ? db.prepare("SELECT ad_id, ad_ref FROM leads WHERE store_id = ? AND ad_id != '' AND replace(replace(replace(replace(tel,'+',''),' ',''),'-',''),'(','') LIKE ? ORDER BY created_at DESC LIMIT 1").get(sid, '%' + telNorm) as { ad_id: string; ad_ref: string } | undefined
+    : undefined;
+  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, envio, nota, ad_id, ad_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(oid, sid, numero, cliente, String(b.ciudad || ''), String(b.tel || ''), String(b.direccion || ''), 'Nuevo', total, String(b.departamento || ''), envio, String(b.nota || ''), adLead?.ad_id || '', adLead?.ad_ref || '');
   for (const it of limpios) db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   registrarLog(sid, 'info', 'pedido', `Pedido manual DF-${numero} creado para ${cliente} (${limpios.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`);
   {
