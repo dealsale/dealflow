@@ -258,6 +258,23 @@ export function Login({ df }: { df: DealFlowState }) {
             Admin: <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>admin@dealflow.co · admin123</span>
           </div>
         )}
+
+        {/* Redes sociales + legales */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
+          <a href="https://www.instagram.com/dealflow444" target="_blank" rel="noopener" aria-label="Instagram de DealFlow" title="Instagram"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 10, border: '1px solid var(--df-border)', color: 'var(--df-text-muted)' }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none" /></svg>
+          </a>
+          <a href="https://www.facebook.com/dealflowsbs/" target="_blank" rel="noopener" aria-label="Facebook de DealFlow" title="Facebook"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 10, border: '1px solid var(--df-border)', color: 'var(--df-text-muted)' }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M14 8.5V7c0-.8.2-1.2 1.3-1.2H17V3h-2.5c-2.6 0-3.7 1.5-3.7 3.6v1.9H9V11h1.8v9H14v-9h2.2l.4-2.5H14Z" /></svg>
+          </a>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 10, fontSize: 12, color: 'var(--df-text-faint)' }}>
+          <a href="/legal/privacidad.html" target="_blank" rel="noopener" style={{ color: 'var(--df-text-muted)' }}>Privacidad</a>
+          {' · '}
+          <a href="/legal/terminos.html" target="_blank" rel="noopener" style={{ color: 'var(--df-text-muted)' }}>Términos</a>
+        </div>
       </div>
     </div>
   );
