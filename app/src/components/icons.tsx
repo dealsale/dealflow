@@ -18,6 +18,17 @@ export function IconResumen() {
   );
 }
 
+export function IconEstadisticas() {
+  return (
+    <svg {...common}>
+      <path d="M3 3v18h18"></path>
+      <rect x="7" y="12" width="3" height="5" rx="0.6"></rect>
+      <rect x="12.5" y="8" width="3" height="9" rx="0.6"></rect>
+      <rect x="18" y="5" width="3" height="12" rx="0.6"></rect>
+    </svg>
+  );
+}
+
 export function IconProductos() {
   return (
     <svg {...common}>

@@ -343,14 +343,49 @@ api.get('/stats', requireAuth, requireStore, (req, res) => {
     `SELECT COALESCE(NULLIF(canal,''),'whatsapp') canal, COUNT(*) n FROM leads WHERE store_id = ? AND ${F} BETWEEN ? AND ? GROUP BY canal ORDER BY n DESC`,
   ).all(sid, desde, hasta) as { canal: string; n: number }[]);
 
-  // Top anuncios por cantidad de chats.
-  const topRaw = (db.prepare(
-    `SELECT ad_id, MAX(ad_ref) ref, COUNT(*) n FROM leads WHERE store_id = ? AND ad_id != '' AND ${F} BETWEEN ? AND ? GROUP BY ad_id ORDER BY n DESC LIMIT 12`,
-  ).all(sid, desde, hasta) as { ad_id: string; ref: string; n: number }[]);
-  const topAnuncios = topRaw.map((r) => {
-    const a = pj<{ titular?: string; canal?: string; url?: string; media?: string }>(r.ref || '', {});
-    return { id: r.ad_id, titular: a.titular || 'Anuncio', canal: a.canal || '', url: a.url || '', media: a.media || '', chats: r.n };
-  });
+  // ── Estadística de anuncios: chats Y ventas por pauta ──
+  // Chats por anuncio (en el rango).
+  const chatsPorAd = new Map<string, number>();
+  for (const r of db.prepare(
+    `SELECT ad_id, COUNT(*) n FROM leads WHERE store_id = ? AND ad_id != '' AND ${F} BETWEEN ? AND ? GROUP BY ad_id`,
+  ).all(sid, desde, hasta) as { ad_id: string; n: number }[]) chatsPorAd.set(r.ad_id, r.n);
+  // Datos del anuncio (titular, miniatura, link…): el ref más reciente de cada uno.
+  const refDeAd = new Map<string, string>();
+  const telAAd = new Map<string, string>(); // teléfono normalizado → anuncio (para atribuir ventas)
+  const normTel = (t: string) => String(t || '').replace(/\D/g, '').slice(-10);
+  for (const l of db.prepare("SELECT tel, wa_id, ad_id, ad_ref FROM leads WHERE store_id = ? AND ad_id != '' ORDER BY created_at").all(sid) as { tel: string; wa_id: string; ad_id: string; ad_ref: string }[]) {
+    refDeAd.set(l.ad_id, l.ad_ref);
+    const k = normTel(l.tel) || normTel(l.wa_id);
+    if (k.length >= 7) telAAd.set(k, l.ad_id); // el último que clicó ese anuncio con ese teléfono
+  }
+  // Ventas atribuidas: cada pedido del rango se asigna al anuncio del que vino su cliente (por teléfono).
+  const ventasPorAd = new Map<string, number>();
+  const pedidosPorAd = new Map<string, number>();
+  let ventasAnuncioTotal = 0;
+  for (const o of db.prepare(
+    `SELECT o.tel tel, COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio val FROM orders o WHERE o.store_id = ? AND ${FO} BETWEEN ? AND ?`,
+  ).all(sid, desde, hasta) as { tel: string; val: number }[]) {
+    const ad = telAAd.get(normTel(o.tel));
+    if (!ad) continue;
+    ventasPorAd.set(ad, (ventasPorAd.get(ad) || 0) + o.val);
+    pedidosPorAd.set(ad, (pedidosPorAd.get(ad) || 0) + 1);
+    ventasAnuncioTotal += o.val;
+  }
+  // Une los anuncios con chats y/o ventas en el rango.
+  const idsAnuncios = new Set<string>([...chatsPorAd.keys(), ...ventasPorAd.keys()]);
+  const topAnuncios = [...idsAnuncios].map((id) => {
+    const a = pj<{ titular?: string; canal?: string; url?: string; media?: string }>(refDeAd.get(id) || '', {});
+    return {
+      id,
+      titular: a.titular || 'Anuncio',
+      canal: a.canal || '',
+      url: a.url || '',
+      media: a.media || '',
+      chats: chatsPorAd.get(id) || 0,
+      ventas: ventasPorAd.get(id) || 0,
+      pedidos: pedidosPorAd.get(id) || 0,
+    };
+  }).sort((x, y) => y.chats - x.chats || y.ventas - x.ventas).slice(0, 20);
 
   // Series diarias (para los gráficos): chats, pedidos y ventas por día.
   const serieChats = new Map<string, number>();
@@ -378,6 +413,7 @@ api.get('/stats', requireAuth, requireStore, (req, res) => {
       chatsOrganicos: Math.max(0, chats - chatsAnuncio),
       pedidos,
       ventas,
+      ventasAnuncio: ventasAnuncioTotal, // ventas atribuidas a anuncios (por teléfono)
       ticketPromedio: pedidos ? Math.round(ventas / pedidos) : 0,
       conversion: chats ? Math.round((pedidos / chats) * 1000) / 10 : 0, // % con 1 decimal
     },

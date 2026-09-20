@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { fmt } from '../lib/format';
 import { LineChart, GroupedBars, Donut, TopAnuncios, PALETA } from '../components/Charts';
@@ -37,6 +38,7 @@ function Kpi({ label, valor, sub, color }: { label: string; valor: string; sub?:
 export function Estadisticas({ df }: { df: DealFlowState }) {
   const s = df.stats;
   const t = s?.totales;
+  const [ordenAds, setOrdenAds] = useState<'chats' | 'ventas'>('chats');
   const chip = (active: boolean): React.CSSProperties => ({
     background: active ? 'var(--df-brand)' : 'var(--df-surface)',
     color: active ? '#fff' : 'var(--df-text-body)',
@@ -101,11 +103,24 @@ export function Estadisticas({ df }: { df: DealFlowState }) {
               <Donut data={canalData} />
             </div>
             <div style={card}>
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Anuncios con más chats</div>
-              <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 14 }}>Cuáles pautas te traen más conversaciones.</div>
-              {topAds.length ? <TopAnuncios data={topAds} /> : (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>Estadística de anuncios</div>
+                <div style={{ marginLeft: 'auto', display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 8, overflow: 'hidden' }}>
+                  {(['chats', 'ventas'] as const).map((o) => (
+                    <button key={o} onClick={() => setOrdenAds(o)}
+                      style={{ background: ordenAds === o ? 'var(--df-brand)' : 'var(--df-surface)', color: ordenAds === o ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      {o === 'chats' ? 'Por chats' : 'Por ventas'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', margin: '4px 0 14px' }}>
+                Qué pauta genera más chats y cuánto dinero produce cada una.
+                {(t?.ventasAnuncio ?? 0) > 0 && <> Ventas atribuidas a anuncios: <strong style={{ color: 'var(--df-brand-dark)' }}>{fmt(t?.ventasAnuncio ?? 0)}</strong>.</>}
+              </div>
+              {topAds.length ? <TopAnuncios data={topAds} orden={ordenAds} /> : (
                 <div style={{ color: 'var(--df-text-faint)', fontSize: 13, padding: '18px 0' }}>
-                  Aún no hay chats que hayan entrado por un anuncio en este periodo.
+                  Aún no hay chats ni ventas que hayan entrado por un anuncio en este periodo.
                 </div>
               )}
             </div>

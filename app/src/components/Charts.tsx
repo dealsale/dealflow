@@ -194,25 +194,24 @@ export function HBars({ data }: { data: { label: string; valor: number; sub?: st
   );
 }
 
-/** Top de anuncios con miniatura, barra de chats y clic para abrir el anuncio. */
-export function TopAnuncios({ data }: {
-  data: { id: string; titular: string; canal: string; url: string; media: string; chats: number }[];
-}) {
+export interface AnuncioStat { id: string; titular: string; canal: string; url: string; media: string; chats: number; ventas: number; pedidos: number }
+
+/** Top de anuncios con miniatura, barra (por chats o por ventas) y clic para abrir. */
+export function TopAnuncios({ data, orden = 'chats' }: { data: AnuncioStat[]; orden?: 'chats' | 'ventas' }) {
   if (!data.length) return <SinDatos alto={140} />;
-  const max = Math.max(1, ...data.map((d) => d.chats));
+  const val = (d: AnuncioStat) => (orden === 'ventas' ? d.ventas : d.chats);
+  const filas = [...data].sort((a, b) => val(b) - val(a));
+  const max = Math.max(1, ...filas.map(val));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {data.map((d, i) => (
-        <AdRow key={d.id || i} d={d} color={PALETA[i % PALETA.length]} pct={(d.chats / max) * 100} />
+      {filas.map((d, i) => (
+        <AdRow key={d.id || i} d={d} color={PALETA[i % PALETA.length]} pct={(val(d) / max) * 100} orden={orden} />
       ))}
     </div>
   );
 }
 
-function AdRow({ d, color, pct }: {
-  d: { id: string; titular: string; canal: string; url: string; media: string; chats: number };
-  color: string; pct: number;
-}) {
+function AdRow({ d, color, pct, orden }: { d: AnuncioStat; color: string; pct: number; orden: 'chats' | 'ventas' }) {
   const [imgOk, setImgOk] = useState(true);
   const clickable = !!d.url;
   const abrir = () => { if (d.url) window.open(d.url, '_blank', 'noopener'); };
@@ -235,14 +234,15 @@ function AdRow({ d, color, pct }: {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--df-text-body)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.titular}</span>
-          <span style={{ fontSize: 13, fontWeight: 800 }}>{d.chats}</span>
+          <span style={{ fontSize: 13, fontWeight: 800 }}>{orden === 'ventas' ? money(d.ventas) : d.chats}</span>
         </div>
         <div style={{ height: 8, borderRadius: 999, background: 'var(--df-surface-2)', overflow: 'hidden', margin: '5px 0 4px' }}>
           <div style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: color }} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {d.canal && <span style={{ fontSize: 10.5, color: 'var(--df-text-faint)', textTransform: 'capitalize' }}>{d.canal}</span>}
-          {d.id && <span style={{ fontSize: 10.5, color: 'var(--df-text-faint)', fontFamily: "'JetBrains Mono',monospace" }}>#{String(d.id).slice(-6)}</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 600 }}>💬 {d.chats}</span>
+          <span style={{ fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 600 }}>🛒 {d.pedidos}</span>
+          <span style={{ fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 600 }}>💰 {money(d.ventas)}</span>
           {clickable && <span style={{ fontSize: 11, color: 'var(--df-brand-dark)', fontWeight: 700, marginLeft: 'auto' }}>Ver anuncio ↗</span>}
         </div>
       </div>
