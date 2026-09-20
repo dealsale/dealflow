@@ -492,7 +492,7 @@ export interface Estadisticas {
   };
   serie: { fecha: string; chats: number; pedidos: number; ventas: number }[];
   porCanal: { canal: string; n: number }[];
-  topAnuncios: { id: string; titular: string; canal: string; url: string; chats: number }[];
+  topAnuncios: { id: string; titular: string; canal: string; url: string; media: string; chats: number }[];
 }
 export const apiStats = (desde: string, hasta: string) =>
   req<Estadisticas>(`/api/stats?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, 'GET');

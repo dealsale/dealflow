@@ -1,6 +1,6 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { fmt } from '../lib/format';
-import { LineChart, GroupedBars, Donut, HBars, PALETA } from '../components/Charts';
+import { LineChart, GroupedBars, Donut, TopAnuncios, PALETA } from '../components/Charts';
 
 const card: React.CSSProperties = {
   background: 'var(--df-surface)',
@@ -47,7 +47,7 @@ export function Estadisticas({ df }: { df: DealFlowState }) {
 
   const ventasSerie = (s?.serie || []).map((d) => ({ fecha: d.fecha, valor: d.ventas }));
   const canalData = (s?.porCanal || []).map((c) => ({ label: c.canal, valor: c.n, color: COLOR_CANAL[c.canal] || PALETA[5] }));
-  const topAds = (s?.topAnuncios || []).map((a) => ({ label: a.titular, valor: a.chats, sub: a.canal || undefined }));
+  const topAds = s?.topAnuncios || [];
 
   return (
     <section data-screen-label="Estadísticas">
@@ -103,7 +103,7 @@ export function Estadisticas({ df }: { df: DealFlowState }) {
             <div style={card}>
               <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Anuncios con más chats</div>
               <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 14 }}>Cuáles pautas te traen más conversaciones.</div>
-              {topAds.length ? <HBars data={topAds} /> : (
+              {topAds.length ? <TopAnuncios data={topAds} /> : (
                 <div style={{ color: 'var(--df-text-faint)', fontSize: 13, padding: '18px 0' }}>
                   Aún no hay chats que hayan entrado por un anuncio en este periodo.
                 </div>

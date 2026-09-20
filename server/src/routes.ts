@@ -348,8 +348,8 @@ api.get('/stats', requireAuth, requireStore, (req, res) => {
     `SELECT ad_id, MAX(ad_ref) ref, COUNT(*) n FROM leads WHERE store_id = ? AND ad_id != '' AND ${F} BETWEEN ? AND ? GROUP BY ad_id ORDER BY n DESC LIMIT 12`,
   ).all(sid, desde, hasta) as { ad_id: string; ref: string; n: number }[]);
   const topAnuncios = topRaw.map((r) => {
-    const a = pj<{ titular?: string; canal?: string; url?: string }>(r.ref || '', {});
-    return { id: r.ad_id, titular: a.titular || 'Anuncio', canal: a.canal || '', url: a.url || '', chats: r.n };
+    const a = pj<{ titular?: string; canal?: string; url?: string; media?: string }>(r.ref || '', {});
+    return { id: r.ad_id, titular: a.titular || 'Anuncio', canal: a.canal || '', url: a.url || '', media: a.media || '', chats: r.n };
   });
 
   // Series diarias (para los gráficos): chats, pedidos y ventas por día.

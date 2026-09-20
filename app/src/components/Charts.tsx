@@ -194,6 +194,62 @@ export function HBars({ data }: { data: { label: string; valor: number; sub?: st
   );
 }
 
+/** Top de anuncios con miniatura, barra de chats y clic para abrir el anuncio. */
+export function TopAnuncios({ data }: {
+  data: { id: string; titular: string; canal: string; url: string; media: string; chats: number }[];
+}) {
+  if (!data.length) return <SinDatos alto={140} />;
+  const max = Math.max(1, ...data.map((d) => d.chats));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {data.map((d, i) => (
+        <AdRow key={d.id || i} d={d} color={PALETA[i % PALETA.length]} pct={(d.chats / max) * 100} />
+      ))}
+    </div>
+  );
+}
+
+function AdRow({ d, color, pct }: {
+  d: { id: string; titular: string; canal: string; url: string; media: string; chats: number };
+  color: string; pct: number;
+}) {
+  const [imgOk, setImgOk] = useState(true);
+  const clickable = !!d.url;
+  const abrir = () => { if (d.url) window.open(d.url, '_blank', 'noopener'); };
+  return (
+    <div
+      onClick={clickable ? abrir : undefined}
+      title={clickable ? 'Abrir el anuncio' : d.titular}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 11, padding: 8, borderRadius: 10,
+        border: '1px solid var(--df-border)', background: 'var(--df-surface)',
+        cursor: clickable ? 'pointer' : 'default',
+      }}
+    >
+      {/* Miniatura del anuncio (o marcador si no hay imagen / falla la carga). */}
+      <div style={{ width: 52, height: 52, borderRadius: 8, flexShrink: 0, background: 'var(--df-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {d.media && imgOk
+          ? <img src={d.media} alt="" onError={() => setImgOk(false)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : <span style={{ fontSize: 20 }}>📢</span>}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--df-text-body)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.titular}</span>
+          <span style={{ fontSize: 13, fontWeight: 800 }}>{d.chats}</span>
+        </div>
+        <div style={{ height: 8, borderRadius: 999, background: 'var(--df-surface-2)', overflow: 'hidden', margin: '5px 0 4px' }}>
+          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: color }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {d.canal && <span style={{ fontSize: 10.5, color: 'var(--df-text-faint)', textTransform: 'capitalize' }}>{d.canal}</span>}
+          {d.id && <span style={{ fontSize: 10.5, color: 'var(--df-text-faint)', fontFamily: "'JetBrains Mono',monospace" }}>#{String(d.id).slice(-6)}</span>}
+          {clickable && <span style={{ fontSize: 11, color: 'var(--df-brand-dark)', fontWeight: 700, marginLeft: 'auto' }}>Ver anuncio ↗</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SinDatos({ alto }: { alto: number }) {
   return (
     <div style={{ height: alto, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--df-text-faint)', fontSize: 13 }}>
