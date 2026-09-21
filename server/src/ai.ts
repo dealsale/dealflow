@@ -686,6 +686,81 @@ function pedidoDesdeResumen(leadId: string): string {
 }
 
 /** Registra el pedido cuando la IA cierra la venta y le confirma al cliente. Devuelve true si lo creó. */
+export interface PedidoItem { qty: number; nombre: string; precio: number }
+export interface PedidoExtraido { cliente: string; departamento: string; ciudad: string; direccion: string; items: PedidoItem[]; total: number }
+
+/**
+ * Convierte el "inner" de un ##PEDIDO (o del resumen) en datos estructurados,
+ * casando cada ítem con un producto de la tienda para tomar su precio. NO escribe
+ * nada: se usa para el flujo de "completar pedido desde el chat" (con revisión).
+ */
+export function parsearPedidoInner(storeId: string, inner: string): PedidoExtraido {
+  const productRows = db.prepare('SELECT nombre, precio FROM products WHERE store_id = ?').all(storeId) as Record<string, unknown>[];
+  const cliente = campoPedido(inner, 'cliente');
+  const ciudad = campoPedido(inner, 'ciudad');
+  const direccion = campoPedido(inner, 'direccion');
+  const departamento = campoPedido(inner, 'departamento');
+  const itemsRaw = campoPedido(inner, 'items');
+  const partes: string[] = [];
+  let buf = ''; let dentro = 0;
+  for (const ch of itemsRaw) {
+    if (ch === '(') dentro++;
+    if (ch === ')') dentro = Math.max(0, dentro - 1);
+    if (ch === ',' && dentro === 0) { partes.push(buf); buf = ''; } else buf += ch;
+  }
+  if (buf.trim()) partes.push(buf);
+  const items = partes.map((s) => s.trim()).filter(Boolean).map((it) => {
+    const mm = it.match(/(\d+)\s*[xX×]\s*(.+)/);
+    const qty = mm ? parseInt(mm[1], 10) || 1 : 1;
+    const completo = limpiarValor(mm ? mm[2] : it);
+    const base = completo.split('(')[0].split('—')[0].trim().toLowerCase();
+    const prod = productRows.find((p) => String(p.nombre).toLowerCase() === base)
+      || productRows.find((p) => String(p.nombre).toLowerCase().includes(base) || base.includes(String(p.nombre).toLowerCase()));
+    return { qty, nombre: completo, precio: prod ? Number(prod.precio) : 0 };
+  }).filter((i) => i.nombre);
+  const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
+  return { cliente, departamento, ciudad, direccion, items, total };
+}
+
+/**
+ * Lee la conversación de un chat y pide a la IA extraer el pedido como marcador
+ * ##PEDIDO. Primero intenta reconstruirlo del "Resumen de tu pedido" (determinista)
+ * y, si no hay, usa el modelo. Devuelve el "inner" (sin escribir nada) o ''.
+ */
+export async function extraerPedidoDelChat(storeId: string, leadId: string): Promise<string> {
+  // 1) Intento determinista: el resumen que ya envió el bot.
+  const porResumen = pedidoDesdeResumen(leadId);
+  if (porResumen) return porResumen;
+  // 2) IA sobre la conversación.
+  const ia = resolverTexto(storeId);
+  if (!ia) return '';
+  const productos = (db.prepare('SELECT nombre, precio FROM products WHERE store_id = ? LIMIT 80').all(storeId) as { nombre: string; precio: number }[])
+    .map((p) => `- ${p.nombre}: ${Number(p.precio) > 0 ? '$' + Number(p.precio).toLocaleString('es-CO') : 'gratis'}`).join('\n');
+  const historia = (db.prepare('SELECT de, texto, tipo FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 40').all(leadId) as { de: string; texto: string; tipo: string }[])
+    .reverse()
+    .map((m) => `${m.de === 'cliente' ? 'CLIENTE' : 'TIENDA'}: ${(m.texto || '').trim() || `[${m.tipo}]`}`)
+    .filter((l) => l.length > 8)
+    .join('\n');
+  if (!historia.trim()) return '';
+  const system = `Eres un extractor de pedidos de una tienda por WhatsApp en Colombia. Te doy una conversación y el catálogo. Devuelve EXCLUSIVAMENTE una línea con el marcador, sin explicaciones ni texto extra:
+##PEDIDO cliente="Nombre y apellido"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre EXACTO del catálogo (Talla M · Negro), 1x Otro producto (Talla L · Rojo)"; total="139900"##
+Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. Si un dato no está, déjalo vacío ("" ). En items pon la cantidad, el nombre EXACTO del catálogo y entre paréntesis la talla y el color que el cliente pidió. En total pon el valor final acordado (solo números). Si no hay un pedido real en la conversación, responde exactamente: SIN_PEDIDO`;
+  try {
+    const res = await fetch(ia.url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: system }, { role: 'user', content: `CATÁLOGO:\n${productos || '(sin productos)'}\n\nCONVERSACIÓN:\n${historia}` }], max_tokens: 320, temperature: 0 }),
+    });
+    if (!res.ok) return '';
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    let out = (body.choices?.[0]?.message?.content || '').trim();
+    out = desenvolver(out) || out;
+    if (/SIN_PEDIDO/i.test(out)) return '';
+    const m = out.match(/##PEDIDO(.*?)##/s);
+    return m ? m[1] : (/(cliente|items)\s*=/.test(out) ? out : '');
+  } catch { return ''; }
+}
+
 async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<boolean> {
   const cliente = campoPedido(inner, 'cliente') || lead.nombre || 'Cliente';
   const ciudad = campoPedido(inner, 'ciudad');

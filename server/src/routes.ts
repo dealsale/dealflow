@@ -1000,6 +1000,52 @@ api.post('/leads/:id/flujo-inicial', requireAuth, requireStore, async (req, res)
   res.json({ ok: true });
 });
 
+// Extrae (con IA + el resumen del chat) el pedido de una conversación para
+// REVISAR y completar un pedido existente. No escribe nada.
+api.post('/leads/:id/extraer-pedido', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const l = db.prepare('SELECT id, nombre, tel FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, sid) as { id: string; nombre: string; tel: string } | undefined;
+  if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
+  const { extraerPedidoDelChat, parsearPedidoInner } = await import('./ai.js');
+  const inner = await extraerPedidoDelChat(sid, l.id);
+  const p = inner ? parsearPedidoInner(sid, inner) : null;
+  // Pedido existente del mismo cliente (por teléfono, últimos 10 dígitos).
+  const telNorm = String(l.tel || '').replace(/\D/g, '').slice(-10);
+  const orden = telNorm.length >= 7
+    ? db.prepare("SELECT id, numero FROM orders WHERE store_id = ? AND replace(replace(replace(replace(tel,'+',''),' ',''),'-',''),'(','') LIKE ? ORDER BY numero DESC LIMIT 1").get(sid, '%' + telNorm) as { id: string; numero: number } | undefined
+    : undefined;
+  res.json({
+    propuesta: p ? { cliente: p.cliente || l.nombre || '', tel: l.tel || '', departamento: p.departamento, ciudad: p.ciudad, direccion: p.direccion, items: p.items, total: p.total } : null,
+    ordenExistente: orden ? { rowId: orden.id, id: 'DF-' + orden.numero } : null,
+  });
+});
+
+// Actualiza un pedido existente (datos de envío + ítems). Se usa desde "completar
+// pedido desde el chat" tras la revisión del dueño.
+api.put('/orders/:rowId', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT id FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const b = req.body || {};
+  const items = Array.isArray(b.items)
+    ? b.items.map((it: { qty?: unknown; nombre?: unknown; precio?: unknown }) => ({ qty: Math.max(1, parseInt(String(it.qty), 10) || 1), nombre: String(it.nombre || '').trim(), precio: Math.max(0, Math.round(Number(it.precio) || 0)) })).filter((it: { nombre: string }) => it.nombre)
+    : null;
+  if (!String(b.cliente || '').trim()) return res.status(400).json({ error: 'Falta el nombre del cliente.' });
+  if (items && !items.length) return res.status(400).json({ error: 'El pedido debe tener al menos un producto.' });
+  const envio = Math.max(0, Math.round(Number(b.envio) || 0));
+  const totalItems = (items || []).reduce((a: number, it: { qty: number; precio: number }) => a + it.qty * it.precio, 0);
+  const total = b.total != null && Number(b.total) > 0 ? Math.round(Number(b.total)) : totalItems + envio;
+  db.prepare('UPDATE orders SET cliente = ?, tel = ?, ciudad = ?, departamento = ?, direccion = ?, nota = ?, envio = ?, total = ? WHERE id = ?')
+    .run(String(b.cliente).trim(), String(b.tel || ''), String(b.ciudad || ''), String(b.departamento || ''), String(b.direccion || ''), String(b.nota || ''), envio, total, o.id);
+  if (items) {
+    db.prepare('DELETE FROM order_items WHERE order_id = ?').run(o.id);
+    for (const it of items) db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), o.id, it.qty, it.nombre, it.precio);
+  }
+  const numero = (db.prepare('SELECT numero FROM orders WHERE id = ?').get(o.id) as { numero: number }).numero;
+  registrarLog(sid, 'info', 'pedido', `Pedido DF-${numero} completado/corregido desde el chat.`);
+  res.json({ ok: true, id: 'DF-' + numero });
+});
+
 // Enviar un adjunto (imagen, video, audio o archivo) al lead.
 api.post('/leads/:id/media', requireAuth, requireStore, async (req, res) => {
   const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as

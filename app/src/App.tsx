@@ -5,6 +5,7 @@ import { Login } from './components/Login';
 import { OrderDetailPanel } from './components/OrderDetailPanel';
 import { OrderToast } from './components/OrderToast';
 import { ManualOrderModal } from './components/ManualOrderModal';
+import { CompletarPedidoModal } from './components/CompletarPedidoModal';
 import { Sidebar } from './components/Sidebar';
 import { FloatingNav } from './components/FloatingNav';
 import { MobileChat } from './components/mobile/MobileChat';
@@ -356,6 +357,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
       <OrderDetailPanel df={df} />
       <OrderToast df={df} />
       <ManualOrderModal df={df} open={df.crearPedidoAbierto} onClose={df.cerrarCrearPedido} prefill={df.crearPedidoPrefill} />
+      <CompletarPedidoModal df={df} />
     </div>
   );
 }
@@ -401,6 +403,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
       <MobileOrderSheet df={df} />
       <OrderToast df={df} mobile />
       <ManualOrderModal df={df} open={df.crearPedidoAbierto} onClose={df.cerrarCrearPedido} prefill={df.crearPedidoPrefill} />
+      <CompletarPedidoModal df={df} />
     </div>
   );
 }

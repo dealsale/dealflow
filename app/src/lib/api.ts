@@ -358,6 +358,16 @@ export const apiDeleteLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}
 export const apiResetLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}/reset`, 'POST');
 export const apiEnviarFlujoInicial = (id: string, productId: string) => req<{ ok: true }>(`/api/leads/${id}/flujo-inicial`, 'POST', { productId });
 
+// ── Completar pedido desde el chat ──
+export interface PropuestaPedido {
+  cliente: string; tel: string; departamento: string; ciudad: string; direccion: string;
+  items: { qty: number; nombre: string; precio: number }[]; total: number;
+}
+export const apiExtraerPedido = (leadId: string) =>
+  req<{ propuesta: PropuestaPedido | null; ordenExistente: { rowId: string; id: string } | null }>(`/api/leads/${leadId}/extraer-pedido`, 'POST');
+export const apiActualizarPedido = (rowId: string, body: { cliente: string; tel?: string; departamento?: string; ciudad?: string; direccion?: string; nota?: string; envio?: number; total?: number; items?: { qty: number; nombre: string; precio: number }[] }) =>
+  req<{ ok: true; id: string }>(`/api/orders/${rowId}`, 'PUT', body);
+
 export const apiWaLinkCloud = (b: { wabaId: string; phoneNumberId: string; accessToken: string }) =>
   req<{ conectado: boolean; numero: string }>('/api/whatsapp', 'PUT', b);
 export const apiWaUnlink = () => req<{ conectado: boolean }>('/api/whatsapp', 'DELETE');

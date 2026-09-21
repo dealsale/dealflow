@@ -36,6 +36,8 @@ import {
   apiDeleteLead,
   apiResetLead,
   apiEnviarFlujoInicial,
+  apiExtraerPedido,
+  apiActualizarPedido,
   apiSendLeadMedia,
   apiSendLeadMessage,
   apiState,
@@ -132,7 +134,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -1037,6 +1039,34 @@ export function useDealFlowState() {
     const { data } = await apiOrders();
     if (data) setOrders(mapApiOrders(data.orders));
     return r.data.id;
+  }
+
+  // ── Completar pedido desde el chat (revisar y corregir un pedido incompleto) ──
+  const [completarAbierto, setCompletarAbierto] = useState(false);
+  const [completarCargando, setCompletarCargando] = useState(false);
+  const [completarMsg, setCompletarMsg] = useState('');
+  const [completarDatos, setCompletarDatos] = useState<{ propuesta: PropuestaPedido | null; ordenExistente: { rowId: string; id: string } | null } | null>(null);
+  async function abrirCompletarPedido(leadId: number | string) {
+    setCompletarAbierto(true);
+    setCompletarCargando(true);
+    setCompletarMsg('');
+    setCompletarDatos(null);
+    const r = await apiExtraerPedido(String(leadId));
+    setCompletarCargando(false);
+    if (r.error || !r.data) { setCompletarMsg(r.error || 'No pudimos leer el pedido del chat.'); return; }
+    setCompletarDatos(r.data);
+    if (!r.data.propuesta) setCompletarMsg('No encontramos datos de un pedido en esta conversación.');
+    else if (!r.data.ordenExistente) setCompletarMsg('Leímos el pedido del chat, pero este cliente no tiene un pedido existente para completar. Puedes crear uno nuevo desde “Crear pedido”.');
+  }
+  function cerrarCompletarPedido() { setCompletarAbierto(false); setCompletarMsg(''); setCompletarDatos(null); }
+  async function guardarPedidoCompletado(rowId: string, body: { cliente: string; tel?: string; departamento?: string; ciudad?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: { qty: number; nombre: string; precio: number }[] }): Promise<boolean> {
+    setCompletarMsg('Guardando…');
+    const r = await apiActualizarPedido(rowId, body);
+    if (r.error || !r.data) { setCompletarMsg(r.error || 'No se pudo guardar el pedido.'); return false; }
+    const { data } = await apiOrders();
+    if (data) setOrders(mapApiOrders(data.orders));
+    cerrarCompletarPedido();
+    return true;
   }
 
   function sendToDropi(id: string) {
@@ -3195,6 +3225,14 @@ export function useDealFlowState() {
     crearPedidoPrefill,
     abrirCrearPedido,
     cerrarCrearPedido,
+    // Completar pedido desde el chat
+    completarAbierto,
+    completarCargando,
+    completarMsg,
+    completarDatos,
+    abrirCompletarPedido,
+    cerrarCompletarPedido,
+    guardarPedidoCompletado,
     reenviarMensaje,
     reenviandoMsg,
     // ── Biblioteca de productos ──

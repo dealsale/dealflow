@@ -45,6 +45,13 @@ export function MobileChat({ df }: { df: DealFlowState }) {
           </div>
         </div>
         <div
+          onClick={() => df.abrirCompletarPedido(chat.id)}
+          title="Completar pedido desde el chat"
+          style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--df-brand-dark)', fontSize: 18 }}
+        >
+          🧾
+        </div>
+        <div
           onClick={() => df.abrirLogs(String(chat.id), chat.nombre)}
           title="Registro de actividad de este chat"
           style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 18 }}
