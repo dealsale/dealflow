@@ -278,13 +278,6 @@ export function CRM({ df }: { df: DealFlowState }) {
               </div>
               <div style={{ flex: 1 }} />
               <button
-                onClick={() => df.abrirCompletarPedido(chat.id)}
-                title="Lee el pedido de este chat con IA y completa/corrige el pedido"
-                style={{ background: 'var(--df-brand-subtle)', color: 'var(--df-brand-dark)', border: '1px solid var(--df-brand-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}
-              >
-                🧾 Completar pedido
-              </button>
-              <button
                 onClick={() => df.abrirLogs(String(chat.id), chat.nombre)}
                 title="Ver el registro de actividad de ESTE chat"
                 style={{ background: 'var(--df-surface)', color: 'var(--df-text-secondary)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}
@@ -453,6 +446,13 @@ export function CRM({ df }: { df: DealFlowState }) {
                   style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
                 >
                   🧾 Crear pedido para él/ella
+                </button>
+                <button
+                  onClick={() => { setPanelCliente(false); df.abrirCompletarPedido(chat.id); }}
+                  title="Lee el pedido de este chat con IA y completa/corrige el pedido existente"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
+                >
+                  ✅ Completar pedido desde el chat
                 </button>
               </div>
               <div style={{ marginTop: 8 }}>

@@ -319,6 +319,8 @@ El campo departamento es OBLIGATORIO: en Colombia hay ciudades con el mismo nomb
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
 FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
 
+NO ENTRES EN BUCLE DE CONFIRMACIÓN: un "sí", "confirmo", "correcto", "dale" del cliente confirma EL PEDIDO, aunque lo haya dicho justo después de que le pediste un dato suelto (como el punto de referencia). Si ya mostraste el resumen y tienes nombre, ciudad y dirección, ese "sí" cierra la venta: pon el marcador ##PEDIDO. JAMÁS vuelvas a preguntar "¿confirmas?" ni pidas de nuevo datos que el cliente ya te dio. Nunca pidas confirmación dos veces seguidas.
+
 FORMATO DE TU RESPUESTA: responde SIEMPRE en texto plano, exactamente lo que verá el cliente. NUNCA respondas en formato JSON, NUNCA empieces con «text:» o «"text":», y NUNCA encierres toda tu respuesta entre comillas. Escribe el mensaje directo, nada más.
 
 OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó registrado", "ya está creado", "confirmado" o similar si en ESE MISMO mensaje no incluiste el marcador ##PEDIDO ...##. Si todavía te falta el nombre, la ciudad o la dirección exacta, pídelos primero y NO afirmes que el pedido quedó registrado. El mensaje de confirmación al cliente lo envía el sistema automáticamente, no lo escribas tú.`;
@@ -502,9 +504,11 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     let pedidoCreado = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
 
     // RED DE SEGURIDAD: la IA mostró el "Resumen de tu pedido" y el cliente confirmó
-    // (sí/sisas/dale/correcto…), pero la IA NO puso el marcador. Tomamos el pedido
-    // del último resumen que envió la IA, para no perder ventas por un descuido del modelo.
-    if (!pedidoCreado && !mp && esAfirmacion(ultimo?.texto || '')) {
+    // (sí/sisas/dale/correcto…), pero la IA NO puso el marcador o lo puso mal. Tomamos
+    // el pedido del último resumen que envió la IA, para no perder ventas ni quedar en
+    // un bucle de "¿confirmas?". Aplica aunque hubiera un marcador fallido (mp): el
+    // guard anti-duplicado de crearPedido evita crear dos.
+    if (!pedidoCreado && esAfirmacion(ultimo?.texto || '')) {
       const inner = pedidoDesdeResumen(leadId);
       if (inner) pedidoCreado = await crearPedido(storeId, lead, inner, productRows, destino, pn);
     }
@@ -660,7 +664,9 @@ function campoResumen(txt: string, etiqueta: string): string {
  * el marcador ##PEDIDO##. Devuelve el "inner" listo para crearPedido, o ''.
  */
 function pedidoDesdeResumen(leadId: string): string {
-  const rows = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'bot' AND texto != '' ORDER BY created_at DESC LIMIT 6").all(leadId) as { texto: string }[];
+  // Miramos bastante atrás: si el bot re-preguntó "¿confirmas?" varias veces, el
+  // "Resumen de tu pedido" real pudo quedar varios mensajes atrás.
+  const rows = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'bot' AND texto != '' ORDER BY created_at DESC LIMIT 16").all(leadId) as { texto: string }[];
   const resumen = rows.map((r) => r.texto).find((t) => /resumen/i.test(t) && /(direcc|total|ciudad)/i.test(t));
   if (!resumen) return '';
   const cliente = campoResumen(resumen, 'Nombre');
