@@ -2238,7 +2238,7 @@ export function useDealFlowState() {
   async function reloadAdmin() {
     const { data } = await apiAdminOverview();
     if (!data) return;
-    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa, planEstado: s.planEstado, planVence: s.planVence, creditos: s.creditos, temaPremium: s.temaPremium })));
+    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa, planEstado: s.planEstado, planVence: s.planVence, creditos: s.creditos, temaPremium: s.temaPremium, oculta: s.oculta })));
     setPlans(data.plans.map((p) => ({ id: p.id, nombre: p.nombre, precio: p.precio, cuentas: p.cuentas, features: p.features })));
   }
   useEffect(() => {

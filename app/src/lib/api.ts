@@ -114,6 +114,7 @@ export interface AdminStore {
   planVence?: string | null;
   creditos?: number;
   temaPremium?: boolean;
+  oculta?: boolean;
 }
 export interface AdminPlan {
   id: string;

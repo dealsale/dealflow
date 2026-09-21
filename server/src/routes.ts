@@ -1185,14 +1185,19 @@ api.get('/whatsapp/qr/status', requireAuth, requireStore, requireOwner, async (r
 });
 
 // ── Admin ─────────────────────────────────────────────────────────────
-api.get('/admin/overview', requireAuth, requireAdmin, (_req, res) => {
-  // Las tiendas ocultas (fantasma) no aparecen para el admin normal.
-  const stores = (db.prepare('SELECT * FROM stores WHERE COALESCE(oculta,0) = 0 ORDER BY created_at').all() as Record<string, unknown>[]).map((s) => {
+api.get('/admin/overview', requireAuth, requireAdmin, (req, res) => {
+  // Las tiendas ocultas (fantasma) no aparecen para el admin normal. El SUPERADMIN
+  // sí las ve (marcadas como ocultas) para poder entrar sin tener que desocultarlas.
+  const esSuper = req.user!.role === 'SUPERADMIN';
+  const filtro = esSuper
+    ? "WHERE id != '" + MASTER_STORE_ID + "'" // ve todas menos la tienda interna de la biblioteca
+    : 'WHERE COALESCE(oculta,0) = 0';
+  const stores = (db.prepare(`SELECT * FROM stores ${filtro} ORDER BY created_at`).all() as Record<string, unknown>[]).map((s) => {
     const ventas = db.prepare(
       `SELECT COALESCE(SUM(CASE WHEN o.total > 0 THEN o.total ELSE COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio END), 0) AS total
        FROM orders o WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
     ).get(s.id) as { total: number };
-    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, creditos: s.creditos || 0, temaPremium: !!s.tema_premium };
+    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, creditos: s.creditos || 0, temaPremium: !!s.tema_premium, oculta: !!s.oculta };
   });
   const plans = (db.prepare('SELECT * FROM plans').all() as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, features: pj(p.features as string, []),

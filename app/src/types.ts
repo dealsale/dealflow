@@ -224,6 +224,7 @@ export interface Account {
   planVence?: string | null;
   creditos?: number;
   temaPremium?: boolean;
+  oculta?: boolean;
 }
 
 export type VendedorSection =

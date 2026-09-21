@@ -227,7 +227,10 @@ export function Cuentas({ df }: { df: DealFlowState }) {
             return (
               <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '1.5fr 0.9fr 90px auto 44px', gap: 14, alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid var(--df-border)' }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.tienda}</div>
+                  <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.tienda}</span>
+                    {a.oculta && <span title="Oculta para el admin normal; solo tú (superadmin) la ves" style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, color: 'var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 6, padding: '1px 7px', letterSpacing: '.02em' }}>👻 Oculta</span>}
+                  </div>
                   <div style={{ color: 'var(--df-text-faint)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {a.correo} · Plan {a.plan}
                     <span style={{ color: 'var(--df-purple)', fontWeight: 700 }}> · 🎨 {(a.creditos ?? 0).toLocaleString('es-CO')} créditos</span>
