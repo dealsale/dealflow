@@ -12,15 +12,18 @@ const TITULO_NEGRO: CSSProperties = { fontSize: 13.5, fontWeight: 800, color: 'v
 // Subtítulo dentro de un grupo (jerarquía secundaria, en gris).
 const SUBLABEL: CSSProperties = { fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 8px' };
 
-/** Contenido de un bloque de imagen/video: varias piezas, cada una con quitar y mover. */
+/** Contenido de un bloque de imagen/video/audio: varias piezas, cada una con quitar y mover. */
 function MediaEnBloque({ b }: { b: BloqueDecorado }) {
   const esVideo = b.tipo === 'video';
+  const esAudio = b.tipo === 'audio';
   return (
     <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
       {b.mediaLista.map((src, k) => (
         <div key={k} style={{ position: 'relative', flexShrink: 0 }}>
           {esVideo
             ? <video src={src} controls style={{ width: 150, maxWidth: '100%', borderRadius: 8, background: '#0F172A', display: 'block' }} />
+            : esAudio
+            ? <audio src={src} controls style={{ height: 40, maxWidth: '100%', display: 'block' }} />
             : <img src={src} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(15,23,42,.1)', display: 'block' }} />}
           <span
             onClick={() => b.removeMedia(k)}
@@ -39,7 +42,7 @@ function MediaEnBloque({ b }: { b: BloqueDecorado }) {
           </div>
         </div>
       ))}
-      <PhotoAddChip label={esVideo ? '+ Video' : '+ Imagen'} accept={esVideo ? 'video/*' : undefined} onFiles={b.addMedia} />
+      <PhotoAddChip label={esVideo ? '+ Video' : esAudio ? '+ Audio' : '+ Imagen'} accept={esVideo ? 'video/*' : esAudio ? 'audio/*' : undefined} onFiles={b.addMedia} />
     </div>
   );
 }
@@ -76,7 +79,7 @@ function BloquesInicial({ p }: { p: DecoratedProduct }) {
             >⠿</span>
             <span style={{ background: 'var(--df-surface-2)', color: 'var(--df-text-muted)', borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace", marginTop: 4 }}>{i + 1}</span>
             <span style={{ color: 'var(--df-text-faint)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', width: 52, flexShrink: 0, marginTop: 5 }}>
-              {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : 'Video'}
+              {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : b.tipo === 'audio' ? 'Audio' : 'Video'}
             </span>
             {b.tipo === 'texto' ? (
               <AutoTextarea
@@ -397,6 +400,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             <button onClick={p.addBloqueTexto} className="df-btn-outline-green" style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Texto</button>
             <PhotoAddChip label="+ Imagen" onFiles={p.addBloqueImagen} />
             <PhotoAddChip label="+ Video" accept="video/*" onFiles={p.addBloqueVideo} />
+            <PhotoAddChip label="+ Audio" accept="audio/*" onFiles={p.addBloqueAudio} />
           </div>
           <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
             Cuando un cliente pregunte por este producto, el asistente enviará estos bloques en orden, como mensajes de WhatsApp.

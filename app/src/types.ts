@@ -67,7 +67,7 @@ export interface Bundle {
   etiqueta?: string;
 }
 
-export type BloqueTipo = 'texto' | 'imagen' | 'video';
+export type BloqueTipo = 'texto' | 'imagen' | 'video' | 'audio';
 
 /**
  * Un bloque del mensaje inicial. Un bloque de texto trae `valor`; uno de

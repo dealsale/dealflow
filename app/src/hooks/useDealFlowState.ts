@@ -326,6 +326,7 @@ export interface DecoratedProduct extends Product {
   addBloqueTexto: () => void;
   addBloqueImagen: (files: File[]) => void;
   addBloqueVideo: (files: File[]) => void;
+  addBloqueAudio: (files: File[]) => void;
   bundlesDecorados: (Bundle & { precioFmt: string; remove: () => void })[];
   addBundle: () => void;
   opcionesDecoradas: {
@@ -1929,14 +1930,16 @@ export function useDealFlowState() {
 
   // Crea UN bloque nuevo con todas las piezas subidas (varias imágenes en un
   // bloque de imagen, varios videos en uno de video).
-  async function addBloqueMedia(productId: number | string, files: File[], tipo: 'imagen' | 'video') {
-    const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, tipo === 'imagen' ? 'image/' : 'video/');
+  async function addBloqueMedia(productId: number | string, files: File[], tipo: 'imagen' | 'video' | 'audio') {
+    const prefijo = tipo === 'imagen' ? 'image/' : tipo === 'audio' ? 'audio/' : 'video/';
+    const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, prefijo);
     if (urls.length) patchProductList(productId, 'mensajeBloques', (b) => [...b, { tipo, valores: urls }]);
   }
 
-  // Agrega más piezas a un bloque de imagen/video ya existente.
-  async function addMediaABloque(productId: number | string, index: number, files: File[], tipo: 'imagen' | 'video') {
-    const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, tipo === 'imagen' ? 'image/' : 'video/');
+  // Agrega más piezas a un bloque de imagen/video/audio ya existente.
+  async function addMediaABloque(productId: number | string, index: number, files: File[], tipo: 'imagen' | 'video' | 'audio') {
+    const prefijo = tipo === 'imagen' ? 'image/' : tipo === 'audio' ? 'audio/' : 'video/';
+    const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, prefijo);
     if (!urls.length) return;
     patchProductList(productId, 'mensajeBloques', (bl) =>
       bl.map((b, j) => (j === index ? { ...b, valores: [...mediaDeBloque(b), ...urls], valor: undefined } : b)),
@@ -2054,7 +2057,7 @@ export function useDealFlowState() {
           duplicate: () =>
             patchProductList(p.id, 'mensajeBloques', (bl) => bl.flatMap((bloque, j) => (j === i ? [bloque, { ...bloque }] : [bloque]))),
           addMedia: (files: File[]) => {
-            if (b.tipo === 'imagen' || b.tipo === 'video') void addMediaABloque(p.id, i, files, b.tipo);
+            if (b.tipo === 'imagen' || b.tipo === 'video' || b.tipo === 'audio') void addMediaABloque(p.id, i, files, b.tipo);
           },
           // Quita una pieza del bloque; si queda vacío, elimina el bloque entero.
           removeMedia: (mediaIndex: number) =>
@@ -2094,6 +2097,7 @@ export function useDealFlowState() {
         },
         addBloqueImagen: (files: File[]) => void addBloqueMedia(p.id, files, 'imagen'),
         addBloqueVideo: (files: File[]) => void addBloqueMedia(p.id, files, 'video'),
+        addBloqueAudio: (files: File[]) => void addBloqueMedia(p.id, files, 'audio'),
         bundlesDecorados: (p.bundles || []).map((b, i) => ({
           ...b,
           precioFmt: fmt(b.precio),
