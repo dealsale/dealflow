@@ -188,14 +188,39 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                   </div>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: df.detalleStore.whatsapp.conectado ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)', background: df.detalleStore.whatsapp.conectado ? 'var(--df-brand-subtle)' : 'var(--df-danger-subtle-2)', borderRadius: 6, padding: '3px 9px' }}>
                   WhatsApp {df.detalleStore.whatsapp.conectado ? 'conectado' : 'desconectado'}{df.detalleStore.whatsapp.numero ? ` · ${df.detalleStore.whatsapp.numero}` : ''}
                 </span>
+                <button
+                  onClick={() => df.sincronizarWhatsapp(df.detalleStore!.id)}
+                  title="Consulta a Meta el número actual de esta WABA y actualiza el que usa DealFlow"
+                  style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                >
+                  🔄 Sincronizar número con Meta
+                </button>
                 {df.detalleStore.porEstado.map((e) => (
                   <span key={e.estado} style={{ fontSize: 12.5, color: 'var(--df-text-secondary)' }}>{e.estado}: <b>{e.n}</b></span>
                 ))}
               </div>
+              {df.waSyncStoreId === df.detalleStore.id && (df.waSyncMsg || df.waSyncNumeros.length > 0) && (
+                <div style={{ background: 'var(--df-surface-2)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+                  {df.waSyncMsg && <div style={{ fontSize: 12.5, fontWeight: 600, color: df.waSyncMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.waSyncMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-text-body)' }}>{df.waSyncMsg}</div>}
+                  {df.waSyncNumeros.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                      {df.waSyncNumeros.map((n) => (
+                        <button key={n.id} onClick={() => df.sincronizarWhatsapp(df.detalleStore!.id, n.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px', fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}>
+                          <span style={{ fontWeight: 700 }}>{n.numero || '(sin número visible)'}</span>
+                          {n.nombre && <span style={{ color: 'var(--df-text-muted)' }}>· {n.nombre}</span>}
+                          <span style={{ flex: 1 }} />
+                          <span style={{ color: 'var(--df-brand-dark)', fontWeight: 700 }}>Usar este</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {df.detalleStore.recientes.length > 0 && (
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Últimos pedidos</div>

@@ -1364,6 +1364,44 @@ api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) 
   res.json({ ok: true });
 });
 
+// Barrido contra la API de Meta: consulta los números que HOY tiene la WABA de la
+// tienda y actualiza el phone_number_id/numero guardado (para cuando la tienda
+// cambió de número en Meta pero DealFlow seguía con el anterior). requireAdmin.
+api.post('/admin/stores/:id/whatsapp/sync', requireAuth, requireAdmin, async (req, res) => {
+  const sid = req.params.id;
+  const wa = db.prepare('SELECT waba_id, phone_number_id, access_token, numero FROM whatsapp WHERE store_id = ?').get(sid) as
+    | { waba_id: string; phone_number_id: string; access_token: string; numero: string }
+    | undefined;
+  if (!wa || !wa.access_token) return res.status(400).json({ error: 'Esta tienda no tiene WhatsApp conectado (sin token). Conéctalo primero en Integraciones.' });
+  if (!wa.waba_id) return res.status(400).json({ error: 'No hay WABA ID guardado para esta tienda. Reconéctala en Integraciones para poder sincronizar.' });
+  const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
+  let numeros: { id: string; numero: string; nombre: string }[] = [];
+  try {
+    const r = await fetch(`${GRAPH}/${encodeURIComponent(wa.waba_id)}/phone_numbers?fields=id,display_phone_number,verified_name&access_token=${encodeURIComponent(wa.access_token)}`);
+    const b = (await r.json()) as { data?: { id: string; display_phone_number?: string; verified_name?: string }[]; error?: { message?: string } };
+    if (!r.ok || b.error) return res.status(400).json({ error: b.error?.message || 'Meta no aceptó la consulta (¿el token sigue vigente?).' });
+    numeros = (b.data || []).map((n) => ({ id: n.id, numero: n.display_phone_number || '', nombre: n.verified_name || '' }));
+  } catch {
+    return res.status(502).json({ error: 'No pudimos hablar con Meta. Intenta de nuevo.' });
+  }
+  if (!numeros.length) return res.status(400).json({ error: 'Meta no devolvió ningún número para esta WABA.' });
+
+  // Aplica un número: el que pidió el admin, o el único, o (si hay varios y ninguno
+  // coincide con el guardado) se devuelve la lista para que elija.
+  const pedido = String(req.body?.phoneNumberId || '').trim();
+  let elegido = numeros.find((n) => n.id === pedido);
+  if (!elegido && numeros.length === 1) elegido = numeros[0];
+  if (!elegido) {
+    const yaEsta = numeros.some((n) => n.id === wa.phone_number_id);
+    return res.json({ ok: false, needsChoice: true, actual: { phoneNumberId: wa.phone_number_id, numero: wa.numero, sigueEnMeta: yaEsta }, numeros });
+  }
+  // Un número solo puede estar activo en una tienda: desconéctalo en otras.
+  db.prepare("UPDATE whatsapp SET conectado = 0 WHERE phone_number_id = ? AND store_id != ?").run(elegido.id, sid);
+  db.prepare("UPDATE whatsapp SET phone_number_id = ?, numero = ?, conectado = 1 WHERE store_id = ?").run(elegido.id, elegido.numero, sid);
+  registrarLog(sid, 'info', 'whatsapp', `Número sincronizado con Meta: ahora ${elegido.numero} (phone_number_id ${elegido.id}).`);
+  res.json({ ok: true, aplicado: { phoneNumberId: elegido.id, numero: elegido.numero, nombre: elegido.nombre }, numeros, anterior: { phoneNumberId: wa.phone_number_id, numero: wa.numero } });
+});
+
 api.patch('/admin/plans/:id', requireAuth, requireAdmin, (req, res) => {
   const p = db.prepare('SELECT id, nombre FROM plans WHERE id = ?').get(req.params.id) as { id: string; nombre: string } | undefined;
   if (!p) return res.status(404).json({ error: 'Plan no encontrado.' });

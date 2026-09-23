@@ -91,6 +91,7 @@ import {
   apiUpdateStore,
   apiDeleteStore,
   apiStoreDetalle,
+  apiSyncWhatsapp,
   apiStats,
   apiImpersonate,
   apiOnboardingTienda,
@@ -3234,6 +3235,28 @@ export function useDealFlowState() {
     setDetalleStore(null);
     setEditStoreId(null);
   }
+  // Barrido de WhatsApp: sincroniza el número guardado con el que hay hoy en Meta.
+  const [waSyncMsg, setWaSyncMsg] = useState('');
+  const [waSyncNumeros, setWaSyncNumeros] = useState<{ id: string; numero: string; nombre: string }[]>([]);
+  const [waSyncStoreId, setWaSyncStoreId] = useState('');
+  function sincronizarWhatsapp(storeId: string, phoneNumberId?: string) {
+    setWaSyncStoreId(storeId);
+    setWaSyncMsg('Consultando a Meta…');
+    setWaSyncNumeros([]);
+    void apiSyncWhatsapp(storeId, phoneNumberId).then((r) => {
+      if (r.error || !r.data) { setWaSyncMsg(r.error || 'No se pudo sincronizar.'); return; }
+      if (r.data.aplicado) {
+        setWaSyncMsg(`✓ Número actualizado a ${r.data.aplicado.numero}${r.data.anterior?.numero && r.data.anterior.numero !== r.data.aplicado.numero ? ` (antes ${r.data.anterior.numero})` : ''}.`);
+        setWaSyncNumeros([]);
+        if (detalleStore && detalleStore.id === storeId) void apiStoreDetalle(storeId).then((d) => { if (d.data) setDetalleStore(d.data.detalle); });
+        return;
+      }
+      if (r.data.needsChoice) {
+        setWaSyncMsg('Esta WABA tiene varios números. Elige cuál usar:');
+        setWaSyncNumeros(r.data.numeros || []);
+      }
+    });
+  }
   function entrarATienda(id: string) {
     void apiImpersonate(id).then((r) => {
       if (r.error) { setEditStoreMsg(r.error); return; }
@@ -3852,11 +3875,15 @@ export function useDealFlowState() {
     editStoreMsg,
     eliminarStore,
     armedDeleteStoreId,
-    abrirDetalleStore,
-    cerrarPanelStore,
+    abrirDetalleStore,    cerrarPanelStore,
     detalleStore,
     detalleLoading,
     entrarATienda,
+    // Barrido de WhatsApp con Meta
+    sincronizarWhatsapp,
+    waSyncMsg,
+    waSyncNumeros,
+    waSyncStoreId,
     volverAlAdmin,
     entrarBiblioteca,
     // Onboarding: configura el asistente + crea productos de una tienda (para dar de alta un cliente).

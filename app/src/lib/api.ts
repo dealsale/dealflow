@@ -530,6 +530,18 @@ export interface AdminStoreDetalle {
 }
 export const apiStoreDetalle = (id: string) => req<{ detalle: AdminStoreDetalle }>(`/api/admin/stores/${id}`, 'GET');
 
+// Barrido: sincroniza el número de WhatsApp de una tienda con lo que hay HOY en su WABA de Meta.
+export interface WaSyncResp {
+  ok: boolean;
+  needsChoice?: boolean;
+  aplicado?: { phoneNumberId: string; numero: string; nombre: string };
+  anterior?: { phoneNumberId: string; numero: string };
+  actual?: { phoneNumberId: string; numero: string; sigueEnMeta: boolean };
+  numeros?: { id: string; numero: string; nombre: string }[];
+}
+export const apiSyncWhatsapp = (id: string, phoneNumberId?: string) =>
+  req<WaSyncResp>(`/api/admin/stores/${id}/whatsapp/sync`, 'POST', phoneNumberId ? { phoneNumberId } : {});
+
 // ── Superadmin ──
 export interface SuperStore {
   id: string; tienda: string; correo: string; plan: string; ventas: number; activa: boolean; oculta: boolean;
