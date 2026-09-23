@@ -36,6 +36,11 @@ import {
   apiDeleteLead,
   apiResetLead,
   apiEnviarFlujoInicial,
+  apiFlows,
+  apiCrearFlujo,
+  apiActualizarFlujo,
+  apiEliminarFlujo,
+  apiEnviarFlujoRemarketing,
   apiExtraerPedido,
   apiActualizarPedido,
   apiSendLeadMedia,
@@ -135,6 +140,7 @@ import {
   apiEliminarCupon,
 } from '../lib/api';
 import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido } from '../lib/api';
+import type { Flujo } from '../types';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -574,7 +580,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     testimonios: p.testimonios || [],
     modosUso: p.modosUso || '',
     videos: p.videos || [],
-    mensajeBloques: (p.mensajeBloques || []).filter((b): b is MensajeBloque => b.tipo === 'texto' || b.tipo === 'imagen' || b.tipo === 'video'),
+    mensajeBloques: (p.mensajeBloques || []).filter((b): b is MensajeBloque => b.tipo === 'texto' || b.tipo === 'imagen' || b.tipo === 'video' || b.tipo === 'audio'),
     bundles: p.bundles || [],
     opciones: (p.opciones || []).filter((o) => o && typeof o.nombre === 'string' && Array.isArray(o.valores)).map((o) => ({
       nombre: o.nombre,
@@ -634,6 +640,10 @@ export function useDealFlowState() {
   });
   const [stats, setStats] = useState<Estadisticas | null>(null);
   const [statsCargando, setStatsCargando] = useState(false);
+  // ── Flujos de remarketing ──
+  const [flujos, setFlujos] = useState<Flujo[]>([]);
+  const [flujoTextoDraft, setFlujoTextoDraft] = useState('');
+  const [flujoMsgRemk, setFlujoMsgRemk] = useState('');
   const rangoDePreset = (preset: StatsPreset): { desde: string; hasta: string } => {
     const bog = (t: number) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
     const hoy = bog(Date.now());
@@ -2264,6 +2274,108 @@ export function useDealFlowState() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser, section, statsRango.desde, statsRango.hasta]);
 
+  // Flujos de remarketing: carga la lista al entrar a la pestaña o al abrir el
+  // menú de Flujos del Inbox.
+  async function recargarFlujos() {
+    if (!apiMode) return;
+    const { data } = await apiFlows();
+    if (data) setFlujos(data.flows);
+  }
+  useEffect(() => {
+    if (apiMode && sessionUser && (section === 'flujos' || section === 'crm')) void recargarFlujos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, sessionUser, section]);
+
+  // Persiste los bloques de un flujo (local + servidor).
+  function patchFlujoBloques(id: string, fn: (b: MensajeBloque[]) => MensajeBloque[]) {
+    let nuevos: MensajeBloque[] = [];
+    setFlujos((st) => st.map((f) => {
+      if (f.id !== id) return f;
+      nuevos = fn(f.bloques || []);
+      return { ...f, bloques: nuevos };
+    }));
+    if (apiMode) void apiActualizarFlujo(id, { bloques: nuevos }).then((r) => { if (r.error) void recargarFlujos(); });
+  }
+  async function addBloqueFlujoMedia(id: string, files: File[], tipo: 'imagen' | 'video' | 'audio') {
+    const prefijo = tipo === 'imagen' ? 'image/' : tipo === 'audio' ? 'audio/' : 'video/';
+    const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, prefijo);
+    if (urls.length) patchFlujoBloques(id, (b) => [...b, { tipo, valores: urls }]);
+  }
+  async function addMediaAFlujoBloque(id: string, index: number, files: File[], tipo: 'imagen' | 'video' | 'audio') {
+    const prefijo = tipo === 'imagen' ? 'image/' : tipo === 'audio' ? 'audio/' : 'video/';
+    const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, prefijo);
+    if (!urls.length) return;
+    patchFlujoBloques(id, (bl) => bl.map((b, j) => (j === index ? { ...b, valores: [...mediaDeBloque(b), ...urls], valor: undefined } : b)));
+  }
+  async function crearFlujo(nombre: string): Promise<string> {
+    if (!nombre.trim()) return '';
+    if (apiMode) {
+      const { data } = await apiCrearFlujo({ nombre: nombre.trim() });
+      if (data) { await recargarFlujos(); return data.id; }
+      return '';
+    }
+    const id = 'flow_' + Date.now();
+    setFlujos((st) => [{ id, nombre: nombre.trim(), descripcion: '', bloques: [], activo: true }, ...st]);
+    return id;
+  }
+  function actualizarFlujoMeta(id: string, patch: { nombre?: string; descripcion?: string; activo?: boolean }) {
+    setFlujos((st) => st.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+    if (apiMode) void apiActualizarFlujo(id, patch);
+  }
+  function eliminarFlujo(id: string) {
+    setFlujos((st) => st.filter((f) => f.id !== id));
+    if (apiMode) void apiEliminarFlujo(id);
+  }
+  function enviarFlujoRemarketing(flowId: string) {
+    const leadId = crmSelectedId;
+    setFlujoMsgRemk('Enviando el flujo…');
+    void apiEnviarFlujoRemarketing(String(leadId), flowId).then((r) => {
+      if (r.error || !r.data) { setFlujoMsgRemk(r.error || 'No se pudo enviar el flujo.'); return; }
+      setFlujoMsgRemk(`✓ Flujo enviado (${r.data.enviadas} pieza${r.data.enviadas === 1 ? '' : 's'}).`);
+      if (apiMode) cargarMensajesChat(leadId);
+    });
+  }
+  // Flujos decorados: cada uno con sus bloques listos para el BloquesBuilder.
+  const flujosDecorados = flujos.map((f) => ({
+    ...f,
+    bloquesDecorados: (f.bloques || []).map((b, i) => ({
+      ...b,
+      mediaLista: mediaDeBloque(b),
+      remove: () => patchFlujoBloques(f.id, (bl) => bl.filter((_, j) => j !== i)),
+      editText: (valor: string) => patchFlujoBloques(f.id, (bl) => bl.map((bloque, j) => (j === i ? { ...bloque, valor } : bloque))),
+      duplicate: () => patchFlujoBloques(f.id, (bl) => bl.flatMap((bloque, j) => (j === i ? [bloque, { ...bloque }] : [bloque]))),
+      addMedia: (files: File[]) => { if (b.tipo === 'imagen' || b.tipo === 'video' || b.tipo === 'audio') void addMediaAFlujoBloque(f.id, i, files, b.tipo); },
+      removeMedia: (mediaIndex: number) => patchFlujoBloques(f.id, (bl) => bl.flatMap((bloque, j) => {
+        if (j !== i) return [bloque];
+        const restantes = mediaDeBloque(bloque).filter((_, k) => k !== mediaIndex);
+        return restantes.length ? [{ ...bloque, valores: restantes, valor: undefined }] : [];
+      })),
+      moverMedia: (from: number, to: number) => patchFlujoBloques(f.id, (bl) => bl.map((bloque, j) => {
+        if (j !== i) return bloque;
+        const piezas = [...mediaDeBloque(bloque)];
+        if (from === to || from < 0 || to < 0 || from >= piezas.length || to >= piezas.length) return bloque;
+        const [x] = piezas.splice(from, 1);
+        piezas.splice(to, 0, x);
+        return { ...bloque, valores: piezas, valor: undefined };
+      })),
+    })),
+    moverBloque: (from: number, to: number) => patchFlujoBloques(f.id, (bl) => {
+      if (from === to || from < 0 || to < 0 || from >= bl.length || to >= bl.length) return bl;
+      const copia = [...bl];
+      const [x] = copia.splice(from, 1);
+      copia.splice(to, 0, x);
+      return copia;
+    }),
+    addBloqueTexto: () => { const t = flujoTextoDraft.trim(); if (t) { patchFlujoBloques(f.id, (bl) => [...bl, { tipo: 'texto', valor: t }]); setFlujoTextoDraft(''); } },
+    addBloqueImagen: (files: File[]) => void addBloqueFlujoMedia(f.id, files, 'imagen'),
+    addBloqueVideo: (files: File[]) => void addBloqueFlujoMedia(f.id, files, 'video'),
+    addBloqueAudio: (files: File[]) => void addBloqueFlujoMedia(f.id, files, 'audio'),
+    remove: () => eliminarFlujo(f.id),
+    setNombre: (v: string) => actualizarFlujoMeta(f.id, { nombre: v }),
+    setDescripcion: (v: string) => actualizarFlujoMeta(f.id, { descripcion: v }),
+  }));
+
+
   // ── Superadmin: todas las tiendas + ocultar del admin ──
   const [superStores, setSuperStores] = useState<SuperStore[]>([]);
   async function reloadSuper() {
@@ -3264,6 +3376,13 @@ export function useDealFlowState() {
     statsRango,
     elegirStatsPreset,
     setStatsFechas,
+    // Flujos de remarketing
+    flujos: flujosDecorados,
+    flujoTextoDraft,
+    setFlujoTextoDraft,
+    crearFlujo,
+    flujoMsgRemk,
+    enviarFlujoRemarketing,
     go,
     goAdmin,
     toggleMode,

@@ -29,6 +29,16 @@ export function IconEstadisticas() {
   );
 }
 
+export function IconFlujos() {
+  return (
+    <svg {...common}>
+      <rect x="3" y="4" width="7" height="5" rx="1.2"></rect>
+      <rect x="14" y="15" width="7" height="5" rx="1.2"></rect>
+      <path d="M6.5 9v4.5a2 2 0 0 0 2 2H14"></path>
+    </svg>
+  );
+}
+
 export function IconProductos() {
   return (
     <svg {...common}>

@@ -42,10 +42,11 @@ export function AnuncioCard({ anuncio }: { anuncio: Anuncio }) {
 export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: number }) {
   const [open, setOpen] = useState(false);
   const [verProductos, setVerProductos] = useState(false);
+  const [verRemk, setVerRemk] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setVerProductos(false); } };
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setVerProductos(false); setVerRemk(false); } };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
@@ -54,12 +55,34 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
     <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
       <button
         onClick={() => setOpen((o) => !o)}
-        title="Enviar un flujo (ej: mensaje inicial)"
+        title="Enviar un flujo (mensaje inicial o remarketing)"
         style={{ width: size, height: size, borderRadius: 10, border: '1px solid var(--df-border)', background: open ? 'var(--df-surface-2)' : 'var(--df-surface)', color: 'var(--df-brand)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}
       >⚡</button>
       {open && (
         <div style={{ position: 'absolute', bottom: size + 8, left: 0, width: 268, maxHeight: 320, overflowY: 'auto', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 10px 34px rgba(15,23,42,.28)', zIndex: 60, padding: 6 }}>
-          {!verProductos ? (
+          {verProductos ? (
+            <>
+              <button onClick={() => setVerProductos(false)} style={{ ...item, fontWeight: 700, fontSize: 12.5, color: 'var(--df-text-muted)' }}>‹ Elige el producto</button>
+              {df.flujoProductos.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes productos aún.</div>}
+              {df.flujoProductos.map((p) => (
+                <button key={p.id} onClick={() => { df.enviarFlujoInicial(p.id); setOpen(false); setVerProductos(false); }} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <span style={{ fontSize: 15 }}>🛍️</span>
+                  <span style={{ flex: 1, textAlign: 'left', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</span>
+                </button>
+              ))}
+            </>
+          ) : verRemk ? (
+            <>
+              <button onClick={() => setVerRemk(false)} style={{ ...item, fontWeight: 700, fontSize: 12.5, color: 'var(--df-text-muted)' }}>‹ Elige el flujo</button>
+              {df.flujos.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--df-text-muted)' }}>Aún no creaste flujos. Ve a “Flujos” en el menú.</div>}
+              {df.flujos.map((f) => (
+                <button key={f.id} onClick={() => { df.enviarFlujoRemarketing(f.id); setOpen(false); setVerRemk(false); }} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <span style={{ fontSize: 15 }}>🔁</span>
+                  <span style={{ flex: 1, textAlign: 'left', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.nombre}</span>
+                </button>
+              ))}
+            </>
+          ) : (
             <>
               <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-faint)', textTransform: 'uppercase', letterSpacing: '.04em', padding: '8px 10px 6px' }}>Flujos</div>
               <button onClick={() => setVerProductos(true)} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
@@ -70,17 +93,14 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
                 </div>
                 <span style={{ color: 'var(--df-text-faint)' }}>›</span>
               </button>
-            </>
-          ) : (
-            <>
-              <button onClick={() => setVerProductos(false)} style={{ ...item, fontWeight: 700, fontSize: 12.5, color: 'var(--df-text-muted)' }}>‹ Elige el producto</button>
-              {df.flujoProductos.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes productos aún.</div>}
-              {df.flujoProductos.map((p) => (
-                <button key={p.id} onClick={() => { df.enviarFlujoInicial(p.id); setOpen(false); setVerProductos(false); }} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                  <span style={{ fontSize: 15 }}>🛍️</span>
-                  <span style={{ flex: 1, textAlign: 'left', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</span>
-                </button>
-              ))}
+              <button onClick={() => setVerRemk(true)} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                <span style={{ fontSize: 17 }}>🔁</span>
+                <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>Remarketing</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Envía uno de tus flujos de ofertas</div>
+                </div>
+                <span style={{ color: 'var(--df-text-faint)' }}>›</span>
+              </button>
             </>
           )}
         </div>

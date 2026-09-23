@@ -429,6 +429,20 @@ addColumn('orders', "ad_id TEXT NOT NULL DEFAULT ''");
 addColumn('orders', "ad_ref TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_orders_ad ON orders(store_id, ad_id)');
 
+// Flujos de remarketing: plantillas de contenido (bloques texto/imagen/video/audio,
+// igual que el mensaje inicial) que la tienda arma para reenganchar clientes. Se
+// envían a un chat desde el Inbox. `bloques` es un JSON de MensajeBloque[].
+db.exec(`CREATE TABLE IF NOT EXISTS flows (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  descripcion TEXT NOT NULL DEFAULT '',
+  bloques TEXT NOT NULL DEFAULT '[]',
+  activo INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_flows_store ON flows(store_id)');
+
 // Registro de actividad/errores por tienda (diagnóstico del Inbox): quién
 // disparó un flujo, si un envío falló y por qué, pedidos creados, etc.
 db.exec(`CREATE TABLE IF NOT EXISTS event_log (

@@ -2,103 +2,14 @@ import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
 import { AutoTextarea } from '../components/AutoTextarea';
+import { BloquesBuilder } from '../components/BloquesBuilder';
 import { apiWooBuscarProductos, type ProductoWoo } from '../lib/api';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
-
-type BloqueDecorado = DecoratedProduct['bloquesDecorados'][number];
 
 // Título de sección resaltado en negro (para diferenciar los grupos del editor).
 const TITULO_NEGRO: CSSProperties = { fontSize: 13.5, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '-0.01em', margin: '2px 0 10px' };
 // Subtítulo dentro de un grupo (jerarquía secundaria, en gris).
 const SUBLABEL: CSSProperties = { fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 8px' };
-
-/** Contenido de un bloque de imagen/video/audio: varias piezas, cada una con quitar y mover. */
-function MediaEnBloque({ b }: { b: BloqueDecorado }) {
-  const esVideo = b.tipo === 'video';
-  const esAudio = b.tipo === 'audio';
-  return (
-    <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-      {b.mediaLista.map((src, k) => (
-        <div key={k} style={{ position: 'relative', flexShrink: 0 }}>
-          {esVideo
-            ? <video src={src} controls style={{ width: 150, maxWidth: '100%', borderRadius: 8, background: '#0F172A', display: 'block' }} />
-            : esAudio
-            ? <audio src={src} controls style={{ height: 40, maxWidth: '100%', display: 'block' }} />
-            : <img src={src} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(15,23,42,.1)', display: 'block' }} />}
-          <span
-            onClick={() => b.removeMedia(k)}
-            title="Quitar esta pieza"
-            style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: '#0F172A', color: '#fff', fontSize: 11, lineHeight: '18px', textAlign: 'center', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }}
-          >✕</span>
-          <div style={{ position: 'absolute', bottom: 3, left: 3, display: 'flex', gap: 3 }}>
-            {k > 0 && (
-              <span onClick={() => b.moverMedia(k, k - 1)} title="Mover a la izquierda"
-                style={{ width: 18, height: 18, borderRadius: 5, background: 'rgba(15,23,42,.72)', color: '#fff', fontSize: 11, lineHeight: '18px', textAlign: 'center', cursor: 'pointer' }}>◀</span>
-            )}
-            {k < b.mediaLista.length - 1 && (
-              <span onClick={() => b.moverMedia(k, k + 1)} title="Mover a la derecha"
-                style={{ width: 18, height: 18, borderRadius: 5, background: 'rgba(15,23,42,.72)', color: '#fff', fontSize: 11, lineHeight: '18px', textAlign: 'center', cursor: 'pointer' }}>▶</span>
-            )}
-          </div>
-        </div>
-      ))}
-      <PhotoAddChip label={esVideo ? '+ Video' : esAudio ? '+ Audio' : '+ Imagen'} accept={esVideo ? 'video/*' : esAudio ? 'audio/*' : undefined} onFiles={b.addMedia} />
-    </div>
-  );
-}
-
-/** Bloques del mensaje inicial, con arrastrar-para-reordenar. */
-function BloquesInicial({ p }: { p: DecoratedProduct }) {
-  const [drag, setDrag] = useState<number | null>(null);
-  const [over, setOver] = useState<number | null>(null);
-  if (!p.bloquesDecorados.length) return null;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {p.bloquesDecorados.map((b, i) => {
-        const esObjetivo = over === i && drag !== null && drag !== i;
-        return (
-          <div
-            key={i}
-            onDragEnter={() => setOver(i)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => { if (drag !== null) p.moverBloque(drag, i); setDrag(null); setOver(null); }}
-            onDragEnd={() => { setDrag(null); setOver(null); }}
-            style={{
-              display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-surface)',
-              border: '1px solid ' + (esObjetivo ? 'var(--df-brand)' : 'var(--df-border)'),
-              boxShadow: esObjetivo ? '0 -2px 0 var(--df-brand) inset' : 'none',
-              borderRadius: 10, padding: '9px 12px', opacity: drag === i ? 0.4 : 1,
-            }}
-          >
-            {/* La manija (⠿) es lo único arrastrable: así se puede editar el texto sin disparar el arrastre. */}
-            <span
-              draggable
-              onDragStart={() => setDrag(i)}
-              title="Arrastra para reordenar"
-              style={{ color: 'var(--df-border-strong)', fontSize: 16, flexShrink: 0, cursor: 'grab', lineHeight: 1, marginTop: 6 }}
-            >⠿</span>
-            <span style={{ background: 'var(--df-surface-2)', color: 'var(--df-text-muted)', borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace", marginTop: 4 }}>{i + 1}</span>
-            <span style={{ color: 'var(--df-text-faint)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', width: 52, flexShrink: 0, marginTop: 5 }}>
-              {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : b.tipo === 'audio' ? 'Audio' : 'Video'}
-            </span>
-            {b.tipo === 'texto' ? (
-              <AutoTextarea
-                value={b.valor || ''}
-                onChange={(v) => b.editText(v)}
-                placeholder="Escribe el texto de este bloque…"
-                style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5, minHeight: 38, boxSizing: 'border-box' }}
-              />
-            ) : (
-              <MediaEnBloque b={b} />
-            )}
-            <span onClick={b.duplicate} className="df-copy-hover" title="Duplicar este bloque (copiar y pegar)" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 2, alignSelf: 'flex-start', marginTop: 4 }}>⧉</span>
-            <span onClick={b.remove} className="df-danger-hover" title={b.tipo === 'texto' ? 'Quitar bloque' : 'Quitar el bloque completo'} style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, alignSelf: 'flex-start', marginTop: 4 }}>✕</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 /** Editor de opciones del producto: grupos como Color (Negro, Azul…) y Talla (S, M, L…). */
 function OpcionesEditor({ p }: { p: DecoratedProduct }) {
@@ -388,19 +299,22 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             <input className="df-input" value={p.disparador || ''} onChange={(e) => p.setDisparador(e.target.value)} placeholder="Ej: ¡Hola! Me interesan los Bota recta ámbar." style={inputStyle} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-            <BloquesInicial p={p} />
             {p.bloquesDecorados.length === 0 && !!(p.mensajeInicial || '').trim() && (
               <div style={{ color: 'var(--df-text-faint)', fontSize: 12, background: 'var(--df-surface)', border: '1px dashed var(--df-border)', borderRadius: 8, padding: '9px 12px' }}>
                 Hoy el asistente usa este texto: “{p.mensajeInicial}”. Agrega bloques y los usará en su lugar.
               </div>
             )}
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input className="df-input" value={df.bloqueTexto} onChange={(e) => df.setBloqueTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') p.addBloqueTexto(); }} placeholder="Escribe un bloque de texto · ej: ¡Claro! Te cuento: 3 joggers por $109.900…" style={{ flex: 1, minWidth: 220, border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }} />
-            <button onClick={p.addBloqueTexto} className="df-btn-outline-green" style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Texto</button>
-            <PhotoAddChip label="+ Imagen" onFiles={p.addBloqueImagen} />
-            <PhotoAddChip label="+ Video" accept="video/*" onFiles={p.addBloqueVideo} />
-            <PhotoAddChip label="+ Audio" accept="audio/*" onFiles={p.addBloqueAudio} />
+            <BloquesBuilder
+              bloques={p.bloquesDecorados}
+              moverBloque={p.moverBloque}
+              textoDraft={df.bloqueTexto}
+              setTextoDraft={df.setBloqueTexto}
+              onAddTexto={p.addBloqueTexto}
+              onAddImagen={p.addBloqueImagen}
+              onAddVideo={p.addBloqueVideo}
+              onAddAudio={p.addBloqueAudio}
+              placeholderTexto="Escribe un bloque de texto · ej: ¡Claro! Te cuento: 3 joggers por $109.900…"
+            />
           </div>
           <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
             Cuando un cliente pregunte por este producto, el asistente enviará estos bloques en orden, como mensajes de WhatsApp.

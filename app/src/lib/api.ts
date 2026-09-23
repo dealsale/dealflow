@@ -1,3 +1,4 @@
+import type { Flujo, MensajeBloque } from '../types';
 export interface ApiUser {
   id: string;
   email: string;
@@ -358,6 +359,13 @@ export const apiSetLeadNotaInterna = (id: string, notaInterna: string) => req<{ 
 export const apiDeleteLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}`, 'DELETE');
 export const apiResetLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}/reset`, 'POST');
 export const apiEnviarFlujoInicial = (id: string, productId: string) => req<{ ok: true }>(`/api/leads/${id}/flujo-inicial`, 'POST', { productId });
+
+// ── Flujos de remarketing ──
+export const apiFlows = () => req<{ flows: Flujo[] }>('/api/flows', 'GET');
+export const apiCrearFlujo = (body: { nombre: string; descripcion?: string }) => req<{ id: string }>('/api/flows', 'POST', body);
+export const apiActualizarFlujo = (id: string, body: { nombre?: string; descripcion?: string; bloques?: MensajeBloque[]; activo?: boolean }) => req<{ ok: true }>(`/api/flows/${id}`, 'PUT', body);
+export const apiEliminarFlujo = (id: string) => req<{ ok: true }>(`/api/flows/${id}`, 'DELETE');
+export const apiEnviarFlujoRemarketing = (leadId: string, flowId: string) => req<{ ok: true; enviadas: number }>(`/api/leads/${leadId}/enviar-flujo`, 'POST', { flowId });
 
 // ── Completar pedido desde el chat ──
 export interface PropuestaPedido {

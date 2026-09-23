@@ -81,6 +81,15 @@ export interface MensajeBloque {
   valores?: string[];
 }
 
+/** Un flujo de remarketing: contenido en bloques que la tienda arma y reenvía. */
+export interface Flujo {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  bloques: MensajeBloque[];
+  activo: boolean;
+}
+
 export interface Product {
   id: number | string;
   nombre: string;
@@ -231,6 +240,7 @@ export type VendedorSection =
   | 'resumen'
   | 'estadisticas'
   | 'productos'
+  | 'flujos'
   | 'asistente'
   | 'whatsapp'
   | 'pedidos'

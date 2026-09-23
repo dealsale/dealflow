@@ -1077,6 +1077,60 @@ export async function enviarMensajeInicialManual(storeId: string, leadId: string
 }
 
 /**
+ * Envía un FLUJO de remarketing (bloques texto/imagen/video/audio armados por la
+ * tienda) a un chat, en el orden construido. Se dispara a mano desde el Inbox.
+ */
+export async function enviarFlujo(storeId: string, leadId: string, flowId: string): Promise<{ ok: boolean; error?: string; enviadas?: number }> {
+  const flow = db.prepare('SELECT nombre, bloques FROM flows WHERE id = ? AND store_id = ?').get(flowId, storeId) as { nombre: string; bloques: string } | undefined;
+  if (!flow) return { ok: false, error: 'Flujo no encontrado.' };
+  const lead = db.prepare('SELECT nombre, wa_id, tel FROM leads WHERE id = ? AND store_id = ?').get(leadId, storeId) as { nombre: string; wa_id: string | null; tel: string } | undefined;
+  if (!lead) return { ok: false, error: 'Chat no encontrado.' };
+  const destino = lead.wa_id || lead.tel;
+  const pn = lead.tel;
+  const bloques = pj<{ tipo: string; valor?: string; valores?: string[] }[]>(flow.bloques, []);
+  const piezas: { tipo: string; valor: string }[] = bloques.flatMap((b) => {
+    if (b.tipo === 'texto') return [{ tipo: 'texto', valor: b.valor || '' }];
+    const lista = Array.isArray(b.valores) && b.valores.length ? b.valores : b.valor ? [b.valor] : [];
+    return lista.map((v) => ({ tipo: b.tipo, valor: v }));
+  });
+  if (!piezas.length) return { ok: false, error: 'Este flujo no tiene contenido cargado.' };
+  const gap = Number(process.env.BOT_MSG_GAP) || 1200;
+  let enviadas = 0;
+  let idx = 0;
+  for (const b of piezas) {
+    let ok = false;
+    if (b.tipo === 'texto') {
+      const valor = rellenar(b.valor, lead);
+      if (valor.trim()) {
+        const mid = uid();
+        db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, leadId, 'bot', valor);
+        const r = await sendWhatsappText(storeId, destino, valor, pn);
+        marcarEnviado(mid, r);
+        ok = r.ok;
+      }
+    } else {
+      const media = materializar(storeId, b.valor);
+      if (media) {
+        const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
+        const mid = uid();
+        db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
+          .run(mid, leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+        marcarEnviado(mid, r);
+        ok = r.ok;
+      }
+    }
+    if (ok) enviadas++;
+    if (ok && gap > 0 && idx < piezas.length - 1) await dormir(gap);
+    idx++;
+  }
+  // El bot queda atendiendo y se reinicia el seguimiento (el flujo reactivó el chat).
+  db.prepare("UPDATE leads SET seguimiento_nivel = 0 WHERE id = ?").run(leadId);
+  if (enviadas > 0) registrarLog(storeId, 'info', 'flujo', `Flujo de remarketing "${flow.nombre}" enviado (${enviadas}/${piezas.length} piezas).`, leadId);
+  else registrarLog(storeId, 'warn', 'flujo', `No se pudo enviar el flujo "${flow.nombre}" (revisa la conexión de WhatsApp).`, leadId);
+  return { ok: enviadas > 0, enviadas, error: enviadas > 0 ? undefined : 'No se envió ninguna pieza (¿WhatsApp conectado?).' };
+}
+
+/**
  * Envía las fotos y videos SUELTOS del producto (cuando el cliente los pide).
  * NO usa los bloques del mensaje inicial: esos están reservados para el
  * disparador, así una petición de fotos nunca reenvía el saludo. Sin candado.

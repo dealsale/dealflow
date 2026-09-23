@@ -8,6 +8,7 @@ import {
   IconMarketing,
   IconDealShop,
   IconEstadisticas,
+  IconFlujos,
   IconBiblioteca,
   IconIntegraciones,
   IconLeads,
@@ -71,6 +72,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
           {item('resumen', <IconResumen />, 'Resumen')}
           {item('estadisticas', <IconEstadisticas />, 'Estadísticas')}
           {item('productos', <IconProductos />, 'Productos')}
+          {item('flujos', <IconFlujos />, 'Flujos')}
           {item('asistente', <IconAsistente />, 'Asistente')}
           {item(
             'whatsapp',

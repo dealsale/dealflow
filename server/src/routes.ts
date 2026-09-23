@@ -1000,6 +1000,49 @@ api.post('/leads/:id/flujo-inicial', requireAuth, requireStore, async (req, res)
   res.json({ ok: true });
 });
 
+// ── Flujos de remarketing ─────────────────────────────────────────────
+api.get('/flows', requireAuth, requireStore, (req, res) => {
+  const rows = db.prepare('SELECT id, nombre, descripcion, bloques, activo, created_at FROM flows WHERE store_id = ? ORDER BY created_at DESC').all(req.user!.storeId) as Record<string, unknown>[];
+  res.json({ flows: rows.map((f) => ({ id: f.id, nombre: f.nombre, descripcion: f.descripcion, bloques: pj(f.bloques as string, []), activo: !!f.activo })) });
+});
+
+api.post('/flows', requireAuth, requireStore, (req, res) => {
+  const nombre = String(req.body?.nombre || '').trim();
+  if (!nombre) return res.status(400).json({ error: 'Ponle un nombre al flujo.' });
+  const id = uid();
+  db.prepare('INSERT INTO flows (id, store_id, nombre, descripcion, bloques) VALUES (?,?,?,?,?)')
+    .run(id, req.user!.storeId, nombre, String(req.body?.descripcion || ''), j(Array.isArray(req.body?.bloques) ? req.body.bloques : []));
+  res.json({ id });
+});
+
+api.put('/flows/:id', requireAuth, requireStore, (req, res) => {
+  const f = db.prepare('SELECT id FROM flows WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!f) return res.status(404).json({ error: 'Flujo no encontrado.' });
+  const b = req.body || {};
+  if (typeof b.nombre === 'string' && b.nombre.trim()) db.prepare('UPDATE flows SET nombre = ? WHERE id = ?').run(b.nombre.trim(), req.params.id);
+  if (typeof b.descripcion === 'string') db.prepare('UPDATE flows SET descripcion = ? WHERE id = ?').run(b.descripcion, req.params.id);
+  if (Array.isArray(b.bloques)) db.prepare('UPDATE flows SET bloques = ? WHERE id = ?').run(j(b.bloques), req.params.id);
+  if (b.activo !== undefined) db.prepare('UPDATE flows SET activo = ? WHERE id = ?').run(b.activo ? 1 : 0, req.params.id);
+  res.json({ ok: true });
+});
+
+api.delete('/flows/:id', requireAuth, requireStore, (req, res) => {
+  const f = db.prepare('SELECT id FROM flows WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!f) return res.status(404).json({ error: 'Flujo no encontrado.' });
+  db.prepare('DELETE FROM flows WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// Enviar un flujo de remarketing a un chat.
+api.post('/leads/:id/enviar-flujo', requireAuth, requireStore, async (req, res) => {
+  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
+  const { enviarFlujo } = await import('./ai.js');
+  const r = await enviarFlujo(req.user!.storeId!, req.params.id, String(req.body?.flowId || ''));
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, enviadas: r.enviadas });
+});
+
 // Extrae (con IA + el resumen del chat) el pedido de una conversación para
 // REVISAR y completar un pedido existente. No escribe nada.
 api.post('/leads/:id/extraer-pedido', requireAuth, requireStore, async (req, res) => {
