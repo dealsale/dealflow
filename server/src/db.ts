@@ -443,6 +443,21 @@ db.exec(`CREATE TABLE IF NOT EXISTS flows (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_flows_store ON flows(store_id)');
 
+// ── Índices de rendimiento (críticos) ──
+// El Inbox sondea /api/leads?resumen cada pocos segundos y, POR CADA lead, lee sus
+// mensajes (último, cola de 40) ordenados por fecha. Sin este índice, cada lectura
+// escanea TODA la tabla messages (que crece sin límite entre todas las tiendas), y
+// como better-sqlite3 es SÍNCRONO, esos escaneos bloquean el event loop y toda la
+// app se pone lenta / deja de cargar. Con el índice son búsquedas instantáneas.
+db.exec('CREATE INDEX IF NOT EXISTS idx_messages_lead ON messages(lead_id, created_at)');
+// /state y /orders leen los ítems por pedido; el editor lee las variantes por
+// producto. Sin índice, cada lectura escanea toda la tabla.
+db.exec('CREATE INDEX IF NOT EXISTS idx_orderitems_order ON order_items(order_id)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_variants_product ON variants(product_id)');
+// Acelera el emparejamiento de pedidos por teléfono y las búsquedas por número.
+db.exec('CREATE INDEX IF NOT EXISTS idx_orders_tel ON orders(store_id, tel)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_leads_tel ON leads(store_id, tel)');
+
 // Registro de actividad/errores por tienda (diagnóstico del Inbox): quién
 // disparó un flujo, si un envío falló y por qué, pedidos creados, etc.
 db.exec(`CREATE TABLE IF NOT EXISTS event_log (
