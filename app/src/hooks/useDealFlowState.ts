@@ -2279,7 +2279,7 @@ export function useDealFlowState() {
   async function recargarFlujos() {
     if (!apiMode) return;
     const { data } = await apiFlows();
-    if (data) setFlujos(data.flows);
+    if (data && Array.isArray(data.flows)) setFlujos(data.flows);
   }
   useEffect(() => {
     if (apiMode && sessionUser && (section === 'flujos' || section === 'crm')) void recargarFlujos();
@@ -2309,9 +2309,11 @@ export function useDealFlowState() {
   }
   async function crearFlujo(nombre: string): Promise<string> {
     if (!nombre.trim()) return '';
+    setFlujoMsgRemk('');
     if (apiMode) {
-      const { data } = await apiCrearFlujo({ nombre: nombre.trim() });
-      if (data) { await recargarFlujos(); return data.id; }
+      const { data, error } = await apiCrearFlujo({ nombre: nombre.trim() });
+      if (data?.id) { await recargarFlujos(); return data.id; }
+      setFlujoMsgRemk(error || 'No se pudo crear el flujo. Recarga la página (F5) e intenta de nuevo.');
       return '';
     }
     const id = 'flow_' + Date.now();

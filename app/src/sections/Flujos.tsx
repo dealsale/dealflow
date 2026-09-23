@@ -45,6 +45,9 @@ export function Flujos({ df }: { df: DealFlowState }) {
           style={{ ...inp, flex: 1, minWidth: 240 }}
         />
         <button onClick={() => void crear()} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Crear flujo</button>
+        {df.flujoMsgRemk && !df.flujoMsgRemk.startsWith('✓') && !df.flujoMsgRemk.includes('Enviando') && (
+          <div style={{ width: '100%', color: 'var(--df-danger-dark)', fontSize: 12.5, marginTop: 2 }}>{df.flujoMsgRemk}</div>
+        )}
       </div>
 
       {flujos.length === 0 ? (
