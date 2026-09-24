@@ -40,7 +40,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-09-24-intervenir-todos',
+    build: '2026-09-24-config-id-visible',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de la conexión en un clic: SOLO dice si las variables están
@@ -51,6 +51,11 @@ app.get('/salud', (_req, res) =>
       appSecret: !!process.env.META_APP_SECRET,
       configId: !!process.env.META_CONFIG_ID,
       listo: !!(process.env.META_APP_ID && process.env.META_APP_SECRET && process.env.META_CONFIG_ID),
+      // El App ID y el Config ID NO son secretos (se envían al navegador en cada
+      // sesión). Los mostramos para poder identificar cuál configuración usa esta
+      // instancia. El App Secret nunca se muestra.
+      appIdValor: process.env.META_APP_ID || '',
+      configIdValor: process.env.META_CONFIG_ID || '',
     },
     verifyToken: !!process.env.WHATSAPP_VERIFY_TOKEN,
     // Web Push listo cuando ambas llaves VAPID están puestas (nunca muestra su valor).
