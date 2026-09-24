@@ -40,7 +40,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-09-24-config-id-visible',
+    build: '2026-09-24-messaging-config',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de la conexión en un clic: SOLO dice si las variables están
@@ -56,6 +56,10 @@ app.get('/salud', (_req, res) =>
       // instancia. El App Secret nunca se muestra.
       appIdValor: process.env.META_APP_ID || '',
       configIdValor: process.env.META_CONFIG_ID || '',
+      // Config usada para Messenger/Instagram + Ads. Si no hay una específica,
+      // cae en la de WhatsApp. Debe traer los permisos de páginas y anuncios.
+      messagingConfigId: !!(process.env.META_MESSAGING_CONFIG_ID || process.env.META_CONFIG_ID),
+      messagingConfigIdValor: process.env.META_MESSAGING_CONFIG_ID || process.env.META_CONFIG_ID || '',
     },
     verifyToken: !!process.env.WHATSAPP_VERIFY_TOKEN,
     // Web Push listo cuando ambas llaves VAPID están puestas (nunca muestra su valor).

@@ -2630,8 +2630,10 @@ export function useDealFlowState() {
     if (!waSignup?.disponible) { setMetaMsg('La conexión con Meta no está configurada en el servidor.'); return; }
     setMetaMsg(''); setMetaLoading(true);
     try {
-      const { abrirLoginMeta } = await import('../lib/metaSignup');
-      const code = await abrirLoginMeta(waSignup.appId, ['pages_show_list', 'pages_messaging', 'pages_manage_metadata', 'pages_read_engagement', 'instagram_basic', 'instagram_manage_messages', 'business_management']);
+      const cfg = waSignup.messagingConfigId || waSignup.configId;
+      if (!cfg) { setMetaLoading(false); setMetaMsg('Falta configurar META_MESSAGING_CONFIG_ID en el servidor.'); return; }
+      const { abrirLoginConfig } = await import('../lib/metaSignup');
+      const code = await abrirLoginConfig(waSignup.appId, cfg);
       const r = await apiMetaConectar(code);
       setMetaLoading(false);
       if (r.error || !r.data) { setMetaMsg(r.error || 'No pudimos conectar tus páginas.'); return; }
@@ -2855,8 +2857,10 @@ export function useDealFlowState() {
     if (!waSignup?.disponible) { setMkError('La conexión con Meta no está configurada en el servidor.'); return; }
     setMkError(''); setMkLoading(true);
     try {
-      const { abrirLoginMeta } = await import('../lib/metaSignup');
-      const code = await abrirLoginMeta(waSignup.appId, ['ads_management', 'ads_read', 'business_management', 'pages_show_list']);
+      const cfg = waSignup.messagingConfigId || waSignup.configId;
+      if (!cfg) { setMkLoading(false); setMkError('Falta configurar META_MESSAGING_CONFIG_ID en el servidor.'); return; }
+      const { abrirLoginConfig } = await import('../lib/metaSignup');
+      const code = await abrirLoginConfig(waSignup.appId, cfg);
       const r = await apiAdsConectar(code);
       setMkLoading(false);
       if (r.error || !r.data) { setMkError(r.error || 'No pudimos leer tus cuentas publicitarias.'); return; }

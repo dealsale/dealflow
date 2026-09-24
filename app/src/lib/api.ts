@@ -381,7 +381,7 @@ export const apiWaLinkCloud = (b: { wabaId: string; phoneNumberId: string; acces
   req<{ conectado: boolean; numero: string }>('/api/whatsapp', 'PUT', b);
 export const apiWaUnlink = () => req<{ conectado: boolean }>('/api/whatsapp', 'DELETE');
 /** Conexión en un clic: datos que devuelve el popup de Facebook (Embedded Signup). */
-export interface MetaSignupCfg { disponible: boolean; appId: string; configId: string }
+export interface MetaSignupCfg { disponible: boolean; appId: string; configId: string; messagingConfigId?: string }
 export const apiWaEmbedded = (b: { code: string; wabaId: string; phoneNumberId: string }) =>
   req<{ conectado: boolean; numero: string; aviso?: string }>('/api/whatsapp/embedded', 'POST', b);
 

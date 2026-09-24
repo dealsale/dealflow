@@ -21,7 +21,13 @@ export function metaSignupConfig() {
   const appId = process.env.META_APP_ID || '';
   const configId = process.env.META_CONFIG_ID || '';
   const secret = process.env.META_APP_SECRET || '';
-  return { disponible: !!(appId && configId && secret), appId, configId };
+  // Config para Messenger/Instagram + Administrador de anuncios. El Login for
+  // Business de Meta EXIGE un config_id (no acepta una lista de permisos suelta:
+  // por eso fallaba con "necesita al menos un supported permission"). Si no se
+  // define uno específico para mensajería, reutilizamos el de WhatsApp cuando
+  // esa misma configuración ya trae todos los permisos.
+  const messagingConfigId = process.env.META_MESSAGING_CONFIG_ID || configId || '';
+  return { disponible: !!(appId && configId && secret), appId, configId, messagingConfigId };
 }
 
 /** PIN de verificación en dos pasos del número. Se guarda para poder re-registrar. */

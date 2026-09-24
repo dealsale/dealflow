@@ -61,6 +61,27 @@ export async function abrirLoginMeta(appId: string, permisos: string[]): Promise
   });
 }
 
+/**
+ * Login con Facebook usando una CONFIGURACIÓN por su ID (Login for Business).
+ * Es la vía correcta para Messenger/Instagram y el Administrador de anuncios:
+ * los permisos viven dentro de la configuración de Meta, no se piden sueltos.
+ * (Pasar solo una lista de `scope` sin config_id falla con "necesita al menos
+ * un supported permission" cuando la app está en modo Login for Business.)
+ */
+export async function abrirLoginConfig(appId: string, configId: string): Promise<string> {
+  const FB = await cargarSdk(appId);
+  return new Promise<string>((resolve, reject) => {
+    FB.login(
+      (r) => {
+        const code = r.authResponse?.code;
+        if (!code) return reject(new Error('No autorizaste la conexión con Facebook.'));
+        resolve(code);
+      },
+      { config_id: configId, response_type: 'code', override_default_response_type: true },
+    );
+  });
+}
+
 export interface DatosSignup { code: string; wabaId: string; phoneNumberId: string }
 
 export async function abrirSignupMeta(appId: string, configId: string): Promise<DatosSignup> {
