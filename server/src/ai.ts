@@ -1017,10 +1017,22 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
   }
 
   const lead = db.prepare('SELECT nombre, tel FROM leads WHERE id = ?').get(leadId) as { nombre: string; tel: string } | undefined;
-  // Pausa entre piezas para que WhatsApp ENTREGUE en el orden en que se armó el
-  // mensaje inicial. Sin esta pausa, los mensajes salen en el mismo segundo y
-  // WhatsApp los reordena (los videos suelen adelantarse al texto).
-  const gap = Number(process.env.BOT_MSG_GAP) || 1200;
+  // Pausa entre piezas. Cumple dos cosas:
+  //  1) Que WhatsApp ENTREGUE en el orden en que se armó el mensaje inicial
+  //     (sin pausa salen en el mismo segundo y los videos se adelantan al texto).
+  //  2) ANTI-BANEO: el bot no dispara una ráfaga de fotos/videos en un instante
+  //     (patrón que genera reportes/bloqueos). Simula el ritmo de una persona:
+  //     una pausa más larga para media que para texto, con variación aleatoria.
+  const gapMin = Number(process.env.BOT_MSG_GAP) || 1200;
+  const escala = Number(process.env.BOT_PACE_SCALE) || 1;
+  const pausaHumana = (tipo: string, len = 0): number => {
+    const base = tipo === 'texto' ? 1300 + Math.min(len * 25, 2500)
+      : tipo === 'video' ? 3800
+      : tipo === 'audio' ? 2600
+      : 2800; // imagen u otros
+    const conJitter = base + Math.floor(Math.random() * base * 0.5); // +0–50%
+    return Math.max(gapMin, Math.round(conJitter * escala));
+  };
   let enviadas = 0;
   let idx = 0;
   for (const b of piezas) {
@@ -1046,8 +1058,12 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
       }
     }
     if (ok) enviadas++;
-    // Espera entre piezas (no después de la última) para conservar el orden.
-    if (ok && gap > 0 && idx < piezas.length - 1) await dormir(gap);
+    // Espera antes de la SIGUIENTE pieza (no tras la última): ritmo humano según
+    // el tipo de lo que viene, para conservar el orden y no enviar en ráfaga.
+    if (ok && idx < piezas.length - 1) {
+      const sig = piezas[idx + 1];
+      await dormir(pausaHumana(sig.tipo, sig.tipo === 'texto' ? (sig.valor || '').length : 0));
+    }
     idx++;
   }
   console.log(`[ia] presentación de "${p.nombre}" enviada (${enviadas}/${piezas.length} piezas, en orden)`);
@@ -1080,11 +1096,17 @@ export async function enviarMensajeInicialManual(storeId: string, leadId: string
  * Envía un FLUJO de remarketing (bloques texto/imagen/video/audio armados por la
  * tienda) a un chat, en el orden construido. Se dispara a mano desde el Inbox.
  */
-export async function enviarFlujo(storeId: string, leadId: string, flowId: string): Promise<{ ok: boolean; error?: string; enviadas?: number }> {
+export async function enviarFlujo(storeId: string, leadId: string, flowId: string, permitirSinOptin = false): Promise<{ ok: boolean; error?: string; enviadas?: number; requiereOptin?: boolean }> {
   const flow = db.prepare('SELECT nombre, bloques FROM flows WHERE id = ? AND store_id = ?').get(flowId, storeId) as { nombre: string; bloques: string } | undefined;
   if (!flow) return { ok: false, error: 'Flujo no encontrado.' };
-  const lead = db.prepare('SELECT nombre, wa_id, tel FROM leads WHERE id = ? AND store_id = ?').get(leadId, storeId) as { nombre: string; wa_id: string | null; tel: string } | undefined;
+  const lead = db.prepare('SELECT nombre, wa_id, tel, promos_optin FROM leads WHERE id = ? AND store_id = ?').get(leadId, storeId) as { nombre: string; wa_id: string | null; tel: string; promos_optin: number } | undefined;
   if (!lead) return { ok: false, error: 'Chat no encontrado.' };
+  // Anti-baneo: el remarketing solo va a quien aceptó recibir promociones.
+  // Enviar a quien no lo pidió sube los reportes/bloqueos y hace que Meta
+  // desactive el número. El usuario puede forzarlo bajo su responsabilidad.
+  if (!permitirSinOptin && Number(lead.promos_optin) !== 1) {
+    return { ok: false, requiereOptin: true, error: 'Este cliente no ha aceptado recibir promociones. Márcalo como opt-in o confirma el envío bajo tu responsabilidad.' };
+  }
   const destino = lead.wa_id || lead.tel;
   const pn = lead.tel;
   const bloques = pj<{ tipo: string; valor?: string; valores?: string[] }[]>(flow.bloques, []);

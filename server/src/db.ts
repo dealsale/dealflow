@@ -423,6 +423,11 @@ addColumn('leads', "nota_interna TEXT NOT NULL DEFAULT ''");
 addColumn('leads', "ad_id TEXT NOT NULL DEFAULT ''");
 addColumn('leads', "ad_ref TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_leads_ad ON leads(store_id, ad_id)');
+// Consentimiento (opt-in) para recibir promociones/remarketing. Anti-baneo:
+// los flujos de remarketing solo se envían a quien lo aceptó. optin_at guarda
+// cuándo se dio, por si hay que auditarlo.
+addColumn('leads', 'promos_optin INTEGER NOT NULL DEFAULT 0');
+addColumn('leads', 'optin_at TEXT');
 // Atribución de venta: el pedido guarda el anuncio del que vino su cliente en el
 // momento de crearse (enlace exacto al chat), no por adivinar el teléfono después.
 addColumn('orders', "ad_id TEXT NOT NULL DEFAULT ''");

@@ -267,6 +267,7 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
       id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
       etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp', notaInterna: l.nota_interna || '',
       anuncio: l.ad_ref ? pj<Record<string, unknown>>(l.ad_ref as string, null as never) : null,
+      promosOptin: Number(l.promos_optin) === 1,
     };
     if (!resumen) return { ...base, mensajes: mensajesDe(l.id as string) };
     const ult = db.prepare('SELECT texto, created_at FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1').get(l.id as string) as Record<string, unknown> | undefined;
@@ -1038,9 +1039,20 @@ api.post('/leads/:id/enviar-flujo', requireAuth, requireStore, async (req, res) 
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
   if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
   const { enviarFlujo } = await import('./ai.js');
-  const r = await enviarFlujo(req.user!.storeId!, req.params.id, String(req.body?.flowId || ''));
-  if (!r.ok) return res.status(400).json({ error: r.error });
+  const r = await enviarFlujo(req.user!.storeId!, req.params.id, String(req.body?.flowId || ''), !!req.body?.permitirSinOptin);
+  if (!r.ok) return res.status(400).json({ error: r.error, requiereOptin: r.requiereOptin });
   res.json({ ok: true, enviadas: r.enviadas });
+});
+
+// Marca (o desmarca) el consentimiento del cliente para recibir promociones.
+// Anti-baneo: los flujos de remarketing solo se envían a quien lo aceptó.
+api.post('/leads/:id/optin', requireAuth, requireStore, (req, res) => {
+  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
+  if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
+  const optin = req.body?.optin === false ? 0 : 1;
+  db.prepare('UPDATE leads SET promos_optin = ?, optin_at = CASE WHEN ? = 1 THEN datetime(\'now\') ELSE optin_at END WHERE id = ?')
+    .run(optin, optin, req.params.id);
+  res.json({ ok: true, optin: optin === 1 });
 });
 
 // Extrae (con IA + el resumen del chat) el pedido de una conversación para

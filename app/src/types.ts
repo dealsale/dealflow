@@ -177,6 +177,8 @@ export interface Lead {
   notaInterna?: string;
   /** Anuncio del que llegó el chat (atribución de campaña); null si es orgánico. */
   anuncio?: Anuncio | null;
+  /** El cliente aceptó recibir promociones (opt-in): habilita el remarketing. */
+  promosOptin?: boolean;
   /** Mensajes seguidos del cliente al final (lo calcula el servidor en modo resumen). */
   sinResponder?: number;
   mensajes: Mensaje[];

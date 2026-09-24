@@ -161,6 +161,7 @@ export interface ApiLead {
   canal?: string;
   notaInterna?: string;
   anuncio?: Anuncio | null;
+  promosOptin?: boolean;
   mensajes: ApiMensaje[];
   // Solo en modo resumen (sondeo liviano del Inbox): el servidor manda estos
   // en vez de todos los mensajes de cada chat.
@@ -365,7 +366,8 @@ export const apiFlows = () => req<{ flows: Flujo[] }>('/api/flows', 'GET');
 export const apiCrearFlujo = (body: { nombre: string; descripcion?: string }) => req<{ id: string }>('/api/flows', 'POST', body);
 export const apiActualizarFlujo = (id: string, body: { nombre?: string; descripcion?: string; bloques?: MensajeBloque[]; activo?: boolean }) => req<{ ok: true }>(`/api/flows/${id}`, 'PUT', body);
 export const apiEliminarFlujo = (id: string) => req<{ ok: true }>(`/api/flows/${id}`, 'DELETE');
-export const apiEnviarFlujoRemarketing = (leadId: string, flowId: string) => req<{ ok: true; enviadas: number }>(`/api/leads/${leadId}/enviar-flujo`, 'POST', { flowId });
+export const apiEnviarFlujoRemarketing = (leadId: string, flowId: string, permitirSinOptin = false) => req<{ ok: true; enviadas: number; requiereOptin?: boolean }>(`/api/leads/${leadId}/enviar-flujo`, 'POST', { flowId, permitirSinOptin });
+export const apiSetOptin = (leadId: string, optin: boolean) => req<{ ok: true; optin: boolean }>(`/api/leads/${leadId}/optin`, 'POST', { optin });
 
 // ── Completar pedido desde el chat ──
 export interface PropuestaPedido {

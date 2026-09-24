@@ -109,6 +109,7 @@ import {
   apiSetLeadEtiqueta,
   apiSetLeadAsignado,
   apiSetLeadNotaInterna,
+  apiSetOptin,
   apiSuperStores,
   apiToggleHideStore,
   apiLogs,
@@ -454,6 +455,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     canal: l.canal || 'whatsapp',
     notaInterna: l.notaInterna || '',
     anuncio: l.anuncio || null,
+    promosOptin: l.promosOptin || false,
     mensajes: mapApiMensajes(l.mensajes),
   }));
 }
@@ -1267,6 +1269,8 @@ export function useDealFlowState() {
   const crmChat = crmChats.find((c) => c.id === crmSelectedId) || null;
   // ¿El chat seleccionado lo atiende el asistente? (fuente de verdad: su "asignado")
   const crmChatBot = crmChat ? /asistente|bot/i.test(String(crmChat.asignado || '')) : true;
+  // ¿El cliente aceptó recibir promociones? (para habilitar el remarketing)
+  const crmOptin = (apiLeadsState || []).find((l) => l.id === crmSelectedId)?.promosOptin ?? false;
 
   function crearProducto() {
     const nombre = newProdNombre.trim();
@@ -2337,13 +2341,27 @@ export function useDealFlowState() {
     setFlujos((st) => st.filter((f) => f.id !== id));
     if (apiMode) void apiEliminarFlujo(id);
   }
-  function enviarFlujoRemarketing(flowId: string) {
+  function enviarFlujoRemarketing(flowId: string, permitirSinOptin = false) {
     const leadId = crmSelectedId;
     setFlujoMsgRemk('Enviando el flujo…');
-    void apiEnviarFlujoRemarketing(String(leadId), flowId).then((r) => {
+    void apiEnviarFlujoRemarketing(String(leadId), flowId, permitirSinOptin).then((r) => {
+      // El cliente no aceptó promociones: avisamos y dejamos confirmar el envío.
+      if (r.error && (r as { requiereOptin?: boolean }).requiereOptin && !permitirSinOptin) {
+        const ok = window.confirm('Este cliente NO ha aceptado recibir promociones. Enviar remarketing a quien no lo pidió aumenta los reportes y bloqueos, y puede hacer que Meta desactive tu número.\n\n¿Enviar de todas formas, bajo tu responsabilidad?');
+        if (ok) return enviarFlujoRemarketing(flowId, true);
+        setFlujoMsgRemk('Envío cancelado. Marca al cliente como opt-in si aceptó recibir promociones.');
+        return;
+      }
       if (r.error || !r.data) { setFlujoMsgRemk(r.error || 'No se pudo enviar el flujo.'); return; }
       setFlujoMsgRemk(`✓ Flujo enviado (${r.data.enviadas} pieza${r.data.enviadas === 1 ? '' : 's'}).`);
       if (apiMode) cargarMensajesChat(leadId);
+    });
+  }
+  // Marca/desmarca el consentimiento del cliente para recibir promociones.
+  function setLeadOptin(leadId: number | string, optin: boolean) {
+    setApiLeadsState((st) => (st || []).map((l) => (l.id === leadId ? { ...l, promosOptin: optin } : l)));
+    void apiSetOptin(String(leadId), optin).then((r) => {
+      if (r.error) setApiLeadsState((st) => (st || []).map((l) => (l.id === leadId ? { ...l, promosOptin: !optin } : l)));
     });
   }
   // Flujos decorados: cada uno con sus bloques listos para el BloquesBuilder.
@@ -3429,6 +3447,8 @@ export function useDealFlowState() {
     crearFlujo,
     flujoMsgRemk,
     enviarFlujoRemarketing,
+    crmOptin,
+    setLeadOptin,
     go,
     goAdmin,
     toggleMode,

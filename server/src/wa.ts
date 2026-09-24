@@ -1,6 +1,7 @@
 import { db, uid, registrarLog } from './db.js';
 import { mediaExt, audioAOgg } from './media.js';
 import { guardarAdEnLead, refDesdeWhatsapp, type AdRef } from './campana.js';
+import { esperarTurno } from './ratelimit.js';
 
 const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
 
@@ -86,6 +87,8 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
   // Canal WEB: el mensaje ya queda guardado en la BD y el chat web lo lee por
   // polling; no hay nada que "enviar" fuera.
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
+  // Anti-baneo: espera el turno de esta tienda (nunca ráfagas de mensajes).
+  await esperarTurno(storeId);
   // Canales de Meta (Messenger / Instagram DM): se envían por la Graph API.
   if (String(to).startsWith('fb:') || String(to).startsWith('ig:')) {
     const { sendMetaText } = await import('./meta.js');
@@ -170,6 +173,8 @@ export async function sendWhatsappMedia(
 ): Promise<{ ok: boolean; error?: string; wamid?: string }> {
   // Canal WEB: la multimedia ya queda en la BD (media_url) y el chat web la muestra.
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
+  // Anti-baneo: espera el turno de esta tienda (nunca ráfagas de mensajes).
+  await esperarTurno(storeId);
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
     | { phone_number_id: string; access_token: string; conectado: number; modo: string }
     | undefined;

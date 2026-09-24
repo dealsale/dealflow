@@ -476,6 +476,13 @@ export function CRM({ df }: { df: DealFlowState }) {
                 >
                   ✅ Completar pedido desde el chat
                 </button>
+                <button
+                  onClick={() => df.setLeadOptin(chat.id, !df.crmOptin)}
+                  title="Marca si este cliente aceptó recibir promociones. El remarketing solo se envía a quien dio su consentimiento (evita reportes y baneos)."
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: df.crmOptin ? 'var(--df-brand-soft, rgba(52,211,153,.12))' : 'var(--df-surface)', border: `1px solid ${df.crmOptin ? 'var(--df-brand)' : 'var(--df-border)'}`, color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
+                >
+                  {df.crmOptin ? '🔔 Acepta promociones (opt-in ✓)' : '🔕 Sin opt-in de promociones'}
+                </button>
               </div>
               <div style={{ marginTop: 8 }}>
                 <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginBottom: 5 }}>Asignar a…</div>
