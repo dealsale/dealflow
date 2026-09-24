@@ -1364,6 +1364,19 @@ api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) 
   res.json({ ok: true });
 });
 
+// Poner TODOS los chats de una tienda en intervención humana (que los atienda una
+// persona y NO el asistente). Útil para pausar el bot en una tienda de golpe.
+api.post('/admin/stores/:id/intervenir-todos', requireAuth, requireAdmin, (req, res) => {
+  const s = db.prepare('SELECT id, correo, nombre FROM stores WHERE id = ?').get(req.params.id) as { id: string; correo: string; nombre: string } | undefined;
+  if (!s) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const dueno = db.prepare('SELECT nombre FROM users WHERE store_id = ? AND email = ?').get(s.id, s.correo) as { nombre: string } | undefined;
+  const nombre = (String(req.body?.nombre || '').trim() || dueno?.nombre || 'Equipo').slice(0, 60);
+  // Un chat "atendido por humano" es cualquier asignado que NO sea el asistente/bot.
+  const info = db.prepare("UPDATE leads SET asignado = ? WHERE store_id = ?").run(nombre, s.id);
+  registrarLog(s.id, 'info', 'inbox', `Todos los chats (${info.changes}) puestos en intervención humana: ahora atiende ${nombre}, no el asistente.`);
+  res.json({ ok: true, intervenidos: info.changes, nombre });
+});
+
 // Barrido contra la API de Meta: consulta los números que HOY tiene la WABA de la
 // tienda y actualiza el phone_number_id/numero guardado (para cuando la tienda
 // cambió de número en Meta pero DealFlow seguía con el anterior). requireAdmin.

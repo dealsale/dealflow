@@ -199,6 +199,13 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                 >
                   🔄 Sincronizar número con Meta
                 </button>
+                <button
+                  onClick={() => { if (confirm(`¿Poner TODOS los chats de "${df.detalleStore!.nombre}" en intervención humana? El asistente dejará de responder en esta tienda y los chats quedarán atendidos por una persona.`)) df.intervenirTodosLosChats(df.detalleStore!.id); }}
+                  title="Marca todos los chats como atendidos por una persona (pausa el bot en esta tienda)"
+                  style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                >
+                  🙋 Intervenir todos los chats
+                </button>
                 {df.detalleStore.porEstado.map((e) => (
                   <span key={e.estado} style={{ fontSize: 12.5, color: 'var(--df-text-secondary)' }}>{e.estado}: <b>{e.n}</b></span>
                 ))}
@@ -220,6 +227,9 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                     </div>
                   )}
                 </div>
+              )}
+              {df.intervenirMsg && (
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: df.intervenirMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.intervenirMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)', marginBottom: 14 }}>{df.intervenirMsg}</div>
               )}
               {df.detalleStore.recientes.length > 0 && (
                 <div>

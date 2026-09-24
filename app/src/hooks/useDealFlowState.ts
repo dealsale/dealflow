@@ -92,6 +92,7 @@ import {
   apiDeleteStore,
   apiStoreDetalle,
   apiSyncWhatsapp,
+  apiIntervenirTodos,
   apiStats,
   apiImpersonate,
   apiOnboardingTienda,
@@ -3242,6 +3243,15 @@ export function useDealFlowState() {
     setDetalleStore(null);
     setEditStoreId(null);
   }
+  // Pone TODOS los chats de una tienda en intervención humana (que atienda una persona).
+  const [intervenirMsg, setIntervenirMsg] = useState('');
+  function intervenirTodosLosChats(storeId: string, nombre?: string) {
+    setIntervenirMsg('Poniendo todos los chats en intervención humana…');
+    void apiIntervenirTodos(storeId, nombre).then((r) => {
+      if (r.error || !r.data) { setIntervenirMsg(r.error || 'No se pudo.'); return; }
+      setIntervenirMsg(`✓ ${r.data.intervenidos} chat(s) quedaron atendidos por ${r.data.nombre} (el asistente ya no responde en esta tienda).`);
+    });
+  }
   // Barrido de WhatsApp: sincroniza el número guardado con el que hay hoy en Meta.
   const [waSyncMsg, setWaSyncMsg] = useState('');
   const [waSyncNumeros, setWaSyncNumeros] = useState<{ id: string; numero: string; nombre: string }[]>([]);
@@ -3891,6 +3901,9 @@ export function useDealFlowState() {
     waSyncMsg,
     waSyncNumeros,
     waSyncStoreId,
+    // Intervención humana masiva
+    intervenirTodosLosChats,
+    intervenirMsg,
     volverAlAdmin,
     entrarBiblioteca,
     // Onboarding: configura el asistente + crea productos de una tienda (para dar de alta un cliente).

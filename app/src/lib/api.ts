@@ -541,6 +541,9 @@ export interface WaSyncResp {
 }
 export const apiSyncWhatsapp = (id: string, phoneNumberId?: string) =>
   req<WaSyncResp>(`/api/admin/stores/${id}/whatsapp/sync`, 'POST', phoneNumberId ? { phoneNumberId } : {});
+// Pone TODOS los chats de una tienda en intervención humana (los atiende una persona, no el bot).
+export const apiIntervenirTodos = (id: string, nombre?: string) =>
+  req<{ ok: true; intervenidos: number; nombre: string }>(`/api/admin/stores/${id}/intervenir-todos`, 'POST', nombre ? { nombre } : {});
 
 // ── Superadmin ──
 export interface SuperStore {
