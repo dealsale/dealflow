@@ -5,6 +5,7 @@ import { SearchInput, FilterSelect } from '../components/Filters';
 import { Dropdown } from '../components/Dropdown';
 import { ActivityLog } from '../components/ActivityLog';
 import { useLazyList } from '../hooks/useLazyList';
+import { archivosDePortapapeles } from '../lib/clipboard';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import type { Anuncio } from '../types';
 
@@ -390,7 +391,8 @@ export function CRM({ df }: { df: DealFlowState }) {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') df.sendCrm();
                     }}
-                    placeholder="Escribe tu mensaje…"
+                    onPaste={(e) => { const fs = archivosDePortapapeles(e); if (fs.length) { e.preventDefault(); fs.forEach(df.sendCrmMedia); } }}
+                    placeholder="Escribe tu mensaje… (o pega una imagen/audio/video)"
                     style={{ flex: 1, border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13 }}
                   />
                   <button

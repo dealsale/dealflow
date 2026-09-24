@@ -3,6 +3,7 @@ import { AttachButton, MediaContent } from '../MediaBubble';
 import { VoiceRecorder } from '../VoiceRecorder';
 import { ActivityLog } from '../ActivityLog';
 import { FlujosButton, AnuncioCard } from '../../sections/CRM';
+import { archivosDePortapapeles } from '../../lib/clipboard';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function MobileChat({ df }: { df: DealFlowState }) {
@@ -140,6 +141,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
                 className="df-input"
                 value={df.crmDraft}
                 onChange={(e) => df.setCrmDraft(e.target.value)}
+                onPaste={(e) => { const fs = archivosDePortapapeles(e); if (fs.length) { e.preventDefault(); fs.forEach(df.sendCrmMedia); } }}
                 placeholder="Escribe tu mensaje…"
                 style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontSize: 14, minHeight: 44, boxSizing: 'border-box' }}
               />

@@ -2313,7 +2313,14 @@ export function useDealFlowState() {
     setFlujoMsgRemk('');
     if (apiMode) {
       const { data, error } = await apiCrearFlujo({ nombre: nombre.trim() });
-      if (data?.id) { await recargarFlujos(); return data.id; }
+      if (data?.id) {
+        // Optimista: lo mostramos YA en la lista, sin depender de que el refresco
+        // llegue a tiempo. Luego reconciliamos con el servidor.
+        const nuevo = { id: data.id, nombre: nombre.trim(), descripcion: '', bloques: [], activo: true };
+        setFlujos((st) => [nuevo, ...st.filter((f) => f.id !== data.id)]);
+        void recargarFlujos();
+        return data.id;
+      }
       setFlujoMsgRemk(error || 'No se pudo crear el flujo. Recarga la página (F5) e intenta de nuevo.');
       return '';
     }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PhotoAddChip } from './PhotoUpload';
 import { AutoTextarea } from './AutoTextarea';
+import { archivosDePortapapeles } from '../lib/clipboard';
 import type { MensajeBloque } from '../types';
 
 /** Un bloque con sus acciones ya "cableadas" (viene decorado del hook). */
@@ -120,7 +121,18 @@ export function BloquesBuilder({ bloques, moverBloque, textoDraft, setTextoDraft
           value={textoDraft}
           onChange={(e) => setTextoDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') onAddTexto(); }}
-          placeholder={placeholderTexto || 'Escribe un bloque de texto…'}
+          onPaste={(e) => {
+            const fs = archivosDePortapapeles(e);
+            if (!fs.length) return; // texto normal: dejar pegar
+            e.preventDefault();
+            const imgs = fs.filter((f) => f.type.startsWith('image/'));
+            const vids = fs.filter((f) => f.type.startsWith('video/'));
+            const auds = fs.filter((f) => f.type.startsWith('audio/'));
+            if (imgs.length) onAddImagen(imgs);
+            if (vids.length) onAddVideo(vids);
+            if (auds.length) onAddAudio(auds);
+          }}
+          placeholder={placeholderTexto || 'Escribe un bloque de texto… (o pega una imagen/audio/video)'}
           style={{ flex: 1, minWidth: 220, border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
         />
         <button onClick={onAddTexto} className="df-btn-outline-green" style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Texto</button>
