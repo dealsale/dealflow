@@ -28,6 +28,11 @@ app.use(
     },
   }),
 );
+// Los callbacks de Meta (eliminación de datos, desautorización) llegan como
+// application/x-www-form-urlencoded con el campo `signed_request`. El parser de
+// JSON no los toca, así que agregamos también el de formularios (coexisten: cada
+// uno solo actúa sobre su propio Content-Type).
+app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 app.use(cookieParser());
 
 if (process.env.NODE_ENV !== 'production') {
@@ -40,7 +45,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-09-24-messaging-config',
+    build: '2026-09-24-data-deletion',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de la conexión en un clic: SOLO dice si las variables están

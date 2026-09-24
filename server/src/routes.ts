@@ -1898,3 +1898,93 @@ webhooks.post('/wompi', async (req, res) => {
   }
   res.sendStatus(200);
 });
+
+// ── Eliminación de datos de Meta (requisito de Facebook Login) ─────────
+// Cuando una persona quita nuestra app desde sus ajustes de Facebook, Meta
+// envía aquí un `signed_request` firmado con el App Secret. Debemos borrar sus
+// datos y responder con una URL de estado + un código de confirmación.
+// https://developers.facebook.com/docs/development/create-an-app/app-dashboard/data-deletion-callback
+
+/** Decodifica y valida el signed_request de Meta (base64url `firma.payload`). */
+function parseSignedRequest(signed: string, secret: string): Record<string, unknown> | null {
+  if (!signed || !signed.includes('.')) return null;
+  const [firma, payload] = signed.split('.', 2);
+  try {
+    const b64 = (s: string) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    const esperado = createHmac('sha256', secret).update(payload).digest();
+    const recibido = b64(firma);
+    if (esperado.length !== recibido.length || !timingSafeEqual(esperado, recibido)) return null;
+    return JSON.parse(b64(payload).toString('utf8')) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/** Base pública para construir las URLs que devolvemos a Meta. */
+function baseUrl(req: { headers: Record<string, unknown>; protocol: string; get: (h: string) => string | undefined }): string {
+  const host = String(req.get('x-forwarded-host') || req.get('host') || 'dealflow.sbs');
+  const proto = String(req.get('x-forwarded-proto') || req.protocol || 'https');
+  return `${proto}://${host}`;
+}
+
+/** Borra lo que podamos asociar a ese usuario de Facebook/Instagram (best-effort). */
+function borrarDatosUsuarioMeta(userId: string): number {
+  if (!userId) return 0;
+  let borrados = 0;
+  try {
+    // Los chats de Messenger/Instagram se guardan con wa_id `fb:<id>` / `ig:<id>`.
+    const leads = db.prepare("SELECT id FROM leads WHERE tel IN (?,?) OR tel = ?").all(`fb:${userId}`, `ig:${userId}`, userId) as { id: string }[];
+    for (const l of leads) {
+      db.prepare('DELETE FROM messages WHERE lead_id = ?').run(l.id);
+      db.prepare('DELETE FROM leads WHERE id = ?').run(l.id);
+      borrados++;
+    }
+  } catch (e) {
+    console.error('[data-deletion] error borrando', e);
+  }
+  return borrados;
+}
+
+webhooks.post('/meta/data-deletion', (req, res) => {
+  const secret = process.env.META_APP_SECRET || '';
+  const signed = String((req.body as { signed_request?: string })?.signed_request || '');
+  const datos = secret ? parseSignedRequest(signed, secret) : null;
+  if (!datos) return res.status(400).json({ error: 'signed_request inválido' });
+  const userId = String(datos.user_id || '');
+  const code = uid().replace(/-/g, '').slice(0, 16);
+  const borrados = borrarDatosUsuarioMeta(userId);
+  console.log(`[data-deletion] solicitud user_id=${userId} code=${code} leads_borrados=${borrados}`);
+  // Meta exige: { url: <página de estado>, confirmation_code: <código> }
+  res.json({ url: `${baseUrl(req)}/webhooks/meta/data-deletion?code=${code}`, confirmation_code: code });
+});
+
+// Página de estado que abre la persona para verificar su solicitud.
+webhooks.get('/meta/data-deletion', (req, res) => {
+  const code = String(req.query.code || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 32) || '—';
+  res.type('html').send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solicitud de eliminación de datos · DealFlow</title>
+<style>body{margin:0;background:#0C1422;color:#E8EFEA;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.6}
+.w{max-width:640px;margin:0 auto;padding:56px 22px}h1{font-size:26px;letter-spacing:-.02em;margin:0 0 10px}
+p{color:#D3DEE6}code{font-family:ui-monospace,monospace;background:#111F32;border:1px solid rgba(255,255,255,.1);padding:3px 8px;border-radius:7px;color:#34D399}
+a{color:#34D399}</style></head><body><div class="w">
+<h1>Solicitud de eliminación recibida ✔</h1>
+<p>Registramos tu solicitud de eliminación de datos en DealFlow. Estamos borrando la información asociada a tu cuenta de Facebook/Instagram.</p>
+<p>Código de confirmación: <code>${code}</code></p>
+<p>La eliminación se completa dentro de los <strong>30 días</strong> siguientes. Si tienes dudas, escríbenos a <a href="mailto:admin@dealflow.sbs">admin@dealflow.sbs</a>.</p>
+<p style="margin-top:28px"><a href="/legal/eliminar-datos.html">Ver la política completa de eliminación de datos →</a></p>
+</div></body></html>`);
+});
+
+// Callback de desautorización: Meta lo llama cuando alguien quita la app.
+// No requiere respuesta con cuerpo; solo confirmamos recepción.
+webhooks.post('/meta/deauthorize', (req, res) => {
+  const secret = process.env.META_APP_SECRET || '';
+  const signed = String((req.body as { signed_request?: string })?.signed_request || '');
+  const datos = secret ? parseSignedRequest(signed, secret) : null;
+  if (datos) {
+    const userId = String(datos.user_id || '');
+    const borrados = borrarDatosUsuarioMeta(userId);
+    console.log(`[deauthorize] user_id=${userId} leads_borrados=${borrados}`);
+  }
+  res.sendStatus(200);
+});
