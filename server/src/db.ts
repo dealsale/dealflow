@@ -205,9 +205,12 @@ addColumn('assistants', 'seguimiento INTEGER NOT NULL DEFAULT 0');
 // Nivel de recordatorio ya enviado a un lead (0=ninguno, 1=5min, 2=15min, 3=30min).
 // Se reinicia a 0 cuando el cliente vuelve a escribir.
 addColumn('leads', 'seguimiento_nivel INTEGER NOT NULL DEFAULT 0');
-// Interruptor del seguimiento automático por tienda. Viene ENCENDIDO por defecto
-// (0 = encendido); la tienda puede apagarlo desde la sección Asistente (1 = apagado).
+// Interruptor del seguimiento automático por tienda (mensajes de remarketing).
+// Anti-baneo: viene APAGADO por defecto (0 = apagado). La tienda lo enciende a
+// propósito desde la sección Asistente (1 = encendido). El viejo seguimiento_off
+// queda obsoleto; manda seguimiento_on.
 addColumn('assistants', 'seguimiento_off INTEGER NOT NULL DEFAULT 0');
+addColumn('assistants', 'seguimiento_on INTEGER NOT NULL DEFAULT 0');
 // Estilo/tono del asistente (JSON): { trato:'tu'|'usted', emojis:bool, largo:'corto'|'detallado' }.
 addColumn('assistants', "estilo TEXT NOT NULL DEFAULT ''");
 db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (

@@ -730,7 +730,7 @@ export function useDealFlowState() {
   function setTheme(t: 'light' | 'dark' | 'premium') { setThemeState(t); }
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? DEF_ASSISTANT);
   const [assistantNombre, setAssistantNombre] = useState<string>('');
-  const [seguimientoActivo, setSeguimientoActivo] = useState<boolean>(true); // el mensaje automático de actividad viene encendido
+  const [seguimientoActivo, setSeguimientoActivo] = useState<boolean>(false); // anti-baneo: el seguimiento automático viene APAGADO; el dueño lo enciende
   const [estilo, setEstilo] = useState<{ trato: 'tu' | 'usted'; emojis: boolean; largo: 'corto' | 'detallado' }>({ trato: 'tu', emojis: true, largo: 'corto' });
   const [rules, setRules] = useState<string[]>(snap?.rules ?? DEF_RULES);
   const [orders, setOrders] = useState<Order[]>(snap?.orders ?? DEF_ORDERS);
@@ -1776,7 +1776,7 @@ export function useDealFlowState() {
         // Datos reales de la tienda: nada de textos demo de "Luna Accesorios".
         setAssistantText(data.assistant?.instrucciones || '');
         setAssistantNombre(data.assistant?.nombre || '');
-        setSeguimientoActivo(data.assistant?.seguimientoActivo !== false);
+        setSeguimientoActivo(data.assistant?.seguimientoActivo === true);
         setEstilo({
           trato: data.assistant?.estilo?.trato === 'usted' ? 'usted' : 'tu',
           emojis: data.assistant?.estilo?.emojis !== false,

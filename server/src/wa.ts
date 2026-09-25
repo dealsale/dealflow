@@ -83,7 +83,31 @@ export async function verifyWhatsappCredentials(phoneNumberId: string, accessTok
 }
 
 /** Envía un mensaje de texto por la vía activa de la tienda (Cloud API o QR). */
-export async function sendWhatsappText(storeId: string, to: string, texto: string, pn?: string): Promise<{ ok: boolean; error?: string; wamid?: string }> {
+/**
+ * ANTI-BANEO — ventana de 24 h de WhatsApp.
+ * Fuera de las 24 h desde el ÚLTIMO mensaje del cliente, Meta solo permite
+ * PLANTILLAS aprobadas; el texto/imagen libre es infracción y dispara baneos.
+ * Devuelve true si la ventana está abierta (el cliente escribió hace < 24 h).
+ * Solo aplica a WhatsApp (no web ni Messenger/Instagram).
+ */
+function ventana24hAbierta(storeId: string, to: string, pn?: string): boolean {
+  const waId = String(to);
+  const num = (pn || to).replace(/[^0-9]/g, '');
+  const numPart = waId.split('@')[0];
+  const lead = db.prepare(
+    "SELECT id FROM leads WHERE store_id = ? AND (wa_id = ? OR wa_id = ? OR replace(replace(replace(tel,' ',''),'+',''),'-','') LIKE ?) ORDER BY created_at DESC LIMIT 1",
+  ).get(storeId, waId, numPart, '%' + num.slice(-10)) as { id: string } | undefined;
+  if (!lead) return false; // sin lead conocido: por seguridad, tratamos la ventana como cerrada
+  const row = db.prepare("SELECT created_at FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(lead.id) as { created_at: string } | undefined;
+  if (!row) return false; // el cliente nunca escribió
+  const t = Date.parse(String(row.created_at).replace(' ', 'T') + 'Z');
+  return !isNaN(t) && Date.now() - t < 24 * 3600 * 1000;
+}
+
+/** Mensaje de error estándar cuando se bloquea un envío por ventana cerrada. */
+const BLOQUEO_VENTANA = 'Fuera de la ventana de 24 h de WhatsApp: a este cliente (escribió hace más de 24 h) solo se le pueden enviar plantillas aprobadas, no texto libre.';
+
+export async function sendWhatsappText(storeId: string, to: string, texto: string, pn?: string, esPlantilla = false): Promise<{ ok: boolean; error?: string; wamid?: string; bloqueadoVentana?: boolean }> {
   // Canal WEB: el mensaje ya queda guardado en la BD y el chat web lo lee por
   // polling; no hay nada que "enviar" fuera.
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
@@ -100,6 +124,11 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
   if (!cfg?.conectado) {
     registrarLog(storeId, 'error', 'envio', `No se envió el mensaje a ${to}: WhatsApp no está conectado.`);
     return { ok: false, error: 'WhatsApp no está conectado.' };
+  }
+  // Anti-baneo: bloqueo duro de la ventana de 24 h (desactivable con WA_BLOQUEO_24H=off).
+  if (process.env.WA_BLOQUEO_24H !== 'off' && !esPlantilla && !ventana24hAbierta(storeId, to, pn)) {
+    registrarLog(storeId, 'warn', 'envio', `Bloqueado por ventana de 24 h: no se envió texto libre a ${to} (el cliente no escribe hace más de 24 h). Usa una plantilla aprobada.`);
+    return { ok: false, error: BLOQUEO_VENTANA, bloqueadoVentana: true };
   }
   if (cfg.modo === 'qr') {
     const { sendViaQr } = await import('./waqr.js');
@@ -170,9 +199,12 @@ export async function sendWhatsappMedia(
   caption: string,
   nombre: string,
   pn?: string,
-): Promise<{ ok: boolean; error?: string; wamid?: string }> {
+  esPlantilla = false,
+): Promise<{ ok: boolean; error?: string; wamid?: string; bloqueadoVentana?: boolean }> {
   // Canal WEB: la multimedia ya queda en la BD (media_url) y el chat web la muestra.
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
+  // Canales de Meta (Messenger / Instagram DM): tienen su propia ventana; no aplica el bloqueo de WhatsApp.
+  const esMeta = String(to).startsWith('fb:') || String(to).startsWith('ig:');
   // Anti-baneo: espera el turno de esta tienda (nunca ráfagas de mensajes).
   await esperarTurno(storeId);
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
@@ -181,6 +213,11 @@ export async function sendWhatsappMedia(
   if (!cfg?.conectado) {
     registrarLog(storeId, 'error', 'envio', `No se envió el adjunto a ${to}: WhatsApp no está conectado.`);
     return { ok: false, error: 'WhatsApp no está conectado.' };
+  }
+  // Anti-baneo: bloqueo duro de la ventana de 24 h (desactivable con WA_BLOQUEO_24H=off).
+  if (!esMeta && process.env.WA_BLOQUEO_24H !== 'off' && !esPlantilla && !ventana24hAbierta(storeId, to, pn)) {
+    registrarLog(storeId, 'warn', 'envio', `Bloqueado por ventana de 24 h: no se envió adjunto a ${to} (el cliente no escribe hace más de 24 h). Usa una plantilla aprobada.`);
+    return { ok: false, error: BLOQUEO_VENTANA, bloqueadoVentana: true };
   }
   // Nota de voz: los navegadores graban en webm; WhatsApp la quiere en ogg/opus.
   if (media.tipo === 'audio' && !media.mime.includes('ogg')) {

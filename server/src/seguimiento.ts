@@ -51,8 +51,9 @@ export async function correrSeguimiento(): Promise<void> {
               (julianday('now') - julianday((SELECT created_at FROM messages WHERE lead_id = l.id AND de = 'cliente' ORDER BY created_at DESC LIMIT 1))) * 1440 AS ventana_min
          FROM leads l
         WHERE COALESCE(l.seguimiento_nivel,0) < 3
-          -- La tienda puede apagar el seguimiento automático (viene encendido por defecto).
-          AND NOT EXISTS (SELECT 1 FROM assistants a WHERE a.store_id = l.store_id AND a.seguimiento_off = 1)
+          -- Anti-baneo: el seguimiento automático viene APAGADO. Solo corre si la
+          -- tienda lo encendió a propósito (seguimiento_on = 1).
+          AND EXISTS (SELECT 1 FROM assistants a WHERE a.store_id = l.store_id AND a.seguimiento_on = 1)
           -- La venta ya cerrada NO se persigue (el bot marca 'Venta' y crea el pedido al cerrar).
           AND COALESCE(l.etiqueta,'') != 'Venta'
           AND NOT EXISTS (
