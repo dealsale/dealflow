@@ -271,16 +271,34 @@ function LoginAcademy({ onOk }: { onOk: () => void }) {
     onOk();
   };
   return (
-    <Centro>
-      <div style={{ ...tarjeta, width: 360, maxWidth: '90vw' }}>
-        <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 4 }}>DealFlow <span style={{ color: C.emerald }}>Academy</span></div>
-        <p style={{ color: C.muted, fontSize: 14, marginTop: 0 }}>Inicia sesión con tus credenciales de DealFlow.</p>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Correo" style={inputA} />
-        <input value={pass} onChange={(e) => setPass(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && entrar()} type="password" placeholder="Contraseña" style={inputA} />
-        {err && <div style={{ color: C.danger, fontSize: 13, marginBottom: 8 }}>{err}</div>}
-        <button onClick={entrar} disabled={cargando} style={{ ...btnPrimary, width: '100%', padding: '11px' }}>{cargando ? 'Entrando…' : 'Entrar'}</button>
+    <div style={{ minHeight: '100vh', background: C.ink, color: C.text, fontFamily: sans, display: 'grid', placeItems: 'center', padding: 20 }}>
+      <style>{`@media (max-width:760px){ .ac-login-hero{display:none !important;} .ac-login-card{grid-template-columns:1fr !important;} }`}</style>
+      <div className="ac-login-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', width: 820, maxWidth: '100%', background: C.panel, border: `1px solid ${C.line}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,.35)' }}>
+        {/* Panel de bienvenida (solo escritorio) */}
+        <div className="ac-login-hero" style={{ padding: '40px 34px', background: `linear-gradient(160deg,${C.emeraldDeep},#062B22 70%)`, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <span style={{ width: 40, height: 40, borderRadius: 11, display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,.14)', fontWeight: 900, fontSize: 20, color: '#fff' }}>A</span>
+          <div style={{ fontSize: 26, fontWeight: 850, letterSpacing: '-.03em', lineHeight: 1.15 }}>Aprende a vender más con DealFlow</div>
+          <p style={{ color: 'rgba(255,255,255,.82)', fontSize: 14.5, lineHeight: 1.6, margin: 0 }}>Cursos y tutoriales paso a paso: configurar tu asistente, subir productos, atender por WhatsApp y hacer crecer tu tienda.</p>
+          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13.5, color: 'rgba(255,255,255,.9)' }}>
+            <div>✓ Temario organizado por módulos</div>
+            <div>✓ Sigue tu progreso curso por curso</div>
+            <div>✓ Con las mismas credenciales de DealFlow</div>
+          </div>
+        </div>
+        {/* Formulario */}
+        <div style={{ padding: '40px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ fontWeight: 850, fontSize: 22, letterSpacing: '-.02em' }}>DealFlow <span style={{ color: C.emerald }}>Academy</span></div>
+          <p style={{ color: C.muted, fontSize: 14, margin: '6px 0 20px' }}>Inicia sesión para entrar al portal.</p>
+          <label style={{ fontSize: 12.5, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Correo</label>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tucorreo@ejemplo.com" style={inputA} />
+          <label style={{ fontSize: 12.5, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Contraseña</label>
+          <input value={pass} onChange={(e) => setPass(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && entrar()} type="password" placeholder="••••••••" style={inputA} />
+          {err && <div style={{ color: C.danger, fontSize: 13, marginBottom: 10 }}>{err}</div>}
+          <button onClick={entrar} disabled={cargando} style={{ ...btnPrimary, width: '100%', padding: '12px', fontSize: 14.5, opacity: cargando ? 0.7 : 1 }}>{cargando ? 'Entrando…' : 'Entrar'}</button>
+          <p style={{ color: C.muted2, fontSize: 12.5, marginTop: 16, textAlign: 'center' }}>Usa el mismo correo y contraseña de tu cuenta DealFlow.</p>
+        </div>
       </div>
-    </Centro>
+    </div>
   );
 }
 
