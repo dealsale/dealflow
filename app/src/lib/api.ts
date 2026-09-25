@@ -562,8 +562,13 @@ export interface ReporteBaneo {
   hallazgos: Hallazgo[];
   veredicto: string;
 }
-export const apiAuditoriaBaneo = (id: string) =>
-  req<{ reporte: ReporteBaneo }>(`/api/admin/stores/${id}/auditoria-baneo`, 'GET');
+export const apiAuditoriaBaneo = (id: string, desde?: string, hasta?: string) => {
+  const q = new URLSearchParams();
+  if (desde) q.set('desde', desde);
+  if (hasta) q.set('hasta', hasta);
+  const qs = q.toString();
+  return req<{ reporte: ReporteBaneo }>(`/api/admin/stores/${id}/auditoria-baneo${qs ? '?' + qs : ''}`, 'GET');
+};
 
 // Plantillas de mensajes de Meta, definidas una vez y publicadas en todas las tiendas.
 export interface BotonPlantilla { tipo: 'QUICK_REPLY' | 'URL'; texto: string; url?: string }

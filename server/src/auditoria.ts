@@ -50,9 +50,23 @@ export interface ReporteBaneo {
 
 interface MsgRow { lead_id: string; de: string; tipo: string | null; texto: string | null; estado: string | null; created_at: string }
 
-export function auditarBaneo(storeId: string): ReporteBaneo | null {
+export function auditarBaneo(storeId: string, desde?: string, hasta?: string): ReporteBaneo | null {
   const tienda = db.prepare('SELECT id, nombre FROM stores WHERE id = ?').get(storeId) as { id: string; nombre: string } | undefined;
   if (!tienda) return null;
+
+  // Rango opcional de fecha/hora (para ver qué pasó en un periodo concreto). Se
+  // interpreta en hora local de Bogotá (UTC-5) que es como el dueño piensa la hora.
+  const aMs = (s: string | undefined, finDelDia: boolean): number => {
+    if (!s) return finDelDia ? Number.POSITIVE_INFINITY : 0;
+    let t = String(s).trim().replace(' ', 'T');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) t += finDelDia ? 'T23:59:59' : 'T00:00:00';
+    const ms = Date.parse(t + '-05:00'); // Bogotá
+    return isNaN(ms) ? (finDelDia ? Number.POSITIVE_INFINITY : 0) : ms;
+  };
+  const desdeMs = aMs(desde, false);
+  const hastaMs = aMs(hasta, true);
+  const hayFiltro = desdeMs > 0 || hastaMs < Number.POSITIVE_INFINITY;
+  const enRango = (ts: number) => ts >= desdeMs && ts <= hastaMs;
 
   // Solo chats que tocan WhatsApp (el chat web no influye en el baneo de Meta).
   const leads = db.prepare(
@@ -89,6 +103,7 @@ export function auditarBaneo(storeId: string): ReporteBaneo | null {
   const salientesPorMinuto = new Map<number, number>(); // minuto (epoch/60000) -> conteo
   const salientesPorDia = new Map<string, number>();
   const textoAChats = new Map<string, Set<string>>(); // texto saliente -> chats distintos
+  const chatsEnRango = new Set<string>();
   let sumaRespuesta = 0, nRespuesta = 0;
 
   // Recorremos por chat (los mensajes ya vienen agrupados por lead_id).
@@ -99,8 +114,9 @@ export function auditarBaneo(storeId: string): ReporteBaneo | null {
     while (i < msgs.length && msgs[i].lead_id === lead) { chat.push(msgs[i]); i++; }
 
     // ¿El primer mensaje del chat lo mandó el negocio? (escribir primero = sin opt-in)
+    // Solo cuenta si ese primer mensaje cae en el rango analizado.
     const primero = chat[0];
-    if (primero && OUT.has(primero.de)) {
+    if (primero && OUT.has(primero.de) && enRango(ms(primero.created_at))) {
       senales.iniciadosPorNegocio++;
       if (senales.ejemplosIniciados.length < 12) senales.ejemplosIniciados.push(telDe.get(lead) || lead);
     }
@@ -108,67 +124,70 @@ export function auditarBaneo(storeId: string): ReporteBaneo | null {
     // La "ventana" queda abierta desde que el cliente escribe y NO se cierra
     // con cada saliente (varios mensajes del bot en una misma conversación
     // siguen dentro de la ventana). Solo un nuevo mensaje del cliente la reabre.
+    // Nota: el ESTADO (ventana, racha) se actualiza SIEMPRE para no perder
+    // precisión en el borde del rango; los CONTEOS solo suman si el mensaje
+    // está dentro del rango de fecha/hora pedido.
     let ventanaHasta = 0;             // ts límite (último 'cliente' + 24 h); 0 = cerrada
     let esperandoRespuesta = false;   // para medir el tiempo de la 1.ª respuesta
     let respuestaDesde = 0;
-    let rachaOut = 0; let rachaInicio = 0; let prevOutTs = 0;
+    let rachaOut = 0; let prevOutTs = 0;
+
+    const cerrarRacha = () => {
+      if (rachaOut >= 3 && enRango(prevOutTs)) { senales.rafagas++; if (rachaOut > senales.rafagaMax) senales.rafagaMax = rachaOut; }
+    };
 
     for (const m of chat) {
       const ts = ms(m.created_at);
-      if (ts) { if (ts < minFecha) minFecha = ts; if (ts > maxFecha) maxFecha = ts; }
+      const dentro = enRango(ts);
+      if (ts && dentro) { if (ts < minFecha) minFecha = ts; if (ts > maxFecha) maxFecha = ts; chatsEnRango.add(lead); }
       const dia = String(m.created_at).slice(0, 10);
 
       if (m.de === 'cliente') {
-        totales.entrantes++;
+        if (dentro) totales.entrantes++;
         ventanaHasta = ts + 24 * 3600 * 1000;
         esperandoRespuesta = true; respuestaDesde = ts;
         rachaOut = 0; prevOutTs = 0; // se corta cualquier racha de salientes
       } else if (OUT.has(m.de)) {
-        totales.salientes++;
-        if (m.tipo && m.tipo !== 'texto') totales.mediaSalientes++;
-        if (String(m.estado || '') === 'fallido') totales.fallidos++;
-        salientesPorDia.set(dia, (salientesPorDia.get(dia) || 0) + 1);
-        if (ts) salientesPorMinuto.set(Math.floor(ts / 60000), (salientesPorMinuto.get(Math.floor(ts / 60000)) || 0) + 1);
+        if (dentro) {
+          totales.salientes++;
+          if (m.tipo && m.tipo !== 'texto') totales.mediaSalientes++;
+          if (String(m.estado || '') === 'fallido') totales.fallidos++;
+          salientesPorDia.set(dia, (salientesPorDia.get(dia) || 0) + 1);
+          salientesPorMinuto.set(Math.floor(ts / 60000), (salientesPorMinuto.get(Math.floor(ts / 60000)) || 0) + 1);
+        }
 
         // Fuera de la ventana de 24 h (o sin que el cliente haya escrito nunca).
-        // Nota: NO cerramos la ventana al responder, así los mensajes de una
-        // misma conversación (p. ej. las piezas del saludo) no cuentan como fuera.
         const fuera = !ventanaHasta || ts > ventanaHasta;
-        if (fuera) senales.fueraDe24h++;
+        if (fuera && dentro) senales.fueraDe24h++;
 
         // Tiempo de la PRIMERA respuesta del negocio tras el mensaje del cliente.
         if (esperandoRespuesta && ts >= respuestaDesde) {
           const seg = (ts - respuestaDesde) / 1000;
-          if (seg <= 3600) { sumaRespuesta += seg; nRespuesta++; if (seg < 2) senales.respuestasInstantaneas++; }
+          if (dentro && seg <= 3600) { sumaRespuesta += seg; nRespuesta++; if (seg < 2) senales.respuestasInstantaneas++; }
           esperandoRespuesta = false;
         }
 
         // Ráfagas: 3+ salientes casi instantáneos (menos de 3 s entre uno y otro).
-        // El envío humano (pausas de 3–6 s del bot ya corregido) NO cuenta como
-        // ráfaga; solo el disparo en tromba (patrón que Meta castiga).
         if (prevOutTs && ts - prevOutTs < 3000) {
-          if (rachaOut === 0) { rachaOut = 1; rachaInicio = prevOutTs; }
+          if (rachaOut === 0) rachaOut = 1;
           rachaOut++;
           const gap = ts - prevOutTs;
-          if (gap < senales.gapMinSaliente) senales.gapMinSaliente = gap;
-          if (rachaOut >= 3 && rachaInicio) { /* racha viva */ }
+          if (dentro && gap < senales.gapMinSaliente) senales.gapMinSaliente = gap;
         } else {
-          if (rachaOut >= 3) { senales.rafagas++; if (rachaOut > senales.rafagaMax) senales.rafagaMax = rachaOut; }
+          cerrarRacha();
           rachaOut = 0;
         }
         prevOutTs = ts;
 
-        // Difusión sospechosa: el MISMO texto reenviado a varios chats, pero solo
-        // cuenta cuando se envió FUERA de la ventana (reactivación masiva). Un
-        // saludo idéntico a cada nuevo cliente (dentro de la ventana) es normal.
+        // Difusión sospechosa: MISMO texto a varios chats, fuera de la ventana.
         const txt = (m.texto || '').trim();
-        if (fuera && txt.length >= 8) {
+        if (fuera && dentro && txt.length >= 8) {
           const set = textoAChats.get(txt) || new Set<string>();
           set.add(lead); textoAChats.set(txt, set);
         }
       }
     }
-    if (rachaOut >= 3) { senales.rafagas++; if (rachaOut > senales.rafagaMax) senales.rafagaMax = rachaOut; }
+    cerrarRacha();
   }
 
   // Pico de salientes en un minuto.
@@ -182,10 +201,13 @@ export function auditarBaneo(storeId: string): ReporteBaneo | null {
   senales.respuestaPromSeg = nRespuesta ? Math.round(sumaRespuesta / nRespuesta) : 0;
   if (!isFinite(senales.gapMinSaliente)) senales.gapMinSaliente = 0;
 
+  // Cuando hay filtro, "chats" = los que tuvieron actividad en el rango.
+  if (hayFiltro) totales.chats = chatsEnRango.size;
+
   const volumenDiario = [...salientesPorDia.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([dia, salientes]) => ({ dia, salientes }));
-  const desde = minFecha === Number.POSITIVE_INFINITY ? '' : new Date(minFecha).toISOString().slice(0, 10);
-  const hasta = maxFecha ? new Date(maxFecha).toISOString().slice(0, 10) : '';
-  const dias = desde && hasta ? Math.max(1, Math.round((maxFecha - minFecha) / 86400000) + 1) : 0;
+  const rangoDesde = minFecha === Number.POSITIVE_INFINITY ? '' : new Date(minFecha).toISOString().slice(0, 10);
+  const rangoHasta = maxFecha ? new Date(maxFecha).toISOString().slice(0, 10) : '';
+  const dias = minFecha === Number.POSITIVE_INFINITY ? 0 : Math.max(1, Math.round((maxFecha - minFecha) / 86400000) + 1);
 
   // ── Hallazgos (diagnóstico legible) ─────────────────────────────────
   const hallazgos: Hallazgo[] = [];
@@ -250,5 +272,5 @@ export function auditarBaneo(storeId: string): ReporteBaneo | null {
       ? 'No hay una causa única contundente, pero sí varias señales medias que sumadas bajan la calidad y pueden desencadenar el baneo.'
       : 'El historial no muestra infracciones claras; probablemente fueron reportes/bloqueos de usuarios, que Meta no revela.';
 
-  return { tienda, rango: { desde, hasta, dias }, totales, senales, volumenDiario, hallazgos, veredicto };
+  return { tienda, rango: { desde: rangoDesde, hasta: rangoHasta, dias }, totales, senales, volumenDiario, hallazgos, veredicto };
 }

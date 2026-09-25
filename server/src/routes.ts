@@ -1410,7 +1410,9 @@ api.get('/admin/stores/:id/auditoria-baneo', requireAuth, requireAdmin, async (r
   const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(req.params.id) as { id: string } | undefined;
   if (!s) return res.status(404).json({ error: 'Tienda no encontrada.' });
   const { auditarBaneo } = await import('./auditoria.js');
-  const reporte = auditarBaneo(s.id);
+  const desde = typeof req.query.desde === 'string' ? req.query.desde : undefined;
+  const hasta = typeof req.query.hasta === 'string' ? req.query.hasta : undefined;
+  const reporte = auditarBaneo(s.id, desde, hasta);
   if (!reporte) return res.status(404).json({ error: 'No se pudo auditar la tienda.' });
   res.json({ reporte });
 });
