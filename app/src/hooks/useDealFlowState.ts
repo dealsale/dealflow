@@ -3325,7 +3325,11 @@ export function useDealFlowState() {
     setPlantillasMetaMsg('Publicando en todas las tiendas…');
     void apiPublicarPlantillaMeta(id).then((r) => {
       if (r.error || !r.data) { setPlantillasMetaMsg(r.error || 'No se pudo publicar.'); return; }
-      setPlantillasMetaMsg(`✓ Enviada a ${r.data.exitosas} de ${r.data.total} tienda(s)${r.data.errores ? ` · ${r.data.errores} con error` : ''}.`);
+      if (r.data.total === 0) {
+        setPlantillasMetaMsg('⚠️ No hay ninguna tienda conectada por WhatsApp Cloud API (oficial). Las plantillas de Meta SOLO se pueden publicar en cuentas Cloud API; las tiendas conectadas por QR no las aceptan. Conecta al menos una tienda por Cloud API e inténtalo de nuevo.');
+        return;
+      }
+      setPlantillasMetaMsg(`✓ Enviada a verificación en ${r.data.exitosas} de ${r.data.total} tienda(s)${r.data.errores ? ` · ${r.data.errores} con error (mira el estado por tienda)` : ''}.`);
       cargarPlantillasMeta();
     });
   }

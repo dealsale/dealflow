@@ -43,9 +43,15 @@ export function PlantillasWA({ df }: { df: DealFlowState }) {
         <div style={{ flex: 1 }} />
         {!form && <button onClick={abrirNueva} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 9, padding: '9px 15px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>+ Nueva plantilla</button>}
       </div>
-      <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 16 }}>
-        Se publicará en <b>{df.tiendasCloudCount}</b> tienda(s) conectada(s) por Cloud API. Cada tienda recibe su copia y Meta la verifica por separado.
-      </div>
+      {df.tiendasCloudCount === 0 ? (
+        <div style={{ background: 'var(--df-danger-subtle-2)', border: '1px solid var(--df-danger-border, rgba(220,38,38,.3))', borderRadius: 10, padding: '11px 13px', marginBottom: 16, fontSize: 12.5, color: 'var(--df-danger-dark)' }}>
+          ⚠️ <b>No hay tiendas conectadas por WhatsApp Cloud API.</b> Las plantillas de Meta solo se publican en cuentas <b>Cloud API (oficial)</b>; las tiendas conectadas por <b>QR</b> no tienen sistema de plantillas. Por eso «Publicar en todas» no envía a ninguna. Conecta al menos una tienda por Cloud API.
+        </div>
+      ) : (
+        <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 16 }}>
+          Se publicará en <b>{df.tiendasCloudCount}</b> tienda(s) conectada(s) por Cloud API. Cada tienda recibe su copia y Meta la verifica por separado.
+        </div>
+      )}
 
       {df.plantillasMetaMsg && (
         <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 12, color: df.plantillasMetaMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.plantillasMetaMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.plantillasMetaMsg}</div>
