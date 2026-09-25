@@ -47,9 +47,17 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-09-25-woo-webhook-academy',
+    build: '2026-09-25-fix-sesion-diag',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
+    // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
+    // EFÍMERA y se reinicia en cada deploy (aparecen tiendas demo, no deja entrar).
+    almacenamiento: {
+      dataDir: process.env.DATA_DIR || './data (EFÍMERO — sin persistencia)',
+      volumenMontado: process.env.RAILWAY_VOLUME_MOUNT_PATH || '(sin volumen)',
+      persistente: !!process.env.DATA_DIR && !!process.env.RAILWAY_VOLUME_MOUNT_PATH
+        && process.env.DATA_DIR.startsWith(process.env.RAILWAY_VOLUME_MOUNT_PATH),
+    },
     // Diagnóstico de la conexión en un clic: SOLO dice si las variables están
     // puestas (true/false), nunca su valor. Las tres deben estar en true para
     // que aparezca el botón "Conexión automática".

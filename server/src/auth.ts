@@ -37,12 +37,15 @@ export const verifyPassword = (p: string, hash: string) => bcrypt.compareSync(p,
  * queda host-only (undefined), para no romper nada. Se puede forzar con COOKIE_DOMAIN.
  */
 function cookieDomain(host?: string): string | undefined {
-  if (process.env.COOKIE_DOMAIN) return process.env.COOKIE_DOMAIN;
+  // Solo se emite en un dominio padre si se pide EXPRESAMENTE con COOKIE_DOMAIN
+  // (p. ej. ".dealflow.sbs" para compartir sesión con academy.*). Por defecto la
+  // cookie es host-only (comportamiento de siempre), para no romper el login.
+  const explicit = process.env.COOKIE_DOMAIN;
+  if (!explicit) return undefined;
   const h = String(host || '').toLowerCase().split(':')[0];
-  for (const base of ['dealflow.sbs', 'zennku.sbs']) {
-    if (h === base || h.endsWith('.' + base)) return '.' + base;
-  }
-  return undefined;
+  const base = explicit.replace(/^\./, '');
+  // Solo aplica el dominio si el host actual pertenece a él (si no, host-only).
+  return h === base || h.endsWith('.' + base) ? explicit : undefined;
 }
 
 export function setAuthCookie(res: Response, user: AuthUser, host?: string) {
