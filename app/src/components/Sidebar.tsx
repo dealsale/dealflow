@@ -123,6 +123,16 @@ export function Sidebar({ df }: { df: DealFlowState }) {
         </>
       )}
 
+      {/* Acceso a DealFlow Academy (portal educativo, vive en la ruta /academy).
+          Es un enlace real porque Academy es su propia app; visible para todos. */}
+      <a
+        href="/academy"
+        style={{ ...df.navStyle(false), textDecoration: 'none', marginTop: 8, borderTop: '1px solid var(--df-text-strong)', paddingTop: 12, borderRadius: 0 }}
+      >
+        <span style={{ fontSize: 16 }}>🎓</span>
+        <span>Academy</span>
+      </a>
+
       <div style={{ flex: 1 }} />
       {premium && (
         <div

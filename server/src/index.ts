@@ -108,7 +108,11 @@ if (existsSync(APP_DIST)) {
   app.use(express.static(APP_DIST, { index: false })); // sirve /logo.png y /assets/* en cualquier host
   app.get(/^\/(?!api|webhooks).*/, (req, res) => {
     const host = (req.hostname || '').toLowerCase();
-    if (LANDING_HOSTS.includes(host) && existsSync(LANDING)) return res.sendFile(LANDING);
+    // Academy vive en la ruta /academy. Debe servir la app (React) SIEMPRE,
+    // incluso en el dominio raíz que normalmente muestra la landing; si no,
+    // dealflow.sbs/academy devolvería la landing y el portal nunca cargaría.
+    const esAcademy = /^\/academy(\/|$)/i.test(req.path);
+    if (!esAcademy && LANDING_HOSTS.includes(host) && existsSync(LANDING)) return res.sendFile(LANDING);
     res.sendFile(path.join(APP_DIST, 'index.html'));
   });
   console.log('[web] Panel desde', APP_DIST, '· landing en', LANDING_HOSTS.join(', '));

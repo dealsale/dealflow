@@ -504,6 +504,57 @@ db.exec(`CREATE TABLE IF NOT EXISTS academy_lecciones (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_academy_lec_curso ON academy_lecciones(curso_id, orden)');
 
+// Academy · robustez estilo Udemy ────────────────────────────────────
+// Secciones/módulos: un curso se organiza en secciones y cada lección
+// pertenece a una sección (modelo Udemy: siempre hay al menos una).
+db.exec(`CREATE TABLE IF NOT EXISTS academy_secciones (
+  id TEXT PRIMARY KEY,
+  curso_id TEXT NOT NULL REFERENCES academy_cursos(id) ON DELETE CASCADE,
+  titulo TEXT NOT NULL DEFAULT '',
+  orden INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_academy_sec_curso ON academy_secciones(curso_id, orden)');
+// Cada lección apunta a su sección (nullable durante la migración; el backfill
+// de abajo garantiza que todas las existentes queden asignadas).
+addColumn('academy_lecciones', 'seccion_id TEXT');
+db.exec('CREATE INDEX IF NOT EXISTS idx_academy_lec_seccion ON academy_lecciones(seccion_id, orden)');
+// Progreso del alumno: una fila por (usuario, lección) marcada como completada.
+db.exec(`CREATE TABLE IF NOT EXISTS academy_progreso (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  leccion_id TEXT NOT NULL REFERENCES academy_lecciones(id) ON DELETE CASCADE,
+  completado INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, leccion_id)
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_academy_prog_user ON academy_progreso(user_id)');
+
+// Backfill único: a cada curso existente se le crea una sección "Contenido del
+// curso" y se le asignan todas sus lecciones que aún no tengan sección. Corre
+// una sola vez (flag) y es idempotente aunque el flag se perdiera.
+{
+  const flag = 'academy_secciones_v1';
+  if (!db.prepare('SELECT 1 FROM app_flags WHERE clave = ?').get(flag)) {
+    const cursos = db.prepare('SELECT id FROM academy_cursos').all() as { id: string }[];
+    const tx = db.transaction(() => {
+      for (const c of cursos) {
+        const sinSeccion = db.prepare(
+          "SELECT COUNT(*) n FROM academy_lecciones WHERE curso_id = ? AND COALESCE(seccion_id,'') = ''",
+        ).get(c.id) as { n: number };
+        if (sinSeccion.n === 0) continue;
+        const secId = crypto.randomUUID();
+        db.prepare('INSERT INTO academy_secciones (id, curso_id, titulo, orden) VALUES (?,?,?,0)')
+          .run(secId, c.id, 'Contenido del curso');
+        db.prepare("UPDATE academy_lecciones SET seccion_id = ? WHERE curso_id = ? AND COALESCE(seccion_id,'') = ''")
+          .run(secId, c.id);
+      }
+    });
+    tx();
+    db.prepare('INSERT INTO app_flags (clave) VALUES (?)').run(flag);
+    console.log('[migración] Academy: secciones por defecto creadas para cursos existentes');
+  }
+}
+
 // ── Índices de rendimiento (críticos) ──
 // El Inbox sondea /api/leads?resumen cada pocos segundos y, POR CADA lead, lee sus
 // mensajes (último, cola de 40) ordenados por fecha. Sin este índice, cada lectura
