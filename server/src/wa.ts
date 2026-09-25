@@ -112,7 +112,7 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
   // polling; no hay nada que "enviar" fuera.
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
   // Anti-baneo: espera el turno de esta tienda (nunca ráfagas de mensajes).
-  await esperarTurno(storeId);
+  await esperarTurno(storeId, to);
   // Canales de Meta (Messenger / Instagram DM): se envían por la Graph API.
   if (String(to).startsWith('fb:') || String(to).startsWith('ig:')) {
     const { sendMetaText } = await import('./meta.js');
@@ -206,7 +206,7 @@ export async function sendWhatsappMedia(
   // Canales de Meta (Messenger / Instagram DM): tienen su propia ventana; no aplica el bloqueo de WhatsApp.
   const esMeta = String(to).startsWith('fb:') || String(to).startsWith('ig:');
   // Anti-baneo: espera el turno de esta tienda (nunca ráfagas de mensajes).
-  await esperarTurno(storeId);
+  await esperarTurno(storeId, to);
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
     | { phone_number_id: string; access_token: string; conectado: number; modo: string }
     | undefined;
@@ -275,8 +275,12 @@ const RANK_ESTADO: Record<string, number> = { enviado: 1, entregado: 2, visto: 3
  */
 export function marcarEnviado(rowId: string, r: { ok: boolean; wamid?: string }) {
   if (!rowId) return;
-  if (r.ok && r.wamid) db.prepare("UPDATE messages SET wa_msg_id = ?, estado = 'enviado' WHERE id = ?").run(r.wamid, rowId);
-  else if (!r.ok) db.prepare("UPDATE messages SET estado = 'fallido' WHERE id = ?").run(rowId);
+  // Sella created_at al MOMENTO real del envío (después del tope de velocidad),
+  // no al de la inserción. Así el historial y la auditoría reflejan el espaciado
+  // real entre mensajes (y no marcan ráfagas falsas cuando se insertan en lote).
+  if (r.ok && r.wamid) db.prepare("UPDATE messages SET wa_msg_id = ?, estado = 'enviado', created_at = datetime('now') WHERE id = ?").run(r.wamid, rowId);
+  else if (r.ok) db.prepare("UPDATE messages SET estado = 'enviado', created_at = datetime('now') WHERE id = ?").run(rowId);
+  else db.prepare("UPDATE messages SET estado = 'fallido' WHERE id = ?").run(rowId);
 }
 
 /** Aplica un acuse de estado de Meta (sent/delivered/read/failed) a nuestro mensaje. */
