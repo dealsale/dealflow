@@ -105,7 +105,12 @@ export function auditarBaneo(storeId: string): ReporteBaneo | null {
       if (senales.ejemplosIniciados.length < 12) senales.ejemplosIniciados.push(telDe.get(lead) || lead);
     }
 
-    let ultimoEntrante = 0;           // ts del último 'cliente'
+    // La "ventana" queda abierta desde que el cliente escribe y NO se cierra
+    // con cada saliente (varios mensajes del bot en una misma conversación
+    // siguen dentro de la ventana). Solo un nuevo mensaje del cliente la reabre.
+    let ventanaHasta = 0;             // ts límite (último 'cliente' + 24 h); 0 = cerrada
+    let esperandoRespuesta = false;   // para medir el tiempo de la 1.ª respuesta
+    let respuestaDesde = 0;
     let rachaOut = 0; let rachaInicio = 0; let prevOutTs = 0;
 
     for (const m of chat) {
@@ -115,7 +120,8 @@ export function auditarBaneo(storeId: string): ReporteBaneo | null {
 
       if (m.de === 'cliente') {
         totales.entrantes++;
-        ultimoEntrante = ts;
+        ventanaHasta = ts + 24 * 3600 * 1000;
+        esperandoRespuesta = true; respuestaDesde = ts;
         rachaOut = 0; prevOutTs = 0; // se corta cualquier racha de salientes
       } else if (OUT.has(m.de)) {
         totales.salientes++;
@@ -125,17 +131,22 @@ export function auditarBaneo(storeId: string): ReporteBaneo | null {
         if (ts) salientesPorMinuto.set(Math.floor(ts / 60000), (salientesPorMinuto.get(Math.floor(ts / 60000)) || 0) + 1);
 
         // Fuera de la ventana de 24 h (o sin que el cliente haya escrito nunca).
-        if (!ultimoEntrante || ts - ultimoEntrante > 24 * 3600 * 1000) senales.fueraDe24h++;
+        // Nota: NO cerramos la ventana al responder, así los mensajes de una
+        // misma conversación (p. ej. las piezas del saludo) no cuentan como fuera.
+        const fuera = !ventanaHasta || ts > ventanaHasta;
+        if (fuera) senales.fueraDe24h++;
 
-        // Tiempo de respuesta del negocio tras un mensaje del cliente.
-        if (ultimoEntrante && ts >= ultimoEntrante) {
-          const seg = (ts - ultimoEntrante) / 1000;
+        // Tiempo de la PRIMERA respuesta del negocio tras el mensaje del cliente.
+        if (esperandoRespuesta && ts >= respuestaDesde) {
+          const seg = (ts - respuestaDesde) / 1000;
           if (seg <= 3600) { sumaRespuesta += seg; nRespuesta++; if (seg < 2) senales.respuestasInstantaneas++; }
-          ultimoEntrante = 0; // solo el primer saliente cuenta como "respuesta"
+          esperandoRespuesta = false;
         }
 
-        // Ráfagas: salientes consecutivos con menos de 8 s entre uno y otro.
-        if (prevOutTs && ts - prevOutTs < 8000) {
+        // Ráfagas: 3+ salientes casi instantáneos (menos de 3 s entre uno y otro).
+        // El envío humano (pausas de 3–6 s del bot ya corregido) NO cuenta como
+        // ráfaga; solo el disparo en tromba (patrón que Meta castiga).
+        if (prevOutTs && ts - prevOutTs < 3000) {
           if (rachaOut === 0) { rachaOut = 1; rachaInicio = prevOutTs; }
           rachaOut++;
           const gap = ts - prevOutTs;
@@ -147,9 +158,11 @@ export function auditarBaneo(storeId: string): ReporteBaneo | null {
         }
         prevOutTs = ts;
 
-        // Difusión: mismo texto (no vacío) a varios chats.
+        // Difusión sospechosa: el MISMO texto reenviado a varios chats, pero solo
+        // cuenta cuando se envió FUERA de la ventana (reactivación masiva). Un
+        // saludo idéntico a cada nuevo cliente (dentro de la ventana) es normal.
         const txt = (m.texto || '').trim();
-        if (txt.length >= 8) {
+        if (fuera && txt.length >= 8) {
           const set = textoAChats.get(txt) || new Set<string>();
           set.add(lead); textoAChats.set(txt, set);
         }
