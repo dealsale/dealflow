@@ -173,14 +173,22 @@ api.post('/crear-tienda', requireAuth, requireStore, (req, res) => {
   const nombre = String(req.body?.nombre || '').trim();
   if (!nombre) return res.status(400).json({ error: 'Ponle un nombre a la nueva tienda.' });
   const storeId = uid();
-  // Tienda extra: sin instalación, plana 250k/mes. Nace pendiente de la primera renta (estado vencida).
-  db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, plan_vence, inicial_pagado, activa, owner_user_id) VALUES (?,?,?, 'Básico', 'vencida', date('now','-40 day'), 1, 1, ?)")
-    .run(storeId, nombre, req.user!.email, req.user!.id);
-  db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
-  db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
-  void import('./creditos.js').then(({ abonar, CREDITOS_BIENVENIDA }) => abonar(storeId, CREDITOS_BIENVENIDA, 'Créditos de bienvenida'));
+  try {
+    // Tienda extra: sin instalación, plana 250k/mes. Nace pendiente de la primera renta (estado vencida).
+    const crear = db.transaction(() => {
+      db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, plan_vence, inicial_pagado, activa, owner_user_id) VALUES (?,?,?, 'Básico', 'vencida', date('now','-40 day'), 1, 1, ?)")
+        .run(storeId, nombre, req.user!.email, req.user!.id);
+      db.prepare('INSERT OR IGNORE INTO whatsapp (store_id) VALUES (?)').run(storeId);
+      db.prepare('INSERT OR IGNORE INTO assistants (store_id) VALUES (?)').run(storeId);
+      db.prepare('UPDATE users SET store_id = ? WHERE id = ?').run(storeId, req.user!.id);
+    });
+    crear();
+  } catch (e) {
+    console.error('[crear-tienda] error', e);
+    return res.status(500).json({ error: 'No pudimos crear la tienda. ' + (e instanceof Error ? e.message : '') });
+  }
+  void import('./creditos.js').then(({ abonar, CREDITOS_BIENVENIDA }) => abonar(storeId, CREDITOS_BIENVENIDA, 'Créditos de bienvenida')).catch(() => {});
   // Deja al dueño parado en la tienda nueva.
-  db.prepare('UPDATE users SET store_id = ? WHERE id = ?').run(storeId, req.user!.id);
   setAuthCookie(res, { ...req.user!, storeId }, req.hostname);
   res.json({ ok: true, storeId });
 });
@@ -1367,13 +1375,19 @@ api.post('/admin/stores/:id/onboarding', requireAuth, requireAdmin, (req, res) =
 
 // Entrar a una tienda (impersonar) para dar soporte.
 api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) => {
-  const s = db.prepare('SELECT id, correo FROM stores WHERE id = ?').get(req.params.id) as { id: string; correo: string } | undefined;
+  const s = db.prepare('SELECT id, correo, owner_user_id FROM stores WHERE id = ?').get(req.params.id) as { id: string; correo: string; owner_user_id: string | null } | undefined;
   if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
-  const dueno = db.prepare("SELECT id, email, nombre, role, store_id FROM users WHERE store_id = ? AND email = ?").get(s.id, s.correo) as
-    | { id: string; email: string; nombre: string; role: 'VENDEDOR' | 'ADMIN'; store_id: string | null }
-    | undefined;
+  // Buscamos al dueño por owner_user_id (fuente de verdad) y, si no, por correo.
+  // NO exigimos que su store_id apunte a esta tienda: en cuentas con varias
+  // tiendas, el usuario "vive" en una a la vez, pero es dueño de todas.
+  type Dueno = { id: string; email: string; nombre: string; role: 'VENDEDOR' | 'ADMIN' };
+  const dueno = (s.owner_user_id
+    ? db.prepare("SELECT id, email, nombre, role FROM users WHERE id = ?").get(s.owner_user_id) as Dueno | undefined
+    : undefined)
+    || (db.prepare("SELECT id, email, nombre, role FROM users WHERE email = ? ORDER BY (role = 'VENDEDOR') DESC, created_at LIMIT 1").get(s.correo) as Dueno | undefined);
   if (!dueno) return res.status(404).json({ error: 'Esta tienda no tiene un dueño para entrar.' });
-  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: dueno.role, storeId: dueno.store_id, imp: req.user!.id }, req.hostname);
+  // Entramos EN esta tienda (storeId = s.id), sin importar dónde estuviera parado el dueño.
+  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: dueno.role, storeId: s.id, imp: req.user!.id }, req.hostname);
   res.json({ ok: true });
 });
 

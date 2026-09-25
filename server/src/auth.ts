@@ -106,9 +106,12 @@ export function requireStore(req: Request, res: Response, next: NextFunction) {
 
 /** El dueño de la tienda es el usuario cuyo correo coincide con el de la tienda. */
 export function esDuenoDeTienda(user?: AuthUser): boolean {
-  if (!user?.storeId || user.role !== 'VENDEDOR') return false;
-  const s = db.prepare('SELECT correo FROM stores WHERE id = ?').get(user.storeId) as { correo: string } | undefined;
-  return !!s && s.correo === user.email;
+  if (!user?.storeId) return false;
+  const s = db.prepare('SELECT correo, owner_user_id FROM stores WHERE id = ?').get(user.storeId) as { correo: string; owner_user_id: string | null } | undefined;
+  if (!s) return false;
+  // Es dueño si la tienda lo marca como owner (fuente de verdad), o —compatibilidad—
+  // si su correo coincide con el de la tienda y es VENDEDOR (no un agente).
+  return s.owner_user_id === user.id || (user.role === 'VENDEDOR' && s.correo === user.email);
 }
 
 /** Solo el dueño de la tienda (no los agentes) puede pasar. */
