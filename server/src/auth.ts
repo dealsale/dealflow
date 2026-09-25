@@ -30,18 +30,34 @@ declare global {
 export const hashPassword = (p: string) => bcrypt.hashSync(p, 10);
 export const verifyPassword = (p: string, hash: string) => bcrypt.compareSync(p, hash);
 
-export function setAuthCookie(res: Response, user: AuthUser) {
+/**
+ * Dominio de la cookie de sesión. Para que las MISMAS credenciales sirvan en
+ * todos los subdominios (ad.dealflow.sbs, academy.dealflow.sbs, …) la cookie se
+ * emite en el dominio padre `.dealflow.sbs`. En la URL de Railway o en localhost
+ * queda host-only (undefined), para no romper nada. Se puede forzar con COOKIE_DOMAIN.
+ */
+function cookieDomain(host?: string): string | undefined {
+  if (process.env.COOKIE_DOMAIN) return process.env.COOKIE_DOMAIN;
+  const h = String(host || '').toLowerCase().split(':')[0];
+  for (const base of ['dealflow.sbs', 'zennku.sbs']) {
+    if (h === base || h.endsWith('.' + base)) return '.' + base;
+  }
+  return undefined;
+}
+
+export function setAuthCookie(res: Response, user: AuthUser, host?: string) {
   const token = jwt.sign(user, JWT_SECRET, { expiresIn: '30d' });
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: 30 * 24 * 3600 * 1000,
+    domain: cookieDomain(host),
   });
 }
 
-export function clearAuthCookie(res: Response) {
-  res.clearCookie(COOKIE);
+export function clearAuthCookie(res: Response, host?: string) {
+  res.clearCookie(COOKIE, { domain: cookieDomain(host) });
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {

@@ -87,6 +87,22 @@ export async function procesarOrden(o: OrdenSync): Promise<{ estado: string; gui
   return { estado: r.estado, guia: guiaNueva };
 }
 
+/**
+ * Sincroniza los pedidos locales que apuntan a un `woo_id` (lo dispara el webhook
+ * de WooCommerce). No confía en el cuerpo del webhook: vuelve a leer el pedido de
+ * Woo con las credenciales de la tienda (procesarOrden). Devuelve cuántos procesó.
+ */
+export async function sincronizarPorWooId(wooId: string): Promise<number> {
+  const id = String(wooId || '').trim();
+  if (!id) return 0;
+  const ordenes = db.prepare(
+    `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, woo_id, guia_avisada
+       FROM orders WHERE woo_id = ? AND COALESCE(despacho_proveedor,'') != '' LIMIT 5`,
+  ).all(id) as OrdenSync[];
+  for (const o of ordenes) { try { await procesarOrden(o); } catch { /* seguimos */ } }
+  return ordenes.length;
+}
+
 /** Sincroniza un pedido puntual desde su id de fila (para el botón manual). */
 export async function sincronizarPedido(storeId: string, rowId: string): Promise<{ estado: string; guia: string } | { error: string }> {
   const o = db.prepare(

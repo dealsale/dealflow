@@ -477,6 +477,33 @@ db.exec(`CREATE TABLE IF NOT EXISTS meta_template_pub (
   PRIMARY KEY (template_id, store_id)
 )`);
 
+// Academy (portal educativo en academy.dealflow.sbs): cursos con lecciones
+// (video o artículo). Lo administra el superadmin/admin; lo consultan los
+// usuarios de DealFlow. `publicado` controla si se muestra en el portal.
+db.exec(`CREATE TABLE IF NOT EXISTS academy_cursos (
+  id TEXT PRIMARY KEY,
+  titulo TEXT NOT NULL,
+  descripcion TEXT NOT NULL DEFAULT '',
+  portada TEXT NOT NULL DEFAULT '',
+  nivel TEXT NOT NULL DEFAULT 'Básico',
+  orden INTEGER NOT NULL DEFAULT 0,
+  publicado INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS academy_lecciones (
+  id TEXT PRIMARY KEY,
+  curso_id TEXT NOT NULL REFERENCES academy_cursos(id) ON DELETE CASCADE,
+  titulo TEXT NOT NULL,
+  tipo TEXT NOT NULL DEFAULT 'video',      -- video | articulo
+  video_url TEXT NOT NULL DEFAULT '',       -- YouTube/Vimeo/mp4
+  contenido TEXT NOT NULL DEFAULT '',       -- cuerpo del artículo / descripción
+  duracion TEXT NOT NULL DEFAULT '',
+  orden INTEGER NOT NULL DEFAULT 0,
+  publicado INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_academy_lec_curso ON academy_lecciones(curso_id, orden)');
+
 // ── Índices de rendimiento (críticos) ──
 // El Inbox sondea /api/leads?resumen cada pocos segundos y, POR CADA lead, lee sus
 // mensajes (último, cola de 40) ordenados por fecha. Sin este índice, cada lectura

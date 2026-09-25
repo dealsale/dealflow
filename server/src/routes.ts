@@ -36,7 +36,7 @@ api.post('/auth/login', (req, res) => {
     if (!store?.activa) return res.status(403).json({ error: 'Tu cuenta está desactivada. Escríbenos para reactivarla.' });
   }
   const user: AuthUser = { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id, foto: row.foto || undefined };
-  setAuthCookie(res, user);
+  setAuthCookie(res, user, req.hostname);
   res.json({ user: { ...user, esDueno: esDuenoDeTienda(user) } });
 });
 
@@ -66,12 +66,12 @@ api.post('/auth/registro', (req, res) => {
   void import('./creditos.js').then(({ abonar, CREDITOS_BIENVENIDA }) => abonar(storeId, CREDITOS_BIENVENIDA, 'Créditos de bienvenida'));
 
   const user: AuthUser = { id: userId, email, nombre: nombre.trim(), role: 'VENDEDOR', storeId };
-  setAuthCookie(res, user);
+  setAuthCookie(res, user, req.hostname);
   res.json({ user: { ...user, esDueno: true } });
 });
 
-api.post('/auth/logout', (_req, res) => {
-  clearAuthCookie(res);
+api.post('/auth/logout', (req, res) => {
+  clearAuthCookie(res, req.hostname);
   res.json({ ok: true });
 });
 
@@ -91,7 +91,7 @@ api.patch('/me', requireAuth, (req, res) => {
   if (nombre.length > 60) return res.status(400).json({ error: 'El nombre es muy largo.' });
   db.prepare('UPDATE users SET nombre = ? WHERE id = ?').run(nombre, req.user!.id);
   const user: AuthUser = { ...req.user!, nombre };
-  setAuthCookie(res, user);
+  setAuthCookie(res, user, req.hostname);
   res.json({ user: { ...user, esDueno: esDuenoDeTienda(user) } });
 });
 
@@ -105,7 +105,7 @@ api.post('/me/foto', requireAuth, (req, res) => {
   const url = saved.url.replace('/api/media/__cuentas__/', '/api/me/media/');
   db.prepare('UPDATE users SET foto = ? WHERE id = ?').run(url, req.user!.id);
   const user: AuthUser = { ...req.user!, foto: url };
-  setAuthCookie(res, user);
+  setAuthCookie(res, user, req.hostname);
   res.json({ ok: true, foto: url, user: { ...user, esDueno: esDuenoDeTienda(user) } });
 });
 
@@ -142,7 +142,7 @@ api.post('/auth/stop-impersonate', requireAuth, (req, res) => {
     | { id: string; email: string; nombre: string; role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN'; store_id: string | null; foto: string }
     | undefined;
   if (!row) return res.status(403).json({ error: 'No pudimos volver a tu sesión de administrador.' });
-  setAuthCookie(res, { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id, foto: row.foto || undefined });
+  setAuthCookie(res, { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id, foto: row.foto || undefined }, req.hostname);
   res.json({ ok: true });
 });
 
@@ -164,7 +164,7 @@ api.post('/cambiar-tienda/:id', requireAuth, requireStore, (req, res) => {
   const esMia = !!s && (s.owner_user_id === req.user!.id || s.correo === req.user!.email);
   if (!esMia) return res.status(404).json({ error: 'Esa tienda no es tuya.' });
   db.prepare('UPDATE users SET store_id = ? WHERE id = ?').run(s.id, req.user!.id);
-  setAuthCookie(res, { ...req.user!, storeId: s.id });
+  setAuthCookie(res, { ...req.user!, storeId: s.id }, req.hostname);
   res.json({ ok: true });
 });
 
@@ -181,7 +181,7 @@ api.post('/crear-tienda', requireAuth, requireStore, (req, res) => {
   void import('./creditos.js').then(({ abonar, CREDITOS_BIENVENIDA }) => abonar(storeId, CREDITOS_BIENVENIDA, 'Créditos de bienvenida'));
   // Deja al dueño parado en la tienda nueva.
   db.prepare('UPDATE users SET store_id = ? WHERE id = ?').run(storeId, req.user!.id);
-  setAuthCookie(res, { ...req.user!, storeId });
+  setAuthCookie(res, { ...req.user!, storeId }, req.hostname);
   res.json({ ok: true, storeId });
 });
 
@@ -1373,7 +1373,7 @@ api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) 
     | { id: string; email: string; nombre: string; role: 'VENDEDOR' | 'ADMIN'; store_id: string | null }
     | undefined;
   if (!dueno) return res.status(404).json({ error: 'Esta tienda no tiene un dueño para entrar.' });
-  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: dueno.role, storeId: dueno.store_id, imp: req.user!.id });
+  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: dueno.role, storeId: dueno.store_id, imp: req.user!.id }, req.hostname);
   res.json({ ok: true });
 });
 
@@ -1783,6 +1783,90 @@ api.post('/superadmin/meta-templates/:id/refrescar', requireAuth, requireSuperAd
   res.json({ ok: true, ...r });
 });
 
+// ── Academy (portal educativo) ───────────────────────────────────────
+// Lectura: cualquier usuario logueado. Escritura: admin/superadmin.
+const mapCurso = (c: Record<string, unknown>) => ({
+  id: c.id, titulo: c.titulo, descripcion: c.descripcion, portada: c.portada || '',
+  nivel: c.nivel || 'Básico', orden: c.orden ?? 0, publicado: Number(c.publicado) === 1,
+});
+const mapLeccion = (l: Record<string, unknown>) => ({
+  id: l.id, cursoId: l.curso_id, titulo: l.titulo, tipo: l.tipo || 'video',
+  videoUrl: l.video_url || '', contenido: l.contenido || '', duracion: l.duracion || '',
+  orden: l.orden ?? 0, publicado: Number(l.publicado) === 1,
+});
+
+api.get('/academy/cursos', requireAuth, (_req, res) => {
+  const cursos = db.prepare("SELECT * FROM academy_cursos WHERE publicado = 1 ORDER BY orden, created_at").all() as Record<string, unknown>[];
+  res.json({
+    cursos: cursos.map((c) => ({
+      ...mapCurso(c),
+      lecciones: (db.prepare("SELECT COUNT(*) n FROM academy_lecciones WHERE curso_id = ? AND publicado = 1").get(c.id) as { n: number }).n,
+    })),
+  });
+});
+api.get('/academy/cursos/:id', requireAuth, (req, res) => {
+  const c = db.prepare("SELECT * FROM academy_cursos WHERE id = ? AND publicado = 1").get(req.params.id) as Record<string, unknown> | undefined;
+  if (!c) return res.status(404).json({ error: 'Curso no encontrado.' });
+  const lecciones = db.prepare("SELECT * FROM academy_lecciones WHERE curso_id = ? AND publicado = 1 ORDER BY orden, created_at").all(req.params.id) as Record<string, unknown>[];
+  res.json({ curso: { ...mapCurso(c), lecciones: lecciones.map(mapLeccion) } });
+});
+
+// Admin: ve TODO (incluye no publicados) con sus lecciones anidadas.
+api.get('/admin/academy/cursos', requireAuth, requireAdmin, (_req, res) => {
+  const cursos = db.prepare("SELECT * FROM academy_cursos ORDER BY orden, created_at").all() as Record<string, unknown>[];
+  res.json({
+    cursos: cursos.map((c) => ({
+      ...mapCurso(c),
+      lecciones: (db.prepare("SELECT * FROM academy_lecciones WHERE curso_id = ? ORDER BY orden, created_at").all(c.id) as Record<string, unknown>[]).map(mapLeccion),
+    })),
+  });
+});
+api.post('/admin/academy/cursos', requireAuth, requireAdmin, (req, res) => {
+  const b = req.body || {};
+  if (!String(b.titulo || '').trim()) return res.status(400).json({ error: 'El título es obligatorio.' });
+  const id = uid();
+  const orden = (db.prepare("SELECT COALESCE(MAX(orden),0)+1 n FROM academy_cursos").get() as { n: number }).n;
+  db.prepare("INSERT INTO academy_cursos (id, titulo, descripcion, portada, nivel, orden, publicado) VALUES (?,?,?,?,?,?,?)")
+    .run(id, String(b.titulo).trim(), String(b.descripcion || ''), String(b.portada || ''), String(b.nivel || 'Básico'), orden, b.publicado ? 1 : 0);
+  res.json({ ok: true, id });
+});
+api.put('/admin/academy/cursos/:id', requireAuth, requireAdmin, (req, res) => {
+  const c = db.prepare("SELECT id FROM academy_cursos WHERE id = ?").get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Curso no encontrado.' });
+  const b = req.body || {};
+  db.prepare("UPDATE academy_cursos SET titulo = ?, descripcion = ?, portada = ?, nivel = ?, orden = ?, publicado = ? WHERE id = ?")
+    .run(String(b.titulo || '').trim(), String(b.descripcion || ''), String(b.portada || ''), String(b.nivel || 'Básico'), Number(b.orden) || 0, b.publicado ? 1 : 0, req.params.id);
+  res.json({ ok: true });
+});
+api.delete('/admin/academy/cursos/:id', requireAuth, requireAdmin, (req, res) => {
+  db.prepare("DELETE FROM academy_lecciones WHERE curso_id = ?").run(req.params.id);
+  db.prepare("DELETE FROM academy_cursos WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+api.post('/admin/academy/cursos/:id/lecciones', requireAuth, requireAdmin, (req, res) => {
+  const c = db.prepare("SELECT id FROM academy_cursos WHERE id = ?").get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Curso no encontrado.' });
+  const b = req.body || {};
+  if (!String(b.titulo || '').trim()) return res.status(400).json({ error: 'El título de la lección es obligatorio.' });
+  const id = uid();
+  const orden = (db.prepare("SELECT COALESCE(MAX(orden),0)+1 n FROM academy_lecciones WHERE curso_id = ?").get(req.params.id) as { n: number }).n;
+  db.prepare("INSERT INTO academy_lecciones (id, curso_id, titulo, tipo, video_url, contenido, duracion, orden, publicado) VALUES (?,?,?,?,?,?,?,?,?)")
+    .run(id, req.params.id, String(b.titulo).trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), orden, b.publicado === false ? 0 : 1);
+  res.json({ ok: true, id });
+});
+api.put('/admin/academy/lecciones/:id', requireAuth, requireAdmin, (req, res) => {
+  const l = db.prepare("SELECT id FROM academy_lecciones WHERE id = ?").get(req.params.id);
+  if (!l) return res.status(404).json({ error: 'Lección no encontrada.' });
+  const b = req.body || {};
+  db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ? WHERE id = ?")
+    .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, req.params.id);
+  res.json({ ok: true });
+});
+api.delete('/admin/academy/lecciones/:id', requireAuth, requireAdmin, (req, res) => {
+  db.prepare("DELETE FROM academy_lecciones WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+
 // ── Biblioteca de productos (superadmin) ─────────────────────────────
 api.get('/superadmin/biblioteca', requireAuth, requireAdmin, async (_req, res) => {
   const { listarBibliotecaAdmin } = await import('./biblioteca.js');
@@ -1810,7 +1894,7 @@ api.post('/superadmin/biblioteca/entrar', requireAuth, requireAdmin, (req, res) 
   asegurarMasterStore();
   const dueno = duenoMasterStore();
   if (!dueno) return res.status(500).json({ error: 'No pudimos preparar la biblioteca.' });
-  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: 'VENDEDOR', storeId: dueno.store_id, imp: req.user!.id });
+  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: 'VENDEDOR', storeId: dueno.store_id, imp: req.user!.id }, req.hostname);
   res.json({ ok: true });
 });
 
@@ -1993,6 +2077,48 @@ webhooks.post('/wompi', async (req, res) => {
     }
   } catch (e) {
     console.error('[wompi] error procesando webhook', e);
+  }
+  res.sendStatus(200);
+});
+
+// ── Webhook de WooCommerce: order.updated (estado + guía en tiempo real) ──
+// Configúralo en cada tienda: WooCommerce → Ajustes → Avanzado → Webhooks →
+// Topic "Order updated", Delivery URL https://dealflow.sbs/webhooks/woocommerce,
+// Secret = WOO_WEBHOOK_SECRET (el mismo en todas las tiendas).
+// No confiamos en el cuerpo: solo lo usamos para saber QUÉ pedido cambió y
+// re-leerlo de Woo con las credenciales de la tienda (procesarOrden).
+function firmaWooValida(secret: string, raw: Buffer | undefined, firma: string): boolean {
+  if (!raw || !firma) return false;
+  try {
+    const esperado = createHmac('sha256', secret).update(raw).digest('base64');
+    const a = Buffer.from(esperado);
+    const b = Buffer.from(firma);
+    return a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+webhooks.post('/woocommerce', async (req, res) => {
+  // Respondemos 200 rápido siempre (WooCommerce reintenta si no).
+  try {
+    const secret = process.env.WOO_WEBHOOK_SECRET;
+    if (secret) {
+      const firma = String(req.headers['x-wc-webhook-signature'] || '');
+      const raw = (req as { rawBody?: Buffer }).rawBody;
+      if (!firmaWooValida(secret, raw, firma)) {
+        console.warn('[webhook-woo] firma inválida o ausente — se ignora');
+        return res.sendStatus(401);
+      }
+    }
+    // Ping de verificación de WooCommerce (al crear el webhook) no trae pedido.
+    const wooId = String((req.body as { id?: number | string })?.id || '').trim();
+    if (wooId) {
+      const { sincronizarPorWooId } = await import('./syncWoo.js');
+      void sincronizarPorWooId(wooId).catch((e) => console.error('[webhook-woo] sync', e));
+    }
+  } catch (e) {
+    console.error('[webhook-woo] error', e);
   }
   res.sendStatus(200);
 });
