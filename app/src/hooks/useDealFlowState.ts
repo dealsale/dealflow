@@ -93,6 +93,7 @@ import {
   apiStoreDetalle,
   apiSyncWhatsapp,
   apiIntervenirTodos,
+  apiAuditoriaBaneo,
   apiStats,
   apiImpersonate,
   apiOnboardingTienda,
@@ -142,7 +143,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo } from '../lib/api';
 import type { Flujo } from '../types';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
@@ -3274,6 +3275,18 @@ export function useDealFlowState() {
       setIntervenirMsg(`✓ ${r.data.intervenidos} chat(s) quedaron atendidos por ${r.data.nombre} (el asistente ya no responde en esta tienda).`);
     });
   }
+  // Auditoría anti-baneo: analiza todos los chats de una tienda y reporta las
+  // posibles infracciones a la política de WhatsApp (por qué Meta pudo banear).
+  const [reporteBaneo, setReporteBaneo] = useState<ReporteBaneo | null>(null);
+  const [auditBaneoStoreId, setAuditBaneoStoreId] = useState('');
+  const [auditBaneoMsg, setAuditBaneoMsg] = useState('');
+  function auditarBaneoStore(storeId: string) {
+    setAuditBaneoStoreId(storeId); setReporteBaneo(null); setAuditBaneoMsg('Revisando chat por chat…');
+    void apiAuditoriaBaneo(storeId).then((r) => {
+      if (r.error || !r.data) { setAuditBaneoMsg(r.error || 'No se pudo auditar.'); return; }
+      setReporteBaneo(r.data.reporte); setAuditBaneoMsg('');
+    });
+  }
   // Barrido de WhatsApp: sincroniza el número guardado con el que hay hoy en Meta.
   const [waSyncMsg, setWaSyncMsg] = useState('');
   const [waSyncNumeros, setWaSyncNumeros] = useState<{ id: string; numero: string; nombre: string }[]>([]);
@@ -3925,6 +3938,11 @@ export function useDealFlowState() {
     waSyncMsg,
     waSyncNumeros,
     waSyncStoreId,
+    // Auditoría anti-baneo
+    auditarBaneoStore,
+    reporteBaneo,
+    auditBaneoStoreId,
+    auditBaneoMsg,
     // Intervención humana masiva
     intervenirTodosLosChats,
     intervenirMsg,

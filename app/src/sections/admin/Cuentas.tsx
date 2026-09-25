@@ -206,6 +206,13 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                 >
                   🙋 Intervenir todos los chats
                 </button>
+                <button
+                  onClick={() => df.auditarBaneoStore(df.detalleStore!.id)}
+                  title="Revisa todos los chats y reporta posibles infracciones a la política de WhatsApp (por qué Meta pudo banear)"
+                  style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                >
+                  🔍 Auditoría anti-baneo
+                </button>
                 {df.detalleStore.porEstado.map((e) => (
                   <span key={e.estado} style={{ fontSize: 12.5, color: 'var(--df-text-secondary)' }}>{e.estado}: <b>{e.n}</b></span>
                 ))}
@@ -230,6 +237,9 @@ export function Cuentas({ df }: { df: DealFlowState }) {
               )}
               {df.intervenirMsg && (
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: df.intervenirMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.intervenirMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)', marginBottom: 14 }}>{df.intervenirMsg}</div>
+              )}
+              {df.auditBaneoStoreId === df.detalleStore.id && (df.auditBaneoMsg || df.reporteBaneo) && (
+                <ReporteBaneoPanel df={df} />
               )}
               {df.detalleStore.recientes.length > 0 && (
                 <div>
@@ -295,5 +305,46 @@ export function Cuentas({ df }: { df: DealFlowState }) {
         </div>
       )}
     </section>
+  );
+}
+
+// Panel del reporte de auditoría anti-baneo.
+function ReporteBaneoPanel({ df }: { df: DealFlowState }) {
+  const r = df.reporteBaneo;
+  const colorGrav = (g: string) => g === 'alta' ? 'var(--df-danger-dark)' : g === 'media' ? '#B45309' : g === 'baja' ? 'var(--df-text-muted)' : 'var(--df-brand-dark)';
+  const bgGrav = (g: string) => g === 'alta' ? 'var(--df-danger-subtle-2)' : g === 'media' ? 'rgba(245,158,11,.12)' : g === 'baja' ? 'var(--df-surface-2)' : 'var(--df-brand-subtle)';
+  const iconGrav = (g: string) => g === 'alta' ? '🔴' : g === 'media' ? '🟠' : g === 'baja' ? '⚪' : '🟢';
+  return (
+    <div style={{ background: 'var(--df-surface-2)', border: '1px solid var(--df-border)', borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontWeight: 800, fontSize: 14 }}>🔍 Auditoría anti-baneo</span>
+        {r && <span style={{ color: 'var(--df-text-muted)', fontSize: 12 }}>· {r.totales.chats} chats · {r.rango.desde || '—'} a {r.rango.hasta || '—'} ({r.rango.dias} días)</span>}
+      </div>
+      {df.auditBaneoMsg && <div style={{ fontSize: 12.5, color: df.auditBaneoMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.auditBaneoMsg}</div>}
+      {r && (
+        <>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12, fontSize: 12.5, color: 'var(--df-text-secondary)' }}>
+            <span>Entrantes: <b>{r.totales.entrantes}</b></span>
+            <span>Salientes: <b>{r.totales.salientes}</b></span>
+            <span>Media enviada: <b>{r.totales.mediaSalientes}</b></span>
+            <span>Fallidos: <b>{r.totales.fallidos}</b></span>
+            <span>Resp. prom: <b>{r.senales.respuestaPromSeg}s</b></span>
+            <span>Pico/min: <b>{r.senales.picoPorMinuto}</b></span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+            {r.hallazgos.map((h, i) => (
+              <div key={i} style={{ background: bgGrav(h.gravedad), border: `1px solid ${colorGrav(h.gravedad)}22`, borderRadius: 9, padding: '9px 11px' }}>
+                <div style={{ fontWeight: 700, fontSize: 12.5, color: colorGrav(h.gravedad), marginBottom: 2 }}>{iconGrav(h.gravedad)} {h.titulo}</div>
+                <div style={{ fontSize: 12, color: 'var(--df-text-body)', lineHeight: 1.5 }}>{h.detalle}</div>
+                {h.dato && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 3, fontFamily: "'JetBrains Mono',monospace" }}>{h.dato}</div>}
+              </div>
+            ))}
+          </div>
+          <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '10px 12px', fontSize: 12.5 }}>
+            <b>Veredicto:</b> {r.veredicto}
+          </div>
+        </>
+      )}
+    </div>
   );
 }

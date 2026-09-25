@@ -547,6 +547,24 @@ export const apiSyncWhatsapp = (id: string, phoneNumberId?: string) =>
 export const apiIntervenirTodos = (id: string, nombre?: string) =>
   req<{ ok: true; intervenidos: number; nombre: string }>(`/api/admin/stores/${id}/intervenir-todos`, 'POST', nombre ? { nombre } : {});
 
+// Auditoría anti-baneo: recorre todos los chats y reporta posibles infracciones.
+export interface Hallazgo { gravedad: 'alta' | 'media' | 'baja' | 'ok'; titulo: string; detalle: string; dato?: string }
+export interface ReporteBaneo {
+  tienda: { id: string; nombre: string };
+  rango: { desde: string; hasta: string; dias: number };
+  totales: { chats: number; entrantes: number; salientes: number; mediaSalientes: number; fallidos: number };
+  senales: {
+    iniciadosPorNegocio: number; ejemplosIniciados: string[]; fueraDe24h: number;
+    rafagas: number; rafagaMax: number; gapMinSaliente: number; picoPorMinuto: number;
+    difusion: { texto: string; chats: number }[]; respuestaPromSeg: number; respuestasInstantaneas: number;
+  };
+  volumenDiario: { dia: string; salientes: number }[];
+  hallazgos: Hallazgo[];
+  veredicto: string;
+}
+export const apiAuditoriaBaneo = (id: string) =>
+  req<{ reporte: ReporteBaneo }>(`/api/admin/stores/${id}/auditoria-baneo`, 'GET');
+
 // ── Superadmin ──
 export interface SuperStore {
   id: string; tienda: string; correo: string; plan: string; ventas: number; activa: boolean; oculta: boolean;

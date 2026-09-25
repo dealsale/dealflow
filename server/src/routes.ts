@@ -1389,6 +1389,17 @@ api.post('/admin/stores/:id/intervenir-todos', requireAuth, requireAdmin, (req, 
   res.json({ ok: true, intervenidos: info.changes, nombre });
 });
 
+// Auditoría anti-baneo: recorre todos los chats de la tienda y reporta las
+// posibles infracciones a la política de WhatsApp (por qué Meta pudo banear).
+api.get('/admin/stores/:id/auditoria-baneo', requireAuth, requireAdmin, async (req, res) => {
+  const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+  if (!s) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const { auditarBaneo } = await import('./auditoria.js');
+  const reporte = auditarBaneo(s.id);
+  if (!reporte) return res.status(404).json({ error: 'No se pudo auditar la tienda.' });
+  res.json({ reporte });
+});
+
 // Barrido contra la API de Meta: consulta los números que HOY tiene la WABA de la
 // tienda y actualiza el phone_number_id/numero guardado (para cuando la tienda
 // cambió de número en Meta pero DealFlow seguía con el anterior). requireAdmin.
