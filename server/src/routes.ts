@@ -1708,6 +1708,80 @@ api.patch('/superadmin/stores/:id/hide', requireAuth, requireSuperAdmin, (req, r
   res.json({ ok: true });
 });
 
+// ── Plantillas de mensajes de Meta (superadmin, para TODAS las tiendas) ──
+// Lista las plantillas maestras + un resumen del estado de publicación por tienda.
+api.get('/superadmin/meta-templates', requireAuth, requireSuperAdmin, (_req, res) => {
+  const rows = db.prepare('SELECT * FROM meta_templates ORDER BY created_at DESC').all() as Record<string, unknown>[];
+  const plantillas = rows.map((r) => {
+    const est = db.prepare(
+      "SELECT estado, COUNT(*) n FROM meta_template_pub WHERE template_id = ? GROUP BY estado",
+    ).all(r.id) as { estado: string; n: number }[];
+    const resumen = { aprobada: 0, pendiente: 0, rechazada: 0, error: 0 } as Record<string, number>;
+    for (const e of est) resumen[e.estado] = e.n;
+    return {
+      id: r.id, nombre: r.nombre, categoria: r.categoria, idioma: r.idioma,
+      encabezado: r.encabezado || '', cuerpo: r.cuerpo, pie: r.pie || '',
+      botones: pj(r.botones as string, []), ejemplos: pj(r.ejemplos as string, []),
+      publicadas: (est.reduce((a, e) => a + e.n, 0)), resumen,
+    };
+  });
+  const tiendasCloud = (db.prepare("SELECT COUNT(*) n FROM whatsapp WHERE conectado = 1 AND modo = 'cloud' AND COALESCE(waba_id,'') != ''").get() as { n: number }).n;
+  res.json({ plantillas, tiendasCloud });
+});
+
+const NOMBRE_TPL = /^[a-z0-9_]{1,60}$/;
+api.post('/superadmin/meta-templates', requireAuth, requireSuperAdmin, (req, res) => {
+  const b = req.body || {};
+  const nombre = String(b.nombre || '').trim().toLowerCase();
+  if (!NOMBRE_TPL.test(nombre)) return res.status(400).json({ error: 'El nombre debe ser minúsculas, números y guion bajo (sin espacios ni tildes).' });
+  if (!String(b.cuerpo || '').trim()) return res.status(400).json({ error: 'El cuerpo del mensaje es obligatorio.' });
+  if (db.prepare('SELECT 1 FROM meta_templates WHERE nombre = ?').get(nombre)) return res.status(400).json({ error: 'Ya existe una plantilla con ese nombre.' });
+  const id = uid();
+  db.prepare(
+    `INSERT INTO meta_templates (id, nombre, categoria, idioma, encabezado, cuerpo, pie, botones, ejemplos)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(id, nombre, b.categoria === 'MARKETING' ? 'MARKETING' : 'UTILITY', String(b.idioma || 'es'),
+    String(b.encabezado || ''), String(b.cuerpo), String(b.pie || ''),
+    JSON.stringify(Array.isArray(b.botones) ? b.botones : []), JSON.stringify(Array.isArray(b.ejemplos) ? b.ejemplos : []));
+  res.json({ ok: true, id });
+});
+
+api.put('/superadmin/meta-templates/:id', requireAuth, requireSuperAdmin, (req, res) => {
+  const t = db.prepare('SELECT id FROM meta_templates WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Plantilla no encontrada.' });
+  const b = req.body || {};
+  if (!String(b.cuerpo || '').trim()) return res.status(400).json({ error: 'El cuerpo del mensaje es obligatorio.' });
+  db.prepare(
+    `UPDATE meta_templates SET categoria = ?, idioma = ?, encabezado = ?, cuerpo = ?, pie = ?, botones = ?, ejemplos = ? WHERE id = ?`,
+  ).run(b.categoria === 'MARKETING' ? 'MARKETING' : 'UTILITY', String(b.idioma || 'es'),
+    String(b.encabezado || ''), String(b.cuerpo), String(b.pie || ''),
+    JSON.stringify(Array.isArray(b.botones) ? b.botones : []), JSON.stringify(Array.isArray(b.ejemplos) ? b.ejemplos : []), req.params.id);
+  res.json({ ok: true });
+});
+
+api.delete('/superadmin/meta-templates/:id', requireAuth, requireSuperAdmin, (req, res) => {
+  db.prepare('DELETE FROM meta_templates WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// Publica la plantilla en la WABA de TODAS las tiendas Cloud API (una acción).
+api.post('/superadmin/meta-templates/:id/publicar', requireAuth, requireSuperAdmin, async (req, res) => {
+  const t = db.prepare('SELECT id FROM meta_templates WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Plantilla no encontrada.' });
+  const { publicarEnTodas } = await import('./metaTemplates.js');
+  const r = await publicarEnTodas(req.params.id);
+  res.json({ ok: true, ...r });
+});
+
+// Refresca el estado de aprobación consultando a Meta por cada tienda.
+api.post('/superadmin/meta-templates/:id/refrescar', requireAuth, requireSuperAdmin, async (req, res) => {
+  const t = db.prepare('SELECT id FROM meta_templates WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Plantilla no encontrada.' });
+  const { sincronizarEstado } = await import('./metaTemplates.js');
+  const r = await sincronizarEstado(req.params.id);
+  res.json({ ok: true, ...r });
+});
+
 // ── Biblioteca de productos (superadmin) ─────────────────────────────
 api.get('/superadmin/biblioteca', requireAuth, requireAdmin, async (_req, res) => {
   const { listarBibliotecaAdmin } = await import('./biblioteca.js');

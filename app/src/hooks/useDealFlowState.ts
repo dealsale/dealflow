@@ -94,6 +94,12 @@ import {
   apiSyncWhatsapp,
   apiIntervenirTodos,
   apiAuditoriaBaneo,
+  apiMetaTemplates,
+  apiCrearPlantillaMeta,
+  apiActualizarPlantillaMeta,
+  apiEliminarPlantillaMeta,
+  apiPublicarPlantillaMeta,
+  apiRefrescarPlantillaMeta,
   apiStats,
   apiImpersonate,
   apiOnboardingTienda,
@@ -143,7 +149,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla } from '../lib/api';
 import type { Flujo } from '../types';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
@@ -3287,6 +3293,49 @@ export function useDealFlowState() {
       setReporteBaneo(r.data.reporte); setAuditBaneoMsg('');
     });
   }
+  // Plantillas de mensajes de Meta (superadmin, para todas las tiendas).
+  const [plantillasMeta, setPlantillasMeta] = useState<PlantillaMeta[]>([]);
+  const [tiendasCloudCount, setTiendasCloudCount] = useState(0);
+  const [plantillasMetaMsg, setPlantillasMetaMsg] = useState('');
+  function cargarPlantillasMeta() {
+    void apiMetaTemplates().then((r) => {
+      if (r.data) { setPlantillasMeta(r.data.plantillas); setTiendasCloudCount(r.data.tiendasCloud); }
+    });
+  }
+  useEffect(() => { if (adminSection === 'plantillas' && isSuperadmin) cargarPlantillasMeta(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminSection, isSuperadmin]);
+  function crearPlantillaMeta(p: NuevaPlantilla, cb?: () => void) {
+    setPlantillasMetaMsg('Guardando…');
+    void apiCrearPlantillaMeta(p).then((r) => {
+      if (r.error) { setPlantillasMetaMsg(r.error); return; }
+      setPlantillasMetaMsg('✓ Plantilla creada.'); cargarPlantillasMeta(); cb?.();
+    });
+  }
+  function actualizarPlantillaMeta(id: string, p: NuevaPlantilla, cb?: () => void) {
+    setPlantillasMetaMsg('Guardando…');
+    void apiActualizarPlantillaMeta(id, p).then((r) => {
+      if (r.error) { setPlantillasMetaMsg(r.error); return; }
+      setPlantillasMetaMsg('✓ Plantilla actualizada.'); cargarPlantillasMeta(); cb?.();
+    });
+  }
+  function eliminarPlantillaMeta(id: string) {
+    void apiEliminarPlantillaMeta(id).then(() => cargarPlantillasMeta());
+  }
+  function publicarPlantillaMeta(id: string) {
+    setPlantillasMetaMsg('Publicando en todas las tiendas…');
+    void apiPublicarPlantillaMeta(id).then((r) => {
+      if (r.error || !r.data) { setPlantillasMetaMsg(r.error || 'No se pudo publicar.'); return; }
+      setPlantillasMetaMsg(`✓ Enviada a ${r.data.exitosas} de ${r.data.total} tienda(s)${r.data.errores ? ` · ${r.data.errores} con error` : ''}.`);
+      cargarPlantillasMeta();
+    });
+  }
+  function refrescarPlantillaMeta(id: string) {
+    setPlantillasMetaMsg('Consultando el estado en Meta…');
+    void apiRefrescarPlantillaMeta(id).then((r) => {
+      if (r.error) { setPlantillasMetaMsg(r.error); return; }
+      setPlantillasMetaMsg('✓ Estado actualizado.'); cargarPlantillasMeta();
+    });
+  }
   // Barrido de WhatsApp: sincroniza el número guardado con el que hay hoy en Meta.
   const [waSyncMsg, setWaSyncMsg] = useState('');
   const [waSyncNumeros, setWaSyncNumeros] = useState<{ id: string; numero: string; nombre: string }[]>([]);
@@ -3943,6 +3992,15 @@ export function useDealFlowState() {
     reporteBaneo,
     auditBaneoStoreId,
     auditBaneoMsg,
+    // Plantillas de mensajes de Meta (superadmin)
+    plantillasMeta,
+    tiendasCloudCount,
+    plantillasMetaMsg,
+    crearPlantillaMeta,
+    actualizarPlantillaMeta,
+    eliminarPlantillaMeta,
+    publicarPlantillaMeta,
+    refrescarPlantillaMeta,
     // Intervención humana masiva
     intervenirTodosLosChats,
     intervenirMsg,

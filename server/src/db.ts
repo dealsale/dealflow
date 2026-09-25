@@ -448,6 +448,32 @@ db.exec(`CREATE TABLE IF NOT EXISTS flows (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_flows_store ON flows(store_id)');
 
+// Plantillas de mensajes de Meta (WhatsApp), definidas UNA vez por el superadmin
+// y publicadas en la WABA de TODAS las tiendas. El texto es genérico (sin nombre
+// de tienda): solo variables {{1}},{{2}}… El estado de aprobación se guarda por
+// tienda en meta_template_pub (una plantilla = una fila por WABA en Meta).
+db.exec(`CREATE TABLE IF NOT EXISTS meta_templates (
+  id TEXT PRIMARY KEY,
+  nombre TEXT NOT NULL,               -- nombre técnico (minúsculas_guionbajo), único
+  categoria TEXT NOT NULL DEFAULT 'UTILITY',  -- UTILITY | MARKETING
+  idioma TEXT NOT NULL DEFAULT 'es',
+  encabezado TEXT NOT NULL DEFAULT '',        -- texto de header opcional
+  cuerpo TEXT NOT NULL,                        -- body con {{1}},{{2}}…
+  pie TEXT NOT NULL DEFAULT '',                 -- footer opcional
+  botones TEXT NOT NULL DEFAULT '[]',           -- JSON [{tipo,texto,url?}]
+  ejemplos TEXT NOT NULL DEFAULT '[]',          -- JSON de ejemplos para {{n}}
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS meta_template_pub (
+  template_id TEXT NOT NULL REFERENCES meta_templates(id) ON DELETE CASCADE,
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  estado TEXT NOT NULL DEFAULT 'pendiente',   -- pendiente | aprobada | rechazada | error
+  meta_id TEXT NOT NULL DEFAULT '',           -- id de la plantilla en Meta
+  motivo TEXT NOT NULL DEFAULT '',            -- razón de rechazo / error
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (template_id, store_id)
+)`);
+
 // ── Índices de rendimiento (críticos) ──
 // El Inbox sondea /api/leads?resumen cada pocos segundos y, POR CADA lead, lee sus
 // mensajes (último, cola de 40) ordenados por fecha. Sin este índice, cada lectura

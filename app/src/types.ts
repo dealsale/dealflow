@@ -254,7 +254,7 @@ export type VendedorSection =
   | 'biblioteca'
   | 'integraciones';
 
-export type AdminSection = 'ventas' | 'planes' | 'cuentas' | 'cupones' | 'superadmin' | 'biblioteca';
+export type AdminSection = 'ventas' | 'planes' | 'cuentas' | 'cupones' | 'superadmin' | 'biblioteca' | 'plantillas';
 
 /** Etiquetas de conversación en el CRM. '' = sin etiqueta. */
 export const ETIQUETAS_CRM = ['Seguimiento', 'Venta', 'Garantía', 'Reclamo', 'Mayorista', 'Postventa'] as const;

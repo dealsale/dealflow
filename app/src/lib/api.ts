@@ -565,6 +565,30 @@ export interface ReporteBaneo {
 export const apiAuditoriaBaneo = (id: string) =>
   req<{ reporte: ReporteBaneo }>(`/api/admin/stores/${id}/auditoria-baneo`, 'GET');
 
+// Plantillas de mensajes de Meta, definidas una vez y publicadas en todas las tiendas.
+export interface BotonPlantilla { tipo: 'QUICK_REPLY' | 'URL'; texto: string; url?: string }
+export interface PlantillaMeta {
+  id: string; nombre: string; categoria: string; idioma: string;
+  encabezado: string; cuerpo: string; pie: string; botones: BotonPlantilla[]; ejemplos: string[];
+  publicadas: number; resumen: { aprobada: number; pendiente: number; rechazada: number; error: number };
+}
+export interface NuevaPlantilla {
+  nombre?: string; categoria: string; idioma: string; encabezado: string; cuerpo: string; pie: string;
+  botones: BotonPlantilla[]; ejemplos: string[];
+}
+export const apiMetaTemplates = () =>
+  req<{ plantillas: PlantillaMeta[]; tiendasCloud: number }>(`/api/superadmin/meta-templates`, 'GET');
+export const apiCrearPlantillaMeta = (p: NuevaPlantilla) =>
+  req<{ ok: true; id: string }>(`/api/superadmin/meta-templates`, 'POST', p);
+export const apiActualizarPlantillaMeta = (id: string, p: NuevaPlantilla) =>
+  req<{ ok: true }>(`/api/superadmin/meta-templates/${id}`, 'PUT', p);
+export const apiEliminarPlantillaMeta = (id: string) =>
+  req<{ ok: true }>(`/api/superadmin/meta-templates/${id}`, 'DELETE');
+export const apiPublicarPlantillaMeta = (id: string) =>
+  req<{ ok: true; total: number; exitosas: number; errores: number }>(`/api/superadmin/meta-templates/${id}/publicar`, 'POST');
+export const apiRefrescarPlantillaMeta = (id: string) =>
+  req<{ ok: true; actualizadas: number }>(`/api/superadmin/meta-templates/${id}/refrescar`, 'POST');
+
 // ── Superadmin ──
 export interface SuperStore {
   id: string; tienda: string; correo: string; plan: string; ventas: number; activa: boolean; oculta: boolean;
