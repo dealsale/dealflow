@@ -50,12 +50,21 @@ function cookieDomain(host?: string): string | undefined {
 
 export function setAuthCookie(res: Response, user: AuthUser, host?: string) {
   const token = jwt.sign(user, JWT_SECRET, { expiresIn: '30d' });
+  const dom = cookieDomain(host);
+  // Auto-sanación: si NO usamos dominio padre, borramos cualquier cookie de
+  // sesión con dominio padre que haya quedado de un deploy anterior. Dos cookies
+  // con el mismo nombre (una host-only y otra de dominio) pueden romper el login.
+  if (!dom) {
+    for (const d of ['.dealflow.sbs', '.zennku.sbs']) {
+      try { res.clearCookie(COOKIE, { domain: d }); } catch { /* ignore */ }
+    }
+  }
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: 30 * 24 * 3600 * 1000,
-    domain: cookieDomain(host),
+    domain: dom,
   });
 }
 

@@ -4,6 +4,7 @@ import cors from 'cors';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { api, webhooks } from './routes.js';
+import { db } from './db.js';
 import { seed } from './seed.js';
 import { seedPlantillas } from './seedPlantillas.js';
 import { restoreQrSessions } from './waqr.js';
@@ -47,7 +48,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-09-25-fix-sesion-diag',
+    build: '2026-09-25-diag-conteo',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -58,6 +59,18 @@ app.get('/salud', (_req, res) =>
       persistente: !!process.env.DATA_DIR && !!process.env.RAILWAY_VOLUME_MOUNT_PATH
         && process.env.DATA_DIR.startsWith(process.env.RAILWAY_VOLUME_MOUNT_PATH),
     },
+    // Conteo real de la base (sin datos sensibles). Sirve para saber si la base
+    // tiene TUS tiendas o arrancó vacía (solo la demo). Si tiendas <= 1, la base
+    // que está leyendo la app es nueva/vacía aunque el volumen sea persistente.
+    contenido: (() => {
+      try {
+        return {
+          tiendas: (db.prepare('SELECT COUNT(*) n FROM stores').get() as { n: number }).n,
+          usuarios: (db.prepare('SELECT COUNT(*) n FROM users').get() as { n: number }).n,
+          pedidos: (db.prepare('SELECT COUNT(*) n FROM orders').get() as { n: number }).n,
+        };
+      } catch { return { tiendas: -1, usuarios: -1, pedidos: -1 }; }
+    })(),
     // Diagnóstico de la conexión en un clic: SOLO dice si las variables están
     // puestas (true/false), nunca su valor. Las tres deben estar en true para
     // que aparezca el botón "Conexión automática".
