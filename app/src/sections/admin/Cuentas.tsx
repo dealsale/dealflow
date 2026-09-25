@@ -311,14 +311,34 @@ export function Cuentas({ df }: { df: DealFlowState }) {
 // Panel del reporte de auditoría anti-baneo.
 function ReporteBaneoPanel({ df }: { df: DealFlowState }) {
   const r = df.reporteBaneo;
+  const storeId = df.auditBaneoStoreId;
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   const colorGrav = (g: string) => g === 'alta' ? 'var(--df-danger-dark)' : g === 'media' ? '#B45309' : g === 'baja' ? 'var(--df-text-muted)' : 'var(--df-brand-dark)';
   const bgGrav = (g: string) => g === 'alta' ? 'var(--df-danger-subtle-2)' : g === 'media' ? 'rgba(245,158,11,.12)' : g === 'baja' ? 'var(--df-surface-2)' : 'var(--df-brand-subtle)';
   const iconGrav = (g: string) => g === 'alta' ? '🔴' : g === 'media' ? '🟠' : g === 'baja' ? '⚪' : '🟢';
+  // Presets rápidos (hora local del navegador → formato datetime-local).
+  const fmtDT = (d: Date) => { const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const preset = (horas: number) => { const ahora = new Date(); setHasta(fmtDT(ahora)); setDesde(fmtDT(new Date(ahora.getTime() - horas * 3600000))); df.auditarBaneoStore(storeId, fmtDT(new Date(ahora.getTime() - horas * 3600000)), fmtDT(ahora)); };
+  const inputDT: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 7, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12, background: 'var(--df-surface)', color: 'var(--df-text-body)' };
   return (
     <div style={{ background: 'var(--df-surface-2)', border: '1px solid var(--df-border)', borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 800, fontSize: 14 }}>🔍 Auditoría anti-baneo</span>
         {r && <span style={{ color: 'var(--df-text-muted)', fontSize: 12 }}>· {r.totales.chats} chats · {r.rango.desde || '—'} a {r.rango.hasta || '—'} ({r.rango.dias} días)</span>}
+      </div>
+      {/* Filtro por fecha y hora (barrido de un periodo concreto). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '9px 11px' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Desde</span>
+        <input type="datetime-local" value={desde} onChange={(e) => setDesde(e.target.value)} style={inputDT} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Hasta</span>
+        <input type="datetime-local" value={hasta} onChange={(e) => setHasta(e.target.value)} style={inputDT} />
+        <button onClick={() => df.auditarBaneoStore(storeId, desde || undefined, hasta || undefined)} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>Analizar</button>
+        <span style={{ width: 1, height: 20, background: 'var(--df-border)' }} />
+        <button onClick={() => preset(24)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 7, padding: '5px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>Últimas 24 h</button>
+        <button onClick={() => preset(72)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 7, padding: '5px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>Últimos 3 días</button>
+        <button onClick={() => preset(168)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 7, padding: '5px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>7 días</button>
+        <button onClick={() => { setDesde(''); setHasta(''); df.auditarBaneoStore(storeId); }} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Todo</button>
       </div>
       {df.auditBaneoMsg && <div style={{ fontSize: 12.5, color: df.auditBaneoMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.auditBaneoMsg}</div>}
       {r && (

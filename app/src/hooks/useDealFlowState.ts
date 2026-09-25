@@ -3286,9 +3286,9 @@ export function useDealFlowState() {
   const [reporteBaneo, setReporteBaneo] = useState<ReporteBaneo | null>(null);
   const [auditBaneoStoreId, setAuditBaneoStoreId] = useState('');
   const [auditBaneoMsg, setAuditBaneoMsg] = useState('');
-  function auditarBaneoStore(storeId: string) {
+  function auditarBaneoStore(storeId: string, desde?: string, hasta?: string) {
     setAuditBaneoStoreId(storeId); setReporteBaneo(null); setAuditBaneoMsg('Revisando chat por chat…');
-    void apiAuditoriaBaneo(storeId).then((r) => {
+    void apiAuditoriaBaneo(storeId, desde, hasta).then((r) => {
       if (r.error || !r.data) { setAuditBaneoMsg(r.error || 'No se pudo auditar.'); return; }
       setReporteBaneo(r.data.reporte); setAuditBaneoMsg('');
     });
