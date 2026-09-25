@@ -889,6 +889,23 @@ function fotoReferencia(p: Record<string, unknown>): string | null {
 }
 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Pausa "humana" entre piezas de un envío en secuencia (saludo, flujo…).
+ * ANTI-BANEO: el bot nunca dispara fotos/videos en tromba (0 s), que fue lo que
+ * hizo que Meta desactivara números. Media espera más que texto, con variación
+ * aleatoria (+0–50%). El tope mínimo y una escala global son configurables.
+ */
+function pausaHumana(tipo: string, len = 0): number {
+  const gapMin = Number(process.env.BOT_MSG_GAP) || 1200;
+  const escala = Number(process.env.BOT_PACE_SCALE) || 1;
+  const base = tipo === 'texto' ? 1300 + Math.min(len * 25, 2500)
+    : tipo === 'video' ? 3800
+    : tipo === 'audio' ? 2600
+    : 2800; // imagen u otros
+  const conJitter = base + Math.floor(Math.random() * base * 0.5);
+  return Math.max(gapMin, Math.round(conJitter * escala));
+}
 /**
  * Hace que el bot tarde entre BOT_DELAY_MIN y BOT_DELAY_MAX ms (por defecto 4–5 s)
  * en responder, contando desde que llegó el mensaje. Si la IA ya se demoró más,
@@ -1023,16 +1040,6 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
   //  2) ANTI-BANEO: el bot no dispara una ráfaga de fotos/videos en un instante
   //     (patrón que genera reportes/bloqueos). Simula el ritmo de una persona:
   //     una pausa más larga para media que para texto, con variación aleatoria.
-  const gapMin = Number(process.env.BOT_MSG_GAP) || 1200;
-  const escala = Number(process.env.BOT_PACE_SCALE) || 1;
-  const pausaHumana = (tipo: string, len = 0): number => {
-    const base = tipo === 'texto' ? 1300 + Math.min(len * 25, 2500)
-      : tipo === 'video' ? 3800
-      : tipo === 'audio' ? 2600
-      : 2800; // imagen u otros
-    const conJitter = base + Math.floor(Math.random() * base * 0.5); // +0–50%
-    return Math.max(gapMin, Math.round(conJitter * escala));
-  };
   let enviadas = 0;
   let idx = 0;
   for (const b of piezas) {
@@ -1116,7 +1123,6 @@ export async function enviarFlujo(storeId: string, leadId: string, flowId: strin
     return lista.map((v) => ({ tipo: b.tipo, valor: v }));
   });
   if (!piezas.length) return { ok: false, error: 'Este flujo no tiene contenido cargado.' };
-  const gap = Number(process.env.BOT_MSG_GAP) || 1200;
   let enviadas = 0;
   let idx = 0;
   for (const b of piezas) {
@@ -1142,7 +1148,11 @@ export async function enviarFlujo(storeId: string, leadId: string, flowId: strin
       }
     }
     if (ok) enviadas++;
-    if (ok && gap > 0 && idx < piezas.length - 1) await dormir(gap);
+    // Ritmo humano entre piezas del flujo (nunca en ráfaga).
+    if (ok && idx < piezas.length - 1) {
+      const sig = piezas[idx + 1];
+      await dormir(pausaHumana(sig.tipo, sig.tipo === 'texto' ? (sig.valor || '').length : 0));
+    }
     idx++;
   }
   // El bot queda atendiendo y se reinicia el seguimiento (el flujo reactivó el chat).
