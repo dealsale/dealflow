@@ -73,12 +73,15 @@ export function seedAcademy(): void {
   const hay = (db.prepare('SELECT COUNT(*) n FROM academy_cursos').get() as { n: number }).n;
   if (hay > 0) return;
   const insCurso = db.prepare("INSERT INTO academy_cursos (id, titulo, descripcion, nivel, orden, publicado) VALUES (?,?,?,?,?,1)");
-  const insLec = db.prepare("INSERT INTO academy_lecciones (id, curso_id, titulo, tipo, video_url, contenido, duracion, orden, publicado) VALUES (?,?,?,?,?,?,?,?,1)");
+  const insSec = db.prepare("INSERT INTO academy_secciones (id, curso_id, titulo, orden) VALUES (?,?,?,0)");
+  const insLec = db.prepare("INSERT INTO academy_lecciones (id, curso_id, seccion_id, titulo, tipo, video_url, contenido, duracion, orden, publicado) VALUES (?,?,?,?,?,?,?,?,?,1)");
   const tx = db.transaction(() => {
     CURSOS.forEach((c, ci) => {
       const cid = uid();
       insCurso.run(cid, c.titulo, c.descripcion, c.nivel, ci);
-      c.lecciones.forEach((l, li) => insLec.run(uid(), cid, l.titulo, l.tipo, l.videoUrl || '', l.contenido || '', l.duracion || '', li));
+      const sid = uid();
+      insSec.run(sid, cid, 'Contenido del curso');
+      c.lecciones.forEach((l, li) => insLec.run(uid(), cid, sid, l.titulo, l.tipo, l.videoUrl || '', l.contenido || '', l.duracion || '', li));
     });
   });
   tx();

@@ -16,8 +16,9 @@ const C = {
 const sans = 'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif';
 
 // ── Tipos ──
-interface Leccion { id: string; cursoId: string; titulo: string; tipo: 'video' | 'articulo'; videoUrl: string; contenido: string; duracion: string; orden: number; publicado: boolean }
-interface Curso { id: string; titulo: string; descripcion: string; portada: string; nivel: string; orden: number; publicado: boolean; lecciones: Leccion[] | number }
+interface Leccion { id: string; cursoId: string; seccionId: string; titulo: string; tipo: 'video' | 'articulo'; videoUrl: string; contenido: string; duracion: string; orden: number; publicado: boolean }
+interface Seccion { id: string; cursoId: string; titulo: string; orden: number; lecciones: Leccion[] }
+interface Curso { id: string; titulo: string; descripcion: string; portada: string; nivel: string; orden: number; publicado: boolean; lecciones: Leccion[] | number; secciones?: Seccion[]; completadas?: string[] }
 interface Sesion { id: string; nombre: string; role: string }
 
 // ── API helper ──
@@ -74,6 +75,10 @@ export function Academy() {
 
   return (
     <div style={{ minHeight: '100vh', background: C.ink, color: C.text, fontFamily: sans }}>
+      <style>{`@media (max-width: 820px){
+        .ac-curso-grid{grid-template-columns:1fr !important;}
+        .ac-temario{position:static !important;order:-1;}
+      }`}</style>
       <Encabezado sesion={sesion} esAdmin={esAdmin} admin={admin} setAdmin={setAdmin} onVolver={cursoAbierto ? () => setCursoAbierto(null) : undefined} />
       <main style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px 80px' }}>
         {admin && esAdmin ? (
@@ -141,29 +146,98 @@ function Portal({ cursos, onAbrir }: { cursos: Curso[]; onAbrir: (c: Curso) => v
 function VistaCurso({ cursoId }: { cursoId: string }) {
   const [curso, setCurso] = useState<Curso | null>(null);
   const [activa, setActiva] = useState<Leccion | null>(null);
+  const [completadas, setCompletadas] = useState<Set<string>>(new Set());
+  const [expandida, setExpandida] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     void aReq<{ curso: Curso }>(`/api/academy/cursos/${cursoId}`).then((r) => {
-      if (r.data) { setCurso(r.data.curso); const ls = r.data.curso.lecciones as Leccion[]; setActiva(ls[0] || null); }
+      if (!r.data) return;
+      const c = r.data.curso;
+      setCurso(c);
+      setCompletadas(new Set(c.completadas || []));
+      const secs = c.secciones || [];
+      // Primera lección disponible y todas las secciones abiertas por defecto.
+      const primera = secs.flatMap((s) => s.lecciones)[0] || null;
+      setActiva(primera);
+      setExpandida(new Set(secs.map((s) => s.id)));
     });
   }, [cursoId]);
+
+  const marcar = useCallback(async (leccionId: string, valor: boolean) => {
+    // Optimista: actualizamos la UI y luego confirmamos con el servidor.
+    setCompletadas((prev) => { const n = new Set(prev); if (valor) n.add(leccionId); else n.delete(leccionId); return n; });
+    await aReq(`/api/academy/progreso/${leccionId}`, 'POST', { completado: valor });
+  }, []);
+
   if (!curso) return <div style={{ color: C.muted }}>Cargando…</div>;
-  const lecciones = curso.lecciones as Leccion[];
+  const secciones = curso.secciones || [];
+  const todas = secciones.flatMap((s) => s.lecciones);
+  const total = todas.length;
+  const hechas = todas.filter((l) => completadas.has(l.id)).length;
+  const pct = total ? Math.round((hechas / total) * 100) : 0;
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 300px', gap: 20, alignItems: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 20, alignItems: 'start' }} className="ac-curso-grid">
       <div>
         <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-.02em', margin: '0 0 4px' }}>{curso.titulo}</h1>
         <p style={{ color: C.muted, margin: '0 0 18px' }}>{curso.descripcion}</p>
-        {activa ? <Reproductor leccion={activa} /> : <div style={{ color: C.muted }}>Este curso aún no tiene lecciones.</div>}
+        {activa ? (
+          <>
+            <Reproductor leccion={activa} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+              <button
+                onClick={() => marcar(activa.id, !completadas.has(activa.id))}
+                style={completadas.has(activa.id) ? { ...btnGhost, borderColor: C.emerald, color: C.emerald } : btnPrimary}
+              >
+                {completadas.has(activa.id) ? '✓ Completada' : 'Marcar como completada'}
+              </button>
+              {(() => {
+                const idx = todas.findIndex((l) => l.id === activa.id);
+                const sig = todas[idx + 1];
+                return sig ? <button onClick={() => setActiva(sig)} style={btnGhost}>Siguiente lección →</button> : null;
+              })()}
+            </div>
+          </>
+        ) : <div style={{ color: C.muted }}>Este curso aún no tiene lecciones.</div>}
       </div>
-      <aside style={{ ...tarjeta, padding: 12, position: 'sticky', top: 78 }}>
-        <div style={{ fontSize: 12, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', padding: '4px 8px 10px' }}>Contenido</div>
-        {lecciones.map((l, i) => (
-          <button key={l.id} onClick={() => setActiva(l)} style={{ display: 'flex', gap: 10, width: '100%', textAlign: 'left', background: activa?.id === l.id ? 'rgba(52,211,153,.12)' : 'transparent', border: 'none', borderRadius: 9, padding: '9px 10px', cursor: 'pointer', color: C.text, alignItems: 'center' }}>
-            <span style={{ color: C.emerald, fontSize: 14 }}>{l.tipo === 'video' ? '▶' : '📄'}</span>
-            <span style={{ flex: 1, fontSize: 13.5 }}>{i + 1}. {l.titulo}</span>
-            {l.duracion && <span style={{ color: C.muted2, fontSize: 12 }}>{l.duracion}</span>}
-          </button>
-        ))}
+      <aside style={{ ...tarjeta, padding: 12, position: 'sticky', top: 78 }} className="ac-temario">
+        <div style={{ padding: '4px 8px 10px' }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em' }}>Contenido del curso</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <div style={{ flex: 1, height: 7, borderRadius: 99, background: 'rgba(255,255,255,.1)', overflow: 'hidden' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${C.emerald},${C.emeraldDeep})`, transition: 'width .3s' }} />
+            </div>
+            <span style={{ fontSize: 12, color: C.muted, fontWeight: 700, whiteSpace: 'nowrap' }}>{pct}%</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: C.muted2, marginTop: 5 }}>{hechas} de {total} lecciones completadas</div>
+        </div>
+        {secciones.map((s) => {
+          const abierta = expandida.has(s.id);
+          const hechasSec = s.lecciones.filter((l) => completadas.has(l.id)).length;
+          return (
+            <div key={s.id} style={{ borderTop: `1px solid ${C.line}`, marginTop: 4 }}>
+              <button
+                onClick={() => setExpandida((prev) => { const n = new Set(prev); if (n.has(s.id)) n.delete(s.id); else n.add(s.id); return n; })}
+                style={{ display: 'flex', gap: 8, width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '11px 8px', cursor: 'pointer', color: C.text, alignItems: 'center' }}
+              >
+                <span style={{ color: C.muted, fontSize: 12 }}>{abierta ? '▾' : '▸'}</span>
+                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>{s.titulo}</span>
+                <span style={{ color: C.muted2, fontSize: 11.5 }}>{hechasSec}/{s.lecciones.length}</span>
+              </button>
+              {abierta && s.lecciones.map((l, i) => {
+                const done = completadas.has(l.id);
+                return (
+                  <button key={l.id} onClick={() => setActiva(l)} style={{ display: 'flex', gap: 9, width: '100%', textAlign: 'left', background: activa?.id === l.id ? 'rgba(52,211,153,.12)' : 'transparent', border: 'none', borderRadius: 9, padding: '8px 10px 8px 22px', cursor: 'pointer', color: C.text, alignItems: 'center' }}>
+                    <span style={{ width: 16, height: 16, borderRadius: 99, flexShrink: 0, display: 'grid', placeItems: 'center', fontSize: 10, border: `1.5px solid ${done ? C.emerald : C.line2}`, background: done ? C.emerald : 'transparent', color: '#052018' }}>{done ? '✓' : ''}</span>
+                    <span style={{ color: C.muted2, fontSize: 13 }}>{l.tipo === 'video' ? '▶' : '📄'}</span>
+                    <span style={{ flex: 1, fontSize: 13, color: done ? C.muted : C.text }}>{i + 1}. {l.titulo}</span>
+                    {l.duracion && <span style={{ color: C.muted2, fontSize: 11.5 }}>{l.duracion}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
       </aside>
     </div>
   );
@@ -279,41 +353,63 @@ function FormCurso({ curso, onGuardar, onCancelar }: { curso: Partial<Curso>; on
 
 function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onEditar: () => void; onBorrar: () => void; onCambio: () => void }) {
   const [abierto, setAbierto] = useState(false);
-  const [editLec, setEditLec] = useState<Partial<Leccion> | null>(null);
-  const lecciones = curso.lecciones as Leccion[];
-  const guardarLec = async (l: Partial<Leccion>) => {
-    const body = { titulo: l.titulo, tipo: l.tipo, videoUrl: l.videoUrl, contenido: l.contenido, duracion: l.duracion, orden: l.orden, publicado: l.publicado };
+  // Lección en edición: guardamos también a qué sección pertenece / se agrega.
+  const [editLec, setEditLec] = useState<{ seccionId: string; leccion: Partial<Leccion> } | null>(null);
+  const [renombrando, setRenombrando] = useState<string | null>(null);
+  const secciones = curso.secciones || [];
+  const totalLec = secciones.reduce((n, s) => n + s.lecciones.length, 0);
+
+  const guardarLec = async (seccionId: string, l: Partial<Leccion>) => {
+    const body = { titulo: l.titulo, tipo: l.tipo, videoUrl: l.videoUrl, contenido: l.contenido, duracion: l.duracion, orden: l.orden, publicado: l.publicado, seccionId };
     const r = l.id ? await aReq(`/api/admin/academy/lecciones/${l.id}`, 'PUT', body) : await aReq(`/api/admin/academy/cursos/${curso.id}/lecciones`, 'POST', body);
     if (r.error) { alert(r.error); return; }
     setEditLec(null); onCambio();
   };
   const borrarLec = async (id: string) => { if (confirm('¿Eliminar la lección?')) { await aReq(`/api/admin/academy/lecciones/${id}`, 'DELETE'); onCambio(); } };
+  const agregarSeccion = async () => { await aReq(`/api/admin/academy/cursos/${curso.id}/secciones`, 'POST', { titulo: 'Nueva sección' }); onCambio(); };
+  const renombrarSeccion = async (id: string, titulo: string) => { await aReq(`/api/admin/academy/secciones/${id}`, 'PUT', { titulo }); setRenombrando(null); onCambio(); };
+  const borrarSeccion = async (id: string) => { if (confirm('¿Eliminar la sección y todas sus lecciones?')) { await aReq(`/api/admin/academy/secciones/${id}`, 'DELETE'); onCambio(); } };
+
   return (
     <div style={tarjeta}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={() => setAbierto(!abierto)} style={{ ...btnGhost, padding: '4px 8px' }}>{abierto ? '▾' : '▸'}</button>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700 }}>{curso.titulo} {!curso.publicado && <span style={{ color: C.muted2, fontSize: 12, fontWeight: 600 }}>· borrador</span>}</div>
-          <div style={{ color: C.muted, fontSize: 12.5 }}>{curso.nivel} · {lecciones.length} lección(es)</div>
+          <div style={{ color: C.muted, fontSize: 12.5 }}>{curso.nivel} · {secciones.length} sección(es) · {totalLec} lección(es)</div>
         </div>
         <button onClick={onEditar} style={btnGhost}>Editar</button>
         <button onClick={onBorrar} style={{ ...btnGhost, color: C.danger }}>Eliminar</button>
       </div>
       {abierto && (
         <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
-          {lecciones.map((l) => (
-            <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 13.5 }}>
-              <span style={{ color: C.emerald }}>{l.tipo === 'video' ? '▶' : '📄'}</span>
-              <span style={{ flex: 1 }}>{l.titulo} {!l.publicado && <span style={{ color: C.muted2, fontSize: 11 }}>(oculta)</span>}</span>
-              <button onClick={() => setEditLec(l)} style={{ ...btnGhost, padding: '3px 8px' }}>Editar</button>
-              <button onClick={() => borrarLec(l.id)} style={{ ...btnGhost, padding: '3px 8px', color: C.danger }}>×</button>
+          {secciones.map((s) => (
+            <div key={s.id} style={{ marginBottom: 12, border: `1px solid ${C.line}`, borderRadius: 10, padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                {renombrando === s.id ? (
+                  <input autoFocus defaultValue={s.titulo} onBlur={(e) => renombrarSeccion(s.id, e.target.value)} onKeyDown={(e) => e.key === 'Enter' && renombrarSeccion(s.id, (e.target as HTMLInputElement).value)} style={{ ...inputA, marginBottom: 0, flex: 1 }} />
+                ) : (
+                  <div style={{ flex: 1, fontWeight: 750, fontSize: 14 }}>📁 {s.titulo}</div>
+                )}
+                <button onClick={() => setRenombrando(s.id)} style={{ ...btnGhost, padding: '3px 8px', fontSize: 12 }}>Renombrar</button>
+                <button onClick={() => borrarSeccion(s.id)} style={{ ...btnGhost, padding: '3px 8px', fontSize: 12, color: C.danger }}>Eliminar</button>
+              </div>
+              {s.lecciones.map((l) => (
+                <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 13.5 }}>
+                  <span style={{ color: C.emerald }}>{l.tipo === 'video' ? '▶' : '📄'}</span>
+                  <span style={{ flex: 1 }}>{l.titulo} {!l.publicado && <span style={{ color: C.muted2, fontSize: 11 }}>(oculta)</span>}</span>
+                  <button onClick={() => setEditLec({ seccionId: s.id, leccion: l })} style={{ ...btnGhost, padding: '3px 8px' }}>Editar</button>
+                  <button onClick={() => borrarLec(l.id)} style={{ ...btnGhost, padding: '3px 8px', color: C.danger }}>×</button>
+                </div>
+              ))}
+              {editLec && editLec.seccionId === s.id ? (
+                <FormLeccion leccion={editLec.leccion} onGuardar={(l) => guardarLec(s.id, l)} onCancelar={() => setEditLec(null)} />
+              ) : (
+                <button onClick={() => setEditLec({ seccionId: s.id, leccion: { tipo: 'video', publicado: true } })} style={{ ...btnGhost, marginTop: 6, borderStyle: 'dashed', fontSize: 12.5 }}>+ Agregar lección</button>
+              )}
             </div>
           ))}
-          {editLec ? (
-            <FormLeccion leccion={editLec} onGuardar={guardarLec} onCancelar={() => setEditLec(null)} />
-          ) : (
-            <button onClick={() => setEditLec({ tipo: 'video', publicado: true })} style={{ ...btnGhost, marginTop: 8, borderStyle: 'dashed' }}>+ Agregar lección</button>
-          )}
+          <button onClick={agregarSeccion} style={{ ...btnGhost, borderStyle: 'dashed' }}>+ Agregar sección</button>
         </div>
       )}
     </div>

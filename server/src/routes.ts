@@ -1804,10 +1804,26 @@ const mapCurso = (c: Record<string, unknown>) => ({
   nivel: c.nivel || 'Básico', orden: c.orden ?? 0, publicado: Number(c.publicado) === 1,
 });
 const mapLeccion = (l: Record<string, unknown>) => ({
-  id: l.id, cursoId: l.curso_id, titulo: l.titulo, tipo: l.tipo || 'video',
+  id: l.id, cursoId: l.curso_id, seccionId: l.seccion_id || '', titulo: l.titulo, tipo: l.tipo || 'video',
   videoUrl: l.video_url || '', contenido: l.contenido || '', duracion: l.duracion || '',
   orden: l.orden ?? 0, publicado: Number(l.publicado) === 1,
 });
+const mapSeccion = (s: Record<string, unknown>) => ({
+  id: s.id, cursoId: s.curso_id, titulo: s.titulo || '', orden: s.orden ?? 0,
+});
+
+/** Devuelve las secciones de un curso con sus lecciones anidadas y ordenadas.
+ *  `soloPublicado` filtra lecciones ocultas (portal); en admin se ve todo. */
+function seccionesDeCurso(cursoId: string, soloPublicado: boolean) {
+  const secs = db.prepare('SELECT * FROM academy_secciones WHERE curso_id = ? ORDER BY orden, created_at')
+    .all(cursoId) as Record<string, unknown>[];
+  const filtro = soloPublicado ? ' AND publicado = 1' : '';
+  return secs.map((s) => ({
+    ...mapSeccion(s),
+    lecciones: (db.prepare(`SELECT * FROM academy_lecciones WHERE seccion_id = ?${filtro} ORDER BY orden, created_at`)
+      .all(s.id) as Record<string, unknown>[]).map(mapLeccion),
+  }));
+}
 
 api.get('/academy/cursos', requireAuth, (_req, res) => {
   const cursos = db.prepare("SELECT * FROM academy_cursos WHERE publicado = 1 ORDER BY orden, created_at").all() as Record<string, unknown>[];
@@ -1821,18 +1837,31 @@ api.get('/academy/cursos', requireAuth, (_req, res) => {
 api.get('/academy/cursos/:id', requireAuth, (req, res) => {
   const c = db.prepare("SELECT * FROM academy_cursos WHERE id = ? AND publicado = 1").get(req.params.id) as Record<string, unknown> | undefined;
   if (!c) return res.status(404).json({ error: 'Curso no encontrado.' });
-  const lecciones = db.prepare("SELECT * FROM academy_lecciones WHERE curso_id = ? AND publicado = 1 ORDER BY orden, created_at").all(req.params.id) as Record<string, unknown>[];
-  res.json({ curso: { ...mapCurso(c), lecciones: lecciones.map(mapLeccion) } });
+  const secciones = seccionesDeCurso(req.params.id, true);
+  // Lecciones que ESTE usuario ya marcó como completadas (para el progreso).
+  const completadas = (db.prepare(
+    `SELECT p.leccion_id id FROM academy_progreso p
+       JOIN academy_lecciones l ON l.id = p.leccion_id
+      WHERE p.user_id = ? AND p.completado = 1 AND l.curso_id = ?`,
+  ).all(req.user!.id, req.params.id) as { id: string }[]).map((r) => r.id);
+  // Compat: lecciones planas (por si algún cliente viejo aún las espera).
+  const lecciones = secciones.flatMap((s) => s.lecciones);
+  res.json({ curso: { ...mapCurso(c), secciones, lecciones, completadas } });
 });
 
 // Admin: ve TODO (incluye no publicados) con sus lecciones anidadas.
 api.get('/admin/academy/cursos', requireAuth, requireAdmin, (_req, res) => {
   const cursos = db.prepare("SELECT * FROM academy_cursos ORDER BY orden, created_at").all() as Record<string, unknown>[];
   res.json({
-    cursos: cursos.map((c) => ({
-      ...mapCurso(c),
-      lecciones: (db.prepare("SELECT * FROM academy_lecciones WHERE curso_id = ? ORDER BY orden, created_at").all(c.id) as Record<string, unknown>[]).map(mapLeccion),
-    })),
+    cursos: cursos.map((c) => {
+      const secciones = seccionesDeCurso(c.id as string, false);
+      return {
+        ...mapCurso(c),
+        secciones,
+        // Compat: lista plana de todas las lecciones del curso.
+        lecciones: secciones.flatMap((s) => s.lecciones),
+      };
+    }),
   });
 });
 api.post('/admin/academy/cursos', requireAuth, requireAdmin, (req, res) => {
@@ -1842,6 +1871,9 @@ api.post('/admin/academy/cursos', requireAuth, requireAdmin, (req, res) => {
   const orden = (db.prepare("SELECT COALESCE(MAX(orden),0)+1 n FROM academy_cursos").get() as { n: number }).n;
   db.prepare("INSERT INTO academy_cursos (id, titulo, descripcion, portada, nivel, orden, publicado) VALUES (?,?,?,?,?,?,?)")
     .run(id, String(b.titulo).trim(), String(b.descripcion || ''), String(b.portada || ''), String(b.nivel || 'Básico'), orden, b.publicado ? 1 : 0);
+  // Modelo Udemy: todo curso arranca con una sección para colgar sus lecciones.
+  db.prepare("INSERT INTO academy_secciones (id, curso_id, titulo, orden) VALUES (?,?,?,0)")
+    .run(uid(), id, 'Contenido del curso');
   res.json({ ok: true, id });
 });
 api.put('/admin/academy/cursos/:id', requireAuth, requireAdmin, (req, res) => {
@@ -1862,23 +1894,99 @@ api.post('/admin/academy/cursos/:id/lecciones', requireAuth, requireAdmin, (req,
   if (!c) return res.status(404).json({ error: 'Curso no encontrado.' });
   const b = req.body || {};
   if (!String(b.titulo || '').trim()) return res.status(400).json({ error: 'El título de la lección es obligatorio.' });
+  // La lección vive dentro de una sección del curso. Si no llega seccionId (o no
+  // es de este curso), la colgamos de la primera sección; si el curso no tiene
+  // ninguna todavía, se crea una por defecto.
+  let seccionId = String(b.seccionId || '');
+  const secOk = seccionId && db.prepare('SELECT 1 FROM academy_secciones WHERE id = ? AND curso_id = ?').get(seccionId, req.params.id);
+  if (!secOk) {
+    const primera = db.prepare('SELECT id FROM academy_secciones WHERE curso_id = ? ORDER BY orden, created_at LIMIT 1').get(req.params.id) as { id: string } | undefined;
+    if (primera) seccionId = primera.id;
+    else { seccionId = uid(); db.prepare("INSERT INTO academy_secciones (id, curso_id, titulo, orden) VALUES (?,?,?,0)").run(seccionId, req.params.id, 'Contenido del curso'); }
+  }
   const id = uid();
-  const orden = (db.prepare("SELECT COALESCE(MAX(orden),0)+1 n FROM academy_lecciones WHERE curso_id = ?").get(req.params.id) as { n: number }).n;
-  db.prepare("INSERT INTO academy_lecciones (id, curso_id, titulo, tipo, video_url, contenido, duracion, orden, publicado) VALUES (?,?,?,?,?,?,?,?,?)")
-    .run(id, req.params.id, String(b.titulo).trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), orden, b.publicado === false ? 0 : 1);
+  const orden = (db.prepare("SELECT COALESCE(MAX(orden),0)+1 n FROM academy_lecciones WHERE seccion_id = ?").get(seccionId) as { n: number }).n;
+  db.prepare("INSERT INTO academy_lecciones (id, curso_id, seccion_id, titulo, tipo, video_url, contenido, duracion, orden, publicado) VALUES (?,?,?,?,?,?,?,?,?,?)")
+    .run(id, req.params.id, seccionId, String(b.titulo).trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), orden, b.publicado === false ? 0 : 1);
   res.json({ ok: true, id });
 });
 api.put('/admin/academy/lecciones/:id', requireAuth, requireAdmin, (req, res) => {
-  const l = db.prepare("SELECT id FROM academy_lecciones WHERE id = ?").get(req.params.id);
+  const l = db.prepare("SELECT id, curso_id FROM academy_lecciones WHERE id = ?").get(req.params.id) as { id: string; curso_id: string } | undefined;
   if (!l) return res.status(404).json({ error: 'Lección no encontrada.' });
   const b = req.body || {};
-  db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ? WHERE id = ?")
-    .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, req.params.id);
+  // Permitir mover la lección a otra sección del MISMO curso (drag entre secciones).
+  let seccionId: string | undefined;
+  if (b.seccionId !== undefined) {
+    const ok = db.prepare('SELECT 1 FROM academy_secciones WHERE id = ? AND curso_id = ?').get(String(b.seccionId), l.curso_id);
+    if (ok) seccionId = String(b.seccionId);
+  }
+  if (seccionId) {
+    db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ?, seccion_id = ? WHERE id = ?")
+      .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, seccionId, req.params.id);
+  } else {
+    db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ? WHERE id = ?")
+      .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, req.params.id);
+  }
   res.json({ ok: true });
 });
 api.delete('/admin/academy/lecciones/:id', requireAuth, requireAdmin, (req, res) => {
   db.prepare("DELETE FROM academy_lecciones WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+});
+
+// Secciones (admin): crear, renombrar, reordenar, borrar.
+api.post('/admin/academy/cursos/:id/secciones', requireAuth, requireAdmin, (req, res) => {
+  const c = db.prepare("SELECT id FROM academy_cursos WHERE id = ?").get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Curso no encontrado.' });
+  const b = req.body || {};
+  const id = uid();
+  const orden = (db.prepare("SELECT COALESCE(MAX(orden),0)+1 n FROM academy_secciones WHERE curso_id = ?").get(req.params.id) as { n: number }).n;
+  db.prepare("INSERT INTO academy_secciones (id, curso_id, titulo, orden) VALUES (?,?,?,?)")
+    .run(id, req.params.id, String(b.titulo || 'Nueva sección').trim() || 'Nueva sección', orden);
+  res.json({ ok: true, id });
+});
+api.put('/admin/academy/secciones/:id', requireAuth, requireAdmin, (req, res) => {
+  const s = db.prepare("SELECT id FROM academy_secciones WHERE id = ?").get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Sección no encontrada.' });
+  const b = req.body || {};
+  db.prepare("UPDATE academy_secciones SET titulo = ?, orden = ? WHERE id = ?")
+    .run(String(b.titulo || '').trim(), Number(b.orden) || 0, req.params.id);
+  res.json({ ok: true });
+});
+api.delete('/admin/academy/secciones/:id', requireAuth, requireAdmin, (req, res) => {
+  // Al borrar una sección se borran sus lecciones (deja el curso consistente).
+  db.prepare("DELETE FROM academy_lecciones WHERE seccion_id = ?").run(req.params.id);
+  db.prepare("DELETE FROM academy_secciones WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+// Reordenar en lote (drag & drop): { secciones:[{id,orden}], lecciones:[{id,orden,seccionId}] }.
+api.put('/admin/academy/cursos/:id/orden', requireAuth, requireAdmin, (req, res) => {
+  const b = req.body || {};
+  const tx = db.transaction(() => {
+    for (const s of (Array.isArray(b.secciones) ? b.secciones : [])) {
+      db.prepare("UPDATE academy_secciones SET orden = ? WHERE id = ? AND curso_id = ?").run(Number(s.orden) || 0, String(s.id), req.params.id);
+    }
+    for (const l of (Array.isArray(b.lecciones) ? b.lecciones : [])) {
+      const okSec = db.prepare('SELECT 1 FROM academy_secciones WHERE id = ? AND curso_id = ?').get(String(l.seccionId), req.params.id);
+      if (okSec) db.prepare("UPDATE academy_lecciones SET orden = ?, seccion_id = ? WHERE id = ? AND curso_id = ?").run(Number(l.orden) || 0, String(l.seccionId), String(l.id), req.params.id);
+    }
+  });
+  tx();
+  res.json({ ok: true });
+});
+
+// Progreso del alumno: marcar/desmarcar una lección como completada.
+api.post('/academy/progreso/:leccionId', requireAuth, (req, res) => {
+  const l = db.prepare("SELECT id FROM academy_lecciones WHERE id = ?").get(req.params.leccionId);
+  if (!l) return res.status(404).json({ error: 'Lección no encontrada.' });
+  const completado = (req.body || {}).completado === false ? 0 : 1;
+  if (completado) {
+    db.prepare("INSERT INTO academy_progreso (user_id, leccion_id, completado, updated_at) VALUES (?,?,1,datetime('now')) ON CONFLICT(user_id, leccion_id) DO UPDATE SET completado = 1, updated_at = datetime('now')")
+      .run(req.user!.id, req.params.leccionId);
+  } else {
+    db.prepare("DELETE FROM academy_progreso WHERE user_id = ? AND leccion_id = ?").run(req.user!.id, req.params.leccionId);
+  }
+  res.json({ ok: true, completado: !!completado });
 });
 
 // ── Biblioteca de productos (superadmin) ─────────────────────────────
