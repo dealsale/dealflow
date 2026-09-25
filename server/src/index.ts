@@ -7,6 +7,7 @@ import { api, webhooks } from './routes.js';
 import { db } from './db.js';
 import { seed } from './seed.js';
 import { seedPlantillas } from './seedPlantillas.js';
+import { seedAcademy } from './seedAcademy.js';
 import { restoreQrSessions } from './waqr.js';
 import { congelarSiFalta } from './plantillas.js';
 import { iniciarSincronizacionWoo } from './syncWoo.js';
@@ -14,6 +15,7 @@ import { iniciarSeguimiento } from './seguimiento.js';
 
 seed();
 seedPlantillas();
+seedAcademy();
 congelarSiFalta();
 restoreQrSessions();
 iniciarSincronizacionWoo();
@@ -48,7 +50,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-09-25-fix-multitienda',
+    build: '2026-09-25-academy-seed',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
