@@ -215,19 +215,35 @@ export async function crearPedido(
     const it = items[i];
     const sku = skuDeItem(it.nombre);
     let productId = 0;
+    let variationId = 0; // si el SKU es de una VARIACIÓN, el id del padre va en product_id
     if (sku) {
       try {
-        const r = await woo<{ id: number }[]>(c, '/products', undefined, { sku, per_page: '1' });
-        if (r.ok && Array.isArray(r.body) && r.body[0]?.id) productId = r.body[0].id;
+        // El filtro por SKU en /products también encuentra VARIACIONES: cuando el
+        // objeto trae parent_id / type='variation', el id devuelto es el de la
+        // variación y el producto real es su padre.
+        const r = await woo<{ id: number; parent_id?: number; type?: string }[]>(c, '/products', undefined, { sku, per_page: '1' });
+        const prod = r.ok && Array.isArray(r.body) ? r.body[0] : undefined;
+        if (prod?.id) {
+          const esVariacion = prod.type === 'variation' || !!(prod.parent_id && prod.parent_id > 0);
+          if (esVariacion) { productId = Number(prod.parent_id); variationId = prod.id; }
+          else productId = prod.id;
+        }
       } catch { /* si falla la búsqueda, cae al fallback */ }
     }
     if (productId) {
       // Línea real con cantidad y su total: WooCommerce muestra el unitario = total ÷ qty.
       // Mandamos subtotal y total (a nivel de LÍNEA, todas las unidades) para respetar
       // el precio negociado en vez del precio de catálogo del producto.
-      lineItems.push({ product_id: productId, quantity: it.qty, subtotal: money(totalLinea[i]), total: money(totalLinea[i]) });
+      // CLAVE para Dropi/Effi: si es una variación, hay que mandar product_id (padre)
+      // Y variation_id. Si solo mandáramos el id de la variación como product_id, el
+      // plugin (Dropify/Effi) NO reconoce la variante y el pedido NUNCA sale a Dropi
+      // (se queda en Woo "en preparación"). Con variation_id, sí lo despacha.
+      const li: Record<string, unknown> = { product_id: productId, quantity: it.qty, subtotal: money(totalLinea[i]), total: money(totalLinea[i]) };
+      if (variationId) li.variation_id = variationId;
+      lineItems.push(li);
     } else {
       // Sin producto en Woo (SKU sin casar): va como cargo con el total de la línea, y se anota.
+      // OJO: un ítem que cae aquí NO lo despacha Dropi/Effi (no es un producto suyo).
       feeLines.push({ name: `${it.qty}× ${it.nombre}`, total: money(totalLinea[i]) });
       sinMapear.push(`${it.qty}× ${it.nombre}`);
     }
