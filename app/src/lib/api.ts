@@ -333,8 +333,8 @@ export const apiWooSyncProductos = (proveedor: string) => req<{ creados: number;
 export interface ProductoWoo { id: number; nombre: string; sku: string; stock: number | null; precio: string }
 export const apiWooBuscarProductos = (q: string, proveedor = '') =>
   req<{ productos: ProductoWoo[]; proveedor: string }>(`/api/woo/productos/buscar?q=${encodeURIComponent(q)}${proveedor ? `&proveedor=${proveedor}` : ''}`, 'GET');
-export interface VariacionWoo { id: number; nombre: string; sku: string; stock: number | null }
-export interface ProductoCatalogoWoo { id: number; nombre: string; sku: string; stock: number | null; tipo: string; variaciones: VariacionWoo[] }
+export interface VariacionWoo { id: number; nombre: string; sku: string; stock: number | null; dropi: boolean }
+export interface ProductoCatalogoWoo { id: number; nombre: string; sku: string; stock: number | null; tipo: string; dropi: boolean; variaciones: VariacionWoo[] }
 export const apiWooCatalogo = (proveedor = '') =>
   req<{ productos: ProductoCatalogoWoo[]; proveedor: string }>(`/api/woo/catalogo${proveedor ? `?proveedor=${proveedor}` : ''}`, 'GET');
 
