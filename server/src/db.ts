@@ -196,6 +196,8 @@ addColumn('orders', "woo_id TEXT NOT NULL DEFAULT ''"); // id del pedido en WooC
 addColumn('orders', "despacho_proveedor TEXT NOT NULL DEFAULT ''"); // dropi | effi: a cuál WooCommerce se envió el pedido
 addColumn('orders', 'guia_avisada INTEGER NOT NULL DEFAULT 0'); // 1 = ya le avisamos la guía al cliente por WhatsApp
 addColumn('orders', "estado_woo TEXT NOT NULL DEFAULT ''"); // último estado leído del WooCommerce del proveedor (diagnóstico)
+addColumn('orders', "dropi_order_id TEXT NOT NULL DEFAULT ''"); // id de la orden en Dropi (despacho por API directa)
+addColumn('orders', "guia_url TEXT NOT NULL DEFAULT ''"); // PDF de la guía (Dropi API)
 addColumn('assistants', "ia_proveedor TEXT NOT NULL DEFAULT ''"); // deepseek | openai | grok ('' = el del servidor)
 // Nombre propio del asistente (ej: "Sky"). Si está vacío, se usa el nombre de la tienda.
 addColumn('assistants', "nombre TEXT NOT NULL DEFAULT ''");
