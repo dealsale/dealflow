@@ -495,9 +495,13 @@ function skuAuto(nombre: string, id: string): string {
 
 /**
  * Empuja el catálogo de DealFlow a WooCommerce: crea los productos que no
- * existen y actualiza los que ya están (casando por SKU). A los productos que no
- * tengan SKU les genera uno automáticamente (y lo guarda), para que la
- * sincronización funcione sin tener que ponerlo a mano.
+ * existen y actualiza los que ya están (casando por SKU). A los que no tengan SKU
+ * les genera uno automáticamente (y lo guarda).
+ *
+ * IMPORTANTE: cada VARIANTE (talla/color) se sube como un PRODUCTO SIMPLE aparte
+ * (nombre "Producto - Talla L · Blanco", con su propio SKU). Effi (y también Dropi)
+ * exigen vincular cada variante por separado, así que en WooCommerce cada
+ * combinación debe existir como su propio producto, no como una variación anidada.
  */
 export async function empujarProductos(storeId: string, prov?: WooProv): Promise<{ creados: number; actualizados: number; skusGenerados: number } | { error: string }> {
   const c = credenciales(storeId, prov);
@@ -507,24 +511,36 @@ export async function empujarProductos(storeId: string, prov?: WooProv): Promise
     { id: string; nombre: string; precio: number; descripcion: string; sku: string }[];
   if (!prods.length) return { error: 'No tienes productos para enviar. Crea productos en la sección Productos.' };
 
-  // A los productos sin SKU les asignamos uno automáticamente y lo guardamos.
+  const stockDe = (id: string) => (db.prepare('SELECT COALESCE(SUM(stock),0) s FROM variants WHERE product_id = ?').get(id) as { s: number }).s;
+
+  // Aplanamos catálogo → una FILA por producto simple o por cada variante real.
+  interface Fila { sku: string; name: string; price: string; desc: string; stock: number }
+  const filas: Fila[] = [];
   let skusGenerados = 0;
   for (const p of prods) {
-    if (!(p.sku || '').trim()) {
-      p.sku = skuAuto(p.nombre, p.id);
-      db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(p.sku, p.id);
-      skusGenerados++;
+    const variantes = db.prepare("SELECT id, label, sku, stock FROM variants WHERE product_id = ?").all(p.id) as
+      { id: string; label: string; sku: string; stock: number }[];
+    const reales = variantes.filter((v) => (v.label || '').trim() && (v.label || '').toLowerCase() !== 'única');
+    if (reales.length) {
+      // Un producto por cada variante (talla/color), con su propio SKU.
+      for (const v of reales) {
+        let sku = (v.sku || '').trim();
+        if (!sku) { sku = skuAuto(`${p.nombre}-${v.label}`, v.id); db.prepare('UPDATE variants SET sku = ? WHERE id = ?').run(sku, v.id); skusGenerados++; }
+        filas.push({ sku, name: `${p.nombre} - ${v.label}`, price: String(p.precio || 0), desc: p.descripcion || '', stock: v.stock || 0 });
+      }
+    } else {
+      // Producto sin variantes: una sola fila con el SKU del producto.
+      let sku = (p.sku || '').trim();
+      if (!sku) { sku = skuAuto(p.nombre, p.id); db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(sku, p.id); skusGenerados++; }
+      filas.push({ sku, name: p.nombre, price: String(p.precio || 0), desc: p.descripcion || '', stock: stockDe(p.id) });
     }
   }
-  const conSku = prods;
-
-  const stockDe = (id: string) => (db.prepare('SELECT COALESCE(SUM(stock),0) s FROM variants WHERE product_id = ?').get(id) as { s: number }).s;
 
   // Mapa sku → id en WooCommerce (para decidir crear vs. actualizar).
   const map: Record<string, number> = {};
   try {
     for (let page = 1; page <= 10; page++) {
-      const r = await woo<{ id: number; sku: string }[]>(c, '/products', undefined, { per_page: '100', page: String(page), _fields: 'id,sku' });
+      const r = await woo<{ id: number; sku: string }[]>(c, '/products', undefined, { per_page: '100', page: String(page), status: 'any', _fields: 'id,sku' });
       if (!r.ok) return { error: r.body.message || 'No pudimos leer los productos de WooCommerce.' };
       if (!Array.isArray(r.body) || !r.body.length) break;
       for (const p of r.body) if (p.sku) map[p.sku] = p.id;
@@ -536,11 +552,11 @@ export async function empujarProductos(storeId: string, prov?: WooProv): Promise
 
   const crear: Record<string, unknown>[] = [];
   const actualizar: Record<string, unknown>[] = [];
-  for (const p of conSku) {
-    const base = { name: p.nombre, regular_price: String(p.precio || 0), description: p.descripcion || '', manage_stock: true, stock_quantity: stockDe(p.id) };
-    const wid = map[p.sku.trim()];
+  for (const f of filas) {
+    const base = { name: f.name, regular_price: f.price, description: f.desc, manage_stock: true, stock_quantity: f.stock };
+    const wid = map[f.sku];
     if (wid) actualizar.push({ id: wid, ...base });
-    else crear.push({ sku: p.sku.trim(), type: 'simple', status: 'publish', ...base });
+    else crear.push({ sku: f.sku, type: 'simple', status: 'publish', ...base });
   }
 
   const enTrozos = (arr: Record<string, unknown>[]) => {
