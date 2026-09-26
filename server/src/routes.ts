@@ -1807,6 +1807,47 @@ api.post('/superadmin/meta-templates/:id/refrescar', requireAuth, requireSuperAd
   res.json({ ok: true, ...r });
 });
 
+// ── WooCommerce CENTRAL por operador (superadmin) ────────────────────
+// Un solo Woo de Dropi (y otro de Effi) que usan todas las tiendas para
+// despachar. Nunca devolvemos los secretos, solo si están puestos.
+api.get('/superadmin/woo-central', requireAuth, requireSuperAdmin, (_req, res) => {
+  const rows = db.prepare("SELECT proveedor, url, consumer_key, consumer_secret, activo, preferido FROM woo_central").all() as
+    { proveedor: string; url: string; consumer_key: string; consumer_secret: string; activo: number; preferido: number }[];
+  const mapa = new Map(rows.map((r) => [r.proveedor, r]));
+  const uno = (prov: string) => {
+    const r = mapa.get(prov);
+    return { proveedor: prov, url: r?.url || '', tieneKeys: !!(r?.consumer_key && r?.consumer_secret), activo: r ? r.activo === 1 : false, preferido: r ? r.preferido === 1 : false };
+  };
+  res.json({ dropi: uno('dropi'), effi: uno('effi') });
+});
+api.post('/superadmin/woo-central', requireAuth, requireSuperAdmin, (req, res) => {
+  const b = req.body || {};
+  const prov = b.proveedor === 'effi' ? 'effi' : b.proveedor === 'dropi' ? 'dropi' : '';
+  if (!prov) return res.status(400).json({ error: 'Proveedor inválido (dropi o effi).' });
+  // Si no mandan llaves nuevas, conservamos las guardadas (para editar solo la URL).
+  const prev = db.prepare('SELECT consumer_key, consumer_secret FROM woo_central WHERE proveedor = ?').get(prov) as { consumer_key: string; consumer_secret: string } | undefined;
+  const ck = String(b.consumerKey ?? '').trim() || prev?.consumer_key || '';
+  const cs = String(b.consumerSecret ?? '').trim() || prev?.consumer_secret || '';
+  const pref = b.preferido ? 1 : 0;
+  db.prepare(
+    `INSERT INTO woo_central (proveedor, url, consumer_key, consumer_secret, activo, preferido, updated_at)
+     VALUES (?,?,?,?,?,?,datetime('now'))
+     ON CONFLICT(proveedor) DO UPDATE SET url = excluded.url, consumer_key = excluded.consumer_key,
+       consumer_secret = excluded.consumer_secret, activo = excluded.activo, preferido = excluded.preferido, updated_at = datetime('now')`,
+  ).run(prov, String(b.url || '').trim(), ck, cs, b.activo === false ? 0 : 1, pref);
+  // Solo un preferido a la vez.
+  if (pref) db.prepare('UPDATE woo_central SET preferido = 0 WHERE proveedor != ?').run(prov);
+  res.json({ ok: true });
+});
+api.post('/superadmin/woo-central/:prov/probar', requireAuth, requireSuperAdmin, async (req, res) => {
+  const prov = req.params.prov === 'effi' ? 'effi' : req.params.prov === 'dropi' ? 'dropi' : null;
+  if (!prov) return res.status(400).json({ error: 'Proveedor inválido.' });
+  const { verificarCentral } = await import('./woocommerce.js');
+  const r = await verificarCentral(prov);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+
 // ── Academy (portal educativo) ───────────────────────────────────────
 // Lectura: cualquier usuario logueado. Escritura: admin/superadmin.
 const mapCurso = (c: Record<string, unknown>) => ({

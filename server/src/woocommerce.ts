@@ -25,21 +25,41 @@ export const WOO_PROVEEDORES: WooProv[] = ['dropi', 'effi'];
  * se guarda como una integración aparte (woocommerce_dropi / woocommerce_effi).
  * Si no se pasa proveedor, usa la integración genérica 'woocommerce' (legado).
  */
-export function credenciales(storeId: string, prov?: WooProv): Cred | null {
-  const tipo = prov ? `woocommerce_${prov}` : 'woocommerce';
-  const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, tipo) as { config: string } | undefined;
-  if (!row) return null;
-  const cfg = pj<Record<string, string>>(row.config, {});
-  const url = String(cfg.url || '').trim().replace(/\/+$/, '');
-  const ck = String(cfg.consumerKey || '').trim();
-  const cs = String(cfg.consumerSecret || '').trim();
+/** Arma la base de la API REST a partir de una URL + llaves. */
+function armar(url0: string, ck0: string, cs0: string): Cred | null {
+  const url = String(url0 || '').trim().replace(/\/+$/, '');
+  const ck = String(ck0 || '').trim();
+  const cs = String(cs0 || '').trim();
   if (!url || !ck || !cs) return null;
-  // Normaliza a la base de la API REST.
   const base = /\/wp-json\/wc\/v3$/.test(url) ? url : `${url.replace(/\/wp-json.*$/, '')}/wp-json/wc/v3`;
   return { base, ck, cs };
 }
 
-/** Proveedores (dropi/effi) que tienen WooCommerce conectado en esta tienda. */
+/** Credenciales del WooCommerce CENTRAL (por operador) de un proveedor. */
+export function credencialesCentral(prov: WooProv): Cred | null {
+  const row = db.prepare("SELECT url, consumer_key, consumer_secret FROM woo_central WHERE proveedor = ? AND activo = 1").get(prov) as
+    | { url: string; consumer_key: string; consumer_secret: string } | undefined;
+  if (!row) return null;
+  return armar(row.url, row.consumer_key, row.consumer_secret);
+}
+
+/**
+ * Credenciales del WooCommerce a usar para una tienda y proveedor.
+ * 1º las propias de la tienda (si las configuró); si no, el Woo CENTRAL del operador.
+ */
+export function credenciales(storeId: string, prov?: WooProv): Cred | null {
+  const tipo = prov ? `woocommerce_${prov}` : 'woocommerce';
+  const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, tipo) as { config: string } | undefined;
+  if (row) {
+    const cfg = pj<Record<string, string>>(row.config, {});
+    const propio = armar(cfg.url, cfg.consumerKey, cfg.consumerSecret);
+    if (propio) return propio;
+  }
+  // Fallback al Woo central del operador (modelo "un solo Woo para todas").
+  return prov ? credencialesCentral(prov) : null;
+}
+
+/** Proveedores (dropi/effi) disponibles para esta tienda (propios o central). */
 export function proveedoresConectados(storeId: string): WooProv[] {
   return WOO_PROVEEDORES.filter((p) => credenciales(storeId, p));
 }
@@ -53,6 +73,9 @@ export function proveedorPreferido(storeId: string): WooProv | null {
   const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'despacho_pref'").get(storeId) as { config: string } | undefined;
   const prov = row ? String(pj<Record<string, string>>(row.config, {}).proveedor || '') : '';
   if ((prov === 'dropi' || prov === 'effi') && credenciales(storeId, prov)) return prov;
+  // Si la tienda no eligió preferido, usa el preferido del Woo CENTRAL (si hay).
+  const central = db.prepare("SELECT proveedor FROM woo_central WHERE preferido = 1 AND activo = 1 LIMIT 1").get() as { proveedor: string } | undefined;
+  if (central && (central.proveedor === 'dropi' || central.proveedor === 'effi') && credenciales(storeId, central.proveedor)) return central.proveedor;
   return null;
 }
 
@@ -95,6 +118,19 @@ export async function verificar(storeId: string, prov?: WooProv): Promise<{ ok: 
   }
 }
 
+/** Verifica las credenciales del Woo CENTRAL de un proveedor. */
+export async function verificarCentral(prov: WooProv): Promise<{ ok: true } | { ok: false; error: string }> {
+  const c = credencialesCentral(prov);
+  if (!c) return { ok: false, error: 'Faltan los datos del WooCommerce central (URL, Consumer Key y Secret).' };
+  try {
+    const r = await woo<unknown[]>(c, '/orders', undefined, { per_page: '1' });
+    if (!r.ok) return { ok: false, error: r.body.message || `WooCommerce respondió ${r.status}. Revisa la URL y las llaves.` };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'No pudimos conectar con el WooCommerce central. Revisa la URL.' };
+  }
+}
+
 interface ItemPedido { qty: number; nombre: string; precio: number }
 interface Pedido { cliente: string; ciudad: string; departamento: string; tel: string; direccion: string; nota: string; envio: number; total?: number }
 
@@ -114,6 +150,7 @@ export async function crearPedido(
 ): Promise<{ wooId: string; numero: string; sinMapear: string[]; mapeados: number } | { error: string }> {
   const c = credenciales(storeId, prov);
   if (!c) return { error: 'Conecta WooCommerce en Integraciones antes de enviar pedidos.' };
+  const tiendaNombre = (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre?: string } | undefined)?.nombre || '';
 
   const lineItems: Record<string, unknown>[] = [];
   const feeLines: Record<string, unknown>[] = [];
@@ -188,7 +225,10 @@ export async function crearPedido(
     line_items: lineItems,
     fee_lines: feeLines,
     shipping_lines: order.envio > 0 ? [{ method_id: 'flat_rate', method_title: 'Envío', total: money(order.envio) }] : [],
-    customer_note: [order.nota, sinMapear.length ? `Productos: ${sinMapear.join(', ')}` : ''].filter(Boolean).join(' · '),
+    // Etiquetamos el pedido con la tienda de origen: en el Woo CENTRAL (uno para
+    // todas) así el operador sabe de qué tienda es cada pedido de un vistazo.
+    customer_note: [tiendaNombre ? `[Tienda: ${tiendaNombre}]` : '', order.nota, sinMapear.length ? `Productos: ${sinMapear.join(', ')}` : ''].filter(Boolean).join(' · '),
+    meta_data: [{ key: 'df_store', value: storeId }, { key: 'df_store_nombre', value: tiendaNombre }],
   };
   // WooCommerce rechaza un pedido sin ninguna línea; si todo cayó a fee_lines, ya está cubierto.
   if (!lineItems.length && !feeLines.length) return { error: 'El pedido no tiene productos.' };
