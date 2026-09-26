@@ -404,9 +404,9 @@ export async function buscarProductos(storeId: string, q: string, prov?: WooProv
 }
 
 export interface VariacionWoo { id: number; nombre: string; sku: string; stock: number | null; dropi: boolean }
-export interface ProductoCatalogoWoo { id: number; nombre: string; sku: string; stock: number | null; tipo: string; dropi: boolean; variaciones: VariacionWoo[] }
+export interface ProductoCatalogoWoo { id: number; nombre: string; sku: string; stock: number | null; tipo: string; estado: string; dropi: boolean; variaciones: VariacionWoo[] }
 type WooMeta = { key?: string; value?: unknown };
-type WooProductoCat = WooProductoRaw & { type?: string; variations?: number[]; meta_data?: WooMeta[] };
+type WooProductoCat = WooProductoRaw & { type?: string; status?: string; variations?: number[]; meta_data?: WooMeta[] };
 type WooVariacionRaw = { id?: number; sku?: string; stock_quantity?: number | null; attributes?: { name?: string; option?: string }[]; meta_data?: WooMeta[] };
 
 /**
@@ -441,16 +441,18 @@ export async function catalogo(storeId: string, prov?: WooProv): Promise<{ produ
     // Hasta 5 páginas de 100 = 500 productos (suficiente para un catálogo típico).
     const variables: ProductoCatalogoWoo[] = [];
     for (let page = 1; page <= 5; page++) {
+      // status: 'any' → también trae los productos en BORRADOR (a veces Effi/Dropi
+      // sincronizan el catálogo sin publicarlo, y sin esto se vería "vacío").
       const r = await woo<WooProductoCat[]>(c, '/products', undefined, {
-        per_page: '100', page: String(page), status: 'publish',
-        _fields: 'id,name,sku,stock_quantity,type,variations,meta_data',
+        per_page: '100', page: String(page), status: 'any',
+        _fields: 'id,name,sku,stock_quantity,type,status,variations,meta_data',
       });
       if (!r.ok) return { error: r.body.message || 'No pudimos leer el catálogo de WooCommerce.' };
       if (!Array.isArray(r.body) || !r.body.length) break;
       for (const p of r.body) {
         const prod: ProductoCatalogoWoo = {
           id: Number(p.id), nombre: String(p.name || ''), sku: String(p.sku || ''),
-          stock: p.stock_quantity ?? null, tipo: String(p.type || 'simple'), dropi: esDropi(p.meta_data), variaciones: [],
+          stock: p.stock_quantity ?? null, tipo: String(p.type || 'simple'), estado: String(p.status || 'publish'), dropi: esDropi(p.meta_data), variaciones: [],
         };
         productos.push(prod);
         if (prod.tipo === 'variable' && Array.isArray(p.variations) && p.variations.length) variables.push(prod);

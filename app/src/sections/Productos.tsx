@@ -187,6 +187,10 @@ function CatalogoPicker({ cat, nombreProv, onPick, usados }: { cat: CatalogoWoo;
   const chipDropi = (esDropi: boolean) => esDropi
     ? <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }}>Dropi ✓</span>
     : null;
+  // Marca los productos que NO están publicados (borrador): no se despachan hasta publicarlos.
+  const chipBorrador = (estado: string) => estado && estado !== 'publish'
+    ? <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-text-faint)', background: 'var(--df-surface-2)', borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }}>borrador</span>
+    : null;
   return (
     <div style={{ marginTop: 8 }}>
       {cat.cargando && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '6px 2px' }}>Trayendo el catálogo de {nombreProv}…</div>}
@@ -197,7 +201,13 @@ function CatalogoPicker({ cat, nombreProv, onPick, usados }: { cat: CatalogoWoo;
             value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Filtrar por nombre o código…"
             style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px', fontSize: 13, marginBottom: 8 }}
           />
-          {!productos.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '4px 2px' }}>No hay productos disponibles que coincidan.</div>}
+          {!productos.length && (
+            (cat.productos && cat.productos.length === 0)
+              ? <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '6px 2px', lineHeight: 1.55 }}>
+                  Este WooCommerce de <b>{nombreProv}</b> no tiene productos todavía. Súbelos desde <b>Integraciones → WooCommerce · {nombreProv} → “Enviar productos”</b>, o pídele a {nombreProv} que sincronice su catálogo en esa tienda. Luego vuelve aquí.
+                </div>
+              : <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '4px 2px' }}>No hay productos disponibles que coincidan.</div>
+          )}
           <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
             {productos.map((p) => {
               const variable = p.tipo === 'variable' && p.variaciones.length > 0;
@@ -209,6 +219,7 @@ function CatalogoPicker({ cat, nombreProv, onPick, usados }: { cat: CatalogoWoo;
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre || '(sin nombre)'}</span>
                         {chipDropi(p.dropi)}
+                        {chipBorrador(p.estado)}
                       </div>
                       <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)', marginTop: 1 }}>
                         {variable ? `${p.variaciones.length} variantes disponibles` : `SKU: ${p.sku || '—'}`}{!variable && ` · stock: ${p.stock ?? '—'}`}
