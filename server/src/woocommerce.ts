@@ -141,12 +141,15 @@ const money = (cents: number) => (cents / 1).toFixed(2); // los precios ya viene
  * Woo por SKU (para que Effi lo despache); los que no tengan SKU van como línea
  * de cargo + en la nota, para que el total y el detalle igual lleguen.
  */
+export interface VarianteSku { producto: string; label: string; sku: string }
+
 export async function crearPedido(
   storeId: string,
   order: Pedido,
   items: ItemPedido[],
   skusPorNombre: Record<string, string>,
   prov?: WooProv,
+  variantesSku: VarianteSku[] = [],
 ): Promise<{ wooId: string; numero: string; sinMapear: string[]; mapeados: number } | { error: string }> {
   const c = credenciales(storeId, prov);
   if (!c) return { error: 'Conecta WooCommerce en Integraciones antes de enviar pedidos.' };
@@ -159,13 +162,29 @@ export async function crearPedido(
   // El nombre del ítem trae talla/color ("Jogger jaspeado (Talla M · Negro)"),
   // pero el SKU está por el nombre base del producto: casamos de forma flexible.
   const nombresProd = Object.keys(skusPorNombre);
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const skuDeItem = (nombreItem: string): string => {
+    const nItem = norm(nombreItem);
+    // 1) SKU POR VARIANTE (talla/color): si el ítem menciona el producto y TODOS
+    //    los tokens de la variante (ej. "talla m", "negro"), usamos su SKU exacto.
+    //    Así Dropi/Effi despachan la talla/color correctos, no el producto genérico.
+    let mejorVar: { sku: string; len: number } | null = null;
+    for (const v of variantesSku) {
+      if (!v.sku) continue;
+      const prodOk = nItem.includes(norm(v.producto).slice(0, Math.min(10, norm(v.producto).length)));
+      const tokens = norm(v.label).split(/[^a-z0-9]+/).filter((t) => t.length > 1);
+      if (prodOk && tokens.length && tokens.every((t) => nItem.includes(t))) {
+        const len = norm(v.producto).length + norm(v.label).length;
+        if (!mejorVar || len > mejorVar.len) mejorVar = { sku: v.sku.trim(), len };
+      }
+    }
+    if (mejorVar) return mejorVar.sku;
+    // 2) SKU por producto (exacto, base, o coincidencia flexible).
     if (skusPorNombre[nombreItem]) return skusPorNombre[nombreItem].trim();
     const base = nombreItem.split('(')[0].split('—')[0].trim();
     if (skusPorNombre[base]) return skusPorNombre[base].trim();
-    const bajo = nombreItem.toLowerCase();
     const m = nombresProd
-      .filter((n) => n && (bajo.startsWith(n.toLowerCase()) || bajo.includes(n.toLowerCase())))
+      .filter((n) => n && (nItem.startsWith(norm(n)) || nItem.includes(norm(n))))
       .sort((a, b) => b.length - a.length)[0];
     return m ? skusPorNombre[m].trim() : '';
   };

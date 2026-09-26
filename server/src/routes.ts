@@ -209,7 +209,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     bundles: pj(p.bundles as string, []), opciones: pj(p.opciones as string, []),
     contenidoPaquete: p.contenido_paquete || '', disparador: p.disparador || '', mensajeInicialActivo: p.mensaje_inicial_activo !== 0,
     variantes: (db.prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY orden').all(p.id as string) as Record<string, unknown>[]).map((v) => ({
-      id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: pj(v.fotos_subidas as string, []),
+      id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: pj(v.fotos_subidas as string, []), sku: v.sku || '',
     })),
   }));
   const promos = (db.prepare('SELECT * FROM promos WHERE store_id = ?').all(sid) as Record<string, unknown>[]).map((p) => ({
@@ -516,9 +516,10 @@ api.post('/products/:id/variants', requireAuth, requireStore, (req, res) => {
 api.patch('/variants/:id', requireAuth, requireStore, (req, res) => {
   const v = db.prepare('SELECT v.id, v.product_id FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(req.params.id, req.user!.storeId) as { id: string; product_id: string } | undefined;
   if (!v) return res.status(404).json({ error: 'Variante no encontrada.' });
-  const { stock, fotosSubidas } = req.body || {};
+  const { stock, fotosSubidas, sku } = req.body || {};
   if (stock !== undefined) db.prepare('UPDATE variants SET stock = ? WHERE id = ?').run(Math.max(0, Number(stock) || 0), req.params.id);
   if (Array.isArray(fotosSubidas)) db.prepare('UPDATE variants SET fotos_subidas = ? WHERE id = ?').run(j(fotosSubidas), req.params.id);
+  if (sku !== undefined) db.prepare('UPDATE variants SET sku = ? WHERE id = ?').run(String(sku).trim(), req.params.id);
   if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(v.product_id);
   res.json({ ok: true });
 });
@@ -677,12 +678,13 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
   const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id) as { qty: number; nombre: string; precio: number }[];
   const skus: Record<string, string> = {};
   for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(sid) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
+  const variantesSku = db.prepare("SELECT p.nombre producto, v.label, v.sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(v.sku,'') != ''").all(sid) as { producto: string; label: string; sku: string }[];
   const { crearPedido } = await import('./woocommerce.js');
   const r = await crearPedido(sid, {
     cliente: String(o.cliente || ''), ciudad: String(o.ciudad || ''), departamento: String(o.departamento || ''),
     tel: String(o.tel || ''), direccion: String(o.direccion || ''), nota: String(o.nota || ''), envio: Number(o.envio || 0),
     total: Number(o.total || 0),
-  }, items, skus, prov);
+  }, items, skus, prov, variantesSku);
   if ('error' in r) return res.status(400).json({ error: r.error });
   const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';
   // Al reenviar reseteamos la guía vieja (el pedido nuevo trae la suya cuando el proveedor la genere).

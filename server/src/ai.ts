@@ -844,7 +844,8 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
       }
       const skus: Record<string, string> = {};
       for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(storeId) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
-      const r = await woo.crearPedido(storeId, { cliente, ciudad, departamento, tel: lead.tel || '', direccion, nota: '', envio: 0, total }, items, skus, prov);
+      const variantesSku = db.prepare("SELECT p.nombre producto, v.label, v.sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(v.sku,'') != ''").all(storeId) as { producto: string; label: string; sku: string }[];
+      const r = await woo.crearPedido(storeId, { cliente, ciudad, departamento, tel: lead.tel || '', direccion, nota: '', envio: 0, total }, items, skus, prov, variantesSku);
       const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';
       if ('error' in r) { console.warn(`[woo] pedido DF-${numero} NO se envió a ${nombreProv}: ${r.error}`); registrarLog(storeId, 'error', 'despacho', `El pedido DF-${numero} no se pudo enviar a ${nombreProv}: ${r.error}`, lead.id); }
       else {

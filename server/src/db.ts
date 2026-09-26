@@ -346,6 +346,7 @@ addColumn('products', "tipo TEXT NOT NULL DEFAULT 'producto'"); // producto | se
 addColumn('products', "duracion TEXT NOT NULL DEFAULT ''"); // solo servicios (ej: "30 min")
 addColumn('products', "plantilla_id TEXT NOT NULL DEFAULT ''"); // plantilla que lo instaló ('' = creado por la tienda)
 addColumn('products', "sku TEXT NOT NULL DEFAULT ''"); // SKU para mapear con el producto en WooCommerce/Effi
+addColumn('variants', "sku TEXT NOT NULL DEFAULT ''"); // SKU por variante (talla/color) para despachar la variante exacta en Dropi/Effi
 
 // Multi-tienda: un dueño puede tener varias tiendas (mismo correo). Para eso hay
 // que quitar el UNIQUE de stores.correo. Además, quién es el dueño (owner_user_id).

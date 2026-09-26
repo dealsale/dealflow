@@ -183,6 +183,78 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
 }
 
 /**
+ * Conecta el SKU de CADA variante (talla/color) con su código en Dropi/Effi,
+ * para que despache la variante exacta. Reusa el buscador de productos del Woo.
+ */
+function SkuVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
+  if (!df.wooProveedores.length) return null;
+  const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
+  if (!variantes.length) return null;
+  const nombreProv = df.wooProveedores.includes('effi') ? 'Effi' : 'Dropi';
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Conectar SKU con {nombreProv} por variante</div>
+      <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Vincula cada talla/color con su código en {nombreProv} para que despache la variante exacta.</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {variantes.map((v) => (
+          <VarSkuRow key={v.id} label={v.label} sku={v.sku || ''} nombreProv={nombreProv} onSet={(s) => df.setVariantSku(p.id, v.id!, s)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VarSkuRow({ label, sku, nombreProv, onSet }: { label: string; sku: string; nombreProv: string; onSet: (sku: string) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [q, setQ] = useState(sku || '');
+  const [cargando, setCargando] = useState(false);
+  const [resultados, setResultados] = useState<ProductoWoo[]>([]);
+  const [error, setError] = useState('');
+  const buscar = () => {
+    const query = q.trim(); if (!query) return;
+    setCargando(true); setError('');
+    void apiWooBuscarProductos(query).then((r) => {
+      setCargando(false);
+      if (r.error || !r.data) { setError(r.error || 'No pudimos buscar.'); setResultados([]); return; }
+      setResultados(r.data.productos);
+    });
+  };
+  return (
+    <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '9px 11px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 600, fontSize: 13, flex: 1, minWidth: 120 }}>{label}</span>
+        {sku
+          ? <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)', borderRadius: 6, padding: '2px 8px' }}>SKU: {sku}</span>
+          : <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>sin SKU</span>}
+        <button onClick={() => setAbierto(!abierto)} style={{ background: 'transparent', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 7, padding: '5px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>{abierto ? 'Cerrar' : sku ? 'Cambiar' : '🔎 Vincular'}</button>
+      </div>
+      {abierto && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') buscar(); }} placeholder={`Código o nombre en ${nombreProv}`} style={{ flex: 1, minWidth: 140, border: '1px solid var(--df-border)', borderRadius: 7, padding: '7px 10px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 }} />
+            <button onClick={buscar} disabled={cargando} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 7, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, color: '#fff', cursor: 'pointer' }}>{cargando ? '…' : 'Buscar'}</button>
+          </div>
+          {error && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--df-danger-dark)' }}>{error}</div>}
+          {!!resultados.length && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {resultados.map((prod) => (
+                <div key={prod.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '7px 10px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prod.nombre || '(sin nombre)'}</div>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)' }}>SKU: {prod.sku || '—'} · stock: {prod.stock ?? '—'}</div>
+                  </div>
+                  <button onClick={() => { onSet(prod.sku); setResultados([]); setQ(prod.sku); setAbierto(false); }} disabled={!prod.sku} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 7, padding: '6px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: prod.sku ? 'pointer' : 'not-allowed', opacity: prod.sku ? 1 : 0.5 }}>Vincular</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Editor desplegado de un producto. Se muestra de dos formas según `vista`:
  * - 'normal': todos los grupos abiertos, uno tras otro (como una ficha larga).
  * - 'agrupada': cada grupo es un acordeón; se despliega al hacer clic en su
@@ -389,6 +461,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
         <>
           <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Color, Talla… El asistente las ofrece al cliente.</div>
           <OpcionesEditor p={p} />
+          <SkuVariantes p={p} df={df} />
         </>
       ),
     },
