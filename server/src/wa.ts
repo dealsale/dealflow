@@ -13,7 +13,7 @@ interface MediaInfo {
 }
 
 function ensureLead(storeId: string, waId: string, nombre: string, tel?: string): { id: string; nuevo: boolean } {
-  const numPart = waId.split('@')[0];
+  const numPart = String(waId || '').split('@')[0];
   const telMostrar = tel || '+' + numPart; // número legible para el CRM (el @lid no sirve de teléfono)
   // Se busca por la dirección completa, por el número pelado (chats viejos) y
   // por teléfono (el mismo contacto puede llegar hoy como @lid y ayer como número).
@@ -343,6 +343,7 @@ export function handleIncomingWebhook(body: unknown) {
 
       for (const msg of value.messages) {
         const waId = msg.from;
+        if (!waId) { console.warn('[webhook] mensaje entrante sin remitente (from), se ignora:', msg.type || '?'); continue; }
         const nombre = value.contacts?.find((c) => c.wa_id === waId)?.profile?.name || '';
         const ad = refDesdeWhatsapp(msg.referral); // anuncio del que vino (si es una pauta)
         if (msg.type === 'text' && msg.text?.body) {

@@ -50,7 +50,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-09-25-antirafaga-chat',
+    build: '2026-09-26-fix-flows-webhook',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -117,6 +117,15 @@ if (existsSync(APP_DIST)) {
   });
   console.log('[web] Panel desde', APP_DIST, '· landing en', LANDING_HOSTS.join(', '));
 }
+
+// Red de seguridad: cualquier error no capturado en una ruta se registra con su
+// mensaje y stack REAL (no solo el fragmento de Express) y devuelve JSON limpio,
+// para no dejar caer un 500 opaco.
+app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error(`[error] ${req.method} ${req.originalUrl}:`, err instanceof Error ? err.stack || err.message : err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: 'Ocurrió un error en el servidor. Intenta de nuevo.' });
+});
 
 const PORT = Number(process.env.PORT) || 3001;
 app.listen(PORT, () => console.log(`DealFlow API escuchando en :${PORT}`));
