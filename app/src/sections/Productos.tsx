@@ -88,28 +88,35 @@ function OpcionesEditor({ p }: { p: DecoratedProduct }) {
 }
 
 /**
- * Selector Dropi / Effi. Solo aparece cuando el dueño tiene los DOS WooCommerce
- * conectados; con uno solo no hay nada que elegir y se oculta. Sirve para decidir
- * en qué catálogo buscamos el código (Dropi paga a una cuenta, Effi a otra).
+ * Selector Dropi / Effi para elegir en qué catálogo buscamos (Dropi paga a una
+ * cuenta, Effi a otra). Muestra SIEMPRE los dos: el que no está conectado sale en
+ * gris y deshabilitado ("Conéctala en Integraciones"), para que quede claro que
+ * también existe Effi y solo falta conectarlo (no que "solo hay Dropi").
  */
-function ProvSelector({ proveedores, prov, onProv }: { proveedores: string[]; prov: string; onProv: (p: string) => void }) {
-  if (proveedores.length < 2) return null;
+const WOO_PROVS = ['dropi', 'effi'];
+function ProvSelector({ conectados, prov, onProv }: { conectados: string[]; prov: string; onProv: (p: string) => void }) {
   const label = (p: string) => (p === 'effi' ? 'Effi' : p === 'dropi' ? 'Dropi' : p);
   return (
-    <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+    <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
       <span style={{ fontSize: 12, color: 'var(--df-text-muted)', marginRight: 2 }}>Buscar en:</span>
-      {proveedores.map((pv) => (
-        <button
-          key={pv}
-          onClick={() => onProv(pv)}
-          style={{
-            background: prov === pv ? 'var(--df-purple)' : 'var(--df-surface)',
-            border: '1px solid var(--df-purple-border)',
-            color: prov === pv ? '#fff' : 'var(--df-purple)',
-            borderRadius: 7, padding: '5px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-          }}
-        >{label(pv)}</button>
-      ))}
+      {WOO_PROVS.map((pv) => {
+        const on = conectados.includes(pv);
+        return (
+          <button
+            key={pv}
+            onClick={() => on && onProv(pv)}
+            disabled={!on}
+            title={on ? '' : `Conecta el WooCommerce de ${label(pv)} en Integraciones para usarlo.`}
+            style={{
+              background: prov === pv && on ? 'var(--df-purple)' : 'var(--df-surface)',
+              border: '1px solid var(--df-purple-border)',
+              color: prov === pv && on ? '#fff' : on ? 'var(--df-purple)' : 'var(--df-text-faint)',
+              borderRadius: 7, padding: '5px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12,
+              cursor: on ? 'pointer' : 'not-allowed', opacity: on ? 1 : 0.55,
+            }}
+          >{label(pv)}{!on && ' · sin conectar'}</button>
+        );
+      })}
     </div>
   );
 }
@@ -175,6 +182,11 @@ function CatalogoPicker({ cat, nombreProv, onPick, usados }: { cat: CatalogoWoo;
     borderRadius: 7, padding: '5px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12,
     cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap',
   });
+  // Chip que indica si el producto/variante está vinculado a Dropi en el plugin
+  // (lo que hace que el pedido de Woo SÍ se empuje a Dropi).
+  const chipDropi = (esDropi: boolean) => esDropi
+    ? <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }}>Dropi ✓</span>
+    : null;
   return (
     <div style={{ marginTop: 8 }}>
       {cat.cargando && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '6px 2px' }}>Trayendo el catálogo de {nombreProv}…</div>}
@@ -194,7 +206,10 @@ function CatalogoPicker({ cat, nombreProv, onPick, usados }: { cat: CatalogoWoo;
                 <div key={p.id} style={{ border: '1px solid var(--df-border)', borderRadius: 8, background: 'var(--df-surface)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre || '(sin nombre)'}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre || '(sin nombre)'}</span>
+                        {chipDropi(p.dropi)}
+                      </div>
                       <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)', marginTop: 1 }}>
                         {variable ? `${p.variaciones.length} variantes disponibles` : `SKU: ${p.sku || '—'}`}{!variable && ` · stock: ${p.stock ?? '—'}`}
                       </div>
@@ -208,7 +223,10 @@ function CatalogoPicker({ cat, nombreProv, onPick, usados }: { cat: CatalogoWoo;
                       {p.variaciones.map((v) => (
                         <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-bg)', borderRadius: 6, padding: '6px 9px' }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, fontWeight: 600 }}>{v.nombre}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 12.5, fontWeight: 600 }}>{v.nombre}</span>
+                              {chipDropi(v.dropi)}
+                            </div>
                             <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)' }}>SKU: {v.sku || '—'} · stock: {v.stock ?? '—'}</div>
                           </div>
                           <button onClick={() => onPick(v.sku, `${p.nombre} — ${v.nombre}`)} disabled={!v.sku} title={v.sku ? '' : `Esta variante no tiene SKU en ${nombreProv}`} style={btnUsar(!v.sku)}>Usar</button>
@@ -276,7 +294,7 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8 }}>
             Vincula este producto con su equivalente en <b>{nombreProv}</b> para que te quede el SKU exacto y {nombreProv} sí lo despache. Elígelo de la lista del catálogo o búscalo por código.
           </div>
-          <ProvSelector proveedores={df.wooProveedores} prov={prov} onProv={(p) => { setProv(p); setResultados([]); setBuscado(false); }} />
+          <ProvSelector conectados={df.wooProveedores} prov={prov} onProv={(p) => { setProv(p); setResultados([]); setBuscado(false); }} />
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             <button onClick={() => setModo('lista')} style={tab(modo === 'lista')}>Elegir de la lista</button>
             <button onClick={() => setModo('buscar')} style={tab(modo === 'buscar')}>Buscar por código</button>
@@ -369,7 +387,7 @@ function SkuVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
       {abierto && (
         <div style={{ marginTop: 10 }}>
           <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Vincula cada talla/color con su producto en {nombreProv} para que despache la variante exacta. Lo que vinculas a una variante deja de aparecer para las demás.</div>
-          <ProvSelector proveedores={df.wooProveedores} prov={prov} onProv={setProv} />
+          <ProvSelector conectados={df.wooProveedores} prov={prov} onProv={setProv} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {variantes.map((v) => (
               <VarSkuRow

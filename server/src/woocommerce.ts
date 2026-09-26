@@ -366,10 +366,28 @@ export async function buscarProductos(storeId: string, q: string, prov?: WooProv
   }
 }
 
-export interface VariacionWoo { id: number; nombre: string; sku: string; stock: number | null }
-export interface ProductoCatalogoWoo { id: number; nombre: string; sku: string; stock: number | null; tipo: string; variaciones: VariacionWoo[] }
-type WooProductoCat = WooProductoRaw & { type?: string; variations?: number[] };
-type WooVariacionRaw = { id?: number; sku?: string; stock_quantity?: number | null; attributes?: { name?: string; option?: string }[] };
+export interface VariacionWoo { id: number; nombre: string; sku: string; stock: number | null; dropi: boolean }
+export interface ProductoCatalogoWoo { id: number; nombre: string; sku: string; stock: number | null; tipo: string; dropi: boolean; variaciones: VariacionWoo[] }
+type WooMeta = { key?: string; value?: unknown };
+type WooProductoCat = WooProductoRaw & { type?: string; variations?: number[]; meta_data?: WooMeta[] };
+type WooVariacionRaw = { id?: number; sku?: string; stock_quantity?: number | null; attributes?: { name?: string; option?: string }[]; meta_data?: WooMeta[] };
+
+/**
+ * ¿Este producto/variación está vinculado a Dropi por el plugin (Dropify)? Es lo
+ * que hace que un pedido de Woo se empuje a Dropi. Detectamos por su meta_data:
+ * Dropify guarda llaves como _dropi_id / _dropshipping_* en el producto.
+ */
+function esDropi(meta?: WooMeta[]): boolean {
+  for (const m of meta || []) {
+    const k = String(m.key || '').toLowerCase();
+    if (/dropi|dropship/.test(k)) {
+      const v = m.value;
+      if (v === undefined || v === null || v === '' || v === '0' || v === 0 || v === false) continue;
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Trae el CATÁLOGO COMPLETO del WooCommerce del proveedor: todos los productos y,
@@ -388,14 +406,14 @@ export async function catalogo(storeId: string, prov?: WooProv): Promise<{ produ
     for (let page = 1; page <= 5; page++) {
       const r = await woo<WooProductoCat[]>(c, '/products', undefined, {
         per_page: '100', page: String(page), status: 'publish',
-        _fields: 'id,name,sku,stock_quantity,type,variations',
+        _fields: 'id,name,sku,stock_quantity,type,variations,meta_data',
       });
       if (!r.ok) return { error: r.body.message || 'No pudimos leer el catálogo de WooCommerce.' };
       if (!Array.isArray(r.body) || !r.body.length) break;
       for (const p of r.body) {
         const prod: ProductoCatalogoWoo = {
           id: Number(p.id), nombre: String(p.name || ''), sku: String(p.sku || ''),
-          stock: p.stock_quantity ?? null, tipo: String(p.type || 'simple'), variaciones: [],
+          stock: p.stock_quantity ?? null, tipo: String(p.type || 'simple'), dropi: esDropi(p.meta_data), variaciones: [],
         };
         productos.push(prod);
         if (prod.tipo === 'variable' && Array.isArray(p.variations) && p.variations.length) variables.push(prod);
@@ -407,7 +425,7 @@ export async function catalogo(storeId: string, prov?: WooProv): Promise<{ produ
     for (const prod of variables.slice(0, 60)) {
       try {
         const rv = await woo<WooVariacionRaw[]>(c, `/products/${prod.id}/variations`, undefined, {
-          per_page: '100', _fields: 'id,sku,stock_quantity,attributes',
+          per_page: '100', _fields: 'id,sku,stock_quantity,attributes,meta_data',
         });
         if (rv.ok && Array.isArray(rv.body)) {
           prod.variaciones = rv.body.map((v) => ({
@@ -415,7 +433,10 @@ export async function catalogo(storeId: string, prov?: WooProv): Promise<{ produ
             nombre: (v.attributes || []).map((a) => String(a.option || '')).filter(Boolean).join(' · ') || 'Variante',
             sku: String(v.sku || ''),
             stock: v.stock_quantity ?? null,
+            dropi: esDropi(v.meta_data) || prod.dropi, // la variación hereda el vínculo del padre
           }));
+          // Un producto variable "es de Dropi" si el padre o alguna variación lo está.
+          if (!prod.dropi && prod.variaciones.some((v) => v.dropi)) prod.dropi = true;
         }
       } catch { /* si una falla, seguimos con las demás */ }
     }
