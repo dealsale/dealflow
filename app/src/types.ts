@@ -42,6 +42,8 @@ export interface Variante {
   fotos?: number;
   /** Fotos subidas por el vendedor, como data URLs */
   fotosSubidas?: string[];
+  /** SKU/código de esta variante en Dropi/Effi (para despachar la talla/color exactos). */
+  sku?: string;
 }
 
 export interface FaqItem {

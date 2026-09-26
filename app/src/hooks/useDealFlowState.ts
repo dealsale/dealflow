@@ -605,7 +605,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     mensajeInicialActivo: p.mensajeInicialActivo !== false,
     fotos: p.fotos?.length ? p.fotos : undefined,
     fotosSubidas: p.fotosSubidas || [],
-    variantes: p.variantes.map((v) => ({ id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: v.fotosSubidas || [] })),
+    variantes: p.variantes.map((v) => ({ id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: v.fotosSubidas || [], sku: v.sku || '' })),
   }));
 }
 
@@ -1390,6 +1390,14 @@ export function useDealFlowState() {
       }),
     );
     if (apiMode && vid) void apiPatchVariant(vid, { stock: nuevo });
+  }
+
+  // Vincula el SKU de una variante (talla/color) con su código en Dropi/Effi.
+  function setVariantSku(productId: number | string, variantId: string, sku: string) {
+    setProducts((prev) => prev.map((p) => (p.id !== productId ? p : {
+      ...p, variantes: p.variantes.map((v) => (v.id === variantId ? { ...v, sku } : v)),
+    })));
+    if (apiMode && variantId) void apiPatchVariant(variantId, { sku });
   }
 
   function saveProduct(id: number | string) {
@@ -3786,6 +3794,7 @@ export function useDealFlowState() {
     setNewProdDuracion,
     newProdError,
     crearProducto,
+    setVariantSku,
 
     variantFormOpen,
     openVariantForm: () => setVariantFormOpen(true),
