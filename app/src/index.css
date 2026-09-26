@@ -236,6 +236,12 @@ body,
   overflow: hidden;
 }
 
+/* El <html> también lleva el fondo del tema: al cambiar de tema, si solo el body
+   lo tuviera, durante el repintado se asomaría el blanco del <html>. */
+html {
+  background: var(--df-page-bg);
+}
+
 body {
   background: var(--df-page-bg);
   color: var(--df-text);
