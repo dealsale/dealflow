@@ -88,6 +88,33 @@ function OpcionesEditor({ p }: { p: DecoratedProduct }) {
 }
 
 /**
+ * Selector Dropi / Effi. Solo aparece cuando el dueño tiene los DOS WooCommerce
+ * conectados; con uno solo no hay nada que elegir y se oculta. Sirve para decidir
+ * en qué catálogo buscamos el código (Dropi paga a una cuenta, Effi a otra).
+ */
+function ProvSelector({ proveedores, prov, onProv }: { proveedores: string[]; prov: string; onProv: (p: string) => void }) {
+  if (proveedores.length < 2) return null;
+  const label = (p: string) => (p === 'effi' ? 'Effi' : p === 'dropi' ? 'Dropi' : p);
+  return (
+    <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+      <span style={{ fontSize: 12, color: 'var(--df-text-muted)', marginRight: 2 }}>Buscar en:</span>
+      {proveedores.map((pv) => (
+        <button
+          key={pv}
+          onClick={() => onProv(pv)}
+          style={{
+            background: prov === pv ? 'var(--df-purple)' : 'var(--df-surface)',
+            border: '1px solid var(--df-purple-border)',
+            color: prov === pv ? '#fff' : 'var(--df-purple)',
+            borderRadius: 7, padding: '5px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer',
+          }}
+        >{label(pv)}</button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * Buscador para vincular el SKU con un producto real del WooCommerce de Effi/Dropi.
  * El dueño pega el código (o el nombre), lo buscamos en su tienda, le mostramos
  * nombre + stock para que confirme, y con un clic le dejamos el SKU correcto.
@@ -102,14 +129,16 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
   const [resultados, setResultados] = useState<ProductoWoo[]>([]);
   const [vinculado, setVinculado] = useState<ProductoWoo | null>(null);
 
+  const [prov, setProv] = useState<string>(df.wooProveedores[0] || 'dropi');
+
   if (!df.wooProveedores.length) return null; // sin WooCommerce conectado, no aplica
-  const nombreProv = df.wooProveedores.includes('effi') ? 'Effi' : 'Dropi';
+  const nombreProv = prov === 'effi' ? 'Effi' : 'Dropi';
 
   const buscar = () => {
     const query = q.trim();
     if (!query) return;
     setCargando(true); setError(''); setBuscado(true); setVinculado(null);
-    void apiWooBuscarProductos(query).then((r) => {
+    void apiWooBuscarProductos(query, prov).then((r) => {
       setCargando(false);
       if (r.error || !r.data) { setError(r.error || 'No pudimos buscar.'); setResultados([]); return; }
       setResultados(r.data.productos);
@@ -128,6 +157,7 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8 }}>
             Pega el <b>código del producto en {nombreProv}</b> (o escribe su nombre) y vincúlalo. Así te queda el SKU exacto y {nombreProv} sí lo despacha.
           </div>
+          <ProvSelector proveedores={df.wooProveedores} prov={prov} onProv={(p) => { setProv(p); setResultados([]); setBuscado(false); }} />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input
               className="df-input"
@@ -187,24 +217,26 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
  * para que despache la variante exacta. Reusa el buscador de productos del Woo.
  */
 function SkuVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
+  const [prov, setProv] = useState<string>(df.wooProveedores[0] || 'dropi');
   if (!df.wooProveedores.length) return null;
   const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
   if (!variantes.length) return null;
-  const nombreProv = df.wooProveedores.includes('effi') ? 'Effi' : 'Dropi';
+  const nombreProv = prov === 'effi' ? 'Effi' : 'Dropi';
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Conectar SKU con {nombreProv} por variante</div>
       <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Vincula cada talla/color con su código en {nombreProv} para que despache la variante exacta.</div>
+      <ProvSelector proveedores={df.wooProveedores} prov={prov} onProv={setProv} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {variantes.map((v) => (
-          <VarSkuRow key={v.id} label={v.label} sku={v.sku || ''} nombreProv={nombreProv} onSet={(s) => df.setVariantSku(p.id, v.id!, s)} />
+          <VarSkuRow key={v.id} label={v.label} sku={v.sku || ''} nombreProv={nombreProv} prov={prov} onSet={(s) => df.setVariantSku(p.id, v.id!, s)} />
         ))}
       </div>
     </div>
   );
 }
 
-function VarSkuRow({ label, sku, nombreProv, onSet }: { label: string; sku: string; nombreProv: string; onSet: (sku: string) => void }) {
+function VarSkuRow({ label, sku, nombreProv, prov, onSet }: { label: string; sku: string; nombreProv: string; prov: string; onSet: (sku: string) => void }) {
   const [abierto, setAbierto] = useState(false);
   const [q, setQ] = useState(sku || '');
   const [cargando, setCargando] = useState(false);
@@ -213,7 +245,7 @@ function VarSkuRow({ label, sku, nombreProv, onSet }: { label: string; sku: stri
   const buscar = () => {
     const query = q.trim(); if (!query) return;
     setCargando(true); setError('');
-    void apiWooBuscarProductos(query).then((r) => {
+    void apiWooBuscarProductos(query, prov).then((r) => {
       setCargando(false);
       if (r.error || !r.data) { setError(r.error || 'No pudimos buscar.'); setResultados([]); return; }
       setResultados(r.data.productos);
