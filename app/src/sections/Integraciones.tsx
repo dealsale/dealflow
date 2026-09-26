@@ -238,28 +238,53 @@ export function Integraciones({ df }: { df: DealFlowState }) {
         );
       })}
 
-      {/* Despacho automático: a qué proveedor mandar los pedidos SIN botón. */}
+      {/* Despacho: manual por defecto; se puede activar el auto-envío y elegir transportadora. */}
       {df.wooProveedores.length > 0 && (
         <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 4, maxWidth: 620 }}>
-          <div style={{ fontWeight: 800, fontSize: 15 }}>Despacho automático</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, margin: '4px 0 12px' }}>
-            Cuando el bot cierre una venta, el pedido se envía solo (sin botón) al proveedor que elijas aquí. Su WooCommerce debe estar conectado.
+          <div style={{ fontWeight: 800, fontSize: 15 }}>Envío de pedidos</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, margin: '4px 0 14px' }}>
+            Por defecto los pedidos se envían <b>a mano</b> desde el detalle de cada pedido (así revisas antes de despachar). Si prefieres, actívalo para que se envíen solos al confirmarse.
           </div>
-          <div style={{ maxWidth: 320 }}>
-            <Dropdown
-              ariaLabel="Proveedor de despacho automático"
-              value={df.wooPreferido}
-              onChange={df.elegirWooPreferido}
-              options={[
-                { value: '', label: 'Preguntar por cada pedido' },
-                ...(df.wooProveedores.includes('effi') ? [{ value: 'effi', label: 'Effi (automático)' }] : []),
-                ...(df.wooProveedores.includes('dropi') ? [{ value: 'dropi', label: 'Dropi (automático)' }] : []),
-              ]}
-            />
-          </div>
-          {df.wooPreferido && (
-            <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle-3)', border: '1px solid var(--df-brand-border)', borderRadius: 8, padding: '8px 11px' }}>
-              ✓ Los pedidos nuevos se enviarán automáticamente a <b>{df.wooPreferido === 'effi' ? 'Effi' : 'Dropi'}</b> (a su WooCommerce). Desde ahí, {df.wooPreferido === 'effi' ? 'Effi' : 'Dropi'} los recoge según su configuración.
+
+          {/* Switch de auto-envío */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: df.wooAuto ? 14 : 0 }}>
+            <span
+              onClick={() => df.guardarDespacho({ auto: !df.wooAuto })}
+              style={{ width: 42, height: 24, borderRadius: 999, background: df.wooAuto ? 'var(--df-brand)' : 'var(--df-border)', position: 'relative', flexShrink: 0, transition: 'background .15s' }}
+            >
+              <span style={{ position: 'absolute', top: 2, left: df.wooAuto ? 20 : 2, width: 20, height: 20, borderRadius: 999, background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+            </span>
+            <span style={{ fontSize: 13.5, fontWeight: 600 }}>Enviar pedidos automáticamente al confirmarse</span>
+          </label>
+
+          {df.wooAuto && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ maxWidth: 340 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 5 }}>Enviar por</div>
+                <Dropdown
+                  ariaLabel="Proveedor de despacho automático"
+                  value={df.wooPreferido}
+                  onChange={(v) => df.guardarDespacho({ proveedor: v })}
+                  options={[
+                    { value: '', label: df.wooProveedores.length === 1 ? `${df.wooProveedores[0] === 'effi' ? 'Effi' : 'Dropi'} (el único conectado)` : 'Elige un proveedor…' },
+                    ...(df.wooProveedores.includes('effi') ? [{ value: 'effi', label: 'Effi' }] : []),
+                    ...(df.wooProveedores.includes('dropi') ? [{ value: 'dropi', label: 'Dropi' }] : []),
+                  ]}
+                />
+              </div>
+              <div style={{ maxWidth: 340 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 5 }}>Transportadora por defecto</div>
+                <Dropdown
+                  ariaLabel="Transportadora por defecto"
+                  value={df.wooTransportadora}
+                  onChange={(v) => df.guardarDespacho({ transportadora: v })}
+                  options={[{ value: '', label: 'Sin especificar' }, ...df.wooTransportadoras.map((t) => ({ value: t, label: t }))]}
+                />
+                <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Se anota en el pedido para que Dropi la vea. La transportadora final se confirma en el panel de Dropi.</div>
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle-3)', border: '1px solid var(--df-brand-border)', borderRadius: 8, padding: '8px 11px' }}>
+                ✓ Los pedidos nuevos se enviarán solos a <b>{df.wooPreferido === 'effi' ? 'Effi' : df.wooPreferido === 'dropi' ? 'Dropi' : (df.wooProveedores[0] === 'effi' ? 'Effi' : 'Dropi')}</b>{df.wooTransportadora ? <> por <b>{df.wooTransportadora}</b></> : ''}.
+              </div>
             </div>
           )}
         </div>

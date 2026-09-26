@@ -30,7 +30,7 @@ function estadoDePipeline(estadoWoo: string, hayGuia: boolean): string | null {
 
 interface OrdenSync {
   id: string; store_id: string; numero: number; tel: string; guia: string | null;
-  estado: string; despacho_proveedor: string; woo_id: string; guia_avisada: number;
+  estado: string; despacho_proveedor: string; transportadora: string | null; woo_id: string; guia_avisada: number;
 }
 
 let corriendoDespachos = false;
@@ -41,7 +41,7 @@ export async function sincronizarDespachos(): Promise<void> {
   corriendoDespachos = true;
   try {
     const pendientes = db.prepare(
-      `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, woo_id, guia_avisada
+      `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, transportadora, woo_id, guia_avisada
          FROM orders
         WHERE COALESCE(woo_id,'') != '' AND COALESCE(despacho_proveedor,'') != ''
           AND estado NOT IN ('Entregado','Cancelado')
@@ -96,7 +96,7 @@ export async function sincronizarPorWooId(wooId: string): Promise<number> {
   const id = String(wooId || '').trim();
   if (!id) return 0;
   const ordenes = db.prepare(
-    `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, woo_id, guia_avisada
+    `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, transportadora, woo_id, guia_avisada
        FROM orders WHERE woo_id = ? AND COALESCE(despacho_proveedor,'') != '' LIMIT 5`,
   ).all(id) as OrdenSync[];
   for (const o of ordenes) { try { await procesarOrden(o); } catch { /* seguimos */ } }
@@ -106,7 +106,7 @@ export async function sincronizarPorWooId(wooId: string): Promise<number> {
 /** Sincroniza un pedido puntual desde su id de fila (para el botón manual). */
 export async function sincronizarPedido(storeId: string, rowId: string): Promise<{ estado: string; guia: string } | { error: string }> {
   const o = db.prepare(
-    `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, woo_id, guia_avisada
+    `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, transportadora, woo_id, guia_avisada
        FROM orders WHERE id = ? AND store_id = ?`,
   ).get(rowId, storeId) as OrdenSync | undefined;
   if (!o) return { error: 'Pedido no encontrado.' };
@@ -116,8 +116,10 @@ export async function sincronizarPedido(storeId: string, rowId: string): Promise
 
 /** Manda el WhatsApp de "tu pedido va en camino" con la guía, y lo deja anotado en el chat. */
 async function avisarGuiaAlCliente(o: OrdenSync, guia: string): Promise<void> {
-  const prov = nombreProv(o.despacho_proveedor);
-  const texto = `¡Buenas noticias! 🎉 Tu pedido DF-${o.numero} ya salió a despacho.\n\n📦 Guía: ${guia}\n🚚 Transportadora: ${prov}\n\nTe avisaremos cuando esté por llegar. ¡Gracias por tu compra!`;
+  // La transportadora real (Interrapidísimo, Servientrega…) si el dueño la eligió;
+  // si no, el nombre del proveedor como respaldo.
+  const transp = (o.transportadora || '').trim() || nombreProv(o.despacho_proveedor);
+  const texto = `¡Buenas noticias! 🎉 Tu pedido DF-${o.numero} ya salió a despacho.\n\n📦 Guía: ${guia}\n🚚 Transportadora: ${transp}\n\nTe avisaremos cuando esté por llegar. ¡Gracias por tu compra!`;
   const envio = await sendWhatsappText(o.store_id, o.tel, texto);
   if (!envio.ok) {
     // No lo marcamos como avisado: se reintenta en el próximo ciclo (puede ser
@@ -126,7 +128,7 @@ async function avisarGuiaAlCliente(o: OrdenSync, guia: string): Promise<void> {
     return;
   }
   db.prepare('UPDATE orders SET guia_avisada = 1 WHERE id = ?').run(o.id);
-  registrarLog(o.store_id, 'info', 'despacho', `Le avisamos al cliente la guía de DF-${o.numero} (${guia}, ${prov}) por WhatsApp.`);
+  registrarLog(o.store_id, 'info', 'despacho', `Le avisamos al cliente la guía de DF-${o.numero} (${guia}, ${transp}) por WhatsApp.`);
   // Lo dejamos también en la conversación del cliente si lo encontramos por teléfono.
   try {
     const tel = String(o.tel).replace(/[^0-9]/g, '');

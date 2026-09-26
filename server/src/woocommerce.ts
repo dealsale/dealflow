@@ -21,6 +21,17 @@ export type WooProv = 'dropi' | 'effi';
 export const WOO_PROVEEDORES: WooProv[] = ['dropi', 'effi'];
 
 /**
+ * Lista fija de transportadoras (las más usadas por dropshippers en Colombia).
+ * El dueño elige una al enviar el pedido; la anotamos en el pedido de Woo para
+ * que Dropi la vea. La transportadora definitiva se confirma en el panel de Dropi
+ * (para imponerla desde aquí haría falta la API directa de Dropi).
+ */
+export const TRANSPORTADORAS = [
+  'Interrapidísimo', 'Servientrega', 'Coordinadora', 'Envía', 'TCC',
+  'Domina', 'Deprisa', 'Veloces', '99 Minutos', 'Saferbo', 'Futura', 'Otra',
+];
+
+/**
  * Lee las credenciales del WooCommerce de un proveedor (dropi/effi). Cada uno
  * se guarda como una integración aparte (woocommerce_dropi / woocommerce_effi).
  * Si no se pasa proveedor, usa la integración genérica 'woocommerce' (legado).
@@ -65,14 +76,28 @@ export function proveedoresConectados(storeId: string): WooProv[] {
 }
 
 /**
- * Proveedor por el que se despacha AUTOMÁTICAMENTE (sin botón), aunque haya dos
- * conectados. Se guarda como integración tipo 'despacho_pref' con {proveedor}.
- * Devuelve null si no hay preferido configurado o si el preferido no está conectado.
+ * Configuración de despacho de la tienda, guardada como integración 'despacho_pref':
+ *   { proveedor?: 'dropi'|'effi', auto?: boolean, transportadora?: string }
+ * - proveedor: por cuál WooCommerce despachar cuando el auto-envío está activo.
+ * - auto: si el pedido se envía SOLO al confirmarse (por defecto NO: manual).
+ * - transportadora: transportadora por defecto para el auto-envío.
+ */
+export interface DespachoPref { proveedor: WooProv | null; auto: boolean; transportadora: string }
+export function despachoConfig(storeId: string): DespachoPref {
+  const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'despacho_pref'").get(storeId) as { config: string } | undefined;
+  const cfg = row ? pj<Record<string, unknown>>(row.config, {}) : {};
+  const prov = String(cfg.proveedor || '');
+  const proveedor: WooProv | null = (prov === 'dropi' || prov === 'effi') ? prov : null;
+  return { proveedor, auto: cfg.auto === true, transportadora: String(cfg.transportadora || '') };
+}
+
+/**
+ * Proveedor por el que se despacha (cuando aplica), aunque haya dos conectados.
+ * Devuelve null si no hay preferido conectado.
  */
 export function proveedorPreferido(storeId: string): WooProv | null {
-  const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'despacho_pref'").get(storeId) as { config: string } | undefined;
-  const prov = row ? String(pj<Record<string, string>>(row.config, {}).proveedor || '') : '';
-  if ((prov === 'dropi' || prov === 'effi') && credenciales(storeId, prov)) return prov;
+  const prov = despachoConfig(storeId).proveedor;
+  if (prov && credenciales(storeId, prov)) return prov;
   // Si la tienda no eligió preferido, usa el preferido del Woo CENTRAL (si hay).
   const central = db.prepare("SELECT proveedor FROM woo_central WHERE preferido = 1 AND activo = 1 LIMIT 1").get() as { proveedor: string } | undefined;
   if (central && (central.proveedor === 'dropi' || central.proveedor === 'effi') && credenciales(storeId, central.proveedor)) return central.proveedor;
@@ -80,11 +105,13 @@ export function proveedorPreferido(storeId: string): WooProv | null {
 }
 
 /**
- * Decide a qué proveedor auto-despachar un pedido nuevo (sin botón):
- *  - el PREFERIDO si está conectado; si no,
- *  - el único conectado (si solo hay uno); si hay dos y no hay preferido, null (se elige a mano).
+ * Decide a qué proveedor auto-despachar un pedido nuevo (sin botón). SOLO cuando el
+ * auto-envío está activado por la tienda (por defecto NO): usa el preferido si está
+ * conectado, o el único conectado. Devuelve null si el auto-envío está apagado o no
+ * hay a quién enviar (entonces el dueño lo envía a mano desde el detalle).
  */
 export function proveedorAutoDespacho(storeId: string): WooProv | null {
+  if (!despachoConfig(storeId).auto) return null; // manual por defecto
   const pref = proveedorPreferido(storeId);
   if (pref) return pref;
   const provs = proveedoresConectados(storeId);
@@ -150,6 +177,7 @@ export async function crearPedido(
   skusPorNombre: Record<string, string>,
   prov?: WooProv,
   variantesSku: VarianteSku[] = [],
+  transportadora = '',
 ): Promise<{ wooId: string; numero: string; sinMapear: string[]; mapeados: number } | { error: string }> {
   const c = credenciales(storeId, prov);
   if (!c) return { error: 'Conecta WooCommerce en Integraciones antes de enviar pedidos.' };
@@ -262,8 +290,17 @@ export async function crearPedido(
     shipping_lines: order.envio > 0 ? [{ method_id: 'flat_rate', method_title: 'Envío', total: money(order.envio) }] : [],
     // Etiquetamos el pedido con la tienda de origen: en el Woo CENTRAL (uno para
     // todas) así el operador sabe de qué tienda es cada pedido de un vistazo.
-    customer_note: [tiendaNombre ? `[Tienda: ${tiendaNombre}]` : '', order.nota, sinMapear.length ? `Productos: ${sinMapear.join(', ')}` : ''].filter(Boolean).join(' · '),
-    meta_data: [{ key: 'df_store', value: storeId }, { key: 'df_store_nombre', value: tiendaNombre }],
+    customer_note: [
+      tiendaNombre ? `[Tienda: ${tiendaNombre}]` : '',
+      transportadora ? `[Transportadora: ${transportadora}]` : '',
+      order.nota,
+      sinMapear.length ? `Productos: ${sinMapear.join(', ')}` : '',
+    ].filter(Boolean).join(' · '),
+    meta_data: [
+      { key: 'df_store', value: storeId },
+      { key: 'df_store_nombre', value: tiendaNombre },
+      ...(transportadora ? [{ key: 'df_transportadora', value: transportadora }] : []),
+    ],
   };
   // WooCommerce rechaza un pedido sin ninguna línea; si todo cayó a fee_lines, ya está cubierto.
   if (!lineItems.length && !feeLines.length) return { error: 'El pedido no tiene productos.' };

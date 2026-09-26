@@ -1,6 +1,5 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { SearchInput, FilterSelect } from '../components/Filters';
-import { Dropdown } from '../components/Dropdown';
 
 export function Pedidos({ df }: { df: DealFlowState }) {
   const fechaActiva = df.orderDateFilters.find((f) => f.active)?.key || 'Todas';
@@ -50,7 +49,7 @@ export function Pedidos({ df }: { df: DealFlowState }) {
             key={o.id}
             onClick={o.open}
             className="df-row-hover"
-            style={{ display: 'grid', gridTemplateColumns: '104px 1fr 110px 116px 170px', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}
+            style={{ display: 'grid', gridTemplateColumns: '104px 1fr 110px 140px', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-muted)' }}>{o.id}</div>
@@ -65,16 +64,9 @@ export function Pedidos({ df }: { df: DealFlowState }) {
               <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.itemsResumen}</div>
             </div>
             <span style={{ fontWeight: 700, fontSize: 14 }}>{o.totalFmt}</span>
-            <span style={o.pillStyle}>{o.estado}</span>
-            {/* Estado seleccionable: cambia a cualquiera (incluye Cancelado), sin flujo forzado. */}
-            <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Dropdown
-                ariaLabel="Cambiar estado del pedido"
-                value={o.estado}
-                onChange={(v) => o.setEstado(v as typeof o.estado)}
-                options={o.estadosDisponibles.map((e) => ({ value: e, label: e }))}
-                width={160}
-              />
+            {/* El estado lo actualiza la integración (Dropi/Effi) automáticamente. */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <span style={o.pillStyle}>{o.estado}</span>
             </div>
           </div>
         ))}

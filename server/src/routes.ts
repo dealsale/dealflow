@@ -672,6 +672,7 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
   // reintentar = volver a enviarlo aunque ya tenga woo_id (algo salió mal en el
   // proveedor y el dueño quiere reenviarlo). Crea un pedido NUEVO en WooCommerce.
   const reintentar = req.body?.reintentar === true;
+  const transportadora = String(req.body?.transportadora || '').slice(0, 40);
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   if (o.woo_id && !reintentar) return res.json({ ok: true, guia: o.guia || '', wooId: o.woo_id, proveedor: o.despacho_proveedor || prov, aviso: 'Este pedido ya fue despachado.' });
@@ -684,11 +685,13 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
     cliente: String(o.cliente || ''), ciudad: String(o.ciudad || ''), departamento: String(o.departamento || ''),
     tel: String(o.tel || ''), direccion: String(o.direccion || ''), nota: String(o.nota || ''), envio: Number(o.envio || 0),
     total: Number(o.total || 0),
-  }, items, skus, prov, variantesSku);
+  }, items, skus, prov, variantesSku, transportadora);
   if ('error' in r) return res.status(400).json({ error: r.error });
   const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';
+  // transportadora = la transportadora elegida (Interrapidísimo, Servientrega…). Se
+  // guarda en el pedido y viaja al pedido de Woo para que Dropi la vea.
   // Al reenviar reseteamos la guía vieja (el pedido nuevo trae la suya cuando el proveedor la genere).
-  db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ?, guia = ? WHERE id = ?').run(r.wooId, prov, nombreProv, reintentar ? '' : String(o.guia || ''), o.id);
+  db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ?, guia = ? WHERE id = ?').run(r.wooId, prov, transportadora, reintentar ? '' : String(o.guia || ''), o.id);
   const numDF = `DF-${String(o.numero || '')}`;
   if (r.sinMapear.length) {
     // Diagnóstico clave: si un ítem no casó por SKU, quedó como "cargo" y el proveedor NO lo despachará.
@@ -712,20 +715,30 @@ api.post('/orders/:rowId/despachar/sync', requireAuth, requireStore, async (req,
 // Qué proveedores WooCommerce tiene conectados la tienda (para mostrar los botones)
 // y cuál es el preferido para auto-despacho (sin botón).
 api.get('/woo/proveedores', requireAuth, requireStore, async (req, res) => {
-  const { proveedoresConectados, proveedorPreferido } = await import('./woocommerce.js');
+  const { proveedoresConectados, despachoConfig, TRANSPORTADORAS } = await import('./woocommerce.js');
   const sid = req.user!.storeId!;
-  res.json({ proveedores: proveedoresConectados(sid), preferido: proveedorPreferido(sid) || '' });
+  const cfg = despachoConfig(sid);
+  res.json({
+    proveedores: proveedoresConectados(sid),
+    preferido: cfg.proveedor || '',
+    auto: cfg.auto,
+    transportadora: cfg.transportadora,
+    transportadoras: TRANSPORTADORAS,
+  });
 });
 
-// Define el proveedor por el que se despacha AUTOMÁTICAMENTE (sin botón). '' = preguntar por pedido.
+// Guarda la config de despacho: proveedor, auto-envío (on/off) y transportadora por
+// defecto. Por defecto auto=false → los pedidos se envían a mano desde el detalle.
 api.post('/woo/preferido', requireAuth, requireStore, requireOwner, (req, res) => {
   const sid = req.user!.storeId!;
   const prov = wooProv(req.body?.proveedor) || '';
+  const auto = req.body?.auto === true;
+  const transportadora = String(req.body?.transportadora || '').slice(0, 40);
   db.prepare(
     `INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?, 'despacho_pref', ?, datetime('now'))
      ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = datetime('now')`,
-  ).run(sid, JSON.stringify({ proveedor: prov }));
-  res.json({ ok: true, preferido: prov });
+  ).run(sid, JSON.stringify({ proveedor: prov, auto, transportadora }));
+  res.json({ ok: true, preferido: prov, auto, transportadora });
 });
 
 // WooCommerce por proveedor: verificar conexión, inventario y productos.
