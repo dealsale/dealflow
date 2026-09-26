@@ -14,6 +14,20 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0A1B2E" />
     <title>DealFlow</title>
+    <!-- Anti-destello: fijamos el tema guardado y el color de fondo ANTES del
+         primer pintado, para que al abrir o recargar (y al cambiar de tema) no
+         se vea el flash blanco mientras carga el CSS. -->
+    <script>
+      try {
+        var t = localStorage.getItem('dealflow:theme');
+        if (t === 'dark' || t === 'premium') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+    <style>
+      html, body { background: #F8FAFC; }
+      html[data-theme='dark'], html[data-theme='dark'] body { background: #0A0F1C; }
+      html[data-theme='premium'], html[data-theme='premium'] body { background: #060814; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

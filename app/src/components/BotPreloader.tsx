@@ -1,107 +1,133 @@
 import logo from '../assets/logo.png';
 
+/**
+ * Preloader de la app: pantalla de arranque con un look tecnológico —
+ * un núcleo con el logo, un anillo de energía que gira, ondas concéntricas,
+ * partículas flotando y una barra de progreso con brillo. Fondo oscuro fijo
+ * (independiente del tema) para que se sienta premium al entrar.
+ */
 const CSS = `
-@keyframes dfplJump { 0%,100% { transform: translateY(0) scaleY(1); } 30% { transform: translateY(-22px) scaleY(1.04); } 50% { transform: translateY(0) scaleY(.92); } 62% { transform: translateY(-8px) scaleY(1.01); } 74% { transform: translateY(0) scaleY(1); } }
-@keyframes dfplShadow { 0%,100% { transform: scaleX(1); opacity:.35; } 30% { transform: scaleX(.6); opacity:.18; } 50% { transform: scaleX(1.05); opacity:.4; } }
-@keyframes dfplBlink { 0%,88%,100% { transform: scaleY(1); } 92%,96% { transform: scaleY(.08); } }
-@keyframes dfplAnt { 0%,100% { opacity:.5; } 50% { opacity:1; } }
-@keyframes dfplDots { 0%,80%,100% { transform: translateY(0); opacity:.35; } 40% { transform: translateY(-7px); opacity:1; } }
-@keyframes dfplBar { 0% { left:-40%; } 100% { left:105%; } }
-@keyframes dfplOrbit { from { transform: rotate(0deg) translateX(86px) rotate(0deg); } to { transform: rotate(360deg) translateX(86px) rotate(-360deg); } }
-@keyframes dfplTwinkle { 0%,100% { opacity:.15; transform: scale(.7); } 50% { opacity:.9; transform: scale(1.1); } }
-@keyframes dfplIn { from { opacity:0; } to { opacity:1; } }
-.dfpl { animation: dfplIn .25s ease both; }
-.dfpl-eye { transform-origin: center; transform-box: fill-box; animation: dfplBlink 3.2s infinite; }
-.dfpl-mini { position:absolute; top:50%; left:50%; margin:-11px 0 0 -11px; animation: dfplOrbit var(--dur,3.6s) linear infinite; animation-delay: var(--del,0s); }
+@keyframes dfplIn { from { opacity:0 } to { opacity:1 } }
+@keyframes dfplSpin { to { transform: rotate(360deg) } }
+@keyframes dfplSpinRev { to { transform: rotate(-360deg) } }
+@keyframes dfplGlow { 0%,100% { opacity:.45; transform: scale(.92) } 50% { opacity:.9; transform: scale(1.08) } }
+@keyframes dfplWave { 0% { transform: scale(.7); opacity:.55 } 100% { transform: scale(1.9); opacity:0 } }
+@keyframes dfplFloat { 0%,100% { transform: translateY(0); opacity:.35 } 50% { transform: translateY(-14px); opacity:.9 } }
+@keyframes dfplBar { 0% { left:-42% } 100% { left:104% } }
+@keyframes dfplDots { 0%,80%,100% { transform: translateY(0); opacity:.3 } 40% { transform: translateY(-6px); opacity:1 } }
+@keyframes dfplGrid { from { background-position: 0 0, 0 0 } to { background-position: 46px 0, 0 46px } }
+@keyframes dfplTilt { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+@keyframes dfplSheen { 0% { background-position: -160% 0 } 100% { background-position: 260% 0 } }
+.dfpl { animation: dfplIn .3s ease both }
 `;
 
-/** Bot mini que orbita alrededor del bot principal. */
-function MiniBot({ color, dark, dur, del }: { color: string; dark: string; dur: string; del: string }) {
-  return (
-    <div className="dfpl-mini" style={{ ['--dur' as never]: dur, ['--del' as never]: del }}>
-      <svg width="22" height="22" viewBox="0 0 64 64" fill="none">
-        <circle cx="32" cy="7" r="4" fill="var(--df-warning-border)" />
-        <rect x="10" y="14" width="44" height="40" rx="15" fill={color} stroke={dark} strokeWidth="3" />
-        <rect x="16" y="21" width="32" height="24" rx="10" fill={dark} opacity=".9" />
-        <circle cx="26" cy="33" r="4" fill="#fff" />
-        <circle cx="38" cy="33" r="4" fill="#fff" />
-      </svg>
-    </div>
-  );
-}
-
-/** Preloader animado (enfocado en bots) que aparece al entrar a la app. */
 export function BotPreloader() {
   return (
     <div
       className="dfpl"
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 999,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 0,
-        background: 'linear-gradient(158deg,#071120 0%,#0A1B2E 46%,#07271F 100%)',
-        fontFamily: "'Inter',system-ui,sans-serif",
+        position: 'fixed', inset: 0, zIndex: 999,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        background: 'radial-gradient(circle at 50% 38%, #0d2a44 0%, #0A1B2E 42%, #060f1c 100%)',
+        fontFamily: "'Inter',system-ui,sans-serif", overflow: 'hidden',
       }}
     >
       <style>{CSS}</style>
 
-      {/* sparkles */}
+      {/* rejilla técnica de fondo, muy sutil, en movimiento lento */}
+      <div style={{
+        position: 'absolute', inset: 0, opacity: 0.5, pointerEvents: 'none',
+        backgroundImage: 'linear-gradient(rgba(16,185,129,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,.06) 1px, transparent 1px)',
+        backgroundSize: '46px 46px', animation: 'dfplGrid 6s linear infinite',
+        maskImage: 'radial-gradient(circle at 50% 40%, #000 0%, transparent 72%)',
+        WebkitMaskImage: 'radial-gradient(circle at 50% 40%, #000 0%, transparent 72%)',
+      }} />
+
+      {/* partículas flotando */}
       {[
-        { top: '18%', left: '22%', fs: 16, del: '0s' },
-        { top: '30%', right: '18%', fs: 13, del: '.6s' },
-        { top: '68%', left: '16%', fs: 14, del: '1.1s' },
-        { top: '74%', right: '24%', fs: 17, del: '.3s' },
-      ].map((s, i) => (
-        <span key={i} style={{ position: 'absolute', top: s.top, left: s.left, right: s.right, fontSize: s.fs, color: 'var(--df-warning-border)', animation: `dfplTwinkle 2.6s ease-in-out ${s.del} infinite` }}>✦</span>
+        { top: '22%', left: '20%', s: 4, d: '0s', c: '#34D399' },
+        { top: '30%', right: '16%', s: 3, d: '.7s', c: '#38BDF8' },
+        { top: '66%', left: '18%', s: 3, d: '1.3s', c: '#A78BFA' },
+        { top: '72%', right: '22%', s: 5, d: '.4s', c: '#34D399' },
+        { top: '48%', left: '10%', s: 3, d: '1s', c: '#38BDF8' },
+        { top: '52%', right: '11%', s: 4, d: '.2s', c: '#34D399' },
+      ].map((p, i) => (
+        <span key={i} style={{
+          position: 'absolute', top: p.top, left: p.left, right: p.right,
+          width: p.s, height: p.s, borderRadius: '50%', background: p.c,
+          boxShadow: `0 0 8px ${p.c}`, animation: `dfplFloat 3.4s ease-in-out ${p.d} infinite`,
+        }} />
       ))}
 
-      {/* bot principal saltando + mini-bots orbitando */}
-      <div style={{ position: 'relative', width: 200, height: 190, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <MiniBot color="var(--df-warning-light)" dark="var(--df-alert-brown)" dur="3.6s" del="0s" />
-        <MiniBot color="#93C5FD" dark="#1E3A8A" dur="3.6s" del="-1.2s" />
-        <MiniBot color="#F9A8D4" dark="#831843" dur="3.6s" del="-2.4s" />
+      {/* núcleo: ondas + anillos giratorios + logo */}
+      <div style={{ position: 'relative', width: 168, height: 168, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'dfplTilt 3.2s ease-in-out infinite' }}>
+        {/* ondas concéntricas */}
+        {[0, 1, 2].map((i) => (
+          <span key={i} style={{
+            position: 'absolute', width: 132, height: 132, borderRadius: 30,
+            border: '1.5px solid rgba(52,211,153,.5)', animation: `dfplWave 2.4s ease-out ${i * 0.8}s infinite`,
+          }} />
+        ))}
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ animation: 'dfplJump 1.5s cubic-bezier(.3,.9,.4,1) infinite', filter: 'drop-shadow(0 18px 26px rgba(0,0,0,.45))' }}>
-            <svg width="104" height="104" viewBox="0 0 64 64" fill="none">
-              <circle cx="32" cy="7" r="3.6" fill="var(--df-warning-border)" style={{ animation: 'dfplAnt 1.4s ease-in-out infinite' }} />
-              <rect x="30.9" y="9" width="2.2" height="5" rx="1" fill="var(--df-brand-deep)" />
-              <rect x="6" y="30" width="5" height="10" rx="2.5" fill="var(--df-brand-deep)" />
-              <rect x="53" y="30" width="5" height="10" rx="2.5" fill="var(--df-brand-deep)" />
-              <rect x="10" y="14" width="44" height="40" rx="15" fill="var(--df-brand-light)" stroke="var(--df-brand-deep)" strokeWidth="2.4" />
-              <rect x="16" y="21" width="32" height="24" rx="10" fill="var(--df-brand-deep)" opacity=".92" />
-              <circle className="dfpl-eye" cx="26" cy="32" r="3.6" fill="var(--df-brand-border)" />
-              <circle className="dfpl-eye" cx="38" cy="32" r="3.6" fill="var(--df-brand-border)" />
-              <path d="M26.5 38.8q5.5 4 11 0" stroke="var(--df-brand-border)" strokeWidth="2.2" strokeLinecap="round" fill="none" />
-              <circle cx="20.5" cy="37" r="2.5" fill="var(--df-danger-light)" opacity=".85" />
-              <circle cx="43.5" cy="37" r="2.5" fill="var(--df-danger-light)" opacity=".85" />
-              <rect x="20" y="54" width="8" height="6" rx="3" fill="var(--df-brand-deep)" />
-              <rect x="36" y="54" width="8" height="6" rx="3" fill="var(--df-brand-deep)" />
-            </svg>
-          </div>
-          <div style={{ width: 74, height: 10, borderRadius: '50%', background: 'rgba(0,0,0,.5)', filter: 'blur(4px)', marginTop: 2, animation: 'dfplShadow 1.5s cubic-bezier(.3,.9,.4,1) infinite' }} />
+        {/* glow suave detrás */}
+        <span style={{
+          position: 'absolute', width: 150, height: 150, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(16,185,129,.5) 0%, transparent 70%)',
+          filter: 'blur(6px)', animation: 'dfplGlow 2.2s ease-in-out infinite',
+        }} />
+
+        {/* anillo de energía exterior (conic, girando) */}
+        <span style={{
+          position: 'absolute', width: 140, height: 140, borderRadius: 32,
+          background: 'conic-gradient(from 0deg, transparent 0deg, #10B981 70deg, #34D399 130deg, transparent 210deg, transparent 360deg)',
+          animation: 'dfplSpin 2.4s linear infinite',
+          filter: 'drop-shadow(0 0 12px rgba(16,185,129,.45))',
+          WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+          WebkitMaskComposite: 'xor', maskComposite: 'exclude', padding: 3,
+        }} />
+        {/* anillo interior fino, girando al revés (punteado tech) */}
+        <span style={{
+          position: 'absolute', width: 118, height: 118, borderRadius: 26,
+          border: '1px dashed rgba(56,189,248,.45)', animation: 'dfplSpinRev 8s linear infinite',
+        }} />
+
+        {/* tile de vidrio con el logo */}
+        <div style={{
+          position: 'relative', width: 104, height: 104, borderRadius: 24,
+          background: 'linear-gradient(145deg, rgba(255,255,255,.09), rgba(255,255,255,.02))',
+          border: '1px solid rgba(255,255,255,.12)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,.15), 0 12px 34px rgba(0,0,0,.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+        }}>
+          <img src={logo} alt="" style={{ width: 58, height: 52, objectFit: 'contain', filter: 'drop-shadow(0 3px 10px rgba(16,185,129,.4))' }} />
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18 }}>
-        <img src={logo} alt="" style={{ width: 34, height: 30, objectFit: 'contain' }} />
-        <span style={{ color: '#F1F5F9', fontWeight: 800, fontSize: 21, letterSpacing: '-0.02em' }}>DealFlow</span>
+      {/* wordmark con brillo que recorre */}
+      <div style={{ marginTop: 26, fontWeight: 800, fontSize: 26, letterSpacing: '-0.02em' }}>
+        <span style={{
+          background: 'linear-gradient(90deg, #E7F6EF 0%, #6EE7B7 30%, #E7F6EF 60%)',
+          backgroundSize: '220% 100%', WebkitBackgroundClip: 'text', backgroundClip: 'text',
+          WebkitTextFillColor: 'transparent', animation: 'dfplSheen 3s linear infinite',
+        }}>DealFlow</span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#8CA0AE', fontSize: 13.5, marginTop: 12 }}>
-        <span>Despertando a tus bots vendedores</span>
+      {/* estado + puntos */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#8CA6B6', fontSize: 13, marginTop: 10, letterSpacing: '.01em' }}>
+        <span>Preparando tu panel</span>
         {[0, 1, 2].map((i) => (
-          <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--df-brand-light)', display: 'inline-block', animation: `dfplDots 1.2s ease-in-out ${i * 0.18}s infinite` }} />
+          <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: '#34D399', display: 'inline-block', animation: `dfplDots 1.2s ease-in-out ${i * 0.18}s infinite` }} />
         ))}
       </div>
 
-      <div style={{ position: 'relative', width: 220, height: 4, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden', marginTop: 16 }}>
-        <span style={{ position: 'absolute', top: 0, width: '40%', height: '100%', borderRadius: 999, background: 'linear-gradient(90deg,transparent,var(--df-brand-light),var(--df-warning-light),transparent)', animation: 'dfplBar 1.15s ease-in-out infinite' }} />
+      {/* barra de progreso con brillo */}
+      <div style={{ position: 'relative', width: 230, height: 3, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden', marginTop: 20 }}>
+        <span style={{
+          position: 'absolute', top: 0, width: '42%', height: '100%', borderRadius: 999,
+          background: 'linear-gradient(90deg, transparent, #10B981, #38BDF8, transparent)',
+          animation: 'dfplBar 1.25s ease-in-out infinite',
+        }} />
       </div>
     </div>
   );
