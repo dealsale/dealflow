@@ -24,6 +24,10 @@ export interface Order {
   guia?: string;
   /** id del pedido en WooCommerce (si ya se despachó) */
   wooId?: string;
+  /** id de la orden en Dropi (despacho por API directa) */
+  dropiOrderId?: string;
+  /** PDF de la guía (Dropi API) */
+  guiaUrl?: string;
   /** proveedor por el que se despachó: 'dropi' | 'effi' */
   despachoProveedor?: string;
   /** último estado leído del WooCommerce del proveedor (Effi/Dropi) */

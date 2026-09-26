@@ -59,6 +59,9 @@ import {
   apiWooVerificar,
   apiWooSyncInventario,
   apiWooSyncProductos,
+  apiDropiEstado,
+  apiDropiConectar,
+  apiDropiPreferencia,
   apiTeamList,
   apiTeamCreate,
   apiTeamDelete,
@@ -562,9 +565,11 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     hora: o.createdAt ? horaBogotaDe(o.createdAt) : 'ahora',
     fecha: fechaBogota(o.createdAt),
     departamento: o.departamento || '',
-    transportadora: o.transportadora || 'Dropi',
+    transportadora: o.transportadora || '',
     guia: o.guia,
     wooId: o.wooId || '',
+    dropiOrderId: o.dropiOrderId || '',
+    guiaUrl: o.guiaUrl || '',
     despachoProveedor: o.despachoProveedor || '',
     estadoWoo: o.estadoWoo || '',
     envio: o.envio || 0,
@@ -1132,6 +1137,10 @@ export function useDealFlowState() {
       if (r.data.guia) setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, guia: r.data!.guia } : x)));
     });
   }
+  // Deja el pedido marcado como creado en Dropi (tras el flujo de la API directa).
+  function marcarDropiCreado(id: string, dropiId: string, transportadora: string) {
+    setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, dropiOrderId: dropiId, despachoProveedor: 'dropi', transportadora } : x)));
+  }
 
   function decorateOrder(o: Order): DecoratedOrder {
     const cfg = ESTADOS[o.estado];
@@ -1162,7 +1171,7 @@ export function useDealFlowState() {
       despachar: (proveedor: 'dropi' | 'effi', transportadora = '') => despacharPedido(o.id, proveedor, false, transportadora),
       reenviarDespacho: (proveedor: 'dropi' | 'effi', transportadora = '') => despacharPedido(o.id, proveedor, true, transportadora),
       sincronizarEffi: () => sincronizarEffi(o.id),
-      despachado: !!o.wooId,
+      despachado: !!(o.wooId || o.dropiOrderId),
       despachoProveedor: o.despachoProveedor || '',
       timeline: ESTADO_ORDER.map((est) => {
         const done = ESTADO_ORDER.indexOf(est) <= ESTADO_ORDER.indexOf(o.estado);
@@ -2721,8 +2730,32 @@ export function useDealFlowState() {
   }
   // Compat: cambiar solo el proveedor preferido.
   function elegirWooPreferido(proveedor: string) { guardarDespacho({ proveedor }); }
+
+  // Dropi API directa (despacho de Dropi por su API, no por WooCommerce).
+  const [dropiConectado, setDropiConectado] = useState(false);
+  const [dropiIntegrationUrl, setDropiIntegrationUrl] = useState('');
+  const [dropiPreferencia, setDropiPreferencia] = useState('operador');
+  async function reloadDropi() {
+    const { data } = await apiDropiEstado();
+    if (data) { setDropiConectado(!!data.conectado); setDropiIntegrationUrl(data.integrationUrl || ''); setDropiPreferencia(data.preferencia || 'operador'); }
+  }
+  function conectarDropi(token: string, integrationUrl: string, cb?: (ok: boolean, error?: string) => void) {
+    setIntegracionMsg('Conectando con Dropi…');
+    void apiDropiConectar(token, integrationUrl, dropiPreferencia).then((r) => {
+      if (r.error) { setIntegracionMsg(r.error); cb?.(false, r.error); return; }
+      setIntegracionMsg('✓ Dropi conectado por API.');
+      void reloadDropi();
+      setTimeout(() => setIntegracionMsg(''), 4000);
+      cb?.(true);
+    });
+  }
+  function guardarDropiPreferencia(preferencia: string) {
+    setDropiPreferencia(preferencia); // optimista
+    void apiDropiPreferencia(preferencia).then((r) => { if (r.error) void reloadDropi(); });
+  }
+
   useEffect(() => {
-    if (apiMode && sessionUser) void reloadWooProveedores();
+    if (apiMode && sessionUser) { void reloadWooProveedores(); void reloadDropi(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser]);
 
@@ -4003,6 +4036,12 @@ export function useDealFlowState() {
     wooTransportadoras,
     guardarDespacho,
     elegirWooPreferido,
+    dropiConectado,
+    dropiIntegrationUrl,
+    dropiPreferencia,
+    conectarDropi,
+    guardarDropiPreferencia,
+    marcarDropiCreado,
     guardarIntegracion,
     eliminarIntegracion,
     elegirIaPredeterminada,
