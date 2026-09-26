@@ -323,10 +323,10 @@ export const apiCrearPedido = (body: { cliente: string; tel?: string; ciudad?: s
   req<{ ok: true; id: string; rowId: string }>('/api/orders', 'POST', body);
 export const apiOrderDropi = (rowId: string) => req<{ guia: string }>(`/api/orders/${rowId}/dropi`, 'POST');
 // Effi (vía WooCommerce)
-export const apiOrderDespachar = (rowId: string, proveedor: string, reintentar = false) => req<{ ok: true; wooId: string; numeroWoo: string; proveedor: string; aviso?: string; reenviado?: boolean; sinMapear?: string[]; mapeados?: number }>(`/api/orders/${rowId}/despachar`, 'POST', { proveedor, reintentar });
+export const apiOrderDespachar = (rowId: string, proveedor: string, reintentar = false, transportadora = '') => req<{ ok: true; wooId: string; numeroWoo: string; proveedor: string; aviso?: string; reenviado?: boolean; sinMapear?: string[]; mapeados?: number }>(`/api/orders/${rowId}/despachar`, 'POST', { proveedor, reintentar, transportadora });
 export const apiOrderDespacharSync = (rowId: string) => req<{ estado: string; guia: string }>(`/api/orders/${rowId}/despachar/sync`, 'POST');
-export const apiWooProveedores = () => req<{ proveedores: string[]; preferido: string }>('/api/woo/proveedores', 'GET');
-export const apiWooPreferido = (proveedor: string) => req<{ ok: true; preferido: string }>('/api/woo/preferido', 'POST', { proveedor });
+export const apiWooProveedores = () => req<{ proveedores: string[]; preferido: string; auto: boolean; transportadora: string; transportadoras: string[] }>('/api/woo/proveedores', 'GET');
+export const apiWooPreferido = (proveedor: string, auto = false, transportadora = '') => req<{ ok: true; preferido: string; auto: boolean; transportadora: string }>('/api/woo/preferido', 'POST', { proveedor, auto, transportadora });
 export const apiWooVerificar = (proveedor: string) => req<{ ok: true }>('/api/woo/verificar', 'POST', { proveedor });
 export const apiWooSyncInventario = (proveedor: string) => req<{ actualizados: number }>('/api/woo/inventario/sync', 'POST', { proveedor });
 export const apiWooSyncProductos = (proveedor: string) => req<{ creados: number; actualizados: number; skusGenerados: number }>('/api/woo/productos/sync', 'POST', { proveedor });

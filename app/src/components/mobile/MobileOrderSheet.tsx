@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../Dropdown';
 
 export function MobileOrderSheet({ df }: { df: DealFlowState }) {
+  const [transp, setTransp] = useState('');
   if (!df.hasSelectedOrder || !df.sel) return null;
   const sel = df.sel;
+  const transpOpts = [{ value: '', label: 'Transportadora (opcional)' }, ...df.wooTransportadoras.map((t) => ({ value: t, label: t }))];
+  const carrierElegido = transp || df.wooTransportadora || '';
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 60, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
@@ -60,7 +64,7 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                   <div style={{ width: 28, height: 28, borderRadius: 8, background: sel.despachoProveedor === 'dropi' ? 'var(--df-warning-subtle)' : 'var(--df-purple-subtle)', color: sel.despachoProveedor === 'dropi' ? 'var(--df-warning)' : 'var(--df-purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11.5, flexShrink: 0 }}>{sel.despachoProveedor === 'dropi' ? 'Dr' : 'Ef'}</div>
-                  <div style={{ flex: 1, fontWeight: 700, fontSize: 13.5 }}>Enviado por {sel.despachoProveedor === 'dropi' ? 'Dropi' : 'Effi'}</div>
+                  <div style={{ flex: 1, fontWeight: 700, fontSize: 13.5 }}>Enviado por {sel.despachoProveedor === 'dropi' ? 'Dropi' : 'Effi'}{sel.transportadora ? ` · 🚚 ${sel.transportadora}` : ''}</div>
                   <button onClick={sel.sincronizarEffi} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-purple)', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 40 }}>Actualizar</button>
                 </div>
                 <div style={{ marginTop: 7, fontSize: 12, color: 'var(--df-text-muted)' }}>
@@ -73,33 +77,36 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
                     <button onClick={() => df.copyGuia(sel.guia!)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-text-strong)', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 40 }}>{df.guiaBtnLabel}</button>
                   </div>
                 )}
-                <button onClick={() => sel.reenviarDespacho((sel.despachoProveedor === 'dropi' ? 'dropi' : 'effi'))} style={{ marginTop: 9, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-warning)', cursor: 'pointer' }}>↻ Volver a enviar</button>
+                <button onClick={() => sel.reenviarDespacho((sel.despachoProveedor === 'dropi' ? 'dropi' : 'effi'), sel.transportadora || carrierElegido)} style={{ marginTop: 9, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-warning)', cursor: 'pointer' }}>↻ Volver a enviar</button>
               </>
             ) : df.wooProveedores.length === 0 ? (
               <div style={{ color: 'var(--df-text-faint)', fontSize: 13 }}>Conecta una tienda WooCommerce (Effi o Dropi) en Integraciones para despachar.</div>
             ) : (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {df.wooProveedores.includes('dropi') && (
-                  <button onClick={() => sel.despachar('dropi')} style={{ background: 'var(--df-warning)', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer', minHeight: 44 }}>Enviar por Dropi</button>
-                )}
-                {df.wooProveedores.includes('effi') && (
-                  <button onClick={() => sel.despachar('effi')} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer', minHeight: 44 }}>Enviar por Effi</button>
-                )}
+              <div>
+                <div style={{ marginBottom: 9 }}>
+                  <Dropdown ariaLabel="Elegir transportadora" value={carrierElegido} onChange={setTransp} options={transpOpts} placeholder="Transportadora (opcional)" />
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {df.wooProveedores.includes('dropi') && (
+                    <button onClick={() => sel.despachar('dropi', carrierElegido)} style={{ background: 'var(--df-warning)', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer', minHeight: 44 }}>Enviar por Dropi</button>
+                  )}
+                  {df.wooProveedores.includes('effi') && (
+                    <button onClick={() => sel.despachar('effi', carrierElegido)} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer', minHeight: 44 }}>Enviar por Effi</button>
+                  )}
+                </div>
               </div>
             )}
             {df.effiMsg && <div style={{ marginTop: 9, fontSize: 12, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
           </div>
         </div>
 
-        <div style={{ padding: '14px 18px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 22px)', borderTop: '1px solid var(--df-border)' }}>
-          {/* Estado seleccionable (incluye Cancelado), sin flujo forzado. */}
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 7 }}>Estado del pedido</div>
-          <Dropdown
-            ariaLabel="Cambiar estado del pedido"
-            value={sel.estado}
-            onChange={(v) => sel.setEstado(v as typeof sel.estado)}
-            options={sel.estadosDisponibles.map((e) => ({ value: e, label: e }))}
-          />
+        {/* El estado lo maneja la integración (Dropi/Effi) y se le avisa al cliente;
+            ya no se cambia a mano desde aquí. */}
+        <div style={{ padding: '14px 18px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 22px)', borderTop: '1px solid var(--df-border)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>
+          <span>Estado actual:</span>
+          <span style={sel.pillStyle}>{sel.estado}</span>
+          <div style={{ flex: 1 }} />
+          <span style={{ color: 'var(--df-text-faint)', fontSize: 11, textAlign: 'right' }}>Automático desde {sel.despachoProveedor === 'effi' ? 'Effi' : 'Dropi'}</span>
         </div>
       </div>
     </div>

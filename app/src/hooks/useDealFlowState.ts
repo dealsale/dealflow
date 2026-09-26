@@ -219,8 +219,8 @@ export interface DecoratedOrder extends Order {
   estadosDisponibles: EstadoPedido[];
   open: () => void;
   sendToDropi: () => void;
-  despachar: (proveedor: 'dropi' | 'effi') => void;
-  reenviarDespacho: (proveedor: 'dropi' | 'effi') => void;
+  despachar: (proveedor: 'dropi' | 'effi', transportadora?: string) => void;
+  reenviarDespacho: (proveedor: 'dropi' | 'effi', transportadora?: string) => void;
   sincronizarEffi: () => void;
   despachado: boolean;
   despachoProveedor: string;
@@ -1106,20 +1106,20 @@ export function useDealFlowState() {
 
   // Despacha el pedido por el proveedor elegido (creándolo en su WooCommerce).
   const [effiMsg, setEffiMsg] = useState('');
-  function despacharPedido(id: string, proveedor: 'dropi' | 'effi', reintentar = false) {
+  function despacharPedido(id: string, proveedor: 'dropi' | 'effi', reintentar = false, transportadora = '') {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o?.rowId) return;
     const nombre = proveedor === 'dropi' ? 'Dropi' : 'Effi';
     setEffiMsg(reintentar ? `Volviendo a enviar a ${nombre}…` : `Enviando a ${nombre}…`);
-    void apiOrderDespachar(o.rowId, proveedor, reintentar).then((r) => {
+    void apiOrderDespachar(o.rowId, proveedor, reintentar, transportadora).then((r) => {
       if (r.error || !r.data) { setEffiMsg(r.error || `No se pudo enviar a ${nombre}.`); return; }
       const noMap = r.data.sinMapear || [];
       if (noMap.length) {
         setEffiMsg(`⚠ El pedido llegó a WooCommerce, pero ${noMap.length} producto(s) NO coinciden por SKU con un producto de ${nombre}, así que ${nombre} NO los va a despachar: ${noMap.join(', ')}. Ponles el mismo SKU del producto de ${nombre} en Productos y vuelve a enviar.`);
       } else {
-        setEffiMsg(r.data.aviso || `✓ Pedido ${reintentar ? 'reenviado' : 'enviado'} a ${nombre}. La guía llega cuando lo despachen.`);
+        setEffiMsg(r.data.aviso || `✓ Pedido ${reintentar ? 'reenviado' : 'enviado'} a ${nombre}${transportadora ? ` por ${transportadora}` : ''}. La guía llega cuando lo despachen.`);
       }
-      setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, despachoProveedor: proveedor, transportadora: nombre, guia: reintentar ? '' : x.guia } : x)));
+      setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, despachoProveedor: proveedor, transportadora, guia: reintentar ? '' : x.guia } : x)));
     });
   }
   function sincronizarEffi(id: string) {
@@ -1159,8 +1159,8 @@ export function useDealFlowState() {
         setSection('pedidos');
       },
       sendToDropi: () => sendToDropi(o.id),
-      despachar: (proveedor: 'dropi' | 'effi') => despacharPedido(o.id, proveedor),
-      reenviarDespacho: (proveedor: 'dropi' | 'effi') => despacharPedido(o.id, proveedor, true),
+      despachar: (proveedor: 'dropi' | 'effi', transportadora = '') => despacharPedido(o.id, proveedor, false, transportadora),
+      reenviarDespacho: (proveedor: 'dropi' | 'effi', transportadora = '') => despacharPedido(o.id, proveedor, true, transportadora),
       sincronizarEffi: () => sincronizarEffi(o.id),
       despachado: !!o.wooId,
       despachoProveedor: o.despachoProveedor || '',
@@ -2698,15 +2698,29 @@ export function useDealFlowState() {
   // Proveedores WooCommerce conectados (dropi/effi) para mostrar los botones de despacho.
   const [wooProveedores, setWooProveedores] = useState<string[]>([]);
   const [wooPreferido, setWooPreferido] = useState<string>('');
+  const [wooAuto, setWooAuto] = useState<boolean>(false); // auto-envío (por defecto manual)
+  const [wooTransportadora, setWooTransportadora] = useState<string>('');
+  const [wooTransportadoras, setWooTransportadoras] = useState<string[]>([]);
   async function reloadWooProveedores() {
     const { data } = await apiWooProveedores();
-    if (data) { setWooProveedores(data.proveedores); setWooPreferido(data.preferido || ''); }
+    if (data) {
+      setWooProveedores(data.proveedores);
+      setWooPreferido(data.preferido || '');
+      setWooAuto(!!data.auto);
+      setWooTransportadora(data.transportadora || '');
+      setWooTransportadoras(data.transportadoras || []);
+    }
   }
-  // Define el proveedor de auto-despacho (sin botón). '' = preguntar por pedido.
-  function elegirWooPreferido(proveedor: string) {
-    setWooPreferido(proveedor); // optimista
-    void apiWooPreferido(proveedor).then((r) => { if (r.error) void reloadWooProveedores(); });
+  // Guarda la config de despacho (auto-envío on/off + proveedor + transportadora por defecto).
+  function guardarDespacho(cfg: { proveedor?: string; auto?: boolean; transportadora?: string }) {
+    const proveedor = cfg.proveedor ?? wooPreferido;
+    const auto = cfg.auto ?? wooAuto;
+    const transportadora = cfg.transportadora ?? wooTransportadora;
+    setWooPreferido(proveedor); setWooAuto(auto); setWooTransportadora(transportadora); // optimista
+    void apiWooPreferido(proveedor, auto, transportadora).then((r) => { if (r.error) void reloadWooProveedores(); });
   }
+  // Compat: cambiar solo el proveedor preferido.
+  function elegirWooPreferido(proveedor: string) { guardarDespacho({ proveedor }); }
   useEffect(() => {
     if (apiMode && sessionUser) void reloadWooProveedores();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3984,6 +3998,10 @@ export function useDealFlowState() {
     sincronizarProductosWoo,
     wooProveedores,
     wooPreferido,
+    wooAuto,
+    wooTransportadora,
+    wooTransportadoras,
+    guardarDespacho,
     elegirWooPreferido,
     guardarIntegracion,
     eliminarIntegracion,
