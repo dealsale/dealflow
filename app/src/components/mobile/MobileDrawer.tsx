@@ -100,6 +100,11 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
                 <span>📩 Plantillas WA</span>
               </div>
             )}
+            {df.isSuperadmin && (
+              <div onClick={() => df.goAdmin('despacho')} style={itemStyle(df.adminSection === 'despacho')}>
+                <span>📦 Despacho central</span>
+              </div>
+            )}
             {ADMIN_ITEMS.map((m) => (
               <div key={m.id} onClick={() => df.goAdmin(m.id)} style={itemStyle(df.adminSection === m.id)}>
                 <span>{m.label}</span>

@@ -31,6 +31,7 @@ import { Flujos } from './sections/Flujos';
 import { WhatsAppSection } from './sections/WhatsApp';
 import { Cuentas } from './sections/admin/Cuentas';
 import { PlantillasWA } from './sections/admin/PlantillasWA';
+import { DespachoCentral } from './sections/admin/DespachoCentral';
 import { Planes } from './sections/admin/Planes';
 import { Cupones } from './sections/admin/Cupones';
 import { Ventas } from './sections/admin/Ventas';
@@ -303,6 +304,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
     <>
       {df.adminSection === 'superadmin' && df.isSuperadmin && <Superadmin df={df} />}
       {df.adminSection === 'plantillas' && df.isSuperadmin && <PlantillasWA df={df} />}
+      {df.adminSection === 'despacho' && df.isSuperadmin && <DespachoCentral df={df} />}
       {df.adminSection === 'ventas' && <Ventas df={df} />}
       {df.adminSection === 'planes' && <Planes df={df} />}
       {df.adminSection === 'cuentas' && <Cuentas df={df} />}

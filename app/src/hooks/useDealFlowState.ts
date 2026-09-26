@@ -100,6 +100,9 @@ import {
   apiEliminarPlantillaMeta,
   apiPublicarPlantillaMeta,
   apiRefrescarPlantillaMeta,
+  apiWooCentral,
+  apiGuardarWooCentral,
+  apiProbarWooCentral,
   apiStats,
   apiImpersonate,
   apiOnboardingTienda,
@@ -149,7 +152,7 @@ import {
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla, WooCentralProv } from '../lib/api';
 import type { Flujo } from '../types';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
@@ -3340,6 +3343,27 @@ export function useDealFlowState() {
       setPlantillasMetaMsg('✓ Estado actualizado.'); cargarPlantillasMeta();
     });
   }
+  // WooCommerce central por operador (superadmin).
+  const [wooCentral, setWooCentral] = useState<{ dropi: WooCentralProv; effi: WooCentralProv } | null>(null);
+  const [wooCentralMsg, setWooCentralMsg] = useState('');
+  function cargarWooCentral() {
+    void apiWooCentral().then((r) => { if (r.data) setWooCentral(r.data); });
+  }
+  useEffect(() => { if (adminSection === 'despacho' && isSuperadmin) cargarWooCentral(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminSection, isSuperadmin]);
+  function guardarWooCentral(p: { proveedor: string; url: string; consumerKey?: string; consumerSecret?: string; activo?: boolean; preferido?: boolean }, cb?: () => void) {
+    setWooCentralMsg('Guardando…');
+    void apiGuardarWooCentral(p).then((r) => {
+      if (r.error) { setWooCentralMsg(r.error); return; }
+      setWooCentralMsg('✓ Guardado.'); cargarWooCentral(); cb?.();
+    });
+  }
+  function probarWooCentral(prov: string) {
+    setWooCentralMsg(`Probando conexión con ${prov}…`);
+    void apiProbarWooCentral(prov).then((r) => {
+      setWooCentralMsg(r.error ? `✕ ${r.error}` : `✓ Conexión con ${prov} correcta.`);
+    });
+  }
   // Barrido de WhatsApp: sincroniza el número guardado con el que hay hoy en Meta.
   const [waSyncMsg, setWaSyncMsg] = useState('');
   const [waSyncNumeros, setWaSyncNumeros] = useState<{ id: string; numero: string; nombre: string }[]>([]);
@@ -3996,6 +4020,11 @@ export function useDealFlowState() {
     reporteBaneo,
     auditBaneoStoreId,
     auditBaneoMsg,
+    // Woo central por operador (superadmin)
+    wooCentral,
+    wooCentralMsg,
+    guardarWooCentral,
+    probarWooCentral,
     // Plantillas de mensajes de Meta (superadmin)
     plantillasMeta,
     tiendasCloudCount,

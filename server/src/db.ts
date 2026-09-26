@@ -484,6 +484,19 @@ db.exec(`CREATE TABLE IF NOT EXISTS meta_template_pub (
   PRIMARY KEY (template_id, store_id)
 )`);
 
+// WooCommerce CENTRAL por operador: un solo Woo de Dropi (y otro de Effi) que
+// usan TODAS las tiendas para despachar. Se configura una vez (superadmin). Cada
+// tienda que no tenga su propio Woo cae a este. Los secretos nunca salen al front.
+db.exec(`CREATE TABLE IF NOT EXISTS woo_central (
+  proveedor TEXT PRIMARY KEY,            -- 'dropi' | 'effi'
+  url TEXT NOT NULL DEFAULT '',
+  consumer_key TEXT NOT NULL DEFAULT '',
+  consumer_secret TEXT NOT NULL DEFAULT '',
+  activo INTEGER NOT NULL DEFAULT 1,
+  preferido INTEGER NOT NULL DEFAULT 0,  -- proveedor por defecto para auto-despacho
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+
 // Academy (portal educativo en academy.dealflow.sbs): cursos con lecciones
 // (video o artículo). Lo administra el superadmin/admin; lo consultan los
 // usuarios de DealFlow. `publicado` controla si se muestra en el portal.

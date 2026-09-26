@@ -562,6 +562,13 @@ export interface ReporteBaneo {
   hallazgos: Hallazgo[];
   veredicto: string;
 }
+// WooCommerce central por operador (superadmin).
+export interface WooCentralProv { proveedor: string; url: string; tieneKeys: boolean; activo: boolean; preferido: boolean }
+export const apiWooCentral = () => req<{ dropi: WooCentralProv; effi: WooCentralProv }>(`/api/superadmin/woo-central`, 'GET');
+export const apiGuardarWooCentral = (p: { proveedor: string; url: string; consumerKey?: string; consumerSecret?: string; activo?: boolean; preferido?: boolean }) =>
+  req<{ ok: true }>(`/api/superadmin/woo-central`, 'POST', p);
+export const apiProbarWooCentral = (prov: string) => req<{ ok: true }>(`/api/superadmin/woo-central/${prov}/probar`, 'POST');
+
 export const apiAuditoriaBaneo = (id: string, desde?: string, hasta?: string) => {
   const q = new URLSearchParams();
   if (desde) q.set('desde', desde);
