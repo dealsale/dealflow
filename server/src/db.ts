@@ -450,6 +450,13 @@ db.exec(`CREATE TABLE IF NOT EXISTS flows (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_flows_store ON flows(store_id)');
+// Migración: si la tabla flows se creó en una versión anterior SIN estas columnas,
+// CREATE TABLE IF NOT EXISTS no las agrega. Las añadimos para no romper las
+// consultas (causaba "no such column: descripcion").
+addColumn('flows', "descripcion TEXT NOT NULL DEFAULT ''");
+addColumn('flows', "bloques TEXT NOT NULL DEFAULT '[]'");
+addColumn('flows', 'activo INTEGER NOT NULL DEFAULT 1');
+addColumn('flows', "created_at TEXT NOT NULL DEFAULT ''");
 
 // Plantillas de mensajes de Meta (WhatsApp), definidas UNA vez por el superadmin
 // y publicadas en la WABA de TODAS las tiendas. El texto es genérico (sin nombre

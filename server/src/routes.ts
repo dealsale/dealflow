@@ -1191,10 +1191,18 @@ api.delete('/meta', requireAuth, requireStore, requireOwner, (req, res) => {
 // aquí completamos el alta contra Meta sin que la tienda toque nada técnico.
 api.post('/whatsapp/embedded', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { code, wabaId, phoneNumberId } = req.body || {};
-  const { conectarPorSignup } = await import('./metaSignup.js');
-  const r = await conectarPorSignup(req.user!.storeId!, String(code || '').trim(), String(wabaId || '').trim(), String(phoneNumberId || '').trim());
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  res.json({ conectado: true, numero: r.numero, aviso: r.aviso });
+  try {
+    const { conectarPorSignup } = await import('./metaSignup.js');
+    const r = await conectarPorSignup(req.user!.storeId!, String(code || '').trim(), String(wabaId || '').trim(), String(phoneNumberId || '').trim());
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    res.json({ conectado: true, numero: r.numero, aviso: r.aviso });
+  } catch (e) {
+    // No dejamos que un fallo (red con Meta, respuesta rara, BD) reviente como 500
+    // sin explicación: lo logueamos y devolvemos un error legible a la tienda.
+    console.error('[whatsapp/embedded] excepción:', e instanceof Error ? e.stack || e.message : e,
+      '· datos:', JSON.stringify({ code: !!code, wabaId: wabaId || '(vacío)', phoneNumberId: phoneNumberId || '(vacío)' }));
+    res.status(500).json({ error: 'No pudimos completar la conexión con Meta. ' + (e instanceof Error ? e.message : 'Intenta de nuevo.') });
+  }
 });
 
 // Chequeo del número contra Meta (calidad, límites, verificación) + enlaces al
