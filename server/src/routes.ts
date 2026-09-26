@@ -7,6 +7,7 @@ import type { AuthUser } from './auth.js';
 import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
 import { mediaPath, saveOutgoingMedia, saveOutgoingMessage, tipoDeMime } from './media.js';
 import { existsSync, readFileSync } from 'node:fs';
+import type * as DropiApi from './dropiApi.js';
 
 export const api = Router();
 export const webhooks = Router();
@@ -217,7 +218,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   }));
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
   // Resumen (sin todos los mensajes de cada chat): la carga inicial del panel no
@@ -313,7 +314,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string),
   }));
   res.json({ orders });
@@ -770,6 +771,157 @@ api.get('/woo/productos/buscar', requireAuth, requireStore, async (req, res) => 
   const r = await buscarProductos(req.user!.storeId!, String(req.query.q || ''), wooProv(req.query.proveedor));
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
+});
+
+// ── Dropi API directa (transportadoras + crear pedido + guía) ─────────────
+/**
+ * Ayudantes para el despacho por API de Dropi. Mapea los ítems del pedido a
+ * productos de Dropi: el SKU del producto en DealFlow es el ID del producto en
+ * Dropi, y la variación (talla/color) se empareja por atributos.
+ */
+const dropiHelpers = {
+  credOrDie(sid: string, dropi: typeof DropiApi): DropiApi.DropiCred | null { return dropi.credDropi(sid); },
+  async resolverProductosDropi(
+    sid: string, o: Record<string, unknown>, cred: DropiApi.DropiCred, dropi: typeof DropiApi,
+  ): Promise<{ cotProductos: DropiApi.CotProducto[]; ordenProductos: CrearOrdenInputProducto[] } | { error: string }> {
+    const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id) as { qty: number; nombre: string; precio: number }[];
+    if (!items.length) return { error: 'El pedido no tiene productos.' };
+    const prodRows = db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(sid) as { nombre: string; sku: string }[];
+    const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const totalQty = items.reduce((a, it) => a + Math.max(1, it.qty), 0);
+    const total = Number(o.total || 0);
+    const cotProductos: DropiApi.CotProducto[] = [];
+    const ordenProductos: CrearOrdenInputProducto[] = [];
+    for (const it of items) {
+      const base = it.nombre.split('(')[0].split('—')[0].trim();
+      const nItem = norm(it.nombre);
+      let sku = '';
+      const exact = prodRows.find((p) => norm(p.nombre) === norm(base));
+      if (exact) sku = exact.sku;
+      else { const m = prodRows.filter((p) => p.nombre && nItem.includes(norm(p.nombre))).sort((a, b) => b.nombre.length - a.nombre.length)[0]; if (m) sku = m.sku; }
+      if (!sku) return { error: `El producto "${base}" no tiene vinculado su ID de Dropi. Ponlo en Productos (el SKU de Dropi = ID del producto en Dropi).` };
+      const pid = Number(String(sku).replace(/[^0-9]/g, ''));
+      if (!pid) return { error: `El ID de Dropi de "${base}" no es válido: "${sku}".` };
+      const dp = await dropi.productoDropi(cred, pid);
+      if ('error' in dp) return { error: dp.error };
+      let variationId: number | undefined;
+      if (dp.tipo === 'VARIABLE') {
+        const parte = it.nombre.match(/\(([^)]*)\)/)?.[1] || it.nombre.replace(base, '');
+        const tks = norm(parte).split(/[^a-z0-9]+/).filter((t) => t.length > 1);
+        const match = tks.length ? dp.variaciones.find((v) => { const a = norm(v.atributos); return tks.every((t) => a.includes(t)); }) : undefined;
+        if (!match) return { error: `No pudimos emparejar la variante de "${it.nombre}" con las variaciones de ese producto en Dropi. Revisa talla/color.` };
+        variationId = match.id;
+      }
+      const precioUnit = it.precio > 0 ? it.precio : Math.round(total / Math.max(1, totalQty));
+      cotProductos.push({ id: pid, quantity: it.qty, type: dp.tipo, variation_id: variationId });
+      ordenProductos.push({ id: pid, name: it.nombre, type: dp.tipo, variation_id: variationId, quantity: it.qty, price: precioUnit });
+    }
+    return { cotProductos, ordenProductos };
+  },
+};
+type CrearOrdenInputProducto = DropiApi.CrearOrdenInput['productos'][number];
+
+// Estado de la conexión Dropi API (sin exponer el token).
+api.get('/dropi/estado', requireAuth, requireStore, (req, res) => {
+  const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'dropi_api'").get(req.user!.storeId!) as { config: string } | undefined;
+  const cfg = row ? JSON.parse(row.config || '{}') : {};
+  res.json({
+    conectado: !!(cfg.token && cfg.integrationUrl),
+    integrationUrl: cfg.integrationUrl || '',
+    preferencia: cfg.preferencia || 'operador',
+  });
+});
+
+// Conecta/actualiza la integración Dropi API (guarda token + URL) y la prueba.
+api.post('/dropi/conectar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const token = String(req.body?.token || '').trim();
+  const integrationUrl = String(req.body?.integrationUrl || '').trim().replace(/\/+$/, '');
+  const preferencia = ['operador', 'cheapest', 'auto', 'fixed'].includes(String(req.body?.preferencia)) ? String(req.body.preferencia) : 'operador';
+  const transportadoraFija = String(req.body?.transportadoraFija || '').slice(0, 40);
+  if (!token || !integrationUrl) return res.status(400).json({ error: 'Falta el token o la URL de integración.' });
+  db.prepare(
+    `INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?, 'dropi_api', ?, datetime('now'))
+     ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = datetime('now')`,
+  ).run(sid, JSON.stringify({ token, integrationUrl, preferencia, transportadoraFija }));
+  const { verificarDropi } = await import('./dropiApi.js');
+  const r = await verificarDropi(sid);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+
+// Guarda solo la preferencia de transportadora (sin re-pegar el token).
+api.post('/dropi/preferencia', requireAuth, requireStore, requireOwner, (req, res) => {
+  const sid = req.user!.storeId!;
+  const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'dropi_api'").get(sid) as { config: string } | undefined;
+  if (!row) return res.status(400).json({ error: 'Conecta Dropi API primero.' });
+  const cfg = JSON.parse(row.config || '{}');
+  cfg.preferencia = ['operador', 'cheapest', 'auto', 'fixed'].includes(String(req.body?.preferencia)) ? String(req.body.preferencia) : 'operador';
+  if (req.body?.transportadoraFija !== undefined) cfg.transportadoraFija = String(req.body.transportadoraFija).slice(0, 40);
+  db.prepare("UPDATE store_integrations SET config = ?, updated_at = datetime('now') WHERE store_id = ? AND tipo = 'dropi_api'").run(JSON.stringify(cfg), sid);
+  res.json({ ok: true, preferencia: cfg.preferencia });
+});
+
+// Valida un ID de producto de Dropi (para vincularlo): trae nombre y variaciones.
+api.get('/dropi/producto/:id', requireAuth, requireStore, async (req, res) => {
+  const { credDropi, productoDropi } = await import('./dropiApi.js');
+  const c = credDropi(req.user!.storeId!);
+  if (!c) return res.status(400).json({ error: 'Conecta Dropi API primero en Integraciones.' });
+  const r = await productoDropi(c, req.params.id);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+
+// Cotiza un pedido en Dropi: resuelve destino, arma los productos y devuelve las
+// transportadoras con su precio para que el operador elija.
+api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { resolverProductosDropi, credOrDie } = dropiHelpers;
+  const sid = req.user!.storeId!;
+  const dropi = await import('./dropiApi.js');
+  const c = credOrDie(sid, dropi);
+  if (!c) return res.status(400).json({ error: 'Conecta Dropi API primero en Integraciones.' });
+  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const destino = await dropi.resolverDestino(c, String(o.departamento || ''), String(o.ciudad || ''), true);
+  if ('error' in destino) return res.status(400).json({ error: destino.error, opciones: destino.opciones });
+  const prods = await resolverProductosDropi(sid, o, c, dropi);
+  if ('error' in prods) return res.status(400).json({ error: prods.error });
+  const monto = Number(o.total || 0);
+  const cot = await dropi.cotizar(c, destino.ciudad, prods.cotProductos, monto, true);
+  if ('error' in cot) return res.status(400).json({ error: cot.error });
+  res.json({ ciudad: destino.ciudad.name, ...cot });
+});
+
+// Crea el pedido en Dropi con la transportadora elegida (o sin ella si auto).
+api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { resolverProductosDropi, credOrDie } = dropiHelpers;
+  const sid = req.user!.storeId!;
+  const dropi = await import('./dropiApi.js');
+  const c = credOrDie(sid, dropi);
+  if (!c) return res.status(400).json({ error: 'Conecta Dropi API primero en Integraciones.' });
+  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (o.dropi_order_id && req.body?.reintentar !== true) return res.json({ ok: true, dropiId: o.dropi_order_id, aviso: 'Este pedido ya se creó en Dropi.' });
+  const destino = await dropi.resolverDestino(c, String(o.departamento || ''), String(o.ciudad || ''), true);
+  if ('error' in destino) return res.status(400).json({ error: destino.error, opciones: destino.opciones });
+  const prods = await resolverProductosDropi(sid, o, c, dropi);
+  if ('error' in prods) return res.status(400).json({ error: prods.error });
+
+  const t = req.body?.transportadora as { id: number; nombre: string; service: string; precio: number } | undefined;
+  const [nombre, ...resto] = String(o.cliente || '').trim().split(' ');
+  const crear = await dropi.crearOrden(c, {
+    total: Number(o.total || 0), notas: `DealFlow DF-${o.numero || ''}${o.nota ? ' · ' + o.nota : ''}`,
+    nombre: nombre || String(o.cliente || ''), apellido: resto.join(' '),
+    direccion: String(o.direccion || ''), departamento: destino.depto.name, ciudad: destino.ciudad.name,
+    telefono: String(o.tel || ''), conRecaudo: true, shopOrderId: `df-${o.id}`,
+    productos: prods.ordenProductos, transportadora: t, ciudadDropi: destino.ciudad,
+  });
+  if ('error' in crear) return res.status(400).json({ error: crear.error });
+  const nombreTransp = t?.nombre || '';
+  db.prepare('UPDATE orders SET dropi_order_id = ?, despacho_proveedor = ?, transportadora = ?, guia = ? WHERE id = ?')
+    .run(crear.id, 'dropi', nombreTransp, req.body?.reintentar === true ? '' : String(o.guia || ''), o.id);
+  registrarLog(sid, 'info', 'despacho', `DF-${o.numero} creado en Dropi (orden ${crear.id})${nombreTransp ? ' por ' + nombreTransp : ''}.`);
+  res.json({ ok: true, dropiId: crear.id, transportadora: nombreTransp });
 });
 
 // Catálogo completo del WooCommerce (productos + variaciones) para vincular por

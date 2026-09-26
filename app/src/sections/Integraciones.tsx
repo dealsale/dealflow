@@ -21,6 +21,71 @@ function Estado({ on }: { on: boolean }) {
   );
 }
 
+/** Conexión de Dropi por su API directa (token de integración + URL). Con esto
+ *  DealFlow cotiza transportadoras y crea el pedido en Dropi sin usar WooCommerce. */
+function DropiApiCard({ df }: { df: DealFlowState }) {
+  const [abierto, setAbierto] = useState(false);
+  const [token, setToken] = useState('');
+  const [url, setUrl] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => { setUrl(df.dropiIntegrationUrl || ''); }, [df.dropiIntegrationUrl]);
+  const conectada = df.dropiConectado;
+  const guardar = () => {
+    if (!token.trim() || !url.trim()) return;
+    setGuardando(true);
+    df.conectarDropi(token.trim(), url.trim(), (ok) => { setGuardando(false); if (ok) { setAbierto(false); setToken(''); } });
+  };
+  return (
+    <div style={{ background: 'var(--df-surface)', border: `1px solid ${conectada ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 14, padding: 18, marginTop: 4, marginBottom: 14, maxWidth: 620 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--df-warning-subtle)', color: 'var(--df-warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13 }}>Dr</div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Dropi (API directa)</div>
+        <div style={{ flex: 1 }} />
+        <Estado on={conectada} />
+      </div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, margin: '8px 0 12px' }}>
+        Conecta Dropi con su API para <b>cotizar transportadoras</b>, crear el pedido eligiendo transportadora y traer la <b>guía</b>. El token se genera en <b>Dropi → Mis Integraciones</b> (tipo WooCommerce). Con esto, Dropi ya no necesita WooCommerce.
+      </div>
+      {conectada && !abierto && (
+        <div style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', marginBottom: 10 }}>✓ Conectado · URL: <b>{df.dropiIntegrationUrl}</b> · transportadora: <b>{
+          df.dropiPreferencia === 'operador' ? 'la elige el operador' : df.dropiPreferencia === 'cheapest' ? 'la más barata' : df.dropiPreferencia === 'auto' ? 'Dropi decide' : 'una fija'
+        }</b></div>
+      )}
+      {!abierto ? (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => setAbierto(true)} style={{ background: conectada ? 'var(--df-surface)' : 'var(--df-warning)', color: conectada ? 'var(--df-warning)' : '#fff', border: conectada ? '1px solid var(--df-warning)' : 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{conectada ? 'Cambiar token' : 'Conectar Dropi'}</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Token de integración (Dropi → Mis Integraciones)</div>
+            <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Pega aquí el token (JWT)" style={inputStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>URL de integración (la que registraste en Dropi)</div>
+            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mitienda.com" style={inputStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Transportadora por defecto</div>
+            <Dropdown ariaLabel="Preferencia de transportadora" value={df.dropiPreferencia} onChange={df.guardarDropiPreferencia}
+              options={[
+                { value: 'operador', label: 'La elige el operador (al enviar)' },
+                { value: 'cheapest', label: 'La más barata' },
+                { value: 'auto', label: 'Que Dropi decida' },
+                { value: 'fixed', label: 'Una fija' },
+              ]} />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={guardar} disabled={guardando || !token.trim() || !url.trim()} style={{ background: 'var(--df-warning)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: guardando || !token.trim() || !url.trim() ? 0.6 : 1 }}>{guardando ? 'Conectando…' : 'Guardar y probar'}</button>
+            <button onClick={() => { setAbierto(false); setToken(''); }} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-muted)', cursor: 'pointer' }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+      {df.integracionMsg && <div style={{ marginTop: 10, fontSize: 12.5, color: df.integracionMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.integracionMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.integracionMsg}</div>}
+    </div>
+  );
+}
+
 /** Tarjeta especial: Administrador de anuncios de Meta (se conecta con el popup de Facebook). */
 function MetaAdsCard({ df, i }: { df: DealFlowState; i: DealFlowState['integrations'][number] }) {
   const ads = df.adsCuenta;
@@ -237,6 +302,9 @@ export function Integraciones({ df }: { df: DealFlowState }) {
           </div>
         );
       })}
+
+      {/* Dropi por API directa (transportadoras + guía sin usar WooCommerce). */}
+      <DropiApiCard df={df} />
 
       {/* Despacho: manual por defecto; se puede activar el auto-envío y elegir transportadora. */}
       {df.wooProveedores.length > 0 && (

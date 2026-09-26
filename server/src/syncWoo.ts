@@ -19,18 +19,19 @@ const nombreProv = (p?: string) => (p === 'dropi' ? 'Dropi' : p === 'effi' ? 'Ef
 const ORDEN_ESTADO = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado', 'Cancelado'];
 const rank = (e: string) => { const i = ORDEN_ESTADO.indexOf(e); return i < 0 ? 0 : i; };
 
-/** Mapea el estado que devuelve WooCommerce (texto en español) al del pipeline de DealFlow. */
+/** Mapea el estado (texto en español de Woo o Dropi) al del pipeline de DealFlow. */
 function estadoDePipeline(estadoWoo: string, hayGuia: boolean): string | null {
   const e = (estadoWoo || '').toLowerCase();
   if (/entregado/.test(e)) return 'Entregado';
-  if (/cancelad|devuelt|fallid/.test(e)) return 'Cancelado';
-  if (/enviado/.test(e) || hayGuia) return 'Despachado';
+  if (/cancelad|devuelt|devoluc|rechaz|fallid/.test(e)) return 'Cancelado';
+  if (/enviado|despach|guia|gu[ií]a|ruta|transit|reparto/.test(e) || hayGuia) return 'Despachado';
   return null; // sin cambio claro
 }
 
 interface OrdenSync {
   id: string; store_id: string; numero: number; tel: string; guia: string | null;
-  estado: string; despacho_proveedor: string; transportadora: string | null; woo_id: string; guia_avisada: number;
+  estado: string; despacho_proveedor: string; transportadora: string | null; woo_id: string;
+  dropi_order_id: string; guia_url: string | null; guia_avisada: number;
 }
 
 let corriendoDespachos = false;
@@ -41,9 +42,9 @@ export async function sincronizarDespachos(): Promise<void> {
   corriendoDespachos = true;
   try {
     const pendientes = db.prepare(
-      `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, transportadora, woo_id, guia_avisada
+      `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, transportadora, woo_id, dropi_order_id, guia_url, guia_avisada
          FROM orders
-        WHERE COALESCE(woo_id,'') != '' AND COALESCE(despacho_proveedor,'') != ''
+        WHERE (COALESCE(woo_id,'') != '' OR COALESCE(dropi_order_id,'') != '') AND COALESCE(despacho_proveedor,'') != ''
           AND estado NOT IN ('Entregado','Cancelado')
         ORDER BY created_at DESC LIMIT 150`,
     ).all() as OrdenSync[];
@@ -60,9 +61,21 @@ export async function sincronizarDespachos(): Promise<void> {
  * (o un error) para que el botón manual "Sincronizar" muestre el resultado.
  */
 export async function procesarOrden(o: OrdenSync): Promise<{ estado: string; guia: string } | { error: string }> {
-  const prov = wooProv(o.despacho_proveedor);
-  let r;
-  try { r = await estadoPedido(o.store_id, o.woo_id, prov); } catch { return { error: 'No pudimos consultar el pedido.' }; }
+  // Dos caminos: si el pedido se creó por la API directa de Dropi (dropi_order_id),
+  // consultamos Dropi; si no, el WooCommerce del proveedor (Effi/Dropi por Woo).
+  let r: { estado: string; guia: string; guiaUrl?: string } | { error: string };
+  if ((o.dropi_order_id || '').trim()) {
+    try {
+      const { credDropi, estadoOrden } = await import('./dropiApi.js');
+      const c = credDropi(o.store_id);
+      if (!c) return { error: 'Dropi API sin conectar.' };
+      const rr = await estadoOrden(c, o.dropi_order_id);
+      r = 'error' in rr ? rr : { estado: rr.estado, guia: rr.guia, guiaUrl: rr.guiaUrl };
+    } catch { return { error: 'No pudimos consultar el pedido en Dropi.' }; }
+  } else {
+    const prov = wooProv(o.despacho_proveedor);
+    try { r = await estadoPedido(o.store_id, o.woo_id, prov); } catch { return { error: 'No pudimos consultar el pedido.' }; }
+  }
   if ('error' in r) return { error: r.error };
 
   const guiaNueva = (r.guia || '').trim();
@@ -70,6 +83,7 @@ export async function procesarOrden(o: OrdenSync): Promise<{ estado: string; gui
   const params: unknown[] = [];
 
   if (guiaNueva && guiaNueva !== (o.guia || '')) { cambios.push('guia = ?'); params.push(guiaNueva); }
+  if ('guiaUrl' in r && r.guiaUrl && r.guiaUrl !== (o.guia_url || '')) { cambios.push('guia_url = ?'); params.push(r.guiaUrl); }
   if (r.estado) { cambios.push('estado_woo = ?'); params.push(r.estado); }
 
   // Auto-avance del estado del pedido (solo hacia adelante).
@@ -96,7 +110,7 @@ export async function sincronizarPorWooId(wooId: string): Promise<number> {
   const id = String(wooId || '').trim();
   if (!id) return 0;
   const ordenes = db.prepare(
-    `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, transportadora, woo_id, guia_avisada
+    `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, transportadora, woo_id, dropi_order_id, guia_url, guia_avisada
        FROM orders WHERE woo_id = ? AND COALESCE(despacho_proveedor,'') != '' LIMIT 5`,
   ).all(id) as OrdenSync[];
   for (const o of ordenes) { try { await procesarOrden(o); } catch { /* seguimos */ } }
@@ -106,11 +120,11 @@ export async function sincronizarPorWooId(wooId: string): Promise<number> {
 /** Sincroniza un pedido puntual desde su id de fila (para el botón manual). */
 export async function sincronizarPedido(storeId: string, rowId: string): Promise<{ estado: string; guia: string } | { error: string }> {
   const o = db.prepare(
-    `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, transportadora, woo_id, guia_avisada
+    `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, transportadora, woo_id, dropi_order_id, guia_url, guia_avisada
        FROM orders WHERE id = ? AND store_id = ?`,
   ).get(rowId, storeId) as OrdenSync | undefined;
   if (!o) return { error: 'Pedido no encontrado.' };
-  if (!o.woo_id) return { error: 'Este pedido aún no se ha despachado.' };
+  if (!o.woo_id && !o.dropi_order_id) return { error: 'Este pedido aún no se ha despachado.' };
   return procesarOrden(o);
 }
 

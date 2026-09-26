@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
 import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
-import { apiWooBuscarProductos, apiWooCatalogo, type ProductoWoo, type ProductoCatalogoWoo } from '../lib/api';
+import { apiWooBuscarProductos, apiWooCatalogo, apiDropiProducto, type ProductoWoo, type ProductoCatalogoWoo, type DropiProducto } from '../lib/api';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 
 // Título de sección resaltado en negro (para diferenciar los grupos del editor).
@@ -83,6 +83,54 @@ function OpcionesEditor({ p }: { p: DecoratedProduct }) {
       <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
         Crea un grupo por cada tipo de opción: uno "Color" con Negro, Azul… y otro "Talla" con S, M, L… El asistente se las ofrece al cliente.
       </div>
+    </div>
+  );
+}
+
+/**
+ * Vincular el producto con Dropi por su API directa: el SKU = ID del producto en
+ * Dropi. Se pega el ID, se valida contra Dropi (trae nombre + variaciones) y queda
+ * listo. Las variaciones (talla/color) se emparejan solas al despachar.
+ */
+function VincularDropiApi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
+  const [abierto, setAbierto] = useState(false);
+  const [id, setId] = useState(p.sku || '');
+  const [prod, setProd] = useState<DropiProducto | null>(null);
+  const [msg, setMsg] = useState('');
+  const [cargando, setCargando] = useState(false);
+  if (!df.dropiConectado) return null;
+  const validar = () => {
+    const v = id.trim(); if (!v) return;
+    setCargando(true); setMsg('');
+    void apiDropiProducto(v).then((r) => {
+      setCargando(false);
+      if (r.error || !r.data) { setProd(null); setMsg(r.error || 'Dropi no encontró ese ID.'); return; }
+      setProd(r.data); p.setSku(v); setMsg('');
+    });
+  };
+  return (
+    <div style={{ marginTop: 8 }}>
+      {!abierto ? (
+        <button onClick={() => setAbierto(true)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-warning)', borderRadius: 8, padding: '8px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-warning)', cursor: 'pointer' }}>🔗 Vincular con Dropi (por ID)</button>
+      ) : (
+        <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, background: 'var(--df-bg)' }}>
+          <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8 }}>Pega el <b>ID del producto en Dropi</b> (lo ves en Dropi, en el producto). Lo validamos y las variantes se emparejan solas al despachar.</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input value={id} onChange={(e) => setId(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') validar(); }} placeholder="Ej. 1000001" style={{ flex: 1, minWidth: 160, boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }} />
+            <button onClick={validar} disabled={cargando} style={{ background: 'var(--df-warning)', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer', opacity: cargando ? 0.7 : 1 }}>{cargando ? 'Validando…' : 'Validar'}</button>
+          </div>
+          {msg && <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-danger-dark)' }}>{msg}</div>}
+          {prod && (
+            <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--df-brand-subtle)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '9px 12px' }}>
+              <span style={{ fontSize: 15 }}>✓</span>
+              <div style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', lineHeight: 1.5 }}>
+                Vinculado con Dropi: <b>{prod.name || '(sin nombre)'}</b> · {prod.tipo === 'VARIABLE' ? `${prod.variaciones.length} variaciones` : 'producto simple'}.<br />
+                <span style={{ color: 'var(--df-text-muted)' }}>Acuérdate de <b>Guardar</b> el producto.</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -558,6 +606,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           <div style={{ maxWidth: 560 }}>
             <div style={label}>SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· para casar este producto con Effi/WooCommerce (opcional)</span></div>
             <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: FAJA-NEGRA-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
+            <VincularDropiApi p={p} df={df} />
             <VincularSkuEffi p={p} df={df} />
           </div>
         </>
@@ -791,7 +840,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
               <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: BODY-NEGRO-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
             </div>
           </div>
-          <div style={{ maxWidth: 560, marginBottom: 16 }}><VincularSkuEffi p={p} df={df} /></div>
+          <div style={{ maxWidth: 560, marginBottom: 16 }}><VincularDropiApi p={p} df={df} /><VincularSkuEffi p={p} df={df} /></div>
         </>
       )}
       {/* Cuando está bloqueado, la estructura se muestra como REFERENCIA (no editable). */}
