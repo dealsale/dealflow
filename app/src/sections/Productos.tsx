@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
 import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
-import { apiWooBuscarProductos, type ProductoWoo } from '../lib/api';
+import { apiWooBuscarProductos, apiWooCatalogo, type ProductoWoo, type ProductoCatalogoWoo } from '../lib/api';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 
 // Título de sección resaltado en negro (para diferenciar los grupos del editor).
@@ -115,6 +115,98 @@ function ProvSelector({ proveedores, prov, onProv }: { proveedores: string[]; pr
 }
 
 /**
+ * Trae y cachea el catálogo completo del WooCommerce de un proveedor. Se comparte
+ * entre todas las filas de variantes de un producto para no pedirlo mil veces.
+ * Al cambiar de proveedor, se limpia para volver a traerlo del Woo correcto.
+ */
+function useCatalogoWoo(prov: string) {
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState('');
+  const [productos, setProductos] = useState<ProductoCatalogoWoo[] | null>(null);
+  useEffect(() => { setProductos(null); setError(''); }, [prov]);
+  const cargar = () => {
+    if (productos || cargando) return;
+    setCargando(true); setError('');
+    void apiWooCatalogo(prov).then((r) => {
+      setCargando(false);
+      if (r.error || !r.data) { setError(r.error || 'No pudimos traer el catálogo.'); return; }
+      setProductos(r.data.productos);
+    });
+  };
+  return { cargando, error, productos, cargar };
+}
+type CatalogoWoo = ReturnType<typeof useCatalogoWoo>;
+
+/**
+ * Lista desplegable del catálogo del WooCommerce: cada producto se abre y muestra
+ * sus variaciones (talla/color) con su SKU y stock. Un clic en "Usar" vincula ese
+ * SKU. Así no hay que ir pegando códigos: se elige de la lista. (Sobre todo Dropi.)
+ */
+function CatalogoPicker({ cat, nombreProv, onPick }: { cat: CatalogoWoo; nombreProv: string; onPick: (sku: string, nombre: string) => void }) {
+  const [filtro, setFiltro] = useState('');
+  const [abierto, setAbierto] = useState<number | null>(null);
+  useEffect(() => { cat.cargar(); }, []); // trae el catálogo al abrir
+  const f = filtro.trim().toLowerCase();
+  const productos = (cat.productos || []).filter((p) =>
+    !f || p.nombre.toLowerCase().includes(f) || (p.sku || '').toLowerCase().includes(f) ||
+    p.variaciones.some((v) => v.nombre.toLowerCase().includes(f) || (v.sku || '').toLowerCase().includes(f)));
+  const btnUsar = (disabled: boolean): CSSProperties => ({
+    background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)',
+    borderRadius: 7, padding: '5px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12,
+    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap',
+  });
+  return (
+    <div style={{ marginTop: 8 }}>
+      {cat.cargando && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '6px 2px' }}>Trayendo el catálogo de {nombreProv}…</div>}
+      {cat.error && <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)', padding: '6px 2px' }}>{cat.error}</div>}
+      {cat.productos && (
+        <>
+          <input
+            value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Filtrar por nombre o código…"
+            style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px', fontSize: 13, marginBottom: 8 }}
+          />
+          {!productos.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '4px 2px' }}>No hay productos que coincidan.</div>}
+          <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {productos.map((p) => {
+              const variable = p.tipo === 'variable' && p.variaciones.length > 0;
+              const exp = abierto === p.id;
+              return (
+                <div key={p.id} style={{ border: '1px solid var(--df-border)', borderRadius: 8, background: 'var(--df-surface)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre || '(sin nombre)'}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)', marginTop: 1 }}>
+                        {variable ? `${p.variaciones.length} variantes` : `SKU: ${p.sku || '—'}`}{!variable && ` · stock: ${p.stock ?? '—'}`}
+                      </div>
+                    </div>
+                    {variable
+                      ? <button onClick={() => setAbierto(exp ? null : p.id)} style={btnUsar(false)}>{exp ? 'Cerrar' : 'Ver variantes'}</button>
+                      : <button onClick={() => onPick(p.sku, p.nombre)} disabled={!p.sku} title={p.sku ? '' : `Este producto no tiene SKU en ${nombreProv}`} style={btnUsar(!p.sku)}>Usar</button>}
+                  </div>
+                  {variable && exp && (
+                    <div style={{ borderTop: '1px solid var(--df-border)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {p.variaciones.map((v) => (
+                        <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-bg)', borderRadius: 6, padding: '6px 9px' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600 }}>{v.nombre}</div>
+                            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)' }}>SKU: {v.sku || '—'} · stock: {v.stock ?? '—'}</div>
+                          </div>
+                          <button onClick={() => onPick(v.sku, `${p.nombre} — ${v.nombre}`)} disabled={!v.sku} title={v.sku ? '' : `Esta variante no tiene SKU en ${nombreProv}`} style={btnUsar(!v.sku)}>Usar</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
  * Buscador para vincular el SKU con un producto real del WooCommerce de Effi/Dropi.
  * El dueño pega el código (o el nombre), lo buscamos en su tienda, le mostramos
  * nombre + stock para que confirme, y con un clic le dejamos el SKU correcto.
@@ -130,6 +222,8 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
   const [vinculado, setVinculado] = useState<ProductoWoo | null>(null);
 
   const [prov, setProv] = useState<string>(df.wooProveedores[0] || 'dropi');
+  const [modo, setModo] = useState<'lista' | 'buscar'>('lista');
+  const cat = useCatalogoWoo(prov);
 
   if (!df.wooProveedores.length) return null; // sin WooCommerce conectado, no aplica
   const nombreProv = prov === 'effi' ? 'Effi' : 'Dropi';
@@ -145,19 +239,32 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
     });
   };
   const vincular = (prod: ProductoWoo) => { p.setSku(prod.sku); setVinculado(prod); setResultados([]); };
+  const vincularSku = (sku: string, nombre: string) => { if (!sku) return; p.setSku(sku); setVinculado({ id: 0, nombre, sku, stock: null, precio: '' }); setResultados([]); };
+  const tab = (activo: boolean): CSSProperties => ({
+    background: activo ? 'var(--df-purple)' : 'transparent', color: activo ? '#fff' : 'var(--df-purple)',
+    border: '1px solid var(--df-purple-border)', borderRadius: 7, padding: '5px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
+  });
 
   const btnMini: CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 8, padding: '8px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-purple)', cursor: 'pointer', whiteSpace: 'nowrap' };
 
   return (
     <div style={{ marginTop: 8 }}>
       {!abierto ? (
-        <button onClick={() => setAbierto(true)} style={btnMini}>🔎 Buscar en {nombreProv} por código</button>
+        <button onClick={() => setAbierto(true)} style={btnMini}>🔗 Vincular con {nombreProv}</button>
       ) : (
         <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, background: 'var(--df-bg)' }}>
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8 }}>
-            Pega el <b>código del producto en {nombreProv}</b> (o escribe su nombre) y vincúlalo. Así te queda el SKU exacto y {nombreProv} sí lo despacha.
+            Vincula este producto con su equivalente en <b>{nombreProv}</b> para que te quede el SKU exacto y {nombreProv} sí lo despache. Elígelo de la lista del catálogo o búscalo por código.
           </div>
           <ProvSelector proveedores={df.wooProveedores} prov={prov} onProv={(p) => { setProv(p); setResultados([]); setBuscado(false); }} />
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <button onClick={() => setModo('lista')} style={tab(modo === 'lista')}>Elegir de la lista</button>
+            <button onClick={() => setModo('buscar')} style={tab(modo === 'buscar')}>Buscar por código</button>
+          </div>
+
+          {modo === 'lista' && <CatalogoPicker cat={cat} nombreProv={nombreProv} onPick={vincularSku} />}
+
+          {modo === 'buscar' && (<>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input
               className="df-input"
@@ -196,6 +303,7 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
           {buscado && !cargando && !error && !resultados.length && !vinculado && (
             <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>No encontramos ese producto en {nombreProv}. Revisa el código o busca por el nombre.</div>
           )}
+          </>)}
 
           {vinculado && (
             <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--df-brand-subtle)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '9px 12px' }}>
@@ -218,6 +326,7 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
  */
 function SkuVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
   const [prov, setProv] = useState<string>(df.wooProveedores[0] || 'dropi');
+  const cat = useCatalogoWoo(prov);
   if (!df.wooProveedores.length) return null;
   const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
   if (!variantes.length) return null;
@@ -225,19 +334,20 @@ function SkuVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Conectar SKU con {nombreProv} por variante</div>
-      <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Vincula cada talla/color con su código en {nombreProv} para que despache la variante exacta.</div>
+      <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Vincula cada talla/color con su código en {nombreProv} para que despache la variante exacta. Elige de la lista del catálogo o busca por código.</div>
       <ProvSelector proveedores={df.wooProveedores} prov={prov} onProv={setProv} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {variantes.map((v) => (
-          <VarSkuRow key={v.id} label={v.label} sku={v.sku || ''} nombreProv={nombreProv} prov={prov} onSet={(s) => df.setVariantSku(p.id, v.id!, s)} />
+          <VarSkuRow key={v.id} label={v.label} sku={v.sku || ''} nombreProv={nombreProv} prov={prov} cat={cat} onSet={(s) => df.setVariantSku(p.id, v.id!, s)} />
         ))}
       </div>
     </div>
   );
 }
 
-function VarSkuRow({ label, sku, nombreProv, prov, onSet }: { label: string; sku: string; nombreProv: string; prov: string; onSet: (sku: string) => void }) {
+function VarSkuRow({ label, sku, nombreProv, prov, cat, onSet }: { label: string; sku: string; nombreProv: string; prov: string; cat: CatalogoWoo; onSet: (sku: string) => void }) {
   const [abierto, setAbierto] = useState(false);
+  const [modo, setModo] = useState<'lista' | 'buscar'>('lista');
   const [q, setQ] = useState(sku || '');
   const [cargando, setCargando] = useState(false);
   const [resultados, setResultados] = useState<ProductoWoo[]>([]);
@@ -251,6 +361,11 @@ function VarSkuRow({ label, sku, nombreProv, prov, onSet }: { label: string; sku
       setResultados(r.data.productos);
     });
   };
+  const usar = (s: string) => { onSet(s); setResultados([]); setQ(s); setAbierto(false); };
+  const tab = (activo: boolean): CSSProperties => ({
+    background: activo ? 'var(--df-purple)' : 'transparent', color: activo ? '#fff' : 'var(--df-purple)',
+    border: '1px solid var(--df-purple-border)', borderRadius: 7, padding: '4px 11px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer',
+  });
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '9px 11px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -262,23 +377,33 @@ function VarSkuRow({ label, sku, nombreProv, prov, onSet }: { label: string; sku
       </div>
       {abierto && (
         <div style={{ marginTop: 8 }}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') buscar(); }} placeholder={`Código o nombre en ${nombreProv}`} style={{ flex: 1, minWidth: 140, border: '1px solid var(--df-border)', borderRadius: 7, padding: '7px 10px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 }} />
-            <button onClick={buscar} disabled={cargando} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 7, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, color: '#fff', cursor: 'pointer' }}>{cargando ? '…' : 'Buscar'}</button>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <button onClick={() => setModo('lista')} style={tab(modo === 'lista')}>Elegir de la lista</button>
+            <button onClick={() => setModo('buscar')} style={tab(modo === 'buscar')}>Buscar por código</button>
           </div>
-          {error && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--df-danger-dark)' }}>{error}</div>}
-          {!!resultados.length && (
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {resultados.map((prod) => (
-                <div key={prod.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '7px 10px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prod.nombre || '(sin nombre)'}</div>
-                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)' }}>SKU: {prod.sku || '—'} · stock: {prod.stock ?? '—'}</div>
-                  </div>
-                  <button onClick={() => { onSet(prod.sku); setResultados([]); setQ(prod.sku); setAbierto(false); }} disabled={!prod.sku} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 7, padding: '6px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: prod.sku ? 'pointer' : 'not-allowed', opacity: prod.sku ? 1 : 0.5 }}>Vincular</button>
+          {modo === 'lista' ? (
+            <CatalogoPicker cat={cat} nombreProv={nombreProv} onPick={usar} />
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') buscar(); }} placeholder={`Código o nombre en ${nombreProv}`} style={{ flex: 1, minWidth: 140, border: '1px solid var(--df-border)', borderRadius: 7, padding: '7px 10px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 }} />
+                <button onClick={buscar} disabled={cargando} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 7, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, color: '#fff', cursor: 'pointer' }}>{cargando ? '…' : 'Buscar'}</button>
+              </div>
+              {error && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--df-danger-dark)' }}>{error}</div>}
+              {!!resultados.length && (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {resultados.map((prod) => (
+                    <div key={prod.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '7px 10px' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prod.nombre || '(sin nombre)'}</div>
+                        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)' }}>SKU: {prod.sku || '—'} · stock: {prod.stock ?? '—'}</div>
+                      </div>
+                      <button onClick={() => usar(prod.sku)} disabled={!prod.sku} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 7, padding: '6px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: prod.sku ? 'pointer' : 'not-allowed', opacity: prod.sku ? 1 : 0.5 }}>Vincular</button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       )}

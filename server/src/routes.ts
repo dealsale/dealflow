@@ -759,6 +759,15 @@ api.get('/woo/productos/buscar', requireAuth, requireStore, async (req, res) => 
   res.json(r);
 });
 
+// Catálogo completo del WooCommerce (productos + variaciones) para vincular por
+// lista desplegable, sin ir pegando códigos. Sobre todo para Dropi.
+api.get('/woo/catalogo', requireAuth, requireStore, async (req, res) => {
+  const { catalogo } = await import('./woocommerce.js');
+  const r = await catalogo(req.user!.storeId!, wooProv(req.query.proveedor));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+
 // ── Leads / CRM ───────────────────────────────────────────────────────
 api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);

@@ -350,6 +350,65 @@ export async function buscarProductos(storeId: string, q: string, prov?: WooProv
   }
 }
 
+export interface VariacionWoo { id: number; nombre: string; sku: string; stock: number | null }
+export interface ProductoCatalogoWoo { id: number; nombre: string; sku: string; stock: number | null; tipo: string; variaciones: VariacionWoo[] }
+type WooProductoCat = WooProductoRaw & { type?: string; variations?: number[] };
+type WooVariacionRaw = { id?: number; sku?: string; stock_quantity?: number | null; attributes?: { name?: string; option?: string }[] };
+
+/**
+ * Trae el CATÁLOGO COMPLETO del WooCommerce del proveedor: todos los productos y,
+ * para los productos variables, todas sus variaciones (con su SKU y stock). Sirve
+ * para vincular por lista desplegable (elegir producto → elegir variante) sin
+ * tener que ir pegando códigos uno por uno. Pensado sobre todo para Dropi.
+ */
+export async function catalogo(storeId: string, prov?: WooProv): Promise<{ productos: ProductoCatalogoWoo[]; proveedor: WooProv } | { error: string }> {
+  const proveedor: WooProv | undefined = prov || (credenciales(storeId, 'dropi') ? 'dropi' : proveedoresConectados(storeId)[0]);
+  const c = proveedor ? credenciales(storeId, proveedor) : null;
+  if (!c || !proveedor) return { error: 'Conecta primero tu WooCommerce (Dropi o Effi) en Integraciones.' };
+  try {
+    const productos: ProductoCatalogoWoo[] = [];
+    // Hasta 5 páginas de 100 = 500 productos (suficiente para un catálogo típico).
+    const variables: ProductoCatalogoWoo[] = [];
+    for (let page = 1; page <= 5; page++) {
+      const r = await woo<WooProductoCat[]>(c, '/products', undefined, {
+        per_page: '100', page: String(page), status: 'publish',
+        _fields: 'id,name,sku,stock_quantity,type,variations',
+      });
+      if (!r.ok) return { error: r.body.message || 'No pudimos leer el catálogo de WooCommerce.' };
+      if (!Array.isArray(r.body) || !r.body.length) break;
+      for (const p of r.body) {
+        const prod: ProductoCatalogoWoo = {
+          id: Number(p.id), nombre: String(p.name || ''), sku: String(p.sku || ''),
+          stock: p.stock_quantity ?? null, tipo: String(p.type || 'simple'), variaciones: [],
+        };
+        productos.push(prod);
+        if (prod.tipo === 'variable' && Array.isArray(p.variations) && p.variations.length) variables.push(prod);
+      }
+      if (r.body.length < 100) break;
+    }
+    // Para cada producto variable, traemos sus variaciones (con SKU y stock).
+    // Cap de 60 productos variables para no dispararnos en llamadas.
+    for (const prod of variables.slice(0, 60)) {
+      try {
+        const rv = await woo<WooVariacionRaw[]>(c, `/products/${prod.id}/variations`, undefined, {
+          per_page: '100', _fields: 'id,sku,stock_quantity,attributes',
+        });
+        if (rv.ok && Array.isArray(rv.body)) {
+          prod.variaciones = rv.body.map((v) => ({
+            id: Number(v.id),
+            nombre: (v.attributes || []).map((a) => String(a.option || '')).filter(Boolean).join(' · ') || 'Variante',
+            sku: String(v.sku || ''),
+            stock: v.stock_quantity ?? null,
+          }));
+        }
+      } catch { /* si una falla, seguimos con las demás */ }
+    }
+    return { productos, proveedor };
+  } catch {
+    return { error: 'No pudimos leer el catálogo de tu WooCommerce. Revisa la conexión en Integraciones.' };
+  }
+}
+
 /** Genera un SKU legible y único a partir del nombre y el id del producto. */
 function skuAuto(nombre: string, id: string): string {
   const slug = (nombre || 'PRODUCTO')
