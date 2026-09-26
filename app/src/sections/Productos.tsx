@@ -127,19 +127,25 @@ function ProvSelector({ conectados, prov, onProv }: { conectados: string[]; prov
  * Al cambiar de proveedor, se limpia para volver a traerlo del Woo correcto.
  */
 function useCatalogoWoo(prov: string) {
+  const [activo, setActivo] = useState(false); // se enciende al abrir el buscador
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [productos, setProductos] = useState<ProductoCatalogoWoo[] | null>(null);
-  useEffect(() => { setProductos(null); setError(''); }, [prov]);
-  const cargar = () => {
-    if (productos || cargando) return;
-    setCargando(true); setError('');
+  // Una vez activo, cada vez que cambia el proveedor se vuelve a traer SU catálogo
+  // automáticamente (antes había que darle "Elegir de la lista" otra vez).
+  useEffect(() => {
+    if (!activo) return;
+    let cancelado = false;
+    setCargando(true); setError(''); setProductos(null);
     void apiWooCatalogo(prov).then((r) => {
+      if (cancelado) return;
       setCargando(false);
       if (r.error || !r.data) { setError(r.error || 'No pudimos traer el catálogo.'); return; }
       setProductos(r.data.productos);
     });
-  };
+    return () => { cancelado = true; };
+  }, [prov, activo]);
+  const cargar = () => setActivo(true);
   return { cargando, error, productos, cargar };
 }
 type CatalogoWoo = ReturnType<typeof useCatalogoWoo>;
@@ -299,7 +305,7 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
   return (
     <div style={{ marginTop: 8 }}>
       {!abierto ? (
-        <button onClick={() => setAbierto(true)} style={btnMini}>🔗 Vincular con {nombreProv}</button>
+        <button onClick={() => setAbierto(true)} style={btnMini}>🔗 Vincular con e-commerce</button>
       ) : (
         <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, background: 'var(--df-bg)' }}>
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8 }}>
@@ -390,7 +396,7 @@ function SkuVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
       >
         <span style={{ fontSize: 13, transition: 'transform .15s', transform: abierto ? 'rotate(90deg)' : 'none', color: 'var(--df-text-muted)' }}>▶</span>
-        <span style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>Vincular variantes con {nombreProv}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>Vincular variantes con e-commerce</span>
         <span style={{ fontSize: 11.5, color: vinculadas === variantes.length ? 'var(--df-brand-dark)' : 'var(--df-text-faint)', fontWeight: 600 }}>
           {vinculadas}/{variantes.length} vinculadas
         </span>
