@@ -53,7 +53,10 @@ async function canjearToken(code: string): Promise<{ token: string } | { error: 
   const url = `${GRAPH}/oauth/access_token?client_id=${encodeURIComponent(appId)}&client_secret=${encodeURIComponent(secret)}&code=${encodeURIComponent(code)}`;
   const { ok, body } = await graph(url);
   const token = String(body.access_token || '');
-  if (!ok || !token) return { error: body.error?.message || 'Meta no entregó el acceso. Intenta conectar de nuevo.' };
+  if (!ok || !token) {
+    console.error('[meta-signup] canjearToken falló:', JSON.stringify(body.error || body));
+    return { error: body.error?.message || 'Meta no entregó el acceso. Intenta conectar de nuevo.' };
+  }
   return { token };
 }
 
@@ -77,7 +80,10 @@ export async function conectarPorSignup(
 
   // 1) Nuestra app pasa a recibir los mensajes de esa cuenta en NUESTRO webhook.
   const sub = await graph(`${GRAPH}/${encodeURIComponent(wabaId)}/subscribed_apps`, { method: 'POST', headers: auth });
-  if (!sub.ok) return { ok: false, error: sub.body.error?.message || 'No pudimos suscribir la cuenta de WhatsApp. Intenta de nuevo.' };
+  if (!sub.ok) {
+    console.error('[meta-signup] subscribed_apps falló:', JSON.stringify(sub.body.error || sub.body));
+    return { ok: false, error: sub.body.error?.message || 'No pudimos suscribir la cuenta de WhatsApp. Intenta de nuevo.' };
+  }
 
   // 2) Registrar el número habilita el envío por la Cloud API.
   let aviso: string | undefined;
@@ -87,6 +93,7 @@ export async function conectarPorSignup(
   });
   if (!reg.ok) {
     const msg = reg.body.error?.message || '';
+    console.error('[meta-signup] register falló:', JSON.stringify(reg.body.error || reg.body));
     // Si ya estaba registrado, seguimos: el número igual puede enviar.
     if (!/already|registrad/i.test(msg)) aviso = `El número quedó vinculado, pero Meta reportó: ${msg}`;
   }
