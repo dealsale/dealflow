@@ -142,14 +142,34 @@ type CatalogoWoo = ReturnType<typeof useCatalogoWoo>;
  * sus variaciones (talla/color) con su SKU y stock. Un clic en "Usar" vincula ese
  * SKU. Así no hay que ir pegando códigos: se elige de la lista. (Sobre todo Dropi.)
  */
-function CatalogoPicker({ cat, nombreProv, onPick }: { cat: CatalogoWoo; nombreProv: string; onPick: (sku: string, nombre: string) => void }) {
+/** Busca el nombre "bonito" de un SKU en el catálogo (producto o producto — variante). */
+function nombreDeSku(cat: CatalogoWoo, sku: string): string {
+  if (!sku) return '';
+  for (const p of cat.productos || []) {
+    if (p.sku && p.sku === sku) return p.nombre;
+    for (const v of p.variaciones) if (v.sku === sku) return `${p.nombre} — ${v.nombre}`;
+  }
+  return '';
+}
+
+function CatalogoPicker({ cat, nombreProv, onPick, usados }: { cat: CatalogoWoo; nombreProv: string; onPick: (sku: string, nombre: string) => void; usados?: Set<string> }) {
   const [filtro, setFiltro] = useState('');
   const [abierto, setAbierto] = useState<number | null>(null);
   useEffect(() => { cat.cargar(); }, []); // trae el catálogo al abrir
   const f = filtro.trim().toLowerCase();
-  const productos = (cat.productos || []).filter((p) =>
-    !f || p.nombre.toLowerCase().includes(f) || (p.sku || '').toLowerCase().includes(f) ||
-    p.variaciones.some((v) => v.nombre.toLowerCase().includes(f) || (v.sku || '').toLowerCase().includes(f)));
+  const yaUsado = (sku: string) => !!sku && !!usados && usados.has(sku);
+  // Ocultamos lo que ya vinculaste a OTRA variante (para no repetir). En variables,
+  // filtramos las variaciones usadas; si no queda ninguna, ocultamos el producto.
+  const productos = (cat.productos || [])
+    .map((p) => ({ ...p, variaciones: p.variaciones.filter((v) => !yaUsado(v.sku)) }))
+    .filter((p) => {
+      const variable = p.tipo === 'variable' && (p.variaciones.length > 0);
+      if (!variable && yaUsado(p.sku)) return false; // simple ya usado
+      if (p.tipo === 'variable' && p.variaciones.length === 0) return false; // todas usadas
+      if (!f) return true;
+      return p.nombre.toLowerCase().includes(f) || (p.sku || '').toLowerCase().includes(f) ||
+        p.variaciones.some((v) => v.nombre.toLowerCase().includes(f) || (v.sku || '').toLowerCase().includes(f));
+    });
   const btnUsar = (disabled: boolean): CSSProperties => ({
     background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)',
     borderRadius: 7, padding: '5px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12,
@@ -165,7 +185,7 @@ function CatalogoPicker({ cat, nombreProv, onPick }: { cat: CatalogoWoo; nombreP
             value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Filtrar por nombre o código…"
             style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px', fontSize: 13, marginBottom: 8 }}
           />
-          {!productos.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '4px 2px' }}>No hay productos que coincidan.</div>}
+          {!productos.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '4px 2px' }}>No hay productos disponibles que coincidan.</div>}
           <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
             {productos.map((p) => {
               const variable = p.tipo === 'variable' && p.variaciones.length > 0;
@@ -176,7 +196,7 @@ function CatalogoPicker({ cat, nombreProv, onPick }: { cat: CatalogoWoo; nombreP
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre || '(sin nombre)'}</div>
                       <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)', marginTop: 1 }}>
-                        {variable ? `${p.variaciones.length} variantes` : `SKU: ${p.sku || '—'}`}{!variable && ` · stock: ${p.stock ?? '—'}`}
+                        {variable ? `${p.variaciones.length} variantes disponibles` : `SKU: ${p.sku || '—'}`}{!variable && ` · stock: ${p.stock ?? '—'}`}
                       </div>
                     </div>
                     {variable
@@ -326,26 +346,51 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
  */
 function SkuVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
   const [prov, setProv] = useState<string>(df.wooProveedores[0] || 'dropi');
+  const [abierto, setAbierto] = useState(false); // plegable: se puede ocultar
   const cat = useCatalogoWoo(prov);
   if (!df.wooProveedores.length) return null;
   const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
   if (!variantes.length) return null;
   const nombreProv = prov === 'effi' ? 'Effi' : 'Dropi';
+  const vinculadas = variantes.filter((v) => (v.sku || '').trim()).length;
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Conectar SKU con {nombreProv} por variante</div>
-      <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Vincula cada talla/color con su código en {nombreProv} para que despache la variante exacta. Elige de la lista del catálogo o busca por código.</div>
-      <ProvSelector proveedores={df.wooProveedores} prov={prov} onProv={setProv} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {variantes.map((v) => (
-          <VarSkuRow key={v.id} label={v.label} sku={v.sku || ''} nombreProv={nombreProv} prov={prov} cat={cat} onSet={(s) => df.setVariantSku(p.id, v.id!, s)} />
-        ))}
-      </div>
+      {/* Cabecera plegable: muestra cuántas variantes están vinculadas y se puede ocultar. */}
+      <button
+        onClick={() => setAbierto(!abierto)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+      >
+        <span style={{ fontSize: 13, transition: 'transform .15s', transform: abierto ? 'rotate(90deg)' : 'none', color: 'var(--df-text-muted)' }}>▶</span>
+        <span style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>Vincular variantes con {nombreProv}</span>
+        <span style={{ fontSize: 11.5, color: vinculadas === variantes.length ? 'var(--df-brand-dark)' : 'var(--df-text-faint)', fontWeight: 600 }}>
+          {vinculadas}/{variantes.length} vinculadas
+        </span>
+      </button>
+      {abierto && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Vincula cada talla/color con su producto en {nombreProv} para que despache la variante exacta. Lo que vinculas a una variante deja de aparecer para las demás.</div>
+          <ProvSelector proveedores={df.wooProveedores} prov={prov} onProv={setProv} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {variantes.map((v) => (
+              <VarSkuRow
+                key={v.id}
+                label={v.label}
+                sku={v.sku || ''}
+                nombreProv={nombreProv}
+                prov={prov}
+                cat={cat}
+                usados={new Set(variantes.filter((o) => o.id !== v.id && (o.sku || '').trim()).map((o) => (o.sku || '').trim()))}
+                onSet={(s) => df.setVariantSku(p.id, v.id!, s)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function VarSkuRow({ label, sku, nombreProv, prov, cat, onSet }: { label: string; sku: string; nombreProv: string; prov: string; cat: CatalogoWoo; onSet: (sku: string) => void }) {
+function VarSkuRow({ label, sku, nombreProv, prov, cat, usados, onSet }: { label: string; sku: string; nombreProv: string; prov: string; cat: CatalogoWoo; usados?: Set<string>; onSet: (sku: string) => void }) {
   const [abierto, setAbierto] = useState(false);
   const [modo, setModo] = useState<'lista' | 'buscar'>('lista');
   const [q, setQ] = useState(sku || '');
@@ -366,6 +411,8 @@ function VarSkuRow({ label, sku, nombreProv, prov, cat, onSet }: { label: string
     background: activo ? 'var(--df-purple)' : 'transparent', color: activo ? '#fff' : 'var(--df-purple)',
     border: '1px solid var(--df-purple-border)', borderRadius: 7, padding: '4px 11px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer',
   });
+  // Nombre del producto/variante de Woo al que quedó vinculada (para verlo en verde).
+  const nombreVinc = sku ? nombreDeSku(cat, sku) : '';
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '9px 11px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -375,6 +422,12 @@ function VarSkuRow({ label, sku, nombreProv, prov, cat, onSet }: { label: string
           : <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>sin SKU</span>}
         <button onClick={() => setAbierto(!abierto)} style={{ background: 'transparent', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 7, padding: '5px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>{abierto ? 'Cerrar' : sku ? 'Cambiar' : '🔎 Vincular'}</button>
       </div>
+      {/* Nombre vinculado en verde: para saber a qué producto de Woo quedó atada la variante. */}
+      {nombreVinc && (
+        <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--df-brand-dark)', fontWeight: 600 }}>
+          <span>✓</span><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombreVinc}</span>
+        </div>
+      )}
       {abierto && (
         <div style={{ marginTop: 8 }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -382,7 +435,7 @@ function VarSkuRow({ label, sku, nombreProv, prov, cat, onSet }: { label: string
             <button onClick={() => setModo('buscar')} style={tab(modo === 'buscar')}>Buscar por código</button>
           </div>
           {modo === 'lista' ? (
-            <CatalogoPicker cat={cat} nombreProv={nombreProv} onPick={usar} />
+            <CatalogoPicker cat={cat} nombreProv={nombreProv} onPick={usar} usados={usados} />
           ) : (
             <>
               <div style={{ display: 'flex', gap: 6 }}>
