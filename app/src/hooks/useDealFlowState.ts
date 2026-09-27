@@ -51,6 +51,7 @@ import {
   apiOrders,
   apiOrderAdvance,
   apiOrderEstado,
+  apiDeleteOrder,
   apiCrearPedido,
   apiOrderDropi,
   apiOrderDespachar,
@@ -221,6 +222,7 @@ export interface DecoratedOrder extends Order {
   advance: () => void;
   setEstado: (estado: EstadoPedido) => void;
   estadosDisponibles: EstadoPedido[];
+  eliminar: () => void;
   open: () => void;
   sendToDropi: () => void;
   despachar: (proveedor: 'dropi' | 'effi', transportadora?: string) => void;
@@ -1049,6 +1051,15 @@ export function useDealFlowState() {
     if (apiMode && o.rowId) void apiOrderEstado(o.rowId, estado).then((r) => { if (r.error) void apiOrders().then(({ data }) => { if (data) setOrders(mapApiOrders(data.orders)); }); });
   }
 
+  // Elimina el pedido del panel (no toca Dropi/Woo). Optimista + confirma servidor.
+  function eliminarPedido(id: string) {
+    const o = ordersRef.current.find((x) => x.id === id);
+    if (!o) return;
+    if (selectedOrderId === id) setSelectedOrderId(null); // cierra el detalle si estaba abierto
+    setOrders((prev) => prev.filter((x) => x.id !== id));
+    if (apiMode && o.rowId) void apiDeleteOrder(o.rowId).then((r) => { if (r.error) void apiOrders().then(({ data }) => { if (data) setOrders(mapApiOrders(data.orders)); }); });
+  }
+
   // Crear pedido manual: un solo modal global (antes vivía duplicado dentro de
   // Pedidos/MPedidos), para poder abrirlo también desde el Inbox con el
   // cliente del chat ya puesto.
@@ -1167,6 +1178,7 @@ export function useDealFlowState() {
       // Estado seleccionable: cambiar a cualquiera (incluye Cancelado).
       setEstado: (estado: EstadoPedido) => cambiarEstadoPedido(o.id, estado),
       estadosDisponibles: ESTADOS_TODOS,
+      eliminar: () => eliminarPedido(o.id),
       open: () => {
         setSelectedOrderId(o.id);
         setSection('pedidos');
@@ -1351,11 +1363,16 @@ export function useDealFlowState() {
 
   const [variantesGenMsg, setVariantesGenMsg] = useState('');
   function generarVariantesProducto(productId: string) {
-    setVariantesGenMsg('Generando combinaciones desde las Opciones…');
+    setVariantesGenMsg('Sincronizando variantes con las opciones…');
     void apiGenerarVariantes(productId).then((r) => {
-      if (r.error || !r.data) { setVariantesGenMsg(r.error || 'No pudimos generar las combinaciones.'); return; }
-      if (r.data.creadas > 0) setVariantesGenMsg(`✓ Se crearon ${r.data.creadas} variante(s) nueva(s) (de ${r.data.total} combinaciones posibles).`);
-      else setVariantesGenMsg(`Ya estaban las ${r.data.total} combinaciones posibles. Nada nuevo que crear.`);
+      if (r.error || !r.data) { setVariantesGenMsg(r.error || 'No pudimos sincronizar las variantes.'); return; }
+      const { creadas, eliminadas, total } = r.data;
+      const partes: string[] = [];
+      if (creadas) partes.push(`${creadas} creada(s)`);
+      if (eliminadas) partes.push(`${eliminadas} repetida(s)/sobrante(s) quitada(s)`);
+      setVariantesGenMsg(partes.length
+        ? `✓ Variantes al día: ${partes.join(' · ')}. Quedaron ${total} en total.`
+        : `Ya estaban las ${total} combinaciones exactas. Nada que ajustar.`);
       void reloadProducts();
       setTimeout(() => setVariantesGenMsg(''), 6000);
     });

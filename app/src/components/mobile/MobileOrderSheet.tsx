@@ -119,13 +119,19 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
           </div>
         </div>
 
-        {/* El estado lo maneja la integración (Dropi/Effi) y se le avisa al cliente;
-            ya no se cambia a mano desde aquí. */}
-        <div style={{ padding: '14px 18px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 22px)', borderTop: '1px solid var(--df-border)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>
-          <span>Estado actual:</span>
-          <span style={sel.pillStyle}>{sel.estado}</span>
-          <div style={{ flex: 1 }} />
-          <span style={{ color: 'var(--df-text-faint)', fontSize: 11, textAlign: 'right' }}>Automático desde {sel.despachoProveedor === 'effi' ? 'Effi' : 'Dropi'}</span>
+        {/* Estado: se actualiza solo desde Dropi/Effi, pero también se puede cambiar
+            a mano o eliminar el pedido. */}
+        <div style={{ padding: '14px 18px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 22px)', borderTop: '1px solid var(--df-border)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 7 }}>Estado del pedido</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <Dropdown ariaLabel="Cambiar estado del pedido" value={sel.estado} onChange={(v) => sel.setEstado(v as typeof sel.estado)} options={sel.estadosDisponibles.map((e) => ({ value: e, label: e }))} />
+            </div>
+            <button
+              onClick={() => { if (confirm(`¿Eliminar el pedido ${sel.id}? Solo lo quita del panel.`)) sel.eliminar(); }}
+              style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-danger-dark)', cursor: 'pointer', minHeight: 44 }}
+            >🗑</button>
+          </div>
         </div>
       </div>
     </div>

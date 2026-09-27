@@ -291,7 +291,7 @@ export const apiCreateProduct = (b: { nombre: string; precio: number; stock: num
 export const apiPatchProduct = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/products/${id}`, 'PATCH', patch);
 export const apiDeleteProduct = (id: string) => req<{ ok: true }>(`/api/products/${id}`, 'DELETE');
 export const apiAddVariant = (productId: string, b: { label: string; stock: number }) => req<{ id: string }>(`/api/products/${productId}/variants`, 'POST', b);
-export const apiGenerarVariantes = (productId: string) => req<{ ok: true; creadas: number; total: number }>(`/api/products/${productId}/variants/generar`, 'POST');
+export const apiGenerarVariantes = (productId: string) => req<{ ok: true; creadas: number; eliminadas: number; total: number }>(`/api/products/${productId}/variants/generar`, 'POST');
 export const apiPatchVariant = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/variants/${id}`, 'PATCH', patch);
 export const apiDeleteVariant = (id: string) => req<{ ok: true }>(`/api/variants/${id}`, 'DELETE');
 export interface EstiloAsistente { trato?: 'tu' | 'usted'; emojis?: boolean; largo?: 'corto' | 'detallado' }
@@ -323,6 +323,7 @@ export const apiState = () => req<{ store: { id: string; nombre: string; plan: s
 export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET');
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
 export const apiOrderEstado = (rowId: string, estado: string) => req<{ estado: string }>(`/api/orders/${rowId}/estado`, 'POST', { estado });
+export const apiDeleteOrder = (rowId: string) => req<{ ok: true }>(`/api/orders/${rowId}`, 'DELETE');
 export interface CrearPedidoItem { qty: number; nombre: string; precio: number }
 export const apiCrearPedido = (body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: CrearPedidoItem[] }) =>
   req<{ ok: true; id: string; rowId: string }>('/api/orders', 'POST', body);

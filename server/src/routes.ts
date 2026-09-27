@@ -474,7 +474,12 @@ api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   }
   const { nombre, precio, reglas, fotosSubidas, descripcion, caracteristicas, mensajeInicial, faqs, testimonios, modosUso, videos, mensajeBloques, bundles, opciones, contenidoPaquete, disparador, mensajeInicialActivo } = req.body || {};
   if (Array.isArray(bundles)) db.prepare('UPDATE products SET bundles = ? WHERE id = ?').run(j(bundles), req.params.id);
-  if (Array.isArray(opciones)) db.prepare('UPDATE products SET opciones = ? WHERE id = ?').run(j(opciones), req.params.id);
+  if (Array.isArray(opciones)) {
+    db.prepare('UPDATE products SET opciones = ? WHERE id = ?').run(j(opciones), req.params.id);
+    // Al cambiar las opciones, las variantes se ajustan SOLAS al producto cartesiano
+    // exacto (crea las que falten, quita repetidas/sobrantes). Sin duplicar.
+    sincronizarVariantes(req.params.id);
+  }
   if (contenidoPaquete !== undefined) db.prepare('UPDATE products SET contenido_paquete = ? WHERE id = ?').run(String(contenidoPaquete), req.params.id);
   if (disparador !== undefined) db.prepare('UPDATE products SET disparador = ? WHERE id = ?').run(String(disparador), req.params.id);
   if (mensajeInicialActivo !== undefined) db.prepare('UPDATE products SET mensaje_inicial_activo = ? WHERE id = ?').run(mensajeInicialActivo ? 1 : 0, req.params.id);
@@ -519,46 +524,86 @@ api.post('/products/:id/variants', requireAuth, requireStore, (req, res) => {
   res.json({ id });
 });
 
-// Genera automáticamente TODAS las combinaciones (talla × color × …) a partir de
-// las Opciones del producto, y crea las variantes que falten (sin duplicar las
-// que ya existen). Soluciona el error manual de "me faltaron variantes" cuando
-// se cargan las tallas/colores a mano una por una.
+/**
+ * Sincroniza las variantes de un producto para que sean EXACTAMENTE el producto
+ * cartesiano de sus Opciones (talla × color × …): ni de más ni de menos.
+ *  - Clave canónica = tokens del label ordenados alfabéticamente, así "M · Verde"
+ *    y "Verde · M" (o con otra separación) cuentan como LA MISMA variante.
+ *  - Crea las combinaciones que falten.
+ *  - Deja UNA sola por combinación (borra repetidas), conservando la que ya tenga
+ *    SKU (para no perder el vínculo con Dropi/Effi) o, si no, la de más stock.
+ *  - Borra las variantes "huérfanas" (que ya no corresponden a ninguna opción).
+ * Si el producto no tiene opciones con valores, NO toca nada (variantes manuales).
+ * Es idempotente: correrla dos veces no cambia nada.
+ */
+function sincronizarVariantes(productId: string): { creadas: number; eliminadas: number; total: number } {
+  const prod = db.prepare('SELECT opciones FROM products WHERE id = ?').get(productId) as { opciones: string } | undefined;
+  if (!prod) return { creadas: 0, eliminadas: 0, total: 0 };
+  const grupos = pj<{ nombre: string; valores: { valor: string }[] }[]>(prod.opciones, []);
+  const conValores = grupos.filter((g) => (g.valores || []).some((v) => (v.valor || '').trim()));
+  const actual = (db.prepare('SELECT COUNT(*) n FROM variants WHERE product_id = ?').get(productId) as { n: number }).n;
+  if (conValores.length < 1) return { creadas: 0, eliminadas: 0, total: actual }; // sin opciones: no tocar variantes manuales
+
+  // Producto cartesiano (valores únicos por grupo).
+  let combos: string[][] = [[]];
+  for (const g of conValores) {
+    const vals = [...new Set((g.valores || []).map((v) => (v.valor || '').trim()).filter(Boolean))];
+    combos = combos.flatMap((c) => vals.map((v) => [...c, v]));
+  }
+  combos = combos.filter((c) => c.length);
+  if (!combos.length) return { creadas: 0, eliminadas: 0, total: actual };
+
+  const canon = (label: string) => String(label || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .split(/[^a-z0-9]+/).filter(Boolean).sort().join('|');
+  const labelDe = (combo: string[]) => combo.join(' · ');
+  // clave canónica → label "bonito" objetivo
+  const objetivo = new Map<string, string>();
+  for (const combo of combos) objetivo.set(canon(labelDe(combo)), labelDe(combo));
+
+  const existentes = db.prepare('SELECT id, label, sku, stock FROM variants WHERE product_id = ? ORDER BY orden')
+    .all(productId) as { id: string; label: string; sku: string; stock: number }[];
+  const porClave = new Map<string, typeof existentes>();
+  for (const v of existentes) { const k = canon(v.label); if (!porClave.has(k)) porClave.set(k, []); porClave.get(k)!.push(v); }
+
+  let creadas = 0;
+  let eliminadas = 0;
+  let orden = (db.prepare('SELECT COALESCE(MAX(orden),0) AS o FROM variants WHERE product_id = ?').get(productId) as { o: number }).o;
+  const insert = db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, orden) VALUES (?,?,?,0,0,?)');
+  const del = db.prepare('DELETE FROM variants WHERE id = ?');
+
+  const tx = db.transaction(() => {
+    // 1) Cada combinación objetivo: asegurar exactamente UNA variante.
+    for (const [clave] of objetivo) {
+      const grupo = porClave.get(clave) || [];
+      if (grupo.length === 0) { orden += 1; insert.run(uid(), productId, objetivo.get(clave)!, orden); creadas++; }
+      else if (grupo.length > 1) {
+        // Conservar la mejor (con SKU primero, luego más stock); borrar el resto.
+        const ordenadas = [...grupo].sort((a, b) => (b.sku ? 1 : 0) - (a.sku ? 1 : 0) || (b.stock || 0) - (a.stock || 0));
+        for (const dup of ordenadas.slice(1)) { del.run(dup.id); eliminadas++; }
+      }
+    }
+    // 2) Huérfanas: variantes que ya no corresponden a ninguna combinación → borrar.
+    for (const [clave, grupo] of porClave) {
+      if (!objetivo.has(clave)) for (const v of grupo) { del.run(v.id); eliminadas++; }
+    }
+  });
+  tx();
+  return { creadas, eliminadas, total: objetivo.size };
+}
+
+// Sincroniza las variantes con las opciones (crea las que falten, quita repetidas
+// y sobrantes). Es lo mismo que corre solo al guardar las opciones.
 api.post('/products/:id/variants/generar', requireAuth, requireStore, (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
   const prod = db.prepare('SELECT opciones FROM products WHERE id = ?').get(req.params.id) as { opciones: string } | undefined;
   if (!prod) return res.status(404).json({ error: 'Producto no encontrado.' });
   const grupos = pj<{ nombre: string; valores: { valor: string }[] }[]>(prod.opciones, []);
-  const conValores = grupos.filter((g) => (g.valores || []).some((v) => (v.valor || '').trim()));
-  if (conValores.length < 1) return res.status(400).json({ error: 'Primero agrega las opciones del producto (ej. Talla, Color) con sus valores.' });
-
-  // Producto cartesiano de los valores de cada grupo, en el orden de los grupos.
-  let combos: string[][] = [[]];
-  for (const g of conValores) {
-    const vals = (g.valores || []).map((v) => (v.valor || '').trim()).filter(Boolean);
-    const next: string[][] = [];
-    for (const c of combos) for (const v of vals) next.push([...c, v]);
-    combos = next;
+  if (!grupos.some((g) => (g.valores || []).some((v) => (v.valor || '').trim()))) {
+    return res.status(400).json({ error: 'Primero agrega las opciones del producto (ej. Talla, Color) con sus valores.' });
   }
-  const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-  const existentes = db.prepare('SELECT label FROM variants WHERE product_id = ?').all(req.params.id) as { label: string }[];
-  const existentesNorm = new Set(existentes.map((v) => norm(v.label)));
-  let orden = (db.prepare('SELECT COALESCE(MAX(orden),0) AS o FROM variants WHERE product_id = ?').get(req.params.id) as { o: number }).o;
-
-  let creadas = 0;
-  const insert = db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, orden) VALUES (?,?,?,0,0,?)');
-  for (const combo of combos) {
-    // Formato consistente con el resto de DealFlow: "Talla M · Negro".
-    const label = combo.join(' · ');
-    if (existentesNorm.has(norm(label))) continue; // ya existía (con este mismo orden de grupos o al revés)
-    const invertida = combo.length === 2 ? [combo[1], combo[0]].join(' · ') : label;
-    if (existentesNorm.has(norm(invertida))) continue;
-    orden += 1;
-    insert.run(uid(), req.params.id, label, orden);
-    existentesNorm.add(norm(label));
-    creadas++;
-  }
+  const r = sincronizarVariantes(req.params.id);
   if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(req.params.id);
-  res.json({ ok: true, creadas, total: combos.length });
+  res.json({ ok: true, ...r });
 });
 
 api.patch('/variants/:id', requireAuth, requireStore, (req, res) => {
@@ -655,6 +700,17 @@ api.post('/orders/:rowId/estado', requireAuth, requireStore, async (req, res) =>
     if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
     void sendWhatsappText(sid, lead?.wa_id || o.tel, msg, o.tel).catch(() => {});
   }
+});
+
+// Elimina un pedido por completo (y sus ítems). No toca el pedido en Dropi/Woo:
+// solo lo quita del panel de DealFlow.
+api.delete('/orders/:rowId', requireAuth, requireStore, requireOwner, (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT id FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  db.prepare('DELETE FROM order_items WHERE order_id = ?').run(o.id);
+  db.prepare('DELETE FROM orders WHERE id = ?').run(o.id);
+  res.json({ ok: true });
 });
 
 // Crea un pedido MANUALMENTE (logística manual): el dueño mete los datos del

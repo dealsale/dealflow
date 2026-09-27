@@ -557,6 +557,11 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_academy_prog_user ON academy_progreso(us
 // Backfill único: a cada curso existente se le crea una sección "Contenido del
 // curso" y se le asignan todas sus lecciones que aún no tengan sección. Corre
 // una sola vez (flag) y es idempotente aunque el flag se perdiera.
+// (app_flags se crea formalmente más abajo, pero este backfill corre ANTES;
+// sin este CREATE aquí también, una base nueva fallaba con "no such table:
+// app_flags" al arrancar por primera vez. CREATE TABLE IF NOT EXISTS es
+// idempotente, así que repetirlo más abajo no hace daño.)
+db.exec("CREATE TABLE IF NOT EXISTS app_flags (clave TEXT PRIMARY KEY, ts TEXT NOT NULL DEFAULT (datetime('now')))");
 {
   const flag = 'academy_secciones_v1';
   if (!db.prepare('SELECT 1 FROM app_flags WHERE clave = ?').get(flag)) {
