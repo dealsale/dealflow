@@ -49,6 +49,29 @@ async function dropi<T>(cred: DropiCred, method: string, path: string, body?: un
   return { ok: res.ok && parsed.isSuccess !== false, body: parsed, http: res.status };
 }
 
+/**
+ * Saca la lista de resultados sin importar cómo la envuelva Dropi: puede venir en
+ * `objects` (array), como array pelado, en `objects.data`, en `data`, o como el
+ * primer array que aparezca dentro del objeto. Así no dependemos de una sola forma.
+ */
+function sacarArray(body: unknown): Record<string, unknown>[] {
+  if (Array.isArray(body)) return body as Record<string, unknown>[];
+  if (body && typeof body === 'object') {
+    const b = body as Record<string, unknown>;
+    if (Array.isArray(b.objects)) return b.objects as Record<string, unknown>[];
+    if (b.objects && typeof b.objects === 'object') {
+      const o = b.objects as Record<string, unknown>;
+      if (Array.isArray(o.data)) return o.data as Record<string, unknown>[];
+      const dentro = Object.values(o).find((v) => Array.isArray(v));
+      if (dentro) return dentro as Record<string, unknown>[];
+    }
+    if (Array.isArray(b.data)) return b.data as Record<string, unknown>[];
+    const arr = Object.values(b).find((v) => Array.isArray(v));
+    if (arr) return arr as Record<string, unknown>[];
+  }
+  return [];
+}
+
 /** Verifica el token: pide los departamentos (llamada barata que exige auth). */
 export async function verificarDropi(storeId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const c = credDropi(storeId);
@@ -88,8 +111,8 @@ export async function resolverDestino(
   let deptosRaw: Record<string, unknown>[] = [];
   try {
     const r = await dropi<Record<string, unknown>[]>(cred, 'GET', '/department');
-    if (!r.ok || !Array.isArray(r.body.objects)) return { error: r.body.message || 'No pudimos leer los departamentos de Dropi.' };
-    deptosRaw = r.body.objects;
+    deptosRaw = sacarArray(r.body);
+    if (!deptosRaw.length) { console.warn('[dropi] department vacío · http', r.http, '· body:', JSON.stringify(r.body).slice(0, 400)); return { error: r.body.message || 'No pudimos leer los departamentos de Dropi.' }; }
   } catch { return { error: 'No pudimos conectar con Dropi (departamentos).' }; }
 
   // Dropi puede llamar al nombre `name`, `nombre`, `description`… lo leemos de todas.
@@ -108,8 +131,8 @@ export async function resolverDestino(
   let ciudades: Record<string, unknown>[] = [];
   try {
     const r = await dropi<Record<string, unknown>[]>(cred, 'POST', '/trajectory/bycity', { department_id: depto.id, rate_type: rateType });
-    if (!r.ok || !Array.isArray(r.body.objects)) return { error: r.body.message || 'No pudimos leer las ciudades de Dropi.' };
-    ciudades = r.body.objects;
+    ciudades = sacarArray(r.body);
+    if (!ciudades.length) { console.warn('[dropi] bycity vacío · dep', depto.id, depto.name, '· http', r.http, '· body:', JSON.stringify(r.body).slice(0, 500)); return { error: r.body.message || 'No pudimos leer las ciudades de Dropi.' }; }
   } catch { return { error: 'No pudimos conectar con Dropi (ciudades).' }; }
 
   const cObjetivo = norm(ciudad);
@@ -186,11 +209,11 @@ export async function cotizar(
   };
   try {
     const r = await dropi<Record<string, unknown>[]>(cred, 'POST', '/orders/cotizaEnvioTransportadoraV2', body);
-    const lista = Array.isArray(r.body.objects) ? r.body.objects : (Array.isArray(r.body as unknown) ? (r.body as unknown as Record<string, unknown>[]) : []);
-    if (!Array.isArray(lista)) return { error: r.body.message || 'Dropi no devolvió transportadoras.' };
+    const lista = sacarArray(r.body);
+    if (!lista.length) { console.warn('[dropi] cotiza vacío · http', r.http, '· body:', JSON.stringify(r.body).slice(0, 500)); return { error: r.body.message || 'Dropi no devolvió transportadoras para este destino.' }; }
     const disponibles: Transportadora[] = [];
     const noDisponibles: { nombre: string; motivo: string }[] = [];
-    for (const t of lista as Record<string, unknown>[]) {
+    for (const t of lista) {
       const nombre = String(t.transportadora || t.name || '');
       const obj = (t.objects || {}) as Record<string, unknown>;
       const precio = Number(obj.precioEnvio ?? obj.precio ?? 0);
