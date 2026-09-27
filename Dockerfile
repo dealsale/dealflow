@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -r
 COPY server/package*.json ./
 RUN npm ci --omit=dev
 COPY --from=server-build /build/server/dist ./dist
+# Capturas que Academy precarga en su primer arranque (tsc no copia binarios).
+COPY --from=server-build /build/server/assets ./assets
 COPY --from=app-build /build/app/dist ./app-dist
 COPY landing.html ./landing.html
 ENV APP_DIST=/srv/app-dist DATA_DIR=/srv/data PORT=3001
