@@ -782,11 +782,15 @@ api.get('/woo/productos/buscar', requireAuth, requireStore, async (req, res) => 
 const dropiHelpers = {
   credOrDie(sid: string, dropi: typeof DropiApi): DropiApi.DropiCred | null { return dropi.credDropi(sid); },
   async resolverProductosDropi(
-    sid: string, o: Record<string, unknown>, cred: DropiApi.DropiCred, dropi: typeof DropiApi,
+    sid: string, o: Record<string, unknown>, _cred: DropiApi.DropiCred, _dropi: typeof DropiApi,
   ): Promise<{ cotProductos: DropiApi.CotProducto[]; ordenProductos: CrearOrdenInputProducto[] } | { error: string }> {
     const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id) as { qty: number; nombre: string; precio: number }[];
     if (!items.length) return { error: 'El pedido no tiene productos.' };
-    const prodRows = db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(sid) as { nombre: string; sku: string }[];
+    // Producto: SKU = ID del producto en Dropi. Variante: SKU = ID de la VARIACIÓN
+    // en Dropi (se vincula a mano en Productos → Variantes). Emparejamos el ítem
+    // contra NUESTRAS propias etiquetas de variante (fiable: el nombre del ítem se
+    // arma con esa etiqueta), y usamos el id de variación que el dueño ya vinculó.
+    const prodRows = db.prepare("SELECT id, nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(sid) as { id: string; nombre: string; sku: string }[];
     const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const totalQty = items.reduce((a, it) => a + Math.max(1, it.qty), 0);
     const total = Number(o.total || 0);
@@ -795,26 +799,34 @@ const dropiHelpers = {
     for (const it of items) {
       const base = it.nombre.split('(')[0].split('—')[0].trim();
       const nItem = norm(it.nombre);
-      let sku = '';
-      const exact = prodRows.find((p) => norm(p.nombre) === norm(base));
-      if (exact) sku = exact.sku;
-      else { const m = prodRows.filter((p) => p.nombre && nItem.includes(norm(p.nombre))).sort((a, b) => b.nombre.length - a.nombre.length)[0]; if (m) sku = m.sku; }
-      if (!sku) return { error: `El producto "${base}" no tiene vinculado su ID de Dropi. Ponlo en Productos (el SKU de Dropi = ID del producto en Dropi).` };
-      const pid = Number(String(sku).replace(/[^0-9]/g, ''));
-      if (!pid) return { error: `El ID de Dropi de "${base}" no es válido: "${sku}".` };
-      const dp = await dropi.productoDropi(cred, pid);
-      if ('error' in dp) return { error: dp.error };
+      const prod = prodRows.find((p) => norm(p.nombre) === norm(base))
+        || prodRows.filter((p) => p.nombre && nItem.includes(norm(p.nombre))).sort((a, b) => b.nombre.length - a.nombre.length)[0];
+      if (!prod) return { error: `El producto "${base}" no tiene vinculado su ID de Dropi. Vincúlalo en Productos (SKU = ID del producto en Dropi).` };
+      const pid = Number(String(prod.sku).replace(/[^0-9]/g, ''));
+      if (!pid) return { error: `El ID de Dropi de "${base}" no es válido: "${prod.sku}".` };
+
+      // Variantes reales de ESTE producto en DealFlow (con su id de variación de Dropi en `sku`).
+      const variantes = db.prepare("SELECT label, sku FROM variants WHERE product_id = ? AND COALESCE(label,'') != '' AND lower(label) != 'única'").all(prod.id) as { label: string; sku: string }[];
       let variationId: number | undefined;
-      if (dp.tipo === 'VARIABLE') {
-        const parte = it.nombre.match(/\(([^)]*)\)/)?.[1] || it.nombre.replace(base, '');
-        const tks = norm(parte).split(/[^a-z0-9]+/).filter((t) => t.length > 1);
-        const match = tks.length ? dp.variaciones.find((v) => { const a = norm(v.atributos); return tks.every((t) => a.includes(t)); }) : undefined;
-        if (!match) return { error: `No pudimos emparejar la variante de "${it.nombre}" con las variaciones de ese producto en Dropi. Revisa talla/color.` };
-        variationId = match.id;
+      if (variantes.length) {
+        // Emparejamos el ítem con la etiqueta de variante (todos sus tokens presentes; gana la más larga).
+        let mejor: { sku: string; len: number } | null = null;
+        for (const v of variantes) {
+          const tks = norm(v.label).split(/[^a-z0-9]+/).filter((t) => t.length > 1);
+          if (tks.length && tks.every((t) => nItem.includes(t))) {
+            const len = norm(v.label).length;
+            if (!mejor || len > mejor.len) mejor = { sku: (v.sku || '').trim(), len };
+          }
+        }
+        if (!mejor) return { error: `No supimos cuál variante es "${it.nombre}". Revisa las variantes del producto.` };
+        const vid = Number(String(mejor.sku).replace(/[^0-9]/g, ''));
+        if (!vid) return { error: `La variante de "${it.nombre}" no está vinculada con Dropi. En Productos → Variantes, vincula cada talla/color con su variación de Dropi.` };
+        variationId = vid;
       }
+      const tipo: 'SIMPLE' | 'VARIABLE' = variationId ? 'VARIABLE' : 'SIMPLE';
       const precioUnit = it.precio > 0 ? it.precio : Math.round(total / Math.max(1, totalQty));
-      cotProductos.push({ id: pid, quantity: it.qty, type: dp.tipo, variation_id: variationId });
-      ordenProductos.push({ id: pid, name: it.nombre, type: dp.tipo, variation_id: variationId, quantity: it.qty, price: precioUnit });
+      cotProductos.push({ id: pid, quantity: it.qty, type: tipo, variation_id: variationId });
+      ordenProductos.push({ id: pid, name: it.nombre, type: tipo, variation_id: variationId, quantity: it.qty, price: precioUnit });
     }
     return { cotProductos, ordenProductos };
   },

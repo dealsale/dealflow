@@ -4,6 +4,7 @@ import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoU
 import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
 import { apiWooBuscarProductos, apiWooCatalogo, apiDropiProducto, type ProductoWoo, type ProductoCatalogoWoo, type DropiProducto } from '../lib/api';
+import { Dropdown } from '../components/Dropdown';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 
 // Título de sección resaltado en negro (para diferenciar los grupos del editor).
@@ -424,6 +425,66 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
 }
 
 /**
+ * Vincula cada variante (talla/color) de DealFlow con su VARIACIÓN en Dropi (API
+ * directa). Trae las variaciones del producto de Dropi (por su ID = SKU del
+ * producto) y para cada variante local muestra un desplegable para elegir la de
+ * Dropi. Guarda el ID de la variación en el SKU de la variante. Así el despacho
+ * no adivina por texto: usa la variación exacta que vinculaste.
+ */
+function SkuVariantesDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
+  const [vars, setVars] = useState<DropiProducto['variaciones'] | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState('');
+  const dropiId = (p.sku || '').trim();
+  useEffect(() => {
+    if (!df.dropiConectado || !dropiId) { setVars(null); return; }
+    setCargando(true); setError('');
+    let cancel = false;
+    void apiDropiProducto(dropiId).then((r) => {
+      if (cancel) return;
+      setCargando(false);
+      if (r.error || !r.data) { setError(r.error || 'No pudimos traer las variaciones de Dropi.'); setVars(null); return; }
+      setVars(r.data.variaciones || []);
+    });
+    return () => { cancel = true; };
+  }, [df.dropiConectado, dropiId]);
+  if (!df.dropiConectado || !dropiId) return null;
+  const variantes = (p.variantes || []).filter((v) => (v.label || '').toLowerCase() !== 'única');
+  if (!variantes.length) return null;
+  const opts = [{ value: '', label: 'Elegir variación de Dropi…' }, ...(vars || []).map((v) => ({ value: String(v.id), label: `${v.atributos}${v.sku ? ` · ${v.sku}` : ''}` }))];
+  const vinculadas = variantes.filter((v) => (v.sku || '').trim()).length;
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}>
+        <span style={{ width: 20, height: 20, borderRadius: 5, background: 'var(--df-warning-subtle)', color: 'var(--df-warning)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 10 }}>Dr</span>
+        Vincular variantes con Dropi
+        <span style={{ marginLeft: 'auto', fontSize: 11.5, color: vinculadas === variantes.length ? 'var(--df-brand-dark)' : 'var(--df-text-faint)', fontWeight: 600 }}>{vinculadas}/{variantes.length}</span>
+      </div>
+      <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Elige, para cada talla/color, cuál es su variación en Dropi. Así se despacha la exacta.</div>
+      {cargando && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Trayendo variaciones de Dropi…</div>}
+      {error && <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)' }}>{error}</div>}
+      {vars && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {variantes.map((v) => (
+            <div key={v.id || v.label} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600, fontSize: 13, minWidth: 120, flex: '0 0 auto' }}>{v.label}</span>
+              {v.id ? (
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <Dropdown ariaLabel={`Variación Dropi para ${v.label}`} value={(v.sku || '')} onChange={(val) => df.setVariantSku(p.id, v.id!, val)} options={opts} placeholder="Elegir variación…" />
+                </div>
+              ) : (
+                <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Guarda el producto primero para vincularla</span>
+              )}
+            </div>
+          ))}
+          {!vars.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Ese producto en Dropi no tiene variaciones (es simple). No hace falta vincular variantes.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Conecta el SKU de CADA variante (talla/color) con su código en Dropi/Effi,
  * para que despache la variante exacta. Reusa el buscador de productos del Woo.
  */
@@ -755,6 +816,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
         <>
           <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Color, Talla… El asistente las ofrece al cliente.</div>
           <OpcionesEditor p={p} />
+          <SkuVariantesDropi p={p} df={df} />
           <SkuVariantes p={p} df={df} />
         </>
       ),
