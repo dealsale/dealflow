@@ -7,6 +7,38 @@ import { apiWooBuscarProductos, apiWooCatalogo, apiDropiProducto, type ProductoW
 import { Dropdown } from '../components/Dropdown';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 
+/**
+ * Elige por cuál proveedor se despacha ESTE producto: Dropi o Effi. Con uno
+ * elegido, solo se muestra el vinculador de ese proveedor (antes salían los dos
+ * a la vez y confundía). Sin elegir, se muestran ambos (comportamiento de antes).
+ */
+function SelectorDespachoProducto({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
+  const provs = df.wooProveedores.includes('effi') ? (df.dropiConectado ? ['dropi', 'effi'] : ['effi']) : (df.dropiConectado ? ['dropi'] : []);
+  if (provs.length < 2) return null; // solo un proveedor conectado (o ninguno): no hay nada que elegir
+  const actual = p.despachoProveedor || '';
+  const opt = (val: string, label: string) => (
+    <button
+      key={val}
+      onClick={() => p.setDespachoProveedor(actual === val ? '' : val)}
+      style={{
+        background: actual === val ? 'var(--df-purple)' : 'var(--df-surface)',
+        border: '1px solid var(--df-purple-border)', color: actual === val ? '#fff' : 'var(--df-purple)',
+        borderRadius: 7, padding: '6px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
+      }}
+    >{label}</button>
+  );
+  return (
+    <div style={{ marginTop: 8, marginBottom: 4 }}>
+      <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 6 }}>Este producto se despacha por:</div>
+      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+        {opt('dropi', 'Dropi')}
+        {opt('effi', 'Effi')}
+        {!actual && <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', alignSelf: 'center' }}>← sin elegir: se muestran las dos integraciones</span>}
+      </div>
+    </div>
+  );
+}
+
 // Título de sección resaltado en negro (para diferenciar los grupos del editor).
 const TITULO_NEGRO: CSSProperties = { fontSize: 13.5, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '-0.01em', margin: '2px 0 10px' };
 // Subtítulo dentro de un grupo (jerarquía secundaria, en gris).
@@ -84,6 +116,28 @@ function OpcionesEditor({ p }: { p: DecoratedProduct }) {
       <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
         Crea un grupo por cada tipo de opción: uno "Color" con Negro, Azul… y otro "Talla" con S, M, L… El asistente se las ofrece al cliente.
       </div>
+    </div>
+  );
+}
+
+/**
+ * "Generar combinaciones desde Opciones": crea de una sola vez TODAS las
+ * variantes (talla × color × …) que falten, a partir de los grupos de Opciones
+ * ya cargados. Evita el error de ir creándolas una por una a mano y que falten
+ * (ej. "tengo 5 tallas × 3 colores, deberían ser 15 y solo salen 13").
+ */
+function BotonGenerarVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
+  const conValores = (p.opcionesDecoradas || []).filter((o) => (o.valores || []).length > 0);
+  if (conValores.length < 1) return null;
+  const totalPosibles = conValores.reduce((acc, o) => acc * o.valores.length, 1);
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <button
+        onClick={p.generarVariantes}
+        style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+      >⚡ Generar combinaciones desde Opciones ({totalPosibles} posibles)</button>
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>Crea las variantes que falten (talla × color) sin duplicar las que ya tienes.</div>
+      {df.variantesGenMsg && <div style={{ marginTop: 6, fontSize: 12.5, color: df.variantesGenMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.variantesGenMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.variantesGenMsg}</div>}
     </div>
   );
 }
@@ -665,10 +719,11 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             </div>
           </div>
           <div style={{ maxWidth: 560 }}>
-            <div style={label}>SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· para casar este producto con Effi/WooCommerce (opcional)</span></div>
+            <div style={label}>SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· para casar este producto con Dropi/Effi (opcional)</span></div>
             <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: FAJA-NEGRA-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
-            <VincularDropiApi p={p} df={df} />
-            <VincularSkuEffi p={p} df={df} />
+            <SelectorDespachoProducto p={p} df={df} />
+            {p.despachoProveedor !== 'effi' && <VincularDropiApi p={p} df={df} />}
+            {p.despachoProveedor !== 'dropi' && <VincularSkuEffi p={p} df={df} />}
           </div>
         </>
       ),
@@ -816,8 +871,9 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
         <>
           <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Color, Talla… El asistente las ofrece al cliente.</div>
           <OpcionesEditor p={p} />
-          <SkuVariantesDropi p={p} df={df} />
-          <SkuVariantes p={p} df={df} />
+          <BotonGenerarVariantes p={p} df={df} />
+          {p.despachoProveedor !== 'effi' && <SkuVariantesDropi p={p} df={df} />}
+          {p.despachoProveedor !== 'dropi' && <SkuVariantes p={p} df={df} />}
         </>
       ),
     },
@@ -902,7 +958,11 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
               <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: BODY-NEGRO-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
             </div>
           </div>
-          <div style={{ maxWidth: 560, marginBottom: 16 }}><VincularDropiApi p={p} df={df} /><VincularSkuEffi p={p} df={df} /></div>
+          <div style={{ maxWidth: 560, marginBottom: 16 }}>
+            <SelectorDespachoProducto p={p} df={df} />
+            {p.despachoProveedor !== 'effi' && <VincularDropiApi p={p} df={df} />}
+            {p.despachoProveedor !== 'dropi' && <VincularSkuEffi p={p} df={df} />}
+          </div>
         </>
       )}
       {/* Cuando está bloqueado, la estructura se muestra como REFERENCIA (no editable). */}

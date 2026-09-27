@@ -16,6 +16,7 @@ import {
 import { comprimirImagen, readFilesAsDataUrls } from '../components/PhotoUpload';
 import {
   apiAddVariant,
+  apiGenerarVariantes,
   apiAdminOverview,
   apiCreatePlan,
   apiCreateProduct,
@@ -321,6 +322,8 @@ export interface DecoratedProduct extends Product {
   setNombre: (v: string) => void;
   setPrecio: (v: string) => void;
   setSku: (v: string) => void;
+  setDespachoProveedor: (v: string) => void;
+  generarVariantes: () => void;
   setTipo: (v: 'producto' | 'servicio') => void;
   setDuracion: (v: string) => void;
   setDescripcion: (v: string) => void;
@@ -590,6 +593,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     tipo: p.tipo || 'producto',
     duracion: p.duracion || '',
     sku: p.sku || '',
+    despachoProveedor: p.despachoProveedor || '',
     bloqueado: !!p.bloqueado,
     reglas: p.reglas || [],
     descripcion: p.descripcion || '',
@@ -1345,6 +1349,18 @@ export function useDealFlowState() {
     if (apiMode && typeof productId === 'string') void apiAddVariant(productId, { label, stock }).then(() => reloadProducts());
   }
 
+  const [variantesGenMsg, setVariantesGenMsg] = useState('');
+  function generarVariantesProducto(productId: string) {
+    setVariantesGenMsg('Generando combinaciones desde las Opciones…');
+    void apiGenerarVariantes(productId).then((r) => {
+      if (r.error || !r.data) { setVariantesGenMsg(r.error || 'No pudimos generar las combinaciones.'); return; }
+      if (r.data.creadas > 0) setVariantesGenMsg(`✓ Se crearon ${r.data.creadas} variante(s) nueva(s) (de ${r.data.total} combinaciones posibles).`);
+      else setVariantesGenMsg(`Ya estaban las ${r.data.total} combinaciones posibles. Nada nuevo que crear.`);
+      void reloadProducts();
+      setTimeout(() => setVariantesGenMsg(''), 6000);
+    });
+  }
+
   function queuePatch(id: number | string, patch: Record<string, unknown>) {
     if (!apiMode || typeof id === 'number') return; // los ids numéricos son de la demo local
     const k = String(id);
@@ -2049,6 +2065,8 @@ export function useDealFlowState() {
         setNombre: (v: string) => updateProduct(p.id, { nombre: v }),
         setPrecio: (v: string) => updateProduct(p.id, { precio: parseInt(v.replace(/[^0-9]/g, ''), 10) || 0 }),
         setSku: (v: string) => updateProduct(p.id, { sku: v }),
+        setDespachoProveedor: (v: string) => updateProduct(p.id, { despachoProveedor: v }),
+        generarVariantes: () => generarVariantesProducto(String(p.id)),
         setTipo: (v: 'producto' | 'servicio') => updateProduct(p.id, { tipo: v }),
         setDuracion: (v: string) => updateProduct(p.id, { duracion: v }),
         fotosMain: (p.fotos || ['Principal', 'Detalle']).map((fl) => ({
@@ -4026,6 +4044,7 @@ export function useDealFlowState() {
     iaPredeterminada,
     integracionMsg,
     effiMsg,
+    variantesGenMsg,
     verificarWoo,
     sincronizarInventarioWoo,
     sincronizarProductosWoo,
