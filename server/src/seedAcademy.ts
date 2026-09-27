@@ -1,4 +1,7 @@
+import { copyFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
 import { db, uid } from './db.js';
+import { mediaDir } from './media.js';
 
 /**
  * Precarga cursos base de Academy (contenido real de cómo usar DealFlow) para
@@ -86,4 +89,109 @@ export function seedAcademy(): void {
   });
   tx();
   console.log(`[seed] ${CURSOS.length} cursos de Academy precargados`);
+}
+
+// ── Curso visual (guía con capturas reales) ──────────────────────────────────
+// A diferencia de seedAcademy(), este corre AUNQUE ya existan cursos: se guarda
+// con su propia bandera en app_flags para que un solo despliegue lo agregue una
+// vez. Las capturas viven en server/assets/academy (versionadas en el repo); al
+// sembrar las copiamos al directorio de media de Academy con nombres estables y
+// referenciamos su URL servida (/api/academy/media/<archivo>). El admin puede
+// luego editarlo, reordenarlo o borrarlo como cualquier otro curso.
+
+interface PasoImg { archivo: string; caption: string }
+interface LecImg { titulo: string; contenido: string; duracion: string; imagenes: PasoImg[] }
+
+const ASSETS_DIR = path.resolve(import.meta.dirname, '../assets/academy');
+
+// Copia la captura al espacio de media de Academy (nombre estable, con prefijo
+// para no chocar con archivos subidos a mano) y devuelve su URL servida.
+function copiarCaptura(archivo: string): string {
+  const destNombre = 'curso-visual-' + archivo;
+  const dest = path.join(mediaDir('__academy__'), destNombre);
+  const src = path.join(ASSETS_DIR, archivo);
+  if (existsSync(src) && !existsSync(dest)) {
+    try { copyFileSync(src, dest); } catch { /* si falla, la lección se ve sin esa imagen */ }
+  }
+  return '/api/academy/media/' + destNombre;
+}
+
+const CURSO_VISUAL: { titulo: string; descripcion: string; nivel: string; secciones: { titulo: string; lecciones: LecImg[] }[] } = {
+  titulo: 'Primeros pasos: productos, variantes y despacho',
+  descripcion: 'La guía visual para montar tu catálogo con tallas/colores y dejarlo listo para despachar por Dropi o Effi. Paso a paso, con capturas reales de DealFlow.',
+  nivel: 'Básico',
+  secciones: [
+    {
+      titulo: 'Productos y variantes',
+      lecciones: [
+        {
+          titulo: 'Crea tu producto y arma sus tallas/colores',
+          duracion: '4 min',
+          contenido: 'Cada producto puede tener variantes (talla, color…). Sigue estos pasos: crea el producto, abre la pestaña Variantes, agrega tus grupos de Opciones y genera todas las combinaciones con un clic — así no se te olvida ninguna.',
+          imagenes: [
+            { archivo: 'dashboard.png', caption: 'Este es tu panel. Entra a "Productos" en el menú de la izquierda.' },
+            { archivo: 'producto.png', caption: 'Abre un producto (o crea uno nuevo con "+ Nuevo producto"). Se despliega su ficha completa: nombre, precio, SKU y más abajo sus secciones.' },
+            { archivo: 'variantes_vacio.png', caption: 'Entra a la sección "Variantes". Aquí creas los grupos de Opciones — por ejemplo "Talla" y "Color" — con los valores que maneje ese producto.' },
+            { archivo: 'opciones.png', caption: 'Agrega cada grupo con su botón "+ Agregar grupo", y dentro de cada uno ve sumando sus valores (S, M, L… Negro, Verde…). Cuando termines, aparece el botón morado para generar las combinaciones.' },
+            { archivo: 'generadas.png', caption: '¡Un clic y listo! Se crean automáticamente TODAS las combinaciones que falten (talla × color), sin duplicar las que ya tenías. El mensaje verde confirma cuántas se crearon.' },
+          ],
+        },
+      ],
+    },
+    {
+      titulo: 'Envíos y despacho',
+      lecciones: [
+        {
+          titulo: 'Conecta Dropi o Effi para despachar solo',
+          duracion: '3 min',
+          contenido: 'En Integraciones eliges con cuál trabajas: Dropi por su API directa (cotiza transportadoras y trae la guía) o Effi por WooCommerce. Puedes tener las dos conectadas y elegir por producto o por pedido.',
+          imagenes: [
+            { archivo: 'integraciones.png', caption: 'Ve a "Integraciones" en el menú. En "Envíos" están Effi (WooCommerce) y Dropi; para Dropi lo recomendado es "Dropi (API directa)": pega el token que genera Dropi en "Mis Integraciones" y listo.' },
+          ],
+        },
+        {
+          titulo: 'Revisa y despacha tus pedidos',
+          duracion: '3 min',
+          contenido: 'Cada venta que cierra tu asistente llega aquí como un pedido nuevo. Ábrelo para ver los datos de envío, lo que pidió el cliente, y el bloque de Despacho para enviarlo por Dropi o Effi.',
+          imagenes: [
+            { archivo: 'pedidos.png', caption: 'En "Pedidos" ves todos los pedidos ordenados por fecha, con el cliente, la ciudad y qué compró. Desde aquí también cambias el estado o eliminas un pedido.' },
+            { archivo: 'pedido_detalle.png', caption: 'Al abrir uno ves los datos de envío, los productos y, en "Despacho", el botón para enviarlo a Dropi o Effi (si aún no conectaste ninguno, te lo recuerda aquí mismo).' },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+export function seedAcademyCursoVisual(): void {
+  const flag = 'academy_curso_visual_v1';
+  if (db.prepare('SELECT 1 FROM app_flags WHERE clave = ?').get(flag)) return;
+
+  const insCurso = db.prepare("INSERT INTO academy_cursos (id, titulo, descripcion, nivel, orden, publicado) VALUES (?,?,?,?,?,1)");
+  const insSec = db.prepare("INSERT INTO academy_secciones (id, curso_id, titulo, orden) VALUES (?,?,?,?)");
+  const insLec = db.prepare("INSERT INTO academy_lecciones (id, curso_id, seccion_id, titulo, tipo, video_url, contenido, duracion, orden, publicado, imagenes) VALUES (?,?,?,?,?,?,?,?,?,1,?)");
+
+  // Copiamos las capturas FUERA de la transacción de SQLite (es I/O de disco).
+  const urls = new Map<string, string>();
+  for (const sec of CURSO_VISUAL.secciones)
+    for (const lec of sec.lecciones)
+      for (const img of lec.imagenes)
+        if (!urls.has(img.archivo)) urls.set(img.archivo, copiarCaptura(img.archivo));
+
+  const tx = db.transaction(() => {
+    const cid = uid();
+    // orden 0 para que aparezca de primero (es la guía de arranque).
+    insCurso.run(cid, CURSO_VISUAL.titulo, CURSO_VISUAL.descripcion, CURSO_VISUAL.nivel, 0);
+    CURSO_VISUAL.secciones.forEach((sec, si) => {
+      const sid = uid();
+      insSec.run(sid, cid, sec.titulo, si);
+      sec.lecciones.forEach((lec, li) => {
+        const imagenes = lec.imagenes.map((img) => ({ url: urls.get(img.archivo) || '', caption: img.caption }));
+        insLec.run(uid(), cid, sid, lec.titulo, 'articulo', '', lec.contenido, lec.duracion, li, JSON.stringify(imagenes));
+      });
+    });
+    db.prepare('INSERT INTO app_flags (clave) VALUES (?)').run(flag);
+  });
+  tx();
+  console.log('[seed] Curso visual de Academy precargado (guía con capturas)');
 }
