@@ -2101,6 +2101,8 @@ const mapLeccion = (l: Record<string, unknown>) => ({
   id: l.id, cursoId: l.curso_id, seccionId: l.seccion_id || '', titulo: l.titulo, tipo: l.tipo || 'video',
   videoUrl: l.video_url || '', contenido: l.contenido || '', duracion: l.duracion || '',
   orden: l.orden ?? 0, publicado: Number(l.publicado) === 1,
+  // Guía paso a paso con capturas: [{url, caption}]. Independiente del tipo (video o artículo).
+  imagenes: pj<{ url: string; caption?: string }[]>(l.imagenes as string, []),
 });
 const mapSeccion = (s: Record<string, unknown>) => ({
   id: s.id, cursoId: s.curso_id, titulo: s.titulo || '', orden: s.orden ?? 0,
@@ -2200,14 +2202,15 @@ api.post('/admin/academy/cursos/:id/lecciones', requireAuth, requireAdmin, (req,
   }
   const id = uid();
   const orden = (db.prepare("SELECT COALESCE(MAX(orden),0)+1 n FROM academy_lecciones WHERE seccion_id = ?").get(seccionId) as { n: number }).n;
-  db.prepare("INSERT INTO academy_lecciones (id, curso_id, seccion_id, titulo, tipo, video_url, contenido, duracion, orden, publicado) VALUES (?,?,?,?,?,?,?,?,?,?)")
-    .run(id, req.params.id, seccionId, String(b.titulo).trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), orden, b.publicado === false ? 0 : 1);
+  db.prepare("INSERT INTO academy_lecciones (id, curso_id, seccion_id, titulo, tipo, video_url, contenido, duracion, orden, publicado, imagenes) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+    .run(id, req.params.id, seccionId, String(b.titulo).trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), orden, b.publicado === false ? 0 : 1, j(Array.isArray(b.imagenes) ? b.imagenes : []));
   res.json({ ok: true, id });
 });
 api.put('/admin/academy/lecciones/:id', requireAuth, requireAdmin, (req, res) => {
   const l = db.prepare("SELECT id, curso_id FROM academy_lecciones WHERE id = ?").get(req.params.id) as { id: string; curso_id: string } | undefined;
   if (!l) return res.status(404).json({ error: 'Lección no encontrada.' });
   const b = req.body || {};
+  const imagenes = j(Array.isArray(b.imagenes) ? b.imagenes : []);
   // Permitir mover la lección a otra sección del MISMO curso (drag entre secciones).
   let seccionId: string | undefined;
   if (b.seccionId !== undefined) {
@@ -2215,11 +2218,11 @@ api.put('/admin/academy/lecciones/:id', requireAuth, requireAdmin, (req, res) =>
     if (ok) seccionId = String(b.seccionId);
   }
   if (seccionId) {
-    db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ?, seccion_id = ? WHERE id = ?")
-      .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, seccionId, req.params.id);
+    db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ?, seccion_id = ?, imagenes = ? WHERE id = ?")
+      .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, seccionId, imagenes, req.params.id);
   } else {
-    db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ? WHERE id = ?")
-      .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, req.params.id);
+    db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ?, imagenes = ? WHERE id = ?")
+      .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, imagenes, req.params.id);
   }
   res.json({ ok: true });
 });
@@ -2414,6 +2417,22 @@ api.get('/media/:storeId/:file', requireAuth, requireStore, (req, res) => {
 // (para poder mostrar las fotos de los productos antes de importarlos).
 api.get('/library/media/:file', requireAuth, requireStore, (req, res) => {
   const file = mediaPath('__biblioteca__', req.params.file);
+  if (!existsSync(file)) return res.status(404).end();
+  res.sendFile(file);
+});
+
+// Capturas de pantalla para las guías paso a paso de Academy. Solo admin/
+// superadmin las sube (no requireStore: el equipo DealFlow no tiene tienda);
+// las lee cualquier usuario logueado (VENDEDOR incluido, son quienes ven el portal).
+api.post('/academy/media', requireAuth, requireAdmin, (req, res) => {
+  const { dataUrl, nombre } = req.body || {};
+  if (!dataUrl) return res.status(400).json({ error: 'No recibimos el archivo.' });
+  const saved = saveOutgoingMedia('__academy__', String(dataUrl), String(nombre || ''));
+  if (!saved) return res.status(400).json({ error: 'El archivo no es válido.' });
+  res.json({ url: saved.url.replace('/api/media/__academy__/', '/api/academy/media/') });
+});
+api.get('/academy/media/:file', requireAuth, (req, res) => {
+  const file = mediaPath('__academy__', req.params.file);
   if (!existsSync(file)) return res.status(404).end();
   res.sendFile(file);
 });

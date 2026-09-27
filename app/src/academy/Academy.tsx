@@ -39,7 +39,8 @@ const GLOBAL_CSS = `
 `;
 
 // ── Tipos ──
-interface Leccion { id: string; cursoId: string; seccionId: string; titulo: string; tipo: 'video' | 'articulo'; videoUrl: string; contenido: string; duracion: string; orden: number; publicado: boolean }
+interface PasoImagen { url: string; caption?: string }
+interface Leccion { id: string; cursoId: string; seccionId: string; titulo: string; tipo: 'video' | 'articulo'; videoUrl: string; contenido: string; duracion: string; orden: number; publicado: boolean; imagenes?: PasoImagen[] }
 interface Seccion { id: string; cursoId: string; titulo: string; orden: number; lecciones: Leccion[] }
 interface Curso { id: string; titulo: string; descripcion: string; portada: string; nivel: string; orden: number; publicado: boolean; lecciones: Leccion[] | number; secciones?: Seccion[]; completadas?: string[] }
 interface Sesion { id: string; nombre: string; role: string }
@@ -289,6 +290,7 @@ function VistaCurso({ cursoId }: { cursoId: string }) {
 
 function Reproductor({ leccion }: { leccion: Leccion }) {
   const emb = leccion.tipo === 'video' ? embedUrl(leccion.videoUrl) : null;
+  const pasos = leccion.imagenes || [];
   return (
     <div>
       {emb && (
@@ -299,7 +301,42 @@ function Reproductor({ leccion }: { leccion: Leccion }) {
         </div>
       )}
       <h2 style={{ fontSize: 19, fontWeight: 750, margin: '0 0 8px' }}>{leccion.titulo}</h2>
-      {leccion.contenido && <div style={{ color: '#D3DEE6', fontSize: 15, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{leccion.contenido}</div>}
+      {leccion.contenido && <div style={{ color: '#D3DEE6', fontSize: 15, lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: pasos.length ? 20 : 0 }}>{leccion.contenido}</div>}
+      {!!pasos.length && <GuiaPasos pasos={pasos} />}
+    </div>
+  );
+}
+
+/** Guía visual paso a paso: cada captura numerada con su descripción, con un
+ * lightbox al hacer clic para verla en grande. */
+function GuiaPasos({ pasos }: { pasos: PasoImagen[] }) {
+  const [ampliada, setAmpliada] = useState<number | null>(null);
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span>📸 Paso a paso</span><span style={{ height: 1, flex: 1, background: C.line }} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {pasos.map((p, i) => (
+          <div key={i} className="ac-card" style={{ display: 'flex', gap: 14, animationDelay: `${i * 0.08}s` }}>
+            <span style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(140deg,${C.emerald},${C.sky})`, color: '#052018', fontWeight: 900, fontSize: 13, display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 2 }}>{i + 1}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {p.caption && <div style={{ fontSize: 14.5, color: C.text, lineHeight: 1.55, marginBottom: 10 }}>{p.caption}</div>}
+              {p.url && (
+                <img
+                  src={p.url} alt={p.caption || `Paso ${i + 1}`} onClick={() => setAmpliada(i)}
+                  style={{ width: '100%', maxWidth: 640, borderRadius: 10, border: `1px solid ${C.line2}`, cursor: 'zoom-in', display: 'block' }}
+                />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {ampliada !== null && pasos[ampliada] && (
+        <div onClick={() => setAmpliada(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(6,10,18,.92)', zIndex: 100, display: 'grid', placeItems: 'center', padding: 24, cursor: 'zoom-out', animation: 'acFadeIn .15s ease both' }}>
+          <img src={pasos[ampliada].url} alt="" style={{ maxWidth: '92vw', maxHeight: '88vh', borderRadius: 10, boxShadow: '0 30px 80px rgba(0,0,0,.6)' }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -425,7 +462,7 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
   const totalLec = secciones.reduce((n, s) => n + s.lecciones.length, 0);
 
   const guardarLec = async (seccionId: string, l: Partial<Leccion>) => {
-    const body = { titulo: l.titulo, tipo: l.tipo, videoUrl: l.videoUrl, contenido: l.contenido, duracion: l.duracion, orden: l.orden, publicado: l.publicado, seccionId };
+    const body = { titulo: l.titulo, tipo: l.tipo, videoUrl: l.videoUrl, contenido: l.contenido, duracion: l.duracion, orden: l.orden, publicado: l.publicado, seccionId, imagenes: l.imagenes || [] };
     const r = l.id ? await aReq(`/api/admin/academy/lecciones/${l.id}`, 'PUT', body) : await aReq(`/api/admin/academy/cursos/${curso.id}/lecciones`, 'POST', body);
     if (r.error) { alert(r.error); return; }
     setEditLec(null); onCambio();
@@ -483,7 +520,24 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
 
 function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Leccion>; onGuardar: (l: Partial<Leccion>) => void; onCancelar: () => void }) {
   const [f, setF] = useState<Partial<Leccion>>(leccion);
+  const [subiendo, setSubiendo] = useState(false);
   const set = (k: keyof Leccion, v: unknown) => setF((p) => ({ ...p, [k]: v }));
+  const pasos = f.imagenes || [];
+  const setPasos = (n: PasoImagen[]) => set('imagenes', n);
+
+  const subirCaptura = (file: File) => {
+    setSubiendo(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      void aReq<{ url: string }>('/api/academy/media', 'POST', { dataUrl: reader.result, nombre: file.name }).then((r) => {
+        setSubiendo(false);
+        if (r.data?.url) setPasos([...pasos, { url: r.data.url, caption: '' }]);
+        else alert(r.error || 'No pudimos subir la captura.');
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div style={{ ...tarjeta, background: 'rgba(255,255,255,.03)', marginTop: 10 }}>
       <input value={f.titulo || ''} onChange={(e) => set('titulo', e.target.value)} placeholder="Título de la lección" style={inputA} />
@@ -495,6 +549,27 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
       </div>
       {f.tipo !== 'articulo' && <input value={f.videoUrl || ''} onChange={(e) => set('videoUrl', e.target.value)} placeholder="URL del video (YouTube, Vimeo o .mp4)" style={inputA} />}
       <textarea value={f.contenido || ''} onChange={(e) => set('contenido', e.target.value)} placeholder={f.tipo === 'articulo' ? 'Contenido del artículo…' : 'Descripción / notas (opcional)'} style={{ ...inputA, minHeight: f.tipo === 'articulo' ? 160 : 70, resize: 'vertical' }} />
+
+      {/* Guía paso a paso: capturas de pantalla numeradas, cada una con su descripción. */}
+      <div style={{ border: `1px dashed ${C.line2}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 10 }}>📸 Paso a paso (capturas)</div>
+        {pasos.map((p, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10, background: 'rgba(255,255,255,.03)', borderRadius: 9, padding: 8 }}>
+            <span style={{ width: 22, height: 22, borderRadius: '50%', background: C.emerald, color: '#052018', fontWeight: 800, fontSize: 11.5, display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 4 }}>{i + 1}</span>
+            {p.url && <img src={p.url} alt="" style={{ width: 88, height: 56, objectFit: 'cover', borderRadius: 6, border: `1px solid ${C.line2}`, flexShrink: 0 }} />}
+            <textarea
+              value={p.caption || ''} onChange={(e) => setPasos(pasos.map((x, j) => (j === i ? { ...x, caption: e.target.value } : x)))}
+              placeholder="Qué hacer en este paso…" style={{ ...inputA, flex: 1, minHeight: 40, marginBottom: 0, fontSize: 13 }}
+            />
+            <button onClick={() => setPasos(pasos.filter((_, j) => j !== i))} style={{ ...btnGhost, padding: '5px 9px', color: C.danger, flexShrink: 0 }}>×</button>
+          </div>
+        ))}
+        <label style={{ ...btnGhost, display: 'inline-block', borderStyle: 'dashed', cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
+          {subiendo ? 'Subiendo…' : '+ Subir captura de pantalla'}
+          <input type="file" accept="image/*" disabled={subiendo} onChange={(e) => { const file = e.target.files?.[0]; if (file) subirCaptura(file); e.target.value = ''; }} style={{ display: 'none' }} />
+        </label>
+      </div>
+
       <label style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.muted, fontSize: 14, marginBottom: 10 }}>
         <input type="checkbox" checked={f.publicado !== false} onChange={(e) => set('publicado', e.target.checked)} /> Publicada
       </label>
