@@ -135,8 +135,8 @@ function BotonGenerarVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowSta
       <button
         onClick={p.generarVariantes}
         style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
-      >⚡ Generar combinaciones desde Opciones ({totalPosibles} posibles)</button>
-      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>Crea las variantes que falten (talla × color) sin duplicar las que ya tienes.</div>
+      >⚡ Sincronizar variantes con las opciones ({totalPosibles} en total)</button>
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>Deja exactamente las {totalPosibles} combinaciones (talla × color): crea las que falten y quita repetidas o sobrantes. Se hace solo al guardar, esto es por si quieres forzarlo ya.</div>
       {df.variantesGenMsg && <div style={{ marginTop: 6, fontSize: 12.5, color: df.variantesGenMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.variantesGenMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.variantesGenMsg}</div>}
     </div>
   );

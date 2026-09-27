@@ -242,13 +242,29 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
           </div>
         </div>
 
-        {/* El estado lo maneja la integración (Dropi/Effi) automáticamente y se le
-            comunica al cliente; por eso ya no se cambia a mano desde aquí. */}
-        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--df-border)', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--df-text-muted)', fontSize: 12.5 }}>
-          <span>Estado actual:</span>
-          <span style={sel.pillStyle}>{sel.estado}</span>
-          <div style={{ flex: 1 }} />
-          <span style={{ color: 'var(--df-text-faint)', fontSize: 11.5, textAlign: 'right' }}>Se actualiza solo desde {sel.despachoProveedor === 'effi' ? 'Effi' : 'Dropi'}</span>
+        {/* Estado del pedido: se actualiza SOLO desde Dropi/Effi, pero también lo
+            puedes cambiar a mano aquí (o eliminar el pedido del panel). */}
+        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--df-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Estado del pedido</span>
+            <div style={{ flex: 1 }} />
+            {sel.despachado && <span style={{ color: 'var(--df-text-faint)', fontSize: 11 }}>se actualiza solo desde {dropiCreado ? 'Dropi' : 'Effi'}</span>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <Dropdown
+                ariaLabel="Cambiar estado del pedido"
+                value={sel.estado}
+                onChange={(v) => sel.setEstado(v as typeof sel.estado)}
+                options={sel.estadosDisponibles.map((e) => ({ value: e, label: e }))}
+              />
+            </div>
+            <button
+              onClick={() => { if (confirm(`¿Eliminar el pedido ${sel.id}? Esto solo lo quita del panel; no cancela nada en Dropi/Effi.`)) sel.eliminar(); }}
+              title="Eliminar pedido"
+              style={{ background: 'var(--df-surface)', border: '1px solid var(--df-danger-border, var(--df-border))', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-danger-dark)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >🗑 Eliminar</button>
+          </div>
         </div>
       </div>
     </div>
