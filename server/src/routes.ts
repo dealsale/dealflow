@@ -820,6 +820,12 @@ const dropiHelpers = {
   },
 };
 type CrearOrdenInputProducto = DropiApi.CrearOrdenInput['productos'][number];
+// Añade al mensaje de error las opciones válidas que devolvió Dropi (para que el
+// dueño vea cómo se escribe la ciudad/departamento en Dropi).
+function errConOpciones(msg: string, opciones?: string[]): string {
+  if (!opciones || !opciones.length) return msg;
+  return `${msg} · Cómo lo tiene Dropi: ${opciones.slice(0, 15).join(', ')}${opciones.length > 15 ? '…' : ''}`;
+}
 
 // Estado de la conexión Dropi API (sin exponer el token).
 api.get('/dropi/estado', requireAuth, requireStore, (req, res) => {
@@ -883,7 +889,7 @@ api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requireOwner
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const destino = await dropi.resolverDestino(c, String(o.departamento || ''), String(o.ciudad || ''), true);
-  if ('error' in destino) return res.status(400).json({ error: destino.error, opciones: destino.opciones });
+  if ('error' in destino) return res.status(400).json({ error: errConOpciones(destino.error, destino.opciones), opciones: destino.opciones });
   const prods = await resolverProductosDropi(sid, o, c, dropi);
   if ('error' in prods) return res.status(400).json({ error: prods.error });
   const monto = Number(o.total || 0);
@@ -903,7 +909,7 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, 
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   if (o.dropi_order_id && req.body?.reintentar !== true) return res.json({ ok: true, dropiId: o.dropi_order_id, aviso: 'Este pedido ya se creó en Dropi.' });
   const destino = await dropi.resolverDestino(c, String(o.departamento || ''), String(o.ciudad || ''), true);
-  if ('error' in destino) return res.status(400).json({ error: destino.error, opciones: destino.opciones });
+  if ('error' in destino) return res.status(400).json({ error: errConOpciones(destino.error, destino.opciones), opciones: destino.opciones });
   const prods = await resolverProductosDropi(sid, o, c, dropi);
   if ('error' in prods) return res.status(400).json({ error: prods.error });
 
@@ -918,8 +924,10 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, 
   });
   if ('error' in crear) return res.status(400).json({ error: crear.error });
   const nombreTransp = t?.nombre || '';
-  db.prepare('UPDATE orders SET dropi_order_id = ?, despacho_proveedor = ?, transportadora = ?, guia = ? WHERE id = ?')
-    .run(crear.id, 'dropi', nombreTransp, req.body?.reintentar === true ? '' : String(o.guia || ''), o.id);
+  // Al crear en Dropi limpiamos cualquier despacho previo por WooCommerce (si el
+  // pedido había quedado enviado por Effi por error, esto lo "cambia" a Dropi).
+  db.prepare("UPDATE orders SET dropi_order_id = ?, despacho_proveedor = 'dropi', transportadora = ?, woo_id = '', estado_woo = '', guia = ? WHERE id = ?")
+    .run(crear.id, nombreTransp, req.body?.reintentar === true ? '' : String(o.guia || ''), o.id);
   registrarLog(sid, 'info', 'despacho', `DF-${o.numero} creado en Dropi (orden ${crear.id})${nombreTransp ? ' por ' + nombreTransp : ''}.`);
   res.json({ ok: true, dropiId: crear.id, transportadora: nombreTransp });
 });
