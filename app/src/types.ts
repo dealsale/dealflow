@@ -107,6 +107,8 @@ export interface Product {
   duracion?: string;
   /** SKU para mapear con WooCommerce/Effi */
   sku?: string;
+  /** Por cuál se despacha: 'dropi' | 'effi' | '' (sin definir, se muestran las dos integraciones). */
+  despachoProveedor?: string;
   /** Producto de biblioteca gratuito: estructura bloqueada (solo precio/SKU editables). */
   bloqueado?: boolean;
   reglas: string[];

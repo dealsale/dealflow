@@ -203,6 +203,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
     tipo: p.tipo || 'producto', duracion: p.duracion || '', sku: p.sku || '', plantillaId: p.plantilla_id || '',
+    despachoProveedor: p.despacho_proveedor || '',
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
     descripcion: p.descripcion || '', caracteristicas: p.caracteristicas || '', mensajeInicial: p.mensaje_inicial || '',
     faqs: pj(p.faqs as string, []), testimonios: pj(p.testimonios as string, []), modosUso: p.modos_uso || '',
@@ -488,6 +489,10 @@ api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   if (req.body?.tipo !== undefined) db.prepare('UPDATE products SET tipo = ? WHERE id = ?').run(req.body.tipo === 'servicio' ? 'servicio' : 'producto', req.params.id);
   if (req.body?.duracion !== undefined) db.prepare('UPDATE products SET duracion = ? WHERE id = ?').run(String(req.body.duracion), req.params.id);
   if (req.body?.sku !== undefined) db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(String(req.body.sku).trim(), req.params.id);
+  if (req.body?.despachoProveedor !== undefined) {
+    const dp = req.body.despachoProveedor === 'dropi' || req.body.despachoProveedor === 'effi' ? req.body.despachoProveedor : '';
+    db.prepare('UPDATE products SET despacho_proveedor = ? WHERE id = ?').run(dp, req.params.id);
+  }
   if (Array.isArray(faqs)) db.prepare('UPDATE products SET faqs = ? WHERE id = ?').run(j(faqs), req.params.id);
   if (precio !== undefined) db.prepare('UPDATE products SET precio = ? WHERE id = ?').run(Number(precio) || 0, req.params.id);
   if (Array.isArray(reglas)) db.prepare('UPDATE products SET reglas = ? WHERE id = ?').run(j(reglas), req.params.id);
@@ -512,6 +517,48 @@ api.post('/products/:id/variants', requireAuth, requireStore, (req, res) => {
   db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, orden) VALUES (?,?,?,?,0,?)').run(id, req.params.id, label.trim(), Number(stock) || 0, orden);
   if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(req.params.id);
   res.json({ id });
+});
+
+// Genera automáticamente TODAS las combinaciones (talla × color × …) a partir de
+// las Opciones del producto, y crea las variantes que falten (sin duplicar las
+// que ya existen). Soluciona el error manual de "me faltaron variantes" cuando
+// se cargan las tallas/colores a mano una por una.
+api.post('/products/:id/variants/generar', requireAuth, requireStore, (req, res) => {
+  if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const prod = db.prepare('SELECT opciones FROM products WHERE id = ?').get(req.params.id) as { opciones: string } | undefined;
+  if (!prod) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const grupos = pj<{ nombre: string; valores: { valor: string }[] }[]>(prod.opciones, []);
+  const conValores = grupos.filter((g) => (g.valores || []).some((v) => (v.valor || '').trim()));
+  if (conValores.length < 1) return res.status(400).json({ error: 'Primero agrega las opciones del producto (ej. Talla, Color) con sus valores.' });
+
+  // Producto cartesiano de los valores de cada grupo, en el orden de los grupos.
+  let combos: string[][] = [[]];
+  for (const g of conValores) {
+    const vals = (g.valores || []).map((v) => (v.valor || '').trim()).filter(Boolean);
+    const next: string[][] = [];
+    for (const c of combos) for (const v of vals) next.push([...c, v]);
+    combos = next;
+  }
+  const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const existentes = db.prepare('SELECT label FROM variants WHERE product_id = ?').all(req.params.id) as { label: string }[];
+  const existentesNorm = new Set(existentes.map((v) => norm(v.label)));
+  let orden = (db.prepare('SELECT COALESCE(MAX(orden),0) AS o FROM variants WHERE product_id = ?').get(req.params.id) as { o: number }).o;
+
+  let creadas = 0;
+  const insert = db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos, orden) VALUES (?,?,?,0,0,?)');
+  for (const combo of combos) {
+    // Formato consistente con el resto de DealFlow: "Talla M · Negro".
+    const label = combo.join(' · ');
+    if (existentesNorm.has(norm(label))) continue; // ya existía (con este mismo orden de grupos o al revés)
+    const invertida = combo.length === 2 ? [combo[1], combo[0]].join(' · ') : label;
+    if (existentesNorm.has(norm(invertida))) continue;
+    orden += 1;
+    insert.run(uid(), req.params.id, label, orden);
+    existentesNorm.add(norm(label));
+    creadas++;
+  }
+  if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(req.params.id);
+  res.json({ ok: true, creadas, total: combos.length });
 });
 
 api.patch('/variants/:id', requireAuth, requireStore, (req, res) => {

@@ -263,6 +263,8 @@ export interface ApiProduct {
   tipo?: 'producto' | 'servicio';
   duracion?: string;
   sku?: string;
+  /** Por cuál se despacha este producto: 'dropi' | 'effi' | '' (sin definir, se muestran ambos). */
+  despachoProveedor?: string;
   bloqueado?: boolean;
   plantillaId?: string;
   reglas: string[];
@@ -289,6 +291,7 @@ export const apiCreateProduct = (b: { nombre: string; precio: number; stock: num
 export const apiPatchProduct = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/products/${id}`, 'PATCH', patch);
 export const apiDeleteProduct = (id: string) => req<{ ok: true }>(`/api/products/${id}`, 'DELETE');
 export const apiAddVariant = (productId: string, b: { label: string; stock: number }) => req<{ id: string }>(`/api/products/${productId}/variants`, 'POST', b);
+export const apiGenerarVariantes = (productId: string) => req<{ ok: true; creadas: number; total: number }>(`/api/products/${productId}/variants/generar`, 'POST');
 export const apiPatchVariant = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/variants/${id}`, 'PATCH', patch);
 export const apiDeleteVariant = (id: string) => req<{ ok: true }>(`/api/variants/${id}`, 'DELETE');
 export interface EstiloAsistente { trato?: 'tu' | 'usted'; emojis?: boolean; largo?: 'corto' | 'detallado' }
