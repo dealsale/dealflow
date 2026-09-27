@@ -10,7 +10,7 @@ const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
  * destino del pedido, el operador elige una (o deja que Dropi decida) y se crea
  * la orden en Dropi con la elegida.
  */
-export function DropiDespacho({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
+export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: DecoratedOrder; onHecho?: () => void }) {
   const [paso, setPaso] = useState<'idle' | 'cargando' | 'elegir' | 'creando'>('idle');
   const [ciudad, setCiudad] = useState('');
   const [disponibles, setDisponibles] = useState<DropiTransportadora[]>([]);
@@ -35,7 +35,7 @@ export function DropiDespacho({ df, sel }: { df: DealFlowState; sel: DecoratedOr
     void apiDropiCrear(sel.rowId, auto ? undefined : (elegida || undefined)).then((r) => {
       if (r.error || !r.data) { setPaso('elegir'); setMsg(r.error || 'No pudimos crear la orden.'); return; }
       df.marcarDropiCreado(sel.id, r.data.dropiId, r.data.transportadora || (auto ? '' : elegida?.nombre || ''));
-      setMsg('');
+      setMsg(''); onHecho?.();
     });
   };
 
@@ -90,6 +90,7 @@ export function DropiDespacho({ df, sel }: { df: DealFlowState; sel: DecoratedOr
 
 export function OrderDetailPanel({ df }: { df: DealFlowState }) {
   const [transp, setTransp] = useState('');
+  const [redespachar, setRedespachar] = useState(false);
   if (!df.hasSelectedOrder || !df.sel) return null;
   const sel = df.sel;
   // Opciones de transportadora: vacío ("sin especificar") + la lista fija.
@@ -165,7 +166,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
 
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Despacho</div>
           <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
-            {sel.despachado ? (
+            {sel.despachado && !redespachar ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <div style={{ width: 30, height: 30, borderRadius: 8, background: dropiCreado ? 'var(--df-warning-subtle)' : 'var(--df-purple-subtle)', color: dropiCreado ? 'var(--df-warning)' : 'var(--df-purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>{dropiCreado ? 'Dr' : 'Ef'}</div>
@@ -179,12 +180,10 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
                   Estado en {dropiCreado ? 'Dropi' : 'Effi'}: <b style={{ color: 'var(--df-text-strong)' }}>{sel.estadoWoo || 'esperando que lo procesen…'}</b>
                   <span style={{ display: 'block', color: 'var(--df-text-faint)', fontSize: 11.5, marginTop: 2 }}>Se actualiza solo cada pocos minutos. Cuando salga la guía, le avisamos al cliente por WhatsApp.</span>
                 </div>
-                {!dropiCreado && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                    <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>¿Algo salió mal en Effi?</span>
-                    <button onClick={() => sel.reenviarDespacho('effi', sel.transportadora || carrierElegido)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-warning)', cursor: 'pointer', whiteSpace: 'nowrap' }}>↻ Volver a enviar</button>
-                  </div>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  {!dropiCreado && <button onClick={() => sel.reenviarDespacho('effi', sel.transportadora || carrierElegido)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-warning)', cursor: 'pointer', whiteSpace: 'nowrap' }}>↻ Volver a enviar</button>}
+                  <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-purple)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline' }}>Cambiar despacho / transportadora</button>
+                </div>
                 {sel.hasGuia && (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 140, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-strong)' }}>Guía {sel.guia}</div>
@@ -197,13 +196,19 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
               <div style={{ color: 'var(--df-text-faint)', fontSize: 13 }}>Conecta <b>Dropi (API)</b> o el <b>WooCommerce de Effi</b> en <b>Integraciones</b> para despachar este pedido.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {redespachar && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Volver a despachar este pedido:</span>
+                    <button onClick={() => setRedespachar(false)} style={{ background: 'transparent', border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-text-muted)', cursor: 'pointer' }}>Cancelar</button>
+                  </div>
+                )}
                 {df.dropiConectado && (
                   <div>
                     <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 7 }}>
                       <span style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--df-warning-subtle)', color: 'var(--df-warning)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11 }}>Dr</span>
                       Despachar por Dropi
                     </div>
-                    <DropiDespacho df={df} sel={sel} />
+                    <DropiDespacho df={df} sel={sel} onHecho={() => setRedespachar(false)} />
                   </div>
                 )}
                 {df.wooProveedores.includes('effi') && (
@@ -216,7 +221,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
                       <div style={{ minWidth: 180, flex: 1 }}>
                         <Dropdown ariaLabel="Transportadora Effi" value={carrierElegido} onChange={setTransp} options={transpOpts} placeholder="Transportadora (opcional)" />
                       </div>
-                      <button onClick={() => sel.despachar('effi', carrierElegido)} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' }}>Enviar por Effi</button>
+                      <button onClick={() => { sel.despachar('effi', carrierElegido); setRedespachar(false); }} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' }}>Enviar por Effi</button>
                     </div>
                     {df.effiMsg && <div style={{ marginTop: 10, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
                   </div>

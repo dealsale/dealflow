@@ -85,15 +85,24 @@ export async function resolverDestino(
   cred: DropiCred, departamento: string, ciudad: string, conRecaudo: boolean,
 ): Promise<{ ciudad: Ciudad; depto: Depto } | { error: string; opciones?: string[] }> {
   let deptos: Depto[] = [];
+  let deptosRaw: Record<string, unknown>[] = [];
   try {
-    const r = await dropi<Depto[]>(cred, 'GET', '/department');
+    const r = await dropi<Record<string, unknown>[]>(cred, 'GET', '/department');
     if (!r.ok || !Array.isArray(r.body.objects)) return { error: r.body.message || 'No pudimos leer los departamentos de Dropi.' };
-    deptos = r.body.objects;
+    deptosRaw = r.body.objects;
   } catch { return { error: 'No pudimos conectar con Dropi (departamentos).' }; }
 
+  // Dropi puede llamar al nombre `name`, `nombre`, `description`… lo leemos de todas.
+  const nombreDe = (o: Record<string, unknown>) => String(o.name ?? o.nombre ?? o.description ?? o.descripcion ?? o.text ?? '');
+  const codDaneDe = (o: Record<string, unknown>) => String(o.cod_dane ?? o.codigo_dane ?? o.dane ?? o.daneCode ?? o.codDane ?? '').trim();
+  deptos = deptosRaw.map((d) => ({ id: Number(d.id), name: nombreDe(d) }));
+
   const dObjetivo = aliasDepto(departamento);
-  const depto = deptos.find((d) => norm(d.name) === dObjetivo) || deptos.find((d) => norm(d.name).includes(dObjetivo) || dObjetivo.includes(norm(d.name)));
-  if (!depto) return { error: `No encontramos el departamento "${departamento}" en Dropi.`, opciones: deptos.map((d) => d.name).slice(0, 40) };
+  const depto = deptos.find((d) => norm(d.name) === dObjetivo) || deptos.find((d) => d.name && (norm(d.name).includes(dObjetivo) || dObjetivo.includes(norm(d.name))));
+  if (!depto) {
+    console.warn('[dropi] departamento no casó:', departamento, '· llaves ejemplo:', deptosRaw[0] ? Object.keys(deptosRaw[0]) : 'sin datos', '· muestra:', JSON.stringify(deptosRaw[0] || {}).slice(0, 300));
+    return { error: `Dropi no reconoce el departamento "${departamento}". Escríbelo como en Dropi.`, opciones: deptos.map((d) => d.name).filter(Boolean).slice(0, 40) };
+  }
 
   const rateType = conRecaudo ? 'CON RECAUDO' : 'SIN RECAUDO';
   let ciudades: Record<string, unknown>[] = [];
@@ -103,14 +112,16 @@ export async function resolverDestino(
     ciudades = r.body.objects;
   } catch { return { error: 'No pudimos conectar con Dropi (ciudades).' }; }
 
-  const nombreDe = (c: Record<string, unknown>) => String(c.name || '');
   const cObjetivo = norm(ciudad);
-  const found = ciudades.find((c) => norm(nombreDe(c)) === cObjetivo) || ciudades.find((c) => norm(nombreDe(c)).includes(cObjetivo) || cObjetivo.includes(norm(nombreDe(c))));
-  if (!found) return { error: `No encontramos la ciudad "${ciudad}" en ${depto.name} (Dropi).`, opciones: ciudades.map(nombreDe).slice(0, 60) };
+  const found = ciudades.find((c) => norm(nombreDe(c)) === cObjetivo) || ciudades.find((c) => { const n = norm(nombreDe(c)); return n && (n.includes(cObjetivo) || cObjetivo.includes(n)); });
+  if (!found) {
+    console.warn('[dropi] ciudad no casó:', ciudad, 'en', depto.name, '· llaves ejemplo:', ciudades[0] ? Object.keys(ciudades[0]) : 'sin datos', '· muestra:', JSON.stringify(ciudades[0] || {}).slice(0, 300));
+    return { error: `Dropi no reconoce la ciudad "${ciudad}" en ${depto.name}. Escríbela como en Dropi.`, opciones: ciudades.map(nombreDe).filter(Boolean).slice(0, 80) };
+  }
 
-  const cod = String(found.cod_dane || '').trim();
+  const cod = codDaneDe(found);
   if (!cod) return { error: `La ciudad "${nombreDe(found)}" no trae código DANE en Dropi; no se puede cotizar.` };
-  const aceptaRecaudo = found.recaudo ?? found.collection_service ?? found.acepta_recaudo;
+  const aceptaRecaudo = found.recaudo ?? found.collection_service ?? found.acepta_recaudo ?? found.con_recaudo;
   const recaudoOk = aceptaRecaudo === undefined ? true : !!aceptaRecaudo;
   if (conRecaudo && !recaudoOk) return { error: `La ciudad "${nombreDe(found)}" no acepta pago contra entrega (recaudo) en Dropi.` };
 
@@ -126,19 +137,26 @@ export async function productoDropi(cred: DropiCred, id: number | string): Promi
     const r = await dropi<Record<string, unknown>>(cred, 'GET', `/products/v2/${encodeURIComponent(String(id))}`);
     if (!r.ok || !r.body.objects) return { error: r.body.message || `Dropi no encontró el producto ${id}.` };
     const o = r.body.objects as Record<string, unknown>;
-    const varsRaw = (Array.isArray(o.variations) ? o.variations : []) as Record<string, unknown>[];
+    const varsRaw = (Array.isArray(o.variations) ? o.variations : (Array.isArray(o.variaciones) ? o.variaciones : [])) as Record<string, unknown>[];
+    // Los atributos de la variación pueden venir de varias formas; los juntamos todos
+    // como texto para poder emparejar por talla/color al despachar.
+    const attrTexto = (v: Record<string, unknown>): string => {
+      const partes: string[] = [];
+      const av = v.attribute_values ?? v.attributes ?? v.atributos;
+      if (Array.isArray(av)) for (const a of av as Record<string, unknown>[]) partes.push(String(a?.value ?? a?.option ?? a?.name ?? a ?? ''));
+      else if (av) partes.push(String(av));
+      partes.push(String(v.name ?? v.nombre ?? ''), String(v.sku ?? ''));
+      return partes.filter(Boolean).join(' ');
+    };
     const variaciones: DropiVariacion[] = varsRaw.map((v) => ({
       id: Number(v.id),
-      atributos: [
-        (v as Record<string, unknown>).attribute_values,
-        v.name, v.sku,
-      ].filter(Boolean).map(String).join(' ') || String(v.id),
+      atributos: attrTexto(v) || String(v.id),
       sku: String(v.sku || ''),
     }));
     return {
       id: Number(o.id),
-      name: String(o.name || ''),
-      tipo: String(o.type || 'SIMPLE').toUpperCase() === 'VARIABLE' ? 'VARIABLE' : 'SIMPLE',
+      name: String(o.name ?? o.nombre ?? ''),
+      tipo: String(o.type ?? o.tipo ?? 'SIMPLE').toUpperCase() === 'VARIABLE' || varsRaw.length > 0 ? 'VARIABLE' : 'SIMPLE',
       userId: Number(o.user_id || o.userId || 0),
       variaciones,
     };
