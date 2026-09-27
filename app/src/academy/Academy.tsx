@@ -7,13 +7,36 @@ import { useEffect, useState, useCallback } from 'react';
  * admin/superadmin puede administrarlos desde el mismo portal.
  */
 
-// ── Tema (autocontenido, look de marca) ──
+// ── Tema (autocontenido, look de marca — vibrante, con acentos en degradé) ──
 const C = {
-  ink: '#0C1422', panel: '#111F32', line: 'rgba(255,255,255,.10)', line2: 'rgba(255,255,255,.16)',
+  ink: '#0A0F1C', panel: '#111F32', line: 'rgba(255,255,255,.10)', line2: 'rgba(255,255,255,.16)',
   emerald: '#34D399', emeraldDeep: '#059669', text: '#E8EFEA', muted: '#9DB0BD', muted2: '#6F8494',
-  danger: '#F87171',
+  danger: '#F87171', violet: '#A78BFA', sky: '#38BDF8', pink: '#F472B6',
 };
 const sans = 'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+
+// Animaciones + fondo con orbes flotando (sutil, no distrae de leer/ver video).
+const GLOBAL_CSS = `
+@keyframes acFadeUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
+@keyframes acFadeIn { from { opacity:0 } to { opacity:1 } }
+@keyframes acFloat1 { 0%,100% { transform:translate(0,0) scale(1) } 50% { transform:translate(30px,-40px) scale(1.08) } }
+@keyframes acFloat2 { 0%,100% { transform:translate(0,0) scale(1) } 50% { transform:translate(-40px,30px) scale(1.1) } }
+@keyframes acShine { 0% { background-position:-150% 0 } 100% { background-position:250% 0 } }
+@keyframes acPulseRing { 0% { box-shadow:0 0 0 0 rgba(52,211,153,.45) } 70% { box-shadow:0 0 0 10px rgba(52,211,153,0) } 100% { box-shadow:0 0 0 0 rgba(52,211,153,0) } }
+@keyframes acPop { 0% { transform:scale(.6); opacity:0 } 60% { transform:scale(1.08) } 100% { transform:scale(1); opacity:1 } }
+.ac-card { animation: acFadeUp .5s cubic-bezier(.2,.8,.2,1) both; transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s, border-color .22s; }
+.ac-card:hover { transform: translateY(-6px) scale(1.015); box-shadow: 0 22px 44px rgba(0,0,0,.38), 0 0 0 1px rgba(52,211,153,.25); border-color: rgba(52,211,153,.4) !important; }
+.ac-card:hover .ac-cover { transform: scale(1.06); }
+.ac-cover { transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+.ac-btn { transition: transform .15s ease, box-shadow .15s ease, filter .15s ease; }
+.ac-btn:hover { transform: translateY(-1px); filter: brightness(1.08); }
+.ac-btn:active { transform: translateY(0) scale(.97); }
+.ac-logo-badge { animation: acPulseRing 2.6s ease-out infinite; }
+.ac-check-pop { animation: acPop .35s cubic-bezier(.3,1.4,.4,1) both; }
+.ac-blob { position:fixed; border-radius:50%; filter:blur(70px); pointer-events:none; z-index:0; opacity:.35; }
+.ac-lec { transition: background .15s ease; }
+.ac-lec:hover { background: rgba(255,255,255,.05) !important; }
+`;
 
 // ── Tipos ──
 interface Leccion { id: string; cursoId: string; seccionId: string; titulo: string; tipo: 'video' | 'articulo'; videoUrl: string; contenido: string; duracion: string; orden: number; publicado: boolean }
@@ -74,21 +97,27 @@ export function Academy() {
   if (!sesion) return <LoginAcademy onOk={() => { setSesion(undefined); void cargarSesion(); }} />;
 
   return (
-    <div style={{ minHeight: '100vh', background: C.ink, color: C.text, fontFamily: sans }}>
-      <style>{`@media (max-width: 820px){
+    <div style={{ minHeight: '100vh', background: C.ink, color: C.text, fontFamily: sans, position: 'relative', overflow: 'hidden' }}>
+      <style>{`${GLOBAL_CSS}@media (max-width: 820px){
         .ac-curso-grid{grid-template-columns:1fr !important;}
         .ac-temario{position:static !important;order:-1;}
       }`}</style>
-      <Encabezado sesion={sesion} esAdmin={esAdmin} admin={admin} setAdmin={setAdmin} onVolver={cursoAbierto ? () => setCursoAbierto(null) : undefined} />
-      <main style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px 80px' }}>
-        {admin && esAdmin ? (
-          <AdminPanel onCambio={cargarCursos} />
-        ) : cursoAbierto ? (
-          <VistaCurso cursoId={cursoAbierto.id} />
-        ) : (
-          <Portal cursos={cursos} onAbrir={(c) => setCursoAbierto(c)} />
-        )}
-      </main>
+      {/* Fondo: orbes de color flotando muy despacio, detrás de todo. */}
+      <div className="ac-blob" style={{ width: 460, height: 460, top: -120, left: -100, background: C.emerald, animation: 'acFloat1 22s ease-in-out infinite' }} />
+      <div className="ac-blob" style={{ width: 380, height: 380, top: 320, right: -120, background: C.violet, animation: 'acFloat2 26s ease-in-out infinite' }} />
+      <div className="ac-blob" style={{ width: 300, height: 300, bottom: -100, left: '30%', background: C.sky, animation: 'acFloat1 30s ease-in-out infinite reverse' }} />
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <Encabezado sesion={sesion} esAdmin={esAdmin} admin={admin} setAdmin={setAdmin} onVolver={cursoAbierto ? () => setCursoAbierto(null) : undefined} />
+        <main style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px 80px', animation: 'acFadeIn .4s ease both' }}>
+          {admin && esAdmin ? (
+            <AdminPanel onCambio={cargarCursos} />
+          ) : cursoAbierto ? (
+            <VistaCurso cursoId={cursoAbierto.id} />
+          ) : (
+            <Portal cursos={cursos} onAbrir={(c) => setCursoAbierto(c)} />
+          )}
+        </main>
+      </div>
     </div>
   );
 }
@@ -99,14 +128,14 @@ function Centro({ children }: { children: React.ReactNode }) {
 
 function Encabezado({ sesion, esAdmin, admin, setAdmin, onVolver }: { sesion: Sesion; esAdmin: boolean; admin: boolean; setAdmin: (v: boolean) => void; onVolver?: () => void }) {
   return (
-    <header style={{ borderBottom: `1px solid ${C.line}`, position: 'sticky', top: 0, background: 'rgba(12,20,34,.85)', backdropFilter: 'blur(12px)', zIndex: 10 }}>
+    <header style={{ borderBottom: `1px solid ${C.line}`, position: 'sticky', top: 0, background: 'rgba(10,15,28,.75)', backdropFilter: 'blur(14px)', zIndex: 10 }}>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px', height: 62, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: `linear-gradient(140deg,${C.emerald},${C.emeraldDeep})`, fontWeight: 900, color: '#052018' }}>A</span>
-        <span style={{ fontWeight: 800, letterSpacing: '-.02em' }}>DealFlow <span style={{ color: C.emerald }}>Academy</span></span>
-        {onVolver && !admin && <button onClick={onVolver} style={btnGhost}>← Volver</button>}
+        <span className="ac-logo-badge" style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: `linear-gradient(140deg,${C.emerald},${C.sky})`, fontWeight: 900, color: '#052018' }}>A</span>
+        <span style={{ fontWeight: 800, letterSpacing: '-.02em' }}>DealFlow <span style={{ background: `linear-gradient(90deg,${C.emerald},${C.sky})`, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Academy</span></span>
+        {onVolver && !admin && <button className="ac-btn" onClick={onVolver} style={btnGhost}>← Volver</button>}
         <div style={{ flex: 1 }} />
         {esAdmin && (
-          <button onClick={() => setAdmin(!admin)} style={admin ? btnPrimary : btnGhost}>
+          <button className="ac-btn" onClick={() => setAdmin(!admin)} style={admin ? btnPrimary : btnGhost}>
             {admin ? '👁️ Ver portal' : '⚙️ Administrar'}
           </button>
         )}
@@ -116,27 +145,39 @@ function Encabezado({ sesion, esAdmin, admin, setAdmin, onVolver }: { sesion: Se
   );
 }
 
+const NIVEL_COLOR: Record<string, string> = { 'Básico': C.emerald, 'Intermedio': C.sky, 'Avanzado': C.pink };
+
 // ── Portal (lectura) ──
 function Portal({ cursos, onAbrir }: { cursos: Curso[]; onAbrir: (c: Curso) => void }) {
   return (
     <>
-      <h1 style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.03em', margin: '0 0 6px' }}>Aprende a sacarle todo a DealFlow</h1>
-      <p style={{ color: C.muted, fontSize: 16, margin: '0 0 26px' }}>Tutoriales y cursos: cómo crear automatizaciones, subir productos, atender por WhatsApp y mucho más.</p>
+      <h1 style={{ fontSize: 32, fontWeight: 850, letterSpacing: '-.03em', margin: '0 0 6px', animation: 'acFadeUp .5s ease both' }}>
+        Aprende a sacarle todo a{' '}
+        <span style={{ background: `linear-gradient(90deg,${C.emerald},${C.sky},${C.violet})`, backgroundSize: '200% 100%', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'acShine 5s linear infinite' }}>DealFlow</span>
+      </h1>
+      <p style={{ color: C.muted, fontSize: 16, margin: '0 0 26px', animation: 'acFadeUp .5s .05s ease both' }}>Tutoriales y cursos: cómo crear automatizaciones, subir productos, atender por WhatsApp y mucho más.</p>
       {cursos.length === 0 ? (
-        <div style={{ ...tarjeta, textAlign: 'center', color: C.muted }}>Pronto habrá contenido nuevo por aquí. 📚</div>
+        <div style={{ ...tarjeta, textAlign: 'center', color: C.muted, animation: 'acFadeUp .5s ease both' }}>Pronto habrá contenido nuevo por aquí. 📚</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
-          {cursos.map((c) => (
-            <button key={c.id} onClick={() => onAbrir(c)} style={{ ...tarjeta, padding: 0, overflow: 'hidden', cursor: 'pointer', textAlign: 'left' }}>
-              <div style={{ height: 148, background: c.portada ? `center/cover no-repeat url(${c.portada})` : `linear-gradient(140deg,${C.emeraldDeep},${C.panel})` }} />
-              <div style={{ padding: '14px 16px' }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: C.emerald, textTransform: 'uppercase', letterSpacing: '.05em' }}>{c.nivel}</div>
-                <div style={{ fontWeight: 750, fontSize: 16, margin: '4px 0 6px' }}>{c.titulo}</div>
-                <div style={{ color: C.muted, fontSize: 13.5, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.descripcion}</div>
-                <div style={{ color: C.muted2, fontSize: 12.5, marginTop: 10 }}>{typeof c.lecciones === 'number' ? c.lecciones : (c.lecciones as Leccion[]).length} lección(es)</div>
-              </div>
-            </button>
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 18 }}>
+          {cursos.map((c, i) => {
+            const nivelColor = NIVEL_COLOR[c.nivel] || C.emerald;
+            return (
+              <button key={c.id} className="ac-card" onClick={() => onAbrir(c)} style={{ ...tarjeta, padding: 0, overflow: 'hidden', cursor: 'pointer', textAlign: 'left', animationDelay: `${i * 0.06}s` }}>
+                <div style={{ height: 148, overflow: 'hidden' }}>
+                  <div className="ac-cover" style={{ height: '100%', background: c.portada ? `center/cover no-repeat url(${c.portada})` : `linear-gradient(140deg,${nivelColor},${C.panel} 130%)` }} />
+                </div>
+                <div style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 800, color: nivelColor, background: `${nivelColor}22`, borderRadius: 999, padding: '2px 9px', textTransform: 'uppercase', letterSpacing: '.05em' }}>{c.nivel}</div>
+                  <div style={{ fontWeight: 750, fontSize: 16, margin: '8px 0 6px' }}>{c.titulo}</div>
+                  <div style={{ color: C.muted, fontSize: 13.5, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.descripcion}</div>
+                  <div style={{ color: C.muted2, fontSize: 12.5, marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>▶</span>{typeof c.lecciones === 'number' ? c.lecciones : (c.lecciones as Leccion[]).length} lección(es)
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
     </>
@@ -178,7 +219,7 @@ function VistaCurso({ cursoId }: { cursoId: string }) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 20, alignItems: 'start' }} className="ac-curso-grid">
-      <div>
+      <div style={{ animation: 'acFadeUp .45s ease both' }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-.02em', margin: '0 0 4px' }}>{curso.titulo}</h1>
         <p style={{ color: C.muted, margin: '0 0 18px' }}>{curso.descripcion}</p>
         {activa ? (
@@ -186,28 +227,31 @@ function VistaCurso({ cursoId }: { cursoId: string }) {
             <Reproductor leccion={activa} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
               <button
+                className="ac-btn"
                 onClick={() => marcar(activa.id, !completadas.has(activa.id))}
                 style={completadas.has(activa.id) ? { ...btnGhost, borderColor: C.emerald, color: C.emerald } : btnPrimary}
               >
-                {completadas.has(activa.id) ? '✓ Completada' : 'Marcar como completada'}
+                {completadas.has(activa.id) ? <span className="ac-check-pop" style={{ display: 'inline-block' }}>✓ Completada</span> : 'Marcar como completada'}
               </button>
               {(() => {
                 const idx = todas.findIndex((l) => l.id === activa.id);
                 const sig = todas[idx + 1];
-                return sig ? <button onClick={() => setActiva(sig)} style={btnGhost}>Siguiente lección →</button> : null;
+                return sig ? <button className="ac-btn" onClick={() => setActiva(sig)} style={btnGhost}>Siguiente lección →</button> : null;
               })()}
             </div>
           </>
         ) : <div style={{ color: C.muted }}>Este curso aún no tiene lecciones.</div>}
       </div>
-      <aside style={{ ...tarjeta, padding: 12, position: 'sticky', top: 78 }} className="ac-temario">
+      <aside style={{ ...tarjeta, padding: 12, position: 'sticky', top: 78, animation: 'acFadeUp .45s .08s ease both' }} className="ac-temario">
         <div style={{ padding: '4px 8px 10px' }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em' }}>Contenido del curso</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-            <div style={{ flex: 1, height: 7, borderRadius: 99, background: 'rgba(255,255,255,.1)', overflow: 'hidden' }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${C.emerald},${C.emeraldDeep})`, transition: 'width .3s' }} />
+            <div style={{ flex: 1, height: 8, borderRadius: 99, background: 'rgba(255,255,255,.1)', overflow: 'hidden', position: 'relative' }}>
+              <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: `linear-gradient(90deg,${C.emerald},${C.sky})`, transition: 'width .4s cubic-bezier(.2,.8,.2,1)', position: 'relative', overflow: 'hidden' }}>
+                {pct > 0 && pct < 100 && <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent)', backgroundSize: '200% 100%', animation: 'acShine 1.8s linear infinite' }} />}
+              </div>
             </div>
-            <span style={{ fontSize: 12, color: C.muted, fontWeight: 700, whiteSpace: 'nowrap' }}>{pct}%</span>
+            <span style={{ fontSize: 12, color: pct === 100 ? C.emerald : C.muted, fontWeight: 700, whiteSpace: 'nowrap' }}>{pct === 100 ? '🎉 100%' : `${pct}%`}</span>
           </div>
           <div style={{ fontSize: 11.5, color: C.muted2, marginTop: 5 }}>{hechas} de {total} lecciones completadas</div>
         </div>
@@ -220,15 +264,15 @@ function VistaCurso({ cursoId }: { cursoId: string }) {
                 onClick={() => setExpandida((prev) => { const n = new Set(prev); if (n.has(s.id)) n.delete(s.id); else n.add(s.id); return n; })}
                 style={{ display: 'flex', gap: 8, width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '11px 8px', cursor: 'pointer', color: C.text, alignItems: 'center' }}
               >
-                <span style={{ color: C.muted, fontSize: 12 }}>{abierta ? '▾' : '▸'}</span>
+                <span style={{ color: C.muted, fontSize: 12, transition: 'transform .2s', display: 'inline-block', transform: abierta ? 'rotate(90deg)' : 'none' }}>▸</span>
                 <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>{s.titulo}</span>
-                <span style={{ color: C.muted2, fontSize: 11.5 }}>{hechasSec}/{s.lecciones.length}</span>
+                <span style={{ color: hechasSec === s.lecciones.length && s.lecciones.length ? C.emerald : C.muted2, fontSize: 11.5, fontWeight: 700 }}>{hechasSec}/{s.lecciones.length}</span>
               </button>
               {abierta && s.lecciones.map((l, i) => {
                 const done = completadas.has(l.id);
                 return (
-                  <button key={l.id} onClick={() => setActiva(l)} style={{ display: 'flex', gap: 9, width: '100%', textAlign: 'left', background: activa?.id === l.id ? 'rgba(52,211,153,.12)' : 'transparent', border: 'none', borderRadius: 9, padding: '8px 10px 8px 22px', cursor: 'pointer', color: C.text, alignItems: 'center' }}>
-                    <span style={{ width: 16, height: 16, borderRadius: 99, flexShrink: 0, display: 'grid', placeItems: 'center', fontSize: 10, border: `1.5px solid ${done ? C.emerald : C.line2}`, background: done ? C.emerald : 'transparent', color: '#052018' }}>{done ? '✓' : ''}</span>
+                  <button key={l.id} onClick={() => setActiva(l)} className="ac-lec" style={{ display: 'flex', gap: 9, width: '100%', textAlign: 'left', background: activa?.id === l.id ? 'rgba(52,211,153,.14)' : 'transparent', border: 'none', borderRadius: 9, padding: '8px 10px 8px 22px', cursor: 'pointer', color: C.text, alignItems: 'center' }}>
+                    <span style={{ width: 16, height: 16, borderRadius: 99, flexShrink: 0, display: 'grid', placeItems: 'center', fontSize: 10, border: `1.5px solid ${done ? C.emerald : C.line2}`, background: done ? C.emerald : 'transparent', color: '#052018', transition: 'background .2s,border-color .2s' }}>{done ? '✓' : ''}</span>
                     <span style={{ color: C.muted2, fontSize: 13 }}>{l.tipo === 'video' ? '▶' : '📄'}</span>
                     <span style={{ flex: 1, fontSize: 13, color: done ? C.muted : C.text }}>{i + 1}. {l.titulo}</span>
                     {l.duracion && <span style={{ color: C.muted2, fontSize: 11.5 }}>{l.duracion}</span>}
@@ -271,12 +315,15 @@ function LoginAcademy({ onOk }: { onOk: () => void }) {
     onOk();
   };
   return (
-    <div style={{ minHeight: '100vh', background: C.ink, color: C.text, fontFamily: sans, display: 'grid', placeItems: 'center', padding: 20 }}>
-      <style>{`@media (max-width:760px){ .ac-login-hero{display:none !important;} .ac-login-card{grid-template-columns:1fr !important;} }`}</style>
-      <div className="ac-login-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', width: 820, maxWidth: '100%', background: C.panel, border: `1px solid ${C.line}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,.35)' }}>
+    <div style={{ minHeight: '100vh', background: C.ink, color: C.text, fontFamily: sans, display: 'grid', placeItems: 'center', padding: 20, position: 'relative', overflow: 'hidden' }}>
+      <style>{`${GLOBAL_CSS}@media (max-width:760px){ .ac-login-hero{display:none !important;} .ac-login-card{grid-template-columns:1fr !important;} }`}</style>
+      <div className="ac-blob" style={{ width: 480, height: 480, top: -140, left: -140, background: C.emerald, animation: 'acFloat1 20s ease-in-out infinite' }} />
+      <div className="ac-blob" style={{ width: 420, height: 420, bottom: -160, right: -140, background: C.sky, animation: 'acFloat2 24s ease-in-out infinite' }} />
+      <div className="ac-blob" style={{ width: 260, height: 260, top: '40%', right: '8%', background: C.violet, animation: 'acFloat1 28s ease-in-out infinite reverse', opacity: .22 }} />
+      <div className="ac-login-card" style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', width: 820, maxWidth: '100%', background: 'rgba(17,31,50,.9)', backdropFilter: 'blur(8px)', border: `1px solid ${C.line}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,.45)', animation: 'acFadeUp .5s cubic-bezier(.2,.8,.2,1) both' }}>
         {/* Panel de bienvenida (solo escritorio) */}
-        <div className="ac-login-hero" style={{ padding: '40px 34px', background: `linear-gradient(160deg,${C.emeraldDeep},#062B22 70%)`, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <span style={{ width: 40, height: 40, borderRadius: 11, display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,.14)', fontWeight: 900, fontSize: 20, color: '#fff' }}>A</span>
+        <div className="ac-login-hero" style={{ padding: '40px 34px', background: `linear-gradient(160deg,${C.emeraldDeep},#062B22 70%)`, display: 'flex', flexDirection: 'column', gap: 16, position: 'relative', overflow: 'hidden' }}>
+          <span className="ac-logo-badge" style={{ width: 40, height: 40, borderRadius: 11, display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,.14)', fontWeight: 900, fontSize: 20, color: '#fff' }}>A</span>
           <div style={{ fontSize: 26, fontWeight: 850, letterSpacing: '-.03em', lineHeight: 1.15 }}>Aprende a vender más con DealFlow</div>
           <p style={{ color: 'rgba(255,255,255,.82)', fontSize: 14.5, lineHeight: 1.6, margin: 0 }}>Cursos y tutoriales paso a paso: configurar tu asistente, subir productos, atender por WhatsApp y hacer crecer tu tienda.</p>
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13.5, color: 'rgba(255,255,255,.9)' }}>
@@ -287,14 +334,14 @@ function LoginAcademy({ onOk }: { onOk: () => void }) {
         </div>
         {/* Formulario */}
         <div style={{ padding: '40px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <div style={{ fontWeight: 850, fontSize: 22, letterSpacing: '-.02em' }}>DealFlow <span style={{ color: C.emerald }}>Academy</span></div>
+          <div style={{ fontWeight: 850, fontSize: 22, letterSpacing: '-.02em' }}>DealFlow <span style={{ background: `linear-gradient(90deg,${C.emerald},${C.sky})`, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Academy</span></div>
           <p style={{ color: C.muted, fontSize: 14, margin: '6px 0 20px' }}>Inicia sesión para entrar al portal.</p>
           <label style={{ fontSize: 12.5, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Correo</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tucorreo@ejemplo.com" style={inputA} />
           <label style={{ fontSize: 12.5, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Contraseña</label>
           <input value={pass} onChange={(e) => setPass(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && entrar()} type="password" placeholder="••••••••" style={inputA} />
-          {err && <div style={{ color: C.danger, fontSize: 13, marginBottom: 10 }}>{err}</div>}
-          <button onClick={entrar} disabled={cargando} style={{ ...btnPrimary, width: '100%', padding: '12px', fontSize: 14.5, opacity: cargando ? 0.7 : 1 }}>{cargando ? 'Entrando…' : 'Entrar'}</button>
+          {err && <div style={{ color: C.danger, fontSize: 13, marginBottom: 10, animation: 'acFadeUp .25s ease both' }}>{err}</div>}
+          <button className="ac-btn" onClick={entrar} disabled={cargando} style={{ ...btnPrimary, width: '100%', padding: '12px', fontSize: 14.5, opacity: cargando ? 0.7 : 1 }}>{cargando ? 'Entrando…' : 'Entrar'}</button>
           <p style={{ color: C.muted2, fontSize: 12.5, marginTop: 16, textAlign: 'center' }}>Usa el mismo correo y contraseña de tu cuenta DealFlow.</p>
         </div>
       </div>
