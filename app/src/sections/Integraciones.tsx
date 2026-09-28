@@ -150,6 +150,70 @@ function MetaAdsCard({ df, i }: { df: DealFlowState; i: DealFlowState['integrati
 // (MetaCanalesCard — Messenger + Instagram — retirada temporalmente: por ahora
 //  la integración de Meta es solo WhatsApp.)
 
+/**
+ * Effi nativo: DealFlow se hace pasar por la tienda WooCommerce de Effi. Al activarlo
+ * se genera un subdominio (storefront) y un par de llaves (ck/cs) que el dueño pega
+ * en Effi → Integraciones Ecommerce. Las llaves se muestran UNA sola vez.
+ */
+function EffiNativoCard({ df }: { df: DealFlowState }) {
+  const [copiado, setCopiado] = useState('');
+  useEffect(() => { void df.cargarEffiWoo(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const e = df.effiWoo;
+  const creds = df.effiCreds;
+  const copiar = (txt: string, que: string) => { void navigator.clipboard?.writeText(txt); setCopiado(que); setTimeout(() => setCopiado(''), 1500); };
+  const fila = (label: string, valor: string, que: string) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={lbl}>{label}</div>
+        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, wordBreak: 'break-all', color: 'var(--df-text-body)' }}>{valor}</div>
+      </div>
+      <button onClick={() => copiar(valor, que)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '6px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>{copiado === que ? '¡Copiado!' : 'Copiar'}</button>
+    </div>
+  );
+  return (
+    <div style={cardBase(e.activo)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 9, background: 'var(--df-purple-subtle)', color: 'var(--df-purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13 }}>Ef</div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Effi (DealFlow como tienda)</div>
+        <div style={{ flex: 1 }} />
+        <Estado on={e.activo} />
+      </div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, flex: 1 }}>
+        Sin WooCommerce aparte: DealFlow se conecta a Effi como tu tienda. Actívalo, copia la URL y las llaves, y pégalas en <b>Effi → Integraciones Ecommerce</b>. Tus productos (por SKU) y tus pedidos entran a Effi automáticamente.
+      </div>
+
+      {e.activo && (
+        <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {fila('URL principal (con la barra final)', e.url, 'url')}
+          {creds ? (
+            <>
+              {fila('Api key 1 (Consumer Key)', creds.ck, 'ck')}
+              {fila('Api key 2 (Consumer Secret)', creds.cs, 'cs')}
+              <div style={{ fontSize: 11.5, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', borderRadius: 8, padding: '7px 10px' }}>
+                ⚠️ Guarda estas llaves ahora: por seguridad no se vuelven a mostrar. Si las pierdes, dale “Regenerar llaves”.
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Las llaves se muestran solo al generarlas. Si las necesitas de nuevo, dale “Regenerar llaves” (tendrás que volver a pegarlas en Effi).</div>
+          )}
+          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', lineHeight: 1.5 }}>
+            En Effi: Plataforma <b>Wordpress - Woocommerce</b> · Versión <b>3.00</b> · Tipo de transacción <b>REMISIÓN DE VENTA</b>. Luego en <b>Inventario → Artículos → Vincular masivamente con Ecommerce</b>. Importante: el <b>SKU de cada variante debe ser la Referencia del artículo en Effi</b>.
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {!e.activo
+          ? <button onClick={df.activarEffiWoo} style={btnPrimary}>Activar</button>
+          : <>
+              <button onClick={df.activarEffiWoo} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Regenerar llaves</button>
+              <button onClick={df.desactivarEffiWoo} style={{ background: 'transparent', border: '1px solid var(--df-border)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Desactivar</button>
+            </>}
+      </div>
+    </div>
+  );
+}
+
 const lbl: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600, marginBottom: 4 };
 const cardBase = (on: boolean): React.CSSProperties => ({ background: 'var(--df-surface)', border: '1px solid ' + (on ? 'var(--df-brand-border)' : 'var(--df-border)'), borderRadius: 12, padding: 18, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', gap: 10 });
 const btnPrimary: React.CSSProperties = { background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
@@ -197,6 +261,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
               <p style={{ color: 'var(--df-text-faint)', fontSize: 12.5, margin: '2px 0 0' }}>{g.sub}</p>
             </div>
             <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, alignItems: 'start' }}>
+              {g.id === 'envios' && <EffiNativoCard df={df} />}
               {items.map((i) => {
                 if (i.especial === 'meta-ads') return <MetaAdsCard key={i.id} df={df} i={i} />;
                 const abiertaEsta = abierta === i.id;

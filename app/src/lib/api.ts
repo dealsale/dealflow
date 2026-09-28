@@ -453,6 +453,11 @@ export const apiCambiarTienda = (id: string) => req<{ ok: true }>(`/api/cambiar-
 export const apiCrearTienda = (nombre: string) => req<{ ok: true; storeId: string }>('/api/crear-tienda', 'POST', { nombre });
 export const apiEliminarMiTienda = (id: string) => req<{ ok: true }>(`/api/mis-tiendas/${id}`, 'DELETE');
 
+// Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio).
+export const apiEffiEstado = () => req<{ activo: boolean; slug: string; url: string }>('/api/effi/estado', 'GET');
+export const apiEffiActivar = () => req<{ slug: string; url: string; ck: string; cs: string }>('/api/effi/activar', 'POST');
+export const apiEffiDesactivar = () => req<{ ok: true }>('/api/effi/desactivar', 'POST');
+
 // ── Campañas del Marketing IA ──
 export interface Brief {
   producto: string; descripcion: string; precio: string; publico: string;
