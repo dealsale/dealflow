@@ -132,6 +132,23 @@ async function woo<T>(c: Cred, ruta: string, init?: RequestInit, params?: Record
   return { ok: res.ok, status: res.status, body };
 }
 
+/**
+ * Convierte un error de la API de WooCommerce en un mensaje ACCIONABLE en español.
+ * El más común: la llave API quedó en "Escritura" (o el usuario perdió permisos) y
+ * WooCommerce responde "Lo siento, no puedes listar recursos" (woocommerce_rest_cannot_view).
+ * En ese caso decimos EXACTAMENTE qué arreglar, en vez de repetir el mensaje críptico.
+ */
+function mensajeWooError(r: { status: number; body: { message?: string; code?: string } }, nombreProv?: string): string {
+  const code = String(r.body.code || '');
+  const msg = String(r.body.message || '');
+  const permiso = /cannot_view|cannot_list|no puedes (listar|ver)/i.test(code + ' ' + msg) || r.status === 401 || r.status === 403;
+  const quien = nombreProv ? `de ${nombreProv}` : 'de WooCommerce';
+  if (permiso) {
+    return `La clave API ${quien} no tiene permiso de LECTURA. En WooCommerce ve a Ajustes → Avanzado → API REST, edita esa clave y ponla en “Lectura/Escritura” (o vuelve a generarla con ese permiso) y guárdala de nuevo aquí.`;
+  }
+  return msg || `WooCommerce respondió ${r.status}. Revisa la URL y las llaves ${quien}.`;
+}
+
 /** Verifica que las credenciales sirvan (pide 1 pedido). */
 export async function verificar(storeId: string, prov?: WooProv): Promise<{ ok: true } | { ok: false; error: string }> {
   const c = credenciales(storeId, prov);
@@ -391,6 +408,10 @@ export async function buscarProductos(storeId: string, q: string, prov?: WooProv
   try {
     // 1) Coincidencia exacta por SKU (el código pegado).
     const porSku = await woo<WooProductoRaw[]>(c, '/products', undefined, { sku: query, per_page: '5' });
+    // Si la llave no puede leer, decimos QUÉ arreglar (no un "no encontramos" engañoso).
+    if (!porSku.ok && (porSku.status === 401 || porSku.status === 403 || /cannot_view|no puedes/i.test(String(porSku.body.code) + String(porSku.body.message)))) {
+      return { error: mensajeWooError(porSku, proveedor === 'effi' ? 'Effi' : 'Dropi') };
+    }
     const productos: ProductoWoo[] = porSku.ok && Array.isArray(porSku.body) ? mapear(porSku.body) : [];
     // 2) Si no hubo match exacto, buscamos por texto (nombre o código parcial).
     if (!productos.length) {
@@ -447,7 +468,7 @@ export async function catalogo(storeId: string, prov?: WooProv): Promise<{ produ
         per_page: '100', page: String(page), status: 'any',
         _fields: 'id,name,sku,stock_quantity,type,status,variations,meta_data',
       });
-      if (!r.ok) return { error: r.body.message || 'No pudimos leer el catálogo de WooCommerce.' };
+      if (!r.ok) return { error: mensajeWooError(r, proveedor === 'effi' ? 'Effi' : 'Dropi') };
       if (!Array.isArray(r.body) || !r.body.length) break;
       for (const p of r.body) {
         const prod: ProductoCatalogoWoo = {

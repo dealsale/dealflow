@@ -49,7 +49,14 @@ function cookieDomain(host?: string): string | undefined {
 }
 
 export function setAuthCookie(res: Response, user: AuthUser, host?: string) {
-  const token = jwt.sign(user, JWT_SECRET, { expiresIn: '30d' });
+  // jwt.verify() deja las claims estándar (iat/exp/nbf) dentro del objeto user.
+  // Si reenviamos ese objeto a jwt.sign() con expiresIn, lanza:
+  //   "Bad options.expiresIn option the payload already has an exp property".
+  // Pasaba al crear/cambiar de tienda o editar el perfil (spread de req.user),
+  // rompiendo esas acciones con un 500. Quitamos las claims antes de firmar.
+  const { iat, exp, nbf, ...limpio } = user as AuthUser & { iat?: number; exp?: number; nbf?: number };
+  void iat; void exp; void nbf;
+  const token = jwt.sign(limpio, JWT_SECRET, { expiresIn: '30d' });
   const dom = cookieDomain(host);
   // Auto-sanación: si NO usamos dominio padre, borramos cualquier cookie de
   // sesión con dominio padre que haya quedado de un deploy anterior. Dos cookies
