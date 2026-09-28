@@ -252,6 +252,51 @@ export function montarEffiWoo(app: Express): void {
   });
 }
 
+/**
+ * Envía un pedido de DealFlow a Effi como webhook order.created (Effi crea el
+ * cliente y la remisión de venta solo). Effi responde 200 vacío a todo, así que
+ * validamos ANTES y guardamos idempotencia (Effi NO deduplica: crearía 2 remisiones).
+ */
+export async function enviarPedidoAEffi(storeId: string, orderRowId: string, reintentar = false): Promise<{ ok: true; remision: string; sinSku: string[] } | { error: string }> {
+  const f = filaDe(storeId);
+  if (!f || !f.activo) return { error: 'Primero activa el storefront de Effi en Integraciones → “Effi (DealFlow como tienda)”.' };
+  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderRowId, storeId) as Record<string, unknown> | undefined;
+  if (!o) return { error: 'Pedido no encontrado.' };
+  const numero = Number(o.numero);
+  if (!reintentar && db.prepare('SELECT 1 FROM effi_enviados WHERE store_id = ? AND order_id = ?').get(storeId, orderRowId)) {
+    return { error: 'Este pedido ya se envió a Effi (no lo mandamos otra vez para no duplicar la remisión).' };
+  }
+  const woo = pedidoAWoo(storeId, o);
+  const items = (woo.line_items as { product_id: number; name: string }[]) || [];
+  const sinSku = items.filter((li) => !li.product_id).map((li) => li.name); // sin SKU vinculado → Effi no lo reconoce
+  const src = `https://${f.slug}.${BASE_DOMAIN}/`;
+  try {
+    await fetch('https://effi.com.co/app/venta/crear_venta_woocommerce', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-WC-Webhook-Topic': 'order.created',
+        'X-WC-Webhook-Resource': 'order',
+        'X-WC-Webhook-Event': 'created',
+        'X-WC-Webhook-Source': src,
+        'X-WC-Webhook-ID': '1',
+        'X-WC-Webhook-Delivery-ID': `${numero}-${Date.now()}`,
+        'User-Agent': 'WooCommerce/9.0.0 Hookshot (WordPress/6.6)',
+      },
+      body: JSON.stringify(woo),
+    });
+    // Effi responde 200 vacío pase lo que pase; marcamos enviado para no duplicar.
+    db.prepare('INSERT OR REPLACE INTO effi_enviados (store_id, order_id) VALUES (?,?)').run(storeId, orderRowId);
+    try {
+      db.prepare('INSERT INTO effi_log (store_id, metodo, ruta, sku, auth, resultado) VALUES (?,?,?,?,1,?)')
+        .run(storeId, 'POST', '→ Effi crear_venta', '', `pedido ${numero} → remisión ${numero}-1${sinSku.length ? ` · ${sinSku.length} ítem(s) SIN SKU` : ''}`);
+    } catch { /* el log no debe romper el envío */ }
+    return { ok: true, remision: `${numero}-1`, sinSku };
+  } catch (e) {
+    return { error: 'No pudimos enviar el pedido a Effi: ' + (e instanceof Error ? e.message : String(e)) };
+  }
+}
+
 // ── Formato de pedido WooCommerce (para GET /orders/:id y para el webhook) ─────
 export function pedidoAWoo(storeId: string, o: Record<string, unknown>): Record<string, unknown> {
   const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string) as
@@ -313,7 +358,7 @@ function datosCliente(o: Record<string, unknown>): Record<string, unknown> {
   return {
     first_name: limpiarTexto(first), last_name: limpiarTexto(last), company: '',
     address_1: limpiarTexto(String(o.direccion || '')), address_2: '',
-    city: limpiarTexto(String(o.ciudad || '')), state: codigoDepto(String(o.departamento || o.ciudad || '')),
+    city: limpiarTexto(String(o.ciudad || '')), state: codigoDepto(String(o.departamento || ''), String(o.ciudad || '')),
     postcode: '', country: 'CO', email: '', phone: telColombiano(String(o.tel || '')),
   };
 }
@@ -342,12 +387,29 @@ const DEPTOS: Record<string, string> = {
   'risaralda': 'RIS', 'san andres': 'SAP', 'san andres y providencia': 'SAP', 'santander': 'SAN',
   'sucre': 'SUC', 'tolima': 'TOL', 'valle del cauca': 'VAC', 'valle': 'VAC', 'vaupes': 'VAU', 'vichada': 'VID',
 };
-export function codigoDepto(nombre: string): string {
+// Ciudades principales → su departamento (respaldo cuando el pedido no trae depto).
+const CIUDADES: Record<string, string> = {
+  'bogota': 'DC', 'medellin': 'ANT', 'cali': 'VAC', 'barranquilla': 'ATL', 'cartagena': 'BOL',
+  'cucuta': 'NSA', 'bucaramanga': 'SAN', 'pereira': 'RIS', 'santa marta': 'MAG', 'ibague': 'TOL',
+  'pasto': 'NAR', 'manizales': 'CAL', 'neiva': 'HUI', 'villavicencio': 'MET', 'armenia': 'QUI',
+  'valledupar': 'CES', 'monteria': 'COR', 'sincelejo': 'SUC', 'popayan': 'CAU', 'tunja': 'BOY',
+  'florencia': 'CAQ', 'riohacha': 'LAG', 'quibdo': 'CHO', 'yopal': 'CAS', 'arauca': 'ARA',
+  'mocoa': 'PUT', 'leticia': 'AMA', 'san andres': 'SAP', 'girardot': 'CUN', 'soacha': 'CUN',
+  'soledad': 'ATL', 'bello': 'ANT', 'itagui': 'ANT', 'envigado': 'ANT', 'palmira': 'VAC',
+  'buenaventura': 'VAC', 'tulua': 'VAC', 'floridablanca': 'SAN', 'dosquebradas': 'RIS',
+};
+export function codigoDepto(nombre: string, ciudad = ''): string {
   const n = norm(nombre);
-  if (DEPTOS[n]) return DEPTOS[n];
-  // Bogotá en cualquier variante → DC.
-  if (n.includes('bogota')) return 'DC';
-  // Búsqueda laxa por inclusión.
-  for (const k of Object.keys(DEPTOS)) if (n.includes(k)) return DEPTOS[k];
-  return nombre.trim().toUpperCase().slice(0, 3); // último recurso
+  if (n) {
+    if (DEPTOS[n]) return DEPTOS[n];
+    if (n.includes('bogota')) return 'DC';
+    for (const k of Object.keys(DEPTOS)) if (n.includes(k)) return DEPTOS[k];
+  }
+  // Sin depto (o no reconocido): lo inferimos de la ciudad si es una principal.
+  const c = norm(ciudad);
+  if (c) {
+    if (CIUDADES[c]) return CIUDADES[c];
+    for (const k of Object.keys(CIUDADES)) if (c.includes(k)) return CIUDADES[k];
+  }
+  return (nombre || ciudad).trim().toUpperCase().slice(0, 3); // último recurso
 }

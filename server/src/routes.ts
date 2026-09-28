@@ -812,6 +812,20 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   if (o.woo_id && !reintentar) return res.json({ ok: true, guia: o.guia || '', wooId: o.woo_id, proveedor: o.despacho_proveedor || prov, aviso: 'Este pedido ya fue despachado.' });
+  // Effi NATIVO: si el storefront de Effi está activo, mandamos el pedido a Effi
+  // como webhook (crea cliente + remisión de venta), sin WooCommerce real.
+  if (prov === 'effi') {
+    const { estadoEffi, enviarPedidoAEffi } = await import('./effiWoo.js');
+    if (estadoEffi(sid).activo) {
+      const r = await enviarPedidoAEffi(sid, String(o.id), reintentar);
+      if ('error' in r) return res.status(400).json({ error: r.error });
+      db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ? WHERE id = ?').run(r.remision, 'effi', transportadora, o.id);
+      const numDF = `DF-${String(o.numero || '')}`;
+      if (r.sinSku.length) registrarLog(sid, 'warn', 'despacho', `${numDF} se envió a Effi, pero ${r.sinSku.length} ítem(s) NO tienen SKU vinculado (Effi no los reconocerá): ${r.sinSku.join(', ')}. Ponles el SKU = Referencia del artículo en Effi.`);
+      else registrarLog(sid, 'info', 'despacho', `${numDF} enviado a Effi como remisión ${r.remision}.`);
+      return res.json({ ok: true, proveedor: 'effi', remision: r.remision, sinMapear: r.sinSku, nativo: true });
+    }
+  }
   const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id) as { qty: number; nombre: string; precio: number }[];
   const skus: Record<string, string> = {};
   for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(sid) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
