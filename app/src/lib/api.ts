@@ -329,7 +329,7 @@ export const apiCrearPedido = (body: { cliente: string; tel?: string; ciudad?: s
   req<{ ok: true; id: string; rowId: string }>('/api/orders', 'POST', body);
 export const apiOrderDropi = (rowId: string) => req<{ guia: string }>(`/api/orders/${rowId}/dropi`, 'POST');
 // Effi (vía WooCommerce)
-export const apiOrderDespachar = (rowId: string, proveedor: string, reintentar = false, transportadora = '', recaudo: 'con' | 'sin' = 'con') => req<{ ok: true; wooId: string; numeroWoo: string; proveedor: string; aviso?: string; reenviado?: boolean; sinMapear?: string[]; mapeados?: number; remision?: string; nativo?: boolean }>(`/api/orders/${rowId}/despachar`, 'POST', { proveedor, reintentar, transportadora, recaudo });
+export const apiOrderDespachar = (rowId: string, proveedor: string, reintentar = false, transportadora = '') => req<{ ok: true; wooId: string; numeroWoo: string; proveedor: string; aviso?: string; reenviado?: boolean; sinMapear?: string[]; mapeados?: number }>(`/api/orders/${rowId}/despachar`, 'POST', { proveedor, reintentar, transportadora });
 export const apiOrderDespacharSync = (rowId: string) => req<{ estado: string; guia: string }>(`/api/orders/${rowId}/despachar/sync`, 'POST');
 // Dropi (API directa): cotizar transportadoras y crear la orden con la elegida.
 export const apiDropiEstado = () => req<{ conectado: boolean; integrationUrl: string; preferencia: string }>('/api/dropi/estado', 'GET');
