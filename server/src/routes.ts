@@ -817,7 +817,8 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
   if (prov === 'effi') {
     const { estadoEffi, enviarPedidoAEffi } = await import('./effiWoo.js');
     if (estadoEffi(sid).activo) {
-      const r = await enviarPedidoAEffi(sid, String(o.id), reintentar);
+      const conRecaudo = req.body?.recaudo !== 'sin'; // 'sin' = prepagado; por defecto con recaudo (contra entrega)
+      const r = await enviarPedidoAEffi(sid, String(o.id), reintentar, conRecaudo);
       if ('error' in r) return res.status(400).json({ error: r.error });
       db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ? WHERE id = ?').run(r.remision, 'effi', transportadora, o.id);
       const numDF = `DF-${String(o.numero || '')}`;

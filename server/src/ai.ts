@@ -321,9 +321,10 @@ PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma ge
 FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
 
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
-##PEDIDO cliente="Nombre Apellido"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="2x Nombre exacto del producto (Talla M · Negro, Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
+##PEDIDO cliente="Nombre Apellido"; telefono="3001234567"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="2x Nombre exacto del producto (Talla M · Negro, Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
 El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
 En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar.
+El campo telefono es el CELULAR DE CONTACTO para la entrega (10 dígitos, sin +57). PREGÚNTALO SIEMPRE antes de cerrar ("¿A qué número te llama la transportadora para coordinar la entrega?"), porque puede ser distinto al de este WhatsApp. Si el cliente dice que es el mismo de WhatsApp, igual ponlo en el marcador.
 El campo departamento es OBLIGATORIO: en Colombia hay ciudades con el mismo nombre en varios departamentos. Si el cliente no lo ha dicho, pregúntaselo antes de cerrar el pedido.
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
 FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
@@ -758,8 +759,8 @@ export async function extraerPedidoDelChat(storeId: string, leadId: string): Pro
     .join('\n');
   if (!historia.trim()) return '';
   const system = `Eres un extractor de pedidos de una tienda por WhatsApp en Colombia. Te doy una conversación y el catálogo. Devuelve EXCLUSIVAMENTE una línea con el marcador, sin explicaciones ni texto extra:
-##PEDIDO cliente="Nombre y apellido"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre EXACTO del catálogo (Talla M · Negro), 1x Otro producto (Talla L · Rojo)"; total="139900"##
-Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. Si un dato no está, déjalo vacío ("" ). En items pon la cantidad, el nombre EXACTO del catálogo y entre paréntesis la talla y el color que el cliente pidió. En total pon el valor final acordado (solo números). Si no hay un pedido real en la conversación, responde exactamente: SIN_PEDIDO`;
+##PEDIDO cliente="Nombre y apellido"; telefono="3001234567"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre EXACTO del catálogo (Talla M · Negro), 1x Otro producto (Talla L · Rojo)"; total="139900"##
+Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefono pon el celular de contacto para la entrega (10 dígitos) si el cliente lo dio. Si un dato no está, déjalo vacío ("" ). En items pon la cantidad, el nombre EXACTO del catálogo y entre paréntesis la talla y el color que el cliente pidió. En total pon el valor final acordado (solo números). Si no hay un pedido real en la conversación, responde exactamente: SIN_PEDIDO`;
   try {
     const res = await fetch(ia.url, {
       method: 'POST',
@@ -781,6 +782,10 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   const ciudad = campoPedido(inner, 'ciudad');
   const direccion = campoPedido(inner, 'direccion');
   const itemsRaw = campoPedido(inner, 'items');
+  // Teléfono de CONTACTO para la entrega: el que el cliente dé en la conversación.
+  // Si no lo da, caemos al número de WhatsApp del chat. Se limpia a solo dígitos.
+  const telContacto = (campoPedido(inner, 'telefono') || '').replace(/\D/g, '');
+  const tel = telContacto || (lead.tel || '');
   // Departamento: si la IA no lo puso en el marcador, lo rescatamos del último
   // "Resumen de tu pedido" del chat (hay ciudades repetidas entre departamentos).
   let departamento = campoPedido(inner, 'departamento');
@@ -822,7 +827,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   // Atribución exacta: copiamos el anuncio del que vino este chat al pedido.
   const adLead = db.prepare('SELECT ad_id, ad_ref FROM leads WHERE id = ?').get(lead.id) as { ad_id: string; ad_ref: string } | undefined;
   db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, ad_id, ad_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(oid, storeId, numero, cliente, ciudad, lead.tel || '', direccion, 'Nuevo', total, departamento, adLead?.ad_id || '', adLead?.ad_ref || '');
+    .run(oid, storeId, numero, cliente, ciudad, tel, direccion, 'Nuevo', total, departamento, adLead?.ad_id || '', adLead?.ad_ref || '');
   for (const it of items) {
     db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   }
