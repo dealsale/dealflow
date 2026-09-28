@@ -1088,6 +1088,15 @@ api.get('/woo/catalogo', requireAuth, requireStore, async (req, res) => {
   res.json(r);
 });
 
+// Diagnóstico del catálogo: de qué WooCommerce se lee (propio/central), host y
+// cuántos productos ve la API. Ábrelo en el navegador (logueado):
+//   /api/woo/diagnostico?proveedor=effi   (o dropi)
+api.get('/woo/diagnostico', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { diagnosticoCatalogo } = await import('./woocommerce.js');
+  const prov = wooProv(req.query.proveedor) || 'effi';
+  res.json(await diagnosticoCatalogo(req.user!.storeId!, prov));
+});
+
 // ── Leads / CRM ───────────────────────────────────────────────────────
 api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);

@@ -66,8 +66,10 @@ export function credenciales(storeId: string, prov?: WooProv): Cred | null {
     const propio = armar(cfg.url, cfg.consumerKey, cfg.consumerSecret);
     if (propio) return propio;
   }
-  // Fallback al Woo central del operador (modelo "un solo Woo para todas").
-  return prov ? credencialesCentral(prov) : null;
+  // Cada tienda usa SOLO su propio WooCommerce. Ya NO caemos al Woo "central" del
+  // operador: interfería (mostraba productos de otra tienda) y cada cliente tiene
+  // su propia conexión. Si no configuró la suya, no hay catálogo (mensaje claro).
+  return null;
 }
 
 /** Proveedores (dropi/effi) disponibles para esta tienda (propios o central). */
@@ -98,9 +100,6 @@ export function despachoConfig(storeId: string): DespachoPref {
 export function proveedorPreferido(storeId: string): WooProv | null {
   const prov = despachoConfig(storeId).proveedor;
   if (prov && credenciales(storeId, prov)) return prov;
-  // Si la tienda no eligió preferido, usa el preferido del Woo CENTRAL (si hay).
-  const central = db.prepare("SELECT proveedor FROM woo_central WHERE preferido = 1 AND activo = 1 LIMIT 1").get() as { proveedor: string } | undefined;
-  if (central && (central.proveedor === 'dropi' || central.proveedor === 'effi') && credenciales(storeId, central.proveedor)) return central.proveedor;
   return null;
 }
 
@@ -503,6 +502,46 @@ export async function catalogo(storeId: string, prov?: WooProv): Promise<{ produ
     return { productos, proveedor };
   } catch {
     return { error: 'No pudimos leer el catálogo de tu WooCommerce. Revisa la conexión en Integraciones.' };
+  }
+}
+
+/**
+ * Diagnóstico: dice EXACTAMENTE de qué WooCommerce está leyendo el catálogo de un
+ * proveedor (la config PROPIA de la tienda, o el WooCommerce CENTRAL del operador),
+ * su host, cuántos productos ve realmente la API (cabecera X-WP-Total) y el primero.
+ * Sirve para entender por qué "solo aparece un producto" sin adivinar.
+ */
+export async function diagnosticoCatalogo(storeId: string, prov: WooProv): Promise<Record<string, unknown>> {
+  const tipo = `woocommerce_${prov}`;
+  const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, tipo) as { config: string } | undefined;
+  const cfg = row ? pj<Record<string, string>>(row.config, {}) : {};
+  const c = row ? armar(cfg.url, cfg.consumerKey, cfg.consumerSecret) : null;
+  const fuente = c ? 'propio (esta tienda)' : 'ninguno';
+  if (!c) return { proveedor: prov, fuente, error: `No tienes guardado el WooCommerce de ${prov} en Integraciones (cada tienda usa el suyo; ya no hay central).` };
+  let host = '';
+  try { host = new URL(c.base).host; } catch { host = c.base; }
+  try {
+    const res = await fetch(url(c, '/products', { per_page: '3', status: 'any' }));
+    const totalHeader = res.headers.get('x-wp-total');
+    const body = (await res.json().catch(() => [])) as Array<{ name?: string; type?: string; status?: string; message?: string }>;
+    const lista = Array.isArray(body) ? body : [];
+    return {
+      proveedor: prov,
+      fuente,
+      host, // el dominio del WooCommerce que se está consultando (reconócelo)
+      httpStatus: res.status,
+      totalSegunAPI: totalHeader != null ? Number(totalHeader) : '(sin cabecera X-WP-Total)',
+      devueltosEnMuestra: lista.length,
+      primeros: lista.slice(0, 3).map((p) => ({ nombre: p.name, tipo: p.type, estado: p.status })),
+      respuestaCruda: !Array.isArray(body) ? body : undefined, // por si la API devolvió un error en vez de la lista
+      nota: !res.ok
+        ? 'La API de tu WooCommerce respondió con error (revisa que la clave tenga permiso de LECTURA y que la URL sea la correcta).'
+        : Number(totalHeader) <= 3
+          ? 'La API de tu WooCommerce solo expone estos productos. Suele ser porque los demás están en BORRADOR o la clave no tiene permiso para verlos.'
+          : 'La API ve más productos; si en DealFlow ves menos, avísame con este diagnóstico.',
+    };
+  } catch (e) {
+    return { proveedor: prov, fuente, host, error: 'No pudimos consultar ese WooCommerce: ' + (e instanceof Error ? e.message : String(e)) };
   }
 }
 
