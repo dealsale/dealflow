@@ -74,8 +74,8 @@ export const INTEGRATIONS: Integration[] = [
   // Envíos
   { id: 'woocommerce_effi', nombre: 'WooCommerce · Effi', logoText: 'Ef', logoBg: 'var(--df-purple-subtle)', logoTxt: 'var(--df-purple)', grupo: 'envios', especial: 'woo', desc: 'La tienda WooCommerce (con el plugin de Effi) por donde despachas con Effi. Los pedidos que envíes por Effi se crean aquí; Effi genera la guía. "Enviar productos" sube tu catálogo con SKU automáticos.', estado: 'disponible', campos: [{ key: 'url', label: 'URL de tu WooCommerce de Effi', placeholder: 'https://mitienda-effi.com' }, { key: 'consumerKey', label: 'Consumer Key', placeholder: 'ck_…', secreto: true }, { key: 'consumerSecret', label: 'Consumer Secret', placeholder: 'cs_…', secreto: true }] },
   { id: 'woocommerce_dropi', nombre: 'WooCommerce · Dropi', logoText: 'Dr', logoBg: 'var(--df-warning-subtle)', logoTxt: 'var(--df-warning)', grupo: 'envios', especial: 'woo', desc: 'La tienda WooCommerce (con el plugin de Dropi) por donde despachas con Dropi. Los pedidos que envíes por Dropi se crean aquí; Dropi genera la guía. Puede ser una WooCommerce distinta a la de Effi.', estado: 'disponible', campos: [{ key: 'url', label: 'URL de tu WooCommerce de Dropi', placeholder: 'https://mitienda-dropi.com' }, { key: 'consumerKey', label: 'Consumer Key', placeholder: 'ck_…', secreto: true }, { key: 'consumerSecret', label: 'Consumer Secret', placeholder: 'cs_…', secreto: true }] },
-  // Publicidad
-  { id: 'meta-ads', nombre: 'Administrador de anuncios', logoText: 'f', logoBg: '#E7F0FF', logoTxt: '#0866FF', grupo: 'publicidad', especial: 'meta-ads', desc: 'Conecta tu cuenta publicitaria de Meta para publicar campañas desde el Marketing IA. Tú pagas la pauta directo a Meta.', estado: 'disponible' },
+  // (Publicidad / Administrador de anuncios: retirado temporalmente. Por ahora
+  //  solo WhatsApp; Messenger, Instagram y anuncios se retoman más adelante.)
 ];
 
 export const PLANS: Plan[] = [
