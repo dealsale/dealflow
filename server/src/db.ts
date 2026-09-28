@@ -530,6 +530,19 @@ db.exec(`CREATE TABLE IF NOT EXISTS effi_enviados (
   enviado_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (store_id, order_id)
 )`);
+// Registro de lo que Effi le pregunta al storefront (diagnóstico: saber si Effi
+// llega, con qué SKU y qué respondimos). Se poda para no crecer sin límite.
+db.exec(`CREATE TABLE IF NOT EXISTS effi_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_id TEXT,
+  ts TEXT NOT NULL DEFAULT (datetime('now')),
+  metodo TEXT NOT NULL DEFAULT '',
+  ruta TEXT NOT NULL DEFAULT '',
+  sku TEXT NOT NULL DEFAULT '',
+  auth INTEGER NOT NULL DEFAULT 0,
+  resultado TEXT NOT NULL DEFAULT ''
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_effi_log ON effi_log(store_id, id)');
 
 // Academy (portal educativo en academy.dealflow.sbs): cursos con lecciones
 // (video o artículo). Lo administra el superadmin/admin; lo consultan los
