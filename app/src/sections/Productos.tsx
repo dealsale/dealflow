@@ -8,33 +8,74 @@ import { Dropdown } from '../components/Dropdown';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 
 /**
- * Elige por cuál proveedor se despacha ESTE producto: Dropi o Effi. Con uno
- * elegido, solo se muestra el vinculador de ese proveedor (antes salían los dos
- * a la vez y confundía). Sin elegir, se muestran ambos (comportamiento de antes).
+ * Proveedor con el que se despacha ESTE producto, ya resuelto: el elegido a
+ * mano; o —si solo hay uno conectado— ese único. Es la ÚNICA fuente de verdad
+ * para saber qué vinculador (Dropi o Effi) mostrar. '' = ambos conectados y aún
+ * sin elegir. Así nunca se muestran los dos a la vez ni el toggle viejo.
+ */
+export function despachoEfectivo(p: DecoratedProduct, df: DealFlowState): string {
+  if (p.despachoProveedor) return p.despachoProveedor;
+  const dropi = df.dropiConectado, effi = df.wooProveedores.includes('effi');
+  if (dropi && !effi) return 'dropi';
+  if (effi && !dropi) return 'effi';
+  return '';
+}
+/** ¿Ya está vinculado el producto a un e-commerce? (SKU del producto o de alguna variante). */
+function estaVinculado(p: DecoratedProduct): boolean {
+  return !!(p.sku || '').trim() || (p.variantes || []).some((v) => (v.sku || '').trim());
+}
+
+/**
+ * Elige por cuál proveedor se despacha ESTE producto: Dropi o Effi. Es exclusivo:
+ * apenas queda vinculado a uno, el otro se bloquea (gris). Para cambiar, primero
+ * "Desconectar" (suelta SKU del producto y de sus variantes) y ahí se habilita el
+ * otro. Cada proveedor va con su propio nombre; no hay "vincular e-commerce".
  */
 function SelectorDespachoProducto({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
-  const provs = df.wooProveedores.includes('effi') ? (df.dropiConectado ? ['dropi', 'effi'] : ['effi']) : (df.dropiConectado ? ['dropi'] : []);
-  if (provs.length < 2) return null; // solo un proveedor conectado (o ninguno): no hay nada que elegir
-  const actual = p.despachoProveedor || '';
-  const opt = (val: string, label: string) => (
-    <button
-      key={val}
-      onClick={() => p.setDespachoProveedor(actual === val ? '' : val)}
-      style={{
-        background: actual === val ? 'var(--df-purple)' : 'var(--df-surface)',
-        border: '1px solid var(--df-purple-border)', color: actual === val ? '#fff' : 'var(--df-purple)',
-        borderRadius: 7, padding: '6px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
-      }}
-    >{label}</button>
-  );
+  const dropiOn = df.dropiConectado;
+  const effiOn = df.wooProveedores.includes('effi');
+  if (!dropiOn && !effiOn) return null; // nada conectado: no hay despacho que elegir
+  const efectivo = despachoEfectivo(p, df);
+  const vinculado = estaVinculado(p);
+  const opt = (val: string, label: string, on: boolean) => {
+    const activo = efectivo === val;
+    // Bloqueado si ya hay vínculo con el OTRO proveedor: hay que desconectar primero.
+    const bloqueado = vinculado && !!efectivo && !activo;
+    const disabled = !on || bloqueado;
+    return (
+      <button
+        key={val}
+        onClick={() => { if (disabled) return; p.setDespachoProveedor(p.despachoProveedor === val ? '' : val); }}
+        disabled={disabled}
+        title={!on ? `Conéctalo en Integraciones para despachar por ${label}.` : bloqueado ? 'Desconecta el otro proveedor primero para cambiar.' : ''}
+        style={{
+          background: activo ? 'var(--df-purple)' : 'var(--df-surface)',
+          border: '1px solid var(--df-purple-border)', color: activo ? '#fff' : disabled ? 'var(--df-text-faint)' : 'var(--df-purple)',
+          borderRadius: 7, padding: '6px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5,
+          cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled && !activo ? 0.55 : 1,
+        }}
+      >{label}{!on ? ' · sin conectar' : ''}</button>
+    );
+  };
   return (
     <div style={{ marginTop: 8, marginBottom: 4 }}>
       <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 6 }}>Este producto se despacha por:</div>
-      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-        {opt('dropi', 'Dropi')}
-        {opt('effi', 'Effi')}
-        {!actual && <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', alignSelf: 'center' }}>← sin elegir: se muestran las dos integraciones</span>}
+      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+        {opt('dropi', 'Dropi', dropiOn)}
+        {opt('effi', 'Effi', effiOn)}
+        {vinculado && efectivo && (
+          <button
+            onClick={() => { if (confirm(`¿Desconectar este producto de ${efectivo === 'dropi' ? 'Dropi' : 'Effi'}? Se suelta el vínculo del producto y de sus variantes para poder cambiar de proveedor.`)) p.desvincularDespacho(); }}
+            style={{ background: 'transparent', border: '1px solid var(--df-danger)', color: 'var(--df-danger-dark)', borderRadius: 7, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}
+          >Desconectar</button>
+        )}
+        {dropiOn && effiOn && !efectivo && <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', alignSelf: 'center' }}>← elige con cuál para vincularlo</span>}
       </div>
+      {vinculado && efectivo && (
+        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--df-brand-dark)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>✓</span><span>Vinculado con {efectivo === 'dropi' ? 'Dropi' : 'Effi'}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -186,40 +227,6 @@ function VincularDropiApi({ p, df }: { p: DecoratedProduct; df: DealFlowState })
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Selector Dropi / Effi para elegir en qué catálogo buscamos (Dropi paga a una
- * cuenta, Effi a otra). Muestra SIEMPRE los dos: el que no está conectado sale en
- * gris y deshabilitado ("Conéctala en Integraciones"), para que quede claro que
- * también existe Effi y solo falta conectarlo (no que "solo hay Dropi").
- */
-const WOO_PROVS = ['dropi', 'effi'];
-function ProvSelector({ conectados, prov, onProv }: { conectados: string[]; prov: string; onProv: (p: string) => void }) {
-  const label = (p: string) => (p === 'effi' ? 'Effi' : p === 'dropi' ? 'Dropi' : p);
-  return (
-    <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 12, color: 'var(--df-text-muted)', marginRight: 2 }}>Buscar en:</span>
-      {WOO_PROVS.map((pv) => {
-        const on = conectados.includes(pv);
-        return (
-          <button
-            key={pv}
-            onClick={() => on && onProv(pv)}
-            disabled={!on}
-            title={on ? '' : `Conecta el WooCommerce de ${label(pv)} en Integraciones para usarlo.`}
-            style={{
-              background: prov === pv && on ? 'var(--df-purple)' : 'var(--df-surface)',
-              border: '1px solid var(--df-purple-border)',
-              color: prov === pv && on ? '#fff' : on ? 'var(--df-purple)' : 'var(--df-text-faint)',
-              borderRadius: 7, padding: '5px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12,
-              cursor: on ? 'pointer' : 'not-allowed', opacity: on ? 1 : 0.55,
-            }}
-          >{label(pv)}{!on && ' · sin conectar'}</button>
-        );
-      })}
     </div>
   );
 }
@@ -379,12 +386,12 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
   const [resultados, setResultados] = useState<ProductoWoo[]>([]);
   const [vinculado, setVinculado] = useState<ProductoWoo | null>(null);
 
-  const [prov, setProv] = useState<string>(df.wooProveedores[0] || 'dropi');
+  const prov = 'effi'; // este vinculador es SOLO de Effi; Dropi tiene el suyo (por ID)
   const [modo, setModo] = useState<'lista' | 'buscar'>('lista');
   const cat = useCatalogoWoo(prov);
 
-  if (!df.wooProveedores.length) return null; // sin WooCommerce conectado, no aplica
-  const nombreProv = prov === 'effi' ? 'Effi' : 'Dropi';
+  if (!df.wooProveedores.includes('effi')) return null; // sin Effi conectado, no aplica
+  const nombreProv = 'Effi';
 
   const buscar = () => {
     const query = q.trim();
@@ -408,13 +415,12 @@ function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) 
   return (
     <div style={{ marginTop: 8 }}>
       {!abierto ? (
-        <button onClick={() => setAbierto(true)} style={btnMini}>🔗 Vincular con e-commerce</button>
+        <button onClick={() => setAbierto(true)} style={btnMini}>🔗 Vincular con Effi</button>
       ) : (
         <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, background: 'var(--df-bg)' }}>
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8 }}>
             Vincula este producto con su equivalente en <b>{nombreProv}</b> para que te quede el SKU exacto y {nombreProv} sí lo despache. Elígelo de la lista del catálogo o búscalo por código.
           </div>
-          <ProvSelector conectados={df.wooProveedores} prov={prov} onProv={(p) => { setProv(p); setResultados([]); setBuscado(false); }} />
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             <button onClick={() => setModo('lista')} style={tab(modo === 'lista')}>Elegir de la lista</button>
             <button onClick={() => setModo('buscar')} style={tab(modo === 'buscar')}>Buscar por código</button>
@@ -543,13 +549,13 @@ function SkuVariantesDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }
  * para que despache la variante exacta. Reusa el buscador de productos del Woo.
  */
 function SkuVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
-  const [prov, setProv] = useState<string>(df.wooProveedores[0] || 'dropi');
+  const prov = 'effi'; // vincular variantes con Effi (Dropi tiene su propio panel por variación)
   const [abierto, setAbierto] = useState(false); // plegable: se puede ocultar
   const cat = useCatalogoWoo(prov);
-  if (!df.wooProveedores.length) return null;
+  if (!df.wooProveedores.includes('effi')) return null;
   const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
   if (!variantes.length) return null;
-  const nombreProv = prov === 'effi' ? 'Effi' : 'Dropi';
+  const nombreProv = 'Effi';
   const vinculadas = variantes.filter((v) => (v.sku || '').trim()).length;
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
@@ -559,7 +565,7 @@ function SkuVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
       >
         <span style={{ fontSize: 13, transition: 'transform .15s', transform: abierto ? 'rotate(90deg)' : 'none', color: 'var(--df-text-muted)' }}>▶</span>
-        <span style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>Vincular variantes con e-commerce</span>
+        <span style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>Vincular variantes con Effi</span>
         <span style={{ fontSize: 11.5, color: vinculadas === variantes.length ? 'var(--df-brand-dark)' : 'var(--df-text-faint)', fontWeight: 600 }}>
           {vinculadas}/{variantes.length} vinculadas
         </span>
@@ -567,7 +573,6 @@ function SkuVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
       {abierto && (
         <div style={{ marginTop: 10 }}>
           <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Vincula cada talla/color con su producto en {nombreProv} para que despache la variante exacta. Lo que vinculas a una variante deja de aparecer para las demás.</div>
-          <ProvSelector conectados={df.wooProveedores} prov={prov} onProv={setProv} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {variantes.map((v) => (
               <VarSkuRow
@@ -722,8 +727,8 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             <div style={label}>SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· para casar este producto con Dropi/Effi (opcional)</span></div>
             <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: FAJA-NEGRA-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
             <SelectorDespachoProducto p={p} df={df} />
-            {p.despachoProveedor !== 'effi' && <VincularDropiApi p={p} df={df} />}
-            {p.despachoProveedor !== 'dropi' && <VincularSkuEffi p={p} df={df} />}
+            {despachoEfectivo(p, df) === 'dropi' && <VincularDropiApi p={p} df={df} />}
+            {despachoEfectivo(p, df) === 'effi' && <VincularSkuEffi p={p} df={df} />}
           </div>
         </>
       ),
@@ -872,8 +877,8 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Color, Talla… El asistente las ofrece al cliente.</div>
           <OpcionesEditor p={p} />
           <BotonGenerarVariantes p={p} df={df} />
-          {p.despachoProveedor !== 'effi' && <SkuVariantesDropi p={p} df={df} />}
-          {p.despachoProveedor !== 'dropi' && <SkuVariantes p={p} df={df} />}
+          {despachoEfectivo(p, df) === 'dropi' && <SkuVariantesDropi p={p} df={df} />}
+          {despachoEfectivo(p, df) === 'effi' && <SkuVariantes p={p} df={df} />}
         </>
       ),
     },
@@ -960,8 +965,8 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           </div>
           <div style={{ maxWidth: 560, marginBottom: 16 }}>
             <SelectorDespachoProducto p={p} df={df} />
-            {p.despachoProveedor !== 'effi' && <VincularDropiApi p={p} df={df} />}
-            {p.despachoProveedor !== 'dropi' && <VincularSkuEffi p={p} df={df} />}
+            {despachoEfectivo(p, df) === 'dropi' && <VincularDropiApi p={p} df={df} />}
+            {despachoEfectivo(p, df) === 'effi' && <VincularSkuEffi p={p} df={df} />}
           </div>
         </>
       )}
