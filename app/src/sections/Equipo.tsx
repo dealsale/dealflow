@@ -54,7 +54,7 @@ export function Equipo({ df }: { df: DealFlowState }) {
       <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Agregar agente al equipo</div>
         <div style={{ color: 'var(--df-text-faint)', fontSize: 12.5, marginBottom: 16 }}>
-          Entra con su propio correo y contraseña. Un <b style={{ color: 'var(--df-indigo)' }}>agente</b> ve solo Productos, CRM, Leads, Pedidos y Marketing.
+          Entra con su propio correo y contraseña. Un <b style={{ color: 'var(--df-indigo)' }}>agente</b> ve solo Productos, CRM, Leads y Pedidos.
           No accede a la conexión de WhatsApp, al Asistente ni al Equipo. Cuando responde un chat, queda a su nombre.
         </div>
         <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>

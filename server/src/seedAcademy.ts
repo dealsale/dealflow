@@ -163,11 +163,23 @@ const CURSO_VISUAL: { titulo: string; descripcion: string; nivel: string; seccio
   ],
 };
 
+// Portada del curso visual: la captura del panel (dashboard), servida desde media.
+const PORTADA_ARCHIVO = 'dashboard.png';
+const PORTADA_URL = '/api/academy/media/curso-visual-' + PORTADA_ARCHIVO;
+
 export function seedAcademyCursoVisual(): void {
   const flag = 'academy_curso_visual_v1';
+  // Backfill de portada para instalaciones donde el curso YA se sembró sin portada
+  // (corre una sola vez con su propia bandera; respeta si el admin la cambió).
+  const flagPortada = 'academy_curso_visual_portada_v1';
+  if (!db.prepare('SELECT 1 FROM app_flags WHERE clave = ?').get(flagPortada)) {
+    db.prepare("UPDATE academy_cursos SET portada = ? WHERE titulo = ? AND COALESCE(portada,'') = ''")
+      .run(PORTADA_URL, CURSO_VISUAL.titulo);
+    db.prepare('INSERT INTO app_flags (clave) VALUES (?)').run(flagPortada);
+  }
   if (db.prepare('SELECT 1 FROM app_flags WHERE clave = ?').get(flag)) return;
 
-  const insCurso = db.prepare("INSERT INTO academy_cursos (id, titulo, descripcion, nivel, orden, publicado) VALUES (?,?,?,?,?,1)");
+  const insCurso = db.prepare("INSERT INTO academy_cursos (id, titulo, descripcion, portada, nivel, orden, publicado) VALUES (?,?,?,?,?,?,1)");
   const insSec = db.prepare("INSERT INTO academy_secciones (id, curso_id, titulo, orden) VALUES (?,?,?,?)");
   const insLec = db.prepare("INSERT INTO academy_lecciones (id, curso_id, seccion_id, titulo, tipo, video_url, contenido, duracion, orden, publicado, imagenes) VALUES (?,?,?,?,?,?,?,?,?,1,?)");
 
@@ -177,11 +189,13 @@ export function seedAcademyCursoVisual(): void {
     for (const lec of sec.lecciones)
       for (const img of lec.imagenes)
         if (!urls.has(img.archivo)) urls.set(img.archivo, copiarCaptura(img.archivo));
+  // Aseguramos la portada aunque no esté entre las imágenes de las lecciones.
+  if (!urls.has(PORTADA_ARCHIVO)) urls.set(PORTADA_ARCHIVO, copiarCaptura(PORTADA_ARCHIVO));
 
   const tx = db.transaction(() => {
     const cid = uid();
     // orden 0 para que aparezca de primero (es la guía de arranque).
-    insCurso.run(cid, CURSO_VISUAL.titulo, CURSO_VISUAL.descripcion, CURSO_VISUAL.nivel, 0);
+    insCurso.run(cid, CURSO_VISUAL.titulo, CURSO_VISUAL.descripcion, urls.get(PORTADA_ARCHIVO) || PORTADA_URL, CURSO_VISUAL.nivel, 0);
     CURSO_VISUAL.secciones.forEach((sec, si) => {
       const sid = uid();
       insSec.run(sid, cid, sec.titulo, si);

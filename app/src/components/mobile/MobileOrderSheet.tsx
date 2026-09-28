@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../Dropdown';
+import { confirmar } from '../dialogs';
 import { DropiDespacho } from '../OrderDetailPanel';
 
 export function MobileOrderSheet({ df }: { df: DealFlowState }) {
@@ -128,7 +129,7 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
               <Dropdown ariaLabel="Cambiar estado del pedido" value={sel.estado} onChange={(v) => sel.setEstado(v as typeof sel.estado)} options={sel.estadosDisponibles.map((e) => ({ value: e, label: e }))} />
             </div>
             <button
-              onClick={() => { if (confirm(`¿Eliminar el pedido ${sel.id}? Solo lo quita del panel.`)) sel.eliminar(); }}
+              onClick={async () => { if (await confirmar({ titulo: `Eliminar ${sel.id}`, mensaje: 'Solo lo quita del panel; no cancela nada en Dropi/Effi.', aceptar: 'Eliminar', peligro: true })) sel.eliminar(); }}
               style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-danger-dark)', cursor: 'pointer', minHeight: 44 }}
             >🗑</button>
           </div>

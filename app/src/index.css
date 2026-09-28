@@ -430,6 +430,16 @@ textarea {
   }
 }
 
+/* Pop-ups y modales (avisos dentro de la web, no del navegador). */
+@keyframes dfPopIn {
+  from { opacity: 0; transform: translateY(6px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes dfFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Nota: antes aquí se apagaban TODAS las animaciones cuando el sistema tenía
    "reducir movimiento" activo, y eso dejaba el login y el preloader estáticos
    en muchos Windows. Las animaciones de DealFlow son suaves, así que se

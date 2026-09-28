@@ -14,6 +14,7 @@ import {
   WEBHOOK_URL,
 } from '../data';
 import { comprimirImagen, readFilesAsDataUrls } from '../components/PhotoUpload';
+import { confirmar, notificar as toast } from '../components/dialogs';
 import {
   apiAddVariant,
   apiGenerarVariantes,
@@ -1005,7 +1006,7 @@ export function useDealFlowState() {
   const isSuperadmin = sessionUser?.role === 'superadmin';
 
   // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
-  const AGENTE_SECCIONES: VendedorSection[] = ['productos', 'crm', 'leads', 'pedidos', 'marketing'];
+  const AGENTE_SECCIONES: VendedorSection[] = ['productos', 'crm', 'leads', 'pedidos'];
   const esAgente = apiMode && sessionUser?.role === 'vendedor' && sessionUser?.esDueno === false;
   const puedeVerSeccion = (sec: VendedorSection) => !esAgente || AGENTE_SECCIONES.includes(sec);
 
@@ -2415,9 +2416,10 @@ export function useDealFlowState() {
     void apiEnviarFlujoRemarketing(String(leadId), flowId, permitirSinOptin).then((r) => {
       // El cliente no aceptó promociones: avisamos y dejamos confirmar el envío.
       if (r.error && (r as { requiereOptin?: boolean }).requiereOptin && !permitirSinOptin) {
-        const ok = window.confirm('Este cliente NO ha aceptado recibir promociones. Enviar remarketing a quien no lo pidió aumenta los reportes y bloqueos, y puede hacer que Meta desactive tu número.\n\n¿Enviar de todas formas, bajo tu responsabilidad?');
-        if (ok) return enviarFlujoRemarketing(flowId, true);
-        setFlujoMsgRemk('Envío cancelado. Marca al cliente como opt-in si aceptó recibir promociones.');
+        void confirmar({ titulo: 'El cliente no aceptó promociones', mensaje: 'Enviar remarketing a quien no lo pidió aumenta los reportes y bloqueos, y puede hacer que Meta desactive tu número. ¿Enviar de todas formas, bajo tu responsabilidad?', aceptar: 'Enviar igual', peligro: true }).then((ok) => {
+          if (ok) enviarFlujoRemarketing(flowId, true);
+          else setFlujoMsgRemk('Envío cancelado. Marca al cliente como opt-in si aceptó recibir promociones.');
+        });
         return;
       }
       if (r.error || !r.data) { setFlujoMsgRemk(r.error || 'No se pudo enviar el flujo.'); return; }
@@ -2632,12 +2634,15 @@ export function useDealFlowState() {
   // ── Multi-tienda por cuenta ──
   async function reloadMisTiendas() { const { data } = await apiMisTiendas(); if (data) setMisTiendas(data.tiendas); }
   function cambiarTienda(id: string) {
-    void apiCambiarTienda(id).then((r) => { if (!r.error) location.reload(); }); // recarga con la tienda activa nueva
+    void apiCambiarTienda(id).then((r) => {
+      if (r.error) { toast(r.error, 'error'); return; }
+      location.reload(); // recarga con la tienda activa nueva
+    });
   }
   function crearTienda(nombre: string) {
-    setSuscMsg('Creando tu tienda…');
+    toast('Creando tu tienda…', 'info', 2500);
     void apiCrearTienda(nombre).then((r) => {
-      if (r.error) { setSuscMsg(r.error); return; }
+      if (r.error) { toast(r.error, 'error', 6000); return; }
       location.reload(); // aterriza en la tienda nueva (pendiente de pago)
     });
   }

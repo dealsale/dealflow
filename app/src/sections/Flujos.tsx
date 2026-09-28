@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { BloquesBuilder } from '../components/BloquesBuilder';
+import { confirmar } from '../components/dialogs';
 
 const card: React.CSSProperties = {
   background: 'var(--df-surface)',
@@ -101,7 +102,7 @@ export function Flujos({ df }: { df: DealFlowState }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
                       <span style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Se envía desde el Inbox → botón Flujos, dentro de cada chat.</span>
                       <div style={{ flex: 1 }} />
-                      <button onClick={() => { if (confirm(`¿Eliminar el flujo "${f.nombre}"?`)) { f.remove(); setAbierto(null); } }}
+                      <button onClick={async () => { if (await confirmar({ titulo: 'Eliminar flujo', mensaje: `¿Eliminar el flujo "${f.nombre}"?`, aceptar: 'Eliminar', peligro: true })) { f.remove(); setAbierto(null); } }}
                         style={{ background: 'var(--df-surface)', color: 'var(--df-danger)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
                         Eliminar flujo
                       </button>

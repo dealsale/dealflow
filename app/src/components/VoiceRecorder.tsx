@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { notificar } from './dialogs';
 
 /** Botón de micrófono que graba una nota de voz y la entrega como archivo. */
 export function VoiceRecorder({ onRecorded, size = 40 }: { onRecorded: (f: File) => void; size?: number }) {
@@ -11,7 +12,7 @@ export function VoiceRecorder({ onRecorded, size = 40 }: { onRecorded: (f: File)
 
   async function start() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      alert('Tu navegador no permite grabar audio.');
+      notificar('Tu navegador no permite grabar audio.', 'error');
       return;
     }
     try {
@@ -39,7 +40,7 @@ export function VoiceRecorder({ onRecorded, size = 40 }: { onRecorded: (f: File)
       setSecs(0);
       timerRef.current = setInterval(() => setSecs((s) => s + 1), 1000);
     } catch {
-      alert('No pudimos usar el micrófono. Revisa los permisos del navegador.');
+      notificar('No pudimos usar el micrófono. Revisa los permisos del navegador.', 'error');
     }
   }
 
