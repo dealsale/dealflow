@@ -1133,6 +1133,29 @@ api.get('/effi/log', requireAuth, requireStore, requireOwner, async (req, res) =
   const { logEffi, estadoEffi } = await import('./effiWoo.js');
   res.json({ estado: estadoEffi(req.user!.storeId!), eventos: logEffi(req.user!.storeId!, 80) });
 });
+// Preview del pedido EXACTO que se le manda a Effi (para ver departamento, ciudad
+// y product_id de cada ítem, que son los que Effi descarta en silencio si están mal).
+// Acepta el número DF (ej. 1049) o el id interno del pedido.
+api.get('/effi/preview/:ref', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { pedidoAWoo } = await import('./effiWoo.js');
+  const sid = req.user!.storeId!;
+  const ref = String(req.params.ref).replace(/^DF-/i, '');
+  const o = (/^\d+$/.test(ref)
+    ? db.prepare('SELECT * FROM orders WHERE store_id = ? AND numero = ?').get(sid, Number(ref))
+    : db.prepare('SELECT * FROM orders WHERE store_id = ? AND id = ?').get(sid, ref)) as Record<string, unknown> | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const woo = pedidoAWoo(sid, o) as { billing: { state: string; city: string }; line_items: { name: string; sku: string; product_id: number }[]; total: string };
+  res.json({
+    // Resumen de lo que Effi suele descartar en silencio:
+    revisar: {
+      departamentoCodigo: woo.billing.state,
+      ciudad: woo.billing.city,
+      itemsSinVincular: woo.line_items.filter((li) => !li.product_id).map((li) => `${li.name} (sku: ${li.sku || '—'})`),
+      total: woo.total,
+    },
+    pedidoCompleto: woo,
+  });
+});
 
 // ── Leads / CRM ───────────────────────────────────────────────────────
 api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {
