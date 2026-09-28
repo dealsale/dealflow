@@ -631,7 +631,14 @@ export async function empujarProductos(storeId: string, prov?: WooProv): Promise
   const crear: Record<string, unknown>[] = [];
   const actualizar: Record<string, unknown>[] = [];
   for (const f of filas) {
-    const base = { name: f.name, regular_price: f.price, description: f.desc, manage_stock: true, stock_quantity: f.stock };
+    // Stock: si en DealFlow hay unidades, las llevamos y marcamos EN STOCK. Si no
+    // hay (0), NO gestionamos stock y lo dejamos "instock": en dropshipping el
+    // inventario real lo maneja Effi/Dropi, y si lo dejáramos en 0 gestionado,
+    // WooCommerce lo marca "agotado" y los ERP (Effi) no lo listan ni lo venden.
+    const stockFields = f.stock > 0
+      ? { manage_stock: true, stock_quantity: f.stock, stock_status: 'instock' }
+      : { manage_stock: false, stock_status: 'instock' };
+    const base = { name: f.name, regular_price: f.price, description: f.desc, catalog_visibility: 'visible', ...stockFields };
     const wid = map[f.sku];
     if (wid) actualizar.push({ id: wid, ...base });
     else crear.push({ sku: f.sku, type: 'simple', status: 'publish', ...base });
