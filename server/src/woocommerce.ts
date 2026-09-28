@@ -511,7 +511,7 @@ export async function catalogo(storeId: string, prov?: WooProv): Promise<{ produ
  * su host, cuántos productos ve realmente la API (cabecera X-WP-Total) y el primero.
  * Sirve para entender por qué "solo aparece un producto" sin adivinar.
  */
-export async function diagnosticoCatalogo(storeId: string, prov: WooProv): Promise<Record<string, unknown>> {
+export async function diagnosticoCatalogo(storeId: string, prov: WooProv, full = false): Promise<Record<string, unknown>> {
   const tipo = `woocommerce_${prov}`;
   const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, tipo) as { config: string } | undefined;
   const cfg = row ? pj<Record<string, string>>(row.config, {}) : {};
@@ -521,10 +521,32 @@ export async function diagnosticoCatalogo(storeId: string, prov: WooProv): Promi
   let host = '';
   try { host = new URL(c.base).host; } catch { host = c.base; }
   try {
-    const res = await fetch(url(c, '/products', { per_page: '3', status: 'any' }));
+    // En modo `full` pedimos TODOS los campos que un ERP suele usar para filtrar,
+    // así comparamos el producto que Effi sí toma contra los que ignora.
+    const campos = 'id,name,sku,type,status,catalog_visibility,stock_status,manage_stock,stock_quantity,price,regular_price,purchasable';
+    const res = await fetch(url(c, '/products', { per_page: full ? '100' : '3', status: 'any', ...(full ? { _fields: campos } : {}) }));
     const totalHeader = res.headers.get('x-wp-total');
-    const body = (await res.json().catch(() => [])) as Array<{ name?: string; type?: string; status?: string; message?: string }>;
+    const body = (await res.json().catch(() => [])) as Array<Record<string, unknown>>;
     const lista = Array.isArray(body) ? body : [];
+    if (full) {
+      // Resumen: distribución por los campos que importan (para ver qué distingue a unos de otros).
+      const cuenta = (campo: string) => lista.reduce<Record<string, number>>((a, p) => { const k = String(p[campo] ?? '—'); a[k] = (a[k] || 0) + 1; return a; }, {});
+      return {
+        proveedor: prov, fuente, host, httpStatus: res.status,
+        totalSegunAPI: totalHeader != null ? Number(totalHeader) : '(sin X-WP-Total)',
+        devueltos: lista.length,
+        resumen: {
+          porEstado: cuenta('status'),
+          porVisibilidad: cuenta('catalog_visibility'),
+          porTipo: cuenta('type'),
+          porStock: cuenta('stock_status'),
+          comprables: lista.filter((p) => p.purchasable === true).length,
+          conPrecio: lista.filter((p) => String(p.price ?? '') !== '' && String(p.price) !== '0').length,
+          conSku: lista.filter((p) => String(p.sku ?? '') !== '').length,
+        },
+        productos: lista.map((p) => ({ id: p.id, nombre: p.name, sku: p.sku, tipo: p.type, estado: p.status, visibilidad: p.catalog_visibility, stock: p.stock_status, comprable: p.purchasable, precio: p.price })),
+      };
+    }
     return {
       proveedor: prov,
       fuente,
@@ -533,12 +555,8 @@ export async function diagnosticoCatalogo(storeId: string, prov: WooProv): Promi
       totalSegunAPI: totalHeader != null ? Number(totalHeader) : '(sin cabecera X-WP-Total)',
       devueltosEnMuestra: lista.length,
       primeros: lista.slice(0, 3).map((p) => ({ nombre: p.name, tipo: p.type, estado: p.status })),
-      respuestaCruda: !Array.isArray(body) ? body : undefined, // por si la API devolvió un error en vez de la lista
-      nota: !res.ok
-        ? 'La API de tu WooCommerce respondió con error (revisa que la clave tenga permiso de LECTURA y que la URL sea la correcta).'
-        : Number(totalHeader) <= 3
-          ? 'La API de tu WooCommerce solo expone estos productos. Suele ser porque los demás están en BORRADOR o la clave no tiene permiso para verlos.'
-          : 'La API ve más productos; si en DealFlow ves menos, avísame con este diagnóstico.',
+      respuestaCruda: !Array.isArray(body) ? body : undefined,
+      nota: 'Para ver TODOS los productos y comparar campos, agrega &full=1 a la URL.',
     };
   } catch (e) {
     return { proveedor: prov, fuente, host, error: 'No pudimos consultar ese WooCommerce: ' + (e instanceof Error ? e.message : String(e)) };

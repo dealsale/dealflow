@@ -1094,7 +1094,8 @@ api.get('/woo/catalogo', requireAuth, requireStore, async (req, res) => {
 api.get('/woo/diagnostico', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { diagnosticoCatalogo } = await import('./woocommerce.js');
   const prov = wooProv(req.query.proveedor) || 'effi';
-  res.json(await diagnosticoCatalogo(req.user!.storeId!, prov));
+  const full = req.query.full === '1' || req.query.full === 'true';
+  res.json(await diagnosticoCatalogo(req.user!.storeId!, prov, full));
 });
 
 // ── Leads / CRM ───────────────────────────────────────────────────────
