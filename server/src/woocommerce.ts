@@ -563,6 +563,26 @@ export async function diagnosticoCatalogo(storeId: string, prov: WooProv, full =
   }
 }
 
+/**
+ * Convierte la etiqueta de una variante ("GRIS · XL", "Negro - M", "L · Gris",
+ * "Camel · XL"…) en atributos de WooCommerce Talla y Color. El token que parece
+ * talla (S, M, L, XL, XXL, número, Única) va a "Talla"; el resto a "Color". Así
+ * Effi/Dropi ven el producto con sus atributos, no solo el nombre.
+ */
+const TALLAS_CONOCIDAS = new Set(['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'XXXXL', 'UNICA', 'ÚNICA', 'TALLA UNICA', 'U']);
+function atributosDeLabel(label: string): { name: string; position: number; visible: boolean; variation: boolean; options: string[] }[] {
+  const tokens = String(label || '').split(/[-·|/,]+/).map((t) => t.trim()).filter(Boolean);
+  if (!tokens.length) return [];
+  const esTalla = (t: string) => TALLAS_CONOCIDAS.has(t.toUpperCase()) || /^\d{1,3}$/.test(t) || /^tall?a\b/i.test(t);
+  const talla = tokens.find(esTalla);
+  const colores = tokens.filter((t) => t !== talla);
+  const attrs: { name: string; position: number; visible: boolean; variation: boolean; options: string[] }[] = [];
+  let pos = 0;
+  if (talla) attrs.push({ name: 'Talla', position: pos++, visible: true, variation: false, options: [talla] });
+  if (colores.length) attrs.push({ name: 'Color', position: pos++, visible: true, variation: false, options: [colores.join(' ')] });
+  return attrs;
+}
+
 /** Genera un SKU legible y único a partir del nombre y el id del producto. */
 function skuAuto(nombre: string, id: string): string {
   const slug = (nombre || 'PRODUCTO')
@@ -592,7 +612,8 @@ export async function empujarProductos(storeId: string, prov?: WooProv): Promise
   const stockDe = (id: string) => (db.prepare('SELECT COALESCE(SUM(stock),0) s FROM variants WHERE product_id = ?').get(id) as { s: number }).s;
 
   // Aplanamos catálogo → una FILA por producto simple o por cada variante real.
-  interface Fila { sku: string; name: string; price: string; desc: string; stock: number }
+  interface AtributoWoo { name: string; position: number; visible: boolean; variation: boolean; options: string[] }
+  interface Fila { sku: string; name: string; price: string; desc: string; stock: number; attrs?: AtributoWoo[] }
   const filas: Fila[] = [];
   let skusGenerados = 0;
   for (const p of prods) {
@@ -600,11 +621,12 @@ export async function empujarProductos(storeId: string, prov?: WooProv): Promise
       { id: string; label: string; sku: string; stock: number }[];
     const reales = variantes.filter((v) => (v.label || '').trim() && (v.label || '').toLowerCase() !== 'única');
     if (reales.length) {
-      // Un producto por cada variante (talla/color), con su propio SKU.
+      // Un producto por cada variante (talla/color), con su propio SKU y con sus
+      // ATRIBUTOS (Talla / Color) en WooCommerce, para que Effi/Dropi los reconozcan.
       for (const v of reales) {
         let sku = (v.sku || '').trim();
         if (!sku) { sku = skuAuto(`${p.nombre}-${v.label}`, v.id); db.prepare('UPDATE variants SET sku = ? WHERE id = ?').run(sku, v.id); skusGenerados++; }
-        filas.push({ sku, name: `${p.nombre} - ${v.label}`, price: String(p.precio || 0), desc: p.descripcion || '', stock: v.stock || 0 });
+        filas.push({ sku, name: `${p.nombre} - ${v.label}`, price: String(p.precio || 0), desc: p.descripcion || '', stock: v.stock || 0, attrs: atributosDeLabel(v.label) });
       }
     } else {
       // Producto sin variantes: una sola fila con el SKU del producto.
@@ -638,7 +660,7 @@ export async function empujarProductos(storeId: string, prov?: WooProv): Promise
     const stockFields = f.stock > 0
       ? { manage_stock: true, stock_quantity: f.stock, stock_status: 'instock' }
       : { manage_stock: false, stock_status: 'instock' };
-    const base = { name: f.name, regular_price: f.price, description: f.desc, catalog_visibility: 'visible', ...stockFields };
+    const base = { name: f.name, regular_price: f.price, description: f.desc, catalog_visibility: 'visible', ...stockFields, ...(f.attrs && f.attrs.length ? { attributes: f.attrs } : {}) };
     const wid = map[f.sku];
     if (wid) actualizar.push({ id: wid, ...base });
     else crear.push({ sku: f.sku, type: 'simple', status: 'publish', ...base });
