@@ -1114,6 +1114,11 @@ api.post('/effi/desactivar', requireAuth, requireStore, requireOwner, async (req
   desactivarEffi(req.user!.storeId!);
   res.json({ ok: true });
 });
+// Diagnóstico: qué le ha preguntado Effi al storefront (para saber si llega y con qué SKU).
+api.get('/effi/log', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { logEffi, estadoEffi } = await import('./effiWoo.js');
+  res.json({ estado: estadoEffi(req.user!.storeId!), eventos: logEffi(req.user!.storeId!, 80) });
+});
 
 // ── Leads / CRM ───────────────────────────────────────────────────────
 api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {

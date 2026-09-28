@@ -159,6 +159,21 @@ function noEncontrado(res: Response) {
   res.status(404).json({ code: 'woocommerce_rest_product_invalid_id', message: 'ID no válido.', data: { status: 404 } });
 }
 
+// Guarda en effi_log lo que Effi preguntó y qué respondimos (diagnóstico del dueño).
+function registrar(storeId: string, req: Request, auth: boolean, resultado: string) {
+  try {
+    db.prepare('INSERT INTO effi_log (store_id, metodo, ruta, sku, auth, resultado) VALUES (?,?,?,?,?,?)')
+      .run(storeId, req.method, String(req.path || '').slice(0, 200), String(req.query.sku || '').slice(0, 80), auth ? 1 : 0, resultado.slice(0, 120));
+    // Poda: dejamos las últimas ~300 por tienda.
+    db.prepare("DELETE FROM effi_log WHERE store_id = ? AND id NOT IN (SELECT id FROM effi_log WHERE store_id = ? ORDER BY id DESC LIMIT 300)").run(storeId, storeId);
+  } catch { /* el log nunca debe romper la respuesta */ }
+}
+
+// Últimas entradas del log para el dueño.
+export function logEffi(storeId: string, limite = 60): Record<string, unknown>[] {
+  return db.prepare('SELECT ts, metodo, ruta, sku, auth, resultado FROM effi_log WHERE store_id = ? ORDER BY id DESC LIMIT ?').all(storeId, limite) as Record<string, unknown>[];
+}
+
 /**
  * Maneja una petición dirigida a un storefront de Effi (Host ya resuelto a storeId).
  * Devuelve true si la atendió (para que el resto de la app no la procese).
@@ -167,11 +182,12 @@ function manejar(req: Request, res: Response, storeId: string): boolean {
   const ruta = (req.path || '/').replace(/\/+$/, '') || '/';
 
   // Probe sin autenticación: confirma que hay tienda en este origen.
-  if (req.method === 'GET' && ruta === '/') { res.json({}); return true; }
+  if (req.method === 'GET' && ruta === '/') { registrar(storeId, req, false, 'probe / → {}'); res.json({}); return true; }
 
   if (!ruta.startsWith('/wp-json/wc/v3')) return false; // no es del storefront
 
   if (!autenticado(storeId, req)) {
+    registrar(storeId, req, false, '401 credenciales inválidas');
     res.status(401).json({ code: 'woocommerce_rest_authentication_error', message: 'Credenciales inválidas.', data: { status: 401 } });
     return true;
   }
@@ -179,8 +195,9 @@ function manejar(req: Request, res: Response, storeId: string): boolean {
   // GET /wp-json/wc/v3/products?sku=<ref>  → [] o [producto]
   if (req.method === 'GET' && /^\/wp-json\/wc\/v3\/products$/.test(ruta)) {
     const sku = String(req.query.sku || '').trim();
-    if (!sku) { res.json([]); return true; } // sin sku no enumeramos el catálogo
+    if (!sku) { registrar(storeId, req, true, 'products sin sku → []'); res.json([]); return true; }
     const prod = buscarPorSku(storeId, sku);
+    registrar(storeId, req, true, prod ? `products sku=${sku} → 1 match` : `products sku=${sku} → 0 (SKU no existe en DealFlow)`);
     res.json(prod ? [wooProducto(storeId, prod)] : []);
     return true;
   }
@@ -190,9 +207,10 @@ function manejar(req: Request, res: Response, storeId: string): boolean {
     const id = Number(mProd[1]);
     const sku = skuDeId(storeId, id);
     const prod = sku ? buscarPorSku(storeId, sku) : null;
-    if (!prod) { noEncontrado(res); return true; }
-    if (req.method === 'GET') { res.json(wooProducto(storeId, prod)); return true; }
+    if (!prod) { registrar(storeId, req, true, `products/${id} → 404`); noEncontrado(res); return true; }
+    if (req.method === 'GET') { registrar(storeId, req, true, `products/${id} (sku=${sku}) → ok`); res.json(wooProducto(storeId, prod)); return true; }
     if (req.method === 'PUT') {
+      registrar(storeId, req, true, `PUT stock products/${id} (sku=${sku})`);
       // Effi nos empuja su stock: {manage_stock:"1", stock_quantity:199}
       const q = req.body?.stock_quantity;
       if (q !== undefined && q !== null && !Number.isNaN(Number(q))) {
@@ -219,6 +237,7 @@ function manejar(req: Request, res: Response, storeId: string): boolean {
   }
 
   // Cualquier otra ruta wc/v3 la reconocemos pero respondemos vacío/OK.
+  registrar(storeId, req, true, 'otra ruta wc/v3 → []');
   res.json([]);
   return true;
 }
