@@ -12,6 +12,7 @@ import { restoreQrSessions } from './waqr.js';
 import { congelarSiFalta } from './plantillas.js';
 import { iniciarSincronizacionWoo } from './syncWoo.js';
 import { iniciarSeguimiento } from './seguimiento.js';
+import { montarEffiWoo } from './effiWoo.js';
 
 seed();
 seedPlantillas();
@@ -45,13 +46,17 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5183'], credentials: true }));
 }
 
+// Storefront de Effi: si el Host es un subdominio de tienda (<slug>.dealflow.sbs),
+// DealFlow responde como una tienda WooCommerce. Debe ir ANTES de /api y del SPA.
+montarEffiWoo(app);
+
 app.use('/api', api);
 app.use('/webhooks', webhooks);
 app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-09-28-woo-productos-con-atributos',
+    build: '2026-09-28-effi-nativo-storefront',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

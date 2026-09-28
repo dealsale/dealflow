@@ -93,6 +93,9 @@ import {
   apiCambiarTienda,
   apiCrearTienda,
   apiEliminarMiTienda,
+  apiEffiEstado,
+  apiEffiActivar,
+  apiEffiDesactivar,
   apiToggleStore,
   apiTogglePremiumTema,
   apiUpdateStore,
@@ -2664,6 +2667,22 @@ export function useDealFlowState() {
     });
   }
 
+  // Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio).
+  const [effiWoo, setEffiWoo] = useState<{ activo: boolean; slug: string; url: string }>({ activo: false, slug: '', url: '' });
+  const [effiCreds, setEffiCreds] = useState<{ ck: string; cs: string } | null>(null);
+  async function cargarEffiWoo() { const { data } = await apiEffiEstado(); if (data) setEffiWoo(data); }
+  function activarEffiWoo() {
+    void apiEffiActivar().then((r) => {
+      if (r.error || !r.data) { toast(r.error || 'No se pudo activar el storefront de Effi.', 'error'); return; }
+      setEffiWoo({ activo: true, slug: r.data.slug, url: r.data.url });
+      setEffiCreds({ ck: r.data.ck, cs: r.data.cs }); // se muestran UNA vez
+      toast('Storefront de Effi activado ✓', 'ok');
+    });
+  }
+  function desactivarEffiWoo() {
+    void apiEffiDesactivar().then((r) => { if (!r.error) { setEffiWoo((s) => ({ ...s, activo: false })); setEffiCreds(null); toast('Storefront de Effi desactivado.', 'ok'); } });
+  }
+
   // ── Cupones (gestión del admin de DealFlow) ──
   async function reloadCupones() { const { data } = await apiCupones(); if (data) setCupones(data.cupones); }
   function crearCupon(nuevo: NuevoCupon) {
@@ -4074,6 +4093,11 @@ export function useDealFlowState() {
     cambiarTienda,
     crearTienda,
     eliminarMiTienda,
+    effiWoo,
+    effiCreds,
+    cargarEffiWoo,
+    activarEffiWoo,
+    desactivarEffiWoo,
     planes,
     pagarSuscripcion,
     validarCupon,

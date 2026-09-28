@@ -1098,6 +1098,23 @@ api.get('/woo/diagnostico', requireAuth, requireStore, requireOwner, async (req,
   res.json(await diagnosticoCatalogo(req.user!.storeId!, prov, full));
 });
 
+// ── Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio) ──
+api.get('/effi/estado', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { estadoEffi } = await import('./effiWoo.js');
+  res.json(estadoEffi(req.user!.storeId!));
+});
+// Activa el storefront y devuelve las llaves EN CLARO una sola vez (para pegarlas en Effi).
+api.post('/effi/activar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { activarEffi } = await import('./effiWoo.js');
+  const s = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(req.user!.storeId!) as { nombre: string } | undefined;
+  res.json(activarEffi(req.user!.storeId!, s?.nombre || 'tienda'));
+});
+api.post('/effi/desactivar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { desactivarEffi } = await import('./effiWoo.js');
+  desactivarEffi(req.user!.storeId!);
+  res.json({ ok: true });
+});
+
 // ── Leads / CRM ───────────────────────────────────────────────────────
 api.patch('/leads/:id', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);

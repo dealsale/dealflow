@@ -501,6 +501,36 @@ db.exec(`CREATE TABLE IF NOT EXISTS woo_central (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
 
+// Effi vía "DealFlow como tienda WooCommerce": cada tienda expone un storefront
+// (subdominio <slug>.dealflow.sbs) que RESPONDE como WooCommerce a Effi. Effi
+// vincula sus artículos por SKU y nosotros le mandamos los pedidos por webhook.
+// Guardamos solo el SHA-256 de las llaves (el secreto viaja en la query de Effi).
+db.exec(`CREATE TABLE IF NOT EXISTS effi_woo (
+  store_id TEXT PRIMARY KEY REFERENCES stores(id) ON DELETE CASCADE,
+  slug TEXT UNIQUE,                      -- subdominio del storefront (<slug>.dealflow.sbs)
+  ck_hash TEXT NOT NULL DEFAULT '',
+  cs_hash TEXT NOT NULL DEFAULT '',
+  activo INTEGER NOT NULL DEFAULT 0,
+  flete_ref TEXT NOT NULL DEFAULT '',    -- (info; el artículo de flete se configura en Effi)
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+// Id numérico ESTABLE por SKU que Effi guarda para cada artículo (una vez asignado
+// no cambia). El AUTOINCREMENT global sirve como product_id de WooCommerce.
+db.exec(`CREATE TABLE IF NOT EXISTS effi_product_ids (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_id TEXT NOT NULL,
+  sku TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_effi_pid ON effi_product_ids(store_id, sku)');
+// Idempotencia de envíos de pedidos a Effi (Effi no deduplica: crea 2 remisiones).
+db.exec(`CREATE TABLE IF NOT EXISTS effi_enviados (
+  store_id TEXT NOT NULL,
+  order_id TEXT NOT NULL,
+  enviado_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (store_id, order_id)
+)`);
+
 // Academy (portal educativo en academy.dealflow.sbs): cursos con lecciones
 // (video o artículo). Lo administra el superadmin/admin; lo consultan los
 // usuarios de DealFlow. `publicado` controla si se muestra en el portal.
