@@ -325,6 +325,8 @@ export interface DecoratedProduct extends Product {
   setPrecio: (v: string) => void;
   setSku: (v: string) => void;
   setDespachoProveedor: (v: string) => void;
+  /** Suelta el vínculo: limpia el SKU del producto, el de todas sus variantes y el proveedor, para poder cambiar de Dropi a Effi (o al revés). */
+  desvincularDespacho: () => void;
   generarVariantes: () => void;
   setTipo: (v: 'producto' | 'servicio') => void;
   setDuracion: (v: string) => void;
@@ -2083,6 +2085,10 @@ export function useDealFlowState() {
         setPrecio: (v: string) => updateProduct(p.id, { precio: parseInt(v.replace(/[^0-9]/g, ''), 10) || 0 }),
         setSku: (v: string) => updateProduct(p.id, { sku: v }),
         setDespachoProveedor: (v: string) => updateProduct(p.id, { despachoProveedor: v }),
+        desvincularDespacho: () => {
+          updateProduct(p.id, { sku: '', despachoProveedor: '' });
+          (p.variantes || []).forEach((v) => { if (v.id && (v.sku || '').trim()) setVariantSku(p.id, v.id, ''); });
+        },
         generarVariantes: () => generarVariantesProducto(String(p.id)),
         setTipo: (v: 'producto' | 'servicio') => updateProduct(p.id, { tipo: v }),
         setDuracion: (v: string) => updateProduct(p.id, { duracion: v }),
