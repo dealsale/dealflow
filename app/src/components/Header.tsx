@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { NotificationsMenu } from './NotificationsMenu';
 import { ProfileMenu } from './ProfileMenu';
-import { pedirTexto } from './dialogs';
+import { pedirTexto, confirmar } from './dialogs';
 
 /** Selector de tienda: cambia entre las tiendas del dueño y permite crear otra. */
 function StoreSwitcher({ df }: { df: DealFlowState }) {
@@ -41,6 +41,18 @@ function StoreSwitcher({ df }: { df: DealFlowState }) {
                 <span style={{ fontWeight: 600, fontSize: 13.5, flex: 1 }}>{t.nombre}</span>
                 {t.bloqueada && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-danger-dark)', background: 'var(--df-danger-subtle-2)', borderRadius: 5, padding: '1px 6px' }}>pago pendiente</span>}
                 {t.activa && <span style={{ fontSize: 12, color: 'var(--df-brand)' }}>✓</span>}
+                {/* Eliminar una tienda de más (solo las que no son la activa, y si hay varias). */}
+                {!t.activa && varias && (
+                  <span
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (await confirmar({ titulo: `Eliminar "${t.nombre}"`, mensaje: 'Se elimina esta tienda y todo su contenido (productos, pedidos, chats). Esta acción no se puede deshacer.', aceptar: 'Eliminar', peligro: true })) df.eliminarMiTienda(t.id);
+                    }}
+                    className="df-danger-hover"
+                    title="Eliminar esta tienda"
+                    style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 3 }}
+                  >🗑</span>
+                )}
               </div>
             ))}
             <div style={{ borderTop: '1px solid var(--df-border)', margin: '4px 0' }} />

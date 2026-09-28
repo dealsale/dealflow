@@ -208,6 +208,24 @@ api.post('/crear-tienda', requireAuth, requireStore, (req, res) => {
   res.json({ ok: true, storeId });
 });
 
+// El dueño elimina una de SUS tiendas (para limpiar tiendas de más). No puede
+// borrar la tienda en la que está parado (que cambie primero) ni su única tienda.
+api.delete('/mis-tiendas/:id', requireAuth, requireStore, (req, res) => {
+  if (!esDuenoDeTienda(req.user)) return res.status(403).json({ error: 'Solo el dueño puede eliminar tiendas.' });
+  if (req.params.id === req.user!.storeId) return res.status(400).json({ error: 'No puedes eliminar la tienda en la que estás. Cámbiate a otra primero.' });
+  const mias = db.prepare("SELECT id FROM stores WHERE owner_user_id = ? OR (owner_user_id = '' AND correo = ?)").all(req.user!.id, req.user!.email) as { id: string }[];
+  if (mias.length <= 1) return res.status(400).json({ error: 'No puedes eliminar tu única tienda.' });
+  const esMia = mias.some((s) => s.id === req.params.id);
+  if (!esMia) return res.status(404).json({ error: 'Esa tienda no es tuya.' });
+  try {
+    db.prepare('DELETE FROM stores WHERE id = ?').run(req.params.id); // cascada limpia lo demás
+  } catch (e) {
+    console.error('[eliminar-tienda] error', e);
+    return res.status(500).json({ error: 'No pudimos eliminar la tienda. Intenta de nuevo.' });
+  }
+  res.json({ ok: true });
+});
+
 // ── Estado completo de la tienda (una llamada para pintar el panel) ───
 api.get('/state', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;

@@ -92,6 +92,7 @@ import {
   apiMisTiendas,
   apiCambiarTienda,
   apiCrearTienda,
+  apiEliminarMiTienda,
   apiToggleStore,
   apiTogglePremiumTema,
   apiUpdateStore,
@@ -818,7 +819,15 @@ export function useDealFlowState() {
   }, [premiumPermitido]);
   const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
   const [iaPredeterminada, setIaPredeterminada] = useState('deepseek');
-  const [integracionMsg, setIntegracionMsg] = useState('');
+  // Los avisos de integraciones (guardar, probar conexión, sincronizar…) ahora
+  // salen como pop-up flotante, no como texto fijo en el panel. Mantenemos la
+  // misma firma setIntegracionMsg para no tocar cada llamada; el progreso ("…")
+  // se ignora y solo se avisa el resultado final (✓ éxito o error).
+  const integracionMsg = '';
+  const setIntegracionMsg = (msg: string) => {
+    if (!msg || msg.endsWith('…')) return;
+    toast(msg, msg.startsWith('✓') ? 'ok' : 'error', msg.startsWith('✓') ? 4000 : 6000);
+  };
   const [suscripcion, setSuscripcion] = useState<Suscripcion | null>(null);
   const [suscMsg, setSuscMsg] = useState('');
   const [misTiendas, setMisTiendas] = useState<MiTienda[]>([]);
@@ -1449,6 +1458,7 @@ export function useDealFlowState() {
     setSavedProductId(id);
     clearTimeout(savedProductTimer.current);
     savedProductTimer.current = setTimeout(() => setSavedProductId(null), 2500);
+    toast('Producto guardado ✓', 'ok', 2500);
   }
 
   function armDeleteTimer() {
@@ -2646,6 +2656,13 @@ export function useDealFlowState() {
       location.reload(); // aterriza en la tienda nueva (pendiente de pago)
     });
   }
+  function eliminarMiTienda(id: string) {
+    void apiEliminarMiTienda(id).then((r) => {
+      if (r.error) { toast(r.error, 'error', 6000); return; }
+      toast('Tienda eliminada.', 'ok');
+      void reloadMisTiendas();
+    });
+  }
 
   // ── Cupones (gestión del admin de DealFlow) ──
   async function reloadCupones() { const { data } = await apiCupones(); if (data) setCupones(data.cupones); }
@@ -3211,6 +3228,7 @@ export function useDealFlowState() {
     setAssistantSaved(true);
     clearTimeout(assistantTimer.current);
     assistantTimer.current = setTimeout(() => setAssistantSaved(false), 2500);
+    toast('Asistente guardado ✓', 'ok', 2500);
   }
 
   function sendCrm() {
@@ -4055,6 +4073,7 @@ export function useDealFlowState() {
     misTiendas,
     cambiarTienda,
     crearTienda,
+    eliminarMiTienda,
     planes,
     pagarSuscripcion,
     validarCupon,
