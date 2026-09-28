@@ -257,7 +257,7 @@ export function montarEffiWoo(app: Express): void {
  * cliente y la remisión de venta solo). Effi responde 200 vacío a todo, así que
  * validamos ANTES y guardamos idempotencia (Effi NO deduplica: crearía 2 remisiones).
  */
-export async function enviarPedidoAEffi(storeId: string, orderRowId: string, reintentar = false): Promise<{ ok: true; remision: string; sinSku: string[] } | { error: string }> {
+export async function enviarPedidoAEffi(storeId: string, orderRowId: string, reintentar = false, conRecaudo = true): Promise<{ ok: true; remision: string; sinSku: string[] } | { error: string }> {
   const f = filaDe(storeId);
   if (!f || !f.activo) return { error: 'Primero activa el storefront de Effi en Integraciones → “Effi (DealFlow como tienda)”.' };
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderRowId, storeId) as Record<string, unknown> | undefined;
@@ -266,7 +266,7 @@ export async function enviarPedidoAEffi(storeId: string, orderRowId: string, rei
   if (!reintentar && db.prepare('SELECT 1 FROM effi_enviados WHERE store_id = ? AND order_id = ?').get(storeId, orderRowId)) {
     return { error: 'Este pedido ya se envió a Effi (no lo mandamos otra vez para no duplicar la remisión).' };
   }
-  const woo = pedidoAWoo(storeId, o);
+  const woo = pedidoAWoo(storeId, o, conRecaudo);
   const items = (woo.line_items as { product_id: number; name: string }[]) || [];
   const sinSku = items.filter((li) => !li.product_id).map((li) => li.name); // sin SKU vinculado → Effi no lo reconoce
   const src = `https://${f.slug}.${BASE_DOMAIN}/`;
@@ -298,7 +298,9 @@ export async function enviarPedidoAEffi(storeId: string, orderRowId: string, rei
 }
 
 // ── Formato de pedido WooCommerce (para GET /orders/:id y para el webhook) ─────
-export function pedidoAWoo(storeId: string, o: Record<string, unknown>): Record<string, unknown> {
+// conRecaudo=true → contra entrega (Effi recauda el total en la entrega).
+// conRecaudo=false → prepagado / sin recaudo (el cliente ya pagó; Effi no cobra).
+export function pedidoAWoo(storeId: string, o: Record<string, unknown>, conRecaudo = true): Record<string, unknown> {
   const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string) as
     { qty: number; nombre: string; precio: number }[];
   const numero = Number(o.numero);
@@ -323,7 +325,14 @@ export function pedidoAWoo(storeId: string, o: Record<string, unknown>): Record<
     cart_tax: '0', total: String(total), total_tax: '0', prices_include_tax: false, customer_id: 0,
     customer_note: limpiarTexto(String(o.nota || '')),
     billing: datosCliente(o), shipping: datosCliente(o),
-    payment_method: 'cod', payment_method_title: 'Pago contra entrega', transaction_id: '', meta_data: [],
+    // Recaudo: contra entrega (cod) vs prepagado. En prepagado marcamos el pedido
+    // como ya pagado para que Effi no lo cobre en la entrega.
+    payment_method: conRecaudo ? 'cod' : 'prepaid',
+    payment_method_title: conRecaudo ? 'Pago contra entrega' : 'Pagado (sin recaudo)',
+    set_paid: !conRecaudo,
+    date_paid: conRecaudo ? null : String(o.created_at || ''),
+    date_paid_gmt: conRecaudo ? null : String(o.created_at || ''),
+    transaction_id: '', meta_data: [],
     line_items,
     tax_lines: [],
     shipping_lines: envio > 0 ? [{ id: 999, method_title: 'Envío', method_id: 'flat_rate', instance_id: '1', total: String(envio), total_tax: '0', taxes: [], meta_data: [] }] : [],
