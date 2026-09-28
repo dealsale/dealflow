@@ -451,6 +451,7 @@ export interface MiTienda { id: string; nombre: string; activa: boolean; estado:
 export const apiMisTiendas = () => req<{ tiendas: MiTienda[] }>('/api/mis-tiendas', 'GET');
 export const apiCambiarTienda = (id: string) => req<{ ok: true }>(`/api/cambiar-tienda/${id}`, 'POST');
 export const apiCrearTienda = (nombre: string) => req<{ ok: true; storeId: string }>('/api/crear-tienda', 'POST', { nombre });
+export const apiEliminarMiTienda = (id: string) => req<{ ok: true }>(`/api/mis-tiendas/${id}`, 'DELETE');
 
 // ── Campañas del Marketing IA ──
 export interface Brief {
