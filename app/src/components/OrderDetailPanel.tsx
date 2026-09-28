@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
+import { confirmar } from './dialogs';
 import { apiDropiCotizar, apiDropiCrear, type DropiTransportadora } from '../lib/api';
 
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
@@ -260,7 +261,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
               />
             </div>
             <button
-              onClick={() => { if (confirm(`¿Eliminar el pedido ${sel.id}? Esto solo lo quita del panel; no cancela nada en Dropi/Effi.`)) sel.eliminar(); }}
+              onClick={async () => { if (await confirmar({ titulo: `Eliminar ${sel.id}`, mensaje: 'Esto solo lo quita del panel; no cancela nada en Dropi/Effi.', aceptar: 'Eliminar', peligro: true })) sel.eliminar(); }}
               title="Eliminar pedido"
               style={{ background: 'var(--df-surface)', border: '1px solid var(--df-danger-border, var(--df-border))', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-danger-dark)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             >🗑 Eliminar</button>

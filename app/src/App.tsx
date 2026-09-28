@@ -4,6 +4,7 @@ import { BotPreloader } from './components/BotPreloader';
 import { Login } from './components/Login';
 import { OrderDetailPanel } from './components/OrderDetailPanel';
 import { OrderToast } from './components/OrderToast';
+import { DialogHost } from './components/dialogs';
 import { ManualOrderModal } from './components/ManualOrderModal';
 import { CompletarPedidoModal } from './components/CompletarPedidoModal';
 import { Sidebar } from './components/Sidebar';
@@ -22,7 +23,6 @@ import { Leads } from './sections/Leads';
 import { Pedidos } from './sections/Pedidos';
 import { Productos } from './sections/Productos';
 import { Equipo } from './sections/Equipo';
-import { Marketing } from './sections/Marketing';
 import { DealShop } from './sections/DealShop';
 import { Biblioteca } from './sections/Biblioteca';
 import { Resumen } from './sections/Resumen';
@@ -348,7 +348,6 @@ function DesktopApp({ df }: { df: DealFlowState }) {
           {df.isVendedor && df.section === 'asistente' && <Asistente df={df} />}
           {df.isVendedor && df.section === 'whatsapp' && <WhatsAppSection df={df} />}
           {df.isVendedor && df.section === 'equipo' && <Equipo df={df} />}
-          {df.isVendedor && df.section === 'marketing' && <Marketing df={df} />}
           {df.isVendedor && df.section === 'dealshop' && <DealShop df={df} />}
           {df.isVendedor && df.section === 'biblioteca' && <Biblioteca df={df} />}
           {df.isVendedor && df.section === 'pedidos' && <Pedidos df={df} />}
@@ -397,7 +396,6 @@ function MobileApp({ df }: { df: DealFlowState }) {
         {df.isVendedor && df.section === 'asistente' && <Asistente df={df} />}
         {df.isVendedor && df.section === 'whatsapp' && <WhatsAppSection df={df} />}
         {df.isVendedor && df.section === 'equipo' && <Equipo df={df} />}
-        {df.isVendedor && df.section === 'marketing' && <Marketing df={df} />}
         {df.isVendedor && df.section === 'dealshop' && <DealShop df={df} />}
         {df.isVendedor && df.section === 'biblioteca' && <Biblioteca df={df} />}
         {df.isVendedor && df.section === 'integraciones' && <Integraciones df={df} />}
@@ -449,6 +447,7 @@ function App() {
       {df.impersonando && <ImpersonationBanner df={df} />}
       {df.isVendedor && <SuscripcionBanner df={df} />}
       <div style={{ flex: 1, minHeight: 0 }}>{isMobile ? <MobileApp df={df} /> : <DesktopApp df={df} />}</div>
+      <DialogHost />
     </div>
   );
 }

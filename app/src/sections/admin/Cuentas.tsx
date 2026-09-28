@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
+import { confirmar } from '../../components/dialogs';
 
 const labelStyle: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 };
@@ -200,7 +201,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                   🔄 Sincronizar número con Meta
                 </button>
                 <button
-                  onClick={() => { if (confirm(`¿Poner TODOS los chats de "${df.detalleStore!.nombre}" en intervención humana? El asistente dejará de responder en esta tienda y los chats quedarán atendidos por una persona.`)) df.intervenirTodosLosChats(df.detalleStore!.id); }}
+                  onClick={async () => { if (await confirmar({ titulo: 'Intervención humana', mensaje: `¿Poner TODOS los chats de "${df.detalleStore!.nombre}" en intervención humana? El asistente dejará de responder en esta tienda y los chats quedarán atendidos por una persona.`, aceptar: 'Intervenir todo', peligro: true })) df.intervenirTodosLosChats(df.detalleStore!.id); }}
                   title="Marca todos los chats como atendidos por una persona (pausa el bot en esta tienda)"
                   style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
                 >

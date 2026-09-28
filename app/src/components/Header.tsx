@@ -2,14 +2,20 @@ import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { NotificationsMenu } from './NotificationsMenu';
 import { ProfileMenu } from './ProfileMenu';
+import { pedirTexto } from './dialogs';
 
 /** Selector de tienda: cambia entre las tiendas del dueño y permite crear otra. */
 function StoreSwitcher({ df }: { df: DealFlowState }) {
   const [open, setOpen] = useState(false);
   const tiendas = df.misTiendas;
   const varias = tiendas.length > 1;
-  const nuevaTienda = () => {
-    const nombre = window.prompt('Nombre de la nueva tienda (paga $250.000/mes, con su propio número):');
+  const nuevaTienda = async () => {
+    const nombre = await pedirTexto({
+      titulo: 'Crear otra tienda',
+      mensaje: 'Cada tienda extra tiene su propio número y catálogo, y cuesta $250.000/mes. ¿Cómo se va a llamar?',
+      placeholder: 'Ej: Urban Supply Medellín',
+      aceptar: 'Crear tienda',
+    });
     if (nombre && nombre.trim()) df.crearTienda(nombre.trim());
   };
   return (

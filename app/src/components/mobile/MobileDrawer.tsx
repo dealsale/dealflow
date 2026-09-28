@@ -14,7 +14,6 @@ const VENDOR_ITEMS: { id: VendedorSection; label: string }[] = [
   { id: 'pedidos', label: 'Pedidos' },
   { id: 'crm', label: 'Inbox' },
   { id: 'leads', label: 'Leads' },
-  { id: 'marketing', label: 'Marketing IA' },
   { id: 'biblioteca', label: 'Biblioteca' },
   { id: 'dealshop', label: 'DealShop' },
   { id: 'equipo', label: 'Equipo' },

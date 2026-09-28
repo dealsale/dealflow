@@ -56,15 +56,29 @@ api.post('/auth/registro', (req, res) => {
   const storeId = uid();
   const nombreTienda = (negocio?.trim() || nombre.trim());
   const userId = uid();
-  // Nace sin plan: plan_estado 'sin_plan', inicial_pagado 0. Activa=1 para poder entrar y ver el muro de pago.
-  db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, inicial_pagado, activa, owner_user_id) VALUES (?,?,?,?, 'sin_plan', 0, 1, ?)")
-    .run(storeId, nombreTienda, email, '', userId);
-  db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)')
-    .run(userId, email, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', storeId);
-  db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
-  db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
-  // Créditos de bienvenida para probar el Marketing IA.
-  void import('./creditos.js').then(({ abonar, CREDITOS_BIENVENIDA }) => abonar(storeId, CREDITOS_BIENVENIDA, 'Créditos de bienvenida'));
+  // Todo en UNA transacción: si algo falla, no queda una tienda "huérfana" con el
+  // correo del cliente que luego choque (UNIQUE) y dé "error interno" al reintentar.
+  try {
+    // Limpieza defensiva: si un intento anterior dejó una tienda sin dueño con este
+    // correo (pero sin usuario, porque falló a mitad), la quitamos para no chocar.
+    const huerfana = db.prepare("SELECT s.id FROM stores s WHERE s.correo = ? AND NOT EXISTS (SELECT 1 FROM users u WHERE u.store_id = s.id)").get(email) as { id: string } | undefined;
+    if (huerfana) db.prepare('DELETE FROM stores WHERE id = ?').run(huerfana.id);
+    const crear = db.transaction(() => {
+      // Nace sin plan: plan_estado 'sin_plan', inicial_pagado 0. Activa=1 para poder entrar y ver el muro de pago.
+      db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, inicial_pagado, activa, owner_user_id) VALUES (?,?,?,?, 'sin_plan', 0, 1, ?)")
+        .run(storeId, nombreTienda, email, '', userId);
+      db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)')
+        .run(userId, email, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', storeId);
+      db.prepare('INSERT OR IGNORE INTO whatsapp (store_id) VALUES (?)').run(storeId);
+      db.prepare('INSERT OR IGNORE INTO assistants (store_id) VALUES (?)').run(storeId);
+    });
+    crear();
+  } catch (e) {
+    console.error('[registro] error', e);
+    return res.status(500).json({ error: 'No pudimos crear tu cuenta. Intenta de nuevo; si sigue fallando, escríbenos.' });
+  }
+  // Créditos de bienvenida (no crítico: si falla, la cuenta ya quedó creada).
+  void import('./creditos.js').then(({ abonar, CREDITOS_BIENVENIDA }) => abonar(storeId, CREDITOS_BIENVENIDA, 'Créditos de bienvenida')).catch(() => {});
 
   const user: AuthUser = { id: userId, email, nombre: nombre.trim(), role: 'VENDEDOR', storeId };
   setAuthCookie(res, user, req.hostname);

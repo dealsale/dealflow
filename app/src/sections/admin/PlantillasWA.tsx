@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import type { PlantillaMeta, NuevaPlantilla, BotonPlantilla } from '../../lib/api';
 import { Dropdown } from '../../components/Dropdown';
+import { confirmar } from '../../components/dialogs';
 
 const vacia: NuevaPlantilla = { nombre: '', categoria: 'UTILITY', idioma: 'es', encabezado: '', cuerpo: '', pie: '', botones: [], ejemplos: [] };
 const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13 };
@@ -133,7 +134,7 @@ export function PlantillasWA({ df }: { df: DealFlowState }) {
               <button onClick={() => df.publicarPlantillaMeta(p.id)} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>📤 Publicar en todas ({df.tiendasCloudCount})</button>
               {p.publicadas > 0 && <button onClick={() => df.refrescarPlantillaMeta(p.id)} style={{ background: 'var(--df-surface-2)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>🔄 Refrescar estado</button>}
               <button onClick={() => abrirEditar(p)} style={{ background: 'transparent', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Editar</button>
-              <button onClick={() => { if (confirm(`¿Eliminar la plantilla "${p.nombre}" de DealFlow? (No la borra de las tiendas donde ya está aprobada en Meta.)`)) df.eliminarPlantillaMeta(p.id); }} style={{ background: 'transparent', color: 'var(--df-danger-dark)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Eliminar</button>
+              <button onClick={async () => { if (await confirmar({ titulo: 'Eliminar plantilla', mensaje: `¿Eliminar la plantilla "${p.nombre}" de DealFlow? No la borra de las tiendas donde ya está aprobada en Meta.`, aceptar: 'Eliminar', peligro: true })) df.eliminarPlantillaMeta(p.id); }} style={{ background: 'transparent', color: 'var(--df-danger-dark)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Eliminar</button>
             </div>
           </div>
         ))}

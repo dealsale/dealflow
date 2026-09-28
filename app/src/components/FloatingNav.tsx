@@ -6,7 +6,6 @@ import {
   IconCRM,
   IconCuentas,
   IconEquipo,
-  IconMarketing,
   IconDealShop,
   IconBiblioteca,
   IconIntegraciones,
@@ -75,7 +74,6 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                 ))}
                 {item('leads', <IconLeads />, 'Leads')}
                 {item('crm', <IconCRM />, 'Inbox', <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)', animation: 'dfpulse 1.8s infinite' }} />)}
-                {item('marketing', <IconMarketing />, 'Marketing IA')}
                 {item('biblioteca', <IconBiblioteca />, 'Biblioteca')}
                 {item('dealshop', <IconDealShop />, 'DealShop')}
                 {item('equipo', <IconEquipo />, 'Equipo')}

@@ -5,6 +5,7 @@ import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
 import { apiWooBuscarProductos, apiWooCatalogo, apiDropiProducto, type ProductoWoo, type ProductoCatalogoWoo, type DropiProducto } from '../lib/api';
 import { Dropdown } from '../components/Dropdown';
+import { confirmar, notificar } from '../components/dialogs';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 
 /**
@@ -65,7 +66,7 @@ function SelectorDespachoProducto({ p, df }: { p: DecoratedProduct; df: DealFlow
         {opt('effi', 'Effi', effiOn)}
         {vinculado && efectivo && (
           <button
-            onClick={() => { if (confirm(`¿Desconectar este producto de ${efectivo === 'dropi' ? 'Dropi' : 'Effi'}? Se suelta el vínculo del producto y de sus variantes para poder cambiar de proveedor.`)) p.desvincularDespacho(); }}
+            onClick={async () => { if (await confirmar({ titulo: `Desconectar de ${efectivo === 'dropi' ? 'Dropi' : 'Effi'}`, mensaje: 'Se suelta el vínculo del producto y de todas sus variantes para poder cambiar de proveedor.', aceptar: 'Desconectar', peligro: true })) { p.desvincularDespacho(); notificar('Producto desconectado. Ya puedes elegir el otro proveedor.'); } }}
             style={{ background: 'transparent', border: '1px solid var(--df-danger)', color: 'var(--df-danger-dark)', borderRadius: 7, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}
           >Desconectar</button>
         )}

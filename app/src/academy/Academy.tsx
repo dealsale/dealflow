@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { DialogHost, notificar, confirmar } from '../components/dialogs';
 
 /**
  * DealFlow Academy — portal educativo (academy.dealflow.sbs).
@@ -98,7 +99,7 @@ export function Academy() {
   if (!sesion) return <LoginAcademy onOk={() => { setSesion(undefined); void cargarSesion(); }} />;
 
   return (
-    <div style={{ minHeight: '100vh', background: C.ink, color: C.text, fontFamily: sans, position: 'relative', overflow: 'hidden' }}>
+    <div style={{ height: '100vh', background: C.ink, color: C.text, fontFamily: sans, position: 'relative', overflowY: 'auto', overflowX: 'hidden' }}>
       <style>{`${GLOBAL_CSS}@media (max-width: 820px){
         .ac-curso-grid{grid-template-columns:1fr !important;}
         .ac-temario{position:static !important;order:-1;}
@@ -119,6 +120,7 @@ export function Academy() {
           )}
         </main>
       </div>
+      <DialogHost />
     </div>
   );
 }
@@ -165,8 +167,12 @@ function Portal({ cursos, onAbrir }: { cursos: Curso[]; onAbrir: (c: Curso) => v
             const nivelColor = NIVEL_COLOR[c.nivel] || C.emerald;
             return (
               <button key={c.id} className="ac-card" onClick={() => onAbrir(c)} style={{ ...tarjeta, padding: 0, overflow: 'hidden', cursor: 'pointer', textAlign: 'left', animationDelay: `${i * 0.06}s` }}>
-                <div style={{ height: 148, overflow: 'hidden' }}>
+                <div style={{ height: 148, overflow: 'hidden', position: 'relative' }}>
                   <div className="ac-cover" style={{ height: '100%', background: c.portada ? `center/cover no-repeat url(${c.portada})` : `linear-gradient(140deg,${nivelColor},${C.panel} 130%)` }} />
+                  {/* Sin portada propia: un ícono decorativo para que la tarjeta no se vea vacía. */}
+                  {!c.portada && (
+                    <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 52, opacity: 0.9, filter: 'drop-shadow(0 4px 14px rgba(0,0,0,.35))', pointerEvents: 'none' }}>🎓</span>
+                  )}
                 </div>
                 <div style={{ padding: '14px 16px' }}>
                   <div style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 800, color: nivelColor, background: `${nivelColor}22`, borderRadius: 999, padding: '2px 9px', textTransform: 'uppercase', letterSpacing: '.05em' }}>{c.nivel}</div>
@@ -405,7 +411,7 @@ function AdminPanel({ onCambio }: { onCambio: () => void }) {
     setMsg('✓ Guardado'); setEditCurso(null); await cargar(); onCambio();
   };
   const borrarCurso = async (id: string) => {
-    if (!confirm('¿Eliminar el curso y todas sus lecciones?')) return;
+    if (!(await confirmar({ titulo: 'Eliminar curso', mensaje: '¿Eliminar el curso y todas sus lecciones?', aceptar: 'Eliminar', peligro: true }))) return;
     await aReq(`/api/admin/academy/cursos/${id}`, 'DELETE'); await cargar(); onCambio();
   };
 
@@ -464,13 +470,13 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
   const guardarLec = async (seccionId: string, l: Partial<Leccion>) => {
     const body = { titulo: l.titulo, tipo: l.tipo, videoUrl: l.videoUrl, contenido: l.contenido, duracion: l.duracion, orden: l.orden, publicado: l.publicado, seccionId, imagenes: l.imagenes || [] };
     const r = l.id ? await aReq(`/api/admin/academy/lecciones/${l.id}`, 'PUT', body) : await aReq(`/api/admin/academy/cursos/${curso.id}/lecciones`, 'POST', body);
-    if (r.error) { alert(r.error); return; }
+    if (r.error) { notificar(r.error, 'error'); return; }
     setEditLec(null); onCambio();
   };
-  const borrarLec = async (id: string) => { if (confirm('¿Eliminar la lección?')) { await aReq(`/api/admin/academy/lecciones/${id}`, 'DELETE'); onCambio(); } };
+  const borrarLec = async (id: string) => { if (await confirmar({ titulo: 'Eliminar lección', mensaje: '¿Eliminar la lección?', aceptar: 'Eliminar', peligro: true })) { await aReq(`/api/admin/academy/lecciones/${id}`, 'DELETE'); onCambio(); } };
   const agregarSeccion = async () => { await aReq(`/api/admin/academy/cursos/${curso.id}/secciones`, 'POST', { titulo: 'Nueva sección' }); onCambio(); };
   const renombrarSeccion = async (id: string, titulo: string) => { await aReq(`/api/admin/academy/secciones/${id}`, 'PUT', { titulo }); setRenombrando(null); onCambio(); };
-  const borrarSeccion = async (id: string) => { if (confirm('¿Eliminar la sección y todas sus lecciones?')) { await aReq(`/api/admin/academy/secciones/${id}`, 'DELETE'); onCambio(); } };
+  const borrarSeccion = async (id: string) => { if (await confirmar({ titulo: 'Eliminar sección', mensaje: '¿Eliminar la sección y todas sus lecciones?', aceptar: 'Eliminar', peligro: true })) { await aReq(`/api/admin/academy/secciones/${id}`, 'DELETE'); onCambio(); } };
 
   return (
     <div style={tarjeta}>
@@ -532,7 +538,7 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
       void aReq<{ url: string }>('/api/academy/media', 'POST', { dataUrl: reader.result, nombre: file.name }).then((r) => {
         setSubiendo(false);
         if (r.data?.url) setPasos([...pasos, { url: r.data.url, caption: '' }]);
-        else alert(r.error || 'No pudimos subir la captura.');
+        else notificar(r.error || 'No pudimos subir la captura.', 'error');
       });
     };
     reader.readAsDataURL(file);

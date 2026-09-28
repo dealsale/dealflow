@@ -1,6 +1,7 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { SearchInput, FilterSelect } from '../components/Filters';
 import { Dropdown } from '../components/Dropdown';
+import { confirmar } from '../components/dialogs';
 
 export function Pedidos({ df }: { df: DealFlowState }) {
   const fechaActiva = df.orderDateFilters.find((f) => f.active)?.key || 'Todas';
@@ -76,7 +77,7 @@ export function Pedidos({ df }: { df: DealFlowState }) {
               />
             </div>
             <button
-              onClick={(e) => { e.stopPropagation(); if (confirm(`¿Eliminar el pedido ${o.id}? Solo lo quita del panel.`)) o.eliminar(); }}
+              onClick={async (e) => { e.stopPropagation(); if (await confirmar({ titulo: `Eliminar ${o.id}`, mensaje: 'Esto solo lo quita del panel; no cancela nada en Dropi/Effi.', aceptar: 'Eliminar', peligro: true })) o.eliminar(); }}
               title="Eliminar pedido"
               className="df-danger-hover"
               style={{ background: 'transparent', border: 'none', color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 15, padding: 4 }}
