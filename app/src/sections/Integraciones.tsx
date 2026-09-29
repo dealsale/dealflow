@@ -147,8 +147,32 @@ function MetaAdsCard({ df, i }: { df: DealFlowState; i: DealFlowState['integrati
   );
 }
 
-// (MetaCanalesCard — Messenger + Instagram — retirada temporalmente: por ahora
-//  la integración de Meta es solo WhatsApp.)
+/** Tarjeta de canales de Meta: Messenger + Instagram DM (conexión en un clic). */
+function MetaCanalesCard({ df }: { df: DealFlowState }) {
+  const e = df.metaEstado;
+  const on = e.messenger || e.instagram;
+  return (
+    <div style={cardBase(on)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 9, background: 'linear-gradient(135deg,#0084FF,#E1306C)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>💬</div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Messenger e Instagram</div>
+        <div style={{ flex: 1 }} />
+        <Estado on={on} />
+      </div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, flex: 1 }}>Recibe y responde los mensajes directos de Facebook Messenger e Instagram desde el mismo Inbox, atendidos por tu asistente.</div>
+      {on && (
+        <div style={{ background: 'var(--df-brand-subtle-3)', border: '1px solid var(--df-brand-border)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: 'var(--df-brand-dark)' }}>
+          ✓ {e.paginas.join(', ')} · Messenger{e.instagram ? ' + Instagram' : ''}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={df.conectarMeta} disabled={df.metaLoading} style={{ ...btnPrimary, opacity: df.metaLoading ? 0.7 : 1 }}>{df.metaLoading ? 'Conectando…' : on ? 'Reconectar' : 'Conectar con Facebook'}</button>
+        {on && <button onClick={df.desconectarMeta} style={{ background: 'transparent', border: '1px solid var(--df-border)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Desconectar</button>}
+      </div>
+      {df.metaMsg && <div style={{ fontSize: 12.5, color: df.metaMsg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)' }}>{df.metaMsg}</div>}
+    </div>
+  );
+}
 
 /**
  * Effi nativo: DealFlow se hace pasar por la tienda WooCommerce de Effi. Al activarlo
@@ -261,6 +285,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
               <p style={{ color: 'var(--df-text-faint)', fontSize: 12.5, margin: '2px 0 0' }}>{g.sub}</p>
             </div>
             <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, alignItems: 'start' }}>
+              {g.id === 'canales' && <MetaCanalesCard df={df} />}
               {g.id === 'envios' && <EffiNativoCard df={df} />}
               {items.map((i) => {
                 if (i.especial === 'meta-ads') return <MetaAdsCard key={i.id} df={df} i={i} />;
