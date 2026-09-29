@@ -6,6 +6,7 @@ import path from 'node:path';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { db, uid } from './db.js';
 import { saveIncomingMessage } from './wa.js';
+import { esperarTurno } from './ratelimit.js';
 import { mediaExt } from './media.js';
 
 const DATA_DIR = process.env.DATA_DIR || './data';
@@ -251,6 +252,7 @@ export async function sendViaQr(storeId: string, to: string, texto: string, pn?:
     console.warn(`[wa-qr] no envío texto a ${to}: ${r.error}`);
     return { ok: false, error: r.error };
   }
+  await esperarTurno(storeId, to); // anti-baneo: espacia los envíos (evita ráfagas que banean)
   try {
     await s.sock.sendMessage(r.jid, { text: texto });
     console.log(`[wa-qr] texto enviado a ${r.jid} (destino ${to}${pn ? ' · ' + pn : ''})`);
@@ -277,6 +279,7 @@ export async function sendMediaViaQr(
     return { ok: false, error: r.error };
   }
   const jid = r.jid;
+  await esperarTurno(storeId, to); // anti-baneo: espacia los envíos (evita ráfagas que banean)
   try {
     if (media.tipo === 'image') await s.sock.sendMessage(jid, { image: media.buffer, caption: caption || undefined });
     else if (media.tipo === 'video') await s.sock.sendMessage(jid, { video: media.buffer, caption: caption || undefined });
