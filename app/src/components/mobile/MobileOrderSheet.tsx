@@ -5,15 +5,12 @@ import { confirmar } from '../dialogs';
 import { DropiDespacho } from '../OrderDetailPanel';
 
 export function MobileOrderSheet({ df }: { df: DealFlowState }) {
-  const [transp, setTransp] = useState('');
   const [redespachar, setRedespachar] = useState(false);
   const [recaudo, setRecaudo] = useState<'con' | 'sin'>('con');
   useEffect(() => { void df.cargarEffiWoo?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!df.hasSelectedOrder || !df.sel) return null;
   const sel = df.sel;
   const effiDisponible = df.wooProveedores.includes('effi') || !!df.effiWoo?.activo;
-  const transpOpts = [{ value: '', label: 'Transportadora (opcional)' }, ...df.wooTransportadoras.map((t) => ({ value: t, label: t }))];
-  const carrierElegido = transp || df.wooTransportadora || '';
   const dropiCreado = sel.despachoProveedor === 'dropi';
 
   return (
@@ -87,7 +84,7 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
                 )}
                 <div style={{ display: 'flex', gap: 10, marginTop: 9, flexWrap: 'wrap', alignItems: 'center' }}>
                   {!dropiCreado && (
-                    <button onClick={() => sel.reenviarDespacho('effi', sel.transportadora || carrierElegido)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-warning)', cursor: 'pointer' }}>↻ Volver a enviar</button>
+                    <button onClick={() => sel.reenviarDespacho('effi', '')} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-warning)', cursor: 'pointer' }}>↻ Volver a enviar</button>
                   )}
                   <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-purple)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline' }}>Cambiar despacho</button>
                 </div>
@@ -116,10 +113,8 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
                         <button key={r} onClick={() => setRecaudo(r)} style={{ flex: 1, background: recaudo === r ? 'var(--df-purple)' : 'var(--df-surface)', color: recaudo === r ? '#fff' : 'var(--df-purple)', border: '1px solid var(--df-purple-border)', borderRadius: 7, padding: '8px 8px', fontFamily: 'inherit', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>{r === 'con' ? 'Con recaudo' : 'Sin recaudo'}</button>
                       ))}
                     </div>
-                    <div style={{ marginBottom: 9 }}>
-                      <Dropdown ariaLabel="Transportadora Effi" value={carrierElegido} onChange={setTransp} options={transpOpts} placeholder="Transportadora (opcional)" />
-                    </div>
-                    <button onClick={() => { sel.despachar('effi', carrierElegido, recaudo); setRedespachar(false); }} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer', minHeight: 44 }}>Enviar por Effi</button>
+                    <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginBottom: 9, lineHeight: 1.45 }}>Se envía la <b>remisión de venta</b> a Effi. La guía la generas después dentro de Effi con la transportadora que elijas.</div>
+                    <button onClick={() => { sel.despachar('effi', '', recaudo); setRedespachar(false); }} style={{ width: '100%', background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer', minHeight: 44 }}>Enviar remisión a Effi</button>
                     {df.effiMsg && <div style={{ marginTop: 9, fontSize: 12, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
                   </div>
                 )}
