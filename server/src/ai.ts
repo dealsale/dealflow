@@ -706,6 +706,23 @@ export interface PedidoItem { qty: number; nombre: string; precio: number }
 export interface PedidoExtraido { cliente: string; departamento: string; ciudad: string; direccion: string; items: PedidoItem[]; total: number }
 
 /**
+ * Junta los ítems IDÉNTICOS (mismo nombre exacto = mismo producto + misma variante)
+ * sumando la cantidad. Así el pedido no queda como "1x Body, 1x Body" sino "2x Body".
+ * Las variantes distintas (otra talla u otro color) quedan en líneas separadas.
+ * El orden se conserva por la primera aparición de cada ítem.
+ */
+export function agruparItems(items: PedidoItem[]): PedidoItem[] {
+  const mapa = new Map<string, PedidoItem>();
+  for (const it of items) {
+    const clave = it.nombre.trim().toLowerCase().replace(/\s+/g, ' ');
+    const prev = mapa.get(clave);
+    if (prev) { prev.qty += it.qty; if (!prev.precio && it.precio) prev.precio = it.precio; }
+    else mapa.set(clave, { qty: it.qty, nombre: it.nombre.trim(), precio: it.precio });
+  }
+  return [...mapa.values()];
+}
+
+/**
  * Convierte el "inner" de un ##PEDIDO (o del resumen) en datos estructurados,
  * casando cada ítem con un producto de la tienda para tomar su precio. NO escribe
  * nada: se usa para el flujo de "completar pedido desde el chat" (con revisión).
@@ -725,7 +742,7 @@ export function parsearPedidoInner(storeId: string, inner: string): PedidoExtrai
     if (ch === ',' && dentro === 0) { partes.push(buf); buf = ''; } else buf += ch;
   }
   if (buf.trim()) partes.push(buf);
-  const items = partes.map((s) => s.trim()).filter(Boolean).map((it) => {
+  const items = agruparItems(partes.map((s) => s.trim()).filter(Boolean).map((it) => {
     const mm = it.match(/(\d+)\s*[xX×]\s*(.+)/);
     const qty = mm ? parseInt(mm[1], 10) || 1 : 1;
     const completo = limpiarValor(mm ? mm[2] : it);
@@ -733,7 +750,7 @@ export function parsearPedidoInner(storeId: string, inner: string): PedidoExtrai
     const prod = productRows.find((p) => String(p.nombre).toLowerCase() === base)
       || productRows.find((p) => String(p.nombre).toLowerCase().includes(base) || base.includes(String(p.nombre).toLowerCase()));
     return { qty, nombre: completo, precio: prod ? Number(prod.precio) : 0 };
-  }).filter((i) => i.nombre);
+  }).filter((i) => i.nombre));
   const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
   return { cliente, departamento, ciudad, direccion, items, total };
 }
@@ -805,7 +822,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     if (ch === ',' && dentro === 0) { partes.push(buf); buf = ''; } else buf += ch;
   }
   if (buf.trim()) partes.push(buf);
-  const items = partes.map((s) => s.trim()).filter(Boolean).map((it) => {
+  const items = agruparItems(partes.map((s) => s.trim()).filter(Boolean).map((it) => {
     const mm = it.match(/(\d+)\s*[xX×]\s*(.+)/);
     const qty = mm ? parseInt(mm[1], 10) || 1 : 1;
     const completo = limpiarValor(mm ? mm[2] : it); // nombre CON el detalle (talla/color)
@@ -814,7 +831,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
       || productRows.find((p) => String(p.nombre).toLowerCase().includes(base) || base.includes(String(p.nombre).toLowerCase()));
     // Guardamos el nombre COMPLETO (con talla y color): el vendedor lo necesita para despachar.
     return { qty, nombre: completo, precio: prod ? Number(prod.precio) : 0 };
-  }).filter((i) => i.nombre);
+  }).filter((i) => i.nombre)); // agrupa idénticos: "1x Body, 1x Body" → "2x Body"
   if (!items.length || (!direccion && !ciudad)) return false; // datos insuficientes, esperamos
 
   // Evita duplicados si la IA repite el marcador: un pedido "Nuevo" por número en los últimos 10 min.

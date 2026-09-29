@@ -273,6 +273,11 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
               />
             </div>
             <button
+              onClick={() => df.abrirEditarPedido(sel)}
+              title="Editar pedido"
+              style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-strong)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >✏️ Editar</button>
+            <button
               onClick={async () => { if (await confirmar({ titulo: `Eliminar ${sel.id}`, mensaje: 'Esto solo lo quita del panel; no cancela nada en Dropi/Effi.', aceptar: 'Eliminar', peligro: true })) sel.eliminar(); }}
               title="Eliminar pedido"
               style={{ background: 'var(--df-surface)', border: '1px solid var(--df-danger-border, var(--df-border))', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-danger-dark)', cursor: 'pointer', whiteSpace: 'nowrap' }}
