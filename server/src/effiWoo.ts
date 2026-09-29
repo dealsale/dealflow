@@ -311,6 +311,10 @@ export function pedidoAWoo(storeId: string, o: Record<string, unknown>, conRecau
   // es menor que la suma a precio de catálogo, así que REPARTIMOS el total entre los
   // ítems para que sumen exacto (si no, Effi descarta el pedido en silencio).
   const objetivoItems = Math.max(0, total - envio);
+  // Peso de cada línea para repartir el total: por su valor (precio×cantidad) si lo
+  // hay; si no (ítems sin precio), por cantidad. Así los ítems SIEMPRE suman el total.
+  const pesos = items.map((it) => (bruto > 0 ? it.qty * it.precio : it.qty || 1));
+  const sumaPesos = pesos.reduce((a, b) => a + b, 0) || 1;
   let acumulado = 0;
   const line_items = items.map((it, i) => {
     // Buscamos el SKU del ítem por nombre exacto de variante/producto (mejor esfuerzo).
@@ -318,8 +322,8 @@ export function pedidoAWoo(storeId: string, o: Record<string, unknown>, conRecau
     const sku = prod?.sku || '';
     const product_id = sku ? idEstableDeSku(storeId, sku) : 0;
     let lineaTotal: number;
-    if (bruto > 0 && objetivoItems > 0) {
-      lineaTotal = i === items.length - 1 ? objetivoItems - acumulado : Math.round((it.qty * it.precio) / bruto * objetivoItems);
+    if (objetivoItems > 0) {
+      lineaTotal = i === items.length - 1 ? objetivoItems - acumulado : Math.round((pesos[i] / sumaPesos) * objetivoItems);
       acumulado += lineaTotal;
     } else {
       lineaTotal = it.qty * it.precio;
