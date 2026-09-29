@@ -1135,6 +1135,24 @@ export function useDealFlowState() {
     return true;
   }
 
+  // ── Editar un pedido YA guardado (además de "completar desde el chat") ──
+  // Reusa el mismo PUT /orders/:rowId. El modal precarga los datos del pedido y
+  // permite corregir cliente, envío, departamento/ciudad, dirección, nota e ítems.
+  const [editarOrden, setEditarOrden] = useState<Order | null>(null);
+  const [editarMsg, setEditarMsg] = useState('');
+  function abrirEditarPedido(order: Order) { setEditarMsg(''); setEditarOrden(order); }
+  function cerrarEditarPedido() { setEditarOrden(null); setEditarMsg(''); }
+  async function guardarEdicionPedido(rowId: string, body: { cliente: string; tel?: string; departamento?: string; ciudad?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: { qty: number; nombre: string; precio: number }[] }): Promise<boolean> {
+    setEditarMsg('Guardando…');
+    const r = await apiActualizarPedido(rowId, body);
+    if (r.error || !r.data) { setEditarMsg(r.error || 'No se pudo guardar el pedido.'); return false; }
+    const { data } = await apiOrders();
+    if (data) setOrders(mapApiOrders(data.orders));
+    cerrarEditarPedido();
+    toast('✓ Pedido actualizado.');
+    return true;
+  }
+
   function sendToDropi(id: string) {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o || o.guia) return;
@@ -3655,6 +3673,11 @@ export function useDealFlowState() {
     abrirCompletarPedido,
     cerrarCompletarPedido,
     guardarPedidoCompletado,
+    editarOrden,
+    editarMsg,
+    abrirEditarPedido,
+    cerrarEditarPedido,
+    guardarEdicionPedido,
     reenviarMensaje,
     reenviandoMsg,
     // ── Biblioteca de productos ──
