@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { Combobox } from './Combobox';
+import { DEPARTAMENTOS_CO, ciudadesDeDepto } from '../data/colombia';
 import { fmt } from '../lib/format';
 
 interface ItemFila { qty: number; nombre: string; precio: number }
@@ -85,8 +87,8 @@ export function CompletarPedidoModal({ df }: { df: DealFlowState }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div><label style={lbl}>Nombre *</label><input value={cliente} onChange={(e) => setCliente(e.target.value)} style={inp} /></div>
                 <div><label style={lbl}>Teléfono</label><input value={tel} onChange={(e) => setTel(e.target.value)} style={inp} /></div>
-                <div><label style={lbl}>Departamento</label><input value={departamento} onChange={(e) => setDepartamento(e.target.value)} style={inp} /></div>
-                <div><label style={lbl}>Ciudad</label><input value={ciudad} onChange={(e) => setCiudad(e.target.value)} style={inp} /></div>
+                <div><label style={lbl}>Departamento</label><Combobox value={departamento} onChange={(v) => { setDepartamento(v); const cds = ciudadesDeDepto(v); if (ciudad && cds.length && !cds.includes(ciudad)) setCiudad(''); }} options={DEPARTAMENTOS_CO} placeholder="Cundinamarca" inputStyle={inp} /></div>
+                <div><label style={lbl}>Ciudad</label><Combobox value={ciudad} onChange={setCiudad} options={ciudadesDeDepto(departamento)} placeholder="Bogotá" inputStyle={inp} /></div>
                 <div style={{ gridColumn: '1 / -1' }}><label style={lbl}>Dirección</label><input value={direccion} onChange={(e) => setDireccion(e.target.value)} style={inp} /></div>
               </div>
 
