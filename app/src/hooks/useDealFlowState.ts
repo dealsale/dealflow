@@ -2500,10 +2500,14 @@ export function useDealFlowState() {
     if (apiMode && sessionUser && (section === 'flujos' || section === 'crm')) void recargarPlantillasAprobadas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser, section]);
+  const enviandoPlantillaRef = useRef(false);
   function enviarPlantillaAChat(plantillaId: string) {
+    if (enviandoPlantillaRef.current) return; // evita doble envío por doble clic
+    enviandoPlantillaRef.current = true;
     const leadId = crmSelectedId;
     setFlujoMsgRemk('Enviando la plantilla…');
     void apiEnviarPlantilla(String(leadId), plantillaId).then((r) => {
+      enviandoPlantillaRef.current = false;
       if (r.error || !r.data) { setFlujoMsgRemk(r.error || 'No se pudo enviar la plantilla.'); return; }
       setFlujoMsgRemk('✓ Plantilla enviada.');
       if (apiMode) cargarMensajesChat(leadId);
