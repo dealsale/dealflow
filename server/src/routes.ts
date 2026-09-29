@@ -1645,9 +1645,15 @@ api.post('/whatsapp/embedded', requireAuth, requireStore, requireOwner, async (r
   const { code, wabaId, phoneNumberId } = req.body || {};
   try {
     const { conectarPorSignup } = await import('./metaSignup.js');
-    const r = await conectarPorSignup(req.user!.storeId!, String(code || '').trim(), String(wabaId || '').trim(), String(phoneNumberId || '').trim());
+    const sid = req.user!.storeId!;
+    const r = await conectarPorSignup(sid, String(code || '').trim(), String(wabaId || '').trim(), String(phoneNumberId || '').trim());
     if (!r.ok) return res.status(400).json({ error: r.error });
     res.json({ conectado: true, numero: r.numero, aviso: r.aviso });
+    // En segundo plano: publica las plantillas maestras en la WABA recién conectada,
+    // para que las tiendas nuevas reciban las plantillas sin republicar a mano.
+    void import('./metaTemplates.js').then((m) => m.publicarTodasEnTienda(sid)).then((res2) => {
+      if (res2.total) registrarLog(sid, 'info', 'plantilla', `Plantillas publicadas en la WABA nueva: ${res2.exitosas}/${res2.total}.`);
+    }).catch(() => {});
   } catch (e) {
     // No dejamos que un fallo (red con Meta, respuesta rara, BD) reviente como 500
     // sin explicación: lo logueamos y devolvemos un error legible a la tienda.
@@ -1701,6 +1707,11 @@ api.put('/whatsapp', requireAuth, requireStore, requireOwner, async (req, res) =
   ).run(req.user!.storeId, wabaId.trim(), phoneNumberId.trim(), accessToken.trim(), check.numero);
   console.log(`[whatsapp] tienda ${req.user!.storeId} conectó phone_number_id=${phoneNumberId.trim()} (${check.numero})`);
   res.json({ conectado: true, numero: check.numero });
+  // En segundo plano: publica las plantillas maestras en la WABA recién conectada.
+  const sidWa = req.user!.storeId!;
+  void import('./metaTemplates.js').then((m) => m.publicarTodasEnTienda(sidWa)).then((res2) => {
+    if (res2.total) registrarLog(sidWa, 'info', 'plantilla', `Plantillas publicadas en la WABA nueva: ${res2.exitosas}/${res2.total}.`);
+  }).catch(() => {});
 });
 
 api.delete('/whatsapp', requireAuth, requireStore, requireOwner, async (req, res) => {

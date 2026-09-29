@@ -108,25 +108,62 @@ function tiendasCloud(): { store_id: string; waba_id: string; access_token: stri
 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Publica una plantilla en TODAS las tiendas Cloud API. Devuelve el resumen. */
-export async function publicarEnTodas(templateId: string): Promise<{ total: number; exitosas: number; errores: number }> {
+/** Publica una plantilla en TODAS las tiendas Cloud API. Devuelve el resumen.
+ *  NO reenvía a las tiendas que ya la tienen APROBADA (evita "revivirlas" a
+ *  pendiente y volver a mandarlas a revisión sin necesidad). Publica solo donde
+ *  falta o donde no quedó aprobada. */
+export async function publicarEnTodas(templateId: string): Promise<{ total: number; exitosas: number; errores: number; saltadas: number }> {
   const row = db.prepare('SELECT * FROM meta_templates WHERE id = ?').get(templateId) as Record<string, unknown> | undefined;
-  if (!row) return { total: 0, exitosas: 0, errores: 0 };
+  if (!row) return { total: 0, exitosas: 0, errores: 0, saltadas: 0 };
   const t = leerPlantilla(row);
   const tiendas = tiendasCloud();
-  let exitosas = 0, errores = 0;
+  // Estado actual por tienda (para no tocar las que ya están aprobadas).
+  const yaAprobadas = new Set(
+    (db.prepare("SELECT store_id FROM meta_template_pub WHERE template_id = ? AND estado = 'aprobada'").all(templateId) as { store_id: string }[])
+      .map((r) => r.store_id),
+  );
+  let exitosas = 0, errores = 0, saltadas = 0;
   const upsert = db.prepare(
     `INSERT INTO meta_template_pub (template_id, store_id, estado, meta_id, motivo, updated_at)
      VALUES (?,?,?,?,?,datetime('now'))
      ON CONFLICT(template_id, store_id) DO UPDATE SET estado = excluded.estado, meta_id = excluded.meta_id, motivo = excluded.motivo, updated_at = datetime('now')`,
   );
   for (const tienda of tiendas) {
+    if (yaAprobadas.has(tienda.store_id)) { saltadas++; continue; } // ya la tiene aprobada: no la tocamos
     const r = await publicarEnTienda(tienda.waba_id, tienda.access_token, t);
     upsert.run(templateId, tienda.store_id, r.estado, r.metaId, r.motivo);
     if (r.estado === 'error' || r.estado === 'rechazada') errores++; else exitosas++;
     await dormir(250); // no atropellar la Graph API
   }
-  return { total: tiendas.length, exitosas, errores };
+  return { total: tiendas.length, exitosas, errores, saltadas };
+}
+
+/** Publica TODAS las plantillas maestras en la WABA de UNA tienda recién conectada.
+ *  Se llama al conectar WhatsApp para que las tiendas nuevas reciban las plantillas
+ *  sin que el superadmin tenga que republicar a mano. Idempotente: si ya existen en
+ *  esa WABA, Meta responde "already exists" y no se duplican. */
+export async function publicarTodasEnTienda(storeId: string): Promise<{ total: number; exitosas: number; errores: number }> {
+  const w = db.prepare(
+    "SELECT waba_id, access_token FROM whatsapp WHERE store_id = ? AND conectado = 1 AND modo = 'cloud' AND COALESCE(waba_id,'') != '' AND COALESCE(access_token,'') != ''",
+  ).get(storeId) as { waba_id: string; access_token: string } | undefined;
+  if (!w) return { total: 0, exitosas: 0, errores: 0 };
+  const plantillas = db.prepare('SELECT * FROM meta_templates').all() as Record<string, unknown>[];
+  const upsert = db.prepare(
+    `INSERT INTO meta_template_pub (template_id, store_id, estado, meta_id, motivo, updated_at)
+     VALUES (?,?,?,?,?,datetime('now'))
+     ON CONFLICT(template_id, store_id) DO UPDATE SET estado = excluded.estado, meta_id = excluded.meta_id, motivo = excluded.motivo, updated_at = datetime('now')`,
+  );
+  let exitosas = 0, errores = 0;
+  for (const row of plantillas) {
+    // Si ya está aprobada para esta tienda, no la tocamos.
+    const pub = db.prepare("SELECT estado FROM meta_template_pub WHERE template_id = ? AND store_id = ?").get(row.id, storeId) as { estado: string } | undefined;
+    if (pub?.estado === 'aprobada') { exitosas++; continue; }
+    const r = await publicarEnTienda(w.waba_id, w.access_token, leerPlantilla(row));
+    upsert.run(String(row.id), storeId, r.estado, r.metaId, r.motivo);
+    if (r.estado === 'error' || r.estado === 'rechazada') errores++; else exitosas++;
+    await dormir(250);
+  }
+  return { total: plantillas.length, exitosas, errores };
 }
 
 /** Consulta a Meta el estado real de una plantilla en cada tienda (refrescar). */
