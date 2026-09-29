@@ -71,7 +71,8 @@ function embedUrl(u: string): { tipo: 'iframe' | 'video'; src: string } | null {
   if (m) return { tipo: 'iframe', src: `https://www.youtube.com/embed/${m[1]}` };
   m = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
   if (m) return { tipo: 'iframe', src: `https://player.vimeo.com/video/${m[1]}` };
-  if (/\.(mp4|webm|ogg)(\?|$)/i.test(url)) return { tipo: 'video', src: url };
+  // Video subido a Academy o archivo de video directo → reproductor <video>.
+  if (url.includes('/api/academy/media/') || /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(url)) return { tipo: 'video', src: url };
   return { tipo: 'iframe', src: url }; // último recurso: intentar embeber
 }
 
@@ -434,15 +435,41 @@ function AdminPanel({ onCambio }: { onCambio: () => void }) {
   );
 }
 
+// Sube un archivo (imagen o video) a Academy y devuelve su URL pública, o null.
+function subirArchivoAcademy(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      void aReq<{ url: string }>('/api/academy/media', 'POST', { dataUrl: reader.result, nombre: file.name }).then((r) => {
+        if (r.data?.url) resolve(r.data.url);
+        else { notificar(r.error || 'No pudimos subir el archivo.', 'error'); resolve(null); }
+      });
+    };
+    reader.onerror = () => { notificar('No pudimos leer el archivo.', 'error'); resolve(null); };
+    reader.readAsDataURL(file);
+  });
+}
+
 function FormCurso({ curso, onGuardar, onCancelar }: { curso: Partial<Curso>; onGuardar: (c: Partial<Curso>) => void; onCancelar: () => void }) {
   const [f, setF] = useState<Partial<Curso>>(curso);
+  const [subiendo, setSubiendo] = useState(false);
   const set = (k: keyof Curso, v: unknown) => setF((p) => ({ ...p, [k]: v }));
+  const subirPortada = async (file: File) => { setSubiendo(true); const url = await subirArchivoAcademy(file); setSubiendo(false); if (url) set('portada', url); };
   return (
     <div style={{ ...tarjeta, marginBottom: 16 }}>
       <div style={{ fontWeight: 800, marginBottom: 12 }}>{curso.id ? 'Editar curso' : 'Nuevo curso'}</div>
       <input value={f.titulo || ''} onChange={(e) => set('titulo', e.target.value)} placeholder="Título del curso" style={inputA} />
       <textarea value={f.descripcion || ''} onChange={(e) => set('descripcion', e.target.value)} placeholder="Descripción" style={{ ...inputA, minHeight: 70, resize: 'vertical' }} />
-      <input value={f.portada || ''} onChange={(e) => set('portada', e.target.value)} placeholder="URL de la imagen de portada (opcional)" style={inputA} />
+      {/* Portada: subir una imagen o pegar una URL. */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+        {f.portada && <img src={f.portada} alt="" style={{ width: 96, height: 60, objectFit: 'cover', borderRadius: 8, border: `1px solid ${C.line2}` }} />}
+        <label style={{ ...btnGhost, display: 'inline-block', borderStyle: 'dashed', cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
+          {subiendo ? 'Subiendo…' : (f.portada ? '🖼️ Cambiar portada' : '🖼️ Subir portada')}
+          <input type="file" accept="image/*" disabled={subiendo} onChange={(e) => { const file = e.target.files?.[0]; if (file) void subirPortada(file); e.target.value = ''; }} style={{ display: 'none' }} />
+        </label>
+        {f.portada && <button onClick={() => set('portada', '')} style={{ ...btnGhost, padding: '5px 10px', color: C.danger }}>Quitar</button>}
+      </div>
+      <input value={f.portada || ''} onChange={(e) => set('portada', e.target.value)} placeholder="…o pega la URL de la portada" style={inputA} />
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <select value={f.nivel || 'Básico'} onChange={(e) => set('nivel', e.target.value)} style={{ ...inputA, width: 160, marginBottom: 0 }}>
           <option>Básico</option><option>Intermedio</option><option>Avanzado</option>
@@ -477,6 +504,19 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
   const agregarSeccion = async () => { await aReq(`/api/admin/academy/cursos/${curso.id}/secciones`, 'POST', { titulo: 'Nueva sección' }); onCambio(); };
   const renombrarSeccion = async (id: string, titulo: string) => { await aReq(`/api/admin/academy/secciones/${id}`, 'PUT', { titulo }); setRenombrando(null); onCambio(); };
   const borrarSeccion = async (id: string) => { if (await confirmar({ titulo: 'Eliminar sección', mensaje: '¿Eliminar la sección y todas sus lecciones?', aceptar: 'Eliminar', peligro: true })) { await aReq(`/api/admin/academy/secciones/${id}`, 'DELETE'); onCambio(); } };
+  // Reordenar secciones y lecciones (▲▼): reindexa y guarda en lote.
+  const reordenar = async (payload: unknown) => { await aReq(`/api/admin/academy/cursos/${curso.id}/orden`, 'PUT', payload); onCambio(); };
+  const moverSeccion = (i: number, dir: -1 | 1) => {
+    const j = i + dir; if (j < 0 || j >= secciones.length) return;
+    const arr = [...secciones]; [arr[i], arr[j]] = [arr[j], arr[i]];
+    void reordenar({ secciones: arr.map((s, idx) => ({ id: s.id, orden: idx })) });
+  };
+  const moverLeccion = (s: Seccion, i: number, dir: -1 | 1) => {
+    const j = i + dir; if (j < 0 || j >= s.lecciones.length) return;
+    const arr = [...s.lecciones]; [arr[i], arr[j]] = [arr[j], arr[i]];
+    void reordenar({ lecciones: arr.map((l, idx) => ({ id: l.id, orden: idx, seccionId: s.id })) });
+  };
+  const flechita: React.CSSProperties = { ...btnGhost, padding: '2px 7px', fontSize: 12, lineHeight: 1 };
 
   return (
     <div style={tarjeta}>
@@ -491,9 +531,13 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
       </div>
       {abierto && (
         <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
-          {secciones.map((s) => (
+          {secciones.map((s, si) => (
             <div key={s.id} style={{ marginBottom: 12, border: `1px solid ${C.line}`, borderRadius: 10, padding: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <button onClick={() => moverSeccion(si, -1)} disabled={si === 0} style={{ ...flechita, opacity: si === 0 ? 0.35 : 1 }} title="Subir sección">▲</button>
+                  <button onClick={() => moverSeccion(si, 1)} disabled={si === secciones.length - 1} style={{ ...flechita, opacity: si === secciones.length - 1 ? 0.35 : 1 }} title="Bajar sección">▼</button>
+                </div>
                 {renombrando === s.id ? (
                   <input autoFocus defaultValue={s.titulo} onBlur={(e) => renombrarSeccion(s.id, e.target.value)} onKeyDown={(e) => e.key === 'Enter' && renombrarSeccion(s.id, (e.target as HTMLInputElement).value)} style={{ ...inputA, marginBottom: 0, flex: 1 }} />
                 ) : (
@@ -502,8 +546,12 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
                 <button onClick={() => setRenombrando(s.id)} style={{ ...btnGhost, padding: '3px 8px', fontSize: 12 }}>Renombrar</button>
                 <button onClick={() => borrarSeccion(s.id)} style={{ ...btnGhost, padding: '3px 8px', fontSize: 12, color: C.danger }}>Eliminar</button>
               </div>
-              {s.lecciones.map((l) => (
+              {s.lecciones.map((l, li) => (
                 <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 13.5 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <button onClick={() => moverLeccion(s, li, -1)} disabled={li === 0} style={{ ...flechita, opacity: li === 0 ? 0.35 : 1 }} title="Subir">▲</button>
+                    <button onClick={() => moverLeccion(s, li, 1)} disabled={li === s.lecciones.length - 1} style={{ ...flechita, opacity: li === s.lecciones.length - 1 ? 0.35 : 1 }} title="Bajar">▼</button>
+                  </div>
                   <span style={{ color: C.emerald }}>{l.tipo === 'video' ? '▶' : '📄'}</span>
                   <span style={{ flex: 1 }}>{l.titulo} {!l.publicado && <span style={{ color: C.muted2, fontSize: 11 }}>(oculta)</span>}</span>
                   <button onClick={() => setEditLec({ seccionId: s.id, leccion: l })} style={{ ...btnGhost, padding: '3px 8px' }}>Editar</button>
@@ -527,21 +575,22 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
 function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Leccion>; onGuardar: (l: Partial<Leccion>) => void; onCancelar: () => void }) {
   const [f, setF] = useState<Partial<Leccion>>(leccion);
   const [subiendo, setSubiendo] = useState(false);
+  const [subVideo, setSubVideo] = useState(false);
   const set = (k: keyof Leccion, v: unknown) => setF((p) => ({ ...p, [k]: v }));
   const pasos = f.imagenes || [];
   const setPasos = (n: PasoImagen[]) => set('imagenes', n);
 
-  const subirCaptura = (file: File) => {
+  const subirCaptura = async (file: File) => {
     setSubiendo(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      void aReq<{ url: string }>('/api/academy/media', 'POST', { dataUrl: reader.result, nombre: file.name }).then((r) => {
-        setSubiendo(false);
-        if (r.data?.url) setPasos([...pasos, { url: r.data.url, caption: '' }]);
-        else notificar(r.error || 'No pudimos subir la captura.', 'error');
-      });
-    };
-    reader.readAsDataURL(file);
+    const url = await subirArchivoAcademy(file);
+    setSubiendo(false);
+    if (url) setPasos([...pasos, { url, caption: '' }]);
+  };
+  const subirVideo = async (file: File) => {
+    setSubVideo(true);
+    const url = await subirArchivoAcademy(file);
+    setSubVideo(false);
+    if (url) set('videoUrl', url);
   };
 
   return (
@@ -553,7 +602,21 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
         </select>
         <input value={f.duracion || ''} onChange={(e) => set('duracion', e.target.value)} placeholder="Duración (ej. 5:30)" style={{ ...inputA, width: 150 }} />
       </div>
-      {f.tipo !== 'articulo' && <input value={f.videoUrl || ''} onChange={(e) => set('videoUrl', e.target.value)} placeholder="URL del video (YouTube, Vimeo o .mp4)" style={inputA} />}
+      {f.tipo !== 'articulo' && (
+        <>
+          <input value={f.videoUrl || ''} onChange={(e) => set('videoUrl', e.target.value)} placeholder="URL del video (YouTube, Vimeo o .mp4)" style={inputA} />
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+            <label style={{ ...btnGhost, display: 'inline-block', borderStyle: 'dashed', cursor: subVideo ? 'default' : 'pointer', opacity: subVideo ? 0.6 : 1 }}>
+              {subVideo ? 'Subiendo video…' : '⬆️ Subir video (mp4)'}
+              <input type="file" accept="video/*" disabled={subVideo} onChange={(e) => { const file = e.target.files?.[0]; if (file) void subirVideo(file); e.target.value = ''; }} style={{ display: 'none' }} />
+            </label>
+            <span style={{ fontSize: 11.5, color: C.muted2 }}>Máx. ~25 MB. Para videos largos usa mejor una URL de YouTube o Vimeo.</span>
+          </div>
+          {f.videoUrl && f.videoUrl.startsWith('/api/academy/media/') && (
+            <video src={f.videoUrl} controls style={{ width: '100%', maxHeight: 200, borderRadius: 8, border: `1px solid ${C.line2}`, marginBottom: 10, background: '#000' }} />
+          )}
+        </>
+      )}
       <textarea value={f.contenido || ''} onChange={(e) => set('contenido', e.target.value)} placeholder={f.tipo === 'articulo' ? 'Contenido del artículo…' : 'Descripción / notas (opcional)'} style={{ ...inputA, minHeight: f.tipo === 'articulo' ? 160 : 70, resize: 'vertical' }} />
 
       {/* Guía paso a paso: capturas de pantalla numeradas, cada una con su descripción. */}
@@ -572,7 +635,7 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
         ))}
         <label style={{ ...btnGhost, display: 'inline-block', borderStyle: 'dashed', cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
           {subiendo ? 'Subiendo…' : '+ Subir captura de pantalla'}
-          <input type="file" accept="image/*" disabled={subiendo} onChange={(e) => { const file = e.target.files?.[0]; if (file) subirCaptura(file); e.target.value = ''; }} style={{ display: 'none' }} />
+          <input type="file" accept="image/*" disabled={subiendo} onChange={(e) => { const file = e.target.files?.[0]; if (file) void subirCaptura(file); e.target.value = ''; }} style={{ display: 'none' }} />
         </label>
       </div>
 
