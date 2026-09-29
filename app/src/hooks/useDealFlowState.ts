@@ -1605,7 +1605,6 @@ export function useDealFlowState() {
   }
 
   function logout() {
-    if (apiMode) apiLogout();
     try {
       localStorage.removeItem('dealflow:session');
       clearSnapshot(); // que no quede data de una tienda cacheada tras salir
@@ -1615,6 +1614,10 @@ export function useDealFlowState() {
     setSection('resumen');
     setSelectedOrderId(null);
     setMenuOpen(false);
+    // Un solo programa: al salir volvemos a la landing (servida en "/" cuando no
+    // hay sesión). Esperamos a que el logout borre la cookie para no rebotar a la app.
+    if (apiMode) { void apiLogout().finally(() => { window.location.href = '/'; }); }
+    else { try { window.location.href = '/'; } catch { /* nada */ } }
   }
 
   // ── Perfil de la cuenta (nombre, foto, contraseña) ──

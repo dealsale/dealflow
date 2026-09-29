@@ -56,7 +56,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-09-29-effi-callback-orden-guion',
+    build: '2026-09-29-landing-en-app-effi-pegar-codigo',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -112,16 +112,30 @@ const LANDING_HOSTS = (process.env.LANDING_HOSTS || 'dealflow.sbs,www.dealflow.s
   .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
 if (existsSync(APP_DIST)) {
   app.use(express.static(APP_DIST, { index: false })); // sirve /logo.png y /assets/* en cualquier host
+  // "Un solo programa": en el MISMO host conviven la landing (para visitantes) y la
+  // app (para quien ya inició sesión). Reglas:
+  //  - /academy*  → siempre la app (React) — el portal educativo.
+  //  - /entrar, /registro, /login, /panel, /app → siempre la app (login/registro),
+  //    aunque no haya sesión: son las puertas de entrada desde la landing.
+  //  - resto de rutas → si NO hay cookie de sesión mostramos la landing; si la hay,
+  //    la app. Así app.<dominio>/ enseña la landing al visitante y el panel al dueño.
+  // LANDING_HOSTS se mantiene como hosts que SIEMPRE muestran landing al visitante
+  // (compatibilidad con el dominio raíz), pero ya no es necesario para que funcione.
+  const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app)(\/|$)/i;
   app.get(/^\/(?!api|webhooks).*/, (req, res) => {
     const host = (req.hostname || '').toLowerCase();
-    // Academy vive en la ruta /academy. Debe servir la app (React) SIEMPRE,
-    // incluso en el dominio raíz que normalmente muestra la landing; si no,
-    // dealflow.sbs/academy devolvería la landing y el portal nunca cargaría.
     const esAcademy = /^\/academy(\/|$)/i.test(req.path);
-    if (!esAcademy && LANDING_HOSTS.includes(host) && existsSync(LANDING)) return res.sendFile(LANDING);
+    if (esAcademy) return res.sendFile(path.join(APP_DIST, 'index.html'));
+    const esEntradaApp = ENTRADAS_APP.test(req.path);
+    const tieneSesion = !!(req.cookies && req.cookies['df_token']);
+    // Muestra la landing a los visitantes (sin sesión) que no van a una puerta de
+    // entrada de la app. En hosts de solo-landing, siempre (aunque tengan cookie).
+    const mostrarLanding = existsSync(LANDING) && !esEntradaApp &&
+      (LANDING_HOSTS.includes(host) || !tieneSesion);
+    if (mostrarLanding) return res.sendFile(LANDING);
     res.sendFile(path.join(APP_DIST, 'index.html'));
   });
-  console.log('[web] Panel desde', APP_DIST, '· landing en', LANDING_HOSTS.join(', '));
+  console.log('[web] App + landing en el mismo host · landing hosts fijos:', LANDING_HOSTS.join(', '));
 }
 
 // Red de seguridad: cualquier error no capturado en una ruta se registra con su

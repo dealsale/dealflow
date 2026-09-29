@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
 import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
-import { apiWooBuscarProductos, apiWooCatalogo, apiDropiProducto, type ProductoWoo, type ProductoCatalogoWoo, type DropiProducto } from '../lib/api';
+import { apiDropiProducto, type DropiProducto } from '../lib/api';
 import { Dropdown } from '../components/Dropdown';
 import { confirmar, notificar } from '../components/dialogs';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
@@ -232,243 +232,43 @@ function VincularDropiApi({ p, df }: { p: DecoratedProduct; df: DealFlowState })
   );
 }
 
-/**
- * Trae y cachea el catálogo completo del WooCommerce de un proveedor. Se comparte
- * entre todas las filas de variantes de un producto para no pedirlo mil veces.
- * Al cambiar de proveedor, se limpia para volver a traerlo del Woo correcto.
- */
-function useCatalogoWoo(prov: string) {
-  const [activo, setActivo] = useState(false); // se enciende al abrir el buscador
-  const [cargando, setCargando] = useState(false);
-  const [error, setError] = useState('');
-  const [productos, setProductos] = useState<ProductoCatalogoWoo[] | null>(null);
-  // Una vez activo, cada vez que cambia el proveedor se vuelve a traer SU catálogo
-  // automáticamente (antes había que darle "Elegir de la lista" otra vez).
-  useEffect(() => {
-    if (!activo) return;
-    let cancelado = false;
-    setCargando(true); setError(''); setProductos(null);
-    void apiWooCatalogo(prov).then((r) => {
-      if (cancelado) return;
-      setCargando(false);
-      if (r.error || !r.data) { setError(r.error || 'No pudimos traer el catálogo.'); return; }
-      setProductos(r.data.productos);
-    });
-    return () => { cancelado = true; };
-  }, [prov, activo]);
-  const cargar = () => setActivo(true);
-  return { cargando, error, productos, cargar };
-}
-type CatalogoWoo = ReturnType<typeof useCatalogoWoo>;
 
 /**
- * Lista desplegable del catálogo del WooCommerce: cada producto se abre y muestra
- * sus variaciones (talla/color) con su SKU y stock. Un clic en "Usar" vincula ese
- * SKU. Así no hay que ir pegando códigos: se elige de la lista. (Sobre todo Dropi.)
- */
-function CatalogoPicker({ cat, nombreProv, onPick, usados }: { cat: CatalogoWoo; nombreProv: string; onPick: (sku: string, nombre: string) => void; usados?: Set<string> }) {
-  const [filtro, setFiltro] = useState('');
-  const [abierto, setAbierto] = useState<number | null>(null);
-  useEffect(() => { cat.cargar(); }, []); // trae el catálogo al abrir
-  const f = filtro.trim().toLowerCase();
-  const yaUsado = (sku: string) => !!sku && !!usados && usados.has(sku);
-  // Ocultamos lo que ya vinculaste a OTRA variante (para no repetir). En variables,
-  // filtramos las variaciones usadas; si no queda ninguna, ocultamos el producto.
-  const productos = (cat.productos || [])
-    .map((p) => ({ ...p, variaciones: p.variaciones.filter((v) => !yaUsado(v.sku)) }))
-    .filter((p) => {
-      const variable = p.tipo === 'variable' && (p.variaciones.length > 0);
-      if (!variable && yaUsado(p.sku)) return false; // simple ya usado
-      if (p.tipo === 'variable' && p.variaciones.length === 0) return false; // todas usadas
-      if (!f) return true;
-      return p.nombre.toLowerCase().includes(f) || (p.sku || '').toLowerCase().includes(f) ||
-        p.variaciones.some((v) => v.nombre.toLowerCase().includes(f) || (v.sku || '').toLowerCase().includes(f));
-    });
-  const btnUsar = (disabled: boolean): CSSProperties => ({
-    background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)',
-    borderRadius: 7, padding: '5px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12,
-    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap',
-  });
-  // Chip que indica si el producto/variante está vinculado a Dropi en el plugin
-  // (lo que hace que el pedido de Woo SÍ se empuje a Dropi).
-  const chipDropi = (esDropi: boolean) => esDropi
-    ? <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }}>Dropi ✓</span>
-    : null;
-  // Marca los productos que NO están publicados (borrador): no se despachan hasta publicarlos.
-  const chipBorrador = (estado: string) => estado && estado !== 'publish'
-    ? <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-text-faint)', background: 'var(--df-surface-2)', borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }}>borrador</span>
-    : null;
-  return (
-    <div style={{ marginTop: 8 }}>
-      {cat.cargando && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '6px 2px' }}>Trayendo el catálogo de {nombreProv}…</div>}
-      {cat.error && <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)', padding: '6px 2px' }}>{cat.error}</div>}
-      {cat.productos && (
-        <>
-          <input
-            value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Filtrar por nombre o código…"
-            style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px', fontSize: 13, marginBottom: 8 }}
-          />
-          {!productos.length && (
-            (cat.productos && cat.productos.length === 0)
-              ? <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '6px 2px', lineHeight: 1.55 }}>
-                  Este WooCommerce de <b>{nombreProv}</b> no tiene productos todavía. Súbelos desde <b>Integraciones → WooCommerce · {nombreProv} → “Enviar productos”</b>, o pídele a {nombreProv} que sincronice su catálogo en esa tienda. Luego vuelve aquí.
-                </div>
-              : <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', padding: '4px 2px' }}>No hay productos disponibles que coincidan.</div>
-          )}
-          <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {productos.map((p) => {
-              const variable = p.tipo === 'variable' && p.variaciones.length > 0;
-              const exp = abierto === p.id;
-              return (
-                <div key={p.id} style={{ border: '1px solid var(--df-border)', borderRadius: 8, background: 'var(--df-surface)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre || '(sin nombre)'}</span>
-                        {chipDropi(p.dropi)}
-                        {chipBorrador(p.estado)}
-                      </div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)', marginTop: 1 }}>
-                        {variable ? `${p.variaciones.length} variantes disponibles` : `SKU: ${p.sku || '—'}`}{!variable && ` · stock: ${p.stock ?? '—'}`}
-                      </div>
-                    </div>
-                    {variable
-                      ? <button onClick={() => setAbierto(exp ? null : p.id)} style={btnUsar(false)}>{exp ? 'Cerrar' : 'Ver variantes'}</button>
-                      : <button onClick={() => onPick(p.sku, p.nombre)} disabled={!p.sku} title={p.sku ? '' : `Este producto no tiene SKU en ${nombreProv}`} style={btnUsar(!p.sku)}>Usar</button>}
-                  </div>
-                  {variable && exp && (
-                    <div style={{ borderTop: '1px solid var(--df-border)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {p.variaciones.map((v) => (
-                        <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-bg)', borderRadius: 6, padding: '6px 9px' }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontSize: 12.5, fontWeight: 600 }}>{v.nombre}</span>
-                              {chipDropi(v.dropi)}
-                            </div>
-                            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--df-text-muted)' }}>SKU: {v.sku || '—'} · stock: {v.stock ?? '—'}</div>
-                          </div>
-                          <button onClick={() => onPick(v.sku, `${p.nombre} — ${v.nombre}`)} disabled={!v.sku} title={v.sku ? '' : `Esta variante no tiene SKU en ${nombreProv}`} style={btnUsar(!v.sku)}>Usar</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * Buscador para vincular el SKU con un producto real del WooCommerce de Effi/Dropi.
- * El dueño pega el código (o el nombre), lo buscamos en su tienda, le mostramos
- * nombre + stock para que confirme, y con un clic le dejamos el SKU correcto.
- * Solo aparece si hay un WooCommerce (Effi/Dropi) conectado.
+ * Vincular con Effi = pegar la Referencia del artículo en Effi. DealFlow YA es la
+ * tienda (Effi nos lee como su WooCommerce), así que no hay catálogo externo que
+ * buscar: el código que pegas se guarda tal cual en el SKU y Effi casa el producto
+ * por SKU = Referencia. Sin buscador, sin lista de catálogo.
  */
 function VincularSkuEffi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
   const [abierto, setAbierto] = useState(false);
-  const [q, setQ] = useState(p.sku || '');
-  const [cargando, setCargando] = useState(false);
-  const [error, setError] = useState('');
-  const [buscado, setBuscado] = useState(false);
-  const [resultados, setResultados] = useState<ProductoWoo[]>([]);
-  const [vinculado, setVinculado] = useState<ProductoWoo | null>(null);
+  const [val, setVal] = useState(p.sku || '');
+  useEffect(() => { setVal(p.sku || ''); }, [p.sku]); // refleja cambios externos
+  if (!df.wooProveedores.includes('effi') && !df.effiWoo?.activo) return null; // sin Effi, no aplica
 
-  const prov = 'effi'; // este vinculador es SOLO de Effi; Dropi tiene el suyo (por ID)
-  const [modo, setModo] = useState<'lista' | 'buscar'>('lista');
-  const cat = useCatalogoWoo(prov);
-
-  if (!df.wooProveedores.includes('effi')) return null; // sin Effi conectado, no aplica
-  const nombreProv = 'Effi';
-
-  const buscar = () => {
-    const query = q.trim();
-    if (!query) return;
-    setCargando(true); setError(''); setBuscado(true); setVinculado(null);
-    void apiWooBuscarProductos(query, prov).then((r) => {
-      setCargando(false);
-      if (r.error || !r.data) { setError(r.error || 'No pudimos buscar.'); setResultados([]); return; }
-      setResultados(r.data.productos);
-    });
-  };
-  const vincular = (prod: ProductoWoo) => { p.setSku(prod.sku); setVinculado(prod); setResultados([]); };
-  const vincularSku = (sku: string, nombre: string) => { if (!sku) return; p.setSku(sku); setVinculado({ id: 0, nombre, sku, stock: null, precio: '' }); setResultados([]); };
-  const tab = (activo: boolean): CSSProperties => ({
-    background: activo ? 'var(--df-purple)' : 'transparent', color: activo ? '#fff' : 'var(--df-purple)',
-    border: '1px solid var(--df-purple-border)', borderRadius: 7, padding: '5px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
-  });
-
+  const guardar = () => { const t = val.trim(); if (t !== (p.sku || '')) p.setSku(t); };
   const btnMini: CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 8, padding: '8px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-purple)', cursor: 'pointer', whiteSpace: 'nowrap' };
 
   return (
     <div style={{ marginTop: 8 }}>
       {!abierto ? (
-        <button onClick={() => setAbierto(true)} style={btnMini}>🔗 Vincular con Effi</button>
+        <button onClick={() => setAbierto(true)} style={btnMini}>🔗 Vincular con Effi (pegar código)</button>
       ) : (
         <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, background: 'var(--df-bg)' }}>
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8 }}>
-            Vincula este producto con su equivalente en <b>{nombreProv}</b> para que te quede el SKU exacto y {nombreProv} sí lo despache. Elígelo de la lista del catálogo o búscalo por código.
+            Pega la <b>Referencia exacta del artículo en Effi</b>. Se guarda como SKU y Effi casa el producto por <b>SKU = Referencia</b>. Si el producto tiene tallas/colores, usa el <b>SKU por variante</b> de más abajo.
           </div>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-            <button onClick={() => setModo('lista')} style={tab(modo === 'lista')}>Elegir de la lista</button>
-            <button onClick={() => setModo('buscar')} style={tab(modo === 'buscar')}>Buscar por código</button>
-          </div>
-
-          {modo === 'lista' && <CatalogoPicker cat={cat} nombreProv={nombreProv} onPick={vincularSku} />}
-
-          {modo === 'buscar' && (<>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <input
-              className="df-input"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') buscar(); }}
-              placeholder="Código o nombre del producto"
-              style={{ flex: 1, minWidth: 180, boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
+              value={val}
+              onChange={(e) => setVal(e.target.value)}
+              onBlur={guardar}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              placeholder="Referencia de Effi (ej: 1990377)"
+              style={{ flex: 1, minWidth: 160, boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
             />
-            <button onClick={buscar} disabled={cargando} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: cargando ? 'default' : 'pointer', opacity: cargando ? 0.7 : 1 }}>{cargando ? 'Buscando…' : 'Buscar'}</button>
+            {(val || '').trim() ? <span style={{ fontSize: 15, color: 'var(--df-brand)' }}>✓</span> : <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>sin código</span>}
           </div>
-
-          {error && <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-danger-dark)' }}>{error}</div>}
-
-          {!!resultados.length && (
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {resultados.map((prod) => (
-                <div key={prod.id} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prod.nombre || '(producto sin nombre)'}</div>
-                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 1 }}>
-                      SKU: {prod.sku || '— sin SKU en ' + nombreProv} · stock: {prod.stock ?? '—'}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => vincular(prod)}
-                    disabled={!prod.sku}
-                    title={prod.sku ? '' : `Este producto no tiene SKU en ${nombreProv}; ponle uno allá primero.`}
-                    style={{ ...btnMini, opacity: prod.sku ? 1 : 0.5, cursor: prod.sku ? 'pointer' : 'not-allowed' }}
-                  >Vincular</button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {buscado && !cargando && !error && !resultados.length && !vinculado && (
-            <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>No encontramos ese producto en {nombreProv}. Revisa el código o busca por el nombre.</div>
-          )}
-          </>)}
-
-          {vinculado && (
-            <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--df-brand-subtle)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '9px 12px' }}>
-              <span style={{ fontSize: 15 }}>✓</span>
-              <div style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', lineHeight: 1.5 }}>
-                Vinculado con {nombreProv}: <b>{vinculado.nombre || '(sin nombre)'}</b> · stock <b>{vinculado.stock ?? '—'}</b>.<br />
-                <span style={{ color: 'var(--df-text-muted)' }}>Acuérdate de <b>Guardar</b> el producto para que quede.</span>
-              </div>
-            </div>
-          )}
+          <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)' }}>Acuérdate de <b>Guardar</b> el producto para que quede.</div>
         </div>
       )}
     </div>
