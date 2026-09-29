@@ -44,10 +44,11 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
   const [open, setOpen] = useState(false);
   const [verProductos, setVerProductos] = useState(false);
   const [verRemk, setVerRemk] = useState(false);
+  const [verPlantillas, setVerPlantillas] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setVerProductos(false); setVerRemk(false); } };
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setVerProductos(false); setVerRemk(false); setVerPlantillas(false); } };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
@@ -83,6 +84,21 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
                 </button>
               ))}
             </>
+          ) : verPlantillas ? (
+            <>
+              <button onClick={() => setVerPlantillas(false)} style={{ ...item, fontWeight: 700, fontSize: 12.5, color: 'var(--df-text-muted)' }}>‹ Elige la plantilla</button>
+              <div style={{ padding: '2px 10px 8px', fontSize: 11.5, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>Las plantillas aprobadas SÍ se pueden enviar aunque hayan pasado las 24 h.</div>
+              {df.plantillasAprobadas.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes plantillas aprobadas todavía. Créalas y publícalas desde el panel de plantillas.</div>}
+              {df.plantillasAprobadas.map((t) => (
+                <button key={t.id} onClick={() => { df.enviarPlantillaAChat(t.id); setOpen(false); setVerPlantillas(false); }} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <span style={{ fontSize: 15 }}>📋</span>
+                  <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nombre}</div>
+                    <div style={{ fontSize: 11, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.cuerpo}</div>
+                  </div>
+                </button>
+              ))}
+            </>
           ) : (
             <>
               <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-faint)', textTransform: 'uppercase', letterSpacing: '.04em', padding: '8px 10px 6px' }}>Flujos</div>
@@ -99,6 +115,14 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
                 <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 13 }}>Remarketing</div>
                   <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Envía uno de tus flujos de ofertas</div>
+                </div>
+                <span style={{ color: 'var(--df-text-faint)' }}>›</span>
+              </button>
+              <button onClick={() => setVerPlantillas(true)} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                <span style={{ fontSize: 17 }}>📋</span>
+                <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>Plantillas aprobadas</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Mensajes que llegan aun pasadas las 24 h</div>
                 </div>
                 <span style={{ color: 'var(--df-text-faint)' }}>›</span>
               </button>

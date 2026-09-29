@@ -154,6 +154,47 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
   }
 }
 
+/**
+ * Envía una PLANTILLA aprobada por la Cloud API. Las plantillas SÍ se pueden
+ * enviar fuera de la ventana de 24 h (para eso existen). Solo por la API oficial
+ * (el canal QR no maneja plantillas de Meta). Pasa por el tope de velocidad.
+ */
+export async function sendWhatsappTemplate(
+  storeId: string, to: string, plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string },
+  params: string[] = [], pn?: string,
+): Promise<{ ok: boolean; error?: string; wamid?: string; textoRender?: string }> {
+  await esperarTurno(storeId, to);
+  const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
+    | { phone_number_id: string; access_token: string; conectado: number; modo: string } | undefined;
+  if (!cfg?.conectado) return { ok: false, error: 'WhatsApp no está conectado.' };
+  if (cfg.modo === 'qr') return { ok: false, error: 'Las plantillas de Meta solo se envían por la conexión oficial de WhatsApp (no por QR).' };
+  // Texto renderizado (para guardarlo en el chat): reemplaza {{n}} por el parámetro.
+  const textoRender = String(plantilla.cuerpo || '').replace(/\{\{(\d+)\}\}/g, (_m, n) => params[Number(n) - 1] ?? `{{${n}}}`);
+  const components: Record<string, unknown>[] = [];
+  if (params.length) components.push({ type: 'body', parameters: params.map((t) => ({ type: 'text', text: String(t) })) });
+  try {
+    const numero = (pn || to).replace(/[^0-9]/g, '');
+    const res = await fetch(`${GRAPH}/${cfg.phone_number_id}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cfg.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp', to: numero, type: 'template',
+        template: { name: plantilla.nombre, language: { code: plantilla.idioma || 'es' }, ...(components.length ? { components } : {}) },
+      }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: { message?: string } };
+    if (!res.ok) {
+      const msg = body.error?.message || 'Meta no aceptó la plantilla.';
+      registrarLog(storeId, 'error', 'envio', `Meta rechazó la plantilla "${plantilla.nombre}" a ${to}: ${msg}`);
+      return { ok: false, error: msg };
+    }
+    return { ok: true, wamid: body.messages?.[0]?.id, textoRender };
+  } catch {
+    registrarLog(storeId, 'error', 'envio', `No pudimos conectar con Meta para enviar la plantilla a ${to}.`);
+    return { ok: false, error: 'No pudimos hablar con Meta.' };
+  }
+}
+
 /** Sube un adjunto a Meta y lo envía por su media ID (Cloud API). */
 async function cloudSendMedia(
   phoneId: string,

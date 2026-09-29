@@ -43,6 +43,9 @@ import {
   apiActualizarFlujo,
   apiEliminarFlujo,
   apiEnviarFlujoRemarketing,
+  apiPlantillasAprobadas,
+  apiEnviarPlantilla,
+  type PlantillaAprobada,
   apiExtraerPedido,
   apiActualizarPedido,
   apiSendLeadMedia,
@@ -2472,6 +2475,27 @@ export function useDealFlowState() {
       if (apiMode) cargarMensajesChat(leadId);
     });
   }
+  // ── Plantillas aprobadas (enviables desde el chat, incluso pasadas las 24 h) ──
+  const [plantillasAprobadas, setPlantillasAprobadas] = useState<PlantillaAprobada[]>([]);
+  async function recargarPlantillasAprobadas() {
+    if (!apiMode) return;
+    const { data } = await apiPlantillasAprobadas();
+    if (data && Array.isArray(data.plantillas)) setPlantillasAprobadas(data.plantillas);
+  }
+  useEffect(() => {
+    if (apiMode && sessionUser && (section === 'flujos' || section === 'crm')) void recargarPlantillasAprobadas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, sessionUser, section]);
+  function enviarPlantillaAChat(plantillaId: string) {
+    const leadId = crmSelectedId;
+    setFlujoMsgRemk('Enviando la plantilla…');
+    void apiEnviarPlantilla(String(leadId), plantillaId).then((r) => {
+      if (r.error || !r.data) { setFlujoMsgRemk(r.error || 'No se pudo enviar la plantilla.'); return; }
+      setFlujoMsgRemk('✓ Plantilla enviada.');
+      if (apiMode) cargarMensajesChat(leadId);
+    });
+  }
+
   // Marca/desmarca el consentimiento del cliente para recibir promociones.
   function setLeadOptin(leadId: number | string, optin: boolean) {
     setApiLeadsState((st) => (st || []).map((l) => (l.id === leadId ? { ...l, promosOptin: optin } : l)));
@@ -3712,6 +3736,8 @@ export function useDealFlowState() {
     crearFlujo,
     flujoMsgRemk,
     enviarFlujoRemarketing,
+    plantillasAprobadas,
+    enviarPlantillaAChat,
     crmOptin,
     setLeadOptin,
     go,
