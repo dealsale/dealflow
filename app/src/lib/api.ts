@@ -389,6 +389,10 @@ export const apiEliminarFlujo = (id: string) => req<{ ok: true }>(`/api/flows/${
 export const apiEnviarFlujoRemarketing = (leadId: string, flowId: string, permitirSinOptin = false) => req<{ ok: true; enviadas: number; requiereOptin?: boolean }>(`/api/leads/${leadId}/enviar-flujo`, 'POST', { flowId, permitirSinOptin });
 export const apiSetOptin = (leadId: string, optin: boolean) => req<{ ok: true; optin: boolean }>(`/api/leads/${leadId}/optin`, 'POST', { optin });
 
+export interface PlantillaAprobada { id: string; nombre: string; idioma: string; categoria: string; encabezado: string; cuerpo: string; pie: string; variables: number; ejemplos: string[] }
+export const apiPlantillasAprobadas = () => req<{ plantillas: PlantillaAprobada[] }>('/api/plantillas-aprobadas', 'GET');
+export const apiEnviarPlantilla = (leadId: string, plantillaId: string, params?: string[]) => req<{ ok: true }>(`/api/leads/${leadId}/enviar-plantilla`, 'POST', { plantillaId, params });
+
 // ── Completar pedido desde el chat ──
 export interface PropuestaPedido {
   cliente: string; tel: string; departamento: string; ciudad: string; direccion: string;

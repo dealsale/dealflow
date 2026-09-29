@@ -4,7 +4,7 @@ import { db, j, pj, uid, registrarLog } from './db.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
-import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, verifyWhatsappCredentials } from './wa.js';
+import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, sendWhatsappTemplate, verifyWhatsappCredentials } from './wa.js';
 import { mediaPath, saveOutgoingMedia, saveOutgoingMessage, tipoDeMime } from './media.js';
 import { existsSync, readFileSync } from 'node:fs';
 import type * as DropiApi from './dropiApi.js';
@@ -1451,6 +1451,55 @@ api.post('/leads/:id/enviar-flujo', requireAuth, requireStore, async (req, res) 
   const r = await enviarFlujo(req.user!.storeId!, req.params.id, String(req.body?.flowId || ''), !!req.body?.permitirSinOptin);
   if (!r.ok) return res.status(400).json({ error: r.error, requiereOptin: r.requiereOptin });
   res.json({ ok: true, enviadas: r.enviadas });
+});
+
+// Plantillas APROBADAS de esta tienda (para enviarlas desde el chat, incluso
+// fuera de la ventana de 24 h — para eso sirven las plantillas de Meta).
+api.get('/plantillas-aprobadas', requireAuth, requireStore, (req, res) => {
+  const rows = db.prepare(
+    `SELECT t.id, t.nombre, t.idioma, t.categoria, t.encabezado, t.cuerpo, t.pie, t.ejemplos
+       FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id
+      WHERE p.store_id = ? AND p.estado = 'aprobada'
+      ORDER BY t.categoria, t.nombre`,
+  ).all(req.user!.storeId) as Record<string, unknown>[];
+  const plantillas = rows.map((t) => {
+    const vars = [...new Set([...String(t.cuerpo || '').matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1])))].sort((a, b) => a - b);
+    return {
+      id: t.id, nombre: t.nombre, idioma: t.idioma, categoria: t.categoria,
+      encabezado: t.encabezado, cuerpo: t.cuerpo, pie: t.pie,
+      variables: vars.length, ejemplos: pj<string[]>(t.ejemplos as string, []),
+    };
+  });
+  res.json({ plantillas });
+});
+
+// Enviar una plantilla APROBADA a un chat. Funciona aunque hayan pasado 24 h.
+api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, sid) as
+    | { id: string; tel: string; wa_id: string | null } | undefined;
+  if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
+  const t = db.prepare(
+    `SELECT t.nombre, t.idioma, t.encabezado, t.cuerpo, t.ejemplos
+       FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id
+      WHERE p.store_id = ? AND p.template_id = ? AND p.estado = 'aprobada'`,
+  ).get(sid, String(req.body?.plantillaId || '')) as
+    | { nombre: string; idioma: string; encabezado: string; cuerpo: string; ejemplos: string } | undefined;
+  if (!t) return res.status(400).json({ error: 'Esa plantilla no está aprobada para tu tienda todavía.' });
+  // Parámetros: los que manden, o los ejemplos de la plantilla como respaldo.
+  const nVars = [...new Set([...String(t.cuerpo || '').matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1])))].length;
+  const ejemplos = pj<string[]>(t.ejemplos, []);
+  const dados = Array.isArray(req.body?.params) ? (req.body.params as unknown[]).map((x) => String(x)) : [];
+  const params = Array.from({ length: nVars }, (_, i) => dados[i] || ejemplos[i] || '');
+  const r = await sendWhatsappTemplate(sid, l.wa_id || l.tel, { nombre: t.nombre, idioma: t.idioma, encabezado: t.encabezado, cuerpo: t.cuerpo }, params, l.tel);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  // Guarda el mensaje en el chat (texto renderizado) para que quede el registro.
+  const mid = uid();
+  db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, l.id, 'vendedor', r.textoRender || `[Plantilla: ${t.nombre}]`);
+  marcarEnviado(mid, { ok: true, wamid: r.wamid });
+  db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
+  registrarLog(sid, 'info', 'envio', `Plantilla "${t.nombre}" enviada al chat.`);
+  res.json({ ok: true });
 });
 
 // Marca (o desmarca) el consentimiento del cliente para recibir promociones.
