@@ -30,6 +30,22 @@ export function Resumen({ df }: { df: DealFlowState }) {
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Hola, {df.saludoNombre} 👋</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 18px' }}>Así va tu tienda hoy, {df.resumenFecha}.</p>
 
+      {df.antibaneo && df.antibaneo.nivel !== 'ok' && !df.esAgente && (
+        <div style={{
+          marginBottom: 18, borderRadius: 12, padding: '13px 16px',
+          border: `1px solid ${df.antibaneo.nivel === 'alerta' ? 'var(--df-danger-border, var(--df-border))' : 'var(--df-warning-border, var(--df-border))'}`,
+          background: df.antibaneo.nivel === 'alerta' ? 'var(--df-danger-subtle)' : 'var(--df-warning-subtle)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 14, color: df.antibaneo.nivel === 'alerta' ? 'var(--df-danger-dark)' : 'var(--df-warning)' }}>
+            <span style={{ fontSize: 16 }}>{df.antibaneo.nivel === 'alerta' ? '🚨' : '⚠️'}</span>
+            Monitor anti-baneo de WhatsApp
+          </div>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 20, color: 'var(--df-text-secondary)', fontSize: 13, lineHeight: 1.55 }}>
+            {df.antibaneo.avisos.map((a, i) => <li key={i}>{a}</li>)}
+          </ul>
+        </div>
+      )}
+
       {df.suscripcion && !df.esAgente && (
         <div style={{ ...card, padding: 0, marginBottom: 18, borderLeft: '4px solid var(--df-brand)', overflow: 'hidden' }}>
           <div

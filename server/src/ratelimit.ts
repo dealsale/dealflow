@@ -18,11 +18,27 @@ const MAX_PER_MIN = Number(process.env.BOT_MAX_PER_MIN) || 45;
 // las ráfagas que banean: nunca 5 fotos a la misma persona en un instante.
 const MIN_GAP_CHAT = Number(process.env.BOT_MIN_GAP_CHAT_MS) || 2500;
 
-interface EstadoTienda { proximo: number; sellos: number[] }
+interface EstadoTienda { proximo: number; sellos: number[]; ultimoFrenado: number }
 const porTienda = new Map<string, EstadoTienda>();
 const porChat = new Map<string, number>(); // clave storeId|destino -> próximo permitido
 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Jitter: un pequeño aleatorio para que los envíos NO salgan a intervalos exactos
+// (los patrones perfectamente regulares también le parecen "bot" a Meta).
+const jitter = () => Math.floor(Math.random() * 500);
+
+/**
+ * Salud de envío de una tienda (para el monitor anti-baneo del panel). Todo en
+ * memoria: cuántos mensajes salieron en el último minuto, si está cerca del tope
+ * y cuándo fue la última vez que el freno tuvo que retener un envío (señal de que
+ * el bot está intentando disparar en ráfaga).
+ */
+export function estadisticasEnvio(storeId: string): { porMinuto: number; tope: number; cerca: boolean; ultimoFrenado: number } {
+  const st = porTienda.get(storeId);
+  const ahora = Date.now();
+  const porMinuto = st ? st.sellos.filter((t) => t > ahora - 60_000).length : 0;
+  return { porMinuto, tope: MAX_PER_MIN, cerca: porMinuto >= Math.ceil(MAX_PER_MIN * 0.8), ultimoFrenado: st?.ultimoFrenado || 0 };
+}
 
 /**
  * Espera hasta que la tienda (y el chat) tengan permitido el siguiente envío.
@@ -33,9 +49,9 @@ const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export async function esperarTurno(storeId: string, destino?: string): Promise<void> {
   const ahora = Date.now();
-  const st = porTienda.get(storeId) || { proximo: 0, sellos: [] };
+  const st = porTienda.get(storeId) || { proximo: 0, sellos: [], ultimoFrenado: 0 };
 
-  // 1) Espacio mínimo por tienda.
+  // 1) Espacio mínimo por tienda (con jitter para no salir a intervalos exactos).
   let turno = Math.max(ahora, st.proximo);
 
   // 2) Tope por minuto por tienda.
@@ -53,9 +69,12 @@ export async function esperarTurno(storeId: string, destino?: string): Promise<v
 
   recientes.push(turno);
   st.sellos = recientes.slice(-MAX_PER_MIN);
-  st.proximo = turno + MIN_GAP;
+  st.proximo = turno + MIN_GAP + jitter();
+  // Registra si este envío tuvo que ESPERAR bastante (el bot intentó disparar en
+  // ráfaga y el freno lo retuvo): señal para el monitor anti-baneo.
+  if (turno - ahora > MIN_GAP) st.ultimoFrenado = ahora;
   porTienda.set(storeId, st);
-  if (claveChat) porChat.set(claveChat, turno + MIN_GAP_CHAT);
+  if (claveChat) porChat.set(claveChat, turno + MIN_GAP_CHAT + jitter());
 
   const espera = turno - ahora;
   if (espera > 0) await dormir(espera);

@@ -1662,6 +1662,25 @@ api.get('/whatsapp/estado', requireAuth, requireStore, requireOwner, async (req,
   res.json(await estadoNumero(req.user!.storeId!));
 });
 
+// Monitor anti-baneo: combina el ritmo de envío (en memoria) con la calidad del
+// número (Meta) para avisar en el panel cuando la tienda se acerca al tope por
+// minuto, cuando el freno tuvo que retener ráfagas, o cuando la calidad baja.
+api.get('/antibaneo/estado', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const { estadisticasEnvio } = await import('./ratelimit.js');
+  const env = estadisticasEnvio(sid);
+  let calidad = ''; let limite = '';
+  try { const est = await import('./waEstado.js').then((m) => m.estadoNumero(sid)); calidad = est.calidad; limite = est.limite; } catch { /* la calidad es opcional */ }
+  const avisos: string[] = [];
+  let nivel: 'ok' | 'aviso' | 'alerta' = 'ok';
+  const subir = (n: 'aviso' | 'alerta') => { if (nivel === 'ok' || (nivel === 'aviso' && n === 'alerta')) nivel = n; };
+  if (env.cerca) { subir('aviso'); avisos.push(`Vas en ${env.porMinuto} de ${env.tope} mensajes por minuto. Estás cerca del tope: baja el ritmo para que Meta no lo lea como spam.`); }
+  if (env.ultimoFrenado && Date.now() - env.ultimoFrenado < 5 * 60_000) { subir('aviso'); avisos.push('Hace poco el sistema tuvo que frenar envíos en ráfaga (te protegió). Evita disparar muchos mensajes juntos.'); }
+  if (calidad === 'YELLOW') { subir('aviso'); avisos.push('La calidad de tu número bajó a MEDIA. Cuida el tono y la frecuencia de los mensajes.'); }
+  if (calidad === 'RED') { subir('alerta'); avisos.push('La calidad de tu número está en ROJO: tus clientes están bloqueando o reportando. Escribe solo a quien te escribió y usa plantillas aprobadas.'); }
+  res.json({ nivel, porMinuto: env.porMinuto, tope: env.tope, cerca: env.cerca, calidad, limite, avisos });
+});
+
 // ── WhatsApp (vinculación por WABA ID + token) ───────────────────────
 api.put('/whatsapp', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { wabaId, phoneNumberId, accessToken } = req.body || {};
