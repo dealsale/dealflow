@@ -2280,6 +2280,16 @@ api.post('/superadmin/meta-templates/:id/publicar', requireAuth, requireSuperAdm
   res.json({ ok: true, ...r });
 });
 
+// Publica TODAS las plantillas en TODAS las tiendas que aún NO las tienen aprobadas
+// (un clic, útil tras conectar tiendas nuevas). No toca las que ya están aprobadas.
+api.post('/superadmin/meta-templates/publicar-todas', requireAuth, requireSuperAdmin, async (_req, res) => {
+  const { publicarEnTodas } = await import('./metaTemplates.js');
+  const ids = (db.prepare('SELECT id FROM meta_templates').all() as { id: string }[]).map((r) => r.id);
+  let exitosas = 0, errores = 0, saltadas = 0;
+  for (const id of ids) { const r = await publicarEnTodas(id); exitosas += r.exitosas; errores += r.errores; saltadas += r.saltadas; }
+  res.json({ ok: true, plantillas: ids.length, exitosas, errores, saltadas });
+});
+
 // Refresca el estado de aprobación consultando a Meta por cada tienda.
 api.post('/superadmin/meta-templates/:id/refrescar', requireAuth, requireSuperAdmin, async (req, res) => {
   const t = db.prepare('SELECT id FROM meta_templates WHERE id = ?').get(req.params.id);

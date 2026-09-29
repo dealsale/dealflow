@@ -631,6 +631,8 @@ export const apiEliminarPlantillaMeta = (id: string) =>
   req<{ ok: true }>(`/api/superadmin/meta-templates/${id}`, 'DELETE');
 export const apiPublicarPlantillaMeta = (id: string) =>
   req<{ ok: true; total: number; exitosas: number; errores: number }>(`/api/superadmin/meta-templates/${id}/publicar`, 'POST');
+export const apiPublicarTodasPlantillasMeta = () =>
+  req<{ ok: true; plantillas: number; exitosas: number; errores: number; saltadas: number }>(`/api/superadmin/meta-templates/publicar-todas`, 'POST');
 export const apiRefrescarPlantillaMeta = (id: string) =>
   req<{ ok: true; actualizadas: number }>(`/api/superadmin/meta-templates/${id}/refrescar`, 'POST');
 
