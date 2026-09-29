@@ -45,7 +45,9 @@ import {
   apiEnviarFlujoRemarketing,
   apiPlantillasAprobadas,
   apiEnviarPlantilla,
+  apiAntibaneoEstado,
   type PlantillaAprobada,
+  type AntibaneoEstado,
   apiExtraerPedido,
   apiActualizarPedido,
   apiSendLeadMedia,
@@ -2475,6 +2477,18 @@ export function useDealFlowState() {
       if (apiMode) cargarMensajesChat(leadId);
     });
   }
+  // ── Monitor anti-baneo: avisa en el panel si la tienda se acerca al tope por
+  //    minuto, si el freno retuvo ráfagas, o si la calidad del número bajó. ──
+  const [antibaneo, setAntibaneo] = useState<AntibaneoEstado | null>(null);
+  useEffect(() => {
+    if (!apiMode || !sessionUser) return;
+    let vivo = true;
+    const cargar = () => { void apiAntibaneoEstado().then((r) => { if (vivo && r.data) setAntibaneo(r.data); }); };
+    cargar();
+    const t = setInterval(cargar, 90_000); // revisa cada 90s
+    return () => { vivo = false; clearInterval(t); };
+  }, [apiMode, sessionUser]);
+
   // ── Plantillas aprobadas (enviables desde el chat, incluso pasadas las 24 h) ──
   const [plantillasAprobadas, setPlantillasAprobadas] = useState<PlantillaAprobada[]>([]);
   async function recargarPlantillasAprobadas() {
@@ -3736,6 +3750,7 @@ export function useDealFlowState() {
     crearFlujo,
     flujoMsgRemk,
     enviarFlujoRemarketing,
+    antibaneo,
     plantillasAprobadas,
     enviarPlantillaAChat,
     crmOptin,
