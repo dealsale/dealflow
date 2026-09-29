@@ -53,7 +53,7 @@ export async function apiLogin(email: string, password: string): Promise<{ user?
 }
 
 export function apiLogout() {
-  void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  return fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
 }
 
 export async function apiUpdateMe(nombre: string): Promise<{ user?: ApiUser; error?: string }> {

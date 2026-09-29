@@ -364,12 +364,16 @@
 
 <script>
 (function(){
-  // Los botones "Entrar / Empezar" llevan a la app (app.<tu-dominio>).
+  // Los botones "Entrar / Empezar" llevan a la app. Ahora la app vive en el MISMO
+  // origen (un solo programa): la puerta de entrada es /entrar. Si estamos en un
+  // dominio de solo-landing (raíz o www), saltamos a app.<dominio>/entrar.
   var h = location.hostname.replace(/^www\./,'');
-  var appUrl = (h==='localhost'||h.indexOf('app.')===0||/^\d+\.\d+\.\d+\.\d+$/.test(h)) ? '/' : (location.protocol+'//app.'+h);
+  var mismoOrigen = (h==='localhost'||h.indexOf('app.')===0||/^\d+\.\d+\.\d+\.\d+$/.test(h));
+  var base = mismoOrigen ? '' : (location.protocol+'//app.'+h);
+  var appUrl = base + '/entrar';
   Array.prototype.forEach.call(document.querySelectorAll('.to-app'), function(a){ a.href=appUrl; });
   // "Instala la app": abre la app con ?instalar=1 para que muestre el aviso de instalación PWA.
-  Array.prototype.forEach.call(document.querySelectorAll('.to-app-instalar'), function(a){ a.href=appUrl+(appUrl.indexOf('?')>=0?'&':'?')+'instalar=1'; });
+  Array.prototype.forEach.call(document.querySelectorAll('.to-app-instalar'), function(a){ a.href=appUrl+'?instalar=1'; });
 
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var scroll = document.getElementById('chatScroll');
