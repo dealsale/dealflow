@@ -304,19 +304,33 @@ export function pedidoAWoo(storeId: string, o: Record<string, unknown>, conRecau
   const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string) as
     { qty: number; nombre: string; precio: number }[];
   const numero = Number(o.numero);
-  const total = Number(o.total) || items.reduce((a, it) => a + it.qty * it.precio, 0) + (Number(o.envio) || 0);
+  const envio = Number(o.envio) || 0;
+  const bruto = items.reduce((a, it) => a + it.qty * it.precio, 0); // suma a precio de catálogo
+  const total = Number(o.total) || bruto + envio; // total ACORDADO (ya contempla combos/promos)
+  // Effi EXIGE que los ítems + flete = total. Si hay combo/promo, el total acordado
+  // es menor que la suma a precio de catálogo, así que REPARTIMOS el total entre los
+  // ítems para que sumen exacto (si no, Effi descarta el pedido en silencio).
+  const objetivoItems = Math.max(0, total - envio);
+  let acumulado = 0;
   const line_items = items.map((it, i) => {
     // Buscamos el SKU del ítem por nombre exacto de variante/producto (mejor esfuerzo).
     const prod = buscarProductoDePedido(storeId, it.nombre);
     const sku = prod?.sku || '';
     const product_id = sku ? idEstableDeSku(storeId, sku) : 0;
+    let lineaTotal: number;
+    if (bruto > 0 && objetivoItems > 0) {
+      lineaTotal = i === items.length - 1 ? objetivoItems - acumulado : Math.round((it.qty * it.precio) / bruto * objetivoItems);
+      acumulado += lineaTotal;
+    } else {
+      lineaTotal = it.qty * it.precio;
+    }
+    const precioUnit = it.qty ? Math.round(lineaTotal / it.qty) : lineaTotal;
     return {
       id: i + 1, name: it.nombre, product_id, variation_id: 0, quantity: it.qty,
-      tax_class: '', subtotal: String(it.qty * it.precio), subtotal_tax: '0',
-      total: String(it.qty * it.precio), total_tax: '0', taxes: [], meta_data: [], sku, price: it.precio,
+      tax_class: '', subtotal: String(lineaTotal), subtotal_tax: '0',
+      total: String(lineaTotal), total_tax: '0', taxes: [], meta_data: [], sku, price: precioUnit,
     };
   });
-  const envio = Number(o.envio) || 0;
   return {
     id: numero, parent_id: 0, number: String(numero), order_key: `wc_order_${numero}`,
     created_via: 'rest-api', version: '9.0.0', status: 'processing', currency: 'COP',

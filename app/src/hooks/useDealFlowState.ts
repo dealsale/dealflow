@@ -230,8 +230,8 @@ export interface DecoratedOrder extends Order {
   eliminar: () => void;
   open: () => void;
   sendToDropi: () => void;
-  despachar: (proveedor: 'dropi' | 'effi', transportadora?: string) => void;
-  reenviarDespacho: (proveedor: 'dropi' | 'effi', transportadora?: string) => void;
+  despachar: (proveedor: 'dropi' | 'effi', transportadora?: string, recaudo?: 'con' | 'sin') => void;
+  reenviarDespacho: (proveedor: 'dropi' | 'effi', transportadora?: string, recaudo?: 'con' | 'sin') => void;
   sincronizarEffi: () => void;
   despachado: boolean;
   despachoProveedor: string;
@@ -1141,15 +1141,20 @@ export function useDealFlowState() {
 
   // Despacha el pedido por el proveedor elegido (creándolo en su WooCommerce).
   const [effiMsg, setEffiMsg] = useState('');
-  function despacharPedido(id: string, proveedor: 'dropi' | 'effi', reintentar = false, transportadora = '') {
+  function despacharPedido(id: string, proveedor: 'dropi' | 'effi', reintentar = false, transportadora = '', recaudo: 'con' | 'sin' = 'con') {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o?.rowId) return;
     const nombre = proveedor === 'dropi' ? 'Dropi' : 'Effi';
     setEffiMsg(reintentar ? `Volviendo a enviar a ${nombre}…` : `Enviando a ${nombre}…`);
-    void apiOrderDespachar(o.rowId, proveedor, reintentar, transportadora).then((r) => {
+    void apiOrderDespachar(o.rowId, proveedor, reintentar, transportadora, recaudo).then((r) => {
       if (r.error || !r.data) { setEffiMsg(r.error || `No se pudo enviar a ${nombre}.`); return; }
       const noMap = r.data.sinMapear || [];
-      if (noMap.length) {
+      if (r.data.nativo) {
+        // Effi nativo: se creó la remisión (o quedó sin ítems vinculados).
+        setEffiMsg(noMap.length
+          ? `⚠ Se envió a Effi (remisión ${r.data.remision}), pero ${noMap.length} ítem(s) SIN SKU vinculado: ${noMap.join(', ')}. Ponles el SKU = Referencia de Effi.`
+          : `✓ Pedido enviado a Effi como remisión ${r.data.remision} (${recaudo === 'sin' ? 'sin recaudo' : 'con recaudo'}). Verifícala en Effi.`);
+      } else if (noMap.length) {
         setEffiMsg(`⚠ El pedido llegó a WooCommerce, pero ${noMap.length} producto(s) NO coinciden por SKU con un producto de ${nombre}, así que ${nombre} NO los va a despachar: ${noMap.join(', ')}. Ponles el mismo SKU del producto de ${nombre} en Productos y vuelve a enviar.`);
       } else {
         setEffiMsg(r.data.aviso || `✓ Pedido ${reintentar ? 'reenviado' : 'enviado'} a ${nombre}${transportadora ? ` por ${transportadora}` : ''}. La guía llega cuando lo despachen.`);
@@ -1199,8 +1204,8 @@ export function useDealFlowState() {
         setSection('pedidos');
       },
       sendToDropi: () => sendToDropi(o.id),
-      despachar: (proveedor: 'dropi' | 'effi', transportadora = '') => despacharPedido(o.id, proveedor, false, transportadora),
-      reenviarDespacho: (proveedor: 'dropi' | 'effi', transportadora = '') => despacharPedido(o.id, proveedor, true, transportadora),
+      despachar: (proveedor: 'dropi' | 'effi', transportadora = '', recaudo: 'con' | 'sin' = 'con') => despacharPedido(o.id, proveedor, false, transportadora, recaudo),
+      reenviarDespacho: (proveedor: 'dropi' | 'effi', transportadora = '', recaudo: 'con' | 'sin' = 'con') => despacharPedido(o.id, proveedor, true, transportadora, recaudo),
       sincronizarEffi: () => sincronizarEffi(o.id),
       despachado: !!(o.wooId || o.dropiOrderId),
       despachoProveedor: o.despachoProveedor || '',
