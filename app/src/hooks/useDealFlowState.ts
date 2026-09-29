@@ -809,6 +809,12 @@ export function useDealFlowState() {
   });
   const [loginError, setLoginError] = useState<string>('');
   const [apiMode, setApiMode] = useState<boolean>(false);
+  // Arranque: si el backend ya nos sirvió antes (bootServed), NO sabemos aún si la
+  // sesión sigue viva hasta que responda apiMe(). Mientras tanto mostramos el
+  // preloader en vez del login, para que no parpadee la pantalla de iniciar sesión
+  // (ni datos viejos) antes de cargar el panel real. En demo/primer arranque no hay
+  // nada que esperar, así que no bloqueamos.
+  const [arrancando, setArrancando] = useState<boolean>(bootServed);
   const [storeNombre, setStoreNombre] = useState<string>('');
   const [storeId, setStoreId] = useState<string>('');
   // Tema Premium: solo lo puede elegir la tienda si el Admin se lo habilitó —
@@ -1542,7 +1548,7 @@ export function useDealFlowState() {
         if (rol === 'superadmin') setAdminSection('superadmin');
         if (user && user.role === 'VENDEDOR' && user.esDueno === false) setSection('crm'); // el agente arranca en su CRM
       }
-    });
+    }).finally(() => setArrancando(false)); // ya sabemos si hay sesión: quita el preloader de arranque
   }, []);
 
   // Cuentas de la demo estática (sin backend).
@@ -3949,6 +3955,7 @@ export function useDealFlowState() {
     resetDemo,
 
     isLoggedIn: !!sessionUser,
+    arrancando,
     sessionUser,
     canAdmin: sessionUser?.role === 'admin',
     esAgente,

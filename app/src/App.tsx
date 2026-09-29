@@ -431,6 +431,9 @@ function App() {
     prevLogged.current = df.isLoggedIn;
   }, [df.isLoggedIn]);
 
+  // Mientras confirmamos la sesión con el servidor, mostramos el preloader (no el
+  // login ni datos viejos): evita el parpadeo feo al recargar con sesión activa.
+  if (df.arrancando) return <BotPreloader />;
   if (!df.isLoggedIn) return <Login df={df} />;
   // Muro de pago: la tienda no accede a nada hasta activar su plan (pagar el inicial) o ponerse al día con la renta.
   if (df.isVendedor && df.suscripcion?.bloqueado) {
