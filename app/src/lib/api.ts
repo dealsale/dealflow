@@ -339,8 +339,8 @@ export interface DropiVariacion { id: number; atributos: string; sku: string }
 export interface DropiProducto { id: number; name: string; tipo: string; userId: number; variaciones: DropiVariacion[] }
 export const apiDropiProducto = (id: string) => req<DropiProducto>(`/api/dropi/producto/${encodeURIComponent(id)}`, 'GET');
 export interface DropiTransportadora { id: number; nombre: string; service: string; precio: number }
-export const apiDropiCotizar = (rowId: string) => req<{ ciudad: string; disponibles: DropiTransportadora[]; noDisponibles: { nombre: string; motivo: string }[] }>(`/api/orders/${rowId}/dropi/cotizar`, 'POST');
-export const apiDropiCrear = (rowId: string, transportadora?: DropiTransportadora, reintentar = false) => req<{ ok: true; dropiId: string; transportadora: string; aviso?: string }>(`/api/orders/${rowId}/dropi/crear`, 'POST', { transportadora, reintentar });
+export const apiDropiCotizar = (rowId: string, recaudo: 'con' | 'sin' = 'con') => req<{ ciudad: string; disponibles: DropiTransportadora[]; noDisponibles: { nombre: string; motivo: string }[] }>(`/api/orders/${rowId}/dropi/cotizar`, 'POST', { recaudo });
+export const apiDropiCrear = (rowId: string, transportadora?: DropiTransportadora, reintentar = false, recaudo: 'con' | 'sin' = 'con') => req<{ ok: true; dropiId: string; transportadora: string; aviso?: string }>(`/api/orders/${rowId}/dropi/crear`, 'POST', { transportadora, reintentar, recaudo });
 export const apiWooProveedores = () => req<{ proveedores: string[]; preferido: string; auto: boolean; transportadora: string; transportadoras: string[] }>('/api/woo/proveedores', 'GET');
 export const apiWooPreferido = (proveedor: string, auto = false, transportadora = '') => req<{ ok: true; preferido: string; auto: boolean; transportadora: string }>('/api/woo/preferido', 'POST', { proveedor, auto, transportadora });
 export const apiWooVerificar = (proveedor: string) => req<{ ok: true }>('/api/woo/verificar', 'POST', { proveedor });
