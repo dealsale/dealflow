@@ -42,6 +42,9 @@ export function PlantillasWA({ df }: { df: DealFlowState }) {
           </p>
         </div>
         <div style={{ flex: 1 }} />
+        {!form && df.tiendasCloudCount > 0 && df.plantillasMeta.length > 0 && (
+          <button onClick={df.publicarTodasPlantillasMeta} title="Publica todas las plantillas en las tiendas que aún no las tienen aprobadas (no toca las aprobadas)" style={{ background: 'var(--df-surface)', color: 'var(--df-brand-dark)', border: '1px solid var(--df-brand)', borderRadius: 9, padding: '9px 15px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginRight: 8 }}>📤 Publicar en las que faltan</button>
+        )}
         {!form && <button onClick={abrirNueva} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 9, padding: '9px 15px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>+ Nueva plantilla</button>}
       </div>
       {df.tiendasCloudCount === 0 ? (

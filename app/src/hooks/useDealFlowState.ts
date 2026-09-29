@@ -114,6 +114,7 @@ import {
   apiActualizarPlantillaMeta,
   apiEliminarPlantillaMeta,
   apiPublicarPlantillaMeta,
+  apiPublicarTodasPlantillasMeta,
   apiRefrescarPlantillaMeta,
   apiWooCentral,
   apiGuardarWooCentral,
@@ -3548,6 +3549,14 @@ export function useDealFlowState() {
       cargarPlantillasMeta();
     });
   }
+  function publicarTodasPlantillasMeta() {
+    setPlantillasMetaMsg('Publicando todas las plantillas en las tiendas que faltan…');
+    void apiPublicarTodasPlantillasMeta().then((r) => {
+      if (r.error || !r.data) { setPlantillasMetaMsg(r.error || 'No se pudo publicar.'); return; }
+      setPlantillasMetaMsg(`✓ Listo: ${r.data.plantillas} plantilla(s) revisadas · ${r.data.exitosas} envío(s) a verificación · ${r.data.saltadas} ya aprobadas (no se tocaron)${r.data.errores ? ` · ${r.data.errores} con error` : ''}.`);
+      cargarPlantillasMeta();
+    });
+  }
   function refrescarPlantillaMeta(id: string) {
     setPlantillasMetaMsg('Consultando el estado en Meta…');
     void apiRefrescarPlantillaMeta(id).then((r) => {
@@ -4272,6 +4281,7 @@ export function useDealFlowState() {
     actualizarPlantillaMeta,
     eliminarPlantillaMeta,
     publicarPlantillaMeta,
+    publicarTodasPlantillasMeta,
     refrescarPlantillaMeta,
     // Intervención humana masiva
     intervenirTodosLosChats,
