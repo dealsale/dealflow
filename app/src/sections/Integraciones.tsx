@@ -38,7 +38,7 @@ function DropiApiCard({ df }: { df: DealFlowState }) {
   return (
     <div style={{ background: 'var(--df-surface)', border: `1px solid ${conectada ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 14, padding: 18, marginTop: 4, marginBottom: 14, maxWidth: 620 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--df-warning-subtle)', color: 'var(--df-warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13 }}>Dr</div>
+        <img src="/logos/dropi.jpg" alt="Dropi" style={{ width: 34, height: 34, borderRadius: 9, objectFit: 'cover' }} />
         <div style={{ fontWeight: 700, fontSize: 15 }}>Dropi (API directa)</div>
         <div style={{ flex: 1 }} />
         <Estado on={conectada} />
@@ -197,7 +197,7 @@ function EffiNativoCard({ df }: { df: DealFlowState }) {
   return (
     <div style={cardBase(e.activo)}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 9, background: 'var(--df-purple-subtle)', color: 'var(--df-purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13 }}>Ef</div>
+        <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fff', border: '1px solid var(--df-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, boxSizing: 'border-box' }}><img src="/logos/effi.png" alt="Effi" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /></div>
         <div style={{ fontWeight: 700, fontSize: 15 }}>Effi (DealFlow como tienda)</div>
         <div style={{ flex: 1 }} />
         <Estado on={e.activo} />

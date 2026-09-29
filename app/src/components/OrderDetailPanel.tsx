@@ -205,7 +205,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
                 {df.dropiConectado && (
                   <div>
                     <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--df-warning-subtle)', color: 'var(--df-warning)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11 }}>Dr</span>
+                      <img src="/logos/dropi.jpg" alt="Dropi" style={{ width: 22, height: 22, borderRadius: 6, objectFit: 'cover' }} />
                       Despachar por Dropi
                     </div>
                     <DropiDespacho df={df} sel={sel} onHecho={() => setRedespachar(false)} />
@@ -214,7 +214,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
                 {effiDisponible && (
                   <div style={{ borderTop: df.dropiConectado ? '1px solid var(--df-border)' : 'none', paddingTop: df.dropiConectado ? 12 : 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--df-purple-subtle)', color: 'var(--df-purple)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11 }}>Ef</span>
+                      <img src="/logos/effi.png" alt="Effi" style={{ height: 18, width: 'auto', display: 'block' }} />
                       Despachar por Effi
                     </div>
                     {/* Recaudo: contra entrega (Effi cobra en la entrega) vs prepagado (ya pagó). */}

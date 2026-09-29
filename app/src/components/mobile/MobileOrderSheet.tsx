@@ -101,13 +101,13 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
                 )}
                 {df.dropiConectado && (
                   <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 7 }}>Despachar por Dropi</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 7 }}><img src="/logos/dropi.jpg" alt="Dropi" style={{ width: 20, height: 20, borderRadius: 5, objectFit: 'cover' }} />Despachar por Dropi</div>
                     <DropiDespacho df={df} sel={sel} onHecho={() => setRedespachar(false)} />
                   </div>
                 )}
                 {effiDisponible && (
                   <div style={{ borderTop: df.dropiConectado ? '1px solid var(--df-border)' : 'none', paddingTop: df.dropiConectado ? 10 : 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 7 }}>Despachar por Effi</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 7 }}><img src="/logos/effi.png" alt="Effi" style={{ height: 16, width: 'auto', display: 'block' }} />Despachar por Effi</div>
                     <div style={{ display: 'flex', gap: 6, marginBottom: 9 }}>
                       {(['con', 'sin'] as const).map((r) => (
                         <button key={r} onClick={() => setRecaudo(r)} style={{ flex: 1, background: recaudo === r ? 'var(--df-purple)' : 'var(--df-surface)', color: recaudo === r ? '#fff' : 'var(--df-purple)', border: '1px solid var(--df-purple-border)', borderRadius: 7, padding: '8px 8px', fontFamily: 'inherit', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>{r === 'con' ? 'Con recaudo' : 'Sin recaudo'}</button>
