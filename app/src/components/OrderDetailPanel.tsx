@@ -19,11 +19,12 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
   const [elegida, setElegida] = useState<DropiTransportadora | null>(null);
   const [auto, setAuto] = useState(false);
   const [msg, setMsg] = useState('');
+  const [recaudo, setRecaudo] = useState<'con' | 'sin'>('con');
 
   const cotizar = () => {
     if (!sel.rowId) return;
     setPaso('cargando'); setMsg('Cotizando transportadoras en Dropi…');
-    void apiDropiCotizar(sel.rowId).then((r) => {
+    void apiDropiCotizar(sel.rowId, recaudo).then((r) => {
       if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos cotizar.'); return; }
       setCiudad(r.data.ciudad); setDisponibles(r.data.disponibles); setNoDisp(r.data.noDisponibles);
       setElegida(r.data.disponibles[0] || null); setAuto(false);
@@ -33,7 +34,7 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
   const crear = () => {
     if (!sel.rowId) return;
     setPaso('creando'); setMsg('Creando la orden en Dropi…');
-    void apiDropiCrear(sel.rowId, auto ? undefined : (elegida || undefined)).then((r) => {
+    void apiDropiCrear(sel.rowId, auto ? undefined : (elegida || undefined), false, recaudo).then((r) => {
       if (r.error || !r.data) { setPaso('elegir'); setMsg(r.error || 'No pudimos crear la orden.'); return; }
       df.marcarDropiCreado(sel.id, r.data.dropiId, r.data.transportadora || (auto ? '' : elegida?.nombre || ''));
       setMsg(''); onHecho?.();
@@ -45,6 +46,15 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
   if (paso === 'idle' || paso === 'cargando') {
     return (
       <div>
+        {/* Recaudo: contra entrega (Dropi cobra al entregar) vs prepagado (ya pagó). */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 9 }}>
+          {(['con', 'sin'] as const).map((r) => (
+            <button key={r} onClick={() => setRecaudo(r)} style={{
+              background: recaudo === r ? 'var(--df-warning)' : 'var(--df-surface)', color: recaudo === r ? '#fff' : 'var(--df-warning)',
+              border: '1px solid var(--df-warning)', borderRadius: 7, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer',
+            }}>{r === 'con' ? 'Con recaudo (contra entrega)' : 'Sin recaudo (pagado)'}</button>
+          ))}
+        </div>
         <button onClick={cotizar} disabled={paso === 'cargando'} style={{ ...btnP, opacity: paso === 'cargando' ? 0.7 : 1 }}>
           {paso === 'cargando' ? 'Cotizando…' : '📦 Generar en Dropi'}
         </button>
@@ -91,7 +101,6 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
 
 export function OrderDetailPanel({ df }: { df: DealFlowState }) {
   const [redespachar, setRedespachar] = useState(false);
-  const [recaudo, setRecaudo] = useState<'con' | 'sin'>('con');
   useEffect(() => { void df.cargarEffiWoo?.(); }, []); // saber si el storefront de Effi está activo
   if (!df.hasSelectedOrder || !df.sel) return null;
   const sel = df.sel;
@@ -217,19 +226,10 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
                       <img src="/logos/effi.png" alt="Effi" style={{ height: 18, width: 'auto', display: 'block' }} />
                       Despachar por Effi
                     </div>
-                    {/* Recaudo: contra entrega (Effi cobra en la entrega) vs prepagado (ya pagó). */}
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                      {(['con', 'sin'] as const).map((r) => (
-                        <button key={r} onClick={() => setRecaudo(r)} style={{
-                          background: recaudo === r ? 'var(--df-purple)' : 'var(--df-surface)', color: recaudo === r ? '#fff' : 'var(--df-purple)',
-                          border: '1px solid var(--df-purple-border)', borderRadius: 7, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-                        }}>{r === 'con' ? 'Con recaudo (contra entrega)' : 'Sin recaudo (pagado)'}</button>
-                      ))}
-                    </div>
-                    {/* En Effi NO se elige transportadora: solo llega la remisión de venta.
-                        La guía se genera después dentro de Effi con la transportadora que quieras. */}
-                    <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginBottom: 8, lineHeight: 1.45 }}>Se envía la <b>remisión de venta</b> a Effi. La guía la generas después dentro de Effi con la transportadora que elijas.</div>
-                    <button onClick={() => { sel.despachar('effi', '', recaudo); setRedespachar(false); }} style={{ width: '100%', background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' }}>Enviar remisión a Effi</button>
+                    {/* En Effi NO se elige transportadora ni recaudo: solo llega la remisión
+                        de venta. La guía (y con/sin recaudo) se define después dentro de Effi. */}
+                    <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginBottom: 8, lineHeight: 1.45 }}>Se envía la <b>remisión de venta</b> a Effi. La guía y el recaudo los defines después dentro de Effi con la transportadora que elijas.</div>
+                    <button onClick={() => { sel.despachar('effi'); setRedespachar(false); }} style={{ width: '100%', background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' }}>Generar remisión en Effi</button>
                     {df.effiMsg && <div style={{ marginTop: 10, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
                   </div>
                 )}

@@ -1050,12 +1050,13 @@ api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requireOwner
   if (!c) return res.status(400).json({ error: 'Conecta Dropi API primero en Integraciones.' });
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  const destino = await dropi.resolverDestino(c, String(o.departamento || ''), String(o.ciudad || ''), true);
+  const conRecaudo = req.body?.recaudo !== 'sin'; // 'sin' = prepagado; por defecto contra entrega
+  const destino = await dropi.resolverDestino(c, String(o.departamento || ''), String(o.ciudad || ''), conRecaudo);
   if ('error' in destino) return res.status(400).json({ error: errConOpciones(destino.error, destino.opciones), opciones: destino.opciones });
   const prods = await resolverProductosDropi(sid, o, c, dropi);
   if ('error' in prods) return res.status(400).json({ error: prods.error });
   const monto = Number(o.total || 0);
-  const cot = await dropi.cotizar(c, destino.ciudad, prods.cotProductos, monto, true);
+  const cot = await dropi.cotizar(c, destino.ciudad, prods.cotProductos, monto, conRecaudo);
   if ('error' in cot) return res.status(400).json({ error: cot.error });
   res.json({ ciudad: destino.ciudad.name, ...cot });
 });
@@ -1070,7 +1071,8 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, 
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   if (o.dropi_order_id && req.body?.reintentar !== true) return res.json({ ok: true, dropiId: o.dropi_order_id, aviso: 'Este pedido ya se creó en Dropi.' });
-  const destino = await dropi.resolverDestino(c, String(o.departamento || ''), String(o.ciudad || ''), true);
+  const conRecaudo = req.body?.recaudo !== 'sin'; // 'sin' = prepagado; por defecto contra entrega
+  const destino = await dropi.resolverDestino(c, String(o.departamento || ''), String(o.ciudad || ''), conRecaudo);
   if ('error' in destino) return res.status(400).json({ error: errConOpciones(destino.error, destino.opciones), opciones: destino.opciones });
   const prods = await resolverProductosDropi(sid, o, c, dropi);
   if ('error' in prods) return res.status(400).json({ error: prods.error });
@@ -1081,7 +1083,7 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, 
     total: Number(o.total || 0), notas: `DealFlow DF-${o.numero || ''}${o.nota ? ' · ' + o.nota : ''}`,
     nombre: nombre || String(o.cliente || ''), apellido: resto.join(' '),
     direccion: String(o.direccion || ''), departamento: destino.depto.name, ciudad: destino.ciudad.name,
-    telefono: String(o.tel || ''), conRecaudo: true, shopOrderId: `df-${o.id}`,
+    telefono: String(o.tel || ''), conRecaudo, shopOrderId: `df-${o.id}`,
     productos: prods.ordenProductos, transportadora: t, ciudadDropi: destino.ciudad,
   });
   if ('error' in crear) return res.status(400).json({ error: crear.error });
