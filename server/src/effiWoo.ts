@@ -226,12 +226,15 @@ function manejar(req: Request, res: Response, storeId: string): boolean {
   // GET /wp-json/wc/v3/products/:id/variations → siempre [] (cada SKU es simple)
   if (req.method === 'GET' && /^\/wp-json\/wc\/v3\/products\/\d+\/variations$/.test(ruta)) { res.json([]); return true; }
 
-  // GET /wp-json/wc/v3/orders/:id → el pedido en formato Woo (verificación de Effi)
-  const mOrder = ruta.match(/^\/wp-json\/wc\/v3\/orders\/(\d+)$/);
+  // GET /wp-json/wc/v3/orders/:id → el pedido en formato Woo (verificación de Effi).
+  // Effi consulta el id que le dimos en la remisión ("1054-1"): el número real es
+  // la parte antes del guion. Aceptamos ambos ("1054" y "1054-1").
+  const mOrder = ruta.match(/^\/wp-json\/wc\/v3\/orders\/(\d+)(?:-\d+)?$/);
   if (req.method === 'GET' && mOrder) {
     const numero = Number(mOrder[1]);
     const o = db.prepare('SELECT * FROM orders WHERE store_id = ? AND numero = ?').get(storeId, numero) as Record<string, unknown> | undefined;
-    if (!o) { res.status(404).json({ code: 'woocommerce_rest_shop_order_invalid_id', message: 'Pedido no encontrado.', data: { status: 404 } }); return true; }
+    if (!o) { registrar(storeId, req, true, `orders/${mOrder[1]} → 404 (no existe)`); res.status(404).json({ code: 'woocommerce_rest_shop_order_invalid_id', message: 'Pedido no encontrado.', data: { status: 404 } }); return true; }
+    registrar(storeId, req, true, `orders/${mOrder[1]} → pedido ${numero} ok`);
     res.json(pedidoAWoo(storeId, o));
     return true;
   }
