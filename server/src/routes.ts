@@ -2352,6 +2352,8 @@ const mapLeccion = (l: Record<string, unknown>) => ({
   orden: l.orden ?? 0, publicado: Number(l.publicado) === 1,
   // Guía paso a paso con capturas: [{url, caption}]. Independiente del tipo (video o artículo).
   imagenes: pj<{ url: string; caption?: string }[]>(l.imagenes as string, []),
+  // Varios videos por lección: [{url, titulo}]. Compat: si está vacío y hay video_url, se usa ese.
+  videos: pj<{ url: string; titulo?: string }[]>(l.videos as string, []),
 });
 const mapSeccion = (s: Record<string, unknown>) => ({
   id: s.id, cursoId: s.curso_id, titulo: s.titulo || '', orden: s.orden ?? 0,
@@ -2451,8 +2453,8 @@ api.post('/admin/academy/cursos/:id/lecciones', requireAuth, requireAdmin, (req,
   }
   const id = uid();
   const orden = (db.prepare("SELECT COALESCE(MAX(orden),0)+1 n FROM academy_lecciones WHERE seccion_id = ?").get(seccionId) as { n: number }).n;
-  db.prepare("INSERT INTO academy_lecciones (id, curso_id, seccion_id, titulo, tipo, video_url, contenido, duracion, orden, publicado, imagenes) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-    .run(id, req.params.id, seccionId, String(b.titulo).trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), orden, b.publicado === false ? 0 : 1, j(Array.isArray(b.imagenes) ? b.imagenes : []));
+  db.prepare("INSERT INTO academy_lecciones (id, curso_id, seccion_id, titulo, tipo, video_url, contenido, duracion, orden, publicado, imagenes, videos) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(id, req.params.id, seccionId, String(b.titulo).trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), orden, b.publicado === false ? 0 : 1, j(Array.isArray(b.imagenes) ? b.imagenes : []), j(Array.isArray(b.videos) ? b.videos : []));
   res.json({ ok: true, id });
 });
 api.put('/admin/academy/lecciones/:id', requireAuth, requireAdmin, (req, res) => {
@@ -2460,6 +2462,7 @@ api.put('/admin/academy/lecciones/:id', requireAuth, requireAdmin, (req, res) =>
   if (!l) return res.status(404).json({ error: 'Lección no encontrada.' });
   const b = req.body || {};
   const imagenes = j(Array.isArray(b.imagenes) ? b.imagenes : []);
+  const videos = j(Array.isArray(b.videos) ? b.videos : []);
   // Permitir mover la lección a otra sección del MISMO curso (drag entre secciones).
   let seccionId: string | undefined;
   if (b.seccionId !== undefined) {
@@ -2467,11 +2470,11 @@ api.put('/admin/academy/lecciones/:id', requireAuth, requireAdmin, (req, res) =>
     if (ok) seccionId = String(b.seccionId);
   }
   if (seccionId) {
-    db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ?, seccion_id = ?, imagenes = ? WHERE id = ?")
-      .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, seccionId, imagenes, req.params.id);
+    db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ?, seccion_id = ?, imagenes = ?, videos = ? WHERE id = ?")
+      .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, seccionId, imagenes, videos, req.params.id);
   } else {
-    db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ?, imagenes = ? WHERE id = ?")
-      .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, imagenes, req.params.id);
+    db.prepare("UPDATE academy_lecciones SET titulo = ?, tipo = ?, video_url = ?, contenido = ?, duracion = ?, orden = ?, publicado = ?, imagenes = ?, videos = ? WHERE id = ?")
+      .run(String(b.titulo || '').trim(), b.tipo === 'articulo' ? 'articulo' : 'video', String(b.videoUrl || ''), String(b.contenido || ''), String(b.duracion || ''), Number(b.orden) || 0, b.publicado === false ? 0 : 1, imagenes, videos, req.params.id);
   }
   res.json({ ok: true });
 });

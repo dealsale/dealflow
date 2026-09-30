@@ -571,6 +571,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS academy_lecciones (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_academy_lec_curso ON academy_lecciones(curso_id, orden)');
 addColumn('academy_lecciones', "imagenes TEXT NOT NULL DEFAULT '[]'"); // pasos con captura: [{url, caption}] — guía visual paso a paso
+addColumn('academy_lecciones', "videos TEXT NOT NULL DEFAULT '[]'"); // varios videos por lección: [{url, titulo}] (subidos o YouTube/Vimeo)
 
 // Academy · robustez estilo Udemy ────────────────────────────────────
 // Secciones/módulos: un curso se organiza en secciones y cada lección
