@@ -72,9 +72,22 @@ export function credenciales(storeId: string, prov?: WooProv): Cred | null {
   return null;
 }
 
-/** Proveedores (dropi/effi) disponibles para esta tienda (propios o central). */
+/** ¿La tienda tiene ACTIVO el storefront nativo de Effi (DealFlow como tienda)?
+ *  Se consulta la tabla directamente para no crear un import circular con effiWoo. */
+export function effiNativoActivo(storeId: string): boolean {
+  try {
+    const r = db.prepare('SELECT activo FROM effi_woo WHERE store_id = ?').get(storeId) as { activo: number } | undefined;
+    return !!r?.activo;
+  } catch { return false; }
+}
+
+/** Proveedores (dropi/effi) disponibles para esta tienda (propios, central o Effi nativo). */
 export function proveedoresConectados(storeId: string): WooProv[] {
-  return WOO_PROVEEDORES.filter((p) => credenciales(storeId, p));
+  const provs = WOO_PROVEEDORES.filter((p) => credenciales(storeId, p));
+  // Effi nativo (DealFlow como tienda) cuenta como "effi conectado" aunque no haya
+  // credenciales de un WooCommerce real.
+  if (!provs.includes('effi') && effiNativoActivo(storeId)) provs.push('effi');
+  return provs;
 }
 
 /**
@@ -99,7 +112,7 @@ export function despachoConfig(storeId: string): DespachoPref {
  */
 export function proveedorPreferido(storeId: string): WooProv | null {
   const prov = despachoConfig(storeId).proveedor;
-  if (prov && credenciales(storeId, prov)) return prov;
+  if (prov && (credenciales(storeId, prov) || (prov === 'effi' && effiNativoActivo(storeId)))) return prov;
   return null;
 }
 

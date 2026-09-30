@@ -873,6 +873,21 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
         else console.log('[woo] pedido no auto-enviado: hay 2 proveedores y no hay preferido, se elige a mano');
         return;
       }
+      // Effi NATIVO (DealFlow como tienda): se envía la remisión por webhook, NO por
+      // un WooCommerce real. Igual que el despacho manual, usamos enviarPedidoAEffi.
+      if (prov === 'effi') {
+        const { estadoEffi, enviarPedidoAEffi } = await import('./effiWoo.js');
+        if (estadoEffi(storeId).activo) {
+          const re = await enviarPedidoAEffi(storeId, oid, false, true);
+          if ('error' in re) { console.warn(`[effi] pedido DF-${numero} NO se envió: ${re.error}`); registrarLog(storeId, 'error', 'despacho', `El pedido DF-${numero} no se pudo enviar a Effi: ${re.error}`, lead.id); }
+          else {
+            db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ? WHERE id = ?').run(re.remision, 'effi', oid);
+            if (re.sinSku.length) registrarLog(storeId, 'warn', 'despacho', `DF-${numero} se envió a Effi, pero ${re.sinSku.length} ítem(s) NO tienen SKU vinculado (Effi no los reconocerá): ${re.sinSku.join(', ')}.`, lead.id);
+            else registrarLog(storeId, 'info', 'despacho', `Pedido DF-${numero} enviado a Effi como remisión ${re.remision}.`, lead.id);
+          }
+          return; // ya despachado por la vía nativa
+        }
+      }
       const skus: Record<string, string> = {};
       for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(storeId) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
       const variantesSku = db.prepare("SELECT p.nombre producto, v.label, v.sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(v.sku,'') != ''").all(storeId) as { producto: string; label: string; sku: string }[];
