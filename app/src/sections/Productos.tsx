@@ -4,6 +4,7 @@ import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoU
 import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
 import { apiDropiProducto, type DropiProducto } from '../lib/api';
+import type { Variante } from '../types';
 import { Dropdown } from '../components/Dropdown';
 import { confirmar, notificar } from '../components/dialogs';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
@@ -354,11 +355,70 @@ function SkuVariantesManual({ p, df }: { p: DecoratedProduct; df: DealFlowState 
       <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>
         Escribe la <b>Referencia exacta del artículo en Effi</b> (o el código de Dropi) de cada talla/color. Effi vincula por <b>SKU = Referencia</b>, así casa cada variante. Se guarda al salir del campo.
       </div>
+      <ImportarReferenciasEffi p={p} df={df} variantes={variantes} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {variantes.map((v) => (
           <VarSkuInput key={v.id} label={v.label} sku={v.sku || ''} onSave={(s) => df.setVariantSku(p.id, v.id!, s)} />
         ))}
       </div>
+    </div>
+  );
+}
+
+// Normaliza una etiqueta de variante a un conjunto ORDENADO de tokens, para que
+// "Gris L", "L Gris", "gris · l" o "GRIS-L" cuenten como la MISMA variante.
+const claveVariante = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/talla/g, ' ').replace(/[·\-–—/,|:()]+/g, ' ').split(/\s+/).filter(Boolean).sort().join(' ');
+
+/**
+ * Importador masivo de referencias: el dueño pega una lista "variante = referencia"
+ * (una por línea) y el sistema casa cada línea con la variante por su etiqueta
+ * (Gris L → Gris L) y le pone el SKU. Evita ponerlas una por una.
+ */
+function ImportarReferenciasEffi({ p, df, variantes }: { p: DecoratedProduct; df: DealFlowState; variantes: Variante[] }) {
+  const [abierto, setAbierto] = useState(false);
+  const [texto, setTexto] = useState('');
+  const [resumen, setResumen] = useState('');
+
+  const aplicar = () => {
+    const idx = new Map<string, Variante>();
+    for (const v of variantes) idx.set(claveVariante(v.label), v);
+    let ok = 0; const noCasan: string[] = [];
+    for (const linea of texto.split('\n').map((l) => l.trim()).filter(Boolean)) {
+      // Separadores admitidos: '=', ':', '|', tab o 2+ espacios. Si no hay, la
+      // última palabra es la referencia y el resto la etiqueta.
+      let etiqueta = ''; let ref = '';
+      const m = linea.match(/^(.*?)\s*[=|:\t]\s*(\S.*)$/) || linea.match(/^(.*\S)\s{2,}(\S.*)$/);
+      if (m) { etiqueta = m[1]; ref = m[2]; }
+      else { const w = linea.split(/\s+/); ref = w[w.length - 1]; etiqueta = w.slice(0, -1).join(' '); }
+      etiqueta = etiqueta.trim(); ref = ref.trim();
+      if (!etiqueta || !ref) { noCasan.push(linea); continue; }
+      const v = idx.get(claveVariante(etiqueta));
+      if (v && v.id) { df.setVariantSku(p.id, v.id, ref); ok++; } else noCasan.push(linea);
+    }
+    setResumen(`✓ ${ok} variante(s) vinculada(s).${noCasan.length ? ` No casaron ${noCasan.length}: ${noCasan.slice(0, 4).join(' · ')}${noCasan.length > 4 ? '…' : ''}` : ''}`);
+    if (ok) setTexto('');
+  };
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      {!abierto ? (
+        <button onClick={() => setAbierto(true)} style={{ background: 'var(--df-surface)', border: '1px dashed var(--df-purple-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-purple)', cursor: 'pointer' }}>📋 Pegar varias referencias de una</button>
+      ) : (
+        <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, background: 'var(--df-bg)' }}>
+          <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+            Pega una línea por variante con el formato <b>variante = referencia</b>. El sistema casa cada una por su talla/color. Ejemplo:
+            <pre style={{ margin: '6px 0 0', fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-secondary)', whiteSpace: 'pre-wrap' }}>Gris L = 41{'\n'}Gris M = 42{'\n'}Azul rey M = Dianne</pre>
+          </div>
+          <textarea value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'Gris L = 41\nGris M = 42\n…'} rows={5} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, resize: 'vertical' }} />
+          {resumen && <div style={{ marginTop: 8, fontSize: 12.5, color: resumen.includes('No casaron') ? 'var(--df-warning)' : 'var(--df-brand-dark)' }}>{resumen}</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button onClick={aplicar} disabled={!texto.trim()} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, color: '#fff', cursor: texto.trim() ? 'pointer' : 'not-allowed', opacity: texto.trim() ? 1 : 0.6 }}>Vincular</button>
+            <button onClick={() => { setAbierto(false); setResumen(''); }} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-text-muted)', cursor: 'pointer' }}>Cerrar</button>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--df-text-faint)' }}>Acuérdate de <b>Guardar</b> el producto para que queden.</div>
+        </div>
+      )}
     </div>
   );
 }
