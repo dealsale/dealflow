@@ -101,6 +101,16 @@ function skuDeId(storeId: string, id: number): string | null {
 }
 
 interface ProdBasico { nombre: string; sku: string; precio: number; stock: number }
+// Lista TODOS los productos/variantes con SKU de la tienda (para que Effi liste el
+// catálogo, como haría un WooCommerce real). Dedup por SKU.
+function listarProductos(storeId: string): ProdBasico[] {
+  const skus = new Set<string>();
+  for (const r of db.prepare("SELECT v.sku sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(v.sku,'') != ''").all(storeId) as { sku: string }[]) skus.add(r.sku);
+  for (const r of db.prepare("SELECT sku FROM products WHERE store_id = ? AND COALESCE(sku,'') != ''").all(storeId) as { sku: string }[]) skus.add(r.sku);
+  const out: ProdBasico[] = [];
+  for (const sku of skus) { const p = buscarPorSku(storeId, sku); if (p) out.push(p); }
+  return out;
+}
 // Busca un producto/variante de la tienda por su SKU (exacto, sensible a mayúsculas).
 function buscarPorSku(storeId: string, sku: string): ProdBasico | null {
   const v = db.prepare(
@@ -195,10 +205,22 @@ function manejar(req: Request, res: Response, storeId: string): boolean {
   // GET /wp-json/wc/v3/products?sku=<ref>  → [] o [producto]
   if (req.method === 'GET' && /^\/wp-json\/wc\/v3\/products$/.test(ruta)) {
     const sku = String(req.query.sku || '').trim();
-    if (!sku) { registrar(storeId, req, true, 'products sin sku → []'); res.json([]); return true; }
-    const prod = buscarPorSku(storeId, sku);
-    registrar(storeId, req, true, prod ? `products sku=${sku} → 1 match` : `products sku=${sku} → 0 (SKU no existe en DealFlow)`);
-    res.json(prod ? [wooProducto(storeId, prod)] : []);
+    if (sku) {
+      const prod = buscarPorSku(storeId, sku);
+      registrar(storeId, req, true, prod ? `products sku=${sku} → 1 match` : `products sku=${sku} → 0 (SKU no existe en DealFlow)`);
+      res.json(prod ? [wooProducto(storeId, prod)] : []);
+      return true;
+    }
+    // Sin sku: devolvemos el catálogo COMPLETO paginado (como un WooCommerce real),
+    // para que Effi pueda listar y mapear los productos por Referencia.
+    const todos = listarProductos(storeId);
+    const perPage = Math.min(100, Math.max(1, Number(req.query.per_page) || 100));
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const slice = todos.slice((page - 1) * perPage, page * perPage);
+    res.setHeader('X-WP-Total', String(todos.length));
+    res.setHeader('X-WP-TotalPages', String(Math.max(1, Math.ceil(todos.length / perPage))));
+    registrar(storeId, req, true, `products lista → ${slice.length}/${todos.length} (pág ${page})`);
+    res.json(slice.map((p) => wooProducto(storeId, p)));
     return true;
   }
 
