@@ -41,7 +41,8 @@ const GLOBAL_CSS = `
 
 // ── Tipos ──
 interface PasoImagen { url: string; caption?: string }
-interface Leccion { id: string; cursoId: string; seccionId: string; titulo: string; tipo: 'video' | 'articulo'; videoUrl: string; contenido: string; duracion: string; orden: number; publicado: boolean; imagenes?: PasoImagen[] }
+interface VideoLec { url: string; titulo?: string }
+interface Leccion { id: string; cursoId: string; seccionId: string; titulo: string; tipo: 'video' | 'articulo'; videoUrl: string; contenido: string; duracion: string; orden: number; publicado: boolean; imagenes?: PasoImagen[]; videos?: VideoLec[] }
 interface Seccion { id: string; cursoId: string; titulo: string; orden: number; lecciones: Leccion[] }
 interface Curso { id: string; titulo: string; descripcion: string; portada: string; nivel: string; orden: number; publicado: boolean; lecciones: Leccion[] | number; secciones?: Seccion[]; completadas?: string[] }
 interface Sesion { id: string; nombre: string; role: string }
@@ -274,8 +275,14 @@ function VistaCurso({ cursoId }: { cursoId: string }) {
               >
                 <span style={{ color: C.muted, fontSize: 12, transition: 'transform .2s', display: 'inline-block', transform: abierta ? 'rotate(90deg)' : 'none' }}>▸</span>
                 <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>{s.titulo}</span>
+                {hechasSec === s.lecciones.length && s.lecciones.length > 0 && <span style={{ color: C.emerald, fontSize: 12 }}>✓</span>}
                 <span style={{ color: hechasSec === s.lecciones.length && s.lecciones.length ? C.emerald : C.muted2, fontSize: 11.5, fontWeight: 700 }}>{hechasSec}/{s.lecciones.length}</span>
               </button>
+              {s.lecciones.length > 0 && (
+                <div style={{ height: 3, borderRadius: 99, background: C.line, margin: '0 8px 6px', overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.round((hechasSec / s.lecciones.length) * 100)}%`, height: '100%', background: `linear-gradient(90deg,${C.emerald},${C.sky})`, transition: 'width .4s' }} />
+                </div>
+              )}
               {abierta && s.lecciones.map((l, i) => {
                 const done = completadas.has(l.id);
                 return (
@@ -296,19 +303,29 @@ function VistaCurso({ cursoId }: { cursoId: string }) {
 }
 
 function Reproductor({ leccion }: { leccion: Leccion }) {
-  const emb = leccion.tipo === 'video' ? embedUrl(leccion.videoUrl) : null;
   const pasos = leccion.imagenes || [];
+  // Lista de videos: la nueva (varios) o, si está vacía, el video único legado.
+  const listaVideos = leccion.tipo === 'video'
+    ? (leccion.videos && leccion.videos.length ? leccion.videos : (leccion.videoUrl ? [{ url: leccion.videoUrl, titulo: '' }] : []))
+    : [];
   return (
     <div>
-      {emb && (
-        <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', borderRadius: 12, overflow: 'hidden', background: '#000', marginBottom: 14 }}>
-          {emb.tipo === 'iframe'
-            ? <iframe src={emb.src} title={leccion.titulo} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }} />
-            : <video src={emb.src} controls style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />}
-        </div>
-      )}
       <h2 style={{ fontSize: 19, fontWeight: 750, margin: '0 0 8px' }}>{leccion.titulo}</h2>
-      {leccion.contenido && <div style={{ color: '#D3DEE6', fontSize: 15, lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: pasos.length ? 20 : 0 }}>{leccion.contenido}</div>}
+      {leccion.contenido && <div style={{ color: '#D3DEE6', fontSize: 15, lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: 16 }}>{leccion.contenido}</div>}
+      {listaVideos.map((v, i) => {
+        const emb = embedUrl(v.url);
+        if (!emb) return null;
+        return (
+          <div key={i} style={{ marginBottom: 16 }}>
+            {v.titulo && <div style={{ fontSize: 15, fontWeight: 700, margin: '0 0 8px', color: C.text }}>{listaVideos.length > 1 ? `${i + 1}. ` : ''}{v.titulo}</div>}
+            <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', borderRadius: 12, overflow: 'hidden', background: '#000' }}>
+              {emb.tipo === 'iframe'
+                ? <iframe src={emb.src} title={v.titulo || leccion.titulo} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }} />
+                : <video src={emb.src} controls style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />}
+            </div>
+          </div>
+        );
+      })}
       {!!pasos.length && <GuiaPasos pasos={pasos} />}
     </div>
   );
@@ -495,7 +512,7 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
   const totalLec = secciones.reduce((n, s) => n + s.lecciones.length, 0);
 
   const guardarLec = async (seccionId: string, l: Partial<Leccion>) => {
-    const body = { titulo: l.titulo, tipo: l.tipo, videoUrl: l.videoUrl, contenido: l.contenido, duracion: l.duracion, orden: l.orden, publicado: l.publicado, seccionId, imagenes: l.imagenes || [] };
+    const body = { titulo: l.titulo, tipo: l.tipo, videoUrl: l.videoUrl, contenido: l.contenido, duracion: l.duracion, orden: l.orden, publicado: l.publicado, seccionId, imagenes: l.imagenes || [], videos: l.videos || [] };
     const r = l.id ? await aReq(`/api/admin/academy/lecciones/${l.id}`, 'PUT', body) : await aReq(`/api/admin/academy/cursos/${curso.id}/lecciones`, 'POST', body);
     if (r.error) { notificar(r.error, 'error'); return; }
     setEditLec(null); onCambio();
@@ -573,12 +590,20 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
 }
 
 function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Leccion>; onGuardar: (l: Partial<Leccion>) => void; onCancelar: () => void }) {
-  const [f, setF] = useState<Partial<Leccion>>(leccion);
+  // Compat: si la lección venía con un solo video (videoUrl legado) y aún no tiene
+  // lista de videos, la inicializamos con ese video para poder agregar más.
+  const [f, setF] = useState<Partial<Leccion>>(() => {
+    const vids = leccion.videos && leccion.videos.length ? leccion.videos
+      : (leccion.videoUrl ? [{ url: leccion.videoUrl, titulo: '' }] : []);
+    return { ...leccion, videos: vids };
+  });
   const [subiendo, setSubiendo] = useState(false);
   const [subVideo, setSubVideo] = useState(false);
   const set = (k: keyof Leccion, v: unknown) => setF((p) => ({ ...p, [k]: v }));
   const pasos = f.imagenes || [];
   const setPasos = (n: PasoImagen[]) => set('imagenes', n);
+  const videos = f.videos || [];
+  const setVideos = (n: VideoLec[]) => set('videos', n);
 
   const subirCaptura = async (file: File) => {
     setSubiendo(true);
@@ -590,7 +615,7 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
     setSubVideo(true);
     const url = await subirArchivoAcademy(file);
     setSubVideo(false);
-    if (url) set('videoUrl', url);
+    if (url) setVideos([...(f.videos || []), { url, titulo: '' }]);
   };
 
   return (
@@ -603,19 +628,34 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
         <input value={f.duracion || ''} onChange={(e) => set('duracion', e.target.value)} placeholder="Duración (ej. 5:30)" style={{ ...inputA, width: 150 }} />
       </div>
       {f.tipo !== 'articulo' && (
-        <>
-          <input value={f.videoUrl || ''} onChange={(e) => set('videoUrl', e.target.value)} placeholder="URL del video (YouTube, Vimeo o .mp4)" style={inputA} />
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-            <label style={{ ...btnGhost, display: 'inline-block', borderStyle: 'dashed', cursor: subVideo ? 'default' : 'pointer', opacity: subVideo ? 0.6 : 1 }}>
+        <div style={{ border: `1px dashed ${C.line2}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 10 }}>🎬 Videos de la lección</div>
+          {videos.map((v, i) => (
+            <div key={i} style={{ marginBottom: 12, background: 'rgba(255,255,255,.03)', borderRadius: 9, padding: 10 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <button onClick={() => i > 0 && setVideos(videos.map((x, k) => k === i - 1 ? videos[i] : k === i ? videos[i - 1] : x))} disabled={i === 0} style={{ ...btnGhost, padding: '2px 7px', fontSize: 11, opacity: i === 0 ? 0.35 : 1 }} title="Subir">▲</button>
+                  <button onClick={() => i < videos.length - 1 && setVideos(videos.map((x, k) => k === i + 1 ? videos[i] : k === i ? videos[i + 1] : x))} disabled={i === videos.length - 1} style={{ ...btnGhost, padding: '2px 7px', fontSize: 11, opacity: i === videos.length - 1 ? 0.35 : 1 }} title="Bajar">▼</button>
+                </div>
+                <span style={{ width: 22, height: 22, borderRadius: '50%', background: C.emerald, color: '#052018', fontWeight: 800, fontSize: 11.5, display: 'grid', placeItems: 'center', flexShrink: 0 }}>{i + 1}</span>
+                <input value={v.titulo || ''} onChange={(e) => setVideos(videos.map((x, k) => k === i ? { ...x, titulo: e.target.value } : x))} placeholder="Título del video (opcional)" style={{ ...inputA, marginBottom: 0, flex: 1 }} />
+                <button onClick={() => setVideos(videos.filter((_, k) => k !== i))} style={{ ...btnGhost, padding: '5px 9px', color: C.danger, flexShrink: 0 }}>×</button>
+              </div>
+              <input value={v.url || ''} onChange={(e) => setVideos(videos.map((x, k) => k === i ? { ...x, url: e.target.value } : x))} placeholder="URL (YouTube, Vimeo o .mp4)" style={{ ...inputA, marginBottom: v.url ? 8 : 0 }} />
+              {v.url && v.url.startsWith('/api/academy/media/') && (
+                <video src={v.url} controls style={{ width: '100%', maxHeight: 180, borderRadius: 8, border: `1px solid ${C.line2}`, background: '#000' }} />
+              )}
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => setVideos([...videos, { url: '', titulo: '' }])} style={{ ...btnGhost, borderStyle: 'dashed', fontSize: 12.5 }}>+ Agregar video por URL</button>
+            <label style={{ ...btnGhost, display: 'inline-block', borderStyle: 'dashed', cursor: subVideo ? 'default' : 'pointer', opacity: subVideo ? 0.6 : 1, fontSize: 12.5 }}>
               {subVideo ? 'Subiendo video…' : '⬆️ Subir video (mp4)'}
               <input type="file" accept="video/*" disabled={subVideo} onChange={(e) => { const file = e.target.files?.[0]; if (file) void subirVideo(file); e.target.value = ''; }} style={{ display: 'none' }} />
             </label>
-            <span style={{ fontSize: 11.5, color: C.muted2 }}>Máx. ~25 MB. Para videos largos usa mejor una URL de YouTube o Vimeo.</span>
           </div>
-          {f.videoUrl && f.videoUrl.startsWith('/api/academy/media/') && (
-            <video src={f.videoUrl} controls style={{ width: '100%', maxHeight: 200, borderRadius: 8, border: `1px solid ${C.line2}`, marginBottom: 10, background: '#000' }} />
-          )}
-        </>
+          <div style={{ fontSize: 11.5, color: C.muted2, marginTop: 8 }}>Puedes poner varios videos: unos subidos (máx. ~25 MB c/u) y otros por URL de YouTube/Vimeo. Se muestran en orden en el portal.</div>
+        </div>
       )}
       <textarea value={f.contenido || ''} onChange={(e) => set('contenido', e.target.value)} placeholder={f.tipo === 'articulo' ? 'Contenido del artículo…' : 'Descripción / notas (opcional)'} style={{ ...inputA, minHeight: f.tipo === 'articulo' ? 160 : 70, resize: 'vertical' }} />
 
@@ -643,7 +683,7 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
         <input type="checkbox" checked={f.publicado !== false} onChange={(e) => set('publicado', e.target.checked)} /> Publicada
       </label>
       <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={() => onGuardar(f)} style={btnPrimary}>Guardar lección</button>
+        <button onClick={() => onGuardar({ ...f, videoUrl: (f.videos && f.videos[0]?.url) || f.videoUrl || '' })} style={btnPrimary}>Guardar lección</button>
         <button onClick={onCancelar} style={btnGhost}>Cancelar</button>
       </div>
     </div>
