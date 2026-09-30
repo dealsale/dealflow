@@ -4,7 +4,7 @@ import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoU
 import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
 import { apiDropiProducto, type DropiProducto } from '../lib/api';
-import type { Variante } from '../types';
+import type { Variante, Opcion } from '../types';
 import { Dropdown } from '../components/Dropdown';
 import { confirmar, notificar } from '../components/dialogs';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
@@ -344,8 +344,15 @@ function SkuVariantesDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }
  */
 function SkuVariantesManual({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
   const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
+  const [orden, setOrden] = useState<'def' | 'color' | 'talla'>('def');
   if (!variantes.length) return null;
   const conSku = variantes.filter((v) => (v.sku || '').trim()).length;
+  const mostradas = orden === 'def' ? variantes : ordenarVariantes(variantes, p.opciones, orden);
+  const btnOrden = (modo: 'def' | 'color' | 'talla'): CSSProperties => ({
+    background: orden === modo ? 'var(--df-brand)' : 'var(--df-surface)', color: orden === modo ? '#fff' : 'var(--df-text-secondary)',
+    border: `1px solid ${orden === modo ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 7, padding: '4px 10px',
+    fontFamily: 'inherit', fontWeight: 600, fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap',
+  });
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -355,9 +362,15 @@ function SkuVariantesManual({ p, df }: { p: DecoratedProduct; df: DealFlowState 
       <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>
         Escribe la <b>Referencia exacta del artículo en Effi</b> (o el código de Dropi) de cada talla/color. Effi vincula por <b>SKU = Referencia</b>, así casa cada variante. Se guarda al salir del campo.
       </div>
-      <ImportarReferenciasEffi p={p} df={df} variantes={variantes} />
+      {/* Ordenar la lista para gestionarla más fácil (agrupar por color o por talla). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', fontWeight: 600 }}>Ordenar:</span>
+        <button onClick={() => setOrden('def')} style={btnOrden('def')}>Por defecto</button>
+        <button onClick={() => setOrden('color')} style={btnOrden('color')}>Por color</button>
+        <button onClick={() => setOrden('talla')} style={btnOrden('talla')}>Por talla</button>
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {variantes.map((v) => (
+        {mostradas.map((v) => (
           <VarSkuInput key={v.id} label={v.label} sku={v.sku || ''} onSave={(s) => df.setVariantSku(p.id, v.id!, s)} />
         ))}
       </div>
@@ -365,62 +378,35 @@ function SkuVariantesManual({ p, df }: { p: DecoratedProduct; df: DealFlowState 
   );
 }
 
-// Normaliza una etiqueta de variante a un conjunto ORDENADO de tokens, para que
-// "Gris L", "L Gris", "gris · l" o "GRIS-L" cuenten como la MISMA variante.
-const claveVariante = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .toLowerCase().replace(/talla/g, ' ').replace(/[·\-–—/,|:()]+/g, ' ').split(/\s+/).filter(Boolean).sort().join(' ');
+// Rango de tallas para ordenar cuando el producto no define el grupo "Talla".
+const RANGO_TALLA: Record<string, number> = { xs: 0, s: 1, m: 2, l: 3, xl: 4, xxl: 5, '2xl': 5, xxxl: 6, '3xl': 6, unica: 99 };
+const normTok = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
 /**
- * Importador masivo de referencias: el dueño pega una lista "variante = referencia"
- * (una por línea) y el sistema casa cada línea con la variante por su etiqueta
- * (Gris L → Gris L) y le pone el SKU. Evita ponerlas una por una.
+ * Ordena las variantes agrupando por COLOR o por TALLA (para gestionarlas: tener
+ * todos los amarillos juntos, o todas las M juntas). Usa el orden que el dueño
+ * definió en las opciones (Color/Talla); si no hay, adivina la talla por su rango.
  */
-function ImportarReferenciasEffi({ p, df, variantes }: { p: DecoratedProduct; df: DealFlowState; variantes: Variante[] }) {
-  const [abierto, setAbierto] = useState(false);
-  const [texto, setTexto] = useState('');
-  const [resumen, setResumen] = useState('');
-
-  const aplicar = () => {
-    const idx = new Map<string, Variante>();
-    for (const v of variantes) idx.set(claveVariante(v.label), v);
-    let ok = 0; const noCasan: string[] = [];
-    for (const linea of texto.split('\n').map((l) => l.trim()).filter(Boolean)) {
-      // Separadores admitidos: '=', ':', '|', tab o 2+ espacios. Si no hay, la
-      // última palabra es la referencia y el resto la etiqueta.
-      let etiqueta = ''; let ref = '';
-      const m = linea.match(/^(.*?)\s*[=|:\t]\s*(\S.*)$/) || linea.match(/^(.*\S)\s{2,}(\S.*)$/);
-      if (m) { etiqueta = m[1]; ref = m[2]; }
-      else { const w = linea.split(/\s+/); ref = w[w.length - 1]; etiqueta = w.slice(0, -1).join(' '); }
-      etiqueta = etiqueta.trim(); ref = ref.trim();
-      if (!etiqueta || !ref) { noCasan.push(linea); continue; }
-      const v = idx.get(claveVariante(etiqueta));
-      if (v && v.id) { df.setVariantSku(p.id, v.id, ref); ok++; } else noCasan.push(linea);
-    }
-    setResumen(`✓ ${ok} variante(s) vinculada(s).${noCasan.length ? ` No casaron ${noCasan.length}: ${noCasan.slice(0, 4).join(' · ')}${noCasan.length > 4 ? '…' : ''}` : ''}`);
-    if (ok) setTexto('');
+function ordenarVariantes(variantes: Variante[], opciones: Opcion[] | undefined, modo: 'color' | 'talla'): Variante[] {
+  const gc = (opciones || []).find((g) => /color/i.test(g.nombre));
+  const gt = (opciones || []).find((g) => /(talla|tama|size)/i.test(g.nombre));
+  const colores = (gc?.valores || []).map((v) => normTok(v.valor));
+  const tallas = (gt?.valores || []).map((v) => normTok(v.valor));
+  const analiza = (label: string) => {
+    const tokens = label.split(/[·\-–—/,|]+/).map((t) => normTok(t)).filter(Boolean);
+    let color = ''; let talla = '';
+    for (const t of tokens) { if (!color && colores.includes(t)) color = t; else if (!talla && tallas.includes(t)) talla = t; }
+    if (!talla) talla = tokens.find((t) => t in RANGO_TALLA) || '';
+    if (!color) color = tokens.find((t) => t !== talla) || label.toLowerCase();
+    return { color, talla };
   };
-
-  return (
-    <div style={{ marginBottom: 10 }}>
-      {!abierto ? (
-        <button onClick={() => setAbierto(true)} style={{ background: 'var(--df-surface)', border: '1px dashed var(--df-purple-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-purple)', cursor: 'pointer' }}>📋 Pegar varias referencias de una</button>
-      ) : (
-        <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, background: 'var(--df-bg)' }}>
-          <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
-            Pega una línea por variante con el formato <b>variante = referencia</b>. El sistema casa cada una por su talla/color. Ejemplo:
-            <pre style={{ margin: '6px 0 0', fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-secondary)', whiteSpace: 'pre-wrap' }}>Gris L = 41{'\n'}Gris M = 42{'\n'}Azul rey M = Dianne</pre>
-          </div>
-          <textarea value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'Gris L = 41\nGris M = 42\n…'} rows={5} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, resize: 'vertical' }} />
-          {resumen && <div style={{ marginTop: 8, fontSize: 12.5, color: resumen.includes('No casaron') ? 'var(--df-warning)' : 'var(--df-brand-dark)' }}>{resumen}</div>}
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button onClick={aplicar} disabled={!texto.trim()} style={{ background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, color: '#fff', cursor: texto.trim() ? 'pointer' : 'not-allowed', opacity: texto.trim() ? 1 : 0.6 }}>Vincular</button>
-            <button onClick={() => { setAbierto(false); setResumen(''); }} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-text-muted)', cursor: 'pointer' }}>Cerrar</button>
-          </div>
-          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--df-text-faint)' }}>Acuérdate de <b>Guardar</b> el producto para que queden.</div>
-        </div>
-      )}
-    </div>
-  );
+  const iColor = (c: string) => { const i = colores.indexOf(c); return i < 0 ? 999 : i; };
+  const iTalla = (t: string) => { const i = tallas.indexOf(t); if (i >= 0) return i; return t in RANGO_TALLA ? 100 + RANGO_TALLA[t] : 999; };
+  return [...variantes].sort((a, b) => {
+    const A = analiza(a.label); const B = analiza(b.label);
+    if (modo === 'color') return iColor(A.color) - iColor(B.color) || A.color.localeCompare(B.color) || iTalla(A.talla) - iTalla(B.talla) || a.label.localeCompare(b.label);
+    return iTalla(A.talla) - iTalla(B.talla) || A.talla.localeCompare(B.talla) || iColor(A.color) - iColor(B.color) || a.label.localeCompare(b.label);
+  });
 }
 
 function VarSkuInput({ label, sku, onSave }: { label: string; sku: string; onSave: (sku: string) => void }) {
