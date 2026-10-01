@@ -1030,6 +1030,46 @@ api.post('/dropi/preferencia', requireAuth, requireStore, requireOwner, (req, re
   res.json({ ok: true, preferencia: cfg.preferencia });
 });
 
+// ── Shopify (Admin API) ──────────────────────────────────────────────
+// Estado de la conexión (sin exponer el token).
+api.get('/shopify/estado', requireAuth, requireStore, (req, res) => {
+  const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").get(req.user!.storeId!) as { config: string } | undefined;
+  const cfg = row ? JSON.parse(row.config || '{}') : {};
+  res.json({ conectado: !!(cfg.shop && cfg.token), shop: cfg.shop || '', nombre: cfg.nombre || '' });
+});
+
+// Conecta/actualiza Shopify (dominio + Admin API token) y prueba la conexión.
+api.post('/shopify/conectar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const { normalizarShop, probarShopify } = await import('./shopify.js');
+  const shop = normalizarShop(String(req.body?.shop || ''));
+  const token = String(req.body?.token || '').trim();
+  if (!shop || !token) return res.status(400).json({ error: 'Falta el dominio de la tienda (mitienda.myshopify.com) o el Admin API token.' });
+  const prueba = await probarShopify(shop, token);
+  if (!prueba.ok) return res.status(400).json({ error: prueba.error });
+  db.prepare(
+    `INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?, 'shopify', ?, datetime('now'))
+     ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = datetime('now')`,
+  ).run(sid, JSON.stringify({ shop, token, nombre: prueba.nombre }));
+  res.json({ ok: true, nombre: prueba.nombre, shop });
+});
+
+api.post('/shopify/desconectar', requireAuth, requireStore, requireOwner, (req, res) => {
+  db.prepare("DELETE FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").run(req.user!.storeId!);
+  res.json({ ok: true });
+});
+
+// Prueba de vinculación: busca una variante por SKU en Shopify.
+api.get('/shopify/producto', requireAuth, requireStore, async (req, res) => {
+  const { credShopify, buscarVarPorSku } = await import('./shopify.js');
+  const c = credShopify(req.user!.storeId!);
+  if (!c) return res.status(400).json({ error: 'Conecta Shopify primero en Integraciones.' });
+  const sku = String(req.query.sku || '').trim();
+  if (!sku) return res.status(400).json({ error: 'Falta el SKU a buscar.' });
+  const v = await buscarVarPorSku(c, sku);
+  res.json({ encontrado: !!v, variante: v });
+});
+
 // Valida un ID de producto de Dropi (para vincularlo): trae nombre y variaciones.
 api.get('/dropi/producto/:id', requireAuth, requireStore, async (req, res) => {
   const { credDropi, productoDropi } = await import('./dropiApi.js');
