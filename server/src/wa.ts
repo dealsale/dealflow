@@ -314,13 +314,16 @@ const RANK_ESTADO: Record<string, number> = { enviado: 1, entregado: 2, visto: 3
  * lo deja en 'enviado'. Si el envío falló, lo deja en 'fallido'. Los envíos por
  * web/QR (sin wamid) no llevan estado (no hay acuses de la Cloud API).
  */
-export function marcarEnviado(rowId: string, r: { ok: boolean; wamid?: string }) {
+export function marcarEnviado(rowId: string, r: { ok: boolean; wamid?: string; bloqueadoVentana?: boolean }) {
   if (!rowId) return;
   // Sella created_at al MOMENTO real del envío (después del tope de velocidad),
   // no al de la inserción. Así el historial y la auditoría reflejan el espaciado
   // real entre mensajes (y no marcan ráfagas falsas cuando se insertan en lote).
   if (r.ok && r.wamid) db.prepare("UPDATE messages SET wa_msg_id = ?, estado = 'enviado', created_at = datetime('now') WHERE id = ?").run(r.wamid, rowId);
   else if (r.ok) db.prepare("UPDATE messages SET estado = 'enviado', created_at = datetime('now') WHERE id = ?").run(rowId);
+  // Bloqueo por ventana de 24 h: es una PROTECCIÓN nuestra, NO una falla de Meta.
+  // Se marca aparte ('bloqueado') y se re-sella la hora para no agrupar falsas ráfagas.
+  else if (r.bloqueadoVentana) db.prepare("UPDATE messages SET estado = 'bloqueado', created_at = datetime('now') WHERE id = ?").run(rowId);
   else db.prepare("UPDATE messages SET estado = 'fallido' WHERE id = ?").run(rowId);
 }
 
