@@ -440,6 +440,10 @@ addColumn('leads', 'optin_at TEXT');
 addColumn('orders', "ad_id TEXT NOT NULL DEFAULT ''");
 addColumn('orders', "ad_ref TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_orders_ad ON orders(store_id, ad_id)');
+// Origen de la venta (de DÓNDE vino el pedido), independiente del proveedor de
+// despacho: whatsapp | messenger | instagram | shopify | landing | web | manual.
+addColumn('orders', "origen TEXT NOT NULL DEFAULT ''");
+db.exec('CREATE INDEX IF NOT EXISTS idx_orders_origen ON orders(store_id, origen)');
 
 // Flujos de remarketing: plantillas de contenido (bloques texto/imagen/video/audio,
 // igual que el mensaje inicial) que la tienda arma para reenganchar clientes. Se
