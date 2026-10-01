@@ -585,7 +585,7 @@ export interface Hallazgo { gravedad: 'alta' | 'media' | 'baja' | 'ok'; titulo: 
 export interface ReporteBaneo {
   tienda: { id: string; nombre: string };
   rango: { desde: string; hasta: string; dias: number };
-  totales: { chats: number; entrantes: number; salientes: number; mediaSalientes: number; fallidos: number };
+  totales: { chats: number; entrantes: number; salientes: number; mediaSalientes: number; fallidos: number; bloqueados?: number };
   senales: {
     iniciadosPorNegocio: number; ejemplosIniciados: string[]; fueraDe24h: number;
     rafagas: number; rafagaMax: number; gapMinSaliente: number; picoPorMinuto: number;

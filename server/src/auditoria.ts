@@ -33,7 +33,7 @@ export interface ReporteBaneo {
   rango: { desde: string; hasta: string; dias: number };
   totales: {
     chats: number; entrantes: number; salientes: number; mediaSalientes: number;
-    fallidos: number;
+    fallidos: number; bloqueados: number;
   };
   senales: {
     iniciadosPorNegocio: number; ejemplosIniciados: string[];
@@ -75,7 +75,7 @@ export function auditarBaneo(storeId: string, desde?: string, hasta?: string): R
   const telDe = new Map(leads.map((l) => [l.id, l.tel] as const));
   const ids = leads.map((l) => l.id);
 
-  const totales = { chats: leads.length, entrantes: 0, salientes: 0, mediaSalientes: 0, fallidos: 0 };
+  const totales = { chats: leads.length, entrantes: 0, salientes: 0, mediaSalientes: 0, fallidos: 0, bloqueados: 0 };
   const senales = {
     iniciadosPorNegocio: 0, ejemplosIniciados: [] as string[],
     fueraDe24h: 0, rafagas: 0, rafagaMax: 0, gapMinSaliente: Number.POSITIVE_INFINITY,
@@ -148,6 +148,13 @@ export function auditarBaneo(storeId: string, desde?: string, hasta?: string): R
         esperandoRespuesta = true; respuestaDesde = ts;
         rachaOut = 0; prevOutTs = 0; // se corta cualquier racha de salientes
       } else if (OUT.has(m.de)) {
+        // Bloqueado por la ventana de 24 h: NUNCA salió a Meta (protección nuestra).
+        // No cuenta como saliente ni para ráfagas/picos; corta cualquier racha.
+        if (String(m.estado || '') === 'bloqueado') {
+          if (dentro) totales.bloqueados++;
+          cerrarRacha(); rachaOut = 0; prevOutTs = 0;
+          continue;
+        }
         if (dentro) {
           totales.salientes++;
           if (m.tipo && m.tipo !== 'texto') totales.mediaSalientes++;
@@ -167,8 +174,10 @@ export function auditarBaneo(storeId: string, desde?: string, hasta?: string): R
           esperandoRespuesta = false;
         }
 
-        // Ráfagas: 3+ salientes casi instantáneos (menos de 3 s entre uno y otro).
-        if (prevOutTs && ts - prevOutTs < 3000) {
+        // Ráfagas: 3+ salientes casi instantáneos. Umbral < 1.5 s, POR DEBAJO del
+        // espacio mínimo del freno (2.5 s/chat): así no marca como ráfaga lo que el
+        // anti-baneo ya dejó bien espaciado; solo marca disparos reales (mismo instante).
+        if (prevOutTs && ts - prevOutTs < 1500) {
           if (rachaOut === 0) rachaOut = 1;
           rachaOut++;
           const gap = ts - prevOutTs;
