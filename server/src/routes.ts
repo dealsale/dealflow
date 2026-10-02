@@ -1050,13 +1050,14 @@ api.get('/shopify/estado', requireAuth, requireStore, (req, res) => {
 // Conecta/actualiza Shopify (dominio + Admin API token) y prueba la conexión.
 api.post('/shopify/conectar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const sid = req.user!.storeId!;
-  const { normalizarShop, probarShopify } = await import('./shopify.js');
+  const { normalizarShop, probarShopify, olvidarTokenShopify } = await import('./shopify.js');
   const shop = normalizarShop(String(req.body?.shop || ''));
   const token = String(req.body?.token || '').trim();
   const clientId = String(req.body?.clientId || '').trim();
   const clientSecret = String(req.body?.clientSecret || '').trim();
   if (!shop) return res.status(400).json({ error: 'Falta el dominio de la tienda (mitienda.myshopify.com).' });
   if (!token && !(clientId && clientSecret)) return res.status(400).json({ error: 'Pon el Admin API token, o el Client ID + Client Secret de la app.' });
+  olvidarTokenShopify(shop); // por si cambió los scopes: forzar token nuevo
   const prueba = await probarShopify(shop, { token, clientId, clientSecret });
   if (!prueba.ok) return res.status(400).json({ error: prueba.error });
   db.prepare(
@@ -1080,6 +1081,37 @@ api.get('/shopify/producto', requireAuth, requireStore, async (req, res) => {
   if (!sku) return res.status(400).json({ error: 'Falta el SKU a buscar.' });
   const v = await buscarVarPorSku(c, sku);
   res.json({ encontrado: !!v, variante: v });
+});
+
+// Crea/publica un producto de DealFlow EN Shopify (productSet) y guarda el SKU
+// resultante en refs.shopify de cada variante (para que los pedidos la encuentren).
+api.post('/shopify/publicar-producto', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const { credShopify, crearProductoEnShopify } = await import('./shopify.js');
+  const c = credShopify(sid);
+  if (!c) return res.status(400).json({ error: 'Conecta Shopify primero en Integraciones.' });
+  const productId = String(req.body?.productId || '');
+  const activar = !!req.body?.activar;
+  const prow = db.prepare('SELECT * FROM products WHERE id = ? AND store_id = ?').get(productId, sid) as Record<string, unknown> | undefined;
+  if (!prow) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const variantes = (db.prepare('SELECT id, label, sku, stock, refs FROM variants WHERE product_id = ? ORDER BY orden').all(productId) as Record<string, unknown>[]).map((v) => ({
+    id: String(v.id), label: String(v.label || ''), sku: String(v.sku || ''), stock: Number(v.stock) || 0,
+    refs: pj<Record<string, string>>(v.refs as string, {}),
+  }));
+  const producto = {
+    id: String(prow.id), nombre: String(prow.nombre || ''), precio: Number(prow.precio) || 0,
+    descripcion: String(prow.descripcion || ''), caracteristicas: String(prow.caracteristicas || ''),
+    fotos: pj<string[]>(prow.fotos as string, []),
+    opciones: pj<{ nombre: string; valores: { valor: string }[] }[]>(prow.opciones as string, []),
+    variantes,
+  };
+  const r = await crearProductoEnShopify(c, producto, { activar });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  // Guardar el SKU usado en refs.shopify de cada variante (si no lo tenían ya).
+  const upd = db.prepare("UPDATE variants SET refs = json_set(COALESCE(NULLIF(refs,''),'{}'), '$.shopify', ?) WHERE id = ? AND product_id = ?");
+  const tx = db.transaction(() => { for (const m of r.mapSku) upd.run(m.sku, m.dfVariantId, productId); });
+  tx();
+  res.json({ ok: true, productId: r.productId, status: r.status, variantes: r.variantes, imagenes: r.imagenes, vinculadas: r.mapSku.length });
 });
 
 // Valida un ID de producto de Dropi (para vincularlo): trae nombre y variaciones.

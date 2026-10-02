@@ -51,6 +51,12 @@ export function credShopify(storeId: string): ShopifyCred | null {
 // Cache en memoria de tokens obtenidos por client credentials: "shop:clientId" → {token, exp(ms)}.
 const ccgCache = new Map<string, { token: string; exp: number }>();
 
+/** Olvida el token cacheado de una tienda (p.ej. al reconectar tras cambiar scopes). */
+export function olvidarTokenShopify(shop: string): void {
+  const s = normalizarShop(shop);
+  for (const k of [...ccgCache.keys()]) if (k.startsWith(`${s}:`)) ccgCache.delete(k);
+}
+
 /**
  * Resuelve el token de acceso a usar: el estático si lo hay, o uno nuevo por
  * "client credentials" (cacheado hasta ~24h). El flujo client credentials solo
@@ -221,4 +227,91 @@ export async function crearBorradorShopify(cred: ShopifyCred, p: PedidoShopify):
   const d = out?.draftOrder;
   if (!d) return { ok: false, error: 'Shopify no devolvió el pedido.' };
   return { ok: true, id: d.id, nombre: d.name, invoiceUrl: d.invoiceUrl || '', sinSku };
+}
+
+// ── Crear/publicar un producto de DealFlow EN Shopify ────────────────────────
+export interface ProductoDF {
+  id: string | number; nombre: string; precio: number;
+  descripcion?: string; caracteristicas?: string; fotos?: string[];
+  opciones?: { nombre: string; valores: { valor: string }[] }[];
+  variantes?: { id?: string; label: string; sku?: string; refs?: Record<string, string>; stock?: number }[];
+}
+
+const escHtml = (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const esUnica = (lbl?: string) => { const t = String(lbl || '').trim().toLowerCase(); return !t || t === 'única' || t === 'unica'; };
+
+/**
+ * Crea (o actualiza, con `shopifyProductId`) un producto en Shopify a partir de un
+ * producto de DealFlow, usando `productSet` (producto + opciones + variantes en una
+ * sola llamada). Las variantes toman el precio del producto y un SKU estable; se
+ * devuelve el mapeo variante_DealFlow → SKU para que el llamador lo guarde en
+ * refs.shopify y así los pedidos luego encuentren la variante. Se crea como BORRADOR
+ * salvo que `activar` sea true. Requiere el scope write_products.
+ */
+export async function crearProductoEnShopify(
+  cred: ShopifyCred,
+  p: ProductoDF,
+  opts?: { activar?: boolean; shopifyProductId?: string },
+): Promise<{ ok: true; productId: string; handle: string; status: string; mapSku: { dfVariantId: string; sku: string }[]; imagenes: number; variantes: number } | { ok: false; error: string }> {
+  const grupos = (p.opciones || []).filter((g) => (g.valores || []).some((v) => (v.valor || '').trim()));
+  const vars = (p.variantes || []).filter((v) => v.id);
+  const precio = String(Math.max(0, Number(p.precio) || 0));
+  const skuDe = (v: { sku?: string; refs?: Record<string, string> }, i: number) =>
+    (v.refs?.shopify || v.sku || `DF-${p.id}-${i + 1}`).trim();
+
+  const mapSku: { dfVariantId: string; sku: string }[] = [];
+  let productOptions: { name: string; values: { name: string }[] }[] | undefined;
+  let variants: Record<string, unknown>[];
+
+  if (grupos.length) {
+    // Estructurado: opciones (Color, Talla…) y variantes mapeadas por el label "A · B".
+    productOptions = grupos.map((g) => ({
+      name: g.nombre,
+      values: [...new Set((g.valores || []).map((v) => (v.valor || '').trim()).filter(Boolean))].map((name) => ({ name })),
+    }));
+    variants = vars.map((v, i) => {
+      const partes = String(v.label || '').split(' · ').map((s) => s.trim());
+      const optionValues = grupos.map((g, gi) => ({ optionName: g.nombre, name: partes[gi] || (g.valores[0]?.valor || '').trim() }));
+      const sku = skuDe(v, i); mapSku.push({ dfVariantId: String(v.id), sku });
+      return { optionValues, price: precio, inventoryItem: { sku, tracked: false } };
+    });
+  } else {
+    const reales = vars.filter((v) => !esUnica(v.label));
+    if (reales.length) {
+      // Sin grupos pero con variantes con nombre: una sola opción "Variante".
+      productOptions = [{ name: 'Variante', values: reales.map((v) => ({ name: v.label.trim() })) }];
+      variants = reales.map((v, i) => {
+        const sku = skuDe(v, i); mapSku.push({ dfVariantId: String(v.id), sku });
+        return { optionValues: [{ optionName: 'Variante', name: v.label.trim() }], price: precio, inventoryItem: { sku, tracked: false } };
+      });
+    } else {
+      // Producto simple: una variante por defecto.
+      const v = vars[0];
+      const sku = v ? skuDe(v, 0) : `DF-${p.id}`;
+      if (v) mapSku.push({ dfVariantId: String(v.id), sku });
+      variants = [{ price: precio, inventoryItem: { sku, tracked: false } }];
+    }
+  }
+
+  const descripcion = [p.descripcion, p.caracteristicas].map((s) => String(s || '').trim()).filter(Boolean).join('\n\n');
+  const files = (p.fotos || []).filter((u) => /^https?:\/\//i.test(u)).slice(0, 20).map((u) => ({ originalSource: u, contentType: 'IMAGE' }));
+
+  const input: Record<string, unknown> = {
+    title: p.nombre,
+    status: opts?.activar ? 'ACTIVE' : 'DRAFT',
+    variants,
+  };
+  if (opts?.shopifyProductId) input.id = opts.shopifyProductId;
+  if (descripcion) input.descriptionHtml = descripcion.split(/\n+/).map((l) => `<p>${escHtml(l)}</p>`).join('');
+  if (productOptions) input.productOptions = productOptions;
+  if (files.length) input.files = files;
+
+  const mut = `mutation($input: ProductSetInput!){ productSet(input:$input){ product{ id handle status variants(first:150){ nodes{ id sku } } } userErrors{ field message } } }`;
+  const r = await shopifyGQL<{ productSet: { product: { id: string; handle: string; status: string; variants: { nodes: { id: string; sku: string }[] } } | null; userErrors: { field: string[]; message: string }[] } }>(cred, mut, { input });
+  if (!r.ok) return { ok: false, error: r.error || 'No pudimos crear el producto en Shopify.' };
+  const out = r.data?.productSet;
+  if (out?.userErrors?.length) return { ok: false, error: out.userErrors.map((e) => `${(e.field || []).join('.')} ${e.message}`.trim()).join(' · ') };
+  const prod = out?.product;
+  if (!prod) return { ok: false, error: 'Shopify no devolvió el producto.' };
+  return { ok: true, productId: prod.id, handle: prod.handle, status: prod.status, mapSku, imagenes: files.length, variantes: prod.variants?.nodes?.length || 0 };
 }
