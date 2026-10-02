@@ -356,7 +356,8 @@ export const apiWooCatalogo = (proveedor = '') =>
 
 // ── Shopify (Admin API) ──
 export const apiShopifyEstado = () => req<{ conectado: boolean; shop: string; nombre: string }>('/api/shopify/estado', 'GET');
-export const apiShopifyConectar = (shop: string, token: string) => req<{ ok: true; nombre: string; shop: string }>('/api/shopify/conectar', 'POST', { shop, token });
+export const apiShopifyConectar = (shop: string, creds: { token?: string; clientId?: string; clientSecret?: string }) =>
+  req<{ ok: true; nombre: string; shop: string }>('/api/shopify/conectar', 'POST', { shop, ...creds });
 export const apiShopifyDesconectar = () => req<{ ok: true }>('/api/shopify/desconectar', 'POST');
 
 export interface EventoLog { nivel: string; evento: string; detalle: string; leadId: string | null; createdAt: string }

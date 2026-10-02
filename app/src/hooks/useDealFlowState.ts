@@ -2755,8 +2755,8 @@ export function useDealFlowState() {
   // Shopify (Admin API): si la tienda tiene Shopify conectado.
   const [shopify, setShopify] = useState<{ conectado: boolean; shop: string; nombre: string }>({ conectado: false, shop: '', nombre: '' });
   async function cargarShopify() { const { data } = await apiShopifyEstado(); if (data) setShopify(data); }
-  function conectarShopify(shop: string, token: string, cb?: (ok: boolean) => void) {
-    void apiShopifyConectar(shop, token).then((r) => {
+  function conectarShopify(shop: string, creds: { token?: string; clientId?: string; clientSecret?: string }, cb?: (ok: boolean) => void) {
+    void apiShopifyConectar(shop, creds).then((r) => {
       if (r.error || !r.data) { toast(r.error || 'No se pudo conectar Shopify.', 'error'); cb?.(false); return; }
       setShopify({ conectado: true, shop: r.data.shop, nombre: r.data.nombre });
       toast(`Shopify conectado ✓ (${r.data.nombre})`, 'ok'); cb?.(true);

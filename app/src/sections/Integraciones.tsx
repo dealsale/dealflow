@@ -25,17 +25,26 @@ function Estado({ on }: { on: boolean }) {
  *  DealFlow cotiza transportadoras y crea el pedido en Dropi sin usar WooCommerce. */
 function ShopifyCard({ df }: { df: DealFlowState }) {
   const [abierto, setAbierto] = useState(false);
+  const [metodo, setMetodo] = useState<'token' | 'cc'>('cc'); // 'cc' = Client ID + Secret (Dev Dashboard)
   const [shop, setShop] = useState('');
   const [token, setToken] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
   const [guardando, setGuardando] = useState(false);
   useEffect(() => { void df.cargarShopify?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const conectada = df.shopifyConectado;
+  const listo = metodo === 'token' ? !!(shop.trim() && token.trim()) : !!(shop.trim() && clientId.trim() && clientSecret.trim());
   const guardar = () => {
-    if (!shop.trim() || !token.trim()) return;
+    if (!listo) return;
     setGuardando(true);
-    df.conectarShopify(shop.trim(), token.trim(), (ok) => { setGuardando(false); if (ok) { setAbierto(false); setToken(''); setShop(''); } });
+    const creds = metodo === 'token' ? { token: token.trim() } : { clientId: clientId.trim(), clientSecret: clientSecret.trim() };
+    df.conectarShopify(shop.trim(), creds, (ok) => { setGuardando(false); if (ok) { setAbierto(false); setToken(''); setClientId(''); setClientSecret(''); setShop(''); } });
   };
   const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, marginTop: 6 };
+  const tab = (m: 'token' | 'cc'): React.CSSProperties => ({
+    flex: 1, textAlign: 'center', background: metodo === m ? '#5E8E3E' : 'var(--df-bg)', color: metodo === m ? '#fff' : 'var(--df-text-secondary)',
+    border: `1px solid ${metodo === m ? '#5E8E3E' : 'var(--df-border)'}`, borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer',
+  });
   return (
     <div style={{ background: 'var(--df-surface)', border: `1px solid ${conectada ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 14, padding: 18, marginTop: 4, marginBottom: 14, maxWidth: 620 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -45,7 +54,7 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
         <Estado on={conectada} />
       </div>
       <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, margin: '8px 0 12px' }}>
-        Conecta tu tienda Shopify para traer productos (por SKU) y crear pedidos. Crea una <b>app personalizada</b> en Shopify (Configuración → Apps → Desarrollar apps), con permisos <b>read_products, read/write_inventory, read/write_orders</b>, instálala y copia el <b>Admin API access token</b> y tu dominio <b>.myshopify.com</b>.
+        Conecta tu tienda Shopify para traer productos (por SKU) y crear pedidos. Crea una <b>app</b> en Shopify con permisos <b>read_products, read/write_orders, read/write_draft_orders</b>. Hay dos formas de conectar según cómo te dé Shopify las llaves.
       </div>
       {conectada && <div style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', marginBottom: 10 }}>✓ Conectado: <b>{df.shopifyNombre}</b> ({df.shopifyShop})</div>}
       {!abierto ? (
@@ -56,9 +65,24 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
       ) : (
         <div>
           <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="mitienda.myshopify.com" style={inp} />
-          <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Admin API access token (shpat_…)" style={inp} />
+          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+            <button onClick={() => setMetodo('cc')} style={tab('cc')}>Client ID + Secret</button>
+            <button onClick={() => setMetodo('token')} style={tab('token')}>Admin API token</button>
+          </div>
+          {metodo === 'cc' ? (
+            <>
+              <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>Para apps del <b>Dev Dashboard</b> / tiendas de desarrollo. Copia el <b>ID de cliente</b> y el <b>Secreto del cliente</b> de la pestaña Credenciales de tu app.</div>
+              <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client ID (ID de cliente)" style={inp} />
+              <input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="Client Secret (shpss_…)" style={inp} />
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>Para apps personalizadas instaladas. Pega el <b>Admin API access token</b> que sale al instalar la app (empieza por <b>shpat_</b>).</div>
+              <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Admin API access token (shpat_…)" style={inp} />
+            </>
+          )}
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button onClick={guardar} disabled={guardando} style={{ background: '#5E8E3E', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: guardando ? 0.7 : 1 }}>{guardando ? 'Conectando…' : 'Conectar'}</button>
+            <button onClick={guardar} disabled={guardando || !listo} style={{ background: '#5E8E3E', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: (guardando || !listo) ? 0.6 : 1 }}>{guardando ? 'Conectando…' : 'Conectar'}</button>
             <button onClick={() => setAbierto(false)} style={{ background: 'transparent', border: '1px solid var(--df-border)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
           </div>
         </div>
