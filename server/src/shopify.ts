@@ -6,14 +6,16 @@ import { db, pj } from './db.js';
  * A diferencia de Effi (donde DealFlow SE HACE PASAR por la tienda WooCommerce),
  * aquí Shopify ES la tienda y la fuente de verdad: DealFlow la CONSUME, igual que
  * el conector directo de Dropi. El comerciante crea una "custom app" en su panel de
- * Shopify, le da permisos (read_products, read/write_inventory, read/write_orders),
- * la instala y copia el Admin API access token (shpat_…) + su dominio myshopify.
+ * Shopify, le da permisos (read_products, read/write_orders, read/write_draft_orders),
+ * y copia un Admin API access token + su dominio myshopify. El token puede ser el
+ * clásico de app personalizada (shpat_…) o un "token de automatización" del nuevo
+ * Dev Dashboard (atkn_…); ambos se usan igual en el header X-Shopify-Access-Token.
  *
  * Auth: cada petición lleva el header `X-Shopify-Access-Token: <token>`.
  * Base: https://<tienda>.myshopify.com/admin/api/<versión>/graphql.json
  */
 
-const API_VERSION = process.env.SHOPIFY_API_VERSION || '2024-10';
+const API_VERSION = process.env.SHOPIFY_API_VERSION || '2025-10';
 
 export interface ShopifyCred { shop: string; token: string }
 
@@ -46,14 +48,28 @@ async function shopifyGQL<T>(cred: ShopifyCred, query: string, variables?: Recor
       headers: { 'X-Shopify-Access-Token': cred.token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, variables: variables || {} }),
     });
-    const body = (await res.json().catch(() => ({}))) as GraphResp<T>;
+    const raw = await res.text();
+    let body: GraphResp<T> = {};
+    try { body = JSON.parse(raw) as GraphResp<T>; } catch { /* respuesta no-JSON (p.ej. HTML de error) */ }
+    // Shopify, en 401/403, suele responder { "errors": "texto explicativo" } (string, no arreglo).
+    const detalle = (() => {
+      const e = (body as { errors?: unknown }).errors;
+      if (typeof e === 'string') return e;
+      if (Array.isArray(e)) return e.map((x) => (x && typeof x === 'object' && 'message' in x ? String((x as { message: unknown }).message) : String(x))).join(' · ');
+      return raw.slice(0, 200);
+    })();
     if (!res.ok) {
-      const msg = res.status === 401 || res.status === 403
-        ? 'Token inválido o sin permisos. Revisa el Admin API access token y los scopes de la app.'
-        : `Shopify respondió ${res.status}.`;
+      let msg: string;
+      if (res.status === 401) msg = `Token no reconocido por Shopify (401). Verifica que el token de automatización esté completo y que el dominio sea el de ESA tienda. Shopify dice: ${detalle}`;
+      else if (res.status === 403) msg = `Shopify aceptó el token pero niega el permiso (403): a la app le faltan scopes o no está instalada/liberada. Shopify dice: ${detalle}`;
+      else if (res.status === 404) msg = `Shopify respondió 404: revisa el dominio .myshopify.com (quizá está mal escrito). Detalle: ${detalle}`;
+      else msg = `Shopify respondió ${res.status}: ${detalle}`;
       return { ok: false, error: msg, http: res.status };
     }
-    if (body.errors?.length) return { ok: false, error: body.errors.map((e) => e.message).join(' · '), http: res.status };
+    const errs = (body as { errors?: unknown }).errors;
+    if ((typeof errs === 'string' && errs) || (Array.isArray(errs) && errs.length)) {
+      return { ok: false, error: detalle, http: res.status };
+    }
     return { ok: true, data: body.data, http: res.status };
   } catch {
     return { ok: false, error: 'No pudimos conectar con Shopify.', http: 0 };
