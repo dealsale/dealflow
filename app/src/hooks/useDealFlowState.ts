@@ -99,6 +99,9 @@ import {
   apiCrearTienda,
   apiEliminarMiTienda,
   apiEffiEstado,
+  apiShopifyEstado,
+  apiShopifyConectar,
+  apiShopifyDesconectar,
   apiEffiActivar,
   apiEffiDesactivar,
   apiToggleStore,
@@ -1491,6 +1494,13 @@ export function useDealFlowState() {
     })));
     if (apiMode && variantId) void apiPatchVariant(variantId, { sku });
   }
+  // Referencia de una variante PARA UNA INTEGRACIÓN (dropi | effi | shopify).
+  function setVariantRef(productId: number | string, variantId: string, integracion: string, ref: string) {
+    setProducts((prev) => prev.map((p) => (p.id !== productId ? p : {
+      ...p, variantes: p.variantes.map((v) => (v.id === variantId ? { ...v, refs: { ...(v.refs || {}), [integracion]: ref } } : v)),
+    })));
+    if (apiMode && variantId) void apiPatchVariant(variantId, { integracion, ref });
+  }
 
   function saveProduct(id: number | string) {
     setSavedProductId(id);
@@ -2740,6 +2750,20 @@ export function useDealFlowState() {
       toast('Tienda eliminada.', 'ok');
       void reloadMisTiendas();
     });
+  }
+
+  // Shopify (Admin API): si la tienda tiene Shopify conectado.
+  const [shopify, setShopify] = useState<{ conectado: boolean; shop: string; nombre: string }>({ conectado: false, shop: '', nombre: '' });
+  async function cargarShopify() { const { data } = await apiShopifyEstado(); if (data) setShopify(data); }
+  function conectarShopify(shop: string, token: string, cb?: (ok: boolean) => void) {
+    void apiShopifyConectar(shop, token).then((r) => {
+      if (r.error || !r.data) { toast(r.error || 'No se pudo conectar Shopify.', 'error'); cb?.(false); return; }
+      setShopify({ conectado: true, shop: r.data.shop, nombre: r.data.nombre });
+      toast(`Shopify conectado ✓ (${r.data.nombre})`, 'ok'); cb?.(true);
+    });
+  }
+  function desconectarShopify() {
+    void apiShopifyDesconectar().then(() => { setShopify({ conectado: false, shop: '', nombre: '' }); toast('Shopify desconectado.', 'ok'); });
   }
 
   // Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio).
@@ -4016,6 +4040,13 @@ export function useDealFlowState() {
     newProdError,
     crearProducto,
     setVariantSku,
+    setVariantRef,
+    shopifyConectado: shopify.conectado,
+    shopifyNombre: shopify.nombre,
+    shopifyShop: shopify.shop,
+    cargarShopify,
+    conectarShopify,
+    desconectarShopify,
 
     variantFormOpen,
     openVariantForm: () => setVariantFormOpen(true),

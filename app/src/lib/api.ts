@@ -354,6 +354,11 @@ export interface ProductoCatalogoWoo { id: number; nombre: string; sku: string; 
 export const apiWooCatalogo = (proveedor = '') =>
   req<{ productos: ProductoCatalogoWoo[]; proveedor: string }>(`/api/woo/catalogo${proveedor ? `?proveedor=${proveedor}` : ''}`, 'GET');
 
+// ── Shopify (Admin API) ──
+export const apiShopifyEstado = () => req<{ conectado: boolean; shop: string; nombre: string }>('/api/shopify/estado', 'GET');
+export const apiShopifyConectar = (shop: string, token: string) => req<{ ok: true; nombre: string; shop: string }>('/api/shopify/conectar', 'POST', { shop, token });
+export const apiShopifyDesconectar = () => req<{ ok: true }>('/api/shopify/desconectar', 'POST');
+
 export interface EventoLog { nivel: string; evento: string; detalle: string; leadId: string | null; createdAt: string }
 export const apiLogs = (leadId?: string) => req<{ logs: EventoLog[] }>(`/api/logs${leadId ? `?leadId=${encodeURIComponent(leadId)}` : ''}`, 'GET');
 // Web Push
