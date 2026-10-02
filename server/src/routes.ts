@@ -244,6 +244,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     contenidoPaquete: p.contenido_paquete || '', disparador: p.disparador || '', mensajeInicialActivo: p.mensaje_inicial_activo !== 0,
     variantes: (db.prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY orden').all(p.id as string) as Record<string, unknown>[]).map((v) => ({
       id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: pj(v.fotos_subidas as string, []), sku: v.sku || '',
+      refs: pj<Record<string, string>>(v.refs as string, {}),
     })),
   }));
   const promos = (db.prepare('SELECT * FROM promos WHERE store_id = ?').all(sid) as Record<string, unknown>[]).map((p) => ({
@@ -641,10 +642,17 @@ api.post('/products/:id/variants/generar', requireAuth, requireStore, (req, res)
 api.patch('/variants/:id', requireAuth, requireStore, (req, res) => {
   const v = db.prepare('SELECT v.id, v.product_id FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(req.params.id, req.user!.storeId) as { id: string; product_id: string } | undefined;
   if (!v) return res.status(404).json({ error: 'Variante no encontrada.' });
-  const { stock, fotosSubidas, sku } = req.body || {};
+  const { stock, fotosSubidas, sku, integracion, ref } = req.body || {};
   if (stock !== undefined) db.prepare('UPDATE variants SET stock = ? WHERE id = ?').run(Math.max(0, Number(stock) || 0), req.params.id);
   if (Array.isArray(fotosSubidas)) db.prepare('UPDATE variants SET fotos_subidas = ? WHERE id = ?').run(j(fotosSubidas), req.params.id);
   if (sku !== undefined) db.prepare('UPDATE variants SET sku = ? WHERE id = ?').run(String(sku).trim(), req.params.id);
+  // Referencia POR INTEGRACIÓN (dropi | effi | shopify): se guarda en refs.<integracion>.
+  if (integracion && ['dropi', 'effi', 'shopify'].includes(String(integracion))) {
+    const fila = db.prepare('SELECT refs FROM variants WHERE id = ?').get(req.params.id) as { refs: string } | undefined;
+    const refs = pj<Record<string, string>>(fila?.refs || '{}', {});
+    refs[String(integracion)] = String(ref ?? '').trim();
+    db.prepare('UPDATE variants SET refs = ? WHERE id = ?').run(JSON.stringify(refs), req.params.id);
+  }
   if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(v.product_id);
   res.json({ ok: true });
 });
@@ -830,7 +838,8 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
   const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id) as { qty: number; nombre: string; precio: number }[];
   const skus: Record<string, string> = {};
   for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(sid) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
-  const variantesSku = db.prepare("SELECT p.nombre producto, v.label, v.sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(v.sku,'') != ''").all(sid) as { producto: string; label: string; sku: string }[];
+  // Ref por proveedor: refs.<prov> y, si está vacía, el sku legado.
+  const variantesSku = db.prepare("SELECT p.nombre producto, v.label, COALESCE(NULLIF(json_extract(v.refs,'$.'||?),''), v.sku) sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(NULLIF(json_extract(v.refs,'$.'||?),''), v.sku) != ''").all(prov, sid, prov) as { producto: string; label: string; sku: string }[];
   const { crearPedido } = await import('./woocommerce.js');
   const r = await crearPedido(sid, {
     cliente: String(o.cliente || ''), ciudad: String(o.ciudad || ''), departamento: String(o.departamento || ''),

@@ -101,22 +101,24 @@ function skuDeId(storeId: string, id: number): string | null {
 }
 
 interface ProdBasico { nombre: string; sku: string; precio: number; stock: number }
-// Lista TODOS los productos/variantes con SKU de la tienda (para que Effi liste el
-// catálogo, como haría un WooCommerce real). Dedup por SKU.
+// Referencia que Effi usa por variante: refs.effi y, si está vacía, el sku legado.
+const EFFI_REF = "COALESCE(NULLIF(json_extract(v.refs,'$.effi'),''), v.sku)";
+// Lista TODOS los productos/variantes con referencia de Effi (para que Effi liste el
+// catálogo, como haría un WooCommerce real). Dedup por referencia.
 function listarProductos(storeId: string): ProdBasico[] {
   const skus = new Set<string>();
-  for (const r of db.prepare("SELECT v.sku sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(v.sku,'') != ''").all(storeId) as { sku: string }[]) skus.add(r.sku);
+  for (const r of db.prepare(`SELECT ${EFFI_REF} ref FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(${EFFI_REF},'') != ''`).all(storeId) as { ref: string }[]) skus.add(r.ref);
   for (const r of db.prepare("SELECT sku FROM products WHERE store_id = ? AND COALESCE(sku,'') != ''").all(storeId) as { sku: string }[]) skus.add(r.sku);
   const out: ProdBasico[] = [];
   for (const sku of skus) { const p = buscarPorSku(storeId, sku); if (p) out.push(p); }
   return out;
 }
-// Busca un producto/variante de la tienda por su SKU (exacto, sensible a mayúsculas).
+// Busca un producto/variante por su referencia de Effi (refs.effi o sku legado).
 function buscarPorSku(storeId: string, sku: string): ProdBasico | null {
   const v = db.prepare(
-    `SELECT p.nombre AS pnombre, p.precio AS precio, v.label AS label, v.sku AS sku, v.stock AS stock
+    `SELECT p.nombre AS pnombre, p.precio AS precio, v.label AS label, ${EFFI_REF} AS sku, v.stock AS stock
        FROM variants v JOIN products p ON p.id = v.product_id
-      WHERE p.store_id = ? AND v.sku = ? LIMIT 1`,
+      WHERE p.store_id = ? AND ${EFFI_REF} = ? LIMIT 1`,
   ).get(storeId, sku) as { pnombre: string; precio: number; label: string; sku: string; stock: number } | undefined;
   if (v) {
     const esUnica = (v.label || '').trim() === '' || (v.label || '').toLowerCase() === 'única';
@@ -393,7 +395,8 @@ function buscarProductoDePedido(storeId: string, nombreItem: string): { sku: str
   const mv = nombreItem.match(/\(([^)]+)\)/);
   if (mv) {
     const etiqueta = mv[1].replace(/talla/ig, '').trim();
-    const vs = db.prepare('SELECT label, sku FROM variants WHERE product_id = ?').all(p.id) as { label: string; sku: string }[];
+    // Referencia de Effi por variante: refs.effi o, si está vacía, el sku legado.
+    const vs = db.prepare(`SELECT label, ${EFFI_REF} sku FROM variants v WHERE product_id = ?`).all(p.id) as { label: string; sku: string }[];
     const hit = vs.find((v) => norm(v.label) === norm(etiqueta)) || vs.find((v) => norm(etiqueta).includes(norm(v.label)) && v.label);
     if (hit?.sku) return { sku: hit.sku };
   }

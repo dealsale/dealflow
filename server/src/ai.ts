@@ -890,7 +890,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
       }
       const skus: Record<string, string> = {};
       for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(storeId) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
-      const variantesSku = db.prepare("SELECT p.nombre producto, v.label, v.sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(v.sku,'') != ''").all(storeId) as { producto: string; label: string; sku: string }[];
+      const variantesSku = db.prepare("SELECT p.nombre producto, v.label, COALESCE(NULLIF(json_extract(v.refs,'$.'||?),''), v.sku) sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(NULLIF(json_extract(v.refs,'$.'||?),''), v.sku) != ''").all(prov, storeId, prov) as { producto: string; label: string; sku: string }[];
       const transportadora = woo.despachoConfig(storeId).transportadora;
       const r = await woo.crearPedido(storeId, { cliente, ciudad, departamento, tel: lead.tel || '', direccion, nota: '', envio: 0, total }, items, skus, prov, variantesSku, transportadora);
       const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';

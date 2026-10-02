@@ -350,6 +350,10 @@ addColumn('products', "plantilla_id TEXT NOT NULL DEFAULT ''"); // plantilla que
 addColumn('products', "sku TEXT NOT NULL DEFAULT ''"); // SKU para mapear con el producto en WooCommerce/Effi
 addColumn('products', "despacho_proveedor TEXT NOT NULL DEFAULT ''"); // 'dropi' | 'effi' | '' (sin definir): por cuál se despacha este producto
 addColumn('variants', "sku TEXT NOT NULL DEFAULT ''"); // SKU por variante (talla/color) para despachar la variante exacta en Dropi/Effi
+// Referencias POR INTEGRACIÓN: {"dropi":"...","effi":"...","shopify":"..."}. Un
+// mismo producto puede estar en varias a la vez con códigos distintos. El despacho
+// usa refs[proveedor] y, si está vacío, cae al sku legado (compatibilidad).
+addColumn('variants', "refs TEXT NOT NULL DEFAULT '{}'");
 
 // Multi-tienda: un dueño puede tener varias tiendas (mismo correo). Para eso hay
 // que quitar el UNIQUE de stores.correo. Además, quién es el dueño (owner_user_id).
