@@ -1053,13 +1053,16 @@ api.post('/shopify/conectar', requireAuth, requireStore, requireOwner, async (re
   const { normalizarShop, probarShopify } = await import('./shopify.js');
   const shop = normalizarShop(String(req.body?.shop || ''));
   const token = String(req.body?.token || '').trim();
-  if (!shop || !token) return res.status(400).json({ error: 'Falta el dominio de la tienda (mitienda.myshopify.com) o el Admin API token.' });
-  const prueba = await probarShopify(shop, token);
+  const clientId = String(req.body?.clientId || '').trim();
+  const clientSecret = String(req.body?.clientSecret || '').trim();
+  if (!shop) return res.status(400).json({ error: 'Falta el dominio de la tienda (mitienda.myshopify.com).' });
+  if (!token && !(clientId && clientSecret)) return res.status(400).json({ error: 'Pon el Admin API token, o el Client ID + Client Secret de la app.' });
+  const prueba = await probarShopify(shop, { token, clientId, clientSecret });
   if (!prueba.ok) return res.status(400).json({ error: prueba.error });
   db.prepare(
     `INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?, 'shopify', ?, datetime('now'))
      ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = datetime('now')`,
-  ).run(sid, JSON.stringify({ shop, token, nombre: prueba.nombre }));
+  ).run(sid, JSON.stringify({ shop, token, clientId, clientSecret, nombre: prueba.nombre }));
   res.json({ ok: true, nombre: prueba.nombre, shop });
 });
 

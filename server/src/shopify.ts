@@ -17,7 +17,15 @@ import { db, pj } from './db.js';
 
 const API_VERSION = process.env.SHOPIFY_API_VERSION || '2025-10';
 
-export interface ShopifyCred { shop: string; token: string }
+/**
+ * Credenciales de una tienda. Dos formas de autenticar:
+ *  - `token`: Admin API access token (shpat_…), el clásico de app personalizada
+ *    instalada. Funciona en CUALQUIER tienda (desarrollo o de pago).
+ *  - `clientId` + `clientSecret`: credenciales de una app del nuevo Dev Dashboard.
+ *    DealFlow los cambia por un token con el flujo "client credentials" (solo
+ *    tiendas de DESARROLLO) y lo renueva solo (dura 24h).
+ */
+export interface ShopifyCred { shop: string; token?: string; clientId?: string; clientSecret?: string }
 
 /** Normaliza el dominio a la forma "mitienda.myshopify.com" (sin https ni barras). */
 export function normalizarShop(input: string): string {
@@ -34,18 +42,64 @@ export function credShopify(storeId: string): ShopifyCred | null {
   const cfg = pj<Record<string, string>>(row.config, {});
   const shop = normalizarShop(cfg.shop || '');
   const token = String(cfg.token || '').trim();
-  if (!shop || !token) return null;
-  return { shop, token };
+  const clientId = String(cfg.clientId || '').trim();
+  const clientSecret = String(cfg.clientSecret || '').trim();
+  if (!shop || (!token && !(clientId && clientSecret))) return null;
+  return { shop, token, clientId, clientSecret };
+}
+
+// Cache en memoria de tokens obtenidos por client credentials: "shop:clientId" → {token, exp(ms)}.
+const ccgCache = new Map<string, { token: string; exp: number }>();
+
+/**
+ * Resuelve el token de acceso a usar: el estático si lo hay, o uno nuevo por
+ * "client credentials" (cacheado hasta ~24h). El flujo client credentials solo
+ * sirve en tiendas de desarrollo; en tiendas de pago Shopify lo rechaza y hay
+ * que usar un Admin API access token.
+ */
+async function resolverToken(cred: ShopifyCred): Promise<{ ok: true; token: string } | { ok: false; error: string; http: number }> {
+  const estatico = String(cred.token || '').trim();
+  if (estatico) return { ok: true, token: estatico };
+  const id = String(cred.clientId || '').trim();
+  const secret = String(cred.clientSecret || '').trim();
+  if (!id || !secret) return { ok: false, error: 'Faltan credenciales de Shopify (token, o Client ID + Client Secret).', http: 0 };
+  const key = `${cred.shop}:${id}`;
+  const hit = ccgCache.get(key);
+  if (hit && hit.exp > Date.now() + 60_000) return { ok: true, token: hit.token };
+  try {
+    const res = await fetch(`https://${cred.shop}/admin/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ client_id: id, client_secret: secret, grant_type: 'client_credentials' }),
+    });
+    const raw = await res.text();
+    let j: { access_token?: string; expires_in?: number; error?: string; error_description?: string } = {};
+    try { j = JSON.parse(raw); } catch { /* no-JSON */ }
+    if (!res.ok || !j.access_token) {
+      const det = j.error_description || j.error || raw.slice(0, 200);
+      const pago = /cannot be performed on this shop/i.test(det);
+      const msg = pago
+        ? 'Esta tienda es de PAGO: el flujo Client ID + Secret (client credentials) solo funciona en tiendas de desarrollo. Instala la app y conéctala con el Admin API access token.'
+        : `No se pudo obtener el token con Client ID + Secret (${res.status}): ${det}`;
+      return { ok: false, error: msg, http: res.status };
+    }
+    ccgCache.set(key, { token: j.access_token, exp: Date.now() + (Number(j.expires_in || 86_000) * 1000) });
+    return { ok: true, token: j.access_token };
+  } catch {
+    return { ok: false, error: 'No pudimos conectar con Shopify para obtener el token.', http: 0 };
+  }
 }
 
 interface GraphResp<T> { data?: T; errors?: { message: string }[] }
 
 /** Llama al Admin API (GraphQL) de una tienda Shopify. */
 async function shopifyGQL<T>(cred: ShopifyCred, query: string, variables?: Record<string, unknown>): Promise<{ ok: boolean; data?: T; error?: string; http: number }> {
+  const tk = await resolverToken(cred);
+  if (!tk.ok) return { ok: false, error: tk.error, http: tk.http };
   try {
     const res = await fetch(`https://${cred.shop}/admin/api/${API_VERSION}/graphql.json`, {
       method: 'POST',
-      headers: { 'X-Shopify-Access-Token': cred.token, 'Content-Type': 'application/json' },
+      headers: { 'X-Shopify-Access-Token': tk.token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, variables: variables || {} }),
     });
     const raw = await res.text();
@@ -60,7 +114,7 @@ async function shopifyGQL<T>(cred: ShopifyCred, query: string, variables?: Recor
     })();
     if (!res.ok) {
       let msg: string;
-      if (res.status === 401) msg = `Token no reconocido por Shopify (401). Verifica que el token de automatización esté completo y que el dominio sea el de ESA tienda. Shopify dice: ${detalle}`;
+      if (res.status === 401) msg = `Token no reconocido por Shopify (401). Verifica que el token/credenciales estén completos y que el dominio sea el de ESA tienda. Shopify dice: ${detalle}`;
       else if (res.status === 403) msg = `Shopify aceptó el token pero niega el permiso (403): a la app le faltan scopes o no está instalada/liberada. Shopify dice: ${detalle}`;
       else if (res.status === 404) msg = `Shopify respondió 404: revisa el dominio .myshopify.com (quizá está mal escrito). Detalle: ${detalle}`;
       else msg = `Shopify respondió ${res.status}: ${detalle}`;
@@ -76,10 +130,19 @@ async function shopifyGQL<T>(cred: ShopifyCred, query: string, variables?: Recor
   }
 }
 
-/** Prueba la conexión: devuelve el nombre de la tienda si el token sirve. */
-export async function probarShopify(shop: string, token: string): Promise<{ ok: true; nombre: string } | { ok: false; error: string }> {
-  const cred: ShopifyCred = { shop: normalizarShop(shop), token: String(token || '').trim() };
-  if (!cred.shop || !cred.token) return { ok: false, error: 'Faltan el dominio de la tienda y/o el token.' };
+/**
+ * Prueba la conexión: devuelve el nombre de la tienda si las credenciales sirven.
+ * Acepta un Admin API token o el par Client ID + Client Secret.
+ */
+export async function probarShopify(shop: string, auth: { token?: string; clientId?: string; clientSecret?: string }): Promise<{ ok: true; nombre: string } | { ok: false; error: string }> {
+  const cred: ShopifyCred = {
+    shop: normalizarShop(shop),
+    token: String(auth.token || '').trim(),
+    clientId: String(auth.clientId || '').trim(),
+    clientSecret: String(auth.clientSecret || '').trim(),
+  };
+  if (!cred.shop) return { ok: false, error: 'Falta el dominio de la tienda (mitienda.myshopify.com).' };
+  if (!cred.token && !(cred.clientId && cred.clientSecret)) return { ok: false, error: 'Pon el Admin API token, o el Client ID + Client Secret.' };
   const r = await shopifyGQL<{ shop: { name: string } }>(cred, '{ shop { name } }');
   if (!r.ok || !r.data?.shop) return { ok: false, error: r.error || 'No pudimos validar la tienda.' };
   return { ok: true, nombre: r.data.shop.name };
