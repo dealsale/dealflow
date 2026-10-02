@@ -23,6 +23,50 @@ function Estado({ on }: { on: boolean }) {
 
 /** Conexión de Dropi por su API directa (token de integración + URL). Con esto
  *  DealFlow cotiza transportadoras y crea el pedido en Dropi sin usar WooCommerce. */
+function ShopifyCard({ df }: { df: DealFlowState }) {
+  const [abierto, setAbierto] = useState(false);
+  const [shop, setShop] = useState('');
+  const [token, setToken] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => { void df.cargarShopify?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const conectada = df.shopifyConectado;
+  const guardar = () => {
+    if (!shop.trim() || !token.trim()) return;
+    setGuardando(true);
+    df.conectarShopify(shop.trim(), token.trim(), (ok) => { setGuardando(false); if (ok) { setAbierto(false); setToken(''); setShop(''); } });
+  };
+  const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13, marginTop: 6 };
+  return (
+    <div style={{ background: 'var(--df-surface)', border: `1px solid ${conectada ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 14, padding: 18, marginTop: 4, marginBottom: 14, maxWidth: 620 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 9, background: '#5E8E3E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16 }}>🛍️</div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Shopify</div>
+        <div style={{ flex: 1 }} />
+        <Estado on={conectada} />
+      </div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, margin: '8px 0 12px' }}>
+        Conecta tu tienda Shopify para traer productos (por SKU) y crear pedidos. Crea una <b>app personalizada</b> en Shopify (Configuración → Apps → Desarrollar apps), con permisos <b>read_products, read/write_inventory, read/write_orders</b>, instálala y copia el <b>Admin API access token</b> y tu dominio <b>.myshopify.com</b>.
+      </div>
+      {conectada && <div style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', marginBottom: 10 }}>✓ Conectado: <b>{df.shopifyNombre}</b> ({df.shopifyShop})</div>}
+      {!abierto ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setAbierto(true)} style={{ background: conectada ? 'var(--df-surface)' : '#5E8E3E', color: conectada ? '#5E8E3E' : '#fff', border: conectada ? '1px solid #5E8E3E' : 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{conectada ? 'Cambiar credenciales' : 'Conectar Shopify'}</button>
+          {conectada && <button onClick={df.desconectarShopify} style={{ background: 'transparent', border: '1px solid var(--df-border)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Desconectar</button>}
+        </div>
+      ) : (
+        <div>
+          <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="mitienda.myshopify.com" style={inp} />
+          <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Admin API access token (shpat_…)" style={inp} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button onClick={guardar} disabled={guardando} style={{ background: '#5E8E3E', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: guardando ? 0.7 : 1 }}>{guardando ? 'Conectando…' : 'Conectar'}</button>
+            <button onClick={() => setAbierto(false)} style={{ background: 'transparent', border: '1px solid var(--df-border)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DropiApiCard({ df }: { df: DealFlowState }) {
   const [abierto, setAbierto] = useState(false);
   const [token, setToken] = useState('');
@@ -370,6 +414,9 @@ export function Integraciones({ df }: { df: DealFlowState }) {
 
       {/* Dropi por API directa (transportadoras + guía sin usar WooCommerce). */}
       <DropiApiCard df={df} />
+
+      {/* Shopify (Admin API): traer productos por SKU y crear pedidos. */}
+      <ShopifyCard df={df} />
 
       {/* Despacho: manual por defecto; se puede activar el auto-envío y elegir transportadora. */}
       {df.wooProveedores.length > 0 && (
