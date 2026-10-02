@@ -149,6 +149,7 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
 function PanelIntegracion({ integ, p, df, variantes }: { integ: { id: IntegId; nombre: string; logo?: string; color: string; placeholder: string }; p: DecoratedProduct; df: DealFlowState; variantes: Variante[] }) {
   const [abierto, setAbierto] = useState(false);
   const [orden, setOrden] = useState<'def' | 'color' | 'talla'>('def');
+  const [publicando, setPublicando] = useState(false);
   // Valor por variante: refs[integracion] y, para Effi, cae al sku legado.
   const valorDe = (v: Variante) => (v.refs?.[integ.id] ?? (integ.id === 'effi' ? (v.sku || '') : '')) || '';
   const conectadas = variantes.filter((v) => valorDe(v).trim()).length;
@@ -172,6 +173,18 @@ function PanelIntegracion({ integ, p, df, variantes }: { integ: { id: IntegId; n
       </button>
       {abierto && (
         <div style={{ padding: 12, borderTop: '1px solid var(--df-border)' }}>
+          {integ.id === 'shopify' && (
+            <div style={{ background: 'var(--df-bg)', border: '1px dashed var(--df-border)', borderRadius: 9, padding: '9px 11px', marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 8, lineHeight: 1.45 }}>
+                ¿No existe este producto en Shopify todavía? Créalo allá con un clic: DealFlow sube el nombre, la descripción, las variantes con su precio y un SKU, y deja el vínculo listo. Se crea como <b>borrador</b> para que lo revises antes de publicarlo.
+              </div>
+              <button
+                onClick={() => { setPublicando(true); df.publicarEnShopify(String(p.id), false, () => setPublicando(false)); }}
+                disabled={publicando}
+                style={{ background: integ.color, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', opacity: publicando ? 0.6 : 1 }}
+              >{publicando ? 'Creando en Shopify…' : '🛍️ Crear este producto en Shopify'}</button>
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: 'var(--df-text-faint)', fontWeight: 600 }}>Ordenar:</span>
             <button onClick={() => setOrden('def')} style={btnOrden('def')}>Por defecto</button>

@@ -102,6 +102,7 @@ import {
   apiShopifyEstado,
   apiShopifyConectar,
   apiShopifyDesconectar,
+  apiShopifyPublicarProducto,
   apiEffiActivar,
   apiEffiDesactivar,
   apiToggleStore,
@@ -2765,6 +2766,14 @@ export function useDealFlowState() {
   function desconectarShopify() {
     void apiShopifyDesconectar().then(() => { setShopify({ conectado: false, shop: '', nombre: '' }); toast('Shopify desconectado.', 'ok'); });
   }
+  function publicarEnShopify(productId: string, activar: boolean, cb?: (ok: boolean) => void) {
+    void apiShopifyPublicarProducto(productId, activar).then(async (r) => {
+      if (r.error || !r.data) { toast(r.error || 'No se pudo crear el producto en Shopify.', 'error'); cb?.(false); return; }
+      await reloadProducts(); // refresca refs.shopify de las variantes
+      toast(`Producto creado en Shopify ✓ (${r.data.variantes} variantes${r.data.status === 'DRAFT' ? ', como borrador' : ''})`, 'ok');
+      cb?.(true);
+    });
+  }
 
   // Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio).
   const [effiWoo, setEffiWoo] = useState<{ activo: boolean; slug: string; url: string }>({ activo: false, slug: '', url: '' });
@@ -4047,6 +4056,7 @@ export function useDealFlowState() {
     cargarShopify,
     conectarShopify,
     desconectarShopify,
+    publicarEnShopify,
 
     variantFormOpen,
     openVariantForm: () => setVariantFormOpen(true),
