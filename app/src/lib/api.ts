@@ -283,7 +283,7 @@ export interface ApiProduct {
   mensajeInicialActivo: boolean;
   fotos: string[];
   fotosSubidas: string[];
-  variantes: { id: string; label: string; stock: number; fotos: number; fotosSubidas: string[]; sku?: string }[];
+  variantes: { id: string; label: string; stock: number; fotos: number; fotosSubidas: string[]; sku?: string; refs?: Record<string, string> }[];
 }
 
 export const apiUpload = (dataUrl: string, nombre?: string) => req<{ url: string }>('/api/upload', 'POST', { dataUrl, nombre });
