@@ -246,9 +246,11 @@ export function auditarBaneo(storeId: string, desde?: string, hasta?: string): R
       detalle: `${senales.rafagas} ráfagas detectadas (la mayor, ${senales.rafagaMax} mensajes seguidos; el envío más rápido, ${(senales.gapMinSaliente / 1000).toFixed(1)} s entre uno y otro). Enviar fotos/videos en ráfaga molesta y genera bloqueos.`,
     });
   }
-  if (senales.picoPorMinuto >= 10) {
+  // El tope de envío es 12/min: un pico normal ronda eso. Solo marcamos por encima
+  // (16 = algo se disparó más de lo esperado; 25 = ráfaga clara de spam).
+  if (senales.picoPorMinuto >= 16) {
     hallazgos.push({
-      gravedad: senales.picoPorMinuto >= 20 ? 'alta' : 'media',
+      gravedad: senales.picoPorMinuto >= 25 ? 'alta' : 'media',
       titulo: 'Picos de volumen por minuto',
       detalle: `Hubo hasta ${senales.picoPorMinuto} mensajes salientes en un mismo minuto. Los picos súbitos de volumen son señal de spam para Meta.`,
     });

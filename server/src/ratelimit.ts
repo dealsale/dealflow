@@ -11,12 +11,16 @@
  */
 
 // Espacio mínimo entre dos envíos de la MISMA tienda (ms). Suaviza las ráfagas.
-const MIN_GAP = Number(process.env.BOT_MIN_GAP_MS) || 900;
-// Tope por minuto por tienda. Al superarlo, el envío espera su turno.
-const MAX_PER_MIN = Number(process.env.BOT_MAX_PER_MIN) || 45;
+// Conservador a propósito: Meta banea por PICOS (muchos en un minuto), no tanto
+// por el total del día. ~3.5s de espacio + tope por minuto => nunca hay ráfaga.
+const MIN_GAP = Number(process.env.BOT_MIN_GAP_MS) || 3500;
+// Tope por minuto por tienda. Al superarlo, el envío espera su turno. Es el freno
+// que de verdad evita el baneo: a 12/min un blast de remarketing se reparte en el
+// tiempo en vez de dispararse de golpe (antes estaba en 45 = demasiado alto).
+const MAX_PER_MIN = Number(process.env.BOT_MAX_PER_MIN) || 12;
 // Espacio mínimo entre dos envíos al MISMO chat (ms). Es lo que de verdad evita
 // las ráfagas que banean: nunca 5 fotos a la misma persona en un instante.
-const MIN_GAP_CHAT = Number(process.env.BOT_MIN_GAP_CHAT_MS) || 2500;
+const MIN_GAP_CHAT = Number(process.env.BOT_MIN_GAP_CHAT_MS) || 3500;
 
 interface EstadoTienda { proximo: number; sellos: number[]; ultimoFrenado: number }
 const porTienda = new Map<string, EstadoTienda>();
@@ -25,7 +29,7 @@ const porChat = new Map<string, number>(); // clave storeId|destino -> próximo 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Jitter: un pequeño aleatorio para que los envíos NO salgan a intervalos exactos
 // (los patrones perfectamente regulares también le parecen "bot" a Meta).
-const jitter = () => Math.floor(Math.random() * 500);
+const jitter = () => Math.floor(Math.random() * 1800);
 
 /**
  * Salud de envío de una tienda (para el monitor anti-baneo del panel). Todo en

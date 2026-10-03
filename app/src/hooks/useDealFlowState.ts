@@ -633,7 +633,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     mensajeInicialActivo: p.mensajeInicialActivo !== false,
     fotos: p.fotos?.length ? p.fotos : undefined,
     fotosSubidas: p.fotosSubidas || [],
-    variantes: p.variantes.map((v) => ({ id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: v.fotosSubidas || [], sku: v.sku || '' })),
+    variantes: p.variantes.map((v) => ({ id: v.id, label: v.label, stock: v.stock, fotos: v.fotos, fotosSubidas: v.fotosSubidas || [], sku: v.sku || '', refs: v.refs || {} })),
   }));
 }
 
