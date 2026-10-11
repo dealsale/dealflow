@@ -1218,7 +1218,8 @@ api.post('/effi/desactivar', requireAuth, requireStore, requireOwner, async (req
 // Diagnóstico: qué le ha preguntado Effi al storefront (para saber si llega y con qué SKU).
 api.get('/effi/log', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { logEffi, estadoEffi } = await import('./effiWoo.js');
-  res.json({ estado: estadoEffi(req.user!.storeId!), eventos: logEffi(req.user!.storeId!, 80) });
+  const pedido = req.query.pedido !== undefined ? String(req.query.pedido) : undefined;
+  res.json({ estado: estadoEffi(req.user!.storeId!), eventos: logEffi(req.user!.storeId!, pedido ? 120 : 80, pedido) });
 });
 // Preview del pedido EXACTO que se le manda a Effi (para ver departamento, ciudad
 // y product_id de cada ítem, que son los que Effi descarta en silencio si están mal).

@@ -469,6 +469,9 @@ export const apiCrearTienda = (nombre: string) => req<{ ok: true; storeId: strin
 export const apiEliminarMiTienda = (id: string) => req<{ ok: true }>(`/api/mis-tiendas/${id}`, 'DELETE');
 
 // Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio).
+export interface EffiLogEvento { ts: string; metodo: string; ruta: string; sku: string; auth: number; resultado: string }
+export const apiEffiLog = (pedido?: string | number) =>
+  req<{ estado: { activo: boolean; slug: string; url: string }; eventos: EffiLogEvento[] }>(`/api/effi/log${pedido !== undefined ? `?pedido=${encodeURIComponent(String(pedido))}` : ''}`, 'GET');
 export const apiEffiEstado = () => req<{ activo: boolean; slug: string; url: string }>('/api/effi/estado', 'GET');
 export const apiEffiActivar = () => req<{ slug: string; url: string; ck: string; cs: string }>('/api/effi/activar', 'POST');
 export const apiEffiDesactivar = () => req<{ ok: true }>('/api/effi/desactivar', 'POST');
