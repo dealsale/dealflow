@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { confirmar } from './dialogs';
-import { apiDropiCotizar, apiDropiCrear, apiEffiLog, type DropiTransportadora, type EffiLogEvento } from '../lib/api';
+import { apiDropiCotizar, apiDropiCrear, apiEffiLog, type DropiTransportadora, type EffiLogEvento, type EffiLineItem } from '../lib/api';
 
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
 
@@ -15,9 +15,10 @@ function EffiLogPedido({ pedidoId }: { pedidoId: string }) {
   const [abierto, setAbierto] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [eventos, setEventos] = useState<EffiLogEvento[] | null>(null);
+  const [items, setItems] = useState<EffiLineItem[]>([]);
   const cargar = () => {
     setCargando(true);
-    void apiEffiLog(pedidoId).then((r) => { setEventos(r.data?.eventos || []); setCargando(false); });
+    void apiEffiLog(pedidoId).then((r) => { setEventos(r.data?.eventos || []); setItems(r.data?.items || []); setCargando(false); });
   };
   const toggle = () => { const n = !abierto; setAbierto(n); if (n && eventos === null) cargar(); };
   const colorDe = (txt: string) => /bloquead|404|inválid|no existe|error|sin/i.test(txt) ? 'var(--df-danger-dark)'
@@ -36,6 +37,21 @@ function EffiLogPedido({ pedidoId }: { pedidoId: string }) {
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
             <button onClick={cargar} disabled={cargando} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 11.5, color: 'var(--df-text-muted)', cursor: 'pointer' }}>{cargando ? 'Cargando…' : '↻ Actualizar'}</button>
           </div>
+          {/* Estructura EXACTA que se le manda a Effi: nombre, Referencia y si quedó vinculado. */}
+          {!!items.length && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 5 }}>Lo que le mandamos a Effi en este pedido:</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {items.map((it, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid ' + (it.vinculado ? 'var(--df-border)' : 'var(--df-danger-border)'), borderRadius: 8, padding: '6px 9px' }}>
+                    <span style={{ fontSize: 12.5, flex: 1, minWidth: 0 }}>{it.qty}× {it.nombre}</span>
+                    <span style={{ fontSize: 11.5, fontFamily: "'JetBrains Mono',monospace", color: it.vinculado ? 'var(--df-purple)' : 'var(--df-danger-dark)' }}>{it.sku ? `Ref: ${it.sku}` : 'SIN Referencia'}</span>
+                    <span title={it.vinculado ? 'Effi puede enlazarlo' : 'Effi no lo reconocerá'} style={{ fontSize: 13 }}>{it.vinculado ? '✓' : '⚠'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {cargando && eventos === null ? (
             <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Cargando el registro…</div>
           ) : !eventos || !eventos.length ? (

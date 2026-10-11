@@ -1217,9 +1217,22 @@ api.post('/effi/desactivar', requireAuth, requireStore, requireOwner, async (req
 });
 // Diagnóstico: qué le ha preguntado Effi al storefront (para saber si llega y con qué SKU).
 api.get('/effi/log', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { logEffi, estadoEffi } = await import('./effiWoo.js');
+  const { logEffi, estadoEffi, pedidoAWoo } = await import('./effiWoo.js');
+  const sid = req.user!.storeId!;
   const pedido = req.query.pedido !== undefined ? String(req.query.pedido) : undefined;
-  res.json({ estado: estadoEffi(req.user!.storeId!), eventos: logEffi(req.user!.storeId!, pedido ? 120 : 80, pedido) });
+  // Si se pide un pedido concreto, incluimos los line_items EXACTOS que le mandamos
+  // a Effi (nombre, Referencia resuelta y si tiene product_id), para ver la estructura.
+  let items: { nombre: string; sku: string; vinculado: boolean; qty: number; total: string }[] | undefined;
+  if (pedido) {
+    const num = Number(String(pedido).replace(/\D/g, ''));
+    const o = num ? db.prepare('SELECT * FROM orders WHERE store_id = ? AND numero = ?').get(sid, num) as Record<string, unknown> | undefined : undefined;
+    if (o) {
+      const woo = pedidoAWoo(sid, o);
+      items = ((woo.line_items as { name: string; sku: string; product_id: number; quantity: number; total: string }[]) || [])
+        .map((li) => ({ nombre: li.name, sku: li.sku || '', vinculado: !!li.product_id, qty: li.quantity, total: li.total }));
+    }
+  }
+  res.json({ estado: estadoEffi(sid), eventos: logEffi(sid, pedido ? 120 : 80, pedido), items });
 });
 // Preview del pedido EXACTO que se le manda a Effi (para ver departamento, ciudad
 // y product_id de cada ítem, que son los que Effi descarta en silencio si están mal).
