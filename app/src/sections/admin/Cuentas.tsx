@@ -19,7 +19,6 @@ export function Cuentas({ df }: { df: DealFlowState }) {
     setDiasDelta('');
     setAjusteMsg('');
   }, [df.editStoreId]);
-  const cuentaEditando = df.accounts.find((x) => String(x.id) === df.editStoreId);
 
   return (
     <section data-screen-label="Admin Cuentas">
@@ -73,91 +72,6 @@ export function Cuentas({ df }: { df: DealFlowState }) {
 
       {df.accCreated && (
         <div style={{ background: 'var(--df-brand-subtle-2)', border: '1px solid var(--df-brand-border)', color: 'var(--df-brand-dark)', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontWeight: 600, marginBottom: 14 }}>✓ {df.accCreated}</div>
-      )}
-
-      {/* Panel de edición de una tienda */}
-      {df.editStoreId && (
-        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>Editar tienda</div>
-          <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <div style={labelStyle}>Nombre de la tienda</div>
-              <input className="df-input" value={df.editStoreForm.nombre} onChange={(e) => df.setEditStoreForm({ nombre: e.target.value })} style={inputStyle} />
-            </div>
-            <div>
-              <div style={labelStyle}>Correo (con este entra)</div>
-              <input className="df-input" value={df.editStoreForm.correo} onChange={(e) => df.setEditStoreForm({ correo: e.target.value })} style={inputStyle} />
-            </div>
-          </div>
-          <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-            <div>
-              <div style={labelStyle}>Plan</div>
-              <Dropdown value={df.editStoreForm.plan} onChange={(v) => df.setEditStoreForm({ plan: v })} options={df.planNames.map((p) => ({ value: p, label: p }))} />
-            </div>
-            <div>
-              <div style={labelStyle}>Nueva contraseña (opcional)</div>
-              <input className="df-input" type="password" value={df.editStoreForm.password} onChange={(e) => df.setEditStoreForm({ password: e.target.value })} placeholder="Déjalo vacío para no cambiarla" style={inputStyle} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-            <button onClick={df.guardarEditarStore} className="df-btn-primary" style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Guardar cambios</button>
-            <button onClick={df.cerrarPanelStore} style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-            {df.editStoreMsg && <span style={{ color: df.editStoreMsg === 'Guardando…' ? 'var(--df-text-muted)' : 'var(--df-danger)', fontSize: 13 }}>{df.editStoreMsg}</span>}
-          </div>
-
-          {cuentaEditando && (
-            <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, borderTop: '1px solid var(--df-border)', paddingTop: 16 }}>
-              <div>
-                <div style={labelStyle}>Créditos ({(cuentaEditando.creditos ?? 0).toLocaleString('es-CO')} actuales)</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="number"
-                    value={creditosDelta}
-                    onChange={(e) => setCreditosDelta(e.target.value)}
-                    placeholder="Ej: 500 o -200"
-                    style={{ ...inputStyle, width: 110 }}
-                  />
-                  <button
-                    onClick={() => { if (creditosDelta) { df.darCreditos(df.editStoreId!, Number(creditosDelta)); setAjusteMsg('✓ Créditos ajustados'); setCreditosDelta(''); } }}
-                    disabled={!creditosDelta}
-                    style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: creditosDelta ? 'pointer' : 'default', opacity: creditosDelta ? 1 : 0.5, whiteSpace: 'nowrap' }}
-                  >
-                    Ajustar
-                  </button>
-                </div>
-              </div>
-              <div>
-                <div style={labelStyle}>Días de renta ({cuentaEditando.facturacionDias || cuentaEditando.facturacionFecha})</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="number"
-                    value={diasDelta}
-                    onChange={(e) => setDiasDelta(e.target.value)}
-                    placeholder="Ej: 30 o -15"
-                    style={{ ...inputStyle, width: 110 }}
-                  />
-                  <button
-                    onClick={() => { if (diasDelta) { df.extenderSuscripcion(df.editStoreId!, Number(diasDelta)); setAjusteMsg('✓ Renta ajustada'); setDiasDelta(''); } }}
-                    disabled={!diasDelta}
-                    style={{ background: 'var(--df-surface)', border: '1px solid var(--df-brand-border)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: diasDelta ? 'pointer' : 'default', opacity: diasDelta ? 1 : 0.5, whiteSpace: 'nowrap' }}
-                  >
-                    Ajustar
-                  </button>
-                </div>
-              </div>
-              <div>
-                <div style={labelStyle}>Tema Premium (upsell)</div>
-                <button
-                  onClick={cuentaEditando.togglePremium}
-                  style={{ background: cuentaEditando.temaPremium ? 'linear-gradient(135deg,#7C3AED,#2563EB)' : 'var(--df-surface)', border: '1px solid ' + (cuentaEditando.temaPremium ? 'transparent' : 'var(--df-border)'), color: cuentaEditando.temaPremium ? '#fff' : 'var(--df-text-body)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', width: '100%' }}
-                >
-                  💎 {cuentaEditando.temaPremium ? 'Premium activado' : 'Activar Premium'}
-                </button>
-              </div>
-              {ajusteMsg && <div style={{ gridColumn: '1 / -1', fontSize: 12.5, color: 'var(--df-brand-dark)', fontWeight: 600 }}>{ajusteMsg}</div>}
-            </div>
-          )}
-        </div>
       )}
 
       {/* Panel de detalle de una tienda */}
@@ -270,8 +184,10 @@ export function Cuentas({ df }: { df: DealFlowState }) {
           {df.accounts.map((a) => {
             const id = String(a.id);
             const armed = df.armedDeleteStoreId === id;
+            const editando = df.editStoreId === id;
             return (
-              <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '1.5fr 0.9fr 90px auto 44px', gap: 14, alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid var(--df-border)' }}>
+              <div key={a.id} style={{ borderBottom: '1px solid var(--df-border)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 0.9fr 90px auto 44px', gap: 14, alignItems: 'center', padding: '12px 18px', background: editando ? 'var(--df-purple-subtle)' : 'transparent' }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.tienda}</span>
@@ -292,7 +208,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <button onClick={() => df.abrirDetalleStore(id)} style={linkBtn('var(--df-text-body)')}>Detalle</button>
-                  <button onClick={() => df.abrirEditarStore(id)} style={linkBtn('var(--df-text-body)')}>Editar</button>
+                  <button onClick={() => (editando ? df.cerrarPanelStore() : df.abrirEditarStore(id))} style={linkBtn(editando ? 'var(--df-purple)' : 'var(--df-text-body)')}>{editando ? 'Cerrar' : 'Editar'}</button>
                   <button onClick={() => df.entrarATienda(id)} style={linkBtn('var(--df-indigo)')}>Entrar</button>
                   <button onClick={() => df.eliminarStore(id)} style={linkBtn(armed ? 'var(--df-danger)' : 'var(--df-danger-dark)')}>{armed ? '¿Seguro?' : 'Eliminar'}</button>
                 </div>
@@ -300,12 +216,85 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                   <div style={a.knobStyle} />
                 </div>
               </div>
+              {/* Edición INLINE: se despliega justo debajo de la tienda (no sube al header). */}
+              {editando && (
+                <div style={{ background: 'var(--df-surface)', borderTop: '1px solid var(--df-purple-border)', padding: '16px 18px' }}>
+                  <EditarTiendaInline df={df} a={a} creditosDelta={creditosDelta} setCreditosDelta={setCreditosDelta} diasDelta={diasDelta} setDiasDelta={setDiasDelta} ajusteMsg={ajusteMsg} setAjusteMsg={setAjusteMsg} />
+                </div>
+              )}
+              </div>
             );
           })}
         </div>
         </div>
       )}
     </section>
+  );
+}
+
+// Formulario de edición de una tienda, desplegado INLINE debajo de su fila.
+function EditarTiendaInline({ df, a, creditosDelta, setCreditosDelta, diasDelta, setDiasDelta, ajusteMsg, setAjusteMsg }: {
+  df: DealFlowState;
+  a: DealFlowState['accounts'][number];
+  creditosDelta: string; setCreditosDelta: (v: string) => void;
+  diasDelta: string; setDiasDelta: (v: string) => void;
+  ajusteMsg: string; setAjusteMsg: (v: string) => void;
+}) {
+  const id = String(a.id);
+  return (
+    <>
+      <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div>
+          <div style={labelStyle}>Nombre de la tienda</div>
+          <input className="df-input" value={df.editStoreForm.nombre} onChange={(e) => df.setEditStoreForm({ nombre: e.target.value })} style={inputStyle} />
+        </div>
+        <div>
+          <div style={labelStyle}>Correo (con este entra)</div>
+          <input className="df-input" value={df.editStoreForm.correo} onChange={(e) => df.setEditStoreForm({ correo: e.target.value })} style={inputStyle} />
+        </div>
+      </div>
+      <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+        <div>
+          <div style={labelStyle}>Plan</div>
+          <Dropdown value={df.editStoreForm.plan} onChange={(v) => df.setEditStoreForm({ plan: v })} options={df.planNames.map((p) => ({ value: p, label: p }))} />
+        </div>
+        <div>
+          <div style={labelStyle}>Nueva contraseña (opcional)</div>
+          <input className="df-input" type="password" value={df.editStoreForm.password} onChange={(e) => df.setEditStoreForm({ password: e.target.value })} placeholder="Déjalo vacío para no cambiarla" style={inputStyle} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
+        <button onClick={df.guardarEditarStore} className="df-btn-primary" style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Guardar cambios</button>
+        <button onClick={df.cerrarPanelStore} style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+        {df.editStoreMsg && <span style={{ color: df.editStoreMsg === 'Guardando…' ? 'var(--df-text-muted)' : 'var(--df-danger)', fontSize: 13 }}>{df.editStoreMsg}</span>}
+      </div>
+      <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, borderTop: '1px solid var(--df-border)', paddingTop: 16 }}>
+        <div>
+          <div style={labelStyle}>Créditos ({(a.creditos ?? 0).toLocaleString('es-CO')} actuales)</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="number" value={creditosDelta} onChange={(e) => setCreditosDelta(e.target.value)} placeholder="Ej: 500 o -200" style={{ ...inputStyle, width: 110 }} />
+            <button onClick={() => { if (creditosDelta) { df.darCreditos(id, Number(creditosDelta)); setAjusteMsg('✓ Créditos ajustados'); setCreditosDelta(''); } }} disabled={!creditosDelta}
+              style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: creditosDelta ? 'pointer' : 'default', opacity: creditosDelta ? 1 : 0.5, whiteSpace: 'nowrap' }}>Ajustar</button>
+          </div>
+        </div>
+        <div>
+          <div style={labelStyle}>Días de renta ({a.facturacionDias || a.facturacionFecha})</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="number" value={diasDelta} onChange={(e) => setDiasDelta(e.target.value)} placeholder="Ej: 30 o -15" style={{ ...inputStyle, width: 110 }} />
+            <button onClick={() => { if (diasDelta) { df.extenderSuscripcion(id, Number(diasDelta)); setAjusteMsg('✓ Renta ajustada'); setDiasDelta(''); } }} disabled={!diasDelta}
+              style={{ background: 'var(--df-surface)', border: '1px solid var(--df-brand-border)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: diasDelta ? 'pointer' : 'default', opacity: diasDelta ? 1 : 0.5, whiteSpace: 'nowrap' }}>Ajustar</button>
+          </div>
+        </div>
+        <div>
+          <div style={labelStyle}>Tema Premium (upsell)</div>
+          <button onClick={a.togglePremium}
+            style={{ background: a.temaPremium ? 'linear-gradient(135deg,#7C3AED,#2563EB)' : 'var(--df-surface)', border: '1px solid ' + (a.temaPremium ? 'transparent' : 'var(--df-border)'), color: a.temaPremium ? '#fff' : 'var(--df-text-body)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', width: '100%' }}>
+            💎 {a.temaPremium ? 'Premium activado' : 'Activar Premium'}
+          </button>
+        </div>
+        {ajusteMsg && <div style={{ gridColumn: '1 / -1', fontSize: 12.5, color: 'var(--df-brand-dark)', fontWeight: 600 }}>{ajusteMsg}</div>}
+      </div>
+    </>
   );
 }
 
