@@ -296,6 +296,15 @@ export async function enviarPedidoAEffi(storeId: string, orderRowId: string, rei
   const woo = pedidoAWoo(storeId, o, conRecaudo);
   const items = (woo.line_items as { product_id: number; name: string }[]) || [];
   const sinSku = items.filter((li) => !li.product_id).map((li) => li.name); // sin SKU vinculado → Effi no lo reconoce
+  // Si algún ítem NO está vinculado con Effi, Effi crearía el cliente pero NO la
+  // remisión (queda a medias). Mejor no enviar y decir exactamente qué vincular.
+  if (sinSku.length) {
+    try {
+      db.prepare('INSERT INTO effi_log (store_id, metodo, ruta, sku, auth, resultado) VALUES (?,?,?,?,1,?)')
+        .run(storeId, 'POST', '→ Effi crear_venta', '', `pedido ${numero} BLOQUEADO: sin Referencia de Effi → ${sinSku.join(', ')}`.slice(0, 120));
+    } catch { /* el log no debe romper */ }
+    return { error: `No se envió a Effi para no crear un cliente sin remisión. Estas variantes/productos no tienen Referencia de Effi: ${sinSku.join(', ')}. Vincúlalas en el producto → pestaña Variantes → Conexiones por variante → Effi (y que ese código exista y esté ACTIVO en Effi), luego reintenta.` };
+  }
   const src = `https://${f.slug}.${BASE_DOMAIN}/`;
   try {
     await fetch('https://effi.com.co/app/venta/crear_venta_woocommerce', {
@@ -387,19 +396,32 @@ export function pedidoAWoo(storeId: string, o: Record<string, unknown>, conRecau
 
 function buscarProductoDePedido(storeId: string, nombreItem: string): { sku: string } | null {
   // El ítem del pedido viene como "Nombre (Talla M · Negro)" o "Nombre - Variante".
-  // Intentamos casar por el nombre de producto y su variante.
+  // Intentamos casar por el nombre de producto y su variante, de forma tolerante.
   const base = nombreItem.split('(')[0].split(' - ')[0].trim();
-  const p = db.prepare('SELECT id, sku FROM products WHERE store_id = ? AND nombre = ? LIMIT 1').get(storeId, base) as { id: string; sku: string } | undefined;
+  // 1) Producto: exacto; si no, por nombre normalizado (acentos/espacios/signos).
+  let p = db.prepare('SELECT id, sku FROM products WHERE store_id = ? AND nombre = ? LIMIT 1').get(storeId, base) as { id: string; sku: string } | undefined;
+  if (!p) {
+    const cands = db.prepare('SELECT id, sku, nombre FROM products WHERE store_id = ?').all(storeId) as { id: string; sku: string; nombre: string }[];
+    const nb = norm(base);
+    p = cands.find((c) => norm(c.nombre) === nb) || cands.find((c) => nb && (norm(c.nombre).includes(nb) || nb.includes(norm(c.nombre))));
+  }
   if (!p) return null;
-  // Si el ítem menciona una variante, buscamos su SKU exacto.
+  // Referencia de Effi por variante: refs.effi o, si está vacía, el sku legado.
+  const vs = db.prepare(`SELECT label, ${EFFI_REF} sku FROM variants v WHERE product_id = ?`).all(p.id) as { label: string; sku: string }[];
+  const conRef = vs.filter((v) => (v.sku || '').trim());
+  // 2) Si el ítem menciona una variante (en paréntesis o tras " - "), casarla.
   const mv = nombreItem.match(/\(([^)]+)\)/);
-  if (mv) {
-    const etiqueta = mv[1].replace(/talla/ig, '').trim();
-    // Referencia de Effi por variante: refs.effi o, si está vacía, el sku legado.
-    const vs = db.prepare(`SELECT label, ${EFFI_REF} sku FROM variants v WHERE product_id = ?`).all(p.id) as { label: string; sku: string }[];
-    const hit = vs.find((v) => norm(v.label) === norm(etiqueta)) || vs.find((v) => norm(etiqueta).includes(norm(v.label)) && v.label);
+  const etiqueta = mv ? mv[1] : (nombreItem.includes(' - ') ? nombreItem.split(' - ').slice(1).join(' - ') : '');
+  if (etiqueta) {
+    const et = norm(etiqueta.replace(/talla/ig, ''));
+    const hit = vs.find((v) => norm(v.label) === et)
+      || vs.find((v) => v.label && (et.includes(norm(v.label)) || norm(v.label).includes(et)));
     if (hit?.sku) return { sku: hit.sku };
   }
+  // 3) Sin variante en el nombre, pero el producto tiene UNA sola variante con
+  //    referencia → usamos esa (caso típico de producto simple ya vinculado).
+  if (conRef.length === 1) return { sku: conRef[0].sku };
+  // 4) SKU a nivel de producto (legado).
   return p.sku ? { sku: p.sku } : null;
 }
 const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
