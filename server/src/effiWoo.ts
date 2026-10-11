@@ -426,10 +426,23 @@ function buscarProductoDePedido(storeId: string, nombreItem: string): { sku: str
       || vs.find((v) => v.label && (et.includes(norm(v.label)) || norm(v.label).includes(et)));
     if (hit?.sku) return { sku: hit.sku };
   }
-  // 3) Sin variante en el nombre, pero el producto tiene UNA sola variante con
+  // 3) Variante EMBEBIDA en el nombre libre (pedidos del bot: "Vestido Dianne Azul
+  //    rey M" sin paréntesis). Casamos la variante cuyas palabras del label aparecen
+  //    TODAS en el nombre del ítem; si varias cuadran, la de más palabras (más específica).
+  const full = norm(nombreItem);
+  const tokensDe = (s: string) => norm(s).split(' ').filter((t) => t.length > 1);
+  let mejor: { label: string; sku: string } | null = null;
+  let mejorScore = 0;
+  for (const v of conRef) {
+    const toks = tokensDe(v.label);
+    if (!toks.length) continue;
+    if (toks.every((t) => full.includes(t)) && toks.length > mejorScore) { mejor = v; mejorScore = toks.length; }
+  }
+  if (mejor) return { sku: mejor.sku };
+  // 4) Sin variante en el nombre, pero el producto tiene UNA sola variante con
   //    referencia → usamos esa (caso típico de producto simple ya vinculado).
   if (conRef.length === 1) return { sku: conRef[0].sku };
-  // 4) SKU a nivel de producto (legado).
+  // 5) SKU a nivel de producto (legado).
   return p.sku ? { sku: p.sku } : null;
 }
 const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
