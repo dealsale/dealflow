@@ -181,9 +181,17 @@ function registrar(storeId: string, req: Request, auth: boolean, resultado: stri
   } catch { /* el log nunca debe romper la respuesta */ }
 }
 
-// Últimas entradas del log para el dueño.
-export function logEffi(storeId: string, limite = 60): Record<string, unknown>[] {
-  return db.prepare('SELECT ts, metodo, ruta, sku, auth, resultado FROM effi_log WHERE store_id = ? ORDER BY id DESC LIMIT ?').all(storeId, limite) as Record<string, unknown>[];
+// Últimas entradas del log para el dueño. Si `pedido` viene, filtra las que
+// mencionan ese número de pedido (en la ruta, el resultado o el SKU), con límite
+// de palabra para no confundir 105 con 1057.
+export function logEffi(storeId: string, limite = 60, pedido?: string | number): Record<string, unknown>[] {
+  const num = String(pedido ?? '').replace(/\D/g, '');
+  if (!num) {
+    return db.prepare('SELECT ts, metodo, ruta, sku, auth, resultado FROM effi_log WHERE store_id = ? ORDER BY id DESC LIMIT ?').all(storeId, limite) as Record<string, unknown>[];
+  }
+  const todas = db.prepare('SELECT ts, metodo, ruta, sku, auth, resultado FROM effi_log WHERE store_id = ? ORDER BY id DESC LIMIT 300').all(storeId) as Record<string, unknown>[];
+  const re = new RegExp(`(^|[^0-9])${num}([^0-9]|$)`);
+  return todas.filter((e) => re.test(String(e.ruta || '')) || re.test(String(e.resultado || '')) || re.test(String(e.sku || ''))).slice(0, limite);
 }
 
 /**

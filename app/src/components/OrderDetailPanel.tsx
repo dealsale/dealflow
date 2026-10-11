@@ -2,9 +2,56 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { confirmar } from './dialogs';
-import { apiDropiCotizar, apiDropiCrear, type DropiTransportadora } from '../lib/api';
+import { apiDropiCotizar, apiDropiCrear, apiEffiLog, type DropiTransportadora, type EffiLogEvento } from '../lib/api';
 
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
+
+/**
+ * "¿Qué pasó en Effi con este pedido?": muestra el registro de lo que DealFlow
+ * envió a Effi y lo que Effi consultó, filtrado por el número de este pedido. Sirve
+ * para ver por qué una remisión no se generó (p. ej. una variante sin Referencia).
+ */
+function EffiLogPedido({ pedidoId }: { pedidoId: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const [cargando, setCargando] = useState(false);
+  const [eventos, setEventos] = useState<EffiLogEvento[] | null>(null);
+  const cargar = () => {
+    setCargando(true);
+    void apiEffiLog(pedidoId).then((r) => { setEventos(r.data?.eventos || []); setCargando(false); });
+  };
+  const toggle = () => { const n = !abierto; setAbierto(n); if (n && eventos === null) cargar(); };
+  const colorDe = (txt: string) => /bloquead|404|inválid|no existe|error|sin/i.test(txt) ? 'var(--df-danger-dark)'
+    : /ok|remisión|1 match|enviado/i.test(txt) ? 'var(--df-purple)' : 'var(--df-text-muted)';
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid var(--df-border)', paddingTop: 10 }}>
+      <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', padding: 0, fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-purple)', cursor: 'pointer' }}>
+        <span style={{ fontSize: 11, transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
+        🔎 ¿Qué pasó en Effi con este pedido?
+      </button>
+      {abierto && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+            <button onClick={cargar} disabled={cargando} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 11.5, color: 'var(--df-text-muted)', cursor: 'pointer' }}>{cargando ? 'Cargando…' : '↻ Actualizar'}</button>
+          </div>
+          {cargando && eventos === null ? (
+            <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Cargando el registro…</div>
+          ) : !eventos || !eventos.length ? (
+            <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Todavía no hay registros de Effi para este pedido. Aparecen cuando intentas despachar o cuando Effi consulta el pedido.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+              {eventos.map((e, i) => (
+                <div key={i} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px' }}>
+                  <div style={{ fontSize: 10.5, color: 'var(--df-text-faint)', fontFamily: "'JetBrains Mono',monospace" }}>{e.ts} · {e.metodo} {e.ruta}{e.sku ? ` · sku=${e.sku}` : ''}</div>
+                  <div style={{ fontSize: 12.5, color: colorDe(e.resultado), marginTop: 2 }}>{e.resultado}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Despacho por la API directa de Dropi: cotiza las transportadoras para el
@@ -236,6 +283,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
               </div>
             )}
             {sel.despachado && df.effiMsg && <div style={{ marginTop: 10, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
+            {effiDisponible && <EffiLogPedido pedidoId={sel.id} />}
           </div>
 
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 10 }}>Avance</div>
