@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
+import type { LibraryAdminItem } from '../../lib/api';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
 
@@ -248,42 +249,77 @@ export function BibliotecaAdmin({ df }: { df: DealFlowState }) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
           {df.superBiblioteca.map((p) => (
-            <div key={p.id} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
-              <div style={{ height: 130, background: 'var(--df-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                {p.portada ? <img src={p.portada} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: 'var(--df-border-strong)', fontSize: 28 }}>🛍️</span>}
-              </div>
-              <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 9 }}>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{p.nombre}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => df.actualizarBibliotecaItem(p.id, { gratis: !p.gratis })}
-                    style={{ border: '1px solid ' + (p.gratis ? 'var(--df-brand-border)' : 'var(--df-purple-border)'), background: p.gratis ? 'var(--df-brand-subtle-2)' : 'var(--df-purple-subtle)', color: p.gratis ? 'var(--df-brand-dark)' : 'var(--df-purple)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    {p.gratis ? 'Gratis' : 'De pago'}
-                  </button>
-                  {!p.gratis && (
-                    <input defaultValue={p.precioImportacion || ''} placeholder="Precio"
-                      onBlur={(e) => { const v = parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 0; if (v !== p.precioImportacion) df.actualizarBibliotecaItem(p.id, { precioImportacion: v }); }}
-                      style={{ width: 100, border: '1px solid var(--df-border)', borderRadius: 7, padding: '5px 8px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 }} />
-                  )}
-                </div>
-                <button onClick={() => df.actualizarBibliotecaItem(p.id, { editable: !p.editable })}
-                  title={p.editable ? 'Los clientes pueden editar su estructura' : 'Estructura bloqueada: el cliente no puede editarla'}
-                  style={{ alignSelf: 'flex-start', border: '1px solid ' + (p.editable ? 'var(--df-border)' : 'var(--df-warning-border)'), background: p.editable ? 'var(--df-surface)' : 'var(--df-warning-subtle-2)', color: p.editable ? 'var(--df-text-body)' : 'var(--df-warning)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                  {p.editable ? 'Editable' : '🔒 Bloqueado'}
-                </button>
-                <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>{p.importos} {p.importos === 1 ? 'tienda lo importó' : 'tiendas lo importaron'}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button onClick={() => df.actualizarBibliotecaItem(p.id, { activo: !p.activo })}
-                    style={{ flex: 1, border: '1px solid ' + (p.activo ? 'var(--df-border)' : 'var(--df-warning-border)'), background: p.activo ? 'var(--df-surface)' : 'var(--df-warning-subtle-2)', color: p.activo ? 'var(--df-text-body)' : 'var(--df-warning)', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
-                    {p.activo ? 'Visible · ocultar' : 'Oculto · mostrar'}
-                  </button>
-                  <span onClick={() => df.eliminarBibliotecaItem(p.id)} title="Eliminar de la biblioteca" className="df-danger-hover"
-                    style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, padding: 4 }}>🗑</span>
-                </div>
-              </div>
-            </div>
+            <CardBiblioteca key={p.id} p={p} df={df} />
           ))}
         </div>
       )}
     </>
+  );
+}
+
+/** Tarjeta de un producto de la biblioteca: editar, enviar a una tienda, precio, visibilidad. */
+function CardBiblioteca({ p, df }: { p: LibraryAdminItem; df: DealFlowState }) {
+  const [tiendaDestino, setTiendaDestino] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  return (
+    <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+      <div style={{ height: 130, background: 'var(--df-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {p.portada ? <img src={p.portada} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: 'var(--df-border-strong)', fontSize: 28 }}>🛍️</span>}
+      </div>
+      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <div style={{ fontWeight: 700, fontSize: 14 }}>{p.nombre}</div>
+
+        {/* Editar con el editor completo */}
+        <button onClick={() => df.editarBibliotecaItem(p.id)}
+          style={{ border: '1px solid var(--df-brand)', background: 'var(--df-brand-subtle)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
+          ✏️ Editar producto
+        </button>
+
+        {/* Enviar a una tienda */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Dropdown
+              value={tiendaDestino}
+              onChange={setTiendaDestino}
+              placeholder="Enviar a una tienda…"
+              options={[{ value: '', label: 'Enviar a una tienda…' }, ...df.superStores.map((s) => ({ value: s.id, label: s.tienda }))]}
+            />
+          </div>
+          <button
+            onClick={() => { if (!tiendaDestino) return; setEnviando(true); df.enviarBibliotecaATienda(p.id, tiendaDestino, () => { setEnviando(false); setTiendaDestino(''); }); }}
+            disabled={!tiendaDestino || enviando}
+            title="Clonar este producto dentro de la tienda elegida"
+            style={{ border: 'none', background: tiendaDestino ? 'var(--df-purple)' : '#C4B5FD', color: '#fff', borderRadius: 8, padding: '0 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: tiendaDestino ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+            {enviando ? '…' : 'Enviar'}
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => df.actualizarBibliotecaItem(p.id, { gratis: !p.gratis })}
+            style={{ border: '1px solid ' + (p.gratis ? 'var(--df-brand-border)' : 'var(--df-purple-border)'), background: p.gratis ? 'var(--df-brand-subtle-2)' : 'var(--df-purple-subtle)', color: p.gratis ? 'var(--df-brand-dark)' : 'var(--df-purple)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+            {p.gratis ? 'Gratis' : 'De pago'}
+          </button>
+          {!p.gratis && (
+            <input defaultValue={p.precioImportacion || ''} placeholder="Precio"
+              onBlur={(e) => { const v = parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 0; if (v !== p.precioImportacion) df.actualizarBibliotecaItem(p.id, { precioImportacion: v }); }}
+              style={{ width: 100, border: '1px solid var(--df-border)', borderRadius: 7, padding: '5px 8px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 }} />
+          )}
+        </div>
+        <button onClick={() => df.actualizarBibliotecaItem(p.id, { editable: !p.editable })}
+          title={p.editable ? 'Los clientes pueden editar su estructura' : 'Estructura bloqueada: el cliente no puede editarla'}
+          style={{ alignSelf: 'flex-start', border: '1px solid ' + (p.editable ? 'var(--df-border)' : 'var(--df-warning-border)'), background: p.editable ? 'var(--df-surface)' : 'var(--df-warning-subtle-2)', color: p.editable ? 'var(--df-text-body)' : 'var(--df-warning)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+          {p.editable ? 'Editable' : '🔒 Bloqueado'}
+        </button>
+        <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>{p.importos} {p.importos === 1 ? 'tienda lo importó' : 'tiendas lo importaron'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => df.actualizarBibliotecaItem(p.id, { activo: !p.activo })}
+            style={{ flex: 1, border: '1px solid ' + (p.activo ? 'var(--df-border)' : 'var(--df-warning-border)'), background: p.activo ? 'var(--df-surface)' : 'var(--df-warning-subtle-2)', color: p.activo ? 'var(--df-text-body)' : 'var(--df-warning)', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
+            {p.activo ? 'Visible · ocultar' : 'Oculto · mostrar'}
+          </button>
+          <span onClick={() => df.eliminarBibliotecaItem(p.id)} title="Eliminar de la biblioteca" className="df-danger-hover"
+            style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, padding: 4 }}>🗑</span>
+        </div>
+      </div>
+    </div>
   );
 }

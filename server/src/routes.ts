@@ -2673,6 +2673,34 @@ api.delete('/superadmin/biblioteca/:id', requireAuth, requireAdmin, async (req, 
   res.json({ ok: true });
 });
 
+// Editar un producto de la biblioteca con el editor completo: lo hace editable
+// (materializa el snapshot en la tienda master si hace falta), impersona la master
+// y devuelve el id del producto para abrirlo.
+api.post('/superadmin/biblioteca/:id/editar', requireAuth, requireAdmin, async (req, res) => {
+  const { materializarLibraryEnMaster } = await import('./biblioteca.js');
+  const r = materializarLibraryEnMaster(req.params.id);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  asegurarMasterStore();
+  const dueno = duenoMasterStore();
+  if (!dueno) return res.status(500).json({ error: 'No pudimos preparar la biblioteca.' });
+  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: 'VENDEDOR', storeId: dueno.store_id, imp: req.user!.id }, req.hostname);
+  res.json({ ok: true, productId: r.productId });
+});
+
+// Enviar un producto de la biblioteca directamente a una tienda (clonarlo ahí).
+api.post('/superadmin/biblioteca/:id/enviar-a-tienda', requireAuth, requireAdmin, async (req, res) => {
+  const { getLibraryProduct, importarLibraryEnTienda } = await import('./biblioteca.js');
+  const storeId = String(req.body?.storeId || '');
+  if (!storeId) return res.status(400).json({ error: 'Elige la tienda destino.' });
+  const existe = db.prepare('SELECT id FROM stores WHERE id = ?').get(storeId);
+  if (!existe) return res.status(404).json({ error: 'La tienda destino no existe.' });
+  const lib = getLibraryProduct(req.params.id);
+  if (!lib) return res.status(404).json({ error: 'Producto de biblioteca no encontrado.' });
+  const r = importarLibraryEnTienda(req.params.id, storeId, true); // admin: se envía como adquirido
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, productId: r.productId });
+});
+
 // ── Biblioteca de productos (tienda cliente) ─────────────────────────
 api.get('/biblioteca', requireAuth, requireStore, async (req, res) => {
   const { listarBiblioteca } = await import('./biblioteca.js');
@@ -2742,16 +2770,19 @@ api.post('/push/unsubscribe', requireAuth, requireStore, async (req, res) => {
 // ── Archivos de conversaciones (imágenes, videos, etc.) ──────────────
 // Servidos bajo /api/media para que la sesión (cookie) los proteja: cada
 // tienda solo ve los suyos.
-api.get('/media/:storeId/:file', requireAuth, requireStore, (req, res) => {
-  if (req.params.storeId !== req.user!.storeId) return res.status(403).end();
+api.get('/media/:storeId/:file', requireAuth, (req, res) => {
+  // Cada tienda ve lo suyo; el equipo DealFlow (admin/superadmin, sin tienda) ve
+  // cualquiera, para poder mostrar las fotos de la biblioteca y al mover productos.
+  const esAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPERADMIN';
+  if (!esAdmin && req.params.storeId !== req.user!.storeId) return res.status(403).end();
   const file = mediaPath(req.params.storeId, req.params.file);
   if (!existsSync(file)) return res.status(404).end();
   res.sendFile(file);
 });
 
-// Multimedia de la Biblioteca: visible para CUALQUIER tienda autenticada
-// (para poder mostrar las fotos de los productos antes de importarlos).
-api.get('/library/media/:file', requireAuth, requireStore, (req, res) => {
+// Multimedia de la Biblioteca: visible para cualquier usuario autenticado —tiendas
+// y el equipo DealFlow (que no tiene tienda)— para mostrar las fotos del catálogo.
+api.get('/library/media/:file', requireAuth, (req, res) => {
   const file = mediaPath('__biblioteca__', req.params.file);
   if (!existsSync(file)) return res.status(404).end();
   res.sendFile(file);

@@ -156,6 +156,8 @@ import {
   apiSuperBibliotecaFromProduct,
   apiSuperBibliotecaPatch,
   apiSuperBibliotecaDelete,
+  apiSuperBibliotecaEditar,
+  apiSuperBibliotecaEnviarATienda,
   apiIntegraciones,
   apiGuardarIntegracion,
   apiEliminarIntegracion,
@@ -2688,6 +2690,21 @@ export function useDealFlowState() {
     setSuperBiblioteca((st) => st.filter((p) => p.id !== id));
     void apiSuperBibliotecaDelete(id).then((r) => { if (r.error) void reloadSuperBiblioteca(); });
   }
+  // Editar un producto de la biblioteca con el editor completo: entra al taller
+  // (impersona la tienda master) con ese producto listo para editar.
+  function editarBibliotecaItem(id: string) {
+    void apiSuperBibliotecaEditar(id).then((r) => {
+      if (r.error || !r.data) { toast(r.error || 'No se pudo abrir el producto para editar.', 'error'); return; }
+      window.location.reload(); // ya quedamos como la tienda master: se ve en Productos
+    });
+  }
+  // Enviar un producto de la biblioteca directamente a una tienda (clonarlo ahí).
+  function enviarBibliotecaATienda(id: string, storeId: string, cb?: (ok: boolean) => void) {
+    void apiSuperBibliotecaEnviarATienda(id, storeId).then((r) => {
+      if (r.error || !r.data) { toast(r.error || 'No se pudo enviar el producto.', 'error'); cb?.(false); return; }
+      toast('Producto enviado a la tienda ✓', 'ok'); cb?.(true);
+    });
+  }
 
   // ── PWA: instalar la app ──
   useEffect(() => {
@@ -3774,6 +3791,8 @@ export function useDealFlowState() {
     enviarProductoABiblioteca,
     actualizarBibliotecaItem,
     eliminarBibliotecaItem,
+    editarBibliotecaItem,
+    enviarBibliotecaATienda,
     setLeadEtiqueta,
     asignarChatCrm,
     guardarNotaInterna,

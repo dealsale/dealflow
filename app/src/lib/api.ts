@@ -671,6 +671,9 @@ export const apiSuperBibliotecaFromProduct = (productId: string, gratis: boolean
 export const apiSuperBibliotecaPatch = (id: string, patch: { nombre?: string; gratis?: boolean; precioImportacion?: number; activo?: boolean; editable?: boolean }) =>
   req<{ ok: true }>(`/api/superadmin/biblioteca/${id}`, 'PATCH', patch);
 export const apiSuperBibliotecaDelete = (id: string) => req<{ ok: true }>(`/api/superadmin/biblioteca/${id}`, 'DELETE');
+export const apiSuperBibliotecaEditar = (id: string) => req<{ ok: true; productId: string }>(`/api/superadmin/biblioteca/${id}/editar`, 'POST');
+export const apiSuperBibliotecaEnviarATienda = (id: string, storeId: string) =>
+  req<{ ok: true; productId: string }>(`/api/superadmin/biblioteca/${id}/enviar-a-tienda`, 'POST', { storeId });
 
 export const apiCreatePlan = (b: { nombre: string; precio: number; features: string[] }) => req<{ id: string }>('/api/admin/plans', 'POST', b);
 export const apiUpdatePlan = (id: string, b: { nombre?: string; precio?: number; features?: string[] }) =>
