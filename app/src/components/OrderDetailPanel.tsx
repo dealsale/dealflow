@@ -30,6 +30,9 @@ function EffiLogPedido({ pedidoId }: { pedidoId: string }) {
       </button>
       {abierto && (
         <div style={{ marginTop: 8 }}>
+          <div style={{ background: 'var(--df-surface-2)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', marginBottom: 8, fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.45 }}>
+            Si aquí ves <b>remisión enviada / ok</b> pero en Effi <b>solo aparece el cliente sin el producto</b>, es porque Effi <b>no crea productos</b>: solo enlaza por <b>Referencia</b> a un producto que ya exista y esté <b>activo</b> en el catálogo de Effi. Revisa que la Referencia de la variante exista tal cual (y activa) en Effi.
+          </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
             <button onClick={cargar} disabled={cargando} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 11.5, color: 'var(--df-text-muted)', cursor: 'pointer' }}>{cargando ? 'Cargando…' : '↻ Actualizar'}</button>
           </div>
@@ -283,7 +286,9 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
               </div>
             )}
             {sel.despachado && df.effiMsg && <div style={{ marginTop: 10, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
-            {effiDisponible && <EffiLogPedido pedidoId={sel.id} />}
+            {/* Diagnóstico de Effi: SOLO para el equipo DealFlow (admin o soporte
+                impersonando una tienda), no para el cliente dueño de la tienda. */}
+            {effiDisponible && (df.sessionUser?.role === 'admin' || df.sessionUser?.role === 'superadmin' || !!df.sessionUser?.impersonando) && <EffiLogPedido pedidoId={sel.id} />}
           </div>
 
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 10 }}>Avance</div>
