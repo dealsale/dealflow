@@ -268,7 +268,7 @@ function PaywallShell({ df, titulo, sub, children }: { df: DealFlowState; titulo
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         <span style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em', color: '#F1F5F9' }}>DealFlow</span>
       </div>
-      <div style={{ width: 720, maxWidth: '100%', background: 'rgba(255,255,255,.97)', borderRadius: 22, padding: 30, boxShadow: '0 30px 80px -20px rgba(0,0,0,.55)' }}>
+      <div className="df-light-scope" style={{ width: 720, maxWidth: '100%', background: 'rgba(255,255,255,.97)', borderRadius: 22, padding: 30, boxShadow: '0 30px 80px -20px rgba(0,0,0,.55)' }}>
         <div style={{ textAlign: 'center', marginBottom: 22 }}>
           <div style={{ fontWeight: 800, fontSize: 22, color: 'var(--df-text)', letterSpacing: '-0.01em' }}>{titulo}</div>
           <div style={{ color: 'var(--df-text-muted)', fontSize: 14, marginTop: 6, maxWidth: 460, marginInline: 'auto', lineHeight: 1.5 }}>{sub}</div>

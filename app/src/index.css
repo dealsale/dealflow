@@ -217,6 +217,58 @@
 :root[data-theme='premium'] ::-webkit-scrollbar-thumb {
   background: #4C4FA0;
 }
+/* Campos de formulario en Premium / Dark: muchos inputs no fijan fondo propio y
+   el navegador (color-scheme: dark) les ponía su gris opaco por defecto, con el
+   texto apagado — los "cuadros grises" que no se distinguían. Les damos un fondo
+   de vidrio oscuro coherente con el tema. Los estilos en línea siguen mandando. */
+:root[data-theme='premium'] :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']), select, textarea) {
+  background-color: rgba(9, 12, 32, 0.62);
+  color: var(--df-text);
+  border-color: var(--df-border-strong);
+}
+:root[data-theme='dark'] :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']), select, textarea) {
+  background-color: #0E1527;
+  color: var(--df-text);
+}
+:root[data-theme='premium'] option,
+:root[data-theme='dark'] option {
+  background-color: #10152e;
+  color: #F5F7FF;
+}
+:root[data-theme='premium'] ::placeholder { color: #8C95C8; }
+:root[data-theme='premium'] input:disabled,
+:root[data-theme='premium'] textarea:disabled { opacity: .75; }
+
+/* Bloques que deben verse SIEMPRE en claro (p. ej. la tarjeta del muro de pago,
+   que es blanca): redefine las variables del tema solo dentro de ese bloque. */
+.df-light-scope {
+  color-scheme: light;
+  --df-surface: #fff;
+  --df-bg: #F8FAFC;
+  --df-surface-2: #F1F5F9;
+  --df-border: #E2E8F0;
+  --df-border-strong: #CBD5E1;
+  --df-text: #0F172A;
+  --df-text-strong: #1E293B;
+  --df-text-body: #334155;
+  --df-text-secondary: #475569;
+  --df-text-muted: #64748B;
+  --df-text-faint: #94A3B8;
+  --df-brand: #059669;
+  --df-brand-dark: #047857;
+  --df-brand-mid: #10B981;
+  --df-brand-light: #34D399;
+  --df-brand-border: #A7F3D0;
+  --df-brand-subtle: #D1FAE5;
+  --df-brand-subtle-2: #ECFDF5;
+  --df-danger: #DC2626;
+  --df-danger-dark: #B91C1C;
+  --df-danger-border: #FECACA;
+  --df-danger-subtle: #FEF2F2;
+  --df-glow: none;
+}
+.df-light-scope :is(input, select, textarea) { background-color: #fff; color: #0F172A; }
+
 :root[data-theme='premium'] .df-input:focus {
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.28), var(--df-glow);
 }
