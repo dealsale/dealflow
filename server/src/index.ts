@@ -1,7 +1,7 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { api, webhooks } from './routes.js';
 import { db } from './db.js';
@@ -56,7 +56,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-10-12-respuesta-citada',
+    build: '2026-10-12-landing-dropshipping-ads',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -121,6 +121,25 @@ if (existsSync(APP_DIST)) {
   //    la app. Así app.<dominio>/ enseña la landing al visitante y el panel al dueño.
   // LANDING_HOSTS se mantiene como hosts que SIEMPRE muestran landing al visitante
   // (compatibilidad con el dominio raíz), pero ya no es necesario para que funcione.
+  // Landing de campañas (dropshipping con IA) para pautar: /dropshipping y /ads.
+  // El número de WhatsApp del CTA sale de LANDING_WA (solo dígitos, ej. 573001234567).
+  const ADS_CANDIDATOS = [
+    process.env.LANDING_ADS_PATH,
+    path.resolve(APP_DIST, '..', 'dropshipping.html'),
+    path.resolve(import.meta.dirname, '../../dropshipping.html'),
+  ].filter(Boolean) as string[];
+  const ADS_FILE = ADS_CANDIDATOS.find((p) => existsSync(p));
+  let adsHtml = '';
+  if (ADS_FILE) {
+    const waNum = (process.env.LANDING_WA || '').replace(/\D/g, '');
+    const waLink = 'https://wa.me/' + waNum + '?text=' + encodeURIComponent('Hola, quiero más información sobre el dropshipping con IA de DealFlow');
+    adsHtml = readFileSync(ADS_FILE, 'utf8').replace(/__WA_LINK__/g, waLink);
+  }
+  app.get(['/dropshipping', '/ads', '/dropshipping-ia'], (_req, res) => {
+    if (!adsHtml) return res.status(404).send('Landing no disponible.');
+    res.type('html').send(adsHtml);
+  });
+
   const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app)(\/|$)/i;
   app.get(/^\/(?!api|webhooks).*/, (req, res) => {
     const host = (req.hostname || '').toLowerCase();
