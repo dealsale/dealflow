@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import logo from '../assets/logo.png';
 
 /**
@@ -5,6 +6,9 @@ import logo from '../assets/logo.png';
  * un núcleo con el logo, un anillo de energía que gira, ondas concéntricas,
  * partículas flotando y una barra de progreso con brillo. Fondo oscuro fijo
  * (independiente del tema) para que se sienta premium al entrar.
+ *
+ * variante 'completo' → secuencia de "encendido de motores" paso a paso (primer
+ * inicio en el dispositivo). variante 'simple' → carga corta para los siguientes.
  */
 const CSS = `
 @keyframes dfplIn { from { opacity:0 } to { opacity:1 } }
@@ -18,10 +22,30 @@ const CSS = `
 @keyframes dfplGrid { from { background-position: 0 0, 0 0 } to { background-position: 46px 0, 0 46px } }
 @keyframes dfplTilt { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
 @keyframes dfplSheen { 0% { background-position: -160% 0 } 100% { background-position: 260% 0 } }
+@keyframes dfplStepIn { from { opacity:0; transform: translateY(6px) } to { opacity:1; transform: translateY(0) } }
+@keyframes dfplMiniSpin { to { transform: rotate(360deg) } }
+@keyframes dfplScan { 0% { transform: translateY(-120%) } 100% { transform: translateY(2400%) } }
 .dfpl { animation: dfplIn .3s ease both }
 `;
 
-export function BotPreloader() {
+// Pasos de "encendido" para la secuencia completa del primer inicio.
+const PASOS = [
+  'Encendiendo los motores de DealFlow',
+  'Conectando con WhatsApp Cloud API',
+  'Activando el asistente de IA',
+  'Sincronizando pedidos y catálogo',
+  'Preparando tu panel',
+];
+
+export function BotPreloader({ variante = 'simple' }: { variante?: 'completo' | 'simple' }) {
+  const completo = variante === 'completo';
+  const [paso, setPaso] = useState(0);
+  useEffect(() => {
+    if (!completo) return;
+    const t = setInterval(() => setPaso((p) => Math.min(p + 1, PASOS.length)), 620);
+    return () => clearInterval(t);
+  }, [completo]);
+
   return (
     <div
       className="dfpl"
@@ -93,7 +117,7 @@ export function BotPreloader() {
 
         {/* tile de vidrio con el logo */}
         <div style={{
-          position: 'relative', width: 104, height: 104, borderRadius: 24,
+          position: 'relative', width: 104, height: 104, borderRadius: 24, overflow: 'hidden',
           background: 'linear-gradient(145deg, rgba(255,255,255,.09), rgba(255,255,255,.02))',
           border: '1px solid rgba(255,255,255,.12)',
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,.15), 0 12px 34px rgba(0,0,0,.5)',
@@ -101,6 +125,8 @@ export function BotPreloader() {
           backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
         }}>
           <img src={logo} alt="" style={{ width: 58, height: 52, objectFit: 'contain', filter: 'drop-shadow(0 3px 10px rgba(16,185,129,.4))' }} />
+          {/* línea de escaneo que recorre el tile (sensación de "booteando") */}
+          {completo && <span style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 14, background: 'linear-gradient(180deg, rgba(52,211,153,.55), transparent)', animation: 'dfplScan 1.6s linear infinite' }} />}
         </div>
       </div>
 
@@ -113,13 +139,42 @@ export function BotPreloader() {
         }}>DealFlow</span>
       </div>
 
-      {/* estado + puntos */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#8CA6B6', fontSize: 13, marginTop: 10, letterSpacing: '.01em' }}>
-        <span>Preparando tu panel</span>
-        {[0, 1, 2].map((i) => (
-          <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: '#34D399', display: 'inline-block', animation: `dfplDots 1.2s ease-in-out ${i * 0.18}s infinite` }} />
-        ))}
-      </div>
+      {completo ? (
+        /* Secuencia de arranque: pasos que se van encendiendo (primer inicio). */
+        <div style={{ width: 300, maxWidth: '82vw', marginTop: 22, display: 'flex', flexDirection: 'column', gap: 9 }}>
+          {PASOS.map((txt, i) => {
+            const estado = i < paso ? 'ok' : i === paso ? 'activo' : 'pend';
+            return (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
+                color: estado === 'pend' ? '#51677A' : estado === 'activo' ? '#CFE9DD' : '#8CA6B6',
+                opacity: estado === 'pend' ? 0.5 : 1,
+                animation: i <= paso ? 'dfplStepIn .3s ease both' : undefined,
+                transition: 'color .3s, opacity .3s',
+              }}>
+                <span style={{ width: 16, height: 16, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {estado === 'ok' ? (
+                    <span style={{ color: '#34D399', fontSize: 14, fontWeight: 800 }}>✓</span>
+                  ) : estado === 'activo' ? (
+                    <span style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(52,211,153,.35)', borderTopColor: '#34D399', animation: 'dfplMiniSpin .7s linear infinite' }} />
+                  ) : (
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#3A4D5E' }} />
+                  )}
+                </span>
+                <span>{txt}{estado === 'activo' ? '…' : ''}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Carga sencilla (inicios siguientes). */
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#8CA6B6', fontSize: 13, marginTop: 10, letterSpacing: '.01em' }}>
+          <span>Preparando tu panel</span>
+          {[0, 1, 2].map((i) => (
+            <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: '#34D399', display: 'inline-block', animation: `dfplDots 1.2s ease-in-out ${i * 0.18}s infinite` }} />
+          ))}
+        </div>
+      )}
 
       {/* barra de progreso con brillo */}
       <div style={{ position: 'relative', width: 230, height: 3, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden', marginTop: 20 }}>
