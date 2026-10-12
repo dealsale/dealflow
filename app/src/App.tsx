@@ -421,18 +421,26 @@ function App() {
   const isMobile = useIsMobile();
 
   // Preloader de bots: aparece al abrir la app con sesión activa y también
-  // justo después de iniciar sesión.
+  // justo después de iniciar sesión. La PRIMERA vez en este dispositivo se muestra
+  // la secuencia completa de "encendido de motores"; luego, una carga sencilla.
   const [splash, setSplash] = useState(false);
+  const [bootCompleto] = useState(() => {
+    try {
+      const nunca = !localStorage.getItem('dealflow:boot-visto');
+      if (nunca) localStorage.setItem('dealflow:boot-visto', '1');
+      return nunca;
+    } catch { return false; }
+  });
   const prevLogged = useRef(false);
   useEffect(() => {
     if (df.isLoggedIn && !prevLogged.current) {
       setSplash(true);
-      const t = setTimeout(() => setSplash(false), 2200);
+      const t = setTimeout(() => setSplash(false), bootCompleto ? 3600 : 1600);
       prevLogged.current = true;
       return () => clearTimeout(t);
     }
     prevLogged.current = df.isLoggedIn;
-  }, [df.isLoggedIn]);
+  }, [df.isLoggedIn, bootCompleto]);
 
   // Mientras confirmamos la sesión con el servidor, mostramos el preloader (no el
   // login ni datos viejos): evita el parpadeo feo al recargar con sesión activa.
@@ -449,7 +457,7 @@ function App() {
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
-      {splash && <BotPreloader />}
+      {splash && <BotPreloader variante={bootCompleto ? 'completo' : 'simple'} />}
       {df.impersonando && <ImpersonationBanner df={df} />}
       {df.isVendedor && <SuscripcionBanner df={df} />}
       <div style={{ flex: 1, minHeight: 0 }}>{isMobile ? <MobileApp df={df} /> : <DesktopApp df={df} />}</div>
