@@ -44,13 +44,23 @@ function ensureLead(storeId: string, waId: string, nombre: string, tel?: string)
  * Guarda un mensaje entrante (texto y/o adjunto). Crea el lead si no existe.
  * La usan tanto el webhook de la Cloud API como la sesión por QR.
  */
-export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo, tel?: string, ad?: AdRef | null) {
+export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo, tel?: string, ad?: AdRef | null, wamid?: string, citaWamid?: string) {
   const { id: leadId, nuevo } = ensureLead(storeId, waId, nombre, tel);
+  // Respuesta citada: si el cliente respondió CITANDO un mensaje, buscamos el mensaje
+  // original por su wamid y guardamos una instantánea (texto + de quién) para mostrarla.
+  let citaTexto = ''; let citaDe = '';
+  if (citaWamid) {
+    try {
+      const orig = db.prepare("SELECT de, texto, tipo FROM messages WHERE wa_msg_id = ? LIMIT 1").get(citaWamid) as { de: string; texto: string; tipo: string } | undefined;
+      if (orig) { citaDe = orig.de; citaTexto = (orig.texto || '').trim() || (orig.tipo && orig.tipo !== 'texto' ? `[${orig.tipo}]` : ''); }
+      else { citaDe = 'cliente'; citaTexto = 'mensaje citado'; } // el original no está en la BD (muy viejo)
+    } catch { /* la cita nunca debe tumbar el guardado */ }
+  }
   // El mensaje del cliente se guarda SIEMPRE primero: ninguna falla de atribución
   // de anuncio puede hacer que se pierda un mensaje entrante (crítico para leads de
   // anuncio, cuyo primer mensaje trae el `referral`).
-  db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)').run(
-    uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null,
+  db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, wa_msg_id, cita_texto, cita_de) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(
+    uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null, wamid || null, citaTexto, citaDe,
   );
   // Atribución de campaña: si el mensaje entró por un anuncio, lo guardamos en el
   // lead. Protegido para no tumbar nunca el guardado del mensaje.
@@ -297,6 +307,7 @@ interface WebhookMessage {
   document?: WebhookMedia;
   button?: { text?: string; payload?: string };
   interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
+  context?: { id?: string }; // respuesta citada: wamid del mensaje al que responde
   referral?: import('./campana.js').WhatsappReferral;
 }
 
@@ -398,8 +409,10 @@ export function handleIncomingWebhook(body: unknown) {
         const nombre = value.contacts?.find((c) => c.wa_id === waId)?.profile?.name || '';
         let ad: AdRef | null = null;
         try { ad = refDesdeWhatsapp(msg.referral); } catch (e) { console.error('[webhook] referral de anuncio inválido (se ignora la atribución):', e); }
+        const wamid = msg.id;                 // wamid del mensaje entrante (para citar en el futuro)
+        const citaWamid = msg.context?.id;    // si es una respuesta citada, el wamid citado
         if (msg.type === 'text' && msg.text?.body) {
-          saveIncomingMessage(store.store_id, waId, nombre, msg.text.body, undefined, undefined, ad);
+          saveIncomingMessage(store.store_id, waId, nombre, msg.text.body, undefined, undefined, ad, wamid, citaWamid);
           continue;
         }
         const media = msg.image || msg.video || msg.audio || msg.document;
@@ -407,13 +420,13 @@ export function handleIncomingWebhook(body: unknown) {
           const tipo = msg.type === 'image' ? 'image' : msg.type === 'video' ? 'video' : msg.type === 'audio' ? 'audio' : 'document';
           const mime = media.mime_type || 'application/octet-stream';
           void descargarMediaCloud(store.store_id, store.access_token, media.id, tipo, mime).then((url) => {
-            saveIncomingMessage(store.store_id, waId, nombre, media.caption || '', url ? { tipo, url, mime, nombre: media.filename || '' } : undefined, undefined, ad);
+            saveIncomingMessage(store.store_id, waId, nombre, media.caption || '', url ? { tipo, url, mime, nombre: media.filename || '' } : undefined, undefined, ad, wamid, citaWamid);
           });
         } else if (msg.text?.body || msg.button?.text || msg.interactive) {
           // Mensajes tipo botón/interactivos (p. ej. respuestas a plantillas o a
           // anuncios): guardamos el texto que se pueda extraer para no perderlos.
           const t = msg.text?.body || msg.button?.text || msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '';
-          if (t) saveIncomingMessage(store.store_id, waId, nombre, t, undefined, undefined, ad);
+          if (t) saveIncomingMessage(store.store_id, waId, nombre, t, undefined, undefined, ad, wamid, citaWamid);
         }
        } catch (e) {
         console.error('[webhook] error procesando un mensaje entrante (se continúa con los demás):', e);

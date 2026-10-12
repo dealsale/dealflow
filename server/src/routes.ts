@@ -293,9 +293,11 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
 const mapMensaje = (m: Record<string, unknown>) => ({
   id: m.id, de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at,
   tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
+  // Respuesta citada (si el cliente respondió citando un mensaje).
+  citaTexto: m.cita_texto || '', citaDe: m.cita_de || '',
 });
 const mensajesDe = (leadId: string) =>
-  (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado FROM messages WHERE lead_id = ? ORDER BY created_at').all(leadId) as Record<string, unknown>[]).map(mapMensaje);
+  (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado, cita_texto, cita_de FROM messages WHERE lead_id = ? ORDER BY created_at').all(leadId) as Record<string, unknown>[]).map(mapMensaje);
 
 /**
  * Lista de leads para el Inbox. En modo `resumen` NO trae todos los mensajes de

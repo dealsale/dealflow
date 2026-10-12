@@ -400,6 +400,10 @@ addColumn('messages', 'media_nombre TEXT');
 addColumn('messages', 'wa_msg_id TEXT');
 addColumn('messages', "estado TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wamid ON messages(wa_msg_id)');
+// Respuesta citada: cuando el cliente responde CITANDO un mensaje, guardamos una
+// instantánea del mensaje citado (texto + de quién era) para mostrarla en el chat.
+addColumn('messages', "cita_texto TEXT NOT NULL DEFAULT ''");
+addColumn('messages', "cita_de TEXT NOT NULL DEFAULT ''");
 // Suscripciones de Web Push (notificaciones con la app cerrada). Una por navegador/
 // dispositivo; guarda qué tipos quiere recibir (pedidos / contactos nuevos).
 db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (

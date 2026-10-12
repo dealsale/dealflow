@@ -136,6 +136,8 @@ export interface ApiMensaje {
   mediaUrl?: string | null;
   mediaMime?: string | null;
   mediaNombre?: string | null;
+  citaTexto?: string;
+  citaDe?: string;
 }
 
 // Anuncio del que llegó un chat (atribución de campaña). Solo viene cuando el

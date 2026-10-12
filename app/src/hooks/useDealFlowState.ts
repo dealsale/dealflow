@@ -509,6 +509,8 @@ function mapApiMensajes(mensajes: ApiLead['mensajes']): Mensaje[] {
     mediaUrl: m.mediaUrl,
     mediaMime: m.mediaMime,
     mediaNombre: m.mediaNombre,
+    citaTexto: m.citaTexto,
+    citaDe: m.citaDe,
   }));
 }
 

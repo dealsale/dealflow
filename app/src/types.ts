@@ -166,6 +166,9 @@ export interface Mensaje {
   mediaUrl?: string | null;
   mediaMime?: string | null;
   mediaNombre?: string | null;
+  /** Respuesta citada: instantánea del mensaje al que responde el cliente. */
+  citaTexto?: string;
+  citaDe?: string;
 }
 
 export type Etapa = 'Explorando' | 'Cotizando' | 'Listo para comprar' | 'Postventa';

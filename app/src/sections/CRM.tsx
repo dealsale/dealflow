@@ -363,6 +363,12 @@ export function CRM({ df }: { df: DealFlowState }) {
                     )}
                     <div style={m.rowStyle}>
                       <div style={m.bubbleStyle}>
+                        {m.citaTexto && (
+                          <div style={{ borderLeft: '3px solid ' + (m.de === 'vendedor' ? 'rgba(255,255,255,.6)' : 'var(--df-brand)'), background: m.de === 'vendedor' ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.05)', borderRadius: 6, padding: '4px 8px', marginBottom: 6, fontSize: 12, opacity: 0.9 }}>
+                            <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 1 }}>{m.citaDe === 'cliente' ? 'Cliente' : m.citaDe === 'bot' ? 'Asistente' : 'Tú'}</div>
+                            <div style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 260 }}>{m.citaTexto}</div>
+                          </div>
+                        )}
                         <MediaContent m={m} />
                         <span style={m.horaStyle}>
                           {m.hora}
