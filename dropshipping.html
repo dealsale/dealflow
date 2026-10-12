@@ -475,9 +475,9 @@ html.quieto .funnel .f-step{width:auto!important}
 @keyframes gridmove{to{background-position:70px 70px,70px 70px}}
 .scanline{position:fixed;left:0;right:0;top:0;height:120px;pointer-events:none;z-index:0;background:linear-gradient(180deg,transparent,rgba(70,216,255,.045) 48%,rgba(70,216,255,.11) 50%,transparent);animation:scan 9s linear infinite}
 @keyframes scan{0%{transform:translateY(-140px)}100%{transform:translateY(110vh)}}
-.live-feed{position:fixed;left:18px;bottom:18px;z-index:900;width:270px;font-family:var(--mono);pointer-events:none;opacity:0;transform:translateY(16px);transition:opacity .5s,transform .5s}
+.live-feed{position:fixed;left:18px;bottom:18px;z-index:900;width:310px;font-family:var(--mono);pointer-events:none;opacity:0;transform:translateY(16px);transition:opacity .5s,transform .5s}
 .live-feed.show{opacity:1;transform:none}
-.lf-head{display:flex;align-items:center;gap:8px;font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px}
+.lf-head{display:flex;align-items:center;gap:8px;white-space:nowrap;padding:6px 6px 6px 11px;border-radius:12px;background:rgba(10,15,34,.88);border:1px solid var(--line);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px}
 .lf-demo{padding:2px 7px;border-radius:999px;border:1px solid rgba(255,198,92,.45);background:rgba(255,198,92,.1);color:var(--amber);font-size:.56rem;letter-spacing:.12em}
 .lf-head b{display:inline-flex;align-items:center;gap:6px;color:var(--green)}
 .lf-head b:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:lfblink 1.4s ease-in-out infinite}
@@ -485,7 +485,12 @@ html.quieto .funnel .f-step{width:auto!important}
 .lf-list{display:flex;flex-direction:column;gap:6px}
 .lf-item{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:12px;background:rgba(10,15,34,.82);border:1px solid var(--line);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:.66rem;color:#cbd5ff;box-shadow:0 12px 30px rgba(0,0,0,.35);animation:lfin .55s cubic-bezier(.2,.8,.2,1) both}
 .lf-item i{font-style:normal;width:22px;height:22px;flex-shrink:0;border-radius:7px;display:grid;place-items:center;background:var(--soft);font-size:.72rem}
-.lf-item em{font-style:normal;color:var(--cyan);margin-left:auto;font-size:.58rem;opacity:.8}
+.lf-item em{font-style:normal;color:var(--cyan);margin-left:auto;font-size:.58rem;opacity:.8;white-space:nowrap;flex-shrink:0;padding-left:6px}
+.lf-item span{flex:1;min-width:0;line-height:1.35;font-family:var(--body);font-size:.74rem}
+.lf-head .lf-sub{overflow:hidden;text-overflow:ellipsis;letter-spacing:.06em}
+.lf-close{pointer-events:auto;margin-left:auto;flex-shrink:0;width:22px;height:22px;border-radius:7px;border:1px solid var(--line);background:rgba(10,15,34,.82);color:var(--muted);font-size:.8rem;line-height:1;cursor:pointer;display:grid;place-items:center;transition:color .2s,border-color .2s}
+.lf-close:hover{color:var(--text);border-color:var(--line-strong)}
+.live-feed.closed{opacity:0!important;transform:translateY(16px)!important;visibility:hidden}
 .lf-item.out{animation:lfout .45s ease forwards}
 @keyframes lfin{from{opacity:0;transform:translateX(-24px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes lfout{to{opacity:0;transform:translateY(-10px) scale(.96);height:0;padding:0 11px;margin-top:-6px;border-width:0}}
@@ -524,7 +529,7 @@ html.quieto .funnel .f-step{width:auto!important}
 </div>
 
 <div class="ambient"></div><div class="grid"></div><canvas id="techbg" aria-hidden="true"></canvas><div class="scanline" aria-hidden="true"></div><div class="noise"></div>
-<div class="live-feed" id="liveFeed" aria-hidden="true"><div class="lf-head"><b>En vivo</b><span class="lf-demo">Demo</span>· así trabaja DealFlow</div><div class="lf-list" id="lfList"></div></div>
+<div class="live-feed" id="liveFeed"><div class="lf-head" aria-hidden="true"><b>En vivo</b><span class="lf-demo">Demo</span><span class="lf-sub">así trabaja DealFlow</span><button class="lf-close" id="lfClose" type="button" aria-label="Cerrar">✕</button></div><div class="lf-list" id="lfList"></div></div>
 <div class="cursor-glow" id="cursorGlow"></div>
 <div class="progress" id="progress"></div>
 
@@ -1249,7 +1254,10 @@ html.quieto .funnel .f-step{width:auto!important}
       if (items.length > 3) { var old = items[0]; old.classList.add('out'); setTimeout(function(){ if(old.parentNode) old.parentNode.removeChild(old); }, 450); }
     }
     var started = false;
-    function start(){ if (started) return; started = true; box.classList.add('show'); push(); setInterval(push, reduce ? 6000 : 4000); }
+    var closed = false; try { closed = sessionStorage.getItem('df_lp_feed_off') === '1'; } catch(e){}
+    var timer = null;
+    $('#lfClose').addEventListener('click', function(){ closed = true; box.classList.add('closed'); if (timer) clearInterval(timer); try { sessionStorage.setItem('df_lp_feed_off','1'); } catch(e){} });
+    function start(){ if (started || closed) return; started = true; box.classList.add('show'); push(); timer = setInterval(push, reduce ? 6000 : 4000); }
     window.addEventListener('scroll', function(){ if (window.scrollY > 300) start(); }, { passive: true });
     setTimeout(start, 6500);
   })();
