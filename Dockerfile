@@ -27,6 +27,7 @@ COPY --from=server-build /build/server/dist ./dist
 COPY --from=server-build /build/server/assets ./assets
 COPY --from=app-build /build/app/dist ./app-dist
 COPY landing.html ./landing.html
+COPY dropshipping.html ./dropshipping.html
 ENV APP_DIST=/srv/app-dist DATA_DIR=/srv/data PORT=3001
 EXPOSE 3001
 CMD ["node", "dist/index.js"]
