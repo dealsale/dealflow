@@ -2833,6 +2833,20 @@ function firmaMetaValida(secret: string, raw: Buffer | undefined, firma: string)
   }
 }
 
+// Salud del webhook entrante de WhatsApp (en memoria, para diagnosticar caídas de
+// recepción: si "recibidos" sube pero "rechazadosFirma" también, el App Secret no
+// cuadra; si "recibidos" no sube, Meta no está entregando (suscripción/URL/servidor).
+const webhookSalud = { recibidos: 0, procesados: 0, rechazadosFirma: 0, errores: 0, ultimoRecibido: '', ultimoRechazo: '', ultimoError: '', desde: new Date().toISOString() };
+
+// Diagnóstico para el equipo DealFlow: estado de recepción de webhooks de WhatsApp.
+api.get('/admin/webhook-salud', requireAuth, requireAdmin, (_req, res) => {
+  res.json({
+    ...webhookSalud,
+    firmaActiva: !!process.env.META_APP_SECRET,
+    modoSoft: process.env.WHATSAPP_WEBHOOK_SOFT === '1',
+  });
+});
+
 webhooks.get('/whatsapp', (req, res) => {
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'dealflow-verify';
   if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === verifyToken) {
@@ -2842,16 +2856,24 @@ webhooks.get('/whatsapp', (req, res) => {
 });
 
 webhooks.post('/whatsapp', (req, res) => {
+  webhookSalud.recibidos++;
+  webhookSalud.ultimoRecibido = new Date().toISOString();
   // Verificamos que el mensaje venga de verdad de Meta: firma HMAC-SHA256 del
   // cuerpo crudo con el App Secret. Sin esto, cualquiera que conozca la URL
   // podría inyectar mensajes falsos en el Inbox de una tienda.
+  // Escotilla de emergencia: WHATSAPP_WEBHOOK_SOFT=1 procesa igual aunque la firma
+  // no cuadre (p. ej. si rotaron el App Secret), para no perder mensajes mientras
+  // se corrige META_APP_SECRET. Deja rastro en la salud del webhook.
   const secret = process.env.META_APP_SECRET;
+  const soft = process.env.WHATSAPP_WEBHOOK_SOFT === '1';
   if (secret) {
     const firma = String(req.headers['x-hub-signature-256'] || '');
     const raw = (req as { rawBody?: Buffer }).rawBody;
     if (!firmaMetaValida(secret, raw, firma)) {
-      console.warn('[webhook] firma de Meta inválida o ausente — se ignora la entrada');
-      return res.sendStatus(403);
+      webhookSalud.rechazadosFirma++;
+      webhookSalud.ultimoRechazo = new Date().toISOString();
+      console.warn(`[webhook] firma de Meta inválida o ausente — ${soft ? 'SOFT: se procesa igual' : 'se IGNORA la entrada'}. ¿Rotaron el App Secret? Revisa META_APP_SECRET. (rechazos: ${webhookSalud.rechazadosFirma})`);
+      if (!soft) return res.sendStatus(403);
     }
   }
   // Meta exige responder rápido: procesamos y contestamos 200 siempre.
@@ -2864,7 +2886,10 @@ webhooks.post('/whatsapp', (req, res) => {
     } else {
       handleIncomingWebhook(req.body);
     }
+    webhookSalud.procesados++;
   } catch (e) {
+    webhookSalud.errores++;
+    webhookSalud.ultimoError = `${new Date().toISOString()} · ${e instanceof Error ? e.message : String(e)}`.slice(0, 200);
     console.error('[webhook] error procesando entrada', e);
   }
   res.sendStatus(200);
