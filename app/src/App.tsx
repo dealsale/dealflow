@@ -40,9 +40,9 @@ import { Superadmin, BibliotecaAdmin } from './sections/admin/Superadmin';
 import { MCRM } from './sections/mobile/MCRM';
 import { MLeads } from './sections/mobile/MLeads';
 import { MPedidos } from './sections/mobile/MPedidos';
+import { MResumen } from './sections/mobile/MResumen';
 
 const BOOT_KEY = 'dealflow:boot-sesion-v2';
-import { MResumen } from './sections/mobile/MResumen';
 
 function ImpersonationBanner({ df }: { df: DealFlowState }) {
   return (
