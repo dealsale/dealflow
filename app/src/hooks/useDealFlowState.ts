@@ -892,6 +892,7 @@ export function useDealFlowState() {
   const [editStoreMsg, setEditStoreMsg] = useState('');
   const [armedDeleteStoreId, setArmedDeleteStoreId] = useState<string | null>(null);
   const [detalleStore, setDetalleStore] = useState<AdminStoreDetalle | null>(null);
+  const [detalleStoreId, setDetalleStoreId] = useState<string | null>(null);
   const [detalleLoading, setDetalleLoading] = useState(false);
   const [editPlanId, setEditPlanId] = useState<string | null>(null);
   const [editPlanForm, setEditPlanForm] = useState({ nombre: '', precio: '', features: '' });
@@ -3526,6 +3527,9 @@ export function useDealFlowState() {
     void apiDeleteStore(id).then((r) => { if (r.error) void reloadAdmin(); });
   }
   function abrirDetalleStore(id: string) {
+    // Toggle: si ya está abierto el detalle de esa tienda, lo cierra.
+    if (detalleStoreId === id) { cerrarPanelStore(); return; }
+    setDetalleStoreId(id);
     setDetalleLoading(true);
     setDetalleStore(null);
     setEditStoreId(null);
@@ -3536,6 +3540,7 @@ export function useDealFlowState() {
   }
   function cerrarPanelStore() {
     setDetalleStore(null);
+    setDetalleStoreId(null);
     setEditStoreId(null);
   }
   // Pone TODOS los chats de una tienda en intervención humana (que atienda una persona).
@@ -4316,6 +4321,7 @@ export function useDealFlowState() {
     armedDeleteStoreId,
     abrirDetalleStore,    cerrarPanelStore,
     detalleStore,
+    detalleStoreId,
     detalleLoading,
     entrarATienda,
     // Barrido de WhatsApp con Meta

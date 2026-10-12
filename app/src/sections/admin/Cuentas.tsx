@@ -74,105 +74,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
         <div style={{ background: 'var(--df-brand-subtle-2)', border: '1px solid var(--df-brand-border)', color: 'var(--df-brand-dark)', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontWeight: 600, marginBottom: 14 }}>✓ {df.accCreated}</div>
       )}
 
-      {/* Panel de detalle de una tienda */}
-      {(df.detalleLoading || df.detalleStore) && (
-        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 }}>
-          {df.detalleLoading || !df.detalleStore ? (
-            <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Cargando detalle…</div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 16 }}>{df.detalleStore.nombre}</div>
-                  <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>{df.detalleStore.correo} · Plan {df.detalleStore.plan} · creada {df.detalleStore.creada}</div>
-                </div>
-                <div style={{ flex: 1 }} />
-                <button onClick={df.cerrarPanelStore} style={linkBtn('var(--df-text-muted)')}>Cerrar ✕</button>
-              </div>
-              <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 14 }}>
-                {[
-                  { k: 'Productos', v: df.detalleStore.productos },
-                  { k: 'Pedidos', v: df.detalleStore.pedidos },
-                  { k: 'Leads', v: df.detalleStore.leads },
-                  { k: 'Agentes', v: df.detalleStore.agentes },
-                  { k: 'Ventas del mes', v: fmt(df.detalleStore.ventasMes) },
-                ].map((x) => (
-                  <div key={x.k} style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 12 }}>
-                    <div style={{ color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600 }}>{x.k}</div>
-                    <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em' }}>{x.v}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: df.detalleStore.whatsapp.conectado ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)', background: df.detalleStore.whatsapp.conectado ? 'var(--df-brand-subtle)' : 'var(--df-danger-subtle-2)', borderRadius: 6, padding: '3px 9px' }}>
-                  WhatsApp {df.detalleStore.whatsapp.conectado ? 'conectado' : 'desconectado'}{df.detalleStore.whatsapp.numero ? ` · ${df.detalleStore.whatsapp.numero}` : ''}
-                </span>
-                <button
-                  onClick={() => df.sincronizarWhatsapp(df.detalleStore!.id)}
-                  title="Consulta a Meta el número actual de esta WABA y actualiza el que usa DealFlow"
-                  style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
-                >
-                  🔄 Sincronizar número con Meta
-                </button>
-                <button
-                  onClick={async () => { if (await confirmar({ titulo: 'Intervención humana', mensaje: `¿Poner TODOS los chats de "${df.detalleStore!.nombre}" en intervención humana? El asistente dejará de responder en esta tienda y los chats quedarán atendidos por una persona.`, aceptar: 'Intervenir todo', peligro: true })) df.intervenirTodosLosChats(df.detalleStore!.id); }}
-                  title="Marca todos los chats como atendidos por una persona (pausa el bot en esta tienda)"
-                  style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
-                >
-                  🙋 Intervenir todos los chats
-                </button>
-                <button
-                  onClick={() => df.auditarBaneoStore(df.detalleStore!.id)}
-                  title="Revisa todos los chats y reporta posibles infracciones a la política de WhatsApp (por qué Meta pudo banear)"
-                  style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
-                >
-                  🔍 Auditoría anti-baneo
-                </button>
-                {df.detalleStore.porEstado.map((e) => (
-                  <span key={e.estado} style={{ fontSize: 12.5, color: 'var(--df-text-secondary)' }}>{e.estado}: <b>{e.n}</b></span>
-                ))}
-              </div>
-              {df.waSyncStoreId === df.detalleStore.id && (df.waSyncMsg || df.waSyncNumeros.length > 0) && (
-                <div style={{ background: 'var(--df-surface-2)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
-                  {df.waSyncMsg && <div style={{ fontSize: 12.5, fontWeight: 600, color: df.waSyncMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.waSyncMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-text-body)' }}>{df.waSyncMsg}</div>}
-                  {df.waSyncNumeros.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                      {df.waSyncNumeros.map((n) => (
-                        <button key={n.id} onClick={() => df.sincronizarWhatsapp(df.detalleStore!.id, n.id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px', fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}>
-                          <span style={{ fontWeight: 700 }}>{n.numero || '(sin número visible)'}</span>
-                          {n.nombre && <span style={{ color: 'var(--df-text-muted)' }}>· {n.nombre}</span>}
-                          <span style={{ flex: 1 }} />
-                          <span style={{ color: 'var(--df-brand-dark)', fontWeight: 700 }}>Usar este</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {df.intervenirMsg && (
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: df.intervenirMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.intervenirMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)', marginBottom: 14 }}>{df.intervenirMsg}</div>
-              )}
-              {df.auditBaneoStoreId === df.detalleStore.id && (df.auditBaneoMsg || df.reporteBaneo) && (
-                <ReporteBaneoPanel df={df} />
-              )}
-              {df.detalleStore.recientes.length > 0 && (
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Últimos pedidos</div>
-                  {df.detalleStore.recientes.map((o) => (
-                    <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--df-border)', fontSize: 13 }}>
-                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'var(--df-text-muted)' }}>{o.id}</span>
-                      <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.cliente}</span>
-                      <span style={{ color: 'var(--df-text-muted)' }}>{o.estado}</span>
-                      <span style={{ fontWeight: 700 }}>{fmt(o.total)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+      {/* El detalle y la edición de cada tienda se despliegan INLINE debajo de su fila. */}
 
       {df.accounts.length === 0 ? (
         <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: '40px 24px', textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 14, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
@@ -218,8 +120,14 @@ export function Cuentas({ df }: { df: DealFlowState }) {
               </div>
               {/* Edición INLINE: se despliega justo debajo de la tienda (no sube al header). */}
               {editando && (
-                <div style={{ background: 'var(--df-surface)', borderTop: '1px solid var(--df-purple-border)', padding: '16px 18px' }}>
+                <div className="df-expand" style={{ background: 'var(--df-surface)', borderTop: '1px solid var(--df-purple-border)', padding: '16px 18px' }}>
                   <EditarTiendaInline df={df} a={a} creditosDelta={creditosDelta} setCreditosDelta={setCreditosDelta} diasDelta={diasDelta} setDiasDelta={setDiasDelta} ajusteMsg={ajusteMsg} setAjusteMsg={setAjusteMsg} />
+                </div>
+              )}
+              {/* Detalle INLINE: se despliega debajo de la tienda, como los productos. */}
+              {df.detalleStoreId === id && (
+                <div className="df-expand" style={{ background: 'var(--df-bg)', borderTop: '1px solid var(--df-border)', padding: '16px 18px' }}>
+                  <DetalleTiendaInline df={df} />
                 </div>
               )}
               </div>
@@ -229,6 +137,99 @@ export function Cuentas({ df }: { df: DealFlowState }) {
         </div>
       )}
     </section>
+  );
+}
+
+// Detalle de una tienda, desplegado INLINE debajo de su fila (métricas, WhatsApp,
+// acciones de soporte, auditoría y últimos pedidos).
+function DetalleTiendaInline({ df }: { df: DealFlowState }) {
+  if (df.detalleLoading || !df.detalleStore) {
+    return <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Cargando detalle…</div>;
+  }
+  const d = df.detalleStore;
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 16 }}>{d.nombre}</div>
+          <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>{d.correo} · Plan {d.plan} · creada {d.creada}</div>
+        </div>
+        <div style={{ flex: 1 }} />
+        <button onClick={df.cerrarPanelStore} style={linkBtn('var(--df-text-muted)')}>Cerrar ✕</button>
+      </div>
+      <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 14 }}>
+        {[
+          { k: 'Productos', v: d.productos },
+          { k: 'Pedidos', v: d.pedidos },
+          { k: 'Leads', v: d.leads },
+          { k: 'Agentes', v: d.agentes },
+          { k: 'Ventas del mes', v: fmt(d.ventasMes) },
+        ].map((x) => (
+          <div key={x.k} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 12 }}>
+            <div style={{ color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600 }}>{x.k}</div>
+            <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em' }}>{x.v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: d.whatsapp.conectado ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)', background: d.whatsapp.conectado ? 'var(--df-brand-subtle)' : 'var(--df-danger-subtle-2)', borderRadius: 6, padding: '3px 9px' }}>
+          WhatsApp {d.whatsapp.conectado ? 'conectado' : 'desconectado'}{d.whatsapp.numero ? ` · ${d.whatsapp.numero}` : ''}
+        </span>
+        <button onClick={() => df.sincronizarWhatsapp(d.id)} title="Consulta a Meta el número actual de esta WABA y actualiza el que usa DealFlow"
+          style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+          🔄 Sincronizar número con Meta
+        </button>
+        <button onClick={async () => { if (await confirmar({ titulo: 'Intervención humana', mensaje: `¿Poner TODOS los chats de "${d.nombre}" en intervención humana? El asistente dejará de responder en esta tienda y los chats quedarán atendidos por una persona.`, aceptar: 'Intervenir todo', peligro: true })) df.intervenirTodosLosChats(d.id); }}
+          title="Marca todos los chats como atendidos por una persona (pausa el bot en esta tienda)"
+          style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+          🙋 Intervenir todos los chats
+        </button>
+        <button onClick={() => df.auditarBaneoStore(d.id)} title="Revisa todos los chats y reporta posibles infracciones a la política de WhatsApp"
+          style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+          🔍 Auditoría anti-baneo
+        </button>
+        {d.porEstado.map((e) => (
+          <span key={e.estado} style={{ fontSize: 12.5, color: 'var(--df-text-secondary)' }}>{e.estado}: <b>{e.n}</b></span>
+        ))}
+      </div>
+      {df.waSyncStoreId === d.id && (df.waSyncMsg || df.waSyncNumeros.length > 0) && (
+        <div style={{ background: 'var(--df-surface-2)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+          {df.waSyncMsg && <div style={{ fontSize: 12.5, fontWeight: 600, color: df.waSyncMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.waSyncMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-text-body)' }}>{df.waSyncMsg}</div>}
+          {df.waSyncNumeros.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              {df.waSyncNumeros.map((n) => (
+                <button key={n.id} onClick={() => df.sincronizarWhatsapp(d.id, n.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px', fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ fontWeight: 700 }}>{n.numero || '(sin número visible)'}</span>
+                  {n.nombre && <span style={{ color: 'var(--df-text-muted)' }}>· {n.nombre}</span>}
+                  <span style={{ flex: 1 }} />
+                  <span style={{ color: 'var(--df-brand-dark)', fontWeight: 700 }}>Usar este</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {df.intervenirMsg && (
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: df.intervenirMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.intervenirMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)', marginBottom: 14 }}>{df.intervenirMsg}</div>
+      )}
+      {df.auditBaneoStoreId === d.id && (df.auditBaneoMsg || df.reporteBaneo) && (
+        <ReporteBaneoPanel df={df} />
+      )}
+      {d.recientes.length > 0 && (
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Últimos pedidos</div>
+          {d.recientes.map((o) => (
+            <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--df-border)', fontSize: 13 }}>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'var(--df-text-muted)' }}>{o.id}</span>
+              <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.cliente}</span>
+              <span style={{ color: 'var(--df-text-muted)' }}>{o.estado}</span>
+              <span style={{ fontWeight: 700 }}>{fmt(o.total)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

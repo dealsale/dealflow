@@ -439,6 +439,15 @@ textarea {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+/* Despliegue hacia abajo (detalle/edición de tienda, como una fila que se abre). */
+@keyframes dfExpand {
+  from { opacity: 0; transform: translateY(-6px); max-height: 0; }
+  to { opacity: 1; transform: translateY(0); max-height: 2200px; }
+}
+.df-expand {
+  animation: dfExpand .28s cubic-bezier(.22,.61,.36,1);
+  overflow: hidden;
+}
 
 /* Nota: antes aquí se apagaban TODAS las animaciones cuando el sistema tenía
    "reducir movimiento" activo, y eso dejaba el login y el preloader estáticos
