@@ -40,6 +40,8 @@ import { Superadmin, BibliotecaAdmin } from './sections/admin/Superadmin';
 import { MCRM } from './sections/mobile/MCRM';
 import { MLeads } from './sections/mobile/MLeads';
 import { MPedidos } from './sections/mobile/MPedidos';
+
+const BOOT_KEY = 'dealflow:boot-sesion-v2';
 import { MResumen } from './sections/mobile/MResumen';
 
 function ImpersonationBanner({ df }: { df: DealFlowState }) {
@@ -421,20 +423,19 @@ function App() {
   const isMobile = useIsMobile();
 
   // Preloader de bots: aparece al abrir la app con sesión activa y también
-  // justo después de iniciar sesión. La PRIMERA vez en este dispositivo se muestra
-  // la secuencia completa de "encendido de motores"; luego, una carga sencilla.
+  // justo después de iniciar sesión. Al ABRIR la app (nueva sesión del navegador)
+  // se muestra la secuencia completa de "encendido de motores"; las recargas
+  // dentro de esa misma sesión usan la carga sencilla. La marca solo se guarda
+  // cuando el preloader completo realmente se mostró (no en la pantalla de login).
   const [splash, setSplash] = useState(false);
   const [bootCompleto] = useState(() => {
-    try {
-      const nunca = !localStorage.getItem('dealflow:boot-visto');
-      if (nunca) localStorage.setItem('dealflow:boot-visto', '1');
-      return nunca;
-    } catch { return false; }
+    try { return !sessionStorage.getItem(BOOT_KEY); } catch { return true; }
   });
   const prevLogged = useRef(false);
   useEffect(() => {
     if (df.isLoggedIn && !prevLogged.current) {
       setSplash(true);
+      try { sessionStorage.setItem(BOOT_KEY, '1'); } catch { /* sin almacenamiento: no pasa nada */ }
       const t = setTimeout(() => setSplash(false), bootCompleto ? 3600 : 1600);
       prevLogged.current = true;
       return () => clearTimeout(t);
@@ -444,7 +445,7 @@ function App() {
 
   // Mientras confirmamos la sesión con el servidor, mostramos el preloader (no el
   // login ni datos viejos): evita el parpadeo feo al recargar con sesión activa.
-  if (df.arrancando) return <BotPreloader />;
+  if (df.arrancando) return <BotPreloader variante={bootCompleto ? 'completo' : 'simple'} />;
   if (!df.isLoggedIn) return <Login df={df} />;
   // Muro de pago: la tienda no accede a nada hasta activar su plan (pagar el inicial) o ponerse al día con la renta.
   if (df.isVendedor && df.suscripcion?.bloqueado) {
