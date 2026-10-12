@@ -25,6 +25,10 @@ const CSS = `
 @keyframes dfplStepIn { from { opacity:0; transform: translateY(6px) } to { opacity:1; transform: translateY(0) } }
 @keyframes dfplMiniSpin { to { transform: rotate(360deg) } }
 @keyframes dfplScan { 0% { transform: translateY(-120%) } 100% { transform: translateY(2400%) } }
+@keyframes dfplOut { to { opacity:0; transform: scale(1.03); filter: blur(4px) } }
+@keyframes dfplPop { 0% { transform: scale(.6); opacity:0 } 60% { transform: scale(1.15); opacity:1 } 100% { transform: scale(1) } }
+@keyframes dfplRay { 0% { transform: rotate(0deg) } 100% { transform: rotate(360deg) } }
+@keyframes dfplLog { from { opacity:0; transform: translateX(-6px) } to { opacity:1; transform: none } }
 .dfpl { animation: dfplIn .3s ease both }
 `;
 
@@ -37,19 +41,43 @@ const PASOS = [
   'Preparando tu panel',
 ];
 
-export function BotPreloader({ variante = 'simple' }: { variante?: 'completo' | 'simple' }) {
+// Líneas de "consola" que acompañan cada fase (sensación de sistema real arrancando).
+const LOGS = [
+  'motor.ia ............ OK',
+  'whatsapp.cloud ...... conectado',
+  'modelo.ventas ....... cargado',
+  'pedidos.sync ........ al día',
+  'panel.ui ............ listo',
+];
+
+export function BotPreloader({ variante = 'simple', duracion = 4400 }: { variante?: 'completo' | 'simple'; duracion?: number }) {
   const completo = variante === 'completo';
-  const [paso, setPaso] = useState(0);
+  // Progreso 0→1 atado al TIEMPO (no a la carga real): la secuencia completa
+  // siempre se ve entera. El último ~18% es el cierre "Todo listo" + salida.
+  const [prog, setProg] = useState(0);
   useEffect(() => {
     if (!completo) return;
-    const t = setInterval(() => setPaso((p) => Math.min(p + 1, PASOS.length)), 620);
-    return () => clearInterval(t);
-  }, [completo]);
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / duracion);
+      setProg(p);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [completo, duracion]);
+  const FASES = 0.78; // fracción del tiempo dedicada a las fases
+  const paso = completo ? Math.min(PASOS.length, Math.floor((prog / FASES) * PASOS.length)) : 0;
+  const listo = completo && prog >= FASES;
+  const pct = Math.min(100, Math.round((prog / FASES) * 100));
+  const R = 76, CIRC = 2 * Math.PI * R;
 
   return (
     <div
       className="dfpl"
       style={{
+        animation: completo ? `dfplIn .3s ease both, dfplOut .38s ease ${Math.max(0, duracion - 380)}ms forwards` : undefined,
         position: 'fixed', inset: 0, zIndex: 999,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         background: 'radial-gradient(circle at 50% 38%, #0d2a44 0%, #0A1B2E 42%, #060f1c 100%)',
@@ -85,6 +113,18 @@ export function BotPreloader({ variante = 'simple' }: { variante?: 'completo' | 
 
       {/* núcleo: ondas + anillos giratorios + logo */}
       <div style={{ position: 'relative', width: 168, height: 168, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'dfplTilt 3.2s ease-in-out infinite' }}>
+        {completo && (
+          <svg width={176} height={176} viewBox="0 0 176 176" style={{ position: 'absolute', inset: -4, transform: 'rotate(-90deg)', filter: 'drop-shadow(0 0 8px rgba(52,211,153,.55))' }}>
+            <defs>
+              <linearGradient id="dfplGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#34D399" /><stop offset=".6" stopColor="#38BDF8" /><stop offset="1" stopColor="#A78BFA" />
+              </linearGradient>
+            </defs>
+            <circle cx={88} cy={88} r={R} fill="none" stroke="rgba(255,255,255,.07)" strokeWidth={3} />
+            <circle cx={88} cy={88} r={R} fill="none" stroke="url(#dfplGrad)" strokeWidth={3} strokeLinecap="round"
+              strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - pct / 100)} />
+          </svg>
+        )}
         {/* ondas concéntricas */}
         {[0, 1, 2].map((i) => (
           <span key={i} style={{
@@ -124,9 +164,13 @@ export function BotPreloader({ variante = 'simple' }: { variante?: 'completo' | 
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
         }}>
-          <img src={logo} alt="" style={{ width: 58, height: 52, objectFit: 'contain', filter: 'drop-shadow(0 3px 10px rgba(16,185,129,.4))' }} />
+          {listo ? (
+            <span style={{ fontSize: 46, fontWeight: 900, color: '#34D399', textShadow: '0 0 18px rgba(52,211,153,.8)', animation: 'dfplPop .45s cubic-bezier(.2,.8,.2,1) both' }}>✓</span>
+          ) : (
+            <img src={logo} alt="" style={{ width: 58, height: 52, objectFit: 'contain', filter: 'drop-shadow(0 3px 10px rgba(16,185,129,.4))' }} />
+          )}
           {/* línea de escaneo que recorre el tile (sensación de "booteando") */}
-          {completo && <span style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 14, background: 'linear-gradient(180deg, rgba(52,211,153,.55), transparent)', animation: 'dfplScan 1.6s linear infinite' }} />}
+          {completo && !listo && <span style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 14, background: 'linear-gradient(180deg, rgba(52,211,153,.55), transparent)', animation: 'dfplScan 1.6s linear infinite' }} />}
         </div>
       </div>
 
@@ -165,6 +209,15 @@ export function BotPreloader({ variante = 'simple' }: { variante?: 'completo' | 
               </div>
             );
           })}
+          {/* consola: una línea por fase completada */}
+          <div style={{ marginTop: 8, padding: '9px 11px', borderRadius: 10, background: 'rgba(0,0,0,.28)', border: '1px solid rgba(52,211,153,.14)', fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 10.5, lineHeight: 1.6, color: '#5E8C7A', minHeight: 30 }}>
+            {LOGS.slice(0, paso).map((l, i) => (
+              <div key={i} style={{ animation: 'dfplLog .25s ease both', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ color: '#34D399' }}>›</span> {l}
+              </div>
+            ))}
+            {listo && <div style={{ animation: 'dfplLog .25s ease both', color: '#6EE7B7', fontWeight: 600 }}>› sistema en línea · bienvenido</div>}
+          </div>
         </div>
       ) : (
         /* Carga sencilla (inicios siguientes). */
@@ -177,12 +230,19 @@ export function BotPreloader({ variante = 'simple' }: { variante?: 'completo' | 
       )}
 
       {/* barra de progreso con brillo */}
-      <div style={{ position: 'relative', width: 230, height: 3, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden', marginTop: 20 }}>
-        <span style={{
-          position: 'absolute', top: 0, width: '42%', height: '100%', borderRadius: 999,
-          background: 'linear-gradient(90deg, transparent, #10B981, #38BDF8, transparent)',
-          animation: 'dfplBar 1.25s ease-in-out infinite',
-        }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20 }}>
+        <div style={{ position: 'relative', width: 230, height: 3, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
+          {completo ? (
+            <span style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pct}%`, borderRadius: 999, background: 'linear-gradient(90deg, #10B981, #38BDF8, #A78BFA)', boxShadow: '0 0 10px rgba(56,189,248,.7)' }} />
+          ) : (
+            <span style={{
+              position: 'absolute', top: 0, width: '42%', height: '100%', borderRadius: 999,
+              background: 'linear-gradient(90deg, transparent, #10B981, #38BDF8, transparent)',
+              animation: 'dfplBar 1.25s ease-in-out infinite',
+            }} />
+          )}
+        </div>
+        {completo && <span style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12, color: listo ? '#34D399' : '#8CA6B6', minWidth: 38, textAlign: 'right' }}>{pct}%</span>}
       </div>
     </div>
   );
