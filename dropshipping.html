@@ -514,6 +514,21 @@ html.quieto .funnel .f-step{width:auto!important}
 @media(min-width:981px) and (max-height:780px){.hero{--hz:.72;padding-top:72px;padding-bottom:116px}.hero .hero-copy h1{font-size:clamp(2.3rem,3.9vw,3.6rem)}.hero .btn.lg{padding:13px 22px}.hero .lead{font-size:1rem}.hero-proof{margin-top:18px}}
 @media(max-width:620px){.live-feed{display:none}.hero{padding-bottom:150px}.hero .scroll-cue{display:none}}
 
+
+/* ================= MÓVIL: sin desborde lateral y scroll estable ================= */
+html{overflow-x:hidden}
+@supports(overflow:clip){html,body{overflow-x:clip}}
+main,section,footer{max-width:100vw}
+.final-glow{width:min(640px,100vw)}
+@media(max-width:620px){
+  .reveal.left,.reveal.right{transform:translateY(26px)}
+  .big-word{font-size:clamp(2.6rem,16vw,4.4rem);overflow-wrap:anywhere}
+  .rotator{height:3em;min-height:0;overflow:hidden;line-height:1.45}.rotator .rw{white-space:normal;display:inline}
+  .sd-card,.float-card,.lf-item,.b-card,.integrator,.phone,.topbar{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+  .scanline{display:none}
+  #net{display:none}
+  .topbar{background:rgba(5,7,19,.95)!important}
+}
 :focus-visible{outline:2px solid var(--cyan);outline-offset:4px}
 </style>
 </head>
@@ -1186,8 +1201,8 @@ html.quieto .funnel .f-step{width:auto!important}
   /* ---------- FONDO TECNOLÓGICO (toda la página) ---------- */
   (function(){
     var c = $('#techbg'); if (!c || reduce) return;
-    var ctx = c.getContext('2d'), dpr = Math.min(2, window.devicePixelRatio || 1), w, h, nodes = [], packets = [], tags = [], cols = [];
     var small = window.innerWidth < 700;
+    var ctx = c.getContext('2d'), dpr = small ? 1 : Math.min(2, window.devicePixelRatio || 1), w, h, nodes = [], packets = [], tags = [], cols = [];
     var TAGS = ['pedido #1043 ✓','+$119.900','chat nuevo · Bogotá','IA → 1,8 s','guía generada','Medellín · COD','combo x2 🔥','datos completos ✓','enviado a Dropi','remisión Effi ✓','cliente respondió','Cali · contra entrega','venta cerrada','Barranquilla','ROAS ↑','02:13 a.m. · vendido','opt-in ✓','Shopify sync'];
     var GLYPHS = '01$✓→#%+COD';
     function size(){
@@ -1198,7 +1213,7 @@ html.quieto .funnel .f-step{width:auto!important}
       for (var x = cw/2; x < w; x += cw) if (Math.random() < .34) cols.push({ x: x, y: Math.random()*h, s: .6 + Math.random()*1.4, len: 6 + (Math.random()*10|0), ch: [] });
       cols.forEach(function(cl){ for (var k=0;k<cl.len;k++) cl.ch.push(GLYPHS[Math.random()*GLYPHS.length|0]); });
     }
-    size(); window.addEventListener('resize', size);
+    size(); var lastW = w; window.addEventListener('resize', function(){ if (small && Math.abs(window.innerWidth - lastW) < 2 && Math.abs(window.innerHeight - h) < 160) return; lastW = window.innerWidth; size(); });
     var sy = 0; window.addEventListener('scroll', function(){ sy = window.scrollY; }, { passive: true });
     function pos(n){ var y = n.y - sy*.12*n.z; y = ((y % (h*1.6)) + h*1.6) % (h*1.6) - h*.3; return { x: n.x, y: y }; }
     var last = 0, tagT = 0, pkT = 0;
@@ -1264,7 +1279,7 @@ html.quieto .funnel .f-step{width:auto!important}
 
   /* ---------- HERO NETWORK CANVAS ---------- */
   (function(){
-    var c = $('#net'); if (!c || reduce) return;
+    var c = $('#net'); if (!c || reduce || window.innerWidth < 700) return;
     var ctx = c.getContext('2d'), w, h, pts = [], dpr = Math.min(2, window.devicePixelRatio || 1), running = true;
     function size(){ var r = c.parentElement.getBoundingClientRect(); w = r.width; h = r.height; c.width = w*dpr; c.height = h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
       var n = Math.round(Math.min(70, w*h/22000)); pts = [];
