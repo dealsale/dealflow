@@ -46,11 +46,15 @@ function ensureLead(storeId: string, waId: string, nombre: string, tel?: string)
  */
 export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo, tel?: string, ad?: AdRef | null) {
   const { id: leadId, nuevo } = ensureLead(storeId, waId, nombre, tel);
-  // Atribución de campaña: si el mensaje entró por un anuncio, lo guardamos en el lead.
-  if (ad) guardarAdEnLead(leadId, ad);
+  // El mensaje del cliente se guarda SIEMPRE primero: ninguna falla de atribución
+  // de anuncio puede hacer que se pierda un mensaje entrante (crítico para leads de
+  // anuncio, cuyo primer mensaje trae el `referral`).
   db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)').run(
     uid(), leadId, 'cliente', texto, media?.tipo || 'texto', media?.url || null, media?.mime || null, media?.nombre || null,
   );
+  // Atribución de campaña: si el mensaje entró por un anuncio, lo guardamos en el
+  // lead. Protegido para no tumbar nunca el guardado del mensaje.
+  if (ad) { try { guardarAdEnLead(leadId, ad); } catch (e) { console.error('[webhook] no se pudo guardar atribución de anuncio (el mensaje sí se guardó):', e); } }
   // El cliente respondió: reinicia el contador de recordatorios de seguimiento.
   db.prepare('UPDATE leads SET seguimiento_nivel = 0 WHERE id = ?').run(leadId);
   // Contacto NUEVO: notifica al dueño por Web Push (si lo tiene activado).
@@ -291,6 +295,8 @@ interface WebhookMessage {
   video?: WebhookMedia;
   audio?: WebhookMedia;
   document?: WebhookMedia;
+  button?: { text?: string; payload?: string };
+  interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
   referral?: import('./campana.js').WhatsappReferral;
 }
 
@@ -386,10 +392,12 @@ export function handleIncomingWebhook(body: unknown) {
       console.log(`[webhook] mensaje entrante para phone_number_id=${phoneNumberId} → tienda ${store.store_id}`);
 
       for (const msg of value.messages) {
+       try {
         const waId = msg.from;
         if (!waId) { console.warn('[webhook] mensaje entrante sin remitente (from), se ignora:', msg.type || '?'); continue; }
         const nombre = value.contacts?.find((c) => c.wa_id === waId)?.profile?.name || '';
-        const ad = refDesdeWhatsapp(msg.referral); // anuncio del que vino (si es una pauta)
+        let ad: AdRef | null = null;
+        try { ad = refDesdeWhatsapp(msg.referral); } catch (e) { console.error('[webhook] referral de anuncio inválido (se ignora la atribución):', e); }
         if (msg.type === 'text' && msg.text?.body) {
           saveIncomingMessage(store.store_id, waId, nombre, msg.text.body, undefined, undefined, ad);
           continue;
@@ -401,7 +409,15 @@ export function handleIncomingWebhook(body: unknown) {
           void descargarMediaCloud(store.store_id, store.access_token, media.id, tipo, mime).then((url) => {
             saveIncomingMessage(store.store_id, waId, nombre, media.caption || '', url ? { tipo, url, mime, nombre: media.filename || '' } : undefined, undefined, ad);
           });
+        } else if (msg.text?.body || msg.button?.text || msg.interactive) {
+          // Mensajes tipo botón/interactivos (p. ej. respuestas a plantillas o a
+          // anuncios): guardamos el texto que se pueda extraer para no perderlos.
+          const t = msg.text?.body || msg.button?.text || msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '';
+          if (t) saveIncomingMessage(store.store_id, waId, nombre, t, undefined, undefined, ad);
         }
+       } catch (e) {
+        console.error('[webhook] error procesando un mensaje entrante (se continúa con los demás):', e);
+       }
       }
     }
   }
