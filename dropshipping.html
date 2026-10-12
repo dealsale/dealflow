@@ -3,9 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Dealflow · Dropshipping con IA, explicado simple. Automatizado de punta a punta.</title>
-<meta name="description" content="Entiende el dropshipping desde cero, calcula tus números y descubre cómo Dealflow atiende tu WhatsApp con IA 24/7, toma el pedido y lo despacha con Dropi, Effi y Shopify.">
-<meta property="og:title" content="Dropshipping con IA · Dealflow">
+<link rel="icon" type="image/png" href="/logo.png" />
+<link rel="apple-touch-icon" href="/logo.png" />
+<title>DealFlow · Dropshipping con IA, explicado simple. Automatizado de punta a punta.</title>
+<meta name="description" content="Entiende el dropshipping desde cero, calcula tus números y descubre cómo DealFlow atiende tu WhatsApp con IA 24/7, toma el pedido y lo despacha con Dropi, Effi y Shopify.">
+<meta property="og:title" content="Dropshipping con IA · DealFlow">
 <meta property="og:description" content="Vende sin inventario y sin vivir pegado al WhatsApp. La IA atiende, cierra y despacha.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#050713">
@@ -38,7 +40,7 @@ button{font-family:inherit}
 .boot-ring{width:108px;height:108px;border-radius:30px;position:relative;display:grid;place-items:center}
 .boot-ring:before{content:"";position:absolute;inset:0;border-radius:30px;padding:2px;background:conic-gradient(from 0deg,transparent,#46d8ff,#6c59ff,#b05aff,transparent 70%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spin 1.4s linear infinite}
 .boot-ring:after{content:"";position:absolute;inset:-18px;border-radius:44px;background:radial-gradient(circle,rgba(90,100,255,.35),transparent 70%);filter:blur(8px);animation:pulse 1.8s ease-in-out infinite}
-.boot-ring .bm{width:62px;height:62px;border-radius:18px;background:var(--grad);display:grid;place-items:center;position:relative;z-index:2;box-shadow:0 10px 30px rgba(76,93,255,.45)}
+.boot-ring .bm{width:62px;height:62px;border-radius:18px;background:linear-gradient(140deg,#34D399,#059669);display:grid;place-items:center;position:relative;z-index:2;box-shadow:0 10px 30px rgba(16,185,129,.35)}
 .boot-ring .bm svg{width:34px;height:34px}
 .boot-lines{font-family:var(--mono);font-size:.72rem;color:var(--muted);letter-spacing:.08em;min-height:20px;text-align:center}
 .boot-lines b{color:var(--cyan)}
@@ -66,8 +68,8 @@ body.has-pointer .cursor-glow{opacity:1}
 .topbar.scrolled{padding:11px 0;background:rgba(5,7,19,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-color:var(--line)}
 .top-in{max-width:var(--max);margin:auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:18px}
 .brand{display:flex;align-items:center;gap:11px;text-decoration:none;font-family:var(--display);font-size:1.28rem;font-weight:700;letter-spacing:-.03em}
-.brand-mark{width:34px;height:34px;border-radius:10px;background:var(--grad);display:grid;place-items:center;box-shadow:0 8px 24px rgba(76,93,255,.35)}
-.brand-mark svg{width:20px;height:20px}
+.brand-mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(140deg,#34D399,#059669);display:grid;place-items:center;box-shadow:0 6px 20px -6px rgba(16,185,129,.28)}
+.brand-mark svg{width:19px;height:19px}
 .brand .flow{background:var(--grad);background-clip:text;-webkit-background-clip:text;color:transparent}
 .mini-chapters{display:flex;align-items:center;gap:17px}
 .mini-chapters a{font-size:.78rem;color:var(--muted);text-decoration:none;transition:color .2s}.mini-chapters a:hover{color:var(--text)}
@@ -477,8 +479,8 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
 <!-- ============ PRELOADER ============ -->
 <div class="boot" id="boot" aria-hidden="true">
   <div class="boot-core">
-    <div class="boot-ring"><div class="bm"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="7" width="16" height="12" rx="4" fill="#fff"/><circle cx="9" cy="13" r="1.6" fill="#2e8bff"/><circle cx="15" cy="13" r="1.6" fill="#2e8bff"/><rect x="11" y="3" width="2" height="4" rx="1" fill="#fff"/><circle cx="12" cy="3" r="1.4" fill="#fff"/></svg></div></div>
-    <div class="boot-lines" id="bootLine">Iniciando <b>Dealflow</b>…</div>
+    <div class="boot-ring"><div class="bm"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 4V5.5Z" fill="#052018"/><circle cx="9" cy="10" r="1.3" fill="#34D399"/><circle cx="12.5" cy="10" r="1.3" fill="#34D399"/><circle cx="16" cy="10" r="1.3" fill="#F59E0B"/></svg></div></div>
+    <div class="boot-lines" id="bootLine">Iniciando <b>DealFlow</b>…</div>
     <div class="boot-bar"><i id="bootBar"></i></div>
   </div>
 </div>
@@ -489,12 +491,12 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
 
 <header class="topbar" id="topbar">
   <div class="top-in">
-    <a class="brand" href="#inicio" aria-label="Dealflow">
-      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="7" width="16" height="12" rx="4" fill="#fff"/><circle cx="9" cy="13" r="1.6" fill="#2e8bff"/><circle cx="15" cy="13" r="1.6" fill="#2e8bff"/><rect x="11" y="3" width="2" height="4" rx="1" fill="#fff"/><circle cx="12" cy="3" r="1.4" fill="#fff"/></svg></span>
-      <span>deal<span class="flow">flow</span></span>
+    <a class="brand" href="#inicio" aria-label="DealFlow">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 4V5.5Z" fill="#052018"/><circle cx="9" cy="10" r="1.3" fill="#34D399"/><circle cx="12.5" cy="10" r="1.3" fill="#34D399"/><circle cx="16" cy="10" r="1.3" fill="#F59E0B"/></svg></span>
+      <span>DealFlow</span>
     </a>
     <nav class="mini-chapters" aria-label="Secciones">
-      <a href="#que-es">Qué es</a><a href="#numeros">Tus números</a><a href="#realidad">La realidad</a><a href="#dealflow">Dealflow</a><a href="#integraciones">Integraciones</a><a href="#faq">Preguntas</a>
+      <a href="#que-es">Qué es</a><a href="#numeros">Tus números</a><a href="#realidad">La realidad</a><a href="#dealflow">DealFlow</a><a href="#integraciones">Integraciones</a><a href="#faq">Preguntas</a>
     </nav>
     <a class="nav-demo magnet" href="__WA_LINK__" target="_blank" rel="noopener">Quiero una demo</a>
   </div>
@@ -508,7 +510,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
   <button class="chapter-dot" data-target="pros" aria-label="Pros y contras"><span>Pros y contras</span></button>
   <button class="chapter-dot" data-target="realidad" aria-label="La realidad"><span>La realidad</span></button>
   <button class="chapter-dot" data-target="fuga" aria-label="Lo que se escapa"><span>Lo que se escapa</span></button>
-  <button class="chapter-dot" data-target="dealflow" aria-label="Dealflow"><span>Dealflow</span></button>
+  <button class="chapter-dot" data-target="dealflow" aria-label="DealFlow"><span>DealFlow</span></button>
   <button class="chapter-dot" data-target="demo" aria-label="Demo"><span>Demo</span></button>
   <button class="chapter-dot" data-target="integraciones" aria-label="Integraciones"><span>Integraciones</span></button>
   <button class="chapter-dot" data-target="dia" aria-label="Un día"><span>Un día</span></button>
@@ -526,7 +528,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
     <div class="hero-copy">
       <span class="eyebrow reveal">Dropshipping + Inteligencia Artificial</span>
       <h1 class="reveal d1">Vender sin inventario. <span class="grad-anim">Sin vivir pegado al WhatsApp.</span></h1>
-      <p class="rotator reveal d2">Mientras tú <span class="rw" id="rot">duermes</span>, Dealflow vende.</p>
+      <p class="rotator reveal d2">Mientras tú <span class="rw" id="rot">duermes</span>, DealFlow vende.</p>
       <p class="lead reveal d3">Te explicamos el dropshipping desde cero, te ayudamos a calcular tus números y te mostramos cómo una IA atiende cada chat, cierra la venta y deja el pedido listo para despachar.</p>
       <div class="btns reveal d4" style="margin-top:28px">
         <a class="btn primary lg magnet" href="#que-es">Empieza la historia ↓</a>
@@ -686,9 +688,9 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
         <div class="pc-head"><i>!</i>Desventajas</div>
         <ul class="pc-list">
           <li><span><b>Márgenes ajustados</b>La pauta y los fletes se comen la utilidad si no calculas bien.</span></li>
-          <li><span><b>Devoluciones contra entrega</b>Cada pedido no recibido te cuesta flete ida y vuelta.<br><span class="pc-fix">Dealflow ayuda: confirma datos completos</span></span></li>
-          <li><span><b>Mucha competencia</b>Varios venden lo mismo; gana quien atiende mejor y más rápido.<br><span class="pc-fix">Dealflow ayuda: responde en segundos</span></span></li>
-          <li><span><b>Avalancha de chats</b>Cuando la pauta funciona, el WhatsApp se vuelve imposible.<br><span class="pc-fix">Dealflow ayuda: atiende todos a la vez</span></span></li>
+          <li><span><b>Devoluciones contra entrega</b>Cada pedido no recibido te cuesta flete ida y vuelta.<br><span class="pc-fix">DealFlow ayuda: confirma datos completos</span></span></li>
+          <li><span><b>Mucha competencia</b>Varios venden lo mismo; gana quien atiende mejor y más rápido.<br><span class="pc-fix">DealFlow ayuda: responde en segundos</span></span></li>
+          <li><span><b>Avalancha de chats</b>Cuando la pauta funciona, el WhatsApp se vuelve imposible.<br><span class="pc-fix">DealFlow ayuda: atiende todos a la vez</span></span></li>
           <li><span><b>Dependes del proveedor</b>Stock y tiempos de despacho no los controlas tú.</span></li>
         </ul>
       </div>
@@ -744,7 +746,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
           <div class="val neg" id="f_plata">$0</div>
           <div class="sub" id="f_anio"></div>
         </div>
-        <div class="tip"><b>Con una IA atendiendo 24/7</b>, cada chat recibe respuesta en segundos — de día, de noche y los fines de semana. Esa es la plata que Dealflow te ayuda a recuperar.</div>
+        <div class="tip"><b>Con una IA atendiendo 24/7</b>, cada chat recibe respuesta en segundos — de día, de noche y los fines de semana. Esa es la plata que DealFlow te ayuda a recuperar.</div>
         <p class="disclaimer">Cálculo ilustrativo. No es una promesa de resultados: depende de tu producto, tu oferta y tu pauta.</p>
       </div>
     </div>
@@ -773,10 +775,10 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
   <div class="wrap">
     <div class="solution-head">
       <div>
-        <span class="eyebrow reveal">08 · Aquí entra Dealflow</span>
+        <span class="eyebrow reveal">08 · Aquí entra DealFlow</span>
         <h2 class="reveal d1">Un vendedor con IA <span class="grad">conectado a tu operación.</span></h2>
       </div>
-      <p class="lead reveal d2">Dealflow no se limita a contestar mensajes: atiende, vende con tus reglas, toma el pedido y lo conecta con las herramientas donde vive tu operación. Y tú puedes entrar a cualquier chat cuando quieras.</p>
+      <p class="lead reveal d2">DealFlow no se limita a contestar mensajes: atiende, vende con tus reglas, toma el pedido y lo conecta con las herramientas donde vive tu operación. Y tú puedes entrar a cualquier chat cuando quieras.</p>
     </div>
     <div class="bento">
       <div class="b-card spot hl s4 wide reveal">
@@ -855,7 +857,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
               <circle r="3.5" fill="#55e7a5"><animateMotion dur="2.6s" begin="1s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#p5"/></animateMotion></circle>
             </g>
           </svg>
-          <div class="hub"><div><div class="hub-in">Dealflow</div><div class="hub-sub">IA + automatización</div></div></div>
+          <div class="hub"><div><div class="hub-in">DealFlow</div><div class="hub-sub">IA + automatización</div></div></div>
           <div class="integrator" style="left:19.5%;top:19.5%"><div class="mark">💬</div><b>WhatsApp</b><small>Chats · IA</small></div>
           <div class="integrator" style="left:80.5%;top:19.5%"><div class="mark">D</div><b>Dropi</b><small>Pedidos · guía</small></div>
           <div class="integrator" style="left:19.5%;top:80.5%"><div class="mark">E</div><b>Effi</b><small>Remisión</small></div>
@@ -871,7 +873,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
 <section class="slide" id="dia">
   <div class="wrap">
     <div class="narrow center" style="margin:auto">
-      <span class="eyebrow reveal">11 · Un día con Dealflow</span>
+      <span class="eyebrow reveal">11 · Un día con DealFlow</span>
       <h2 class="reveal d1">24 horas vendiendo. <span class="grad">Tú solo supervisas.</span></h2>
       <p class="lead reveal d2">Así se ve un día normal cuando la atención ya no depende de que estés frente al celular.</p>
     </div>
@@ -903,11 +905,11 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
         <div class="compare-row"><span>Crear el pedido en el proveedor</span><b>👤 Tú</b></div>
         <div class="compare-row"><span>Saber qué anuncio vendió</span><b>❓ Adivinar</b></div>
       </div>
-      <div class="compare-box deal reveal right d3"><div class="compare-tag">Con Dealflow · automatizado</div>
-        <div class="compare-row"><span>Responder conversaciones</span><b>🤖 Dealflow</b></div>
-        <div class="compare-row"><span>Información y objeciones</span><b>🤖 Dealflow</b></div>
+      <div class="compare-box deal reveal right d3"><div class="compare-tag">Con DealFlow · automatizado</div>
+        <div class="compare-row"><span>Responder conversaciones</span><b>🤖 DealFlow</b></div>
+        <div class="compare-row"><span>Información y objeciones</span><b>🤖 DealFlow</b></div>
         <div class="compare-row"><span>Atender de noche</span><b>🤖 24/7</b></div>
-        <div class="compare-row"><span>Recopilar datos completos</span><b>🤖 Dealflow</b></div>
+        <div class="compare-row"><span>Recopilar datos completos</span><b>🤖 DealFlow</b></div>
         <div class="compare-row"><span>Pasar la orden al proveedor</span><b>⚙️ Integración</b></div>
         <div class="compare-row"><span>Atribución por anuncio</span><b>📊 Automática</b></div>
       </div>
@@ -931,7 +933,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
     <div>
       <span class="eyebrow reveal">13 · Seguridad y buenas prácticas</span>
       <h2 class="reveal d1">Automatizar <span class="grad">sin poner en riesgo tu número.</span></h2>
-      <p class="lead reveal d2">Una automatización mal hecha puede hacer que bloqueen tu WhatsApp. Dealflow está construido para cuidar tu cuenta.</p>
+      <p class="lead reveal d2">Una automatización mal hecha puede hacer que bloqueen tu WhatsApp. DealFlow está construido para cuidar tu cuenta.</p>
       <div class="check-list">
         <div class="check reveal d2"><i>✓</i><div><b>API oficial de WhatsApp</b><span>Conectado por la vía oficial de Meta, no con trucos.</span></div></div>
         <div class="check reveal d3"><i>✓</i><div><b>Respeta la ventana de 24 horas</b><span>Fuera de esa ventana solo se usan plantillas aprobadas, como exige Meta.</span></div></div>
@@ -965,7 +967,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
     <h2 class="reveal d1">No se trata de que la IA haga <span class="grad">tu negocio.</span></h2>
     <p class="lead reveal d2">Se trata de que la IA se encargue de lo repetitivo para que tú te concentres en encontrar productos, crear ofertas, invertir mejor en publicidad y hacer crecer la operación.</p>
     <div class="equation reveal zoom d3">
-      <div class="eq-line">Producto <span class="eq-sign">+</span> Pauta <span class="eq-sign">+</span> Dealflow</div>
+      <div class="eq-line">Producto <span class="eq-sign">+</span> Pauta <span class="eq-sign">+</span> DealFlow</div>
       <div class="eq-line grad" style="margin-top:9px">= una operación que escala con menos fricción</div>
       <div class="stats">
         <div class="stat"><div class="n" data-count="24" data-suffix="/7">0</div><div class="c">atención sin pausas</div></div>
@@ -1019,10 +1021,10 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
     </div>
     <div class="faq" id="faqList" style="width:100%">
       <div class="faq-item reveal"><button class="faq-q">¿Necesito tener inventario para empezar?<i>+</i></button><div class="faq-a"><div><p>No. Esa es la base del dropshipping: vendes primero y el proveedor (por ejemplo, a través de Dropi o Effi) despacha el producto al cliente.</p></div></div></div>
-      <div class="faq-item reveal d1"><button class="faq-q">¿Funciona con pago contra entrega?<i>+</i></button><div class="faq-a"><div><p>Sí. Dealflow toma todos los datos del cliente y el pedido sale hacia tu proveedor con pago contra entrega, que es como se vende la mayoría del dropshipping en Colombia.</p></div></div></div>
+      <div class="faq-item reveal d1"><button class="faq-q">¿Funciona con pago contra entrega?<i>+</i></button><div class="faq-a"><div><p>Sí. DealFlow toma todos los datos del cliente y el pedido sale hacia tu proveedor con pago contra entrega, que es como se vende la mayoría del dropshipping en Colombia.</p></div></div></div>
       <div class="faq-item reveal d2"><button class="faq-q">¿El bot va a sonar como un robot?<i>+</i></button><div class="faq-a"><div><p>No. Lo entrenamos con tu tono, tus productos y tus respuestas. Conversa de forma natural, manda fotos y videos y responde dudas como lo haría un buen vendedor.</p></div></div></div>
       <div class="faq-item reveal d3"><button class="faq-q">¿Puedo responder yo cuando quiera?<i>+</i></button><div class="faq-a"><div><p>Sí. Ves todos los chats en una bandeja y puedes entrar a cualquier conversación con un clic. Mientras intervienes, la IA se aparta de ese chat.</p></div></div></div>
-      <div class="faq-item reveal d4"><button class="faq-q">¿Me pueden bloquear el WhatsApp por usar un bot?<i>+</i></button><div class="faq-a"><div><p>Dealflow usa la API oficial de WhatsApp, respeta la ventana de 24 horas, envía a ritmo humano y solo hace remarketing a quien dio permiso. Así reducimos al máximo ese riesgo. Igual, las políticas de Meta aplican a todos: lo importante es no hacer spam.</p></div></div></div>
+      <div class="faq-item reveal d4"><button class="faq-q">¿Me pueden bloquear el WhatsApp por usar un bot?<i>+</i></button><div class="faq-a"><div><p>DealFlow usa la API oficial de WhatsApp, respeta la ventana de 24 horas, envía a ritmo humano y solo hace remarketing a quien dio permiso. Así reducimos al máximo ese riesgo. Igual, las políticas de Meta aplican a todos: lo importante es no hacer spam.</p></div></div></div>
       <div class="faq-item reveal d5"><button class="faq-q">¿Con qué proveedores y plataformas se conecta?<i>+</i></button><div class="faq-a"><div><p>Hoy con Dropi, Effi y Shopify para pedidos y despacho, y con WhatsApp, Instagram y Messenger como canales de atención.</p></div></div></div>
       <div class="faq-item reveal d5"><button class="faq-q">¿Qué necesito para empezar?<i>+</i></button><div class="faq-a"><div><p>Un número de WhatsApp para tu negocio, tus productos (fotos, precios y combos) y, si ya lo tienes, tu cuenta con el proveedor. Del resto nos encargamos en la configuración.</p></div></div></div>
       <div class="faq-item reveal d5"><button class="faq-q">¿Cuánto cuesta?<i>+</i></button><div class="faq-a"><div><p>Depende de tu operación: cuántos productos manejas, qué integraciones necesitas y si quieres ayuda con campañas. Escríbenos por WhatsApp y te armamos una propuesta a tu medida.</p><p style="padding-top:0"><a class="btn wa" href="__WA_LINK__" target="_blank" rel="noopener">💬 Cotizar por WhatsApp</a></p></div></div></div>
@@ -1035,7 +1037,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
   <div class="final-glow"></div>
   <div class="wrap">
     <span class="eyebrow reveal" style="justify-content:center">18 · Tu siguiente paso</span>
-    <h2 class="reveal d1">El dropshipping es el modelo. <span class="grad-anim">Dealflow es la automatización.</span></h2>
+    <h2 class="reveal d1">El dropshipping es el modelo. <span class="grad-anim">DealFlow es la automatización.</span></h2>
     <p class="lead reveal d2">Muéstranos qué vendes y te enseñamos cómo se vería tu flujo completo: cliente → conversación → pedido → integración → despacho.</p>
     <div class="btns reveal d3"><a class="btn wa lg magnet" href="__WA_LINK__" target="_blank" rel="noopener">💬 Quiero ver una demo</a><a class="btn ghost lg magnet" href="#inicio">Volver al inicio ↑</a></div>
     <div class="trust reveal d4"><span>API oficial de Meta</span><span>Hecho en Colombia</span><span>Soporte en español</span></div>
@@ -1043,7 +1045,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
 </section>
 </main>
 
-<footer class="footer"><div class="footer-in"><div>© Dealflow</div><div>Automatiza · Responde · Convierte</div><div class="footer-tag">Hecho para vender en Colombia 🇨🇴</div></div></footer>
+<footer class="footer"><div class="footer-in"><div>© DealFlow</div><div>Automatiza · Responde · Convierte</div><div class="footer-tag">Hecho para vender en Colombia 🇨🇴</div></div></footer>
 
 <a class="wa-float" id="waFloat" href="__WA_LINK__" target="_blank" rel="noopener" aria-label="Escríbenos por WhatsApp">
   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.945C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.82 9.82 0 001.599 5.328l-.999 3.648 3.9-.675zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.372-.025-.521-.075-.149-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
