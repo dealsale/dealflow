@@ -42,7 +42,7 @@ import { MLeads } from './sections/mobile/MLeads';
 import { MPedidos } from './sections/mobile/MPedidos';
 import { MResumen } from './sections/mobile/MResumen';
 
-const BOOT_KEY = 'dealflow:boot-sesion-v2';
+const DURACION_BOOT = 4400; // ms del preloader completo tras iniciar sesión
 
 function ImpersonationBanner({ df }: { df: DealFlowState }) {
   return (
@@ -422,31 +422,30 @@ function App() {
   const df = useDealFlowState();
   const isMobile = useIsMobile();
 
-  // Preloader de bots: aparece al abrir la app con sesión activa y también
-  // justo después de iniciar sesión. Al ABRIR la app (nueva sesión del navegador)
-  // se muestra la secuencia completa de "encendido de motores"; las recargas
-  // dentro de esa misma sesión usan la carga sencilla. La marca solo se guarda
-  // cuando el preloader completo realmente se mostró (no en la pantalla de login).
-  const [splash, setSplash] = useState(false);
-  const [bootCompleto] = useState(() => {
-    try { return !sessionStorage.getItem(BOOT_KEY); } catch { return true; }
-  });
+  // Preloader de bots:
+  //  - Al INICIAR SESIÓN desde el formulario → secuencia completa de "encendido de
+  //    motores" por fases, que SIEMPRE corre hasta el final (aunque el panel ya
+  //    haya cargado debajo): es la firma de la marca.
+  //  - Al abrir/recargar con la sesión ya activa → carga rápida.
+  const [splash, setSplash] = useState<null | 'completo' | 'simple'>(null);
+  const vioLogin = useRef(false);
   const prevLogged = useRef(false);
   useEffect(() => {
     if (df.isLoggedIn && !prevLogged.current) {
-      setSplash(true);
-      try { sessionStorage.setItem(BOOT_KEY, '1'); } catch { /* sin almacenamiento: no pasa nada */ }
-      const t = setTimeout(() => setSplash(false), bootCompleto ? 3600 : 1600);
+      const variante = vioLogin.current ? 'completo' : 'simple';
+      vioLogin.current = false;
       prevLogged.current = true;
+      setSplash(variante);
+      const t = setTimeout(() => setSplash(null), variante === 'completo' ? DURACION_BOOT : 1400);
       return () => clearTimeout(t);
     }
     prevLogged.current = df.isLoggedIn;
-  }, [df.isLoggedIn, bootCompleto]);
+  }, [df.isLoggedIn]);
 
   // Mientras confirmamos la sesión con el servidor, mostramos el preloader (no el
   // login ni datos viejos): evita el parpadeo feo al recargar con sesión activa.
-  if (df.arrancando) return <BotPreloader variante={bootCompleto ? 'completo' : 'simple'} />;
-  if (!df.isLoggedIn) return <Login df={df} />;
+  if (df.arrancando) return <BotPreloader variante="simple" />;
+  if (!df.isLoggedIn) { vioLogin.current = true; return <Login df={df} />; }
   // Muro de pago: la tienda no accede a nada hasta activar su plan (pagar el inicial) o ponerse al día con la renta.
   if (df.isVendedor && df.suscripcion?.bloqueado) {
     return (
@@ -458,7 +457,7 @@ function App() {
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
-      {splash && <BotPreloader variante={bootCompleto ? 'completo' : 'simple'} />}
+      {splash && <BotPreloader variante={splash} duracion={splash === 'completo' ? DURACION_BOOT : undefined} />}
       {df.impersonando && <ImpersonationBanner df={df} />}
       {df.isVendedor && <SuscripcionBanner df={df} />}
       <div style={{ flex: 1, minHeight: 0 }}>{isMobile ? <MobileApp df={df} /> : <DesktopApp df={df} />}</div>
