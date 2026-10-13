@@ -254,14 +254,6 @@ export function Login({ df }: { df: DealFlowState }) {
       <RedDatos />
       <div className="dfl-scan" />
 
-      {df.pwaDisponible && (
-        <button
-          onClick={df.instalarPwa}
-          style={{ position: 'absolute', top: 16, right: 16, zIndex: 5, background: 'rgba(16,185,129,.12)', color: '#A7F3D0', border: '1px solid rgba(52,211,153,.4)', borderRadius: 999, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', animation: typeof location !== 'undefined' && location.search.includes('instalar=1') ? 'dflPulse 1.6s ease-out infinite' : undefined }}
-        >
-          📲 Instalar la app
-        </button>
-      )}
 
       {/* ── Panel de marca (escritorio) ── */}
       <div className="dfl-left" style={{ flex: '1 1 55%', position: 'relative', zIndex: 2, flexDirection: 'column', justifyContent: 'center', padding: '48px 56px', gap: 34, minWidth: 0 }}>
