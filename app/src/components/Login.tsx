@@ -328,10 +328,12 @@ export function Login({ df }: { df: DealFlowState }) {
       {/* ── Panel de marca (escritorio) ── */}
       <div className="dfl-left" style={{ flex: '1 1 55%', position: 'relative', zIndex: 2, flexDirection: 'column', justifyContent: 'center', padding: '48px 56px', gap: 34, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <a href="/inicio" title="Ir a la página de inicio de DealFlow" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit' }}>
           <div style={{ width: 44, height: 44, borderRadius: 13, background: 'rgba(255,255,255,.05)', border: `1px solid ${C.lineStrong}`, display: 'grid', placeItems: 'center' }}>
             <img src={logo} alt="" style={{ width: 30, height: 27, objectFit: 'contain' }} />
           </div>
           <span style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em' }}>DealFlow</span>
+          </a>
           <span className="dfl-chip" style={{ marginLeft: 6 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, boxShadow: `0 0 10px ${C.green}`, animation: 'dflPulse 1.8s ease-out infinite' }} />sistema en línea</span>
         </div>
 
@@ -363,10 +365,10 @@ export function Login({ df }: { df: DealFlowState }) {
       <div style={{ flex: '1 1 45%', position: 'relative', zIndex: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 18px', minWidth: 0, minHeight: '100%' }}>
         <div style={{ width: 410, maxWidth: '100%', margin: 'auto 0' }}>
           {/* logo visible en celular (el panel de marca se oculta) */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 }} className="dfl-mobile-brand">
+          <a href="/inicio" title="Ir a la página de inicio de DealFlow" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20, textDecoration: 'none', color: 'inherit' }} className="dfl-mobile-brand">
             <img src={logo} alt="DealFlow" style={{ width: 40, height: 36, objectFit: 'contain', filter: 'drop-shadow(0 6px 14px rgba(70,216,255,.35))' }} />
             <span style={{ fontWeight: 800, fontSize: 23, letterSpacing: '-0.02em' }}>DealFlow</span>
-          </div>
+          </a>
 
           <div className={`dfl-card-wrap${df.loginError ? ' err' : ''}`} key={df.loginError ? 'e' + df.loginError : 'ok'}>
             <div className="dfl-card" ref={cardRef} onMouseMove={onMove}>

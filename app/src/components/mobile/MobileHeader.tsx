@@ -27,7 +27,9 @@ export function MobileHeader({ df }: { df: DealFlowState }) {
           <line x1="4" y1="17" x2="20" y2="17"></line>
         </svg>
       </div>
-      <img src={logo} alt="DealFlow" style={{ width: 28, height: 25, objectFit: 'contain', flexShrink: 0 }} />
+      <a href="/inicio" title="Ir a la página de inicio de DealFlow" style={{ display: 'flex', flexShrink: 0 }}>
+        <img src={logo} alt="DealFlow" style={{ width: 28, height: 25, objectFit: 'contain' }} />
+      </a>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{df.headerTitle}</div>
       </div>

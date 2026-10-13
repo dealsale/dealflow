@@ -135,8 +135,10 @@ function Encabezado({ sesion, esAdmin, admin, setAdmin, onVolver }: { sesion: Se
   return (
     <header style={{ borderBottom: `1px solid ${C.line}`, position: 'sticky', top: 0, background: 'rgba(10,15,28,.75)', backdropFilter: 'blur(14px)', zIndex: 10 }}>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px', height: 62, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span className="ac-logo-badge" style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: `linear-gradient(140deg,${C.emerald},${C.sky})`, fontWeight: 900, color: '#052018' }}>A</span>
-        <span style={{ fontWeight: 800, letterSpacing: '-.02em' }}>DealFlow <span style={{ background: `linear-gradient(90deg,${C.emerald},${C.sky})`, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Academy</span></span>
+        <a href="/inicio" title="Ir a la página de inicio de DealFlow" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit' }}>
+          <span className="ac-logo-badge" style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: `linear-gradient(140deg,${C.emerald},${C.sky})`, fontWeight: 900, color: '#052018' }}>A</span>
+          <span style={{ fontWeight: 800, letterSpacing: '-.02em' }}>DealFlow <span style={{ background: `linear-gradient(90deg,${C.emerald},${C.sky})`, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Academy</span></span>
+        </a>
         {onVolver && !admin && <button className="ac-btn" onClick={onVolver} style={btnGhost}>← Volver</button>}
         <div style={{ flex: 1 }} />
         {esAdmin && (
