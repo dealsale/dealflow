@@ -5,7 +5,7 @@ import logo from '../assets/logo.png';
 /*
  * Pantalla de inicio de sesión / registro con el mismo lenguaje visual de la
  * landing: fondo de red de datos animada (canvas), panel de marca con frases que
- * rotan y un chat de ejemplo en vivo, y una tarjeta de vidrio oscuro con borde de
+ * rotan, y una tarjeta de vidrio oscuro con borde de
  * luz giratorio. Los colores son FIJOS (no usan las variables del tema) para que
  * se vea igual con cualquier tema guardado — antes, con Premium, la tarjeta
  * blanca quedaba con textos claros que no se leían.
@@ -31,10 +31,8 @@ const CSS = `
 @keyframes dflShake { 10%,90% { transform: translateX(-2px) } 20%,80% { transform: translateX(3px) } 30%,70% { transform: translateX(-6px) } 40%,60% { transform: translateX(6px) } 50% { transform: translateX(-3px) } }
 @keyframes dflShine { to { background-position: -300% 0 } }
 @keyframes dflCaret { 50% { border-color: transparent } }
-@keyframes dflFloat { 50% { transform: translateY(-8px) } }
 @keyframes dflScan { 0% { transform: translateY(-140px) } 100% { transform: translateY(110vh) } }
 @keyframes dflMsg { from { opacity:0; transform: translateY(8px) scale(.97) } to { opacity:1; transform:none } }
-@keyframes dflBlink { 0%,60%,100% { opacity:.3; transform:none } 30% { opacity:1; transform: translateY(-2px) } }
 @keyframes dflPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.5) } 50% { box-shadow: 0 0 0 7px rgba(52,211,153,0) } }
 @keyframes dflGrid { to { background-position: 64px 64px, 64px 64px } }
 @keyframes dflSweep { 0%,55% { left:-60% } 100% { left:130% } }
@@ -69,14 +67,6 @@ const CSS = `
 .dfl-rot { color:${C.cyan}; border-right:2px solid ${C.cyan}; padding-right:3px; animation: dflCaret 1s step-end infinite; white-space:nowrap; }
 .dfl-chip { display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px; border:1px solid ${C.line}; background: rgba(255,255,255,.03); font-family:'JetBrains Mono',ui-monospace,monospace; font-size:11.5px; color:${C.muted}; }
 .dfl-chip b { color:${C.cyan}; font-weight:700; }
-.dfl-phone { width:300px; border-radius:30px; padding:10px; background: linear-gradient(155deg,#1a2340,#090e1f); border:1px solid ${C.lineStrong}; box-shadow: 0 40px 90px rgba(10,20,60,.6); animation: dflFloat 6s ease-in-out infinite; }
-.dfl-msg { max-width:84%; padding:9px 11px; border-radius:14px; font-size:12.5px; line-height:1.4; animation: dflMsg .4s cubic-bezier(.2,.8,.2,1) both; }
-.dfl-msg.them { background:#1a2540; color:#dbe4ff; align-self:flex-start; border-bottom-left-radius:4px; }
-.dfl-msg.me { background: linear-gradient(120deg,#2E8BFF,#6C59FF); color:#fff; align-self:flex-end; border-bottom-right-radius:4px; }
-.dfl-msg.sys { align-self:center; background: rgba(52,211,153,.1); border:1px solid rgba(52,211,153,.3); color:${C.green}; font-family:'JetBrains Mono',ui-monospace,monospace; font-size:10.5px; border-radius:999px; padding:5px 10px; }
-.dfl-typing { align-self:flex-start; background:#1a2540; padding:10px 13px; border-radius:14px; border-bottom-left-radius:4px; display:flex; gap:4px; animation: dflMsg .3s ease both; }
-.dfl-typing i { width:6px; height:6px; border-radius:50%; background:#8290b6; animation: dflBlink 1.1s infinite; }
-.dfl-typing i:nth-child(2) { animation-delay:.16s } .dfl-typing i:nth-child(3) { animation-delay:.32s }
 .dfl-social { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:11px; border:1px solid ${C.line}; color:${C.muted}; background: rgba(255,255,255,.02); transition: color .2s, border-color .2s, transform .2s; }
 .dfl-social:hover { color:${C.text}; border-color:${C.lineStrong}; transform: translateY(-2px); }
 .dfl-left { display:flex; }
@@ -87,18 +77,6 @@ const CSS = `
 `;
 
 const FRASES = ['duermes', 'estás con tu familia', 'buscas tu próximo producto ganador', 'montas tu siguiente campaña'];
-
-// Conversación de ejemplo que se reproduce en bucle en el teléfono del panel izquierdo.
-type Linea = { t: 'them' | 'me' | 'sys' | 'typing'; x?: string };
-const CHAT: Linea[] = [
-  { t: 'them', x: 'Hola 👋 ¿tienen la camiseta oversize en M?' },
-  { t: 'typing' },
-  { t: 'me', x: '¡Sí! 🙌 En blanco y negro a $59.900. Llevando 2 te quedan en $99.900 🔥' },
-  { t: 'them', x: 'Me llevo 2. Soy Laura, de Medellín' },
-  { t: 'typing' },
-  { t: 'me', x: 'Perfecto Laura ✅ Te las enviamos con pago contra entrega 🚚' },
-  { t: 'sys', x: '✓ PEDIDO CREADO · ENVIADO AL PROVEEDOR' },
-];
 
 /** Fondo: red de nodos con paquetes de datos viajando y etiquetas que aparecen. */
 function RedDatos() {
@@ -216,46 +194,6 @@ function PalabraRotativa() {
   return <span className="dfl-rot">{txt}</span>;
 }
 
-/** Chat de ejemplo que se va escribiendo solo y vuelve a empezar. */
-function ChatDemo() {
-  const [n, setN] = useState(0);
-  const cuerpo = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const espera = n >= CHAT.length ? 3600 : CHAT[n]?.t === 'typing' ? 900 : n === 0 ? 900 : 1100;
-    const t = window.setTimeout(() => setN((v) => (v >= CHAT.length ? 0 : v + 1)), espera);
-    return () => clearTimeout(t);
-  }, [n]);
-  useEffect(() => { if (cuerpo.current) cuerpo.current.scrollTop = cuerpo.current.scrollHeight; }, [n]);
-  // Las líneas "typing" solo se muestran mientras son la última.
-  const visibles = CHAT.slice(0, n).filter((l, i) => l.t !== 'typing' || i === n - 1);
-  return (
-    <div className="dfl-phone" aria-hidden="true">
-      <div style={{ height: 380, borderRadius: 22, background: '#0d1221', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '13px 13px', background: 'linear-gradient(90deg,#152545,#101a30)', borderBottom: '1px solid rgba(255,255,255,.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(140deg,#34D399,#059669)', display: 'grid', placeItems: 'center' }}>
-            <img src={logo} alt="" style={{ width: 20, height: 18, objectFit: 'contain' }} />
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13.5, color: C.text }}>Tu tienda</div>
-            <div style={{ fontSize: 10.5, color: '#64eaa5', display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#64eaa5', boxShadow: '0 0 7px #64eaa5' }} /> en línea · atendido por IA
-            </div>
-          </div>
-        </div>
-        <div ref={cuerpo} style={{ flex: 1, padding: '14px 11px', display: 'flex', flexDirection: 'column', gap: 9, overflow: 'hidden' }}>
-          {visibles.map((l, i) =>
-            l.t === 'typing' ? (
-              <div key={'t' + i} className="dfl-typing"><i /><i /><i /></div>
-            ) : (
-              <div key={i + (l.x || '')} className={`dfl-msg ${l.t}`}>{l.x}</div>
-            ),
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const IcoMail = () => (
   <svg className="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 7 8 6 8-6" /></svg>
 );
@@ -357,7 +295,6 @@ export function Login({ df }: { df: DealFlowState }) {
               <span className="dfl-chip">Chat → <b>pedido</b> → guía</span>
             </div>
           </div>
-          <ChatDemo />
         </div>
       </div>
 
