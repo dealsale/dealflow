@@ -332,6 +332,13 @@ h3{font-size:1.2rem;letter-spacing:-.02em}
 }
 html.quieto *{animation:none!important;transition:none!important}
 html.quieto .reveal{opacity:1;transform:none}
+/* Logo oficial de DealFlow (PNG) en lugar del ícono genérico */
+.df-logo{display:block;width:100%;height:100%;object-fit:contain}
+.brand-mark{background:none!important;box-shadow:none!important;border-radius:0!important;width:40px!important;height:34px!important}
+.brand-mark .df-logo{filter:drop-shadow(0 4px 12px rgba(70,140,255,.35))}
+.boot-ring .bm,.hub .bm{background:rgba(255,255,255,.04)!important;border:1px solid rgba(134,154,255,.3);box-shadow:0 10px 30px rgba(70,120,255,.3)!important;padding:9px}
+.bot-avatar .df-logo{padding:5px}
+.footer .brand-mark{width:30px!important;height:26px!important}
 :focus-visible{outline:2px solid var(--cyan);outline-offset:4px}
 </style>
 </head>
@@ -339,7 +346,7 @@ html.quieto .reveal{opacity:1;transform:none}
 
 <div class="boot" id="boot" aria-hidden="true">
   <div class="boot-core">
-    <div class="boot-ring"><div class="bm"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 4V5.5Z" fill="#052018"/><circle cx="9" cy="10" r="1.3" fill="#34D399"/><circle cx="12.5" cy="10" r="1.3" fill="#34D399"/><circle cx="16" cy="10" r="1.3" fill="#F59E0B"/></svg></div></div>
+    <div class="boot-ring"><div class="bm"><img src="/logo.png" alt="" class="df-logo"></div></div>
     <div class="boot-lines" id="bootLine">Iniciando <b>DealFlow</b>…</div>
     <div class="boot-bar"><i id="bootBar"></i></div>
   </div>
@@ -353,7 +360,7 @@ html.quieto .reveal{opacity:1;transform:none}
 <header class="topbar" id="topbar">
   <div class="top-in">
     <a class="brand" href="#inicio" aria-label="DealFlow">
-      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 4V5.5Z" fill="#052018"/><circle cx="9" cy="10" r="1.3" fill="#34D399"/><circle cx="12.5" cy="10" r="1.3" fill="#34D399"/><circle cx="16" cy="10" r="1.3" fill="#F59E0B"/></svg></span>
+      <span class="brand-mark" aria-hidden="true"><img src="/logo.png" alt="" class="df-logo"></span>
       <span>DealFlow</span>
     </a>
     <nav class="nav-links" aria-label="Secciones">
@@ -389,7 +396,7 @@ html.quieto .reveal{opacity:1;transform:none}
       <div class="fc fc4"><b>🚚 Despacho</b>Guía generada</div>
       <div class="phone tilt" id="phone">
         <div class="screen">
-          <div class="chat-top"><div class="av">S</div><div><div class="cname">Samy Store</div><div class="online">en línea · responde al instante</div></div></div>
+          <div class="chat-top"><div class="av" style="background:#0d1730;padding:5px"><img src="/logo.png" alt="" class="df-logo"></div><div><div class="cname">Samy Store</div><div class="online">en línea · responde al instante</div></div></div>
           <div class="chat-body" id="heroChat"></div>
         </div>
       </div>
@@ -474,7 +481,7 @@ html.quieto .reveal{opacity:1;transform:none}
       </div>
       <div class="phone reveal zoom d2">
         <div class="screen">
-          <div class="chat-top"><div class="av">S</div><div><div class="cname">Samy Store</div><div class="online">atendido por IA</div></div></div>
+          <div class="chat-top"><div class="av" style="background:#0d1730;padding:5px"><img src="/logo.png" alt="" class="df-logo"></div><div><div class="cname">Samy Store</div><div class="online">atendido por IA</div></div></div>
           <div class="chat-body" id="demoChat"></div>
         </div>
       </div>
@@ -538,7 +545,7 @@ html.quieto .reveal{opacity:1;transform:none}
           <circle r="5" fill="#ffc65c"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#p6"/></animateMotion></circle>
         </g>
       </svg>
-      <div class="hub"><div class="bm"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 4V5.5Z" fill="#052018"/><circle cx="9" cy="10" r="1.3" fill="#34D399"/><circle cx="12.5" cy="10" r="1.3" fill="#34D399"/><circle cx="16" cy="10" r="1.3" fill="#F59E0B"/></svg></div></div>
+      <div class="hub"><div class="bm"><img src="/logo.png" alt="" class="df-logo"></div></div>
       <div class="node" style="left:15%;top:17%"><span class="e">💬</span><b>WhatsApp</b>API oficial de Meta</div>
       <div class="node" style="left:15%;top:50%"><span class="e">📸</span><b>Instagram</b>y Messenger</div>
       <div class="node" style="left:15%;top:83%"><span class="e">🧠</span><b>IA</b>DeepSeek · OpenAI</div>
@@ -623,7 +630,7 @@ html.quieto .reveal{opacity:1;transform:none}
 
 <footer class="footer">
   <div class="wrap foot">
-    <span class="brand" style="font-size:1rem"><span class="brand-mark" style="width:26px;height:26px;border-radius:8px" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" style="width:15px;height:15px"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 4V5.5Z" fill="#052018"/><circle cx="9" cy="10" r="1.3" fill="#34D399"/><circle cx="12.5" cy="10" r="1.3" fill="#34D399"/><circle cx="16" cy="10" r="1.3" fill="#F59E0B"/></svg></span>DealFlow</span>
+    <span class="brand" style="font-size:1rem"><span class="brand-mark" style="width:26px;height:26px;border-radius:8px" aria-hidden="true"><img src="/logo.png" alt="" class="df-logo"></span>DealFlow</span>
     <span class="mono">Ventas con IA por WhatsApp</span>
     <span class="spacer"></span>
     <span class="foot-legal"><a href="/legal/privacidad.html">Privacidad</a><a href="/legal/terminos.html">Términos</a><a href="/legal/eliminar-datos.html">Eliminar datos</a></span>
