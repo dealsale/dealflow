@@ -63,10 +63,10 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
           overflowY: 'auto',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 18px' }}>
+        <a href="/inicio" title="Ir a la página de inicio de DealFlow" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 18px', textDecoration: 'none' }}>
           <img src={logo} alt="DealFlow" style={{ width: 30, height: 27, objectFit: 'contain' }} />
           <span style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>DealFlow</span>
-        </div>
+        </a>
 
         {df.isVendedor &&
           VENDOR_ITEMS.filter((m) => df.puedeVerSeccion(m.id)).map((m) => (

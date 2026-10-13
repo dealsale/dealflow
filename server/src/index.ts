@@ -56,7 +56,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '2026-10-13-logo-oficial',
+    build: '2026-10-13-logo-a-inicio',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -138,6 +138,13 @@ if (existsSync(APP_DIST)) {
   app.get(['/dropshipping', '/ads', '/dropshipping-ia'], (_req, res) => {
     if (!adsHtml) return res.status(404).send('Landing no disponible.');
     res.type('html').send(adsHtml);
+  });
+
+  // /inicio: la homepage SIEMPRE (aunque haya sesión). Es a donde lleva el logo
+  // de DealFlow desde cualquier parte (app, login, Academy, landings).
+  app.get(['/inicio', '/home'], (_req, res) => {
+    if (!existsSync(LANDING)) return res.redirect('/');
+    res.sendFile(LANDING);
   });
 
   const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app)(\/|$)/i;

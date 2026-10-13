@@ -61,10 +61,10 @@ export function Sidebar({ df }: { df: DealFlowState }) {
 
   return (
     <aside style={{ width: 224, flexShrink: 0, background: '#0F172A', display: 'flex', flexDirection: 'column', padding: '18px 12px 14px', overflowY: 'auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 18px' }}>
+      <a href="/inicio" title="Ir a la página de inicio de DealFlow" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 18px', textDecoration: 'none' }}>
         <img src={logo} alt="DealFlow" style={{ width: 34, height: 30, objectFit: 'contain' }} />
         <span style={{ color: '#fff', fontWeight: 800, fontSize: 17, letterSpacing: '-0.02em' }}>DealFlow</span>
-      </div>
+      </a>
 
       {df.isVendedor && (
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
