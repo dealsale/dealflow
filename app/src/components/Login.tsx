@@ -1,84 +1,273 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import logo from '../assets/logo.png';
 
-/* Cursor cute: flecha esmeralda con un mini-bot amarillo de compañero. */
-const CUR_DEFAULT = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M3 2l6.8 18.6 3-7.6 7.8-2.6z' fill='%2334D399' stroke='%23064E3B' stroke-width='1.5' stroke-linejoin='round'/%3E%3Ccircle cx='21.5' cy='4' r='1.2' fill='%23F59E0B'/%3E%3Crect x='21.1' y='4.8' width='0.9' height='1.6' fill='%23B45309'/%3E%3Crect x='16.5' y='6.4' width='10' height='8' rx='2.8' fill='%23FBBF24' stroke='%23854D0E' stroke-width='1.2'/%3E%3Ccircle cx='20' cy='10.2' r='1.1' fill='%23422006'/%3E%3Ccircle cx='23.4' cy='10.2' r='1.1' fill='%23422006'/%3E%3C/svg%3E") 3 2, auto`;
-const CUR_POINTER = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M3 2l6.8 18.6 3-7.6 7.8-2.6z' fill='%23FBBF24' stroke='%23854D0E' stroke-width='1.5' stroke-linejoin='round'/%3E%3Ccircle cx='21.5' cy='4' r='1.2' fill='%2334D399'/%3E%3Crect x='21.1' y='4.8' width='0.9' height='1.6' fill='%23064E3B'/%3E%3Crect x='16.5' y='6.4' width='10' height='8' rx='2.8' fill='%2334D399' stroke='%23064E3B' stroke-width='1.2'/%3E%3Ccircle cx='20' cy='10' r='1.1' fill='%23052018'/%3E%3Ccircle cx='23.4' cy='10' r='1.1' fill='%23052018'/%3E%3Cpath d='M20 12.2q1.7 1.3 3.4 0' stroke='%23052018' stroke-width='1' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") 3 2, pointer`;
+/*
+ * Pantalla de inicio de sesión / registro con el mismo lenguaje visual de la
+ * landing: fondo de red de datos animada (canvas), panel de marca con frases que
+ * rotan y un chat de ejemplo en vivo, y una tarjeta de vidrio oscuro con borde de
+ * luz giratorio. Los colores son FIJOS (no usan las variables del tema) para que
+ * se vea igual con cualquier tema guardado — antes, con Premium, la tarjeta
+ * blanca quedaba con textos claros que no se leían.
+ */
+const C = {
+  bg: '#050713',
+  text: '#EEF3FF',
+  muted: '#9AA8C9',
+  faint: '#6F7B9E',
+  line: 'rgba(134,154,255,.16)',
+  lineStrong: 'rgba(134,154,255,.32)',
+  cyan: '#46D8FF',
+  green: '#34D399',
+  violet: '#7658FF',
+  danger: '#FF6B8A',
+};
 
 const CSS = `
-.df-lg { cursor: ${CUR_DEFAULT}; }
-.df-lg button, .df-lg a { cursor: ${CUR_POINTER}; }
-.df-lg input { cursor: text; }
-@keyframes dfFloat { 0%,100% { transform: translateY(0) rotate(var(--rot,0deg)); } 50% { transform: translateY(-16px) rotate(var(--rot,0deg)); } }
-@keyframes dfFloat2 { 0%,100% { transform: translateY(-8px) rotate(var(--rot,0deg)); } 50% { transform: translateY(10px) rotate(var(--rot,0deg)); } }
-@keyframes dfBlink { 0%, 91%, 100% { transform: scaleY(1); } 94%, 97% { transform: scaleY(0.08); } }
-@keyframes dfWave { 0%,100% { transform: rotate(0deg); } 30% { transform: rotate(-22deg); } 60% { transform: rotate(10deg); } }
-@keyframes dfAntena { 0%,100% { opacity:.55; } 50% { opacity:1; } }
-@keyframes dfTwinkle { 0%,100% { opacity:.15; transform: scale(.7) rotate(0deg); } 50% { opacity:.9; transform: scale(1.15) rotate(25deg); } }
-@keyframes dfCardIn { from { opacity:0; transform: translateY(26px) scale(.96); } to { opacity:1; transform: none; } }
-@keyframes dfLogoBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-@keyframes dfShake { 10%,90% { transform: translateX(-2px); } 20%,80% { transform: translateX(3px); } 30%,70% { transform: translateX(-5px); } 40%,60% { transform: translateX(5px); } 50% { transform: translateX(-3px); } }
-@keyframes dfBlob { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(30px,-20px) scale(1.12); } }
-@keyframes dfPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.45); } 50% { box-shadow: 0 0 0 12px rgba(52,211,153,0); } }
-.df-lg-pulse { animation: dfPulse 1.6s ease-out infinite; }
-.df-lg-bot { position:absolute; animation: dfFloat var(--dur,6s) ease-in-out infinite; animation-delay: var(--del,0s); filter: drop-shadow(0 14px 22px rgba(0,0,0,.35)); will-change: transform; }
-.df-lg-bot.alt { animation-name: dfFloat2; }
-.df-lg-eye { transform-origin: center; transform-box: fill-box; animation: dfBlink 4.4s infinite; animation-delay: var(--bdel,0s); }
-.df-lg-arm { transform-origin: top center; transform-box: fill-box; animation: dfWave 3.6s ease-in-out infinite; animation-delay: var(--wdel,.6s); }
-.df-lg-ant { animation: dfAntena 2s ease-in-out infinite; }
-.df-lg-spark { position:absolute; color:var(--df-warning-border); animation: dfTwinkle var(--dur,3s) ease-in-out infinite; animation-delay: var(--del,0s); user-select:none; pointer-events:none; }
-.df-lg-card { animation: dfCardIn .6s cubic-bezier(.2,.8,.25,1.1) both .1s; }
-.df-lg-card.err { animation: dfShake .5s both; }
-.df-lg-logo { animation: dfLogoBob 3.4s ease-in-out infinite; }
-.df-lg-btn { position:relative; overflow:hidden; transition: transform .18s, box-shadow .25s; }
-.df-lg-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 34px -12px rgba(16,185,129,.55); }
-.df-lg-btn::after { content:""; position:absolute; top:0; left:-80%; width:50%; height:100%; background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent); transform:skewX(-20deg); transition:left .5s; }
-.df-lg-btn:hover::after { left:130%; }
-.df-lg-input { transition: border-color .2s, box-shadow .2s, transform .2s; }
-.df-lg-input:focus { outline:none; border-color:var(--df-brand-light) !important; box-shadow:0 0 0 4px rgba(52,211,153,.18); }
-.df-lg-blob { position:absolute; border-radius:50%; filter:blur(80px); pointer-events:none; animation: dfBlob 11s ease-in-out infinite; }
-@media (max-width: 640px) { .df-lg-bot.hide-sm { display:none; } }
+.dfl { --mx: 50%; --my: 50%; }
+.dfl *::selection { background: rgba(118,88,255,.4); }
+@keyframes dflSpin { to { transform: rotate(360deg) } }
+@keyframes dflIn { from { opacity:0; transform: translateY(22px) scale(.98) } to { opacity:1; transform:none } }
+@keyframes dflShake { 10%,90% { transform: translateX(-2px) } 20%,80% { transform: translateX(3px) } 30%,70% { transform: translateX(-6px) } 40%,60% { transform: translateX(6px) } 50% { transform: translateX(-3px) } }
+@keyframes dflShine { to { background-position: -300% 0 } }
+@keyframes dflCaret { 50% { border-color: transparent } }
+@keyframes dflFloat { 50% { transform: translateY(-8px) } }
+@keyframes dflScan { 0% { transform: translateY(-140px) } 100% { transform: translateY(110vh) } }
+@keyframes dflMsg { from { opacity:0; transform: translateY(8px) scale(.97) } to { opacity:1; transform:none } }
+@keyframes dflBlink { 0%,60%,100% { opacity:.3; transform:none } 30% { opacity:1; transform: translateY(-2px) } }
+@keyframes dflPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.5) } 50% { box-shadow: 0 0 0 7px rgba(52,211,153,0) } }
+@keyframes dflGrid { to { background-position: 64px 64px, 64px 64px } }
+@keyframes dflSweep { 0%,55% { left:-60% } 100% { left:130% } }
+.dfl-grid { position:absolute; inset:0; pointer-events:none; background-image: linear-gradient(rgba(120,145,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(120,145,255,.05) 1px, transparent 1px); background-size: 64px 64px; animation: dflGrid 22s linear infinite; -webkit-mask-image: radial-gradient(circle at 50% 40%, #000 15%, transparent 75%); mask-image: radial-gradient(circle at 50% 40%, #000 15%, transparent 75%); }
+.dfl-scan { position:absolute; left:0; right:0; top:0; height:120px; pointer-events:none; background: linear-gradient(180deg, transparent, rgba(70,216,255,.05) 48%, rgba(70,216,255,.12) 50%, transparent); animation: dflScan 8s linear infinite; }
+.dfl-card-wrap { position:relative; border-radius:24px; padding:1.5px; overflow:hidden; animation: dflIn .7s cubic-bezier(.2,.8,.2,1) both .15s; }
+.dfl-card-wrap::before { content:""; position:absolute; inset:-60%; background: conic-gradient(from 0deg, transparent 0 55%, ${C.cyan} 68%, ${C.violet} 78%, ${C.green} 86%, transparent 94%); animation: dflSpin 6s linear infinite; }
+.dfl-card-wrap.err { animation: dflShake .5s both; }
+.dfl-card { position:relative; border-radius:23px; background: linear-gradient(160deg, rgba(14,19,42,.96), rgba(8,11,28,.97)); padding: 30px 28px 26px; }
+.dfl-card::after { content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; background: radial-gradient(420px circle at var(--mx) var(--my), rgba(90,110,255,.10), transparent 60%); }
+.dfl-label { display:block; font-size:11.5px; font-weight:600; letter-spacing:.04em; color:${C.muted}; margin:0 0 6px 2px; text-transform:uppercase; font-family:'JetBrains Mono',ui-monospace,monospace; }
+.dfl-field { position:relative; margin-bottom:14px; }
+.dfl-field svg.ic { position:absolute; left:13px; top:50%; transform:translateY(-50%); width:17px; height:17px; color:${C.faint}; transition: color .2s; pointer-events:none; }
+.dfl-input { width:100%; box-sizing:border-box; min-height:48px; padding:12px 44px 12px 40px; border-radius:12px; border:1px solid ${C.lineStrong}; background: rgba(5,8,24,.7) !important; color:${C.text} !important; font-family:inherit; font-size:14.5px; outline:none; transition: border-color .2s, box-shadow .25s, background .2s; }
+.dfl-input::placeholder { color:#5E6A8F; }
+.dfl-input:focus { border-color:${C.cyan}; box-shadow: 0 0 0 4px rgba(70,216,255,.14), 0 0 24px -6px rgba(70,216,255,.5); background: rgba(8,12,34,.85) !important; }
+.dfl-field:focus-within svg.ic { color:${C.cyan}; }
+.dfl-input:-webkit-autofill { -webkit-text-fill-color:${C.text}; -webkit-box-shadow: 0 0 0 40px #0A0F27 inset; caret-color:${C.text}; }
+.dfl-eye { position:absolute; right:8px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:${C.faint}; cursor:pointer; padding:6px; border-radius:8px; display:grid; place-items:center; }
+.dfl-eye:hover { color:${C.text}; background: rgba(255,255,255,.05); }
+.dfl-btn { position:relative; overflow:hidden; width:100%; border:none; border-radius:13px; padding:15px; font-family:inherit; font-weight:800; font-size:15px; letter-spacing:.01em; color:#fff; cursor:pointer; background: linear-gradient(120deg, #10B981 0%, #2E8BFF 55%, #7658FF 100%); background-size: 160% 100%; box-shadow: 0 14px 34px -12px rgba(46,139,255,.6); transition: transform .18s, box-shadow .25s, background-position .5s; }
+.dfl-btn:hover { transform: translateY(-2px); background-position: 100% 0; box-shadow: 0 18px 40px -12px rgba(118,88,255,.7); }
+.dfl-btn:active { transform: translateY(0); }
+.dfl-btn::after { content:""; position:absolute; top:0; left:-60%; width:40%; height:100%; background: linear-gradient(100deg, transparent, rgba(255,255,255,.35), transparent); transform: skewX(-20deg); animation: dflSweep 3.4s ease-in-out infinite; }
+.dfl-btn[disabled] { opacity:.75; cursor:progress; }
+.dfl-spin { display:inline-block; width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,.35); border-top-color:#fff; animation: dflSpin .7s linear infinite; vertical-align:-3px; margin-right:8px; }
+.dfl-tabs { display:grid; grid-template-columns:1fr 1fr; padding:4px; border-radius:12px; background: rgba(255,255,255,.04); border:1px solid ${C.line}; margin-bottom:22px; position:relative; }
+.dfl-tabs button { position:relative; z-index:1; border:none; background:transparent; color:${C.muted}; font-family:inherit; font-weight:700; font-size:13px; padding:9px; border-radius:9px; cursor:pointer; transition: color .25s; }
+.dfl-tabs button.on { color:#fff; }
+.dfl-tabs .pill { position:absolute; top:4px; bottom:4px; width:calc(50% - 4px); border-radius:9px; background: linear-gradient(120deg, rgba(46,139,255,.35), rgba(118,88,255,.35)); border:1px solid rgba(134,154,255,.35); transition: transform .35s cubic-bezier(.2,.8,.2,1); }
+.dfl-grad { background: linear-gradient(110deg, #2E8BFF, #6C59FF, #B05AFF, #46D8FF, #2E8BFF); background-size: 300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation: dflShine 7s linear infinite; }
+.dfl-rot { color:${C.cyan}; border-right:2px solid ${C.cyan}; padding-right:3px; animation: dflCaret 1s step-end infinite; white-space:nowrap; }
+.dfl-chip { display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px; border:1px solid ${C.line}; background: rgba(255,255,255,.03); font-family:'JetBrains Mono',ui-monospace,monospace; font-size:11.5px; color:${C.muted}; }
+.dfl-chip b { color:${C.cyan}; font-weight:700; }
+.dfl-phone { width:300px; border-radius:30px; padding:10px; background: linear-gradient(155deg,#1a2340,#090e1f); border:1px solid ${C.lineStrong}; box-shadow: 0 40px 90px rgba(10,20,60,.6); animation: dflFloat 6s ease-in-out infinite; }
+.dfl-msg { max-width:84%; padding:9px 11px; border-radius:14px; font-size:12.5px; line-height:1.4; animation: dflMsg .4s cubic-bezier(.2,.8,.2,1) both; }
+.dfl-msg.them { background:#1a2540; color:#dbe4ff; align-self:flex-start; border-bottom-left-radius:4px; }
+.dfl-msg.me { background: linear-gradient(120deg,#2E8BFF,#6C59FF); color:#fff; align-self:flex-end; border-bottom-right-radius:4px; }
+.dfl-msg.sys { align-self:center; background: rgba(52,211,153,.1); border:1px solid rgba(52,211,153,.3); color:${C.green}; font-family:'JetBrains Mono',ui-monospace,monospace; font-size:10.5px; border-radius:999px; padding:5px 10px; }
+.dfl-typing { align-self:flex-start; background:#1a2540; padding:10px 13px; border-radius:14px; border-bottom-left-radius:4px; display:flex; gap:4px; animation: dflMsg .3s ease both; }
+.dfl-typing i { width:6px; height:6px; border-radius:50%; background:#8290b6; animation: dflBlink 1.1s infinite; }
+.dfl-typing i:nth-child(2) { animation-delay:.16s } .dfl-typing i:nth-child(3) { animation-delay:.32s }
+.dfl-social { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:11px; border:1px solid ${C.line}; color:${C.muted}; background: rgba(255,255,255,.02); transition: color .2s, border-color .2s, transform .2s; }
+.dfl-social:hover { color:${C.text}; border-color:${C.lineStrong}; transform: translateY(-2px); }
+.dfl-left { display:flex; }
+@media (max-width: 1020px) { .dfl-left { display:none !important; } }
+@media (min-width: 1021px) { .dfl-mobile-brand { display:none !important; } }
+@media (max-width: 520px) { .dfl-card { padding: 24px 18px 20px; } }
+@media (prefers-reduced-motion: reduce) { .dfl * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; } }
 `;
 
-/** Bot cute: cuerpo redondito, ojos que parpadean, cachetes, antena y bracito que saluda. */
-function CuteBot({ body, dark, cheek, size, style, className, blinkDelay = '0s', waveDelay = '.5s' }: {
-  body: string; dark: string; cheek: string; size: number;
-  style?: React.CSSProperties; className?: string; blinkDelay?: string; waveDelay?: string;
-}) {
+const FRASES = ['duermes', 'estás con tu familia', 'buscas tu próximo producto ganador', 'montas tu siguiente campaña'];
+
+// Conversación de ejemplo que se reproduce en bucle en el teléfono del panel izquierdo.
+type Linea = { t: 'them' | 'me' | 'sys' | 'typing'; x?: string };
+const CHAT: Linea[] = [
+  { t: 'them', x: 'Hola 👋 ¿tienen la camiseta oversize en M?' },
+  { t: 'typing' },
+  { t: 'me', x: '¡Sí! 🙌 En blanco y negro a $59.900. Llevando 2 te quedan en $99.900 🔥' },
+  { t: 'them', x: 'Me llevo 2. Soy Laura, de Medellín' },
+  { t: 'typing' },
+  { t: 'me', x: 'Perfecto Laura ✅ Te las enviamos con pago contra entrega 🚚' },
+  { t: 'sys', x: '✓ PEDIDO CREADO · ENVIADO AL PROVEEDOR' },
+];
+
+/** Fondo: red de nodos con paquetes de datos viajando y etiquetas que aparecen. */
+function RedDatos() {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    const small = window.innerWidth < 700;
+    const dpr = small ? 1 : Math.min(2, window.devicePixelRatio || 1);
+    const TAGS = ['pedido #1043 ✓', '+$119.900', 'chat nuevo · Bogotá', 'IA → 1,8 s', 'guía generada', 'venta cerrada', 'remisión Effi ✓', 'enviado a Dropi', 'opt-in ✓', '02:13 a.m. · vendido'];
+    let w = 0, h = 0, raf = 0, last = 0, pkT = 0, tagT = 0;
+    let nodes: { x: number; y: number; vx: number; vy: number; z: number }[] = [];
+    let packets: { a: number; b: number; t: number; sp: number; col: string }[] = [];
+    let tags: { n: number; txt: string; life: number }[] = [];
+    const size = () => {
+      w = c.clientWidth; h = c.clientHeight;
+      c.width = w * dpr; c.height = h * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const n = Math.round(Math.min(small ? 28 : 64, (w * h) / 21000));
+      nodes = Array.from({ length: n }, () => ({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3, z: 0.4 + Math.random() * 0.8 }));
+    };
+    size();
+    window.addEventListener('resize', size);
+    const frame = (t: number) => {
+      raf = requestAnimationFrame(frame);
+      if (document.hidden) return;
+      const dt = Math.min(50, t - last || 16); last = t;
+      ctx.clearRect(0, 0, w, h);
+      for (const n of nodes) {
+        n.x += n.vx * n.z; n.y += n.vy * n.z;
+        if (n.x < 0 || n.x > w) n.vx *= -1;
+        if (n.y < 0 || n.y > h) n.vy *= -1;
+      }
+      const links: [number, number][] = [];
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y, d = dx * dx + dy * dy;
+          if (d < 28000) {
+            ctx.strokeStyle = `rgba(105,135,255,${0.2 * (1 - d / 28000)})`;
+            ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(nodes[i].x, nodes[i].y); ctx.lineTo(nodes[j].x, nodes[j].y); ctx.stroke();
+            links.push([i, j]);
+          }
+        }
+      }
+      for (const n of nodes) { ctx.fillStyle = `rgba(140,170,255,${0.45 * n.z})`; ctx.beginPath(); ctx.arc(n.x, n.y, 1 + n.z * 1.2, 0, 6.283); ctx.fill(); }
+      pkT += dt;
+      if (pkT > 220 && links.length && packets.length < (small ? 6 : 16)) {
+        pkT = 0;
+        const L = links[(Math.random() * links.length) | 0];
+        const r = Math.random();
+        packets.push({ a: L[0], b: L[1], t: 0, sp: 0.0013 + Math.random() * 0.0016, col: r < 0.4 ? '70,216,255' : r < 0.7 ? '52,211,153' : '183,93,255' });
+      }
+      packets = packets.filter((k) => {
+        k.t += k.sp * dt;
+        if (k.t >= 1) return false;
+        const A = nodes[k.a], B = nodes[k.b];
+        if (!A || !B) return false;
+        const x = A.x + (B.x - A.x) * k.t, y = A.y + (B.y - A.y) * k.t;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 9);
+        g.addColorStop(0, `rgba(${k.col},.95)`); g.addColorStop(1, `rgba(${k.col},0)`);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 9, 0, 6.283); ctx.fill();
+        return true;
+      });
+      tagT += dt;
+      if (tagT > (small ? 2400 : 1200) && nodes.length) {
+        tagT = 0;
+        const ni = (Math.random() * nodes.length) | 0;
+        if (nodes[ni].y > 80 && nodes[ni].y < h - 80 && nodes[ni].x < w - 200) tags.push({ n: ni, txt: TAGS[(Math.random() * TAGS.length) | 0], life: 0 });
+      }
+      ctx.font = '600 10.5px "JetBrains Mono", ui-monospace, monospace';
+      tags = tags.filter((tg) => {
+        tg.life += dt;
+        const L = 3200;
+        if (tg.life > L) return false;
+        const a = tg.life < 400 ? tg.life / 400 : tg.life > L - 600 ? (L - tg.life) / 600 : 1;
+        const p0 = nodes[tg.n];
+        const x = p0.x + 10, y = p0.y - 12 - tg.life * 0.006, tw = ctx.measureText(tg.txt).width + 16;
+        ctx.globalAlpha = a * 0.9;
+        ctx.fillStyle = 'rgba(10,16,36,.88)'; ctx.strokeStyle = 'rgba(110,140,255,.4)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x, y - 14, tw, 20, 7); else ctx.rect(x, y - 14, tw, 20);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#bfe9ff'; ctx.fillText(tg.txt, x + 8, y);
+        ctx.globalAlpha = 1;
+        return true;
+      });
+    };
+    raf = requestAnimationFrame(frame);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', size); };
+  }, []);
+  return <canvas ref={ref} aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />;
+}
+
+/** Palabra que se escribe y se borra sola ("Mientras tú ___, DealFlow vende"). */
+function PalabraRotativa() {
+  const [txt, setTxt] = useState(FRASES[0]);
+  useEffect(() => {
+    let wi = 0, ci = FRASES[0].length, borrando = true, to = 0;
+    const tick = () => {
+      const palabra = FRASES[wi];
+      if (borrando) {
+        ci--; setTxt(palabra.slice(0, ci));
+        if (ci <= 0) { borrando = false; wi = (wi + 1) % FRASES.length; }
+        to = window.setTimeout(tick, 38);
+      } else {
+        ci++; setTxt(FRASES[wi].slice(0, ci));
+        if (ci >= FRASES[wi].length) { borrando = true; to = window.setTimeout(tick, 1900); return; }
+        to = window.setTimeout(tick, 62);
+      }
+    };
+    to = window.setTimeout(tick, 2200);
+    return () => clearTimeout(to);
+  }, []);
+  return <span className="dfl-rot">{txt}</span>;
+}
+
+/** Chat de ejemplo que se va escribiendo solo y vuelve a empezar. */
+function ChatDemo() {
+  const [n, setN] = useState(0);
+  const cuerpo = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const espera = n >= CHAT.length ? 3600 : CHAT[n]?.t === 'typing' ? 900 : n === 0 ? 900 : 1100;
+    const t = window.setTimeout(() => setN((v) => (v >= CHAT.length ? 0 : v + 1)), espera);
+    return () => clearTimeout(t);
+  }, [n]);
+  useEffect(() => { if (cuerpo.current) cuerpo.current.scrollTop = cuerpo.current.scrollHeight; }, [n]);
+  // Las líneas "typing" solo se muestran mientras son la última.
+  const visibles = CHAT.slice(0, n).filter((l, i) => l.t !== 'typing' || i === n - 1);
   return (
-    <div className={`df-lg-bot ${className || ''}`} style={style} aria-hidden="true">
-      <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
-        {/* antena */}
-        <circle className="df-lg-ant" cx="32" cy="7" r="3.4" fill="var(--df-warning-border)" />
-        <rect x="30.9" y="9" width="2.2" height="5" rx="1" fill={dark} />
-        {/* orejitas */}
-        <rect x="6" y="30" width="5" height="10" rx="2.5" fill={dark} />
-        <rect x="53" y="30" width="5" height="10" rx="2.5" fill={dark} />
-        {/* cuerpo */}
-        <rect x="10" y="14" width="44" height="40" rx="15" fill={body} />
-        <rect x="10" y="14" width="44" height="40" rx="15" stroke={dark} strokeWidth="2.4" />
-        {/* carita (pantalla) */}
-        <rect x="16" y="21" width="32" height="24" rx="10" fill={dark} opacity=".92" />
-        {/* ojos */}
-        <circle className="df-lg-eye" style={{ ['--bdel' as never]: blinkDelay }} cx="26" cy="32" r="3.4" fill="var(--df-brand-border)" />
-        <circle className="df-lg-eye" style={{ ['--bdel' as never]: blinkDelay }} cx="38" cy="32" r="3.4" fill="var(--df-brand-border)" />
-        {/* sonrisa */}
-        <path d="M27 38.5q5 3.6 10 0" stroke="var(--df-brand-border)" strokeWidth="2" strokeLinecap="round" fill="none" />
-        {/* cachetes */}
-        <circle cx="20.5" cy="37" r="2.4" fill={cheek} opacity=".85" />
-        <circle cx="43.5" cy="37" r="2.4" fill={cheek} opacity=".85" />
-        {/* bracito que saluda */}
-        <g className="df-lg-arm" style={{ ['--wdel' as never]: waveDelay }}>
-          <rect x="56" y="20" width="5.5" height="14" rx="2.75" fill={body} stroke={dark} strokeWidth="1.8" transform="rotate(28 58 21)" />
-        </g>
-        {/* patitas */}
-        <rect x="20" y="54" width="8" height="6" rx="3" fill={dark} />
-        <rect x="36" y="54" width="8" height="6" rx="3" fill={dark} />
-      </svg>
+    <div className="dfl-phone" aria-hidden="true">
+      <div style={{ height: 380, borderRadius: 22, background: '#0d1221', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '13px 13px', background: 'linear-gradient(90deg,#152545,#101a30)', borderBottom: '1px solid rgba(255,255,255,.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(140deg,#34D399,#059669)', display: 'grid', placeItems: 'center' }}>
+            <img src={logo} alt="" style={{ width: 20, height: 18, objectFit: 'contain' }} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13.5, color: C.text }}>Tu tienda</div>
+            <div style={{ fontSize: 10.5, color: '#64eaa5', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#64eaa5', boxShadow: '0 0 7px #64eaa5' }} /> en línea · atendido por IA
+            </div>
+          </div>
+        </div>
+        <div ref={cuerpo} style={{ flex: 1, padding: '14px 11px', display: 'flex', flexDirection: 'column', gap: 9, overflow: 'hidden' }}>
+          {visibles.map((l, i) =>
+            l.t === 'typing' ? (
+              <div key={'t' + i} className="dfl-typing"><i /><i /><i /></div>
+            ) : (
+              <div key={i + (l.x || '')} className={`dfl-msg ${l.t}`}>{l.x}</div>
+            ),
+          )}
+        </div>
+      </div>
     </div>
   );
 }
+
+const IcoMail = () => (
+  <svg className="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 7 8 6 8-6" /></svg>
+);
+const IcoLock = () => (
+  <svg className="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="4.5" y="10.5" width="15" height="10" rx="2.5" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></svg>
+);
+const IcoUser = () => (
+  <svg className="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5" /></svg>
+);
+const IcoStore = () => (
+  <svg className="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M4 9.5 5.5 4h13L20 9.5" /><path d="M4 9.5h16v2a2.7 2.7 0 0 1-5.3 0 2.7 2.7 0 0 1-5.4 0 2.7 2.7 0 0 1-5.3 0Z" /><path d="M5.5 13v7h13v-7" /></svg>
+);
 
 export function Login({ df }: { df: DealFlowState }) {
   const [modo, setModo] = useState<'login' | 'registro'>('login');
@@ -86,194 +275,192 @@ export function Login({ df }: { df: DealFlowState }) {
   const [negocio, setNegocio] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [verClave, setVerClave] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const esRegistro = modo === 'registro';
-  const entrar = () => (esRegistro ? df.registrar(nombre, negocio, email, password) : df.login(email, password));
-  const cambiarModo = () => { setModo(esRegistro ? 'login' : 'registro'); df.clearLoginError(); };
-  const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontSize: 14, marginBottom: 12, minHeight: 44, background: 'var(--df-surface)' };
+  const entrar = async () => {
+    if (enviando) return;
+    setEnviando(true);
+    try {
+      await (esRegistro ? df.registrar(nombre, negocio, email, password) : df.login(email, password));
+    } finally {
+      // Si el login fue exitoso este componente se desmonta; si no, reactivamos el botón.
+      window.setTimeout(() => setEnviando(false), 400);
+    }
+  };
+  const cambiarModo = (m: 'login' | 'registro') => { if (m !== modo) { setModo(m); df.clearLoginError(); } };
+  const limpiar = () => df.clearLoginError();
+
+  // Luz que sigue al cursor dentro de la tarjeta.
+  const onMove = (e: React.MouseEvent) => {
+    const el = cardRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', `${e.clientX - r.left}px`);
+    el.style.setProperty('--my', `${e.clientY - r.top}px`);
+  };
 
   return (
     <div
-      className="df-lg"
+      className="dfl"
       style={{
-        minHeight: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(158deg,#071120 0%,#0A1B2E 46%,#07271F 100%)',
-        fontFamily: "'Inter',system-ui,sans-serif",
-        color: 'var(--df-text-strong)',
-        padding: 16,
-        position: 'relative',
-        overflow: 'hidden',
+        minHeight: '100%', height: '100%', display: 'flex', position: 'relative', overflow: 'auto',
+        background: `radial-gradient(900px circle at 12% 8%, rgba(37,99,235,.22), transparent 55%), radial-gradient(800px circle at 90% 90%, rgba(139,92,246,.2), transparent 55%), radial-gradient(600px circle at 70% 10%, rgba(16,185,129,.12), transparent 55%), ${C.bg}`,
+        fontFamily: "'Inter',system-ui,sans-serif", color: C.text, colorScheme: 'dark',
       }}
     >
       <style>{CSS}</style>
-
-      {/* blobs de luz */}
-      <div className="df-lg-blob" style={{ width: 440, height: 440, top: -140, right: -100, background: 'radial-gradient(circle, rgba(16,185,129,.24), transparent 68%)' }} />
-      <div className="df-lg-blob" style={{ width: 380, height: 380, bottom: -120, left: -110, background: 'radial-gradient(circle, rgba(245,158,11,.16), transparent 70%)', animationDelay: '-5s' }} />
-
-      {/* bots cute flotando */}
-      <CuteBot body="var(--df-brand-light)" dark="var(--df-brand-deep)" cheek="var(--df-danger-light)" size={92} style={{ top: '12%', left: '9%', ['--dur' as never]: '6.5s' }} blinkDelay="0s" waveDelay=".4s" />
-      <CuteBot body="var(--df-warning-light)" dark="var(--df-alert-brown)" cheek="#FDA4AF" size={68} className="alt" style={{ top: '64%', left: '16%', ['--dur' as never]: '7.5s', ['--rot' as never]: '-7deg' }} blinkDelay="1.2s" waveDelay="1.4s" />
-      <CuteBot body="#93C5FD" dark="#1E3A8A" cheek="#F9A8D4" size={76} style={{ top: '18%', right: '11%', ['--dur' as never]: '8s', ['--rot' as never]: '6deg' }} blinkDelay="2.1s" waveDelay="2s" />
-      <CuteBot body="#F9A8D4" dark="#831843" cheek="var(--df-warning-border)" size={60} className="alt hide-sm" style={{ bottom: '14%', right: '17%', ['--dur' as never]: '6s', ['--rot' as never]: '-5deg' }} blinkDelay="3s" waveDelay=".9s" />
-      <CuteBot body="#C4B5FD" dark="#4C1D95" cheek="var(--df-danger-light)" size={54} className="hide-sm" style={{ bottom: '30%', left: '38%', ['--dur' as never]: '9s', ['--rot' as never]: '4deg', opacity: 0.5 }} blinkDelay="1.7s" waveDelay="2.6s" />
-
-      {/* sparkles */}
-      {[
-        { top: '9%', left: '30%', fs: 18, dur: '2.6s', del: '0s' },
-        { top: '30%', left: '5%', fs: 13, dur: '3.4s', del: '.7s' },
-        { top: '74%', left: '8%', fs: 16, dur: '3s', del: '1.4s' },
-        { top: '12%', right: '28%', fs: 14, dur: '2.8s', del: '.4s' },
-        { top: '58%', right: '9%', fs: 19, dur: '3.6s', del: '1s' },
-        { top: '84%', right: '30%', fs: 13, dur: '2.4s', del: '1.8s' },
-      ].map((s, i) => (
-        <span key={i} className="df-lg-spark" style={{ top: s.top, left: s.left, right: s.right, fontSize: s.fs, ['--dur' as never]: s.dur, ['--del' as never]: s.del }}>✦</span>
-      ))}
+      <div className="dfl-grid" />
+      <RedDatos />
+      <div className="dfl-scan" />
 
       {df.pwaDisponible && (
         <button
           onClick={df.instalarPwa}
-          className={`df-lg-btn${typeof location !== 'undefined' && location.search.includes('instalar=1') ? ' df-lg-pulse' : ''}`}
-          style={{ position: 'absolute', top: 16, right: 16, zIndex: 3, background: 'rgba(16,185,129,.14)', color: 'var(--df-brand-border)', border: '1px solid rgba(52,211,153,.4)', borderRadius: 999, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+          style={{ position: 'absolute', top: 16, right: 16, zIndex: 5, background: 'rgba(16,185,129,.12)', color: '#A7F3D0', border: '1px solid rgba(52,211,153,.4)', borderRadius: 999, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', animation: typeof location !== 'undefined' && location.search.includes('instalar=1') ? 'dflPulse 1.6s ease-out infinite' : undefined }}
         >
           📲 Instalar la app
         </button>
       )}
 
-      <div style={{ width: 384, maxWidth: '100%', position: 'relative', zIndex: 2 }}>
-        <div className="df-lg-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 18 }}>
-          <img src={logo} alt="DealFlow" style={{ width: 42, height: 38, objectFit: 'contain', filter: 'drop-shadow(0 6px 14px rgba(16,185,129,.4))' }} />
-          <span style={{ fontWeight: 800, fontSize: 23, letterSpacing: '-0.02em', color: '#F1F5F9' }}>DealFlow</span>
+      {/* ── Panel de marca (escritorio) ── */}
+      <div className="dfl-left" style={{ flex: '1 1 55%', position: 'relative', zIndex: 2, flexDirection: 'column', justifyContent: 'center', padding: '48px 56px', gap: 34, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 13, background: 'rgba(255,255,255,.05)', border: `1px solid ${C.lineStrong}`, display: 'grid', placeItems: 'center' }}>
+            <img src={logo} alt="" style={{ width: 30, height: 27, objectFit: 'contain' }} />
+          </div>
+          <span style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em' }}>DealFlow</span>
+          <span className="dfl-chip" style={{ marginLeft: 6 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, boxShadow: `0 0 10px ${C.green}`, animation: 'dflPulse 1.8s ease-out infinite' }} />sistema en línea</span>
         </div>
 
-        <div
-          className={`df-lg-card${df.loginError ? ' err' : ''}`}
-          style={{
-            background: 'rgba(255,255,255,.94)',
-            backdropFilter: 'blur(14px)',
-            border: '1px solid rgba(255,255,255,.6)',
-            borderRadius: 20,
-            padding: 28,
-            boxShadow: '0 30px 80px -20px rgba(0,0,0,.55), 0 0 0 1px rgba(16,185,129,.08)',
-          }}
-        >
-          <div style={{ fontWeight: 800, fontSize: 19, marginBottom: 2, letterSpacing: '-0.01em' }}>{esRegistro ? 'Crea tu cuenta 🚀' : '¡Hola de nuevo! 👋'}</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 20 }}>{esRegistro ? 'Regístrate y activa tu plan para empezar a vender.' : 'Tu tienda y tu asistente de WhatsApp te están esperando.'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 44, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 320px', minWidth: 0, maxWidth: 540 }}>
+            <div style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12, letterSpacing: '.18em', textTransform: 'uppercase', color: C.cyan, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 28, height: 1, background: `linear-gradient(90deg, ${C.cyan}, transparent)` }} />Ventas con IA por WhatsApp
+            </div>
+            <h1 style={{ fontSize: 'clamp(2.2rem, 3.6vw, 3.4rem)', lineHeight: 1.04, letterSpacing: '-0.035em', fontWeight: 800, margin: 0 }}>
+              Tu tienda en <span className="dfl-grad">piloto automático.</span>
+            </h1>
+            <p style={{ fontSize: 17, margin: '18px 0 0', color: C.text, minHeight: '3.2em' }}>
+              Mientras tú <PalabraRotativa />, DealFlow vende.
+            </p>
+            <p style={{ fontSize: 14.5, color: C.muted, lineHeight: 1.65, margin: '12px 0 0', maxWidth: 470 }}>
+              La IA atiende cada chat, responde con tu catálogo, cierra la venta y deja el pedido listo para despachar con Dropi, Effi o Shopify.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginTop: 24 }}>
+              <span className="dfl-chip">Atención <b>24/7</b></span>
+              <span className="dfl-chip">Respuesta en <b>segundos</b></span>
+              <span className="dfl-chip">Chat → <b>pedido</b> → guía</span>
+            </div>
+          </div>
+          <ChatDemo />
+        </div>
+      </div>
 
-          {esRegistro && (
-            <>
-              <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Tu nombre</div>
-              <input
-                className="df-lg-input"
-                value={nombre}
-                onChange={(e) => { setNombre(e.target.value); df.clearLoginError(); }}
-                placeholder="Ej: Camila Torres"
-                autoComplete="name"
-                style={inputStyle}
-              />
-              <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre de tu tienda</div>
-              <input
-                className="df-lg-input"
-                value={negocio}
-                onChange={(e) => { setNegocio(e.target.value); df.clearLoginError(); }}
-                placeholder="Ej: Luna Accesorios"
-                style={inputStyle}
-              />
-            </>
-          )}
+      {/* ── Formulario ── */}
+      <div style={{ flex: '1 1 45%', position: 'relative', zIndex: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 18px', minWidth: 0, minHeight: '100%' }}>
+        <div style={{ width: 410, maxWidth: '100%', margin: 'auto 0' }}>
+          {/* logo visible en celular (el panel de marca se oculta) */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 }} className="dfl-mobile-brand">
+            <img src={logo} alt="DealFlow" style={{ width: 40, height: 36, objectFit: 'contain', filter: 'drop-shadow(0 6px 14px rgba(70,216,255,.35))' }} />
+            <span style={{ fontWeight: 800, fontSize: 23, letterSpacing: '-0.02em' }}>DealFlow</span>
+          </div>
 
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Correo</div>
-          <input
-            className="df-lg-input"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              df.clearLoginError();
-            }}
-            placeholder="tucorreo@tienda.co"
-            autoComplete="username"
-            style={inputStyle}
-          />
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Contraseña</div>
-          <input
-            className="df-lg-input"
-            type="password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              df.clearLoginError();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') entrar();
-            }}
-            placeholder={esRegistro ? 'Mínimo 6 caracteres' : '••••••••'}
-            autoComplete={esRegistro ? 'new-password' : 'current-password'}
-            style={{ ...inputStyle, marginBottom: 14 }}
-          />
-          {df.loginError && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--df-danger)', fontSize: 13, marginBottom: 12, background: 'var(--df-danger-subtle)', border: '1px solid var(--df-danger-border)', borderRadius: 10, padding: '9px 12px' }}>
-              <span>🤖</span>
-              <span>{df.loginError}</span>
+          <div className={`dfl-card-wrap${df.loginError ? ' err' : ''}`} key={df.loginError ? 'e' + df.loginError : 'ok'}>
+            <div className="dfl-card" ref={cardRef} onMouseMove={onMove}>
+              <div className="dfl-tabs" role="tablist">
+                <span className="pill" style={{ transform: esRegistro ? 'translateX(calc(100% + 0px))' : 'none', left: 4 }} />
+                <button role="tab" className={!esRegistro ? 'on' : ''} onClick={() => cambiarModo('login')}>Iniciar sesión</button>
+                <button role="tab" className={esRegistro ? 'on' : ''} onClick={() => cambiarModo('registro')}>Crear cuenta</button>
+              </div>
+
+              <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em', marginBottom: 4 }}>
+                {esRegistro ? <>Activa tu <span className="dfl-grad">asistente</span> 🚀</> : <>¡Hola de nuevo! 👋</>}
+              </div>
+              <div style={{ color: C.muted, fontSize: 13.5, marginBottom: 22, lineHeight: 1.5 }}>
+                {esRegistro ? 'Regístrate y deja que la IA empiece a vender por ti.' : 'Tu tienda y tu asistente de WhatsApp te están esperando.'}
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); void entrar(); }}>
+                {esRegistro && (
+                  <>
+                    <label className="dfl-label" htmlFor="dfl-nombre">Tu nombre</label>
+                    <div className="dfl-field">
+                      <IcoUser />
+                      <input id="dfl-nombre" className="dfl-input" value={nombre} onChange={(e) => { setNombre(e.target.value); limpiar(); }} placeholder="Ej: Camila Torres" autoComplete="name" />
+                    </div>
+                    <label className="dfl-label" htmlFor="dfl-negocio">Nombre de tu tienda</label>
+                    <div className="dfl-field">
+                      <IcoStore />
+                      <input id="dfl-negocio" className="dfl-input" value={negocio} onChange={(e) => { setNegocio(e.target.value); limpiar(); }} placeholder="Ej: Luna Accesorios" />
+                    </div>
+                  </>
+                )}
+
+                <label className="dfl-label" htmlFor="dfl-email">Correo</label>
+                <div className="dfl-field">
+                  <IcoMail />
+                  <input id="dfl-email" type="email" className="dfl-input" value={email} onChange={(e) => { setEmail(e.target.value); limpiar(); }} placeholder="tucorreo@tienda.co" autoComplete="username" />
+                </div>
+
+                <label className="dfl-label" htmlFor="dfl-clave">Contraseña</label>
+                <div className="dfl-field" style={{ marginBottom: 18 }}>
+                  <IcoLock />
+                  <input id="dfl-clave" type={verClave ? 'text' : 'password'} className="dfl-input" value={password} onChange={(e) => { setPassword(e.target.value); limpiar(); }} placeholder={esRegistro ? 'Mínimo 6 caracteres' : '••••••••'} autoComplete={esRegistro ? 'new-password' : 'current-password'} />
+                  <button type="button" className="dfl-eye" onClick={() => setVerClave((v) => !v)} aria-label={verClave ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
+                    {verClave ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M3 3l18 18" /><path d="M10.6 6.1A9.7 9.7 0 0 1 12 6c5 0 8.5 4 9.5 6-.4.8-1.2 2-2.4 3.2M6.5 7.6C4.6 8.9 3.3 10.7 2.5 12c1 2 4.5 6 9.5 6 1.6 0 3-.4 4.3-1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M2.5 12C3.5 10 7 6 12 6s8.5 4 9.5 6c-1 2-4.5 6-9.5 6s-8.5-4-9.5-6Z" /><circle cx="12" cy="12" r="3" /></svg>
+                    )}
+                  </button>
+                </div>
+
+                {df.loginError && (
+                  <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', color: '#FFC2CF', fontSize: 13, marginBottom: 14, background: 'rgba(255,107,138,.1)', border: '1px solid rgba(255,107,138,.35)', borderRadius: 11, padding: '10px 12px', animation: 'dflMsg .3s ease both' }}>
+                    <span>⚠️</span>
+                    <span>{df.loginError}</span>
+                  </div>
+                )}
+
+                <button type="submit" className="dfl-btn" disabled={enviando}>
+                  {enviando ? <><span className="dfl-spin" />{esRegistro ? 'Creando tu cuenta…' : 'Entrando…'}</> : esRegistro ? 'Crear mi cuenta →' : 'Entrar a mi tienda →'}
+                </button>
+              </form>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0 0', color: C.faint, fontSize: 11.5, fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>
+                <span style={{ flex: 1, height: 1, background: C.line }} />
+                <span>🔒 conexión cifrada · API oficial de WhatsApp</span>
+                <span style={{ flex: 1, height: 1, background: C.line }} />
+              </div>
+            </div>
+          </div>
+
+          {!df.apiMode && (
+            <div style={{ background: 'rgba(16,185,129,.08)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 12, padding: '12px 16px', marginTop: 14, fontSize: 12.5, color: '#A7F3D0', lineHeight: 1.7 }}>
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>Cuentas de la demo</div>
+              Vendedora: <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>karla@lunaaccesorios.co · demo123</span>
+              <br />
+              Admin: <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>admin@dealflow.co · admin123</span>
             </div>
           )}
-          <button
-            onClick={entrar}
-            className="df-lg-btn"
-            style={{
-              width: '100%',
-              background: 'linear-gradient(135deg,var(--df-brand-light),var(--df-brand))',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 12,
-              padding: 14,
-              fontFamily: 'inherit',
-              fontWeight: 800,
-              fontSize: 15,
-              letterSpacing: '.01em',
-              boxShadow: '0 10px 26px -10px rgba(16,185,129,.5)',
-            }}
-          >
-            {esRegistro ? 'Crear mi cuenta →' : 'Entrar a mi tienda →'}
-          </button>
 
-          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: 'var(--df-text-muted)' }}>
-            {esRegistro ? '¿Ya tienes cuenta?' : '¿Aún no tienes cuenta?'}{' '}
-            <button
-              onClick={cambiarModo}
-              style={{ background: 'transparent', border: 'none', color: 'var(--df-brand)', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer', padding: 0 }}
-            >
-              {esRegistro ? 'Inicia sesión' : 'Regístrate gratis'}
-            </button>
+          {/* Redes sociales + legales */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 20 }}>
+            <a className="dfl-social" href="https://www.instagram.com/dealflow444" target="_blank" rel="noopener" aria-label="Instagram de DealFlow" title="Instagram">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none" /></svg>
+            </a>
+            <a className="dfl-social" href="https://www.facebook.com/dealflowsbs/" target="_blank" rel="noopener" aria-label="Facebook de DealFlow" title="Facebook">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M14 8.5V7c0-.8.2-1.2 1.3-1.2H17V3h-2.5c-2.6 0-3.7 1.5-3.7 3.6v1.9H9V11h1.8v9H14v-9h2.2l.4-2.5H14Z" /></svg>
+            </a>
           </div>
-        </div>
-
-        {!df.apiMode && (
-          <div style={{ background: 'rgba(16,185,129,.1)', border: '1px solid rgba(52,211,153,.35)', borderRadius: 12, padding: '12px 16px', marginTop: 14, fontSize: 12.5, color: 'var(--df-brand-border)', lineHeight: 1.7 }}>
-            <div style={{ fontWeight: 700, marginBottom: 2 }}>Cuentas de la demo</div>
-            Vendedora: <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>karla@lunaaccesorios.co · demo123</span>
-            <br />
-            Admin: <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>admin@dealflow.co · admin123</span>
+          <div style={{ textAlign: 'center', marginTop: 10, fontSize: 12, color: C.faint }}>
+            <a href="/legal/privacidad.html" target="_blank" rel="noopener" style={{ color: C.muted }}>Privacidad</a>
+            {' · '}
+            <a href="/legal/terminos.html" target="_blank" rel="noopener" style={{ color: C.muted }}>Términos</a>
           </div>
-        )}
-
-        {/* Redes sociales + legales */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
-          <a href="https://www.instagram.com/dealflow444" target="_blank" rel="noopener" aria-label="Instagram de DealFlow" title="Instagram"
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 10, border: '1px solid var(--df-border)', color: 'var(--df-text-muted)' }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none" /></svg>
-          </a>
-          <a href="https://www.facebook.com/dealflowsbs/" target="_blank" rel="noopener" aria-label="Facebook de DealFlow" title="Facebook"
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 10, border: '1px solid var(--df-border)', color: 'var(--df-text-muted)' }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M14 8.5V7c0-.8.2-1.2 1.3-1.2H17V3h-2.5c-2.6 0-3.7 1.5-3.7 3.6v1.9H9V11h1.8v9H14v-9h2.2l.4-2.5H14Z" /></svg>
-          </a>
-        </div>
-        <div style={{ textAlign: 'center', marginTop: 10, fontSize: 12, color: 'var(--df-text-faint)' }}>
-          <a href="/legal/privacidad.html" target="_blank" rel="noopener" style={{ color: 'var(--df-text-muted)' }}>Privacidad</a>
-          {' · '}
-          <a href="/legal/terminos.html" target="_blank" rel="noopener" style={{ color: 'var(--df-text-muted)' }}>Términos</a>
         </div>
       </div>
     </div>
