@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Header } from './components/Header';
 import { BotPreloader } from './components/BotPreloader';
+import { InstalarAppPopup, esAppInstalada, esIOS } from './components/InstalarAppPopup';
 import { Login } from './components/Login';
 import { OrderDetailPanel } from './components/OrderDetailPanel';
 import { OrderToast } from './components/OrderToast';
@@ -429,6 +430,7 @@ function App() {
   //  - Al abrir/recargar con la sesión ya activa → carga rápida.
   const [splash, setSplash] = useState<null | 'completo' | 'simple'>(null);
   const vioLogin = useRef(false);
+  const [ofrecerInstalar, setOfrecerInstalar] = useState(false);
   const prevLogged = useRef(false);
   useEffect(() => {
     if (df.isLoggedIn && !prevLogged.current) {
@@ -436,6 +438,10 @@ function App() {
       vioLogin.current = false;
       prevLogged.current = true;
       setSplash(variante);
+      // Tras iniciar sesión (o si viene de "Instala la app" en la landing), ofrecer
+      // instalar la app si no se está usando ya instalada.
+      const pidioInstalar = typeof location !== 'undefined' && /[?&]instalar=1\b/.test(location.search);
+      if ((variante === 'completo' || pidioInstalar) && !esAppInstalada()) setOfrecerInstalar(true);
       const t = setTimeout(() => setSplash(null), variante === 'completo' ? DURACION_BOOT : 1400);
       return () => clearTimeout(t);
     }
@@ -458,6 +464,7 @@ function App() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
       {splash && <BotPreloader variante={splash} duracion={splash === 'completo' ? DURACION_BOOT : undefined} />}
+      {!splash && ofrecerInstalar && (df.pwaDisponible || esIOS()) && <InstalarAppPopup df={df} onClose={() => setOfrecerInstalar(false)} />}
       {df.impersonando && <ImpersonationBanner df={df} />}
       {df.isVendedor && <SuscripcionBanner df={df} />}
       <div style={{ flex: 1, minHeight: 0 }}>{isMobile ? <MobileApp df={df} /> : <DesktopApp df={df} />}</div>
