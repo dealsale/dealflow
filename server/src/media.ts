@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { db, uid } from './db.js';
 
@@ -56,6 +57,30 @@ export function saveOutgoingMedia(storeId: string, dataUrl: string, nombre: stri
   const file = uid() + '.' + mediaExt(tipo, mime);
   writeFileSync(path.join(mediaDir(storeId), file), buffer);
   return { url: '/api/media/' + storeId + '/' + file, buffer, mime, tipo };
+}
+
+/** Primera página de un PDF como PNG (pdftoppm). null si no hay poppler o falla. */
+export function pdfAPng(pdf: Buffer): Buffer | null {
+  // pdftoppm no lee de stdin en todas las versiones: usamos archivos temporales.
+  const dir = mkdtempSync(path.join(tmpdir(), 'guia-'));
+  try {
+    const entrada = path.join(dir, 'in.pdf');
+    writeFileSync(entrada, pdf);
+    const r = spawnSync('pdftoppm', ['-png', '-r', '130', '-f', '1', '-l', '1', '-singlefile', entrada, path.join(dir, 'out')], { timeout: 30000 });
+    if (r.status === 0) return readFileSync(path.join(dir, 'out.png'));
+  } catch {
+    /* sin poppler o PDF inválido */
+  } finally {
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ }
+  }
+  return null;
+}
+
+/** Guarda un buffer en la carpeta de la tienda con un nombre dado; devuelve su URL. */
+export function guardarArchivo(storeId: string, nombre: string, buffer: Buffer): string {
+  const file = path.basename(nombre);
+  writeFileSync(path.join(mediaDir(storeId), file), buffer);
+  return '/api/media/' + storeId + '/' + file;
 }
 
 /** Registra un mensaje saliente con adjunto en la conversación. */

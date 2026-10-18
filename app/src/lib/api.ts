@@ -313,6 +313,8 @@ export interface ApiOrder {
   wooId?: string;
   dropiOrderId?: string;
   guiaUrl?: string;
+  guiaImg?: string;
+  effiGuiaCreada?: boolean;
   despachoProveedor?: string;
   estadoWoo?: string;
   effiRemision?: string;
@@ -510,6 +512,12 @@ export const apiEffiApiBuscar = (q: string) => req<{ articulos: EffiArticulo[] }
 export const apiEffiApiProveedor = (productIds: string[], proveedor: 'effi' | 'dropi' | '') => req<{ ok: true; actualizados: number }>('/api/effi-api/producto-proveedor', 'POST', { productIds, proveedor });
 export const apiEffiApiVincular = (variantId: string, effiId: string) => req<{ ok: true }>('/api/effi-api/articulos/vincular', 'POST', { variantId, effiId });
 export const apiEffiApiEventos = () => req<{ eventos: EffiEvento[] }>('/api/effi-api/eventos', 'GET');
+export interface OpcionesGuia { transportadoras: EffiTransportadora[]; remitentes: EffiOpcion[]; defaults: EffiGuiaCfg }
+export interface DatosGuia { transportadora: string; servicio: string; formaPagoFlete: string; remitente: string; cantPaquetes: number; peso: number; volumen: number; alto: number; ancho: number; largo: number; contenido: string; valorDeclarado: number; nota: string; recibeSabado: boolean }
+export const apiEffiOpcionesGuia = () => req<OpcionesGuia>('/api/effi-api/opciones-guia', 'GET');
+export const apiEffiGuia = (rowId: string, d: DatosGuia) => req<{ ok: true; guia: string; transportadora: string; idTransaccion: string }>(`/api/orders/${rowId}/effi/guia`, 'POST', d);
+export const apiGuiaDocumento = (rowId: string, dataUrl: string) => req<{ ok: true; guiaUrl: string; guiaImg: string; convertida: boolean }>(`/api/orders/${rowId}/guia-documento`, 'POST', { dataUrl });
+export const apiGuiaEnviar = (rowId: string) => req<{ ok: true; con: string }>(`/api/orders/${rowId}/guia-enviar`, 'POST');
 export const apiEffiPreview = (rowId: string) => req<EffiPreview>(`/api/orders/${rowId}/effi/preview`, 'GET');
 export const apiEffiDespachar = (rowId: string, reintentar = false) => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar });
 

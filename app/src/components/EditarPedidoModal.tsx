@@ -3,8 +3,7 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Combobox } from './Combobox';
 import { DEPARTAMENTOS_CO, ciudadesDeDepto } from '../data/colombia';
 import { fmt } from '../lib/format';
-
-interface ItemFila { qty: number; nombre: string; precio: number }
+import { ItemsPedido, filaDesdeItem, filaVacia, itemsDeFilas, totalFilas, validarFilas, type FilaItem } from './ItemsPedido';
 
 /**
  * Editar un pedido YA guardado: corrige cliente, envío, departamento/ciudad,
@@ -21,7 +20,8 @@ export function EditarPedidoModal({ df }: { df: DealFlowState }) {
   const [nota, setNota] = useState('');
   const [envio, setEnvio] = useState('');
   const [totalManual, setTotalManual] = useState('');
-  const [filas, setFilas] = useState<ItemFila[]>([]);
+  const [filas, setFilas] = useState<FilaItem[]>([]);
+  const [error, setError] = useState('');
 
   // Al abrir, precargamos con los datos actuales del pedido.
   useEffect(() => {
@@ -34,22 +34,23 @@ export function EditarPedidoModal({ df }: { df: DealFlowState }) {
     setNota(orden.nota || '');
     setEnvio(orden.envio ? String(orden.envio) : '');
     setTotalManual(orden.total ? String(orden.total) : '');
-    setFilas(orden.items?.length ? orden.items.map((it) => ({ qty: it.qty, nombre: it.nombre, precio: it.precio })) : [{ qty: 1, nombre: '', precio: 0 }]);
+    setFilas(orden.items?.length ? orden.items.map((it) => filaDesdeItem(it, df.products)) : [filaVacia()]);
+    setError('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orden]);
 
-  const totalItems = useMemo(() => filas.reduce((a, f) => a + Math.max(1, f.qty) * Math.max(0, f.precio), 0), [filas]);
+  const totalItems = useMemo(() => totalFilas(filas), [filas]);
   const envioNum = Math.max(0, parseInt(envio.replace(/[^0-9]/g, ''), 10) || 0);
   const totalNum = totalManual.trim() ? Math.max(0, parseInt(totalManual.replace(/[^0-9]/g, ''), 10) || 0) : totalItems + envioNum;
 
   if (!orden) return null;
 
-  const setFila = (i: number, patch: Partial<ItemFila>) => setFilas((fs) => fs.map((f, j) => (j === i ? { ...f, ...patch } : f)));
-  const quitar = (i: number) => setFilas((fs) => (fs.length > 1 ? fs.filter((_, j) => j !== i) : fs));
-  const agregar = () => setFilas((fs) => [...fs, { qty: 1, nombre: '', precio: 0 }]);
-
   const guardar = () => {
     if (!orden.rowId) return;
-    const items = filas.map((f) => ({ qty: Math.max(1, f.qty), nombre: f.nombre.trim(), precio: Math.max(0, f.precio) })).filter((f) => f.nombre);
+    const err = validarFilas(filas, df.products);
+    if (err) { setError(err); return; }
+    setError('');
+    const items = itemsDeFilas(filas, df.products);
     void df.guardarEdicionPedido(orden.rowId, { cliente: cliente.trim(), tel, departamento, ciudad, direccion, nota, envio: envioNum, total: totalNum, items });
   };
 
@@ -84,17 +85,9 @@ export function EditarPedidoModal({ df }: { df: DealFlowState }) {
           </div>
 
           <div style={{ borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
-            <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Productos (con talla y color)</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Productos</span>
           </div>
-          {filas.map((f, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <div style={{ width: 66 }}><label style={lbl}>Cant.</label><input type="number" min={1} value={f.qty} onChange={(e) => setFila(i, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })} style={inp} /></div>
-              <div style={{ flex: 1 }}><label style={lbl}>Producto</label><input value={f.nombre} onChange={(e) => setFila(i, { nombre: e.target.value })} placeholder="Ej: Bodys con Manga (Talla M · Negro)" style={inp} /></div>
-              <div style={{ width: 110 }}><label style={lbl}>Precio unit.</label><input type="number" min={0} value={f.precio} onChange={(e) => setFila(i, { precio: Math.max(0, parseInt(e.target.value, 10) || 0) })} style={inp} /></div>
-              {filas.length > 1 && <button onClick={() => quitar(i)} title="Quitar" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-danger-border)', color: 'var(--df-danger)', borderRadius: 8, width: 36, height: 38, cursor: 'pointer', fontSize: 15, flexShrink: 0 }}>✕</button>}
-            </div>
-          ))}
-          <button onClick={agregar} style={{ alignSelf: 'flex-start', background: 'var(--df-surface)', border: '1px dashed var(--df-border-strong)', color: 'var(--df-text-secondary)', borderRadius: 10, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Agregar producto</button>
+          <ItemsPedido productos={df.products} filas={filas} setFilas={setFilas} />
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
             <div><label style={lbl}>Envío</label><input type="number" min={0} value={envio} onChange={(e) => setEnvio(e.target.value)} placeholder="0" style={inp} /></div>
@@ -103,6 +96,7 @@ export function EditarPedidoModal({ df }: { df: DealFlowState }) {
           <div style={{ textAlign: 'right', fontSize: 13, color: 'var(--df-text-muted)' }}>Total a guardar: <strong style={{ color: 'var(--df-text)', fontSize: 16 }}>{fmt(totalNum)}</strong></div>
           <div><label style={lbl}>Nota (opcional)</label><input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Punto de referencia, indicaciones…" style={inp} /></div>
 
+          {error && <div style={{ color: 'var(--df-danger-dark)', fontSize: 13, background: 'var(--df-danger-subtle)', border: '1px solid var(--df-danger-border)', borderRadius: 10, padding: '9px 12px' }}>{error}</div>}
           {df.editarMsg && (
             <div style={{ color: df.editarMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)', fontSize: 13 }}>{df.editarMsg}</div>
           )}

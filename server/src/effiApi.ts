@@ -177,6 +177,20 @@ export async function listasEffi(apiKey: string): Promise<Record<string, unknown
   };
 }
 
+/** Solo lo que pide el formulario de guía (más liviano que todas las listas). */
+export async function opcionesGuiaEffi(apiKey: string): Promise<{ transportadoras: unknown[]; remitentes: unknown[] } | { error: string }> {
+  const [t, r] = await Promise.all([todo<Fila>(apiKey, '/api/transportadora', {}, 5), todo<Fila>(apiKey, '/api/remitente', {}, 5)]);
+  if (!Array.isArray(t)) return t;
+  return {
+    transportadoras: t.filter((f) => txt(f.vigente) !== '0').map((f) => ({
+      id: txt(f.id), nombre: txt(f.nombre), effi: txt(f.nombre_transportadora_efficommerce),
+      servicios: Array.isArray(f.t_servicio) ? (f.t_servicio as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
+      formasPago: Array.isArray(f.t_forma_pago) ? (f.t_forma_pago as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
+    })),
+    remitentes: Array.isArray(r) ? r.map((f) => ({ id: txt(f.codigo), nombre: txt(f.nombre) })) : [],
+  };
+}
+
 // ── Ubicación (departamento / ciudad) ────────────────────────────────────────
 
 const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -553,21 +567,37 @@ export async function despacharEffi(storeId: string, orderId: string, reintento 
 
   let guia = ''; let transportadora = '';
   if (c.guia.activa && c.guia.transportadora && c.guia.servicio && c.guia.formaPagoFlete && c.guia.remitente) {
-    const g = await crearGuia(storeId, c, o, { sucursal: txt(doc!.sucursal), id: txt(doc!.id) }, cli.tercero, ubic, reintento);
+    const g = await crearGuia(storeId, c, c.guia, o, { sucursal: txt(doc!.sucursal), id: txt(doc!.id) }, cli.tercero, ubic, reintento);
     if ('error' in g) avisos.push(g.error);
     else { guia = g.guia; transportadora = g.transportadora; }
   }
   return { remision, sucursal: txt(doc!.sucursal), id: txt(doc!.id), guia, transportadora, avisos };
 }
 
-async function crearGuia(storeId: string, c: EffiCfg, o: Fila, docRef: { sucursal: string; id: string }, tercero: string, ubic: { provincia: string; ciudad: string }, reintento: boolean): Promise<{ guia: string; transportadora: string } | { error: string }> {
-  const g = c.guia;
+export interface OpcionesGuia extends EffiGuiaCfg { cantPaquetes?: number; contenido?: string; nota?: string; recibeSabado?: boolean; valorDeclarado?: number }
+
+/** Busca en los datos de Effi un enlace a PDF/imagen de la guía (si Effi lo manda). */
+export function urlDocumentoGuia(obj: unknown): string {
+  let hallado = '';
+  const recorrer = (v: unknown) => {
+    if (hallado || v == null) return;
+    if (typeof v === 'string') { if (/^https?:\/\/\S+\.(pdf|png|jpe?g)(\?|$)/i.test(v) || /^https?:\/\/\S*(pdf|rotulo|guia)\S*$/i.test(v)) hallado = v; return; }
+    if (typeof v === 'object') for (const x of Object.values(v as Fila)) recorrer(x);
+  };
+  recorrer(obj);
+  return hallado;
+}
+
+async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, docRef: { sucursal: string; id: string }, tercero: string, ubic: { provincia: string; ciudad: string }, reintento: boolean): Promise<{ guia: string; transportadora: string; idTransaccion: string; url: string } | { error: string }> {
   const numero = txt(o.numero);
   const body: Record<string, unknown> = {
     idempotency_key: `dfg-${storeId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}-${numero}${reintento ? `-r${Date.now().toString(36).slice(-5)}` : ''}`.slice(0, 36),
     sucursal: Number(c.sucursal), transportadora: Number(g.transportadora), t_servicio: Number(g.servicio), t_forma_pago: Number(g.formaPagoFlete),
-    cant_paquetes: 1, peso_total: g.peso || 1, volumen_total: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10,
-    contenido: 'Mercancía', contenido_check: true, valor_declarado_check: true, valor_declarado: Math.round(Number(o.total) || 0),
+    cant_paquetes: Math.max(1, Math.round(g.cantPaquetes || 1)), peso_total: g.peso || 1, volumen_total: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10,
+    recibe_sabado: g.recibeSabado === false ? 0 : 1,
+    contenido: (g.contenido || 'Mercancía').slice(0, 80), contenido_check: !g.contenido,
+    valor_declarado_check: !(g.valorDeclarado && g.valorDeclarado > 0), valor_declarado: g.valorDeclarado && g.valorDeclarado > 0 ? Math.round(g.valorDeclarado) : Math.round(Number(o.total) || 0),
+    ...(g.nota ? { nota_guia: g.nota.slice(0, 255) } : {}),
     t_trans_ref: [T_TRANS_REMISION_V], sucursal_ref: [Number(docRef.sucursal)], id_ref: [Number(docRef.id)],
     centro_costos: [Number(c.centroCostos)], remitente: [Number(g.remitente)], destinatario: [Number(tercero)],
     id_pais_destinatario: [PAIS_COLOMBIA], id_provincia_destinatario: [Number(ubic.provincia)], id_ciudad_destinatario: [Number(ubic.ciudad)],
@@ -583,10 +613,39 @@ async function crearGuia(storeId: string, c: EffiCfg, o: Fila, docRef: { sucursa
   const gg = r.body.data?.guias?.[0] || {};
   const guia = txt(gg.guia);
   const transportadora = txt(gg.nombre_transportadora_efficommerce) || txt(gg.nombre_transportadora);
+  const url = urlDocumentoGuia(gg);
+  if (url) db.prepare('UPDATE orders SET guia_url = ? WHERE id = ?').run(url, txt(o.id));
   db.prepare('UPDATE orders SET effi_guia = ?, guia = CASE WHEN ? != \'\' THEN ? ELSE guia END, transportadora = CASE WHEN ? != \'\' THEN ? ELSE transportadora END WHERE id = ?')
     .run(JSON.stringify({ sucursal: txt(gg.sucursal), id: txt(gg.id), id_transaccion: txt(gg.id_transaccion) }), guia, guia, transportadora, transportadora, txt(o.id));
   registrarLog(storeId, 'info', 'despacho', `DF-${numero}: guía ${txt(gg.id_transaccion)}${guia ? ` (${transportadora} ${guia})` : ''} creada en Effi.`);
-  return { guia, transportadora };
+  return { guia, transportadora, idTransaccion: txt(gg.id_transaccion), url };
+}
+
+/** Genera la guía de un pedido que YA tiene remisión en Effi, con los datos que elige el dueño. */
+export async function generarGuiaPedido(storeId: string, orderId: string, g: OpcionesGuia, reintento = false): Promise<{ guia: string; transportadora: string; idTransaccion: string } | { error: string }> {
+  const c = cfgEffi(storeId);
+  if (!c?.apiKey) return { error: 'Effi no está conectado.' };
+  if (!g.transportadora || !g.servicio || !g.formaPagoFlete || !g.remitente) return { error: 'Elige transportadora, servicio, pago del flete y remitente.' };
+  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+  if (!o) return { error: 'Pedido no encontrado.' };
+  const d = pj<Fila>(txt(o.effi_doc), {});
+  if (!d.id) return { error: 'Primero crea la remisión en Effi; la guía se genera sobre esa remisión.' };
+  const ubic = await resolverUbicacion(c.apiKey, txt(o.departamento), txt(o.ciudad));
+  if ('error' in ubic) return ubic;
+  let tercero = txt(d.tercero);
+  if (!tercero) { const cli = await clienteEffi(c, o, ubic); if ('error' in cli) return cli; tercero = cli.tercero; }
+  // Recordamos la última elección como valores por defecto del formulario.
+  guardarCfgEffi(storeId, { guia: { ...c.guia, transportadora: g.transportadora, servicio: g.servicio, formaPagoFlete: g.formaPagoFlete, remitente: g.remitente, peso: g.peso, volumen: g.volumen, alto: g.alto, ancho: g.ancho, largo: g.largo } });
+  const yaTenia = !!pj<Fila>(txt(o.effi_guia), {}).id;
+  const r = await crearGuia(storeId, c, g, o, { sucursal: txt(d.sucursal), id: txt(d.id) }, tercero, ubic, reintento || yaTenia);
+  if ('error' in r) return { error: r.error.replace('La remisión quedó creada, pero Effi no creó la guía: ', 'Effi no creó la guía: ') };
+  if (r.guia) {
+    const fresca = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as Fila;
+    if (fresca?.tel && !Number(fresca.guia_avisada)) {
+      try { const { avisarGuiaAlCliente } = await import('./syncWoo.js'); await avisarGuiaAlCliente(fresca as unknown as Parameters<typeof avisarGuiaAlCliente>[0], r.guia); } catch { /* el aviso no bloquea */ }
+    }
+  }
+  return r;
 }
 
 // ── Webhooks de Effi ─────────────────────────────────────────────────────────
@@ -670,6 +729,8 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
       const transp = campo(datos, 'nombre_transportadora_efficommerce', 'nombre_transportadora');
       const estadoTxt = campo(datos, 'estado_efficommerce', 'estado_guia_efficommerce', 'estado_new_efficommerce', 'estado_new', 'estado', 'nombre_est_guia');
       if (guia && guia !== txt(orden.guia)) db.prepare('UPDATE orders SET guia = ? WHERE id = ?').run(guia, orden.id);
+      const urlDoc = urlDocumentoGuia(datos);
+      if (urlDoc && urlDoc !== txt(orden.guia_url)) db.prepare('UPDATE orders SET guia_url = ? WHERE id = ?').run(urlDoc, orden.id);
       if (transp) db.prepare('UPDATE orders SET transportadora = ? WHERE id = ?').run(transp, orden.id);
       if (estadoTxt) db.prepare('UPDATE orders SET estado_woo = ? WHERE id = ?').run(estadoTxt.slice(0, 60), orden.id);
       const nuevo = estadoPipeline(estadoTxt, !!(guia || orden.guia));

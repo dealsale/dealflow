@@ -596,6 +596,8 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     wooId: o.wooId || '',
     dropiOrderId: o.dropiOrderId || '',
     guiaUrl: o.guiaUrl || '',
+    guiaImg: o.guiaImg || '',
+    effiGuiaCreada: !!o.effiGuiaCreada,
     despachoProveedor: o.despachoProveedor || '',
     estadoWoo: o.estadoWoo || '',
     effiRemision: o.effiRemision || '',
