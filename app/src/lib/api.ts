@@ -330,7 +330,7 @@ export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/
 export const apiOrderEstado = (rowId: string, estado: string) => req<{ estado: string }>(`/api/orders/${rowId}/estado`, 'POST', { estado });
 export const apiDeleteOrder = (rowId: string) => req<{ ok: true }>(`/api/orders/${rowId}`, 'DELETE');
 export interface CrearPedidoItem { qty: number; nombre: string; precio: number }
-export const apiCrearPedido = (body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: CrearPedidoItem[] }) =>
+export const apiCrearPedido = (body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: CrearPedidoItem[]; leadId?: string }) =>
   req<{ ok: true; id: string; rowId: string }>('/api/orders', 'POST', body);
 export const apiOrderDropi = (rowId: string) => req<{ guia: string }>(`/api/orders/${rowId}/dropi`, 'POST');
 // Effi (vía WooCommerce)
@@ -517,7 +517,8 @@ export interface DatosGuia { transportadora: string; servicio: string; formaPago
 export const apiEffiOpcionesGuia = () => req<OpcionesGuia>('/api/effi-api/opciones-guia', 'GET');
 export const apiEffiGuia = (rowId: string, d: DatosGuia) => req<{ ok: true; guia: string; transportadora: string; idTransaccion: string }>(`/api/orders/${rowId}/effi/guia`, 'POST', d);
 export const apiGuiaDocumento = (rowId: string, dataUrl: string) => req<{ ok: true; guiaUrl: string; guiaImg: string; convertida: boolean }>(`/api/orders/${rowId}/guia-documento`, 'POST', { dataUrl });
-export const apiGuiaEnviar = (rowId: string) => req<{ ok: true; con: string }>(`/api/orders/${rowId}/guia-enviar`, 'POST');
+export interface ResultadoAvisoGuia { chat: 'enviado' | 'plantilla' | 'bloqueado' | 'error' | 'sin_chat'; contacto: 'plantilla' | 'mismo' | 'sin_plantilla' | 'error' | 'no_aplica'; con: 'image' | 'document' | 'texto'; detalle: string[] }
+export const apiGuiaEnviar = (rowId: string) => req<{ ok: true } & ResultadoAvisoGuia>(`/api/orders/${rowId}/guia-enviar`, 'POST');
 export const apiEffiPreview = (rowId: string) => req<EffiPreview>(`/api/orders/${rowId}/effi/preview`, 'GET');
 export const apiEffiDespachar = (rowId: string, reintentar = false) => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar });
 
