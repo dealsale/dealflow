@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { db, j, pj, uid, registrarLog } from './db.js';
+import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
@@ -191,7 +191,7 @@ api.post('/crear-tienda', requireAuth, requireStore, (req, res) => {
   try {
     // Tienda extra: sin instalación, plana 250k/mes. Nace pendiente de la primera renta (estado vencida).
     const crear = db.transaction(() => {
-      db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, plan_vence, inicial_pagado, activa, owner_user_id) VALUES (?,?,?, 'Básico', 'vencida', date('now','-40 day'), 1, 1, ?)")
+      db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, plan_vence, inicial_pagado, activa, owner_user_id) VALUES (?,?,?, 'DealFlow', 'vencida', date('now','-40 day'), 1, 1, ?)")
         .run(storeId, nombre, req.user!.email, req.user!.id);
       db.prepare('INSERT OR IGNORE INTO whatsapp (store_id) VALUES (?)').run(storeId);
       db.prepare('INSERT OR IGNORE INTO assistants (store_id) VALUES (?)').run(storeId);
@@ -2070,7 +2070,7 @@ api.delete('/admin/plans/:id', requireAuth, requireAdmin, (req, res) => {
 });
 
 api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
-  const { nombre, correo, plan = 'Básico', password } = req.body || {};
+  const { nombre, correo, plan = PLAN_UNICO, password } = req.body || {};
   if (!nombre?.trim() || !correo?.trim() || !password) return res.status(400).json({ error: 'Faltan el nombre de la tienda, el correo o la contraseña.' });
   const email = String(correo).toLowerCase().trim();
   if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });

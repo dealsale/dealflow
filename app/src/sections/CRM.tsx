@@ -494,7 +494,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                   🛒 Ver pedidos de este cliente
                 </button>
                 <button
-                  onClick={() => df.abrirCrearPedido({ cliente: chat.nombre, tel: chat.tel })}
+                  onClick={() => df.abrirCrearPedido({ cliente: chat.nombre, tel: chat.tel }, chat.id)}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
                 >
                   🧾 Crear pedido para él/ella

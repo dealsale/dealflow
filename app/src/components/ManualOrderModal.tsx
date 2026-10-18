@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { DealFlowState } from '../hooks/useDealFlowState';
+import type { DealFlowState, PrefillPedido } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { Combobox } from './Combobox';
 import { DEPARTAMENTOS_CO, ciudadesDeDepto } from '../data/colombia';
@@ -17,7 +17,22 @@ interface Fila {
  * pide el bot) y OBLIGA a elegir producto + variantes + cantidad. Sirve para la
  * logística manual (pedidos que no llegaron por el bot).
  */
-export function ManualOrderModal({ df, open, onClose, prefill }: { df: DealFlowState; open: boolean; onClose: () => void; prefill?: { cliente?: string; tel?: string } | null }) {
+const norm = (s: string) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+/** ¿`palabra` aparece como palabra completa dentro de `txt`? (ambos normalizados) */
+const conPalabra = (txt: string, palabra: string) => !!palabra && new RegExp(`(^|[^a-z0-9])${palabra.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`).test(txt);
+/** Busca en una lista el valor que coincide sin importar tildes/mayúsculas. */
+function matchLista(v: string, lista: string[]): string {
+  const n = norm(v);
+  return n ? lista.find((x) => norm(x) === n) || '' : '';
+}
+/** El producto del catálogo cuyo nombre aparece en el texto (gana el más largo). */
+function productoDeTexto<T extends { nombre: string }>(texto: string, productos: T[]): T | undefined {
+  const t = norm(texto);
+  const cands = productos.filter((p) => { const n = norm(p.nombre); return n && (t.includes(n) || n.includes(t)); });
+  return cands.sort((a, b) => b.nombre.length - a.nombre.length)[0];
+}
+
+export function ManualOrderModal({ df, open, onClose, prefill }: { df: DealFlowState; open: boolean; onClose: () => void; prefill?: PrefillPedido | null }) {
   const [cliente, setCliente] = useState('');
   const [tel, setTel] = useState('');
   const [departamento, setDepartamento] = useState('');
@@ -40,6 +55,37 @@ export function ManualOrderModal({ df, open, onClose, prefill }: { df: DealFlowS
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Autocompletado desde el chat: cuando llega lo que la IA leyó de la
+  // conversación, llenamos SOLO los campos que siguen vacíos (nunca pisamos lo
+  // que el dueño ya escribió) y emparejamos los productos con el catálogo.
+  useEffect(() => {
+    if (!open || !prefill?.desdeChat) return;
+    const deptoOk = matchLista(prefill.departamento || '', DEPARTAMENTOS_CO);
+    setDepartamento((v) => v || deptoOk || prefill.departamento || '');
+    setCiudad((v) => v || prefill.ciudad || '');
+    setDireccion((v) => v || prefill.direccion || '');
+    setCliente((v) => v || prefill.cliente || '');
+    setTel((v) => v || prefill.tel || '');
+    const its = prefill.items || [];
+    if (!its.length) return;
+    const nuevas: Fila[] = [];
+    const sinCatalogo: string[] = [];
+    for (const it of its) {
+      const p = productoDeTexto(it.nombre, df.products);
+      if (!p) { sinCatalogo.push(`${it.qty}× ${it.nombre}`); continue; }
+      const opciones: Record<string, string> = {};
+      const txt = norm(it.nombre);
+      for (const g of p.opciones || []) {
+        const val = (g.valores || []).map((x) => x.valor).filter((v) => conPalabra(txt, norm(v))).sort((a, b) => b.length - a.length)[0];
+        if (val) opciones[g.nombre] = val;
+      }
+      nuevas.push({ productId: String(p.id), opciones, qty: Math.max(1, it.qty || 1), precio: it.precio > 0 ? it.precio : p.precio });
+    }
+    setFilas((fs) => (fs.some((f) => f.productId) || !nuevas.length ? fs : nuevas));
+    if (sinCatalogo.length) setNota((v) => v || `Del chat (revisar): ${sinCatalogo.join(', ')}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, prefill?.desdeChat]);
 
   const productos = df.products;
   const opcionesProducto = [{ value: '', label: 'Selecciona un producto…' }, ...productos.map((p) => ({ value: String(p.id), label: `${p.nombre} · ${fmt(p.precio)}` }))];
@@ -93,13 +139,15 @@ export function ManualOrderModal({ df, open, onClose, prefill }: { df: DealFlowS
   const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 5, display: 'block' };
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--df-surface)', width: 'min(640px, 100%)', maxHeight: '88vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(15,23,42,.3)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px', borderBottom: '1px solid var(--df-border)' }}>
           <span style={{ fontSize: 18 }}>🧾</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 16 }}>Crear pedido manual</div>
-            <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>Para pedidos que no llegaron por el bot (logística manual).</div>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>{prefill?.desdeChat || prefill?.leyendo ? 'Crear pedido desde el chat' : 'Crear pedido manual'}</div>
+            {prefill?.leyendo && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 2 }}>⏳ Leyendo la conversación para autocompletar…</div>}
+            {prefill?.desdeChat && <div style={{ fontSize: 12, color: 'var(--df-brand)', fontWeight: 600, marginTop: 2 }}>✨ Autocompletado con lo que el cliente dio en el chat. Revísalo antes de guardar.</div>}
+            {!prefill?.desdeChat && !prefill?.leyendo && <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>Para pedidos que no llegaron por el bot (logística manual).</div>}
           </div>
           <span onClick={onClose} title="Cerrar" style={{ cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 20, padding: 4, lineHeight: 1 }}>✕</span>
         </div>

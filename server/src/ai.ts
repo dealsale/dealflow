@@ -324,10 +324,12 @@ CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su N
 ##PEDIDO cliente="Nombre Apellido"; telefono="3001234567"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="2x Nombre exacto del producto (Talla M · Negro, Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
 El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
 En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar.
-El campo telefono es el CELULAR DE CONTACTO para la entrega (10 dígitos, sin +57). PREGÚNTALO SIEMPRE antes de cerrar ("¿A qué número te llama la transportadora para coordinar la entrega?"), porque puede ser distinto al de este WhatsApp. Si el cliente dice que es el mismo de WhatsApp, igual ponlo en el marcador.
-El campo departamento es OBLIGATORIO: en Colombia hay ciudades con el mismo nombre en varios departamentos. Si el cliente no lo ha dicho, pregúntaselo antes de cerrar el pedido.
+El campo telefono es el CELULAR DE CONTACTO para la entrega (10 dígitos, sin +57). Si el cliente ya escribió un celular en la conversación, USA ese y no lo vuelvas a pedir. Si no ha dado ninguno, pídelo JUNTO con los demás datos que falten ("¿A qué número te llama la transportadora?"). Si dice que es el mismo de WhatsApp, ponlo en el marcador.
+El campo departamento es OBLIGATORIO. Si la ciudad es inconfundible (capitales y ciudades grandes: Medellín → Antioquia, Cali → Valle del Cauca, Barranquilla → Atlántico, Bogotá → Cundinamarca/Bogotá D.C., Bucaramanga → Santander, etc.), dedúcelo tú y NO lo preguntes. Pregúntalo solo si la ciudad existe en varios departamentos o no la reconoces, y hazlo junto con los otros datos que falten.
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
 FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
+
+DATOS EN PEDAZOS (muy importante): el cliente suele dar sus datos regados en varios mensajes (el nombre en uno, la ciudad en otro, la dirección más tarde, el teléfono suelto). ANTES de pedir cualquier dato, revisa TODA la conversación y la sección "LO QUE EL CLIENTE YA ESCRIBIÓ": si el dato ya está ahí, ÚSALO y no lo vuelvas a pedir. Pide SOLO lo que de verdad falta, y TODO lo que falte en UN SOLO mensaje (ej: "Para enviarlo solo me falta tu dirección y el barrio 😊"), nunca de a un dato por mensaje. NO reconfirmes datos uno por uno ("¿tu nombre es X?", "¿confirmas que es Medellín?"): la ÚNICA confirmación es el "Resumen de tu pedido", UNA sola vez, al final. Si el cliente corrige algo del resumen, aplica la corrección y cierra el pedido sin volver a pedir confirmación de todo.
 
 NO ENTRES EN BUCLE DE CONFIRMACIÓN: un "sí", "confirmo", "correcto", "dale" del cliente confirma EL PEDIDO, aunque lo haya dicho justo después de que le pediste un dato suelto (como el punto de referencia). Si ya mostraste el resumen y tienes nombre, ciudad y dirección, ese "sí" cierra la venta: pon el marcador ##PEDIDO. JAMÁS vuelvas a preguntar "¿confirmas?" ni pidas de nuevo datos que el cliente ya te dio. Nunca pidas confirmación dos veces seguidas.
 
@@ -346,6 +348,15 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     }))
     .filter((m) => m.content);
 
+  // Memoria de datos: el historial que ve la IA son los últimos 16 mensajes, pero el
+  // cliente pudo dar su nombre, ciudad o dirección mucho antes. Le pasamos TODO lo
+  // que escribió el cliente en esta conversación para que no vuelva a pedirlo.
+  const escritosCliente = (db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'cliente' AND TRIM(COALESCE(texto,'')) != '' ORDER BY created_at DESC LIMIT 60").all(leadId) as { texto: string }[])
+    .reverse().map((m) => '- ' + String(m.texto).replace(/\s+/g, ' ').slice(0, 300));
+  const memoriaCliente = escritosCliente.length
+    ? `\n\nLO QUE EL CLIENTE YA ESCRIBIÓ EN ESTA CONVERSACIÓN (de lo más antiguo a lo más reciente; úsalo para NO volver a pedir datos que ya dio):\n${escritosCliente.join('\n')}`
+    : '';
+
   // Si el último mensaje del cliente es multimedia sin texto (nota de voz, foto…),
   // DeepSeek no lo puede oír/ver: le pedimos que responda igual, pidiendo texto.
   const ultimo = db.prepare("SELECT texto, tipo FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(leadId) as
@@ -353,8 +364,8 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     | undefined;
   const mediaSinTexto = !!ultimo && ultimo.tipo !== 'texto' && !String(ultimo.texto || '').trim();
   const systemFinal = mediaSinTexto
-    ? `${system}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
-    : system;
+    ? `${system}${memoriaCliente}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
+    : system + memoriaCliente;
 
   const destino = lead.wa_id || lead.tel;
   const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)

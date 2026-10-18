@@ -656,6 +656,16 @@ function navStyle(active: boolean): CSSProperties {
   };
 }
 
+/** Datos con los que se abre el creador de pedidos (desde el chat pueden venir completos). */
+export interface PrefillPedido {
+  cliente?: string; tel?: string; departamento?: string; ciudad?: string; direccion?: string;
+  items?: { qty: number; nombre: string; precio: number }[];
+  /** true mientras se lee el chat con la IA. */
+  leyendo?: boolean;
+  /** true si los datos se autocompletaron desde la conversación. */
+  desdeChat?: boolean;
+}
+
 export function useDealFlowState() {
   // ¿El panel lo sirve el backend real? Lo recordamos en localStorage para saberlo
   // SÍNCRONAMENTE al recargar (apiMode se confirma async y llegaría tarde). Cuando
@@ -1100,10 +1110,31 @@ export function useDealFlowState() {
   // Pedidos/MPedidos), para poder abrirlo también desde el Inbox con el
   // cliente del chat ya puesto.
   const [crearPedidoAbierto, setCrearPedidoAbierto] = useState(false);
-  const [crearPedidoPrefill, setCrearPedidoPrefill] = useState<{ cliente?: string; tel?: string } | null>(null);
-  function abrirCrearPedido(prefill?: { cliente?: string; tel?: string }) {
-    setCrearPedidoPrefill(prefill || null);
+  const [crearPedidoPrefill, setCrearPedidoPrefill] = useState<PrefillPedido | null>(null);
+  // Abre el creador de pedidos. Si viene de un chat (leadId), además lee la
+  // conversación con la IA (lo mismo que "Completar pedido") y autocompleta
+  // ciudad, dirección y productos con lo que el cliente ya dio.
+  function abrirCrearPedido(prefill?: { cliente?: string; tel?: string }, leadId?: number | string) {
+    const base: PrefillPedido = { ...(prefill || {}), leyendo: !!(leadId && apiMode) };
+    setCrearPedidoPrefill(base);
     setCrearPedidoAbierto(true);
+    if (!leadId || !apiMode) return;
+    void apiExtraerPedido(String(leadId)).then((r) => {
+      const p = r.data?.propuesta;
+      setCrearPedidoPrefill((cur) => {
+        if (!cur) return cur; // ya se cerró
+        if (!p) return { ...cur, leyendo: false };
+        return {
+          ...cur,
+          leyendo: false,
+          desdeChat: true,
+          cliente: cur.cliente || p.cliente,
+          tel: cur.tel || p.tel,
+          departamento: p.departamento, ciudad: p.ciudad, direccion: p.direccion,
+          items: p.items,
+        };
+      });
+    });
   }
   function cerrarCrearPedido() {
     setCrearPedidoAbierto(false);

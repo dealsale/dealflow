@@ -5,7 +5,7 @@ import { getLibraryProduct, importarLibraryEnTienda } from './biblioteca.js';
 
 /**
  * Suscripción de las tiendas a DealFlow. Modelo de dos fases:
- *   1) VALOR INICIAL (una sola vez): activa la cuenta. Básico $2.000.000 / Premium $2.500.000.
+ *   1) VALOR INICIAL / INSTALACIÓN (una sola vez): activa la cuenta. Plan único $1.000.000.
  *   2) RENTA MENSUAL recurrente ($250.000): mantiene la cuenta al día mes a mes.
  * Se cobra con Wompi (Web Checkout). Las llaves son de DealFlow (una sola cuenta
  * que recibe todos los pagos) y van en variables de entorno:

@@ -204,8 +204,8 @@ function Paywall({ df }: { df: DealFlowState }) {
 
   // Sin plan: elegir y comprar (valor inicial + renta).
   return (
-    <PaywallShell df={df} titulo="Elige tu plan para empezar" sub="Actívate con el pago de instalación única (incluye 30 días de servicio). Después, una renta mensual de $250.000.">
-      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
+    <PaywallShell df={df} titulo="Activa tu cuenta DealFlow" sub="Un solo paquete: pagas la instalación una vez (incluye 30 días de servicio) y luego una mensualidad.">
+      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: df.planes.length === 1 ? 'minmax(0, 380px)' : 'repeat(auto-fit, minmax(230px, 1fr))', justifyContent: 'center' }}>
         {df.planes.length === 0 && <div style={{ color: 'var(--df-text-muted)', fontSize: 14, textAlign: 'center', gridColumn: '1/-1' }}>Cargando planes…</div>}
         {df.planes.map((p, i) => {
           const premium = i === df.planes.length - 1 && df.planes.length > 1;
@@ -219,7 +219,7 @@ function Paywall({ df }: { df: DealFlowState }) {
                 <span style={{ fontSize: 13, color: 'var(--df-text-muted)', fontWeight: 600 }}> instalación única</span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 8 }}>Incluye 30 días de servicio{cupon ? ` · cupón: ${etiquetaCupon}` : ''}</div>
-              <div style={{ fontSize: 13.5, color: 'var(--df-brand)', fontWeight: 700, marginBottom: 14 }}>+ {money(conDesc(p.mensual))} / mes de renta</div>
+              <div style={{ fontSize: 13.5, color: 'var(--df-brand)', fontWeight: 700, marginBottom: 14 }}>+ {money(conDesc(p.mensual))} de mensualidad</div>
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                 {p.features.map((f) => (
                   <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13, color: 'var(--df-text-body)', lineHeight: 1.4 }}>
@@ -234,7 +234,7 @@ function Paywall({ df }: { df: DealFlowState }) {
                 className="df-pw-btn"
                 style={{ ...pwBtn, background: premium ? 'linear-gradient(135deg,var(--df-brand-light),var(--df-brand))' : '#0F172A' }}
               >
-                {cargando ? 'Abriendo…' : conDesc(p.precio) <= 0 ? `Activar ${p.nombre} gratis` : `Comprar ${p.nombre}`}
+                {cargando ? 'Abriendo…' : conDesc(p.precio) <= 0 ? `Activar ${p.nombre} gratis` : `Activar por ${money(conDesc(p.precio))}`}
               </button>
             </div>
           );

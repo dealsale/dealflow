@@ -1,4 +1,4 @@
-import { db, ensurePlanesCanonicos, j, uid } from './db.js';
+import { db, ensurePlanesCanonicos, PLAN_UNICO, j, uid } from './db.js';
 import { hashPassword } from './auth.js';
 
 /**
@@ -68,7 +68,7 @@ export function asegurarCuentaSky() {
   }
   const storeId = uid();
   db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, plan_vence, inicial_pagado, activa) VALUES (?,?,?,?, 'activa', date('now','+3650 days'), 1, 1)")
-    .run(storeId, 'DealFlow', email, 'Premium');
+    .run(storeId, 'DealFlow', email, PLAN_UNICO);
   db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)').run(
     uid(), email, hashPassword(password), 'Equipo DealFlow', 'VENDEDOR', storeId,
   );
@@ -122,7 +122,7 @@ export function seed() {
     }
   }
 
-  // Planes canónicos de DealFlow (Básico + Premium) — idempotente en cada arranque.
+  // Plan único de DealFlow — idempotente en cada arranque.
   ensurePlanesCanonicos();
 
   // ¿La base ya tenía tiendas ANTES de crear la cuenta Sky? (para decidir la demo)
@@ -137,7 +137,7 @@ export function seed() {
     const storeId = uid();
     // La tienda demo arranca ya activada (valor inicial pagado) para no chocar con la compuerta de plan.
     db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, plan_vence, inicial_pagado) VALUES (?,?,?,?, 'activa', date('now','+30 days'), 1)")
-      .run(storeId, 'Luna Accesorios', 'karla@lunaaccesorios.co', 'Premium');
+      .run(storeId, 'Luna Accesorios', 'karla@lunaaccesorios.co', PLAN_UNICO);
     db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)').run(
       uid(), 'karla@lunaaccesorios.co', hashPassword('demo123'), 'Karla', 'VENDEDOR', storeId,
     );
