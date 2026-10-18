@@ -1114,12 +1114,15 @@ export function useDealFlowState() {
   // cliente del chat ya puesto.
   const [crearPedidoAbierto, setCrearPedidoAbierto] = useState(false);
   const [crearPedidoPrefill, setCrearPedidoPrefill] = useState<PrefillPedido | null>(null);
+  // Chat del que se abrió el creador: el pedido queda ligado a él (para avisar la guía ahí).
+  const [crearPedidoLeadId, setCrearPedidoLeadId] = useState<string | null>(null);
   // Abre el creador de pedidos. Si viene de un chat (leadId), además lee la
   // conversación con la IA (lo mismo que "Completar pedido") y autocompleta
   // ciudad, dirección y productos con lo que el cliente ya dio.
   function abrirCrearPedido(prefill?: { cliente?: string; tel?: string }, leadId?: number | string) {
     const base: PrefillPedido = { ...(prefill || {}), leyendo: !!(leadId && apiMode) };
     setCrearPedidoPrefill(base);
+    setCrearPedidoLeadId(leadId ? String(leadId) : null);
     setCrearPedidoAbierto(true);
     if (!leadId || !apiMode) return;
     void apiExtraerPedido(String(leadId)).then((r) => {
@@ -1148,7 +1151,7 @@ export function useDealFlowState() {
   const [crearPedidoMsg, setCrearPedidoMsg] = useState('');
   async function crearPedidoManual(body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: { qty: number; nombre: string; precio: number }[] }): Promise<string> {
     setCrearPedidoMsg('Creando el pedido…');
-    const r = await apiCrearPedido(body);
+    const r = await apiCrearPedido({ ...body, leadId: crearPedidoLeadId || undefined });
     if (r.error || !r.data) { setCrearPedidoMsg(r.error || 'No se pudo crear el pedido.'); return ''; }
     setCrearPedidoMsg('');
     const { data } = await apiOrders();

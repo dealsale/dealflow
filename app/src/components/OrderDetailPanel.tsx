@@ -359,7 +359,12 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
     const r = await apiGuiaEnviar(sel.rowId);
     setOcupado(false);
     if (r.error || !r.data) { setMsg(r.error || 'No se pudo enviar.'); return; }
-    setMsg(`✓ Guía enviada al cliente${r.data.con === 'image' ? ' con la imagen' : r.data.con === 'document' ? ' con el PDF' : ''}.`);
+    const d = r.data;
+    const partes = [
+      d.chat === 'enviado' ? `al chat${d.con === 'image' ? ' con la imagen' : d.con === 'document' ? ' con el PDF' : ''}` : d.chat === 'plantilla' ? 'al chat (con plantilla, la ventana de 24 h estaba cerrada)' : '',
+      d.contacto === 'plantilla' ? 'al celular de contacto con la plantilla aprobada' : '',
+    ].filter(Boolean);
+    setMsg(`✓ Guía enviada ${partes.join(' y ')}.${d.detalle.length ? ' ⚠ ' + d.detalle.join(' ') : ''}`);
   };
   const archivo = sel.guiaUrl || sel.guiaImg;
   return (

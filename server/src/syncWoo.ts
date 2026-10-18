@@ -144,28 +144,10 @@ export async function sincronizarPedido(storeId: string, rowId: string): Promise
 }
 
 /** Manda el WhatsApp de "tu pedido va en camino" con la guía, y lo deja anotado en el chat. */
-export async function avisarGuiaAlCliente(o: OrdenSync, guia: string): Promise<void> {
-  // La transportadora real (Interrapidísimo, Servientrega…) si el dueño la eligió;
-  // si no, el nombre del proveedor como respaldo.
-  const transp = (o.transportadora || '').trim() || nombreProv(o.despacho_proveedor);
-  const texto = `¡Buenas noticias! 🎉 Tu pedido DF-${o.numero} ya salió a despacho.\n\n📦 Guía: ${guia}\n🚚 Transportadora: ${transp}\n\nTe avisaremos cuando esté por llegar. ¡Gracias por tu compra!`;
-  const envio = await sendWhatsappText(o.store_id, o.tel, texto);
-  if (!envio.ok) {
-    // No lo marcamos como avisado: se reintenta en el próximo ciclo (puede ser
-    // que la ventana de 24h de WhatsApp esté cerrada; el dueño igual ve la guía en el panel).
-    registrarLog(o.store_id, 'warn', 'despacho', `No pudimos avisarle la guía de DF-${o.numero} al cliente por WhatsApp: ${envio.error || 'error'}. La guía sí quedó en el pedido.`);
-    return;
-  }
-  db.prepare('UPDATE orders SET guia_avisada = 1 WHERE id = ?').run(o.id);
-  registrarLog(o.store_id, 'info', 'despacho', `Le avisamos al cliente la guía de DF-${o.numero} (${guia}, ${transp}) por WhatsApp.`);
-  // Lo dejamos también en la conversación del cliente si lo encontramos por teléfono.
-  try {
-    const tel = String(o.tel).replace(/[^0-9]/g, '');
-    const lead = db.prepare(
-      `SELECT id FROM leads WHERE store_id = ? AND REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-','') LIKE ? LIMIT 1`,
-    ).get(o.store_id, `%${tel.slice(-10)}`) as { id: string } | undefined;
-    if (lead) db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado) VALUES (?,?, 'bot', ?, 'enviado')").run(uid(), lead.id, texto);
-  } catch { /* si no casa el lead, no pasa nada */ }
+export async function avisarGuiaAlCliente(o: OrdenSync, _guia: string): Promise<void> {
+  // Aviso al chat del pedido y, si el cliente dejó otro celular de contacto, plantilla a ese número.
+  const { avisarGuia } = await import('./avisoGuia.js');
+  await avisarGuia(o.store_id, o.id);
 }
 
 let corriendoInventario = false;

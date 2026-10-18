@@ -783,8 +783,10 @@ api.post('/orders', requireAuth, requireStore, (req, res) => {
   const adLead = telNorm.length >= 7
     ? db.prepare("SELECT ad_id, ad_ref FROM leads WHERE store_id = ? AND ad_id != '' AND replace(replace(replace(replace(tel,'+',''),' ',''),'-',''),'(','') LIKE ? ORDER BY created_at DESC LIMIT 1").get(sid, '%' + telNorm) as { ad_id: string; ad_ref: string } | undefined
     : undefined;
-  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, envio, nota, ad_id, ad_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(oid, sid, numero, cliente, String(b.ciudad || ''), String(b.tel || ''), String(b.direccion || ''), 'Nuevo', total, String(b.departamento || ''), envio, String(b.nota || ''), adLead?.ad_id || '', adLead?.ad_ref || '');
+  // Chat del que sale el pedido (si se creó desde la conversación): para avisarle la guía ahí.
+  const leadId = b.leadId && db.prepare('SELECT 1 FROM leads WHERE id = ? AND store_id = ?').get(String(b.leadId), sid) ? String(b.leadId) : null;
+  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, envio, nota, ad_id, ad_ref, lead_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(oid, sid, numero, cliente, String(b.ciudad || ''), String(b.tel || ''), String(b.direccion || ''), 'Nuevo', total, String(b.departamento || ''), envio, String(b.nota || ''), adLead?.ad_id || '', adLead?.ad_ref || '', leadId);
   for (const it of limpios) db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   registrarLog(sid, 'info', 'pedido', `Pedido manual DF-${numero} creado para ${cliente} (${limpios.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`);
   {
@@ -1380,17 +1382,15 @@ api.post('/orders/:rowId/guia-documento', requireAuth, requireStore, requireOwne
   db.prepare('UPDATE orders SET guia_url = ?, guia_img = ? WHERE id = ?').run(url, img, o.id);
   res.json({ ok: true, guiaUrl: url, guiaImg: img, convertida: mime === 'application/pdf' ? !!img : true });
 });
-// Envía la guía al cliente por WhatsApp: imagen de la guía con el número en el texto
-// (si no hay imagen, el PDF como documento; si no hay archivo, solo el texto).
+// Envía la guía al cliente: al chat (imagen/PDF/texto) y, si dejó otro celular de
+// contacto, a ese número con la plantilla aprobada (ver avisoGuia.ts).
 api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const guia = String(o.guia || '').trim();
   if (!guia) return res.status(400).json({ error: 'El pedido todavía no tiene número de guía.' });
-  const { mediaPath, guardarArchivo, pdfAPng } = await import('./media.js');
-  const { readFileSync, existsSync } = await import('node:fs');
-  const { sendWhatsappMedia, sendWhatsappText } = await import('./wa.js');
+  const { guardarArchivo, pdfAPng } = await import('./media.js');
   let img = String(o.guia_img || '');
   const url = String(o.guia_url || '');
   // Guía externa (enlace que mandó Effi): la bajamos y la convertimos una vez.
@@ -1403,33 +1403,11 @@ api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, re
       if (png) { img = guardarArchivo(sid, `guia-DF${o.numero}-${uid().slice(0, 6)}.png`, png); db.prepare('UPDATE orders SET guia_img = ? WHERE id = ?').run(img, o.id); }
     } catch { /* seguimos con texto */ }
   }
-  const nombre = String(o.cliente || '').split(' ')[0];
-  const transp = String(o.transportadora || '').trim();
-  const texto = `¡Hola${nombre ? ' ' + nombre : ''}! 📦 Tu pedido DF-${o.numero} ya va en camino.\n\n🧾 Guía: ${guia}${transp ? `\n🚚 Transportadora: ${transp}` : ''}\n\nCon este número puedes seguir tu envío. ¡Gracias por tu compra!`;
-  const tel = String(o.tel || '').replace(/\D/g, '');
-  const lead = tel ? db.prepare(`SELECT id, wa_id, tel FROM leads WHERE store_id = ? AND REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-','') LIKE ? ORDER BY created_at DESC LIMIT 1`).get(sid, `%${tel.slice(-10)}`) as { id: string; wa_id: string; tel: string } | undefined : undefined;
-  const destino = lead?.wa_id || lead?.tel || String(o.tel || '');
-  const pn = lead?.tel || String(o.tel || '');
-  const archivo = img || (url.startsWith('/api/media/') ? url : '');
-  let envio: { ok: boolean; error?: string };
-  let tipo = 'texto'; let mime: string | null = null;
-  if (archivo && existsSync(mediaPath(sid, archivo.split('/').pop()!))) {
-    const buf = readFileSync(mediaPath(sid, archivo.split('/').pop()!));
-    const esImg = !/\.pdf$/i.test(archivo);
-    mime = esImg ? (archivo.endsWith('.png') ? 'image/png' : archivo.endsWith('.webp') ? 'image/webp' : 'image/jpeg') : 'application/pdf';
-    tipo = esImg ? 'image' : 'document';
-    envio = await sendWhatsappMedia(sid, destino, { buffer: buf, mime, tipo }, texto, `Guia-DF${o.numero}.${esImg ? (mime === 'image/png' ? 'png' : 'jpg') : 'pdf'}`, pn);
-  } else {
-    envio = await sendWhatsappText(sid, destino, texto, pn);
-  }
-  if (!envio.ok) return res.status(400).json({ error: envio.error || 'No se pudo enviar por WhatsApp.' });
-  db.prepare('UPDATE orders SET guia_avisada = 1 WHERE id = ?').run(o.id);
-  if (lead) {
-    const { saveOutgoingMessage } = await import('./media.js');
-    saveOutgoingMessage(lead.id, texto, tipo === 'texto' ? 'texto' : tipo, tipo === 'texto' ? null : archivo, mime, tipo === 'texto' ? null : `Guia-DF${o.numero}`);
-  }
-  registrarLog(sid, 'info', 'despacho', `Guía de DF-${o.numero} (${guia}) enviada al cliente por WhatsApp${tipo !== 'texto' ? ` con ${tipo === 'image' ? 'imagen' : 'PDF'}` : ''}.`);
-  res.json({ ok: true, con: tipo });
+  const { avisarGuia } = await import('./avisoGuia.js');
+  const r = await avisarGuia(sid, String(o.id), { conArchivo: true });
+  const ok = r.chat === 'enviado' || r.chat === 'plantilla' || r.contacto === 'plantilla';
+  if (!ok) return res.status(400).json({ error: r.detalle.join(' ') || 'No se encontró el chat del cliente ni un número de contacto.' });
+  res.json({ ok: true, ...r });
 });
 // Vista previa: lo que se le mandaría a Effi para este pedido (no crea nada).
 api.get('/orders/:rowId/effi/preview', requireAuth, requireStore, requireOwner, async (req, res) => {

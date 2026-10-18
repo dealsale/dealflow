@@ -26,6 +26,26 @@ const PLANTILLAS: Semilla[] = [
     ejemplos: ['Camila', 'Servientrega', '1234567890', '2 a 3 días hábiles'],
   },
   {
+    // Guía del pedido. Se usa sola cuando: (a) el cliente dejó un celular de
+    // contacto distinto al del chat (ese número nunca nos escribió), o (b) la
+    // ventana de 24 h del chat está cerrada. Variables: nombre, tienda, pedido,
+    // transportadora y número de guía.
+    nombre: 'guia_envio_pedido', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nTu pedido {{3}} ya fue despachado 📦\n\n🚚 Transportadora: {{4}}\n🧾 Número de guía: {{5}}\n\nCon este número puedes hacerle seguimiento a tu envío. Si el pago es contra entrega, ten el valor listo al recibirlo. ¿Alguna duda? Responde este mensaje y te ayudamos.',
+    pie: 'Mensaje sobre tu compra',
+    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'Interrapidísimo', '240012345678'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Recibido, gracias' }, { tipo: 'QUICK_REPLY', texto: 'Tengo una duda' }],
+  },
+  {
+    // Confirma el pedido en el celular de contacto cuando es distinto al del chat
+    // (la transportadora llamará a ese número).
+    nombre: 'confirmar_contacto_pedido', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Recibimos tu pedido {{2}} en {{3}}:\n{{4}}\n\nDejaste este número como contacto para la entrega. ¿Nos confirmas que es correcto? La transportadora te llamará aquí para coordinar.',
+    pie: 'Mensaje sobre tu compra',
+    ejemplos: ['Camila', 'DF-1049', 'Luna Accesorios', '2 camisetas talla M · Total $120.000'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Sí, es correcto' }, { tipo: 'QUICK_REPLY', texto: 'No, es otro número' }],
+  },
+  {
     nombre: 'recordatorio_abono', categoria: 'UTILITY', idioma: 'es',
     cuerpo: 'Hola {{1}}, te recordamos que tu pedido {{2}} está apartado.\nPara despacharlo necesitamos confirmar el pago de {{3}}.\nCuando quieras, respóndenos por aquí y te ayudamos a completarlo. 🙌',
     ejemplos: ['Camila', '#1098', '$60.000'],
