@@ -252,7 +252,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   }));
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
   // Resumen (sin todos los mensajes de cada chat): la carga inicial del panel no
@@ -350,7 +350,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string),
   }));
   res.json({ orders });
@@ -1329,6 +1329,107 @@ api.post('/effi-api/articulos/vincular', requireAuth, requireStore, requireOwner
 api.get('/effi-api/eventos', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
   res.json({ eventos: ef.eventosEffi(req.user!.storeId!, 80) });
+});
+// Lo necesario para el formulario de guía: transportadoras (con servicios y pago del flete),
+// remitentes y los valores por defecto (la última elección).
+api.get('/effi-api/opciones-guia', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const c = ef.cfgEffi(req.user!.storeId!);
+  if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
+  const r = await ef.opcionesGuiaEffi(c.apiKey);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json({ ...r, defaults: c.guia });
+});
+api.post('/orders/:rowId/effi/guia', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const b = req.body || {};
+  const s = (v: unknown) => String(v ?? '').trim().slice(0, 40);
+  const n = (v: unknown, d: number) => (Number(v) > 0 ? Number(v) : d);
+  const r = await ef.generarGuiaPedido(req.user!.storeId!, req.params.rowId, {
+    activa: true, transportadora: s(b.transportadora), servicio: s(b.servicio), formaPagoFlete: s(b.formaPagoFlete), remitente: s(b.remitente),
+    peso: n(b.peso, 1), volumen: n(b.volumen, 1), alto: n(b.alto, 10), ancho: n(b.ancho, 10), largo: n(b.largo, 10),
+    cantPaquetes: n(b.cantPaquetes, 1), contenido: String(b.contenido || '').trim().slice(0, 80), nota: String(b.nota || '').trim().slice(0, 255),
+    recibeSabado: b.recibeSabado !== false, valorDeclarado: Number(b.valorDeclarado) > 0 ? Number(b.valorDeclarado) : undefined,
+  }, b.reintentar === true);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, ...r });
+});
+// Documento de la guía (PDF o imagen) que el dueño sube al pedido. Si es PDF,
+// guardamos también la primera página como PNG para mandarla por WhatsApp.
+api.post('/orders/:rowId/guia-documento', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT id, numero FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; numero: number } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const dataUrl = String(req.body?.dataUrl || '');
+  const i = dataUrl.indexOf(';base64,');
+  if (!dataUrl.startsWith('data:') || i < 0) return res.status(400).json({ error: 'Archivo inválido.' });
+  const mime = dataUrl.slice(5, i).split(';')[0].trim();
+  const buf = Buffer.from(dataUrl.slice(i + 8), 'base64');
+  if (buf.length > 15 * 1024 * 1024) return res.status(400).json({ error: 'El archivo pesa más de 15 MB.' });
+  const { guardarArchivo, pdfAPng } = await import('./media.js');
+  const base = `guia-DF${o.numero}-${uid().slice(0, 6)}`;
+  let url = ''; let img = '';
+  if (mime === 'application/pdf') {
+    url = guardarArchivo(sid, `${base}.pdf`, buf);
+    const png = pdfAPng(buf);
+    if (png) img = guardarArchivo(sid, `${base}.png`, png);
+  } else if (/^image\/(png|jpe?g|webp)$/.test(mime)) {
+    img = guardarArchivo(sid, `${base}.${mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg'}`, buf);
+    url = img;
+  } else return res.status(400).json({ error: 'Sube la guía en PDF o como imagen (PNG/JPG).' });
+  db.prepare('UPDATE orders SET guia_url = ?, guia_img = ? WHERE id = ?').run(url, img, o.id);
+  res.json({ ok: true, guiaUrl: url, guiaImg: img, convertida: mime === 'application/pdf' ? !!img : true });
+});
+// Envía la guía al cliente por WhatsApp: imagen de la guía con el número en el texto
+// (si no hay imagen, el PDF como documento; si no hay archivo, solo el texto).
+api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const guia = String(o.guia || '').trim();
+  if (!guia) return res.status(400).json({ error: 'El pedido todavía no tiene número de guía.' });
+  const { mediaPath, guardarArchivo, pdfAPng } = await import('./media.js');
+  const { readFileSync, existsSync } = await import('node:fs');
+  const { sendWhatsappMedia, sendWhatsappText } = await import('./wa.js');
+  let img = String(o.guia_img || '');
+  const url = String(o.guia_url || '');
+  // Guía externa (enlace que mandó Effi): la bajamos y la convertimos una vez.
+  if (!img && /^https?:\/\//.test(url)) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+      const buf = Buffer.from(await r.arrayBuffer());
+      const ct = r.headers.get('content-type') || '';
+      const png = ct.includes('pdf') || /\.pdf(\?|$)/i.test(url) ? pdfAPng(buf) : /image\//.test(ct) ? buf : null;
+      if (png) { img = guardarArchivo(sid, `guia-DF${o.numero}-${uid().slice(0, 6)}.png`, png); db.prepare('UPDATE orders SET guia_img = ? WHERE id = ?').run(img, o.id); }
+    } catch { /* seguimos con texto */ }
+  }
+  const nombre = String(o.cliente || '').split(' ')[0];
+  const transp = String(o.transportadora || '').trim();
+  const texto = `¡Hola${nombre ? ' ' + nombre : ''}! 📦 Tu pedido DF-${o.numero} ya va en camino.\n\n🧾 Guía: ${guia}${transp ? `\n🚚 Transportadora: ${transp}` : ''}\n\nCon este número puedes seguir tu envío. ¡Gracias por tu compra!`;
+  const tel = String(o.tel || '').replace(/\D/g, '');
+  const lead = tel ? db.prepare(`SELECT id, wa_id, tel FROM leads WHERE store_id = ? AND REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-','') LIKE ? ORDER BY created_at DESC LIMIT 1`).get(sid, `%${tel.slice(-10)}`) as { id: string; wa_id: string; tel: string } | undefined : undefined;
+  const destino = lead?.wa_id || lead?.tel || String(o.tel || '');
+  const pn = lead?.tel || String(o.tel || '');
+  const archivo = img || (url.startsWith('/api/media/') ? url : '');
+  let envio: { ok: boolean; error?: string };
+  let tipo = 'texto'; let mime: string | null = null;
+  if (archivo && existsSync(mediaPath(sid, archivo.split('/').pop()!))) {
+    const buf = readFileSync(mediaPath(sid, archivo.split('/').pop()!));
+    const esImg = !/\.pdf$/i.test(archivo);
+    mime = esImg ? (archivo.endsWith('.png') ? 'image/png' : archivo.endsWith('.webp') ? 'image/webp' : 'image/jpeg') : 'application/pdf';
+    tipo = esImg ? 'image' : 'document';
+    envio = await sendWhatsappMedia(sid, destino, { buffer: buf, mime, tipo }, texto, `Guia-DF${o.numero}.${esImg ? (mime === 'image/png' ? 'png' : 'jpg') : 'pdf'}`, pn);
+  } else {
+    envio = await sendWhatsappText(sid, destino, texto, pn);
+  }
+  if (!envio.ok) return res.status(400).json({ error: envio.error || 'No se pudo enviar por WhatsApp.' });
+  db.prepare('UPDATE orders SET guia_avisada = 1 WHERE id = ?').run(o.id);
+  if (lead) {
+    const { saveOutgoingMessage } = await import('./media.js');
+    saveOutgoingMessage(lead.id, texto, tipo === 'texto' ? 'texto' : tipo, tipo === 'texto' ? null : archivo, mime, tipo === 'texto' ? null : `Guia-DF${o.numero}`);
+  }
+  registrarLog(sid, 'info', 'despacho', `Guía de DF-${o.numero} (${guia}) enviada al cliente por WhatsApp${tipo !== 'texto' ? ` con ${tipo === 'image' ? 'imagen' : 'PDF'}` : ''}.`);
+  res.json({ ok: true, con: tipo });
 });
 // Vista previa: lo que se le mandaría a Effi para este pedido (no crea nada).
 api.get('/orders/:rowId/effi/preview', requireAuth, requireStore, requireOwner, async (req, res) => {

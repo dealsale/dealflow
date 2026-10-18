@@ -198,6 +198,7 @@ addColumn('orders', 'guia_avisada INTEGER NOT NULL DEFAULT 0'); // 1 = ya le avi
 addColumn('orders', "estado_woo TEXT NOT NULL DEFAULT ''"); // último estado leído del WooCommerce del proveedor (diagnóstico)
 addColumn('orders', "dropi_order_id TEXT NOT NULL DEFAULT ''"); // id de la orden en Dropi (despacho por API directa)
 addColumn('orders', "guia_url TEXT NOT NULL DEFAULT ''"); // PDF de la guía (Dropi API)
+addColumn('orders', "guia_img TEXT NOT NULL DEFAULT ''"); // imagen (PNG) de la guía para enviarla por WhatsApp
 addColumn('orders', "effi_remision TEXT NOT NULL DEFAULT ''"); // remisión de venta creada en Effi por API (ej. PPAL-270)
 addColumn('orders', "effi_doc TEXT NOT NULL DEFAULT ''"); // JSON {sucursal, id, prefijo, tercero} de esa remisión
 addColumn('orders', "effi_guia TEXT NOT NULL DEFAULT ''"); // JSON {sucursal, id, id_transaccion} de la guía creada en Effi

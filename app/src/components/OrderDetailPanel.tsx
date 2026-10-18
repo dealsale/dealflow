@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { confirmar } from './dialogs';
-import { apiDropiCotizar, apiDropiCrear, apiEffiLog, apiEffiPreview, apiEffiDespachar, type DropiTransportadora, type EffiLogEvento, type EffiLineItem, type EffiPreview } from '../lib/api';
+import { apiDropiCotizar, apiDropiCrear, apiEffiLog, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiLogEvento, type EffiLineItem, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
 
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
 
@@ -250,6 +250,139 @@ function PasosEnvio({ sel }: { sel: DecoratedOrder }) {
   );
 }
 
+/** Formulario para generar la guía en Effi desde DealFlow (sobre la remisión del pedido). */
+function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
+  const [abierto, setAbierto] = useState(false);
+  const [ops, setOps] = useState<OpcionesGuia | null>(null);
+  const [d, setD] = useState<DatosGuia>({ transportadora: '', servicio: '', formaPagoFlete: '', remitente: '', cantPaquetes: 1, peso: 1, volumen: 1, alto: 10, ancho: 10, largo: 10, contenido: '', valorDeclarado: 0, nota: '', recibeSabado: true });
+  const [msg, setMsg] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const abrir = async () => {
+    setAbierto(true);
+    if (ops) return;
+    setMsg('Cargando transportadoras de Effi…');
+    const r = await apiEffiOpcionesGuia();
+    if (r.error || !r.data) { setMsg(r.error || 'No se pudieron cargar las transportadoras.'); return; }
+    setMsg('');
+    setOps(r.data);
+    const g = r.data.defaults;
+    setD((x) => ({ ...x, transportadora: g.transportadora || '', servicio: g.servicio || '', formaPagoFlete: g.formaPagoFlete || '', remitente: g.remitente || (r.data!.remitentes[0]?.id ?? ''), peso: g.peso || 1, volumen: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10 }));
+  };
+  const set = (p: Partial<DatosGuia>) => setD((x) => ({ ...x, ...p }));
+  const t = ops?.transportadoras.find((x) => x.id === d.transportadora);
+  const listo = d.transportadora && d.servicio && d.formaPagoFlete && d.remitente;
+  const crear = async () => {
+    if (!sel.rowId || !listo) return;
+    setEnviando(true); setMsg('Creando la guía en Effi…');
+    const r = await apiEffiGuia(sel.rowId, d);
+    setEnviando(false);
+    if (r.error || !r.data) { setMsg(r.error || 'Effi no creó la guía.'); return; }
+    setMsg(`✓ Guía ${r.data.guia || r.data.idTransaccion} creada${r.data.transportadora ? ` con ${r.data.transportadora}` : ''}.`);
+    await df.refrescarPedidos();
+  };
+  const sel_: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 9px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)' };
+  const lb: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 4 };
+  if (!abierto) return <button onClick={abrir} style={{ ...btnP, marginTop: 12 }}>🚚 Generar guía en Effi</button>;
+  return (
+    <div className="df-expand" style={{ marginTop: 12, border: '1px solid var(--df-purple-border)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <b style={{ fontSize: 13.5, flex: 1 }}>Guía de transporte</b>
+        <button onClick={() => setAbierto(false)} style={{ ...btnS, padding: '5px 10px' }}>Cerrar</button>
+      </div>
+      {ops && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Transportadora</label>
+              <select value={d.transportadora} onChange={(e) => set({ transportadora: e.target.value, servicio: '', formaPagoFlete: '' })} style={sel_}>
+                <option value="">Elige…</option>
+                {ops.transportadoras.map((x) => <option key={x.id} value={x.id}>{x.effi ? `${x.nombre} (Effi)` : x.nombre}</option>)}
+              </select></div>
+            <div><label style={lb}>Servicio</label>
+              <select value={d.servicio} onChange={(e) => set({ servicio: e.target.value })} style={sel_}>
+                <option value="">Elige…</option>{(t?.servicios || []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+              </select></div>
+            <div><label style={lb}>Pago del flete</label>
+              <select value={d.formaPagoFlete} onChange={(e) => set({ formaPagoFlete: e.target.value })} style={sel_}>
+                <option value="">Elige…</option>{(t?.formasPago || []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+              </select></div>
+            <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Remitente</label>
+              <select value={d.remitente} onChange={(e) => set({ remitente: e.target.value })} style={sel_}>
+                <option value="">Elige…</option>{ops.remitentes.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+              </select></div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            <div><label style={lb}>Paquetes</label><input type="number" min={1} value={d.cantPaquetes} onChange={(e) => set({ cantPaquetes: Number(e.target.value) })} style={sel_} /></div>
+            <div><label style={lb}>Peso (kg)</label><input type="number" min={0.1} step={0.1} value={d.peso} onChange={(e) => set({ peso: Number(e.target.value) })} style={sel_} /></div>
+            <div><label style={lb}>Peso vol. (kg)</label><input type="number" min={0.1} step={0.1} value={d.volumen} onChange={(e) => set({ volumen: Number(e.target.value) })} style={sel_} /></div>
+            <div><label style={lb}>Alto (cm)</label><input type="number" min={1} value={d.alto} onChange={(e) => set({ alto: Number(e.target.value) })} style={sel_} /></div>
+            <div><label style={lb}>Ancho (cm)</label><input type="number" min={1} value={d.ancho} onChange={(e) => set({ ancho: Number(e.target.value) })} style={sel_} /></div>
+            <div><label style={lb}>Largo (cm)</label><input type="number" min={1} value={d.largo} onChange={(e) => set({ largo: Number(e.target.value) })} style={sel_} /></div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div><label style={lb}>Contenido (opcional)</label><input value={d.contenido} onChange={(e) => set({ contenido: e.target.value })} placeholder="Se copia de la remisión" style={sel_} /></div>
+            <div><label style={lb}>Valor declarado (opcional)</label><input type="number" min={0} value={d.valorDeclarado || ''} onChange={(e) => set({ valorDeclarado: Number(e.target.value) })} placeholder="Del total de la remisión" style={sel_} /></div>
+            <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Nota en la guía (opcional)</label><input value={d.nota} onChange={(e) => set({ nota: e.target.value })} placeholder="Ej: llamar antes de entregar" style={sel_} /></div>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, cursor: 'pointer' }}>
+            <input type="checkbox" checked={d.recibeSabado} onChange={(e) => set({ recibeSabado: e.target.checked })} /> Recibe los sábados
+          </label>
+          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>El recaudo contra entrega se toma del saldo de la remisión. La dirección es la del pedido.</div>
+          <button onClick={crear} disabled={!listo || enviando} style={{ ...btnP, opacity: !listo || enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Crear guía en Effi'}</button>
+        </>
+      )}
+      {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+/** Guía generada: copiar, descargar el documento, subirlo y enviarlo al cliente por WhatsApp. */
+function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
+  const [msg, setMsg] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+  const subir = (file: File | undefined) => {
+    if (!file || !sel.rowId) return;
+    if (file.size > 15 * 1024 * 1024) { setMsg('El archivo pesa más de 15 MB.'); return; }
+    const fr = new FileReader();
+    fr.onload = async () => {
+      setOcupado(true); setMsg('Subiendo la guía…');
+      const r = await apiGuiaDocumento(sel.rowId!, String(fr.result));
+      setOcupado(false);
+      if (r.error || !r.data) { setMsg(r.error || 'No se pudo subir.'); return; }
+      setMsg(r.data.convertida ? '✓ Guía guardada. Ya puedes enviarla al cliente.' : '✓ PDF guardado (no se pudo convertir a imagen: se enviará como PDF).');
+      await df.refrescarPedidos();
+    };
+    fr.readAsDataURL(file);
+  };
+  const enviar = async () => {
+    if (!sel.rowId) return;
+    setOcupado(true); setMsg('Enviando por WhatsApp…');
+    const r = await apiGuiaEnviar(sel.rowId);
+    setOcupado(false);
+    if (r.error || !r.data) { setMsg(r.error || 'No se pudo enviar.'); return; }
+    setMsg(`✓ Guía enviada al cliente${r.data.con === 'image' ? ' con la imagen' : r.data.con === 'document' ? ' con el PDF' : ''}.`);
+  };
+  const archivo = sel.guiaUrl || sel.guiaImg;
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 140, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-strong)' }}>Guía {sel.guia}</div>
+        <button onClick={() => df.copyGuia(sel.guia!)} className="df-copy-btn" style={btnS}>{df.guiaBtnLabel}</button>
+        {archivo && <a href={archivo} download={`Guia-${sel.id}`} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-purple)', textDecoration: 'none' }}>⬇ Descargar</a>}
+      </div>
+      {sel.guiaImg && <a href={sel.guiaImg} target="_blank" rel="noreferrer"><img src={sel.guiaImg} alt={`Guía ${sel.guia}`} style={{ width: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--df-border)', background: '#fff' }} /></a>}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <label style={{ ...btnS, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: ocupado ? 'progress' : 'pointer' }}>
+          📎 {archivo ? 'Cambiar documento' : 'Subir guía (PDF o imagen)'}
+          <input type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden onChange={(e) => { subir(e.target.files?.[0]); e.target.value = ''; }} />
+        </label>
+        <button onClick={enviar} disabled={ocupado} style={{ ...btnS, background: '#25D366', borderColor: '#25D366', color: '#05301a', fontWeight: 700 }}>💬 Enviar guía al cliente</button>
+      </div>
+      {!archivo && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Effi no entrega el PDF de la guía por su API: descárgalo de Effi y súbelo aquí para mandárselo al cliente como imagen. Sin archivo, se envía solo el número.</div>}
+      {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
+    </div>
+  );
+}
+
 /** Bloque de despacho del pedido: elegir proveedor (Effi / Dropi) o ver el envío ya hecho. */
 export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   const [redespachar, setRedespachar] = useState(false);
@@ -278,16 +411,12 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
           {remision && <span style={chip('var(--df-purple-subtle)', 'var(--df-purple)')}>🧾 {remision}</span>}
-          {sel.transportadora && <span style={chip('var(--df-warning-subtle)', 'var(--df-warning)')}>🚚 {sel.transportadora}</span>}
+          {sel.transportadora && !(sel.transportadora === 'Dropi' && !dropiCreado) && <span style={chip('var(--df-warning-subtle)', 'var(--df-warning)')}>🚚 {sel.transportadora}</span>}
         </div>
         <PasosEnvio sel={sel} />
-        {sel.hasGuia && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 140, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-strong)' }}>Guía {sel.guia}</div>
-            <button onClick={() => df.copyGuia(sel.guia!)} className="df-copy-btn" style={btnS}>{df.guiaBtnLabel}</button>
-            {sel.guiaUrl && <a href={sel.guiaUrl} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-purple)', textDecoration: 'none' }}>Ver PDF</a>}
-          </div>
-        )}
+        {!dropiCreado && !!sel.effiRemision && !sel.hasGuia && df.effiApi.conectado && !sel.effiGuiaCreada && <GuiaEffiForm df={df} sel={sel} />}
+        {!sel.hasGuia && sel.effiGuiaCreada && <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--df-text-muted)', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px' }}>🚚 Guía creada en Effi · esperando que la transportadora asigne el número (llega solo).</div>}
+        {sel.hasGuia && <GuiaAcciones df={df} sel={sel} />}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--df-border)' }}>
           <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', flex: 1 }}>Se actualiza solo. Cuando salga la guía, se la avisamos al cliente por WhatsApp.</span>
           <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Volver a despachar</button>
