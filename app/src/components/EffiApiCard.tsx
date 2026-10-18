@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { EffiProductos } from './EffiProductos';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
-  apiEffiApiArticulos, apiEffiApiConectar, apiEffiApiConfig, apiEffiApiDesconectar, apiEffiApiEventos, apiEffiApiListas,
-  apiEffiApiSecreto, apiEffiApiSyncArticulos, apiEffiApiVincular,
-  type EffiApiEstado, type EffiArticulo, type EffiEvento, type EffiGuiaCfg, type EffiListas,
+  apiEffiApiConectar, apiEffiApiConfig, apiEffiApiDesconectar, apiEffiApiEventos, apiEffiApiListas,
+  apiEffiApiSecreto,
+  type EffiApiEstado, type EffiEvento, type EffiGuiaCfg, type EffiListas,
 } from '../lib/api';
 
 /**
@@ -50,9 +51,6 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
   const [listas, setListas] = useState<EffiListas | null>(null);
   const [cfg, setCfg] = useState<EffiApiEstado>({ conectado: false });
   const [secreto, setSecreto] = useState('');
-  const [articulos, setArticulos] = useState<EffiArticulo[]>([]);
-  const [variantes, setVariantes] = useState<{ variantId: string; nombre: string; effiId: string }[]>([]);
-  const [sinVinculo, setSinVinculo] = useState<{ variantId: string | null; nombre: string }[] | null>(null);
   const [eventos, setEventos] = useState<EffiEvento[]>([]);
   const [verEventos, setVerEventos] = useState(false);
   const [copiado, setCopiado] = useState('');
@@ -63,7 +61,6 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
   useEffect(() => {
     if (!est.conectado || !abierta || listas) return;
     void apiEffiApiListas().then((r) => { if (r.data) setListas(r.data); else setMsg(r.error || 'No pudimos leer tu configuración de Effi.'); });
-    void apiEffiApiArticulos().then((r) => { if (r.data) { setArticulos(r.data.articulos); setVariantes(r.data.variantes); } });
   }, [est.conectado, abierta]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (patch: Partial<EffiApiEstado>) => setCfg((c) => ({ ...c, ...patch }));
@@ -90,23 +87,6 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
     setMsg(r.data.listo ? '✓ Configuración guardada. Ya puedes despachar pedidos a Effi.' : 'Guardado. Falta elegir sucursal, bodega, centro de costos y forma de pago.');
     await df.cargarEffiApi();
   };
-  const sincronizar = async () => {
-    setCargando(true); setMsg('Descargando artículos de Effi y vinculando…');
-    const r = await apiEffiApiSyncArticulos();
-    setCargando(false);
-    if (r.error || !r.data) { setMsg(r.error || 'No se pudo sincronizar.'); return; }
-    setSinVinculo(r.data.sinVinculo);
-    setMsg(`✓ ${r.data.total} artículos leídos de Effi · ${r.data.vinculadas} productos/variantes vinculados${r.data.sinVinculo.length ? ` · ${r.data.sinVinculo.length} sin vincular` : ''}.`);
-    const a = await apiEffiApiArticulos();
-    if (a.data) { setArticulos(a.data.articulos); setVariantes(a.data.variantes); }
-    await df.cargarEffiApi();
-  };
-  const vincular = async (variantId: string, effiId: string) => {
-    const r = await apiEffiApiVincular(variantId, effiId);
-    if (r.error) { setMsg(r.error); return; }
-    setVariantes((vs) => vs.map((v) => (v.variantId === variantId ? { ...v, effiId } : v)));
-    setSinVinculo((s) => (s ? s.filter((x) => x.variantId !== variantId) : s));
-  };
   const guardarSecreto = async () => {
     const r = await apiEffiApiSecreto(secreto.trim());
     if (r.error) { setMsg(r.error); return; }
@@ -125,8 +105,6 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
     if (r.data) setEventos(r.data.eventos);
   };
 
-  const sinVinc = sinVinculo ?? variantes.filter((v) => !v.effiId).map((v) => ({ variantId: v.variantId, nombre: v.nombre }));
-  const opcionesArt = articulos.map((a) => ({ id: a.id, nombre: `${a.descripcion}${a.referencia ? ` [${a.referencia}]` : ''}` }));
 
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid ' + (est.listo ? 'var(--df-purple-border)' : 'var(--df-border)'), borderRadius: 14, padding: 20, marginBottom: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
@@ -218,30 +196,10 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                 <button onClick={guardar} disabled={cargando} style={btn}>Guardar configuración</button>
               </div>
 
-              {/* 3. Artículos */}
+              {/* 3. Productos */}
               <div style={seccion}>
                 <div style={titulo}>3 · Productos ↔ artículos de Effi</div>
-                <p style={ayuda}>Se vinculan solos: por el producto que vinculaste en tu e-commerce de Effi, por la <b>referencia</b> o por el nombre. Sincroniza después de vincular productos en Effi.</p>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button onClick={sincronizar} disabled={cargando} style={btn}>↻ Sincronizar artículos de Effi</button>
-                  <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{est.articulosEnCache || 0} artículos en memoria · {variantes.filter((v) => v.effiId).length}/{variantes.length} variantes vinculadas</span>
-                </div>
-                {sinVinc.length > 0 && articulos.length > 0 && (
-                  <div style={{ marginTop: 12, border: '1px solid var(--df-warning-border)', background: 'var(--df-warning-subtle-2)', borderRadius: 10, padding: 12 }}>
-                    <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 8, color: 'var(--df-warning)' }}>Sin vincular ({sinVinc.length}): elige su artículo en Effi</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 280, overflowY: 'auto' }}>
-                      {sinVinc.filter((s) => s.variantId).slice(0, 60).map((s) => (
-                        <div key={s.variantId!} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.2fr)', gap: 10, alignItems: 'center' }}>
-                          <span style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.nombre}>{s.nombre}</span>
-                          <select defaultValue="" onChange={(e) => e.target.value && void vincular(s.variantId!, e.target.value)} style={{ ...inp, padding: '7px 9px', fontSize: 12.5 }}>
-                            <option value="">Elegir artículo…</option>
-                            {opcionesArt.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-                          </select>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <EffiProductos onMsg={setMsg} />
               </div>
 
               {/* 4. Webhooks */}

@@ -126,11 +126,26 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
   useEffect(() => { void df.cargarShopify?.(); }, []); // saber si Shopify está conectado
   const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
   const conectada = (id: IntegId) => id === 'dropi' ? df.dropiConectado
-    : id === 'effi' ? (df.wooProveedores.includes('effi') || !!df.effiWoo?.activo)
+    : id === 'effi' ? (df.wooProveedores.includes('effi') || !!df.effiWoo?.activo || !!df.effiApi?.conectado)
       : df.shopifyConectado;
   const activas = INTEGRACIONES.filter((i) => conectada(i.id));
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 800 }}>🚚 Se despacha por</span>
+        <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 8, overflow: 'hidden' }}>
+          {([['effi', 'Effi'], ['dropi', 'Dropi'], ['', 'Sin definir']] as const).map(([k, t]) => {
+            const on = (p.despachoProveedor || '') === k;
+            return (
+              <button key={k || 'none'} onClick={() => p.setDespachoProveedor(k)}
+                style={{ border: 'none', padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', background: on ? (k === 'effi' ? 'var(--df-purple)' : k === 'dropi' ? 'var(--df-warning)' : 'var(--df-surface-2)') : 'var(--df-surface)', color: on && k ? '#fff' : 'var(--df-text-muted)' }}>
+                {t}
+              </button>
+            );
+          })}
+        </div>
+        <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>La sincronización con Effi solo toma los productos de Effi.</span>
+      </div>
       <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4, letterSpacing: '.02em' }}>🔗 Conexiones por variante</div>
       <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>
         Pon el código de cada variante en cada integración donde vendes este producto. El despacho usa el código de la integración por la que se envía. Se guarda al salir del campo.

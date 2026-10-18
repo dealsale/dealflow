@@ -503,8 +503,11 @@ export const apiEffiApiListas = () => req<EffiListas>('/api/effi-api/listas', 'G
 export const apiEffiApiConfig = (cfg: Partial<EffiApiEstado>) => req<{ ok: true; listo: boolean }>('/api/effi-api/config', 'POST', cfg);
 export const apiEffiApiSecreto = (secreto: string) => req<{ ok: true; secretos: number }>('/api/effi-api/webhook-secreto', 'POST', { secreto });
 export const apiEffiApiDesconectar = () => req<{ ok: true }>('/api/effi-api/desconectar', 'POST');
-export const apiEffiApiSyncArticulos = () => req<{ total: number; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[] }>('/api/effi-api/articulos/sync', 'POST');
-export const apiEffiApiArticulos = () => req<{ articulos: EffiArticulo[]; variantes: { variantId: string; nombre: string; effiId: string }[] }>('/api/effi-api/articulos', 'GET');
+export const apiEffiApiSyncArticulos = () => req<{ total: number; soloVinculados: boolean; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[]; productosEffi: number; sinProveedor: number }>('/api/effi-api/articulos/sync', 'POST');
+export interface EffiVarianteDF { variantId: string; productId: string; producto: string; proveedor: string; nombre: string; effiId: string }
+export const apiEffiApiArticulos = () => req<{ articulos: EffiArticulo[]; variantes: EffiVarianteDF[]; nombres: Record<string, string> }>('/api/effi-api/articulos', 'GET');
+export const apiEffiApiBuscar = (q: string) => req<{ articulos: EffiArticulo[] }>(`/api/effi-api/articulos/buscar?q=${encodeURIComponent(q)}`, 'GET');
+export const apiEffiApiProveedor = (productIds: string[], proveedor: 'effi' | 'dropi' | '') => req<{ ok: true; actualizados: number }>('/api/effi-api/producto-proveedor', 'POST', { productIds, proveedor });
 export const apiEffiApiVincular = (variantId: string, effiId: string) => req<{ ok: true }>('/api/effi-api/articulos/vincular', 'POST', { variantId, effiId });
 export const apiEffiApiEventos = () => req<{ eventos: EffiEvento[] }>('/api/effi-api/eventos', 'GET');
 export const apiEffiPreview = (rowId: string) => req<EffiPreview>(`/api/orders/${rowId}/effi/preview`, 'GET');

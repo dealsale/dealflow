@@ -243,10 +243,22 @@ db.exec(`CREATE TABLE IF NOT EXISTS effi_articulos (
 
 export interface ArticuloEffi { id: string; descripcion: string; referencia: string; ecommerce: string; stock: number | null }
 
-/** Descarga los artículos vendibles de Effi a la caché local. */
-export async function descargarArticulos(storeId: string, apiKey: string): Promise<{ total: number } | { error: string }> {
-  const r = await todo<Fila>(apiKey, '/api/articulo', { ventas: 1 }, 60);
+/**
+ * Descarga a la caché local los artículos de Effi VINCULADOS a un e-commerce (los
+ * que el dueño enlazó en su integración de Effi): ese es su catálogo real. Bajar
+ * todo el maestro de artículos traía miles de artículos ajenos (catálogos de
+ * dropshipping, etc.). Lo demás se busca en vivo por nombre o referencia.
+ */
+export async function descargarArticulos(storeId: string, apiKey: string): Promise<{ total: number; soloVinculados: boolean } | { error: string }> {
+  let r = await todo<Fila>(apiKey, '/api/articulo', { existe_vinculacion: 1 }, 40);
   if (!Array.isArray(r)) return r;
+  const soloVinculados = r.length > 0;
+  if (!soloVinculados) {
+    // Sin vínculos de e-commerce todavía: caemos a los artículos de venta (con tope).
+    const t = await todo<Fila>(apiKey, '/api/articulo', { ventas: 1 }, 20);
+    if (!Array.isArray(t)) return t;
+    r = t;
+  }
   const tx = db.transaction((filas: Fila[]) => {
     db.prepare('DELETE FROM effi_articulos WHERE store_id = ?').run(storeId);
     const ins = db.prepare('INSERT OR REPLACE INTO effi_articulos (store_id, id, descripcion, referencia, ecommerce, stock) VALUES (?,?,?,?,?,?)');
@@ -256,7 +268,29 @@ export async function descargarArticulos(storeId: string, apiKey: string): Promi
     }
   });
   tx(r);
-  return { total: r.length };
+  return { total: r.length, soloVinculados };
+}
+
+/** Búsqueda en vivo en Effi por nombre (palabras) o referencia, para vincular a mano. */
+export async function buscarArticulosEffi(storeId: string, q: string): Promise<ArticuloEffi[] | { error: string }> {
+  const c = cfgEffi(storeId);
+  if (!c?.apiKey) return { error: 'Conecta Effi primero.' };
+  const term = q.trim().slice(0, 60);
+  if (term.length < 2) return [];
+  const [porNombre, porRef] = await Promise.all([
+    effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { descripcion: term, por_pagina: 40 } }),
+    effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { referencia: `${term}%`, por_pagina: 20 } }),
+  ]);
+  if (!porNombre.ok && !porRef.ok) return { error: mensajeError(porNombre) };
+  const vistos = new Set<string>();
+  const out: ArticuloEffi[] = [];
+  for (const f of [...(porRef.body.data || []), ...(porNombre.body.data || [])]) {
+    const id = txt(f.id);
+    if (!id || vistos.has(id) || txt(f.vigente) === '0') continue;
+    vistos.add(id);
+    out.push({ id, descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: f.stock_empresa == null ? null : Number(f.stock_empresa) });
+  }
+  return out;
 }
 
 export function articulosCache(storeId: string): ArticuloEffi[] {
@@ -272,19 +306,19 @@ function idEcommerceDeRef(storeId: string, ref: string): number | null {
   } catch { return null; }
 }
 
-interface VarianteDF { productId: string; variantId: string | null; producto: string; label: string; ref: string; effiId: string }
+interface VarianteDF { productId: string; variantId: string | null; producto: string; label: string; ref: string; effiId: string; proveedor: string }
 
 /** Todas las variantes (y productos sin variantes) de la tienda con su vínculo actual. */
 function variantesTienda(storeId: string): VarianteDF[] {
   const out: VarianteDF[] = [];
-  const prods = db.prepare('SELECT id, nombre, sku FROM products WHERE store_id = ?').all(storeId) as { id: string; nombre: string; sku: string }[];
+  const prods = db.prepare("SELECT id, nombre, sku, COALESCE(despacho_proveedor,'') proveedor FROM products WHERE store_id = ?").all(storeId) as { id: string; nombre: string; sku: string; proveedor: string }[];
   const vst = db.prepare("SELECT id, label, sku, COALESCE(refs,'{}') refs FROM variants WHERE product_id = ?");
   for (const p of prods) {
     const vs = vst.all(p.id) as { id: string; label: string; sku: string; refs: string }[];
-    if (!vs.length) { out.push({ productId: p.id, variantId: null, producto: p.nombre, label: '', ref: p.sku || '', effiId: '' }); continue; }
+    if (!vs.length) { out.push({ productId: p.id, variantId: null, producto: p.nombre, label: '', ref: p.sku || '', effiId: '', proveedor: p.proveedor }); continue; }
     for (const v of vs) {
       const refs = pj<Record<string, string>>(v.refs, {});
-      out.push({ productId: p.id, variantId: v.id, producto: p.nombre, label: v.label || '', ref: String(refs.effi || v.sku || p.sku || ''), effiId: String(refs.effi_id || '') });
+      out.push({ productId: p.id, variantId: v.id, producto: p.nombre, label: v.label || '', ref: String(refs.effi || v.sku || p.sku || ''), effiId: String(refs.effi_id || ''), proveedor: p.proveedor });
     }
   }
   return out;
@@ -315,7 +349,7 @@ export function vincularArticulo(storeId: string, variantId: string, effiId: str
 }
 
 /** Descarga artículos y vincula automáticamente todas las variantes que casen. */
-export async function sincronizarArticulos(storeId: string): Promise<{ total: number; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[] } | { error: string }> {
+export async function sincronizarArticulos(storeId: string): Promise<{ total: number; soloVinculados: boolean; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[]; productosEffi: number; sinProveedor: number } | { error: string }> {
   const c = cfgEffi(storeId);
   if (!c?.apiKey) return { error: 'Conecta Effi con la API key primero.' };
   const d = await descargarArticulos(storeId, c.apiKey);
@@ -323,14 +357,19 @@ export async function sincronizarArticulos(storeId: string): Promise<{ total: nu
   const arts = articulosCache(storeId);
   let vinculadas = 0;
   const sinVinculo: { variantId: string | null; nombre: string }[] = [];
-  for (const v of variantesTienda(storeId)) {
+  // Solo los productos marcados "se despacha por Effi" (los de Dropi van por su lado).
+  const todas = variantesTienda(storeId);
+  const deEffi = todas.filter((v) => v.proveedor === 'effi');
+  const productosEffi = new Set(deEffi.map((v) => v.productId)).size;
+  const sinProveedor = new Set(todas.filter((v) => !v.proveedor).map((v) => v.productId)).size;
+  for (const v of deEffi) {
     const a = articuloPara(storeId, v, arts);
     const nombre = v.label && norm(v.label) !== 'unica' ? `${v.producto} (${v.label})` : v.producto;
     if (a && v.variantId) { if (a.id !== v.effiId) vincularArticulo(storeId, v.variantId, a.id); vinculadas++; }
     else if (a) vinculadas++;
     else sinVinculo.push({ variantId: v.variantId, nombre });
   }
-  return { total: d.total, vinculadas, sinVinculo };
+  return { total: d.total, soloVinculados: d.soloVinculados, vinculadas, sinVinculo, productosEffi, sinProveedor };
 }
 
 /** Variante de DealFlow a la que corresponde un ítem del pedido ("Producto (Talla M · Negro)"). */
