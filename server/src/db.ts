@@ -229,31 +229,28 @@ addColumn('stores', 'plan_vence TEXT'); // fecha ISO del próximo cobro de la re
 addColumn('plans', 'mensual INTEGER NOT NULL DEFAULT 0'); // renta mensual (precio = valor inicial una vez)
 const nuevaColInicial = addColumn('stores', 'inicial_pagado INTEGER NOT NULL DEFAULT 0'); // 1 = ya pagó el valor inicial
 
-// Planes canónicos de DealFlow: Básico y Premium (valor inicial + renta mensual).
+// Plan único de DealFlow: instalación (valor inicial, una sola vez) + mensualidad.
+export const PLAN_UNICO = 'DealFlow';
+export const PLAN_INSTALACION = 1000000;
+export const PLAN_MENSUAL = 250000;
+const PLAN_FEATURES = [
+  'Configuración completa del agente IA',
+  'WhatsApp Business, Instagram y Facebook Messenger',
+  'Respuestas automáticas inteligentes, 24/7',
+  'Entrenamiento inicial del bot',
+  'Integración con Dropi, Effi y Shopify',
+  '30 días de soporte incluido',
+];
+
+// Deja un solo plan (idempotente en cada arranque): crea/actualiza "DealFlow",
+// mueve a él las tiendas de planes anteriores (Básico, Premium…) y borra esos
+// planes. La renta de esas tiendas no cambia (ya era de $250.000).
 export function ensurePlanesCanonicos(): void {
-  const planes: [string, number, number, string[]][] = [
-    ['Básico', 2000000, 250000, [
-      'Configuración completa del agente IA',
-      'WhatsApp Business, Instagram y Facebook Messenger',
-      'Respuestas automáticas inteligentes',
-      'Atención 24/7',
-      'Entrenamiento inicial del bot',
-      '30 días de soporte incluido',
-    ]],
-    ['Premium', 2500000, 250000, [
-      'Todo lo del plan Básico +',
-      'Primera campaña de marketing',
-      'Configuración de anuncios',
-      'Estrategia para conseguir clientes',
-      'Seguimiento personalizado',
-      'Optimización del bot durante el primer mes',
-    ]],
-  ];
-  for (const [nombre, precio, mensual, features] of planes) {
-    const ex = db.prepare('SELECT id FROM plans WHERE nombre = ?').get(nombre) as { id: string } | undefined;
-    if (ex) db.prepare('UPDATE plans SET precio = ?, mensual = ?, features = ? WHERE id = ?').run(precio, mensual, JSON.stringify(features), ex.id);
-    else db.prepare('INSERT INTO plans (id, nombre, precio, mensual, features) VALUES (?,?,?,?,?)').run(crypto.randomUUID(), nombre, precio, mensual, JSON.stringify(features));
-  }
+  const ex = db.prepare('SELECT id FROM plans WHERE nombre = ?').get(PLAN_UNICO) as { id: string } | undefined;
+  if (ex) db.prepare('UPDATE plans SET precio = ?, mensual = ?, features = ? WHERE id = ?').run(PLAN_INSTALACION, PLAN_MENSUAL, JSON.stringify(PLAN_FEATURES), ex.id);
+  else db.prepare('INSERT INTO plans (id, nombre, precio, mensual, features) VALUES (?,?,?,?,?)').run(crypto.randomUUID(), PLAN_UNICO, PLAN_INSTALACION, PLAN_MENSUAL, JSON.stringify(PLAN_FEATURES));
+  db.prepare('UPDATE stores SET plan = ? WHERE plan != ?').run(PLAN_UNICO, PLAN_UNICO);
+  db.prepare('DELETE FROM plans WHERE nombre != ?').run(PLAN_UNICO);
 }
 if (nuevaColInicial) {
   const hayTiendas = (db.prepare('SELECT COUNT(*) AS n FROM stores').get() as { n: number }).n > 0;
@@ -262,9 +259,6 @@ if (nuevaColInicial) {
     // las tiendas que ya existían siguen con acceso (se consideran "al día").
     db.exec('UPDATE stores SET inicial_pagado = 1 WHERE COALESCE(inicial_pagado,0) = 0');
     ensurePlanesCanonicos();
-    // Mueve tiendas de planes viejos (Inicio/Crecimiento/Pro) a Premium y limpia esos planes.
-    db.exec("UPDATE stores SET plan = 'Premium' WHERE plan IN ('Inicio','Crecimiento','Pro')");
-    db.exec("DELETE FROM plans WHERE nombre IN ('Inicio','Crecimiento','Pro')");
   }
 }
 db.exec(`CREATE TABLE IF NOT EXISTS pagos (
