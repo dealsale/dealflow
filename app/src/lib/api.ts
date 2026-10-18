@@ -315,6 +315,7 @@ export interface ApiOrder {
   guiaUrl?: string;
   despachoProveedor?: string;
   estadoWoo?: string;
+  effiRemision?: string;
   envio: number;
   nota: string;
   total: number;
@@ -478,6 +479,36 @@ export const apiEffiLog = (pedido?: string | number) =>
 export const apiEffiEstado = () => req<{ activo: boolean; slug: string; url: string }>('/api/effi/estado', 'GET');
 export const apiEffiActivar = () => req<{ slug: string; url: string; ck: string; cs: string }>('/api/effi/activar', 'POST');
 export const apiEffiDesactivar = () => req<{ ok: true }>('/api/effi/desactivar', 'POST');
+
+// ── Effi por API directa ──
+export interface EffiOpcion { id: string; nombre: string; [k: string]: unknown }
+export interface EffiTransportadora { id: string; nombre: string; effi: string; servicios: EffiOpcion[]; formasPago: EffiOpcion[] }
+export interface EffiListas {
+  sucursales: EffiOpcion[]; bodegas: (EffiOpcion & { sucursal: string })[]; centrosCostos: EffiOpcion[];
+  formasPago: (EffiOpcion & { contado: boolean })[]; mediosPago: EffiOpcion[]; cajas: EffiOpcion[]; cuentas: EffiOpcion[];
+  transportadoras: EffiTransportadora[]; remitentes: EffiOpcion[]; ecommerce: (EffiOpcion & { plataforma: string })[];
+}
+export interface EffiGuiaCfg { activa: boolean; transportadora: string; servicio: string; formaPagoFlete: string; remitente: string; peso: number; volumen: number; alto: number; ancho: number; largo: number }
+export interface EffiApiEstado {
+  conectado: boolean; listo?: boolean; apiKeyFin?: string; webhookSecreto?: boolean; webhookSecretos?: number; webhookUrl?: string; articulosEnCache?: number;
+  sucursal?: string; bodega?: string; centroCostos?: string; formaPago?: string; formaPagoContado?: boolean; medioPago?: string; caja?: string; cuenta?: string;
+  vendedor?: string; articuloFlete?: string; diasEntrega?: number; autoDespacho?: boolean; guia?: EffiGuiaCfg;
+}
+export interface EffiArticulo { id: string; descripcion: string; referencia: string; ecommerce: string; stock: number | null }
+export interface EffiEvento { id: number; evento: string; entrega: string; resumen: string; payload: string; created_at: string }
+export interface EffiPreview { lineas: { item: string; articulo: string }[]; ubicacion: string; avisos: string[]; total: number }
+export const apiEffiApiEstado = () => req<EffiApiEstado>('/api/effi-api/estado', 'GET');
+export const apiEffiApiConectar = (apiKey: string) => req<{ ok: true }>('/api/effi-api/conectar', 'POST', { apiKey });
+export const apiEffiApiListas = () => req<EffiListas>('/api/effi-api/listas', 'GET');
+export const apiEffiApiConfig = (cfg: Partial<EffiApiEstado>) => req<{ ok: true; listo: boolean }>('/api/effi-api/config', 'POST', cfg);
+export const apiEffiApiSecreto = (secreto: string) => req<{ ok: true; secretos: number }>('/api/effi-api/webhook-secreto', 'POST', { secreto });
+export const apiEffiApiDesconectar = () => req<{ ok: true }>('/api/effi-api/desconectar', 'POST');
+export const apiEffiApiSyncArticulos = () => req<{ total: number; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[] }>('/api/effi-api/articulos/sync', 'POST');
+export const apiEffiApiArticulos = () => req<{ articulos: EffiArticulo[]; variantes: { variantId: string; nombre: string; effiId: string }[] }>('/api/effi-api/articulos', 'GET');
+export const apiEffiApiVincular = (variantId: string, effiId: string) => req<{ ok: true }>('/api/effi-api/articulos/vincular', 'POST', { variantId, effiId });
+export const apiEffiApiEventos = () => req<{ eventos: EffiEvento[] }>('/api/effi-api/eventos', 'GET');
+export const apiEffiPreview = (rowId: string) => req<EffiPreview>(`/api/orders/${rowId}/effi/preview`, 'GET');
+export const apiEffiDespachar = (rowId: string, reintentar = false) => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar });
 
 // ── Campañas del Marketing IA ──
 export interface Brief {

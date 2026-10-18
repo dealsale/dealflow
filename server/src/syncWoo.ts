@@ -45,11 +45,26 @@ export async function sincronizarDespachos(): Promise<void> {
       `SELECT id, store_id, numero, tel, guia, estado, despacho_proveedor, transportadora, woo_id, dropi_order_id, guia_url, guia_avisada
          FROM orders
         WHERE (COALESCE(woo_id,'') != '' OR COALESCE(dropi_order_id,'') != '') AND COALESCE(despacho_proveedor,'') != ''
+          AND COALESCE(effi_doc,'') = ''
           AND estado NOT IN ('Entregado','Cancelado')
         ORDER BY created_at DESC LIMIT 150`,
     ).all() as OrdenSync[];
 
     for (const o of pendientes) { await procesarOrden(o); }
+
+    // Pedidos enviados a Effi por API: los webhooks traen los cambios al instante;
+    // como respaldo (webhook sin configurar o caído) consultamos los que aún no
+    // tienen guía o siguen en camino, de los últimos 20 días.
+    const effiPend = db.prepare(
+      `SELECT id, store_id FROM orders
+        WHERE COALESCE(effi_doc,'') != '' AND estado NOT IN ('Entregado','Cancelado')
+          AND created_at > datetime('now','-20 days')
+        ORDER BY created_at DESC LIMIT 120`,
+    ).all() as { id: string; store_id: string }[];
+    if (effiPend.length) {
+      const { consultarEstadoEffi } = await import('./effiApi.js');
+      for (const o of effiPend) { try { await consultarEstadoEffi(o.store_id, o.id); } catch { /* sigue con el próximo */ } }
+    }
   } finally {
     corriendoDespachos = false;
   }
@@ -129,7 +144,7 @@ export async function sincronizarPedido(storeId: string, rowId: string): Promise
 }
 
 /** Manda el WhatsApp de "tu pedido va en camino" con la guía, y lo deja anotado en el chat. */
-async function avisarGuiaAlCliente(o: OrdenSync, guia: string): Promise<void> {
+export async function avisarGuiaAlCliente(o: OrdenSync, guia: string): Promise<void> {
   // La transportadora real (Interrapidísimo, Servientrega…) si el dueño la eligió;
   // si no, el nombre del proveedor como respaldo.
   const transp = (o.transportadora || '').trim() || nombreProv(o.despacho_proveedor);

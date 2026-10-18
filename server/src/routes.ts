@@ -251,7 +251,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     id: p.id, tipo: p.tipo, titulo: p.titulo, desc: p.descripcion, vigencia: p.vigencia, activa: !!p.activa,
   }));
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
   }));
@@ -349,7 +349,7 @@ api.get('/leads/:id/mensajes', requireAuth, requireStore, (req, res) => {
 api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string),
   }));
@@ -825,6 +825,13 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
   // Effi NATIVO: si el storefront de Effi está activo, mandamos el pedido a Effi
   // como webhook (crea cliente + remisión de venta), sin WooCommerce real.
   if (prov === 'effi') {
+    const ef = await import('./effiApi.js');
+    if (ef.effiApiListo(sid)) {
+      const r = await ef.despacharEffi(sid, String(o.id), reintentar);
+      if ('error' in r) return res.status(400).json({ error: r.error });
+      if (transportadora && !r.transportadora) db.prepare('UPDATE orders SET transportadora = ? WHERE id = ?').run(transportadora, o.id);
+      return res.json({ ok: true, proveedor: 'effi', remision: r.remision, guia: r.guia, avisos: r.avisos, api: true });
+    }
     const { estadoEffi, enviarPedidoAEffi } = await import('./effiWoo.js');
     if (estadoEffi(sid).activo) {
       const conRecaudo = req.body?.recaudo !== 'sin'; // 'sin' = prepagado; por defecto con recaudo (contra entrega)
@@ -868,6 +875,14 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
 // Sincroniza estado y guía del pedido desde el WooCommerce del proveedor usado.
 // Reutiliza la misma lógica del sync automático (actualiza estado, guía y avisa al cliente).
 api.post('/orders/:rowId/despachar/sync', requireAuth, requireStore, async (req, res) => {
+  // Pedidos enviados a Effi por API: consultamos la guía directamente en Effi.
+  const eo = db.prepare("SELECT effi_doc FROM orders WHERE id = ? AND store_id = ?").get(req.params.rowId, req.user!.storeId!) as { effi_doc: string } | undefined;
+  if (eo?.effi_doc) {
+    const ef = await import('./effiApi.js');
+    const r = await ef.consultarEstadoEffi(req.user!.storeId!, req.params.rowId);
+    if ('error' in r) return res.status(400).json({ error: r.error });
+    return res.json(r);
+  }
   const { sincronizarPedido } = await import('./syncWoo.js');
   const r = await sincronizarPedido(req.user!.storeId!, req.params.rowId);
   if ('error' in r) return res.status(400).json({ error: r.error });
@@ -1199,6 +1214,121 @@ api.get('/woo/diagnostico', requireAuth, requireStore, requireOwner, async (req,
   const prov = wooProv(req.query.proveedor) || 'effi';
   const full = req.query.full === '1' || req.query.full === 'true';
   res.json(await diagnosticoCatalogo(req.user!.storeId!, prov, full));
+});
+
+// ── Effi por API directa (reemplaza el puente WooCommerce) ──
+// URL pública del webhook de la tienda (la que se pega en Effi → Webhooks).
+function urlWebhookEffi(req: import('express').Request, token: string): string {
+  const base = (process.env.PUBLIC_APP_URL || `https://${req.get('host') || 'app.dealflow.sbs'}`).replace(/\/+$/, '');
+  return `${base}/webhooks/effi/${token}`;
+}
+api.get('/effi-api/estado', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const sid = req.user!.storeId!;
+  const c = ef.cfgEffi(sid);
+  if (!c?.apiKey) return res.json({ conectado: false });
+  const { apiKey, webhookSecret, ...resto } = c;
+  const nSecretos = webhookSecret ? webhookSecret.split('\n').filter((s) => s.trim()).length : 0;
+  const nArt = (db.prepare('SELECT COUNT(*) n FROM effi_articulos WHERE store_id = ?').get(sid) as { n: number }).n;
+  res.json({
+    conectado: true, listo: ef.effiApiListo(sid), apiKeyFin: apiKey.slice(-4), webhookSecreto: nSecretos > 0, webhookSecretos: nSecretos,
+    webhookUrl: urlWebhookEffi(req, c.webhookToken), articulosEnCache: nArt, ...resto,
+  });
+});
+api.post('/effi-api/conectar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const apiKey = String(req.body?.apiKey || '').trim();
+  if (apiKey.length < 32 || apiKey.length > 40) return res.status(400).json({ error: 'La API key de Effi tiene entre 32 y 40 caracteres. Cópiala completa desde Administración → Usuarios → Ver más.' });
+  const v = await ef.verificarEffi(apiKey);
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  ef.guardarCfgEffi(req.user!.storeId!, { apiKey });
+  registrarLog(req.user!.storeId!, 'info', 'integracion', 'Effi conectado por API.');
+  res.json({ ok: true });
+});
+api.get('/effi-api/listas', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const c = ef.cfgEffi(req.user!.storeId!);
+  if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
+  const l = await ef.listasEffi(c.apiKey);
+  if ('error' in l) return res.status(400).json({ error: l.error });
+  res.json(l);
+});
+api.post('/effi-api/config', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const sid = req.user!.storeId!;
+  if (!ef.cfgEffi(sid)?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
+  const b = req.body || {};
+  const s = (v: unknown) => String(v ?? '').trim().slice(0, 40);
+  const parcial: Record<string, unknown> = {};
+  for (const k of ['sucursal', 'bodega', 'centroCostos', 'formaPago', 'medioPago', 'caja', 'cuenta', 'vendedor', 'articuloFlete']) if (k in b) parcial[k] = s(b[k]);
+  if ('formaPagoContado' in b) parcial.formaPagoContado = b.formaPagoContado === true;
+  if ('autoDespacho' in b) parcial.autoDespacho = b.autoDespacho === true;
+  if ('diasEntrega' in b) parcial.diasEntrega = Math.min(60, Math.max(0, Math.round(Number(b.diasEntrega) || 3)));
+  if (b.guia && typeof b.guia === 'object') {
+    const g = b.guia as Record<string, unknown>;
+    const num = (v: unknown, d: number) => (Number(v) > 0 ? Number(v) : d);
+    parcial.guia = {
+      activa: g.activa === true, transportadora: s(g.transportadora), servicio: s(g.servicio), formaPagoFlete: s(g.formaPagoFlete), remitente: s(g.remitente),
+      peso: num(g.peso, 1), volumen: num(g.volumen, 1), alto: num(g.alto, 10), ancho: num(g.ancho, 10), largo: num(g.largo, 10),
+    };
+  }
+  ef.guardarCfgEffi(sid, parcial);
+  res.json({ ok: true, listo: ef.effiApiListo(sid) });
+});
+// El secreto lo genera Effi al crear el webhook (se muestra una sola vez): el dueño lo pega aquí.
+api.post('/effi-api/webhook-secreto', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const secreto = String(req.body?.secreto || '').trim();
+  if (secreto.length < 32) return res.status(400).json({ error: 'Pega el secreto completo que te mostró Effi al crear el webhook (64 caracteres).' });
+  const n = ef.agregarSecretoEffi(req.user!.storeId!, secreto);
+  res.json({ ok: true, secretos: n });
+});
+api.post('/effi-api/desconectar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  ef.borrarCfgEffi(req.user!.storeId!);
+  res.json({ ok: true });
+});
+api.post('/effi-api/articulos/sync', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const r = await ef.sincronizarArticulos(req.user!.storeId!);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+api.get('/effi-api/articulos', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const sid = req.user!.storeId!;
+  const arts = ef.articulosCache(sid);
+  const variantes = (db.prepare("SELECT v.id, p.nombre producto, v.label, COALESCE(json_extract(v.refs,'$.effi_id'),'') effi_id FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? ORDER BY p.nombre, v.label").all(sid) as { id: string; producto: string; label: string; effi_id: string }[])
+    .map((v) => ({ variantId: v.id, nombre: v.label && v.label.toLowerCase() !== 'única' ? `${v.producto} (${v.label})` : v.producto, effiId: String(v.effi_id || '') }));
+  res.json({ articulos: arts, variantes });
+});
+api.post('/effi-api/articulos/vincular', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const ok = ef.vincularArticulo(req.user!.storeId!, String(req.body?.variantId || ''), String(req.body?.effiId || '').replace(/\D/g, ''));
+  if (!ok) return res.status(404).json({ error: 'Variante no encontrada.' });
+  res.json({ ok: true });
+});
+api.get('/effi-api/eventos', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  res.json({ eventos: ef.eventosEffi(req.user!.storeId!, 80) });
+});
+// Vista previa: lo que se le mandaría a Effi para este pedido (no crea nada).
+api.get('/orders/:rowId/effi/preview', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const r = await ef.prepararRemision(req.user!.storeId!, req.params.rowId);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json({ lineas: r.lineas, ubicacion: r.ubic.nombre, avisos: r.avisos, total: (r.body.valor_forma_pago as number[])[0], remision: r.body });
+});
+api.post('/orders/:rowId/effi/despachar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT effi_remision FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { effi_remision: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const reintentar = req.body?.reintentar === true;
+  if (o.effi_remision && !o.effi_remision.includes('anulada') && !reintentar) return res.json({ ok: true, remision: o.effi_remision, aviso: 'Este pedido ya tiene remisión en Effi.' });
+  const r = await ef.despacharEffi(sid, req.params.rowId, reintentar);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, ...r });
 });
 
 // ── Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio) ──
@@ -2941,6 +3071,26 @@ function firmaWooValida(secret: string, raw: Buffer | undefined, firma: string):
     return false;
   }
 }
+
+// Webhooks de Effi ERP: un token por tienda en la URL y firma HMAC-SHA256 del
+// cuerpo en X-Effi-Signature (con el secreto que Effi mostró al crear el webhook).
+// Effi exige 2xx en < 5 s: respondemos de inmediato y procesamos después.
+webhooks.post('/effi/:token', async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const sid = ef.tiendaPorWebhookToken(String(req.params.token || ''));
+  if (!sid) return res.sendStatus(404);
+  const c = ef.cfgEffi(sid);
+  const raw = (req as { rawBody?: Buffer }).rawBody || Buffer.from(JSON.stringify(req.body || {}));
+  const firma = String(req.headers['x-effi-signature'] || '');
+  if (c?.webhookSecret && !ef.firmaEffiValida(c.webhookSecret, raw, firma)) {
+    console.warn(`[effi-webhook] firma inválida para la tienda ${sid}`);
+    return res.sendStatus(401);
+  }
+  res.sendStatus(200);
+  const evento = String(req.headers['x-effi-event'] || (req.body as { evento?: string })?.evento || '');
+  const entrega = String(req.headers['x-effi-delivery'] || '');
+  ef.procesarWebhookEffi(sid, evento, entrega, req.body).catch((e) => console.warn('[effi-webhook] error procesando', e));
+});
 
 webhooks.post('/woocommerce', async (req, res) => {
   // Respondemos 200 rápido siempre (WooCommerce reintenta si no).
