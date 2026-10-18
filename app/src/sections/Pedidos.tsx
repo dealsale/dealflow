@@ -1,3 +1,4 @@
+import { OrigenBadge } from '../components/OrigenPedido';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { SearchInput, FilterSelect } from '../components/Filters';
 import { Dropdown } from '../components/Dropdown';
@@ -60,8 +61,9 @@ export function Pedidos({ df }: { df: DealFlowState }) {
               )}
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>
-                {o.cliente} <span style={{ color: 'var(--df-text-faint)', fontWeight: 400, fontSize: 12 }}>· {o.ciudad}</span>
+              <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                <OrigenBadge origen={o.origen} />
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.cliente}</span> <span style={{ color: 'var(--df-text-faint)', fontWeight: 400, fontSize: 12, whiteSpace: 'nowrap' }}>· {o.ciudad}</span>
               </div>
               <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.itemsResumen}</div>
             </div>

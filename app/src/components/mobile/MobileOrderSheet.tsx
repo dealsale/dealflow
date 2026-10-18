@@ -1,3 +1,4 @@
+import { OrigenBadge } from '../OrigenPedido';
 import { useEffect } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../Dropdown';
@@ -37,7 +38,10 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
           <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 13, marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: 15 }}>{sel.cliente}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>{sel.cliente}</div>
+              <OrigenBadge origen={sel.origen} texto />
+            </div>
             <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 6px' }}>{sel.tel}</div>
             <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{sel.direccion}</div>
             <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>{sel.ciudad}</div>

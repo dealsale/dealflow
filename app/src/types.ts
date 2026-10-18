@@ -38,6 +38,8 @@ export interface Order {
   estadoWoo?: string;
   /** remisión de venta creada en Effi por API (ej. PPAL-270) */
   effiRemision?: string;
+  /** canal del que vino: whatsapp | instagram | messenger | shopify | web | manual */
+  origen?: string;
   envio: number;
   nota: string;
   /** Total del pedido acordado por el asistente (si no hay precios por ítem) */

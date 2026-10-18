@@ -451,6 +451,18 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_orders_ad ON orders(store_id, ad_id)');
 // despacho: whatsapp | messenger | instagram | shopify | landing | web | manual.
 addColumn('orders', "origen TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS idx_orders_origen ON orders(store_id, origen)');
+// Pedidos viejos sin origen: lo sacamos del canal del chat (por lead_id o, si no, por teléfono).
+{
+  const canalSql = "CASE WHEN l.canal IN ('whatsapp','messenger','instagram','web') THEN l.canal ELSE 'whatsapp' END";
+  const r1 = db.prepare(`UPDATE orders SET origen = (SELECT ${canalSql} FROM leads l WHERE l.id = orders.lead_id)
+    WHERE origen = '' AND lead_id <> '' AND EXISTS (SELECT 1 FROM leads l WHERE l.id = orders.lead_id)`).run().changes;
+  const r2 = db.prepare(`UPDATE orders SET origen = COALESCE((SELECT ${canalSql} FROM leads l WHERE l.store_id = orders.store_id
+      AND length(replace(replace(replace(orders.tel,' ',''),'+',''),'-','')) >= 7
+      AND replace(replace(replace(l.tel,' ',''),'+',''),'-','') LIKE '%' || substr(replace(replace(replace(orders.tel,' ',''),'+',''),'-',''), -10)
+      ORDER BY l.created_at DESC LIMIT 1), '')
+    WHERE origen = ''`).run().changes;
+  if (r1 + r2) console.log(`[migración] origen de pedidos rellenado: ${r1 + r2}`);
+}
 
 // Flujos de remarketing: plantillas de contenido (bloques texto/imagen/video/audio,
 // igual que el mensaje inicial) que la tienda arma para reenganchar clientes. Se

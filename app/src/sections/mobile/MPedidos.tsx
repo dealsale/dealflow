@@ -1,3 +1,4 @@
+import { OrigenBadge } from '../../components/OrigenPedido';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../../components/Dropdown';
 
@@ -58,8 +59,9 @@ export function MPedidos({ df }: { df: DealFlowState }) {
               <div style={{ flex: 1 }} />
               <span style={{ color: 'var(--df-text-faint)', fontSize: 11.5, whiteSpace: 'nowrap' }}>{o.fechaLabel}{o.fechaLabel && o.hora ? ' · ' : ''}{o.hora}</span>
             </div>
-            <div style={{ fontWeight: 700, fontSize: 15 }}>
-              {o.cliente} <span style={{ color: 'var(--df-text-faint)', fontWeight: 400, fontSize: 12.5 }}>· {o.ciudad}</span>
+            <div style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 7 }}>
+              <OrigenBadge origen={o.origen} size={19} />
+              <span>{o.cliente}</span> <span style={{ color: 'var(--df-text-faint)', fontWeight: 400, fontSize: 12.5 }}>· {o.ciudad}</span>
             </div>
             <div style={{ color: 'var(--df-text-muted)', fontSize: 13, margin: '3px 0 10px' }}>{o.itemsResumen}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
