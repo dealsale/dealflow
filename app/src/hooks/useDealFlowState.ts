@@ -15,7 +15,7 @@ import {
 } from '../data';
 import { comprimirImagen, readFilesAsDataUrls } from '../components/PhotoUpload';
 import { confirmar, notificar as toast } from '../components/dialogs';
-import {
+import { apiEffiApiEstado, type EffiApiEstado,
   apiAddVariant,
   apiGenerarVariantes,
   apiAdminOverview,
@@ -598,6 +598,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     guiaUrl: o.guiaUrl || '',
     despachoProveedor: o.despachoProveedor || '',
     estadoWoo: o.estadoWoo || '',
+    effiRemision: o.effiRemision || '',
     envio: o.envio || 0,
     nota: o.nota || '',
     total: o.total || 0,
@@ -2828,6 +2829,10 @@ export function useDealFlowState() {
 
   // Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio).
   const [effiWoo, setEffiWoo] = useState<{ activo: boolean; slug: string; url: string }>({ activo: false, slug: '', url: '' });
+  // Effi por API directa: ¿la tienda lo tiene listo para despachar?
+  const [effiApi, setEffiApi] = useState<EffiApiEstado>({ conectado: false });
+  async function cargarEffiApi() { const { data } = await apiEffiApiEstado(); if (data) setEffiApi(data); return data; }
+  async function refrescarPedidos() { const { data } = await apiOrders(); if (data) setOrders(mapApiOrders(data.orders)); }
   const [effiCreds, setEffiCreds] = useState<{ ck: string; cs: string } | null>(null);
   async function cargarEffiWoo() { const { data } = await apiEffiEstado(); if (data) setEffiWoo(data); }
   function activarEffiWoo() {
@@ -4284,6 +4289,9 @@ export function useDealFlowState() {
     crearTienda,
     eliminarMiTienda,
     effiWoo,
+    effiApi,
+    cargarEffiApi,
+    refrescarPedidos,
     effiCreds,
     cargarEffiWoo,
     activarEffiWoo,

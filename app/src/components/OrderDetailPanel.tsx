@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { confirmar } from './dialogs';
-import { apiDropiCotizar, apiDropiCrear, apiEffiLog, type DropiTransportadora, type EffiLogEvento, type EffiLineItem } from '../lib/api';
+import { apiDropiCotizar, apiDropiCrear, apiEffiLog, apiEffiPreview, apiEffiDespachar, type DropiTransportadora, type EffiLogEvento, type EffiLineItem, type EffiPreview } from '../lib/api';
 
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
 
@@ -165,13 +165,192 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
   );
 }
 
-export function OrderDetailPanel({ df }: { df: DealFlowState }) {
+const tarjetaProv = (activo: boolean, disponible: boolean): React.CSSProperties => ({
+  flex: 1, minWidth: 0, textAlign: 'left', cursor: disponible ? 'pointer' : 'default', fontFamily: 'inherit',
+  border: '1.5px solid ' + (activo ? 'var(--df-purple)' : 'var(--df-border)'), borderRadius: 12, padding: '12px 12px 11px',
+  background: activo ? 'var(--df-purple-subtle)' : 'var(--df-surface)', opacity: disponible ? 1 : 0.55,
+  boxShadow: activo ? '0 6px 18px -10px rgba(124,58,237,.6)' : 'none', transition: 'border-color .15s, background .15s',
+  display: 'flex', flexDirection: 'column', gap: 6,
+});
+const chip = (bg: string, fg: string): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 5, background: bg, color: fg, borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' });
+const btnP: React.CSSProperties = { width: '100%', background: 'var(--df-purple)', border: 'none', borderRadius: 10, padding: '12px 16px', fontFamily: 'inherit', fontWeight: 800, fontSize: 13.5, color: '#fff', cursor: 'pointer' };
+const btnS: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-text-body)', cursor: 'pointer', whiteSpace: 'nowrap' };
+
+/** Effi por API: revisar lo que se va a enviar y crear la remisión (+ guía). */
+function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; sel: DecoratedOrder; reintentar: boolean; onHecho: () => void }) {
+  const [paso, setPaso] = useState<'idle' | 'revisando' | 'listo' | 'enviando'>('idle');
+  const [prev, setPrev] = useState<EffiPreview | null>(null);
+  const [msg, setMsg] = useState('');
+  const revisar = async () => {
+    if (!sel.rowId) return;
+    setPaso('revisando'); setMsg('');
+    const r = await apiEffiPreview(sel.rowId);
+    if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos preparar el envío.'); return; }
+    setPrev(r.data); setPaso('listo');
+  };
+  const enviar = async () => {
+    if (!sel.rowId) return;
+    setPaso('enviando'); setMsg('Creando la remisión en Effi…');
+    const r = await apiEffiDespachar(sel.rowId, reintentar);
+    if (r.error || !r.data) { setPaso('listo'); setMsg(r.error || 'Effi no creó la remisión.'); return; }
+    setMsg(`✓ Remisión ${r.data.remision} creada en Effi${r.data.guia ? ` · guía ${r.data.guia}` : ''}.${r.data.avisos?.length ? ' ' + r.data.avisos.join(' ') : ''}`);
+    await df.refrescarPedidos();
+    onHecho();
+  };
+  const guiaAuto = !!df.effiApi.guia?.activa;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {paso === 'idle' || paso === 'revisando' ? (
+        <button onClick={revisar} disabled={paso === 'revisando'} style={{ ...btnP, opacity: paso === 'revisando' ? 0.7 : 1 }}>
+          {paso === 'revisando' ? 'Preparando…' : reintentar ? 'Revisar y crear otra remisión' : 'Revisar envío a Effi →'}
+        </button>
+      ) : prev && (
+        <div className="df-expand" style={{ border: '1px solid var(--df-purple-border)', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ padding: '10px 12px', background: 'var(--df-purple-subtle)', fontSize: 12, fontWeight: 700, color: 'var(--df-purple)', display: 'flex', gap: 8 }}>
+            <span>📍 {prev.ubicacion}</span><span style={{ marginLeft: 'auto' }}>{pesos(prev.total)}</span>
+          </div>
+          {prev.lineas.map((l, i) => (
+            <div key={i} style={{ padding: '9px 12px', borderTop: '1px solid var(--df-border)', fontSize: 12.5 }}>
+              <div style={{ fontWeight: 700 }}>{l.item}</div>
+              <div style={{ color: 'var(--df-text-muted)', fontSize: 11.5, marginTop: 2 }}>→ {l.articulo}</div>
+            </div>
+          ))}
+          {prev.avisos.map((a, i) => <div key={i} style={{ padding: '8px 12px', borderTop: '1px solid var(--df-border)', fontSize: 12, color: 'var(--df-warning)', background: 'var(--df-warning-subtle-2)' }}>⚠ {a}</div>)}
+          <div style={{ padding: 12, borderTop: '1px solid var(--df-border)', display: 'flex', gap: 8 }}>
+            <button onClick={() => { setPaso('idle'); setPrev(null); }} style={btnS}>Atrás</button>
+            <button onClick={enviar} disabled={paso === 'enviando'} style={{ ...btnP, flex: 1, opacity: paso === 'enviando' ? 0.7 : 1 }}>
+              {paso === 'enviando' ? 'Enviando…' : guiaAuto ? 'Crear remisión y guía' : 'Crear remisión en Effi'}
+            </button>
+          </div>
+        </div>
+      )}
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>
+        Cliente en Effi: cédula = celular {sel.tel ? <b>{String(sel.tel).replace(/\D/g, '').slice(-10)}</b> : ''}. {guiaAuto ? 'La guía se crea sola con la transportadora configurada.' : 'La guía la generas dentro de Effi.'}
+      </div>
+      {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+/** Pasos del envío para el pedido ya despachado. */
+function PasosEnvio({ sel }: { sel: DecoratedOrder }) {
+  const hecho = [true, !!sel.hasGuia, ['Despachado', 'Entregado'].includes(sel.estado) && !!sel.hasGuia, sel.estado === 'Entregado'];
+  const nombres = [sel.despachoProveedor === 'dropi' ? 'Orden creada' : 'Remisión creada', 'Guía generada', 'En camino', 'Entregado'];
+  const cancelado = sel.estado === 'Cancelado';
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', marginTop: 12 }}>
+      {nombres.map((n, i) => (
+        <div key={n} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+          {i > 0 && <span style={{ position: 'absolute', top: 9, right: '50%', width: '100%', height: 2, background: hecho[i] ? 'var(--df-purple)' : 'var(--df-border)' }} />}
+          <span style={{ position: 'relative', width: 20, height: 20, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800, background: cancelado && i > 0 && !hecho[i] ? 'var(--df-danger-subtle)' : hecho[i] ? 'var(--df-purple)' : 'var(--df-surface-2)', color: hecho[i] ? '#fff' : 'var(--df-text-faint)', border: hecho[i] ? 'none' : '1px solid var(--df-border)' }}>{hecho[i] ? '✓' : i + 1}</span>
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: hecho[i] ? 'var(--df-text-strong)' : 'var(--df-text-faint)', marginTop: 5, textAlign: 'center', lineHeight: 1.2 }}>{n}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Bloque de despacho del pedido: elegir proveedor (Effi / Dropi) o ver el envío ya hecho. */
+export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   const [redespachar, setRedespachar] = useState(false);
-  useEffect(() => { void df.cargarEffiWoo?.(); }, []); // saber si el storefront de Effi está activo
+  const effiApiListo = !!df.effiApi.listo;
+  const effiLegado = !effiApiListo && (df.wooProveedores.includes('effi') || !!df.effiWoo?.activo);
+  const effiOk = effiApiListo || effiLegado;
+  const dropiOk = !!df.dropiConectado;
+  const [prov, setProv] = useState<'effi' | 'dropi' | ''>('');
+  const elegido = prov || (effiOk ? 'effi' : dropiOk ? 'dropi' : '');
+  const dropiCreado = sel.despachoProveedor === 'dropi';
+  const esAdmin = df.sessionUser?.role === 'admin' || df.sessionUser?.role === 'superadmin' || !!df.sessionUser?.impersonando;
+
+  if (sel.despachado && !redespachar) {
+    const remision = sel.effiRemision || (sel.despachoProveedor === 'effi' ? sel.wooId : '');
+    return (
+      <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: '14px', marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {dropiCreado
+            ? <img src="/logos/dropi.jpg" alt="Dropi" style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover' }} />
+            : <span style={{ width: 30, height: 30, borderRadius: 8, background: '#fff', border: '1px solid var(--df-border)', display: 'grid', placeItems: 'center', padding: 3, boxSizing: 'border-box' }}><img src="/logos/effi.png" alt="Effi" style={{ maxWidth: '100%', maxHeight: '100%' }} /></span>}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 14 }}>Enviado a {dropiCreado ? 'Dropi' : 'Effi'}</div>
+            <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Estado: <b style={{ color: 'var(--df-text-strong)' }}>{sel.estadoWoo || (sel.hasGuia ? 'guía generada' : 'esperando guía…')}</b></div>
+          </div>
+          <button onClick={sel.sincronizarEffi} style={{ ...btnS, color: 'var(--df-purple)', borderColor: 'var(--df-purple-border)' }}>↻ Actualizar</button>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+          {remision && <span style={chip('var(--df-purple-subtle)', 'var(--df-purple)')}>🧾 {remision}</span>}
+          {sel.transportadora && <span style={chip('var(--df-warning-subtle)', 'var(--df-warning)')}>🚚 {sel.transportadora}</span>}
+        </div>
+        <PasosEnvio sel={sel} />
+        {sel.hasGuia && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 140, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-strong)' }}>Guía {sel.guia}</div>
+            <button onClick={() => df.copyGuia(sel.guia!)} className="df-copy-btn" style={btnS}>{df.guiaBtnLabel}</button>
+            {sel.guiaUrl && <a href={sel.guiaUrl} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-purple)', textDecoration: 'none' }}>Ver PDF</a>}
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--df-border)' }}>
+          <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', flex: 1 }}>Se actualiza solo. Cuando salga la guía, se la avisamos al cliente por WhatsApp.</span>
+          <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Volver a despachar</button>
+        </div>
+        {df.effiMsg && <div style={{ marginTop: 8, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
+        {!dropiCreado && esAdmin && effiLegado && <EffiLogPedido pedidoId={sel.id} />}
+      </div>
+    );
+  }
+
+  if (!effiOk && !dropiOk) {
+    return (
+      <div style={{ border: '1px dashed var(--df-border-strong)', borderRadius: 12, padding: 16, marginBottom: 18, textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 13 }}>
+        Conecta <b>Effi</b> o <b>Dropi</b> en <b>Integraciones</b> para despachar este pedido con un toque.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: 14, marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {redespachar && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-warning-subtle-2)', border: '1px solid var(--df-warning-border)', borderRadius: 9, padding: '8px 10px' }}>
+          <span style={{ fontSize: 12.5, color: 'var(--df-warning)', fontWeight: 600, flex: 1 }}>Vas a despachar otra vez este pedido.</span>
+          <button onClick={() => setRedespachar(false)} style={btnS}>Cancelar</button>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={() => effiOk && setProv('effi')} style={tarjetaProv(elegido === 'effi', effiOk)}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 7, background: '#fff', border: '1px solid var(--df-border)', display: 'grid', placeItems: 'center', padding: 3, boxSizing: 'border-box' }}><img src="/logos/effi.png" alt="" style={{ maxWidth: '100%', maxHeight: '100%' }} /></span>
+            <b style={{ fontSize: 14, color: 'var(--df-text-strong)' }}>Effi</b>
+            {elegido === 'effi' && <span style={{ marginLeft: 'auto', color: 'var(--df-purple)', fontWeight: 800 }}>●</span>}
+          </span>
+          <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.35 }}>{effiOk ? (effiApiListo ? 'Remisión de venta' + (df.effiApi.guia?.activa ? ' + guía' : '') : 'Remisión (método anterior)') : 'Conéctalo en Integraciones'}</span>
+        </button>
+        <button onClick={() => dropiOk && setProv('dropi')} style={tarjetaProv(elegido === 'dropi', dropiOk)}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <img src="/logos/dropi.jpg" alt="" style={{ width: 26, height: 26, borderRadius: 7, objectFit: 'cover' }} />
+            <b style={{ fontSize: 14, color: 'var(--df-text-strong)' }}>Dropi</b>
+            {elegido === 'dropi' && <span style={{ marginLeft: 'auto', color: 'var(--df-purple)', fontWeight: 800 }}>●</span>}
+          </span>
+          <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.35 }}>{dropiOk ? 'Cotiza y elige transportadora' : 'Conéctalo en Integraciones'}</span>
+        </button>
+      </div>
+
+      {elegido === 'effi' && effiApiListo && <EffiApiDespacho df={df} sel={sel} reintentar={redespachar} onHecho={() => setRedespachar(false)} />}
+      {elegido === 'effi' && effiLegado && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button onClick={() => { sel.despachar('effi'); setRedespachar(false); }} style={btnP}>Generar remisión en Effi</button>
+          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Método anterior (DealFlow como tienda WooCommerce). Conecta Effi por API en Integraciones para el despacho directo.</div>
+          {df.effiMsg && <div style={{ fontSize: 12.5, color: df.effiMsg.startsWith('✓') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
+        </div>
+      )}
+      {elegido === 'dropi' && <DropiDespacho df={df} sel={sel} onHecho={() => setRedespachar(false)} />}
+    </div>
+  );
+}
+
+export function OrderDetailPanel({ df }: { df: DealFlowState }) {
+  useEffect(() => { void df.cargarEffiWoo?.(); void df.cargarEffiApi?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!df.hasSelectedOrder || !df.sel) return null;
   const sel = df.sel;
   const dropiCreado = sel.despachoProveedor === 'dropi'; // Dropi se despacha por API directa
-  const effiDisponible = df.wooProveedores.includes('effi') || !!df.effiWoo?.activo; // Woo real o storefront nativo
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'flex', justifyContent: 'flex-end' }}>
@@ -240,72 +419,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
           )}
 
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Despacho</div>
-          <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
-            {sel.despachado && !redespachar ? (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <div style={{ width: 30, height: 30, borderRadius: 8, background: dropiCreado ? 'var(--df-warning-subtle)' : 'var(--df-purple-subtle)', color: dropiCreado ? 'var(--df-warning)' : 'var(--df-purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>{dropiCreado ? 'Dr' : 'Ef'}</div>
-                  <span style={{ fontWeight: 700, fontSize: 14 }}>Enviado por {dropiCreado ? 'Dropi' : 'Effi'}</span>
-                  {sel.transportadora && <span style={{ display: 'inline-block', background: 'var(--df-warning-subtle)', color: 'var(--df-warning)', borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>🚚 {sel.transportadora}</span>}
-                  <span style={{ display: 'inline-block', background: 'var(--df-brand-subtle)', color: 'var(--df-brand-dark)', borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>{dropiCreado ? 'En Dropi' : 'En WooCommerce'}</span>
-                  <div style={{ flex: 1 }} />
-                  <button onClick={sel.sincronizarEffi} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-purple)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Actualizar ahora</button>
-                </div>
-                <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>
-                  Estado en {dropiCreado ? 'Dropi' : 'Effi'}: <b style={{ color: 'var(--df-text-strong)' }}>{sel.estadoWoo || 'esperando que lo procesen…'}</b>
-                  <span style={{ display: 'block', color: 'var(--df-text-faint)', fontSize: 11.5, marginTop: 2 }}>Se actualiza solo cada pocos minutos. Cuando salga la guía, le avisamos al cliente por WhatsApp.</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                  {!dropiCreado && <button onClick={() => sel.reenviarDespacho('effi', '')} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-warning)', cursor: 'pointer', whiteSpace: 'nowrap' }}>↻ Volver a enviar</button>}
-                  <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-purple)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline' }}>Cambiar despacho / transportadora</button>
-                </div>
-                {sel.hasGuia && (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, minWidth: 140, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-strong)' }}>Guía {sel.guia}</div>
-                    <button onClick={() => df.copyGuia(sel.guia!)} className="df-copy-btn" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-strong)', cursor: 'pointer', whiteSpace: 'nowrap' }}>{df.guiaBtnLabel}</button>
-                    {sel.guiaUrl && <a href={sel.guiaUrl} target="_blank" rel="noreferrer" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-purple)', textDecoration: 'none', whiteSpace: 'nowrap' }}>Ver PDF</a>}
-                  </div>
-                )}
-              </>
-            ) : !df.dropiConectado && !effiDisponible ? (
-              <div style={{ color: 'var(--df-text-faint)', fontSize: 13 }}>Conecta <b>Dropi (API)</b> o <b>Effi</b> en <b>Integraciones</b> para despachar este pedido.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {redespachar && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Volver a despachar este pedido:</span>
-                    <button onClick={() => setRedespachar(false)} style={{ background: 'transparent', border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-text-muted)', cursor: 'pointer' }}>Cancelar</button>
-                  </div>
-                )}
-                {df.dropiConectado && (
-                  <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <img src="/logos/dropi.jpg" alt="Dropi" style={{ width: 22, height: 22, borderRadius: 6, objectFit: 'cover' }} />
-                      Despachar por Dropi
-                    </div>
-                    <DropiDespacho df={df} sel={sel} onHecho={() => setRedespachar(false)} />
-                  </div>
-                )}
-                {effiDisponible && (
-                  <div style={{ borderTop: df.dropiConectado ? '1px solid var(--df-border)' : 'none', paddingTop: df.dropiConectado ? 12 : 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <img src="/logos/effi.png" alt="Effi" style={{ height: 18, width: 'auto', display: 'block' }} />
-                      Despachar por Effi
-                    </div>
-                    {/* En Effi NO se elige transportadora ni recaudo: solo llega la remisión
-                        de venta. La guía (y con/sin recaudo) se define después dentro de Effi. */}
-                    <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginBottom: 8, lineHeight: 1.45 }}>Se envía la <b>remisión de venta</b> a Effi. La guía y el recaudo los defines después dentro de Effi con la transportadora que elijas.</div>
-                    <button onClick={() => { sel.despachar('effi'); setRedespachar(false); }} style={{ width: '100%', background: 'var(--df-purple)', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' }}>Generar remisión en Effi</button>
-                    {df.effiMsg && <div style={{ marginTop: 10, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
-                  </div>
-                )}
-              </div>
-            )}
-            {sel.despachado && df.effiMsg && <div style={{ marginTop: 10, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
-            {/* Diagnóstico de Effi: SOLO para el equipo DealFlow (admin o soporte
-                impersonando una tienda), no para el cliente dueño de la tienda. */}
-            {effiDisponible && (df.sessionUser?.role === 'admin' || df.sessionUser?.role === 'superadmin' || !!df.sessionUser?.impersonando) && <EffiLogPedido pedidoId={sel.id} />}
-          </div>
+          <DespachoPedido df={df} sel={sel} />
 
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 10 }}>Avance</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>

@@ -874,6 +874,13 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   // a mano desde el detalle del pedido.
   void (async () => {
     try {
+      // Effi por API directa (si la tienda lo configuró con auto-despacho): remisión sin WooCommerce.
+      const ef = await import('./effiApi.js');
+      if (ef.effiApiListo(storeId) && ef.cfgEffi(storeId)?.autoDespacho) {
+        const re = await ef.despacharEffi(storeId, oid);
+        if ('error' in re) console.warn(`[effi] pedido DF-${numero} NO se envió: ${re.error}`);
+        return;
+      }
       const woo = await import('./woocommerce.js');
       // Auto-despacho SIN botón: el proveedor preferido de la tienda (aunque haya dos
       // conectados) o, si no hay preferido, el único conectado. Con dos y sin preferido,

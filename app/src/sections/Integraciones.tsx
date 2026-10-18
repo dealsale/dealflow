@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { EffiApiCard } from '../components/EffiApiCard';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 
@@ -354,7 +355,8 @@ export function Integraciones({ df }: { df: DealFlowState }) {
             </div>
             <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, alignItems: 'start' }}>
               {g.id === 'canales' && <MetaCanalesCard df={df} />}
-              {g.id === 'envios' && <EffiNativoCard df={df} />}
+              {/* Método anterior (DealFlow como tienda WooCommerce): solo si sigue activo. */}
+              {g.id === 'envios' && df.effiWoo.activo && <EffiNativoCard df={df} />}
               {items.map((i) => {
                 if (i.especial === 'meta-ads') return <MetaAdsCard key={i.id} df={df} i={i} />;
                 const abiertaEsta = abierta === i.id;
@@ -435,6 +437,9 @@ export function Integraciones({ df }: { df: DealFlowState }) {
           </div>
         );
       })}
+
+      {/* Effi por API directa: remisión (+ guía) y webhooks, sin WooCommerce. */}
+      <EffiApiCard df={df} />
 
       {/* Dropi por API directa (transportadoras + guía sin usar WooCommerce). */}
       <DropiApiCard df={df} />

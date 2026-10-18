@@ -32,6 +32,8 @@ export interface Order {
   despachoProveedor?: string;
   /** último estado leído del WooCommerce del proveedor (Effi/Dropi) */
   estadoWoo?: string;
+  /** remisión de venta creada en Effi por API (ej. PPAL-270) */
+  effiRemision?: string;
   envio: number;
   nota: string;
   /** Total del pedido acordado por el asistente (si no hay precios por ítem) */
