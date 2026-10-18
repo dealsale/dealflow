@@ -1,3 +1,4 @@
+import { OrigenBadge } from '../components/OrigenPedido';
 import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
@@ -195,6 +196,7 @@ export function Resumen({ df }: { df: DealFlowState }) {
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}
             >
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'var(--df-text-muted)' }}>{o.id}</span>
+              <OrigenBadge origen={o.origen} size={16} />
               <span style={{ fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.cliente}</span>
               <span style={{ fontSize: 13, fontWeight: 700 }}>{o.totalFmt}</span>
               <span style={o.pillStyle}>{o.estado}</span>

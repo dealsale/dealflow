@@ -1,3 +1,4 @@
+import { OrigenBadge } from './OrigenPedido';
 import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
@@ -494,6 +495,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
           <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, fontWeight: 600 }}>{sel.id}</span>
           <span style={sel.pillStyle}>{sel.estado}</span>
           <div style={{ flex: 1 }} />
+          <OrigenBadge origen={sel.origen} texto />
           <span onClick={df.closeOrder} className="df-close-hover" style={{ color: 'var(--df-text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}>
             ✕
           </span>

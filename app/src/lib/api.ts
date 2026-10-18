@@ -318,6 +318,7 @@ export interface ApiOrder {
   despachoProveedor?: string;
   estadoWoo?: string;
   effiRemision?: string;
+  origen?: string;
   envio: number;
   nota: string;
   total: number;

@@ -853,9 +853,10 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 1048) + 1;
   const oid = uid();
   // Atribución exacta: copiamos el anuncio del que vino este chat al pedido.
-  const adLead = db.prepare('SELECT ad_id, ad_ref FROM leads WHERE id = ?').get(lead.id) as { ad_id: string; ad_ref: string } | undefined;
-  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, ad_id, ad_ref, lead_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(oid, storeId, numero, cliente, ciudad, tel, direccion, 'Nuevo', total, departamento, adLead?.ad_id || '', adLead?.ad_ref || '', lead.id);
+  const adLead = db.prepare('SELECT ad_id, ad_ref, canal FROM leads WHERE id = ?').get(lead.id) as { ad_id: string; ad_ref: string; canal: string } | undefined;
+  const origen = ['messenger', 'instagram', 'web'].includes(adLead?.canal || '') ? adLead!.canal : 'whatsapp';
+  db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, ad_id, ad_ref, lead_id, origen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(oid, storeId, numero, cliente, ciudad, tel, direccion, 'Nuevo', total, departamento, adLead?.ad_id || '', adLead?.ad_ref || '', lead.id, origen);
   for (const it of items) {
     db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   }
