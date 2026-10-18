@@ -1298,9 +1298,27 @@ api.get('/effi-api/articulos', requireAuth, requireStore, requireOwner, async (r
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
   const arts = ef.articulosCache(sid);
-  const variantes = (db.prepare("SELECT v.id, p.nombre producto, v.label, COALESCE(json_extract(v.refs,'$.effi_id'),'') effi_id FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? ORDER BY p.nombre, v.label").all(sid) as { id: string; producto: string; label: string; effi_id: string }[])
-    .map((v) => ({ variantId: v.id, nombre: v.label && v.label.toLowerCase() !== 'única' ? `${v.producto} (${v.label})` : v.producto, effiId: String(v.effi_id || '') }));
-  res.json({ articulos: arts, variantes });
+  const variantes = (db.prepare("SELECT v.id, p.id pid, p.nombre producto, v.label, COALESCE(p.despacho_proveedor,'') proveedor, COALESCE(json_extract(v.refs,'$.effi_id'),'') effi_id FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? ORDER BY p.nombre, v.label").all(sid) as { id: string; pid: string; producto: string; label: string; proveedor: string; effi_id: string }[])
+    .map((v) => ({ variantId: v.id, productId: v.pid, producto: v.producto, proveedor: v.proveedor, nombre: v.label && v.label.toLowerCase() !== 'única' ? `${v.producto} (${v.label})` : v.producto, effiId: String(v.effi_id || '') }));
+  // El nombre del artículo vinculado (aunque no esté en la caché), para mostrarlo.
+  const nombres: Record<string, string> = {};
+  for (const a of arts) nombres[a.id] = a.descripcion + (a.referencia ? ` [${a.referencia}]` : '');
+  res.json({ articulos: arts, variantes, nombres });
+});
+api.get('/effi-api/articulos/buscar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const r = await ef.buscarArticulosEffi(req.user!.storeId!, String(req.query.q || ''));
+  if (!Array.isArray(r)) return res.status(400).json({ error: r.error });
+  res.json({ articulos: r });
+});
+// Marca por quién se despacha un producto (effi | dropi | '').
+api.post('/effi-api/producto-proveedor', requireAuth, requireStore, requireOwner, (req, res) => {
+  const dp = req.body?.proveedor === 'dropi' || req.body?.proveedor === 'effi' ? req.body.proveedor : '';
+  const ids: string[] = Array.isArray(req.body?.productIds) ? req.body.productIds.map(String) : [String(req.body?.productId || '')];
+  const upd = db.prepare('UPDATE products SET despacho_proveedor = ? WHERE id = ? AND store_id = ?');
+  let n = 0;
+  for (const id of ids) n += upd.run(dp, id, req.user!.storeId!).changes;
+  res.json({ ok: true, actualizados: n });
 });
 api.post('/effi-api/articulos/vincular', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
