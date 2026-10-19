@@ -249,7 +249,7 @@ export function Login({ df }: { df: DealFlowState }) {
       style={{
         minHeight: '100%', height: '100%', display: 'flex', position: 'relative', overflow: 'auto',
         background: `radial-gradient(900px circle at 12% 8%, rgba(37,99,235,.22), transparent 55%), radial-gradient(800px circle at 90% 90%, rgba(139,92,246,.2), transparent 55%), radial-gradient(600px circle at 70% 10%, rgba(16,185,129,.12), transparent 55%), ${C.bg}`,
-        fontFamily: "'Inter',system-ui,sans-serif", color: C.text, colorScheme: 'dark',
+        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", color: C.text, colorScheme: 'dark',
       }}
     >
       {/* Idioma de la interfaz (antes de entrar no hay menú de perfil). */}
