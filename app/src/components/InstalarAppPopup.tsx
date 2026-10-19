@@ -17,7 +17,7 @@ export function esIOS(): boolean {
 const CSS = `
 @keyframes dfInsIn { from { opacity:0; transform: translateY(28px) scale(.97) } to { opacity:1; transform:none } }
 @keyframes dfInsSpin { to { transform: rotate(360deg) } }
-.df-ins { position: fixed; right: 22px; bottom: 22px; z-index: 1200; width: 370px; max-width: calc(100vw - 24px); border-radius: 22px; padding: 1.5px; overflow: hidden; animation: dfInsIn .5s cubic-bezier(.2,.8,.2,1) both; box-shadow: 0 30px 80px -20px rgba(0,0,0,.7); font-family: 'Inter', system-ui, sans-serif; }
+.df-ins { position: fixed; right: 22px; bottom: 22px; z-index: 1200; width: 370px; max-width: calc(100vw - 24px); border-radius: 22px; padding: 1.5px; overflow: hidden; animation: dfInsIn .5s cubic-bezier(.2,.8,.2,1) both; box-shadow: 0 30px 80px -20px rgba(0,0,0,.7); font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
 .df-ins::before { content:""; position:absolute; inset:-60%; background: conic-gradient(from 0deg, transparent 0 60%, #46D8FF 72%, #7658FF 82%, #34D399 90%, transparent 96%); animation: dfInsSpin 6s linear infinite; }
 .df-ins-in { position: relative; border-radius: 21px; background: linear-gradient(160deg, rgba(14,19,42,.98), rgba(8,11,28,.99)); padding: 20px 20px 18px; color: #EEF3FF; }
 .df-ins-x { position:absolute; top:12px; right:12px; width:28px; height:28px; border-radius:9px; border:1px solid rgba(134,154,255,.2); background: rgba(255,255,255,.03); color:#9AA8C9; cursor:pointer; display:grid; place-items:center; font-size:13px; }

@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="/icon-192.png">
+</head>
+<body>
+<title>Tutoriales DealFlow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: riel de tutoriales a la izquierda + escenario con el panel simulado y la guía paso a paso. */
+:root {
+  --bg: #F4F6FA;
+  --surface: #FFFFFF;
+  --surface-2: #EEF2F7;
+  --line: #DDE3EC;
+  --ink: #0F172A;
+  --ink-2: #334155;
+  --muted: #64748B;
+  --brand: #059669;
+  --brand-ink: #047857;
+  --brand-soft: #D1FAE5;
+  --accent: #6D5DF6;
+  --accent-soft: #ECEAFE;
+  --halo: rgba(5, 150, 105, .55);
+  --shadow: 0 10px 30px -14px rgba(15, 23, 42, .35);
+  --f-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-titulo: 'Sora', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --f-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0A0F1C; --surface: #121A2E; --surface-2: #19223A; --line: #26314D; --ink: #F1F5FF; --ink-2: #CBD5E8; --muted: #8E9BB8;
+    --brand: #1FD8A8; --brand-ink: #4DF0C4; --brand-soft: rgba(31, 216, 168, .14); --accent: #A49BFF; --accent-soft: rgba(164, 155, 255, .14);
+    --halo: rgba(31, 216, 168, .6); --shadow: 0 12px 34px -14px rgba(0, 0, 0, .7); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0A0F1C; --surface: #121A2E; --surface-2: #19223A; --line: #26314D; --ink: #F1F5FF; --ink-2: #CBD5E8; --muted: #8E9BB8;
+  --brand: #1FD8A8; --brand-ink: #4DF0C4; --brand-soft: rgba(31, 216, 168, .14); --accent: #A49BFF; --accent-soft: rgba(164, 155, 255, .14);
+  --halo: rgba(31, 216, 168, .6); --shadow: 0 12px 34px -14px rgba(0, 0, 0, .7); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 14px; line-height: 1.5; }
+button { font-family: inherit; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.top { display: flex; align-items: center; gap: 12px; padding-block: 14px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); background: var(--surface); }
+.marca { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 16px; letter-spacing: -.01em; }
+.marca i { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, #10B981, #2563EB); display: grid; place-items: center; color: #fff; font-style: normal; font-size: 15px; }
+.marca small { font-weight: 600; color: var(--muted); font-size: 13px; }
+.top .esp { flex: 1; }
+.volver { color: var(--brand-ink); font-weight: 700; text-decoration: none; font-size: 13px; border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px; background: var(--surface); }
+.avance-global { font-size: 12.5px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+
+.app { display: grid; grid-template-columns: 290px minmax(0, 1fr); min-height: calc(100vh - 60px); }
+.riel { border-right: 1px solid var(--line); background: var(--surface); padding: 16px 12px 30px; overflow-y: auto; }
+.riel h3 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 18px 10px 6px; }
+.riel h3:first-child { margin-top: 4px; }
+.tuto-btn { width: 100%; display: flex; gap: 10px; align-items: flex-start; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 10px; padding: 9px 10px; cursor: pointer; color: var(--ink); }
+.tuto-btn:hover { background: var(--surface-2); }
+.tuto-btn[aria-current="true"] { background: var(--brand-soft); border-color: color-mix(in srgb, var(--brand) 40%, transparent); }
+.tuto-btn .ic { width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0; display: grid; place-items: center; background: var(--surface-2); font-size: 14px; }
+.tuto-btn b { display: block; font-size: 13.5px; font-weight: 700; line-height: 1.3; }
+.tuto-btn span.m { font-size: 11.5px; color: var(--muted); }
+.tuto-btn .ok { margin-left: auto; color: var(--brand); font-weight: 800; font-size: 13px; }
+
+.zona { padding-block: 22px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); min-width: 0; }
+.zona-in { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.cabeza { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 18px; }
+.cabeza .eyebrow { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 800; }
+.cabeza h1 { font-family: var(--f-titulo); margin: 2px 0 0; font-size: 26px; letter-spacing: -.02em; line-height: 1.15; text-wrap: balance; }
+.cabeza p { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
+.cabeza .esp { flex: 1; }
+.pasos-mini { display: flex; gap: 5px; align-items: center; }
+.pasos-mini i { width: 22px; height: 6px; border-radius: 4px; background: var(--line); }
+.pasos-mini i.hecho { background: var(--brand); }
+.pasos-mini i.ahora { background: var(--accent); }
+
+.guia { display: flex; gap: 14px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow); flex-wrap: wrap; }
+.guia .num { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 800; display: grid; place-items: center; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.guia .txt { flex: 1 1 320px; min-width: 0; }
+.guia .txt > b { display: block; font-size: 15px; }
+.guia .txt span b { color: var(--ink); }
+.guia .txt span { color: var(--ink-2); font-size: 13.5px; }
+.guia .hint { font-size: 12px; color: var(--muted); }
+.btn { border-radius: 9px; padding: 9px 15px; font-weight: 700; font-size: 13px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.btn.pri { background: var(--brand); border-color: var(--brand); color: #fff; }
+:root[data-theme="dark"] .btn.pri { color: #04231A; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.pri { color: #04231A; } }
+.btn:disabled { opacity: .45; cursor: default; }
+
+/* Escenario: el panel simulado se dibuja a 1180×720 y se escala al ancho disponible. */
+.escenario { position: relative; width: 100%; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); background: #F8FAFC; }
+.lienzo { position: absolute; top: 0; left: 0; width: 1180px; height: 720px; transform-origin: 0 0; }
+.foco { position: absolute; border-radius: 10px; pointer-events: none; box-shadow: 0 0 0 3px #10B981, 0 0 0 9999px rgba(15, 23, 42, .42); transition: all .35s cubic-bezier(.2, .8, .2, 1); z-index: 40; }
+.foco::after { content: ''; position: absolute; inset: -8px; border-radius: 14px; border: 2px solid #10B981; animation: pulso 1.6s ease-out infinite; }
+@keyframes pulso { from { opacity: .9; transform: scale(.96); } to { opacity: 0; transform: scale(1.12); } }
+.burbuja { position: absolute; z-index: 41; width: 280px; background: #0F172A; color: #F8FAFC; border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.45; box-shadow: 0 14px 34px -10px rgba(0, 0, 0, .55); transition: all .35s cubic-bezier(.2, .8, .2, 1); }
+.burbuja b { color: #6EE7B7; }
+.burbuja .mano { display: block; margin-top: 6px; font-size: 12px; color: #A7B4CC; }
+.final { position: absolute; inset: 0; z-index: 45; display: grid; place-items: center; background: rgba(15, 23, 42, .55); }
+.final .caja { background: #fff; color: #0F172A; border-radius: 18px; padding: 30px 34px; width: 520px; text-align: center; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .5); }
+.final .caja .sello { width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 12px; background: #D1FAE5; color: #047857; display: grid; place-items: center; font-size: 30px; }
+.final .caja h2 { font-family: var(--f-titulo); margin: 0 0 6px; font-size: 24px; letter-spacing: -.02em; }
+.final .caja p { margin: 0 0 16px; color: #475569; font-size: 15px; }
+.final .caja ul { text-align: left; margin: 0 0 20px; padding-left: 20px; color: #334155; font-size: 14px; }
+.final .caja .fila { display: flex; gap: 10px; justify-content: center; }
+.final .caja button { border-radius: 10px; padding: 11px 18px; font-weight: 700; font-size: 14px; cursor: pointer; border: 1px solid #CBD5E1; background: #fff; color: #0F172A; }
+.final .caja button.pri { background: #059669; border-color: #059669; color: #fff; }
+
+/* ───── Panel simulado (siempre el tema claro de DealFlow) ───── */
+.df { position: absolute; inset: 0; display: flex; font-family: var(--f-ui); color: #0F172A; background: #F8FAFC; font-size: 14px; }
+.df-side { width: 220px; background: #0F172A; color: #CBD5E1; padding: 18px 12px; display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
+.df-logo { display: flex; align-items: center; gap: 9px; color: #fff; font-weight: 800; font-size: 17px; margin: 0 6px 16px; }
+.df-logo i { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, #10B981, #2563EB); display: grid; place-items: center; font-style: normal; font-size: 14px; }
+.df-nav { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 9px; font-size: 14px; color: #94A3B8; }
+.df-nav.on { background: #065F46; color: #fff; font-weight: 700; }
+.df-nav .badge { margin-left: auto; background: #F59E0B; color: #fff; border-radius: 999px; font-size: 11px; font-weight: 800; padding: 0 7px; }
+.df-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.df-head { height: 56px; background: #fff; border-bottom: 1px solid #E2E8F0; display: flex; align-items: center; gap: 12px; padding: 0 24px; flex-shrink: 0; }
+.df-head .tienda { font-weight: 800; font-size: 15px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pill.ok { background: #D1FAE5; color: #047857; }
+.pill.no { background: #FEE2E2; color: #B91C1C; }
+.df-head .esp { flex: 1; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: #059669; color: #fff; font-weight: 800; display: grid; place-items: center; }
+.perfil { display: flex; align-items: center; gap: 9px; padding: 4px 8px; border-radius: 10px; }
+.perfil b { display: block; font-size: 13px; }
+.perfil small { color: #64748B; font-size: 11.5px; }
+.df-body { flex: 1; overflow: hidden; padding: 22px 26px; position: relative; }
+.h1 { font-family: var(--f-titulo); font-size: 21px; font-weight: 800; letter-spacing: -.02em; margin: 0; }
+.sub { color: #64748B; font-size: 13.5px; margin: 3px 0 0; }
+.fila { display: flex; align-items: center; gap: 10px; }
+.esp { flex: 1; }
+.b { border-radius: 8px; padding: 8px 14px; font-weight: 700; font-size: 13px; border: 1px solid #E2E8F0; background: #fff; color: #0F172A; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.b.v { background: #059669; border-color: #059669; color: #fff; }
+.b.m { background: #6D28D9; border-color: #6D28D9; color: #fff; }
+.b.n { background: #C2410C; border-color: #C2410C; color: #fff; }
+.card { background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; }
+.inp { border: 1px solid #CBD5E1; border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #fff; color: #0F172A; min-height: 36px; display: flex; align-items: center; }
+.inp.ph { color: #94A3B8; }
+.lbl { font-size: 11.5px; font-weight: 700; color: #64748B; margin-bottom: 4px; }
+.th { font-size: 11px; font-weight: 800; color: #64748B; letter-spacing: .05em; text-transform: uppercase; }
+.mono { font-family: var(--f-mono); }
+.chip { display: inline-flex; align-items: center; border-radius: 6px; padding: 2px 8px; font-size: 11.5px; font-weight: 700; }
+.e-nuevo { background: #DBEAFE; color: #1D4ED8; } .e-conf { background: #EDE9FE; color: #6D28D9; } .e-guia { background: #FEF3C7; color: #B45309; }
+.e-trans { background: #CFFAFE; color: #0E7490; } .e-rep { background: #DBEAFE; color: #1D4ED8; } .e-nov { background: #FFEDD5; color: #C2410C; } .e-ent { background: #D1FAE5; color: #047857; }
+.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 430px; background: #fff; border-left: 1px solid #E2E8F0; box-shadow: -18px 0 40px -20px rgba(15, 23, 42, .35); display: flex; flex-direction: column; z-index: 5; }
+.drawer .dh { padding: 14px 18px; border-bottom: 1px solid #E2E8F0; display: flex; align-items: center; gap: 10px; }
+.drawer .db { padding: 12px 18px; overflow: hidden; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.drawer .df2 { padding: 12px 18px; border-top: 1px solid #E2E8F0; display: flex; gap: 8px; align-items: center; }
+.velo { position: absolute; inset: 0; background: rgba(15, 23, 42, .25); z-index: 4; }
+.modal { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 560px; background: #fff; border-radius: 16px; box-shadow: 0 30px 60px -20px rgba(15, 23, 42, .45); padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.tog { width: 36px; height: 20px; border-radius: 999px; background: #CBD5E1; position: relative; flex-shrink: 0; }
+.tog::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .2s; }
+.tog.on { background: #059669; } .tog.on::after { left: 18px; }
+.burb { max-width: 70%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; }
+.burb.c { background: #fff; border: 1px solid #E2E8F0; align-self: flex-start; }
+.burb.y { background: #D1FAE5; align-self: flex-end; }
+.burb.v { background: #EDE9FE; align-self: flex-end; }
+.tipeando::after { content: '|'; animation: blink 1s steps(1) infinite; color: #059669; margin-left: 1px; }
+@keyframes blink { 50% { opacity: 0; } }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .riel { border-right: 0; border-bottom: 1px solid var(--line); max-height: none; display: flex; gap: 6px; overflow-x: auto; padding: 10px 12px; }
+  .riel h3 { display: none; }
+  .tuto-btn { width: auto; flex-shrink: 0; }
+  .tuto-btn span.m { display: none; }
+  .burbuja { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .foco, .burbuja { transition: none; } .foco::after, .tipeando::after { animation: none; } }
+</style>
+
+<header class="top">
+  <div class="marca"><i>✦</i> DealFlow <small>Tutoriales</small></div>
+  <div class="esp"></div>
+  <span class="avance-global" id="avanceGlobal"></span>
+  <a class="volver" id="volver" href="/" hidden>← Volver al panel</a>
+</header>
+
+<div class="app">
+  <nav class="riel" id="riel" aria-label="Tutoriales"></nav>
+  <main class="zona">
+    <div class="zona-in">
+      <div class="cabeza">
+        <div>
+          <div class="eyebrow" id="grupo"></div>
+          <h1 id="titulo"></h1>
+          <p id="resumen"></p>
+        </div>
+        <div class="esp"></div>
+        <div class="pasos-mini" id="pasosMini" aria-hidden="true"></div>
+      </div>
+      <div class="guia" aria-live="polite">
+        <div class="num" id="num">1</div>
+        <div class="txt"><b id="pasoTitulo"></b><span id="pasoTexto"></span><div class="hint" id="pasoHint"></div></div>
+        <button class="btn" id="ant" type="button">← Anterior</button>
+        <button class="btn pri" id="sig" type="button">Siguiente →</button>
+      </div>
+      <div class="escenario" id="escenario">
+        <div class="lienzo" id="lienzo"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  // ───────── Piezas del panel simulado ─────────
+  const NAV = [['resumen', '▦', 'Resumen'], ['productos', '◇', 'Productos'], ['asistente', '☺', 'Asistente'], ['whatsapp', '◌', 'WhatsApp'], ['pedidos', '▣', 'Pedidos'], ['leads', '☷', 'Leads'], ['inbox', '✉', 'Inbox'], ['integraciones', '⚡', 'Integraciones'], ['tutoriales', '🎓', 'Tutoriales']];
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const campo = (t, lbl, val, ph) => `<div><div class="lbl">${lbl}</div><div class="inp ${val ? '' : 'ph'}" data-t="${t}">${val ? esc(val) : esc(ph || '')}</div></div>`;
+  const tog = (on, t) => `<span class="tog ${on ? 'on' : ''}" ${t ? `data-t="${t}"` : ''}></span>`;
+
+  function shell(sec, cuerpo, st) {
+    const nav = NAV.map(([id, ic, l]) => `<div class="df-nav ${id === sec ? 'on' : ''}" data-t="nav-${id}"><span>${ic}</span>${l}${id === 'pedidos' && st.novedad ? '<span class="badge">1</span>' : ''}</div>`).join('');
+    const wa = st.waConectado === false ? '<span class="pill no">● WhatsApp desconectado</span>' : '<span class="pill ok">● WhatsApp conectado</span>';
+    return `<div class="df">
+      <aside class="df-side"><div class="df-logo"><i>✦</i>DealFlow</div>${nav}</aside>
+      <div class="df-main">
+        <div class="df-head"><span class="tienda">Luna Accesorios ▾</span>${wa}<span class="esp"></span>
+          <div class="perfil" data-t="perfil"><span class="avatar">K</span><div><b>Karla</b><small>${st.en ? 'Store owner' : 'Dueña de la tienda'}</small></div><span style="color:#94A3B8">▾</span></div></div>
+        <div class="df-body">${cuerpo}</div>
+      </div></div>`;
+  }
+
+  const PEDIDOS = [
+    { n: 'DF-1131', c: 'Ana Martínez', ci: 'Pore · Casanare', p: '1× Vestido Layla (Talla M · Azul rey)', t: '$129.900', tr: 'Interrapidísimo', g: '240063774164', e: ['Guía generada', 'e-guia'] },
+    { n: 'DF-1130', c: 'Sofía Ramírez', ci: 'Cali · Valle', p: '3× Jogger jaspeado', t: '$146.700', tr: 'Servientrega', g: '99887766', e: ['Novedad', 'e-nov'] },
+    { n: 'DF-1129', c: 'María Bermúdez', ci: 'Villavicencio · Meta', p: '1× Vestido Layla (Talla L · Azul rey)', t: '$129.900', tr: 'Envía', g: '014164737678', e: ['En tránsito', 'e-trans'] },
+    { n: 'DF-1128', c: 'Georgina Marriaga', ci: 'Barranquilla · Atlántico', p: '2× Vestido Layla (Talla 2XL)', t: '$259.900', tr: 'Envía', g: '014164738853', e: ['En reparto', 'e-rep'] },
+    { n: 'DF-1127', c: 'María Castro', ci: 'Cali · Valle', p: '1× Vestido Layla (Talla M · Blanco)', t: '$129.900', tr: 'Envía', g: '014164737464', e: ['Entregado', 'e-ent'] },
+  ];
+
+  function vPedidos(st) {
+    const nuevo = st.pedidoCreado ? [{ n: 'DF-1132', c: 'Laura Gómez', ci: 'Medellín · Antioquia', p: '1× Vestido Layla (Talla S · Negro)', t: '$129.900', tr: '', g: '', e: [st.pedEstado || 'Nuevo', st.pedEstado === 'Confirmado' ? 'e-conf' : 'e-nuevo'] }] : [];
+    const filas = [...nuevo, ...PEDIDOS].filter((o) => !st.filtroGuia || o.g).map((o) => `
+      <div data-t="row-${o.n}" style="display:grid;grid-template-columns:120px 1.2fr 1.5fr 92px 1.2fr 128px;gap:12px;align-items:center;padding:11px 16px;border-top:1px solid #E2E8F0">
+        <div><div class="mono" style="font-weight:700;font-size:12.5px">${o.n}</div><div style="font-size:11px;color:#64748B">Hoy · 09:4${o.n.slice(-1)}</div></div>
+        <div><div style="font-weight:700">${o.c}</div><div style="font-size:11.5px;color:#64748B">${o.ci}</div></div>
+        <div style="font-size:12.5px;color:#334155">${o.p}</div>
+        <div style="font-weight:800;text-align:right">${o.t}</div>
+        <div style="font-size:12px">${o.g ? `<span class="chip" style="background:#EDE9FE;color:#6D28D9;font-size:10.5px">Effi</span> <b>${o.tr}</b><div class="mono" style="font-size:11px;color:#475569;margin-top:2px">${o.g}</div>` : '<span style="color:#94A3B8">Sin despachar</span>'}</div>
+        <div ${o.n === 'DF-1129' ? 'data-t="col-estado"' : ''}><span class="pill ${o.e[1]}">${o.e[0]}</span></div>
+      </div>`).join('');
+    const banner = st.novedad ? `<div data-t="nov-banner" class="card" style="background:#FFF7ED;border-color:#FDBA74;padding:10px 14px;margin-bottom:12px" >
+        <div class="fila"><b style="color:#9A3412">⚠️ 1 novedad por resolver</b><span style="font-size:12px;color:#9A3412">Resuélvela antes de que la transportadora devuelva el pedido.</span><span class="esp"></span><span class="b">↻ Revisar en Effi</span></div>
+        <div class="fila" data-t="nov-fila" style="margin-top:8px;border-top:1px solid #FED7AA;padding-top:8px;font-size:12.5px"><b class="mono">DF-1130</b><b>Sofía Ramírez</b><span>Cliente ausente · Servientrega</span><span class="esp"></span><b style="color:#C2410C">Esperando respuesta del cliente</b><b style="color:#B91C1C">hace 1 día</b></div></div>` : '';
+    const filtros = st.filtrosAbiertos ? `<div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="lbl" style="margin:0">Estado</span>${['Nuevo', 'Guía generada', 'En tránsito', 'Novedad', 'Entregado'].map((x) => `<span class="chip" style="background:#F1F5F9;color:#334155">${x}</span>`).join('')}<span class="lbl" style="margin:0 0 0 10px">Guía</span><span class="chip" data-t="f-guia" style="background:${st.filtroGuia ? '#059669' : '#F1F5F9'};color:${st.filtroGuia ? '#fff' : '#334155'}">Con guía</span><span class="chip" style="background:#F1F5F9;color:#334155">Sin guía</span></div>` : '';
+    return `<div class="fila"><div><p class="h1">Pedidos</p><p class="sub">Filtra, ordena y toca un pedido para ver el detalle.</p></div><span class="esp"></span>
+        <span class="b v" data-t="ped-crear">＋ Crear pedido</span><span class="b" data-t="ped-export">⬇ Exportar ${st.filtroGuia ? 5 : 6} a Excel</span></div>
+      <div class="fila" style="margin:14px 0 12px"><div class="inp ph" style="width:300px">🔍 Cliente, teléfono, número o guía…</div><span class="b" data-t="ped-filtros">☰ Filtros ${st.filtroGuia ? '(1)' : ''}</span><span class="esp"></span><span style="font-size:12.5px;color:#64748B;font-weight:600">Ordenar</span><div class="inp" style="width:160px">Más recientes ▾</div></div>
+      ${filtros}${banner}
+      <div class="card" style="overflow:hidden">
+        <div style="display:grid;grid-template-columns:120px 1.2fr 1.5fr 92px 1.2fr 128px;gap:12px;padding:10px 16px;background:#F1F5F9"><span class="th">Pedido</span><span class="th">Cliente</span><span class="th">Productos</span><span class="th" style="text-align:right">Total</span><span class="th">Despacho</span><span class="th">Estado guía</span></div>
+        ${filas}
+      </div>`;
+  }
+
+  function vCrearPedido(st) {
+    return vPedidos(st) + `<div class="velo"></div><div class="modal">
+      <div class="fila"><b style="font-size:17px">Crear pedido</b><span class="esp"></span><span style="color:#94A3B8">✕</span></div>
+      <div class="g2">${campo('cp-cliente', 'Cliente', st.cpCliente, 'Nombre y apellido')}${campo('cp-tel', 'Celular', st.cpTel, '300 000 0000')}</div>
+      <div class="g2">${campo('cp-ciudad', 'Ciudad', st.cpCiudad, 'Ciudad')}${campo('cp-dir', 'Dirección', st.cpDir, 'Dirección con punto de referencia')}</div>
+      <div><div class="lbl">Productos</div><div class="fila"><div class="inp ${st.cpProd ? '' : 'ph'}" data-t="cp-prod" style="flex:1">${st.cpProd ? 'Vestido Layla · Talla S · Negro' : 'Busca un producto…'}</div><div class="inp" style="width:70px">1</div><div class="inp" style="width:110px">${st.cpProd ? '$129.900' : '$0'}</div></div></div>
+      <div class="fila" style="border-top:1px solid #E2E8F0;padding-top:12px"><span style="color:#64748B">Total</span><b style="font-size:18px">${st.cpProd ? '$129.900' : '$0'}</b><span class="esp"></span><span class="b">Cancelar</span><span class="b v" data-t="cp-guardar">Guardar pedido</span></div></div>`;
+  }
+
+  function vDetalle(st) {
+    const o = st.detalleNov ? { n: 'DF-1130', c: 'Sofía Ramírez', dir: 'Av 6N # 25-30', ci: 'Cali', p: '3× Jogger jaspeado', t: '$146.700' } : { n: 'DF-1132', c: 'Laura Gómez', dir: 'Cl 10 # 43E-31', ci: 'Medellín', p: '1× Vestido Layla (Talla S · Negro)', t: '$129.900' };
+    let desp = '';
+    if (st.detalleNov) {
+      desp = `<div class="card" style="padding:12px;background:#FFF7ED;border-color:#FDBA74">
+        <b style="color:#9A3412">⚠️ Novedad: Cliente ausente</b><div style="font-size:12px;color:#64748B">Servientrega · hace 1 día · Pendiente de solución</div>
+        <div style="font-size:12px;font-weight:700;color:${st.novEnviada ? '#6D28D9' : '#C2410C'};margin-top:4px">${st.novEnviada ? 'Solución enviada · Pendiente de revisión' : st.novBot ? 'El cliente eligió: Volver a ofrecer (mañana) · falta enviarla' : 'Esperando respuesta del cliente (avisado por WhatsApp)'}</div>
+        ${st.novEnviada ? '' : `<div class="g3" style="margin-top:10px">
+          <div class="card" data-t="nov-ofrecer" style="padding:7px 9px;${st.novOp ? 'border:1.5px solid #C2410C;background:#FFEDD5' : ''}"><b style="font-size:12.5px">Volver a ofrecer</b><div style="font-size:10.5px;color:#64748B">Misma dirección, otro día</div></div>
+          <div class="card" style="padding:7px 9px"><b style="font-size:12.5px">Otra dirección</b><div style="font-size:10.5px;color:#64748B">En la misma ciudad</div></div>
+          <div class="card" style="padding:7px 9px"><b style="font-size:12.5px">Devolver</b><div style="font-size:10.5px;color:#64748B">Al remitente</div></div></div>
+          <div class="g2" style="margin-top:8px">${campo('nov-fecha', 'Fecha de entrega', st.novOp ? 'mañana · 21/10/2026' : '', 'dd/mm/aaaa')}${campo('', 'Quién recibe', 'Sofía Ramírez')}</div>
+          <div style="margin-top:8px"><span class="b n" data-t="nov-enviar">📤 Enviar solución a Effi</span></div>`}</div>`;
+    } else if (!st.enviadoEffi) {
+      desp = `<div class="g2"><div class="card" data-t="desp-effi" style="padding:10px 12px;${st.provEffi ? 'border:1.5px solid #6D28D9' : ''}"><b>Effi</b> ${st.provEffi ? '<span style="color:#6D28D9">●</span>' : ''}<div style="font-size:11.5px;color:#64748B">Remisión + guía</div></div><div class="card" style="padding:10px 12px"><b>Dropi</b><div style="font-size:11.5px;color:#64748B">API oficial</div></div></div>
+        ${st.provEffi ? `<div class="card" style="padding:10px 12px;font-size:12.5px;background:#F8FAFC"><b>Así va a Effi:</b><div>Vestido Layla (Talla S · Negro) → <span class="mono">LAYLA-S-NEG</span> ✓</div><div style="color:#64748B">Medellín, Antioquia · cédula = celular</div></div><span class="b m" data-t="desp-enviar" style="justify-content:center">Enviar a Effi</span>` : ''}`;
+    } else {
+      const pasos = ['Remisión creada', 'Guía generada', 'En camino', 'Entregado'];
+      const hechos = [true, !!st.guiaCreada, false, false];
+      desp = `<div class="card" style="padding:12px"><div class="fila"><b>Enviado a Effi</b><span class="chip" style="background:#EDE9FE;color:#6D28D9">🧾 PPAL-272</span>${st.guiaCreada ? '<span class="chip" style="background:#FEF3C7;color:#B45309">🚚 Interrapidísimo</span>' : ''}</div>
+        <div class="fila" style="margin:12px 0 4px;justify-content:space-between">${pasos.map((p, i) => `<div style="text-align:center;flex:1"><span style="display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:800;background:${hechos[i] ? '#6D28D9' : '#F1F5F9'};color:${hechos[i] ? '#fff' : '#94A3B8'}">${hechos[i] ? '✓' : i + 1}</span><div style="font-size:10.5px;font-weight:600;color:${hechos[i] ? '#0F172A' : '#94A3B8'}">${p}</div></div>`).join('')}</div>
+        ${st.guiaCreada ? `<div class="fila" style="margin-top:8px"><div class="inp mono" style="flex:1">Guía 240063774199</div><span class="b">Copiar</span></div>
+          <div style="margin-top:8px;border:1px solid #E2E8F0;border-radius:8px;height:58px;display:grid;place-items:center;background:#fff;color:#94A3B8;font-size:12px">[ imagen de la guía, derecha y recortada ]</div>
+          <div style="margin-top:8px"><span class="b v" data-t="guia-enviar">💬 Enviar guía al cliente</span> ${st.guiaAvisada ? '<span style="color:#047857;font-weight:700;font-size:12.5px">✓ Enviada al chat del cliente</span>' : ''}</div>`
+          : `<div class="g2" style="margin-top:8px">${campo('guia-transp', 'Transportadora', st.transp ? 'Interrapidísimo' : '', 'Elige…')}${campo('', 'Servicio', st.transp ? 'Paquete · Crédito' : '', 'Elige…')}</div><div style="margin-top:8px"><span class="b m" data-t="guia-crear">🚚 Crear guía</span></div>`}</div>`;
+    }
+    const estados = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Novedad', 'Entregado', 'Devuelto', 'Cancelado'];
+    const menu = st.menuEstado ? `<div class="card" style="position:absolute;bottom:58px;left:18px;width:220px;padding:4px;box-shadow:0 14px 30px -12px rgba(15,23,42,.35);z-index:3">${estados.map((e) => `<div ${e === 'Confirmado' ? 'data-t="estado-conf"' : ''} style="padding:6px 10px;border-radius:6px;font-size:13px">${e}</div>`).join('')}</div>` : '';
+    return vPedidos(st) + `<div class="drawer">
+      <div class="dh"><b class="mono">${o.n}</b><span class="pill ${st.detalleNov ? 'e-nov' : st.guiaCreada ? 'e-guia' : st.pedEstado === 'Confirmado' ? 'e-conf' : 'e-nuevo'}">${st.detalleNov ? 'Novedad' : st.guiaCreada ? 'Guía generada' : st.pedEstado || 'Nuevo'}</span><span class="esp"></span><span style="color:#94A3B8">✕</span></div>
+      <div class="db">
+        <div class="card" style="padding:10px 12px;font-size:13px;line-height:1.7"><b>${o.c}</b><div>${o.dir} · ${o.ci}</div><div style="color:#64748B">Contraentrega</div></div>
+        <div class="card" style="padding:10px 12px;font-size:13px">${o.p}<div class="fila" style="margin-top:6px"><b>Total</b><span class="esp"></span><b>${o.t}</b></div></div>
+        <div class="th">Despacho</div>${desp}
+      </div>
+      <div class="df2" style="position:relative">${menu}<div style="flex:1"><div class="lbl">Estado del pedido</div><div class="inp" data-t="det-estado">${st.detalleNov ? 'Novedad' : st.pedEstado || 'Nuevo'} ▾</div></div><span class="b">✏️ Editar</span><span class="b" style="color:#B91C1C">🗑</span></div>
+    </div>`;
+  }
+
+  function vIntegraciones(st) {
+    const filas = [['WhatsApp', 'Conectado por la API oficial de Meta', true], ['Effi', st.effiOk ? 'Conectado · remisiones y guías' : 'Remisiones, guías y novedades', !!st.effiOk], ['Dropi', 'API oficial', false], ['IA (DeepSeek / OpenAI)', 'Escribe, oye y ve', true]];
+    let detalle = '';
+    if (st.effiAbierto) {
+      detalle = `<div class="card" style="padding:16px;margin-top:12px;display:flex;flex-direction:column;gap:10px">
+        <b style="font-size:15px">Effi por API</b>
+        ${st.effiOk ? `<div class="g3">${campo('effi-suc', 'Sucursal', st.effiCfg ? 'Principal' : '', 'Elige…')}${campo('', 'Bodega', st.effiCfg ? 'Principal' : '', 'Elige…')}${campo('', 'Forma de pago', st.effiCfg ? 'Contraentrega' : '', 'Elige…')}</div>
+          <div class="g2">${campo('effi-conv', 'Convenio dropshipping (proveedor)', st.effiCfg ? 'LjlghlaP' : '', 'Código del convenio')}<div><div class="lbl">Novedades de envío</div><div class="fila" style="font-size:12.5px">${tog(true)}Avisar al cliente ${tog(true)} Bot resuelve</div></div></div>
+          <div><span class="b v" data-t="effi-guardar">Guardar configuración</span> ${st.effiGuardado ? '<span style="color:#047857;font-weight:700;font-size:12.5px">✓ Guardado · listo para despachar</span>' : ''}</div>`
+        : `<div style="font-size:12.5px;color:#64748B">Effi → Administración → Usuarios → Ver más → copia la API key.</div><div class="fila">${campo('effi-key', 'API key de Effi', st.effiKey ? '••••••••••••••••••••••••••••a91f' : '', 'Pega aquí la API key')}<span class="esp"></span></div><div><span class="b m" data-t="effi-conectar">Conectar Effi</span></div>`}
+      </div>`;
+    }
+    return `<p class="h1">Integraciones</p><p class="sub">Conecta tus canales, la IA y tus despachos.</p>
+      <div class="card" style="margin-top:14px;overflow:hidden">${filas.map(([n, d, ok], i) => `<div class="fila" ${n === 'Effi' ? 'data-t="int-effi"' : ''} style="padding:13px 16px;${i ? 'border-top:1px solid #E2E8F0' : ''}"><span style="width:34px;height:34px;border-radius:9px;background:#F1F5F9;display:grid;place-items:center;font-weight:800">${n[0]}</span><div><b>${n}</b><div style="font-size:12px;color:#64748B">${d}</div></div><span class="esp"></span><span class="pill ${ok ? 'ok' : ''}" style="${ok ? '' : 'background:#F1F5F9;color:#64748B'}">${ok ? 'Conectado' : 'Sin conectar'}</span><span class="b">${n === 'Effi' && st.effiAbierto ? 'Cerrar' : 'Configurar'}</span></div>`).join('')}</div>${detalle}`;
+  }
+
+  function vEffiProductos(st) {
+    const vars = [['Talla S · Negro', 'LAYLA-S-NEG'], ['Talla M · Negro', 'LAYLA-M-NEG'], ['Talla M · Azul rey', ''], ['Talla L · Azul rey', 'LAYLA-L-AZR']];
+    const lista = st.buscando ? `<div class="card" style="position:absolute;left:330px;top:250px;width:420px;padding:10px;z-index:3;box-shadow:0 18px 40px -16px rgba(15,23,42,.4)">
+        <div class="inp" style="margin-bottom:8px">🔍 layla azul</div>
+        ${['Vestido Layla Azul rey M · LAYLA-M-AZR · 14 und', 'Vestido Layla Azul rey S · LAYLA-S-AZR · 9 und', 'Vestido Layla Azul rey XL · LAYLA-XL-AZR · 3 und'].map((x, i) => `<div ${i === 0 ? 'data-t="effi-art"' : ''} style="padding:7px 9px;border-radius:7px;font-size:12.5px;${i === 0 ? 'background:#F1F5F9' : ''}">${x}</div>`).join('')}
+        <div style="font-size:11px;color:#64748B;margin-top:6px">Todos los artículos de tu Effi · filtra por nombre o referencia</div></div>` : '';
+    return vIntegraciones({ ...st, effiAbierto: false }).replace(/<\/div>$/, '') + `</div>
+      <div class="card" style="padding:14px 16px;margin-top:12px">
+        <div class="fila"><b>Productos vinculados con Effi</b><span class="esp"></span><span style="font-size:12px;color:#64748B">Así sabe Effi qué artículo despachar</span></div>
+        <div class="card" data-t="effi-prod" style="margin-top:10px;padding:10px 12px"><div class="fila"><b>${st.acordeon ? '▾' : '▸'} Vestido Layla</b><span class="chip" style="background:${st.vinculado ? '#D1FAE5' : '#FEF3C7'};color:${st.vinculado ? '#047857' : '#B45309'}">${st.vinculado ? '4 de 4 vinculadas' : '3 de 4 vinculadas'}</span></div>
+          ${st.acordeon ? vars.map(([v, ref], i) => `<div class="fila" style="padding:7px 0;border-top:1px solid #F1F5F9;font-size:12.5px"><span style="width:160px">${v}</span><span class="mono" style="color:${ref || (i === 2 && st.vinculado) ? '#0F172A' : '#B91C1C'}">${ref || (i === 2 && st.vinculado ? 'LAYLA-M-AZR' : 'sin vincular')}</span><span class="esp"></span>${i === 2 && !st.vinculado ? '<span class="b m" data-t="effi-buscar">🔍 Buscar en Effi</span>' : '<span style="color:#047857">✓</span>'}</div>`).join('') : ''}
+        </div></div>${lista}`;
+  }
+
+  function vWhatsapp(st) {
+    const conectado = st.waConectado;
+    return `<p class="h1">WhatsApp</p><p class="sub">Conecta el número donde tu asistente atiende a los clientes.</p>
+      <div class="g2" style="margin-top:16px">
+        <div class="card" data-t="wa-oficial" style="padding:16px;${st.waOficial ? 'border:1.5px solid #059669' : ''}"><b>API oficial de Meta</b> <span class="pill ok" style="font-size:11px">Recomendado</span><div style="font-size:12.5px;color:#64748B;margin-top:4px">Estable, con plantillas aprobadas para escribir fuera de las 24 h.</div></div>
+        <div class="card" style="padding:16px"><b>Código QR</b><div style="font-size:12.5px;color:#64748B;margin-top:4px">Rápido para probar. Sin plantillas.</div></div></div>
+      ${st.waOficial ? `<div class="card" style="padding:16px;margin-top:12px;display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:13px">Te abrimos la ventana de Meta: eliges tu negocio, tu número y aceptas.</div>
+        ${conectado ? '<div class="fila"><span class="pill ok">● Conectado</span><b>+57 315 662 9034</b><span style="color:#64748B;font-size:12.5px">Las plantillas se envían a verificación solas</span></div>' : '<div><span class="b v" data-t="wa-meta">Continuar con Facebook</span></div>'}</div>` : ''}`;
+  }
+
+  function vProductos(st) {
+    if (!st.prodForm) {
+      return `<div class="fila"><div><p class="h1">Productos</p><p class="sub">Tu catálogo: lo que el asistente vende.</p></div><span class="esp"></span><span class="b v" data-t="prod-nuevo">＋ Nuevo producto</span></div>
+        <div class="g3" style="margin-top:16px">${['Vestido Layla · $129.900', 'Jogger jaspeado · $48.900', 'Camiseta oversize · $59.900'].map((x) => `<div class="card" style="padding:12px"><div style="height:110px;border-radius:8px;background:linear-gradient(135deg,#E2E8F0,#F8FAFC)"></div><b style="display:block;margin-top:8px">${x.split(' · ')[0]}</b><span style="color:#64748B">${x.split(' · ')[1]}</span></div>`).join('')}</div>`;
+    }
+    return `<p class="h1">Nuevo producto</p>
+      <div class="card" style="padding:16px;margin-top:12px;display:flex;flex-direction:column;gap:12px">
+        <div class="g2">${campo('prod-nombre', 'Nombre', st.prodNombre, 'Ej. Vestido Olivia')}${campo('prod-precio', 'Precio', st.prodNombre ? '$139.900' : '', '$0')}</div>
+        <div><div class="lbl">Opciones (variantes)</div><div class="fila" data-t="prod-opciones" style="flex-wrap:wrap;gap:6px">${st.prodVar ? ['Talla: S', 'M', 'L', 'XL', '· Color: Negro', 'Verde', 'Café'].map((x) => `<span class="chip" style="background:#F1F5F9;color:#334155">${x}</span>`).join('') : '<span class="b">＋ Agregar opción (talla, color…)</span>'}</div>${st.prodVar ? '<div style="font-size:12px;color:#64748B;margin-top:6px">Se crean 12 variantes con su propio stock.</div>' : ''}</div>
+        <div class="g2"><div><div class="lbl">Fotos</div><div class="inp ph" style="height:60px">＋ Sube fotos y videos</div></div>${campo('', 'Reglas del producto (opcional)', '', 'Ej. 2 por $250.000')}</div>
+        <div><span class="b v" data-t="prod-guardar">Guardar producto</span> ${st.prodGuardado ? '<span style="color:#047857;font-weight:700;font-size:12.5px">✓ Guardado: el asistente ya lo puede vender</span>' : ''}</div></div>`;
+  }
+
+  function vAsistente(st) {
+    const tabs = ['Personalidad', 'Tu negocio', 'Preguntas frecuentes', 'Cómo vende', 'Prohibido', 'Pasar a una persona'];
+    const tab = st.asisTab || 'Personalidad';
+    const cont = {
+      'Personalidad': `<div class="g2">${campo('', 'Nombre del asistente', 'Valentina')}${campo('', 'Tono', 'Cercano y alegre 😊')}</div><div class="g2">${campo('asis-idioma', 'Idioma del asistente', st.asisIdioma || 'Español', '')}${campo('', 'Emojis', 'Pocos')}</div>`,
+      'Tu negocio': `${campo('', 'Qué vendes y a quién', 'Ropa femenina, envíos a toda Colombia, pago contraentrega.')}${campo('', 'Horarios', 'Lunes a sábado, 8 a. m. a 8 p. m.')}`,
+      'Preguntas frecuentes': `${campo('', '¿Hacen envíos?', 'Sí, a toda Colombia. Llega en 2 a 4 días hábiles.')}${campo('', '¿Puedo cambiar la talla?', 'Sí, dentro de los 5 días siguientes.')}`,
+      'Cómo vende': `${campo('', 'Estilo de venta', 'Muestra fotos, pregunta talla y color, resume y confirma.')}`,
+      'Prohibido': `${campo('', 'Nunca debe…', 'Dar descuentos que no estén en el catálogo.')}`,
+      'Pasar a una persona': `<div class="fila" data-t="asis-humano" style="gap:10px">${tog(!!st.asisHumano)}<b>Pasar el chat a una persona cuando…</b></div>${st.asisHumano ? campo('', 'Cuándo', 'El cliente pide hablar con alguien o tiene un reclamo.') + campo('', 'Qué le dice al cliente', 'Ya te comunico con una asesora 🙌') : ''}`,
+    }[tab];
+    return `<p class="h1">Asistente</p><p class="sub">Así habla, vende y responde tu asistente.</p>
+      <div class="fila" style="margin:14px 0 12px;gap:6px">${tabs.map((t) => `<span class="b" ${t === 'Pasar a una persona' ? 'data-t="asis-tab-humano"' : t === 'Preguntas frecuentes' ? 'data-t="asis-tab-faq"' : ''} style="${t === tab ? 'background:#065F46;color:#fff;border-color:#065F46' : ''}">${t}</span>`).join('')}</div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">${cont}<div><span class="b v" data-t="asis-guardar">Guardar</span> ${st.asisGuardado ? '<span style="color:#047857;font-weight:700;font-size:12.5px">✓ Guardado</span>' : ''}</div></div>`;
+  }
+
+  function vLeads(st) {
+    const cols = [['Preguntando', '#64748B', ['Diana R.', 'Paola M.']], ['Interesado', '#2563EB', ['Camila T.']], ['Faltan datos', '#B45309', st.leadMovido ? [] : ['Juliana P.']], ['Datos completos', '#6D28D9', st.leadMovido ? ['Juliana P.'] : []], ['Venta', '#047857', ['Ana M.', 'María C.']], ['Perdido', '#B91C1C', ['Luisa G.']]];
+    const menu = st.leadMenu ? `<div class="card" style="position:absolute;left:330px;top:240px;width:200px;padding:4px;z-index:3;box-shadow:0 14px 30px -12px rgba(15,23,42,.35)">${cols.map(([c]) => `<div ${c === 'Datos completos' ? 'data-t="lead-mover"' : ''} style="padding:6px 10px;font-size:13px;border-radius:6px">${c}</div>`).join('')}<div style="border-top:1px solid #E2E8F0;margin-top:4px;padding:6px 10px;font-size:12px;color:#64748B">Automático (según el chat)</div></div>` : '';
+    return `<p class="h1">Leads</p><p class="sub">Cada cliente en su etapa. Se mueven solos según el chat.</p>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:14px">${cols.map(([c, color, ls]) => `<div class="card" style="padding:10px;background:#F8FAFC;min-height:300px"><div class="fila" style="margin-bottom:8px"><span style="width:8px;height:8px;border-radius:50%;background:${color}"></span><b style="font-size:12.5px">${c}</b><span class="esp"></span><span style="font-size:11.5px;color:#64748B">${ls.length}</span></div>
+        ${ls.map((l) => `<div class="card" ${l === 'Juliana P.' ? 'data-t="lead-card"' : ''} style="padding:9px;margin-bottom:8px"><b style="font-size:13px">${l}</b><div style="font-size:11.5px;color:#64748B">${c === 'Faltan datos' || (l === 'Juliana P.') ? 'Falta: dirección' : 'Vestido Layla'}</div>${l === 'Juliana P.' ? `<div class="fila" style="margin-top:6px;gap:6px"><span class="b" style="padding:4px 8px;font-size:11.5px" data-t="lead-etapa">Etapa ▾</span><span class="b" style="padding:4px 8px;font-size:11.5px" data-t="lead-chat">💬 Ir al chat</span></div>` : ''}</div>`).join('')}</div>`).join('')}</div>${menu}`;
+  }
+
+  function vInbox(st) {
+    const msgs = [['c', 'Hola, ¿el vestido Layla viene en azul?'], ['y', '¡Hola Juliana! 😊 Sí, en Azul rey. ¿Qué talla usas?'], ['c', 'M. Pero tengo una duda con la entrega, ¿puedo hablar con alguien?']];
+    if (st.tomado) msgs.push(['v', st.escrito ? 'Hola Juliana, soy Karla. Claro, te ayudo con la entrega 🙌' : '']);
+    return `<div style="display:grid;grid-template-columns:280px 1fr;gap:12px;height:100%">
+      <div class="card" style="overflow:hidden">${['Juliana P.', 'Camila T.', 'Diana R.', 'Paola M.'].map((n, i) => `<div style="padding:11px 13px;border-top:${i ? '1px solid #E2E8F0' : '0'};${i === 0 ? 'background:#ECFDF5' : ''}"><b style="font-size:13px">${n}</b><div style="font-size:12px;color:#64748B">${i === 0 ? '¿puedo hablar con alguien?' : 'Vestido Layla'}</div></div>`).join('')}</div>
+      <div class="card" style="display:flex;flex-direction:column;overflow:hidden">
+        <div class="fila" style="padding:11px 14px;border-bottom:1px solid #E2E8F0"><b>Juliana P.</b><span class="pill" style="background:${st.tomado ? '#EDE9FE' : '#D1FAE5'};color:${st.tomado ? '#6D28D9' : '#047857'}">${st.tomado ? 'La atiendes tú' : 'Atiende el asistente'}</span><span class="esp"></span>${st.tomado ? '<span class="b" data-t="inbox-devolver">🤖 Devolver al asistente</span>' : '<span class="b m" data-t="inbox-tomar">✋ Tomar el chat</span>'}</div>
+        <div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:8px;background:#F8FAFC">${msgs.filter((m) => m[1]).map(([w, t]) => `<div class="burb ${w}">${t}</div>`).join('')}</div>
+        <div class="fila" style="padding:10px 12px;border-top:1px solid #E2E8F0"><div class="inp ${st.tomado && !st.escrito ? '' : 'ph'}" data-t="inbox-escribir" style="flex:1">${st.tomado && !st.escrito ? '<span class="tipeando">Hola Juliana, soy Karla…</span>' : 'Escribe un mensaje…'}</div><span class="b v" data-t="inbox-enviar">Enviar</span></div></div></div>`;
+  }
+
+  function vResumen(st) {
+    const menu = st.perfilMenu ? `<div class="card" style="position:absolute;right:20px;top:4px;width:240px;padding:6px;z-index:3;box-shadow:0 14px 30px -12px rgba(15,23,42,.35)"><div style="padding:8px 10px;font-size:13px">👤 Mi perfil</div><div style="padding:8px 10px;font-size:13px">🎨 Tema</div><div style="padding:8px 10px;font-size:13px;display:flex;gap:6px;align-items:center">🌐 Idioma <span class="esp"></span><span class="chip" style="background:${st.en ? '#F1F5F9' : '#065F46'};color:${st.en ? '#334155' : '#fff'}">ES</span><span class="chip" data-t="idioma-en" style="background:${st.en ? '#065F46' : '#F1F5F9'};color:${st.en ? '#fff' : '#334155'}">EN</span></div><div style="padding:8px 10px;font-size:13px;color:#B91C1C">Cerrar sesión</div></div>` : '';
+    const t = st.en ? { h: 'Hi, Karla 👋', s: 'Here is how your store is doing today.', v: 'October sales', p: 'New orders', l: 'Active leads' } : { h: 'Hola, Karla 👋', s: 'Así va tu tienda hoy, lunes 19 de octubre.', v: 'Ventas de octubre', p: 'Pedidos nuevos', l: 'Leads activos' };
+    return `${menu}<p class="h1">${t.h}</p><p class="sub">${t.s}</p>
+      <div class="card" style="margin-top:14px;padding:18px;background:linear-gradient(135deg,#059669,#047857);color:#fff;border:0"><div style="font-weight:600">${t.v}</div><div style="font-size:34px;font-weight:800">$ 1.109.300</div></div>
+      <div class="g3" style="margin-top:12px">${[[t.p, '4'], [t.l, '23'], ['Ticket', '$ 129.900']].map(([a, b]) => `<div class="card" style="padding:14px"><div style="color:#64748B;font-weight:600;font-size:13px">${a}</div><div style="font-size:26px;font-weight:800">${b}</div></div>`).join('')}</div>`;
+  }
+
+  const VISTAS = { pedidos: vPedidos, crear: vCrearPedido, detalle: vDetalle, integraciones: vIntegraciones, effiProductos: vEffiProductos, whatsapp: vWhatsapp, productos: vProductos, asistente: vAsistente, leads: vLeads, inbox: vInbox, resumen: vResumen };
+  const SECCION = { pedidos: 'pedidos', crear: 'pedidos', detalle: 'pedidos', integraciones: 'integraciones', effiProductos: 'integraciones', whatsapp: 'whatsapp', productos: 'productos', asistente: 'asistente', leads: 'leads', inbox: 'inbox', resumen: 'resumen' };
+
+  // ───────── Tutoriales ─────────
+  // Cada paso: vista, objetivo (data-t), texto. `set` se acumula: el estado del paso N
+  // es la suma de los `set` del 0 al N, así se puede saltar a cualquier paso.
+  const T = [
+    { id: 'whatsapp', grupo: 'Primeros pasos', ic: '◌', titulo: 'Conectar WhatsApp', min: 2, resumen: 'Conecta el número donde tu asistente va a atender y vender.', base: { waConectado: false },
+      pasos: [
+        { vista: 'resumen', t: 'nav-whatsapp', titulo: 'Abre WhatsApp', texto: 'En el menú de la izquierda entra a <b>WhatsApp</b>.' },
+        { vista: 'whatsapp', t: 'wa-oficial', titulo: 'Elige la API oficial', texto: 'La <b>API oficial de Meta</b> es la recomendada: es estable y permite plantillas para escribir después de 24 horas.' },
+        { vista: 'whatsapp', set: { waOficial: true }, t: 'wa-meta', titulo: 'Inicia sesión con Facebook', texto: 'Se abre la ventana de Meta: eliges tu negocio y tu número, y aceptas.' },
+        { vista: 'whatsapp', set: { waConectado: true }, t: 'nav-pedidos', titulo: '¡Conectado!', texto: 'Arriba ya dice <b>WhatsApp conectado</b>. Las plantillas de mensajes se mandan a verificación solas.', fin: ['El número queda conectado a tu asistente.', 'Las plantillas (guía, novedades…) se verifican en Meta automáticamente.'] },
+      ] },
+    { id: 'producto', grupo: 'Primeros pasos', ic: '◇', titulo: 'Crear un producto', min: 2, resumen: 'Crea un producto con tallas y colores para que el asistente lo venda.',
+      pasos: [
+        { vista: 'resumen', t: 'nav-productos', titulo: 'Abre Productos', texto: 'Entra a <b>Productos</b> en el menú.' },
+        { vista: 'productos', t: 'prod-nuevo', titulo: 'Nuevo producto', texto: 'Toca <b>＋ Nuevo producto</b>.' },
+        { vista: 'productos', set: { prodForm: true }, t: 'prod-nombre', titulo: 'Nombre y precio', texto: 'Escribe el nombre y el precio. Toca el campo para llenarlo.' },
+        { vista: 'productos', set: { prodNombre: 'Vestido Olivia' }, t: 'prod-opciones', titulo: 'Tallas y colores', texto: 'Agrega las <b>opciones</b>: tallas y colores. DealFlow crea una variante por combinación, cada una con su stock.' },
+        { vista: 'productos', set: { prodVar: true }, t: 'prod-guardar', titulo: 'Guarda', texto: 'Toca <b>Guardar producto</b>. Desde ya el asistente lo puede ofrecer y mandar sus fotos.' },
+        { vista: 'productos', set: { prodGuardado: true }, fin: ['Cada talla y color es una variante con su propio stock.', 'El asistente usa el precio, los combos y las reglas exactas del producto.'] },
+      ] },
+    { id: 'asistente', grupo: 'Primeros pasos', ic: '☺', titulo: 'Personalizar el asistente', min: 3, resumen: 'Dale personalidad, cuéntale de tu negocio y define cuándo pasa el chat a una persona.',
+      pasos: [
+        { vista: 'resumen', t: 'nav-asistente', titulo: 'Abre Asistente', texto: 'Entra a <b>Asistente</b>.' },
+        { vista: 'asistente', t: 'asis-tab-faq', titulo: 'Recorre las pestañas', texto: 'Personalidad, Tu negocio, <b>Preguntas frecuentes</b>, Cómo vende y Prohibido. Abre las preguntas frecuentes.' },
+        { vista: 'asistente', set: { asisTab: 'Preguntas frecuentes' }, t: 'asis-tab-humano', titulo: 'Respuestas exactas', texto: 'Lo que escribas aquí el asistente lo responde tal cual. Ahora abre <b>Pasar a una persona</b>.' },
+        { vista: 'asistente', set: { asisTab: 'Pasar a una persona' }, t: 'asis-humano', titulo: 'Activa el pase a humano', texto: 'Enciéndelo y escribe cuándo debe pasar el chat a tu equipo y qué le dice al cliente.' },
+        { vista: 'asistente', set: { asisHumano: true }, t: 'asis-guardar', titulo: 'Guarda', texto: 'Toca <b>Guardar</b>. Cuando pase, el chat aparece en el Inbox para que lo atiendas.' },
+        { vista: 'asistente', set: { asisGuardado: true }, fin: ['La personalidad y tu negocio guían cada respuesta.', 'Si el cliente lo pide, el asistente te pasa el chat.'] },
+      ] },
+    { id: 'leads', grupo: 'Ventas', ic: '☷', titulo: 'Leads por etapas', min: 2, resumen: 'Mira en qué va cada cliente y muévelo de etapa si hace falta.',
+      pasos: [
+        { vista: 'resumen', t: 'nav-leads', titulo: 'Abre Leads', texto: 'Entra a <b>Leads</b>.' },
+        { vista: 'leads', t: 'lead-card', titulo: 'Las etapas', texto: 'Preguntando, Interesado, Faltan datos, Datos completos, Venta y Perdido. Se mueven solas según lo que pasa en el chat.' },
+        { vista: 'leads', t: 'lead-etapa', titulo: 'Moverlo a mano', texto: 'Si sabes algo que el chat no dice, toca <b>Etapa</b>.' },
+        { vista: 'leads', set: { leadMenu: true }, t: 'lead-mover', titulo: 'Elige la etapa', texto: 'Pásalo a <b>Datos completos</b>. Con "Automático" vuelve a moverse solo.' },
+        { vista: 'leads', set: { leadMenu: false, leadMovido: true }, t: 'lead-chat', titulo: 'Ve al chat', texto: '<b>Ir al chat</b> te lleva directo a la conversación.' },
+        { vista: 'inbox', fin: ['Las etapas se actualizan solas con cada mensaje.', 'Puedes fijar una etapa a mano y volver a automático.'] },
+      ] },
+    { id: 'inbox', grupo: 'Ventas', ic: '✉', titulo: 'Atender un chat', min: 2, resumen: 'Toma un chat cuando el cliente quiere hablar con una persona y devuélvelo al asistente.',
+      pasos: [
+        { vista: 'resumen', t: 'nav-inbox', titulo: 'Abre el Inbox', texto: 'Entra a <b>Inbox</b>: ahí están todas las conversaciones.' },
+        { vista: 'inbox', t: 'inbox-tomar', titulo: 'Toma el chat', texto: 'Juliana pidió hablar con alguien. Toca <b>Tomar el chat</b>: el asistente deja de responder.' },
+        { vista: 'inbox', set: { tomado: true }, t: 'inbox-enviar', titulo: 'Escríbele', texto: 'Escribe tu mensaje y toca <b>Enviar</b>.' },
+        { vista: 'inbox', set: { escrito: true }, t: 'inbox-devolver', titulo: 'Devuélvelo', texto: 'Cuando termines, <b>Devolver al asistente</b> para que siga vendiendo.' },
+        { vista: 'inbox', set: { tomado: false }, fin: ['Mientras lo atiendes tú, el asistente no responde.', 'Devuélvelo y retoma solo.'] },
+      ] },
+    { id: 'crear-pedido', grupo: 'Ventas', ic: '＋', titulo: 'Crear un pedido a mano', min: 2, resumen: 'Registra un pedido que te llegó por otro lado (llamada, Instagram…).',
+      pasos: [
+        { vista: 'resumen', t: 'nav-pedidos', titulo: 'Abre Pedidos', texto: 'Entra a <b>Pedidos</b>.' },
+        { vista: 'pedidos', t: 'ped-crear', titulo: 'Crear pedido', texto: 'Toca <b>＋ Crear pedido</b>.' },
+        { vista: 'crear', t: 'cp-cliente', titulo: 'Datos del cliente', texto: 'Nombre, celular, ciudad y dirección. Toca el campo para llenarlo.' },
+        { vista: 'crear', set: { cpCliente: 'Laura Gómez', cpTel: '301 887 2245', cpCiudad: 'Medellín', cpDir: 'Cl 10 # 43E-31, apto 502' }, t: 'cp-prod', titulo: 'Producto', texto: 'Busca el producto y elige talla y color. El total se calcula solo.' },
+        { vista: 'crear', set: { cpProd: true }, t: 'cp-guardar', titulo: 'Guarda', texto: 'Toca <b>Guardar pedido</b>.' },
+        { vista: 'pedidos', set: { pedidoCreado: true }, t: 'row-DF-1132', titulo: 'Ahí está', texto: 'El pedido <b>DF-1132</b> aparece de primero, en estado <b>Nuevo</b>.', fin: ['El pedido entra como Nuevo, listo para despachar.', 'Desde el detalle lo envías a Effi o Dropi.'] },
+      ] },
+    { id: 'effi', grupo: 'Effi y despachos', ic: '⚡', titulo: 'Conectar Effi', min: 3, resumen: 'Conecta Effi por API para crear remisiones y guías sin salir de DealFlow.',
+      pasos: [
+        { vista: 'resumen', t: 'nav-integraciones', titulo: 'Abre Integraciones', texto: 'Entra a <b>Integraciones</b>.' },
+        { vista: 'integraciones', t: 'int-effi', titulo: 'Effi', texto: 'Toca la fila de <b>Effi</b>.' },
+        { vista: 'integraciones', set: { effiAbierto: true }, t: 'effi-key', titulo: 'Pega la API key', texto: 'En Effi: Administración → Usuarios → Ver más. Cópiala y pégala aquí.' },
+        { vista: 'integraciones', set: { effiKey: true }, t: 'effi-conectar', titulo: 'Conecta', texto: 'Toca <b>Conectar Effi</b>. DealFlow verifica la llave.' },
+        { vista: 'integraciones', set: { effiOk: true }, t: 'effi-suc', titulo: 'Configura', texto: 'Elige sucursal, bodega y forma de pago. Si vendes artículos de un proveedor, pon el <b>convenio dropshipping</b>: así Effi no te pide stock propio.' },
+        { vista: 'integraciones', set: { effiCfg: true }, t: 'effi-guardar', titulo: 'Guarda', texto: 'Toca <b>Guardar configuración</b>. Ahí mismo activas las novedades de envío.' },
+        { vista: 'integraciones', set: { effiGuardado: true }, fin: ['Effi queda listo para crear remisiones.', 'Con el convenio, los artículos del proveedor no exigen stock propio.'] },
+      ] },
+    { id: 'vincular', grupo: 'Effi y despachos', ic: '🔗', titulo: 'Vincular productos con Effi', min: 2, resumen: 'Dile a Effi qué artículo corresponde a cada talla y color.', base: { effiOk: true },
+      pasos: [
+        { vista: 'effiProductos', t: 'effi-prod', titulo: 'Productos vinculados', texto: 'En Integraciones → Effi, abre el producto (es un acordeón).' },
+        { vista: 'effiProductos', set: { acordeon: true }, t: 'effi-buscar', titulo: 'Falta una variante', texto: '<b>Talla M · Azul rey</b> está sin vincular. Toca <b>Buscar en Effi</b>.' },
+        { vista: 'effiProductos', set: { buscando: true }, t: 'effi-art', titulo: 'Elige el artículo', texto: 'Ves <b>todos</b> los artículos de tu Effi y puedes filtrar por nombre o referencia. Elige el correcto.' },
+        { vista: 'effiProductos', set: { buscando: false, vinculado: true }, fin: ['Cada variante queda unida a su artículo en Effi.', 'DealFlow también empareja solo: "Talla M · Negro" encuentra "Negro Unicolor · M".'] },
+      ] },
+    { id: 'despachar', grupo: 'Effi y despachos', ic: '🚚', titulo: 'Despachar y crear la guía', min: 3, resumen: 'Envía el pedido a Effi, crea la guía y avísale al cliente.', base: { pedidoCreado: true },
+      pasos: [
+        { vista: 'pedidos', t: 'row-DF-1132', titulo: 'Abre el pedido', texto: 'Toca el pedido <b>DF-1132</b>.' },
+        { vista: 'detalle', t: 'desp-effi', titulo: 'Elige Effi', texto: 'En <b>Despacho</b> elige Effi.' },
+        { vista: 'detalle', set: { provEffi: true }, t: 'desp-enviar', titulo: 'Revisa y envía', texto: 'Ves cómo va a Effi: cada producto con su artículo. Toca <b>Enviar a Effi</b>: se crea la remisión.' },
+        { vista: 'detalle', set: { enviadoEffi: true }, t: 'guia-transp', titulo: 'Transportadora', texto: 'Elige transportadora y servicio. Toca el campo.' },
+        { vista: 'detalle', set: { transp: true }, t: 'guia-crear', titulo: 'Crea la guía', texto: 'Toca <b>Crear guía</b>.' },
+        { vista: 'detalle', set: { guiaCreada: true }, t: 'guia-enviar', titulo: 'Avísale al cliente', texto: 'Llega el número y la imagen de la guía. Toca <b>Enviar guía al cliente</b>. Si pasaron más de 24 h, sale con la plantilla aprobada.' },
+        { vista: 'detalle', set: { guiaAvisada: true }, fin: ['Remisión y guía se crean desde el pedido.', 'El cliente recibe la guía con el nombre real de la transportadora.', 'Si activas "crear la guía automáticamente", todo esto pasa solo.'] },
+      ] },
+    { id: 'estados', grupo: 'Effi y despachos', ic: '◉', titulo: 'Estados del envío', min: 2, resumen: 'Lee el estado real de cada guía y cámbialo a mano solo cuando haga falta.',
+      pasos: [
+        { vista: 'pedidos', t: 'col-estado', titulo: 'Columna Estado guía', texto: 'Cada pedido muestra el estado <b>real</b> de su guía: Guía generada, En tránsito, En reparto, Novedad, Entregado o Devuelto. Se actualiza solo con Effi y Dropi.' },
+        { vista: 'pedidos', set: { pedidoCreado: true }, t: 'row-DF-1132', titulo: 'Cambiarlo a mano', texto: 'Desde la lista no se cambia. Si necesitas hacerlo (por ejemplo, un pedido sin guía), abre el pedido.' },
+        { vista: 'detalle', t: 'det-estado', titulo: 'Abajo, en el detalle', texto: 'En <b>Estado del pedido</b>, abajo del detalle, elige el estado.' },
+        { vista: 'detalle', set: { menuEstado: true }, t: 'estado-conf', titulo: 'Elige', texto: 'Pásalo a <b>Confirmado</b>. Si tiene mensaje para el cliente, se lo enviamos por WhatsApp.' },
+        { vista: 'detalle', set: { menuEstado: false, pedEstado: 'Confirmado' }, fin: ['Con guía, el estado lo pone la transportadora (cada 4 min y al instante con Effi).', 'A mano, solo desde el detalle del pedido.'] },
+      ] },
+    { id: 'novedades', grupo: 'Effi y despachos', ic: '⚠', titulo: 'Resolver una novedad', min: 3, resumen: 'Cuando la transportadora no pudo entregar, resuélvelo antes de que devuelva el pedido.', base: { novedad: true },
+      pasos: [
+        { vista: 'pedidos', t: 'nov-banner', titulo: 'Novedades por resolver', texto: 'Arriba de los pedidos aparecen las novedades, de la más vieja a la más nueva. DealFlow ya le escribió al cliente.' },
+        { vista: 'pedidos', t: 'nov-fila', titulo: 'Abre la novedad', texto: 'Toca la fila de <b>Sofía Ramírez</b>.' },
+        { vista: 'detalle', set: { detalleNov: true, novBot: true }, t: 'nov-ofrecer', titulo: 'El cliente ya eligió', texto: 'El asistente habló con Sofía: quiere que se lo <b>vuelvan a ofrecer</b> mañana. Revisa la opción.' },
+        { vista: 'detalle', set: { novOp: true }, t: 'nov-enviar', titulo: 'Envíala a Effi', texto: 'Fecha (de mañana a 5 días), quién recibe, dirección y celular ya vienen llenos. Toca <b>Enviar solución a Effi</b>.' },
+        { vista: 'detalle', set: { novEnviada: true }, fin: ['DealFlow detecta la novedad, avisa al cliente y el asistente recoge la solución.', 'Puedes dejar que la envíe a Effi solo (Integraciones → Effi).', 'Ves si Effi la aprobó o la rechazó.'] },
+      ] },
+    { id: 'filtrar', grupo: 'Cuenta y reportes', ic: '☰', titulo: 'Filtrar y exportar pedidos', min: 1, resumen: 'Encuentra pedidos por estado, guía o ciudad y descárgalos en Excel.',
+      pasos: [
+        { vista: 'pedidos', t: 'ped-filtros', titulo: 'Abre los filtros', texto: 'Toca <b>Filtros</b>.' },
+        { vista: 'pedidos', set: { filtrosAbiertos: true }, t: 'f-guia', titulo: 'Con guía', texto: 'Filtra por estado, por guía, ciudad o producto. Toca <b>Con guía</b>.' },
+        { vista: 'pedidos', set: { filtroGuia: true }, t: 'ped-export', titulo: 'Exporta', texto: '<b>Exportar</b> descarga en Excel justo los pedidos que estás viendo.' },
+        { vista: 'pedidos', fin: ['Los filtros se combinan entre sí.', 'El Excel sale con los pedidos filtrados.'] },
+      ] },
+    { id: 'idioma', grupo: 'Cuenta y reportes', ic: '🌐', titulo: 'Panel en inglés', min: 1, resumen: 'Cambia el idioma del panel y el del asistente.',
+      pasos: [
+        { vista: 'resumen', t: 'perfil', titulo: 'Tu perfil', texto: 'Arriba a la derecha toca tu nombre.' },
+        { vista: 'resumen', set: { perfilMenu: true }, t: 'idioma-en', titulo: 'Idioma', texto: 'Elige <b>EN</b>: todo el panel pasa a inglés al instante.' },
+        { vista: 'resumen', set: { perfilMenu: false, en: true }, t: 'nav-asistente', titulo: 'Y el asistente', texto: 'El idioma del asistente es aparte: en Asistente → Personalidad eliges Español, Inglés o <b>Automático</b> (responde en el idioma del cliente).' },
+        { vista: 'asistente', set: { asisIdioma: 'Automático (el del cliente)' }, fin: ['El panel cambia solo para ti.', 'El asistente puede responder en el idioma de cada cliente.'] },
+      ] },
+  ];
+
+  // Si el último paso tiene objetivo y resumen, el resumen va en una pantalla final aparte.
+  T.forEach((t) => {
+    const u = t.pasos[t.pasos.length - 1];
+    if (u.t && u.fin) { t.pasos.push({ vista: u.vista, fin: u.fin }); delete u.fin; }
+  });
+
+  // ───────── Motor ─────────
+  const $ = (id) => document.getElementById(id);
+  const lienzo = $('lienzo'); const escenario = $('escenario');
+  let ti = 0; let pi = 0; let escala = 1;
+  const hechos = new Set();
+  try { (JSON.parse(localStorage.getItem('df-tutos') || '[]') || []).forEach((x) => hechos.add(x)); } catch (e) { /* sin almacenamiento */ }
+  const guardarHechos = () => { try { localStorage.setItem('df-tutos', JSON.stringify([...hechos])); } catch (e) { /* nada */ } };
+
+  if (/^\/tutoriales/.test(location.pathname)) $('volver').hidden = false;
+
+  function pintarRiel() {
+    let html = ''; let g = '';
+    T.forEach((t, i) => {
+      if (t.grupo !== g) { g = t.grupo; html += `<h3>${g}</h3>`; }
+      html += `<button class="tuto-btn" type="button" data-i="${i}" aria-current="${i === ti}"><span class="ic">${t.ic}</span><span><b>${t.titulo}</b><span class="m">${t.min} min · ${t.pasos.filter((x) => x.t).length} pasos</span></span>${hechos.has(t.id) ? '<span class="ok">✓</span>' : ''}</button>`;
+    });
+    $('riel').innerHTML = html;
+    $('avanceGlobal').textContent = `${hechos.size} de ${T.length} completados`;
+  }
+
+  function estadoEn(t, n) {
+    const st = { ...(t.base || {}) };
+    for (let k = 0; k <= n; k++) Object.assign(st, t.pasos[k].set || {});
+    return st;
+  }
+
+  function medir() {
+    const w = escenario.clientWidth;
+    escala = Math.min(1, w / 1180);
+    lienzo.style.transform = `scale(${escala})`;
+    escenario.style.height = `${720 * escala}px`;
+  }
+
+  function pintar() {
+    const t = T[ti]; const p = t.pasos[pi]; const st = estadoEn(t, pi);
+    $('grupo').textContent = t.grupo;
+    $('titulo').textContent = t.titulo;
+    $('resumen').textContent = t.resumen;
+    const conObjetivo = t.pasos.filter((x) => x.t).length;
+    $('pasosMini').innerHTML = t.pasos.filter((x) => x.t).map((_, k) => `<i class="${k < pi ? 'hecho' : k === pi ? 'ahora' : ''}"></i>`).join('');
+    const esFinal = !p.t && p.fin;
+    $('num').textContent = esFinal ? '✓' : String(pi + 1);
+    $('pasoTitulo').textContent = esFinal ? '¡Tutorial completado!' : p.titulo;
+    $('pasoTexto').innerHTML = esFinal ? 'Repasa lo que aprendiste o sigue con el próximo tutorial.' : p.texto;
+    $('pasoHint').textContent = esFinal ? '' : `Paso ${pi + 1} de ${conObjetivo} · haz clic en lo resaltado o usa "Siguiente"`;
+    $('ant').disabled = pi === 0;
+    $('sig').textContent = esFinal ? (ti < T.length - 1 ? 'Próximo tutorial →' : 'Volver al inicio') : 'Siguiente →';
+
+    lienzo.innerHTML = shell(SECCION[p.vista], VISTAS[p.vista](st), st) + '<div class="foco" id="foco" hidden></div><div class="burbuja" id="burbuja" hidden></div>';
+    if (esFinal) {
+      hechos.add(t.id); guardarHechos(); pintarRiel();
+      const sig = T[ti + 1];
+      lienzo.insertAdjacentHTML('beforeend', `<div class="final"><div class="caja"><div class="sello">✓</div><h2>${t.titulo}: listo</h2><p>Esto es lo que ya sabes hacer:</p><ul>${p.fin.map((x) => `<li>${x}</li>`).join('')}</ul><div class="fila"><button type="button" id="repetir">Repetir</button>${sig ? `<button type="button" class="pri" id="proximo">Siguiente: ${sig.titulo} →</button>` : ''}</div></div></div>`);
+      $('repetir').onclick = () => irA(ti, 0);
+      if (sig) $('proximo').onclick = () => irA(ti + 1, 0);
+      return;
+    }
+    requestAnimationFrame(() => enfocar(p));
+  }
+
+  function enfocar(p) {
+    const el = lienzo.querySelector(`[data-t="${p.t}"]`);
+    const foco = $('foco'); const burbuja = $('burbuja');
+    if (!el) return;
+    const base = lienzo.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const x = (r.left - base.left) / escala; const y = (r.top - base.top) / escala;
+    const w = r.width / escala; const h = r.height / escala;
+    Object.assign(foco.style, { left: `${x - 4}px`, top: `${y - 4}px`, width: `${w + 8}px`, height: `${h + 8}px` });
+    foco.hidden = false;
+    burbuja.innerHTML = `${p.texto}<span class="mano">👆 Haz clic aquí</span>`;
+    burbuja.hidden = false;
+    // La burbuja va abajo del objetivo; si no cabe, arriba; y se mantiene dentro del lienzo.
+    const bw = 280; const bh = burbuja.offsetHeight || 110;
+    let bx = Math.min(Math.max(12, x + w / 2 - bw / 2), 1180 - bw - 12);
+    let by = y + h + 16;
+    if (by + bh > 708) by = Math.max(12, y - bh - 16);
+    Object.assign(burbuja.style, { left: `${bx}px`, top: `${by}px` });
+    el.style.cursor = 'pointer';
+  }
+
+  function irA(t, p) { ti = t; pi = p; pintarRiel(); pintar(); try { history.replaceState(null, '', `#${T[ti].id}`); } catch (e) { /* nada */ } }
+  function siguiente() {
+    const t = T[ti];
+    if (pi < t.pasos.length - 1) { pi++; pintar(); return; }
+    irA(ti < T.length - 1 ? ti + 1 : 0, 0);
+  }
+
+  lienzo.addEventListener('click', (e) => {
+    const p = T[ti].pasos[pi];
+    if (!p.t) return;
+    const el = e.target.closest('[data-t]');
+    if (el && el.getAttribute('data-t') === p.t) siguiente();
+  });
+  $('sig').onclick = siguiente;
+  $('ant').onclick = () => { if (pi > 0) { pi--; pintar(); } };
+  $('riel').addEventListener('click', (e) => { const b = e.target.closest('.tuto-btn'); if (b) irA(Number(b.dataset.i), 0); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight') siguiente(); if (e.key === 'ArrowLeft' && pi > 0) { pi--; pintar(); } });
+  window.addEventListener('resize', () => { medir(); const p = T[ti].pasos[pi]; if (p.t) enfocar(p); });
+
+  const inicial = T.findIndex((t) => t.id === location.hash.slice(1));
+  ti = inicial >= 0 ? inicial : 0;
+  medir(); pintarRiel(); pintar();
+})();
+</script>
+
+</body>
+</html>

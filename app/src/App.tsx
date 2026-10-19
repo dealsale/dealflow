@@ -71,7 +71,7 @@ function ImpersonationBanner({ df }: { df: DealFlowState }) {
       style={{
         display: 'flex', alignItems: 'center', gap: 8, height: 30, boxSizing: 'border-box',
         background: 'var(--df-alert-brown)', color: '#FEF3C7', padding: '0 10px',
-        fontFamily: "'Inter',system-ui,sans-serif", fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden',
+        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden',
       }}
     >
       <button
@@ -104,7 +104,7 @@ function SuscripcionBanner({ df }: { df: DealFlowState }) {
         background: 'var(--df-alert-brown)',
         color: '#FEF3C7',
         padding: '9px 16px',
-        fontFamily: "'Inter',system-ui,sans-serif",
+        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif",
         fontSize: 13.5,
         fontWeight: 600,
       }}
@@ -280,7 +280,7 @@ function suscMsgEsPago(msg: string) {
 
 function PaywallShell({ df, titulo, sub, children }: { df: DealFlowState; titulo: string; sub: string; children: React.ReactNode }) {
   return (
-    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(158deg,#071120 0%,#0A1B2E 46%,#07271F 100%)', fontFamily: "'Inter',system-ui,sans-serif", padding: 20 }}>
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(158deg,#071120 0%,#0A1B2E 46%,#07271F 100%)', fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", padding: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         <a href="/inicio" title="Ir a la página de inicio de DealFlow" style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em', color: '#F1F5F9', textDecoration: 'none' }}>DealFlow</a>
       </div>
@@ -349,7 +349,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
         width: '100%',
         height: '100%',
         minHeight: 600,
-        fontFamily: "'Inter',system-ui,sans-serif",
+        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif",
         background: df.theme === 'premium' ? undefined : 'var(--df-bg)',
         color: 'var(--df-text-strong)',
         overflow: 'hidden',
@@ -397,7 +397,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
         flexDirection: 'column',
         width: '100%',
         height: '100%',
-        fontFamily: "'Inter',system-ui,sans-serif",
+        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif",
         background: df.theme === 'premium' ? undefined : 'var(--df-bg)',
         color: 'var(--df-text-strong)',
         overflow: 'hidden',

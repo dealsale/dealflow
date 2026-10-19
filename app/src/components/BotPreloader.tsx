@@ -81,7 +81,7 @@ export function BotPreloader({ variante = 'simple', duracion = 4400 }: { variant
         position: 'fixed', inset: 0, zIndex: 999,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         background: 'radial-gradient(circle at 50% 38%, #0d2a44 0%, #0A1B2E 42%, #060f1c 100%)',
-        fontFamily: "'Inter',system-ui,sans-serif", overflow: 'hidden',
+        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", overflow: 'hidden',
       }}
     >
       <style>{CSS}</style>

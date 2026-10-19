@@ -7,6 +7,26 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
  * `waEstado`: en el header móvil, un puntico de estado del WhatsApp encima del
  * avatar (verde parpadeando = conectado) — así nos ahorramos el pill de texto
  * "Conectado/Sin conexión" que no cabía junto al nombre de la tienda. */
+// Fondo animado del tema Premium (se puede apagar en equipos lentos).
+const CLAVE_FONDO = 'dealflow:fondo';
+try { if (localStorage.getItem(CLAVE_FONDO) === 'off') document.documentElement.classList.add('df-fondo-quieto'); } catch { /* modo privado */ }
+function FondoAnimado() {
+  const [on, setOn] = useState(() => !document.documentElement.classList.contains('df-fondo-quieto'));
+  const cambiar = () => {
+    const v = !on; setOn(v);
+    document.documentElement.classList.toggle('df-fondo-quieto', !v);
+    try { localStorage.setItem(CLAVE_FONDO, v ? 'on' : 'off'); } catch { /* modo privado */ }
+  };
+  return (
+    <button type="button" role="switch" aria-checked={on} onClick={cambiar} style={{ marginTop: 10, width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', border: 'none', padding: 0, fontFamily: 'inherit', color: 'var(--df-text-body)', fontSize: 13, fontWeight: 600, textAlign: 'left' }}>
+      <span style={{ width: 34, height: 19, borderRadius: 999, background: on ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', flexShrink: 0, transition: 'background .2s' }}>
+        <span style={{ position: 'absolute', top: 2, left: on ? 17 : 2, width: 15, height: 15, borderRadius: '50%', background: '#fff', transition: 'left .2s' }} />
+      </span>
+      Fondo animado {on ? '' : '(apagado)'}
+    </button>
+  );
+}
+
 function Avatar({ foto, iniciales, size, premium, waEstado }: { foto: string; iniciales: string; size: number; premium?: boolean; waEstado?: boolean }) {
   const inner = foto ? (
     <img src={foto} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', display: 'block', flexShrink: 0 }} />
@@ -221,6 +241,7 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
                 ...(df.premiumHabilitado ? [{ v: 'premium' as const, label: 'Premium', icon: '💎', gradient: 'linear-gradient(135deg,#6D28D9,#2563EB)' }] : []),
               ]}
             />
+            {df.theme === 'premium' && <FondoAnimado />}
             {!df.premiumHabilitado && (
               <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)' }}>💎 El tema Premium es exclusivo: pregúntale a tu administrador de DealFlow si te lo puede habilitar.</div>
             )}

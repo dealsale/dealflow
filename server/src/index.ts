@@ -54,7 +54,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'guias-derechas-1',
+    build: 'tutoriales-fuente-1',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -150,6 +150,8 @@ if (existsSync(APP_DIST)) {
     const esLanding = existsSync(LANDING);
     const esAds = /^\/(dropshipping|ads|dropshipping-ia)\/?$/i.test(req.path);
     const esInicio = /^\/(inicio|home)\/?$/i.test(req.path);
+    // Tutoriales en vivo (página propia, en cualquier host).
+    if (/^\/tutoriales\/?$/i.test(req.path)) return enviarHtml(res, path.join(APP_DIST, 'tutoriales.html'));
 
     // 1) Dominio raíz (dealflow.sbs / www): solo la landing. Las puertas de la app
     //    llevan a app.<dominio> en la misma pestaña.
