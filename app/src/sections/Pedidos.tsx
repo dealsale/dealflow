@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { OrigenBadge } from '../components/OrigenPedido';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
@@ -7,14 +7,30 @@ import { Dropdown } from '../components/Dropdown';
 import { confirmar } from '../components/dialogs';
 import { useFiltrosPedidos, PanelFiltros, ResumenFiltros, ORDENES, fechaCorta, valorPedido, type Orden } from '../components/PedidosFiltros';
 
-// Columnas fijas tipo Excel: cada dato en su celda, nada se monta sobre otra columna.
-const COLS = '118px 54px minmax(160px, 1.1fr) minmax(110px, .7fr) minmax(190px, 1.5fr) 104px 138px 146px 32px';
+// Columnas tipo Excel: cada dato en su celda. La tabla se acomoda al ancho que
+// hay (sin forzar un mínimo que la corte): completa, compacta o en tarjetas.
+type Modo = 'completa' | 'compacta' | 'tarjetas';
+const COLS: Record<Exclude<Modo, 'tarjetas'>, string> = {
+  completa: '108px 26px minmax(140px, 1.2fr) minmax(96px, .75fr) minmax(150px, 1.6fr) 96px 118px 140px 26px',
+  compacta: '118px minmax(140px, 1.1fr) minmax(130px, 1.4fr) 112px 136px 26px',
+};
+const modoPara = (ancho: number): Modo => (ancho >= 1000 ? 'completa' : ancho >= 700 ? 'compacta' : 'tarjetas');
 const celda: CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
 export function Pedidos({ df }: { df: DealFlowState }) {
   const fp = useFiltrosPedidos(df.allOrders, df.orderQuery);
   const [abierto, setAbierto] = useState(false);
   const n = fp.activos.length;
+  // Ancho real del área de la tabla (no de la ventana): cambia con el menú lateral abierto o cerrado.
+  const cajaRef = useRef<HTMLDivElement>(null);
+  const [modo, setModo] = useState<Modo>('completa');
+  useEffect(() => {
+    const el = cajaRef.current; if (!el) return;
+    const medir = () => setModo(modoPara(el.clientWidth));
+    medir();
+    const ro = new ResizeObserver(medir); ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Encabezado ordenable: un toque ordena por esa columna; otro invierte.
   const ordenarPor = (asc: Orden, desc: Orden) => fp.set({ orden: fp.f.orden === desc ? asc : desc });
@@ -63,27 +79,29 @@ export function Pedidos({ df }: { df: DealFlowState }) {
       {abierto && <PanelFiltros fp={fp} />}
       <ResumenFiltros fp={fp} />
 
-      <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', overflowX: 'auto' }}>
-        <div style={{ minWidth: 1090 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 12, alignItems: 'center', padding: '10px 18px', borderBottom: '1px solid var(--df-border)', background: 'var(--df-bg)', position: 'sticky', top: 0, zIndex: 1 }}>
+      <div ref={cajaRef} style={modo === 'tarjetas' ? undefined : { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', overflow: 'hidden' }}>
+        {modo !== 'tarjetas' && (
+          <div style={{ display: 'grid', gridTemplateColumns: COLS[modo], gap: 10, alignItems: 'center', padding: '10px 16px', borderBottom: '1px solid var(--df-border)', background: 'var(--df-bg)' }}>
             {th('Pedido', ['antiguos', 'recientes'])}
-            <span style={{ ...thStyle, textAlign: 'center' }}>Canal</span>
+            {modo === 'completa' && <span />}
             {th('Cliente', ['cliente', 'cliente'])}
-            {th('Ciudad')}
+            {modo === 'completa' && th('Ciudad')}
             {th('Productos')}
             {th('Total', ['menor', 'mayor'], 'right')}
-            {th('Despacho')}
+            {modo === 'completa' && th('Despacho')}
             {th('Estado')}
             <span />
           </div>
-          {fp.filtrados.map((o) => <Fila key={o.id} o={o} />)}
-          {fp.filtrados.length === 0 && (
-            <div style={{ padding: 36, textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 14 }}>
-              {df.orderQuery.trim() || n ? 'Ningún pedido coincide con la búsqueda o los filtros.' : 'Todavía no hay pedidos.'}
-              {n > 0 && <div style={{ marginTop: 10 }}><button onClick={fp.limpiar} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', color: 'var(--df-text-body)' }}>Limpiar filtros</button></div>}
-            </div>
-          )}
+        )}
+        <div style={modo === 'tarjetas' ? { display: 'flex', flexDirection: 'column', gap: 10 } : undefined}>
+          {fp.filtrados.map((o) => <Fila key={o.id} o={o} modo={modo} />)}
         </div>
+        {fp.filtrados.length === 0 && (
+          <div style={{ padding: 36, textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 14, ...(modo === 'tarjetas' ? { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12 } : {}) }}>
+            {df.orderQuery.trim() || n ? 'Ningún pedido coincide con la búsqueda o los filtros.' : 'Todavía no hay pedidos.'}
+            {n > 0 && <div style={{ marginTop: 10 }}><button onClick={fp.limpiar} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', color: 'var(--df-text-body)' }}>Limpiar filtros</button></div>}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -91,53 +109,81 @@ export function Pedidos({ df }: { df: DealFlowState }) {
 
 const thStyle: CSSProperties = { fontSize: 11.5, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', display: 'block' };
 
-function Fila({ o }: { o: DecoratedOrder }) {
+function Fila({ o, modo }: { o: DecoratedOrder; modo: Modo }) {
   const prov = o.despachoProveedor === 'effi' ? 'Effi' : o.despachoProveedor === 'dropi' ? 'Dropi' : '';
+  const numero = (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ ...celda, fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-strong)', fontWeight: 600 }}>{o.id}</div>
+      <div style={{ ...celda, fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 2 }}>{fechaCorta(o.fecha)}{o.hora ? ` · ${o.hora}` : ''}</div>
+    </div>
+  );
+  const cliente = (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ ...celda, fontWeight: 700, fontSize: 14 }} title={o.cliente}>{o.cliente}</div>
+      <div style={{ ...celda, fontSize: 12, color: 'var(--df-text-muted)' }}>{modo === 'completa' ? <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>{o.tel}</span> : `${o.ciudad || '—'}${o.departamento ? ' · ' + o.departamento : ''}`}</div>
+    </div>
+  );
+  const productos = <div style={{ minWidth: 0, fontSize: 13, lineHeight: 1.35, color: 'var(--df-text-body)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={o.itemsResumen}>{o.itemsResumen}</div>;
+  const total = <div style={{ ...celda, fontWeight: 800, fontSize: 14, textAlign: 'right' }}>${valorPedido(o).toLocaleString('es-CO')}</div>;
+  const despacho = prov ? (
+    <div style={{ minWidth: 0 }}>
+      <span style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 800, borderRadius: 6, padding: '2px 7px', background: prov === 'Effi' ? 'var(--df-purple-subtle)' : 'var(--df-warning-subtle)', color: prov === 'Effi' ? 'var(--df-purple)' : 'var(--df-warning)' }}>{prov}</span>
+      <div style={{ ...celda, fontSize: 11.5, color: o.hasGuia ? 'var(--df-text-body)' : 'var(--df-text-muted)', marginTop: 3, fontFamily: o.hasGuia ? "'JetBrains Mono',monospace" : 'inherit' }} title={o.guia || ''}>{o.hasGuia ? o.guia : 'esperando guía'}</div>
+    </div>
+  ) : <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Sin despachar</span>;
+  const estado = (
+    <div onClick={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
+      <Dropdown ariaLabel="Estado del pedido" value={o.estado} onChange={(v) => o.setEstado(v as typeof o.estado)} options={o.estadosDisponibles.map((e) => ({ value: e, label: e }))} />
+    </div>
+  );
+  const borrar = (
+    <button
+      onClick={async (e) => { e.stopPropagation(); if (await confirmar({ titulo: `Eliminar ${o.id}`, mensaje: 'Esto solo lo quita del panel; no cancela nada en Dropi/Effi.', aceptar: 'Eliminar', peligro: true })) o.eliminar(); }}
+      title="Eliminar pedido"
+      aria-label={`Eliminar ${o.id}`}
+      className="df-danger-hover"
+      style={{ background: 'transparent', border: 'none', color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 15, padding: 2 }}
+    >🗑</button>
+  );
+
+  if (modo === 'tarjetas') {
+    return (
+      <div onClick={o.open} className="df-row-hover" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <OrigenBadge origen={o.origen} size={20} />
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, fontWeight: 600 }}>{o.id}</span>
+          <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{fechaCorta(o.fecha)}{o.hora ? ` · ${o.hora}` : ''}</span>
+          <div style={{ flex: 1 }} />
+          {total}
+        </div>
+        {cliente}
+        {productos}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>{despacho}</div>
+          <div style={{ width: 150 }}>{estado}</div>
+          {borrar}
+        </div>
+      </div>
+    );
+  }
   return (
-    <div
-      onClick={o.open}
-      className="df-row-hover"
-      style={{ display: 'grid', gridTemplateColumns: COLS, gap: 12, alignItems: 'center', padding: '11px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ ...celda, fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-strong)', fontWeight: 600 }}>{o.id}</div>
-        <div style={{ ...celda, fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 2 }}>{fechaCorta(o.fecha)}{o.hora ? ` · ${o.hora}` : ''}</div>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'center' }}><OrigenBadge origen={o.origen} size={22} /></div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ ...celda, fontWeight: 700, fontSize: 14 }} title={o.cliente}>{o.cliente}</div>
-        <div style={{ ...celda, fontSize: 12, color: 'var(--df-text-muted)', fontFamily: "'JetBrains Mono',monospace" }}>{o.tel}</div>
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ ...celda, fontSize: 13, fontWeight: 600 }} title={o.ciudad}>{o.ciudad || '—'}</div>
-        {o.departamento && <div style={{ ...celda, fontSize: 11.5, color: 'var(--df-text-muted)' }}>{o.departamento}</div>}
-      </div>
-      <div style={{ minWidth: 0, fontSize: 13, lineHeight: 1.35, color: 'var(--df-text-body)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={o.itemsResumen}>{o.itemsResumen}</div>
-      <div style={{ ...celda, fontWeight: 800, fontSize: 14, textAlign: 'right' }}>${valorPedido(o).toLocaleString('es-CO')}</div>
-      <div style={{ minWidth: 0 }}>
-        {prov ? (
-          <>
-            <span style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 800, borderRadius: 6, padding: '2px 7px', background: prov === 'Effi' ? 'var(--df-purple-subtle)' : 'var(--df-warning-subtle)', color: prov === 'Effi' ? 'var(--df-purple)' : 'var(--df-warning)' }}>{prov}</span>
-            <div style={{ ...celda, fontSize: 11.5, color: o.hasGuia ? 'var(--df-text-body)' : 'var(--df-text-muted)', marginTop: 3, fontFamily: o.hasGuia ? "'JetBrains Mono',monospace" : 'inherit' }} title={o.guia || ''}>{o.hasGuia ? o.guia : 'esperando guía'}</div>
-          </>
-        ) : <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Sin despachar</span>}
-      </div>
-      <div onClick={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
-        <Dropdown
-          ariaLabel="Estado del pedido"
-          value={o.estado}
-          onChange={(v) => o.setEstado(v as typeof o.estado)}
-          options={o.estadosDisponibles.map((e) => ({ value: e, label: e }))}
-          width={140}
-        />
-      </div>
-      <button
-        onClick={async (e) => { e.stopPropagation(); if (await confirmar({ titulo: `Eliminar ${o.id}`, mensaje: 'Esto solo lo quita del panel; no cancela nada en Dropi/Effi.', aceptar: 'Eliminar', peligro: true })) o.eliminar(); }}
-        title="Eliminar pedido"
-        aria-label={`Eliminar ${o.id}`}
-        className="df-danger-hover"
-        style={{ background: 'transparent', border: 'none', color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 15, padding: 4 }}
-      >🗑</button>
+    <div onClick={o.open} className="df-row-hover" style={{ display: 'grid', gridTemplateColumns: COLS[modo], gap: 10, alignItems: 'center', padding: '11px 16px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}>
+      {modo === 'completa' ? numero : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}><OrigenBadge origen={o.origen} size={20} />{numero}</div>
+      )}
+      {modo === 'completa' && <div style={{ display: 'flex' }}><OrigenBadge origen={o.origen} size={22} /></div>}
+      {cliente}
+      {modo === 'completa' && (
+        <div style={{ minWidth: 0 }}>
+          <div style={{ ...celda, fontSize: 13, fontWeight: 600 }} title={o.ciudad}>{o.ciudad || '—'}</div>
+          {o.departamento && <div style={{ ...celda, fontSize: 11.5, color: 'var(--df-text-muted)' }}>{o.departamento}</div>}
+        </div>
+      )}
+      {productos}
+      {modo === 'completa' ? total : <div style={{ minWidth: 0 }}>{total}<div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 3 }}>{despacho}</div></div>}
+      {modo === 'completa' && despacho}
+      {estado}
+      {borrar}
     </div>
   );
 }

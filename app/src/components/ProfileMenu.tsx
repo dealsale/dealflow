@@ -1,4 +1,3 @@
-import { fondoActivo, setFondoActivo } from './FondoAnimado';
 import { useEffect, useRef, useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
@@ -224,7 +223,6 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
             {!df.premiumHabilitado && (
               <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)' }}>💎 El tema Premium es exclusivo: pregúntale a tu administrador de DealFlow si te lo puede habilitar.</div>
             )}
-            <FondoSwitch />
           </div>
 
           {/* Cambiar contraseña */}
@@ -282,18 +280,3 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
   );
 }
 
-/** Interruptor "Fondo animado" (se recuerda en este dispositivo). */
-function FondoSwitch() {
-  const [on, setOn] = useState(fondoActivo);
-  const cambiar = () => { setFondoActivo(!on); setOn(!on); };
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--df-text)' }}>Fondo animado</span>
-      <span role="switch" aria-checked={on} tabIndex={0} onClick={cambiar} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cambiar(); } }}
-        className="df-switch" data-on={on}
-        style={{ width: 38, height: 22, borderRadius: 999, background: on ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
-        <span style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--df-surface)', boxShadow: '0 1px 2px rgba(15,23,42,.3)' }} />
-      </span>
-    </div>
-  );
-}
