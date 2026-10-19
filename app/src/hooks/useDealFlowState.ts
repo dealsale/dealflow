@@ -496,7 +496,9 @@ function mapApiMensajes(mensajes: ApiLead['mensajes']): Mensaje[] {
   }));
 }
 
-const ESTADOS_PEDIDO = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado', 'Cancelado'];
+const ESTADOS_PEDIDO: string[] = ESTADOS_TODOS;
+// Estados viejos (antes de seguir a la transportadora).
+const ESTADO_VIEJO: Record<string, string> = { Empacado: 'Confirmado', Despachado: 'En tránsito' };
 /** Fecha (YYYY-MM-DD) en Bogotá a partir del datetime UTC del servidor. */
 function fechaBogota(iso?: string): string {
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
@@ -569,7 +571,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     ciudad: o.ciudad,
     tel: o.tel,
     direccion: o.direccion,
-    estado: (ESTADOS_PEDIDO.includes(o.estado) ? o.estado : 'Nuevo') as Order['estado'],
+    estado: (ESTADOS_PEDIDO.includes(o.estado) ? o.estado : ESTADO_VIEJO[o.estado] || 'Nuevo') as Order['estado'],
     hora: o.createdAt ? horaBogotaDe(o.createdAt) : 'ahora',
     fecha: fechaBogota(o.createdAt),
     departamento: o.departamento || '',
@@ -1256,7 +1258,9 @@ export function useDealFlowState() {
       despachado: !!(o.wooId || o.dropiOrderId),
       despachoProveedor: o.despachoProveedor || '',
       timeline: ESTADO_ORDER.map((est) => {
-        const done = ESTADO_ORDER.indexOf(est) <= ESTADO_ORDER.indexOf(o.estado);
+        // Novedad cuenta como "en camino"; Devuelto/Cancelado no marcan pasos de entrega.
+        const actual = o.estado === 'Novedad' ? 'En tránsito' : o.estado;
+        const done = ESTADO_ORDER.indexOf(est) <= ESTADO_ORDER.indexOf(actual);
         return {
           estado: est,
           dotStyle: { width: '10px', height: '10px', borderRadius: '50%', background: done ? ESTADOS[est].color : 'var(--df-border)', flexShrink: 0 },

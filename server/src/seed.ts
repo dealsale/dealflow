@@ -20,7 +20,7 @@ QUÉ INCLUYE (para vender y para soporte):
 - Inbox (bandeja) con todos los chats en un solo lugar; el equipo puede tomar cualquier chat y responder como agente humano.
 - Conexión de WhatsApp de dos formas: por la API oficial de WhatsApp (Meta Cloud API, con número verificado) o por código QR (como WhatsApp Web).
 - Envíos con Effi y Dropi conectados por su API oficial: desde el pedido se crea la remisión y la guía (eligiendo transportadora), y el estado + la guía se sincronizan solos y se le avisan al cliente por WhatsApp.
-- Pedidos con estados: Nuevo, Confirmado, Empacado, Despachado, Entregado o Cancelado.
+- Pedidos con estados: Nuevo, Confirmado, Guía generada, En tránsito, En reparto, Novedad, Entregado, Devuelto o Cancelado.
 - Marketing con IA, tienda web (DealShop), equipo/agentes, planes y temas visuales.
 
 CÓMO VENDER EL PLAN (flujo):

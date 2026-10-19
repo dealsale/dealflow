@@ -4,6 +4,7 @@ import type { Request as ExRequest, Response as ExResponse } from 'express';
 import { trazar, conPedido } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
 import { idiomaDe, MSG_ESTADO } from './idioma.js';
+import { ESTADOS_PEDIDO } from './estadosPedido.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
@@ -17,7 +18,7 @@ import type * as DropiApi from './dropiApi.js';
 export const api = Router();
 export const webhooks = Router();
 
-const ESTADOS = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado'] as const;
+const ESTADOS = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Entregado'] as const;
 
 /** Hora local de Bogotá (GMT-5) a partir del datetime UTC que guarda SQLite. */
 function horaBogota(dt: unknown): string {
@@ -802,7 +803,7 @@ api.delete('/promos/:id', requireAuth, requireStore, (req, res) => {
 
 // Todos los estados posibles (incluye Cancelado). El dueño puede cambiar de
 // cualquiera a cualquiera; no es un flujo forzado sin retroceso.
-const ESTADOS_VALIDOS = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado', 'Cancelado'] as const;
+const ESTADOS_VALIDOS = ESTADOS_PEDIDO;
 
 api.post('/orders/:rowId/advance', requireAuth, requireStore, async (req, res) => {
   const o = db.prepare('SELECT id, estado, numero, tel FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, req.user!.storeId) as

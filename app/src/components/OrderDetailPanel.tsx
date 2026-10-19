@@ -192,7 +192,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
 
 /** Pasos del envío para el pedido ya despachado. */
 function PasosEnvio({ sel }: { sel: DecoratedOrder }) {
-  const hecho = [true, !!sel.hasGuia, ['Despachado', 'Entregado'].includes(sel.estado) && !!sel.hasGuia, sel.estado === 'Entregado'];
+  const hecho = [true, !!sel.hasGuia, ['En tránsito', 'En reparto', 'Novedad', 'Entregado'].includes(sel.estado) && !!sel.hasGuia, sel.estado === 'Entregado'];
   const nombres = [sel.despachoProveedor === 'dropi' ? 'Orden creada' : 'Remisión creada', 'Guía generada', 'En camino', 'Entregado'];
   const cancelado = sel.estado === 'Cancelado';
   return (

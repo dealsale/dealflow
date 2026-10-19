@@ -1,6 +1,7 @@
 import { OrigenBadge } from '../../components/OrigenPedido';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../../components/Dropdown';
+import { textoGuia } from '../Pedidos';
 import { useState } from 'react';
 import { useFiltrosPedidos, PanelFiltros, ResumenFiltros, ORDENES, fechaCorta, type Orden } from '../../components/PedidosFiltros';
 import { ESTADOS_TODOS } from '../../lib/style';
@@ -80,15 +81,10 @@ export function MPedidos({ df }: { df: DealFlowState }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontWeight: 800, fontSize: 16 }}>{o.totalFmt}</span>
               <div style={{ flex: 1 }} />
-              {/* Estado seleccionable (incluye Cancelado), sin flujo forzado. */}
-              <div onClick={(e) => e.stopPropagation()}>
-                <Dropdown
-                  ariaLabel="Cambiar estado del pedido"
-                  value={o.estado}
-                  onChange={(v) => o.setEstado(v as typeof o.estado)}
-                  options={o.estadosDisponibles.map((e) => ({ value: e, label: e }))}
-                  width={155}
-                />
+              {/* Estado de la guía (solo lectura): se cambia a mano dentro del pedido. */}
+              <div style={{ textAlign: 'right', minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: o.hasGuia ? 'var(--df-text-body)' : 'var(--df-text-faint)' }}>{o.hasGuia ? `${o.transportadora || 'Guía'} · ${o.guia}` : o.despachado ? 'esperando guía' : 'Sin despachar'}</div>
+                {textoGuia(o) && <div style={{ fontSize: 11, color: 'var(--df-text-muted)', marginTop: 2 }}>{textoGuia(o)}</div>}
               </div>
             </div>
           </div>

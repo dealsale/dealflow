@@ -719,6 +719,17 @@ db.exec("CREATE TABLE IF NOT EXISTS app_flags (clave TEXT PRIMARY KEY, ts TEXT N
   }
 }
 
+// Estados de pedido = estados reales del envío: Empacado y Despachado ya no existen.
+{
+  const flag = 'estados_logistica_v1';
+  if (!db.prepare('SELECT 1 FROM app_flags WHERE clave = ?').get(flag)) {
+    db.prepare("UPDATE orders SET estado = 'Confirmado' WHERE estado = 'Empacado' AND COALESCE(guia,'') = ''").run();
+    db.prepare("UPDATE orders SET estado = 'Guía generada' WHERE estado = 'Empacado'").run();
+    db.prepare("UPDATE orders SET estado = 'En tránsito' WHERE estado = 'Despachado'").run();
+    db.prepare('INSERT INTO app_flags (clave) VALUES (?)').run(flag);
+  }
+}
+
 export const uid = () => crypto.randomUUID();
 export const j = (v: unknown) => JSON.stringify(v);
 export const pj = <T,>(s: string, fallback: T): T => {

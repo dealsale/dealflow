@@ -3,6 +3,7 @@ import { db, pj, registrarLog } from './db.js';
 import { conPedido, trazar, trazarApi } from './trazabilidad.js';
 import { emparejarItem, type Emparejado } from './emparejar.js';
 import { nombreTransportadora } from './transportadoras.js';
+import { estadoLogistico, siguienteEstado } from './estadosPedido.js';
 
 /**
  * Integración DIRECTA con la API de Effi ERP (https://effi.com.co/api).
@@ -810,15 +811,6 @@ export function agregarSecretoEffi(storeId: string, secreto: string): number {
   return final.length;
 }
 
-const ORDEN_ESTADO = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado', 'Cancelado'];
-const rank = (e: string) => Math.max(0, ORDEN_ESTADO.indexOf(e));
-function estadoPipeline(texto: string, hayGuia: boolean): string | null {
-  const e = norm(texto);
-  if (/entregad/.test(e)) return 'Entregado';
-  if (/cancelad|devuelt|devoluc|rechaz|anulad/.test(e)) return 'Cancelado';
-  if (/transito|despach|reparto|ruta|recogid|enviad|admitid|bodega|centro de/.test(e) || hayGuia) return 'Despachado';
-  return null;
-}
 
 /** Busca un campo por varios nombres posibles (Effi manda los datos "como la API" y anida a veces). */
 function campo(obj: unknown, ...claves: string[]): string {
@@ -871,8 +863,8 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
       if (urlDoc && urlDoc !== txt(orden.guia_url)) db.prepare('UPDATE orders SET guia_url = ? WHERE id = ?').run(urlDoc, orden.id);
       if (transp) db.prepare('UPDATE orders SET transportadora = ? WHERE id = ?').run(nombreTransportadora(transp) || transp, orden.id);
       if (estadoTxt) db.prepare('UPDATE orders SET estado_woo = ? WHERE id = ?').run(estadoTxt.slice(0, 60), orden.id);
-      const nuevo = estadoPipeline(estadoTxt, !!(guia || orden.guia));
-      if (nuevo && rank(nuevo) > rank(txt(orden.estado))) db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, orden.id);
+      const nuevo = siguienteEstado(txt(orden.estado), estadoLogistico(estadoTxt, !!(guia || orden.guia)));
+      if (nuevo) db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, orden.id);
       resumen += `${guia ? ` · guía ${guia}` : ''}${estadoTxt ? ` · ${estadoTxt}` : ''}`;
       if (guia && !Number(orden.guia_avisada)) {
         try {
