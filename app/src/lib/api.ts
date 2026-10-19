@@ -715,3 +715,9 @@ export const apiTrazabilidad = (f: { store?: string; q?: string; nivel?: string;
 export interface PedidoTraza { id: string; store_id: string; tienda: string; numero: number; cliente: string; tel: string; ciudad: string; departamento: string; direccion: string; estado: string; total: number; envio: number; origen: string; despacho_proveedor: string; effi_remision: string; dropi_order_id: string; guia: string; transportadora: string; estado_woo: string; created_at: string }
 export const apiTrazaPedido = (orderId: string) => req<{ pedido: PedidoTraza | null; items: { qty: number; nombre: string; precio: number }[]; eventos: (Omit<EventoTraza, 'store_id' | 'tienda' | 'order_id' | 'numero' | 'cliente' | 'estado' | 'tieneDatos'> & { datos: unknown })[] }>(`/api/admin/trazabilidad/pedido/${orderId}`, 'GET');
 export const apiEffiConvenios = () => req<{ convenios: { id: string; nombre: string }[]; actual: string }>('/api/effi-api/convenios', 'GET');
+
+// ── Leads por estado (embudo) ──
+export type EstadoLead = 'preguntando' | 'interesado' | 'faltan_datos' | 'datos_completos' | 'venta' | 'perdido';
+export interface LeadEstado { id: string; nombre: string; tel: string; canal: string; asignado: string; estado: EstadoLead; auto: EstadoLead; manual: boolean; ultimo: string; ultimoIso: string; hora: string; mensajes: number; pedido: { numero: number; total: number; estado: string } | null }
+export const apiLeadsEstados = () => req<{ leads: LeadEstado[] }>('/api/leads/estados', 'GET');
+export const apiSetLeadEstado = (id: string, estado: EstadoLead | '') => req<{ ok: true }>(`/api/leads/${id}/estado`, 'POST', { estado });

@@ -357,6 +357,8 @@ addColumn('variants', "refs TEXT NOT NULL DEFAULT '{}'");
 // Producto/variante EXACTOS de cada ítem del pedido (se guardan al crearlo): el
 // despacho ya no depende de que el nombre del ítem coincida con el catálogo.
 addColumn('order_items', "product_id TEXT NOT NULL DEFAULT ''");
+// Estado del lead elegido A MANO en Leads (si está vacío, se calcula solo).
+addColumn('leads', "estado_manual TEXT NOT NULL DEFAULT ''");
 addColumn('order_items', "variant_id TEXT NOT NULL DEFAULT ''");
 
 // Multi-tienda: un dueño puede tener varias tiendas (mismo correo). Para eso hay

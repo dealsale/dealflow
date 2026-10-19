@@ -3783,6 +3783,14 @@ export function useDealFlowState() {
     openMenu: () => setMenuOpen(true),
     closeMenu: () => setMenuOpen(false),
     mobileChatOpen,
+    // Desde Leads: abre ese chat en el Inbox (en celular, directo la conversación).
+    abrirChat: (id: number | string) => {
+      setCrmSelectedId(id);
+      setCrmSendWarn('');
+      if (apiMode) cargarMensajesChat(id);
+      setMobileChatOpen(true);
+      go('crm');
+    },
     openMobileChat: (id: number | string) => {
       setCrmSelectedId(id);
       setMobileChatOpen(true);

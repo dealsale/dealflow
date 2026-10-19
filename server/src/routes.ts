@@ -352,6 +352,74 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
   });
 }
 
+// ── Leads por estado (embudo) ─────────────────────────────────────────
+// El estado se CALCULA de la conversación y los pedidos (venta > datos completos >
+// faltan datos > interesado > preguntando); el dueño puede fijarlo a mano.
+export const ESTADOS_LEAD = ['preguntando', 'interesado', 'faltan_datos', 'datos_completos', 'venta', 'perdido'] as const;
+const likeAny = (col: string, pats: string[]) => '(' + pats.map((p) => `lower(${col}) LIKE '%${p}%'`).join(' OR ') + ')';
+const INTENCION = ['precio', 'cuanto', 'cuánto', 'vale', 'valor', 'quiero', 'talla', 'color', 'envio', 'envío', 'comprar', 'compro', 'pedido', 'disponible', 'contraentrega', 'contra entrega', 'lo llevo', 'me lo', 'domicilio', 'pago'];
+const PIDE_DATOS = ['dirección', 'direccion', 'nombre completo', 'ciudad', 'barrio', 'punto de referencia'];
+const DIO_DATOS = ['calle', 'carrera', 'cra ', 'cll', 'barrio', 'avenida', 'apto', 'apartamento', 'conjunto', 'manzana', 'diagonal', 'transversal'];
+
+// El cálculo revisa todas las conversaciones: se guarda 15 s por tienda para que
+// varias pestañas abiertas no lo repitan (se invalida al mover un lead a mano).
+const cacheEstados = new Map<string, { t: number; leads: unknown[] }>();
+api.get('/leads/estados', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  const c = cacheEstados.get(sid);
+  if (c && Date.now() - c.t < 15_000) return res.json({ leads: c.leads });
+  const rows = db.prepare(`SELECT l.id, l.nombre, l.tel, l.canal, l.asignado, l.estado_manual, l.created_at,
+      (SELECT texto FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_texto,
+      (SELECT tipo FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_tipo,
+      (SELECT created_at FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_at,
+      (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id) AS n_msgs,
+      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de != 'cliente' AND lower(m.texto) LIKE '%resumen de tu pedido%') AS resumen,
+      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de != 'cliente' AND ${likeAny('m.texto', PIDE_DATOS)}) AS pidio_datos,
+      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' AND ${likeAny('m.texto', DIO_DATOS)}) AS dio_datos,
+      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' AND ${likeAny('m.texto', INTENCION)}) AS intencion
+    FROM leads l WHERE l.store_id = ?`).all(sid) as Record<string, unknown>[];
+  rows.sort((a, b) => String(b.ult_at || b.created_at).localeCompare(String(a.ult_at || a.created_at)));
+  // Pedidos de la tienda en UNA consulta: por chat (lead_id) y por celular (últimos 10 dígitos).
+  const diez = (t: unknown) => String(t || '').replace(/\D/g, '').slice(-10);
+  const porLead = new Map<string, string>(); const porTel = new Map<string, string>();
+  for (const o of db.prepare("SELECT lead_id, tel, numero, total, estado FROM orders WHERE store_id = ? AND estado != 'Cancelado' ORDER BY created_at").all(sid) as Record<string, unknown>[]) {
+    const v = `${o.numero}|${o.total}|${o.estado}`;
+    if (o.lead_id) porLead.set(String(o.lead_id), v);
+    if (diez(o.tel).length >= 7) porTel.set(diez(o.tel), v);
+  }
+  for (const l of rows) l.pedido = porLead.get(String(l.id)) || (diez(l.tel).length >= 7 ? porTel.get(diez(l.tel)) : undefined) || '';
+  const etiquetaMedia: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento' };
+  const leads = rows.map((l) => {
+    const [num, total, estadoPedido] = String(l.pedido || '').split('|');
+    let auto: (typeof ESTADOS_LEAD)[number] = 'preguntando';
+    if (l.pedido) auto = 'venta';
+    else if (l.resumen) auto = 'datos_completos';
+    else if (l.pidio_datos || l.dio_datos) auto = 'faltan_datos';
+    else if (l.intencion) auto = 'interesado';
+    const manual = String(l.estado_manual || '');
+    // Una venta real siempre gana; si no, manda lo que el dueño fijó a mano.
+    const estado = auto === 'venta' ? 'venta' : (ESTADOS_LEAD as readonly string[]).includes(manual) ? manual : auto;
+    return {
+      id: l.id, nombre: l.nombre, tel: l.tel, canal: l.canal || 'whatsapp', asignado: l.asignado,
+      estado, auto, manual: !!manual && estado === manual && manual !== auto,
+      ultimo: l.ult_at ? (String(l.ult_texto || '').trim() || etiquetaMedia[String(l.ult_tipo)] || '') : '',
+      ultimoIso: l.ult_at || l.created_at, hora: l.ult_at ? horaBogota(l.ult_at) : '', mensajes: Number(l.n_msgs) || 0,
+      pedido: num ? { numero: Number(num), total: Number(total) || 0, estado: estadoPedido } : null,
+    };
+  });
+  cacheEstados.set(sid, { t: Date.now(), leads });
+  res.json({ leads });
+});
+
+api.post('/leads/:id/estado', requireAuth, requireStore, (req, res) => {
+  const e = String(req.body?.estado || '');
+  if (e && !(ESTADOS_LEAD as readonly string[]).includes(e)) return res.status(400).json({ error: 'Estado no válido.' });
+  const r = db.prepare('UPDATE leads SET estado_manual = ? WHERE id = ? AND store_id = ?').run(e, req.params.id, req.user!.storeId);
+  if (!r.changes) return res.status(404).json({ error: 'Chat no encontrado.' });
+  cacheEstados.delete(req.user!.storeId!);
+  res.json({ ok: true });
+});
+
 // Leads en vivo (para que el CRM refresque sin recargar toda la tienda).
 // ?resumen=1 → liviano (sin todos los mensajes); &abierto=<id> → ese chat sí completo.
 api.get('/leads', requireAuth, requireStore, (req, res) => {
