@@ -196,7 +196,7 @@ import type {
   VendedorSection,
 } from '../types';
 import { COLOR_ETIQUETA, ETIQUETAS_CRM } from '../types';
-import type { Bundle, MensajeBloque } from '../types';
+import type { Bundle, MensajeBloque, MensajeInicialVar } from '../types';
 
 /** Piezas de un bloque de imagen/video (normaliza el `valor` antiguo de una sola pieza). */
 function mediaDeBloque(b: MensajeBloque): string[] {
@@ -388,6 +388,9 @@ export interface DecoratedProduct extends Product {
   setContenidoPaquete: (v: string) => void;
   setDisparador: (v: string) => void;
   toggleMensajeInicial: () => void;
+  mensajesDecorados: { id: string; nombre: string; activo: boolean; piezas: number; seleccionado: boolean; elegir: () => void; toggle: () => void; renombrar: (n: string) => void; eliminar: () => void }[];
+  nuevoMensaje: (duplicar: boolean) => void;
+  mensajeAviso: string;
   variantesDecorated: DecoratedVariante[];
 }
 
@@ -609,6 +612,18 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
   }));
 }
 
+const bloquesValidos = (bl: { tipo: string; valor?: string; valores?: string[] }[] | undefined): MensajeBloque[] =>
+  (bl || []).filter((b): b is MensajeBloque => b.tipo === 'texto' || b.tipo === 'imagen' || b.tipo === 'video' || b.tipo === 'audio');
+
+/** Tras recargar del servidor, mantiene en el editor el mensaje inicial que se estaba editando. */
+function conSeleccion(nuevos: Product[], prev: Product[]): Product[] {
+  return nuevos.map((p) => {
+    const sel = prev.find((x) => x.id === p.id)?.mensajeSel || 0;
+    if (!sel || !p.mensajes || sel >= p.mensajes.length) return p;
+    return { ...p, mensajeSel: sel, mensajeBloques: p.mensajes[sel].bloques };
+  });
+}
+
 function mapApiProducts(items: ApiProduct[]): Product[] {
   return items.map((p) => ({
     id: p.id,
@@ -630,7 +645,10 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     testimonios: p.testimonios || [],
     modosUso: p.modosUso || '',
     videos: p.videos || [],
-    mensajeBloques: (p.mensajeBloques || []).filter((b): b is MensajeBloque => b.tipo === 'texto' || b.tipo === 'imagen' || b.tipo === 'video' || b.tipo === 'audio'),
+    mensajeBloques: bloquesValidos(p.mensajes?.length ? p.mensajes[0].bloques : p.mensajeBloques),
+    mensajes: (p.mensajes?.length ? p.mensajes : [{ id: 'm1', nombre: 'Mensaje 1', activo: true, bloques: p.mensajeBloques || [] }])
+      .map((m) => ({ id: m.id, nombre: m.nombre, activo: m.activo !== false, bloques: bloquesValidos(m.bloques) })),
+    mensajeSel: 0,
     bundles: p.bundles || [],
     opciones: (p.opciones || []).filter((o) => o && typeof o.nombre === 'string' && Array.isArray(o.valores)).map((o) => ({
       nombre: o.nombre,
@@ -788,6 +806,7 @@ export function useDealFlowState() {
   const [faqP, setFaqP] = useState('');
   const [faqR, setFaqR] = useState('');
   const [bloqueTexto, setBloqueTexto] = useState('');
+  const [mensajeAviso, setMensajeAviso] = useState('');
   const [videoWarn, setVideoWarn] = useState('');
   const [mediaWarn, setMediaWarn] = useState('');
   const [bundleCantidad, setBundleCantidad] = useState('');
@@ -1489,7 +1508,7 @@ export function useDealFlowState() {
 
   async function reloadProducts() {
     const { data } = await apiState();
-    if (data?.products) setProducts(mapApiProducts(data.products));
+    if (data?.products) setProducts((prev) => conSeleccion(mapApiProducts(data.products), prev));
   }
 
   /** Manda ya cualquier cambio de producto pendiente (al recargar/cerrar). */
@@ -1946,7 +1965,7 @@ export function useDealFlowState() {
         setRules(data.assistant?.reglas || []);
         setApiLeadsState(mapApiLeads(data.leads));
         if (data.orders) setOrders(mapApiOrders(data.orders));
-        if (data.products) setProducts(mapApiProducts(data.products));
+        if (data.products) setProducts((prev) => conSeleccion(mapApiProducts(data.products), prev));
       });
     };
     if (!sessionUser) return;
@@ -2091,9 +2110,34 @@ export function useDealFlowState() {
   ) {
     const prod = productsRef.current.find((p) => p.id === productId);
     const nueva = mutate((prod?.[key] || []) as NonNullable<Product[K]>);
+    if (key === 'mensajeBloques' && prod) {
+      // Se edita el mensaje inicial SELECCIONADO: guardamos la lista completa.
+      const sel = prod.mensajeSel || 0;
+      const mensajes = listaMensajes(prod).map((m, i) => (i === sel ? { ...m, bloques: nueva as MensajeBloque[] } : m));
+      setProducts((st) => st.map((p) => (p.id === productId ? { ...p, mensajeBloques: nueva as MensajeBloque[], mensajes } : p)));
+      queuePatch(productId, { mensajes });
+      return;
+    }
     setProducts((st) => st.map((p) => (p.id === productId ? { ...p, [key]: nueva } : p)));
     queuePatch(productId, { [key]: nueva });
   }
+
+  // ── Varios mensajes iniciales por producto ──
+  const listaMensajes = (p: Product): MensajeInicialVar[] =>
+    p.mensajes?.length ? p.mensajes : [{ id: 'm1', nombre: 'Mensaje 1', activo: true, bloques: p.mensajeBloques || [] }];
+  /** Cambia la lista y deja el editor en el mensaje `sel`. */
+  function setMensajes(productId: number | string, fn: (l: MensajeInicialVar[]) => MensajeInicialVar[], sel?: number, guardar = true) {
+    const prod = productsRef.current.find((p) => p.id === productId);
+    if (!prod) return;
+    const mensajes = fn(listaMensajes(prod));
+    const s = Math.min(Math.max(0, sel ?? prod.mensajeSel ?? 0), mensajes.length - 1);
+    const next = { ...prod, mensajes, mensajeSel: s, mensajeBloques: mensajes[s]?.bloques || [] };
+    productsRef.current = productsRef.current.map((p) => (p.id === productId ? next : p));
+    setProducts((st) => st.map((p) => (p.id === productId ? next : p)));
+    if (guardar) queuePatch(productId, { mensajes });
+  }
+  const nuevoIdMensaje = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const nombreLibre = (l: MensajeInicialVar[]) => { let n = l.length + 1; while (l.some((m) => m.nombre === `Mensaje ${n}`)) n++; return `Mensaje ${n}`; };
 
   async function addTestimonios(productId: number | string, files: File[]) {
     const urls = await subir(files, 'image/');
@@ -2327,6 +2371,32 @@ export function useDealFlowState() {
         setContenidoPaquete: (v: string) => updateProduct(p.id, { contenidoPaquete: v }),
         setDisparador: (v: string) => updateProduct(p.id, { disparador: v }),
         toggleMensajeInicial: () => updateProduct(p.id, { mensajeInicialActivo: !(p.mensajeInicialActivo !== false) }),
+        mensajesDecorados: listaMensajes(p).map((m, i, l) => ({
+          id: m.id, nombre: m.nombre, activo: m.activo, piezas: m.bloques.length,
+          seleccionado: (p.mensajeSel || 0) === i,
+          elegir: () => setMensajes(p.id, (x) => x, i, false),
+          // Encender/apagar: siempre queda al menos uno encendido.
+          toggle: () => {
+            if (m.activo && l.filter((x) => x.activo).length <= 1) { setMensajeAviso('Debe quedar al menos un mensaje encendido. Para no enviar ninguno, apaga el interruptor general.'); return; }
+            setMensajeAviso('');
+            setMensajes(p.id, (x) => x.map((y, j) => (j === i ? { ...y, activo: !y.activo } : y)));
+          },
+          renombrar: (nombre: string) => setMensajes(p.id, (x) => x.map((y, j) => (j === i ? { ...y, nombre } : y))),
+          eliminar: () => {
+            if (l.length <= 1) return;
+            setMensajes(p.id, (x) => {
+              const resto = x.filter((_, j) => j !== i);
+              return resto.some((y) => y.activo) ? resto : resto.map((y, j) => (j === 0 ? { ...y, activo: true } : y));
+            }, Math.max(0, i - 1));
+          },
+        })),
+        nuevoMensaje: (duplicar: boolean) => {
+          const l = listaMensajes(p);
+          if (l.length >= 10) { setMensajeAviso('Máximo 10 mensajes iniciales por producto.'); return; }
+          const base = duplicar ? l[p.mensajeSel || 0] : null;
+          setMensajes(p.id, (x) => [...x, { id: nuevoIdMensaje(), nombre: base ? `${base.nombre} (copia)` : nombreLibre(x), activo: false, bloques: base ? base.bloques.map((b) => ({ ...b })) : [] }], l.length);
+        },
+        mensajeAviso,
         faqsDecoradas: (p.faqs || []).map((f, i) => ({
           ...f,
           remove: () => {

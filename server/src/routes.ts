@@ -1,3 +1,4 @@
+import { mensajesDe as mensajesInicialesDe, normalizarMensajes, principal } from './mensajesIniciales.js';
 import { Router } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
@@ -239,7 +240,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
     descripcion: p.descripcion || '', caracteristicas: p.caracteristicas || '', mensajeInicial: p.mensaje_inicial || '',
     faqs: pj(p.faqs as string, []), testimonios: pj(p.testimonios as string, []), modosUso: p.modos_uso || '',
-    videos: pj(p.videos as string, []), mensajeBloques: pj(p.mensaje_bloques as string, []),
+    videos: pj(p.videos as string, []), mensajeBloques: pj(p.mensaje_bloques as string, []), mensajes: mensajesInicialesDe(p),
     bundles: pj(p.bundles as string, []), opciones: pj(p.opciones as string, []),
     contenidoPaquete: p.contenido_paquete || '', disparador: p.disparador || '', mensajeInicialActivo: p.mensaje_inicial_activo !== 0,
     variantes: (db.prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY orden').all(p.id as string) as Record<string, unknown>[]).map((v) => ({
@@ -315,7 +316,8 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
       promosOptin: Number(l.promos_optin) === 1,
     };
     if (!resumen) return { ...base, mensajes: mensajesDe(l.id as string) };
-    const ult = db.prepare('SELECT texto, created_at FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1').get(l.id as string) as Record<string, unknown> | undefined;
+    const ult = db.prepare('SELECT texto, tipo, created_at FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1').get(l.id as string) as Record<string, unknown> | undefined;
+    const etiquetaMedia: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento' };
     const cola = db.prepare('SELECT de FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 40').all(l.id as string) as Record<string, unknown>[];
     let sinResponder = 0;
     for (const m of cola) { if (m.de === 'cliente') sinResponder++; else break; }
@@ -323,7 +325,7 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
     return {
       ...base,
       mensajes: esAbierto ? mensajesDe(l.id as string) : [],
-      ultimo: ult ? ult.texto : '', ultimoIso: ult ? ult.created_at : null,
+      ultimo: ult ? (String(ult.texto || '').trim() || etiquetaMedia[String(ult.tipo)] || '') : '', ultimoIso: ult ? ult.created_at : null,
       hora: ult ? horaBogota(ult.created_at) : '', sinResponder,
     };
   });
@@ -521,7 +523,21 @@ api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   if (modosUso !== undefined) db.prepare('UPDATE products SET modos_uso = ? WHERE id = ?').run(String(modosUso), req.params.id);
   if (Array.isArray(testimonios)) db.prepare('UPDATE products SET testimonios = ? WHERE id = ?').run(j(testimonios), req.params.id);
   if (Array.isArray(videos)) db.prepare('UPDATE products SET videos = ? WHERE id = ?').run(j(videos), req.params.id);
-  if (Array.isArray(mensajeBloques)) db.prepare('UPDATE products SET mensaje_bloques = ? WHERE id = ?').run(j(mensajeBloques), req.params.id);
+  if (Array.isArray(mensajeBloques)) {
+    db.prepare('UPDATE products SET mensaje_bloques = ? WHERE id = ?').run(j(mensajeBloques), req.params.id);
+    // Cliente viejo que solo conoce un mensaje: lo reflejamos en el primero de la lista.
+    const fila = db.prepare('SELECT mensajes_iniciales FROM products WHERE id = ?').get(req.params.id) as { mensajes_iniciales: string } | undefined;
+    const lista = pj<{ bloques: unknown[] }[]>(fila?.mensajes_iniciales || '', []);
+    if (lista.length) { lista[0].bloques = mensajeBloques; db.prepare('UPDATE products SET mensajes_iniciales = ? WHERE id = ?').run(j(lista), req.params.id); }
+  }
+  // Varios mensajes iniciales: se guarda la lista y mensaje_bloques queda con el
+  // principal (lo usan la IA como guion y la imagen de referencia del producto).
+  if (req.body?.mensajes !== undefined) {
+    const lista = normalizarMensajes(req.body.mensajes);
+    if (lista) {
+      db.prepare('UPDATE products SET mensajes_iniciales = ?, mensaje_bloques = ? WHERE id = ?').run(j(lista), j(principal(lista).bloques), req.params.id);
+    }
+  }
   if (nombre !== undefined) db.prepare('UPDATE products SET nombre = ? WHERE id = ?').run(String(nombre), req.params.id);
   if (descripcion !== undefined) db.prepare('UPDATE products SET descripcion = ? WHERE id = ?').run(String(descripcion), req.params.id);
   if (caracteristicas !== undefined) db.prepare('UPDATE products SET caracteristicas = ? WHERE id = ?').run(String(caracteristicas), req.params.id);

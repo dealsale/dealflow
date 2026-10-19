@@ -106,6 +106,8 @@ export interface Flujo {
   activo: boolean;
 }
 
+export interface MensajeInicialVar { id: string; nombre: string; activo: boolean; bloques: MensajeBloque[] }
+
 export interface Product {
   id: number | string;
   nombre: string;
@@ -131,8 +133,13 @@ export interface Product {
   modosUso?: string;
   /** Videos del producto, como data URLs */
   videos?: string[];
-  /** Mensaje inicial como construcción de bloques (texto/imagen/video) */
+  /** Mensaje inicial como construcción de bloques (texto/imagen/video). Es el
+   *  que se está editando: el de `mensajes[mensajeSel]`. */
   mensajeBloques?: MensajeBloque[];
+  /** Todos los mensajes iniciales del producto (varios encendidos → se envían al azar). */
+  mensajes?: MensajeInicialVar[];
+  /** Índice del mensaje que se edita en el panel (solo UI). */
+  mensajeSel?: number;
   /** Combos/bundles: llevar N por un precio especial */
   bundles?: Bundle[];
   /** Grupos de opciones: Color (negro, azul…), Talla (S, M, L…) */

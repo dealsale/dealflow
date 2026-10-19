@@ -278,6 +278,7 @@ export interface ApiProduct {
   modosUso: string;
   videos: string[];
   mensajeBloques: { tipo: string; valor?: string; valores?: string[] }[];
+  mensajes?: { id: string; nombre: string; activo: boolean; bloques: { tipo: string; valor?: string; valores?: string[] }[] }[];
   bundles: { cantidad: number; precio: number; etiqueta?: string }[];
   opciones: { nombre: string; valores: ({ valor: string; foto?: string } | string)[] }[];
   contenidoPaquete: string;

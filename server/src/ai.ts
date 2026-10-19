@@ -1,3 +1,4 @@
+import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
@@ -106,7 +107,7 @@ async function entenderImagen(storeId: string, mediaUrl: string): Promise<string
       body: JSON.stringify({
         model: process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini', max_tokens: 150,
         messages: [{ role: 'user', content: [
-          { type: 'text', text: 'Un cliente envió esta imagen por WhatsApp a una tienda. En español y en 1-2 frases, di qué se ve y qué podría querer (ej: un producto del catálogo, un comprobante de pago, una talla, una captura). Sé concreto y breve.' },
+          { type: 'text', text: 'Un cliente envió esta imagen por WhatsApp a una tienda. En español y en UNA frase corta, di solo QUÉ TIPO de cosa es (ej: "una prenda tipo vestido largo color negro", "un comprobante de pago", "una captura de una publicación", "una tabla de tallas"). Menciona el color si se ve. NO adivines material, tela, composición, marca ni calidad.' },
           { type: 'image_url', image_url: { url: dataUrl } },
         ] }],
       }),
@@ -271,8 +272,9 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
       ? await transcribirAudio(storeId, umedia.media_url)
       : await entenderImagen(storeId, umedia.media_url);
     if (reconocido) {
-      const guardar = umedia.tipo === 'audio' ? reconocido : `[El cliente envió una foto: ${reconocido}]`;
-      db.prepare('UPDATE messages SET texto = ? WHERE id = ?').run(guardar, umedia.id);
+      // El audio se transcribe al texto (se lee en el chat); la foto queda como nota INTERNA.
+      if (umedia.tipo === 'audio') db.prepare('UPDATE messages SET texto = ? WHERE id = ?').run(reconocido, umedia.id);
+      else db.prepare('UPDATE messages SET ia_nota = ? WHERE id = ?').run(reconocido, umedia.id);
       console.log(`[ia] ${umedia.tipo} → texto (OpenAI): ${reconocido.slice(0, 90)}`);
     }
   }
@@ -335,16 +337,21 @@ NO ENTRES EN BUCLE DE CONFIRMACIÓN: un "sí", "confirmo", "correcto", "dale" de
 
 FORMATO DE TU RESPUESTA: responde SIEMPRE en texto plano, exactamente lo que verá el cliente. NUNCA respondas en formato JSON, NUNCA empieces con «text:» o «"text":», y NUNCA encierres toda tu respuesta entre comillas. Escribe el mensaje directo, nada más.
 
+FOTOS DEL CLIENTE: cuando el cliente manda una foto verás "[el cliente envió una foto · pista interna aproximada: …]". Esa pista la generó un sistema automático y puede equivocarse: es SOLO para orientarte. NUNCA la cites ni la repitas al cliente, y NUNCA digas que algo "no está disponible", "no lo manejamos" o "no tenemos esa tela/material/referencia" por lo que diga esa pista. Si la foto parece de un producto, relaciónala con el producto del CATÁLOGO que más se parezca (por tipo y color) y sigue la venta con ese; si no estás seguro, pregúntale amablemente cuál de nuestros productos le interesa o muéstrale las opciones del catálogo.
+
 OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó registrado", "ya está creado", "confirmado" o similar si en ESE MISMO mensaje no incluiste el marcador ##PEDIDO ...##. Si todavía te falta el nombre, la ciudad o la dirección exacta, pídelos primero y NO afirmes que el pedido quedó registrado. El mensaje de confirmación al cliente lo envía el sistema automáticamente, no lo escribas tú.`;
 
   const nombreMedia = (tipo: string) =>
     tipo === 'audio' ? 'una nota de voz' : tipo === 'image' ? 'una imagen' : tipo === 'video' ? 'un video' : 'un archivo';
-  const historia = (db.prepare('SELECT de, texto, tipo FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 16').all(leadId) as { de: string; texto: string; tipo: string }[])
+  const historia = (db.prepare('SELECT de, texto, tipo, ia_nota, cita_texto FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 16').all(leadId) as { de: string; texto: string; tipo: string; ia_nota: string; cita_texto: string }[])
     .reverse()
     .map((m) => ({
       role: m.de === 'cliente' ? ('user' as const) : ('assistant' as const),
       // Limpiamos respuestas viejas mal formateadas ("text": "...") para que el modelo no las copie.
-      content: (m.de === 'cliente' ? m.texto : desenvolver(m.texto || '')) || (m.tipo && m.tipo !== 'texto' ? `[el cliente envió ${nombreMedia(m.tipo)}]` : ''),
+      // Si el cliente respondió CITANDO un mensaje, se lo decimos a la IA para que sepa a qué responde.
+      content: (m.de === 'cliente' && m.cita_texto ? `(respondiendo a: «${m.cita_texto.replace(/\s+/g, ' ').slice(0, 160)}») ` : '') + (m.de === 'cliente' && m.tipo === 'image'
+        ? [m.texto, `[el cliente envió una foto${m.ia_nota ? ` · pista interna aproximada: ${m.ia_nota}` : ''}]`].filter(Boolean).join('\n')
+        : (m.de === 'cliente' ? m.texto : desenvolver(m.texto || '')) || (m.tipo && m.tipo !== 'texto' ? `[el cliente envió ${nombreMedia(m.tipo)}]` : '')),
     }))
     .filter((m) => m.content);
 
@@ -1080,7 +1087,10 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
      ON CONFLICT(lead_id, product_id) DO UPDATE SET created_at = datetime('now')`,
   ).run(leadId, pid);
 
-  const bloques = pj<{ tipo: string; valor?: string; valores?: string[] }[]>(p.mensaje_bloques as string, []);
+  // Varios mensajes iniciales encendidos → uno al azar para este chat.
+  const elegido = elegirMensaje(p);
+  const bloques = elegido ? elegido.bloques : pj<{ tipo: string; valor?: string; valores?: string[] }[]>(p.mensaje_bloques as string, []);
+  if (elegido && mensajesDe(p).filter((m) => m.activo && m.bloques.length).length > 1) console.log(`[ia] "${p.nombre}": mensaje inicial al azar → ${elegido.nombre}`);
   const fotos = pj<string[]>(p.fotos_subidas as string, []);
   const videos = pj<string[]>(p.videos as string, []);
   // Si armaste el mensaje inicial con bloques, se envía EXACTAMENTE esa
