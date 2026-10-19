@@ -48,15 +48,17 @@ export function directivaIdioma(storeId: string): string {
 export const MSG_ESTADO: Record<Idioma, Record<string, (n: number) => string>> = {
   es: {
     Confirmado: (n) => `✅ ¡Tu pedido #DF-${n} quedó confirmado! Ya lo estamos preparando para enviártelo. 📦`,
-    Empacado: (n) => `📦 Tu pedido #DF-${n} ya está empacado y listo para salir. 🚀`,
-    Despachado: (n) => `🚚 ¡Tu pedido #DF-${n} va en camino! Pronto lo recibes. 🙌`,
+    'En tránsito': (n) => `🚚 ¡Tu pedido #DF-${n} va en camino! Pronto lo recibes. 🙌`,
+    'En reparto': (n) => `🛵 ¡Tu pedido #DF-${n} salió a reparto! Hoy te lo entregan, ten el celular a mano. 📲`,
+    Novedad: (n) => `⚠️ La transportadora reportó una novedad con tu pedido #DF-${n}. Escríbenos y te ayudamos a resolverla. 🙏`,
     Entregado: (n) => `🎉 Tu pedido #DF-${n} fue entregado. ¡Muchas gracias por tu compra! 💚`,
     Cancelado: (n) => `❌ Tu pedido #DF-${n} fue cancelado. Si fue un error o quieres retomarlo, escríbenos y con gusto te ayudamos. 🙏`,
   },
   en: {
     Confirmado: (n) => `✅ Your order #DF-${n} is confirmed! We're getting it ready to ship. 📦`,
-    Empacado: (n) => `📦 Your order #DF-${n} is packed and ready to go. 🚀`,
-    Despachado: (n) => `🚚 Your order #DF-${n} is on its way! You'll have it soon. 🙌`,
+    'En tránsito': (n) => `🚚 Your order #DF-${n} is on its way! You'll have it soon. 🙌`,
+    'En reparto': (n) => `🛵 Your order #DF-${n} is out for delivery! Keep your phone handy. 📲`,
+    Novedad: (n) => `⚠️ The carrier reported an issue with your order #DF-${n}. Message us and we'll help you sort it out. 🙏`,
     Entregado: (n) => `🎉 Your order #DF-${n} was delivered. Thank you so much for your purchase! 💚`,
     Cancelado: (n) => `❌ Your order #DF-${n} was cancelled. If it was a mistake or you'd like to pick it back up, just message us and we'll gladly help. 🙏`,
   },

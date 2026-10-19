@@ -24,19 +24,24 @@ export interface EstadoCfg extends PillColor {
   nextEstado: EstadoPedido | null;
 }
 
+// Estados = los del envío real (Effi / Dropi / transportadora). Con guía se
+// sincronizan solos; a mano solo se cambian desde el detalle del pedido.
 export const ESTADOS: Record<EstadoPedido, EstadoCfg> = {
   Nuevo: { color: 'var(--df-info)', bg: 'var(--df-info-subtle)', next: 'Confirmar', nextEstado: 'Confirmado' },
-  Confirmado: { color: 'var(--df-purple)', bg: 'var(--df-purple-subtle)', next: 'Empacar', nextEstado: 'Empacado' },
-  Empacado: { color: 'var(--df-warning)', bg: 'var(--df-warning-subtle)', next: 'Despachar', nextEstado: 'Despachado' },
-  Despachado: { color: '#0E7490', bg: '#CFFAFE', next: 'Marcar entregado', nextEstado: 'Entregado' },
+  Confirmado: { color: 'var(--df-purple)', bg: 'var(--df-purple-subtle)', next: null, nextEstado: null },
+  'Guía generada': { color: 'var(--df-warning)', bg: 'var(--df-warning-subtle)', next: null, nextEstado: null },
+  'En tránsito': { color: '#0E7490', bg: '#CFFAFE', next: null, nextEstado: null },
+  'En reparto': { color: '#1D4ED8', bg: '#DBEAFE', next: null, nextEstado: null },
+  Novedad: { color: '#C2410C', bg: '#FFEDD5', next: null, nextEstado: null },
   Entregado: { color: 'var(--df-brand-dark)', bg: 'var(--df-brand-subtle)', next: null, nextEstado: null },
+  Devuelto: { color: '#9D174D', bg: '#FCE7F3', next: null, nextEstado: null },
   Cancelado: { color: 'var(--df-danger-dark)', bg: 'var(--df-danger-subtle-2)', next: null, nextEstado: null },
 };
 
-// Progresión "normal" (para la línea de tiempo). Cancelado va aparte: no es un paso.
-export const ESTADO_ORDER: EstadoPedido[] = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado'];
-// Todos los estados que el dueño puede elegir a mano (incluye Cancelado).
-export const ESTADOS_TODOS: EstadoPedido[] = ['Nuevo', 'Confirmado', 'Empacado', 'Despachado', 'Entregado', 'Cancelado'];
+// Progresión "normal" (para la línea de tiempo). Novedad, Devuelto y Cancelado van aparte.
+export const ESTADO_ORDER: EstadoPedido[] = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Entregado'];
+// Todos los estados (filtros y el selector del detalle del pedido).
+export const ESTADOS_TODOS: EstadoPedido[] = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Novedad', 'Entregado', 'Devuelto', 'Cancelado'];
 
 export function swatch(label: string, fallback: string): string {
   const l = label.toLowerCase();

@@ -89,7 +89,7 @@ export function Pedidos({ df }: { df: DealFlowState }) {
             {th('Productos')}
             {th('Total', ['menor', 'mayor'], 'right')}
             {modo === 'completa' && th('Despacho')}
-            {th('Estado')}
+            {th('Estado guía')}
             <span />
           </div>
         )}
@@ -108,6 +108,10 @@ export function Pedidos({ df }: { df: DealFlowState }) {
 }
 
 const thStyle: CSSProperties = { fontSize: 11.5, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', display: 'block' };
+
+// Texto literal de la transportadora, solo si dice algo más que el estado.
+const sinTildes = (x: string) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+export const textoGuia = (o: DecoratedOrder) => (o.estadoWoo && sinTildes(o.estadoWoo) !== sinTildes(o.estado) ? o.estadoWoo : '');
 
 function Fila({ o, modo }: { o: DecoratedOrder; modo: Modo }) {
   const prov = o.despachoProveedor === 'effi' ? 'Effi' : o.despachoProveedor === 'dropi' ? 'Dropi' : '';
@@ -128,12 +132,15 @@ function Fila({ o, modo }: { o: DecoratedOrder; modo: Modo }) {
   const despacho = prov ? (
     <div style={{ minWidth: 0 }}>
       <span style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 800, borderRadius: 6, padding: '2px 7px', background: prov === 'Effi' ? 'var(--df-purple-subtle)' : 'var(--df-warning-subtle)', color: prov === 'Effi' ? 'var(--df-purple)' : 'var(--df-warning)' }}>{prov}</span>
+      {o.transportadora && o.transportadora !== prov && <div style={{ ...celda, fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-body)', marginTop: 3 }} title={o.transportadora}>{o.transportadora}</div>}
       <div style={{ ...celda, fontSize: 11.5, color: o.hasGuia ? 'var(--df-text-body)' : 'var(--df-text-muted)', marginTop: 3, fontFamily: o.hasGuia ? "'JetBrains Mono',monospace" : 'inherit' }} title={o.guia || ''}>{o.hasGuia ? o.guia : 'esperando guía'}</div>
     </div>
   ) : <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Sin despachar</span>;
+  // Estado de la guía (solo lectura): lo sincroniza Effi/Dropi. A mano, dentro del pedido.
   const estado = (
-    <div onClick={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
-      <Dropdown ariaLabel="Estado del pedido" value={o.estado} onChange={(v) => o.setEstado(v as typeof o.estado)} options={o.estadosDisponibles.map((e) => ({ value: e, label: e }))} />
+    <div style={{ minWidth: 0 }} title={o.estadoWoo ? `Transportadora: ${o.estadoWoo}` : undefined}>
+      <span style={{ ...o.pillStyle, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'middle' }}>{o.estado}</span>
+      {textoGuia(o) && <div style={{ ...celda, fontSize: 11, color: 'var(--df-text-muted)', marginTop: 3 }}>{textoGuia(o)}</div>}
     </div>
   );
   const borrar = (
