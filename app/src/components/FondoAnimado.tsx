@@ -12,7 +12,12 @@ import { useEffect, useRef, useState } from 'react';
  * (localStorage dealflow:fondo = 'off').
  */
 export function fondoActivo(): boolean {
-  try { if (localStorage.getItem('dealflow:fondo') === 'off') return false; } catch { /* modo privado */ }
+  try {
+    // Modo seguro: abrir la app con ?sinfondo lo apaga en este equipo (se vuelve a
+    // encender desde el menú de perfil).
+    if (/[?&]sinfondo\b/.test(location.search)) localStorage.setItem('dealflow:fondo', 'off');
+    if (localStorage.getItem('dealflow:fondo') === 'off') return false;
+  } catch { /* modo privado */ }
   return !(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
 
@@ -49,7 +54,7 @@ export function FondoAnimado({ tema }: { tema: string }) {
     const medir = () => {
       const r = raiz.getBoundingClientRect();
       W = r.width; H = r.height;
-      const d = Math.min(window.devicePixelRatio || 1, 1.5);
+      const d = 1; // resolución 1:1: mucho más liviano para la tarjeta gráfica
       c.width = Math.round(W * d); c.height = Math.round(H * d);
       c.style.width = W + 'px'; c.style.height = H + 'px';
       ctx.setTransform(d, 0, 0, d, 0, 0);
@@ -103,7 +108,8 @@ export function FondoAnimado({ tema }: { tema: string }) {
         if (!a || !b || q.t >= 1 || Math.hypot(a.x - b.x, a.y - b.y) > max * 1.2) { paquetes.splice(k, 1); continue; }
         const x = a.x + (b.x - a.x) * q.t, y = a.y + (b.y - a.y) * q.t;
         ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 6.283); ctx.fillStyle = pal.paquete;
-        ctx.shadowColor = pal.paquete; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0;
+        ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.283); ctx.fillStyle = pal.paquete.replace(/[\d.]+\)$/, '0.18)'); ctx.fill();
       }
     };
     raf = requestAnimationFrame(cuadro);
