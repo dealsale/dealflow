@@ -3337,6 +3337,9 @@ export function useDealFlowState() {
     set: () => setFechaFilter(f),
   }));
   const recentOrders: DecoratedOrder[] = useMemo(() => orders.slice(0, 4).map(decorateOrder), [orders]);
+  // Todos los pedidos decorados: la tabla de Pedidos aplica sus propios filtros avanzados.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const allOrders: DecoratedOrder[] = useMemo(() => orders.map(decorateOrder), [orders]);
   const selRaw = orders.find((o) => o.id === selectedOrderId) || null;
   const sel = selRaw ? decorateOrder(selRaw) : null;
 
@@ -3691,8 +3694,9 @@ export function useDealFlowState() {
 
   // Exporta los pedidos a CSV para Excel (BOM UTF-8 + ';' que es el separador
   // que Excel usa con configuración regional de Colombia).
-  function exportarPedidos() {
-    const lista = ordersRef.current;
+  /** Exporta a Excel (CSV) los pedidos dados (por defecto, todos). */
+  function exportarPedidos(ids?: string[]) {
+    const lista = ids ? ordersRef.current.filter((o) => ids.includes(o.id)) : ordersRef.current;
     if (!lista.length) return;
     const esc = (v: unknown) => {
       const s = String(v ?? '').replace(/"/g, '""');
@@ -3867,6 +3871,7 @@ export function useDealFlowState() {
     orderDateFilters,
     filter,
     filteredOrders,
+    allOrders,
     noOrders: filteredOrders.length === 0,
     orderQuery,
     setOrderQuery,
