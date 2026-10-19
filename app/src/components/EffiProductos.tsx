@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Dropdown } from './Dropdown';
 import {
   apiEffiApiArticulos, apiEffiApiBuscar, apiEffiApiProveedor, apiEffiApiSyncArticulos, apiEffiApiVincular,
   type EffiArticulo, type EffiVarianteDF,
@@ -18,46 +19,66 @@ const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', borde
 const btn: React.CSSProperties = { background: 'var(--df-purple)', color: '#fff', border: 'none', borderRadius: 9, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' };
 const mini: React.CSSProperties = { border: '1px solid var(--df-border)', background: 'var(--df-surface)', borderRadius: 7, padding: '5px 9px', fontFamily: 'inherit', fontWeight: 600, fontSize: 11.5, cursor: 'pointer', color: 'var(--df-text-body)', whiteSpace: 'nowrap' };
 
-/** Buscador de artículos de Effi: filtra los vinculados en memoria y busca en vivo en Effi. */
-function BuscadorArticulo({ cache, onElegir, inicial }: { cache: EffiArticulo[]; onElegir: (a: EffiArticulo) => void; inicial: string }) {
-  const [q, setQ] = useState(inicial);
+const tokens = (s: string) => norm(s).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((t) => t.length > 1);
+/** Qué tanto se parece un artículo a la variante (para ordenar el selector). */
+const parecido = (a: EffiArticulo, sugerencia: string[]) => {
+  const t = tokens(`${a.descripcion} ${a.referencia}`);
+  return sugerencia.filter((x) => t.some((y) => y === x || y.startsWith(x) || x.startsWith(y))).length;
+};
+
+/**
+ * Elegir el artículo de Effi de una variante: un SELECTOR con todos tus artículos
+ * (ordenados por parecido a la variante y con buscador adentro) y, debajo, la
+ * búsqueda en vivo en Effi para traer los que aún no están en la lista.
+ */
+function BuscadorArticulo({ cache, onElegir, producto, variante }: { cache: EffiArticulo[]; onElegir: (a: EffiArticulo) => void; producto: string; variante: string }) {
+  const [q, setQ] = useState('');
   const [remotos, setRemotos] = useState<EffiArticulo[]>([]);
   const [buscando, setBuscando] = useState(false);
+  const [elegido, setElegido] = useState('');
   const t = useRef<number | undefined>(undefined);
+  const traer = (term: string) => {
+    setBuscando(true);
+    void apiEffiApiBuscar(term).then((r) => { setBuscando(false); const nuevos = r.data?.articulos || []; setRemotos((prev) => [...prev, ...nuevos.filter((x) => !prev.some((p) => p.id === x.id))]); });
+  };
+  // Al abrir: trae de Effi los artículos con el nombre del producto (por si no estaban en memoria).
+  useEffect(() => { const base = tokens(producto).slice(0, 2).join(' '); if (base.length >= 2) traer(base); }, [producto]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     window.clearTimeout(t.current);
-    if (q.trim().length < 2) { setRemotos([]); return; }
-    t.current = window.setTimeout(() => {
-      setBuscando(true);
-      void apiEffiApiBuscar(q).then((r) => { setBuscando(false); setRemotos(r.data?.articulos || []); });
-    }, 450);
+    if (q.trim().length < 2) return;
+    t.current = window.setTimeout(() => traer(q.trim()), 450);
     return () => window.clearTimeout(t.current);
-  }, [q]);
-  const locales = useMemo(() => {
-    const palabras = norm(q).split(/\s+/).filter(Boolean);
-    if (!palabras.length) return [];
-    return cache.filter((a) => { const txt = norm(`${a.descripcion} ${a.referencia}`); return palabras.every((p) => txt.includes(p)); }).slice(0, 8);
-  }, [q, cache]);
-  const vistos = new Set(locales.map((a) => a.id));
-  const lista = [...locales, ...remotos.filter((a) => !vistos.has(a.id))].slice(0, 12);
+  }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sugerencia = useMemo(() => tokens(`${producto} ${variante}`), [producto, variante]);
+  const todos = useMemo(() => {
+    const m = new Map<string, EffiArticulo>();
+    for (const a of [...cache, ...remotos]) if (!m.has(a.id)) m.set(a.id, a);
+    // Lo que escribas en la búsqueda manda; luego, el parecido con la variante.
+    const tq = tokens(q);
+    const score = (a: EffiArticulo) => parecido(a, tq) * 10 + parecido(a, sugerencia);
+    return [...m.values()].sort((x, y) => score(y) - score(x) || x.descripcion.localeCompare(y.descripcion));
+  }, [cache, remotos, sugerencia, q]);
+  const etiqueta = (a: EffiArticulo) => `${a.descripcion}${a.referencia ? ` · ref ${a.referencia}` : ''} · #${a.id}${a.stock != null ? ` · stock ${a.stock}` : ''}`;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <input id="effi-buscar-articulo" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Busca el artículo en Effi por nombre o referencia…" style={inp} />
-      {buscando && <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Buscando en Effi…</span>}
-      {!buscando && q.trim().length >= 2 && !lista.length && <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Effi no tiene artículos con ese nombre o referencia.</span>}
-      {lista.length > 0 && (
-        <div style={{ border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden', maxHeight: 260, overflowY: 'auto' }}>
-          {lista.map((a) => (
-            <button key={a.id} onClick={() => onElegir(a)} className="df-row-hover" style={{ display: 'flex', width: '100%', textAlign: 'left', gap: 8, alignItems: 'center', padding: '8px 10px', border: 'none', borderBottom: '1px solid var(--df-border)', background: 'var(--df-surface)', fontFamily: 'inherit', cursor: 'pointer', color: 'var(--df-text)' }}>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600 }}>{a.descripcion}</span>
-                <span style={{ fontSize: 11, color: 'var(--df-text-faint)', fontFamily: "'JetBrains Mono',monospace" }}>#{a.id}{a.referencia ? ` · ref ${a.referencia}` : ''}{a.stock != null ? ` · stock ${a.stock}` : ''}</span>
-              </span>
-              {a.ecommerce && <span style={{ fontSize: 10.5, fontWeight: 700, background: 'var(--df-purple-subtle)', color: 'var(--df-purple)', borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap' }}>en tu e-commerce</span>}
-            </button>
-          ))}
-        </div>
-      )}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 4 }}>Elige el artículo de Effi ({todos.length} disponibles{buscando ? ', cargando más…' : ''})</div>
+        <Dropdown
+          ariaLabel="Artículo de Effi"
+          placeholder="Selecciona un artículo…"
+          buscar
+          value={elegido}
+          onChange={(id) => { setElegido(id); const a = todos.find((x) => x.id === id); if (a) onElegir(a); }}
+          options={todos.map((a) => ({ value: a.id, label: etiqueta(a) }))}
+        />
+      </div>
+      <div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 4 }}>¿No aparece? Búscalo en Effi</div>
+        <input id="effi-buscar-articulo" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre o referencia en Effi (se agrega al selector)…" style={inp} />
+        {!buscando && q.trim().length >= 2 && !todos.some((a) => tokens(`${a.descripcion} ${a.referencia}`).some((x) => tokens(q).some((y) => x.startsWith(y)))) && (
+          <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Effi no tiene artículos con ese nombre o referencia.</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -202,7 +223,7 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
                         </div>
                         {abierto === v.variantId && (
                           <div style={{ marginTop: 8 }}>
-                            <BuscadorArticulo cache={cache} inicial={p.nombre} onElegir={(a) => void vincular(v, a)} />
+                            <BuscadorArticulo cache={cache} producto={p.nombre} variante={etiqueta} onElegir={(a) => void vincular(v, a)} />
                           </div>
                         )}
                       </div>
