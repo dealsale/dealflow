@@ -2,25 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { EffiApiCard } from '../components/EffiApiCard';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
+import { IntegracionFila, LogoInteg } from '../components/IntegracionFila';
 
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13 };
 
 const GRUPOS: { id: string; titulo: string; sub: string }[] = [
   { id: 'ia', titulo: 'Inteligencia artificial', sub: 'El cerebro de tu asistente. Cada tienda pone sus llaves y paga solo lo que consume.' },
   { id: 'canales', titulo: 'Canales', sub: 'Por dónde atiende y vende tu asistente.' },
-  { id: 'envios', titulo: 'Envíos', sub: 'Genera guías y sigue el estado de tus pedidos.' },
+  { id: 'envios', titulo: 'Envíos y tiendas', sub: 'Despacha tus pedidos, genera guías y sigue su estado.' },
   // Publicidad (anuncios) retirada temporalmente: por ahora la integración de Meta es solo WhatsApp.
 ];
-
-/** Punto + etiqueta de estado (conectada / sin conectar). */
-function Estado({ on }: { on: boolean }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: on ? 'var(--df-brand-dark)' : 'var(--df-text-faint)', background: on ? 'var(--df-brand-subtle)' : 'var(--df-surface-2)', borderRadius: 999, padding: '3px 9px' }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: on ? 'var(--df-brand-mid)' : 'var(--df-border-strong)' }} />
-      {on ? 'Conectada' : 'Sin conectar'}
-    </span>
-  );
-}
 
 /** Conexión de Dropi por su API directa (token de integración + URL). Con esto
  *  DealFlow cotiza transportadoras y crea el pedido en Dropi. */
@@ -47,48 +38,39 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
     border: `1px solid ${metodo === m ? '#5E8E3E' : 'var(--df-border)'}`, borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer',
   });
   return (
-    <div style={{ background: 'var(--df-surface)', border: `1px solid ${conectada ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 14, padding: 18, marginTop: 4, marginBottom: 14, maxWidth: 620 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 9, background: '#5E8E3E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16 }}>🛍️</div>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>Shopify</div>
-        <div style={{ flex: 1 }} />
-        <Estado on={conectada} />
+    <IntegracionFila
+      logo={<LogoInteg fondo="#5E8E3E">🛍️</LogoInteg>}
+      nombre="Shopify"
+      desc={conectada ? <>Conectada a <b>{df.shopifyNombre}</b> ({df.shopifyShop}). Trae productos por SKU y crea pedidos.</> : 'Trae tus productos (por SKU) y crea los pedidos en tu tienda Shopify.'}
+      estado={conectada ? 'on' : 'off'}
+      abierta={abierto}
+      onToggle={() => setAbierto((v) => !v)}
+    >
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5, marginBottom: 10 }}>
+        Crea una <b>app</b> en Shopify con permisos <b>read_products, read/write_orders, read/write_draft_orders</b>. Hay dos formas de conectar según cómo te dé Shopify las llaves.
       </div>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, margin: '8px 0 12px' }}>
-        Conecta tu tienda Shopify para traer productos (por SKU) y crear pedidos. Crea una <b>app</b> en Shopify con permisos <b>read_products, read/write_orders, read/write_draft_orders</b>. Hay dos formas de conectar según cómo te dé Shopify las llaves.
+      <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="mitienda.myshopify.com" style={inp} />
+      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+        <button onClick={() => setMetodo('cc')} style={tab('cc')}>Client ID + Secret</button>
+        <button onClick={() => setMetodo('token')} style={tab('token')}>Admin API token</button>
       </div>
-      {conectada && <div style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', marginBottom: 10 }}>✓ Conectado: <b>{df.shopifyNombre}</b> ({df.shopifyShop})</div>}
-      {!abierto ? (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setAbierto(true)} style={{ background: conectada ? 'var(--df-surface)' : '#5E8E3E', color: conectada ? '#5E8E3E' : '#fff', border: conectada ? '1px solid #5E8E3E' : 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{conectada ? 'Cambiar credenciales' : 'Conectar Shopify'}</button>
-          {conectada && <button onClick={df.desconectarShopify} style={{ background: 'transparent', border: '1px solid var(--df-border)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Desconectar</button>}
-        </div>
+      {metodo === 'cc' ? (
+        <>
+          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>Para apps del <b>Dev Dashboard</b> / tiendas de desarrollo. Copia el <b>ID de cliente</b> y el <b>Secreto del cliente</b> de la pestaña Credenciales de tu app.</div>
+          <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client ID (ID de cliente)" style={inp} />
+          <input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="Client Secret (shpss_…)" style={inp} />
+        </>
       ) : (
-        <div>
-          <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="mitienda.myshopify.com" style={inp} />
-          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-            <button onClick={() => setMetodo('cc')} style={tab('cc')}>Client ID + Secret</button>
-            <button onClick={() => setMetodo('token')} style={tab('token')}>Admin API token</button>
-          </div>
-          {metodo === 'cc' ? (
-            <>
-              <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>Para apps del <b>Dev Dashboard</b> / tiendas de desarrollo. Copia el <b>ID de cliente</b> y el <b>Secreto del cliente</b> de la pestaña Credenciales de tu app.</div>
-              <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client ID (ID de cliente)" style={inp} />
-              <input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="Client Secret (shpss_…)" style={inp} />
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>Para apps personalizadas instaladas. Pega el <b>Admin API access token</b> que sale al instalar la app (empieza por <b>shpat_</b>).</div>
-              <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Admin API access token (shpat_…)" style={inp} />
-            </>
-          )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button onClick={guardar} disabled={guardando || !listo} style={{ background: '#5E8E3E', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: (guardando || !listo) ? 0.6 : 1 }}>{guardando ? 'Conectando…' : 'Conectar'}</button>
-            <button onClick={() => setAbierto(false)} style={{ background: 'transparent', border: '1px solid var(--df-border)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-          </div>
-        </div>
+        <>
+          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>Para apps personalizadas instaladas. Pega el <b>Admin API access token</b> que sale al instalar la app (empieza por <b>shpat_</b>).</div>
+          <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Admin API access token (shpat_…)" style={inp} />
+        </>
       )}
-    </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+        <button onClick={guardar} disabled={guardando || !listo} style={{ ...btnPrimary, opacity: (guardando || !listo) ? 0.6 : 1 }}>{guardando ? 'Conectando…' : conectada ? 'Cambiar credenciales' : 'Conectar'}</button>
+        {conectada && <button onClick={df.desconectarShopify} style={btnGhostRed}>Desconectar</button>}
+      </div>
+    </IntegracionFila>
   );
 }
 
@@ -104,54 +86,41 @@ function DropiApiCard({ df }: { df: DealFlowState }) {
     setGuardando(true);
     df.conectarDropi(token.trim(), url.trim(), (ok) => { setGuardando(false); if (ok) { setAbierto(false); setToken(''); } });
   };
+  const pref = df.dropiPreferencia === 'operador' ? 'la elige el operador' : df.dropiPreferencia === 'cheapest' ? 'la más barata' : df.dropiPreferencia === 'auto' ? 'Dropi decide' : 'una fija';
   return (
-    <div style={{ background: 'var(--df-surface)', border: `1px solid ${conectada ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 14, padding: 18, marginTop: 4, marginBottom: 14, maxWidth: 620 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <img src="/logos/dropi.jpg" alt="Dropi" style={{ width: 34, height: 34, borderRadius: 9, objectFit: 'cover' }} />
-        <div style={{ fontWeight: 700, fontSize: 15 }}>Dropi (API directa)</div>
-        <div style={{ flex: 1 }} />
-        <Estado on={conectada} />
-      </div>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, margin: '8px 0 12px' }}>
-        Conecta Dropi con su API para <b>cotizar transportadoras</b>, crear el pedido eligiendo transportadora y traer la <b>guía</b>. El token se genera en <b>Dropi → Mis Integraciones</b> (tipo WooCommerce). Con esto, Dropi ya no necesita WooCommerce.
-      </div>
-      {conectada && !abierto && (
-        <div style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', marginBottom: 10 }}>✓ Conectado · URL: <b>{df.dropiIntegrationUrl}</b> · transportadora: <b>{
-          df.dropiPreferencia === 'operador' ? 'la elige el operador' : df.dropiPreferencia === 'cheapest' ? 'la más barata' : df.dropiPreferencia === 'auto' ? 'Dropi decide' : 'una fija'
-        }</b></div>
-      )}
-      {!abierto ? (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={() => setAbierto(true)} style={{ background: conectada ? 'var(--df-surface)' : 'var(--df-warning)', color: conectada ? 'var(--df-warning)' : '#fff', border: conectada ? '1px solid var(--df-warning)' : 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{conectada ? 'Cambiar token' : 'Conectar Dropi'}</button>
+    <IntegracionFila
+      logo={<LogoInteg src="/logos/dropi.jpg" alt="Dropi" />}
+      nombre="Dropi"
+      desc={conectada ? <>Conectada · {df.dropiIntegrationUrl} · transportadora: <b>{pref}</b></> : 'Cotiza transportadoras, crea el pedido en Dropi y trae la guía.'}
+      estado={conectada ? 'on' : 'off'}
+      abierta={abierto}
+      onToggle={() => { setAbierto((v) => !v); setToken(''); }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5 }}>El token se genera en <b>Dropi → Mis Integraciones</b> (tipo WooCommerce).</div>
+        <div>
+          <div style={lbl}>Token de integración</div>
+          <input value={token} onChange={(e) => setToken(e.target.value)} placeholder={conectada ? 'Pega un token nuevo solo si quieres cambiarlo' : 'Pega aquí el token (JWT)'} style={inputStyle} />
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Token de integración (Dropi → Mis Integraciones)</div>
-            <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Pega aquí el token (JWT)" style={inputStyle} />
-          </div>
-          <div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>URL de integración (la que registraste en Dropi)</div>
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mitienda.com" style={inputStyle} />
-          </div>
-          <div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Transportadora por defecto</div>
-            <Dropdown ariaLabel="Preferencia de transportadora" value={df.dropiPreferencia} onChange={df.guardarDropiPreferencia}
-              options={[
-                { value: 'operador', label: 'La elige el operador (al enviar)' },
-                { value: 'cheapest', label: 'La más barata' },
-                { value: 'auto', label: 'Que Dropi decida' },
-                { value: 'fixed', label: 'Una fija' },
-              ]} />
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={guardar} disabled={guardando || !token.trim() || !url.trim()} style={{ background: 'var(--df-warning)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: guardando || !token.trim() || !url.trim() ? 0.6 : 1 }}>{guardando ? 'Conectando…' : 'Guardar y probar'}</button>
-            <button onClick={() => { setAbierto(false); setToken(''); }} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-muted)', cursor: 'pointer' }}>Cancelar</button>
-          </div>
+        <div>
+          <div style={lbl}>URL de integración (la que registraste en Dropi)</div>
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mitienda.com" style={inputStyle} />
         </div>
-      )}
-      {df.integracionMsg && <div style={{ marginTop: 10, fontSize: 12.5, color: df.integracionMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.integracionMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.integracionMsg}</div>}
-    </div>
+        <div>
+          <div style={lbl}>Transportadora por defecto</div>
+          <Dropdown ariaLabel="Preferencia de transportadora" value={df.dropiPreferencia} onChange={df.guardarDropiPreferencia}
+            options={[
+              { value: 'operador', label: 'La elige el operador (al enviar)' },
+              { value: 'cheapest', label: 'La más barata' },
+              { value: 'auto', label: 'Que Dropi decida' },
+              { value: 'fixed', label: 'Una fija' },
+            ]} />
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={guardar} disabled={guardando || !token.trim() || !url.trim()} style={{ ...btnPrimary, opacity: guardando || !token.trim() || !url.trim() ? 0.6 : 1 }}>{guardando ? 'Conectando…' : 'Guardar y probar'}</button>
+        </div>
+      </div>
+    </IntegracionFila>
   );
 }
 
@@ -163,56 +132,50 @@ function MetaAdsCard({ df, i }: { df: DealFlowState; i: DealFlowState['integrati
   const [pagina, setPagina] = useState('');
   const conectada = !!ads?.conectada;
 
+  const [abierta, setAbierta] = useState(false);
   return (
-    <div style={cardBase(conectada)}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={i.logoStyle}>{i.logoText}</div>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>{i.nombre}</div>
-        <div style={{ flex: 1 }} />
-        <Estado on={conectada} />
-      </div>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, flex: 1 }}>{i.desc}</div>
-
-      {conectada ? (
-        <div style={{ background: 'var(--df-brand-subtle-3)', border: '1px solid var(--df-brand-border)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: 'var(--df-brand-dark)' }}>
-          ✓ {ads!.adAccountNombre}{ads!.pageNombre ? ` · página ${ads!.pageNombre}` : ''}
-        </div>
-      ) : ops ? (
-        <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 9 }}>
-          <div>
-            <div style={lbl}>Cuenta publicitaria</div>
-            <Dropdown value={cuenta} onChange={setCuenta} placeholder="Elige una…"
-              options={[{ value: '', label: 'Elige una…' }, ...ops.cuentas.map((a) => ({ value: a.id, label: `${a.nombre} (${a.moneda})` }))]} />
-          </div>
-          <div>
-            <div style={lbl}>Página de Facebook</div>
-            <Dropdown value={pagina} onChange={setPagina} placeholder="Elige una…"
-              options={[{ value: '', label: 'Elige una…' }, ...ops.paginas.map((p) => ({ value: p.id, label: p.nombre }))]} />
-          </div>
-          <button
-            onClick={() => {
-              const a = ops.cuentas.find((x) => x.id === cuenta);
-              const p = ops.paginas.find((x) => x.id === pagina);
-              df.elegirCuentaAds({ adAccountId: cuenta, adAccountNombre: a?.nombre || '', moneda: a?.moneda || '', pageId: pagina, pageNombre: p?.nombre || '' });
-            }}
-            disabled={!cuenta}
-            style={{ ...btnPrimary, opacity: cuenta ? 1 : 0.6, alignSelf: 'flex-start' }}
-          >
-            Guardar conexión
+    <IntegracionFila
+      logo={<div style={{ ...i.logoStyle, width: 44, height: 44, borderRadius: 11, flexShrink: 0 }}>{i.logoText}</div>}
+      nombre={i.nombre}
+      desc={conectada ? `✓ ${ads!.adAccountNombre}${ads!.pageNombre ? ` · página ${ads!.pageNombre}` : ''}` : i.desc}
+      estado={conectada ? 'on' : 'off'}
+      abierta={abierta}
+      onToggle={() => setAbierta((v) => !v)}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {!conectada && ops && (
+          <>
+            <div>
+              <div style={lbl}>Cuenta publicitaria</div>
+              <Dropdown value={cuenta} onChange={setCuenta} placeholder="Elige una…"
+                options={[{ value: '', label: 'Elige una…' }, ...ops.cuentas.map((a) => ({ value: a.id, label: `${a.nombre} (${a.moneda})` }))]} />
+            </div>
+            <div>
+              <div style={lbl}>Página de Facebook</div>
+              <Dropdown value={pagina} onChange={setPagina} placeholder="Elige una…"
+                options={[{ value: '', label: 'Elige una…' }, ...ops.paginas.map((p) => ({ value: p.id, label: p.nombre }))]} />
+            </div>
+            <button
+              onClick={() => {
+                const a = ops.cuentas.find((x) => x.id === cuenta);
+                const p = ops.paginas.find((x) => x.id === pagina);
+                df.elegirCuentaAds({ adAccountId: cuenta, adAccountNombre: a?.nombre || '', moneda: a?.moneda || '', pageId: pagina, pageNombre: p?.nombre || '' });
+              }}
+              disabled={!cuenta}
+              style={{ ...btnPrimary, opacity: cuenta ? 1 : 0.6, alignSelf: 'flex-start' }}
+            >Guardar conexión</button>
+          </>
+        )}
+        {df.mkError && !conectada && <div style={{ color: 'var(--df-danger-dark)', fontSize: 12.5 }}>{df.mkError}</div>}
+        {conectada ? (
+          <button onClick={df.desconectarAds} style={btnGhostRed}>Desconectar</button>
+        ) : !ops && (
+          <button onClick={df.conectarAds} disabled={df.mkLoading} style={{ ...btnFacebook, opacity: df.mkLoading ? 0.7 : 1, alignSelf: 'flex-start' }}>
+            {df.mkLoading ? 'Conectando…' : 'Conectar con Facebook'}
           </button>
-        </div>
-      ) : null}
-
-      {df.mkError && !conectada && <div style={{ color: 'var(--df-danger-dark)', fontSize: 12.5 }}>{df.mkError}</div>}
-
-      {conectada ? (
-        <button onClick={df.desconectarAds} style={btnGhostRed}>Desconectar</button>
-      ) : (
-        <button onClick={df.conectarAds} disabled={df.mkLoading} style={{ ...btnFacebook, opacity: df.mkLoading ? 0.7 : 1 }}>
-          {df.mkLoading ? 'Conectando…' : 'Conectar con Facebook'}
-        </button>
-      )}
-    </div>
+        )}
+      </div>
+    </IntegracionFila>
   );
 }
 
@@ -220,31 +183,26 @@ function MetaAdsCard({ df, i }: { df: DealFlowState; i: DealFlowState['integrati
 function MetaCanalesCard({ df }: { df: DealFlowState }) {
   const e = df.metaEstado;
   const on = e.messenger || e.instagram;
+  const [abierta, setAbierta] = useState(false);
   return (
-    <div style={cardBase(on)}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 9, background: 'linear-gradient(135deg,#0084FF,#E1306C)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>💬</div>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>Messenger e Instagram</div>
-        <div style={{ flex: 1 }} />
-        <Estado on={on} />
-      </div>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, flex: 1 }}>Recibe y responde los mensajes directos de Facebook Messenger e Instagram desde el mismo Inbox, atendidos por tu asistente.</div>
-      {on && (
-        <div style={{ background: 'var(--df-brand-subtle-3)', border: '1px solid var(--df-brand-border)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: 'var(--df-brand-dark)' }}>
-          ✓ {e.paginas.join(', ')} · Messenger{e.instagram ? ' + Instagram' : ''}
-        </div>
-      )}
+    <IntegracionFila
+      logo={<LogoInteg fondo="linear-gradient(135deg,#0084FF,#E1306C)">💬</LogoInteg>}
+      nombre="Messenger e Instagram"
+      desc={on ? `✓ ${e.paginas.join(', ')} · Messenger${e.instagram ? ' + Instagram' : ''}` : 'Responde los mensajes directos de Facebook e Instagram desde el mismo Inbox, con tu asistente.'}
+      estado={on ? 'on' : 'off'}
+      abierta={abierta}
+      onToggle={() => setAbierta((v) => !v)}
+    >
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button onClick={df.conectarMeta} disabled={df.metaLoading} style={{ ...btnPrimary, opacity: df.metaLoading ? 0.7 : 1 }}>{df.metaLoading ? 'Conectando…' : on ? 'Reconectar' : 'Conectar con Facebook'}</button>
-        {on && <button onClick={df.desconectarMeta} style={{ background: 'transparent', border: '1px solid var(--df-border)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Desconectar</button>}
+        <button onClick={df.conectarMeta} disabled={df.metaLoading} style={{ ...btnFacebook, opacity: df.metaLoading ? 0.7 : 1 }}>{df.metaLoading ? 'Conectando…' : on ? 'Reconectar' : 'Conectar con Facebook'}</button>
+        {on && <button onClick={df.desconectarMeta} style={btnGhostRed}>Desconectar</button>}
       </div>
-      {df.metaMsg && <div style={{ fontSize: 12.5, color: df.metaMsg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)' }}>{df.metaMsg}</div>}
-    </div>
+      {df.metaMsg && <div style={{ fontSize: 12.5, marginTop: 8, color: df.metaMsg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)' }}>{df.metaMsg}</div>}
+    </IntegracionFila>
   );
 }
 
 const lbl: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600, marginBottom: 4 };
-const cardBase = (on: boolean): React.CSSProperties => ({ background: 'var(--df-surface)', border: '1px solid ' + (on ? 'var(--df-brand-border)' : 'var(--df-border)'), borderRadius: 12, padding: 18, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', gap: 10 });
 const btnPrimary: React.CSSProperties = { background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
 const btnFacebook: React.CSSProperties = { background: '#1877F2', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
 const btnGhostRed: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-danger-dark)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', alignSelf: 'flex-start' };
@@ -282,14 +240,18 @@ export function Integraciones({ df }: { df: DealFlowState }) {
 
       {GRUPOS.map((g) => {
         const items = df.integrations.filter((i) => (i.grupo || 'canales') === g.id);
-        if (!items.length) return null;
+        const extras = g.id === 'envios' ? 3 : g.id === 'canales' ? 1 : 0;
+        if (!items.length && !extras) return null;
         return (
           <div key={g.id} style={{ marginBottom: 26 }}>
-            <div style={{ marginBottom: 12 }}>
+            <div style={{ marginBottom: 10 }}>
               <h2 style={{ fontSize: 15, fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>{g.titulo}</h2>
               <p style={{ color: 'var(--df-text-faint)', fontSize: 12.5, margin: '2px 0 0' }}>{g.sub}</p>
             </div>
-            <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, alignItems: 'start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {g.id === 'envios' && <EffiApiCard df={df} />}
+              {g.id === 'envios' && <DropiApiCard df={df} />}
+              {g.id === 'envios' && <ShopifyCard df={df} />}
               {g.id === 'canales' && <MetaCanalesCard df={df} />}
               {items.map((i) => {
                 if (i.especial === 'meta-ads') return <MetaAdsCard key={i.id} df={df} i={i} />;
@@ -298,18 +260,19 @@ export function Integraciones({ df }: { df: DealFlowState }) {
                 const conectado = i.id === 'wa' ? df.waConnected : configurada;
                 const esAgente = i.esIA && df.iaPredeterminada === i.id;
                 return (
-                  <div key={i.id} style={cardBase(abiertaEsta || conectado)}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={i.logoStyle}>{i.logoText}</div>
-                      <div style={{ fontWeight: 700, fontSize: 15 }}>{i.nombre}</div>
-                      <div style={{ flex: 1 }} />
-                      {esAgente && <span title="Este es el agente que responde tus chats" style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)', borderRadius: 6, padding: '2px 7px' }}>🤖 Agente</span>}
-                      <Estado on={conectado} />
-                    </div>
-                    <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, flex: 1 }}>{i.desc}</div>
-
-                    {abiertaEsta && i.campos && (
-                      <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 9 }}>
+                  <IntegracionFila
+                    key={i.id}
+                    logo={<div style={{ ...i.logoStyle, width: 44, height: 44, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i.logoText}</div>}
+                    nombre={i.nombre}
+                    desc={i.desc}
+                    extra={esAgente ? <span title="Este es el agente que responde tus chats" style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)', borderRadius: 6, padding: '2px 7px' }}>🤖 Agente</span> : undefined}
+                    estado={conectado ? 'on' : 'off'}
+                    abierta={abiertaEsta}
+                    onToggle={() => abrir(i.id)}
+                    accion={i.campos ? undefined : { texto: i.id === 'wa' ? 'Ir a WhatsApp →' : conectado ? 'Configurar' : 'Conectar', onClick: () => i.action() }}
+                  >
+                    {i.campos ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 560 }}>
                         {configurada && (
                           <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>
                             Guardado: {Object.entries(df.integracionesCfg[i.id]).map(([k, v]) => `${k} ${v}`).join(' · ')}
@@ -340,40 +303,18 @@ export function Integraciones({ df }: { df: DealFlowState }) {
                             <button onClick={() => df.elegirIaPredeterminada(i.id)} style={{ background: 'var(--df-surface)', color: 'var(--df-brand-dark)', border: '1px solid var(--df-brand-border)', borderRadius: 8, padding: '8px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Hacer agente</button>
                           )}
                           {configurada && (
-                            <button onClick={() => { df.eliminarIntegracion(i.id); setAbierta(null); }} style={{ background: 'var(--df-surface)', color: 'var(--df-danger-dark)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '8px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Desconectar</button>
+                            <button onClick={() => { df.eliminarIntegracion(i.id); setAbierta(null); }} style={btnGhostRed}>Desconectar</button>
                           )}
-                          <button onClick={() => setAbierta(null)} style={{ background: 'transparent', color: 'var(--df-text-muted)', border: 'none', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Cancelar</button>
                         </div>
                       </div>
-                    )}
-
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button
-                        onClick={() => (i.campos ? abrir(i.id) : i.action())}
-                        style={conectado && !abiertaEsta
-                          ? { background: 'var(--df-surface)', color: 'var(--df-text-strong)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }
-                          : btnPrimary}
-                      >
-                        {abiertaEsta ? 'Cerrar' : i.id === 'wa' ? 'Ir a WhatsApp' : conectado ? 'Configurar' : 'Conectar'}
-                      </button>
-                    </div>
-                  </div>
+                    ) : undefined}
+                  </IntegracionFila>
                 );
               })}
             </div>
           </div>
         );
       })}
-
-      {/* Effi por API directa: remisión (+ guía) y webhooks. */}
-      <EffiApiCard df={df} />
-
-      {/* Dropi por API directa (transportadoras + guía). */}
-      <DropiApiCard df={df} />
-
-      {/* Shopify (Admin API): traer productos por SKU y crear pedidos. */}
-      <ShopifyCard df={df} />
-
     </section>
   );
 }
