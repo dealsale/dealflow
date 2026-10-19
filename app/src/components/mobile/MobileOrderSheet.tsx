@@ -6,7 +6,7 @@ import { confirmar } from '../dialogs';
 import { DespachoPedido } from '../OrderDetailPanel';
 
 export function MobileOrderSheet({ df }: { df: DealFlowState }) {
-  useEffect(() => { void df.cargarEffiWoo?.(); void df.cargarEffiApi?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void df.cargarEffiApi?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!df.hasSelectedOrder || !df.sel) return null;
   const sel = df.sel;
 

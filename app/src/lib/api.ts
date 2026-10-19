@@ -334,9 +334,6 @@ export const apiDeleteOrder = (rowId: string) => req<{ ok: true }>(`/api/orders/
 export interface CrearPedidoItem { qty: number; nombre: string; precio: number }
 export const apiCrearPedido = (body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: CrearPedidoItem[]; leadId?: string }) =>
   req<{ ok: true; id: string; rowId: string }>('/api/orders', 'POST', body);
-export const apiOrderDropi = (rowId: string) => req<{ guia: string }>(`/api/orders/${rowId}/dropi`, 'POST');
-// Effi (vía WooCommerce)
-export const apiOrderDespachar = (rowId: string, proveedor: string, reintentar = false, transportadora = '', recaudo: 'con' | 'sin' = 'con') => req<{ ok: true; wooId: string; numeroWoo: string; proveedor: string; aviso?: string; reenviado?: boolean; sinMapear?: string[]; mapeados?: number; remision?: string; nativo?: boolean }>(`/api/orders/${rowId}/despachar`, 'POST', { proveedor, reintentar, transportadora, recaudo });
 export const apiOrderDespacharSync = (rowId: string) => req<{ estado: string; guia: string }>(`/api/orders/${rowId}/despachar/sync`, 'POST');
 // Dropi (API directa): cotizar transportadoras y crear la orden con la elegida.
 export const apiDropiEstado = () => req<{ conectado: boolean; integrationUrl: string; preferencia: string }>('/api/dropi/estado', 'GET');
@@ -348,18 +345,6 @@ export const apiDropiProducto = (id: string) => req<DropiProducto>(`/api/dropi/p
 export interface DropiTransportadora { id: number; nombre: string; service: string; precio: number }
 export const apiDropiCotizar = (rowId: string, recaudo: 'con' | 'sin' = 'con') => req<{ ciudad: string; disponibles: DropiTransportadora[]; noDisponibles: { nombre: string; motivo: string }[] }>(`/api/orders/${rowId}/dropi/cotizar`, 'POST', { recaudo });
 export const apiDropiCrear = (rowId: string, transportadora?: DropiTransportadora, reintentar = false, recaudo: 'con' | 'sin' = 'con') => req<{ ok: true; dropiId: string; transportadora: string; aviso?: string }>(`/api/orders/${rowId}/dropi/crear`, 'POST', { transportadora, reintentar, recaudo });
-export const apiWooProveedores = () => req<{ proveedores: string[]; preferido: string; auto: boolean; transportadora: string; transportadoras: string[] }>('/api/woo/proveedores', 'GET');
-export const apiWooPreferido = (proveedor: string, auto = false, transportadora = '') => req<{ ok: true; preferido: string; auto: boolean; transportadora: string }>('/api/woo/preferido', 'POST', { proveedor, auto, transportadora });
-export const apiWooVerificar = (proveedor: string) => req<{ ok: true }>('/api/woo/verificar', 'POST', { proveedor });
-export const apiWooSyncInventario = (proveedor: string) => req<{ actualizados: number }>('/api/woo/inventario/sync', 'POST', { proveedor });
-export const apiWooSyncProductos = (proveedor: string) => req<{ creados: number; actualizados: number; skusGenerados: number }>('/api/woo/productos/sync', 'POST', { proveedor });
-export interface ProductoWoo { id: number; nombre: string; sku: string; stock: number | null; precio: string }
-export const apiWooBuscarProductos = (q: string, proveedor = '') =>
-  req<{ productos: ProductoWoo[]; proveedor: string }>(`/api/woo/productos/buscar?q=${encodeURIComponent(q)}${proveedor ? `&proveedor=${proveedor}` : ''}`, 'GET');
-export interface VariacionWoo { id: number; nombre: string; sku: string; stock: number | null; dropi: boolean }
-export interface ProductoCatalogoWoo { id: number; nombre: string; sku: string; stock: number | null; tipo: string; estado: string; dropi: boolean; variaciones: VariacionWoo[] }
-export const apiWooCatalogo = (proveedor = '') =>
-  req<{ productos: ProductoCatalogoWoo[]; proveedor: string }>(`/api/woo/catalogo${proveedor ? `?proveedor=${proveedor}` : ''}`, 'GET');
 
 // ── Shopify (Admin API) ──
 export const apiShopifyEstado = () => req<{ conectado: boolean; shop: string; nombre: string }>('/api/shopify/estado', 'GET');
@@ -474,15 +459,6 @@ export const apiMisTiendas = () => req<{ tiendas: MiTienda[] }>('/api/mis-tienda
 export const apiCambiarTienda = (id: string) => req<{ ok: true }>(`/api/cambiar-tienda/${id}`, 'POST');
 export const apiCrearTienda = (nombre: string) => req<{ ok: true; storeId: string }>('/api/crear-tienda', 'POST', { nombre });
 export const apiEliminarMiTienda = (id: string) => req<{ ok: true }>(`/api/mis-tiendas/${id}`, 'DELETE');
-
-// Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio).
-export interface EffiLogEvento { ts: string; metodo: string; ruta: string; sku: string; auth: number; resultado: string }
-export interface EffiLineItem { nombre: string; sku: string; vinculado: boolean; qty: number; total: string }
-export const apiEffiLog = (pedido?: string | number) =>
-  req<{ estado: { activo: boolean; slug: string; url: string }; eventos: EffiLogEvento[]; items?: EffiLineItem[] }>(`/api/effi/log${pedido !== undefined ? `?pedido=${encodeURIComponent(String(pedido))}` : ''}`, 'GET');
-export const apiEffiEstado = () => req<{ activo: boolean; slug: string; url: string }>('/api/effi/estado', 'GET');
-export const apiEffiActivar = () => req<{ slug: string; url: string; ck: string; cs: string }>('/api/effi/activar', 'POST');
-export const apiEffiDesactivar = () => req<{ ok: true }>('/api/effi/desactivar', 'POST');
 
 // ── Effi por API directa ──
 export interface EffiOpcion { id: string; nombre: string; [k: string]: unknown }
@@ -654,12 +630,6 @@ export interface ReporteBaneo {
   hallazgos: Hallazgo[];
   veredicto: string;
 }
-// WooCommerce central por operador (superadmin).
-export interface WooCentralProv { proveedor: string; url: string; tieneKeys: boolean; activo: boolean; preferido: boolean }
-export const apiWooCentral = () => req<{ dropi: WooCentralProv; effi: WooCentralProv }>(`/api/superadmin/woo-central`, 'GET');
-export const apiGuardarWooCentral = (p: { proveedor: string; url: string; consumerKey?: string; consumerSecret?: string; activo?: boolean; preferido?: boolean }) =>
-  req<{ ok: true }>(`/api/superadmin/woo-central`, 'POST', p);
-export const apiProbarWooCentral = (prov: string) => req<{ ok: true }>(`/api/superadmin/woo-central/${prov}/probar`, 'POST');
 
 export const apiAuditoriaBaneo = (id: string, desde?: string, hasta?: string) => {
   const q = new URLSearchParams();

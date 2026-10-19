@@ -241,7 +241,7 @@ export interface Integration {
   /** Grupo para agrupar las tarjetas en la sección. */
   grupo?: 'ia' | 'canales' | 'envios' | 'publicidad';
   /** true si se conecta por un flujo especial (popup de Facebook), no por formulario. */
-  especial?: 'meta-ads' | 'woo';
+  especial?: 'meta-ads';
 }
 
 export interface Plan {

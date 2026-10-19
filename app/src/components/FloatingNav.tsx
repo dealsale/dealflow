@@ -89,7 +89,6 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                   <>
                     {fila(aSection === 'superadmin', () => goA('superadmin'), <IconCuentas />, 'Todas las tiendas')}
                     {fila(aSection === 'plantillas', () => goA('plantillas'), <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA')}
-                    {fila(aSection === 'despacho', () => goA('despacho'), <span style={{ fontSize: 16 }}>📦</span>, 'Despacho central')}
                   </>
                 ) : (
                   <>

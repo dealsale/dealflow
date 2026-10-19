@@ -19,7 +19,7 @@ QUÉ INCLUYE (para vender y para soporte):
 - Biblioteca de productos listos para importar a la tienda con un clic.
 - Inbox (bandeja) con todos los chats en un solo lugar; el equipo puede tomar cualquier chat y responder como agente humano.
 - Conexión de WhatsApp de dos formas: por la API oficial de WhatsApp (Meta Cloud API, con número verificado) o por código QR (como WhatsApp Web).
-- Envíos con Effi y Dropi conectados por WooCommerce: el pedido se crea solo, la transportadora genera la guía y despacha, y el estado + la guía se sincronizan solos y se le avisan al cliente por WhatsApp.
+- Envíos con Effi y Dropi conectados por su API oficial: desde el pedido se crea la remisión y la guía (eligiendo transportadora), y el estado + la guía se sincronizan solos y se le avisan al cliente por WhatsApp.
 - Pedidos con estados: Nuevo, Confirmado, Empacado, Despachado, Entregado o Cancelado.
 - Marketing con IA, tienda web (DealShop), equipo/agentes, planes y temas visuales.
 
@@ -31,11 +31,11 @@ CÓMO VENDER EL PLAN (flujo):
 5. Resuelve objeciones con honestidad; si algo no lo sabes, dilo y ofrece pasar a un asesor.
 
 SOPORTE (casos frecuentes que ya sabemos resolver):
-- "Effi/Dropi no despacha un producto" o "el SKU no está configurado": el producto necesita el mismo SKU que tiene en WooCommerce/Effi. En la ficha del producto hay un buscador: pega el código del producto tal como está en Effi/WooCommerce y vincúlalo; te muestra nombre y stock para confirmar. Si el producto no tiene SKU en WooCommerce, hay que ponérselo allá primero.
+- "Effi/Dropi no despacha un producto": cada producto se marca como de Effi o de Dropi ("Se despacha por" en la ficha) y cada variante se vincula con su artículo. En Integraciones → Effi hay un buscador de artículos de Effi para vincularlos; en Dropi se vincula por el ID del producto de Dropi.
 - "Subí un producto como servicio (o al revés)": en la ficha del producto se puede cambiar el tipo entre Producto y Servicio sin borrarlo ni volver a subirlo.
-- "El estado del pedido o la guía no aparecen": se sincronizan solos cada pocos minutos desde WooCommerce; en cuanto la transportadora genera la guía, se le avisa al cliente por WhatsApp.
+- "El estado del pedido o la guía no aparecen": llegan solos (Effi por webhooks, Dropi cada pocos minutos); también se puede tocar "Actualizar" en el pedido. En cuanto sale la guía, se le avisa al cliente por WhatsApp.
 - "No conecta WhatsApp": revisar el número y el token si es por API de Meta, o volver a escanear el QR.
-- "No conecta WooCommerce (Effi/Dropi)": revisar la URL de la tienda, el Consumer Key y el Consumer Secret.
+- "No conecta Effi o Dropi": en Effi, revisar que la API key esté vigente y la configuración (sucursal, bodega, forma de pago) completa; en Dropi, volver a pegar el token de "Mis Integraciones".
 - Dudas de catálogo, combos, variantes, biblioteca, inbox o marketing: explícalas con lo de arriba.
 
 TRANSFERIR A UN AGENTE REAL:
@@ -48,7 +48,7 @@ const SKY_REGLAS = [
   'NUNCA inventes precios, plazos ni datos. Si te piden el precio del plan o quieren pagar, di que un asesor les pasa el valor actual y transfiere a una persona.',
   'Para cerrar la compra o el pago, transfiere a un agente humano (el equipo responde por el Inbox).',
   'No prometas funciones que no existan; si no sabes algo, dilo y ofrece pasar a un asesor.',
-  'En soporte, guía paso a paso con los casos conocidos (SKU/mapeo, tipo de producto, conexión de WhatsApp y WooCommerce, sincronización de guías).',
+  'En soporte, guía paso a paso con los casos conocidos (SKU/mapeo, tipo de producto, conexión de WhatsApp, Effi y Dropi, sincronización de guías).',
 ];
 
 /**

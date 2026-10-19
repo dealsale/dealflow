@@ -126,7 +126,7 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
   useEffect(() => { void df.cargarShopify?.(); }, []); // saber si Shopify está conectado
   const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
   const conectada = (id: IntegId) => id === 'dropi' ? df.dropiConectado
-    : id === 'effi' ? (df.wooProveedores.includes('effi') || !!df.effiWoo?.activo || !!df.effiApi?.conectado)
+    : id === 'effi' ? !!df.effiApi?.conectado
       : df.shopifyConectado;
   const activas = INTEGRACIONES.filter((i) => conectada(i.id));
   return (
@@ -559,7 +559,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
               <input className="df-input" value={String(p.precio)} onChange={(e) => p.setPrecio(e.target.value)} style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
             </div>
             <div>
-              <div style={label}>SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· para Effi/WooCommerce</span></div>
+              <div style={label}>SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· referencia interna (opcional)</span></div>
               <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: BODY-NEGRO-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
             </div>
           </div>

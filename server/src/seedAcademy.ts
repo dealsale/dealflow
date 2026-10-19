@@ -144,9 +144,9 @@ const CURSO_VISUAL: { titulo: string; descripcion: string; nivel: string; seccio
         {
           titulo: 'Conecta Dropi o Effi para despachar solo',
           duracion: '3 min',
-          contenido: 'En Integraciones eliges con cuál trabajas: Dropi por su API directa (cotiza transportadoras y trae la guía) o Effi por WooCommerce. Puedes tener las dos conectadas y elegir por producto o por pedido.',
+          contenido: 'En Integraciones eliges con cuál trabajas: Dropi por su API directa (cotiza transportadoras y trae la guía) o Effi por su API (crea la remisión y la guía desde el pedido). Puedes tener las dos conectadas y elegir por producto o por pedido.',
           imagenes: [
-            { archivo: 'integraciones.png', caption: 'Ve a "Integraciones" en el menú. En "Envíos" están Effi (WooCommerce) y Dropi; para Dropi lo recomendado es "Dropi (API directa)": pega el token que genera Dropi en "Mis Integraciones" y listo.' },
+            { archivo: 'integraciones.png', caption: 'Ve a "Integraciones" en el menú. En "Envíos" están Effi (API) y Dropi; para Dropi lo recomendado es "Dropi (API directa)": pega el token que genera Dropi en "Mis Integraciones" y listo.' },
           ],
         },
         {
