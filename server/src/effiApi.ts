@@ -351,8 +351,8 @@ export async function buscarArticulosEffi(storeId: string, q: string): Promise<A
   const term = q.trim().slice(0, 60);
   if (term.length < 2) return [];
   const [porNombre, porRef] = await Promise.all([
-    effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { descripcion: term, por_pagina: 40 } }),
-    effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { referencia: `${term}%`, por_pagina: 20 } }),
+    effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { descripcion: term, por_pagina: 100 } }),
+    effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { referencia: `${term}%`, por_pagina: 50 } }),
   ]);
   if (!porNombre.ok && !porRef.ok) return { error: mensajeError(porNombre) };
   const vistos = new Set<string>();
