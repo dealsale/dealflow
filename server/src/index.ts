@@ -51,7 +51,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'pedidos-filtros-tabla',
+    build: 'paleta-fondo-dominios',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -102,20 +102,29 @@ app.get('/salud', (_req, res) =>
 // raíz configurado, la landing. La app vive en app.<dominio> (o en cualquier
 // otro host, como la URL de Railway, para no romper nada).
 const APP_DIST = process.env.APP_DIST || path.resolve(import.meta.dirname, '../../app/dist');
-const LANDING = process.env.LANDING_PATH || path.resolve(APP_DIST, '..', 'landing.html');
+const LANDING = process.env.LANDING_PATH || [path.resolve(APP_DIST, '..', 'landing.html'), path.resolve(import.meta.dirname, '../../landing.html')].find((p) => existsSync(p)) || path.resolve(APP_DIST, '..', 'landing.html');
 const LANDING_HOSTS = (process.env.LANDING_HOSTS || 'dealflow.sbs,www.dealflow.sbs,zennku.sbs,www.zennku.sbs')
   .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+// Dominios: la landing vive en el dominio raíz (dealflow.sbs) y la app en
+// app.<dominio>. Se navega entre ambos en la MISMA pestaña. El comodín
+// *.dealflow.sbs ya no se usa para tiendas: cualquier otro subdominio vuelve a
+// la landing (salvo academy.<dominio>, el portal educativo).
+const raizDe = (host: string) => host.replace(/^(www|app|academy)\./, '');
+const esHostLanding = (host: string) => LANDING_HOSTS.includes(host);
+const esHostApp = (host: string) => LANDING_HOSTS.some((h) => host === 'app.' + raizDe(h));
+const raizDeSub = (host: string) => LANDING_HOSTS.map(raizDe).find((r) => host.endsWith('.' + r)) || '';
+// Caché: el HTML NUNCA se guarda (así nadie tiene que hundir Ctrl+Shift+R tras un
+// despliegue); los archivos con huella de versión (/assets/*) sí, por un año.
+const SIN_CACHE = 'no-cache, no-store, must-revalidate';
+const enviarHtml = (res: express.Response, archivo: string) => { res.setHeader('Cache-Control', SIN_CACHE); res.sendFile(archivo); };
 if (existsSync(APP_DIST)) {
-  app.use(express.static(APP_DIST, { index: false })); // sirve /logo.png y /assets/* en cualquier host
-  // "Un solo programa": en el MISMO host conviven la landing (para visitantes) y la
-  // app (para quien ya inició sesión). Reglas:
-  //  - /academy*  → siempre la app (React) — el portal educativo.
-  //  - /entrar, /registro, /login, /panel, /app → siempre la app (login/registro),
-  //    aunque no haya sesión: son las puertas de entrada desde la landing.
-  //  - resto de rutas → si NO hay cookie de sesión mostramos la landing; si la hay,
-  //    la app. Así app.<dominio>/ enseña la landing al visitante y el panel al dueño.
-  // LANDING_HOSTS se mantiene como hosts que SIEMPRE muestran landing al visitante
-  // (compatibilidad con el dominio raíz), pero ya no es necesario para que funcione.
+  app.use(express.static(APP_DIST, {
+    index: false, // sirve /logo.png y /assets/* en cualquier host
+    setHeaders: (res, ruta) => {
+      if (/[\\/]assets[\\/]/.test(ruta)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      else res.setHeader('Cache-Control', 'no-cache');
+    },
+  }));
   // Landing de campañas (dropshipping con IA) para pautar: /dropshipping y /ads.
   // El número de WhatsApp del CTA sale de LANDING_WA (solo dígitos, ej. 573001234567).
   const ADS_CANDIDATOS = [
@@ -130,33 +139,46 @@ if (existsSync(APP_DIST)) {
     const waLink = 'https://wa.me/' + waNum + '?text=' + encodeURIComponent('Hola, quiero más información sobre el dropshipping con IA de DealFlow');
     adsHtml = readFileSync(ADS_FILE, 'utf8').replace(/__WA_LINK__/g, waLink);
   }
-  app.get(['/dropshipping', '/ads', '/dropshipping-ia'], (_req, res) => {
-    if (!adsHtml) return res.status(404).send('Landing no disponible.');
-    res.type('html').send(adsHtml);
-  });
+  const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app|academy)(\/|$)/i;
+  const urlEn = (req: express.Request, host: string) => `${req.protocol === 'http' && !/^localhost/.test(host) ? 'https' : req.protocol}://${host}${req.originalUrl}`;
 
-  // /inicio: la homepage SIEMPRE (aunque haya sesión). Es a donde lleva el logo
-  // de DealFlow desde cualquier parte (app, login, Academy, landings).
-  app.get(['/inicio', '/home'], (_req, res) => {
-    if (!existsSync(LANDING)) return res.redirect('/');
-    res.sendFile(LANDING);
-  });
-
-  const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app)(\/|$)/i;
   app.get(/^\/(?!api|webhooks).*/, (req, res) => {
     const host = (req.hostname || '').toLowerCase();
-    const esAcademy = /^\/academy(\/|$)/i.test(req.path);
-    if (esAcademy) return res.sendFile(path.join(APP_DIST, 'index.html'));
-    const esEntradaApp = ENTRADAS_APP.test(req.path);
+    const esLanding = existsSync(LANDING);
+    const esAds = /^\/(dropshipping|ads|dropshipping-ia)\/?$/i.test(req.path);
+    const esInicio = /^\/(inicio|home)\/?$/i.test(req.path);
+
+    // 1) Dominio raíz (dealflow.sbs / www): solo la landing. Las puertas de la app
+    //    llevan a app.<dominio> en la misma pestaña.
+    if (esHostLanding(host)) {
+      if (ENTRADAS_APP.test(req.path)) return res.redirect(302, urlEn(req, 'app.' + raizDe(host)));
+      if (esAds) return adsHtml ? (res.setHeader('Cache-Control', SIN_CACHE), res.type('html').send(adsHtml)) : res.status(404).send('Landing no disponible.');
+      return esLanding ? enviarHtml(res, LANDING) : res.status(404).send('Landing no disponible.');
+    }
+    // 2) app.<dominio>: siempre la app (sin sesión, el inicio de sesión). El logo
+    //    (/inicio) y la landing de campañas viven en el dominio raíz.
+    if (esHostApp(host)) {
+      if (esInicio) return res.redirect(302, `https://${raizDe(host)}/`);
+      if (esAds) return res.redirect(302, `https://${raizDe(host)}${req.path}`);
+      return enviarHtml(res, path.join(APP_DIST, 'index.html'));
+    }
+    // 3) academy.<dominio>: el portal educativo (lo resuelve la app). Cualquier
+    //    otro subdominio del comodín vuelve a la landing.
+    const raiz = raizDeSub(host);
+    if (raiz) {
+      if (/^academy\./.test(host) && !esInicio) return enviarHtml(res, path.join(APP_DIST, 'index.html'));
+      return res.redirect(302, `https://${raiz}/`);
+    }
+    // 4) Otros hosts (URL de Railway, localhost): como siempre, la landing para el
+    //    visitante sin sesión y la app para quien ya entró.
+    if (esAds) return adsHtml ? (res.setHeader('Cache-Control', SIN_CACHE), res.type('html').send(adsHtml)) : res.status(404).send('Landing no disponible.');
+    if (esInicio) return esLanding ? enviarHtml(res, LANDING) : res.redirect('/');
+    if (/^\/academy(\/|$)/i.test(req.path)) return enviarHtml(res, path.join(APP_DIST, 'index.html'));
     const tieneSesion = !!(req.cookies && req.cookies['df_token']);
-    // Muestra la landing a los visitantes (sin sesión) que no van a una puerta de
-    // entrada de la app. En hosts de solo-landing, siempre (aunque tengan cookie).
-    const mostrarLanding = existsSync(LANDING) && !esEntradaApp &&
-      (LANDING_HOSTS.includes(host) || !tieneSesion);
-    if (mostrarLanding) return res.sendFile(LANDING);
-    res.sendFile(path.join(APP_DIST, 'index.html'));
+    if (esLanding && !ENTRADAS_APP.test(req.path) && !tieneSesion) return enviarHtml(res, LANDING);
+    enviarHtml(res, path.join(APP_DIST, 'index.html'));
   });
-  console.log('[web] App + landing en el mismo host · landing hosts fijos:', LANDING_HOSTS.join(', '));
+  console.log('[web] landing en', LANDING_HOSTS.join(', '), '· app en app.<dominio>');
 }
 
 // Red de seguridad: cualquier error no capturado en una ruta se registra con su

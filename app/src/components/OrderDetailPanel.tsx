@@ -239,22 +239,13 @@ function CamposGuia({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
     <>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Transportadora</label>
-          <select value={d.transportadora} onChange={(e) => set({ transportadora: e.target.value, servicio: '', formaPagoFlete: '' })} style={sel_}>
-            <option value="">Elige…</option>
-            {ops.transportadoras.map((x) => <option key={x.id} value={x.id}>{x.effi ? `${x.nombre} (Effi)` : x.nombre}</option>)}
-          </select></div>
+          <Dropdown ariaLabel="Transportadora" placeholder="Elige…" value={d.transportadora} onChange={(v) => set({ transportadora: v, servicio: '', formaPagoFlete: '' })} options={ops.transportadoras.map((x) => ({ value: x.id, label: x.effi ? `${x.nombre} (Effi)` : x.nombre }))} /></div>
         <div><label style={lb}>Servicio</label>
-          <select value={d.servicio} onChange={(e) => set({ servicio: e.target.value })} style={sel_}>
-            <option value="">Elige…</option>{(t?.servicios || []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-          </select></div>
+          <Dropdown ariaLabel="Servicio" placeholder="Elige…" value={d.servicio} onChange={(v) => set({ servicio: v })} options={(t?.servicios || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
         <div><label style={lb}>Pago del flete</label>
-          <select value={d.formaPagoFlete} onChange={(e) => set({ formaPagoFlete: e.target.value })} style={sel_}>
-            <option value="">Elige…</option>{(t?.formasPago || []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-          </select></div>
+          <Dropdown ariaLabel="Pago del flete" placeholder="Elige…" value={d.formaPagoFlete} onChange={(v) => set({ formaPagoFlete: v })} options={(t?.formasPago || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
         <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Remitente</label>
-          <select value={d.remitente} onChange={(e) => set({ remitente: e.target.value })} style={sel_}>
-            <option value="">Elige…</option>{ops.remitentes.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-          </select></div>
+          <Dropdown ariaLabel="Remitente" placeholder="Elige…" value={d.remitente} onChange={(v) => set({ remitente: v })} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} /></div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
         <div><label style={lb}>Paquetes</label><input type="number" min={1} value={d.cantPaquetes} onChange={(e) => set({ cantPaquetes: Number(e.target.value) })} style={sel_} /></div>

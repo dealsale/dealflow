@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
@@ -26,14 +27,32 @@ export function Combobox({
   const [abierto, setAbierto] = useState(false);
   const [resalte, setResalte] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  // La lista se abre en un portal con posición fija: así ningún modal o tarjeta
+  // con overflow la recorta ni queda tapada por lo que sigue debajo.
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number }>({ left: 0, width: 0 });
+  const recalcular = () => {
+    const r = boxRef.current?.getBoundingClientRect(); if (!r) return;
+    const arriba = window.innerHeight - r.bottom < 250 && r.top > 250;
+    setPos({ left: r.left, width: r.width, top: arriba ? undefined : r.bottom + 4, bottom: arriba ? window.innerHeight - r.top + 4 : undefined });
+  };
 
   useEffect(() => {
     const fuera = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setAbierto(false);
+      const t = e.target as Node;
+      if (boxRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      setAbierto(false);
     };
     document.addEventListener('mousedown', fuera);
     return () => document.removeEventListener('mousedown', fuera);
   }, []);
+  useEffect(() => {
+    if (!abierto) return;
+    recalcular();
+    window.addEventListener('resize', recalcular);
+    window.addEventListener('scroll', recalcular, true);
+    return () => { window.removeEventListener('resize', recalcular); window.removeEventListener('scroll', recalcular, true); };
+  }, [abierto]);
 
   const q = norm(value);
   // Si lo escrito coincide exactamente con una opción, mostramos todas (para
@@ -75,10 +94,13 @@ export function Combobox({
         style={inp}
         autoComplete="off"
       />
-      {abierto && lista.length > 0 && (
+      {abierto && lista.length > 0 && createPortal(
         <div
+          ref={popRef}
+          className="df-pop"
           style={{
-            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
+            position: 'fixed', left: pos.left, width: pos.width, zIndex: 3000,
+            ...(pos.bottom != null ? { bottom: pos.bottom } : { top: pos.top }),
             background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10,
             boxShadow: '0 12px 32px rgba(15,23,42,.18)', maxHeight: 240, overflowY: 'auto', padding: 4,
           }}
@@ -97,7 +119,8 @@ export function Combobox({
               {o}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

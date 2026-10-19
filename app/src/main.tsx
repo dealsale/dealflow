@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { Academy } from './academy/Academy.tsx'
+import { iniciarAutoActualizacion } from './lib/autoUpdate'
+
+iniciarAutoActualizacion()
 
 // El subdominio academy.<dominio> muestra el portal educativo (Academy). También
 // se puede abrir por la ruta /academy en el host actual (útil para probarlo antes

@@ -6,6 +6,7 @@ function Switch({ on, onClick, disabled }: { on: boolean; onClick: () => void; d
   return (
     <span
       onClick={disabled ? undefined : onClick}
+      className="df-switch" data-on={on}
       style={{ width: 38, height: 22, borderRadius: 999, background: on ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', cursor: disabled ? 'default' : 'pointer', flexShrink: 0, opacity: disabled ? 0.5 : 1, transition: 'background .15s' }}
     >
       <span style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--df-surface)', transition: 'left .15s', boxShadow: '0 1px 2px rgba(15,23,42,.3)' }} />

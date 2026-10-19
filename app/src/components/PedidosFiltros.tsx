@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import type { DecoratedOrder } from '../hooks/useDealFlowState';
 import { ESTADOS_TODOS } from '../lib/style';
 import { OrigenBadge } from './OrigenPedido';
+import { Dropdown } from './Dropdown';
 
 /**
  * Filtros avanzados de Pedidos (los usan la tabla de escritorio y la lista móvil):
@@ -203,20 +204,14 @@ export function PanelFiltros({ fp }: { fp: FiltrosPedidos }) {
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <label>
+        <div>
           <div style={etiqueta}>Ciudad</div>
-          <select value={f.ciudad} onChange={(e) => set({ ciudad: e.target.value })} style={campo}>
-            <option value="">Todas las ciudades</option>
-            {fp.ciudades.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </label>
-        <label>
+          <Dropdown ariaLabel="Ciudad" value={f.ciudad} onChange={(v) => set({ ciudad: v })} buscar options={[{ value: '', label: 'Todas las ciudades' }, ...fp.ciudades.map((c) => ({ value: c, label: c }))]} />
+        </div>
+        <div>
           <div style={etiqueta}>Producto</div>
-          <select value={f.producto} onChange={(e) => set({ producto: e.target.value })} style={campo}>
-            <option value="">Todos los productos</option>
-            {fp.productos.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </label>
+          <Dropdown ariaLabel="Producto" value={f.producto} onChange={(v) => set({ producto: v })} buscar options={[{ value: '', label: 'Todos los productos' }, ...fp.productos.map((p) => ({ value: p, label: p }))]} />
+        </div>
       </div>
       <div>
         <div style={etiqueta}>Valor del pedido</div>

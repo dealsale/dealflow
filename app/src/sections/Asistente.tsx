@@ -245,6 +245,7 @@ export function Asistente({ df }: { df: DealFlowState }) {
           role="switch"
           aria-checked={df.seguimientoActivo}
           title={df.seguimientoActivo ? 'Encendido' : 'Apagado'}
+          className="df-switch" data-on={df.seguimientoActivo}
           style={{ width: 52, height: 30, borderRadius: 999, background: df.seguimientoActivo ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .15s' }}
         >
           <div style={{ position: 'absolute', top: 3, left: df.seguimientoActivo ? 25 : 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />

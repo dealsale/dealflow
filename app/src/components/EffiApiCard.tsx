@@ -1,3 +1,4 @@
+import { Dropdown } from './Dropdown';
 import { useEffect, useMemo, useState } from 'react';
 import { EffiProductos } from './EffiProductos';
 import type { DealFlowState } from '../hooks/useDealFlowState';
@@ -35,10 +36,7 @@ function Select({ label, value, onChange, opciones, vacio = 'Selecciona…' }: {
   return (
     <div>
       <label style={lbl}>{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)} style={inp}>
-        <option value="">{vacio}</option>
-        {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre || `#${o.id}`}</option>)}
-      </select>
+      <Dropdown value={value} onChange={onChange} ariaLabel={label} placeholder={vacio} options={[{ value: '', label: vacio }, ...opciones.map((o) => ({ value: o.id, label: o.nombre || `#${o.id}` }))]} />
     </div>
   );
 }
