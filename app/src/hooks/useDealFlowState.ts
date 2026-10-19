@@ -686,6 +686,8 @@ export function useDealFlowState() {
   const DEF_RULES = bootServed ? [] : RULES_DEFAULT;
   const [mode, setMode] = useState<Mode>('vendedor');
   const [section, setSection] = useState<VendedorSection>('resumen');
+  const sectionRef = useRef<string>('resumen');
+  sectionRef.current = section;
   const [adminSection, setAdminSection] = useState<AdminSection>('ventas');
   // ── Estadísticas / Rendimiento ──
   type StatsPreset = 'hoy' | 'ayer' | '7d' | '30d' | 'mes' | 'mesPasado' | 'rango';
@@ -1923,7 +1925,11 @@ export function useDealFlowState() {
     // de pedidos viejos al entrar). Luego, cada pedido nuevo dispara el pop-up.
     let sembrado = false;
     let sembradoLeads = false;
+    let tick = 0;
     const t = setInterval(() => {
+      // Con la pestaña oculta no se sondea (ahorra red y CPU; al volver sigue solo).
+      if (typeof document !== 'undefined' && document.hidden) return;
+      tick++;
       // Sondeo LIVIANO: solo el resumen de cada chat (último mensaje + sin
       // responder), y la conversación completa SOLO del chat abierto. Antes esto
       // descargaba TODOS los mensajes de TODOS los chats cada 5s (varios MB),
@@ -1951,6 +1957,8 @@ export function useDealFlowState() {
           aplicarResumenLeads(leads);
         }
       });
+      // Pedidos: cada 5 s si estás en Pedidos/Resumen; si no, cada 15 s (basta para el aviso de pedido nuevo).
+      if (!['pedidos', 'resumen'].includes(sectionRef.current) && tick % 3 !== 0) return;
       void apiOrders().then(({ data }) => {
         if (!data) return;
         const nuevos = mapApiOrders(data.orders);
@@ -3251,10 +3259,11 @@ export function useDealFlowState() {
     toast('Asistente guardado ✓', 'ok', 2500);
   }
 
-  function sendCrm() {
-    const txt = crmDraft.trim();
+  // El texto llega desde la caja del chat (estado local); crmDraft queda como respaldo.
+  function sendCrm(texto?: string) {
+    const txt = (typeof texto === 'string' ? texto : crmDraft).trim();
     if (!txt) return;
-    setCrmDraft('');
+    if (typeof texto !== 'string') setCrmDraft('');
     setCrmSendWarn('');
     if (apiMode && apiLeadsState) {
       // Optimista: muestra el mensaje ya, y lo confirma/refresca contra el servidor.

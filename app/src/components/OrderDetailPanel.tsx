@@ -237,14 +237,15 @@ function CamposGuia({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
   const lb: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 4 };
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Transportadora</label>
+      {/* Una debajo de la otra: los nombres de servicio y pago son largos y en dos columnas se cortaban. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8 }}>
+        <div><label style={lb}>Transportadora</label>
           <Dropdown ariaLabel="Transportadora" placeholder="Elige…" value={d.transportadora} onChange={(v) => set({ transportadora: v, servicio: '', formaPagoFlete: '' })} options={ops.transportadoras.map((x) => ({ value: x.id, label: x.effi ? `${x.nombre} (Effi)` : x.nombre }))} /></div>
         <div><label style={lb}>Servicio</label>
           <Dropdown ariaLabel="Servicio" placeholder="Elige…" value={d.servicio} onChange={(v) => set({ servicio: v })} options={(t?.servicios || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
         <div><label style={lb}>Pago del flete</label>
           <Dropdown ariaLabel="Pago del flete" placeholder="Elige…" value={d.formaPagoFlete} onChange={(v) => set({ formaPagoFlete: v })} options={(t?.formasPago || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
-        <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Remitente</label>
+        <div><label style={lb}>Remitente</label>
           <Dropdown ariaLabel="Remitente" placeholder="Elige…" value={d.remitente} onChange={(v) => set({ remitente: v })} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} /></div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>

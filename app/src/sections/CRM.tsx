@@ -5,7 +5,7 @@ import { SearchInput, FilterSelect } from '../components/Filters';
 import { Dropdown } from '../components/Dropdown';
 import { ActivityLog } from '../components/ActivityLog';
 import { useLazyList } from '../hooks/useLazyList';
-import { archivosDePortapapeles } from '../lib/clipboard';
+import { CajaMensaje } from '../components/CajaMensaje';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import type { Anuncio } from '../types';
 
@@ -394,24 +394,14 @@ export function CRM({ df }: { df: DealFlowState }) {
                   <AttachButton onFile={df.sendCrmMedia} size={40} />
                   <FlujosButton df={df} size={40} />
                   <VoiceRecorder onRecorded={df.sendCrmMedia} size={40} />
-                  <input
-                    className="df-input"
-                    value={df.crmDraft}
-                    onChange={(e) => df.setCrmDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') df.sendCrm();
-                    }}
-                    onPaste={(e) => { const fs = archivosDePortapapeles(e); if (fs.length) { e.preventDefault(); fs.forEach(df.sendCrmMedia); } }}
+                  <CajaMensaje
+                    chatId={String(chat.id)}
+                    onSend={df.sendCrm}
+                    onFile={df.sendCrmMedia}
                     placeholder="Escribe tu mensaje… (o pega una imagen/audio/video)"
-                    style={{ flex: 1, border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                    inputStyle={{ flex: 1, border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13 }}
+                    botonStyle={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
                   />
-                  <button
-                    onClick={df.sendCrm}
-                    className="df-btn-primary"
-                    style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
-                  >
-                    Enviar
-                  </button>
                   <button
                     onClick={df.backToBot}
                     style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}

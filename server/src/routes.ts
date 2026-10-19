@@ -254,10 +254,11 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const promos = (db.prepare('SELECT * FROM promos WHERE store_id = ?').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, tipo: p.tipo, titulo: p.titulo, desc: p.descripcion, vigencia: p.vigencia, activa: !!p.activa,
   }));
+  const itemsTienda = itemsPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
-    items: (db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string)),
+    items: itemsTienda.get(o.id as string) || [],
   }));
   // Resumen (sin todos los mensajes de cada chat): la carga inicial del panel no
   // debe descargar la conversación completa de cientos de chats. Cada chat carga
@@ -293,6 +294,16 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   });
 });
 
+// Ítems de TODOS los pedidos de la tienda en una sola consulta (antes era una
+// consulta por pedido en cada sondeo de 5 s, y con miles de pedidos frenaba el
+// servidor, que es el mismo que procesa los mensajes de WhatsApp).
+function itemsPorPedido(sid: string): Map<string, { qty: number; nombre: string; precio: number }[]> {
+  const m = new Map<string, { qty: number; nombre: string; precio: number }[]>();
+  const rows = db.prepare('SELECT i.order_id, i.qty, i.nombre, i.precio FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.store_id = ?').all(sid) as { order_id: string; qty: number; nombre: string; precio: number }[];
+  for (const r of rows) { const l = m.get(r.order_id); const it = { qty: r.qty, nombre: r.nombre, precio: r.precio }; if (l) l.push(it); else m.set(r.order_id, [it]); }
+  return m;
+}
+
 // Mensajes completos de un lead (para el conversación).
 const mapMensaje = (m: Record<string, unknown>) => ({
   id: m.id, de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at,
@@ -310,7 +321,18 @@ const mensajesDe = (leadId: string) =>
  * ABIERTO trae su conversación completa, para que se actualice en vivo.
  */
 function listarLeads(sid: string, resumen: boolean, abierto?: string) {
-  const rows = db.prepare('SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[];
+  // Una sola consulta: datos del chat + su último mensaje + cuántos mensajes del
+  // cliente van seguidos sin respuesta (antes eran 2 consultas por chat en cada sondeo).
+  const rows = db.prepare(resumen
+    ? `SELECT l.*,
+         (SELECT texto FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_texto,
+         (SELECT tipo FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_tipo,
+         (SELECT created_at FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_at,
+         (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente'
+            AND m.created_at > COALESCE((SELECT MAX(x.created_at) FROM messages x WHERE x.lead_id = l.id AND x.de != 'cliente'), '')) AS sin_responder
+       FROM leads l WHERE l.store_id = ? ORDER BY l.created_at DESC`
+    : 'SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[];
+  const etiquetaMedia: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento' };
   return rows.map((l) => {
     const base = {
       id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
@@ -319,17 +341,13 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
       promosOptin: Number(l.promos_optin) === 1,
     };
     if (!resumen) return { ...base, mensajes: mensajesDe(l.id as string) };
-    const ult = db.prepare('SELECT texto, tipo, created_at FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1').get(l.id as string) as Record<string, unknown> | undefined;
-    const etiquetaMedia: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento' };
-    const cola = db.prepare('SELECT de FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 40').all(l.id as string) as Record<string, unknown>[];
-    let sinResponder = 0;
-    for (const m of cola) { if (m.de === 'cliente') sinResponder++; else break; }
     const esAbierto = !!abierto && String(l.id) === String(abierto);
+    const hay = l.ult_at != null;
     return {
       ...base,
       mensajes: esAbierto ? mensajesDe(l.id as string) : [],
-      ultimo: ult ? (String(ult.texto || '').trim() || etiquetaMedia[String(ult.tipo)] || '') : '', ultimoIso: ult ? ult.created_at : null,
-      hora: ult ? horaBogota(ult.created_at) : '', sinResponder,
+      ultimo: hay ? (String(l.ult_texto || '').trim() || etiquetaMedia[String(l.ult_tipo)] || '') : '', ultimoIso: hay ? l.ult_at : null,
+      hora: hay ? horaBogota(l.ult_at) : '', sinResponder: Math.min(40, Number(l.sin_responder) || 0),
     };
   });
 }
@@ -353,10 +371,11 @@ api.get('/leads/:id/mensajes', requireAuth, requireStore, (req, res) => {
 // Pedidos en vivo (para refrescar sin recargar toda la tienda).
 api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
+  const items = itemsPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
-    items: db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id as string),
+    items: items.get(o.id as string) || [],
   }));
   res.json({ orders });
 });

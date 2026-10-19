@@ -3,7 +3,7 @@ import { AttachButton, MediaContent } from '../MediaBubble';
 import { VoiceRecorder } from '../VoiceRecorder';
 import { ActivityLog } from '../ActivityLog';
 import { FlujosButton, AnuncioCard } from '../../sections/CRM';
-import { archivosDePortapapeles } from '../../lib/clipboard';
+import { CajaMensaje } from '../CajaMensaje';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function MobileChat({ df }: { df: DealFlowState }) {
@@ -143,21 +143,15 @@ export function MobileChat({ df }: { df: DealFlowState }) {
               <AttachButton onFile={df.sendCrmMedia} size={44} />
               <FlujosButton df={df} size={44} />
               <VoiceRecorder onRecorded={df.sendCrmMedia} size={44} />
-              <input
-                className="df-input"
-                value={df.crmDraft}
-                onChange={(e) => df.setCrmDraft(e.target.value)}
-                onPaste={(e) => { const fs = archivosDePortapapeles(e); if (fs.length) { e.preventDefault(); fs.forEach(df.sendCrmMedia); } }}
+              <CajaMensaje
+                chatId={String(chat?.id ?? '')}
+                onSend={df.sendCrm}
+                onFile={df.sendCrmMedia}
+                enviarConEnter={false}
                 placeholder="Escribe tu mensaje…"
-                style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontSize: 14, minHeight: 44, boxSizing: 'border-box' }}
+                inputStyle={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontSize: 14, minHeight: 44, boxSizing: 'border-box' }}
+                botonStyle={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', minHeight: 44 }}
               />
-              <button
-                onClick={df.sendCrm}
-                className="df-btn-primary"
-                style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', minHeight: 44 }}
-              >
-                Enviar
-              </button>
             </div>
             <div onClick={df.backToBot} style={{ textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 13, fontWeight: 600, marginTop: 10, cursor: 'pointer' }}>
               Devolver al asistente
