@@ -36,7 +36,7 @@ function Tarjeta({ l, onAbrir, onMover }: { l: LeadEstado; onAbrir: () => void; 
         <b style={{ fontSize: 13, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.nombre || l.tel || 'Sin nombre'}</b>
         <span style={{ fontSize: 11, color: 'var(--df-text-faint)', whiteSpace: 'nowrap' }}>{l.hora}</span>
       </div>
-      {l.ultimo && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{l.ultimo}</div>}
+      {l.ultimo && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} translate="no">{l.ultimo}</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }} onClick={(ev) => ev.stopPropagation()}>
         {l.pedido && <span style={{ fontSize: 11, fontWeight: 700, color: '#047857', background: 'rgba(16,185,129,.12)', borderRadius: 6, padding: '2px 7px' }}>DF-{l.pedido.numero} · ${l.pedido.total.toLocaleString('es-CO')}</span>}
         {l.manual && <span title="Lo moviste tú a este estado" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-text-muted)', background: 'var(--df-surface-2)', borderRadius: 6, padding: '2px 6px' }}>✋ manual</span>}

@@ -1,4 +1,5 @@
 import { db, uid } from './db.js';
+import { idiomaDe, seguimientoRespaldo } from './idioma.js';
 import { sendWhatsappText, marcarEnviado } from './wa.js';
 
 /**
@@ -90,7 +91,7 @@ export async function correrSeguimiento(): Promise<void> {
       // 'NADA' = la IA considera que la conversación ya está cerrada (venta hecha,
       // el cliente se despidió, etc.): no molestamos más y detenemos el seguimiento.
       if (generado === 'NADA') { db.prepare('UPDATE leads SET seguimiento_nivel = 3 WHERE id = ?').run(l.id); continue; }
-      const texto = generado || mensajeSeguimiento(objetivo, l.nombre);
+      const texto = generado || seguimientoRespaldo(idiomaDe(l.store_id, l.id), objetivo, l.nombre) || mensajeSeguimiento(objetivo, l.nombre);
       const destino = l.wa_id || l.tel;
       const pn = l.tel;
       try {

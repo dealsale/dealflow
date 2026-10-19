@@ -2,6 +2,7 @@ import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
+import { directivaIdioma, idiomaDe, confirmacionPedido, preguntaUnProducto, preguntaVariosProductos } from './idioma.js';
 import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
 import { saveOutgoingMedia, mediaPath, tipoDeMime } from './media.js';
@@ -223,7 +224,8 @@ export async function generarSeguimientoIA(storeId: string, leadId: string, nive
   const system = `Eres ${nombreAsist ? `"${nombreAsist}", el asistente de ventas por WhatsApp de "${marca}". Te presentas como ${nombreAsist}` : `el asistente de ventas por WhatsApp de "${marca}"`}.
 ${assistant?.instrucciones || ''}
 
-${estiloDirectiva(assistant?.estilo)}${personalizacionDirectiva(assistant?.estilo).replace(/\n\nPASAR A UNA PERSONA:[\s\S]*$/, '')}
+${estiloDirectiva(assistant?.estilo)}
+${directivaIdioma(storeId)}${personalizacionDirectiva(assistant?.estilo).replace(/\n\nPASAR A UNA PERSONA:[\s\S]*$/, '')}
 
 CATÁLOGO (solo como contexto; NO inventes precios que no estén aquí):
 ${productos || '(sin productos cargados)'}
@@ -377,7 +379,8 @@ BLINDAJE DE PRECIOS Y CUENTAS (INNEGOCIABLE, tiene prioridad sobre la simpatía 
 - Ante cualquier duda o contradicción sobre un precio, gana SIEMPRE el catálogo, nunca el cliente.
 
 Estás chateando por WhatsApp; sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
-${estiloDirectiva(assistant?.estilo)}${personalizacionDirectiva(assistant?.estilo)}
+${estiloDirectiva(assistant?.estilo)}
+${directivaIdioma(storeId)}${personalizacionDirectiva(assistant?.estilo)}
 
 FORMATO DE RESPUESTA (OBLIGATORIO): responde SIEMPRE en texto plano normal, como se escribe por WhatsApp. NUNCA respondas en JSON, ni uses llaves { } ni bloques de código con acentos graves (\`\`\`). No incluyas campos como "text" u "order". Para registrar un pedido usa EXCLUSIVAMENTE el marcador ##PEDIDO en su propia línea, tal como se indica; jamás escribas el pedido como JSON.
 
@@ -515,12 +518,11 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
         await esperarRespuestaHumana(t0);
         if (activos.length === 1) {
           db.prepare('UPDATE leads SET pendiente_info = ? WHERE id = ?').run(String(activos[0].id), leadId);
-          await responder(`¡Hola${nombreCorto}! 😊 Con gusto te doy toda la información. ¿Te interesa nuestro ${String(activos[0].nombre)}?`);
+          await responder(preguntaUnProducto(idiomaDe(storeId, leadId), nombreCorto, String(activos[0].nombre)));
         } else {
           const lista = activos.slice(0, 6).map((p) => `• ${String(p.nombre)}`).join('\n');
-          const extra = activos.length > 6 ? '\n\nO dime cuál viste en el anuncio 🙂' : '';
           db.prepare("UPDATE leads SET pendiente_info = 'ASK' WHERE id = ?").run(leadId);
-          await responder(`¡Hola${nombreCorto}! 😊 ¡Claro! ¿Sobre cuál de estos quieres información?\n\n${lista}${extra}`);
+          await responder(preguntaVariosProductos(idiomaDe(storeId, leadId), nombreCorto, lista, activos.length > 6));
         }
         return;
       }
@@ -702,9 +704,9 @@ function esAfirmacion(t: string): boolean {
   const s = norm(t);
   if (!s || s.length > 45) return false;
   const words = new Set(s.split(' ').filter(Boolean));
-  const yes = ['si', 'sisas', 'sisa', 'sip', 'sipi', 'claro', 'dale', 'dalee', 'listo', 'correcto', 'confirmo', 'confirmado', 'ok', 'oka', 'okay', 'okey', 'eso', 'vale', 'va', 'sale', 'perfecto', 'hagale', 'deacuerdo', 'acuerdo', 'positivo', 'afirmativo'];
+  const yes = ['si', 'sisas', 'sisa', 'sip', 'sipi', 'claro', 'dale', 'dalee', 'listo', 'correcto', 'confirmo', 'confirmado', 'ok', 'oka', 'okay', 'okey', 'eso', 'vale', 'va', 'sale', 'perfecto', 'hagale', 'deacuerdo', 'acuerdo', 'positivo', 'afirmativo', 'yes', 'yeah', 'yep', 'sure', 'correct', 'confirmed', 'right', 'exactly'];
   if (yes.some((y) => words.has(y))) return true;
-  return /\b(si|sisas|dale|listo|correcto|confirm\w*|perfecto|de una|hagale|todo bien|esta bien|asi es)\b/.test(s);
+  return /\b(si|sisas|dale|listo|correcto|confirm\w*|perfecto|de una|hagale|todo bien|esta bien|asi es|that s right|sounds good|all good|go ahead)\b/.test(s);
 }
 
 /**
@@ -719,7 +721,8 @@ function esMasInfo(t: string): boolean {
   if (/\b(mas)\s+(info\w*|detalle\w*)\b/.test(s)) return true;
   if (/\binformacion\b/.test(s)) return true;
   if (/\b(me interesa|quiero saber|quiero mas|deseo informacion|necesito informacion|mas detalles)\b/.test(s)) return true;
-  return ['info', 'mas info', 'interesado', 'interesada', 'informes'].includes(s);
+  if (/\b(more (info|information|details)|i m interested|im interested|information please|tell me more)\b/.test(s)) return true;
+  return ['info', 'mas info', 'interesado', 'interesada', 'informes', 'interested', 'information', 'details'].includes(s);
 }
 
 /**
@@ -766,13 +769,13 @@ function pedidoDesdeResumen(leadId: string): string {
   // Miramos bastante atrás: si el bot re-preguntó "¿confirmas?" varias veces, el
   // "Resumen de tu pedido" real pudo quedar varios mensajes atrás.
   const rows = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'bot' AND texto != '' ORDER BY created_at DESC LIMIT 16").all(leadId) as { texto: string }[];
-  const resumen = rows.map((r) => r.texto).find((t) => /resumen/i.test(t) && /(direcc|total|ciudad)/i.test(t));
+  const resumen = rows.map((r) => r.texto).find((t) => /(resumen|summary)/i.test(t) && /(direcc|address|total|ciudad|city)/i.test(t));
   if (!resumen) return '';
-  const cliente = campoResumen(resumen, 'Nombre');
-  const ciudad = campoResumen(resumen, 'Ciudad');
-  const direccion = campoResumen(resumen, 'Direcci');
+  const cliente = campoResumen(resumen, '(?:Nombre|Name)');
+  const ciudad = campoResumen(resumen, '(?:Ciudad|City)');
+  const direccion = campoResumen(resumen, '(?:Direcci|Address)');
   const total = (campoResumen(resumen, 'Total').match(/\d/g) || []).join('');
-  const prodField = campoResumen(resumen, 'Producto') || resumen;
+  const prodField = campoResumen(resumen, '(?:Producto|Product)') || resumen;
   const items: string[] = [];
   // Conserva el detalle (talla/color) que viene tras el nombre: "3 x Bota — Talla: L — Negro, Camel"
   // se convierte en "3x Bota (Talla: L · Negro, Camel)" para que el pedido quede completo.
@@ -785,7 +788,7 @@ function pedidoDesdeResumen(leadId: string): string {
     items.push(detalle ? `${mm[1]}x ${base} (${detalle})` : `${mm[1]}x ${base}`);
   }
   if (!items.length || (!direccion && !ciudad)) return '';
-  const departamento = campoResumen(resumen, 'Departamento');
+  const departamento = campoResumen(resumen, '(?:Departamento|Department)');
   console.log(`[ia] pedido tomado del resumen (la IA no puso el marcador) para lead ${leadId}`);
   return ` cliente="${cliente}"; departamento="${departamento}"; ciudad="${ciudad}"; direccion="${direccion}"; items="${items.join(', ')}"; total="${total}"`;
 }
@@ -898,7 +901,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   if (!departamento) {
     const rows = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'bot' AND texto != '' ORDER BY created_at DESC LIMIT 8").all(lead.id) as { texto: string }[];
     const resumen = rows.map((r) => r.texto).find((t) => /departamento/i.test(t));
-    if (resumen) departamento = campoResumen(resumen, 'Departamento');
+    if (resumen) departamento = campoResumen(resumen, '(?:Departamento|Department)');
   }
   // Los ítems pueden traer el detalle entre paréntesis: "2x Bota Recta (Talla M · Negro, Gris)".
   // Separamos por comas SOLO fuera de paréntesis para no partir la lista de colores.
@@ -965,7 +968,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   // Mensaje de confirmación al cliente.
   const primerNombre = cliente.split(' ')[0];
   const producto = (items[0]?.nombre || 'tu pedido').split('(')[0].split('—')[0].trim();
-  const confirmacion = `Tu pedido ya quedó registrado exitosamente 🎉\n\nTe llegará un mensaje de confirmación con el número de pedido y los detalles del envío en un momento 📲\n\n¡Gracias por tu compra, ${primerNombre}! Que disfrutes mucho tus ${producto} 🙌😊`;
+  const confirmacion = confirmacionPedido(idiomaDe(storeId, lead.id), primerNombre, producto);
   const midConf = uid();
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(midConf, lead.id, 'bot', confirmacion);
   marcarEnviado(midConf, await sendWhatsappText(storeId, destino, confirmacion, pn));

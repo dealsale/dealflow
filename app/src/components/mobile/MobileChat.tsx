@@ -84,7 +84,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
         </div>
       )}
 
-      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div ref={scrollRef} translate="no" style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {chat.anuncio && (chat.anuncio.titular || chat.anuncio.id || chat.anuncio.url) && <AnuncioCard anuncio={chat.anuncio} />}
         {chat.mensajesDecorated.map((m, i) => {
           const prev = chat.mensajesDecorated[i - 1];

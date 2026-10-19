@@ -297,6 +297,7 @@ export const apiGenerarVariantes = (productId: string) => req<{ ok: true; creada
 export const apiPatchVariant = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/variants/${id}`, 'PATCH', patch);
 export const apiDeleteVariant = (id: string) => req<{ ok: true }>(`/api/variants/${id}`, 'DELETE');
 export interface EstiloAsistente {
+  idioma?: 'es' | 'en' | 'auto';
   trato?: 'tu' | 'usted'; emojis?: boolean; emojiNivel?: 'nada' | 'pocos' | 'muchos'; largo?: 'corto' | 'medio' | 'detallado';
   personalidad?: 'amigable' | 'profesional' | 'divertido' | 'experto' | 'directo'; modismos?: 'neutro' | 'colombiano';
   insistencia?: 'suave' | 'equilibrada' | 'persuasiva'; sugerirCombos?: boolean;

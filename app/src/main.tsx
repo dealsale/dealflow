@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import { Academy } from './academy/Academy.tsx'
 import { iniciarAutoActualizacion } from './lib/autoUpdate'
+import { iniciarTraduccion } from './i18n/traductor'
 
 iniciarAutoActualizacion()
 
@@ -17,3 +18,6 @@ createRoot(document.getElementById('root')!).render(
     {esAcademy ? <Academy /> : <App />}
   </StrictMode>,
 )
+
+// Interfaz en inglés si el usuario lo eligió (traduce en vivo lo que se pinta).
+iniciarTraduccion()

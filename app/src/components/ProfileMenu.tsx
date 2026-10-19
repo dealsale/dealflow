@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { cambiarIdiomaUI, idiomaUI, type IdiomaUI } from '../i18n/traductor';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 /** Avatar redondo: la foto de perfil si hay, si no las iniciales. En el tema
@@ -223,6 +224,19 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
             {!df.premiumHabilitado && (
               <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)' }}>💎 El tema Premium es exclusivo: pregúntale a tu administrador de DealFlow si te lo puede habilitar.</div>
             )}
+          </div>
+
+          {/* Idioma de la plataforma */}
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--df-border)' }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 8 }}>Idioma</div>
+            <Pills
+              value={idiomaUI()}
+              onChange={(v) => cambiarIdiomaUI(v as IdiomaUI)}
+              options={[
+                { v: 'es', label: 'Español', icon: '🇪🇸' },
+                { v: 'en', label: 'English', icon: '🇺🇸' },
+              ]}
+            />
           </div>
 
           {/* Cambiar contraseña */}

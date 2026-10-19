@@ -91,6 +91,13 @@ export function emparejarItem<T extends VarBase>(nombreItem: string, todas: T[])
       if (tl.length && tl.every((t) => tokE.some((x) => mismoToken(x, t))) && tl.length > score) { mejorV = v; score = tl.length; }
     }
     if (mejorV) return { v: mejorV, motivo: '', parecidos };
+    // 3) Lo pedido está contenido en la variante ("Negro · L" ⊂ "Negro con blanco · L"):
+    //    gana la que menos palabras de más tenga, solo si es la única con ese mínimo.
+    const cands = vs.map((v) => ({ v, tl: tokensVariante(v.label) }))
+      .filter((x) => tokE.every((t) => x.tl.some((y) => mismoToken(y, t))))
+      .map((x) => ({ v: x.v, extra: x.tl.length - tokE.length }))
+      .sort((a, b) => a.extra - b.extra);
+    if (cands.length && (cands.length === 1 || cands[1].extra > cands[0].extra)) return { v: cands[0].v, motivo: '', parecidos };
   }
   // Variante escrita sin paréntesis ("Vestido Dianne Azul rey M"): todas las palabras del label en el nombre.
   const full = tokensVariante(nombreItem);
@@ -108,7 +115,8 @@ export function emparejarItem<T extends VarBase>(nombreItem: string, todas: T[])
 }
 
 // Rótulos que no identifican la variante ("Talla", "Color"…): se ignoran al comparar.
-const ROTULOS = new Set(['talla', 'tallas', 'color', 'colores', 'size', 'tamano', 'referencia', 'ref']);
+// "Unicolor", "liso"… describen el color pero el cliente casi nunca los dice: "Negro" = "Negro Unicolor".
+const ROTULOS = new Set(['talla', 'tallas', 'color', 'colores', 'size', 'tamano', 'referencia', 'ref', 'unicolor', 'liso', 'lisa', 'solido', 'solida', 'entero', 'entera']);
 function tokensVariante(s: string): string[] {
   const alias: Record<string, string> = { xxl: '2xl', xxxl: '3xl', xxs: '2xs' };
   return norm(s).split(' ').filter((t) => t && !ROTULOS.has(t)).map((t) => alias[t] || t);
