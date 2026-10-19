@@ -17,7 +17,7 @@ export interface DropdownOption {
  *  - 'field' → campo de formulario del ancho de su contenedor.
  */
 export function Dropdown({
-  value, onChange, options, variant = 'field', label, placeholder, width, active, ariaLabel, buscar,
+  value, onChange, options, variant = 'field', label, placeholder, width, active, ariaLabel, buscar, compacto,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -30,6 +30,8 @@ export function Dropdown({
   ariaLabel?: string;
   /** Muestra un buscador arriba de la lista (por defecto, con más de 8 opciones). */
   buscar?: boolean;
+  /** Pill más bajito (para barras finas, como la de modo soporte). */
+  compacto?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -98,7 +100,13 @@ export function Dropdown({
   const isActive = active ?? (variant === 'pill' && options.length > 0 && value !== options[0].value);
   const pill = variant === 'pill';
 
-  const triggerStyle: CSSProperties = pill
+  const triggerStyle: CSSProperties = pill && compacto
+    ? {
+        display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, boxSizing: 'border-box', maxWidth: 240,
+        border: '1px solid rgba(255,255,255,.28)', background: 'rgba(0,0,0,.18)', color: '#fff',
+        borderRadius: 6, padding: '0 8px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+      }
+    : pill
     ? {
         display: 'inline-flex', alignItems: 'center', gap: 7, height: 34, boxSizing: 'border-box',
         border: '1px solid ' + (isActive ? '#0F172A' : 'var(--df-border)'), background: isActive ? '#0F172A' : 'var(--df-surface)',
@@ -113,7 +121,7 @@ export function Dropdown({
 
   return (
     <div ref={ref} style={{ position: 'relative', display: pill ? 'inline-block' : 'block', width: pill ? undefined : (width ?? '100%') }}>
-      <button type="button" onClick={abrir} onKeyDown={onKey} aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel || label} style={triggerStyle} className={pill && isActive ? 'df-dd-pill-on' : undefined}>
+      <button type="button" onClick={abrir} onKeyDown={onKey} aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel || label} style={triggerStyle} className={pill && isActive && !compacto ? 'df-dd-pill-on' : undefined}>
         {label && <span style={{ color: pill ? (isActive ? 'rgba(255,255,255,.7)' : 'var(--df-text-faint)') : 'var(--df-text-faint)', whiteSpace: 'nowrap', fontWeight: 600 }}>{label}</span>}
         <span style={{ flex: pill ? undefined : 1, fontWeight: pill ? 700 : 600, color: sel ? 'inherit' : 'var(--df-text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {sel ? sel.label : (placeholder || 'Selecciona…')}

@@ -118,15 +118,76 @@ async function entenderImagen(storeId: string, mediaUrl: string): Promise<string
   } catch (e) { console.error('[ia] error viendo imagen', e); return ''; }
 }
 
+/** Personalización del asistente que guarda la tienda (JSON en assistants.estilo). */
+interface EstiloCfg {
+  trato?: string; emojis?: boolean; emojiNivel?: string; largo?: string;
+  personalidad?: string; modismos?: string; insistencia?: string; sugerirCombos?: boolean;
+  saludo?: string; despedida?: string; prohibido?: string;
+  negocio?: { envios?: string; pagos?: string; cambios?: string; horario?: string; ubicacion?: string; extra?: string };
+  faqs?: { pregunta?: string; respuesta?: string }[];
+  humano?: { activo?: boolean; cuando?: string; mensaje?: string };
+}
+const PERSONALIDADES: Record<string, string> = {
+  amigable: 'cálido, cercano y servicial, como un amigo que sabe del producto',
+  profesional: 'profesional, claro y respetuoso, sin perder la amabilidad',
+  divertido: 'alegre y con buena energía, con un toque de humor ligero (sin exagerar)',
+  experto: 'experto y asesor: explica beneficios y resuelve dudas con seguridad',
+  directo: 'directo y eficiente: va al grano y facilita la compra sin rodeos',
+};
+const INSISTENCIA: Record<string, string> = {
+  suave: 'Vende sin presionar: informa, resuelve dudas y deja que el cliente decida; invita a comprar solo cuando muestre interés.',
+  equilibrada: 'Guía la conversación hacia la compra con naturalidad: después de resolver cada duda, invita al siguiente paso.',
+  persuasiva: 'Sé un vendedor proactivo: resalta beneficios, maneja objeciones con argumentos y propón cerrar el pedido en cuanto haya interés (sin mentir ni inventar promociones).',
+};
+const lim = (v: unknown, n = 1500) => String(v ?? '').trim().slice(0, n);
+
 /** Convierte el estilo/tono elegido por la tienda en una instrucción para la IA. */
 function estiloDirectiva(estiloRaw?: string): string {
-  const e = pj<{ trato?: string; emojis?: boolean; largo?: string }>(estiloRaw || '', {});
+  const e = pj<EstiloCfg>(estiloRaw || '', {});
+  const emoji = e.emojiNivel || (e.emojis === false ? 'nada' : 'pocos');
   const partes = [
     e.trato === 'usted' ? 'trata al cliente de "usted"' : 'trata al cliente de "tú", cercano',
-    e.emojis === false ? 'no uses emojis' : 'usa algunos emojis con moderación',
-    e.largo === 'detallado' ? 'da respuestas algo más detalladas cuando ayude a la venta' : 'respuestas breves (1-3 frases)',
+    emoji === 'nada' ? 'no uses emojis' : emoji === 'muchos' ? 'usa emojis con frecuencia para dar calidez (1-3 por mensaje)' : 'usa algunos emojis con moderación',
+    e.largo === 'detallado' ? 'da respuestas algo más detalladas cuando ayude a la venta' : e.largo === 'medio' ? 'respuestas de largo medio (2-4 frases)' : 'respuestas breves (1-3 frases)',
   ];
+  if (e.personalidad && PERSONALIDADES[e.personalidad]) partes.push(`personalidad: ${PERSONALIDADES[e.personalidad]}`);
+  if (e.modismos === 'colombiano') partes.push('habla con expresiones colombianas naturales y respetuosas (ej: "con mucho gusto", "claro que sí", "a la orden"), sin caricaturizar');
   return `ESTILO Y TONO (respétalo): ${partes.join('; ')}.`;
+}
+
+/**
+ * Lo que la tienda configuró en "Asistente" además del tono: información del
+ * negocio, preguntas frecuentes, forma de vender, saludo, temas prohibidos y
+ * cuándo pasar el chat a una persona. Todo opcional: lo vacío no se incluye.
+ */
+function personalizacionDirectiva(estiloRaw?: string): string {
+  const e = pj<EstiloCfg>(estiloRaw || '', {});
+  const out: string[] = [];
+  const n = e.negocio || {};
+  const negocio = [
+    lim(n.envios) && `- Envíos (tiempos, costos, cobertura): ${lim(n.envios)}`,
+    lim(n.pagos) && `- Formas de pago: ${lim(n.pagos)}`,
+    lim(n.cambios) && `- Cambios, devoluciones y garantía: ${lim(n.cambios)}`,
+    lim(n.horario) && `- Horario de atención: ${lim(n.horario)}`,
+    lim(n.ubicacion) && `- Ubicación / tienda física / redes: ${lim(n.ubicacion)}`,
+    lim(n.extra, 3000) && `- Otra información: ${lim(n.extra, 3000)}`,
+  ].filter(Boolean);
+  if (negocio.length) out.push(`INFORMACIÓN DEL NEGOCIO (úsala tal cual cuando pregunten; no inventes nada distinto):\n${negocio.join('\n')}`);
+  const faqs = (Array.isArray(e.faqs) ? e.faqs : []).filter((f) => lim(f?.pregunta) && lim(f?.respuesta)).slice(0, 40)
+    .map((f) => `- P: ${lim(f.pregunta, 300)} → R: ${lim(f.respuesta, 800)}`);
+  if (faqs.length) out.push(`PREGUNTAS FRECUENTES DE LA TIENDA (si el cliente pregunta algo parecido, responde con esta información):\n${faqs.join('\n')}`);
+  if (e.insistencia && INSISTENCIA[e.insistencia]) out.push(`FORMA DE VENDER: ${INSISTENCIA[e.insistencia]}`);
+  if (e.sugerirCombos) out.push('VENTA CRUZADA: cuando el cliente ya eligió un producto, sugiere UNA vez (sin insistir) un combo configurado o un producto del catálogo que lo complemente.');
+  if (lim(e.saludo, 600)) out.push(`SALUDO: en tu PRIMER mensaje de la conversación saluda de esta forma (adáptala con naturalidad, sin cambiar la idea): «${lim(e.saludo, 600)}»`);
+  if (lim(e.despedida, 600)) out.push(`DESPEDIDA: cuando el cliente se despida o dé las gracias, despídete así (adáptala con naturalidad): «${lim(e.despedida, 600)}»`);
+  if (lim(e.prohibido)) out.push(`PROHIBIDO (nunca lo hagas ni lo menciones): ${lim(e.prohibido)}`);
+  const h = e.humano || {};
+  if (h.activo) {
+    const cuando = lim(h.cuando, 800) || 'el cliente pide hablar con una persona o asesor, tiene un reclamo o queja, o pregunta algo que no puedes resolver con la información que tienes';
+    const msg = lim(h.mensaje, 400) || 'Ya mismo te comunico con una persona de nuestro equipo para ayudarte mejor 🙌';
+    out.push(`PASAR A UNA PERSONA: si ${cuando}, NO sigas atendiendo tú: responde con este mensaje (adáptalo con naturalidad): «${msg}» y agrega al final, en una línea sola, el marcador ##HUMANO## (el cliente no lo ve). No pongas ##PEDIDO en ese mismo mensaje.`);
+  }
+  return out.length ? '\n\n' + out.join('\n\n') : '';
 }
 
 /**
@@ -160,7 +221,7 @@ export async function generarSeguimientoIA(storeId: string, leadId: string, nive
   const system = `Eres ${nombreAsist ? `"${nombreAsist}", el asistente de ventas por WhatsApp de "${marca}". Te presentas como ${nombreAsist}` : `el asistente de ventas por WhatsApp de "${marca}"`}.
 ${assistant?.instrucciones || ''}
 
-${estiloDirectiva(assistant?.estilo)}
+${estiloDirectiva(assistant?.estilo)}${personalizacionDirectiva(assistant?.estilo).replace(/\n\nPASAR A UNA PERSONA:[\s\S]*$/, '')}
 
 CATÁLOGO (solo como contexto; NO inventes precios que no estén aquí):
 ${productos || '(sin productos cargados)'}
@@ -314,7 +375,7 @@ BLINDAJE DE PRECIOS Y CUENTAS (INNEGOCIABLE, tiene prioridad sobre la simpatía 
 - Ante cualquier duda o contradicción sobre un precio, gana SIEMPRE el catálogo, nunca el cliente.
 
 Estás chateando por WhatsApp; sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
-${estiloDirectiva(assistant?.estilo)}
+${estiloDirectiva(assistant?.estilo)}${personalizacionDirectiva(assistant?.estilo)}
 
 FORMATO DE RESPUESTA (OBLIGATORIO): responde SIEMPRE en texto plano normal, como se escribe por WhatsApp. NUNCA respondas en JSON, ni uses llaves { } ni bloques de código con acentos graves (\`\`\`). No incluyas campos como "text" u "order". Para registrar un pedido usa EXCLUSIVAMENTE el marcador ##PEDIDO en su propia línea, tal como se indica; jamás escribas el pedido como JSON.
 
@@ -494,7 +555,9 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     const marcaPed = /##\s*PEDIDO\b([^\n]*)/i;
     const m = bruto.match(marca);
     const mp = bruto.match(marcaPed);
-    const texto = bruto.replace(marcaStrip, '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').replace(/```+/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+    // Pase a humano: la IA decide (según lo configurado) que el chat lo tome una persona.
+    const pideHumano = /##\s*HUMANO\b\s*(?:##)?/i.test(bruto);
+    const texto = bruto.replace(/##\s*HUMANO\b\s*(?:##)?/gi, '').replace(marcaStrip, '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').replace(/```+/g, '').replace(/[ \t]{2,}/g, ' ').trim();
     // ¿Enviamos fotos? Sí si la IA puso el marcador (con o sin nombre) o si el
     // cliente pidió fotos explícitamente (red de seguridad, igual que la del pedido).
     const nombreMarca = m && m[1] ? m[1].replace('|', ' ').trim() : '';
@@ -528,6 +591,12 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
           }
         }
       }
+    }
+    if (pideHumano) {
+      if (texto) { await esperarRespuestaHumana(t0); await responder(texto); }
+      db.prepare("UPDATE leads SET asignado = 'Equipo (pidió asesor)' WHERE id = ?").run(leadId);
+      registrarLog(storeId, 'warn', 'humano', 'El asistente pasó este chat a una persona del equipo (ya no responde solo). Atiéndelo desde el Inbox o devuélvelo al asistente.', leadId);
+      return;
     }
     let pedidoCreado = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
 
@@ -1129,69 +1198,6 @@ export async function enviarMensajeInicialManual(storeId: string, leadId: string
   // contador de seguimiento para no encimar recordatorios.
   db.prepare("UPDATE leads SET asignado = 'Asistente (bot)', seguimiento_nivel = 0 WHERE id = ?").run(leadId);
   return { ok: true };
-}
-
-/**
- * Envía un FLUJO de remarketing (bloques texto/imagen/video/audio armados por la
- * tienda) a un chat, en el orden construido. Se dispara a mano desde el Inbox.
- */
-export async function enviarFlujo(storeId: string, leadId: string, flowId: string, permitirSinOptin = false): Promise<{ ok: boolean; error?: string; enviadas?: number; requiereOptin?: boolean }> {
-  const flow = db.prepare('SELECT nombre, bloques FROM flows WHERE id = ? AND store_id = ?').get(flowId, storeId) as { nombre: string; bloques: string } | undefined;
-  if (!flow) return { ok: false, error: 'Flujo no encontrado.' };
-  const lead = db.prepare('SELECT nombre, wa_id, tel, promos_optin FROM leads WHERE id = ? AND store_id = ?').get(leadId, storeId) as { nombre: string; wa_id: string | null; tel: string; promos_optin: number } | undefined;
-  if (!lead) return { ok: false, error: 'Chat no encontrado.' };
-  // Anti-baneo: el remarketing solo va a quien aceptó recibir promociones.
-  // Enviar a quien no lo pidió sube los reportes/bloqueos y hace que Meta
-  // desactive el número. El usuario puede forzarlo bajo su responsabilidad.
-  if (!permitirSinOptin && Number(lead.promos_optin) !== 1) {
-    return { ok: false, requiereOptin: true, error: 'Este cliente no ha aceptado recibir promociones. Márcalo como opt-in o confirma el envío bajo tu responsabilidad.' };
-  }
-  const destino = lead.wa_id || lead.tel;
-  const pn = lead.tel;
-  const bloques = pj<{ tipo: string; valor?: string; valores?: string[] }[]>(flow.bloques, []);
-  const piezas: { tipo: string; valor: string }[] = bloques.flatMap((b) => {
-    if (b.tipo === 'texto') return [{ tipo: 'texto', valor: b.valor || '' }];
-    const lista = Array.isArray(b.valores) && b.valores.length ? b.valores : b.valor ? [b.valor] : [];
-    return lista.map((v) => ({ tipo: b.tipo, valor: v }));
-  });
-  if (!piezas.length) return { ok: false, error: 'Este flujo no tiene contenido cargado.' };
-  let enviadas = 0;
-  let idx = 0;
-  for (const b of piezas) {
-    let ok = false;
-    if (b.tipo === 'texto') {
-      const valor = rellenar(b.valor, lead);
-      if (valor.trim()) {
-        const mid = uid();
-        db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, leadId, 'bot', valor);
-        const r = await sendWhatsappText(storeId, destino, valor, pn);
-        marcarEnviado(mid, r);
-        ok = r.ok;
-      }
-    } else {
-      const media = materializar(storeId, b.valor);
-      if (media) {
-        const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
-        const mid = uid();
-        db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
-          .run(mid, leadId, 'bot', '', media.tipo, media.url, media.mime, null);
-        marcarEnviado(mid, r);
-        ok = r.ok;
-      }
-    }
-    if (ok) enviadas++;
-    // Ritmo humano entre piezas del flujo (nunca en ráfaga).
-    if (ok && idx < piezas.length - 1) {
-      const sig = piezas[idx + 1];
-      await dormir(pausaHumana(sig.tipo, sig.tipo === 'texto' ? (sig.valor || '').length : 0));
-    }
-    idx++;
-  }
-  // El bot queda atendiendo y se reinicia el seguimiento (el flujo reactivó el chat).
-  db.prepare("UPDATE leads SET seguimiento_nivel = 0 WHERE id = ?").run(leadId);
-  if (enviadas > 0) registrarLog(storeId, 'info', 'flujo', `Flujo de remarketing "${flow.nombre}" enviado (${enviadas}/${piezas.length} piezas).`, leadId);
-  else registrarLog(storeId, 'warn', 'flujo', `No se pudo enviar el flujo "${flow.nombre}" (revisa la conexión de WhatsApp).`, leadId);
-  return { ok: enviadas > 0, enviadas, error: enviadas > 0 ? undefined : 'No se envió ninguna pieza (¿WhatsApp conectado?).' };
 }
 
 /**

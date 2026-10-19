@@ -37,11 +37,13 @@ const jitter = () => Math.floor(Math.random() * 1800);
  * y cuándo fue la última vez que el freno tuvo que retener un envío (señal de que
  * el bot está intentando disparar en ráfaga).
  */
-export function estadisticasEnvio(storeId: string): { porMinuto: number; tope: number; cerca: boolean; ultimoFrenado: number } {
+export function estadisticasEnvio(storeId: string): { porMinuto: number; tope: number; cerca: boolean; ultimoFrenado: number; colaMs: number } {
   const st = porTienda.get(storeId);
   const ahora = Date.now();
   const porMinuto = st ? st.sellos.filter((t) => t > ahora - 60_000).length : 0;
-  return { porMinuto, tope: MAX_PER_MIN, cerca: porMinuto >= Math.ceil(MAX_PER_MIN * 0.8), ultimoFrenado: st?.ultimoFrenado || 0 };
+  // colaMs: cuánto falta para que salga el último envío ya reservado (cola del freno).
+  const colaMs = st ? Math.max(0, st.proximo - ahora) : 0;
+  return { porMinuto, tope: MAX_PER_MIN, cerca: porMinuto >= Math.ceil(MAX_PER_MIN * 0.8), ultimoFrenado: st?.ultimoFrenado || 0, colaMs };
 }
 
 /**

@@ -1,5 +1,6 @@
 import { mensajesDe as mensajesInicialesDe, normalizarMensajes, principal } from './mensajesIniciales.js';
 import { Router } from 'express';
+import type { Request as ExRequest, Response as ExResponse } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
@@ -1554,49 +1555,6 @@ api.post('/leads/:id/flujo-inicial', requireAuth, requireStore, async (req, res)
   res.json({ ok: true });
 });
 
-// ── Flujos de remarketing ─────────────────────────────────────────────
-api.get('/flows', requireAuth, requireStore, (req, res) => {
-  const rows = db.prepare('SELECT id, nombre, descripcion, bloques, activo, created_at FROM flows WHERE store_id = ? ORDER BY created_at DESC').all(req.user!.storeId) as Record<string, unknown>[];
-  res.json({ flows: rows.map((f) => ({ id: f.id, nombre: f.nombre, descripcion: f.descripcion, bloques: pj(f.bloques as string, []), activo: !!f.activo })) });
-});
-
-api.post('/flows', requireAuth, requireStore, (req, res) => {
-  const nombre = String(req.body?.nombre || '').trim();
-  if (!nombre) return res.status(400).json({ error: 'Ponle un nombre al flujo.' });
-  const id = uid();
-  db.prepare('INSERT INTO flows (id, store_id, nombre, descripcion, bloques) VALUES (?,?,?,?,?)')
-    .run(id, req.user!.storeId, nombre, String(req.body?.descripcion || ''), j(Array.isArray(req.body?.bloques) ? req.body.bloques : []));
-  res.json({ id });
-});
-
-api.put('/flows/:id', requireAuth, requireStore, (req, res) => {
-  const f = db.prepare('SELECT id FROM flows WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
-  if (!f) return res.status(404).json({ error: 'Flujo no encontrado.' });
-  const b = req.body || {};
-  if (typeof b.nombre === 'string' && b.nombre.trim()) db.prepare('UPDATE flows SET nombre = ? WHERE id = ?').run(b.nombre.trim(), req.params.id);
-  if (typeof b.descripcion === 'string') db.prepare('UPDATE flows SET descripcion = ? WHERE id = ?').run(b.descripcion, req.params.id);
-  if (Array.isArray(b.bloques)) db.prepare('UPDATE flows SET bloques = ? WHERE id = ?').run(j(b.bloques), req.params.id);
-  if (b.activo !== undefined) db.prepare('UPDATE flows SET activo = ? WHERE id = ?').run(b.activo ? 1 : 0, req.params.id);
-  res.json({ ok: true });
-});
-
-api.delete('/flows/:id', requireAuth, requireStore, (req, res) => {
-  const f = db.prepare('SELECT id FROM flows WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
-  if (!f) return res.status(404).json({ error: 'Flujo no encontrado.' });
-  db.prepare('DELETE FROM flows WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
-});
-
-// Enviar un flujo de remarketing a un chat.
-api.post('/leads/:id/enviar-flujo', requireAuth, requireStore, async (req, res) => {
-  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
-  if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
-  const { enviarFlujo } = await import('./ai.js');
-  const r = await enviarFlujo(req.user!.storeId!, req.params.id, String(req.body?.flowId || ''), !!req.body?.permitirSinOptin);
-  if (!r.ok) return res.status(400).json({ error: r.error, requiereOptin: r.requiereOptin });
-  res.json({ ok: true, enviadas: r.enviadas });
-});
-
 // Plantillas APROBADAS de esta tienda (para enviarlas desde el chat, incluso
 // fuera de la ventana de 24 h — para eso sirven las plantillas de Meta).
 api.get('/plantillas-aprobadas', requireAuth, requireStore, (req, res) => {
@@ -1647,7 +1605,6 @@ api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, async (req, r
 });
 
 // Marca (o desmarca) el consentimiento del cliente para recibir promociones.
-// Anti-baneo: los flujos de remarketing solo se envían a quien lo aceptó.
 api.post('/leads/:id/optin', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
   if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
@@ -1751,6 +1708,7 @@ api.put('/assistant', requireAuth, requireStore, requireOwner, (req, res) => {
   // dueño lo activa a propósito (seguimiento_on = 1).
   const on = seguimientoActivo === true ? 1 : 0;
   const estiloJson = estilo && typeof estilo === 'object' ? j(estilo) : '';
+  if (estiloJson.length > 60_000) return res.status(400).json({ error: 'La configuración del asistente es demasiado larga. Resume la información del negocio o las preguntas frecuentes.' });
   db.prepare(
     `INSERT INTO assistants (store_id, instrucciones, reglas, nombre, seguimiento_on, estilo) VALUES (?,?,?,?,?,?)
      ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas, nombre = excluded.nombre, seguimiento_on = excluded.seguimiento_on, estilo = excluded.estilo`,
@@ -1813,8 +1771,8 @@ api.get('/whatsapp/estado', requireAuth, requireStore, requireOwner, async (req,
 });
 
 // Monitor anti-baneo: combina el ritmo de envío (en memoria) con la calidad del
-// número (Meta) para avisar en el panel cuando la tienda se acerca al tope por
-// minuto, cuando el freno tuvo que retener ráfagas, o cuando la calidad baja.
+// número (Meta) para avisar en el panel cuando la calidad baja o cuando la cola
+// del freno es tan larga que las respuestas se demoran.
 api.get('/antibaneo/estado', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const { estadisticasEnvio } = await import('./ratelimit.js');
@@ -1824,8 +1782,10 @@ api.get('/antibaneo/estado', requireAuth, requireStore, async (req, res) => {
   const avisos: string[] = [];
   let nivel: 'ok' | 'aviso' | 'alerta' = 'ok';
   const subir = (n: 'aviso' | 'alerta') => { if (nivel === 'ok' || (nivel === 'aviso' && n === 'alerta')) nivel = n; };
-  if (env.cerca) { subir('aviso'); avisos.push(`Vas en ${env.porMinuto} de ${env.tope} mensajes por minuto. Estás cerca del tope: baja el ritmo para que Meta no lo lea como spam.`); }
-  if (env.ultimoFrenado && Date.now() - env.ultimoFrenado < 5 * 60_000) { subir('aviso'); avisos.push('Hace poco el sistema tuvo que frenar envíos en ráfaga (te protegió). Evita disparar muchos mensajes juntos.'); }
+  // El freno por minuto y el espaciado anti-ráfaga son AUTOMÁTICOS: llegar al tope
+  // no es culpa de la tienda ni un riesgo (el sistema ya está espaciando), así que
+  // no se avisa. Solo se informa si la cola es larga y las respuestas se demoran.
+  if (env.colaMs > 120_000) { subir('aviso'); avisos.push(`Muchos chats a la vez: el sistema está espaciando los envíos para proteger tu número, así que algunas respuestas pueden tardar hasta ${Math.ceil(env.colaMs / 60_000)} min.`); }
   if (calidad === 'YELLOW') { subir('aviso'); avisos.push('La calidad de tu número bajó a MEDIA. Cuida el tono y la frecuencia de los mensajes.'); }
   if (calidad === 'RED') { subir('alerta'); avisos.push('La calidad de tu número está en ROJO: tus clientes están bloqueando o reportando. Escribe solo a quien te escribió y usa plantillas aprobadas.'); }
   res.json({ nivel, porMinuto: env.porMinuto, tope: env.tope, cerca: env.cerca, calidad, limite, avisos });
@@ -2005,10 +1965,11 @@ api.post('/admin/stores/:id/onboarding', requireAuth, requireAdmin, (req, res) =
   res.json({ ok: true, productosCreados: creados });
 });
 
-// Entrar a una tienda (impersonar) para dar soporte.
-api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) => {
-  const s = db.prepare('SELECT id, correo, owner_user_id FROM stores WHERE id = ?').get(req.params.id) as { id: string; correo: string; owner_user_id: string | null } | undefined;
-  if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
+// Entrar a una tienda (impersonar) para dar soporte. Lo usan el panel del admin y
+// el selector de la barra de soporte (cambiar de tienda sin volver al panel).
+function entrarATiendaComo(res: ExResponse, hostname: string, storeId: string, adminId: string): string | null {
+  const s = db.prepare('SELECT id, correo, owner_user_id FROM stores WHERE id = ?').get(storeId) as { id: string; correo: string; owner_user_id: string | null } | undefined;
+  if (!s) return 'Cuenta no encontrada.';
   // Buscamos al dueño por owner_user_id (fuente de verdad) y, si no, por correo.
   // NO exigimos que su store_id apunte a esta tienda: en cuentas con varias
   // tiendas, el usuario "vive" en una a la vez, pero es dueño de todas.
@@ -2017,9 +1978,41 @@ api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) 
     ? db.prepare("SELECT id, email, nombre, role FROM users WHERE id = ?").get(s.owner_user_id) as Dueno | undefined
     : undefined)
     || (db.prepare("SELECT id, email, nombre, role FROM users WHERE email = ? ORDER BY (role = 'VENDEDOR') DESC, created_at LIMIT 1").get(s.correo) as Dueno | undefined);
-  if (!dueno) return res.status(404).json({ error: 'Esta tienda no tiene un dueño para entrar.' });
+  if (!dueno) return 'Esta tienda no tiene un dueño para entrar.';
   // Entramos EN esta tienda (storeId = s.id), sin importar dónde estuviera parado el dueño.
-  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: dueno.role, storeId: s.id, imp: req.user!.id }, req.hostname);
+  setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: dueno.role, storeId: s.id, imp: adminId }, hostname);
+  return null;
+}
+
+api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) => {
+  const err = entrarATiendaComo(res, req.hostname, req.params.id, req.user!.id);
+  if (err) return res.status(404).json({ error: err });
+  res.json({ ok: true });
+});
+
+// Barra de soporte: el admin que está DENTRO de una tienda puede listar las tiendas
+// y saltar a otra directamente. Se valida contra el admin original (imp).
+function adminDeSoporte(req: ExRequest): { id: string; role: string } | undefined {
+  const adminId = req.user?.imp;
+  if (!adminId) return undefined;
+  return db.prepare("SELECT id, role FROM users WHERE id = ? AND role IN ('ADMIN','SUPERADMIN')").get(adminId) as { id: string; role: string } | undefined;
+}
+api.get('/auth/soporte/tiendas', requireAuth, (req, res) => {
+  const admin = adminDeSoporte(req);
+  if (!admin) return res.status(403).json({ error: 'Solo el equipo DealFlow en modo soporte.' });
+  const filtro = admin.role === 'SUPERADMIN' ? "WHERE id != '" + MASTER_STORE_ID + "'" : "WHERE COALESCE(oculta,0) = 0 AND id != '" + MASTER_STORE_ID + "'";
+  const tiendas = db.prepare(`SELECT id, nombre FROM stores ${filtro} ORDER BY nombre COLLATE NOCASE`).all() as { id: string; nombre: string }[];
+  res.json({ tiendas, actual: req.user!.storeId });
+});
+api.post('/auth/soporte/cambiar/:id', requireAuth, (req, res) => {
+  const admin = adminDeSoporte(req);
+  if (!admin) return res.status(403).json({ error: 'Solo el equipo DealFlow en modo soporte.' });
+  if (admin.role !== 'SUPERADMIN') {
+    const oculta = db.prepare('SELECT COALESCE(oculta,0) AS o FROM stores WHERE id = ?').get(req.params.id) as { o: number } | undefined;
+    if (oculta?.o) return res.status(404).json({ error: 'Cuenta no encontrada.' });
+  }
+  const err = entrarATiendaComo(res, req.hostname, req.params.id, admin.id);
+  if (err) return res.status(404).json({ error: err });
   res.json({ ok: true });
 });
 
