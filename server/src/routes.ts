@@ -1382,11 +1382,13 @@ api.post('/orders/:rowId/effi/guia', requireAuth, requireStore, requireOwner, as
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ ok: true, ...r });
 });
+// Transportadoras cuya guía en PDF viene "acostada" en la hoja (hay que enderezarla).
+const guiaAcostada = (transp: string) => /inter\s*rap/i.test(String(transp || '').normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
 // Documento de la guía (PDF o imagen) que el dueño sube al pedido. Si es PDF,
 // guardamos también la primera página como PNG para mandarla por WhatsApp.
 api.post('/orders/:rowId/guia-documento', requireAuth, requireStore, requireOwner, async (req, res) => {
   const sid = req.user!.storeId!;
-  const o = db.prepare('SELECT id, numero FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; numero: number } | undefined;
+  const o = db.prepare('SELECT id, numero, transportadora FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; numero: number; transportadora: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const dataUrl = String(req.body?.dataUrl || '');
   const i = dataUrl.indexOf(';base64,');
@@ -1399,7 +1401,7 @@ api.post('/orders/:rowId/guia-documento', requireAuth, requireStore, requireOwne
   let url = ''; let img = '';
   if (mime === 'application/pdf') {
     url = guardarArchivo(sid, `${base}.pdf`, buf);
-    const png = pdfAPng(buf);
+    const png = pdfAPng(buf, { enderezar: guiaAcostada(o.transportadora) });
     if (png) img = guardarArchivo(sid, `${base}.png`, png);
   } else if (/^image\/(png|jpe?g|webp)$/.test(mime)) {
     img = guardarArchivo(sid, `${base}.${mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg'}`, buf);
@@ -1425,7 +1427,7 @@ api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, re
       const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
       const buf = Buffer.from(await r.arrayBuffer());
       const ct = r.headers.get('content-type') || '';
-      const png = ct.includes('pdf') || /\.pdf(\?|$)/i.test(url) ? pdfAPng(buf) : /image\//.test(ct) ? buf : null;
+      const png = ct.includes('pdf') || /\.pdf(\?|$)/i.test(url) ? pdfAPng(buf, { enderezar: guiaAcostada(String(o.transportadora || '')) }) : /image\//.test(ct) ? buf : null;
       if (png) { img = guardarArchivo(sid, `guia-DF${o.numero}-${uid().slice(0, 6)}.png`, png); db.prepare('UPDATE orders SET guia_img = ? WHERE id = ?').run(img, o.id); }
     } catch { /* seguimos con texto */ }
   }
