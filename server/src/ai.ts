@@ -1,5 +1,6 @@
 import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
+import { trazar } from './trazabilidad.js';
 import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
 import { saveOutgoingMedia, mediaPath, tipoDeMime } from './media.js';
@@ -937,6 +938,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   }
   db.prepare("UPDATE leads SET etapa = 'Listo para comprar', etiqueta = 'Venta' WHERE id = ?").run(lead.id);
+  trazar(storeId, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado por el asistente`, detalle: `Origen: ${origen}`, datos: { cliente, tel, ciudad, departamento, direccion, total, items, marcador: inner } });
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
   registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} creado para ${cliente} (${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`, lead.id);
   // Notifica al dueño por Web Push (app cerrada) con un resumen corto del pedido.

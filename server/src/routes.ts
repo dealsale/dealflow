@@ -1,6 +1,7 @@
 import { mensajesDe as mensajesInicialesDe, normalizarMensajes, principal } from './mensajesIniciales.js';
 import { Router } from 'express';
 import type { Request as ExRequest, Response as ExResponse } from 'express';
+import { trazar, conPedido } from './trazabilidad.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
@@ -729,6 +730,7 @@ api.post('/orders/:rowId/advance', requireAuth, requireStore, async (req, res) =
   if (idx < 0 || idx >= ESTADOS.length - 1) return res.status(400).json({ error: 'Este pedido ya está entregado.' });
   const nuevo = ESTADOS[idx + 1];
   db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, o.id);
+  trazar(req.user!.storeId!, o.id, { etapa: 'estado', titulo: `Estado: ${o.estado} → ${nuevo}`, detalle: `Por ${req.user!.nombre}` });
   res.json({ estado: nuevo });
 
   // Avísale al cliente por WhatsApp del nuevo estado (y déjalo en el chat).
@@ -751,6 +753,7 @@ api.post('/orders/:rowId/estado', requireAuth, requireStore, async (req, res) =>
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   if (o.estado === nuevo) return res.json({ estado: nuevo });
   db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, o.id);
+  trazar(sid, o.id, { etapa: 'estado', nivel: nuevo === 'Cancelado' ? 'warn' : 'info', titulo: `Estado: ${o.estado} → ${nuevo}`, detalle: `Por ${req.user!.nombre}` });
   res.json({ estado: nuevo });
   // Solo notificamos cuando el estado tiene un mensaje pensado para el cliente.
   const msg = MSG_ESTADO[nuevo]?.(o.numero);
@@ -809,6 +812,7 @@ api.post('/orders', requireAuth, requireStore, (req, res) => {
     .run(oid, sid, numero, cliente, String(b.ciudad || ''), String(b.tel || ''), String(b.direccion || ''), 'Nuevo', total, String(b.departamento || ''), envio, String(b.nota || ''), adLead?.ad_id || '', adLead?.ad_ref || '', leadId, origen);
   for (const it of limpios) db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
   registrarLog(sid, 'info', 'pedido', `Pedido manual DF-${numero} creado para ${cliente} (${limpios.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`);
+  trazar(sid, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado a mano por ${req.user!.nombre}`, detalle: `Origen: ${origen}`, datos: { cliente, tel: b.tel, ciudad: b.ciudad, departamento: b.departamento, direccion: b.direccion, total, envio, items: limpios } });
   {
     const nprod = limpios.reduce((a, i) => a + i.qty, 0);
     void import('./push.js').then((p) => p.enviarPush(sid, 'pedidos', `Nuevo pedido DF-${numero} 🛒`, `${cliente} · $${total.toLocaleString('es-CO')} · ${nprod} producto${nprod === 1 ? '' : 's'}`, { url: '/' })).catch(() => {});
@@ -1060,6 +1064,16 @@ api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requireOwner
 
 // Crea el pedido en Dropi con la transportadora elegida (o sin ella si auto).
 api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sidT = req.user!.storeId!;
+  trazar(sidT, req.params.rowId, { etapa: 'despacho', titulo: 'Creación en Dropi iniciada', datos: { opciones: req.body } });
+  // El resultado (éxito o error) queda en la línea de tiempo del pedido.
+  const jsonOrig = res.json.bind(res);
+  res.json = (b: { error?: string; dropiId?: string; aviso?: string }) => {
+    if (res.statusCode >= 400) trazar(sidT, req.params.rowId, { etapa: 'despacho', nivel: 'error', titulo: 'Creación en Dropi falló', detalle: String(b?.error || '') });
+    else trazar(sidT, req.params.rowId, { etapa: 'despacho', nivel: 'ok', titulo: b?.aviso || `Pedido creado en Dropi (orden ${b?.dropiId || ''})` });
+    return jsonOrig(b);
+  };
+  await conPedido(sidT, req.params.rowId, async () => {
   const { resolverProductosDropi, credOrDie } = dropiHelpers;
   const sid = req.user!.storeId!;
   const dropi = await import('./dropiApi.js');
@@ -1091,6 +1105,7 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, 
     .run(crear.id, nombreTransp, req.body?.reintentar === true ? '' : String(o.guia || ''), o.id);
   registrarLog(sid, 'info', 'despacho', `DF-${o.numero} creado en Dropi (orden ${crear.id})${nombreTransp ? ' por ' + nombreTransp : ''}.`);
   res.json({ ok: true, dropiId: crear.id, transportadora: nombreTransp });
+  });
 });
 
 // ── Effi por API directa (reemplaza el puente WooCommerce) ──
@@ -1122,6 +1137,14 @@ api.post('/effi-api/conectar', requireAuth, requireStore, requireOwner, async (r
   registrarLog(req.user!.storeId!, 'info', 'integracion', 'Effi conectado por API.');
   res.json({ ok: true });
 });
+// Convenios Dropshipping que la tienda ya usó en Effi (para elegir el de las remisiones).
+api.get('/effi-api/convenios', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const c = ef.cfgEffi(req.user!.storeId!);
+  if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
+  res.json({ convenios: await ef.conveniosDropshipping(c.apiKey), actual: c.convenioDropshipping });
+});
+
 api.get('/effi-api/listas', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
   const c = ef.cfgEffi(req.user!.storeId!);
@@ -1138,6 +1161,7 @@ api.post('/effi-api/config', requireAuth, requireStore, requireOwner, async (req
   const s = (v: unknown) => String(v ?? '').trim().slice(0, 40);
   const parcial: Record<string, unknown> = {};
   for (const k of ['sucursal', 'bodega', 'centroCostos', 'formaPago', 'medioPago', 'caja', 'cuenta', 'vendedor', 'articuloFlete']) if (k in b) parcial[k] = s(b[k]);
+  if ('convenioDropshipping' in b) parcial.convenioDropshipping = s(b.convenioDropshipping).replace(/\D/g, '');
   if ('formaPagoContado' in b) parcial.formaPagoContado = b.formaPagoContado === true;
   if ('autoDespacho' in b) parcial.autoDespacho = b.autoDespacho === true;
   if ('diasEntrega' in b) parcial.diasEntrega = Math.min(60, Math.max(0, Math.round(Number(b.diasEntrega) || 3)));
@@ -1988,6 +2012,50 @@ api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) 
   const err = entrarATiendaComo(res, req.hostname, req.params.id, req.user!.id);
   if (err) return res.status(404).json({ error: err });
   res.json({ ok: true });
+});
+
+// ── Trazabilidad de pedidos (equipo DealFlow) ─────────────────────────
+// Lista de eventos de todas las tiendas con filtros, y la línea de tiempo de un pedido.
+api.get('/admin/trazabilidad', requireAuth, requireAdmin, (req, res) => {
+  const q = req.query as Record<string, string>;
+  const where: string[] = []; const args: unknown[] = [];
+  if (req.user!.role !== 'SUPERADMIN') where.push('COALESCE(s.oculta,0) = 0');
+  if (q.store) { where.push('e.store_id = ?'); args.push(q.store); }
+  if (q.nivel === 'problemas') where.push("e.nivel IN ('warn','error')");
+  else if (q.nivel) { where.push('e.nivel = ?'); args.push(q.nivel); }
+  if (q.etapa) { where.push('e.etapa = ?'); args.push(q.etapa); }
+  if (q.antes) { where.push('e.id < ?'); args.push(Number(q.antes)); }
+  if (q.desde) { where.push('e.created_at >= ?'); args.push(String(q.desde)); }
+  const texto = String(q.q || '').trim();
+  if (texto) {
+    const num = texto.replace(/^df-?/i, '').replace(/\D/g, '');
+    const like = '%' + texto.replace(/[%_]/g, '') + '%';
+    where.push('(o.cliente LIKE ? OR o.tel LIKE ? OR o.guia LIKE ? OR o.effi_remision LIKE ? OR e.titulo LIKE ? OR e.detalle LIKE ?' + (num ? ' OR o.numero = ?' : '') + ')');
+    args.push(like, like, like, like, like, like, ...(num ? [Number(num)] : []));
+  }
+  const lim = Math.min(300, Math.max(20, Number(q.limit) || 100));
+  const rows = db.prepare(`SELECT e.id, e.store_id, s.nombre tienda, e.order_id, o.numero, o.cliente, o.estado, e.etapa, e.nivel, e.titulo, e.detalle, e.created_at, (e.datos != '') tieneDatos
+    FROM order_eventos e LEFT JOIN orders o ON o.id = e.order_id LEFT JOIN stores s ON s.id = e.store_id
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY e.id DESC LIMIT ${lim}`).all(...args);
+  // Resumen de las últimas 24 h para la cabecera.
+  const resumen = db.prepare(`SELECT
+      SUM(CASE WHEN e.etapa = 'pedido' THEN 1 ELSE 0 END) pedidos,
+      SUM(CASE WHEN e.etapa = 'despacho' AND e.nivel = 'ok' THEN 1 ELSE 0 END) despachos,
+      SUM(CASE WHEN e.etapa IN ('despacho','guia') AND e.nivel = 'error' THEN 1 ELSE 0 END) fallos,
+      SUM(CASE WHEN e.etapa = 'api' AND e.nivel = 'error' THEN 1 ELSE 0 END) apiFallos
+    FROM order_eventos e LEFT JOIN stores s ON s.id = e.store_id
+    WHERE e.created_at >= datetime('now','-1 day')${req.user!.role !== 'SUPERADMIN' ? ' AND COALESCE(s.oculta,0) = 0' : ''}${q.store ? ' AND e.store_id = ?' : ''}`).get(...(q.store ? [q.store] : []));
+  res.json({ eventos: rows, resumen });
+});
+
+api.get('/admin/trazabilidad/pedido/:orderId', requireAuth, requireAdmin, (req, res) => {
+  const o = db.prepare(`SELECT o.id, o.store_id, s.nombre tienda, o.numero, o.cliente, o.tel, o.ciudad, o.departamento, o.direccion, o.estado, o.total, o.envio,
+      o.origen, o.despacho_proveedor, o.effi_remision, o.dropi_order_id, o.guia, o.transportadora, o.estado_woo, o.created_at
+    FROM orders o LEFT JOIN stores s ON s.id = o.store_id WHERE o.id = ?`).get(req.params.orderId) as Record<string, unknown> | undefined;
+  const eventos = (db.prepare('SELECT id, etapa, nivel, titulo, detalle, datos, created_at FROM order_eventos WHERE order_id = ? ORDER BY id').all(req.params.orderId) as Record<string, unknown>[])
+    .map((e) => ({ ...e, datos: e.datos ? pj(String(e.datos), String(e.datos)) : null }));
+  const items = o ? db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(req.params.orderId) : [];
+  res.json({ pedido: o || null, items, eventos });
 });
 
 // Barra de soporte: el admin que está DENTRO de una tienda puede listar las tiendas

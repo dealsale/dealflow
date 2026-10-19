@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
+import { trazar } from './trazabilidad.js';
 import { db, registrarLog, uid } from './db.js';
 import { sendWhatsappMedia, sendWhatsappTemplate, sendWhatsappText } from './wa.js';
 import { mediaPath } from './media.js';
@@ -42,6 +43,13 @@ function chatDelPedido(storeId: string, o: Fila): { id: string; tel: string; wa_
 export interface ResultadoAviso { chat: 'enviado' | 'plantilla' | 'bloqueado' | 'error' | 'sin_chat'; contacto: 'plantilla' | 'mismo' | 'sin_plantilla' | 'error' | 'no_aplica'; con: 'image' | 'document' | 'texto'; detalle: string[] }
 
 export async function avisarGuia(storeId: string, orderId: string, opts: { conArchivo?: boolean } = {}): Promise<ResultadoAviso> {
+  const r = await avisarGuiaInterno(storeId, orderId, opts);
+  const fallo = r.chat === 'error' || r.contacto === 'error' || (r.chat === 'sin_chat' && r.contacto !== 'plantilla');
+  trazar(storeId, orderId, { etapa: 'aviso', nivel: fallo ? 'warn' : 'ok', titulo: `Aviso de guía al cliente: chat ${r.chat}${r.contacto !== 'no_aplica' ? ` · contacto ${r.contacto}` : ''}`, detalle: r.detalle.join(' ') });
+  return r;
+}
+
+async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conArchivo?: boolean } = {}): Promise<ResultadoAviso> {
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
   const res: ResultadoAviso = { chat: 'sin_chat', contacto: 'no_aplica', con: 'texto', detalle: [] };
   if (!o) { res.detalle.push('Pedido no encontrado.'); return res; }
