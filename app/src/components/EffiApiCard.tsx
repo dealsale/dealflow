@@ -4,7 +4,7 @@ import { EffiProductos } from './EffiProductos';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
   apiEffiApiConectar, apiEffiApiConfig, apiEffiApiDesconectar, apiEffiApiEventos, apiEffiApiListas,
-  apiEffiApiSecreto,
+  apiEffiApiSecreto, apiEffiConvenios,
   type EffiApiEstado, type EffiEvento, type EffiGuiaCfg, type EffiListas,
 } from '../lib/api';
 
@@ -53,6 +53,8 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
   const [verEventos, setVerEventos] = useState(false);
   const [copiado, setCopiado] = useState('');
   const [abierta, setAbierta] = useState(false);
+  const [convenios, setConvenios] = useState<{ id: string; nombre: string }[] | null>(null);
+  const [buscandoConv, setBuscandoConv] = useState(false);
 
   useEffect(() => { void df.cargarEffiApi(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setCfg(est); }, [est]);
@@ -96,6 +98,15 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
     await apiEffiApiDesconectar();
     setListas(null); setMsg('Effi desconectado.');
     await df.cargarEffiApi();
+  };
+  // Busca en Effi los convenios dropshipping que la tienda ya usó (no hay listado en la API).
+  const detectarConvenios = async () => {
+    setBuscandoConv(true);
+    const r = await apiEffiConvenios();
+    setBuscandoConv(false);
+    if (r.error || !r.data) { setMsg(r.error || 'No pudimos consultar los convenios.'); return; }
+    setConvenios(r.data.convenios);
+    if (r.data.convenios.length === 1 && !cfg.convenioDropshipping) set({ convenioDropshipping: r.data.convenios[0].id });
   };
   const cargarEventos = async () => {
     setVerEventos((v) => !v);
@@ -158,6 +169,24 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                   </div>
                 </div>
                 {forma && !forma.contado && <p style={{ ...ayuda, margin: '10px 0 0' }}>Con forma de pago a <b>crédito</b> la remisión queda con saldo por cobrar, y ese saldo es el valor del recaudo de la guía.</p>}
+                <div style={{ marginTop: 14, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 12 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 3 }}>Convenio dropshipping</div>
+                  <p style={{ ...ayuda, margin: '0 0 10px' }}>Si vendes artículos de un <b>proveedor dropshipping</b> en Effi, la remisión debe llevar el convenio: así Effi <b>no exige stock en tu bodega</b> (lo despacha el proveedor). DealFlow lo usa solo con los artículos vinculados a un proveedor; los tuyos siguen como mercancía propia.</p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input value={cfg.convenioDropshipping || ''} onChange={(e) => set({ convenioDropshipping: e.target.value.replace(/\D/g, '') })} placeholder="Código del convenio (ej: 12)" style={{ ...inp, width: 200, flex: '0 0 auto' }} />
+                    <button onClick={detectarConvenios} disabled={buscandoConv} style={btnSec}>{buscandoConv ? 'Buscando…' : '🔍 Detectar en Effi'}</button>
+                  </div>
+                  {convenios && (
+                    <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>
+                      {convenios.length === 0
+                        ? 'No encontramos remisiones con convenio en tu Effi. Búscalo en Effi → Dropshipping → Convenios y escribe su código.'
+                        : <>Encontrados: {convenios.map((c) => (
+                          <button key={c.id} onClick={() => set({ convenioDropshipping: c.id })} style={{ ...btnSec, padding: '3px 9px', fontSize: 12, marginLeft: 6, borderColor: cfg.convenioDropshipping === c.id ? 'var(--df-purple)' : undefined }}>{c.nombre} · {c.id}</button>
+                        ))}</>}
+                    </div>
+                  )}
+                  <p style={{ ...ayuda, margin: '8px 0 0', fontSize: 11.5 }}>Si lo dejas vacío y el pedido trae artículos de proveedor, DealFlow intenta detectarlo solo la primera vez.</p>
+                </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, fontSize: 13, cursor: 'pointer' }}>
                   <input type="checkbox" checked={!!cfg.autoDespacho} onChange={(e) => set({ autoDespacho: e.target.checked })} />
                   <span><b>Enviar solo a Effi</b> cada pedido que cierre el bot, sin tocar ningún botón.</span>

@@ -1,4 +1,5 @@
 import { db, pj } from './db.js';
+import { trazarApi } from './trazabilidad.js';
 
 /**
  * Integración DIRECTA con la API de Dropi (no por WooCommerce/Dropify).
@@ -35,6 +36,16 @@ export function credDropi(storeId: string): DropiCred | null {
 interface DropiResp<T> { isSuccess?: boolean; status?: number | string; message?: string; objects?: T }
 
 async function dropi<T>(cred: DropiCred, method: string, path: string, body?: unknown): Promise<{ ok: boolean; body: DropiResp<T>; http: number }> {
+  const t0 = Date.now();
+  const r = await dropiHttp<T>(cred, method, path, body);
+  const resp = Array.isArray((r.body as { objects?: unknown }).objects)
+    ? { ...r.body, objects: ((r.body as { objects: unknown[] }).objects).slice(0, 3) }
+    : r.body;
+  trazarApi('Dropi', method, path, r.http, r.ok, Date.now() - t0, body, resp, r.ok ? undefined : String((r.body as { message?: string }).message || ''));
+  return r;
+}
+
+async function dropiHttp<T>(cred: DropiCred, method: string, path: string, body?: unknown): Promise<{ ok: boolean; body: DropiResp<T>; http: number }> {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {

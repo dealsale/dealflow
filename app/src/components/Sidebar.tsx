@@ -110,6 +110,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             {/* El superadmin ve TODO lo del admin y, además, "Todas las tiendas". */}
             {df.isSuperadmin && adminItem('superadmin', <span style={{ fontSize: 16 }}>🌐</span>, 'Todas las tiendas')}
             {df.isSuperadmin && adminItem('plantillas', <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA')}
+            {adminItem('trazabilidad', <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad')}
             {adminItem('ventas', <IconVentas />, 'Ventas')}
             {adminItem('planes', <IconPlanes />, 'Planes')}
             {adminItem('cuentas', <IconCuentas />, 'Cuentas')}

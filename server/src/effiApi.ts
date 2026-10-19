@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { db, pj, registrarLog } from './db.js';
+import { conPedido, trazar, trazarApi } from './trazabilidad.js';
 
 /**
  * Integración DIRECTA con la API de Effi ERP (https://effi.com.co/api).
@@ -34,6 +35,8 @@ export interface EffiCfg {
   medioPago: string; caja: string; cuenta: string; // solo si la forma de pago es de contado
   vendedor: string; articuloFlete: string; diasEntrega: number;
   autoDespacho: boolean;
+  /** Código del convenio Dropshipping (artículos de un proveedor: no exigen stock propio). */
+  convenioDropshipping: string;
   guia: EffiGuiaCfg;
   webhookToken: string; webhookSecret: string;
 }
@@ -53,6 +56,7 @@ export function cfgEffi(storeId: string): EffiCfg | null {
     medioPago: s('medioPago'), caja: s('caja'), cuenta: s('cuenta'),
     vendedor: s('vendedor'), articuloFlete: s('articuloFlete'), diasEntrega: Number(c.diasEntrega) > 0 ? Number(c.diasEntrega) : 3,
     autoDespacho: c.autoDespacho === true,
+    convenioDropshipping: s('convenioDropshipping'),
     guia: { ...GUIA_VACIA, ...g, activa: g.activa === true } as EffiGuiaCfg,
     webhookToken: s('webhookToken'), webhookSecret: s('webhookSecret'),
   };
@@ -99,6 +103,18 @@ async function effi<T>(apiKey: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   const qs = opts.query
     ? '?' + Object.entries(opts.query).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&')
     : '';
+  const t0 = Date.now();
+  const r = await effiHttp<T>(apiKey, method, path, qs, opts.body);
+  // Trazabilidad: si estamos trabajando sobre un pedido, queda la petición y la respuesta.
+  const resp = Array.isArray(r.body.data)
+    ? { ok: r.body.ok, mensaje: r.body.mensaje, total: (r.body.data as unknown[]).length, primeros: (r.body.data as unknown[]).slice(0, 3) }
+    : r.body;
+  trazarApi('Effi', method, path + qs, r.http, r.ok, Date.now() - t0, opts.body, resp, r.ok ? undefined : r.body.mensaje);
+  return r;
+}
+
+async function effiHttp<T>(apiKey: string, method: string, path: string, qs: string, cuerpo: unknown): Promise<{ ok: boolean; http: number; body: EffiResp<T> }> {
+  const opts = { body: cuerpo };
   for (let intento = 0; intento < 2; intento++) {
     let res: Response;
     try {
@@ -254,8 +270,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS effi_articulos (
   actualizado TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (store_id, id)
 )`);
+// drop = 1 si el artículo está vinculado a un PROVEEDOR dropshipping (la tienda es
+// distribuidora): ese artículo no exige stock propio si la remisión lleva convenio.
+try { db.exec('ALTER TABLE effi_articulos ADD COLUMN es_drop INTEGER NOT NULL DEFAULT 0'); } catch { /* ya existe */ }
 
-export interface ArticuloEffi { id: string; descripcion: string; referencia: string; ecommerce: string; stock: number | null }
+export interface ArticuloEffi { id: string; descripcion: string; referencia: string; ecommerce: string; stock: number | null; drop?: number }
 
 /**
  * Descarga a la caché local los artículos de Effi VINCULADOS a un e-commerce (los
@@ -273,16 +292,53 @@ export async function descargarArticulos(storeId: string, apiKey: string): Promi
     if (!Array.isArray(t)) return t;
     r = t;
   }
-  const tx = db.transaction((filas: Fila[]) => {
+  // Artículos vinculados a un proveedor dropshipping: se marcan (y se agregan aunque
+  // no estén enlazados al e-commerce, porque el dueño los vincula a mano).
+  const drop = await todo<Fila>(apiKey, '/api/articulo', { dropshipping_distribuidor: 1 }, 40);
+  const idsDrop = new Set(Array.isArray(drop) ? drop.map((f) => txt(f.id)) : []);
+  const filas = [...r, ...(Array.isArray(drop) ? drop.filter((f) => !r.some((x) => txt(x.id) === txt(f.id))) : [])];
+  const tx = db.transaction((lista: Fila[]) => {
     db.prepare('DELETE FROM effi_articulos WHERE store_id = ?').run(storeId);
-    const ins = db.prepare('INSERT OR REPLACE INTO effi_articulos (store_id, id, descripcion, referencia, ecommerce, stock) VALUES (?,?,?,?,?,?)');
-    for (const f of filas) {
+    const ins = db.prepare('INSERT OR REPLACE INTO effi_articulos (store_id, id, descripcion, referencia, ecommerce, stock, es_drop) VALUES (?,?,?,?,?,?,?)');
+    for (const f of lista) {
       if (txt(f.vigente) === '0') continue;
-      ins.run(storeId, txt(f.id), txt(f.descripcion), txt(f.referencia), txt(f.articulos_ecommerce), f.stock_empresa == null ? null : Number(f.stock_empresa));
+      ins.run(storeId, txt(f.id), txt(f.descripcion), txt(f.referencia), txt(f.articulos_ecommerce), f.stock_empresa == null ? null : Number(f.stock_empresa), idsDrop.has(txt(f.id)) ? 1 : 0);
     }
   });
-  tx(r);
-  return { total: r.length, soloVinculados };
+  tx(filas);
+  return { total: filas.length, soloVinculados };
+}
+
+/** Un artículo por id, en vivo (con su marca de dropshipping). Lo guarda en la caché. */
+async function articuloPorId(storeId: string, apiKey: string, id: string): Promise<ArticuloEffi | undefined> {
+  const [r, d] = await Promise.all([
+    effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { id, por_pagina: 1 } }),
+    effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { id, dropshipping_distribuidor: 1, por_pagina: 1 } }),
+  ]);
+  const f = r.ok ? r.body.data?.[0] : undefined;
+  if (!f || txt(f.vigente) === '0') return undefined;
+  const a: ArticuloEffi = { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: f.stock_empresa == null ? null : Number(f.stock_empresa), drop: d.ok && d.body.data?.length ? 1 : 0 };
+  try {
+    db.prepare('INSERT OR REPLACE INTO effi_articulos (store_id, id, descripcion, referencia, ecommerce, stock, es_drop) VALUES (?,?,?,?,?,?,?)')
+      .run(storeId, a.id, a.descripcion, a.referencia, a.ecommerce, a.stock, a.drop);
+  } catch { /* caché opcional */ }
+  return a;
+}
+
+/**
+ * Convenios Dropshipping que la tienda ya usó en Effi (se leen de sus remisiones y
+ * facturas como distribuidora). Effi no tiene un listado de convenios en la API.
+ */
+export async function conveniosDropshipping(apiKey: string): Promise<{ id: string; nombre: string }[]> {
+  const out = new Map<string, string>();
+  for (const ruta of ['/api/remision_v', '/api/factura_v']) {
+    const r = await effi<Fila[]>(apiKey, 'GET', ruta, { query: { dropshipping_distribuidor: 1, por_pagina: 100 } });
+    for (const f of r.ok ? r.body.data || [] : []) {
+      const id = txt(f.convenio_dropshipping);
+      if (id && id !== '1' && !out.has(id)) out.set(id, txt(f.nombre_convenio_dropshipping) || `Convenio ${id}`);
+    }
+  }
+  return [...out].map(([id, nombre]) => ({ id, nombre }));
 }
 
 /** Búsqueda en vivo en Effi por nombre (palabras) o referencia, para vincular a mano. */
@@ -308,7 +364,7 @@ export async function buscarArticulosEffi(storeId: string, q: string): Promise<A
 }
 
 export function articulosCache(storeId: string): ArticuloEffi[] {
-  return db.prepare('SELECT id, descripcion, referencia, ecommerce, stock FROM effi_articulos WHERE store_id = ? ORDER BY descripcion').all(storeId) as ArticuloEffi[];
+  return db.prepare('SELECT id, descripcion, referencia, ecommerce, stock, es_drop AS "drop" FROM effi_articulos WHERE store_id = ? ORDER BY descripcion').all(storeId) as ArticuloEffi[];
 }
 
 /** Id numérico estable que DealFlow le dio a una referencia (lo que Effi guardó como "ID producto ecommerce"). */
@@ -408,7 +464,11 @@ function varianteDeItem(storeId: string, nombreItem: string, todas: VarianteDF[]
     const toks = norm(v.label).split(' ').filter((t) => t.length > 0);
     if (toks.length && toks.every((t) => new RegExp(`(^| )${t}( |$)`).test(full)) && toks.length > score) { mejor = v; score = toks.length; }
   }
-  return mejor;
+  if (mejor) return mejor;
+  // Si todas las variantes del producto apuntan al MISMO artículo de Effi, da igual cuál sea.
+  const ids = new Set(vs.map((v) => v.effiId).filter(Boolean));
+  if (ids.size === 1 && vs.every((v) => v.effiId)) return vs[0];
+  return undefined;
 }
 
 // ── Pedido → remisión de venta (+ guía opcional) ─────────────────────────────
@@ -452,7 +512,24 @@ async function clienteEffi(c: EffiCfg, o: Fila, ubic: { provincia: string; ciuda
 export interface ResultadoEffi { remision: string; sucursal: string; id: string; guia: string; transportadora: string; avisos: string[] }
 
 /** Lo que se le mandaría a Effi (sin crear nada): para revisar antes de despachar. */
-export async function prepararRemision(storeId: string, orderId: string, reintento = false): Promise<{ body: Record<string, unknown>; o: Fila; ubic: { provincia: string; ciudad: string; nombre: string }; lineas: { item: string; articulo: string }[]; avisos: string[] } | { error: string }> {
+// Un fallo inesperado no debe tumbar el servidor: se devuelve como error (y queda en la traza).
+const errorInterno = (e: unknown): { error: string } => {
+  console.error('[effi] error interno', e);
+  return { error: `Error interno de DealFlow: ${e instanceof Error ? e.message : String(e)}` };
+};
+
+export function prepararRemision(storeId: string, orderId: string, reintento = false, origen = 'revision'): ReturnType<typeof prepararRemisionInterna> {
+  return conPedido(storeId, orderId, async () => {
+    const r = await prepararRemisionInterna(storeId, orderId, reintento).catch(errorInterno);
+    if (origen === 'revision') {
+      if ('error' in r) trazar(storeId, orderId, { etapa: 'despacho', nivel: 'error', titulo: 'Revisión para Effi: no se puede enviar', detalle: r.error });
+      else trazar(storeId, orderId, { etapa: 'despacho', nivel: 'info', titulo: 'Revisión para Effi lista', detalle: r.avisos.join(' '), datos: { lineas: r.lineas, remision: r.body } });
+    }
+    return r;
+  });
+}
+
+async function prepararRemisionInterna(storeId: string, orderId: string, reintento = false): Promise<{ body: Record<string, unknown>; o: Fila; ubic: { provincia: string; ciudad: string; nombre: string }; lineas: { item: string; articulo: string }[]; avisos: string[] } | { error: string }> {
   const c = cfgEffi(storeId);
   if (!c || !effiApiListo(storeId)) return { error: 'Effi no está configurado: conecta la API key y elige sucursal, bodega, centro de costos y forma de pago en Integraciones.' };
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
@@ -469,21 +546,64 @@ export async function prepararRemision(storeId: string, orderId: string, reinten
   const lineas: { item: string; articulo: string }[] = [];
   const conceptos: { articulo: number; descripcion: string; cantidad: number; precio: number }[] = [];
   const sinVinculo: string[] = [];
+  const esDrop: boolean[] = [];
+  const enVivo = new Set<string>(); // artículos ya consultados en vivo en este pedido
   for (const it of items) {
     const v = varianteDeItem(storeId, it.nombre, todas);
     let a = v ? articuloPara(storeId, v, arts) : undefined;
+    // El vínculo guardado (manual o automático) es la verdad aunque el artículo no
+    // esté en la caché (p. ej. artículos de un proveedor dropshipping): lo traemos en vivo.
+    if (v?.effiId && (!a || a.id !== v.effiId)) {
+      enVivo.add(v.effiId);
+      a = (await articuloPorId(storeId, c.apiKey, v.effiId)) || { id: v.effiId, descripcion: v.producto, referencia: v.ref, ecommerce: '', stock: null };
+    }
     if (!a && v?.ref) {
       // Último intento en vivo por referencia (por si la caché está vieja).
       const r = await effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { referencia: v.ref, por_pagina: 5 } });
       const f = r.ok ? r.body.data?.[0] : undefined;
       if (f) a = { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: null };
     }
-    if (!a) { sinVinculo.push(it.nombre); continue; }
+    if (!a) {
+      // Mensaje preciso: qué parte del vínculo falta.
+      const base = it.nombre.split('(')[0].trim();
+      const motivo = !v
+        ? (todas.some((x) => norm(x.producto) === norm(base)) ? 'no se identificó la talla/color en DealFlow' : 'el producto no existe con ese nombre en DealFlow')
+        : 'la variante no tiene artículo de Effi';
+      sinVinculo.push(`${it.nombre} (${motivo})`);
+      trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Sin vínculo: ${it.nombre}`, detalle: motivo, datos: { item: it.nombre, variante: v ? { producto: v.producto, label: v.label, ref: v.ref, effiId: v.effiId, proveedor: v.proveedor } : null } });
+      continue;
+    }
     if (v?.variantId && v.effiId !== a.id) vincularArticulo(storeId, v.variantId, a.id);
-    lineas.push({ item: `${it.qty}× ${it.nombre}`, articulo: `${a.descripcion}${a.referencia ? ` [${a.referencia}]` : ''} · #${a.id}` });
+    // ¿Artículo de proveedor dropshipping? La caché vieja no traía la marca: se confirma en vivo.
+    if (a.drop !== 1 && !enVivo.has(a.id)) {
+      const vivo = await articuloPorId(storeId, c.apiKey, a.id);
+      if (vivo) a = { ...a, drop: vivo.drop };
+    }
+    esDrop.push(a.drop === 1);
+    lineas.push({ item: `${it.qty}× ${it.nombre}`, articulo: `${a.descripcion}${a.referencia ? ` [${a.referencia}]` : ''} · #${a.id}${a.drop === 1 ? ' · dropshipping' : ''}` });
     conceptos.push({ articulo: Number(a.id), descripcion: it.nombre.slice(0, 250), cantidad: Math.max(1, Number(it.qty) || 1), precio: Math.max(0, Math.round(Number(it.precio) || 0)) });
   }
-  if (sinVinculo.length) return { error: `Estos productos no están vinculados con un artículo de Effi: ${sinVinculo.join(', ')}. Vincúlalos en Integraciones → Effi → Artículos.` };
+  if (sinVinculo.length) return { error: `No pudimos emparejar con Effi: ${sinVinculo.join(' · ')}. Revisa el vínculo en Integraciones → Effi → Artículos.` };
+
+  // Dropshipping: si los artículos son de un proveedor, la remisión debe llevar el
+  // convenio; sin él Effi la toma como mercancía propia y exige stock en tu bodega.
+  let convenio = '';
+  if (esDrop.some(Boolean)) {
+    convenio = c.convenioDropshipping;
+    if (!convenio) {
+      const lista = await conveniosDropshipping(c.apiKey);
+      if (lista.length === 1) {
+        convenio = lista[0].id;
+        guardarCfgEffi(storeId, { convenioDropshipping: convenio });
+        avisos.push(`Se detectó y guardó tu convenio dropshipping: ${lista[0].nombre} (${convenio}).`);
+      } else if (lista.length > 1) {
+        return { error: `Estos productos son de un proveedor dropshipping y tienes varios convenios (${lista.map((x) => `${x.nombre} = ${x.id}`).join(', ')}). Elige cuál usar en Integraciones → Effi → Convenio dropshipping.` };
+      } else {
+        return { error: 'Estos productos son de un proveedor dropshipping en Effi, pero falta el código del convenio dropshipping. Escríbelo en Integraciones → Effi → Convenio dropshipping (lo ves en Effi → Dropshipping → Convenios).' };
+      }
+    }
+    if (esDrop.some((x) => !x)) avisos.push('El pedido mezcla productos propios y de proveedor dropshipping: los propios sí necesitan stock en tu bodega.');
+  }
 
   const ubic = await resolverUbicacion(c.apiKey, txt(o.departamento), txt(o.ciudad));
   if ('error' in ubic) return ubic;
@@ -525,6 +645,7 @@ export async function prepararRemision(storeId: string, orderId: string, reinten
     t_forma_pago: [Number(c.formaPago)], valor_forma_pago: [total],
   };
   if (c.vendedor) body.vendedor = Number(c.vendedor);
+  if (convenio) body.convenio_dropshipping = Number(convenio);
   if (c.formaPagoContado) {
     if (!c.medioPago) return { error: 'La forma de pago elegida es de contado: elige también el medio de pago (y la caja o cuenta) en Integraciones → Effi.' };
     body.medio_pago = [Number(c.medioPago)];
@@ -536,9 +657,19 @@ export async function prepararRemision(storeId: string, orderId: string, reinten
 }
 
 /** Despacha el pedido a Effi: cliente + remisión (+ guía si está activa). */
-export async function despacharEffi(storeId: string, orderId: string, reintento = false): Promise<ResultadoEffi | { error: string }> {
+export function despacharEffi(storeId: string, orderId: string, reintento = false): Promise<ResultadoEffi | { error: string }> {
+  return conPedido(storeId, orderId, async () => {
+    trazar(storeId, orderId, { etapa: 'despacho', titulo: reintento ? 'Reenvío a Effi iniciado' : 'Envío a Effi iniciado' });
+    const r = await despacharEffiInterno(storeId, orderId, reintento).catch(errorInterno);
+    if ('error' in r) trazar(storeId, orderId, { etapa: 'despacho', nivel: 'error', titulo: 'Envío a Effi falló', detalle: r.error });
+    else trazar(storeId, orderId, { etapa: 'despacho', nivel: 'ok', titulo: `Remisión ${r.remision} creada en Effi${r.guia ? ` · guía ${r.guia}` : ''}`, detalle: r.avisos.join(' '), datos: r });
+    return r;
+  });
+}
+
+async function despacharEffiInterno(storeId: string, orderId: string, reintento = false): Promise<ResultadoEffi | { error: string }> {
   const c = cfgEffi(storeId)!;
-  const prep = await prepararRemision(storeId, orderId, reintento);
+  const prep = await prepararRemision(storeId, orderId, reintento, 'despacho');
   if ('error' in prep) return prep;
   const { body, o, ubic, avisos } = prep;
   const numDF = `DF-${txt(o.numero)}`;
@@ -622,7 +753,17 @@ async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, 
 }
 
 /** Genera la guía de un pedido que YA tiene remisión en Effi, con los datos que elige el dueño. */
-export async function generarGuiaPedido(storeId: string, orderId: string, g: OpcionesGuia, reintento = false): Promise<{ guia: string; transportadora: string; idTransaccion: string } | { error: string }> {
+export function generarGuiaPedido(storeId: string, orderId: string, g: OpcionesGuia, reintento = false): Promise<{ guia: string; transportadora: string; idTransaccion: string } | { error: string }> {
+  return conPedido(storeId, orderId, async () => {
+    trazar(storeId, orderId, { etapa: 'guia', titulo: 'Generación de guía iniciada', datos: { opciones: g } });
+    const r = await generarGuiaInterna(storeId, orderId, g, reintento).catch(errorInterno);
+    if ('error' in r) trazar(storeId, orderId, { etapa: 'guia', nivel: 'error', titulo: 'No se generó la guía', detalle: r.error });
+    else trazar(storeId, orderId, { etapa: 'guia', nivel: 'ok', titulo: `Guía ${r.idTransaccion}${r.guia ? ` (${r.transportadora} ${r.guia})` : ''} creada` });
+    return r;
+  });
+}
+
+async function generarGuiaInterna(storeId: string, orderId: string, g: OpcionesGuia, reintento = false): Promise<{ guia: string; transportadora: string; idTransaccion: string } | { error: string }> {
   const c = cfgEffi(storeId);
   if (!c?.apiKey) return { error: 'Effi no está conectado.' };
   if (!g.transportadora || !g.servicio || !g.formaPagoFlete || !g.remitente) return { error: 'Elige transportadora, servicio, pago del flete y remitente.' };
@@ -742,6 +883,14 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
           if (txt(orden.tel)) await avisarGuiaAlCliente(txt(orden.store_id), txt(orden.id));
         } catch (e) { console.warn('[effi] no se pudo avisar la guía', e); }
       }
+    }
+  }
+  if (orden) {
+    // En la línea de tiempo del pedido: solo cuando algo cambió (las consultas periódicas no la llenan).
+    const despues = db.prepare('SELECT estado, guia, estado_woo FROM orders WHERE id = ?').get(orden.id) as Fila | undefined;
+    const cambio = !despues || txt(despues.estado) !== txt(orden.estado) || txt(despues.guia) !== txt(orden.guia) || txt(despues.estado_woo) !== txt(orden.estado_woo);
+    if (evento !== 'Consulta de guía' || cambio) {
+      trazar(storeId, txt(orden.id), { etapa: 'webhook', nivel: /anulac/.test(ev) ? 'warn' : 'info', titulo: evento === 'Consulta de guía' ? `Effi (consulta): ${resumen.split(' · ').slice(2).join(' · ') || 'sin cambios'}` : `Effi avisó: ${resumen}`, detalle: cambio && despues ? `Estado: ${txt(orden.estado)} → ${txt(despues.estado)}` : '', datos: payload });
     }
   }
   if (evento === 'Consulta de guía') return resumen; // consultas periódicas: no llenan el registro de eventos

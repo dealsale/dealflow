@@ -92,6 +92,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                   </>
                 ) : (
                   <>
+                    {fila(aSection === 'trazabilidad', () => goA('trazabilidad'), <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad')}
                     {fila(aSection === 'ventas', () => goA('ventas'), <IconVentas />, 'Ventas')}
                     {fila(aSection === 'planes', () => goA('planes'), <IconPlanes />, 'Planes')}
                     {fila(aSection === 'cuentas', () => goA('cuentas'), <IconCuentas />, 'Cuentas')}

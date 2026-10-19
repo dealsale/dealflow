@@ -474,6 +474,7 @@ export interface EffiApiEstado {
   conectado: boolean; listo?: boolean; apiKeyFin?: string; webhookSecreto?: boolean; webhookSecretos?: number; webhookUrl?: string; articulosEnCache?: number;
   sucursal?: string; bodega?: string; centroCostos?: string; formaPago?: string; formaPagoContado?: boolean; medioPago?: string; caja?: string; cuenta?: string;
   vendedor?: string; articuloFlete?: string; diasEntrega?: number; autoDespacho?: boolean; guia?: EffiGuiaCfg;
+  convenioDropshipping?: string;
 }
 export interface EffiArticulo { id: string; descripcion: string; referencia: string; ecommerce: string; stock: number | null }
 export interface EffiEvento { id: number; evento: string; entrega: string; resumen: string; payload: string; created_at: string }
@@ -703,3 +704,14 @@ export const apiCreatePlan = (b: { nombre: string; precio: number; features: str
 export const apiUpdatePlan = (id: string, b: { nombre?: string; precio?: number; features?: string[] }) =>
   req<{ ok: true }>(`/api/admin/plans/${id}`, 'PATCH', b);
 export const apiDeletePlan = (id: string) => req<{ ok: true }>(`/api/admin/plans/${id}`, 'DELETE');
+
+// ── Trazabilidad de pedidos (admin) ──
+export interface EventoTraza { id: number; store_id: string; tienda: string | null; order_id: string; numero: number | null; cliente: string | null; estado: string | null; etapa: string; nivel: 'info' | 'ok' | 'warn' | 'error'; titulo: string; detalle: string; created_at: string; tieneDatos: number }
+export interface ResumenTraza { pedidos: number | null; despachos: number | null; fallos: number | null; apiFallos: number | null }
+export const apiTrazabilidad = (f: { store?: string; q?: string; nivel?: string; etapa?: string; antes?: number }) => {
+  const qs = Object.entries(f).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&');
+  return req<{ eventos: EventoTraza[]; resumen: ResumenTraza }>(`/api/admin/trazabilidad${qs ? '?' + qs : ''}`, 'GET');
+};
+export interface PedidoTraza { id: string; store_id: string; tienda: string; numero: number; cliente: string; tel: string; ciudad: string; departamento: string; direccion: string; estado: string; total: number; envio: number; origen: string; despacho_proveedor: string; effi_remision: string; dropi_order_id: string; guia: string; transportadora: string; estado_woo: string; created_at: string }
+export const apiTrazaPedido = (orderId: string) => req<{ pedido: PedidoTraza | null; items: { qty: number; nombre: string; precio: number }[]; eventos: (Omit<EventoTraza, 'store_id' | 'tienda' | 'order_id' | 'numero' | 'cliente' | 'estado' | 'tieneDatos'> & { datos: unknown })[] }>(`/api/admin/trazabilidad/pedido/${orderId}`, 'GET');
+export const apiEffiConvenios = () => req<{ convenios: { id: string; nombre: string }[]; actual: string }>('/api/effi-api/convenios', 'GET');

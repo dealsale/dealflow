@@ -9,6 +9,7 @@ import { DialogHost } from './components/dialogs';
 import { ManualOrderModal } from './components/ManualOrderModal';
 import { CompletarPedidoModal } from './components/CompletarPedidoModal';
 import { EditarPedidoModal } from './components/EditarPedidoModal';
+import { Trazabilidad } from './sections/admin/Trazabilidad';
 import { Dropdown } from './components/Dropdown';
 import { apiSoporteTiendas, apiSoporteCambiar } from './lib/api';
 import { Sidebar } from './components/Sidebar';
@@ -322,6 +323,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
     <>
       {df.adminSection === 'superadmin' && df.isSuperadmin && <Superadmin df={df} />}
       {df.adminSection === 'plantillas' && df.isSuperadmin && <PlantillasWA df={df} />}
+      {df.adminSection === 'trazabilidad' && <Trazabilidad df={df} />}
       {df.adminSection === 'ventas' && <Ventas df={df} />}
       {df.adminSection === 'planes' && <Planes df={df} />}
       {df.adminSection === 'cuentas' && <Cuentas df={df} />}
