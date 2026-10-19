@@ -14,7 +14,7 @@ import {
   WEBHOOK_URL,
 } from '../data';
 import { comprimirImagen, readFilesAsDataUrls } from '../components/PhotoUpload';
-import { confirmar, notificar as toast } from '../components/dialogs';
+import { notificar as toast } from '../components/dialogs';
 import { apiEffiApiEstado, type EffiApiEstado,
   apiAddVariant,
   apiGenerarVariantes,
@@ -38,16 +38,12 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiDeleteLead,
   apiResetLead,
   apiEnviarFlujoInicial,
-  apiFlows,
-  apiCrearFlujo,
-  apiActualizarFlujo,
-  apiEliminarFlujo,
-  apiEnviarFlujoRemarketing,
   apiPlantillasAprobadas,
   apiEnviarPlantilla,
   apiAntibaneoEstado,
   type PlantillaAprobada,
   type AntibaneoEstado,
+  type EstiloAsistente,
   apiExtraerPedido,
   apiActualizarPedido,
   apiSendLeadMedia,
@@ -162,7 +158,6 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiEliminarCupon,
 } from '../lib/api';
 import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla } from '../lib/api';
-import type { Flujo } from '../types';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -702,10 +697,6 @@ export function useDealFlowState() {
   });
   const [stats, setStats] = useState<Estadisticas | null>(null);
   const [statsCargando, setStatsCargando] = useState(false);
-  // ── Flujos de remarketing ──
-  const [flujos, setFlujos] = useState<Flujo[]>([]);
-  const [flujoTextoDraft, setFlujoTextoDraft] = useState('');
-  const [flujoMsgRemk, setFlujoMsgRemk] = useState('');
   const rangoDePreset = (preset: StatsPreset): { desde: string; hasta: string } => {
     const bog = (t: number) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
     const hoy = bog(Date.now());
@@ -788,7 +779,8 @@ export function useDealFlowState() {
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? DEF_ASSISTANT);
   const [assistantNombre, setAssistantNombre] = useState<string>('');
   const [seguimientoActivo, setSeguimientoActivo] = useState<boolean>(false); // anti-baneo: el seguimiento automático viene APAGADO; el dueño lo enciende
-  const [estilo, setEstilo] = useState<{ trato: 'tu' | 'usted'; emojis: boolean; largo: 'corto' | 'detallado' }>({ trato: 'tu', emojis: true, largo: 'corto' });
+  const [estilo, setEstilo] = useState<EstiloAsistente>({ trato: 'tu', emojis: true, largo: 'corto' });
+  const estiloTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [rules, setRules] = useState<string[]>(snap?.rules ?? DEF_RULES);
   const [orders, setOrders] = useState<Order[]>(snap?.orders ?? DEF_ORDERS);
   const [products, setProducts] = useState<Product[]>(snap?.products ?? DEF_PRODUCTS);
@@ -1914,9 +1906,10 @@ export function useDealFlowState() {
         setAssistantNombre(data.assistant?.nombre || '');
         setSeguimientoActivo(data.assistant?.seguimientoActivo === true);
         setEstilo({
+          ...(data.assistant?.estilo || {}),
           trato: data.assistant?.estilo?.trato === 'usted' ? 'usted' : 'tu',
           emojis: data.assistant?.estilo?.emojis !== false,
-          largo: data.assistant?.estilo?.largo === 'detallado' ? 'detallado' : 'corto',
+          largo: data.assistant?.estilo?.largo === 'detallado' || data.assistant?.estilo?.largo === 'medio' ? data.assistant.estilo.largo : 'corto',
         });
         setRules(data.assistant?.reglas || []);
         setApiLeadsState(mapApiLeads(data.leads));
@@ -2480,84 +2473,6 @@ export function useDealFlowState() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser, section, statsRango.desde, statsRango.hasta]);
 
-  // Flujos de remarketing: carga la lista al entrar a la pestaña o al abrir el
-  // menú de Flujos del Inbox.
-  async function recargarFlujos() {
-    if (!apiMode) return;
-    const { data } = await apiFlows();
-    if (data && Array.isArray(data.flows)) setFlujos(data.flows);
-  }
-  useEffect(() => {
-    if (apiMode && sessionUser && (section === 'flujos' || section === 'crm')) void recargarFlujos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiMode, sessionUser, section]);
-
-  // Persiste los bloques de un flujo (local + servidor).
-  function patchFlujoBloques(id: string, fn: (b: MensajeBloque[]) => MensajeBloque[]) {
-    let nuevos: MensajeBloque[] = [];
-    setFlujos((st) => st.map((f) => {
-      if (f.id !== id) return f;
-      nuevos = fn(f.bloques || []);
-      return { ...f, bloques: nuevos };
-    }));
-    if (apiMode) void apiActualizarFlujo(id, { bloques: nuevos }).then((r) => { if (r.error) void recargarFlujos(); });
-  }
-  async function addBloqueFlujoMedia(id: string, files: File[], tipo: 'imagen' | 'video' | 'audio') {
-    const prefijo = tipo === 'imagen' ? 'image/' : tipo === 'audio' ? 'audio/' : 'video/';
-    const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, prefijo);
-    if (urls.length) patchFlujoBloques(id, (b) => [...b, { tipo, valores: urls }]);
-  }
-  async function addMediaAFlujoBloque(id: string, index: number, files: File[], tipo: 'imagen' | 'video' | 'audio') {
-    const prefijo = tipo === 'imagen' ? 'image/' : tipo === 'audio' ? 'audio/' : 'video/';
-    const urls = await subir(tipo === 'video' ? filtrarVideos(files) : files, prefijo);
-    if (!urls.length) return;
-    patchFlujoBloques(id, (bl) => bl.map((b, j) => (j === index ? { ...b, valores: [...mediaDeBloque(b), ...urls], valor: undefined } : b)));
-  }
-  async function crearFlujo(nombre: string): Promise<string> {
-    if (!nombre.trim()) return '';
-    setFlujoMsgRemk('');
-    if (apiMode) {
-      const { data, error } = await apiCrearFlujo({ nombre: nombre.trim() });
-      if (data?.id) {
-        // Optimista: lo mostramos YA en la lista, sin depender de que el refresco
-        // llegue a tiempo. Luego reconciliamos con el servidor.
-        const nuevo = { id: data.id, nombre: nombre.trim(), descripcion: '', bloques: [], activo: true };
-        setFlujos((st) => [nuevo, ...st.filter((f) => f.id !== data.id)]);
-        void recargarFlujos();
-        return data.id;
-      }
-      setFlujoMsgRemk(error || 'No se pudo crear el flujo. Recarga la página (F5) e intenta de nuevo.');
-      return '';
-    }
-    const id = 'flow_' + Date.now();
-    setFlujos((st) => [{ id, nombre: nombre.trim(), descripcion: '', bloques: [], activo: true }, ...st]);
-    return id;
-  }
-  function actualizarFlujoMeta(id: string, patch: { nombre?: string; descripcion?: string; activo?: boolean }) {
-    setFlujos((st) => st.map((f) => (f.id === id ? { ...f, ...patch } : f)));
-    if (apiMode) void apiActualizarFlujo(id, patch);
-  }
-  function eliminarFlujo(id: string) {
-    setFlujos((st) => st.filter((f) => f.id !== id));
-    if (apiMode) void apiEliminarFlujo(id);
-  }
-  function enviarFlujoRemarketing(flowId: string, permitirSinOptin = false) {
-    const leadId = crmSelectedId;
-    setFlujoMsgRemk('Enviando el flujo…');
-    void apiEnviarFlujoRemarketing(String(leadId), flowId, permitirSinOptin).then((r) => {
-      // El cliente no aceptó promociones: avisamos y dejamos confirmar el envío.
-      if (r.error && (r as { requiereOptin?: boolean }).requiereOptin && !permitirSinOptin) {
-        void confirmar({ titulo: 'El cliente no aceptó promociones', mensaje: 'Enviar remarketing a quien no lo pidió aumenta los reportes y bloqueos, y puede hacer que Meta desactive tu número. ¿Enviar de todas formas, bajo tu responsabilidad?', aceptar: 'Enviar igual', peligro: true }).then((ok) => {
-          if (ok) enviarFlujoRemarketing(flowId, true);
-          else setFlujoMsgRemk('Envío cancelado. Marca al cliente como opt-in si aceptó recibir promociones.');
-        });
-        return;
-      }
-      if (r.error || !r.data) { setFlujoMsgRemk(r.error || 'No se pudo enviar el flujo.'); return; }
-      setFlujoMsgRemk(`✓ Flujo enviado (${r.data.enviadas} pieza${r.data.enviadas === 1 ? '' : 's'}).`);
-      if (apiMode) cargarMensajesChat(leadId);
-    });
-  }
   // ── Monitor anti-baneo: avisa en el panel si la tienda se acerca al tope por
   //    minuto, si el freno retuvo ráfagas, o si la calidad del número bajó. ──
   const [antibaneo, setAntibaneo] = useState<AntibaneoEstado | null>(null);
@@ -2578,7 +2493,7 @@ export function useDealFlowState() {
     if (data && Array.isArray(data.plantillas)) setPlantillasAprobadas(data.plantillas);
   }
   useEffect(() => {
-    if (apiMode && sessionUser && (section === 'flujos' || section === 'crm')) void recargarPlantillasAprobadas();
+    if (apiMode && sessionUser && section === 'crm') void recargarPlantillasAprobadas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser, section]);
   const enviandoPlantillaRef = useRef(false);
@@ -2586,11 +2501,11 @@ export function useDealFlowState() {
     if (enviandoPlantillaRef.current) return; // evita doble envío por doble clic
     enviandoPlantillaRef.current = true;
     const leadId = crmSelectedId;
-    setFlujoMsgRemk('Enviando la plantilla…');
+    setFlujoMsg('Enviando la plantilla…');
     void apiEnviarPlantilla(String(leadId), plantillaId).then((r) => {
       enviandoPlantillaRef.current = false;
-      if (r.error || !r.data) { setFlujoMsgRemk(r.error || 'No se pudo enviar la plantilla.'); return; }
-      setFlujoMsgRemk('✓ Plantilla enviada.');
+      if (r.error || !r.data) { setFlujoMsg(r.error || 'No se pudo enviar la plantilla.'); return; }
+      setFlujoMsg('✓ Plantilla enviada.'); setTimeout(() => setFlujoMsg(''), 4000);
       if (apiMode) cargarMensajesChat(leadId);
     });
   }
@@ -2602,47 +2517,6 @@ export function useDealFlowState() {
       if (r.error) setApiLeadsState((st) => (st || []).map((l) => (l.id === leadId ? { ...l, promosOptin: !optin } : l)));
     });
   }
-  // Flujos decorados: cada uno con sus bloques listos para el BloquesBuilder.
-  const flujosDecorados = flujos.map((f) => ({
-    ...f,
-    bloquesDecorados: (f.bloques || []).map((b, i) => ({
-      ...b,
-      mediaLista: mediaDeBloque(b),
-      remove: () => patchFlujoBloques(f.id, (bl) => bl.filter((_, j) => j !== i)),
-      editText: (valor: string) => patchFlujoBloques(f.id, (bl) => bl.map((bloque, j) => (j === i ? { ...bloque, valor } : bloque))),
-      duplicate: () => patchFlujoBloques(f.id, (bl) => bl.flatMap((bloque, j) => (j === i ? [bloque, { ...bloque }] : [bloque]))),
-      addMedia: (files: File[]) => { if (b.tipo === 'imagen' || b.tipo === 'video' || b.tipo === 'audio') void addMediaAFlujoBloque(f.id, i, files, b.tipo); },
-      removeMedia: (mediaIndex: number) => patchFlujoBloques(f.id, (bl) => bl.flatMap((bloque, j) => {
-        if (j !== i) return [bloque];
-        const restantes = mediaDeBloque(bloque).filter((_, k) => k !== mediaIndex);
-        return restantes.length ? [{ ...bloque, valores: restantes, valor: undefined }] : [];
-      })),
-      moverMedia: (from: number, to: number) => patchFlujoBloques(f.id, (bl) => bl.map((bloque, j) => {
-        if (j !== i) return bloque;
-        const piezas = [...mediaDeBloque(bloque)];
-        if (from === to || from < 0 || to < 0 || from >= piezas.length || to >= piezas.length) return bloque;
-        const [x] = piezas.splice(from, 1);
-        piezas.splice(to, 0, x);
-        return { ...bloque, valores: piezas, valor: undefined };
-      })),
-    })),
-    moverBloque: (from: number, to: number) => patchFlujoBloques(f.id, (bl) => {
-      if (from === to || from < 0 || to < 0 || from >= bl.length || to >= bl.length) return bl;
-      const copia = [...bl];
-      const [x] = copia.splice(from, 1);
-      copia.splice(to, 0, x);
-      return copia;
-    }),
-    addBloqueTexto: () => { const t = flujoTextoDraft.trim(); if (t) { patchFlujoBloques(f.id, (bl) => [...bl, { tipo: 'texto', valor: t }]); setFlujoTextoDraft(''); } },
-    addBloqueImagen: (files: File[]) => void addBloqueFlujoMedia(f.id, files, 'imagen'),
-    addBloqueVideo: (files: File[]) => void addBloqueFlujoMedia(f.id, files, 'video'),
-    addBloqueAudio: (files: File[]) => void addBloqueFlujoMedia(f.id, files, 'audio'),
-    remove: () => eliminarFlujo(f.id),
-    setNombre: (v: string) => actualizarFlujoMeta(f.id, { nombre: v }),
-    setDescripcion: (v: string) => actualizarFlujoMeta(f.id, { descripcion: v }),
-  }));
-
-
   // ── Superadmin: todas las tiendas + ocultar del admin ──
   const [superStores, setSuperStores] = useState<SuperStore[]>([]);
   async function reloadSuper() {
@@ -3796,13 +3670,6 @@ export function useDealFlowState() {
     statsRango,
     elegirStatsPreset,
     setStatsFechas,
-    // Flujos de remarketing
-    flujos: flujosDecorados,
-    flujoTextoDraft,
-    setFlujoTextoDraft,
-    crearFlujo,
-    flujoMsgRemk,
-    enviarFlujoRemarketing,
     antibaneo,
     plantillasAprobadas,
     enviarPlantillaAChat,
@@ -4218,11 +4085,18 @@ export function useDealFlowState() {
       if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre, seguimientoActivo: nuevo, estilo });
     },
     estilo,
-    // Cambia un aspecto del tono/estilo y lo guarda al instante.
-    setEstiloCampo: (patch: Partial<{ trato: 'tu' | 'usted'; emojis: boolean; largo: 'corto' | 'detallado' }>) => {
+    // Cambia un aspecto de la personalización y lo guarda solo (con una pequeña
+    // espera, para no mandar una petición por cada letra que se escribe).
+    setEstiloCampo: (patch: Partial<EstiloAsistente>) => {
       const nuevo = { ...estilo, ...patch };
       setEstilo(nuevo);
-      if (apiMode) void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre, seguimientoActivo, estilo: nuevo });
+      if (!apiMode) return;
+      clearTimeout(estiloTimer.current);
+      estiloTimer.current = setTimeout(() => {
+        void apiPutAssistant({ instrucciones: assistantText, reglas: rules, nombre: assistantNombre, seguimientoActivo, estilo: nuevo }).then((r) => {
+          if (r.error) toast(r.error, 'error', 4000);
+        });
+      }, 700);
     },
     saveAssistant,
     assistantSaved,

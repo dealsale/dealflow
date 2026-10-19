@@ -53,16 +53,12 @@ const CURSOS: Cur[] = [
   },
   {
     titulo: 'El asistente y las automatizaciones',
-    descripcion: 'Instruye a tu bot, crea flujos de remarketing y aplica las buenas prácticas para no ser baneado por WhatsApp.',
+    descripcion: 'Instruye a tu bot y aplica las buenas prácticas para no ser baneado por WhatsApp.',
     nivel: 'Intermedio',
     lecciones: [
       {
         titulo: 'Instrucciones y tono del asistente', tipo: 'articulo', duracion: '6 min',
         contenido: 'En la sección Asistente le dices al bot cómo vender: qué ofrecer, cómo responder precios, formas de pago y envío, y qué NO hacer. Escribe como si le explicaras a un vendedor nuevo.\n\nDefine también el tono (cercano, formal), si usa emojis y qué tan largos son los mensajes. Entre más claras las instrucciones, mejor vende.',
-      },
-      {
-        titulo: 'Flujos de remarketing', tipo: 'articulo', duracion: '5 min',
-        contenido: 'Los flujos son mensajes (texto, foto, audio, video) que reenganchan a un cliente. Se envían desde el chat, y solo a clientes que dieron su consentimiento (opt-in).\n\nRecuerda: el remarketing automático viene APAGADO por defecto. Si lo activas, hazlo con cabeza. Y fuera de las 24 horas desde el último mensaje del cliente, solo se pueden enviar plantillas aprobadas por Meta.',
       },
       {
         titulo: 'Buenas prácticas anti-baneo', tipo: 'articulo', duracion: '6 min',
@@ -71,6 +67,15 @@ const CURSOS: Cur[] = [
     ],
   },
 ];
+
+// La función de flujos de remarketing se retiró: quita su lección de las
+// academias ya sembradas y ajusta la descripción del curso.
+export function limpiarAcademyRemarketing(): void {
+  try {
+    db.prepare("DELETE FROM academy_lecciones WHERE titulo = 'Flujos de remarketing'").run();
+    db.prepare("UPDATE academy_cursos SET descripcion = REPLACE(descripcion, ', crea flujos de remarketing', '') WHERE descripcion LIKE '%flujos de remarketing%'").run();
+  } catch { /* la academia es opcional */ }
+}
 
 export function seedAcademy(): void {
   const hay = (db.prepare('SELECT COUNT(*) n FROM academy_cursos').get() as { n: number }).n;

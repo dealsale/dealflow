@@ -9,6 +9,8 @@ import { DialogHost } from './components/dialogs';
 import { ManualOrderModal } from './components/ManualOrderModal';
 import { CompletarPedidoModal } from './components/CompletarPedidoModal';
 import { EditarPedidoModal } from './components/EditarPedidoModal';
+import { Dropdown } from './components/Dropdown';
+import { apiSoporteTiendas, apiSoporteCambiar } from './lib/api';
 import { Sidebar } from './components/Sidebar';
 import { FloatingNav } from './components/FloatingNav';
 import { MobileChat } from './components/mobile/MobileChat';
@@ -29,7 +31,6 @@ import { DealShop } from './sections/DealShop';
 import { Biblioteca } from './sections/Biblioteca';
 import { Resumen } from './sections/Resumen';
 import { Estadisticas } from './sections/Estadisticas';
-import { Flujos } from './sections/Flujos';
 import { WhatsAppSection } from './sections/WhatsApp';
 import { Cuentas } from './sections/admin/Cuentas';
 import { PlantillasWA } from './sections/admin/PlantillasWA';
@@ -44,30 +45,44 @@ import { MResumen } from './sections/mobile/MResumen';
 
 const DURACION_BOOT = 4400; // ms del preloader completo tras iniciar sesión
 
+/**
+ * Barra de modo soporte (admin dentro de una tienda): una línea finita con un
+ * botón para volver al panel y un selector para saltar a otra tienda sin salir.
+ */
 function ImpersonationBanner({ df }: { df: DealFlowState }) {
+  const [tiendas, setTiendas] = useState<{ id: string; nombre: string }[]>([]);
+  const [actual, setActual] = useState('');
+  const [cambiando, setCambiando] = useState(false);
+  useEffect(() => {
+    void apiSoporteTiendas().then((r) => { if (r.data) { setTiendas(r.data.tiendas); setActual(r.data.actual || ''); } });
+  }, []);
+  const cambiar = (id: string) => {
+    if (!id || id === actual || cambiando) return;
+    setCambiando(true);
+    void apiSoporteCambiar(id).then((r) => {
+      if (r.error) { setCambiando(false); return; }
+      window.location.reload();
+    });
+  };
+  const opciones = tiendas.length ? tiendas.map((t) => ({ value: t.id, label: t.nombre })) : [{ value: actual, label: df.tiendaImpersonada || 'Tienda' }];
   return (
     <div
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        flexWrap: 'wrap',
-        background: 'var(--df-alert-brown)',
-        color: '#FEF3C7',
-        padding: '9px 16px',
-        fontFamily: "'Inter',system-ui,sans-serif",
-        fontSize: 13.5,
-        fontWeight: 600,
+        display: 'flex', alignItems: 'center', gap: 8, height: 30, boxSizing: 'border-box',
+        background: 'var(--df-alert-brown)', color: '#FEF3C7', padding: '0 10px',
+        fontFamily: "'Inter',system-ui,sans-serif", fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden',
       }}
     >
-      <span>👀 Estás dentro de <b style={{ color: '#fff' }}>{df.tiendaImpersonada || 'una tienda'}</b> en modo soporte. Los cambios que hagas afectan a esta tienda real.</span>
-      <div style={{ flex: 1 }} />
       <button
         onClick={df.volverAlAdmin}
-        style={{ background: 'var(--df-warning-subtle)', color: 'var(--df-alert-brown)', border: 'none', borderRadius: 7, padding: '6px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+        title="Volver al panel de administración"
+        aria-label="Volver al panel de administración"
+        style={{ width: 22, height: 22, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.16)', color: '#fff', border: '1px solid rgba(255,255,255,.28)', borderRadius: 6, cursor: 'pointer', padding: 0 }}
       >
-        ← Volver al panel de admin
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
       </button>
+      <Dropdown variant="pill" compacto ariaLabel="Cambiar de tienda" value={actual} options={opciones} onChange={cambiar} buscar={tiendas.length > 6} />
+      <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis' }}>{cambiando ? 'Cambiando de tienda…' : 'Modo soporte · los cambios afectan la tienda real'}</span>
     </div>
   );
 }
@@ -346,7 +361,6 @@ function DesktopApp({ df }: { df: DealFlowState }) {
           {df.isVendedor && df.section === 'resumen' && <Resumen df={df} />}
           {df.isVendedor && df.section === 'estadisticas' && <Estadisticas df={df} />}
           {df.isVendedor && df.section === 'productos' && <Productos df={df} />}
-          {df.isVendedor && df.section === 'flujos' && <Flujos df={df} />}
           {df.isVendedor && df.section === 'asistente' && <Asistente df={df} />}
           {df.isVendedor && df.section === 'whatsapp' && <WhatsAppSection df={df} />}
           {df.isVendedor && df.section === 'equipo' && <Equipo df={df} />}
@@ -393,7 +407,6 @@ function MobileApp({ df }: { df: DealFlowState }) {
         {df.isVendedor && df.section === 'estadisticas' && <Estadisticas df={df} />}
         {df.isVendedor && df.section === 'pedidos' && <MPedidos df={df} />}
         {df.isVendedor && df.section === 'productos' && <Productos df={df} />}
-          {df.isVendedor && df.section === 'flujos' && <Flujos df={df} />}
         {df.isVendedor && df.section === 'crm' && <MCRM df={df} />}
         {df.isVendedor && df.section === 'leads' && <MLeads df={df} />}
         {df.isVendedor && df.section === 'asistente' && <Asistente df={df} />}

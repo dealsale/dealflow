@@ -16,7 +16,7 @@ const COLOR: Record<string, { dot: string; bg: string; txt: string }> = {
 
 /**
  * Registro de actividad de la tienda: ventana discreta que se abre desde el
- * Inbox y muestra qué pasó (flujos disparados, respuestas del asistente,
+ * Inbox y muestra qué pasó (mensajes iniciales enviados, respuestas del asistente,
  * pedidos) y, sobre todo, los errores de envío de mensajes.
  */
 export function ActivityLog({ df }: { df: DealFlowState }) {
@@ -39,7 +39,7 @@ export function ActivityLog({ df }: { df: DealFlowState }) {
           <div>
             <div style={{ fontWeight: 800, fontSize: 15 }}>{df.logsLeadId ? 'Registro del chat' : 'Registro de actividad'}</div>
             <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
-              {df.logsLeadId ? `Solo de: ${df.logsTitulo}. Flujos, respuestas y errores de este chat.` : 'Toda tu tienda: flujos, respuestas y errores de envío.'}
+              {df.logsLeadId ? `Solo de: ${df.logsTitulo}. Mensajes enviados, respuestas y errores de este chat.` : 'Toda tu tienda: envíos, respuestas y errores de envío.'}
             </div>
           </div>
           <div style={{ flex: 1 }} />

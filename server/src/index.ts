@@ -7,7 +7,7 @@ import { api, webhooks } from './routes.js';
 import { db } from './db.js';
 import { seed } from './seed.js';
 import { seedPlantillas } from './seedPlantillas.js';
-import { seedAcademy, seedAcademyCursoVisual } from './seedAcademy.js';
+import { seedAcademy, seedAcademyCursoVisual, limpiarAcademyRemarketing } from './seedAcademy.js';
 import { restoreQrSessions } from './waqr.js';
 import { congelarSiFalta } from './plantillas.js';
 import { iniciarSincronizacionDespachos } from './despachos.js';
@@ -17,6 +17,7 @@ seed();
 seedPlantillas();
 seedAcademy();
 seedAcademyCursoVisual();
+limpiarAcademyRemarketing();
 congelarSiFalta();
 restoreQrSessions();
 iniciarSincronizacionDespachos();
@@ -51,7 +52,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'sin-fondo-pedidos-adaptables',
+    build: 'asistente-soporte-sin-remarketing',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

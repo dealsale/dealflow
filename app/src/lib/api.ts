@@ -1,4 +1,3 @@
-import type { Flujo, MensajeBloque } from '../types';
 export interface ApiUser {
   id: string;
   email: string;
@@ -297,7 +296,15 @@ export const apiAddVariant = (productId: string, b: { label: string; stock: numb
 export const apiGenerarVariantes = (productId: string) => req<{ ok: true; creadas: number; eliminadas: number; total: number }>(`/api/products/${productId}/variants/generar`, 'POST');
 export const apiPatchVariant = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/variants/${id}`, 'PATCH', patch);
 export const apiDeleteVariant = (id: string) => req<{ ok: true }>(`/api/variants/${id}`, 'DELETE');
-export interface EstiloAsistente { trato?: 'tu' | 'usted'; emojis?: boolean; largo?: 'corto' | 'detallado' }
+export interface EstiloAsistente {
+  trato?: 'tu' | 'usted'; emojis?: boolean; emojiNivel?: 'nada' | 'pocos' | 'muchos'; largo?: 'corto' | 'medio' | 'detallado';
+  personalidad?: 'amigable' | 'profesional' | 'divertido' | 'experto' | 'directo'; modismos?: 'neutro' | 'colombiano';
+  insistencia?: 'suave' | 'equilibrada' | 'persuasiva'; sugerirCombos?: boolean;
+  saludo?: string; despedida?: string; prohibido?: string;
+  negocio?: { envios?: string; pagos?: string; cambios?: string; horario?: string; ubicacion?: string; extra?: string };
+  faqs?: { pregunta: string; respuesta: string }[];
+  humano?: { activo?: boolean; cuando?: string; mensaje?: string };
+}
 export const apiPutAssistant = (b: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente }) => req<{ ok: true }>('/api/assistant', 'PUT', b);
 
 export interface ApiOrder {
@@ -381,12 +388,6 @@ export const apiDeleteLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}
 export const apiResetLead = (id: string) => req<{ ok: true }>(`/api/leads/${id}/reset`, 'POST');
 export const apiEnviarFlujoInicial = (id: string, productId: string) => req<{ ok: true }>(`/api/leads/${id}/flujo-inicial`, 'POST', { productId });
 
-// ── Flujos de remarketing ──
-export const apiFlows = () => req<{ flows: Flujo[] }>('/api/flows', 'GET');
-export const apiCrearFlujo = (body: { nombre: string; descripcion?: string }) => req<{ id: string }>('/api/flows', 'POST', body);
-export const apiActualizarFlujo = (id: string, body: { nombre?: string; descripcion?: string; bloques?: MensajeBloque[]; activo?: boolean }) => req<{ ok: true }>(`/api/flows/${id}`, 'PUT', body);
-export const apiEliminarFlujo = (id: string) => req<{ ok: true }>(`/api/flows/${id}`, 'DELETE');
-export const apiEnviarFlujoRemarketing = (leadId: string, flowId: string, permitirSinOptin = false) => req<{ ok: true; enviadas: number; requiereOptin?: boolean }>(`/api/leads/${leadId}/enviar-flujo`, 'POST', { flowId, permitirSinOptin });
 export const apiSetOptin = (leadId: string, optin: boolean) => req<{ ok: true; optin: boolean }>(`/api/leads/${leadId}/optin`, 'POST', { optin });
 
 export interface AntibaneoEstado { nivel: 'ok' | 'aviso' | 'alerta'; porMinuto: number; tope: number; cerca: boolean; calidad: string; limite: string; avisos: string[] }
@@ -589,6 +590,8 @@ export const apiStats = (desde: string, hasta: string) =>
 
 export const apiImpersonate = (id: string) => req<{ ok: true }>(`/api/admin/stores/${id}/impersonate`, 'POST');
 export const apiStopImpersonate = () => req<{ ok: true }>('/api/auth/stop-impersonate', 'POST');
+export const apiSoporteTiendas = () => req<{ tiendas: { id: string; nombre: string }[]; actual: string | null }>('/api/auth/soporte/tiendas', 'GET');
+export const apiSoporteCambiar = (id: string) => req<{ ok: true }>(`/api/auth/soporte/cambiar/${id}`, 'POST');
 export const apiEntrarBiblioteca = () => req<{ ok: true }>('/api/superadmin/biblioteca/entrar', 'POST');
 
 export interface AdminStoreDetalle {
