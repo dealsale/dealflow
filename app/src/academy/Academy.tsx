@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { DialogHost, notificar, confirmar } from '../components/dialogs';
+import { Dropdown } from '../components/Dropdown';
 
 /**
  * DealFlow Academy — portal educativo (academy.dealflow.sbs).
@@ -490,9 +491,7 @@ function FormCurso({ curso, onGuardar, onCancelar }: { curso: Partial<Curso>; on
       </div>
       <input value={f.portada || ''} onChange={(e) => set('portada', e.target.value)} placeholder="…o pega la URL de la portada" style={inputA} />
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <select value={f.nivel || 'Básico'} onChange={(e) => set('nivel', e.target.value)} style={{ ...inputA, width: 160, marginBottom: 0 }}>
-          <option>Básico</option><option>Intermedio</option><option>Avanzado</option>
-        </select>
+        <Dropdown ariaLabel="Nivel" width={170} value={f.nivel || 'Básico'} onChange={(v) => set('nivel', v)} options={['Básico', 'Intermedio', 'Avanzado'].map((n) => ({ value: n, label: n }))} />
         <label style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.muted, fontSize: 14 }}>
           <input type="checkbox" checked={!!f.publicado} onChange={(e) => set('publicado', e.target.checked)} /> Publicado (visible en el portal)
         </label>
@@ -624,9 +623,7 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
     <div style={{ ...tarjeta, background: 'rgba(255,255,255,.03)', marginTop: 10 }}>
       <input value={f.titulo || ''} onChange={(e) => set('titulo', e.target.value)} placeholder="Título de la lección" style={inputA} />
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <select value={f.tipo || 'video'} onChange={(e) => set('tipo', e.target.value)} style={{ ...inputA, width: 140 }}>
-          <option value="video">Video</option><option value="articulo">Artículo</option>
-        </select>
+        <div style={{ marginBottom: 10 }}><Dropdown ariaLabel="Tipo de lección" width={150} value={f.tipo || 'video'} onChange={(v) => set('tipo', v)} options={[{ value: 'video', label: 'Video' }, { value: 'articulo', label: 'Artículo' }]} /></div>
         <input value={f.duracion || ''} onChange={(e) => set('duracion', e.target.value)} placeholder="Duración (ej. 5:30)" style={{ ...inputA, width: 150 }} />
       </div>
       {f.tipo !== 'articulo' && (

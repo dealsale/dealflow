@@ -375,6 +375,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             <span
               onClick={p.toggleMensajeInicial}
               title="Encender o apagar el envío automático del mensaje inicial"
+              className="df-switch" data-on={p.mensajeInicialActivo !== false}
               style={{ width: 40, height: 23, borderRadius: 999, background: p.mensajeInicialActivo !== false ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', cursor: 'pointer', transition: 'background .2s', flexShrink: 0 }}
             >
               <span style={{ position: 'absolute', top: 2, left: p.mensajeInicialActivo !== false ? 19 : 2, width: 19, height: 19, borderRadius: '50%', background: 'var(--df-surface)', transition: 'left .2s', boxShadow: '0 1px 2px rgba(15,23,42,.3)' }} />
@@ -819,6 +820,7 @@ function MensajesTabs({ p }: { p: DecoratedProduct }) {
             <span
               onClick={(e) => { e.stopPropagation(); m.toggle(); }}
               title={m.activo ? 'Encendido: se puede enviar. Toca para apagarlo.' : 'Apagado: no se envía. Toca para encenderlo.'}
+              className="df-switch" data-on={m.activo}
               style={{ width: 30, height: 17, borderRadius: 999, background: m.activo ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', flexShrink: 0, transition: 'background .2s' }}
             >
               <span style={{ position: 'absolute', top: 2, left: m.activo ? 15 : 2, width: 13, height: 13, borderRadius: '50%', background: '#fff', transition: 'left .2s' }} />

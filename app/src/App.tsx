@@ -1,3 +1,4 @@
+import { FondoAnimado } from './components/FondoAnimado';
 import { useEffect, useRef, useState } from 'react';
 import { Header } from './components/Header';
 import { BotPreloader } from './components/BotPreloader';
@@ -325,7 +326,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
 function DesktopApp({ df }: { df: DealFlowState }) {
   return (
     <div
-      className={df.theme === 'premium' ? 'df-premium-canvas' : undefined}
+      className={'df-app-root' + (df.theme === 'premium' ? ' df-premium-canvas' : '')}
       style={{
         position: 'relative',
         display: 'flex',
@@ -338,6 +339,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
         overflow: 'hidden',
       }}
     >
+      <FondoAnimado tema={df.theme} />
       {df.sidebarVisible && <Sidebar df={df} />}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -373,7 +375,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
 function MobileApp({ df }: { df: DealFlowState }) {
   return (
     <div
-      className={df.theme === 'premium' ? 'df-premium-canvas' : undefined}
+      className={'df-app-root' + (df.theme === 'premium' ? ' df-premium-canvas' : '')}
       style={{
         position: 'relative',
         display: 'flex',
@@ -386,6 +388,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
         overflow: 'hidden',
       }}
     >
+      <FondoAnimado tema={df.theme} />
       <MobileHeader df={df} />
 
       <main style={{ flex: 1, overflowY: 'auto', padding: '18px 16px 90px' }}>

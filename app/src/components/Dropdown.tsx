@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent as KEv, ReactNode } from 'react';
 
 export interface DropdownOption {
   value: string;
@@ -17,7 +17,7 @@ export interface DropdownOption {
  *  - 'field' → campo de formulario del ancho de su contenedor.
  */
 export function Dropdown({
-  value, onChange, options, variant = 'field', label, placeholder, width, active, ariaLabel,
+  value, onChange, options, variant = 'field', label, placeholder, width, active, ariaLabel, buscar,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -28,8 +28,12 @@ export function Dropdown({
   width?: number | string;
   active?: boolean;
   ariaLabel?: string;
+  /** Muestra un buscador arriba de la lista (por defecto, con más de 8 opciones). */
+  buscar?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [resalte, setResalte] = useState(-1);
   const [arriba, setArriba] = useState(false); // abrir hacia arriba si no cabe abajo
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; width: number }>({ left: 0, width: 0 });
   const ref = useRef<HTMLDivElement>(null);
@@ -73,8 +77,21 @@ export function Dropdown({
   }, [open]);
 
   const abrir = () => {
-    if (!open) recalcular();
+    if (!open) { recalcular(); setQ(''); setResalte(-1); }
     setOpen((o) => !o);
+  };
+  const conBuscador = buscar ?? options.length > 8;
+  const nq = q.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const visibles = nq ? options.filter((o) => o.label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(nq)) : options;
+  const elegir = (v: string) => { onChange(v); setOpen(false); };
+  // Teclado: flechas para moverse, Enter para elegir, Escape para cerrar.
+  const onKey = (e: KEv) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) { abrir(); return; }
+      const n = visibles.length; if (!n) return;
+      setResalte((r) => (r + (e.key === 'ArrowDown' ? 1 : -1) + n) % n);
+    } else if (e.key === 'Enter' && open && visibles[resalte]) { e.preventDefault(); elegir(visibles[resalte].value); }
   };
 
   const sel = options.find((o) => o.value === value);
@@ -89,44 +106,59 @@ export function Dropdown({
       }
     : {
         display: 'flex', alignItems: 'center', gap: 8, width: '100%', boxSizing: 'border-box', minHeight: 40,
-        border: '1px solid ' + (open ? '#0F172A' : 'var(--df-border)'), background: 'var(--df-surface)', color: 'var(--df-text-strong)',
+        border: '1px solid ' + (open ? 'var(--df-accent, #2e8bff)' : 'var(--df-border)'), background: 'var(--df-surface)', color: 'var(--df-text-strong)',
         borderRadius: 10, padding: '9px 12px', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
-        boxShadow: open ? '0 0 0 3px rgba(15,23,42,.06)' : 'none', transition: 'border-color .15s, box-shadow .15s', textAlign: 'left',
+        boxShadow: open ? '0 0 0 4px rgba(46,139,255,.14), 0 0 26px -8px rgba(46,139,255,.6)' : 'none', transition: 'border-color .2s, box-shadow .25s', textAlign: 'left',
       };
 
   return (
     <div ref={ref} style={{ position: 'relative', display: pill ? 'inline-block' : 'block', width: pill ? undefined : (width ?? '100%') }}>
-      <button type="button" onClick={abrir} aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel || label} style={triggerStyle}>
+      <button type="button" onClick={abrir} onKeyDown={onKey} aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel || label} style={triggerStyle} className={pill && isActive ? 'df-dd-pill-on' : undefined}>
         {label && <span style={{ color: pill ? (isActive ? 'rgba(255,255,255,.7)' : 'var(--df-text-faint)') : 'var(--df-text-faint)', whiteSpace: 'nowrap', fontWeight: 600 }}>{label}</span>}
         <span style={{ flex: pill ? undefined : 1, fontWeight: pill ? 700 : 600, color: sel ? 'inherit' : 'var(--df-text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {sel ? sel.label : (placeholder || 'Selecciona…')}
           {sel?.count != null ? ` (${sel.count})` : ''}
         </span>
-        <span aria-hidden style={{ fontSize: 10, opacity: 0.6, transition: 'transform .15s', transform: open ? 'rotate(180deg)' : 'none', marginLeft: pill ? -1 : 0 }}>▾</span>
+        <span aria-hidden style={{ fontSize: 10, opacity: open ? 1 : 0.6, color: open ? 'var(--df-accent, #2e8bff)' : undefined, transition: 'transform .3s cubic-bezier(.2,.7,.2,1)', transform: open ? 'rotate(180deg)' : 'none', marginLeft: pill ? -1 : 0 }}>▾</span>
       </button>
 
       {open && createPortal(
         <div
           ref={popRef}
           role="listbox"
+          className={'df-pop' + (arriba ? ' df-pop-up' : '')}
           style={{
             position: 'fixed', zIndex: 3000, left: pos.left, minWidth: pos.width,
             ...(arriba ? { bottom: pos.bottom } : { top: pos.top }),
             background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12,
-            boxShadow: '0 10px 30px rgba(15,23,42,.14), 0 2px 6px rgba(15,23,42,.06)',
-            padding: 5, maxHeight: 260, overflowY: 'auto',
+            boxShadow: '0 18px 44px -12px rgba(15,23,42,.35), 0 2px 6px rgba(15,23,42,.08)',
+            padding: 5, maxHeight: 300, overflowY: 'auto',
           }}
         >
-          {options.map((o) => {
+          {conBuscador && (
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => { setQ(e.target.value); setResalte(0); }}
+              onKeyDown={onKey}
+              placeholder="Buscar…"
+              aria-label="Buscar opción"
+              style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 10px', marginBottom: 5, fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-bg)', color: 'var(--df-text-body)', outline: 'none' }}
+            />
+          )}
+          {conBuscador && !visibles.length && <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--df-text-faint)' }}>Nada coincide.</div>}
+          {visibles.map((o, k) => {
             const activa = o.value === value;
             return (
               <div
                 key={o.value}
                 role="option"
                 aria-selected={activa}
-                onClick={() => { onChange(o.value); setOpen(false); }}
-                className="df-dd-item"
+                onClick={() => elegir(o.value)}
+                onMouseEnter={() => setResalte(k)}
+                className={'df-dd-item' + (k === resalte ? ' df-dd-act' : '')}
                 style={{
+                  animationDelay: `${Math.min(k, 12) * 18}ms`,
                   display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
                   fontSize: 13, fontWeight: activa ? 700 : 500, color: activa ? 'var(--df-brand-dark)' : 'var(--df-text-body)',
                   background: activa ? 'var(--df-brand-subtle-2)' : 'transparent', whiteSpace: 'nowrap',
@@ -135,7 +167,7 @@ export function Dropdown({
                 {o.icon && <span style={{ flexShrink: 0, display: 'inline-flex' }}>{o.icon}</span>}
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</span>
                 {o.count != null && <span style={{ fontSize: 11, fontWeight: 700, color: activa ? 'var(--df-brand)' : 'var(--df-text-faint)', background: activa ? 'var(--df-brand-subtle)' : 'var(--df-surface-2)', borderRadius: 999, padding: '0 7px' }}>{o.count}</span>}
-                {activa && <span style={{ color: 'var(--df-brand)', fontWeight: 800, flexShrink: 0 }}>✓</span>}
+                {activa && <span className="df-dd-check" aria-hidden>✓</span>}
               </div>
             );
           })}

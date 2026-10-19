@@ -155,10 +155,7 @@ function BotonesEditor({ botones, onChange }: { botones: BotonPlantilla[]; onCha
       <label style={label}>Botones (opcional)</label>
       {botones.map((b, i) => (
         <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
-          <select value={b.tipo} onChange={(e) => upd(i, { tipo: e.target.value as BotonPlantilla['tipo'] })} style={{ ...input, width: 150 }}>
-            <option value="QUICK_REPLY">Respuesta rápida</option>
-            <option value="URL">Enlace (URL)</option>
-          </select>
+          <Dropdown ariaLabel="Tipo de botón" width={170} value={b.tipo} onChange={(v) => upd(i, { tipo: v as BotonPlantilla['tipo'] })} options={[{ value: 'QUICK_REPLY', label: 'Respuesta rápida' }, { value: 'URL', label: 'Enlace (URL)' }]} />
           <input style={{ ...input, flex: 1 }} value={b.texto} onChange={(e) => upd(i, { texto: e.target.value })} placeholder="Texto del botón" />
           {b.tipo === 'URL' && <input style={{ ...input, flex: 1 }} value={b.url || ''} onChange={(e) => upd(i, { url: e.target.value })} placeholder="https://…" />}
           <button onClick={() => del(i)} style={{ background: 'transparent', border: 'none', color: 'var(--df-danger-dark)', cursor: 'pointer', fontSize: 16 }}>×</button>
