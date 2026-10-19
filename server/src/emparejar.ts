@@ -78,25 +78,40 @@ export function emparejarItem<T extends VarBase>(nombreItem: string, todas: T[])
   if (vs.length === 1) return { v: vs[0], motivo: '', parecidos };
   const unicas = vs.filter((v) => !v.label || norm(v.label) === 'unica');
   const m = nombreItem.match(/\(([^)]+)\)/);
-  const etiqueta = norm((m ? m[1] : nombreItem.includes(' - ') ? nombreItem.split(' - ').slice(1).join(' ') : '').replace(/talla|color/gi, ''));
-  if (etiqueta) {
-    const tokE = etiqueta.split(' ').filter(Boolean);
-    const hit = vs.find((v) => norm(v.label) === etiqueta)
-      // Mismas palabras en cualquier orden ("M · Blanco" = "Blanco · M").
-      || vs.find((v) => { const tl = norm(v.label).split(' ').filter(Boolean); return tl.length === tokE.length && tl.every((t) => tokE.includes(t)); })
-      || vs.find((v) => v.label && (etiqueta.includes(norm(v.label)) || norm(v.label).includes(etiqueta)));
-    if (hit) return { v: hit, motivo: '', parecidos };
+  // Palabras de la talla/color pedidas, sin rótulos ("Talla XL · Amarillo" → xl, amarillo).
+  const tokE = tokensVariante(m ? m[1] : nombreItem.includes(' - ') ? nombreItem.split(' - ').slice(1).join(' ') : '');
+  if (tokE.length) {
+    // 1) Mismas palabras en cualquier orden (tolerando "amarilla"/"amarillo").
+    const exacta = vs.find((v) => { const tl = tokensVariante(v.label); return tl.length === tokE.length && tl.every((t) => tokE.some((x) => mismoToken(x, t))); });
+    if (exacta) return { v: exacta, motivo: '', parecidos };
+    // 2) Todas las palabras de la variante están en lo pedido (la de más palabras gana).
+    let mejorV: T | undefined; let score = 0;
+    for (const v of vs) {
+      const tl = tokensVariante(v.label);
+      if (tl.length && tl.every((t) => tokE.some((x) => mismoToken(x, t))) && tl.length > score) { mejorV = v; score = tl.length; }
+    }
+    if (mejorV) return { v: mejorV, motivo: '', parecidos };
   }
   // Variante escrita sin paréntesis ("Vestido Dianne Azul rey M"): todas las palabras del label en el nombre.
-  const full = norm(nombreItem);
+  const full = tokensVariante(nombreItem);
   let mejorV: T | undefined; let score = 0;
   for (const v of vs) {
-    const toks = norm(v.label).split(' ').filter((t) => t.length > 0);
-    if (toks.length && toks.every((t) => new RegExp(`(^| )${t}( |$)`).test(full)) && toks.length > score) { mejorV = v; score = toks.length; }
+    const tl = tokensVariante(v.label);
+    if (tl.length && tl.every((t) => full.some((x) => mismoToken(x, t))) && tl.length > score) { mejorV = v; score = tl.length; }
   }
   if (mejorV) return { v: mejorV, motivo: '', parecidos };
-  if (unicas.length === 1 && !etiqueta) return { v: unicas[0], motivo: '', parecidos };
-  return { motivo: `no se identificó la talla/color "${m ? m[1] : ''}" entre las variantes de ${mejor[1].producto}`, parecidos };
+  if (unicas.length === 1 && !tokE.length) return { v: unicas[0], motivo: '', parecidos };
+  return {
+    motivo: `el producto ${mejor[1].producto} no tiene la variante "${m ? m[1] : ''}" (sus variantes: ${vs.slice(0, 12).map((v) => v.label || 'única').join(', ')}${vs.length > 12 ? '…' : ''})`,
+    parecidos,
+  };
+}
+
+// Rótulos que no identifican la variante ("Talla", "Color"…): se ignoran al comparar.
+const ROTULOS = new Set(['talla', 'tallas', 'color', 'colores', 'size', 'tamano', 'referencia', 'ref']);
+function tokensVariante(s: string): string[] {
+  const alias: Record<string, string> = { xxl: '2xl', xxxl: '3xl', xxs: '2xs' };
+  return norm(s).split(' ').filter((t) => t && !ROTULOS.has(t)).map((t) => alias[t] || t);
 }
 
 /** Para guardar en order_items al crear el pedido. */

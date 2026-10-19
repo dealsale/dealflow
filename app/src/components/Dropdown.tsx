@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties, KeyboardEvent as KEv, ReactNode } from 'react';
 
@@ -78,6 +78,15 @@ export function Dropdown({
     };
   }, [open]);
 
+  // Si el panel se sale por la derecha de la pantalla (opciones largas en un panel
+  // lateral), se corre hacia la izquierda para que siempre se vea completo.
+  useLayoutEffect(() => {
+    if (!open || !popRef.current) return;
+    const r = popRef.current.getBoundingClientRect();
+    const sobra = r.right - (window.innerWidth - 8);
+    if (sobra > 0) setPos((p) => ({ ...p, left: Math.max(8, p.left - sobra) }));
+  }, [open, pos.left, pos.width]);
+
   const abrir = () => {
     if (!open) { recalcular(); setQ(''); setResalte(-1); }
     setOpen((o) => !o);
@@ -140,7 +149,7 @@ export function Dropdown({
             ...(arriba ? { bottom: pos.bottom } : { top: pos.top }),
             background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12,
             boxShadow: '0 18px 44px -12px rgba(15,23,42,.35), 0 2px 6px rgba(15,23,42,.08)',
-            padding: 5, maxHeight: 300, overflowY: 'auto',
+            padding: 5, maxHeight: 300, overflowY: 'auto', maxWidth: 'calc(100vw - 16px)', boxSizing: 'border-box',
           }}
         >
           {conBuscador && (

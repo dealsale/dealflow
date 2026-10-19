@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { db, pj, registrarLog } from './db.js';
 import { conPedido, trazar, trazarApi } from './trazabilidad.js';
 import { emparejarItem, type Emparejado } from './emparejar.js';
+import { nombreTransportadora } from './transportadoras.js';
 
 /**
  * Integración DIRECTA con la API de Effi ERP (https://effi.com.co/api).
@@ -739,7 +740,7 @@ async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, 
   }
   const gg = r.body.data?.guias?.[0] || {};
   const guia = txt(gg.guia);
-  const transportadora = txt(gg.nombre_transportadora_efficommerce) || txt(gg.nombre_transportadora);
+  const transportadora = nombreTransportadora(txt(gg.nombre_transportadora_efficommerce) || txt(gg.nombre_transportadora));
   const url = urlDocumentoGuia(gg);
   if (url) db.prepare('UPDATE orders SET guia_url = ? WHERE id = ?').run(url, txt(o.id));
   db.prepare('UPDATE orders SET effi_guia = ?, guia = CASE WHEN ? != \'\' THEN ? ELSE guia END, transportadora = CASE WHEN ? != \'\' THEN ? ELSE transportadora END WHERE id = ?')
@@ -868,7 +869,7 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
       if (guia && guia !== txt(orden.guia)) db.prepare('UPDATE orders SET guia = ? WHERE id = ?').run(guia, orden.id);
       const urlDoc = urlDocumentoGuia(datos);
       if (urlDoc && urlDoc !== txt(orden.guia_url)) db.prepare('UPDATE orders SET guia_url = ? WHERE id = ?').run(urlDoc, orden.id);
-      if (transp) db.prepare('UPDATE orders SET transportadora = ? WHERE id = ?').run(transp, orden.id);
+      if (transp) db.prepare('UPDATE orders SET transportadora = ? WHERE id = ?').run(nombreTransportadora(transp) || transp, orden.id);
       if (estadoTxt) db.prepare('UPDATE orders SET estado_woo = ? WHERE id = ?').run(estadoTxt.slice(0, 60), orden.id);
       const nuevo = estadoPipeline(estadoTxt, !!(guia || orden.guia));
       if (nuevo && rank(nuevo) > rank(txt(orden.estado))) db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, orden.id);

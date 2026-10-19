@@ -3,6 +3,7 @@ import { trazar } from './trazabilidad.js';
 import { db, registrarLog, uid } from './db.js';
 import { sendWhatsappMedia, sendWhatsappTemplate, sendWhatsappText } from './wa.js';
 import { mediaPath } from './media.js';
+import { nombreTransportadora } from './transportadoras.js';
 
 /**
  * Aviso de la guía al cliente, por dos vías:
@@ -58,8 +59,15 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
   const numDF = `DF-${txt(o.numero)}`;
   const tienda = (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined)?.nombre || 'nuestra tienda';
   const nombre = txt(o.cliente).trim().split(' ')[0] || 'cliente';
-  const transp = txt(o.transportadora).trim() && !(txt(o.transportadora) === 'Dropi' && txt(o.despacho_proveedor) !== 'dropi') ? txt(o.transportadora).trim() : 'por confirmar';
-  const texto = `¡Hola ${nombre}! 📦 Tu pedido ${numDF} ya va en camino.\n\n🧾 Guía: ${guia}${transp !== 'por confirmar' ? `\n🚚 Transportadora: ${transp}` : ''}\n\nCon este número puedes seguir tu envío. ¡Gracias por tu compra!`;
+  // Solo el nombre real de la transportadora (nada de "envío", "flete" ni "Effi").
+  const crudoT = txt(o.transportadora).trim() && !(txt(o.transportadora) === 'Dropi' && txt(o.despacho_proveedor) !== 'dropi') ? txt(o.transportadora) : '';
+  const transp = nombreTransportadora(crudoT) || 'por confirmar';
+  const conT = transp !== 'por confirmar' ? ` con ${transp}` : '';
+  // Texto según lo que se manda: con la imagen/PDF de la guía, el mensaje lo presenta.
+  const textoSolo = `¡Hola ${nombre}! 📦 Tu pedido ${numDF} ya va en camino${conT}.\n\n🧾 Número de guía: ${guia}\n\nCon ese número puedes rastrear tu envío. ¡Gracias por tu compra en ${tienda}!`;
+  const textoImagen = `¡Hola ${nombre}! 👋 Te comparto la imagen de tu guía para que la tengas a mano.\n\n🚚 ${transp !== 'por confirmar' ? transp : 'Transportadora por confirmar'} · Guía ${guia}\n\nCualquier duda con tu envío, escríbenos por aquí 💬`;
+  const textoPdf = `¡Hola ${nombre}! 👋 Te comparto tu guía en PDF para que la tengas a mano.\n\n🚚 ${transp !== 'por confirmar' ? transp : 'Transportadora por confirmar'} · Guía ${guia}\n\nCualquier duda con tu envío, escríbenos por aquí 💬`;
+  let texto = textoSolo;
   const params = [nombre, tienda, numDF, transp, guia];
   const tpl = plantillaAprobada(storeId, PLANTILLA_GUIA);
 
@@ -79,6 +87,7 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
       const esImg = !/\.pdf$/i.test(archivo);
       mime = esImg ? (archivo.endsWith('.png') ? 'image/png' : archivo.endsWith('.webp') ? 'image/webp' : 'image/jpeg') : 'application/pdf';
       tipo = esImg ? 'image' : 'document';
+      texto = esImg ? textoImagen : textoPdf;
       envio = await sendWhatsappMedia(storeId, destino, { buffer: readFileSync(ruta), mime, tipo }, texto, `Guia-${numDF}.${esImg ? (mime === 'image/png' ? 'png' : 'jpg') : 'pdf'}`, chat.tel);
     } else {
       envio = await sendWhatsappText(storeId, destino, texto, chat.tel);
