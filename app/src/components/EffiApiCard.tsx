@@ -1,6 +1,7 @@
 import { Dropdown } from './Dropdown';
 import { useEffect, useMemo, useState } from 'react';
 import { EffiProductos } from './EffiProductos';
+import { IntegracionFila, LogoInteg } from './IntegracionFila';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
   apiEffiApiConectar, apiEffiApiConfig, apiEffiApiDesconectar, apiEffiApiEventos, apiEffiApiListas,
@@ -116,23 +117,19 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
 
 
   return (
-    <div style={{ background: 'var(--df-surface)', border: '1px solid ' + (est.listo ? 'var(--df-purple-border)' : 'var(--df-border)'), borderRadius: 14, padding: 20, marginBottom: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ width: 44, height: 44, borderRadius: 11, background: '#fff', border: '1px solid var(--df-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 5, boxSizing: 'border-box' }}>
-          <img src="/logos/effi.png" alt="Effi" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-        </div>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontWeight: 800, fontSize: 16 }}>Effi · conexión directa (API)</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5 }}>Crea el cliente y la remisión de venta en Effi, con la guía si quieres, y recibe los estados por webhook.</div>
-        </div>
-        <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: '4px 11px', background: est.listo ? 'var(--df-purple-subtle)' : est.conectado ? 'var(--df-warning-subtle)' : 'var(--df-surface-2)', color: est.listo ? 'var(--df-purple)' : est.conectado ? 'var(--df-warning)' : 'var(--df-text-muted)' }}>
-          {est.listo ? '● Listo para despachar' : est.conectado ? '● Falta configurar' : 'Sin conectar'}
-        </span>
-        {est.conectado && <button onClick={() => setAbierta((v) => !v)} style={btnSec}>{abierta ? 'Cerrar' : 'Configurar'}</button>}
-      </div>
+    <IntegracionFila
+      logo={<LogoInteg src="/logos/effi.png" alt="Effi" />}
+      nombre="Effi"
+      desc="Crea el cliente y la remisión de venta en Effi (con la guía si quieres) y recibe los estados por webhook."
+      estado={est.listo ? 'on' : est.conectado ? 'pendiente' : 'off'}
+      estadoTexto={est.listo ? 'Listo para despachar' : undefined}
+      abierta={abierta}
+      onToggle={() => setAbierta((v) => !v)}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {!est.conectado && (
-        <div style={{ marginTop: 16 }}>
+        <div>
           <p style={ayuda}>En Effi ve a <b>Administración → Usuarios del sistema → Ver más detalles</b> del usuario que usará DealFlow y copia su <b>API key</b>. Ese usuario necesita permisos de clientes, artículos, remisiones de venta y guías.</p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="API key de Effi (32 a 40 caracteres)" style={{ ...inp, flex: 1, minWidth: 240, fontFamily: "'JetBrains Mono',monospace" }} />
@@ -141,10 +138,10 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
         </div>
       )}
 
-      {msg && <div style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
 
-      {est.conectado && abierta && (
-        <div className="df-expand" style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 16 }}>
+      {est.conectado && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!listas ? <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Leyendo tu configuración de Effi…</div> : (
             <>
               {/* 1. Remisión */}
@@ -173,7 +170,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                   <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 3 }}>Convenio dropshipping</div>
                   <p style={{ ...ayuda, margin: '0 0 10px' }}>Si vendes artículos de un <b>proveedor dropshipping</b> en Effi, la remisión debe llevar el convenio: así Effi <b>no exige stock en tu bodega</b> (lo despacha el proveedor). DealFlow lo usa solo con los artículos vinculados a un proveedor; los tuyos siguen como mercancía propia.</p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <input value={cfg.convenioDropshipping || ''} onChange={(e) => set({ convenioDropshipping: e.target.value.replace(/\D/g, '') })} placeholder="Código del convenio (ej: 12)" style={{ ...inp, width: 200, flex: '0 0 auto' }} />
+                    <input value={cfg.convenioDropshipping || ''} onChange={(e) => set({ convenioDropshipping: e.target.value.replace(/[^A-Za-z0-9_-]/g, '') })} placeholder="Código del convenio" style={{ ...inp, width: 200, flex: '0 0 auto' }} />
                     <button onClick={detectarConvenios} disabled={buscandoConv} style={btnSec}>{buscandoConv ? 'Buscando…' : '🔍 Detectar en Effi'}</button>
                   </div>
                   {convenios && (
@@ -264,6 +261,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
           )}
         </div>
       )}
-    </div>
+      </div>
+    </IntegracionFila>
   );
 }

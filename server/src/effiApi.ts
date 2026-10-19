@@ -333,6 +333,7 @@ async function articuloPorId(storeId: string, apiKey: string, id: string): Promi
 export async function conveniosDropshipping(apiKey: string): Promise<{ id: string; nombre: string }[]> {
   const out = new Map<string, string>();
   for (const ruta of ['/api/remision_v', '/api/factura_v']) {
+    if (out.size && ruta === '/api/factura_v') break; // con las remisiones basta (y no todos los usuarios ven facturas)
     const r = await effi<Fila[]>(apiKey, 'GET', ruta, { query: { dropshipping_distribuidor: 1, por_pagina: 100 } });
     for (const f of r.ok ? r.body.data || [] : []) {
       const id = txt(f.convenio_dropshipping);
@@ -597,25 +598,30 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
   const ubic = await resolverUbicacion(c.apiKey, txt(o.departamento), txt(o.ciudad));
   if ('error' in ubic) return ubic;
 
-  // Totales: si el pedido trae un total menor a la suma (combos/promos), la
-  // diferencia va como descuento repartido entre los conceptos.
+  // Totales: la remisión SIEMPRE suma lo mismo que el pedido (lo que se le cobra
+  // al cliente contra entrega). El precio de venta del bot casi nunca es el del
+  // catálogo de Effi (hay utilidad y a veces el envío va incluido), así que el total
+  // se REPARTE entre los productos: en proporción a sus precios si los tienen, o
+  // por unidades si no. Si sobra algún peso por redondeo, va como descuento mínimo.
   const envio = Math.max(0, Math.round(Number(o.envio) || 0));
   const sumaItems = conceptos.reduce((a, k) => a + k.cantidad * k.precio, 0);
   const totalPedido = Math.round(Number(o.total) || 0) || sumaItems + envio;
   const objetivoItems = Math.max(0, totalPedido - (envio && c.articuloFlete ? envio : 0));
   const descuentos = conceptos.map(() => 0);
-  if (objetivoItems < sumaItems && sumaItems > 0) {
-    let resto = sumaItems - objetivoItems;
+  if (objetivoItems > 0 && objetivoItems !== sumaItems) {
+    const pesos = conceptos.map((k) => (sumaItems > 0 ? k.cantidad * k.precio : k.cantidad));
+    const totalPesos = pesos.reduce((a, x) => a + x, 0) || 1;
+    let resto = objetivoItems;
     conceptos.forEach((k, i) => {
-      const parte = i === conceptos.length - 1 ? resto : Math.round(((k.cantidad * k.precio) / sumaItems) * (sumaItems - objetivoItems));
-      descuentos[i] = Math.min(parte, k.cantidad * k.precio);
-      resto -= descuentos[i];
+      const meta = i === conceptos.length - 1 ? resto : Math.round((pesos[i] / totalPesos) * objetivoItems);
+      resto -= meta;
+      k.precio = Math.ceil(meta / k.cantidad);
+      descuentos[i] = k.precio * k.cantidad - meta; // < cantidad pesos: solo cuadra el redondeo
     });
-  } else if (objetivoItems > sumaItems) {
-    avisos.push(`El total del pedido ($${totalPedido.toLocaleString('es-CO')}) es mayor que la suma de los productos; Effi usará los precios de los productos.`);
+    avisos.push(`El total del pedido ($${objetivoItems.toLocaleString('es-CO')}) se repartió entre los productos para que la remisión cobre exactamente eso.`);
   }
   if (envio && c.articuloFlete) conceptos.push({ articulo: Number(c.articuloFlete), descripcion: 'Flete de envío', cantidad: 1, precio: envio });
-  else if (envio) avisos.push(`El pedido tiene envío de $${envio.toLocaleString('es-CO')} pero no hay "artículo flete" configurado: no se cobra en la remisión.`);
+  else if (envio) avisos.push(`El envío ($${envio.toLocaleString('es-CO')}) va incluido en el precio de los productos (no hay "artículo flete" configurado).`);
   if (descuentos.length < conceptos.length) descuentos.push(0);
   const total = conceptos.reduce((a, k, i) => a + k.cantidad * k.precio - (descuentos[i] || 0), 0);
 
@@ -634,7 +640,8 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     t_forma_pago: [Number(c.formaPago)], valor_forma_pago: [total],
   };
   if (c.vendedor) body.vendedor = Number(c.vendedor);
-  if (convenio) body.convenio_dropshipping = Number(convenio);
+  // El código del convenio puede ser alfanumérico (ej. "LjlghlaP"): se manda tal cual.
+  if (convenio) body.convenio_dropshipping = /^\d+$/.test(convenio) ? Number(convenio) : convenio;
   if (c.formaPagoContado) {
     if (!c.medioPago) return { error: 'La forma de pago elegida es de contado: elige también el medio de pago (y la caja o cuenta) en Integraciones → Effi.' };
     body.medio_pago = [Number(c.medioPago)];

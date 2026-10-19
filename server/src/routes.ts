@@ -1162,7 +1162,7 @@ api.post('/effi-api/config', requireAuth, requireStore, requireOwner, async (req
   const s = (v: unknown) => String(v ?? '').trim().slice(0, 40);
   const parcial: Record<string, unknown> = {};
   for (const k of ['sucursal', 'bodega', 'centroCostos', 'formaPago', 'medioPago', 'caja', 'cuenta', 'vendedor', 'articuloFlete']) if (k in b) parcial[k] = s(b[k]);
-  if ('convenioDropshipping' in b) parcial.convenioDropshipping = s(b.convenioDropshipping).replace(/\D/g, '');
+  if ('convenioDropshipping' in b) parcial.convenioDropshipping = s(b.convenioDropshipping).replace(/[^A-Za-z0-9_-]/g, '');
   if ('formaPagoContado' in b) parcial.formaPagoContado = b.formaPagoContado === true;
   if ('autoDespacho' in b) parcial.autoDespacho = b.autoDespacho === true;
   if ('diasEntrega' in b) parcial.diasEntrega = Math.min(60, Math.max(0, Math.round(Number(b.diasEntrega) || 3)));
