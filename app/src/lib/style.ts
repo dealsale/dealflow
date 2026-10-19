@@ -30,11 +30,11 @@ export const ESTADOS: Record<EstadoPedido, EstadoCfg> = {
   Nuevo: { color: 'var(--df-info)', bg: 'var(--df-info-subtle)', next: 'Confirmar', nextEstado: 'Confirmado' },
   Confirmado: { color: 'var(--df-purple)', bg: 'var(--df-purple-subtle)', next: null, nextEstado: null },
   'Guía generada': { color: 'var(--df-warning)', bg: 'var(--df-warning-subtle)', next: null, nextEstado: null },
-  'En tránsito': { color: '#0E7490', bg: '#CFFAFE', next: null, nextEstado: null },
-  'En reparto': { color: '#1D4ED8', bg: '#DBEAFE', next: null, nextEstado: null },
-  Novedad: { color: '#C2410C', bg: '#FFEDD5', next: null, nextEstado: null },
+  'En tránsito': { color: 'var(--df-st-transito)', bg: 'var(--df-st-transito-bg)', next: null, nextEstado: null },
+  'En reparto': { color: 'var(--df-st-reparto)', bg: 'var(--df-st-reparto-bg)', next: null, nextEstado: null },
+  Novedad: { color: 'var(--df-st-novedad)', bg: 'var(--df-st-novedad-bg)', next: null, nextEstado: null },
   Entregado: { color: 'var(--df-brand-dark)', bg: 'var(--df-brand-subtle)', next: null, nextEstado: null },
-  Devuelto: { color: '#9D174D', bg: '#FCE7F3', next: null, nextEstado: null },
+  Devuelto: { color: 'var(--df-st-devuelto)', bg: 'var(--df-st-devuelto-bg)', next: null, nextEstado: null },
   Cancelado: { color: 'var(--df-danger-dark)', bg: 'var(--df-danger-subtle-2)', next: null, nextEstado: null },
 };
 
