@@ -44,7 +44,10 @@ function ensureLead(storeId: string, waId: string, nombre: string, tel?: string)
  * Guarda un mensaje entrante (texto y/o adjunto). Crea el lead si no existe.
  * La usan tanto el webhook de la Cloud API como la sesión por QR.
  */
-export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo, tel?: string, ad?: AdRef | null, wamid?: string, citaWamid?: string) {
+export function saveIncomingMessage(storeId: string, waId: string, nombre: string, texto: string, media?: MediaInfo, tel?: string, ad?: AdRef | null, wamid?: string, cita?: string | { wamid: string; texto: string; deCliente: boolean }) {
+  // Cloud API manda solo el wamid citado; la sesión QR manda además una copia del texto.
+  const citaWamid = typeof cita === 'string' ? cita : cita?.wamid;
+  const citaCopia = typeof cita === 'string' ? undefined : cita;
   const { id: leadId, nuevo } = ensureLead(storeId, waId, nombre, tel);
   // Respuesta citada: si el cliente respondió CITANDO un mensaje, buscamos el mensaje
   // original por su wamid y guardamos una instantánea (texto + de quién) para mostrarla.
@@ -53,7 +56,8 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
     try {
       const orig = db.prepare("SELECT de, texto, tipo FROM messages WHERE wa_msg_id = ? LIMIT 1").get(citaWamid) as { de: string; texto: string; tipo: string } | undefined;
       if (orig) { citaDe = orig.de; citaTexto = (orig.texto || '').trim() || (orig.tipo && orig.tipo !== 'texto' ? `[${orig.tipo}]` : ''); }
-      else { citaDe = 'cliente'; citaTexto = 'mensaje citado'; } // el original no está en la BD (muy viejo)
+      else if (citaCopia?.texto) { citaDe = citaCopia.deCliente ? 'cliente' : 'bot'; citaTexto = citaCopia.texto; }
+      else { citaDe = 'cliente'; citaTexto = 'Mensaje anterior'; } // el original no está en la BD (muy viejo)
     } catch { /* la cita nunca debe tumbar el guardado */ }
   }
   // El mensaje del cliente se guarda SIEMPRE primero: ninguna falla de atribución

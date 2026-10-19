@@ -202,6 +202,15 @@ async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
   const msg = m.message;
   const texto = msg?.conversation || msg?.extendedTextMessage?.text;
   const mediaMsg = msg?.imageMessage || msg?.videoMessage || msg?.audioMessage || msg?.documentMessage;
+  // Respuesta citada: WhatsApp manda el id del mensaje citado (stanzaId) y una copia de él.
+  const ctx = (msg?.extendedTextMessage?.contextInfo || (mediaMsg as { contextInfo?: unknown } | undefined)?.contextInfo) as
+    | { stanzaId?: string | null; participant?: string | null; quotedMessage?: Record<string, { text?: string; caption?: string } | string | undefined> | null }
+    | undefined;
+  const q = ctx?.quotedMessage;
+  const citaCopia = q ? String(q.conversation || (q.extendedTextMessage as { text?: string } | undefined)?.text
+    || (q.imageMessage as { caption?: string } | undefined)?.caption || (q.videoMessage as { caption?: string } | undefined)?.caption
+    || (q.imageMessage ? '[image]' : q.videoMessage ? '[video]' : q.audioMessage ? '[audio]' : q.documentMessage ? '[document]' : '')) : '';
+  const cita = ctx?.stanzaId ? { wamid: String(ctx.stanzaId), texto: citaCopia, deCliente: !!ctx.participant && ctx.participant === m.key.remoteJid } : undefined;
   console.log(`[wa-qr] ${storeId}: mensaje entrante de ${waId}${tel ? ` (${tel})` : ''}${texto ? '' : mediaMsg ? ' [adjunto]' : ' [sin contenido legible]'}`);
 
   if (mediaMsg) {
@@ -214,7 +223,7 @@ async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
       const file = uid() + '.' + mediaExt(tipo, mime);
       mkdirSync(path.join(DATA_DIR, 'media', storeId), { recursive: true });
       writeFileSync(path.join(DATA_DIR, 'media', storeId, file), buffer);
-      saveIncomingMessage(storeId, waId, nombre, caption, { tipo, url: '/api/media/' + storeId + '/' + file, mime, nombre: nombreArch }, tel);
+      saveIncomingMessage(storeId, waId, nombre, caption, { tipo, url: '/api/media/' + storeId + '/' + file, mime, nombre: nombreArch }, tel, null, m.key.id || undefined, cita);
     } catch (e) {
       console.error('[wa-qr] no se pudo descargar el adjunto', e);
       saveIncomingMessage(storeId, waId, nombre, caption || '[adjunto no disponible]', undefined, tel);
@@ -222,7 +231,7 @@ async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
     return;
   }
 
-  if (texto) saveIncomingMessage(storeId, waId, nombre, texto, undefined, tel);
+  if (texto) saveIncomingMessage(storeId, waId, nombre, texto, undefined, tel, null, m.key.id || undefined, cita);
 }
 
 function tipoDeMime(mime: string): 'image' | 'video' | 'audio' | 'document' {
@@ -244,7 +253,7 @@ export function getQrStatus(storeId: string): { estado: Estado; qr: string | nul
   return { estado: s.estado, qr: s.qrDataUrl, numero: s.numero, error: s.error };
 }
 
-export async function sendViaQr(storeId: string, to: string, texto: string, pn?: string): Promise<{ ok: boolean; error?: string }> {
+export async function sendViaQr(storeId: string, to: string, texto: string, pn?: string): Promise<{ ok: boolean; error?: string; wamid?: string }> {
   const s = sessions.get(storeId);
   if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
   const r = await resolveSendJid(s.sock, to, pn);
@@ -254,9 +263,9 @@ export async function sendViaQr(storeId: string, to: string, texto: string, pn?:
   }
   await esperarTurno(storeId, to); // anti-baneo: espacia los envíos (evita ráfagas que banean)
   try {
-    await s.sock.sendMessage(r.jid, { text: texto });
+    const sent = await s.sock.sendMessage(r.jid, { text: texto });
     console.log(`[wa-qr] texto enviado a ${r.jid} (destino ${to}${pn ? ' · ' + pn : ''})`);
-    return { ok: true };
+    return { ok: true, wamid: sent?.key?.id || undefined }; // id del mensaje: para reconocerlo si el cliente lo cita
   } catch (e) {
     console.error('[wa-qr] fallo enviando texto a', r.jid, e);
     return { ok: false, error: 'No pudimos enviar el mensaje por WhatsApp.' };
@@ -270,7 +279,7 @@ export async function sendMediaViaQr(
   caption: string,
   nombre: string,
   pn?: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; wamid?: string }> {
   const s = sessions.get(storeId);
   if (!s?.sock || s.estado !== 'conectado') return { ok: false, error: 'La conexión de WhatsApp se está estabilizando. Intenta en unos segundos.' };
   const r = await resolveSendJid(s.sock, to, pn);
@@ -281,12 +290,12 @@ export async function sendMediaViaQr(
   const jid = r.jid;
   await esperarTurno(storeId, to); // anti-baneo: espacia los envíos (evita ráfagas que banean)
   try {
-    if (media.tipo === 'image') await s.sock.sendMessage(jid, { image: media.buffer, caption: caption || undefined });
-    else if (media.tipo === 'video') await s.sock.sendMessage(jid, { video: media.buffer, caption: caption || undefined });
-    else if (media.tipo === 'audio') await s.sock.sendMessage(jid, { audio: media.buffer, mimetype: media.mime, ptt: true });
-    else await s.sock.sendMessage(jid, { document: media.buffer, mimetype: media.mime, fileName: nombre || 'archivo' });
+    const sent = media.tipo === 'image' ? await s.sock.sendMessage(jid, { image: media.buffer, caption: caption || undefined })
+      : media.tipo === 'video' ? await s.sock.sendMessage(jid, { video: media.buffer, caption: caption || undefined })
+      : media.tipo === 'audio' ? await s.sock.sendMessage(jid, { audio: media.buffer, mimetype: media.mime, ptt: true })
+      : await s.sock.sendMessage(jid, { document: media.buffer, mimetype: media.mime, fileName: nombre || 'archivo' });
     console.log(`[wa-qr] adjunto enviado a ${jid} (destino original ${to})`);
-    return { ok: true };
+    return { ok: true, wamid: sent?.key?.id || undefined };
   } catch (e) {
     console.error('[wa-qr] fallo enviando adjunto a', jid, e);
     return { ok: false, error: 'No pudimos enviar el adjunto por WhatsApp.' };

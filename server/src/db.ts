@@ -190,6 +190,7 @@ addColumn('products', "opciones TEXT NOT NULL DEFAULT '[]'"); // [{nombre:'Color
 addColumn('products', "contenido_paquete TEXT NOT NULL DEFAULT ''");
 addColumn('products', "disparador TEXT NOT NULL DEFAULT ''");
 addColumn('products', 'mensaje_inicial_activo INTEGER NOT NULL DEFAULT 1');
+addColumn('products', "mensajes_iniciales TEXT NOT NULL DEFAULT ''"); // JSON [{id,nombre,activo,bloques}] (varios mensajes, ver mensajesIniciales.ts)
 addColumn('orders', 'total INTEGER NOT NULL DEFAULT 0');
 addColumn('orders', "departamento TEXT NOT NULL DEFAULT ''");
 addColumn('orders', "woo_id TEXT NOT NULL DEFAULT ''"); // id del pedido en WooCommerce (puente a Effi/Dropi)
@@ -403,6 +404,13 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wamid ON messages(wa_msg_id)');
 // instantánea del mensaje citado (texto + de quién era) para mostrarla en el chat.
 addColumn('messages', "cita_texto TEXT NOT NULL DEFAULT ''");
 addColumn('messages', "cita_de TEXT NOT NULL DEFAULT ''");
+// Lectura INTERNA de una foto del cliente (visión IA): solo la ve el bot como pista,
+// nunca se muestra en el chat. Antes se guardaba en `texto` y sesgaba al bot.
+addColumn('messages', "ia_nota TEXT NOT NULL DEFAULT ''");
+{
+  const n = db.prepare("UPDATE messages SET ia_nota = substr(texto, 29, length(texto) - 29), texto = '' WHERE tipo = 'image' AND texto LIKE '[El cliente envió una foto: %]'").run().changes;
+  if (n) console.log(`[migración] ${n} lecturas de fotos movidas a nota interna`);
+}
 // Suscripciones de Web Push (notificaciones con la app cerrada). Una por navegador/
 // dispositivo; guarda qué tipos quiere recibir (pedidos / contactos nuevos).
 db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (

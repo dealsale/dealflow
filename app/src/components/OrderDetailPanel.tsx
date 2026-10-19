@@ -182,23 +182,38 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
   const [paso, setPaso] = useState<'idle' | 'revisando' | 'listo' | 'enviando'>('idle');
   const [prev, setPrev] = useState<EffiPreview | null>(null);
   const [msg, setMsg] = useState('');
+  const guiaAuto = !!df.effiApi.guia?.activa;
+  // Guía en el MISMO paso: se elige la transportadora aquí y, al confirmar, se crea
+  // la remisión y enseguida la guía (si la guía automática está apagada).
+  const g = useGuiaEffi();
+  const [conGuia, setConGuia] = useState(true);
   const revisar = async () => {
     if (!sel.rowId) return;
     setPaso('revisando'); setMsg('');
+    if (!guiaAuto) void g.cargar();
     const r = await apiEffiPreview(sel.rowId);
     if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos preparar el envío.'); return; }
     setPrev(r.data); setPaso('listo');
   };
+  const hacerGuia = !guiaAuto && conGuia;
   const enviar = async () => {
     if (!sel.rowId) return;
+    if (hacerGuia && !g.listo) { setMsg('Elige transportadora, servicio, pago del flete y remitente (o desmarca "Crear también la guía").'); return; }
     setPaso('enviando'); setMsg('Creando la remisión en Effi…');
     const r = await apiEffiDespachar(sel.rowId, reintentar);
     if (r.error || !r.data) { setPaso('listo'); setMsg(r.error || 'Effi no creó la remisión.'); return; }
-    setMsg(`✓ Remisión ${r.data.remision} creada en Effi${r.data.guia ? ` · guía ${r.data.guia}` : ''}.${r.data.avisos?.length ? ' ' + r.data.avisos.join(' ') : ''}`);
+    let texto = `✓ Remisión ${r.data.remision} creada en Effi${r.data.guia ? ` · guía ${r.data.guia}` : ''}.${r.data.avisos?.length ? ' ' + r.data.avisos.join(' ') : ''}`;
+    if (hacerGuia && !r.data.guia) {
+      setMsg(texto + ' Creando la guía…');
+      const rg = await apiEffiGuia(sel.rowId, g.d);
+      texto += rg.error || !rg.data
+        ? ` ⚠ La guía no se pudo crear: ${rg.error || 'Effi no respondió'}. Puedes intentarlo de nuevo abajo con "Generar guía en Effi".`
+        : ` ✓ Guía ${rg.data.guia || rg.data.idTransaccion} creada${rg.data.transportadora ? ` con ${rg.data.transportadora}` : ''}.`;
+    }
+    setMsg(texto);
     await df.refrescarPedidos();
     onHecho();
   };
-  const guiaAuto = !!df.effiApi.guia?.activa;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {paso === 'idle' || paso === 'revisando' ? (
@@ -217,16 +232,24 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
             </div>
           ))}
           {prev.avisos.map((a, i) => <div key={i} style={{ padding: '8px 12px', borderTop: '1px solid var(--df-border)', fontSize: 12, color: 'var(--df-warning)', background: 'var(--df-warning-subtle-2)' }}>⚠ {a}</div>)}
+          {!guiaAuto && (
+            <div style={{ padding: 12, borderTop: '1px solid var(--df-border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                <input type="checkbox" checked={conGuia} onChange={(e) => setConGuia(e.target.checked)} /> 🚚 Crear también la guía de transporte
+              </label>
+              {conGuia && <CamposGuia g={g} />}
+            </div>
+          )}
           <div style={{ padding: 12, borderTop: '1px solid var(--df-border)', display: 'flex', gap: 8 }}>
             <button onClick={() => { setPaso('idle'); setPrev(null); }} style={btnS}>Atrás</button>
-            <button onClick={enviar} disabled={paso === 'enviando'} style={{ ...btnP, flex: 1, opacity: paso === 'enviando' ? 0.7 : 1 }}>
-              {paso === 'enviando' ? 'Enviando…' : guiaAuto ? 'Crear remisión y guía' : 'Crear remisión en Effi'}
+            <button onClick={enviar} disabled={paso === 'enviando' || (hacerGuia && !g.listo)} style={{ ...btnP, flex: 1, opacity: paso === 'enviando' || (hacerGuia && !g.listo) ? 0.6 : 1 }}>
+              {paso === 'enviando' ? 'Enviando…' : guiaAuto || hacerGuia ? 'Crear remisión y guía' : 'Crear solo la remisión'}
             </button>
           </div>
         </div>
       )}
       <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>
-        Cliente en Effi: cédula = celular {sel.tel ? <b>{String(sel.tel).replace(/\D/g, '').slice(-10)}</b> : ''}. {guiaAuto ? 'La guía se crea sola con la transportadora configurada.' : 'La guía la generas dentro de Effi.'}
+        Cliente en Effi: cédula = celular {sel.tel ? <b>{String(sel.tel).replace(/\D/g, '').slice(-10)}</b> : ''}. {guiaAuto ? 'La guía se crea sola con la transportadora configurada.' : 'La guía la eliges y creas aquí mismo, al revisar el envío.'}
       </div>
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
     </div>
@@ -251,38 +274,91 @@ function PasosEnvio({ sel }: { sel: DecoratedOrder }) {
   );
 }
 
-/** Formulario para generar la guía en Effi desde DealFlow (sobre la remisión del pedido). */
-function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
-  const [abierto, setAbierto] = useState(false);
+/** Carga las transportadoras/remitentes de Effi y los valores por defecto de la tienda. */
+function useGuiaEffi() {
   const [ops, setOps] = useState<OpcionesGuia | null>(null);
   const [d, setD] = useState<DatosGuia>({ transportadora: '', servicio: '', formaPagoFlete: '', remitente: '', cantPaquetes: 1, peso: 1, volumen: 1, alto: 10, ancho: 10, largo: 10, contenido: '', valorDeclarado: 0, nota: '', recibeSabado: true });
-  const [msg, setMsg] = useState('');
-  const [enviando, setEnviando] = useState(false);
-  const abrir = async () => {
-    setAbierto(true);
+  const [cargaMsg, setCargaMsg] = useState('');
+  const cargar = async () => {
     if (ops) return;
-    setMsg('Cargando transportadoras de Effi…');
+    setCargaMsg('Cargando transportadoras de Effi…');
     const r = await apiEffiOpcionesGuia();
-    if (r.error || !r.data) { setMsg(r.error || 'No se pudieron cargar las transportadoras.'); return; }
-    setMsg('');
+    if (r.error || !r.data) { setCargaMsg(r.error || 'No se pudieron cargar las transportadoras.'); return; }
+    setCargaMsg('');
     setOps(r.data);
     const g = r.data.defaults;
     setD((x) => ({ ...x, transportadora: g.transportadora || '', servicio: g.servicio || '', formaPagoFlete: g.formaPagoFlete || '', remitente: g.remitente || (r.data!.remitentes[0]?.id ?? ''), peso: g.peso || 1, volumen: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10 }));
   };
+  const listo = !!(d.transportadora && d.servicio && d.formaPagoFlete && d.remitente);
+  return { ops, d, setD, cargar, cargaMsg, listo };
+}
+
+/** Campos de la guía (transportadora, servicio, paquete…). */
+function CamposGuia({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
+  const { ops, d, setD } = g;
+  if (!ops) return g.cargaMsg ? <div style={{ fontSize: 12.5, color: g.cargaMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{g.cargaMsg}</div> : null;
   const set = (p: Partial<DatosGuia>) => setD((x) => ({ ...x, ...p }));
-  const t = ops?.transportadoras.find((x) => x.id === d.transportadora);
-  const listo = d.transportadora && d.servicio && d.formaPagoFlete && d.remitente;
+  const t = ops.transportadoras.find((x) => x.id === d.transportadora);
+  const sel_: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 9px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)' };
+  const lb: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 4 };
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Transportadora</label>
+          <select value={d.transportadora} onChange={(e) => set({ transportadora: e.target.value, servicio: '', formaPagoFlete: '' })} style={sel_}>
+            <option value="">Elige…</option>
+            {ops.transportadoras.map((x) => <option key={x.id} value={x.id}>{x.effi ? `${x.nombre} (Effi)` : x.nombre}</option>)}
+          </select></div>
+        <div><label style={lb}>Servicio</label>
+          <select value={d.servicio} onChange={(e) => set({ servicio: e.target.value })} style={sel_}>
+            <option value="">Elige…</option>{(t?.servicios || []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+          </select></div>
+        <div><label style={lb}>Pago del flete</label>
+          <select value={d.formaPagoFlete} onChange={(e) => set({ formaPagoFlete: e.target.value })} style={sel_}>
+            <option value="">Elige…</option>{(t?.formasPago || []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+          </select></div>
+        <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Remitente</label>
+          <select value={d.remitente} onChange={(e) => set({ remitente: e.target.value })} style={sel_}>
+            <option value="">Elige…</option>{ops.remitentes.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+          </select></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+        <div><label style={lb}>Paquetes</label><input type="number" min={1} value={d.cantPaquetes} onChange={(e) => set({ cantPaquetes: Number(e.target.value) })} style={sel_} /></div>
+        <div><label style={lb}>Peso (kg)</label><input type="number" min={0.1} step={0.1} value={d.peso} onChange={(e) => set({ peso: Number(e.target.value) })} style={sel_} /></div>
+        <div><label style={lb}>Peso vol. (kg)</label><input type="number" min={0.1} step={0.1} value={d.volumen} onChange={(e) => set({ volumen: Number(e.target.value) })} style={sel_} /></div>
+        <div><label style={lb}>Alto (cm)</label><input type="number" min={1} value={d.alto} onChange={(e) => set({ alto: Number(e.target.value) })} style={sel_} /></div>
+        <div><label style={lb}>Ancho (cm)</label><input type="number" min={1} value={d.ancho} onChange={(e) => set({ ancho: Number(e.target.value) })} style={sel_} /></div>
+        <div><label style={lb}>Largo (cm)</label><input type="number" min={1} value={d.largo} onChange={(e) => set({ largo: Number(e.target.value) })} style={sel_} /></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div><label style={lb}>Contenido (opcional)</label><input value={d.contenido} onChange={(e) => set({ contenido: e.target.value })} placeholder="Se copia de la remisión" style={sel_} /></div>
+        <div><label style={lb}>Valor declarado (opcional)</label><input type="number" min={0} value={d.valorDeclarado || ''} onChange={(e) => set({ valorDeclarado: Number(e.target.value) })} placeholder="Del total de la remisión" style={sel_} /></div>
+        <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Nota en la guía (opcional)</label><input value={d.nota} onChange={(e) => set({ nota: e.target.value })} placeholder="Ej: llamar antes de entregar" style={sel_} /></div>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, cursor: 'pointer' }}>
+        <input type="checkbox" checked={d.recibeSabado} onChange={(e) => set({ recibeSabado: e.target.checked })} /> Recibe los sábados
+      </label>
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>El recaudo contra entrega se toma del saldo de la remisión. La dirección es la del pedido.</div>
+    </>
+  );
+}
+
+/** Formulario para generar la guía en Effi desde DealFlow (sobre la remisión del pedido ya creada). */
+function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
+  const [abierto, setAbierto] = useState(false);
+  const g = useGuiaEffi();
+  const [msg, setMsg] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const abrir = () => { setAbierto(true); void g.cargar(); };
   const crear = async () => {
-    if (!sel.rowId || !listo) return;
+    if (!sel.rowId || !g.listo) return;
     setEnviando(true); setMsg('Creando la guía en Effi…');
-    const r = await apiEffiGuia(sel.rowId, d);
+    const r = await apiEffiGuia(sel.rowId, g.d);
     setEnviando(false);
     if (r.error || !r.data) { setMsg(r.error || 'Effi no creó la guía.'); return; }
     setMsg(`✓ Guía ${r.data.guia || r.data.idTransaccion} creada${r.data.transportadora ? ` con ${r.data.transportadora}` : ''}.`);
     await df.refrescarPedidos();
   };
-  const sel_: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 9px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)' };
-  const lb: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 4 };
   if (!abierto) return <button onClick={abrir} style={{ ...btnP, marginTop: 12 }}>🚚 Generar guía en Effi</button>;
   return (
     <div className="df-expand" style={{ marginTop: 12, border: '1px solid var(--df-purple-border)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -290,47 +366,8 @@ function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
         <b style={{ fontSize: 13.5, flex: 1 }}>Guía de transporte</b>
         <button onClick={() => setAbierto(false)} style={{ ...btnS, padding: '5px 10px' }}>Cerrar</button>
       </div>
-      {ops && (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Transportadora</label>
-              <select value={d.transportadora} onChange={(e) => set({ transportadora: e.target.value, servicio: '', formaPagoFlete: '' })} style={sel_}>
-                <option value="">Elige…</option>
-                {ops.transportadoras.map((x) => <option key={x.id} value={x.id}>{x.effi ? `${x.nombre} (Effi)` : x.nombre}</option>)}
-              </select></div>
-            <div><label style={lb}>Servicio</label>
-              <select value={d.servicio} onChange={(e) => set({ servicio: e.target.value })} style={sel_}>
-                <option value="">Elige…</option>{(t?.servicios || []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-              </select></div>
-            <div><label style={lb}>Pago del flete</label>
-              <select value={d.formaPagoFlete} onChange={(e) => set({ formaPagoFlete: e.target.value })} style={sel_}>
-                <option value="">Elige…</option>{(t?.formasPago || []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-              </select></div>
-            <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Remitente</label>
-              <select value={d.remitente} onChange={(e) => set({ remitente: e.target.value })} style={sel_}>
-                <option value="">Elige…</option>{ops.remitentes.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-              </select></div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-            <div><label style={lb}>Paquetes</label><input type="number" min={1} value={d.cantPaquetes} onChange={(e) => set({ cantPaquetes: Number(e.target.value) })} style={sel_} /></div>
-            <div><label style={lb}>Peso (kg)</label><input type="number" min={0.1} step={0.1} value={d.peso} onChange={(e) => set({ peso: Number(e.target.value) })} style={sel_} /></div>
-            <div><label style={lb}>Peso vol. (kg)</label><input type="number" min={0.1} step={0.1} value={d.volumen} onChange={(e) => set({ volumen: Number(e.target.value) })} style={sel_} /></div>
-            <div><label style={lb}>Alto (cm)</label><input type="number" min={1} value={d.alto} onChange={(e) => set({ alto: Number(e.target.value) })} style={sel_} /></div>
-            <div><label style={lb}>Ancho (cm)</label><input type="number" min={1} value={d.ancho} onChange={(e) => set({ ancho: Number(e.target.value) })} style={sel_} /></div>
-            <div><label style={lb}>Largo (cm)</label><input type="number" min={1} value={d.largo} onChange={(e) => set({ largo: Number(e.target.value) })} style={sel_} /></div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div><label style={lb}>Contenido (opcional)</label><input value={d.contenido} onChange={(e) => set({ contenido: e.target.value })} placeholder="Se copia de la remisión" style={sel_} /></div>
-            <div><label style={lb}>Valor declarado (opcional)</label><input type="number" min={0} value={d.valorDeclarado || ''} onChange={(e) => set({ valorDeclarado: Number(e.target.value) })} placeholder="Del total de la remisión" style={sel_} /></div>
-            <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Nota en la guía (opcional)</label><input value={d.nota} onChange={(e) => set({ nota: e.target.value })} placeholder="Ej: llamar antes de entregar" style={sel_} /></div>
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, cursor: 'pointer' }}>
-            <input type="checkbox" checked={d.recibeSabado} onChange={(e) => set({ recibeSabado: e.target.checked })} /> Recibe los sábados
-          </label>
-          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>El recaudo contra entrega se toma del saldo de la remisión. La dirección es la del pedido.</div>
-          <button onClick={crear} disabled={!listo || enviando} style={{ ...btnP, opacity: !listo || enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Crear guía en Effi'}</button>
-        </>
-      )}
+      <CamposGuia g={g} />
+      {g.ops && <button onClick={crear} disabled={!g.listo || enviando} style={{ ...btnP, opacity: !g.listo || enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Crear guía en Effi'}</button>}
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
     </div>
   );

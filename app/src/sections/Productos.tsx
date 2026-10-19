@@ -380,6 +380,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
               <span style={{ position: 'absolute', top: 2, left: p.mensajeInicialActivo !== false ? 19 : 2, width: 19, height: 19, borderRadius: '50%', background: 'var(--df-surface)', transition: 'left .2s', boxShadow: '0 1px 2px rgba(15,23,42,.3)' }} />
             </span>
           </div>
+          <MensajesTabs p={p} />
           <div style={{ marginBottom: 12 }}>
             <div style={label}>Disparador · si el primer mensaje se parece a esto, envía todo el mensaje inicial</div>
             <input className="df-input" value={p.disparador || ''} onChange={(e) => p.setDisparador(e.target.value)} placeholder="Ej: ¡Hola! Me interesan los Bota recta ámbar." style={inputStyle} />
@@ -404,6 +405,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           </div>
           <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
             Cuando un cliente pregunte por este producto, el asistente enviará estos bloques en orden, como mensajes de WhatsApp.
+            {p.mensajesDecorados.filter((m) => m.activo).length > 1 && ' Como tienes varios mensajes encendidos, a cada cliente le llega uno de ellos al azar.'}
           </div>
         </>
       ),
@@ -785,5 +787,79 @@ export function Productos({ df }: { df: DealFlowState }) {
         ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * Varios mensajes iniciales por producto: pestañas para elegir cuál editar, crear
+ * uno nuevo (vacío o copiando el actual), encenderlos/apagarlos y renombrarlos.
+ * Con varios encendidos, el bot envía uno al azar en cada chat.
+ */
+function MensajesTabs({ p }: { p: DecoratedProduct }) {
+  const [renombrando, setRenombrando] = useState<string | null>(null);
+  const [borrar, setBorrar] = useState<string | null>(null);
+  const activos = p.mensajesDecorados.filter((m) => m.activo).length;
+  const sel = p.mensajesDecorados.find((m) => m.seleccionado) || p.mensajesDecorados[0];
+  const chip = (on: boolean): CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+    border: '1.5px solid ' + (on ? 'var(--df-brand)' : 'var(--df-border)'), background: on ? 'var(--df-brand-subtle, rgba(16,185,129,.08))' : 'var(--df-surface)', color: on ? 'var(--df-text-strong)' : 'var(--df-text-secondary)',
+  });
+  const btn: CSSProperties = { padding: '7px 11px', borderRadius: 10, border: '1px dashed var(--df-border-strong)', background: 'var(--df-surface)', color: 'var(--df-text-secondary)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
+  return (
+    <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: 12, marginBottom: 14, background: 'var(--df-bg)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Mensajes iniciales</span>
+        <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '2px 9px', background: activos > 1 ? 'rgba(99,102,241,.12)' : 'var(--df-surface)', color: activos > 1 ? '#6366F1' : 'var(--df-text-faint)', border: '1px solid ' + (activos > 1 ? 'rgba(99,102,241,.35)' : 'var(--df-border)') }}>
+          {activos > 1 ? `🎲 Aleatorio entre ${activos}` : '1 encendido'}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {p.mensajesDecorados.map((m) => (
+          <div key={m.id} onClick={m.elegir} style={chip(m.seleccionado)} title={m.seleccionado ? 'Editando este mensaje' : 'Editar este mensaje'}>
+            <span
+              onClick={(e) => { e.stopPropagation(); m.toggle(); }}
+              title={m.activo ? 'Encendido: se puede enviar. Toca para apagarlo.' : 'Apagado: no se envía. Toca para encenderlo.'}
+              style={{ width: 30, height: 17, borderRadius: 999, background: m.activo ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', flexShrink: 0, transition: 'background .2s' }}
+            >
+              <span style={{ position: 'absolute', top: 2, left: m.activo ? 15 : 2, width: 13, height: 13, borderRadius: '50%', background: '#fff', transition: 'left .2s' }} />
+            </span>
+            {renombrando === m.id ? (
+              <input
+                autoFocus
+                defaultValue={m.nombre}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={(e) => { m.renombrar(e.target.value.trim() || m.nombre); setRenombrando(null); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenombrando(null); }}
+                style={{ width: 120, border: '1px solid var(--df-border)', borderRadius: 6, padding: '2px 6px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text-body)' }}
+              />
+            ) : (
+              <span onDoubleClick={(e) => { e.stopPropagation(); setRenombrando(m.id); }} style={{ opacity: m.activo ? 1 : 0.6 }}>{m.nombre}</span>
+            )}
+            <span style={{ fontSize: 11, color: 'var(--df-text-faint)', fontWeight: 500 }}>{m.piezas ? `${m.piezas} bloque${m.piezas === 1 ? '' : 's'}` : 'vacío'}</span>
+          </div>
+        ))}
+        <button onClick={() => p.nuevoMensaje(false)} style={btn}>+ Nuevo mensaje</button>
+        <button onClick={() => p.nuevoMensaje(true)} style={btn} title="Crea uno nuevo copiando el que estás editando">⧉ Duplicar</button>
+      </div>
+      {sel && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, fontSize: 12, color: 'var(--df-text-faint)', flexWrap: 'wrap' }}>
+          <span>Editando <b style={{ color: 'var(--df-text-strong)' }}>{sel.nombre}</b>{!sel.activo && ' (apagado: no se envía hasta que lo enciendas)'}</span>
+          <span onClick={() => setRenombrando(sel.id)} style={{ cursor: 'pointer', color: 'var(--df-brand)', fontWeight: 600 }}>Renombrar</span>
+          {p.mensajesDecorados.length > 1 && (borrar === sel.id ? (
+            <span>
+              ¿Eliminar “{sel.nombre}”?{' '}
+              <span onClick={() => { sel.eliminar(); setBorrar(null); }} style={{ cursor: 'pointer', color: 'var(--df-danger)', fontWeight: 700 }}>Sí, eliminar</span>{' · '}
+              <span onClick={() => setBorrar(null)} style={{ cursor: 'pointer', fontWeight: 600 }}>Cancelar</span>
+            </span>
+          ) : (
+            <span onClick={() => setBorrar(sel.id)} style={{ cursor: 'pointer', color: 'var(--df-danger)', fontWeight: 600 }}>Eliminar</span>
+          ))}
+        </div>
+      )}
+      {p.mensajeAviso && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--df-warning)' }}>{p.mensajeAviso}</div>}
+      <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)', lineHeight: 1.5 }}>
+        Enciende uno para enviar siempre ese. Si enciendes varios, cada cliente recibe uno de ellos al azar. Doble clic en el nombre para renombrarlo.
+      </div>
+    </div>
   );
 }
