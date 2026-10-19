@@ -762,20 +762,20 @@ export function useDealFlowState() {
   const [floatingNav, setFloatingNav] = useState<boolean>(() => {
     try { return localStorage.getItem('dealflow:floatnav') === '1'; } catch { return false; }
   });
-  // Tema visual: 'dark' (por defecto, paleta de la landing), 'light' o 'premium'
+  // Tema visual: 'light' (por defecto), 'dark' ("Dark System") o 'premium'
   // (look neón/glass, solo si el Admin lo habilitó para esta tienda). Se
   // recuerda por dispositivo y se aplica como atributo data-theme en <html>.
   const [theme, setThemeState] = useState<'light' | 'dark' | 'premium'>(() => {
     try {
       const v = localStorage.getItem('dealflow:theme');
-      // Nueva paleta (la de la landing) en el tema oscuro: se estrena como tema
-      // por defecto UNA vez; si luego eliges el claro en tu perfil, se respeta.
-      if (!localStorage.getItem('dealflow:theme-v2')) {
-        localStorage.setItem('dealflow:theme-v2', '1');
-        if (v !== 'premium') return 'dark';
+      // El estreno del tema oscuro por defecto se deshizo: quien quedó en oscuro
+      // por ese cambio vuelve al claro UNA vez (como estaba antes).
+      if (localStorage.getItem('dealflow:theme-v2') && !localStorage.getItem('dealflow:theme-v3')) {
+        localStorage.setItem('dealflow:theme-v3', '1');
+        if (v === 'dark') return 'light';
       }
       return v === 'dark' || v === 'premium' ? v : 'light';
-    } catch { return 'dark'; }
+    } catch { return 'light'; }
   });
   useEffect(() => {
     // Cambio de tema INSTANTÁNEO (nada de fundido): repintar toda la app con
