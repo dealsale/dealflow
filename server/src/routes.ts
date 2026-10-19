@@ -2,6 +2,7 @@ import { mensajesDe as mensajesInicialesDe, normalizarMensajes, principal } from
 import { Router } from 'express';
 import type { Request as ExRequest, Response as ExResponse } from 'express';
 import { trazar, conPedido } from './trazabilidad.js';
+import { idsDeItem } from './emparejar.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
@@ -810,7 +811,7 @@ api.post('/orders', requireAuth, requireStore, (req, res) => {
   const origen = leadChat ? (['messenger', 'instagram', 'web'].includes(leadChat.canal) ? leadChat.canal : 'whatsapp') : 'manual';
   db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, envio, nota, ad_id, ad_ref, lead_id, origen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(oid, sid, numero, cliente, String(b.ciudad || ''), String(b.tel || ''), String(b.direccion || ''), 'Nuevo', total, String(b.departamento || ''), envio, String(b.nota || ''), adLead?.ad_id || '', adLead?.ad_ref || '', leadId, origen);
-  for (const it of limpios) db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
+  for (const it of limpios) { const ids = idsDeItem(sid, it.nombre); db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio, product_id, variant_id) VALUES (?,?,?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio, ids.productId, ids.variantId); }
   registrarLog(sid, 'info', 'pedido', `Pedido manual DF-${numero} creado para ${cliente} (${limpios.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`);
   trazar(sid, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado a mano por ${req.user!.nombre}`, detalle: `Origen: ${origen}`, datos: { cliente, tel: b.tel, ciudad: b.ciudad, departamento: b.departamento, direccion: b.direccion, total, envio, items: limpios } });
   {
@@ -1677,7 +1678,7 @@ api.put('/orders/:rowId', requireAuth, requireStore, (req, res) => {
     .run(String(b.cliente).trim(), String(b.tel || ''), String(b.ciudad || ''), String(b.departamento || ''), String(b.direccion || ''), String(b.nota || ''), envio, total, o.id);
   if (items) {
     db.prepare('DELETE FROM order_items WHERE order_id = ?').run(o.id);
-    for (const it of items) db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), o.id, it.qty, it.nombre, it.precio);
+    for (const it of items) { const ids = idsDeItem(sid, it.nombre); db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio, product_id, variant_id) VALUES (?,?,?,?,?,?,?)').run(uid(), o.id, it.qty, it.nombre, it.precio, ids.productId, ids.variantId); }
   }
   const numero = (db.prepare('SELECT numero FROM orders WHERE id = ?').get(o.id) as { numero: number }).numero;
   registrarLog(sid, 'info', 'pedido', `Pedido DF-${numero} completado/corregido desde el chat.`);

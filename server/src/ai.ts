@@ -1,6 +1,7 @@
 import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
+import { idsDeItem } from './emparejar.js';
 import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
 import { saveOutgoingMedia, mediaPath, tipoDeMime } from './media.js';
@@ -935,7 +936,8 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   db.prepare('INSERT INTO orders (id, store_id, numero, cliente, ciudad, tel, direccion, estado, total, departamento, ad_id, ad_ref, lead_id, origen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(oid, storeId, numero, cliente, ciudad, tel, direccion, 'Nuevo', total, departamento, adLead?.ad_id || '', adLead?.ad_ref || '', lead.id, origen);
   for (const it of items) {
-    db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio) VALUES (?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio);
+    const ids = idsDeItem(storeId, it.nombre);
+    db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio, product_id, variant_id) VALUES (?,?,?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio, ids.productId, ids.variantId);
   }
   db.prepare("UPDATE leads SET etapa = 'Listo para comprar', etiqueta = 'Venta' WHERE id = ?").run(lead.id);
   trazar(storeId, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado por el asistente`, detalle: `Origen: ${origen}`, datos: { cliente, tel, ciudad, departamento, direccion, total, items, marcador: inner } });

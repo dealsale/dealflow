@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { db, pj, registrarLog } from './db.js';
 import { conPedido, trazar, trazarApi } from './trazabilidad.js';
+import { emparejarItem, type Emparejado } from './emparejar.js';
 
 /**
  * Integración DIRECTA con la API de Effi ERP (https://effi.com.co/api).
@@ -442,33 +443,23 @@ export async function sincronizarArticulos(storeId: string): Promise<{ total: nu
   return { total: d.total, soloVinculados: d.soloVinculados, vinculadas, sinVinculo, productosEffi, sinProveedor };
 }
 
-/** Variante de DealFlow a la que corresponde un ítem del pedido ("Producto (Talla M · Negro)"). */
-function varianteDeItem(storeId: string, nombreItem: string, todas: VarianteDF[]): VarianteDF | undefined {
-  const base = norm(nombreItem.split('(')[0].split(' - ')[0]);
-  const delProducto = todas.filter((v) => norm(v.producto) === base);
-  const cands = delProducto.length ? delProducto : todas.filter((v) => base && (norm(v.producto).includes(base) || base.includes(norm(v.producto))));
-  if (!cands.length) return undefined;
-  const prodId = cands.sort((a, b) => b.producto.length - a.producto.length)[0].productId;
-  const vs = cands.filter((v) => v.productId === prodId);
-  if (vs.length === 1) return vs[0];
-  const m = nombreItem.match(/\(([^)]+)\)/);
-  const etiqueta = norm((m ? m[1] : nombreItem.includes(' - ') ? nombreItem.split(' - ').slice(1).join(' ') : '').replace(/talla/gi, ''));
-  if (etiqueta) {
-    const hit = vs.find((v) => norm(v.label) === etiqueta) || vs.find((v) => v.label && (etiqueta.includes(norm(v.label)) || norm(v.label).includes(etiqueta)));
-    if (hit) return hit;
+/** Variante de DealFlow a la que corresponde un ítem del pedido ("Producto (Talla M · Blanco)"). */
+function varianteDeItem(it: { nombre: string; product_id?: string; variant_id?: string }, todas: VarianteDF[]): Emparejado<VarianteDF> {
+  // 1) Ids guardados al crear el pedido: la fuente más confiable.
+  if (it.variant_id) { const v = todas.find((x) => x.variantId === it.variant_id); if (v) return { v, motivo: '', parecidos: [] }; }
+  if (it.product_id) {
+    const vs = todas.filter((x) => x.productId === it.product_id);
+    if (vs.length === 1) return { v: vs[0], motivo: '', parecidos: [] };
+    if (vs.length) { const r = emparejarItem(it.nombre, vs); if (r.v) return r; }
   }
-  // Variante escrita sin paréntesis ("Vestido Dianne Azul rey M"): todas las palabras del label en el nombre.
-  const full = norm(nombreItem);
-  let mejor: VarianteDF | undefined; let score = 0;
-  for (const v of vs) {
-    const toks = norm(v.label).split(' ').filter((t) => t.length > 0);
-    if (toks.length && toks.every((t) => new RegExp(`(^| )${t}( |$)`).test(full)) && toks.length > score) { mejor = v; score = toks.length; }
-  }
-  if (mejor) return mejor;
-  // Si todas las variantes del producto apuntan al MISMO artículo de Effi, da igual cuál sea.
-  const ids = new Set(vs.map((v) => v.effiId).filter(Boolean));
-  if (ids.size === 1 && vs.every((v) => v.effiId)) return vs[0];
-  return undefined;
+  // 2) Por nombre (pedidos viejos o ítems escritos a mano).
+  const r = emparejarItem(it.nombre, todas);
+  if (r.v) return r;
+  // 3) Producto claro pero sin talla/color: si todas sus variantes apuntan al MISMO artículo de Effi, da igual cuál.
+  const prod = r.parecidos[0] && r.parecidos[0].puntaje >= 0.6 ? todas.filter((x) => x.producto === r.parecidos[0].producto) : [];
+  const ids = new Set(prod.map((v) => v.effiId).filter(Boolean));
+  if (prod.length && ids.size === 1 && prod.every((v) => v.effiId)) return { v: prod[0], motivo: '', parecidos: r.parecidos };
+  return r;
 }
 
 // ── Pedido → remisión de venta (+ guía opcional) ─────────────────────────────
@@ -534,7 +525,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
   if (!c || !effiApiListo(storeId)) return { error: 'Effi no está configurado: conecta la API key y elige sucursal, bodega, centro de costos y forma de pago en Integraciones.' };
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
   if (!o) return { error: 'Pedido no encontrado.' };
-  const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(orderId) as { qty: number; nombre: string; precio: number }[];
+  const items = db.prepare('SELECT qty, nombre, precio, product_id, variant_id FROM order_items WHERE order_id = ?').all(orderId) as { qty: number; nombre: string; precio: number; product_id: string; variant_id: string }[];
   if (!items.length) return { error: 'El pedido no tiene productos.' };
   if (!txt(o.ciudad).trim()) return { error: 'El pedido no tiene ciudad.' };
   if (!txt(o.direccion).trim()) return { error: 'El pedido no tiene dirección.' };
@@ -549,7 +540,8 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
   const esDrop: boolean[] = [];
   const enVivo = new Set<string>(); // artículos ya consultados en vivo en este pedido
   for (const it of items) {
-    const v = varianteDeItem(storeId, it.nombre, todas);
+    const emp = varianteDeItem(it, todas);
+    const v = emp.v;
     let a = v ? articuloPara(storeId, v, arts) : undefined;
     // El vínculo guardado (manual o automático) es la verdad aunque el artículo no
     // esté en la caché (p. ej. artículos de un proveedor dropshipping): lo traemos en vivo.
@@ -565,12 +557,9 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     }
     if (!a) {
       // Mensaje preciso: qué parte del vínculo falta.
-      const base = it.nombre.split('(')[0].trim();
-      const motivo = !v
-        ? (todas.some((x) => norm(x.producto) === norm(base)) ? 'no se identificó la talla/color en DealFlow' : 'el producto no existe con ese nombre en DealFlow')
-        : 'la variante no tiene artículo de Effi';
+      const motivo = !v ? emp.motivo : `la variante ${v.label || 'única'} de ${v.producto} no tiene artículo de Effi vinculado`;
       sinVinculo.push(`${it.nombre} (${motivo})`);
-      trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Sin vínculo: ${it.nombre}`, detalle: motivo, datos: { item: it.nombre, variante: v ? { producto: v.producto, label: v.label, ref: v.ref, effiId: v.effiId, proveedor: v.proveedor } : null } });
+      trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Sin vínculo: ${it.nombre}`, detalle: motivo, datos: { item: it.nombre, idsGuardados: { producto: it.product_id, variante: it.variant_id }, productosParecidos: emp.parecidos, variante: v ? { producto: v.producto, label: v.label, ref: v.ref, effiId: v.effiId, proveedor: v.proveedor } : null } });
       continue;
     }
     if (v?.variantId && v.effiId !== a.id) vincularArticulo(storeId, v.variantId, a.id);
