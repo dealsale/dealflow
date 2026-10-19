@@ -6,6 +6,12 @@
    cambia diseño, tarjetas, textos y bordes en toda la aplicación.
    ════════════════════════════════════════════════════════════════════ */
 :root {
+  /* Estados del envío (pills de pedidos) */
+  --df-st-transito: #0E7490; --df-st-transito-bg: #CFFAFE;
+  --df-st-reparto: #1D4ED8; --df-st-reparto-bg: #DBEAFE;
+  --df-st-novedad: #C2410C; --df-st-novedad-bg: #FFEDD5;
+  --df-st-devuelto: #9D174D; --df-st-devuelto-bg: #FCE7F3;
+
   color-scheme: light;
 
   /* Superficies / neutros */
@@ -78,6 +84,11 @@
    (ver useDealFlowState → theme), según lo que haya elegido el usuario en
    el menú de perfil (por defecto: claro). Un solo atributo, un solo bloque. */
 :root[data-theme='dark'] {
+  --df-st-transito: #67E8F9; --df-st-transito-bg: rgba(34, 211, 238, 0.14);
+  --df-st-reparto: #93C5FD; --df-st-reparto-bg: rgba(96, 165, 250, 0.16);
+  --df-st-novedad: #FDBA74; --df-st-novedad-bg: rgba(251, 146, 60, 0.16);
+  --df-st-devuelto: #F9A8D4; --df-st-devuelto-bg: rgba(244, 114, 182, 0.16);
+
   color-scheme: dark;
   --df-surface: #121A2E;
   --df-bg: #0A0F1C;
@@ -135,6 +146,11 @@
    mismas variables --df-*, así que hereda automáticamente todo lo que ya
    está construido sobre ellas, más algunos extras solo de este tema. */
 :root[data-theme='premium'] {
+  --df-st-transito: #67E8F9; --df-st-transito-bg: rgba(34, 211, 238, 0.14);
+  --df-st-reparto: #93C5FD; --df-st-reparto-bg: rgba(96, 165, 250, 0.16);
+  --df-st-novedad: #FDBA74; --df-st-novedad-bg: rgba(251, 146, 60, 0.16);
+  --df-st-devuelto: #F9A8D4; --df-st-devuelto-bg: rgba(244, 114, 182, 0.16);
+
   color-scheme: dark;
   --df-surface: rgba(24, 29, 58, 0.72);
   --df-bg: #060814;
@@ -189,26 +205,115 @@
 }
 
 /* Lienzo del tema Premium: lo llevan los contenedores raíz de la app (ver
-   App.tsx). Resplandores radiales FIJOS (sin animar) — un "blur"/animación
-   detrás de la barra superior obliga al navegador a recalcular el desenfoque
-   en cada cuadro, para siempre, y eso es justo lo que se sentía lento incluso
-   en equipos modestos. El degradado fijo se ve igual de bien y cuesta cero
-   una vez pintado. */
+   App.tsx). `isolation` crea su propio contexto de apilamiento: sin él, las
+   capas de fondo (z-index -1) quedaban DEBAJO del color de fondo del propio
+   contenedor y no se veían — por eso Premium parecía un Dark azulado.
+   Rendimiento: nada de blur ni backdrop-filter (recalculan en cada cuadro).
+   La aurora se mueve solo con `transform` sobre capas propias: la tarjeta
+   gráfica las desplaza sin volver a pintar nada. */
 .df-premium-canvas {
   position: relative;
+  isolation: isolate;
   background-color: #060814;
 }
 .df-premium-canvas::before {
   content: '';
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: -2;
   pointer-events: none;
   background-repeat: no-repeat;
   background-image:
-    radial-gradient(900px circle at 15% 10%, rgba(37, 99, 235, .35), transparent 55%),
-    radial-gradient(780px circle at 85% 15%, rgba(139, 92, 246, .32), transparent 52%),
-    radial-gradient(720px circle at 40% 100%, rgba(236, 72, 153, .16), transparent 55%);
+    radial-gradient(900px circle at 15% 10%, rgba(37, 99, 235, .30), transparent 55%),
+    radial-gradient(780px circle at 85% 15%, rgba(139, 92, 246, .28), transparent 52%),
+    radial-gradient(720px circle at 40% 100%, rgba(236, 72, 153, .14), transparent 55%);
+}
+/* Malla de puntos sutil que se desvanece hacia los bordes. */
+.df-premium-canvas::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(165, 180, 252, .16) 1px, transparent 1.2px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 75%);
+  mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 75%);
+}
+.df-aurora { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.df-aurora i {
+  position: absolute;
+  display: block;
+  width: 62vmax; height: 62vmax;
+  border-radius: 50%;
+  will-change: transform;
+  opacity: .55;
+}
+.df-aurora i:nth-child(1) { left: -18vmax; top: -22vmax; background: radial-gradient(circle, rgba(59,130,246,.55), transparent 62%); animation: df-aurora-a 26s ease-in-out infinite alternate; }
+.df-aurora i:nth-child(2) { right: -20vmax; top: -10vmax; background: radial-gradient(circle, rgba(139,92,246,.55), transparent 62%); animation: df-aurora-b 32s ease-in-out infinite alternate; }
+.df-aurora i:nth-child(3) { left: 20vmax; bottom: -32vmax; background: radial-gradient(circle, rgba(236,72,153,.36), transparent 62%); animation: df-aurora-c 38s ease-in-out infinite alternate; }
+.df-aurora i:nth-child(4) { right: 8vmax; bottom: -26vmax; width: 44vmax; height: 44vmax; background: radial-gradient(circle, rgba(31,216,168,.30), transparent 62%); animation: df-aurora-a 30s ease-in-out -12s infinite alternate-reverse; }
+@keyframes df-aurora-a { from { transform: translate3d(0,0,0) scale(1); } to { transform: translate3d(14vmax, 10vmax, 0) scale(1.18); } }
+@keyframes df-aurora-b { from { transform: translate3d(0,0,0) scale(1.1); } to { transform: translate3d(-16vmax, 14vmax, 0) scale(.9); } }
+@keyframes df-aurora-c { from { transform: translate3d(0,0,0) scale(.95); } to { transform: translate3d(12vmax, -12vmax, 0) scale(1.15); } }
+
+/* Barra superior: línea de neón que recorre el borde inferior. */
+:root[data-theme='premium'] header { position: relative; background: rgba(10, 13, 34, .62) !important; }
+:root[data-theme='premium'] header::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, #3B82F6, #8B5CF6, #EC4899, #1FD8A8, transparent);
+  background-size: 200% 100%;
+  animation: df-neon 9s linear infinite;
+  opacity: .85;
+}
+@keyframes df-neon { from { background-position: 0% 0; } to { background-position: 200% 0; } }
+
+/* Tarjetas y tablas: vidrio con brillo en el borde superior y resplandor. */
+:root[data-theme='premium'] main [style*="background: var(--df-surface)"][style*="border-radius"] {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 12px 34px -16px rgba(76, 29, 149, .7);
+}
+:root[data-theme='premium'] main .df-row-hover:hover {
+  background: linear-gradient(90deg, rgba(59, 130, 246, .16), rgba(139, 92, 246, .10) 60%, transparent) !important;
+  box-shadow: inset 3px 0 0 #8B5CF6;
+}
+:root[data-theme='premium'] main .df-card.df-row-hover:hover { transform: translateY(-2px); }
+
+/* Pills de estado con un leve resplandor de su propio color. */
+:root[data-theme='premium'] .df-estado-pill {
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 32%, transparent), 0 0 16px -4px color-mix(in srgb, currentColor 55%, transparent);
+}
+
+/* Botones principales: degradado de marca que se desliza al pasar el mouse. */
+:root[data-theme='premium'] button[style*="background: var(--df-brand)"],
+:root[data-theme='premium'] .df-btn-primary {
+  background-image: linear-gradient(110deg, #1FD8A8, #3B82F6 55%, #8B5CF6) !important;
+  background-size: 180% 100% !important;
+  background-position: 0% 0;
+  color: #fff !important;
+  box-shadow: 0 8px 24px -8px rgba(59, 130, 246, .7);
+  transition: background-position .5s ease, box-shadow .3s ease, transform .2s ease;
+}
+:root[data-theme='premium'] button[style*="background: var(--df-brand)"]:hover,
+:root[data-theme='premium'] .df-btn-primary:hover {
+  background-position: 100% 0;
+  box-shadow: 0 10px 30px -8px rgba(139, 92, 246, .85);
+  transform: translateY(-1px);
+}
+
+/* Al cambiar de sección, el contenido entra suave; las filas, en cascada. */
+:root[data-theme='premium'] main > section { animation: df-entrar .45s cubic-bezier(.2, .8, .2, 1) both; }
+:root[data-theme='premium'] main .df-row-hover { animation: df-entrar .4s cubic-bezier(.2, .8, .2, 1) both; }
+:root[data-theme='premium'] main .df-row-hover:nth-child(2) { animation-delay: .03s; }
+:root[data-theme='premium'] main .df-row-hover:nth-child(3) { animation-delay: .06s; }
+:root[data-theme='premium'] main .df-row-hover:nth-child(4) { animation-delay: .09s; }
+:root[data-theme='premium'] main .df-row-hover:nth-child(5) { animation-delay: .12s; }
+:root[data-theme='premium'] main .df-row-hover:nth-child(6) { animation-delay: .15s; }
+:root[data-theme='premium'] main .df-row-hover:nth-child(n+7) { animation-delay: .18s; }
+@keyframes df-entrar { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .df-aurora i, :root[data-theme='premium'] header::after,
+  :root[data-theme='premium'] main > section, :root[data-theme='premium'] main .df-row-hover { animation: none !important; }
 }
 /* Antes la barra superior tenía además un vidrio esmerilado (backdrop-filter:
    blur) — se veía bien pero es de lo más pesado que existe en CSS para la

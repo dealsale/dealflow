@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { estadoLogistico } from './estadosPedido.js';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
@@ -764,6 +765,23 @@ db.exec("CREATE TABLE IF NOT EXISTS app_flags (clave TEXT PRIMARY KEY, ts TEXT N
     db.prepare("UPDATE orders SET estado = 'Guía generada' WHERE estado = 'Empacado'").run();
     db.prepare("UPDATE orders SET estado = 'En tránsito' WHERE estado = 'Despachado'").run();
     db.prepare('INSERT INTO app_flags (clave) VALUES (?)').run(flag);
+  }
+}
+
+// v2: los "Despachado" viejos pasaron a "En tránsito" aunque la guía apenas
+// estuviera generada. Recalculamos con el último texto real de la transportadora.
+{
+  const flag = 'estados_logistica_v2';
+  if (!db.prepare('SELECT 1 FROM app_flags WHERE clave = ?').get(flag)) {
+    const filas = db.prepare("SELECT id, estado, estado_woo, guia FROM orders WHERE estado = 'En tránsito' AND COALESCE(estado_woo,'') != ''").all() as { id: string; estado: string; estado_woo: string; guia: string | null }[];
+    const upd = db.prepare('UPDATE orders SET estado = ? WHERE id = ?');
+    let n = 0;
+    for (const f of filas) {
+      const real = estadoLogistico(f.estado_woo, !!f.guia);
+      if (real && real !== f.estado) { upd.run(real, f.id); n++; }
+    }
+    db.prepare('INSERT INTO app_flags (clave) VALUES (?)').run(flag);
+    if (n) console.log(`[migración] ${n} pedido(s) con el estado real de su guía`);
   }
 }
 

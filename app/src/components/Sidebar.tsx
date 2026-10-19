@@ -59,7 +59,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
   );
 
   return (
-    <aside style={{ width: 224, flexShrink: 0, background: '#0F172A', display: 'flex', flexDirection: 'column', padding: '18px 12px 14px', overflowY: 'auto' }}>
+    <aside style={{ width: 224, flexShrink: 0, background: premium ? 'linear-gradient(180deg, rgba(10,12,34,.78), rgba(14,12,40,.62))' : '#0F172A', borderRight: premium ? '1px solid rgba(148,163,253,.14)' : undefined, display: 'flex', flexDirection: 'column', padding: '18px 12px 14px', overflowY: 'auto' }}>
       <a href="/inicio" title="Ir a la página de inicio de DealFlow" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 18px', textDecoration: 'none' }}>
         <img src={logo} alt="DealFlow" style={{ width: 34, height: 30, objectFit: 'contain' }} />
         <span style={{ color: '#fff', fontWeight: 800, fontSize: 17, letterSpacing: '-0.02em' }}>DealFlow</span>

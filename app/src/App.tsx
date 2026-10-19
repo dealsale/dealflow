@@ -355,6 +355,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
         overflow: 'hidden',
       }}
     >
+      {df.theme === 'premium' && <div className="df-aurora" aria-hidden="true"><i /><i /><i /><i /></div>}
       {df.sidebarVisible && <Sidebar df={df} />}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -402,6 +403,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
         overflow: 'hidden',
       }}
     >
+      {df.theme === 'premium' && <div className="df-aurora" aria-hidden="true"><i /><i /><i /><i /></div>}
       <MobileHeader df={df} />
 
       <main style={{ flex: 1, overflowY: 'auto', padding: '18px 16px 90px' }}>
