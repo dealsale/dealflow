@@ -104,7 +104,7 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiActualizarPlantillaMeta,
   apiEliminarPlantillaMeta,
   apiPublicarPlantillaMeta,
-  apiPublicarTodasPlantillasMeta,
+  apiPublicarTodasPlantillasMeta, apiProgresoPlantillasMeta, apiRefrescarTodasPlantillasMeta,
   apiRefrescarPlantillaMeta,
   apiStats,
   apiImpersonate,
@@ -585,6 +585,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     despachoProveedor: o.despachoProveedor || '',
     estadoWoo: o.estadoWoo || '',
     effiRemision: o.effiRemision || '',
+    novedad: o.novedad || null,
     origen: o.origen || '',
     envio: o.envio || 0,
     nota: o.nota || '',
@@ -3461,7 +3462,12 @@ export function useDealFlowState() {
       if (r.data) { setPlantillasMeta(r.data.plantillas); setTiendasCloudCount(r.data.tiendasCloud); }
     });
   }
-  useEffect(() => { if (adminSection === 'plantillas' && isSuperadmin) cargarPlantillasMeta(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (adminSection !== 'plantillas' || !isSuperadmin) return;
+    cargarPlantillasMeta();
+    // Si quedó un envío masivo corriendo, seguimos mostrando su avance.
+    void apiProgresoPlantillasMeta().then((r) => { if (r.data?.corriendo) seguirProgresoPlantillas(); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminSection, isSuperadmin]);
   function crearPlantillaMeta(p: NuevaPlantilla, cb?: () => void) {
     setPlantillasMetaMsg('Guardando…');
@@ -3492,12 +3498,36 @@ export function useDealFlowState() {
       cargarPlantillasMeta();
     });
   }
+  // Envío masivo: corre en el servidor en segundo plano; aquí mostramos el avance.
+  const [enviandoPlantillas, setEnviandoPlantillas] = useState(false);
+  function seguirProgresoPlantillas() {
+    setEnviandoPlantillas(true);
+    const tick = () => void apiProgresoPlantillasMeta().then((r) => {
+      const p = r.data;
+      if (!p) { setEnviandoPlantillas(false); return; }
+      if (p.corriendo) {
+        setPlantillasMetaMsg(p.hechas >= p.plantillas ? `Enviadas (${p.exitosas}). Consultando a Meta el estado de cada una…` : `Enviando a verificación… ${p.hechas} de ${p.plantillas} plantillas · ${p.exitosas} envío(s)${p.errores ? ` · ${p.errores} con error` : ''}`);
+        setTimeout(tick, 2500);
+        return;
+      }
+      setEnviandoPlantillas(false);
+      setPlantillasMetaMsg(`✓ Listo: ${p.plantillas} plantilla(s) · ${p.exitosas} enviadas a verificación · ${p.saltadas} ya aprobadas (no se tocaron)${p.errores ? ` · ${p.errores} con error (abre "Ver por tienda")` : ''}. Los estados se revisan solos cada 30 min.`);
+      cargarPlantillasMeta();
+    });
+    tick();
+  }
   function publicarTodasPlantillasMeta() {
-    setPlantillasMetaMsg('Publicando todas las plantillas en las tiendas que faltan…');
+    setPlantillasMetaMsg('Enviando todas las plantillas a verificación…');
     void apiPublicarTodasPlantillasMeta().then((r) => {
       if (r.error || !r.data) { setPlantillasMetaMsg(r.error || 'No se pudo publicar.'); return; }
-      setPlantillasMetaMsg(`✓ Listo: ${r.data.plantillas} plantilla(s) revisadas · ${r.data.exitosas} envío(s) a verificación · ${r.data.saltadas} ya aprobadas (no se tocaron)${r.data.errores ? ` · ${r.data.errores} con error` : ''}.`);
-      cargarPlantillasMeta();
+      seguirProgresoPlantillas();
+    });
+  }
+  function refrescarTodasPlantillasMeta() {
+    setPlantillasMetaMsg('Consultando a Meta el estado de todas las plantillas…');
+    void apiRefrescarTodasPlantillasMeta().then((r) => {
+      if (r.error || !r.data) { setPlantillasMetaMsg(r.error || 'No se pudo consultar.'); return; }
+      setPlantillasMetaMsg(`✓ Estados actualizados (${r.data.actualizadas} consultas a Meta).`); cargarPlantillasMeta();
     });
   }
   function refrescarPlantillaMeta(id: string) {
@@ -4211,6 +4241,8 @@ export function useDealFlowState() {
     eliminarPlantillaMeta,
     publicarPlantillaMeta,
     publicarTodasPlantillasMeta,
+    refrescarTodasPlantillasMeta,
+    enviandoPlantillas,
     refrescarPlantillaMeta,
     // Intervención humana masiva
     intervenirTodosLosChats,
