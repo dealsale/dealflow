@@ -128,7 +128,10 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
   const conectada = (id: IntegId) => id === 'dropi' ? df.dropiConectado
     : id === 'effi' ? !!df.effiApi?.conectado
       : df.shopifyConectado;
-  const activas = INTEGRACIONES.filter((i) => conectada(i.id));
+  // Effi ya no se vincula aquí: con la API, el vínculo se hace solo (por referencia
+  // o nombre) en Integraciones → Effi → Artículos. Aquí solo se muestra el estado.
+  const activas = INTEGRACIONES.filter((i) => i.id !== 'effi' && conectada(i.id));
+  const effiVinculadas = variantes.filter((v) => (v.refs?.effi_id || '').trim()).length;
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -146,17 +149,30 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
         </div>
         <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>La sincronización con Effi solo toma los productos de Effi.</span>
       </div>
+      {conectada('effi') && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '9px 12px', marginBottom: 12, fontSize: 12.5 }}>
+          <img src="/logos/effi.png" alt="Effi" style={{ height: 16 }} />
+          <span style={{ flex: 1, minWidth: 200, color: 'var(--df-text-muted)' }}>
+            {variantes.length
+              ? <><b style={{ color: effiVinculadas === variantes.length ? 'var(--df-purple)' : 'var(--df-text-strong)' }}>{effiVinculadas}/{variantes.length}</b> variantes vinculadas con Effi. El vínculo se hace solo en Integraciones → Effi → Artículos; no tienes que escribir códigos aquí.</>
+              : 'El vínculo con Effi se hace solo en Integraciones → Effi → Artículos.'}
+          </span>
+          <button onClick={() => df.go('integraciones')} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '5px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', color: 'var(--df-text-body)' }}>Ir a Effi →</button>
+        </div>
+      )}
+      {(activas.length > 0 || !conectada('effi')) && <>
       <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4, letterSpacing: '.02em' }}>🔗 Conexiones por variante</div>
       <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>
-        Pon el código de cada variante en cada integración donde vendes este producto. El despacho usa el código de la integración por la que se envía. Se guarda al salir del campo.
+        Pon el código de cada variante en Dropi o Shopify si vendes este producto por allá. Se guarda al salir del campo.
       </div>
       {!variantes.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Primero genera las variantes (arriba) para poder vincularlas.</div>}
       {!!variantes.length && !activas.length && (
-        <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes integraciones conectadas. Conecta Dropi, Effi o Shopify en <b>Integraciones</b> y aquí aparecerá un panel por cada una.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes Dropi ni Shopify conectados. Si los conectas en <b>Integraciones</b>, aquí aparece un panel para poner el código de cada variante.</div>
       )}
       {!!variantes.length && activas.map((integ) => (
         <PanelIntegracion key={integ.id} integ={integ} p={p} df={df} variantes={variantes} />
       ))}
+      </>}
     </div>
   );
 }
@@ -325,9 +341,9 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             </div>
           </div>
           <div style={{ maxWidth: 560 }}>
-            <div style={label}>SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· para casar este producto con Dropi/Effi (opcional)</span></div>
+            <div style={label}>Referencia / SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· opcional: si es igual a la Referencia del artículo en Effi, se vincula solo</span></div>
             <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: FAJA-NEGRA-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
-            <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Vincula este producto con Dropi, Effi y/o Shopify en la pestaña <b>Variantes → Conexiones por variante</b>.</div>
+            <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Effi se vincula solo desde Integraciones; Dropi y Shopify, en <b>Variantes → Conexiones por variante</b>.</div>
           </div>
         </>
       ),
@@ -565,7 +581,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             </div>
           </div>
           <div style={{ maxWidth: 560, marginBottom: 16 }}>
-            <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Vincula este producto con Dropi, Effi y/o Shopify en la pestaña <b>Variantes → Conexiones por variante</b>.</div>
+            <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Effi se vincula solo desde Integraciones; Dropi y Shopify, en <b>Variantes → Conexiones por variante</b>.</div>
           </div>
         </>
       )}
