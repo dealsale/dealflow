@@ -2483,9 +2483,18 @@ api.get('/webchat/:storeId/messages', (req, res) => {
 });
 
 // ── Superadmin: ve TODAS las tiendas y puede ocultarlas del admin ─────
-api.get('/superadmin/stores', requireAuth, requireAdmin, (_req, res) => {
-  // Excluimos la tienda interna "master" de la biblioteca (no es una tienda real).
-  const stores = (db.prepare('SELECT * FROM stores WHERE id != ? ORDER BY created_at').all(MASTER_STORE_ID) as Record<string, unknown>[]).map((s) => {
+// Tiendas ocultas (del superadmin): un admin normal no las ve ni puede operar en ellas.
+const tiendaVedada = (req: ExRequest, storeId: string): boolean => {
+  if (req.user!.role === 'SUPERADMIN') return false;
+  const s = db.prepare('SELECT COALESCE(oculta,0) o FROM stores WHERE id = ?').get(storeId) as { o: number } | undefined;
+  return !!s?.o;
+};
+
+api.get('/superadmin/stores', requireAuth, requireAdmin, (req, res) => {
+  // Excluimos la tienda interna "master" de la biblioteca (no es una tienda real) y,
+  // para el admin normal, las tiendas ocultas del superadmin.
+  const soloVisibles = req.user!.role !== 'SUPERADMIN' ? ' AND COALESCE(oculta,0) = 0' : '';
+  const stores = (db.prepare(`SELECT * FROM stores WHERE id != ?${soloVisibles} ORDER BY created_at`).all(MASTER_STORE_ID) as Record<string, unknown>[]).map((s) => {
     const ventas = (db.prepare(
       `SELECT COALESCE(SUM(CASE WHEN o.total > 0 THEN o.total ELSE COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio END),0) t
        FROM orders o WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
@@ -2793,6 +2802,7 @@ api.get('/superadmin/biblioteca', requireAuth, requireAdmin, async (_req, res) =
 
 // Lista los productos de una tienda (para elegir cuál clonar a la biblioteca).
 api.get('/superadmin/stores/:storeId/products', requireAuth, requireAdmin, (req, res) => {
+  if (tiendaVedada(req, req.params.storeId)) return res.status(404).json({ error: 'Tienda no encontrada.' });
   const rows = db.prepare('SELECT id, nombre, precio, tipo FROM products WHERE store_id = ? ORDER BY created_at').all(req.params.storeId) as
     { id: string; nombre: string; precio: number; tipo: string }[];
   res.json({ productos: rows });
@@ -2801,6 +2811,8 @@ api.get('/superadmin/stores/:storeId/products', requireAuth, requireAdmin, (req,
 api.post('/superadmin/biblioteca/from-product', requireAuth, requireAdmin, async (req, res) => {
   const { agregarProductoABiblioteca } = await import('./biblioteca.js');
   const { productId, gratis, precioImportacion, editable } = req.body || {};
+  const dueña = db.prepare('SELECT store_id FROM products WHERE id = ?').get(String(productId || '')) as { store_id: string } | undefined;
+  if (dueña && tiendaVedada(req, dueña.store_id)) return res.status(404).json({ error: 'Producto no encontrado.' });
   const r = agregarProductoABiblioteca(String(productId || ''), { gratis: !!gratis, precioImportacion: Number(precioImportacion) || 0, editable: editable !== false });
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
@@ -2856,7 +2868,7 @@ api.post('/superadmin/biblioteca/:id/enviar-a-tienda', requireAuth, requireAdmin
   const storeId = String(req.body?.storeId || '');
   if (!storeId) return res.status(400).json({ error: 'Elige la tienda destino.' });
   const existe = db.prepare('SELECT id FROM stores WHERE id = ?').get(storeId);
-  if (!existe) return res.status(404).json({ error: 'La tienda destino no existe.' });
+  if (!existe || tiendaVedada(req, storeId)) return res.status(404).json({ error: 'La tienda destino no existe.' });
   const lib = getLibraryProduct(req.params.id);
   if (!lib) return res.status(404).json({ error: 'Producto de biblioteca no encontrado.' });
   const r = importarLibraryEnTienda(req.params.id, storeId, true); // admin: se envía como adquirido
