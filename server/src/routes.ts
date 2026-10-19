@@ -815,159 +815,33 @@ api.post('/orders', requireAuth, requireStore, (req, res) => {
   res.json({ ok: true, id: 'DF-' + numero, rowId: oid });
 });
 
-api.post('/orders/:rowId/dropi', requireAuth, requireStore, (req, res) => {
-  const o = db.prepare('SELECT id, guia FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, req.user!.storeId) as { id: string; guia: string | null } | undefined;
-  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  if (o.guia) return res.json({ guia: o.guia });
-  // Integración real con Dropi pendiente: por ahora genera la guía localmente.
-  const guia = String(402000 + Math.floor(Math.random() * 900) + 100);
-  db.prepare('UPDATE orders SET guia = ? WHERE id = ?').run(guia, o.id);
-  res.json({ guia });
-});
-
-// ── Effi (vía WooCommerce): crea el pedido en Woo para que Effi lo despache ──
-// Normaliza el proveedor recibido del cliente.
-function wooProv(v: unknown): 'dropi' | 'effi' | undefined {
-  return v === 'dropi' ? 'dropi' : v === 'effi' ? 'effi' : undefined;
-}
-
-// Despacha un pedido a WooCommerce por el proveedor elegido (Dropi o Effi).
 api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  // Despacho a Effi por API (Dropi tiene las suyas: /orders/:rowId/dropi/cotizar y /crear).
   const sid = req.user!.storeId!;
-  const prov = wooProv(req.body?.proveedor);
-  if (!prov) return res.status(400).json({ error: 'Elige el proveedor (Dropi o Effi).' });
-  // reintentar = volver a enviarlo aunque ya tenga woo_id (algo salió mal en el
-  // proveedor y el dueño quiere reenviarlo). Crea un pedido NUEVO en WooCommerce.
   const reintentar = req.body?.reintentar === true;
-  const transportadora = String(req.body?.transportadora || '').slice(0, 40);
-  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
+  const o = db.prepare('SELECT id FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  if (o.woo_id && !reintentar) return res.json({ ok: true, guia: o.guia || '', wooId: o.woo_id, proveedor: o.despacho_proveedor || prov, aviso: 'Este pedido ya fue despachado.' });
-  // Effi NATIVO: si el storefront de Effi está activo, mandamos el pedido a Effi
-  // como webhook (crea cliente + remisión de venta), sin WooCommerce real.
-  if (prov === 'effi') {
-    const ef = await import('./effiApi.js');
-    if (ef.effiApiListo(sid)) {
-      const r = await ef.despacharEffi(sid, String(o.id), reintentar);
-      if ('error' in r) return res.status(400).json({ error: r.error });
-      if (transportadora && !r.transportadora) db.prepare('UPDATE orders SET transportadora = ? WHERE id = ?').run(transportadora, o.id);
-      return res.json({ ok: true, proveedor: 'effi', remision: r.remision, guia: r.guia, avisos: r.avisos, api: true });
-    }
-    const { estadoEffi, enviarPedidoAEffi } = await import('./effiWoo.js');
-    if (estadoEffi(sid).activo) {
-      const conRecaudo = req.body?.recaudo !== 'sin'; // 'sin' = prepagado; por defecto con recaudo (contra entrega)
-      const r = await enviarPedidoAEffi(sid, String(o.id), reintentar, conRecaudo);
-      if ('error' in r) return res.status(400).json({ error: r.error });
-      db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ? WHERE id = ?').run(r.remision, 'effi', transportadora, o.id);
-      const numDF = `DF-${String(o.numero || '')}`;
-      if (r.sinSku.length) registrarLog(sid, 'warn', 'despacho', `${numDF} se envió a Effi, pero ${r.sinSku.length} ítem(s) NO tienen SKU vinculado (Effi no los reconocerá): ${r.sinSku.join(', ')}. Ponles el SKU = Referencia del artículo en Effi.`);
-      else registrarLog(sid, 'info', 'despacho', `${numDF} enviado a Effi como remisión ${r.remision}.`);
-      return res.json({ ok: true, proveedor: 'effi', remision: r.remision, sinMapear: r.sinSku, nativo: true });
-    }
-  }
-  const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id) as { qty: number; nombre: string; precio: number }[];
-  const skus: Record<string, string> = {};
-  for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(sid) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
-  // Ref por proveedor: refs.<prov> y, si está vacía, el sku legado.
-  const variantesSku = db.prepare("SELECT p.nombre producto, v.label, COALESCE(NULLIF(json_extract(v.refs,'$.'||?),''), v.sku) sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(NULLIF(json_extract(v.refs,'$.'||?),''), v.sku) != ''").all(prov, sid, prov) as { producto: string; label: string; sku: string }[];
-  const { crearPedido } = await import('./woocommerce.js');
-  const r = await crearPedido(sid, {
-    cliente: String(o.cliente || ''), ciudad: String(o.ciudad || ''), departamento: String(o.departamento || ''),
-    tel: String(o.tel || ''), direccion: String(o.direccion || ''), nota: String(o.nota || ''), envio: Number(o.envio || 0),
-    total: Number(o.total || 0),
-  }, items, skus, prov, variantesSku, transportadora);
+  const ef = await import('./effiApi.js');
+  if (!ef.effiApiListo(sid)) return res.status(400).json({ error: 'Conecta Effi por API en Integraciones para despachar.' });
+  const r = await ef.despacharEffi(sid, o.id, reintentar);
   if ('error' in r) return res.status(400).json({ error: r.error });
-  const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';
-  // transportadora = la transportadora elegida (Interrapidísimo, Servientrega…). Se
-  // guarda en el pedido y viaja al pedido de Woo para que Dropi la vea.
-  // Al reenviar reseteamos la guía vieja (el pedido nuevo trae la suya cuando el proveedor la genere).
-  db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ?, guia = ? WHERE id = ?').run(r.wooId, prov, transportadora, reintentar ? '' : String(o.guia || ''), o.id);
-  const numDF = `DF-${String(o.numero || '')}`;
-  if (r.sinMapear.length) {
-    // Diagnóstico clave: si un ítem no casó por SKU, quedó como "cargo" y el proveedor NO lo despachará.
-    registrarLog(sid, 'warn', 'despacho',
-      `${numDF} llegó a WooCommerce, pero ${r.sinMapear.length} producto(s) NO coinciden por SKU con un producto de ${nombreProv} y NO se van a despachar: ${r.sinMapear.join(', ')}. Ponles el MISMO SKU del producto de ${nombreProv} en la sección Productos.`);
-  } else {
-    registrarLog(sid, 'info', 'despacho', `${numDF} enviado a ${nombreProv} (WooCommerce #${r.numero}) con ${r.mapeados} producto(s) mapeado(s) por SKU.`);
-  }
-  res.json({ ok: true, wooId: r.wooId, numeroWoo: r.numero, proveedor: prov, reenviado: reintentar, sinMapear: r.sinMapear, mapeados: r.mapeados });
+  res.json({ ok: true, proveedor: 'effi', remision: r.remision, guia: r.guia, avisos: r.avisos, api: true });
 });
 
-// Sincroniza estado y guía del pedido desde el WooCommerce del proveedor usado.
-// Reutiliza la misma lógica del sync automático (actualiza estado, guía y avisa al cliente).
+// Actualiza estado y guía del pedido: Effi por API o Dropi por API.
 api.post('/orders/:rowId/despachar/sync', requireAuth, requireStore, async (req, res) => {
-  // Pedidos enviados a Effi por API: consultamos la guía directamente en Effi.
-  const eo = db.prepare("SELECT effi_doc FROM orders WHERE id = ? AND store_id = ?").get(req.params.rowId, req.user!.storeId!) as { effi_doc: string } | undefined;
+  const sid = req.user!.storeId!;
+  const eo = db.prepare('SELECT effi_doc FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { effi_doc: string } | undefined;
   if (eo?.effi_doc) {
     const ef = await import('./effiApi.js');
-    const r = await ef.consultarEstadoEffi(req.user!.storeId!, req.params.rowId);
+    const r = await ef.consultarEstadoEffi(sid, req.params.rowId);
     if ('error' in r) return res.status(400).json({ error: r.error });
     return res.json(r);
   }
-  const { sincronizarPedido } = await import('./syncWoo.js');
-  const r = await sincronizarPedido(req.user!.storeId!, req.params.rowId);
+  const { sincronizarPedidoDropi } = await import('./despachos.js');
+  const r = await sincronizarPedidoDropi(sid, req.params.rowId);
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ estado: r.estado, guia: r.guia });
-});
-
-// Qué proveedores WooCommerce tiene conectados la tienda (para mostrar los botones)
-// y cuál es el preferido para auto-despacho (sin botón).
-api.get('/woo/proveedores', requireAuth, requireStore, async (req, res) => {
-  const { proveedoresConectados, despachoConfig, TRANSPORTADORAS } = await import('./woocommerce.js');
-  const sid = req.user!.storeId!;
-  const cfg = despachoConfig(sid);
-  res.json({
-    proveedores: proveedoresConectados(sid),
-    preferido: cfg.proveedor || '',
-    auto: cfg.auto,
-    transportadora: cfg.transportadora,
-    transportadoras: TRANSPORTADORAS,
-  });
-});
-
-// Guarda la config de despacho: proveedor, auto-envío (on/off) y transportadora por
-// defecto. Por defecto auto=false → los pedidos se envían a mano desde el detalle.
-api.post('/woo/preferido', requireAuth, requireStore, requireOwner, (req, res) => {
-  const sid = req.user!.storeId!;
-  const prov = wooProv(req.body?.proveedor) || '';
-  const auto = req.body?.auto === true;
-  const transportadora = String(req.body?.transportadora || '').slice(0, 40);
-  db.prepare(
-    `INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?, 'despacho_pref', ?, datetime('now'))
-     ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = datetime('now')`,
-  ).run(sid, JSON.stringify({ proveedor: prov, auto, transportadora }));
-  res.json({ ok: true, preferido: prov, auto, transportadora });
-});
-
-// WooCommerce por proveedor: verificar conexión, inventario y productos.
-api.post('/woo/verificar', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { verificar } = await import('./woocommerce.js');
-  const r = await verificar(req.user!.storeId!, wooProv(req.body?.proveedor));
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  res.json({ ok: true });
-});
-
-api.post('/woo/inventario/sync', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { sincronizarInventario } = await import('./woocommerce.js');
-  const r = await sincronizarInventario(req.user!.storeId!, wooProv(req.body?.proveedor));
-  if ('error' in r) return res.status(400).json({ error: r.error });
-  res.json({ actualizados: r.actualizados });
-});
-
-api.post('/woo/productos/sync', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { empujarProductos } = await import('./woocommerce.js');
-  const r = await empujarProductos(req.user!.storeId!, wooProv(req.body?.proveedor));
-  if ('error' in r) return res.status(400).json({ error: r.error });
-  res.json(r);
-});
-
-// Busca productos en el WooCommerce conectado (por código/SKU o nombre) para
-// vincular el SKU desde la ficha del producto. Solo lectura → basta requireStore.
-api.get('/woo/productos/buscar', requireAuth, requireStore, async (req, res) => {
-  const { buscarProductos } = await import('./woocommerce.js');
-  const r = await buscarProductos(req.user!.storeId!, String(req.query.q || ''), wooProv(req.query.proveedor));
-  if ('error' in r) return res.status(400).json({ error: r.error });
-  res.json(r);
 });
 
 // ── Dropi API directa (transportadoras + crear pedido + guía) ─────────────
@@ -1218,25 +1092,6 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, 
   res.json({ ok: true, dropiId: crear.id, transportadora: nombreTransp });
 });
 
-// Catálogo completo del WooCommerce (productos + variaciones) para vincular por
-// lista desplegable, sin ir pegando códigos. Sobre todo para Dropi.
-api.get('/woo/catalogo', requireAuth, requireStore, async (req, res) => {
-  const { catalogo } = await import('./woocommerce.js');
-  const r = await catalogo(req.user!.storeId!, wooProv(req.query.proveedor));
-  if ('error' in r) return res.status(400).json({ error: r.error });
-  res.json(r);
-});
-
-// Diagnóstico del catálogo: de qué WooCommerce se lee (propio/central), host y
-// cuántos productos ve la API. Ábrelo en el navegador (logueado):
-//   /api/woo/diagnostico?proveedor=effi   (o dropi)
-api.get('/woo/diagnostico', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { diagnosticoCatalogo } = await import('./woocommerce.js');
-  const prov = wooProv(req.query.proveedor) || 'effi';
-  const full = req.query.full === '1' || req.query.full === 'true';
-  res.json(await diagnosticoCatalogo(req.user!.storeId!, prov, full));
-});
-
 // ── Effi por API directa (reemplaza el puente WooCommerce) ──
 // URL pública del webhook de la tienda (la que se pega en Effi → Webhooks).
 function urlWebhookEffi(req: import('express').Request, token: string): string {
@@ -1445,65 +1300,6 @@ api.post('/orders/:rowId/effi/despachar', requireAuth, requireStore, requireOwne
   const r = await ef.despacharEffi(sid, req.params.rowId, reintentar);
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ ok: true, ...r });
-});
-
-// ── Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio) ──
-api.get('/effi/estado', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { estadoEffi } = await import('./effiWoo.js');
-  res.json(estadoEffi(req.user!.storeId!));
-});
-// Activa el storefront y devuelve las llaves EN CLARO una sola vez (para pegarlas en Effi).
-api.post('/effi/activar', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { activarEffi } = await import('./effiWoo.js');
-  const s = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(req.user!.storeId!) as { nombre: string } | undefined;
-  res.json(activarEffi(req.user!.storeId!, s?.nombre || 'tienda'));
-});
-api.post('/effi/desactivar', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { desactivarEffi } = await import('./effiWoo.js');
-  desactivarEffi(req.user!.storeId!);
-  res.json({ ok: true });
-});
-// Diagnóstico: qué le ha preguntado Effi al storefront (para saber si llega y con qué SKU).
-api.get('/effi/log', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { logEffi, estadoEffi, pedidoAWoo } = await import('./effiWoo.js');
-  const sid = req.user!.storeId!;
-  const pedido = req.query.pedido !== undefined ? String(req.query.pedido) : undefined;
-  // Si se pide un pedido concreto, incluimos los line_items EXACTOS que le mandamos
-  // a Effi (nombre, Referencia resuelta y si tiene product_id), para ver la estructura.
-  let items: { nombre: string; sku: string; vinculado: boolean; qty: number; total: string }[] | undefined;
-  if (pedido) {
-    const num = Number(String(pedido).replace(/\D/g, ''));
-    const o = num ? db.prepare('SELECT * FROM orders WHERE store_id = ? AND numero = ?').get(sid, num) as Record<string, unknown> | undefined : undefined;
-    if (o) {
-      const woo = pedidoAWoo(sid, o);
-      items = ((woo.line_items as { name: string; sku: string; product_id: number; quantity: number; total: string }[]) || [])
-        .map((li) => ({ nombre: li.name, sku: li.sku || '', vinculado: !!li.product_id, qty: li.quantity, total: li.total }));
-    }
-  }
-  res.json({ estado: estadoEffi(sid), eventos: logEffi(sid, pedido ? 120 : 80, pedido), items });
-});
-// Preview del pedido EXACTO que se le manda a Effi (para ver departamento, ciudad
-// y product_id de cada ítem, que son los que Effi descarta en silencio si están mal).
-// Acepta el número DF (ej. 1049) o el id interno del pedido.
-api.get('/effi/preview/:ref', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { pedidoAWoo } = await import('./effiWoo.js');
-  const sid = req.user!.storeId!;
-  const ref = String(req.params.ref).replace(/^DF-/i, '');
-  const o = (/^\d+$/.test(ref)
-    ? db.prepare('SELECT * FROM orders WHERE store_id = ? AND numero = ?').get(sid, Number(ref))
-    : db.prepare('SELECT * FROM orders WHERE store_id = ? AND id = ?').get(sid, ref)) as Record<string, unknown> | undefined;
-  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  const woo = pedidoAWoo(sid, o) as { billing: { state: string; city: string }; line_items: { name: string; sku: string; product_id: number }[]; total: string };
-  res.json({
-    // Resumen de lo que Effi suele descartar en silencio:
-    revisar: {
-      departamentoCodigo: woo.billing.state,
-      ciudad: woo.billing.city,
-      itemsSinVincular: woo.line_items.filter((li) => !li.product_id).map((li) => `${li.name} (sku: ${li.sku || '—'})`),
-      total: woo.total,
-    },
-    pedidoCompleto: woo,
-  });
 });
 
 // ── Leads / CRM ───────────────────────────────────────────────────────
@@ -2645,47 +2441,6 @@ api.post('/superadmin/meta-templates/:id/refrescar', requireAuth, requireSuperAd
   res.json({ ok: true, ...r });
 });
 
-// ── WooCommerce CENTRAL por operador (superadmin) ────────────────────
-// Un solo Woo de Dropi (y otro de Effi) que usan todas las tiendas para
-// despachar. Nunca devolvemos los secretos, solo si están puestos.
-api.get('/superadmin/woo-central', requireAuth, requireSuperAdmin, (_req, res) => {
-  const rows = db.prepare("SELECT proveedor, url, consumer_key, consumer_secret, activo, preferido FROM woo_central").all() as
-    { proveedor: string; url: string; consumer_key: string; consumer_secret: string; activo: number; preferido: number }[];
-  const mapa = new Map(rows.map((r) => [r.proveedor, r]));
-  const uno = (prov: string) => {
-    const r = mapa.get(prov);
-    return { proveedor: prov, url: r?.url || '', tieneKeys: !!(r?.consumer_key && r?.consumer_secret), activo: r ? r.activo === 1 : false, preferido: r ? r.preferido === 1 : false };
-  };
-  res.json({ dropi: uno('dropi'), effi: uno('effi') });
-});
-api.post('/superadmin/woo-central', requireAuth, requireSuperAdmin, (req, res) => {
-  const b = req.body || {};
-  const prov = b.proveedor === 'effi' ? 'effi' : b.proveedor === 'dropi' ? 'dropi' : '';
-  if (!prov) return res.status(400).json({ error: 'Proveedor inválido (dropi o effi).' });
-  // Si no mandan llaves nuevas, conservamos las guardadas (para editar solo la URL).
-  const prev = db.prepare('SELECT consumer_key, consumer_secret FROM woo_central WHERE proveedor = ?').get(prov) as { consumer_key: string; consumer_secret: string } | undefined;
-  const ck = String(b.consumerKey ?? '').trim() || prev?.consumer_key || '';
-  const cs = String(b.consumerSecret ?? '').trim() || prev?.consumer_secret || '';
-  const pref = b.preferido ? 1 : 0;
-  db.prepare(
-    `INSERT INTO woo_central (proveedor, url, consumer_key, consumer_secret, activo, preferido, updated_at)
-     VALUES (?,?,?,?,?,?,datetime('now'))
-     ON CONFLICT(proveedor) DO UPDATE SET url = excluded.url, consumer_key = excluded.consumer_key,
-       consumer_secret = excluded.consumer_secret, activo = excluded.activo, preferido = excluded.preferido, updated_at = datetime('now')`,
-  ).run(prov, String(b.url || '').trim(), ck, cs, b.activo === false ? 0 : 1, pref);
-  // Solo un preferido a la vez.
-  if (pref) db.prepare('UPDATE woo_central SET preferido = 0 WHERE proveedor != ?').run(prov);
-  res.json({ ok: true });
-});
-api.post('/superadmin/woo-central/:prov/probar', requireAuth, requireSuperAdmin, async (req, res) => {
-  const prov = req.params.prov === 'effi' ? 'effi' : req.params.prov === 'dropi' ? 'dropi' : null;
-  if (!prov) return res.status(400).json({ error: 'Proveedor inválido.' });
-  const { verificarCentral } = await import('./woocommerce.js');
-  const r = await verificarCentral(prov);
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  res.json({ ok: true });
-});
-
 // ── Academy (portal educativo) ───────────────────────────────────────
 // Lectura: cualquier usuario logueado. Escritura: admin/superadmin.
 const mapCurso = (c: Record<string, unknown>) => ({
@@ -3170,24 +2925,6 @@ webhooks.post('/wompi', async (req, res) => {
   res.sendStatus(200);
 });
 
-// ── Webhook de WooCommerce: order.updated (estado + guía en tiempo real) ──
-// Configúralo en cada tienda: WooCommerce → Ajustes → Avanzado → Webhooks →
-// Topic "Order updated", Delivery URL https://dealflow.sbs/webhooks/woocommerce,
-// Secret = WOO_WEBHOOK_SECRET (el mismo en todas las tiendas).
-// No confiamos en el cuerpo: solo lo usamos para saber QUÉ pedido cambió y
-// re-leerlo de Woo con las credenciales de la tienda (procesarOrden).
-function firmaWooValida(secret: string, raw: Buffer | undefined, firma: string): boolean {
-  if (!raw || !firma) return false;
-  try {
-    const esperado = createHmac('sha256', secret).update(raw).digest('base64');
-    const a = Buffer.from(esperado);
-    const b = Buffer.from(firma);
-    return a.length === b.length && timingSafeEqual(a, b);
-  } catch {
-    return false;
-  }
-}
-
 // Webhooks de Effi ERP: un token por tienda en la URL y firma HMAC-SHA256 del
 // cuerpo en X-Effi-Signature (con el secreto que Effi mostró al crear el webhook).
 // Effi exige 2xx en < 5 s: respondemos de inmediato y procesamos después.
@@ -3206,30 +2943,6 @@ webhooks.post('/effi/:token', async (req, res) => {
   const evento = String(req.headers['x-effi-event'] || (req.body as { evento?: string })?.evento || '');
   const entrega = String(req.headers['x-effi-delivery'] || '');
   ef.procesarWebhookEffi(sid, evento, entrega, req.body).catch((e) => console.warn('[effi-webhook] error procesando', e));
-});
-
-webhooks.post('/woocommerce', async (req, res) => {
-  // Respondemos 200 rápido siempre (WooCommerce reintenta si no).
-  try {
-    const secret = process.env.WOO_WEBHOOK_SECRET;
-    if (secret) {
-      const firma = String(req.headers['x-wc-webhook-signature'] || '');
-      const raw = (req as { rawBody?: Buffer }).rawBody;
-      if (!firmaWooValida(secret, raw, firma)) {
-        console.warn('[webhook-woo] firma inválida o ausente — se ignora');
-        return res.sendStatus(401);
-      }
-    }
-    // Ping de verificación de WooCommerce (al crear el webhook) no trae pedido.
-    const wooId = String((req.body as { id?: number | string })?.id || '').trim();
-    if (wooId) {
-      const { sincronizarPorWooId } = await import('./syncWoo.js');
-      void sincronizarPorWooId(wooId).catch((e) => console.error('[webhook-woo] sync', e));
-    }
-  } catch (e) {
-    console.error('[webhook-woo] error', e);
-  }
-  res.sendStatus(200);
 });
 
 // ── Eliminación de datos de Meta (requisito de Facebook Login) ─────────

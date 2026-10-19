@@ -876,62 +876,17 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido DF-${numero} 🛒`, `${cliente} · $${total.toLocaleString('es-CO')} · ${nprod} producto${nprod === 1 ? '' : 's'}`, { url: '/' })).catch(() => {});
   }
 
-  // Si la tienda tiene WooCommerce conectado, enviamos el pedido allí AUTOMÁTICAMENTE
-  // (Effi/Dropi lo despachan desde WooCommerce). No bloquea la respuesta del bot y
-  // es idempotente: si falla, el pedido igual queda en DealFlow y se puede reenviar
-  // a mano desde el detalle del pedido.
+  // Auto-despacho a Effi por API (si la tienda lo activó): crea la remisión sola.
+  // No bloquea la respuesta del bot; si falla, el pedido queda en DealFlow para
+  // despacharlo a mano desde el detalle.
   void (async () => {
     try {
-      // Effi por API directa (si la tienda lo configuró con auto-despacho): remisión sin WooCommerce.
       const ef = await import('./effiApi.js');
       if (ef.effiApiListo(storeId) && ef.cfgEffi(storeId)?.autoDespacho) {
         const re = await ef.despacharEffi(storeId, oid);
         if ('error' in re) console.warn(`[effi] pedido DF-${numero} NO se envió: ${re.error}`);
-        return;
       }
-      const woo = await import('./woocommerce.js');
-      // Auto-despacho SIN botón: el proveedor preferido de la tienda (aunque haya dos
-      // conectados) o, si no hay preferido, el único conectado. Con dos y sin preferido,
-      // el dueño elige por pedido desde el detalle.
-      const prov = woo.proveedorAutoDespacho(storeId);
-      if (!prov) {
-        if (woo.proveedoresConectados(storeId).length === 0) console.log('[woo] pedido no auto-enviado: no hay WooCommerce conectado');
-        else console.log('[woo] pedido no auto-enviado: hay 2 proveedores y no hay preferido, se elige a mano');
-        return;
-      }
-      // Effi NATIVO (DealFlow como tienda): se envía la remisión por webhook, NO por
-      // un WooCommerce real. Igual que el despacho manual, usamos enviarPedidoAEffi.
-      if (prov === 'effi') {
-        const { estadoEffi, enviarPedidoAEffi } = await import('./effiWoo.js');
-        if (estadoEffi(storeId).activo) {
-          const re = await enviarPedidoAEffi(storeId, oid, false, true);
-          if ('error' in re) { console.warn(`[effi] pedido DF-${numero} NO se envió: ${re.error}`); registrarLog(storeId, 'error', 'despacho', `El pedido DF-${numero} no se pudo enviar a Effi: ${re.error}`, lead.id); }
-          else {
-            db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ? WHERE id = ?').run(re.remision, 'effi', oid);
-            if (re.sinSku.length) registrarLog(storeId, 'warn', 'despacho', `DF-${numero} se envió a Effi, pero ${re.sinSku.length} ítem(s) NO tienen SKU vinculado (Effi no los reconocerá): ${re.sinSku.join(', ')}.`, lead.id);
-            else registrarLog(storeId, 'info', 'despacho', `Pedido DF-${numero} enviado a Effi como remisión ${re.remision}.`, lead.id);
-          }
-          return; // ya despachado por la vía nativa
-        }
-      }
-      const skus: Record<string, string> = {};
-      for (const p of db.prepare("SELECT nombre, sku FROM products WHERE store_id = ? AND sku != ''").all(storeId) as { nombre: string; sku: string }[]) skus[p.nombre] = p.sku;
-      const variantesSku = db.prepare("SELECT p.nombre producto, v.label, COALESCE(NULLIF(json_extract(v.refs,'$.'||?),''), v.sku) sku FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(NULLIF(json_extract(v.refs,'$.'||?),''), v.sku) != ''").all(prov, storeId, prov) as { producto: string; label: string; sku: string }[];
-      const transportadora = woo.despachoConfig(storeId).transportadora;
-      const r = await woo.crearPedido(storeId, { cliente, ciudad, departamento, tel: lead.tel || '', direccion, nota: '', envio: 0, total }, items, skus, prov, variantesSku, transportadora);
-      const nombreProv = prov === 'dropi' ? 'Dropi' : 'Effi';
-      if ('error' in r) { console.warn(`[woo] pedido DF-${numero} NO se envió a ${nombreProv}: ${r.error}`); registrarLog(storeId, 'error', 'despacho', `El pedido DF-${numero} no se pudo enviar a ${nombreProv}: ${r.error}`, lead.id); }
-      else {
-        db.prepare('UPDATE orders SET woo_id = ?, despacho_proveedor = ?, transportadora = ? WHERE id = ?').run(r.wooId, prov, transportadora, oid);
-        console.log(`[woo] pedido DF-${numero} enviado a ${nombreProv} (#${r.numero})`);
-        if (r.sinMapear.length) {
-          // El pedido está en WooCommerce, pero estos ítems no casaron por SKU y el proveedor NO los despachará.
-          registrarLog(storeId, 'warn', 'despacho', `DF-${numero} llegó a WooCommerce, pero ${r.sinMapear.length} producto(s) NO coinciden por SKU con un producto de ${nombreProv} y NO se van a despachar: ${r.sinMapear.join(', ')}. Ponles el MISMO SKU del producto de ${nombreProv} en la sección Productos.`, lead.id);
-        } else {
-          registrarLog(storeId, 'info', 'despacho', `Pedido DF-${numero} enviado a ${nombreProv} (WooCommerce #${r.numero}) con ${r.mapeados} producto(s) mapeado(s) por SKU.`, lead.id);
-        }
-      }
-    } catch (e) { console.error('[woo] error auto-enviando pedido', e); }
+    } catch (e) { console.error('[effi] error auto-enviando pedido', e); }
   })();
 
   // Mensaje de confirmación al cliente.

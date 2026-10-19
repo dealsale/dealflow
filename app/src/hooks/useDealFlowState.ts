@@ -59,14 +59,7 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiOrderEstado,
   apiDeleteOrder,
   apiCrearPedido,
-  apiOrderDropi,
-  apiOrderDespachar,
   apiOrderDespacharSync,
-  apiWooProveedores,
-  apiWooPreferido,
-  apiWooVerificar,
-  apiWooSyncInventario,
-  apiWooSyncProductos,
   apiDropiEstado,
   apiDropiConectar,
   apiDropiPreferencia,
@@ -98,13 +91,10 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiCambiarTienda,
   apiCrearTienda,
   apiEliminarMiTienda,
-  apiEffiEstado,
   apiShopifyEstado,
   apiShopifyConectar,
   apiShopifyDesconectar,
   apiShopifyPublicarProducto,
-  apiEffiActivar,
-  apiEffiDesactivar,
   apiToggleStore,
   apiTogglePremiumTema,
   apiUpdateStore,
@@ -120,9 +110,6 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiPublicarPlantillaMeta,
   apiPublicarTodasPlantillasMeta,
   apiRefrescarPlantillaMeta,
-  apiWooCentral,
-  apiGuardarWooCentral,
-  apiProbarWooCentral,
   apiStats,
   apiImpersonate,
   apiOnboardingTienda,
@@ -174,7 +161,7 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla, WooCentralProv } from '../lib/api';
+import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla } from '../lib/api';
 import type { Flujo } from '../types';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
@@ -241,9 +228,6 @@ export interface DecoratedOrder extends Order {
   estadosDisponibles: EstadoPedido[];
   eliminar: () => void;
   open: () => void;
-  sendToDropi: () => void;
-  despachar: (proveedor: 'dropi' | 'effi', transportadora?: string, recaudo?: 'con' | 'sin') => void;
-  reenviarDespacho: (proveedor: 'dropi' | 'effi', transportadora?: string, recaudo?: 'con' | 'sin') => void;
   sincronizarEffi: () => void;
   despachado: boolean;
   despachoProveedor: string;
@@ -1225,39 +1209,8 @@ export function useDealFlowState() {
     return true;
   }
 
-  function sendToDropi(id: string) {
-    const o = ordersRef.current.find((x) => x.id === id);
-    if (!o || o.guia) return;
-    const guia = String(402000 + Math.floor(Math.random() * 900) + 100);
-    setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, guia } : x)));
-    if (apiMode && o.rowId) void apiOrderDropi(o.rowId).then((r) => {
-      if (r.data?.guia) setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, guia: r.data!.guia } : x)));
-    });
-  }
-
-  // Despacha el pedido por el proveedor elegido (creándolo en su WooCommerce).
+  // Mensaje del último "Actualizar" de despacho (Effi/Dropi por API).
   const [effiMsg, setEffiMsg] = useState('');
-  function despacharPedido(id: string, proveedor: 'dropi' | 'effi', reintentar = false, transportadora = '', recaudo: 'con' | 'sin' = 'con') {
-    const o = ordersRef.current.find((x) => x.id === id);
-    if (!o?.rowId) return;
-    const nombre = proveedor === 'dropi' ? 'Dropi' : 'Effi';
-    setEffiMsg(reintentar ? `Volviendo a enviar a ${nombre}…` : `Enviando a ${nombre}…`);
-    void apiOrderDespachar(o.rowId, proveedor, reintentar, transportadora, recaudo).then((r) => {
-      if (r.error || !r.data) { setEffiMsg(r.error || `No se pudo enviar a ${nombre}.`); return; }
-      const noMap = r.data.sinMapear || [];
-      if (r.data.nativo) {
-        // Effi nativo: se creó la remisión (o quedó sin ítems vinculados).
-        setEffiMsg(noMap.length
-          ? `⚠ Se envió a Effi (remisión ${r.data.remision}), pero ${noMap.length} ítem(s) SIN SKU vinculado: ${noMap.join(', ')}. Ponles el SKU = Referencia de Effi.`
-          : `✓ Pedido enviado a Effi como remisión ${r.data.remision} (${recaudo === 'sin' ? 'sin recaudo' : 'con recaudo'}). Verifícala en Effi.`);
-      } else if (noMap.length) {
-        setEffiMsg(`⚠ El pedido llegó a WooCommerce, pero ${noMap.length} producto(s) NO coinciden por SKU con un producto de ${nombre}, así que ${nombre} NO los va a despachar: ${noMap.join(', ')}. Ponles el mismo SKU del producto de ${nombre} en Productos y vuelve a enviar.`);
-      } else {
-        setEffiMsg(r.data.aviso || `✓ Pedido ${reintentar ? 'reenviado' : 'enviado'} a ${nombre}${transportadora ? ` por ${transportadora}` : ''}. La guía llega cuando lo despachen.`);
-      }
-      setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, wooId: r.data!.wooId, despachoProveedor: proveedor, transportadora, guia: reintentar ? '' : x.guia } : x)));
-    });
-  }
   function sincronizarEffi(id: string) {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o?.rowId) return;
@@ -1299,9 +1252,6 @@ export function useDealFlowState() {
         setSelectedOrderId(o.id);
         setSection('pedidos');
       },
-      sendToDropi: () => sendToDropi(o.id),
-      despachar: (proveedor: 'dropi' | 'effi', transportadora = '', recaudo: 'con' | 'sin' = 'con') => despacharPedido(o.id, proveedor, false, transportadora, recaudo),
-      reenviarDespacho: (proveedor: 'dropi' | 'effi', transportadora = '', recaudo: 'con' | 'sin' = 'con') => despacharPedido(o.id, proveedor, true, transportadora, recaudo),
       sincronizarEffi: () => sincronizarEffi(o.id),
       despachado: !!(o.wooId || o.dropiOrderId),
       despachoProveedor: o.despachoProveedor || '',
@@ -2903,26 +2853,10 @@ export function useDealFlowState() {
     });
   }
 
-  // Effi nativo: DealFlow como tienda WooCommerce (storefront por subdominio).
-  const [effiWoo, setEffiWoo] = useState<{ activo: boolean; slug: string; url: string }>({ activo: false, slug: '', url: '' });
   // Effi por API directa: ¿la tienda lo tiene listo para despachar?
   const [effiApi, setEffiApi] = useState<EffiApiEstado>({ conectado: false });
   async function cargarEffiApi() { const { data } = await apiEffiApiEstado(); if (data) setEffiApi(data); return data; }
   async function refrescarPedidos() { const { data } = await apiOrders(); if (data) setOrders(mapApiOrders(data.orders)); }
-  const [effiCreds, setEffiCreds] = useState<{ ck: string; cs: string } | null>(null);
-  async function cargarEffiWoo() { const { data } = await apiEffiEstado(); if (data) setEffiWoo(data); }
-  function activarEffiWoo() {
-    void apiEffiActivar().then((r) => {
-      if (r.error || !r.data) { toast(r.error || 'No se pudo activar el storefront de Effi.', 'error'); return; }
-      setEffiWoo({ activo: true, slug: r.data.slug, url: r.data.url });
-      setEffiCreds({ ck: r.data.ck, cs: r.data.cs }); // se muestran UNA vez
-      toast('Storefront de Effi activado ✓', 'ok');
-    });
-  }
-  function desactivarEffiWoo() {
-    void apiEffiDesactivar().then((r) => { if (!r.error) { setEffiWoo((s) => ({ ...s, activo: false })); setEffiCreds(null); toast('Storefront de Effi desactivado.', 'ok'); } });
-  }
-
   // ── Cupones (gestión del admin de DealFlow) ──
   async function reloadCupones() { const { data } = await apiCupones(); if (data) setCupones(data.cupones); }
   function crearCupon(nuevo: NuevoCupon) {
@@ -3026,33 +2960,6 @@ export function useDealFlowState() {
   function eliminarIntegracion(tipo: string) {
     void apiEliminarIntegracion(tipo).then(() => void reloadIntegraciones());
   }
-  // Proveedores WooCommerce conectados (dropi/effi) para mostrar los botones de despacho.
-  const [wooProveedores, setWooProveedores] = useState<string[]>([]);
-  const [wooPreferido, setWooPreferido] = useState<string>('');
-  const [wooAuto, setWooAuto] = useState<boolean>(false); // auto-envío (por defecto manual)
-  const [wooTransportadora, setWooTransportadora] = useState<string>('');
-  const [wooTransportadoras, setWooTransportadoras] = useState<string[]>([]);
-  async function reloadWooProveedores() {
-    const { data } = await apiWooProveedores();
-    if (data) {
-      setWooProveedores(data.proveedores);
-      setWooPreferido(data.preferido || '');
-      setWooAuto(!!data.auto);
-      setWooTransportadora(data.transportadora || '');
-      setWooTransportadoras(data.transportadoras || []);
-    }
-  }
-  // Guarda la config de despacho (auto-envío on/off + proveedor + transportadora por defecto).
-  function guardarDespacho(cfg: { proveedor?: string; auto?: boolean; transportadora?: string }) {
-    const proveedor = cfg.proveedor ?? wooPreferido;
-    const auto = cfg.auto ?? wooAuto;
-    const transportadora = cfg.transportadora ?? wooTransportadora;
-    setWooPreferido(proveedor); setWooAuto(auto); setWooTransportadora(transportadora); // optimista
-    void apiWooPreferido(proveedor, auto, transportadora).then((r) => { if (r.error) void reloadWooProveedores(); });
-  }
-  // Compat: cambiar solo el proveedor preferido.
-  function elegirWooPreferido(proveedor: string) { guardarDespacho({ proveedor }); }
-
   // Dropi API directa (despacho de Dropi por su API, no por WooCommerce).
   const [dropiConectado, setDropiConectado] = useState(false);
   const [dropiIntegrationUrl, setDropiIntegrationUrl] = useState('');
@@ -3077,39 +2984,10 @@ export function useDealFlowState() {
   }
 
   useEffect(() => {
-    if (apiMode && sessionUser) { void reloadWooProveedores(); void reloadDropi(); }
+    if (apiMode && sessionUser) { void reloadDropi(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser]);
 
-  // WooCommerce por proveedor (Dropi/Effi): probar conexión, inventario, productos.
-  const nombreProv = (p: string) => (p === 'dropi' ? 'Dropi' : 'Effi');
-  function verificarWoo(proveedor: string) {
-    setIntegracionMsg(`Probando la conexión con WooCommerce (${nombreProv(proveedor)})…`);
-    void apiWooVerificar(proveedor).then((r) => {
-      setIntegracionMsg(r.error ? r.error : `✓ Conexión con WooCommerce (${nombreProv(proveedor)}) correcta.`);
-      void reloadWooProveedores();
-      setTimeout(() => setIntegracionMsg(''), 4000);
-    });
-  }
-  function sincronizarInventarioWoo(proveedor: string) {
-    setIntegracionMsg(`Sincronizando inventario desde WooCommerce (${nombreProv(proveedor)})…`);
-    void apiWooSyncInventario(proveedor).then((r) => {
-      if (r.error || !r.data) { setIntegracionMsg(r.error || 'No se pudo sincronizar.'); return; }
-      setIntegracionMsg(`✓ Inventario sincronizado (${r.data.actualizados} productos).`);
-      if (apiMode) void reloadProducts();
-      setTimeout(() => setIntegracionMsg(''), 4500);
-    });
-  }
-  // Empuja el catálogo de DealFlow al WooCommerce del proveedor elegido.
-  function sincronizarProductosWoo(proveedor: string) {
-    setIntegracionMsg(`Enviando tus productos a WooCommerce (${nombreProv(proveedor)})…`);
-    void apiWooSyncProductos(proveedor).then((r) => {
-      if (r.error || !r.data) { setIntegracionMsg(r.error || 'No se pudieron sincronizar los productos.'); return; }
-      const { creados, actualizados, skusGenerados } = r.data;
-      setIntegracionMsg(`✓ Productos sincronizados: ${creados} creados, ${actualizados} actualizados en WooCommerce${skusGenerados ? ` · ${skusGenerados} SKU generados automáticamente` : ''}.`);
-      setTimeout(() => setIntegracionMsg(''), 7000);
-    });
-  }
   function elegirIaPredeterminada(proveedor: string) {
     setIaPredeterminada(proveedor);
     void apiSetIaPredeterminada(proveedor).then((r) => { if (r.error) { setIntegracionMsg(r.error); void reloadIntegraciones(); } });
@@ -3734,26 +3612,7 @@ export function useDealFlowState() {
     });
   }
   // WooCommerce central por operador (superadmin).
-  const [wooCentral, setWooCentral] = useState<{ dropi: WooCentralProv; effi: WooCentralProv } | null>(null);
-  const [wooCentralMsg, setWooCentralMsg] = useState('');
-  function cargarWooCentral() {
-    void apiWooCentral().then((r) => { if (r.data) setWooCentral(r.data); });
-  }
-  useEffect(() => { if (adminSection === 'despacho' && isSuperadmin) cargarWooCentral(); // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminSection, isSuperadmin]);
-  function guardarWooCentral(p: { proveedor: string; url: string; consumerKey?: string; consumerSecret?: string; activo?: boolean; preferido?: boolean }, cb?: () => void) {
-    setWooCentralMsg('Guardando…');
-    void apiGuardarWooCentral(p).then((r) => {
-      if (r.error) { setWooCentralMsg(r.error); return; }
-      setWooCentralMsg('✓ Guardado.'); cargarWooCentral(); cb?.();
-    });
-  }
-  function probarWooCentral(prov: string) {
-    setWooCentralMsg(`Probando conexión con ${prov}…`);
-    void apiProbarWooCentral(prov).then((r) => {
-      setWooCentralMsg(r.error ? `✕ ${r.error}` : `✓ Conexión con ${prov} correcta.`);
-    });
-  }
+
   // Barrido de WhatsApp: sincroniza el número guardado con el que hay hoy en Meta.
   const [waSyncMsg, setWaSyncMsg] = useState('');
   const [waSyncNumeros, setWaSyncNumeros] = useState<{ id: string; numero: string; nombre: string }[]>([]);
@@ -4364,14 +4223,9 @@ export function useDealFlowState() {
     cambiarTienda,
     crearTienda,
     eliminarMiTienda,
-    effiWoo,
     effiApi,
     cargarEffiApi,
     refrescarPedidos,
-    effiCreds,
-    cargarEffiWoo,
-    activarEffiWoo,
-    desactivarEffiWoo,
     planes,
     pagarSuscripcion,
     validarCupon,
@@ -4390,16 +4244,6 @@ export function useDealFlowState() {
     integracionMsg,
     effiMsg,
     variantesGenMsg,
-    verificarWoo,
-    sincronizarInventarioWoo,
-    sincronizarProductosWoo,
-    wooProveedores,
-    wooPreferido,
-    wooAuto,
-    wooTransportadora,
-    wooTransportadoras,
-    guardarDespacho,
-    elegirWooPreferido,
     dropiConectado,
     dropiIntegrationUrl,
     dropiPreferencia,
@@ -4452,10 +4296,6 @@ export function useDealFlowState() {
     auditBaneoStoreId,
     auditBaneoMsg,
     // Woo central por operador (superadmin)
-    wooCentral,
-    wooCentralMsg,
-    guardarWooCentral,
-    probarWooCentral,
     // Plantillas de mensajes de Meta (superadmin)
     plantillasMeta,
     tiendasCloudCount,

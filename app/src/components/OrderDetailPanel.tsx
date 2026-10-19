@@ -3,75 +3,9 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { confirmar } from './dialogs';
-import { apiDropiCotizar, apiDropiCrear, apiEffiLog, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiLogEvento, type EffiLineItem, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
+import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
 
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
-
-/**
- * "¿Qué pasó en Effi con este pedido?": muestra el registro de lo que DealFlow
- * envió a Effi y lo que Effi consultó, filtrado por el número de este pedido. Sirve
- * para ver por qué una remisión no se generó (p. ej. una variante sin Referencia).
- */
-function EffiLogPedido({ pedidoId }: { pedidoId: string }) {
-  const [abierto, setAbierto] = useState(false);
-  const [cargando, setCargando] = useState(false);
-  const [eventos, setEventos] = useState<EffiLogEvento[] | null>(null);
-  const [items, setItems] = useState<EffiLineItem[]>([]);
-  const cargar = () => {
-    setCargando(true);
-    void apiEffiLog(pedidoId).then((r) => { setEventos(r.data?.eventos || []); setItems(r.data?.items || []); setCargando(false); });
-  };
-  const toggle = () => { const n = !abierto; setAbierto(n); if (n && eventos === null) cargar(); };
-  const colorDe = (txt: string) => /bloquead|404|inválid|no existe|error|sin/i.test(txt) ? 'var(--df-danger-dark)'
-    : /ok|remisión|1 match|enviado/i.test(txt) ? 'var(--df-purple)' : 'var(--df-text-muted)';
-  return (
-    <div style={{ marginTop: 10, borderTop: '1px solid var(--df-border)', paddingTop: 10 }}>
-      <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', padding: 0, fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-purple)', cursor: 'pointer' }}>
-        <span style={{ fontSize: 11, transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
-        🔎 ¿Qué pasó en Effi con este pedido?
-      </button>
-      {abierto && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ background: 'var(--df-surface-2)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', marginBottom: 8, fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.45 }}>
-            Si aquí ves <b>remisión enviada / ok</b> pero en Effi <b>solo aparece el cliente sin el producto</b>, es porque Effi <b>no crea productos</b>: solo enlaza por <b>Referencia</b> a un producto que ya exista y esté <b>activo</b> en el catálogo de Effi. Revisa que la Referencia de la variante exista tal cual (y activa) en Effi.
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-            <button onClick={cargar} disabled={cargando} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 11.5, color: 'var(--df-text-muted)', cursor: 'pointer' }}>{cargando ? 'Cargando…' : '↻ Actualizar'}</button>
-          </div>
-          {/* Estructura EXACTA que se le manda a Effi: nombre, Referencia y si quedó vinculado. */}
-          {!!items.length && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 5 }}>Lo que le mandamos a Effi en este pedido:</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                {items.map((it, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid ' + (it.vinculado ? 'var(--df-border)' : 'var(--df-danger-border)'), borderRadius: 8, padding: '6px 9px' }}>
-                    <span style={{ fontSize: 12.5, flex: 1, minWidth: 0 }}>{it.qty}× {it.nombre}</span>
-                    <span style={{ fontSize: 11.5, fontFamily: "'JetBrains Mono',monospace", color: it.vinculado ? 'var(--df-purple)' : 'var(--df-danger-dark)' }}>{it.sku ? `Ref: ${it.sku}` : 'SIN Referencia'}</span>
-                    <span title={it.vinculado ? 'Effi puede enlazarlo' : 'Effi no lo reconocerá'} style={{ fontSize: 13 }}>{it.vinculado ? '✓' : '⚠'}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {cargando && eventos === null ? (
-            <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Cargando el registro…</div>
-          ) : !eventos || !eventos.length ? (
-            <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Todavía no hay registros de Effi para este pedido. Aparecen cuando intentas despachar o cuando Effi consulta el pedido.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
-              {eventos.map((e, i) => (
-                <div key={i} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px' }}>
-                  <div style={{ fontSize: 10.5, color: 'var(--df-text-faint)', fontFamily: "'JetBrains Mono',monospace" }}>{e.ts} · {e.metodo} {e.ruta}{e.sku ? ` · sku=${e.sku}` : ''}</div>
-                  <div style={{ fontSize: 12.5, color: colorDe(e.resultado), marginTop: 2 }}>{e.resultado}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /**
  * Despacho por la API directa de Dropi: cotiza las transportadoras para el
@@ -430,13 +364,11 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
 export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   const [redespachar, setRedespachar] = useState(false);
   const effiApiListo = !!df.effiApi.listo;
-  const effiLegado = !effiApiListo && (df.wooProveedores.includes('effi') || !!df.effiWoo?.activo);
-  const effiOk = effiApiListo || effiLegado;
+  const effiOk = effiApiListo;
   const dropiOk = !!df.dropiConectado;
   const [prov, setProv] = useState<'effi' | 'dropi' | ''>('');
   const elegido = prov || (effiOk ? 'effi' : dropiOk ? 'dropi' : '');
   const dropiCreado = sel.despachoProveedor === 'dropi';
-  const esAdmin = df.sessionUser?.role === 'admin' || df.sessionUser?.role === 'superadmin' || !!df.sessionUser?.impersonando;
 
   if (sel.despachado && !redespachar) {
     const remision = sel.effiRemision || (sel.despachoProveedor === 'effi' ? sel.wooId : '');
@@ -465,7 +397,6 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
           <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Volver a despachar</button>
         </div>
         {df.effiMsg && <div style={{ marginTop: 8, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
-        {!dropiCreado && esAdmin && effiLegado && <EffiLogPedido pedidoId={sel.id} />}
       </div>
     );
   }
@@ -493,7 +424,7 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
             <b style={{ fontSize: 14, color: 'var(--df-text-strong)' }}>Effi</b>
             {elegido === 'effi' && <span style={{ marginLeft: 'auto', color: 'var(--df-purple)', fontWeight: 800 }}>●</span>}
           </span>
-          <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.35 }}>{effiOk ? (effiApiListo ? 'Remisión de venta' + (df.effiApi.guia?.activa ? ' + guía' : '') : 'Remisión (método anterior)') : 'Conéctalo en Integraciones'}</span>
+          <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.35 }}>{effiOk ? 'Remisión + guía' : 'Conéctalo en Integraciones'}</span>
         </button>
         <button onClick={() => dropiOk && setProv('dropi')} style={tarjetaProv(elegido === 'dropi', dropiOk)}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -506,20 +437,13 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
       </div>
 
       {elegido === 'effi' && effiApiListo && <EffiApiDespacho df={df} sel={sel} reintentar={redespachar} onHecho={() => setRedespachar(false)} />}
-      {elegido === 'effi' && effiLegado && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <button onClick={() => { sel.despachar('effi'); setRedespachar(false); }} style={btnP}>Generar remisión en Effi</button>
-          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Método anterior (DealFlow como tienda WooCommerce). Conecta Effi por API en Integraciones para el despacho directo.</div>
-          {df.effiMsg && <div style={{ fontSize: 12.5, color: df.effiMsg.startsWith('✓') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
-        </div>
-      )}
       {elegido === 'dropi' && <DropiDespacho df={df} sel={sel} onHecho={() => setRedespachar(false)} />}
     </div>
   );
 }
 
 export function OrderDetailPanel({ df }: { df: DealFlowState }) {
-  useEffect(() => { void df.cargarEffiWoo?.(); void df.cargarEffiApi?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void df.cargarEffiApi?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!df.hasSelectedOrder || !df.sel) return null;
   const sel = df.sel;
   const dropiCreado = sel.despachoProveedor === 'dropi'; // Dropi se despacha por API directa
@@ -574,7 +498,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
               </div>
             ))}
             <div style={{ display: 'flex', padding: '11px 14px', background: 'var(--df-bg)', fontSize: 13, color: 'var(--df-text-muted)' }}>
-              <span>Envío{sel.transportadora ? ` (${sel.transportadora})` : ''}</span>
+              <span>Envío{sel.transportadora && !(sel.transportadora === 'Dropi' && sel.despachoProveedor !== 'dropi') ? ` (${sel.transportadora})` : ''}</span>
               <div style={{ flex: 1 }} />
               <span>{sel.envioFmt}</span>
             </div>

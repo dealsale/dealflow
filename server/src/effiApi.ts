@@ -642,7 +642,7 @@ export async function generarGuiaPedido(storeId: string, orderId: string, g: Opc
   if (r.guia) {
     const fresca = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as Fila;
     if (fresca?.tel && !Number(fresca.guia_avisada)) {
-      try { const { avisarGuiaAlCliente } = await import('./syncWoo.js'); await avisarGuiaAlCliente(fresca as unknown as Parameters<typeof avisarGuiaAlCliente>[0], r.guia); } catch { /* el aviso no bloquea */ }
+      try { const { avisarGuiaAlCliente } = await import('./despachos.js'); await avisarGuiaAlCliente(storeId, orderId); } catch { /* el aviso no bloquea */ }
     }
   }
   return r;
@@ -738,9 +738,8 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
       resumen += `${guia ? ` · guía ${guia}` : ''}${estadoTxt ? ` · ${estadoTxt}` : ''}`;
       if (guia && !Number(orden.guia_avisada)) {
         try {
-          const { avisarGuiaAlCliente } = await import('./syncWoo.js');
-          const fresca = db.prepare('SELECT * FROM orders WHERE id = ?').get(orden.id) as Parameters<typeof avisarGuiaAlCliente>[0];
-          if (fresca?.tel) await avisarGuiaAlCliente(fresca, guia);
+          const { avisarGuiaAlCliente } = await import('./despachos.js');
+          if (txt(orden.tel)) await avisarGuiaAlCliente(txt(orden.store_id), txt(orden.id));
         } catch (e) { console.warn('[effi] no se pudo avisar la guía', e); }
       }
     }

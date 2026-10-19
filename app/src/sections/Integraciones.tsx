@@ -23,7 +23,7 @@ function Estado({ on }: { on: boolean }) {
 }
 
 /** Conexión de Dropi por su API directa (token de integración + URL). Con esto
- *  DealFlow cotiza transportadoras y crea el pedido en Dropi sin usar WooCommerce. */
+ *  DealFlow cotiza transportadoras y crea el pedido en Dropi. */
 function ShopifyCard({ df }: { df: DealFlowState }) {
   const [abierto, setAbierto] = useState(false);
   const [metodo, setMetodo] = useState<'token' | 'cc'>('cc'); // 'cc' = Client ID + Secret (Dev Dashboard)
@@ -243,70 +243,6 @@ function MetaCanalesCard({ df }: { df: DealFlowState }) {
   );
 }
 
-/**
- * Effi nativo: DealFlow se hace pasar por la tienda WooCommerce de Effi. Al activarlo
- * se genera un subdominio (storefront) y un par de llaves (ck/cs) que el dueño pega
- * en Effi → Integraciones Ecommerce. Las llaves se muestran UNA sola vez.
- */
-function EffiNativoCard({ df }: { df: DealFlowState }) {
-  const [copiado, setCopiado] = useState('');
-  useEffect(() => { void df.cargarEffiWoo(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const e = df.effiWoo;
-  const creds = df.effiCreds;
-  const copiar = (txt: string, que: string) => { void navigator.clipboard?.writeText(txt); setCopiado(que); setTimeout(() => setCopiado(''), 1500); };
-  const fila = (label: string, valor: string, que: string) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={lbl}>{label}</div>
-        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, wordBreak: 'break-all', color: 'var(--df-text-body)' }}>{valor}</div>
-      </div>
-      <button onClick={() => copiar(valor, que)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '6px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>{copiado === que ? '¡Copiado!' : 'Copiar'}</button>
-    </div>
-  );
-  return (
-    <div style={cardBase(e.activo)}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fff', border: '1px solid var(--df-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, boxSizing: 'border-box' }}><img src="/logos/effi.png" alt="Effi" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /></div>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>Effi (DealFlow como tienda)</div>
-        <div style={{ flex: 1 }} />
-        <Estado on={e.activo} />
-      </div>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.5, flex: 1 }}>
-        Sin WooCommerce aparte: DealFlow se conecta a Effi como tu tienda. Actívalo, copia la URL y las llaves, y pégalas en <b>Effi → Integraciones Ecommerce</b>. Tus productos (por SKU) y tus pedidos entran a Effi automáticamente.
-      </div>
-
-      {e.activo && (
-        <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {fila('URL principal (con la barra final)', e.url, 'url')}
-          {creds ? (
-            <>
-              {fila('Api key 1 (Consumer Key)', creds.ck, 'ck')}
-              {fila('Api key 2 (Consumer Secret)', creds.cs, 'cs')}
-              <div style={{ fontSize: 11.5, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', borderRadius: 8, padding: '7px 10px' }}>
-                ⚠️ Guarda estas llaves ahora: por seguridad no se vuelven a mostrar. Si las pierdes, dale “Regenerar llaves”.
-              </div>
-            </>
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Las llaves se muestran solo al generarlas. Si las necesitas de nuevo, dale “Regenerar llaves” (tendrás que volver a pegarlas en Effi).</div>
-          )}
-          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', lineHeight: 1.5 }}>
-            En Effi: Plataforma <b>Wordpress - Woocommerce</b> · Versión <b>3.00</b> · Tipo de transacción <b>REMISIÓN DE VENTA</b>. Luego en <b>Inventario → Artículos → Vincular masivamente con Ecommerce</b>. Importante: el <b>SKU de cada variante debe ser la Referencia del artículo en Effi</b>.
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        {!e.activo
-          ? <button onClick={df.activarEffiWoo} style={btnPrimary}>Activar</button>
-          : <>
-              <button onClick={df.activarEffiWoo} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Regenerar llaves</button>
-              <button onClick={df.desactivarEffiWoo} style={{ background: 'transparent', border: '1px solid var(--df-border)', color: 'var(--df-text-muted)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Desactivar</button>
-            </>}
-      </div>
-    </div>
-  );
-}
-
 const lbl: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600, marginBottom: 4 };
 const cardBase = (on: boolean): React.CSSProperties => ({ background: 'var(--df-surface)', border: '1px solid ' + (on ? 'var(--df-brand-border)' : 'var(--df-border)'), borderRadius: 12, padding: 18, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', gap: 10 });
 const btnPrimary: React.CSSProperties = { background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
@@ -355,8 +291,6 @@ export function Integraciones({ df }: { df: DealFlowState }) {
             </div>
             <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, alignItems: 'start' }}>
               {g.id === 'canales' && <MetaCanalesCard df={df} />}
-              {/* Método anterior (DealFlow como tienda WooCommerce): solo si sigue activo. */}
-              {g.id === 'envios' && df.effiWoo.activo && <EffiNativoCard df={df} />}
               {items.map((i) => {
                 if (i.especial === 'meta-ads') return <MetaAdsCard key={i.id} df={df} i={i} />;
                 const abiertaEsta = abierta === i.id;
@@ -422,13 +356,6 @@ export function Integraciones({ df }: { df: DealFlowState }) {
                       >
                         {abiertaEsta ? 'Cerrar' : i.id === 'wa' ? 'Ir a WhatsApp' : conectado ? 'Configurar' : 'Conectar'}
                       </button>
-                      {i.especial === 'woo' && conectado && !abiertaEsta && (
-                        <>
-                          <button onClick={() => df.verificarWoo(i.id.replace('woocommerce_', ''))} style={{ background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Probar conexión</button>
-                          <button onClick={() => df.sincronizarProductosWoo(i.id.replace('woocommerce_', ''))} style={{ background: 'var(--df-purple)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Enviar productos →</button>
-                          <button onClick={() => df.sincronizarInventarioWoo(i.id.replace('woocommerce_', ''))} style={{ background: 'var(--df-surface)', color: 'var(--df-purple)', border: '1px solid var(--df-purple-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Traer inventario</button>
-                        </>
-                      )}
                     </div>
                   </div>
                 );
@@ -438,66 +365,15 @@ export function Integraciones({ df }: { df: DealFlowState }) {
         );
       })}
 
-      {/* Effi por API directa: remisión (+ guía) y webhooks, sin WooCommerce. */}
+      {/* Effi por API directa: remisión (+ guía) y webhooks. */}
       <EffiApiCard df={df} />
 
-      {/* Dropi por API directa (transportadoras + guía sin usar WooCommerce). */}
+      {/* Dropi por API directa (transportadoras + guía). */}
       <DropiApiCard df={df} />
 
       {/* Shopify (Admin API): traer productos por SKU y crear pedidos. */}
       <ShopifyCard df={df} />
 
-      {/* Despacho: manual por defecto; se puede activar el auto-envío y elegir transportadora. */}
-      {df.wooProveedores.length > 0 && (
-        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 4, maxWidth: 620 }}>
-          <div style={{ fontWeight: 800, fontSize: 15 }}>Envío de pedidos</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, margin: '4px 0 14px' }}>
-            Por defecto los pedidos se envían <b>a mano</b> desde el detalle de cada pedido (así revisas antes de despachar). Si prefieres, actívalo para que se envíen solos al confirmarse.
-          </div>
-
-          {/* Switch de auto-envío */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: df.wooAuto ? 14 : 0 }}>
-            <span
-              onClick={() => df.guardarDespacho({ auto: !df.wooAuto })}
-              style={{ width: 42, height: 24, borderRadius: 999, background: df.wooAuto ? 'var(--df-brand)' : 'var(--df-border)', position: 'relative', flexShrink: 0, transition: 'background .15s' }}
-            >
-              <span style={{ position: 'absolute', top: 2, left: df.wooAuto ? 20 : 2, width: 20, height: 20, borderRadius: 999, background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
-            </span>
-            <span style={{ fontSize: 13.5, fontWeight: 600 }}>Enviar pedidos automáticamente al confirmarse</span>
-          </label>
-
-          {df.wooAuto && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ maxWidth: 340 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 5 }}>Enviar por</div>
-                <Dropdown
-                  ariaLabel="Proveedor de despacho automático"
-                  value={df.wooPreferido}
-                  onChange={(v) => df.guardarDespacho({ proveedor: v })}
-                  options={[
-                    { value: '', label: df.wooProveedores.length === 1 ? `${df.wooProveedores[0] === 'effi' ? 'Effi' : 'Dropi'} (el único conectado)` : 'Elige un proveedor…' },
-                    ...(df.wooProveedores.includes('effi') ? [{ value: 'effi', label: 'Effi' }] : []),
-                    ...(df.wooProveedores.includes('dropi') ? [{ value: 'dropi', label: 'Dropi' }] : []),
-                  ]}
-                />
-              </div>
-              <div style={{ maxWidth: 340 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 5 }}>Transportadora por defecto</div>
-                <Dropdown
-                  ariaLabel="Transportadora por defecto"
-                  value={df.wooTransportadora}
-                  onChange={(v) => df.guardarDespacho({ transportadora: v })}
-                  options={[{ value: '', label: 'Sin especificar' }, ...df.wooTransportadoras.map((t) => ({ value: t, label: t }))]}
-                />
-                <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Se anota en el pedido para que Dropi la vea. La transportadora final se confirma en el panel de Dropi.</div>
-              </div>
-              <div style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle-3)', border: '1px solid var(--df-brand-border)', borderRadius: 8, padding: '8px 11px' }}>
-                ✓ Los pedidos nuevos se enviarán solos a <b>{df.wooPreferido === 'effi' ? 'Effi' : df.wooPreferido === 'dropi' ? 'Dropi' : (df.wooProveedores[0] === 'effi' ? 'Effi' : 'Dropi')}</b>{df.wooTransportadora ? <> por <b>{df.wooTransportadora}</b></> : ''}.
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </section>
   );
 }
