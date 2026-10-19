@@ -70,6 +70,8 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
   const [cargando, setCargando] = useState(false);
   const [abierto, setAbierto] = useState<string>(''); // variantId con el buscador abierto
   const [buscarProd, setBuscarProd] = useState('');
+  // Acordeón: un producto abierto a la vez (con muchas variantes la lista se hacía eterna).
+  const [prodAbierto, setProdAbierto] = useState('');
 
   const cargar = async () => {
     const r = await apiEffiApiArticulos();
@@ -164,10 +166,20 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
         )}
         {visibles.map((p) => {
           const faltan = p.vars.filter((v) => !v.effiId).length;
+          const desplegado = prodAbierto === p.id && p.proveedor === 'effi';
           return (
-            <div key={p.id} style={{ border: '1px solid var(--df-border)', borderRadius: 11, padding: '10px 12px', background: 'var(--df-surface)' }}>
+            <div key={p.id} style={{ border: `1px solid ${desplegado ? 'var(--df-purple-border)' : 'var(--df-border)'}`, borderRadius: 11, padding: '10px 12px', background: 'var(--df-surface)', transition: 'border-color .2s' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <b style={{ flex: 1, minWidth: 140, fontSize: 13.5 }}>{p.nombre}</b>
+                <button
+                  onClick={() => p.proveedor === 'effi' && setProdAbierto(desplegado ? '' : p.id)}
+                  aria-expanded={desplegado}
+                  disabled={p.proveedor !== 'effi'}
+                  style={{ flex: 1, minWidth: 140, display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', padding: 0, textAlign: 'left', fontFamily: 'inherit', color: 'var(--df-text-strong)', cursor: p.proveedor === 'effi' ? 'pointer' : 'default' }}
+                >
+                  {p.proveedor === 'effi' && <span aria-hidden style={{ fontSize: 11, color: 'var(--df-text-faint)', transition: 'transform .2s', transform: desplegado ? 'rotate(90deg)' : 'none' }}>▸</span>}
+                  <b style={{ fontSize: 13.5 }}>{p.nombre}</b>
+                  <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', fontWeight: 500 }}>{p.vars.length} variante{p.vars.length === 1 ? '' : 's'}</span>
+                </button>
                 {p.proveedor === 'effi' && (
                   <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '3px 9px', background: faltan ? 'var(--df-warning-subtle)' : 'var(--df-purple-subtle)', color: faltan ? 'var(--df-warning)' : 'var(--df-purple)' }}>
                     {faltan ? `${faltan} por vincular` : '✓ vinculado'}
@@ -175,8 +187,8 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
                 )}
                 {seg(p)}
               </div>
-              {p.proveedor === 'effi' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              {desplegado && (
+                <div className="df-expand" style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                   {p.vars.map((v) => {
                     const etiqueta = v.nombre.startsWith(p.nombre) ? (v.nombre.slice(p.nombre.length).replace(/^\s*\(|\)\s*$/g, '') || 'Única') : v.nombre;
                     return (
