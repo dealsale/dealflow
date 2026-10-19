@@ -5,6 +5,7 @@ import { trazar, conPedido } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
 import { idiomaDe, MSG_ESTADO } from './idioma.js';
 import { ESTADOS_PEDIDO } from './estadosPedido.js';
+import { novedadesPorPedido } from './novedades.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
@@ -257,10 +258,11 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     id: p.id, tipo: p.tipo, titulo: p.titulo, desc: p.descripcion, vigencia: p.vigencia, activa: !!p.activa,
   }));
   const itemsTienda = itemsPorPedido(sid);
+  const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
-    items: itemsTienda.get(o.id as string) || [],
+    items: itemsTienda.get(o.id as string) || [], novedad: novTienda.get(o.id as string) || null,
   }));
   // Resumen (sin todos los mensajes de cada chat): la carga inicial del panel no
   // debe descargar la conversación completa de cientos de chats. Cada chat carga
@@ -442,10 +444,11 @@ api.get('/leads/:id/mensajes', requireAuth, requireStore, (req, res) => {
 api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const items = itemsPorPedido(sid);
+  const novs = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
-    items: items.get(o.id as string) || [],
+    items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));
   res.json({ orders });
 });
@@ -848,6 +851,35 @@ api.post('/orders/:rowId/estado', requireAuth, requireStore, async (req, res) =>
     if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
     void sendWhatsappText(sid, lead?.wa_id || o.tel, msg, o.tel).catch(() => {});
   }
+});
+
+// ── Novedades de envío (Effi) ──
+// Revisa ya en Effi (además del ciclo automático).
+api.post('/novedades/sync', requireAuth, requireStore, async (req, res) => {
+  const { sincronizarNovedades } = await import('./novedades.js');
+  const r = await sincronizarNovedades(req.user!.storeId!);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, ...r });
+});
+// Envía a Effi la solución de una novedad (desde el pedido).
+api.post('/novedades/:id/solucion', requireAuth, requireStore, async (req, res) => {
+  const { enviarSolucion } = await import('./novedades.js');
+  const b = req.body || {};
+  const solucion = ['ofrecer', 'redireccionar', 'devolver'].includes(b.solucion) ? b.solucion : '';
+  if (!solucion) return res.status(400).json({ error: 'Elige una solución.' });
+  const s = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n);
+  const r = await enviarSolucion(req.user!.storeId!, String(req.params.id), {
+    solucion, fecha: s(b.fecha, 10), recibe: s(b.recibe, 50), direccion: s(b.direccion, 100), telefono: s(b.telefono, 40), nota: s(b.nota, 500), origen: 'panel',
+  });
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+// Vuelve a escribirle al cliente sobre la novedad.
+api.post('/novedades/:id/avisar', requireAuth, requireStore, async (req, res) => {
+  const { avisarNovedadCliente } = await import('./novedades.js');
+  const r = await avisarNovedadCliente(req.user!.storeId!, String(req.params.id));
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json(r);
 });
 
 // Elimina un pedido por completo (y sus ítems). No toca el pedido en Dropi/Woo:
@@ -1257,6 +1289,15 @@ api.post('/effi-api/config', requireAuth, requireStore, requireOwner, async (req
     parcial.guia = {
       activa: g.activa === true, transportadora: s(g.transportadora), servicio: s(g.servicio), formaPagoFlete: s(g.formaPagoFlete), remitente: s(g.remitente),
       peso: num(g.peso, 1), volumen: num(g.volumen, 1), alto: num(g.alto, 10), ancho: num(g.ancho, 10), largo: num(g.largo, 10),
+    };
+  }
+  if (b.novedades && typeof b.novedades === 'object') {
+    const n = b.novedades as Record<string, unknown>;
+    const actual = ef.cfgEffi(sid)!.novedades;
+    parcial.novedades = {
+      avisarCliente: 'avisarCliente' in n ? n.avisarCliente === true : actual.avisarCliente,
+      botGestiona: 'botGestiona' in n ? n.botGestiona === true : actual.botGestiona,
+      autoEnviar: 'autoEnviar' in n ? n.autoEnviar === true : actual.autoEnviar,
     };
   }
   ef.guardarCfgEffi(sid, parcial);
@@ -2578,14 +2619,31 @@ api.post('/superadmin/meta-templates/:id/publicar', requireAuth, requireSuperAdm
   res.json({ ok: true, ...r });
 });
 
-// Publica TODAS las plantillas en TODAS las tiendas que aún NO las tienen aprobadas
-// (un clic, útil tras conectar tiendas nuevas). No toca las que ya están aprobadas.
+// Envía TODAS las plantillas a verificación en TODAS las tiendas que aún NO las
+// tienen aprobadas (un clic). Corre en segundo plano; el panel consulta el progreso.
 api.post('/superadmin/meta-templates/publicar-todas', requireAuth, requireSuperAdmin, async (_req, res) => {
-  const { publicarEnTodas } = await import('./metaTemplates.js');
-  const ids = (db.prepare('SELECT id FROM meta_templates').all() as { id: string }[]).map((r) => r.id);
-  let exitosas = 0, errores = 0, saltadas = 0;
-  for (const id of ids) { const r = await publicarEnTodas(id); exitosas += r.exitosas; errores += r.errores; saltadas += r.saltadas; }
-  res.json({ ok: true, plantillas: ids.length, exitosas, errores, saltadas });
+  const { enviarTodasEnSegundoPlano } = await import('./metaTemplates.js');
+  res.json({ ok: true, ...enviarTodasEnSegundoPlano() });
+});
+api.get('/superadmin/meta-templates/progreso', requireAuth, requireSuperAdmin, async (_req, res) => {
+  const { progresoEnvio } = await import('./metaTemplates.js');
+  res.json({ ok: true, ...progresoEnvio });
+});
+// Consulta a Meta el estado real de TODAS las plantillas en todas las tiendas.
+api.post('/superadmin/meta-templates/refrescar-todas', requireAuth, requireSuperAdmin, async (_req, res) => {
+  const { sincronizarTodas } = await import('./metaTemplates.js');
+  res.json({ ok: true, ...(await sincronizarTodas(false)) });
+});
+// Estado de UNA plantilla en cada tienda (para ver cuál falta y por qué).
+api.get('/superadmin/meta-templates/:id/tiendas', requireAuth, requireSuperAdmin, (req, res) => {
+  const filas = db.prepare(
+    `SELECT s.id store_id, s.nombre, COALESCE(p.estado,'sin_enviar') estado, COALESCE(p.motivo,'') motivo, COALESCE(p.updated_at,'') updated_at
+       FROM whatsapp w JOIN stores s ON s.id = w.store_id
+       LEFT JOIN meta_template_pub p ON p.store_id = w.store_id AND p.template_id = ?
+      WHERE w.conectado = 1 AND w.modo = 'cloud' AND COALESCE(w.waba_id,'') != ''
+      ORDER BY CASE COALESCE(p.estado,'sin_enviar') WHEN 'aprobada' THEN 9 ELSE 0 END, s.nombre`,
+  ).all(req.params.id);
+  res.json({ tiendas: filas });
 });
 
 // Refresca el estado de aprobación consultando a Meta por cada tienda.

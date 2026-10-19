@@ -2,6 +2,7 @@ import { OrigenBadge } from '../../components/OrigenPedido';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../../components/Dropdown';
 import { textoGuia } from '../Pedidos';
+import { NovedadesBandeja } from '../../components/Novedades';
 import { useState } from 'react';
 import { useFiltrosPedidos, PanelFiltros, ResumenFiltros, ORDENES, fechaCorta, type Orden } from '../../components/PedidosFiltros';
 import { ESTADOS_TODOS } from '../../lib/style';
@@ -59,6 +60,7 @@ export function MPedidos({ df }: { df: DealFlowState }) {
           <PanelFiltros fp={fp} />
         </>
       )}
+      <NovedadesBandeja df={df} />
       <ResumenFiltros fp={fp} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {fp.filtrados.map((o) => (

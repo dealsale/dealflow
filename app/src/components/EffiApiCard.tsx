@@ -220,6 +220,25 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                 <button onClick={guardar} disabled={cargando} style={btn}>Guardar configuración</button>
               </div>
 
+              {/* Novedades de envío */}
+              <div style={seccion}>
+                <div style={titulo}>⚠️ Novedades de envío</div>
+                <p style={ayuda}>Cuando la transportadora no puede entregar (cliente ausente, dirección errada…), DealFlow lo detecta en Effi, pone el pedido en <b>Novedad</b> y te lo muestra en Pedidos.</p>
+                {([
+                  ['avisarCliente', 'Avisarle al cliente por WhatsApp', 'Si pasaron más de 24 h desde su último mensaje, va con la plantilla aprobada «novedad_envio_pedido».'],
+                  ['botGestiona', 'Que el asistente resuelva la novedad con el cliente', 'Le pregunta si se lo vuelven a llevar, a qué dirección y qué día, y deja la solución lista.'],
+                  ['autoEnviar', 'Enviar la solución a Effi automáticamente', 'Si lo apagas, la solución queda lista en el pedido y tú la confirmas con un botón.'],
+                ] as const).map(([k, t, d]) => {
+                  const nv = cfg.novedades || { avisarCliente: true, botGestiona: true, autoEnviar: false };
+                  return (
+                    <label key={k} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 8, fontSize: 13, cursor: 'pointer', opacity: k === 'autoEnviar' && !nv.botGestiona ? 0.5 : 1 }}>
+                      <input type="checkbox" style={{ marginTop: 3 }} checked={!!nv[k]} disabled={k === 'autoEnviar' && !nv.botGestiona} onChange={(e) => set({ novedades: { ...nv, [k]: e.target.checked } })} />
+                      <span><b>{t}</b><br /><span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{d}</span></span>
+                    </label>
+                  );
+                })}
+              </div>
+
               {/* 3. Productos */}
               <div style={seccion}>
                 <div style={titulo}>3 · Productos ↔ artículos de Effi</div>

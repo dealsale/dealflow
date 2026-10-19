@@ -333,7 +333,18 @@ export interface ApiOrder {
   total: number;
   createdAt: string;
   items: { qty: number; nombre: string; precio: number }[];
+  novedad?: NovedadPedido | null;
 }
+/** Novedad de envío reportada por la transportadora (Effi). */
+export interface PropuestaNovedad { solucion: 'ofrecer' | 'redireccionar' | 'devolver'; fecha?: string; recibe?: string; direccion?: string; telefono?: string; nota?: string; origen?: 'bot' | 'panel' }
+export interface NovedadPedido {
+  id: string; orderId: string; nombre: string; aclaracion: string; estado: string; est: number; abierta: boolean; transportadora: string;
+  fechaReporte: string; foto: string; aviso: string; propuesta: PropuestaNovedad | null; propuestaEstado: string;
+  gestionTxt: string; gestionEst: number; gestionMsg: string; cantGestion: number; dias: number;
+}
+export const apiNovedadesSync = () => req<{ ok: true; abiertas: number; nuevas: number }>('/api/novedades/sync', 'POST');
+export const apiNovedadSolucion = (id: string, p: PropuestaNovedad) => req<{ ok: true; estado: string }>(`/api/novedades/${encodeURIComponent(id)}/solucion`, 'POST', p);
+export const apiNovedadAvisar = (id: string) => req<{ ok: true; via: string }>(`/api/novedades/${encodeURIComponent(id)}/avisar`, 'POST');
 export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
 export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET');
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
@@ -476,6 +487,7 @@ export interface EffiApiEstado {
   sucursal?: string; bodega?: string; centroCostos?: string; formaPago?: string; formaPagoContado?: boolean; medioPago?: string; caja?: string; cuenta?: string;
   vendedor?: string; articuloFlete?: string; diasEntrega?: number; autoDespacho?: boolean; guia?: EffiGuiaCfg;
   convenioDropshipping?: string;
+  novedades?: { avisarCliente: boolean; botGestiona: boolean; autoEnviar: boolean };
 }
 export interface EffiArticulo { id: string; descripcion: string; referencia: string; ecommerce: string; stock: number | null }
 export interface EffiEvento { id: number; evento: string; entrega: string; resumen: string; payload: string; created_at: string }
@@ -665,8 +677,16 @@ export const apiEliminarPlantillaMeta = (id: string) =>
   req<{ ok: true }>(`/api/superadmin/meta-templates/${id}`, 'DELETE');
 export const apiPublicarPlantillaMeta = (id: string) =>
   req<{ ok: true; total: number; exitosas: number; errores: number }>(`/api/superadmin/meta-templates/${id}/publicar`, 'POST');
+export interface ProgresoPlantillas { corriendo: boolean; plantillas: number; hechas: number; exitosas: number; errores: number; saltadas: number; inicio: string; fin: string }
 export const apiPublicarTodasPlantillasMeta = () =>
-  req<{ ok: true; plantillas: number; exitosas: number; errores: number; saltadas: number }>(`/api/superadmin/meta-templates/publicar-todas`, 'POST');
+  req<{ ok: true } & ProgresoPlantillas>(`/api/superadmin/meta-templates/publicar-todas`, 'POST');
+export const apiProgresoPlantillasMeta = () =>
+  req<{ ok: true } & ProgresoPlantillas>(`/api/superadmin/meta-templates/progreso`, 'GET');
+export const apiRefrescarTodasPlantillasMeta = () =>
+  req<{ ok: true; plantillas: number; actualizadas: number }>(`/api/superadmin/meta-templates/refrescar-todas`, 'POST');
+export interface EstadoPlantillaTienda { store_id: string; nombre: string; estado: string; motivo: string; updated_at: string }
+export const apiPlantillaMetaTiendas = (id: string) =>
+  req<{ tiendas: EstadoPlantillaTienda[] }>(`/api/superadmin/meta-templates/${id}/tiendas`, 'GET');
 export const apiRefrescarPlantillaMeta = (id: string) =>
   req<{ ok: true; actualizadas: number }>(`/api/superadmin/meta-templates/${id}/refrescar`, 'POST');
 

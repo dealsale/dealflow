@@ -694,6 +694,43 @@ db.exec(`CREATE TABLE IF NOT EXISTS event_log (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_eventlog_store ON event_log(store_id, id)');
 
+// Novedades de guías de Effi (problemas en la entrega que reporta la transportadora).
+// Una fila por novedad de Effi; propuesta = lo que el bot acordó con el cliente.
+db.exec(`CREATE TABLE IF NOT EXISTS novedades (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL,
+  order_id TEXT,
+  effi_id TEXT NOT NULL,
+  empresa TEXT NOT NULL DEFAULT '',
+  guia TEXT NOT NULL DEFAULT '',
+  nombre TEXT NOT NULL DEFAULT '',
+  aclaracion TEXT NOT NULL DEFAULT '',
+  est INTEGER NOT NULL DEFAULT 1,
+  estado_txt TEXT NOT NULL DEFAULT '',
+  transportadora TEXT NOT NULL DEFAULT '',
+  transp_effi TEXT NOT NULL DEFAULT '',
+  fecha_reporte TEXT NOT NULL DEFAULT '',
+  url_foto TEXT NOT NULL DEFAULT '',
+  cant_gestion INTEGER NOT NULL DEFAULT 0,
+  abierta INTEGER NOT NULL DEFAULT 1,
+  aviso TEXT NOT NULL DEFAULT '',
+  propuesta TEXT NOT NULL DEFAULT '',
+  propuesta_estado TEXT NOT NULL DEFAULT '',
+  gestion_id TEXT NOT NULL DEFAULT '',
+  gestion_est INTEGER NOT NULL DEFAULT 0,
+  gestion_txt TEXT NOT NULL DEFAULT '',
+  gestion_msg TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_novedades_store ON novedades(store_id, abierta)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_novedades_order ON novedades(order_id)');
+// Soluciones que acepta cada transportadora de Effi (se aprenden de las gestiones).
+db.exec(`CREATE TABLE IF NOT EXISTS effi_soluciones (
+  store_id TEXT NOT NULL, transp_effi TEXT NOT NULL, id_solucion TEXT NOT NULL, nombre TEXT NOT NULL,
+  PRIMARY KEY (store_id, transp_effi, id_solucion)
+)`);
+
 // Marcadores de migraciones de datos que solo deben correr una vez.
 db.exec("CREATE TABLE IF NOT EXISTS app_flags (clave TEXT PRIMARY KEY, ts TEXT NOT NULL DEFAULT (datetime('now')))");
 

@@ -1,4 +1,5 @@
 import { OrigenBadge } from './OrigenPedido';
+import { NovedadCard } from './Novedades';
 import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
@@ -381,6 +382,7 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
           {sel.transportadora && !(sel.transportadora === 'Dropi' && !dropiCreado) && <span style={chip('var(--df-warning-subtle)', 'var(--df-warning)')}>🚚 {sel.transportadora}</span>}
         </div>
         <PasosEnvio sel={sel} />
+        {sel.novedad && <div style={{ marginTop: 12 }}><NovedadCard df={df} sel={sel} /></div>}
         {!dropiCreado && !!sel.effiRemision && !sel.hasGuia && df.effiApi.conectado && !sel.effiGuiaCreada && <GuiaEffiForm df={df} sel={sel} />}
         {!sel.hasGuia && sel.effiGuiaCreada && <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--df-text-muted)', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px' }}>🚚 Guía creada en Effi · esperando que la transportadora asigne el número (llega solo).</div>}
         {sel.hasGuia && <GuiaAcciones df={df} sel={sel} />}

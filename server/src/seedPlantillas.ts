@@ -46,6 +46,15 @@ const PLANTILLAS: Semilla[] = [
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Sí, es correcto' }, { tipo: 'QUICK_REPLY', texto: 'No, es otro número' }],
   },
   {
+    // Novedad de envío reportada por la transportadora, cuando la ventana de 24 h
+    // está cerrada. Variables: nombre, tienda, pedido, transportadora y motivo.
+    nombre: 'novedad_envio_pedido', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nLa transportadora {{4}} reportó una novedad con tu pedido {{3}}: {{5}}.\n\nPara que lo recibas sin problema, respóndenos por aquí y dinos si te lo vuelven a llevar a la misma dirección (y qué día te queda bien) o a otra dirección en tu ciudad.',
+    pie: 'Mensaje sobre tu compra',
+    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'Interrapidísimo', 'cliente ausente'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Misma dirección' }, { tipo: 'QUICK_REPLY', texto: 'Otra dirección' }],
+  },
+  {
     nombre: 'recordatorio_abono', categoria: 'UTILITY', idioma: 'es',
     cuerpo: 'Hola {{1}}, te recordamos que tu pedido {{2}} está apartado.\nPara despacharlo necesitamos confirmar el pago de {{3}}.\nCuando quieras, respóndenos por aquí y te ayudamos a completarlo. 🙌',
     ejemplos: ['Camila', '#1098', '$60.000'],

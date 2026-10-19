@@ -22,7 +22,7 @@ const txt = (v: unknown) => (v == null ? '' : String(v));
 const diez = (t: string) => { const d = String(t || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : d; };
 
 /** Plantilla aprobada para la tienda (o null). */
-function plantillaAprobada(storeId: string, nombre: string): { nombre: string; idioma: string; encabezado: string; cuerpo: string } | null {
+export function plantillaAprobada(storeId: string, nombre: string): { nombre: string; idioma: string; encabezado: string; cuerpo: string } | null {
   const t = db.prepare(
     `SELECT t.nombre, t.idioma, t.encabezado, t.cuerpo FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id
       WHERE p.store_id = ? AND t.nombre = ? AND p.estado = 'aprobada'`,
@@ -31,7 +31,7 @@ function plantillaAprobada(storeId: string, nombre: string): { nombre: string; i
 }
 
 /** El chat del que salió el pedido: por lead_id y, si no, por el teléfono del pedido. */
-function chatDelPedido(storeId: string, o: Fila): { id: string; tel: string; wa_id: string } | undefined {
+export function chatDelPedido(storeId: string, o: Fila): { id: string; tel: string; wa_id: string } | undefined {
   if (txt(o.lead_id)) {
     const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(txt(o.lead_id), storeId) as { id: string; tel: string; wa_id: string } | undefined;
     if (l) return l;

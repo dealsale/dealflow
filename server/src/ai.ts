@@ -436,9 +436,11 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     | { texto: string; tipo: string }
     | undefined;
   const mediaSinTexto = !!ultimo && ultimo.tipo !== 'texto' && !String(ultimo.texto || '').trim();
+  const { directivaNovedad, leerMarcadorNovedad, quitarMarcadorNovedad, registrarPropuestaBot } = await import('./novedades.js');
+  const novedadTxt = directivaNovedad(storeId, leadId);
   const systemFinal = mediaSinTexto
-    ? `${system}${memoriaCliente}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
-    : system + memoriaCliente;
+    ? `${system}${memoriaCliente}${novedadTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
+    : system + memoriaCliente + novedadTxt;
 
   const destino = lead.wa_id || lead.tel;
   const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
@@ -561,7 +563,10 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     const mp = bruto.match(marcaPed);
     // Pase a humano: la IA decide (según lo configurado) que el chat lo tome una persona.
     const pideHumano = /##\s*HUMANO\b\s*(?:##)?/i.test(bruto);
-    const texto = bruto.replace(/##\s*HUMANO\b\s*(?:##)?/gi, '').replace(marcaStrip, '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').replace(/```+/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+    // Novedad de envío: el bot acordó la solución con el cliente.
+    const propNovedad = novedadTxt ? leerMarcadorNovedad(bruto) : null;
+    if (propNovedad) void registrarPropuestaBot(storeId, leadId, propNovedad).catch((e) => console.warn('[novedad] propuesta', e));
+    const texto = quitarMarcadorNovedad(bruto).replace(/##\s*HUMANO\b\s*(?:##)?/gi, '').replace(marcaStrip, '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').replace(/```+/g, '').replace(/[ \t]{2,}/g, ' ').trim();
     // ¿Enviamos fotos? Sí si la IA puso el marcador (con o sin nombre) o si el
     // cliente pidió fotos explícitamente (red de seguridad, igual que la del pedido).
     const nombreMarca = m && m[1] ? m[1].replace('|', ' ').trim() : '';
@@ -609,7 +614,8 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     // el pedido del último resumen que envió la IA, para no perder ventas ni quedar en
     // un bucle de "¿confirmas?". Aplica aunque hubiera un marcador fallido (mp): el
     // guard anti-duplicado de crearPedido evita crear dos.
-    if (!pedidoCreado && esAfirmacion(ultimo?.texto || '')) {
+    // (No aplica si el chat está resolviendo una novedad de envío: ese "sí" es de la novedad.)
+    if (!pedidoCreado && !novedadTxt && esAfirmacion(ultimo?.texto || '')) {
       const inner = pedidoDesdeResumen(leadId);
       if (inner) pedidoCreado = await crearPedido(storeId, lead, inner, productRows, destino, pn);
     }

@@ -20,7 +20,7 @@ import { estadoLogistico, siguienteEstado } from './estadosPedido.js';
  *    CELULAR del cliente (decisión de negocio: al cliente no se le pide cédula).
  */
 
-const BASE = 'https://effi.com.co';
+const BASE = process.env.EFFI_BASE_URL || 'https://effi.com.co'; // EFFI_BASE_URL solo para pruebas
 const PAIS_COLOMBIA = 47;
 const T_DNI_CEDULA = 2;
 // Tipo de transacción de la remisión de venta (mismo id que usa Effi en t_trans_venta).
@@ -42,7 +42,10 @@ export interface EffiCfg {
   convenioDropshipping: string;
   guia: EffiGuiaCfg;
   webhookToken: string; webhookSecret: string;
+  /** Novedades de guías: avisar al cliente, que el bot recoja los datos y si envía la solución a Effi él solo. */
+  novedades: NovedadesCfg;
 }
+export interface NovedadesCfg { avisarCliente: boolean; botGestiona: boolean; autoEnviar: boolean }
 
 const GUIA_VACIA: EffiGuiaCfg = { activa: false, transportadora: '', servicio: '', formaPagoFlete: '', remitente: '', peso: 1, volumen: 1, alto: 10, ancho: 10, largo: 10 };
 
@@ -62,6 +65,7 @@ export function cfgEffi(storeId: string): EffiCfg | null {
     convenioDropshipping: s('convenioDropshipping'),
     guia: { ...GUIA_VACIA, ...g, activa: g.activa === true } as EffiGuiaCfg,
     webhookToken: s('webhookToken'), webhookSecret: s('webhookSecret'),
+    novedades: (() => { const n = (c.novedades && typeof c.novedades === 'object' ? c.novedades : {}) as Record<string, unknown>; return { avisarCliente: n.avisarCliente !== false, botGestiona: n.botGestiona !== false, autoEnviar: n.autoEnviar === true }; })(),
   };
 }
 
@@ -77,6 +81,7 @@ export function guardarCfgEffi(storeId: string, parcial: Partial<EffiCfg>): Effi
   const base: Record<string, unknown> = actual ? { ...actual } : { guia: GUIA_VACIA };
   const nuevo: Record<string, unknown> = { ...base, ...parcial };
   if (parcial.guia) nuevo.guia = { ...(base.guia as EffiGuiaCfg), ...parcial.guia };
+  if (parcial.novedades) nuevo.novedades = { ...(base.novedades as NovedadesCfg), ...parcial.novedades };
   if (!nuevo.webhookToken) nuevo.webhookToken = randomBytes(18).toString('base64url');
   const json = JSON.stringify(nuevo);
   db.prepare("INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?, 'effi_api', ?, datetime('now')) ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at").run(storeId, json);
@@ -102,7 +107,7 @@ export function tiendaPorWebhookToken(token: string): string | null {
 
 interface EffiResp<T> { ok?: boolean; data?: T; mensaje?: string; paginacion?: { pagina: number; total_paginas: number; total: number } }
 
-async function effi<T>(apiKey: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, opts: { query?: Record<string, string | number | undefined>; body?: unknown } = {}): Promise<{ ok: boolean; http: number; body: EffiResp<T> }> {
+export async function effi<T>(apiKey: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, opts: { query?: Record<string, string | number | undefined>; body?: unknown } = {}): Promise<{ ok: boolean; http: number; body: EffiResp<T> }> {
   const qs = opts.query
     ? '?' + Object.entries(opts.query).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&')
     : '';
@@ -141,7 +146,7 @@ async function effiHttp<T>(apiKey: string, method: string, path: string, qs: str
   return { ok: false, http: 429, body: { ok: false, mensaje: 'Effi está limitando las peticiones (429). Intenta en un minuto.' } };
 }
 
-function mensajeError(r: { http: number; body: EffiResp<unknown> }): string {
+export function mensajeError(r: { http: number; body: EffiResp<unknown> }): string {
   if (r.http === 401) return 'Effi rechazó la API key (401): revisa que esté bien copiada y vigente (Administración → Usuarios → Ver más → Renovar API Key).';
   if (r.http === 403) return `El usuario de la API key no tiene permiso para esta función en Effi (403). ${r.body.mensaje || ''}`.trim();
   return r.body.mensaje || `Effi respondió ${r.http || 'sin conexión'}.`;
