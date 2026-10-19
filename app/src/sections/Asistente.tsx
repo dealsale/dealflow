@@ -126,9 +126,9 @@ function PruebaAsistente({ storeId }: { storeId: string }) {
         </button>
       </div>
 
-      <div ref={scrollRef} style={{ height: 'min(56vh, 480px)', minHeight: 300, overflowY: 'auto', background: 'var(--df-bg)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div ref={scrollRef} translate="no" style={{ height: 'min(56vh, 480px)', minHeight: 300, overflowY: 'auto', background: 'var(--df-bg)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {mensajes.length === 0 && (
-          <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--df-text-faint)', fontSize: 13.5, lineHeight: 1.7 }}>
+          <div translate="yes" style={{ margin: 'auto', textAlign: 'center', color: 'var(--df-text-faint)', fontSize: 13.5, lineHeight: 1.7 }}>
             Escríbele como lo haría un cliente:<br />
             <i>«hola», «tienes joggers?», «mándame fotos», «quiero 2»…</i>
           </div>
@@ -147,7 +147,7 @@ function PruebaAsistente({ storeId }: { storeId: string }) {
             </div>
           );
         })}
-        {enviando && <div style={{ color: 'var(--df-text-faint)', fontSize: 12.5 }}>El asistente está escribiendo…</div>}
+        {enviando && <div translate="yes" style={{ color: 'var(--df-text-faint)', fontSize: 12.5 }}>El asistente está escribiendo…</div>}
       </div>
 
       <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--df-border)' }}>
@@ -224,6 +224,13 @@ export function Asistente({ df }: { df: DealFlowState }) {
                     { v: 'divertido', icono: '🎉', t: 'Divertido', d: 'Buena energía y humor ligero.' },
                     { v: 'experto', icono: '🧠', t: 'Asesor experto', d: 'Explica beneficios con seguridad.' },
                     { v: 'directo', icono: '⚡', t: 'Directo', d: 'Al grano, facilita la compra.' },
+                  ]} />
+                </Campo>
+                <Campo titulo="Idioma" ayuda="En qué idioma le habla a tus clientes. Incluye los mensajes automáticos (confirmación del pedido, estados y guía).">
+                  <OpcionCards min={150} value={e.idioma || 'es'} onPick={(v) => set({ idioma: v })} opciones={[
+                    { v: 'es', icono: '🇪🇸', t: 'Español', d: 'Siempre en español.' },
+                    { v: 'en', icono: '🇺🇸', t: 'English', d: 'Always in English.' },
+                    { v: 'auto', icono: '🌐', t: 'Automático', d: 'Responde en el idioma en que le escriben.' },
                   ]} />
                 </Campo>
                 <Campo titulo="Tono y estilo" ayuda="Se aplica a todas sus respuestas (incluido el seguimiento).">

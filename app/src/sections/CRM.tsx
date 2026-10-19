@@ -260,7 +260,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                   <span style={{ color: c.sinResponder ? 'var(--df-brand)' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11.5, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ color: c.sinResponder ? 'var(--df-text)' : 'var(--df-text-muted)', fontWeight: c.sinResponder ? 600 : 400, fontSize: 12.5, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{c.ultimo}</div>
+                  <div style={{ color: c.sinResponder ? 'var(--df-text)' : 'var(--df-text-muted)', fontWeight: c.sinResponder ? 600 : 400, fontSize: 12.5, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }} translate="no">{c.ultimo}</div>
                   {c.sinResponder > 0 && (
                     <span title={`${c.sinResponder} mensaje(s) sin responder`} style={{ flexShrink: 0, minWidth: 18, height: 18, borderRadius: 999, background: 'var(--df-brand-mid)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>{c.sinResponder}</span>
                   )}
@@ -329,7 +329,7 @@ export function CRM({ df }: { df: DealFlowState }) {
               </button>
             </div>
 
-            <div ref={scrollRef} style={{ flex: 1, background: 'var(--df-bg)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+            <div ref={scrollRef} translate="no" style={{ flex: 1, background: 'var(--df-bg)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
               {chat.anuncio && (chat.anuncio.titular || chat.anuncio.id || chat.anuncio.url) && <AnuncioCard anuncio={chat.anuncio} />}
               {chat.mensajesDecorated.map((m, i) => {
                 const prev = chat.mensajesDecorated[i - 1];

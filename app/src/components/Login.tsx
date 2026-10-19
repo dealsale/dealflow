@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { cambiarIdiomaUI, idiomaUI, t } from '../i18n/traductor';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import logo from '../assets/logo.png';
 
@@ -76,7 +77,9 @@ const CSS = `
 @media (prefers-reduced-motion: reduce) { .dfl * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; } }
 `;
 
-const FRASES = ['duermes', 'estás con tu familia', 'buscas tu próximo producto ganador', 'montas tu siguiente campaña'];
+const FRASES_ES = ['duermes', 'estás con tu familia', 'buscas tu próximo producto ganador', 'montas tu siguiente campaña'];
+// Se escriben letra por letra: se traducen antes (la traducción en vivo no reconoce palabras a medias).
+const FRASES = FRASES_ES.map((f) => t(f));
 
 /** Fondo: red de nodos con paquetes de datos viajando y etiquetas que aparecen. */
 function RedDatos() {
@@ -88,7 +91,7 @@ function RedDatos() {
     if (!ctx) return;
     const small = window.innerWidth < 700;
     const dpr = small ? 1 : Math.min(2, window.devicePixelRatio || 1);
-    const TAGS = ['pedido #1043 ✓', '+$119.900', 'chat nuevo · Bogotá', 'IA → 1,8 s', 'guía generada', 'venta cerrada', 'remisión Effi ✓', 'enviado a Dropi', 'opt-in ✓', '02:13 a.m. · vendido'];
+    const TAGS = ['pedido #1043 ✓', '+$119.900', 'chat nuevo · Bogotá', 'IA → 1,8 s', 'guía generada', 'venta cerrada', 'remisión Effi ✓', 'enviado a Dropi', 'opt-in ✓', '02:13 a.m. · vendido'].map((x) => t(x));
     let w = 0, h = 0, raf = 0, last = 0, pkT = 0, tagT = 0;
     let nodes: { x: number; y: number; vx: number; vy: number; z: number }[] = [];
     let packets: { a: number; b: number; t: number; sp: number; col: string }[] = [];
@@ -249,6 +252,15 @@ export function Login({ df }: { df: DealFlowState }) {
         fontFamily: "'Inter',system-ui,sans-serif", color: C.text, colorScheme: 'dark',
       }}
     >
+      {/* Idioma de la interfaz (antes de entrar no hay menú de perfil). */}
+      <div translate="no" style={{ position: 'absolute', top: 14, right: 14, zIndex: 5, display: 'flex', border: '1px solid rgba(255,255,255,.18)', borderRadius: 999, overflow: 'hidden', background: 'rgba(0,0,0,.25)' }}>
+        {(['es', 'en'] as const).map((l) => (
+          <button key={l} onClick={() => cambiarIdiomaUI(l)} aria-label={l === 'es' ? 'Español' : 'English'}
+            style={{ border: 'none', padding: '5px 11px', fontFamily: 'inherit', fontWeight: 700, fontSize: 11.5, cursor: 'pointer', background: idiomaUI() === l ? 'rgba(255,255,255,.18)' : 'transparent', color: '#fff' }}>
+            {l.toUpperCase()}
+          </button>
+        ))}
+      </div>
       <style>{CSS}</style>
       <div className="dfl-grid" />
       <RedDatos />

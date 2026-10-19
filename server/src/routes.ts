@@ -3,6 +3,7 @@ import { Router } from 'express';
 import type { Request as ExRequest, Response as ExResponse } from 'express';
 import { trazar, conPedido } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
+import { idiomaDe, MSG_ESTADO } from './idioma.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
@@ -373,7 +374,7 @@ api.get('/leads/estados', requireAuth, requireStore, (req, res) => {
       (SELECT tipo FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_tipo,
       (SELECT created_at FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_at,
       (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id) AS n_msgs,
-      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de != 'cliente' AND lower(m.texto) LIKE '%resumen de tu pedido%') AS resumen,
+      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de != 'cliente' AND (lower(m.texto) LIKE '%resumen de tu pedido%' OR lower(m.texto) LIKE '%order summary%')) AS resumen,
       EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de != 'cliente' AND ${likeAny('m.texto', PIDE_DATOS)}) AS pidio_datos,
       EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' AND ${likeAny('m.texto', DIO_DATOS)}) AS dio_datos,
       EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' AND ${likeAny('m.texto', INTENCION)}) AS intencion
@@ -797,13 +798,7 @@ api.delete('/promos/:id', requireAuth, requireStore, (req, res) => {
 });
 
 // ── Pedidos ───────────────────────────────────────────────────────────
-const MSG_ESTADO: Record<string, (n: number) => string> = {
-  Confirmado: (n) => `✅ ¡Tu pedido #DF-${n} quedó confirmado! Ya lo estamos preparando para enviártelo. 📦`,
-  Empacado: (n) => `📦 Tu pedido #DF-${n} ya está empacado y listo para salir. 🚀`,
-  Despachado: (n) => `🚚 ¡Tu pedido #DF-${n} va en camino! Pronto lo recibes. 🙌`,
-  Entregado: (n) => `🎉 Tu pedido #DF-${n} fue entregado. ¡Muchas gracias por tu compra! 💚`,
-  Cancelado: (n) => `❌ Tu pedido #DF-${n} fue cancelado. Si fue un error o quieres retomarlo, escríbenos y con gusto te ayudamos. 🙏`,
-};
+// Mensajes al cliente por cambio de estado: en el idioma del asistente (ver idioma.ts).
 
 // Todos los estados posibles (incluye Cancelado). El dueño puede cambiar de
 // cualquiera a cualquiera; no es un flujo forzado sin retroceso.
@@ -822,7 +817,8 @@ api.post('/orders/:rowId/advance', requireAuth, requireStore, async (req, res) =
   res.json({ estado: nuevo });
 
   // Avísale al cliente por WhatsApp del nuevo estado (y déjalo en el chat).
-  const msg = MSG_ESTADO[nuevo]?.(o.numero);
+  const leadA = o.tel ? db.prepare("SELECT id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(req.user!.storeId, o.tel) as { id: string } | undefined : undefined;
+  const msg = MSG_ESTADO[idiomaDe(req.user!.storeId!, leadA?.id)][nuevo]?.(o.numero);
   if (msg && o.tel) {
     const lead = db.prepare("SELECT id, wa_id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(req.user!.storeId, o.tel) as { id: string; wa_id: string | null } | undefined;
     if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
@@ -844,7 +840,8 @@ api.post('/orders/:rowId/estado', requireAuth, requireStore, async (req, res) =>
   trazar(sid, o.id, { etapa: 'estado', nivel: nuevo === 'Cancelado' ? 'warn' : 'info', titulo: `Estado: ${o.estado} → ${nuevo}`, detalle: `Por ${req.user!.nombre}` });
   res.json({ estado: nuevo });
   // Solo notificamos cuando el estado tiene un mensaje pensado para el cliente.
-  const msg = MSG_ESTADO[nuevo]?.(o.numero);
+  const leadB = o.tel ? db.prepare("SELECT id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(sid, o.tel) as { id: string } | undefined : undefined;
+  const msg = MSG_ESTADO[idiomaDe(sid, leadB?.id)][nuevo]?.(o.numero);
   if (msg && o.tel) {
     const lead = db.prepare("SELECT id, wa_id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(sid, o.tel) as { id: string; wa_id: string | null } | undefined;
     if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
