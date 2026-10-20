@@ -23,6 +23,10 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [guardando, setGuardando] = useState(false);
+  const [shopApp, setShopApp] = useState('');
+  const [codigo, setCodigo] = useState('');
+  const [instalando, setInstalando] = useState(false);
+  const [manual, setManual] = useState(false);
   useEffect(() => { void df.cargarShopify?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const conectada = df.shopifyConectado;
   const listo = metodo === 'token' ? !!(shop.trim() && token.trim()) : !!(shop.trim() && clientId.trim() && clientSecret.trim());
@@ -46,30 +50,58 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
       abierta={abierto}
       onToggle={() => setAbierto((v) => !v)}
     >
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5, marginBottom: 10 }}>
-        Crea una <b>app</b> en Shopify con permisos <b>read_products, read/write_orders, read/write_draft_orders</b>. Hay dos formas de conectar según cómo te dé Shopify las llaves.
-      </div>
-      <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="mitienda.myshopify.com" style={inp} />
-      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-        <button onClick={() => setMetodo('cc')} style={tab('cc')}>Client ID + Secret</button>
-        <button onClick={() => setMetodo('token')} style={tab('token')}>Admin API token</button>
-      </div>
-      {metodo === 'cc' ? (
-        <>
-          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>Para apps del <b>Dev Dashboard</b> / tiendas de desarrollo. Copia el <b>ID de cliente</b> y el <b>Secreto del cliente</b> de la pestaña Credenciales de tu app.</div>
-          <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client ID (ID de cliente)" style={inp} />
-          <input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="Client Secret (shpss_…)" style={inp} />
-        </>
-      ) : (
-        <>
-          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>Para apps personalizadas instaladas. Pega el <b>Admin API access token</b> que sale al instalar la app (empieza por <b>shpat_</b>).</div>
-          <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Admin API access token (shpat_…)" style={inp} />
-        </>
+      {df.shopifyAppDisponible && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          {conectada && df.shopifyVia === 'app' ? (
+            <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', lineHeight: 1.5 }}>✓ Conectada con la <b>app DealFlow</b> instalada en tu tienda. Los pedidos nuevos de Shopify llegan a DealFlow.</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>
+                <b style={{ color: 'var(--df-text-strong)' }}>Instala DealFlow en tu Shopify con un clic</b> (sin crear apps ni copiar tokens). Escribe tu dominio, acepta en Shopify y queda conectada.
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input value={shopApp} onChange={(e) => setShopApp(e.target.value)} placeholder="mitienda.myshopify.com" style={{ ...inp, marginTop: 0, flex: 1, minWidth: 200 }} />
+                <button onClick={() => { if (shopApp.trim()) { setInstalando(true); df.instalarShopifyApp(shopApp.trim(), () => setInstalando(false)); } }} disabled={instalando || !shopApp.trim()} style={{ ...btnPrimary, background: '#5E8E3E', opacity: instalando || !shopApp.trim() ? 0.6 : 1 }}>Instalar en Shopify</button>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--df-text-faint)' }}>¿Instalaste DealFlow desde Shopify? Pega el código que te muestra la app:</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input value={codigo} onChange={(e) => setCodigo(e.target.value.toUpperCase())} placeholder="Código de 6 caracteres" maxLength={6} style={{ ...inp, marginTop: 0, width: 200, letterSpacing: '.12em', fontWeight: 700 }} />
+                <button onClick={() => { if (codigo.trim()) df.vincularShopifyCodigo(codigo.trim(), (ok) => ok && setCodigo('')); }} disabled={codigo.trim().length !== 6} style={{ ...btnPrimary, opacity: codigo.trim().length !== 6 ? 0.6 : 1 }}>Vincular</button>
+              </div>
+            </>
+          )}
+          <button onClick={() => setManual((v) => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, color: 'var(--df-text-muted)', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
+            {manual ? 'Ocultar conexión manual' : 'Conexión manual (avanzado: token o Client ID + Secret)'}
+          </button>
+        </div>
       )}
-      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-        <button onClick={guardar} disabled={guardando || !listo} style={{ ...btnPrimary, opacity: (guardando || !listo) ? 0.6 : 1 }}>{guardando ? 'Conectando…' : conectada ? 'Cambiar credenciales' : 'Conectar'}</button>
-        {conectada && <button onClick={df.desconectarShopify} style={btnGhostRed}>Desconectar</button>}
-      </div>
+      {(manual || !df.shopifyAppDisponible) && (<>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5, marginBottom: 10 }}>
+          Crea una <b>app</b> en Shopify con permisos <b>read_products, read/write_orders, read/write_draft_orders</b>. Hay dos formas de conectar según cómo te dé Shopify las llaves.
+        </div>
+        <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="mitienda.myshopify.com" style={inp} />
+        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+          <button onClick={() => setMetodo('cc')} style={tab('cc')}>Client ID + Secret</button>
+          <button onClick={() => setMetodo('token')} style={tab('token')}>Admin API token</button>
+        </div>
+        {metodo === 'cc' ? (
+          <>
+            <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>Para apps del <b>Dev Dashboard</b> / tiendas de desarrollo. Copia el <b>ID de cliente</b> y el <b>Secreto del cliente</b> de la pestaña Credenciales de tu app.</div>
+            <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client ID (ID de cliente)" style={inp} />
+            <input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="Client Secret (shpss_…)" style={inp} />
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>Para apps personalizadas instaladas. Pega el <b>Admin API access token</b> que sale al instalar la app (empieza por <b>shpat_</b>).</div>
+            <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Admin API access token (shpat_…)" style={inp} />
+          </>
+        )}
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <button onClick={guardar} disabled={guardando || !listo} style={{ ...btnPrimary, opacity: (guardando || !listo) ? 0.6 : 1 }}>{guardando ? 'Conectando…' : conectada ? 'Cambiar credenciales' : 'Conectar'}</button>
+          {conectada && <button onClick={df.desconectarShopify} style={btnGhostRed}>Desconectar</button>}
+        </div>
+        </>)}
+      {conectada && df.shopifyAppDisponible && !manual && <div style={{ marginTop: 4 }}><button onClick={df.desconectarShopify} style={btnGhostRed}>Desconectar</button></div>}
     </IntegracionFila>
   );
 }

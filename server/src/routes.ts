@@ -9,6 +9,7 @@ import { novedadesPorPedido } from './novedades.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { urlTienda } from './tiendaPublica.js';
+import * as sa from './shopifyApp.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
@@ -1150,7 +1151,33 @@ api.post('/dropi/preferencia', requireAuth, requireStore, requireOwner, (req, re
 api.get('/shopify/estado', requireAuth, requireStore, (req, res) => {
   const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").get(req.user!.storeId!) as { config: string } | undefined;
   const cfg = row ? JSON.parse(row.config || '{}') : {};
-  res.json({ conectado: !!(cfg.shop && cfg.token), shop: cfg.shop || '', nombre: cfg.nombre || '' });
+  res.json({ conectado: !!(cfg.shop && cfg.token), shop: cfg.shop || '', nombre: cfg.nombre || '', via: cfg.via || 'manual', appDisponible: sa.appDisponible() });
+});
+
+// ── App pública de Shopify (instalación con un clic) ──
+// La app incrustada manda el id token de App Bridge; no usa la cookie de DealFlow.
+api.post('/shopify/app/sesion', async (req, res) => {
+  const t = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const r = await sa.abrirSesion(t).catch((e) => ({ error: `Error interno: ${e instanceof Error ? e.message : e}` }));
+  if ('error' in r) return res.status(401).json({ error: r.error });
+  res.json(r);
+});
+api.post('/shopify/app/instalar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { normalizarShop } = await import('./shopify.js');
+  const r = sa.iniciarInstalacion(req.user!.storeId!, normalizarShop(String(req.body?.shop || '')));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+api.post('/shopify/app/vincular', requireAuth, requireStore, requireOwner, (req, res) => {
+  const r = sa.vincularConCodigo(req.user!.storeId!, String(req.body?.codigo || ''));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, ...r });
+});
+// Por si Shopify usa la URL de redirección (instalación heredada): volver a la app dentro de Shopify.
+api.get('/shopify/oauth/callback', (req, res) => {
+  const shop = String(req.query.shop || '').toLowerCase();
+  if (!sa.esShopValido(shop) || !sa.KEY()) return res.status(400).send('Tienda no válida.');
+  res.redirect(302, `https://${shop}/admin/apps/${encodeURIComponent(sa.KEY())}`);
 });
 
 // Conecta/actualiza Shopify (dominio + Admin API token) y prueba la conexión.
@@ -3190,6 +3217,17 @@ webhooks.post('/whatsapp', (req, res) => {
 });
 
 // ── Webhook de Wompi: confirma el pago de la suscripción ──────────────
+// Webhooks de la app de Shopify (firmados con HMAC del secret de la app).
+webhooks.post('/shopify', (req, res) => {
+  const raw = (req as { rawBody?: Buffer }).rawBody;
+  if (!sa.firmaWebhookValida(raw, String(req.headers['x-shopify-hmac-sha256'] || ''))) return res.status(401).send('firma no válida');
+  res.status(200).send('ok'); // responder rápido; procesar después
+  const topic = String(req.headers['x-shopify-topic'] || '');
+  const shop = String(req.headers['x-shopify-shop-domain'] || '').toLowerCase();
+  const id = String(req.headers['x-shopify-webhook-id'] || req.headers['x-shopify-event-id'] || '');
+  try { sa.procesarWebhook(topic, shop, id, (req.body || {}) as Record<string, unknown>); } catch (e) { console.error('[shopify-app] webhook', topic, e); }
+});
+
 webhooks.post('/wompi', async (req, res) => {
   try {
     const evento = (req.body || {}) as { event?: string; data?: { transaction?: Record<string, unknown> }; signature?: { checksum?: string; properties?: string[] }; timestamp?: number };

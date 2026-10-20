@@ -6,6 +6,7 @@ import path from 'node:path';
 import { api, webhooks } from './routes.js';
 import { db } from './db.js';
 import { paginaTienda } from './tiendaPublica.js';
+import { paginaApp, cspIncrustada } from './shopifyApp.js';
 import { seed } from './seed.js';
 import { seedPlantillas } from './seedPlantillas.js';
 import { seedAcademy, seedAcademyCursoVisual, limpiarAcademyRemarketing } from './seedAcademy.js';
@@ -56,7 +57,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'effi-ciudades-guardadas',
+    build: 'shopify-app-instalacion',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -154,6 +155,12 @@ if (existsSync(APP_DIST)) {
     const esInicio = /^\/(inicio|home)\/?$/i.test(req.path);
     // Tutoriales en vivo (página propia, en cualquier host).
     if (/^\/tutoriales\/?$/i.test(req.path)) return enviarHtml(res, path.join(APP_DIST, 'tutoriales.html'));
+    // App de Shopify incrustada en el panel de Shopify (solo se deja enmarcar por Shopify).
+    if (/^\/shopify\/app\/?$/i.test(req.path)) {
+      res.setHeader('Content-Security-Policy', cspIncrustada(String(req.query.shop || '').toLowerCase()));
+      res.setHeader('Cache-Control', SIN_CACHE);
+      return res.type('html').send(paginaApp());
+    }
     // Página pública de cada tienda (la "URL de la tienda" que pide Dropi), en cualquier host.
     const mTienda = req.path.match(/^\/tienda\/([a-z0-9-]{1,60})\/?$/i);
     if (mTienda) {

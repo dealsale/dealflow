@@ -88,6 +88,8 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiCrearTienda,
   apiEliminarMiTienda,
   apiShopifyEstado,
+  apiShopifyAppInstalar,
+  apiShopifyAppVincular,
   apiShopifyConectar,
   apiShopifyDesconectar,
   apiShopifyPublicarProducto,
@@ -2726,8 +2728,38 @@ export function useDealFlowState() {
   }
 
   // Shopify (Admin API): si la tienda tiene Shopify conectado.
-  const [shopify, setShopify] = useState<{ conectado: boolean; shop: string; nombre: string }>({ conectado: false, shop: '', nombre: '' });
+  const [shopify, setShopify] = useState<{ conectado: boolean; shop: string; nombre: string; via?: string; appDisponible?: boolean }>({ conectado: false, shop: '', nombre: '' });
   async function cargarShopify() { const { data } = await apiShopifyEstado(); if (data) setShopify(data); }
+  /** App de Shopify: abre la instalación en Shopify (al volver queda vinculada sola). */
+  function instalarShopifyApp(shop: string, cb?: (ok: boolean) => void) {
+    void apiShopifyAppInstalar(shop).then((r) => {
+      if (r.error || !r.data) { toast(r.error || 'No se pudo iniciar la instalación.', 'error'); cb?.(false); return; }
+      window.open(r.data.url, '_blank', 'noopener');
+      toast('Se abrió Shopify: acepta la instalación de DealFlow y vuelve aquí.', 'ok'); cb?.(true);
+    });
+  }
+  function vincularShopifyCodigo(codigo: string, cb?: (ok: boolean) => void) {
+    void apiShopifyAppVincular(codigo).then(async (r) => {
+      if (r.error || !r.data) { toast(r.error || 'No se pudo vincular.', 'error'); cb?.(false); return; }
+      await cargarShopify();
+      toast(`Shopify conectado ✓ (${r.data.shop})`, 'ok'); cb?.(true);
+    });
+  }
+  // Enlace "Vincular con mi cuenta" desde la app dentro de Shopify: ?shopify_codigo=XXXXXX.
+  // Se guarda al cargar (sobrevive al inicio de sesión) y se usa cuando entra el dueño.
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      const c = u.searchParams.get('shopify_codigo');
+      if (c) { sessionStorage.setItem('df:shopify_codigo', c); u.searchParams.delete('shopify_codigo'); window.history.replaceState(null, '', u.pathname + u.search + u.hash); }
+    } catch { /* sin storage */ }
+  }, []);
+  useEffect(() => {
+    if (!apiMode || sessionUser?.role !== 'vendedor' || sessionUser?.esDueno === false) return;
+    let c = '';
+    try { c = sessionStorage.getItem('df:shopify_codigo') || ''; sessionStorage.removeItem('df:shopify_codigo'); } catch { /* sin storage */ }
+    if (c) { setSection('integraciones'); vincularShopifyCodigo(c); }
+  }, [apiMode, sessionUser?.role, sessionUser?.esDueno]); // eslint-disable-line react-hooks/exhaustive-deps
   function conectarShopify(shop: string, creds: { token?: string; clientId?: string; clientSecret?: string }, cb?: (ok: boolean) => void) {
     void apiShopifyConectar(shop, creds).then((r) => {
       if (r.error || !r.data) { toast(r.error || 'No se pudo conectar Shopify.', 'error'); cb?.(false); return; }
@@ -3981,6 +4013,10 @@ export function useDealFlowState() {
     shopifyConectado: shopify.conectado,
     shopifyNombre: shopify.nombre,
     shopifyShop: shopify.shop,
+    shopifyVia: shopify.via || 'manual',
+    shopifyAppDisponible: !!shopify.appDisponible,
+    instalarShopifyApp,
+    vincularShopifyCodigo,
     cargarShopify,
     conectarShopify,
     desconectarShopify,
