@@ -380,6 +380,8 @@ MUY IMPORTANTE: cada producto puede tener sus PROPIAS reglas (aparecen como "· 
 CATÁLOGO (precios en COP):
 ${products || '(sin productos cargados aún)'}
 
+COBERTURA Y CONTRAENTREGA: a dónde se envía y si hay pago contraentrega lo deciden SOLO las reglas de la tienda y de cada producto (arriba). Si un mensaje anterior de este chat dijo que no había contraentrega o cobertura en alguna ciudad, ignóralo: fue un aviso automático que ya no aplica.
+
 FUENTE DE VERDAD: el CATÁLOGO de arriba es la ÚNICA fuente válida y ES EL ACTUAL de esta tienda (el dueño lo edita y cambia con el tiempo). Si mensajes anteriores de este chat mencionan productos, precios, combos o textos que YA NO están en este catálogo, IGNÓRALOS por completo: quedaron viejos. NUNCA mezcles información de un producto con otro; responde solo con los datos del producto exacto por el que preguntan, tal como aparece hoy en el catálogo.
 
 PROMOS ACTIVAS:
@@ -454,9 +456,10 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   const mediaSinTexto = !!ultimo && ultimo.tipo !== 'texto' && !String(ultimo.texto || '').trim();
   const { directivaNovedad, leerMarcadorNovedad, quitarMarcadorNovedad, registrarPropuestaBot } = await import('./novedades.js');
   const novedadTxt = directivaNovedad(storeId, leadId);
-  // Envío real de sus pedidos (rastreo) y cobertura de su ciudad antes de confirmar.
+  // Envío real de sus pedidos (rastreo). La cobertura NO se le da al asistente: los
+  // lugares de entrega y la contraentrega salen solo de las reglas de la tienda y de los productos.
   const extras = await import('./effiExtras.js');
-  const envioTxt = (await extras.contextoEnvioLead(storeId, leadId).catch(() => '')) + (await extras.directivaCobertura(storeId, leadId).catch(() => ''));
+  const envioTxt = await extras.contextoEnvioLead(storeId, leadId).catch(() => '');
   const systemFinal = mediaSinTexto
     ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
     : system + memoriaCliente + novedadTxt + envioTxt;
@@ -968,7 +971,6 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio, product_id, variant_id) VALUES (?,?,?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio, ids.productId, ids.variantId);
   }
   db.prepare("UPDATE leads SET etapa = 'Listo para comprar', etiqueta = 'Venta' WHERE id = ?").run(lead.id);
-  void import('./effiExtras.js').then((m) => m.revisarCoberturaPedido(storeId, oid)).catch(() => {});
   trazar(storeId, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado por el asistente`, detalle: `Origen: ${origen}`, datos: { cliente, tel, ciudad, departamento, direccion, total, items, marcador: inner } });
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
   registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} creado para ${cliente} (${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`, lead.id);

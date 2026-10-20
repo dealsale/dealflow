@@ -148,36 +148,6 @@ export function textoCobertura(cb: Cobertura): string {
   return `Contraentrega disponible a ${cb.destino}${cb.dias ? ` · ${cb.dias} día${cb.dias === 1 ? '' : 's'} aprox.` : ''} (${cb.transportadoras.filter((t) => t.recaudo).map((t) => t.nombre).join(', ')}).`;
 }
 
-/** Al crear el pedido: revisa la cobertura y deja aviso si no hay contraentrega. */
-export async function revisarCoberturaPedido(storeId: string, orderId: string): Promise<void> {
-  const o = db.prepare('SELECT numero, ciudad, departamento FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
-  if (!o || !txt(o.ciudad)) return;
-  const cb = await coberturaCiudad(storeId, txt(o.departamento), txt(o.ciudad)).catch(() => null);
-  if (!cb) return;
-  db.prepare('UPDATE orders SET cobertura = ? WHERE id = ?').run(JSON.stringify(cb), orderId);
-  const ok = cb.conRecaudo && !cb.error;
-  trazar(storeId, orderId, { etapa: 'cobertura', nivel: ok ? 'ok' : 'warn', titulo: `Cobertura: ${textoCobertura(cb)}` });
-  if (!ok) registrarLog(storeId, 'warn', 'despacho', `DF-${txt(o.numero)}: ${textoCobertura(cb)} Revísalo antes de despachar.`);
-}
-
-/**
- * Para el asistente: si ya mostró el "Resumen de tu pedido", revisa la cobertura
- * de esa ciudad y le avisa si no hay contraentrega (antes de confirmar).
- */
-export async function directivaCobertura(storeId: string, leadId: string): Promise<string> {
-  if (!cfgEffi(storeId)?.apiKey) return '';
-  const r = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'bot' AND texto != '' ORDER BY created_at DESC LIMIT 6").all(leadId) as { texto: string }[];
-  const resumen = r.map((x) => x.texto).find((t) => /(resumen|summary)/i.test(t) && /(ciudad|city)/i.test(t));
-  if (!resumen) return '';
-  const campo = (et: string) => { const m = resumen.match(new RegExp('\\*?\\s*' + et + '[^:*]*:\\*?\\s*([^*\\n]+)', 'i')); return m ? m[1].replace(/[*_`]/g, '').trim() : ''; };
-  const ciudad = campo('(?:Ciudad|City)'); const dep = campo('(?:Departamento|Department)');
-  if (!ciudad) return '';
-  const cb = await coberturaCiudad(storeId, dep, ciudad).catch(() => null);
-  if (!cb || cb.error) return '';
-  if (cb.conRecaudo) return `\n\nCOBERTURA (dato real): sí hay envío con pago contraentrega a ${cb.destino}${cb.dias ? `, llega en unos ${cb.dias} día${cb.dias === 1 ? '' : 's'} hábiles` : ''}. Si el cliente pregunta cuándo llega, usa este dato.`;
-  return `\n\nCOBERTURA (IMPORTANTE, dato real): ${textoCobertura(cb)} Antes de confirmar el pedido, explícale con amabilidad al cliente que a esa ciudad no tenemos envío contraentrega y pregúntale si puede pagar por anticipado o recibir en otra ciudad cercana. No pongas el marcador ##PEDIDO hasta que el cliente acepte una de esas opciones.`;
-}
-
 // ── 3. Recaudos contraentrega (Effi Wallet) ────────────────────────────
 
 export interface ResumenRecaudos {

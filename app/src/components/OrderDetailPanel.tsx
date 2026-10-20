@@ -1,6 +1,6 @@
 import { OrigenBadge } from './OrigenPedido';
 import { NovedadCard } from './Novedades';
-import { CoberturaPedido, DevolucionEffi, RastreoGuia } from './EnvioEffi';
+import { DevolucionEffi, RastreoGuia } from './EnvioEffi';
 import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
@@ -410,7 +410,6 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
 
   return (
     <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: 14, marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {effiOk && <CoberturaPedido sel={sel} />}
       {redespachar && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-warning-subtle-2)', border: '1px solid var(--df-warning-border)', borderRadius: 9, padding: '8px 10px' }}>
           <span style={{ fontSize: 12.5, color: 'var(--df-warning)', fontWeight: 600, flex: 1 }}>Vas a despachar otra vez este pedido.</span>
