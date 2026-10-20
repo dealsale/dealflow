@@ -413,7 +413,7 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>💾 Copias diarias de la base</h2>
-          <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Una copia completa cada día; se guardan las últimas 7.</span>
+          <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Una copia completa cada día; se guardan las últimas 3.</span>
           <button onClick={() => void copiarAhora()} disabled={!!ocupado} style={{ ...linkBtn('var(--df-brand)'), border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px' }}>{ocupado === 'copia' ? 'Copiando…' : 'Hacer copia de hoy'}</button>
         </div>
         {!respaldos.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)', marginTop: 10 }}>Aún no hay copias (la primera se hace pocos minutos después de arrancar el servidor).</div>}
