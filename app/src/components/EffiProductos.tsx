@@ -127,14 +127,14 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
     setCargando(false);
     if (r.error || !r.data) { onMsg(r.error || 'No se pudo sincronizar.'); return; }
     const d = r.data;
-    onMsg(`✓ ${d.total} artículos ${d.soloVinculados ? 'vinculados a tu e-commerce' : 'de venta'} leídos de Effi · ${d.vinculadas} variantes de Effi vinculadas${d.sinVinculo.length ? ` · ${d.sinVinculo.length} por vincular` : ''}${d.sinProveedor ? ` · ${d.sinProveedor} productos sin definir si son de Effi o Dropi` : ''}.`);
+    onMsg(`✓ ${d.total} artículos ${d.soloVinculados ? 'vinculados a tu e-commerce' : 'de venta'} leídos de Effi · ${d.vinculadas} variantes de Effi vinculadas${d.marcados ? ` · ${d.marcados} productos encontrados en Effi y marcados como de Effi` : ''}${d.sinVinculo.length ? ` · ${d.sinVinculo.length} por vincular` : ''}${d.sinProveedor ? ` · ${d.sinProveedor} productos sin definir si son de Effi o Dropi` : ''}.`);
     await cargar();
   };
   const vincular = async (v: EffiVarianteDF, a: EffiArticulo) => {
     const r = await apiEffiApiVincular(v.variantId, a.id);
     if (r.error) { onMsg(r.error); return; }
     setNombres((n) => ({ ...n, [a.id]: a.descripcion + (a.referencia ? ` [${a.referencia}]` : '') }));
-    setVariantes((vs) => vs.map((x) => (x.variantId === v.variantId ? { ...x, effiId: a.id } : x)));
+    setVariantes((vs) => vs.map((x) => (x.variantId === v.variantId ? { ...x, effiId: a.id, auto: false } : x)));
     setAbierto('');
   };
 
@@ -157,7 +157,7 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
   return (
     <div>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5, margin: '0 0 12px' }}>
-        Marca cada producto como <b>Effi</b> o <b>Dropi</b>. La sincronización solo vincula los de Effi, con los artículos que enlazaste en tu e-commerce de Effi (por la referencia o el nombre). Los que no casen los buscas aquí mismo.
+        <b>Se vinculan solos:</b> al crear o editar un producto (y cada 30 min) DealFlow lo busca en Effi y une cada talla/color con su artículo por el <b>nombre y la variante</b>, aunque las palabras estén en otro orden. Marca cada producto como <b>Effi</b> o <b>Dropi</b> (si no usas Dropi, los que aparezcan en Effi se marcan solos). Lo que no case lo eliges aquí mismo.
       </p>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
         <button onClick={sincronizar} disabled={cargando} style={{ ...btn, opacity: cargando ? 0.7 : 1 }}>↻ Sincronizar productos de Effi</button>
@@ -219,6 +219,7 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
                           <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: v.effiId ? 'var(--df-text-body)' : 'var(--df-warning)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {v.effiId ? `→ ${nombres[v.effiId] || `Artículo #${v.effiId}`}` : 'Sin artículo de Effi'}
                           </span>
+                          {v.effiId && v.auto && <span title="DealFlow lo vinculó solo por nombre y variante. Si no es el correcto, cámbialo." style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: '2px 7px', background: 'var(--df-purple-subtle)', color: 'var(--df-purple)' }}>⚡ automático</span>}
                           <button onClick={() => setAbierto(abierto === v.variantId ? '' : v.variantId)} style={mini}>{abierto === v.variantId ? 'Cerrar' : v.effiId ? 'Cambiar' : 'Buscar en Effi'}</button>
                         </div>
                         {abierto === v.variantId && (
