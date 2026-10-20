@@ -334,6 +334,7 @@ export interface ApiOrder {
   createdAt: string;
   items: { qty: number; nombre: string; precio: number }[];
   novedad?: NovedadPedido | null;
+  effiDevolucion?: string;
 }
 /** Novedad de envío reportada por la transportadora (Effi). */
 export interface PropuestaNovedad { solucion: 'ofrecer' | 'redireccionar' | 'devolver'; fecha?: string; recibe?: string; direccion?: string; telefono?: string; nota?: string; origen?: 'bot' | 'panel' }
@@ -341,7 +342,21 @@ export interface NovedadPedido {
   id: string; orderId: string; nombre: string; aclaracion: string; estado: string; est: number; abierta: boolean; transportadora: string;
   fechaReporte: string; foto: string; aviso: string; propuesta: PropuestaNovedad | null; propuestaEstado: string;
   gestionTxt: string; gestionEst: number; gestionMsg: string; cantGestion: number; dias: number;
+  tipo: number; guia: string; destinatario: string;
 }
+export interface PasoRastreo { fecha: string; estado: string; estadoGlobal: string; observacion: string; foto: string }
+export interface CoberturaCiudad { destino: string; transportadoras: { nombre: string; recaudo: boolean; dias: number }[]; conRecaudo: boolean; dias: number | null; error?: string }
+export const apiRastreo = (rowId: string, forzar = false) => req<{ pasos: PasoRastreo[] }>(`/api/orders/${rowId}/rastreo${forzar ? '?forzar=1' : ''}`, 'GET');
+export const apiCobertura = (rowId: string) => req<{ cobertura: CoberturaCiudad | null; texto?: string }>(`/api/orders/${rowId}/cobertura`, 'GET');
+export const apiDevolucionEffi = (rowId: string) => req<{ ok: true; devolucion: string }>(`/api/orders/${rowId}/devolucion-effi`, 'POST');
+export interface ResumenRecaudos {
+  mes: string; recaudado: number; descuentos: number; retirado: number; neto: number; movimientos: number;
+  pendientes: { orderId: string; numero: number; cliente: string; guia: string; total: number; entregado: string }[];
+  pagados: { orderId: string; numero: number; cliente: string; guia: string; total: number; recaudo: number; descuentos: number; fecha: string }[];
+}
+export const apiRecaudos = (mes: string) => req<ResumenRecaudos>(`/api/effi-api/recaudos?mes=${encodeURIComponent(mes)}`, 'GET');
+export interface EstadoNovedades { ts: string; error: string; leidas: number; sinPedido: NovedadPedido[] }
+export const apiNovedadesEstado = () => req<EstadoNovedades>('/api/novedades/estado', 'GET');
 export const apiNovedadesSync = () => req<{ ok: true; abiertas: number; nuevas: number }>('/api/novedades/sync', 'POST');
 export const apiNovedadSolucion = (id: string, p: PropuestaNovedad) => req<{ ok: true; estado: string }>(`/api/novedades/${encodeURIComponent(id)}/solucion`, 'POST', p);
 export const apiNovedadAvisar = (id: string) => req<{ ok: true; via: string }>(`/api/novedades/${encodeURIComponent(id)}/avisar`, 'POST');
@@ -488,6 +503,7 @@ export interface EffiApiEstado {
   vendedor?: string; articuloFlete?: string; diasEntrega?: number; autoDespacho?: boolean; guia?: EffiGuiaCfg;
   convenioDropshipping?: string;
   novedades?: { avisarCliente: boolean; botGestiona: boolean; autoEnviar: boolean };
+  devolucionAuto?: boolean;
 }
 export interface EffiArticulo { id: string; descripcion: string; referencia: string; ecommerce: string; stock: number | null }
 export interface EffiEvento { id: number; evento: string; entrega: string; resumen: string; payload: string; created_at: string }

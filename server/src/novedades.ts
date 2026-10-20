@@ -41,12 +41,36 @@ interface NovedadEffi {
   id: string; empresa: string; guia_novedad: string; guia: string; est_novedad: string; estado_novedad: string; t_novedad: string;
   transportadora_efficommerce: string; nombre_transportadora_efficommerce: string; nombre_transportadora: string;
   nombre_novedad: string; aclaracion: string; cant_gestion: string; fecha_trans_transportadora: string; url_foto: string;
+  guia_adicional?: string; sucursal_guia?: string; id_guia?: string; nombre_destinatario?: string;
+}
+
+/** Última revisión de novedades por tienda (para mostrar si Effi respondió con error). */
+db.exec(`CREATE TABLE IF NOT EXISTS novedades_sync (store_id TEXT PRIMARY KEY, ts TEXT NOT NULL DEFAULT (datetime('now')), error TEXT NOT NULL DEFAULT '', leidas INTEGER NOT NULL DEFAULT 0)`);
+for (const col of ["tipo INTEGER NOT NULL DEFAULT 2", "destinatario TEXT NOT NULL DEFAULT ''"]) { try { db.exec(`ALTER TABLE novedades ADD COLUMN ${col}`); } catch { /* ya existe */ } }
+function estadoSync(storeId: string, error: string, leidas = 0): void {
+  const antes = db.prepare('SELECT error FROM novedades_sync WHERE store_id = ?').get(storeId) as { error: string } | undefined;
+  db.prepare("INSERT INTO novedades_sync (store_id, ts, error, leidas) VALUES (?, datetime('now'), ?, ?) ON CONFLICT(store_id) DO UPDATE SET ts = excluded.ts, error = excluded.error, leidas = excluded.leidas").run(storeId, error, leidas);
+  // El error se anota en el registro solo cuando aparece (no cada 4 minutos).
+  if (error && antes?.error !== error) registrarLog(storeId, 'error', 'novedad', `No pudimos leer las novedades de Effi: ${error} Revisa que el usuario de la API key tenga permiso de consulta en "Novedades de guías de transporte".`);
+}
+export function estadoNovedades(storeId: string): { ts: string; error: string; leidas: number; sinPedido: NovedadPanel[] } {
+  const e = db.prepare('SELECT ts, error, leidas FROM novedades_sync WHERE store_id = ?').get(storeId) as { ts: string; error: string; leidas: number } | undefined;
+  const sinPedido = (db.prepare('SELECT * FROM novedades WHERE store_id = ? AND order_id IS NULL AND abierta = 1 ORDER BY created_at').all(storeId) as Fila[]).map(aPanel);
+  return { ts: e?.ts || '', error: e?.error || '', leidas: e?.leidas || 0, sinPedido };
+}
+
+/** Pedido por el id interno de la guía en Effi (guardado al crear la guía desde DealFlow). */
+function pedidoDeGuiaEffi(storeId: string, sucursal: string, idGuia: string): Fila | undefined {
+  if (!idGuia) return undefined;
+  const cands = db.prepare("SELECT * FROM orders WHERE store_id = ? AND COALESCE(effi_guia,'') != ''").all(storeId) as Fila[];
+  return cands.find((o) => { const g = pj<Fila>(txt(o.effi_guia), {}); return txt(g.id) === idGuia && (!sucursal || !txt(g.sucursal) || txt(g.sucursal) === sucursal); });
 }
 
 /** Pedido de la tienda al que pertenece la guía. */
 function pedidoDeGuia(storeId: string, ...guias: string[]): Fila | undefined {
   for (const g of guias.map(txt).filter(Boolean)) {
-    const o = db.prepare('SELECT * FROM orders WHERE store_id = ? AND guia = ? ORDER BY created_at DESC LIMIT 1').get(storeId, g) as Fila | undefined;
+    // Tolerante a ceros a la izquierda y espacios ("014164499260" = "14164499260").
+    const o = db.prepare("SELECT * FROM orders WHERE store_id = ? AND (guia = ? OR LTRIM(REPLACE(guia,' ',''),'0') = LTRIM(?,'0')) ORDER BY created_at DESC LIMIT 1").get(storeId, g, g.replace(/\s/g, '')) as Fila | undefined;
     if (o) return o;
   }
   return undefined;
@@ -58,12 +82,19 @@ export async function sincronizarNovedades(storeId: string): Promise<{ abiertas:
   if (!c?.apiKey) return { error: 'Effi no está conectado.' };
   const desde = fechaCO(-25); const hasta = fechaCO(1);
   const filas: NovedadEffi[] = [];
-  for (let pagina = 1; pagina <= 5; pagina++) {
-    const r = await effi<NovedadEffi[]>(c.apiKey, 'GET', '/api/novedad_guia_transporte', { query: { desde, hasta, t_novedad: 2, vigente: 1, pagina, por_pagina: 100 } });
-    if (!r.ok) { if (pagina === 1) return { error: mensajeError(r) }; break; }
-    filas.push(...(r.body.data || []));
-    const pg = r.body.paginacion;
-    if (!pg || pagina >= pg.total_paginas) break;
+  // Las dos clases: 2 = requiere solución de la empresa (se resuelve desde DealFlow)
+  // y 1 = operativa de la transportadora (informativa: la gestiona ella).
+  for (const tipo of [2, 1]) {
+    for (let pagina = 1; pagina <= 5; pagina++) {
+      const r = await effi<NovedadEffi[]>(c.apiKey, 'GET', '/api/novedad_guia_transporte', { query: { desde, hasta, t_novedad: tipo, vigente: 1, pagina, por_pagina: 100 } });
+      if (!r.ok) {
+        if (pagina === 1 && tipo === 2) { const e = mensajeError(r); estadoSync(storeId, e); return { error: e }; }
+        break;
+      }
+      filas.push(...(r.body.data || []).map((x) => ({ ...x, t_novedad: x.t_novedad || String(tipo) })));
+      const pg = r.body.paginacion;
+      if (!pg || pagina >= pg.total_paginas) break;
+    }
   }
   let nuevas = 0;
   const sel = db.prepare('SELECT * FROM novedades WHERE id = ?');
@@ -72,31 +103,35 @@ export async function sincronizarNovedades(storeId: string): Promise<{ abiertas:
     const antes = sel.get(id) as Fila | undefined;
     const est = Number(n.est_novedad) || 1;
     const abierta = est === 1 || est === 2 ? 1 : 0;
-    const orden = antes?.order_id ? db.prepare('SELECT * FROM orders WHERE id = ?').get(txt(antes.order_id)) as Fila | undefined : pedidoDeGuia(storeId, n.guia_novedad, n.guia);
+    const orden = antes?.order_id ? db.prepare('SELECT * FROM orders WHERE id = ?').get(txt(antes.order_id)) as Fila | undefined
+      : pedidoDeGuia(storeId, n.guia_novedad, n.guia, txt(n.guia_adicional)) || pedidoDeGuiaEffi(storeId, txt(n.sucursal_guia), txt(n.id_guia));
+    const recienLigada = !!orden && (!antes || !txt(antes.order_id));
     const transp = nombreTransportadora(txt(n.nombre_transportadora_efficommerce) || txt(n.nombre_transportadora)) || txt(n.nombre_transportadora_efficommerce);
     if (!antes) {
-      db.prepare(`INSERT INTO novedades (id, store_id, order_id, effi_id, empresa, guia, nombre, aclaracion, est, estado_txt, transportadora, transp_effi, fecha_reporte, url_foto, cant_gestion, abierta)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, storeId, orden ? txt(orden.id) : null, txt(n.id), txt(n.empresa), txt(n.guia_novedad) || txt(n.guia),
-        txt(n.nombre_novedad), txt(n.aclaracion), est, txt(n.estado_novedad), transp, txt(n.transportadora_efficommerce), txt(n.fecha_trans_transportadora), txt(n.url_foto), Number(n.cant_gestion) || 0, abierta);
+      db.prepare(`INSERT INTO novedades (id, store_id, order_id, effi_id, empresa, guia, nombre, aclaracion, est, estado_txt, transportadora, transp_effi, fecha_reporte, url_foto, cant_gestion, abierta, tipo, destinatario)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, storeId, orden ? txt(orden.id) : null, txt(n.id), txt(n.empresa), txt(n.guia_novedad) || txt(n.guia),
+        txt(n.nombre_novedad), txt(n.aclaracion), est, txt(n.estado_novedad), transp, txt(n.transportadora_efficommerce), txt(n.fecha_trans_transportadora), txt(n.url_foto), Number(n.cant_gestion) || 0, abierta,
+        Number(n.t_novedad) || 2, txt(n.nombre_destinatario));
       if (abierta) nuevas++;
     } else {
-      db.prepare(`UPDATE novedades SET order_id = COALESCE(order_id, ?), nombre = ?, aclaracion = ?, est = ?, estado_txt = ?, transportadora = ?, cant_gestion = ?, url_foto = ?, abierta = ?, updated_at = datetime('now') WHERE id = ?`)
-        .run(orden ? txt(orden.id) : null, txt(n.nombre_novedad), txt(n.aclaracion), est, txt(n.estado_novedad), transp, Number(n.cant_gestion) || 0, txt(n.url_foto), abierta, id);
+      db.prepare(`UPDATE novedades SET order_id = COALESCE(order_id, ?), nombre = ?, aclaracion = ?, est = ?, estado_txt = ?, transportadora = ?, cant_gestion = ?, url_foto = ?, abierta = ?, tipo = ?, destinatario = ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(orden ? txt(orden.id) : null, txt(n.nombre_novedad), txt(n.aclaracion), est, txt(n.estado_novedad), transp, Number(n.cant_gestion) || 0, txt(n.url_foto), abierta, Number(n.t_novedad) || 2, txt(n.nombre_destinatario), id);
     }
     if (!orden) continue;
     const orderId = txt(orden.id);
     const motivo = txt(n.nombre_novedad) || 'novedad en la entrega';
-    if (!antes && abierta) {
+    if (recienLigada && abierta) {
       // Pedido en Novedad con el motivo de la transportadora.
       if (!FINALES.includes(txt(orden.estado))) db.prepare("UPDATE orders SET estado = 'Novedad', estado_woo = ? WHERE id = ?").run(`Novedad: ${motivo}`.slice(0, 60), orderId);
       trazar(storeId, orderId, { etapa: 'novedad', nivel: 'warn', titulo: `Novedad de ${transp || 'la transportadora'}: ${motivo}`, detalle: txt(n.aclaracion), datos: n });
       registrarLog(storeId, 'warn', 'novedad', `El pedido DF-${txt(orden.numero)} tiene una novedad: ${motivo}. Resuélvela en Pedidos → Novedades.`);
-      if (c.novedades.avisarCliente) await avisarNovedadCliente(storeId, id).catch((e) => console.warn('[novedad] aviso falló', e));
+      if (c.novedades.avisarCliente && (Number(n.t_novedad) || 2) === 2) await avisarNovedadCliente(storeId, id).catch((e) => console.warn('[novedad] aviso falló', e));
     } else if (antes && Number(antes.abierta) && !abierta) {
       trazar(storeId, orderId, { etapa: 'novedad', nivel: est === 3 ? 'ok' : 'info', titulo: `Novedad cerrada en Effi: ${txt(n.estado_novedad)}` });
     }
   }
   await sincronizarGestiones(storeId, c.apiKey, desde, hasta);
+  estadoSync(storeId, '', filas.length);
   const abiertas = (db.prepare('SELECT COUNT(*) n FROM novedades WHERE store_id = ? AND abierta = 1').get(storeId) as { n: number }).n;
   return { abiertas, nuevas };
 }
@@ -185,7 +220,7 @@ export function novedadAbiertaDelLead(storeId: string, leadId: string): Fila | u
   const diez = String(lead?.tel || '').replace(/\D/g, '').slice(-10);
   return db.prepare(
     `SELECT n.*, o.numero, o.cliente, o.ciudad, o.direccion, o.tel AS tel_pedido FROM novedades n JOIN orders o ON o.id = n.order_id
-      WHERE n.store_id = ? AND n.abierta = 1 AND (o.lead_id = ? OR (? != '' AND REPLACE(REPLACE(o.tel,' ',''),'+','') LIKE ?))
+      WHERE n.store_id = ? AND n.abierta = 1 AND n.tipo = 2 AND (o.lead_id = ? OR (? != '' AND REPLACE(REPLACE(o.tel,' ',''),'+','') LIKE ?))
       ORDER BY n.created_at DESC LIMIT 1`,
   ).get(storeId, leadId, diez, `%${diez}`) as Fila | undefined;
 }
@@ -272,6 +307,7 @@ export async function enviarSolucion(storeId: string, novedadId: string, p: Prop
   const n = db.prepare('SELECT * FROM novedades WHERE id = ? AND store_id = ?').get(novedadId, storeId) as Fila | undefined;
   if (!n) return { error: 'Novedad no encontrada.' };
   if (!Number(n.abierta)) return { error: 'Esta novedad ya está cerrada en Effi.' };
+  if (Number(n.tipo) === 1) return { error: 'Es una novedad operativa: la gestiona la transportadora, no necesita solución tuya.' };
   if (Number(n.est) === 2 && [1, 2, 4].includes(Number(n.gestion_est))) return { error: 'Ya hay una solución enviada esperando respuesta de la transportadora.' };
   const err = validarPropuesta(p);
   if (err) return { error: err };
@@ -312,6 +348,8 @@ export interface NovedadPanel {
   id: string; orderId: string; nombre: string; aclaracion: string; estado: string; est: number; abierta: boolean; transportadora: string;
   fechaReporte: string; foto: string; aviso: string; propuesta: Propuesta | null; propuestaEstado: string;
   gestionTxt: string; gestionEst: number; gestionMsg: string; cantGestion: number; dias: number;
+  /** 2 = requiere solución de la empresa; 1 = operativa de la transportadora (informativa). */
+  tipo: number; guia: string; destinatario: string;
 }
 export function aPanel(n: Fila): NovedadPanel {
   const f = txt(n.fecha_reporte) || txt(n.created_at);
@@ -320,6 +358,7 @@ export function aPanel(n: Fila): NovedadPanel {
     abierta: !!Number(n.abierta), transportadora: txt(n.transportadora), fechaReporte: f, foto: txt(n.url_foto), aviso: txt(n.aviso),
     propuesta: pj<Propuesta | null>(txt(n.propuesta), null), propuestaEstado: txt(n.propuesta_estado),
     gestionTxt: txt(n.gestion_txt), gestionEst: Number(n.gestion_est) || 0, gestionMsg: txt(n.gestion_msg), cantGestion: Number(n.cant_gestion) || 0,
+    tipo: Number(n.tipo) || 2, guia: txt(n.guia), destinatario: txt(n.destinatario),
     dias: f ? Math.max(0, Math.floor((Date.now() - new Date(f.replace(' ', 'T') + 'Z').getTime()) / 86400_000)) : 0,
   };
 }

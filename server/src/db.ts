@@ -197,7 +197,10 @@ addColumn('orders', "departamento TEXT NOT NULL DEFAULT ''");
 addColumn('orders', "woo_id TEXT NOT NULL DEFAULT ''"); // id del pedido en WooCommerce (puente a Effi/Dropi)
 addColumn('orders', "despacho_proveedor TEXT NOT NULL DEFAULT ''"); // dropi | effi: a cuál WooCommerce se envió el pedido
 addColumn('orders', 'guia_avisada INTEGER NOT NULL DEFAULT 0'); // 1 = ya le avisamos la guía al cliente por WhatsApp
-addColumn('orders', "estado_woo TEXT NOT NULL DEFAULT ''"); // último estado leído del WooCommerce del proveedor (diagnóstico)
+addColumn('orders', "estado_woo TEXT NOT NULL DEFAULT ''");
+addColumn('orders', "historial_ts TEXT NOT NULL DEFAULT ''"); // última consulta del rastreo de la guía (effiExtras)
+addColumn('orders', "cobertura TEXT NOT NULL DEFAULT ''"); // cobertura de la ciudad al crear el pedido (JSON)
+addColumn('orders', "effi_devolucion TEXT NOT NULL DEFAULT ''"); // devolución de venta registrada en Effi // último estado leído del WooCommerce del proveedor (diagnóstico)
 addColumn('orders', "dropi_order_id TEXT NOT NULL DEFAULT ''"); // id de la orden en Dropi (despacho por API directa)
 addColumn('orders', "guia_url TEXT NOT NULL DEFAULT ''"); // PDF de la guía (Dropi API)
 addColumn('orders', "lead_id TEXT NOT NULL DEFAULT ''"); // chat del que salió el pedido (para avisarle aunque el contacto sea otro número)

@@ -261,7 +261,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: itemsTienda.get(o.id as string) || [], novedad: novTienda.get(o.id as string) || null,
   }));
   // Resumen (sin todos los mensajes de cada chat): la carga inicial del panel no
@@ -447,7 +447,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const novs = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));
   res.json({ orders });
@@ -853,7 +853,40 @@ api.post('/orders/:rowId/estado', requireAuth, requireStore, async (req, res) =>
   }
 });
 
+// ── Effi: rastreo, cobertura, devolución y recaudos ──
+api.get('/orders/:rowId/rastreo', requireAuth, requireStore, async (req, res) => {
+  const { rastrearGuia } = await import('./effiExtras.js');
+  const r = await rastrearGuia(req.user!.storeId!, String(req.params.rowId), req.query.forzar ? 0 : 10);
+  if (!Array.isArray(r)) return res.status(400).json({ error: r.error });
+  res.json({ pasos: r });
+});
+api.get('/orders/:rowId/cobertura', requireAuth, requireStore, async (req, res) => {
+  const { coberturaCiudad, textoCobertura } = await import('./effiExtras.js');
+  const o = db.prepare('SELECT ciudad, departamento FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, req.user!.storeId) as { ciudad: string; departamento: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const cb = await coberturaCiudad(req.user!.storeId!, o.departamento || '', o.ciudad || '');
+  if (!cb) return res.json({ cobertura: null });
+  res.json({ cobertura: cb, texto: textoCobertura(cb) });
+});
+api.post('/orders/:rowId/devolucion-effi', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { registrarDevolucion } = await import('./effiExtras.js');
+  const r = await registrarDevolucion(req.user!.storeId!, String(req.params.rowId));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+api.get('/effi-api/recaudos', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { recaudosMes } = await import('./effiExtras.js');
+  const r = await recaudosMes(req.user!.storeId!, String(req.query.mes || ''));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+
 // ── Novedades de envío (Effi) ──
+// Última revisión de novedades (con error de Effi si lo hubo) y las que no encontraron su pedido.
+api.get('/novedades/estado', requireAuth, requireStore, async (req, res) => {
+  const { estadoNovedades } = await import('./novedades.js');
+  res.json(estadoNovedades(req.user!.storeId!));
+});
 // Revisa ya en Effi (además del ciclo automático).
 api.post('/novedades/sync', requireAuth, requireStore, async (req, res) => {
   const { sincronizarNovedades } = await import('./novedades.js');
@@ -1300,6 +1333,7 @@ api.post('/effi-api/config', requireAuth, requireStore, requireOwner, async (req
       autoEnviar: 'autoEnviar' in n ? n.autoEnviar === true : actual.autoEnviar,
     };
   }
+  if ('devolucionAuto' in b) parcial.devolucionAuto = b.devolucionAuto === true;
   ef.guardarCfgEffi(sid, parcial);
   res.json({ ok: true, listo: ef.effiApiListo(sid) });
 });

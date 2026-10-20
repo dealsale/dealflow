@@ -69,6 +69,7 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
   if (r.estado) { cambios.push('estado_woo = ?'); params.push(r.estado); }
   const destino = siguienteEstado(o.estado, estadoLogistico(r.estado, !!(guiaNueva || o.guia)));
   if (destino) { cambios.push('estado = ?'); params.push(destino); }
+  if (destino === 'Devuelto') void import('./effiExtras.js').then((m) => m.alQuedarDevuelto(o.store_id, o.id)).catch(() => {});
   if (cambios.length) {
     params.push(o.id);
     db.prepare(`UPDATE orders SET ${cambios.join(', ')} WHERE id = ?`).run(...params);

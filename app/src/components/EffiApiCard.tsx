@@ -239,6 +239,11 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                 })}
               </div>
 
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, margin: '-4px 0 14px', fontSize: 13, cursor: 'pointer' }}>
+                <input type="checkbox" style={{ marginTop: 3 }} checked={!!cfg.devolucionAuto} onChange={(e) => set({ devolucionAuto: e.target.checked })} />
+                <span><b>Registrar la devolución en Effi automáticamente</b><br /><span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Cuando un pedido quede «Devuelto», DealFlow crea la devolución de venta y la mercancía vuelve a tu bodega. Si lo apagas, lo haces con un botón dentro del pedido.</span></span>
+              </label>
+
               {/* 3. Productos */}
               <div style={seccion}>
                 <div style={titulo}>3 · Productos ↔ artículos de Effi</div>
