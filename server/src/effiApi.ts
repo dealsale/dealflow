@@ -221,24 +221,65 @@ export async function opcionesGuiaEffi(apiKey: string): Promise<{ transportadora
 // ── Ubicación (departamento / ciudad) ────────────────────────────────────────
 
 const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-const cacheProv = new Map<string, { id: string; nombre: string }[]>();
-const cacheCiudad = new Map<string, { id: string; nombre: string; provincia: string }[]>();
+// Departamentos y ciudades de Effi: tabla GLOBAL (igual para todas las tiendas). Se
+// guardan en la base para no depender de que Effi responda en cada despacho: si su
+// /api/ciudad falla (p. ej. 500), seguimos resolviendo con lo ya guardado.
+db.exec(`CREATE TABLE IF NOT EXISTS effi_geo (
+  tipo TEXT NOT NULL,               -- 'provincia' | 'ciudad'
+  id TEXT NOT NULL,
+  nombre TEXT NOT NULL,
+  provincia TEXT NOT NULL DEFAULT '',
+  actualizado TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (tipo, id)
+)`);
+// Medellín (de la documentación de Effi), por si la tabla aún está vacía.
+db.prepare("INSERT OR IGNORE INTO effi_geo (tipo, id, nombre, provincia) VALUES ('provincia','776','Antioquia',''), ('ciudad','12601','Medellín','776')").run();
+const guardarGeo = (tipo: 'provincia' | 'ciudad', filas: { id: string; nombre: string; provincia?: string }[]) => {
+  const ins = db.prepare("INSERT OR REPLACE INTO effi_geo (tipo, id, nombre, provincia, actualizado) VALUES (?,?,?,?,datetime('now'))");
+  db.transaction(() => { for (const f of filas) if (f.id && f.nombre) ins.run(tipo, f.id, f.nombre, f.provincia || ''); })();
+};
+const geoGuardado = (tipo: 'provincia' | 'ciudad', provincia?: string) =>
+  (provincia
+    ? db.prepare('SELECT id, nombre, provincia FROM effi_geo WHERE tipo = ? AND provincia = ?').all(tipo, provincia)
+    : db.prepare('SELECT id, nombre, provincia FROM effi_geo WHERE tipo = ?').all(tipo)) as { id: string; nombre: string; provincia: string }[];
+// Departamentos cuya lista COMPLETA de ciudades ya está guardada (no solo la semilla).
+const provCompletas = new Set<string>();
 
 async function provincias(apiKey: string): Promise<{ id: string; nombre: string }[]> {
-  const k = 'co';
-  if (cacheProv.has(k)) return cacheProv.get(k)!;
+  const guardadas = geoGuardado('provincia');
+  if (guardadas.length > 20) return guardadas;
   const r = await todo<Fila>(apiKey, '/api/provincia', { pais: PAIS_COLOMBIA }, 3);
   const lista = Array.isArray(r) ? r.map((f) => ({ id: txt(f.id), nombre: txt(f.nombre) })) : [];
-  if (lista.length) cacheProv.set(k, lista);
-  return lista;
+  if (lista.length) { guardarGeo('provincia', lista); return lista; }
+  return guardadas;
 }
 async function ciudadesDe(apiKey: string, provincia: string): Promise<{ id: string; nombre: string; provincia: string }[]> {
-  if (cacheCiudad.has(provincia)) return cacheCiudad.get(provincia)!;
+  if (provCompletas.has(provincia)) return geoGuardado('ciudad', provincia);
   const r = await todo<Fila>(apiKey, '/api/ciudad', { provincia }, 5);
-  const lista = Array.isArray(r) ? r.map((f) => ({ id: txt(f.id), nombre: txt(f.nombre), provincia: txt(f.provincia) })) : [];
-  if (lista.length) cacheCiudad.set(provincia, lista);
-  return lista;
+  const lista = Array.isArray(r) ? r.map((f) => ({ id: txt(f.id), nombre: txt(f.nombre), provincia: txt(f.provincia) || provincia })) : [];
+  if (lista.length) { guardarGeo('ciudad', lista); provCompletas.add(provincia); return lista; }
+  return geoGuardado('ciudad', provincia); // Effi falló: lo que ya teníamos guardado
 }
+/**
+ * Guarda TODAS las ciudades de Colombia la primera vez que una API key responde bien
+ * (en segundo plano, sin prisa). Después, resolver la ciudad de un pedido ya no
+ * depende de que Effi responda.
+ */
+let precargando = false;
+async function precargarGeo(apiKey: string): Promise<void> {
+  if (precargando) return;
+  precargando = true;
+  try {
+    for (const p of await provincias(apiKey)) {
+      if (provCompletas.has(p.id)) continue;
+      const cs = await ciudadesDe(apiKey, p.id);
+      if (!cs.length) break; // Effi está fallando: se reintenta en el próximo despacho
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  } finally { precargando = false; }
+}
+// Al arrancar: si ya hay ciudades guardadas de un departamento con varias, se da por completo.
+for (const f of db.prepare("SELECT provincia, COUNT(*) n FROM effi_geo WHERE tipo = 'ciudad' GROUP BY provincia HAVING n > 3").all() as { provincia: string }[]) provCompletas.add(f.provincia);
 
 /** Convierte "Antioquia" + "Medellín" en los ids de Effi. Tolera tildes y "Bogotá D.C.". */
 export async function resolverUbicacion(apiKey: string, departamento: string, ciudad: string): Promise<{ provincia: string; ciudad: string; nombre: string } | { error: string }> {
@@ -246,7 +287,7 @@ export async function resolverUbicacion(apiKey: string, departamento: string, ci
   let nd = norm(departamento).replace(/\b(departamento|depto|de)\b/g, ' ').replace(/\s+/g, ' ').trim();
   if (!nd && /bogota/.test(nc)) nd = 'bogota';
   const provs = await provincias(apiKey);
-  if (!provs.length) return { error: 'No pudimos leer los departamentos de Effi.' };
+  if (!provs.length) return { error: 'Effi no respondió la lista de departamentos. No es un error de la dirección: intenta en unos minutos.' };
   const candProv = nd
     ? provs.filter((p) => norm(p.nombre) === nd).concat(provs.filter((p) => norm(p.nombre) !== nd && (norm(p.nombre).includes(nd) || nd.includes(norm(p.nombre)))))
     : [];
@@ -255,10 +296,11 @@ export async function resolverUbicacion(apiKey: string, departamento: string, ci
   for (const p of buscarEn) {
     const cs = await ciudadesDe(apiKey, p.id);
     const hit = cs.find((c) => norm(c.nombre) === nc) || cs.find((c) => nc && (norm(c.nombre).startsWith(nc) || nc.startsWith(norm(c.nombre))));
-    if (hit) return { provincia: p.id, ciudad: hit.id, nombre: `${hit.nombre}, ${p.nombre}` };
+    if (hit) { void precargarGeo(apiKey).catch(() => {}); return { provincia: p.id, ciudad: hit.id, nombre: `${hit.nombre}, ${p.nombre}` }; }
   }
   const r = await effi<Fila[]>(apiKey, 'GET', '/api/ciudad', { query: { nombre: ciudad.trim().slice(0, 40), por_pagina: 100 } });
-  const todas = r.ok ? (r.body.data || []) : [];
+  if (r.ok) guardarGeo('ciudad', (r.body.data || []).map((c) => ({ id: txt(c.id), nombre: txt(c.nombre), provincia: txt(c.provincia) })));
+  const todas: Fila[] = r.ok ? (r.body.data || []) : geoGuardado('ciudad').filter((c) => norm(c.nombre) === nc);
   const exactas = todas.filter((c) => norm(txt(c.nombre)) === nc);
   if (exactas.length === 1) {
     const c = exactas[0];
@@ -266,6 +308,12 @@ export async function resolverUbicacion(apiKey: string, departamento: string, ci
     return { provincia: txt(c.provincia), ciudad: txt(c.id), nombre: `${txt(c.nombre)}, ${pv?.nombre || txt(c.nombre_provincia)}` };
   }
   if (exactas.length > 1) return { error: `La ciudad "${ciudad}" existe en varios departamentos; revisa el departamento del pedido.` };
+  // Effi falló al consultar (no es que la ciudad no exista): decirlo claro.
+  if (!r.ok) {
+    return { error: r.http === 403
+      ? 'El usuario de la API key de Effi no tiene permiso para consultar ciudades: en Effi dale permiso de consulta a "Tablas maestras".'
+      : `Effi está fallando al consultar ciudades (error ${r.http || 'de conexión'} de Effi). No es un error de la dirección "${ciudad}". Si sigue, revisa en Effi que el usuario de la API key tenga permiso de consulta en "Tablas maestras", o intenta en unos minutos.` };
+  }
   return { error: `Effi no reconoce la ciudad "${ciudad}"${departamento ? ` (${departamento})` : ''}. Corrígela en el pedido.` };
 }
 
