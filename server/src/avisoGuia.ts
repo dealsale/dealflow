@@ -71,8 +71,12 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
   const tpl = plantillaAprobada(storeId, PLANTILLA_GUIA);
 
   // ── 1. Al chat ──
+  const { calidadCfg, puedeEscribirle, contarProactivo } = await import('./calidad.js');
   const chat = chatDelPedido(storeId, o);
-  if (chat) {
+  // Si el cliente pidió que no le escribamos, no le mandamos la guía por WhatsApp.
+  const bajaChat = chat ? !puedeEscribirle(storeId, chat.tel, chat.id).ok && !!(db.prepare('SELECT no_contactar FROM leads WHERE id = ?').get(chat.id) as { no_contactar: number } | undefined)?.no_contactar : false;
+  if (bajaChat) res.detalle.push('El cliente pidió que no le escribamos: no se le envió la guía por WhatsApp.');
+  if (chat && !bajaChat) {
     const destino = chat.wa_id || chat.tel;
     let archivo = '';
     if (opts.conArchivo !== false) {
@@ -92,6 +96,7 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
       envio = await sendWhatsappText(storeId, destino, texto, chat.tel);
     }
     if (envio.ok) {
+      contarProactivo(storeId, chat.tel);
       res.chat = 'enviado'; res.con = tipo;
       db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, estado) VALUES (?,?,?,?,?,?,?,?,?)')
         .run(uid(), chat.id, 'bot', texto, tipo, tipo === 'texto' ? null : archivo, mime, tipo === 'texto' ? null : `Guia-${numDF}`, 'enviado');
@@ -111,7 +116,11 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
   // ── 2. Al celular de contacto, si es distinto al del chat ──
   const contacto = diez(txt(o.tel));
   const delChat = chat ? diez(chat.tel) : '';
-  if (contacto.length === 10 && contacto !== delChat) {
+  if (contacto.length === 10 && contacto !== delChat && !calidadCfg(storeId).avisarContacto) {
+    // Mensaje en frío a un número que nunca escribió: es lo que más reportes de spam genera.
+    res.contacto = 'no_aplica';
+    res.detalle.push(`El celular de contacto (${contacto}) es otro número: no se le escribe para cuidar la calidad del WhatsApp (actívalo en WhatsApp → Calidad si lo necesitas).`);
+  } else if (contacto.length === 10 && contacto !== delChat) {
     if (!tpl) {
       res.contacto = 'sin_plantilla';
       res.detalle.push(`El celular de contacto (${contacto}) es distinto al del chat, pero la plantilla "${PLANTILLA_GUIA}" aún no está aprobada para la tienda.`);

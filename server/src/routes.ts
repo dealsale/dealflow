@@ -823,10 +823,11 @@ api.post('/orders/:rowId/advance', requireAuth, requireStore, async (req, res) =
   // Avísale al cliente por WhatsApp del nuevo estado (y déjalo en el chat).
   const leadA = o.tel ? db.prepare("SELECT id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(req.user!.storeId, o.tel) as { id: string } | undefined : undefined;
   const msg = MSG_ESTADO[idiomaDe(req.user!.storeId!, leadA?.id)][nuevo]?.(o.numero);
-  if (msg && o.tel) {
+  const { puedeEscribirle, contarProactivo } = await import('./calidad.js');
+  if (msg && o.tel && puedeEscribirle(req.user!.storeId!, o.tel, leadA?.id).ok) {
     const lead = db.prepare("SELECT id, wa_id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(req.user!.storeId, o.tel) as { id: string; wa_id: string | null } | undefined;
     if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
-    void sendWhatsappText(req.user!.storeId!, lead?.wa_id || o.tel, msg, o.tel).catch(() => {});
+    void sendWhatsappText(req.user!.storeId!, lead?.wa_id || o.tel, msg, o.tel).then((r) => { if (r.ok) contarProactivo(req.user!.storeId!, o.tel); }).catch(() => {});
   }
 });
 
@@ -846,11 +847,23 @@ api.post('/orders/:rowId/estado', requireAuth, requireStore, async (req, res) =>
   // Solo notificamos cuando el estado tiene un mensaje pensado para el cliente.
   const leadB = o.tel ? db.prepare("SELECT id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(sid, o.tel) as { id: string } | undefined : undefined;
   const msg = MSG_ESTADO[idiomaDe(sid, leadB?.id)][nuevo]?.(o.numero);
-  if (msg && o.tel) {
+  const cal = await import('./calidad.js');
+  if (msg && o.tel && cal.puedeEscribirle(sid, o.tel, leadB?.id).ok) {
     const lead = db.prepare("SELECT id, wa_id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(sid, o.tel) as { id: string; wa_id: string | null } | undefined;
     if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
-    void sendWhatsappText(sid, lead?.wa_id || o.tel, msg, o.tel).catch(() => {});
+    void sendWhatsappText(sid, lead?.wa_id || o.tel, msg, o.tel).then((r) => { if (r.ok) cal.contarProactivo(sid, o.tel); }).catch(() => {});
   }
+});
+
+// ── Calidad del número de WhatsApp ──
+api.get('/calidad', requireAuth, requireStore, async (req, res) => {
+  const { resumenCalidad } = await import('./calidad.js');
+  res.json(resumenCalidad(req.user!.storeId!));
+});
+api.post('/calidad', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { guardarCalidadCfg } = await import('./calidad.js');
+  const b = req.body || {};
+  res.json(guardarCalidadCfg(req.user!.storeId!, 'avisarContacto' in b ? { avisarContacto: b.avisarContacto === true } : {}));
 });
 
 // ── Effi: rastreo, cobertura, devolución y recaudos ──

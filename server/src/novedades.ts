@@ -219,12 +219,15 @@ export async function avisarNovedadCliente(storeId: string, novedadId: string): 
     return r;
   };
   if (!chat) return fin({ ok: false, via: '', error: 'No encontramos el chat del cliente.' });
+  const { puedeEscribirle, contarProactivo } = await import('./calidad.js');
+  const permiso = puedeEscribirle(storeId, chat.tel, chat.id);
+  if (!permiso.ok) return fin({ ok: false, via: '', error: `No le escribimos: ${permiso.motivo}.` });
   const destino = chat.wa_id || chat.tel;
   const texto = textoAviso(idiomaDe(storeId, chat.id), nombre, numDF, transp, motivo, txt(o.ciudad));
   const envio = await sendWhatsappText(storeId, destino, texto, chat.tel);
   if (envio.ok) {
     db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado) VALUES (?,?,'bot',?,'enviado')").run(uid(), chat.id, texto);
-    marcar('texto');
+    marcar('texto'); contarProactivo(storeId, chat.tel);
     return fin({ ok: true, via: 'texto' });
   }
   if (!envio.bloqueadoVentana) return fin({ ok: false, via: '', error: envio.error || 'WhatsApp no envió el mensaje.' });
@@ -234,7 +237,7 @@ export async function avisarNovedadCliente(storeId: string, novedadId: string): 
   const r = await sendWhatsappTemplate(storeId, destino, tpl, [nombre, tienda, numDF, transp || 'la transportadora', motivo], chat.tel);
   if (!r.ok) return fin({ ok: false, via: '', error: r.error || 'Meta rechazó la plantilla.' });
   db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado) VALUES (?,?,'bot',?,'enviado')").run(uid(), chat.id, r.textoRender || `[Plantilla: ${PLANTILLA_NOVEDAD}]`);
-  marcar('plantilla');
+  marcar('plantilla'); contarProactivo(storeId, chat.tel);
   return fin({ ok: true, via: 'plantilla' });
 }
 
