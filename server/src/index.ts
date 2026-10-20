@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { api, webhooks } from './routes.js';
 import { db } from './db.js';
+import { paginaTienda } from './tiendaPublica.js';
 import { seed } from './seed.js';
 import { seedPlantillas } from './seedPlantillas.js';
 import { seedAcademy, seedAcademyCursoVisual, limpiarAcademyRemarketing } from './seedAcademy.js';
@@ -55,7 +56,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'effi-autovinculo',
+    build: 'dropi-url-tienda',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -153,6 +154,12 @@ if (existsSync(APP_DIST)) {
     const esInicio = /^\/(inicio|home)\/?$/i.test(req.path);
     // Tutoriales en vivo (página propia, en cualquier host).
     if (/^\/tutoriales\/?$/i.test(req.path)) return enviarHtml(res, path.join(APP_DIST, 'tutoriales.html'));
+    // Página pública de cada tienda (la "URL de la tienda" que pide Dropi), en cualquier host.
+    const mTienda = req.path.match(/^\/tienda\/([a-z0-9-]{1,60})\/?$/i);
+    if (mTienda) {
+      const html = paginaTienda(mTienda[1]);
+      return html ? res.type('html').send(html) : res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><title>Tienda no encontrada</title><p style="font-family:system-ui;padding:24px">Tienda no encontrada.</p>');
+    }
 
     // 1) Dominio raíz (dealflow.sbs / www): solo la landing. Las puertas de la app
     //    llevan a app.<dominio> en la misma pestaña.

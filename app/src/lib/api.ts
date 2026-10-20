@@ -375,7 +375,7 @@ export const apiCrearPedido = (body: { cliente: string; tel?: string; ciudad?: s
   req<{ ok: true; id: string; rowId: string }>('/api/orders', 'POST', body);
 export const apiOrderDespacharSync = (rowId: string) => req<{ estado: string; guia: string }>(`/api/orders/${rowId}/despachar/sync`, 'POST');
 // Dropi (API directa): cotizar transportadoras y crear la orden con la elegida.
-export const apiDropiEstado = () => req<{ conectado: boolean; integrationUrl: string; preferencia: string }>('/api/dropi/estado', 'GET');
+export const apiDropiEstado = () => req<{ conectado: boolean; integrationUrl: string; preferencia: string; urlSugerida?: string }>('/api/dropi/estado', 'GET');
 export const apiDropiConectar = (token: string, integrationUrl: string, preferencia = 'operador') => req<{ ok: true }>('/api/dropi/conectar', 'POST', { token, integrationUrl, preferencia });
 export const apiDropiPreferencia = (preferencia: string, transportadoraFija = '') => req<{ ok: true; preferencia: string }>('/api/dropi/preferencia', 'POST', { preferencia, transportadoraFija });
 export interface DropiVariacion { id: number; atributos: string; sku: string }
