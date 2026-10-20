@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
-import { apiCobertura, apiDevolucionEffi, apiRastreo, type CoberturaCiudad, type PasoRastreo } from '../lib/api';
+import { apiDevolucionEffi, apiRastreo, type PasoRastreo } from '../lib/api';
 
 /**
  * Datos de Effi alrededor del envío, dentro del detalle del pedido:
- * cobertura de la ciudad, rastreo de la guía y devolución.
+ * rastreo de la guía y devolución.
  */
 
 const caja: CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', background: 'var(--df-bg)', fontSize: 12.5 };
@@ -15,30 +15,6 @@ const fechaCO = (f: string) => {
   const d = new Date(f.replace(' ', 'T') + 'Z');
   return Number.isNaN(d.getTime()) ? f : d.toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 };
-
-/** ¿Llegan a la ciudad del pedido con contraentrega? */
-export function CoberturaPedido({ sel }: { sel: DecoratedOrder }) {
-  const [cb, setCb] = useState<CoberturaCiudad | null | undefined>(undefined);
-  useEffect(() => {
-    setCb(undefined);
-    if (!sel.rowId || !sel.ciudad) { setCb(null); return; }
-    void apiCobertura(String(sel.rowId)).then((r) => setCb(r.data?.cobertura ?? null));
-  }, [sel.rowId, sel.ciudad]);
-  if (cb === undefined) return <div style={{ ...caja, color: 'var(--df-text-muted)' }}>Revisando cobertura en {sel.ciudad}…</div>;
-  if (!cb) return null;
-  const ok = cb.conRecaudo && !cb.error;
-  const conR = cb.transportadoras.filter((t) => t.recaudo);
-  return (
-    <div style={{ ...caja, borderColor: ok ? 'var(--df-border)' : 'var(--df-danger-border)', background: ok ? 'var(--df-bg)' : 'var(--df-danger-subtle)' }}>
-      <b style={{ color: ok ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)' }}>{ok ? '✓ Hay cobertura contraentrega' : '⚠️ Sin contraentrega a esta ciudad'}</b>
-      <div style={{ color: 'var(--df-text-body)', marginTop: 2 }}>
-        {cb.error ? cb.error : !cb.transportadoras.length ? `Ninguna transportadora de Effi llega a ${cb.destino}.`
-          : ok ? `${cb.destino}${cb.dias ? ` · ${cb.dias} día${cb.dias === 1 ? '' : 's'} aprox.` : ''} · ${conR.map((t) => t.nombre).join(', ')}`
-            : `Llegan a ${cb.destino} (${cb.transportadoras.map((t) => t.nombre).join(', ')}), pero sin pago contraentrega. Confírmalo con el cliente antes de despachar.`}
-      </div>
-    </div>
-  );
-}
 
 /** Historial de la guía: cada cambio de estado con fecha y hora. */
 export function RastreoGuia({ sel }: { sel: DecoratedOrder }) {
