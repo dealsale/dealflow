@@ -386,7 +386,9 @@ export const apiDropiCotizar = (rowId: string, recaudo: 'con' | 'sin' = 'con') =
 export const apiDropiCrear = (rowId: string, transportadora?: DropiTransportadora, reintentar = false, recaudo: 'con' | 'sin' = 'con') => req<{ ok: true; dropiId: string; transportadora: string; aviso?: string }>(`/api/orders/${rowId}/dropi/crear`, 'POST', { transportadora, reintentar, recaudo });
 
 // ── Shopify (Admin API) ──
-export const apiShopifyEstado = () => req<{ conectado: boolean; shop: string; nombre: string }>('/api/shopify/estado', 'GET');
+export const apiShopifyEstado = () => req<{ conectado: boolean; shop: string; nombre: string; via?: string; appDisponible?: boolean }>('/api/shopify/estado', 'GET');
+export const apiShopifyAppInstalar = (shop: string) => req<{ url: string }>('/api/shopify/app/instalar', 'POST', { shop });
+export const apiShopifyAppVincular = (codigo: string) => req<{ ok: true; shop: string }>('/api/shopify/app/vincular', 'POST', { codigo });
 export const apiShopifyConectar = (shop: string, creds: { token?: string; clientId?: string; clientSecret?: string }) =>
   req<{ ok: true; nombre: string; shop: string }>('/api/shopify/conectar', 'POST', { shop, ...creds });
 export const apiShopifyPublicarProducto = (productId: string, activar?: boolean) =>
