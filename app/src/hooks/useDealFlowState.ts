@@ -4197,6 +4197,7 @@ export function useDealFlowState() {
     cambiarTienda,
     crearTienda,
     eliminarMiTienda,
+    reloadAdmin,
     effiApi,
     cargarEffiApi,
     refrescarPedidos,

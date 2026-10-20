@@ -3,6 +3,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
 import { confirmar } from '../../components/dialogs';
+import { apiPapelera, apiPapeleraRestaurar, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
 
 const labelStyle: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 };
@@ -136,6 +137,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
         </div>
         </div>
       )}
+      {df.isSuperadmin && <PapeleraYCopias df={df} />}
     </section>
   );
 }
@@ -357,5 +359,72 @@ function ReporteBaneoPanel({ df }: { df: DealFlowState }) {
         </>
       )}
     </div>
+  );
+}
+
+const fechaCorta = (iso: string) => { try { return new Date(iso).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return iso; } };
+
+/** Solo superadmin: tiendas eliminadas (se restauran durante 30 días) y copias diarias de la base. */
+function PapeleraYCopias({ df }: { df: DealFlowState }) {
+  const [tiendas, setTiendas] = useState<TiendaPapelera[]>([]);
+  const [respaldos, setRespaldos] = useState<Respaldo[]>([]);
+  const [dias, setDias] = useState(30);
+  const [msg, setMsg] = useState('');
+  const [ocupado, setOcupado] = useState('');
+  const cargar = () => void apiPapelera().then((r) => { if (r.data) { setTiendas(r.data.tiendas); setRespaldos(r.data.respaldos); setDias(r.data.dias); } });
+  useEffect(cargar, []);
+  const restaurar = async (t: TiendaPapelera) => {
+    if (!(await confirmar({ titulo: `Restaurar ${t.nombre}`, mensaje: `Vuelve tal como estaba al eliminarla (${t.pedidos} pedidos, ${t.leads} leads, ${t.productos} productos), con sus usuarios. Sus integraciones y su WhatsApp quedan como estaban.`, aceptar: 'Restaurar' }))) return;
+    setOcupado(t.archivo);
+    const r = await apiPapeleraRestaurar(t.archivo);
+    setOcupado('');
+    if (r.error || !r.data) { setMsg(r.error || 'No se pudo restaurar.'); return; }
+    setMsg(`✓ ${r.data.nombre} restaurada.`);
+    cargar();
+    void df.reloadAdmin();
+  };
+  const copiarAhora = async () => {
+    setOcupado('copia');
+    const r = await apiRespaldoAhora();
+    setOcupado('');
+    if (r.data) { setRespaldos(r.data.respaldos); setMsg('✓ Copia de hoy lista.'); }
+  };
+  const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 18 };
+  const fila: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 0', borderTop: '1px solid var(--df-border)' };
+  return (
+    <>
+      <div style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>🗑️ Papelera de tiendas</h2>
+          <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Las tiendas eliminadas se pueden restaurar durante {dias} días.</span>
+        </div>
+        {msg && <div style={{ fontSize: 12.5, marginTop: 8, color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</div>}
+        {!tiendas.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)', marginTop: 10 }}>La papelera está vacía.</div>}
+        {tiendas.map((t) => (
+          <div key={t.archivo} style={fila}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t.nombre} <span style={{ fontWeight: 500, color: 'var(--df-text-faint)', fontSize: 12 }}>{t.correo}</span></div>
+              <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Eliminada {fechaCorta(t.eliminadaAt)}{t.eliminadaPor ? ` por ${t.eliminadaPor}` : ''} · {t.pedidos} pedidos · {t.leads} leads · {t.productos} productos · se borra del todo el {fechaCorta(t.venceAt)}</div>
+            </div>
+            <button onClick={() => void restaurar(t)} disabled={!!ocupado} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', opacity: ocupado ? 0.6 : 1 }}>{ocupado === t.archivo ? 'Restaurando…' : 'Restaurar'}</button>
+          </div>
+        ))}
+      </div>
+      <div style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>💾 Copias diarias de la base</h2>
+          <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Una copia completa cada día; se guardan las últimas 7.</span>
+          <button onClick={() => void copiarAhora()} disabled={!!ocupado} style={{ ...linkBtn('var(--df-brand)'), border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px' }}>{ocupado === 'copia' ? 'Copiando…' : 'Hacer copia de hoy'}</button>
+        </div>
+        {!respaldos.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)', marginTop: 10 }}>Aún no hay copias (la primera se hace pocos minutos después de arrancar el servidor).</div>}
+        {respaldos.map((r) => (
+          <div key={r.archivo} style={fila}>
+            <span style={{ flex: 1, fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}>{r.archivo}</span>
+            <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{r.tamanoMb} MB · {fechaCorta(r.fecha)}</span>
+            <a href={`/api/admin/respaldos/${encodeURIComponent(r.archivo)}`} style={{ ...linkBtn('var(--df-brand)'), textDecoration: 'none' }}>Descargar</a>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
