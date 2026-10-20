@@ -11,7 +11,7 @@
  * así que sigue ahí al restaurar. A los 30 días el archivo se elimina.
  *
  * Copias: una vez al día, copia completa y consistente de la base
- * (DATA_DIR/respaldos/dealflow-AAAA-MM-DD.db); se guardan las últimas 7.
+ * (DATA_DIR/respaldos/dealflow-AAAA-MM-DD.db); se guardan las últimas 3.
  */
 import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
@@ -23,7 +23,7 @@ const DIR_RESPALDOS = path.join(DATA_DIR, 'respaldos');
 mkdirSync(DIR_PAPELERA, { recursive: true });
 mkdirSync(DIR_RESPALDOS, { recursive: true });
 export const DIAS_PAPELERA = 30;
-const COPIAS = 7;
+const COPIAS = 3;
 
 const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
 
@@ -160,7 +160,7 @@ export function listarRespaldos(): { archivo: string; tamanoMb: number; fecha: s
 export const rutaRespaldo = (archivo: string) => (/^dealflow-\d{4}-\d{2}-\d{2}\.db$/.test(archivo) && existsSync(path.join(DIR_RESPALDOS, archivo)) ? path.join(DIR_RESPALDOS, archivo) : null);
 
 let copiando = false;
-/** Hace la copia del día (si no existe) y deja solo las últimas 7. */
+/** Hace la copia del día (si no existe) y deja solo las últimas 3. */
 export async function copiaDiaria(): Promise<void> {
   if (copiando) return;
   const hoy = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10); // día de Colombia
