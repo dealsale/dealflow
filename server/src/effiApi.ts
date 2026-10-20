@@ -822,6 +822,16 @@ export function agregarSecretoEffi(storeId: string, secreto: string): number {
 }
 
 
+const novedadesPendientes = new Map<string, ReturnType<typeof setTimeout>>();
+/** Junta varios avisos seguidos en una sola revisión de novedades (a los 20 s). */
+function revisarNovedadesPronto(storeId: string): void {
+  if (novedadesPendientes.has(storeId)) return;
+  novedadesPendientes.set(storeId, setTimeout(() => {
+    novedadesPendientes.delete(storeId);
+    void import('./novedades.js').then((m) => m.sincronizarNovedades(storeId)).catch((e) => console.warn('[effi] novedades por webhook', e));
+  }, 20_000));
+}
+
 /** Busca un campo por varios nombres posibles (Effi manda los datos "como la API" y anida a veces). */
 function campo(obj: unknown, ...claves: string[]): string {
   if (!obj || typeof obj !== 'object') return '';
@@ -842,6 +852,8 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
   }
   const ev = norm(evento);
   const datos = (payload && typeof payload === 'object' && (payload as Fila).data) ? (payload as Fila).data : payload;
+  // Aviso de novedad: revisamos las novedades de la tienda ya (sin esperar el ciclo de 4 min).
+  if (/novedad/.test(ev)) revisarNovedadesPronto(storeId);
   // Documento de venta de referencia (guías) o la propia remisión.
   const esGuia = /guia/.test(ev) || !!campo(datos, 'guia', 'est_guia', 'id_ref');
   const idRef = esGuia ? campo(datos, 'id_ref') : campo(datos, 'id');
@@ -873,6 +885,7 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
       if (urlDoc && urlDoc !== txt(orden.guia_url)) db.prepare('UPDATE orders SET guia_url = ? WHERE id = ?').run(urlDoc, orden.id);
       if (transp) db.prepare('UPDATE orders SET transportadora = ? WHERE id = ?').run(nombreTransportadora(transp) || transp, orden.id);
       if (estadoTxt) db.prepare('UPDATE orders SET estado_woo = ? WHERE id = ?').run(estadoTxt.slice(0, 60), orden.id);
+      if (evento !== 'Consulta de guía') db.prepare("UPDATE orders SET historial_ts = '' WHERE id = ?").run(orden.id);
       const nuevo = siguienteEstado(txt(orden.estado), estadoLogistico(estadoTxt, !!(guia || orden.guia)));
       if (nuevo) db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, orden.id);
       if (nuevo === 'Devuelto') { const { alQuedarDevuelto } = await import('./effiExtras.js'); alQuedarDevuelto(storeId, txt(orden.id)); }
