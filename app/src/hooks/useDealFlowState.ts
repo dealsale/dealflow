@@ -2857,10 +2857,11 @@ export function useDealFlowState() {
   // Dropi API directa (despacho de Dropi por su API, no por WooCommerce).
   const [dropiConectado, setDropiConectado] = useState(false);
   const [dropiIntegrationUrl, setDropiIntegrationUrl] = useState('');
+  const [dropiUrlSugerida, setDropiUrlSugerida] = useState('');
   const [dropiPreferencia, setDropiPreferencia] = useState('operador');
   async function reloadDropi() {
     const { data } = await apiDropiEstado();
-    if (data) { setDropiConectado(!!data.conectado); setDropiIntegrationUrl(data.integrationUrl || ''); setDropiPreferencia(data.preferencia || 'operador'); }
+    if (data) { setDropiConectado(!!data.conectado); setDropiIntegrationUrl(data.integrationUrl || ''); setDropiUrlSugerida(data.urlSugerida || ''); setDropiPreferencia(data.preferencia || 'operador'); }
   }
   function conectarDropi(token: string, integrationUrl: string, cb?: (ok: boolean, error?: string) => void) {
     setIntegracionMsg('Conectando con Dropi…');
@@ -4183,6 +4184,7 @@ export function useDealFlowState() {
     variantesGenMsg,
     dropiConectado,
     dropiIntegrationUrl,
+    dropiUrlSugerida,
     dropiPreferencia,
     conectarDropi,
     guardarDropiPreferencia,

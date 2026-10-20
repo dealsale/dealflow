@@ -79,7 +79,10 @@ function DropiApiCard({ df }: { df: DealFlowState }) {
   const [token, setToken] = useState('');
   const [url, setUrl] = useState('');
   const [guardando, setGuardando] = useState(false);
-  useEffect(() => { setUrl(df.dropiIntegrationUrl || ''); }, [df.dropiIntegrationUrl]);
+  // Sin URL guardada, se propone la URL propia de la tienda en DealFlow (no hace falta tener página web).
+  useEffect(() => { setUrl(df.dropiIntegrationUrl || df.dropiUrlSugerida || ''); }, [df.dropiIntegrationUrl, df.dropiUrlSugerida]);
+  const [copiada, setCopiada] = useState(false);
+  const copiar = () => { const u = df.dropiUrlSugerida; if (!u) return; void navigator.clipboard?.writeText(u).then(() => { setCopiada(true); setTimeout(() => setCopiada(false), 1800); }).catch(() => {}); };
   const conectada = df.dropiConectado;
   const guardar = () => {
     if (!token.trim() || !url.trim()) return;
@@ -97,13 +100,22 @@ function DropiApiCard({ df }: { df: DealFlowState }) {
       onToggle={() => { setAbierto((v) => !v); setToken(''); }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5 }}>El token se genera en <b>Dropi → Mis Integraciones</b> (tipo WooCommerce).</div>
+        <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5 }}>
+          El token se genera en <b>Dropi → Mis Integraciones</b> (tipo WooCommerce). Cuando Dropi te pida la <b>URL de la tienda</b>, pega esta (es la página de tu tienda en DealFlow; no necesitas WordPress ni Dropify):
+        </div>
+        {df.dropiUrlSugerida && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', border: '1px dashed var(--df-purple-border)', background: 'var(--df-purple-subtle)', borderRadius: 10, padding: '8px 10px' }}>
+            <code style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--df-purple)', overflowWrap: 'anywhere' }}>{df.dropiUrlSugerida}</code>
+            <button onClick={copiar} style={{ ...btnPrimary, padding: '6px 12px', fontSize: 12 }}>{copiada ? '✓ Copiada' : 'Copiar'}</button>
+            <a href={df.dropiUrlSugerida} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 600, color: 'var(--df-purple)' }}>Ver</a>
+          </div>
+        )}
         <div>
           <div style={lbl}>Token de integración</div>
           <input value={token} onChange={(e) => setToken(e.target.value)} placeholder={conectada ? 'Pega un token nuevo solo si quieres cambiarlo' : 'Pega aquí el token (JWT)'} style={inputStyle} />
         </div>
         <div>
-          <div style={lbl}>URL de integración (la que registraste en Dropi)</div>
+          <div style={lbl}>URL de integración (idéntica a la que pegaste en Dropi)</div>
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mitienda.com" style={inputStyle} />
         </div>
         <div>

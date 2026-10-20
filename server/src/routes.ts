@@ -8,6 +8,7 @@ import { ESTADOS_PEDIDO } from './estadosPedido.js';
 import { novedadesPorPedido } from './novedades.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
+import { urlTienda } from './tiendaPublica.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
@@ -1108,6 +1109,8 @@ api.get('/dropi/estado', requireAuth, requireStore, (req, res) => {
   res.json({
     conectado: !!(cfg.token && cfg.integrationUrl),
     integrationUrl: cfg.integrationUrl || '',
+    // URL propia de la tienda en DealFlow, para registrarla en Dropi sin tener página web.
+    urlSugerida: urlTienda(req.user!.storeId!),
     preferencia: cfg.preferencia || 'operador',
   });
 });
