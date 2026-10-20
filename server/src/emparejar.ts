@@ -36,7 +36,7 @@ function lev(a: string, b: string): number {
   }
   return d[a.length][b.length];
 }
-const mismoToken = (a: string, b: string) => a === b || (a.length >= 4 && b.length >= 4 && lev(a, b) <= 1);
+export const mismoToken = (a: string, b: string) => a === b || (a.length >= 4 && b.length >= 4 && lev(a, b) <= 1);
 
 /**
  * Qué tanto se parece el nombre de un ítem a un producto (0 a 1). Tolera palabras
@@ -117,9 +117,59 @@ export function emparejarItem<T extends VarBase>(nombreItem: string, todas: T[])
 // Rótulos que no identifican la variante ("Talla", "Color"…): se ignoran al comparar.
 // "Unicolor", "liso"… describen el color pero el cliente casi nunca los dice: "Negro" = "Negro Unicolor".
 const ROTULOS = new Set(['talla', 'tallas', 'color', 'colores', 'size', 'tamano', 'referencia', 'ref', 'unicolor', 'liso', 'lisa', 'solido', 'solida', 'entero', 'entera']);
-function tokensVariante(s: string): string[] {
+export function tokensVariante(s: string): string[] {
   const alias: Record<string, string> = { xxl: '2xl', xxxl: '3xl', xxs: '2xs' };
-  return norm(s).split(' ').filter((t) => t && !ROTULOS.has(t)).map((t) => alias[t] || t);
+  // "T8" / "T-8" = talla 8.
+  return norm(s).split(' ').filter((t) => t && !ROTULOS.has(t)).map((t) => alias[t] || t.replace(/^t(\d{1,2})$/, '$1'));
+}
+
+// Palabras que describen el TIPO de prenda y no el producto: "Pantalón Helen" en Effi
+// puede llamarse "Helen" o "Jean Helen". No sirven para saber de qué producto es.
+const GENERICAS = new Set(['pantalon', 'pantalones', 'jean', 'jeans', 'vestido', 'blusa', 'camisa', 'camiseta', 'conjunto', 'set', 'falda', 'short', 'shorts', 'chaqueta', 'buzo', 'top', 'body', 'enterizo', 'leggins', 'legging', 'licra', 'sudadera', 'bolso', 'zapato', 'zapatos', 'tenis', 'sandalia', 'sandalias', 'dama', 'mujer', 'hombre', 'nino', 'nina', 'de', 'la', 'el', 'con', 'y', 'para']);
+const VACIAS = new Set(['de', 'la', 'el', 'con', 'y', 'para', 'unica', 'u']);
+
+/** Palabras distintivas del nombre de un producto, para buscarlo en Effi. */
+export function palabrasClave(producto: string): string[] {
+  return norm(producto).split(' ').filter((t) => t.length >= 3 && !GENERICAS.has(t));
+}
+
+export interface ArticuloBase { id: string; descripcion: string; stock?: number | null }
+
+/**
+ * Empareja las variantes de UN producto con artículos de Effi por nombre, aunque el
+ * orden de las palabras cambie ("Pantalón Helen" + "Talla 8 · Negro" ↔
+ * "PANTALON HELEN NEGRO T8"). Un artículo es del producto si contiene sus palabras
+ * distintivas; lo que le sobra al nombre (talla, color) tiene que ser exactamente la
+ * variante. Nunca asigna el mismo artículo a dos variantes. Devuelve variantId → artículo.
+ */
+export function emparejarArticulos<A extends ArticuloBase>(producto: string, variantes: { variantId: string; label: string }[], arts: A[], usados: Set<string> = new Set()): Map<string, A> {
+  const out = new Map<string, A>();
+  const tp = norm(producto).split(' ').filter(Boolean);
+  const clave = palabrasClave(producto);
+  if (!clave.length) return out;
+  const tiene = (lista: string[], t: string) => lista.some((x) => (t.length < 4 || x.length < 4 ? x === t : mismoToken(x, t)));
+  // Artículos del producto, con lo que les sobra del nombre.
+  const cands = arts.map((a) => {
+    const ta = tokensVariante(a.descripcion);
+    return { a, ta, resto: ta.filter((t) => !tiene(tp, t) && !VACIAS.has(t) && !GENERICAS.has(t)) };
+  }).filter((x) => clave.every((t) => x.ta.includes(t))); // exacto: "Helen" no es "Helena"
+  if (!cands.length) return out;
+  const mejor = (lista: typeof cands) => [...lista].sort((x, y) => (Number(y.a.stock ?? -1) - Number(x.a.stock ?? -1)) || Number(y.a.id) - Number(x.a.id))[0];
+  const pendientes = variantes.map((v) => ({ v, tv: tokensVariante(v.label).filter((t) => !VACIAS.has(t)) }));
+  // 1) Lo que sobra es EXACTAMENTE la variante (mismas palabras, cualquier orden).
+  for (const { v, tv } of pendientes) {
+    const exactos = cands.filter((c) => !usados.has(c.a.id) && c.resto.length === tv.length && tv.every((t) => tiene(c.resto, t)));
+    if (!exactos.length) continue;
+    const a = mejor(exactos).a;
+    out.set(v.variantId, a); usados.add(a.id);
+  }
+  // 2) La variante está contenida y es el artículo con menos palabras de más (sin empates).
+  for (const { v, tv } of pendientes) {
+    if (out.has(v.variantId) || !tv.length) continue;
+    const sub = cands.filter((c) => !usados.has(c.a.id) && tv.every((t) => tiene(c.resto, t))).map((c) => ({ c, extra: c.resto.length - tv.length })).sort((x, y) => x.extra - y.extra);
+    if (sub.length && (sub.length === 1 || sub[1].extra > sub[0].extra)) { out.set(v.variantId, sub[0].c.a); usados.add(sub[0].c.a.id); }
+  }
+  return out;
 }
 
 /** Para guardar en order_items al crear el pedido. */

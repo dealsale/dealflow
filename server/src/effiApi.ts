@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { db, pj, registrarLog } from './db.js';
 import { conPedido, trazar, trazarApi } from './trazabilidad.js';
-import { emparejarItem, type Emparejado } from './emparejar.js';
+import { emparejarItem, emparejarArticulos, palabrasClave, type Emparejado } from './emparejar.js';
 import { nombreTransportadora } from './transportadoras.js';
 import { estadoLogistico, siguienteEstado } from './estadosPedido.js';
 
@@ -388,7 +388,8 @@ function idEcommerceDeRef(storeId: string, ref: string): number | null {
   } catch { return null; }
 }
 
-interface VarianteDF { productId: string; variantId: string | null; producto: string; label: string; ref: string; effiId: string; proveedor: string }
+// refPropia: la referencia es de ESTA variante (no la heredada del producto, que comparten todas).
+interface VarianteDF { productId: string; variantId: string | null; producto: string; label: string; ref: string; effiId: string; proveedor: string; refPropia?: boolean }
 
 /** Todas las variantes (y productos sin variantes) de la tienda con su vínculo actual. */
 function variantesTienda(storeId: string): VarianteDF[] {
@@ -397,10 +398,11 @@ function variantesTienda(storeId: string): VarianteDF[] {
   const vst = db.prepare("SELECT id, label, sku, COALESCE(refs,'{}') refs FROM variants WHERE product_id = ?");
   for (const p of prods) {
     const vs = vst.all(p.id) as { id: string; label: string; sku: string; refs: string }[];
-    if (!vs.length) { out.push({ productId: p.id, variantId: null, producto: p.nombre, label: '', ref: p.sku || '', effiId: '', proveedor: p.proveedor }); continue; }
+    if (!vs.length) { out.push({ productId: p.id, variantId: null, producto: p.nombre, label: '', ref: p.sku || '', effiId: '', proveedor: p.proveedor, refPropia: true }); continue; }
     for (const v of vs) {
       const refs = pj<Record<string, string>>(v.refs, {});
-      out.push({ productId: p.id, variantId: v.id, producto: p.nombre, label: v.label || '', ref: String(refs.effi || v.sku || p.sku || ''), effiId: String(refs.effi_id || ''), proveedor: p.proveedor });
+      const propia = String(refs.effi || v.sku || '');
+      out.push({ productId: p.id, variantId: v.id, producto: p.nombre, label: v.label || '', ref: propia || String(p.sku || ''), effiId: String(refs.effi_id || ''), proveedor: p.proveedor, refPropia: !!propia || vs.length === 1 });
     }
   }
   return out;
@@ -409,17 +411,49 @@ function variantesTienda(storeId: string): VarianteDF[] {
 /** Busca el artículo de Effi que corresponde a una variante de DealFlow. */
 function articuloPara(storeId: string, v: VarianteDF, arts: ArticuloEffi[]): ArticuloEffi | undefined {
   if (v.effiId) { const a = arts.find((x) => x.id === v.effiId); if (a) return a; }
+  // La referencia del PRODUCTO la comparten todas sus tallas/colores: casar por ella
+  // pegaba todas las variantes al mismo artículo. Solo cuenta si es de la variante.
+  const ref = v.refPropia === false ? '' : v.ref;
   // 1) Vinculado en Effi como producto de un ecommerce (Effi guarda nuestro id).
-  const idEc = idEcommerceDeRef(storeId, v.ref);
+  const idEc = idEcommerceDeRef(storeId, ref);
   const candidatosEc = [idEc != null ? String(idEc) : '', v.variantId || '', v.productId].filter(Boolean);
   const porEc = arts.find((a) => a.ecommerce && a.ecommerce.split(',').map((s) => s.trim()).some((x) => candidatosEc.includes(x)));
   if (porEc) return porEc;
   // 2) Misma referencia.
-  if (v.ref) { const a = arts.find((x) => x.referencia && x.referencia.trim().toLowerCase() === v.ref.trim().toLowerCase()); if (a) return a; }
+  if (ref) { const a = arts.find((x) => x.referencia && x.referencia.trim().toLowerCase() === ref.trim().toLowerCase()); if (a) return a; }
   // 3) Mismo nombre ("Producto - Variante" o "Producto Variante").
   const esUnica = !v.label || norm(v.label) === 'unica';
   const nombres = esUnica ? [norm(v.producto)] : [norm(`${v.producto} ${v.label.replace(/·/g, ' ')}`)];
   return arts.find((a) => nombres.includes(norm(a.descripcion)));
+}
+
+/**
+ * Vincula por NOMBRE las variantes sin artículo de un producto, buscando en vivo en
+ * Effi (la caché solo trae lo enlazado a un e-commerce: los productos creados en
+ * Effi después no estaban ahí y nunca se vinculaban solos). Tolera el orden de las
+ * palabras y "T8"/"Talla 8". Devuelve cuántas vinculó.
+ */
+async function vincularPorNombre(storeId: string, apiKey: string, vars: VarianteDF[], arts: ArticuloEffi[]): Promise<number> {
+  const pendientes = vars.filter((v) => v.variantId && !v.effiId) as (VarianteDF & { variantId: string })[];
+  if (!pendientes.length) return 0;
+  const producto = pendientes[0].producto;
+  const clave = palabrasClave(producto);
+  if (!clave.length) return 0;
+  const vivos = await effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { descripcion: clave.join(' '), por_pagina: 100 } });
+  const lista = new Map<string, ArticuloEffi>(arts.map((a) => [a.id, a]));
+  for (const f of vivos.ok ? vivos.body.data || [] : []) {
+    if (txt(f.vigente) === '0' || lista.has(txt(f.id))) continue;
+    lista.set(txt(f.id), { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: f.stock_empresa == null ? null : Number(f.stock_empresa) });
+  }
+  // Los artículos que ya usan otras variantes del producto no se repiten.
+  const usados = new Set(vars.map((v) => v.effiId).filter(Boolean));
+  const m = emparejarArticulos(producto, pendientes.map((v) => ({ variantId: v.variantId, label: v.label })), [...lista.values()], usados);
+  for (const [variantId, a] of m) {
+    vincularArticulo(storeId, variantId, a.id);
+    const v = pendientes.find((x) => x.variantId === variantId);
+    if (v) v.effiId = a.id;
+  }
+  return m.size;
 }
 
 /** Guarda el id del artículo de Effi en la variante (refs.effi_id). */
@@ -444,11 +478,31 @@ export async function sincronizarArticulos(storeId: string): Promise<{ total: nu
   const deEffi = todas.filter((v) => v.proveedor === 'effi');
   const productosEffi = new Set(deEffi.map((v) => v.productId)).size;
   const sinProveedor = new Set(todas.filter((v) => !v.proveedor).map((v) => v.productId)).size;
+  const usadosPorProducto = new Map<string, Set<string>>();
+  for (const v of deEffi) if (v.effiId) { const u = usadosPorProducto.get(v.productId) || new Set(); u.add(v.effiId); usadosPorProducto.set(v.productId, u); }
   for (const v of deEffi) {
+    // Un vínculo ya guardado (a mano o antes) se respeta: el artículo puede no estar
+    // en la caché (búsqueda en vivo, proveedor dropshipping) y aun así ser el correcto.
+    if (v.effiId) continue;
     const a = articuloPara(storeId, v, arts);
+    if (!a) continue;
+    const usados = usadosPorProducto.get(v.productId) || new Set();
+    if (v.variantId && usados.has(a.id)) continue; // ese artículo ya es de otra talla/color
+    if (v.variantId) { vincularArticulo(storeId, v.variantId, a.id); usados.add(a.id); usadosPorProducto.set(v.productId, usados); }
+    v.effiId = a.id;
+  }
+  // Lo que no casó por referencia o nombre exacto: por nombre, buscando en vivo en Effi.
+  const porProducto = new Map<string, VarianteDF[]>();
+  for (const v of deEffi) porProducto.set(v.productId, [...(porProducto.get(v.productId) || []), v]);
+  let consultas = 0;
+  for (const vars of porProducto.values()) {
+    if (!vars.some((v) => v.variantId && !v.effiId)) continue;
+    if (++consultas > 60) break; // tope de llamadas a Effi por sincronización
+    await vincularPorNombre(storeId, c.apiKey, vars, arts);
+  }
+  for (const v of deEffi) {
     const nombre = v.label && norm(v.label) !== 'unica' ? `${v.producto} (${v.label})` : v.producto;
-    if (a && v.variantId) { if (a.id !== v.effiId) vincularArticulo(storeId, v.variantId, a.id); vinculadas++; }
-    else if (a) vinculadas++;
+    if (v.effiId || (!v.variantId && articuloPara(storeId, v, arts))) vinculadas++;
     else sinVinculo.push({ variantId: v.variantId, nombre });
   }
   return { total: d.total, soloVinculados: d.soloVinculados, vinculadas, sinVinculo, productosEffi, sinProveedor };
@@ -560,7 +614,12 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
       enVivo.add(v.effiId);
       a = (await articuloPorId(storeId, c.apiKey, v.effiId)) || { id: v.effiId, descripcion: v.producto, referencia: v.ref, ecommerce: '', stock: null };
     }
-    if (!a && v?.ref) {
+    if (!a && v?.variantId && !v.effiId) {
+      // Variante sin vínculo: se busca el producto en vivo en Effi y se vincula por nombre.
+      await vincularPorNombre(storeId, c.apiKey, todas.filter((x) => x.productId === v.productId), arts);
+      if (v.effiId) { enVivo.add(v.effiId); a = await articuloPorId(storeId, c.apiKey, v.effiId); }
+    }
+    if (!a && v?.ref && v.refPropia !== false) {
       // Último intento en vivo por referencia (por si la caché está vieja).
       const r = await effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { referencia: v.ref, por_pagina: 5 } });
       const f = r.ok ? r.body.data?.[0] : undefined;
