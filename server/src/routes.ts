@@ -1578,6 +1578,30 @@ api.delete('/leads/:id', requireAuth, requireStore, (req, res) => {
 
 // Reinicia la conversación: borra el historial, la deja en manos del asistente
 // y olvida qué presentaciones ya se enviaron (para que el bot empiece de cero).
+// Bloquear / desbloquear el contacto de un chat (DealFlow no le envía nada; y en Meta, si se puede).
+api.get('/leads/:id/bloqueo', requireAuth, requireStore, async (req, res) => {
+  const { estadoBloqueo } = await import('./bloqueos.js');
+  res.json(estadoBloqueo(req.user!.storeId!, req.params.id));
+});
+api.post('/leads/:id/bloquear', requireAuth, requireStore, async (req, res) => {
+  const { bloquearContacto } = await import('./bloqueos.js');
+  const r = await bloquearContacto(req.user!.storeId!, req.params.id, req.user!.email);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+api.post('/leads/:id/desbloquear', requireAuth, requireStore, async (req, res) => {
+  const { desbloquearContacto } = await import('./bloqueos.js');
+  const r = await desbloquearContacto(req.user!.storeId!, req.params.id);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+// Qué apps siguen conectadas (reciben los mensajes) a la cuenta de WhatsApp de la tienda.
+api.get('/whatsapp/apps-conectadas', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { appsConectadas } = await import('./bloqueos.js');
+  const r = await appsConectadas(req.user!.storeId!);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
 api.post('/leads/:id/reset', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
   if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
