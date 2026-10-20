@@ -53,9 +53,31 @@ function estadoSync(storeId: string, error: string, leidas = 0): void {
   // El error se anota en el registro solo cuando aparece (no cada 4 minutos).
   if (error && antes?.error !== error) registrarLog(storeId, 'error', 'novedad', `No pudimos leer las novedades de Effi: ${error} Revisa que el usuario de la API key tenga permiso de consulta en "Novedades de guías de transporte".`);
 }
+try { db.exec("ALTER TABLE novedades ADD COLUMN oculta INTEGER NOT NULL DEFAULT 0"); } catch { /* ya existe */ }
+
+/** Oculta de la bandeja una novedad que no se va a gestionar desde DealFlow. */
+export function ocultarNovedad(storeId: string, novedadId: string): boolean {
+  return db.prepare('UPDATE novedades SET oculta = 1 WHERE id = ? AND store_id = ?').run(novedadId, storeId).changes > 0;
+}
+
+/** Une a mano una novedad (y su guía) con un pedido de DealFlow por su número (DF-1234). */
+export function vincularNovedad(storeId: string, novedadId: string, numero: number): { ok: true; orderId: string } | { error: string } {
+  const n = db.prepare('SELECT * FROM novedades WHERE id = ? AND store_id = ?').get(novedadId, storeId) as Fila | undefined;
+  if (!n) return { error: 'Novedad no encontrada.' };
+  const o = db.prepare('SELECT id, numero, guia, estado FROM orders WHERE store_id = ? AND numero = ?').get(storeId, numero) as Fila | undefined;
+  if (!o) return { error: `No existe el pedido DF-${numero}.` };
+  if (txt(o.guia) && txt(o.guia).replace(/^0+/, '') !== txt(n.guia).replace(/^0+/, '')) return { error: `El pedido DF-${numero} ya tiene otra guía (${txt(o.guia)}).` };
+  db.prepare("UPDATE orders SET guia = ?, transportadora = CASE WHEN ? != '' THEN ? ELSE transportadora END, despacho_proveedor = CASE WHEN COALESCE(despacho_proveedor,'') = '' THEN 'effi' ELSE despacho_proveedor END, guia_avisada = 1 WHERE id = ?")
+    .run(txt(n.guia), txt(n.transportadora), txt(n.transportadora), txt(o.id));
+  db.prepare('UPDATE novedades SET order_id = ? WHERE id = ?').run(txt(o.id), novedadId);
+  if (Number(n.abierta) && !FINALES.includes(txt(o.estado))) db.prepare("UPDATE orders SET estado = 'Novedad', estado_woo = ? WHERE id = ?").run(`Novedad: ${txt(n.nombre)}`.slice(0, 60), txt(o.id));
+  trazar(storeId, txt(o.id), { etapa: 'vinculo', nivel: 'info', titulo: `Guía ${txt(n.guia)} y su novedad unidas a mano a este pedido` });
+  return { ok: true, orderId: txt(o.id) };
+}
+
 export function estadoNovedades(storeId: string): { ts: string; error: string; leidas: number; sinPedido: NovedadPanel[] } {
   const e = db.prepare('SELECT ts, error, leidas FROM novedades_sync WHERE store_id = ?').get(storeId) as { ts: string; error: string; leidas: number } | undefined;
-  const sinPedido = (db.prepare('SELECT * FROM novedades WHERE store_id = ? AND order_id IS NULL AND abierta = 1 ORDER BY created_at').all(storeId) as Fila[]).map(aPanel);
+  const sinPedido = (db.prepare('SELECT * FROM novedades WHERE store_id = ? AND order_id IS NULL AND abierta = 1 AND oculta = 0 ORDER BY created_at').all(storeId) as Fila[]).map(aPanel);
   return { ts: e?.ts || '', error: e?.error || '', leidas: e?.leidas || 0, sinPedido };
 }
 
@@ -77,10 +99,12 @@ function pedidoDeGuia(storeId: string, ...guias: string[]): Fila | undefined {
 }
 
 /** Consulta en Effi las novedades recientes de una tienda y actualiza pedidos. */
-export async function sincronizarNovedades(storeId: string): Promise<{ abiertas: number; nuevas: number } | { error: string }> {
+export async function sincronizarNovedades(storeId: string, forzar = false): Promise<{ abiertas: number; nuevas: number } | { error: string }> {
   const c = cfgEffi(storeId);
   if (!c?.apiKey) return { error: 'Effi no está conectado.' };
   const desde = fechaCO(-25); const hasta = fechaCO(1);
+  // Antes: unir las guías hechas a mano en Effi con sus pedidos (para que las novedades encuentren su pedido).
+  await import('./effiExtras.js').then((m) => m.unirGuiasDeEffi(storeId, forzar)).catch(() => {});
   const filas: NovedadEffi[] = [];
   // Las dos clases: 2 = requiere solución de la empresa (se resuelve desde DealFlow)
   // y 1 = operativa de la transportadora (informativa: la gestiona ella).
@@ -125,7 +149,9 @@ export async function sincronizarNovedades(storeId: string): Promise<{ abiertas:
       if (!FINALES.includes(txt(orden.estado))) db.prepare("UPDATE orders SET estado = 'Novedad', estado_woo = ? WHERE id = ?").run(`Novedad: ${motivo}`.slice(0, 60), orderId);
       trazar(storeId, orderId, { etapa: 'novedad', nivel: 'warn', titulo: `Novedad de ${transp || 'la transportadora'}: ${motivo}`, detalle: txt(n.aclaracion), datos: n });
       registrarLog(storeId, 'warn', 'novedad', `El pedido DF-${txt(orden.numero)} tiene una novedad: ${motivo}. Resuélvela en Pedidos → Novedades.`);
-      if (c.novedades.avisarCliente && (Number(n.t_novedad) || 2) === 2) await avisarNovedadCliente(storeId, id).catch((e) => console.warn('[novedad] aviso falló', e));
+      // Al cliente solo le escribimos si la novedad es reciente (las viejas que se unen tarde, no).
+      const reciente = !txt(n.fecha_trans_transportadora) || Date.now() - new Date(txt(n.fecha_trans_transportadora).replace(' ', 'T') + 'Z').getTime() < 2 * 86400_000;
+      if (c.novedades.avisarCliente && reciente && (Number(n.t_novedad) || 2) === 2) await avisarNovedadCliente(storeId, id).catch((e) => console.warn('[novedad] aviso falló', e));
     } else if (antes && Number(antes.abierta) && !abierta) {
       trazar(storeId, orderId, { etapa: 'novedad', nivel: est === 3 ? 'ok' : 'info', titulo: `Novedad cerrada en Effi: ${txt(n.estado_novedad)}` });
     }

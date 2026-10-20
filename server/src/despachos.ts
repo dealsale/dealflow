@@ -42,6 +42,8 @@ export async function sincronizarDespachos(): Promise<void> {
       const { consultarEstadoEffi } = await import('./effiApi.js');
       for (const o of effiPend) { try { await consultarEstadoEffi(o.store_id, o.id); } catch { /* sigue con el próximo */ } }
     }
+    // Guías hechas a mano en Effi y unidas a pedidos viejos: su estado por número de guía.
+    try { const { consultarGuiasSueltas } = await import('./effiExtras.js'); await consultarGuiasSueltas(); } catch (e) { console.warn('[despachos] guías sueltas', e); }
     // Novedades de entrega que reporta la transportadora (Effi).
     try { const { sincronizarNovedadesTodas } = await import('./novedades.js'); await sincronizarNovedadesTodas(); } catch (e) { console.warn('[despachos] novedades', e); }
   } finally {

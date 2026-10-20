@@ -356,6 +356,8 @@ export interface ResumenRecaudos {
 }
 export const apiRecaudos = (mes: string) => req<ResumenRecaudos>(`/api/effi-api/recaudos?mes=${encodeURIComponent(mes)}`, 'GET');
 export interface EstadoNovedades { ts: string; error: string; leidas: number; sinPedido: NovedadPedido[] }
+export const apiNovedadOcultar = (id: string) => req<{ ok: boolean }>(`/api/novedades/${encodeURIComponent(id)}/ocultar`, 'POST');
+export const apiNovedadVincular = (id: string, numero: string) => req<{ ok: true; orderId: string }>(`/api/novedades/${encodeURIComponent(id)}/vincular`, 'POST', { numero });
 export const apiNovedadesEstado = () => req<EstadoNovedades>('/api/novedades/estado', 'GET');
 export const apiNovedadesSync = () => req<{ ok: true; abiertas: number; nuevas: number }>('/api/novedades/sync', 'POST');
 export const apiNovedadSolucion = (id: string, p: PropuestaNovedad) => req<{ ok: true; estado: string }>(`/api/novedades/${encodeURIComponent(id)}/solucion`, 'POST', p);
