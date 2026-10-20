@@ -6,6 +6,7 @@ import { Dropdown } from '../components/Dropdown';
 import { ActivityLog } from '../components/ActivityLog';
 import { useLazyList } from '../hooks/useLazyList';
 import { CajaMensaje } from '../components/CajaMensaje';
+import { BloquearContacto } from '../components/BloquearContacto';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import type { Anuncio } from '../types';
 
@@ -309,6 +310,7 @@ export function CRM({ df }: { df: DealFlowState }) {
               >
                 🩺 Registro
               </button>
+              <BloquearContacto leadId={String(chat.id)} />
               <button
                 onClick={df.resetChat}
                 title="Borra el historial y devuelve el chat al asistente"

@@ -1,3 +1,4 @@
+import { BloquearContacto } from '../BloquearContacto';
 import { useEffect, useRef } from 'react';
 import { AttachButton, MediaContent } from '../MediaBubble';
 import { VoiceRecorder } from '../VoiceRecorder';
@@ -59,6 +60,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
         >
           🩺
         </div>
+        <BloquearContacto leadId={String(chat.id)} compacto />
         <div
           onClick={df.resetChat}
           title="Reiniciar la conversación"

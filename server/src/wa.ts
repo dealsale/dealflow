@@ -1,4 +1,5 @@
 import { db, uid, registrarLog } from './db.js';
+import { estaBloqueado } from './bloqueos.js';
 import { mediaExt, audioAOgg } from './media.js';
 import { guardarAdEnLead, refDesdeWhatsapp, type AdRef } from './campana.js';
 import { esperarTurno } from './ratelimit.js';
@@ -76,7 +77,8 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
     const quien = (nombre || '').trim().split(' ')[0] || 'Un cliente';
     void import('./push.js').then((p) => p.enviarPush(storeId, 'contactos', 'Nuevo contacto 👋', `${quien} le escribió a tu tienda.`, { url: '/' })).catch(() => {});
   }
-  // Responde el asistente de IA.
+  // Responde el asistente de IA (nunca a un contacto bloqueado).
+  if (estaBloqueado(storeId, waId, tel)) return leadId;
   void (async () => {
     try {
       const a = await import('./ai.js');
@@ -122,6 +124,8 @@ function ventana24hAbierta(storeId: string, to: string, pn?: string): boolean {
   return !isNaN(t) && Date.now() - t < 24 * 3600 * 1000;
 }
 
+const CONTACTO_BLOQUEADO = 'Este contacto está bloqueado en tu tienda: DealFlow no le envía mensajes. Desbloquéalo desde el chat si quieres volver a escribirle.';
+
 /** Mensaje de error estándar cuando se bloquea un envío por ventana cerrada. */
 const BLOQUEO_VENTANA = 'Fuera de la ventana de 24 h de WhatsApp: a este cliente (escribió hace más de 24 h) solo se le pueden enviar plantillas aprobadas, no texto libre.';
 
@@ -129,6 +133,8 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
   // Canal WEB: el mensaje ya queda guardado en la BD y el chat web lo lee por
   // polling; no hay nada que "enviar" fuera.
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
+  // Contacto bloqueado por la tienda: nunca se le envía nada.
+  if (estaBloqueado(storeId, to, pn)) return { ok: false, error: CONTACTO_BLOQUEADO };
   // Anti-baneo: espera el turno de esta tienda (nunca ráfagas de mensajes).
   await esperarTurno(storeId, to);
   // Canales de Meta (Messenger / Instagram DM): se envían por la Graph API.
@@ -181,6 +187,7 @@ export async function sendWhatsappTemplate(
   storeId: string, to: string, plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string },
   params: string[] = [], pn?: string,
 ): Promise<{ ok: boolean; error?: string; wamid?: string; textoRender?: string }> {
+  if (estaBloqueado(storeId, to, pn)) return { ok: false, error: CONTACTO_BLOQUEADO };
   await esperarTurno(storeId, to);
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
     | { phone_number_id: string; access_token: string; conectado: number; modo: string } | undefined;
@@ -264,6 +271,7 @@ export async function sendWhatsappMedia(
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
   // Canales de Meta (Messenger / Instagram DM): tienen su propia ventana; no aplica el bloqueo de WhatsApp.
   const esMeta = String(to).startsWith('fb:') || String(to).startsWith('ig:');
+  if (!esMeta && estaBloqueado(storeId, to, pn)) return { ok: false, error: CONTACTO_BLOQUEADO };
   // Anti-baneo: espera el turno de esta tienda (nunca ráfagas de mensajes).
   await esperarTurno(storeId, to);
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as

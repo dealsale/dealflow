@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { CalidadCard } from '../components/CalidadCard';
+import { AppsConectadas } from '../components/AppsConectadas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { WA_NUMBER } from '../data';
 
@@ -102,6 +103,7 @@ function EstadoNumeroCard({ df }: { df: DealFlowState }) {
       </div>
 
       {est?.disponible && <CalidadCard calidad={est.calidad} />}
+      {est?.disponible && <AppsConectadas />}
 
       {enlaces.length > 0 && (
         <div style={card}>

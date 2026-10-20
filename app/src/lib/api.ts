@@ -770,3 +770,9 @@ export type EstadoLead = 'preguntando' | 'interesado' | 'faltan_datos' | 'datos_
 export interface LeadEstado { id: string; nombre: string; tel: string; canal: string; asignado: string; estado: EstadoLead; auto: EstadoLead; manual: boolean; ultimo: string; ultimoIso: string; hora: string; mensajes: number; pedido: { numero: number; total: number; estado: string } | null }
 export const apiLeadsEstados = () => req<{ leads: LeadEstado[] }>('/api/leads/estados', 'GET');
 export const apiSetLeadEstado = (id: string, estado: EstadoLead | '') => req<{ ok: true }>(`/api/leads/${id}/estado`, 'POST', { estado });
+export interface EstadoBloqueo { bloqueado: boolean; enMeta: boolean; nota: string }
+export const apiLeadBloqueo = (id: string) => req<EstadoBloqueo>(`/api/leads/${id}/bloqueo`, 'GET');
+export const apiLeadBloquear = (id: string) => req<{ ok: true; enMeta: boolean; nota: string }>(`/api/leads/${id}/bloquear`, 'POST');
+export const apiLeadDesbloquear = (id: string) => req<{ ok: true }>(`/api/leads/${id}/desbloquear`, 'POST');
+export interface AppConectada { id: string; nombre: string; enlace: string; esDealFlow: boolean }
+export const apiAppsConectadas = () => req<{ apps: AppConectada[]; waba: string }>('/api/whatsapp/apps-conectadas', 'GET');
