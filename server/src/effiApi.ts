@@ -44,6 +44,8 @@ export interface EffiCfg {
   webhookToken: string; webhookSecret: string;
   /** Novedades de guías: avisar al cliente, que el bot recoja los datos y si envía la solución a Effi él solo. */
   novedades: NovedadesCfg;
+  /** Registrar sola la devolución de venta en Effi cuando el pedido quede Devuelto. */
+  devolucionAuto: boolean;
 }
 export interface NovedadesCfg { avisarCliente: boolean; botGestiona: boolean; autoEnviar: boolean }
 
@@ -65,6 +67,7 @@ export function cfgEffi(storeId: string): EffiCfg | null {
     convenioDropshipping: s('convenioDropshipping'),
     guia: { ...GUIA_VACIA, ...g, activa: g.activa === true } as EffiGuiaCfg,
     webhookToken: s('webhookToken'), webhookSecret: s('webhookSecret'),
+    devolucionAuto: c.devolucionAuto === true,
     novedades: (() => { const n = (c.novedades && typeof c.novedades === 'object' ? c.novedades : {}) as Record<string, unknown>; return { avisarCliente: n.avisarCliente !== false, botGestiona: n.botGestiona !== false, autoEnviar: n.autoEnviar === true }; })(),
   };
 }
@@ -696,7 +699,9 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   }
   const remision = txt(doc!.id_transaccion) || `${txt(doc!.prefijo)}-${txt(doc!.id)}`;
   db.prepare("UPDATE orders SET despacho_proveedor = 'effi', woo_id = ?, effi_remision = ?, effi_doc = ? WHERE id = ?")
-    .run(remision, remision, JSON.stringify({ sucursal: txt(doc!.sucursal), id: txt(doc!.id), prefijo: txt(doc!.prefijo), tercero: cli.tercero }), orderId);
+    .run(remision, remision, JSON.stringify({ sucursal: txt(doc!.sucursal), id: txt(doc!.id), prefijo: txt(doc!.prefijo), tercero: cli.tercero,
+      // Los productos tal como se mandaron (para registrar la devolución si el pedido vuelve).
+      conceptos: { articulo: body.articulo, descripcion: body.descripcion, cantidad: body.cantidad, precio: body.precio, descuento: body.descuento } }), orderId);
   registrarLog(storeId, 'info', 'despacho', `${numDF} enviado a Effi: remisión ${remision} (cliente ${cli.tercero}).${avisos.length ? ' ' + avisos.join(' ') : ''}`);
 
   let guia = ''; let transportadora = '';
@@ -870,6 +875,7 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
       if (estadoTxt) db.prepare('UPDATE orders SET estado_woo = ? WHERE id = ?').run(estadoTxt.slice(0, 60), orden.id);
       const nuevo = siguienteEstado(txt(orden.estado), estadoLogistico(estadoTxt, !!(guia || orden.guia)));
       if (nuevo) db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, orden.id);
+      if (nuevo === 'Devuelto') { const { alQuedarDevuelto } = await import('./effiExtras.js'); alQuedarDevuelto(storeId, txt(orden.id)); }
       resumen += `${guia ? ` · guía ${guia}` : ''}${estadoTxt ? ` · ${estadoTxt}` : ''}`;
       if (guia && !Number(orden.guia_avisada)) {
         try {

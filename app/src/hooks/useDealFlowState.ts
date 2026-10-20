@@ -586,6 +586,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     estadoWoo: o.estadoWoo || '',
     effiRemision: o.effiRemision || '',
     novedad: o.novedad || null,
+    effiDevolucion: o.effiDevolucion || '',
     origen: o.origen || '',
     envio: o.envio || 0,
     nota: o.nota || '',

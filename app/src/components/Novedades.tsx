@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
-import { apiNovedadAvisar, apiNovedadSolucion, apiNovedadesSync, type NovedadPedido, type PropuestaNovedad } from '../lib/api';
+import { apiNovedadAvisar, apiNovedadSolucion, apiNovedadesEstado, apiNovedadesSync, type EstadoNovedades, type NovedadPedido, type PropuestaNovedad } from '../lib/api';
 
 /**
  * Novedades de envío (Effi): lo que reporta la transportadora cuando no pudo
@@ -61,7 +61,7 @@ export function NovedadCard({ df, sel }: { df: DealFlowState; sel: DecoratedOrde
 
   const av = avanceNovedad(n);
   const enEspera = n.propuestaEstado === 'enviada' && n.gestionEst !== 3;
-  const puedeEnviar = n.abierta && !enEspera;
+  const puedeEnviar = n.abierta && !enEspera && n.tipo !== 1;
   const set = (k: keyof PropuestaNovedad, v: string) => setP((x) => ({ ...x, [k]: v }));
 
   async function enviar() {
@@ -92,7 +92,8 @@ export function NovedadCard({ df, sel }: { df: DealFlowState; sel: DecoratedOrde
         {n.foto && <a href={n.foto} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-purple)' }}>📷 Foto</a>}
       </div>
 
-      {n.abierta && !n.aviso && <div style={{ marginTop: 10 }}><button onClick={avisar} style={btn(false)}>💬 Avisar al cliente por WhatsApp</button></div>}
+      {n.abierta && n.tipo === 1 && <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>Novedad operativa: la está gestionando la transportadora; no necesitas enviar solución.</div>}
+      {n.abierta && n.tipo !== 1 && !n.aviso && <div style={{ marginTop: 10 }}><button onClick={avisar} style={btn(false)}>💬 Avisar al cliente por WhatsApp</button></div>}
 
       {puedeEnviar && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--df-warning-border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -131,47 +132,69 @@ export function NovedadCard({ df, sel }: { df: DealFlowState; sel: DecoratedOrde
 /** Bandeja "Novedades por resolver" (arriba de la lista de pedidos). */
 export function NovedadesBandeja({ df }: { df: DealFlowState }) {
   const abiertas = df.allOrders.filter((o) => o.novedad?.abierta).sort((a, b) => (b.novedad!.dias - a.novedad!.dias));
+  const conEffi = df.effiApi.conectado || df.allOrders.some((o) => o.despachoProveedor === 'effi');
   const [ver, setVer] = useState(true);
   const [msg, setMsg] = useState('');
-  if (!df.effiApi.conectado && !abiertas.length) return null;
+  const [estado, setEstado] = useState<EstadoNovedades | null>(null);
+  const cargarEstado = () => { void apiNovedadesEstado().then((r) => { if (r.data) setEstado(r.data); }); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (conEffi) cargarEstado(); }, [conEffi]);
+  if (!conEffi) return null;
   async function revisar() {
     setMsg('Revisando en Effi…');
     const r = await apiNovedadesSync();
-    setMsg(r.error ? r.error : `✓ Revisado: ${r.data?.abiertas || 0} abierta(s)${r.data?.nuevas ? ` · ${r.data.nuevas} nueva(s)` : ''}`);
+    setMsg(r.error ? `Effi respondió: ${r.error}` : `✓ Revisado: ${r.data?.abiertas || 0} abierta(s)${r.data?.nuevas ? ` · ${r.data.nuevas} nueva(s)` : ''}`);
+    cargarEstado();
     await df.refrescarPedidos();
   }
-  if (!abiertas.length) {
+  const sinPedido = estado?.sinPedido || [];
+  const total = abiertas.length + sinPedido.length;
+  const colorMsg = (m: string) => (m.startsWith('✓') ? 'var(--df-brand-dark)' : m.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)');
+  const errorEffi = estado?.error ? (
+    <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)', background: 'var(--df-danger-subtle)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '8px 11px', marginTop: 8 }}>
+      ⚠️ No pudimos leer las novedades de Effi: <b>{estado.error}</b>. Revisa en Effi que el usuario de la API key tenga permiso de consulta en «Novedades de guías de transporte».
+    </div>
+  ) : null;
+  const ultima = estado?.ts ? `Última revisión: ${new Date(estado.ts.replace(' ', 'T') + 'Z').toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}` : '';
+  if (!total) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 12 }}>
-        <span>✅ Sin novedades de envío por resolver.</span>
-        <button onClick={revisar} style={{ background: 'transparent', border: 'none', color: 'var(--df-purple)', fontWeight: 700, fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', padding: 0 }}>↻ Revisar en Effi</button>
-        {msg && <span style={{ color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</span>}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'var(--df-text-muted)', flexWrap: 'wrap' }}>
+          <span>{estado?.error ? '⚠️ Novedades de envío sin revisar.' : '✅ Sin novedades de envío por resolver.'}</span>
+          <button onClick={revisar} style={{ background: 'transparent', border: 'none', color: 'var(--df-purple)', fontWeight: 700, fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', padding: 0 }}>↻ Revisar en Effi</button>
+          {ultima && <span style={{ color: 'var(--df-text-faint)' }}>{ultima}</span>}
+          {msg && <span style={{ color: colorMsg(msg) }}>{msg}</span>}
+        </div>
+        {errorEffi}
       </div>
     );
   }
+  const fila = (key: string, onClick: (() => void) | undefined, id: string, cliente: string, n: NovedadPedido) => {
+    const av = onClick ? avanceNovedad(n) : { texto: 'Gestiónala en Effi o carga el pedido con esta guía', color: 'var(--df-text-muted)' };
+    return (
+      <div key={key} onClick={onClick} className={onClick ? 'df-row-hover' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 14px', borderTop: '1px solid var(--df-warning-border)', cursor: onClick ? 'pointer' : 'default', flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, fontWeight: 700, minWidth: 74 }}>{id}</span>
+        <span style={{ fontWeight: 700, fontSize: 13, minWidth: 0, flex: '0 1 180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} translate="no">{cliente}</span>
+        <span style={{ fontSize: 12.5, color: 'var(--df-text-body)', flex: '1 1 160px', minWidth: 0 }}>{n.nombre}{n.transportadora ? ` · ${n.transportadora}` : ''}{n.tipo === 1 ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)' }}>(operativa)</span> : null}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: av.color, flex: '1 1 200px', minWidth: 0 }}>{av.texto}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 800, color: n.dias >= 2 ? 'var(--df-danger-dark)' : 'var(--df-warning)', whiteSpace: 'nowrap' }}>{hace(n.dias)}</span>
+      </div>
+    );
+  };
   return (
     <div style={{ border: '1px solid var(--df-warning-border)', background: 'var(--df-warning-subtle-2)', borderRadius: 12, marginBottom: 14, overflow: 'hidden' }} className="df-novedad">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
         <button onClick={() => setVer((x) => !x)} aria-expanded={ver} style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, color: 'var(--df-warning)' }}>
-          ⚠️ {abiertas.length} {abiertas.length === 1 ? 'novedad' : 'novedades'} por resolver {ver ? '▴' : '▾'}
+          ⚠️ {total} {total === 1 ? 'novedad' : 'novedades'} por resolver {ver ? '▴' : '▾'}
         </button>
         <span style={{ fontSize: 12, color: 'var(--df-warning)', opacity: 0.8 }}>Resuélvelas antes de que la transportadora devuelva el pedido.</span>
         <div style={{ flex: 1 }} />
-        {msg && <span style={{ fontSize: 12, color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</span>}
+        {msg ? <span style={{ fontSize: 12, color: colorMsg(msg) }}>{msg}</span> : ultima && <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>{ultima}</span>}
         <button onClick={revisar} style={btn(false)}>↻ Revisar en Effi</button>
       </div>
-      {ver && abiertas.map((o) => {
-        const n = o.novedad!; const av = avanceNovedad(n);
-        return (
-          <div key={o.id} onClick={o.open} className="df-row-hover" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 14px', borderTop: '1px solid var(--df-warning-border)', cursor: 'pointer', flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, fontWeight: 700, minWidth: 74 }}>{o.id}</span>
-            <span style={{ fontWeight: 700, fontSize: 13, minWidth: 0, flex: '0 1 180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} translate="no">{o.cliente}</span>
-            <span style={{ fontSize: 12.5, color: 'var(--df-text-body)', flex: '1 1 160px', minWidth: 0 }}>{n.nombre}{n.transportadora ? ` · ${n.transportadora}` : ''}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: av.color, flex: '1 1 200px', minWidth: 0 }}>{av.texto}</span>
-            <span style={{ fontSize: 11.5, fontWeight: 800, color: n.dias >= 2 ? 'var(--df-danger-dark)' : 'var(--df-warning)', whiteSpace: 'nowrap' }}>{hace(n.dias)}</span>
-          </div>
-        );
-      })}
+      {errorEffi && <div style={{ padding: '0 14px 10px' }}>{errorEffi}</div>}
+      {ver && abiertas.map((o) => fila(o.id, o.open, o.id, o.cliente, o.novedad!))}
+      {ver && sinPedido.map((n) => fila(n.id, undefined, `Guía ${n.guia}`, n.destinatario || 'Sin pedido en DealFlow', { ...n, nombre: `${n.nombre} · no encontramos el pedido de esta guía en DealFlow` }))}
     </div>
   );
 }

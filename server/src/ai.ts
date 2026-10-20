@@ -438,9 +438,12 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   const mediaSinTexto = !!ultimo && ultimo.tipo !== 'texto' && !String(ultimo.texto || '').trim();
   const { directivaNovedad, leerMarcadorNovedad, quitarMarcadorNovedad, registrarPropuestaBot } = await import('./novedades.js');
   const novedadTxt = directivaNovedad(storeId, leadId);
+  // Envío real de sus pedidos (rastreo) y cobertura de su ciudad antes de confirmar.
+  const extras = await import('./effiExtras.js');
+  const envioTxt = (await extras.contextoEnvioLead(storeId, leadId).catch(() => '')) + (await extras.directivaCobertura(storeId, leadId).catch(() => ''));
   const systemFinal = mediaSinTexto
-    ? `${system}${memoriaCliente}${novedadTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
-    : system + memoriaCliente + novedadTxt;
+    ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
+    : system + memoriaCliente + novedadTxt + envioTxt;
 
   const destino = lead.wa_id || lead.tel;
   const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
@@ -949,6 +952,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio, product_id, variant_id) VALUES (?,?,?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio, ids.productId, ids.variantId);
   }
   db.prepare("UPDATE leads SET etapa = 'Listo para comprar', etiqueta = 'Venta' WHERE id = ?").run(lead.id);
+  void import('./effiExtras.js').then((m) => m.revisarCoberturaPedido(storeId, oid)).catch(() => {});
   trazar(storeId, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado por el asistente`, detalle: `Origen: ${origen}`, datos: { cliente, tel, ciudad, departamento, direccion, total, items, marcador: inner } });
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
   registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} creado para ${cliente} (${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`, lead.id);

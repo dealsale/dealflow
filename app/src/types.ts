@@ -40,6 +40,8 @@ export interface Order {
   effiRemision?: string;
   /** novedad de envío de la transportadora (Effi), la más reciente */
   novedad?: import('./lib/api').NovedadPedido | null;
+  /** devolución de venta registrada en Effi (ej. DV-12) */
+  effiDevolucion?: string;
   /** canal del que vino: whatsapp | instagram | messenger | shopify | web | manual */
   origen?: string;
   envio: number;

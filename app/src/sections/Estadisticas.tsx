@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { fmt } from '../lib/format';
+import { RecaudosEffi } from '../components/RecaudosEffi';
 import { LineChart, GroupedBars, Donut, TopAnuncios, PALETA } from '../components/Charts';
 
 const card: React.CSSProperties = {
@@ -55,6 +56,8 @@ export function Estadisticas({ df }: { df: DealFlowState }) {
     <section data-screen-label="Estadísticas">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Estadísticas 📊</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 16px' }}>Rendimiento de tus chats, campañas y ventas. Filtra por el periodo que quieras.</p>
+
+      <RecaudosEffi df={df} />
 
       {/* Filtros de fecha */}
       <div style={{ ...card, marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
