@@ -339,6 +339,29 @@ function AdminContent({ df }: { df: DealFlowState }) {
   );
 }
 
+/** Resplandor del tema Premium que sigue al mouse por el fondo. */
+function FocoMouse() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    const cont = el?.parentElement;
+    if (!el || !cont) return;
+    let raf = 0, x = 0, y = 0;
+    const pintar = () => { raf = 0; el.style.transform = `translate3d(${x}px, ${y}px, 0)`; };
+    const mover = (e: MouseEvent) => {
+      const r = cont.getBoundingClientRect();
+      x = e.clientX - r.left; y = e.clientY - r.top;
+      el.style.opacity = '1';
+      if (!raf) raf = requestAnimationFrame(pintar);
+    };
+    const salir = () => { el.style.opacity = '0'; };
+    cont.addEventListener('mousemove', mover);
+    cont.addEventListener('mouseleave', salir);
+    return () => { cont.removeEventListener('mousemove', mover); cont.removeEventListener('mouseleave', salir); if (raf) cancelAnimationFrame(raf); };
+  }, []);
+  return <div ref={ref} className="df-foco-mouse" aria-hidden="true" style={{ opacity: 0 }} />;
+}
+
 function DesktopApp({ df }: { df: DealFlowState }) {
   return (
     <div
@@ -356,6 +379,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
       }}
     >
       {df.theme === 'premium' && <div className="df-aurora" aria-hidden="true"><i /><i /><i /><i /></div>}
+      {df.theme === 'premium' && <FocoMouse />}
       {df.sidebarVisible && <Sidebar df={df} />}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
