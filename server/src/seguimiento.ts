@@ -57,6 +57,8 @@ export async function correrSeguimiento(): Promise<void> {
           AND EXISTS (SELECT 1 FROM assistants a WHERE a.store_id = l.store_id AND a.seguimiento_on = 1)
           -- La venta ya cerrada NO se persigue (el bot marca 'Venta' y crea el pedido al cerrar).
           AND COALESCE(l.etiqueta,'') != 'Venta'
+          -- Calidad del número: nunca al que pidió que no le escribamos.
+          AND COALESCE(l.no_contactar,0) = 0
           AND NOT EXISTS (
             SELECT 1 FROM orders o WHERE o.store_id = l.store_id AND COALESCE(o.tel,'') != ''
               AND replace(replace(replace(o.tel,' ',''),'+',''),'-','') LIKE '%' || substr(replace(replace(replace(l.tel,' ',''),'+',''),'-',''), -10))
@@ -94,10 +96,14 @@ export async function correrSeguimiento(): Promise<void> {
       const texto = generado || seguimientoRespaldo(idiomaDe(l.store_id, l.id), objetivo, l.nombre) || mensajeSeguimiento(objetivo, l.nombre);
       const destino = l.wa_id || l.tel;
       const pn = l.tel;
+      const { puedeEscribirle, contarProactivo } = await import('./calidad.js');
+      if (!puedeEscribirle(l.store_id, l.tel, l.id).ok) { db.prepare('UPDATE leads SET seguimiento_nivel = 3 WHERE id = ?').run(l.id); continue; }
       try {
         const mid = uid();
         db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, l.id, texto);
-        marcarEnviado(mid, await sendWhatsappText(l.store_id, destino, texto, pn));
+        const r = await sendWhatsappText(l.store_id, destino, texto, pn);
+        marcarEnviado(mid, r);
+        if (r.ok) contarProactivo(l.store_id, l.tel);
       } catch { /* si falla el envío, igual marcamos el nivel para no reintentar en bucle */ }
       db.prepare('UPDATE leads SET seguimiento_nivel = ? WHERE id = ?').run(objetivo, l.id);
     }

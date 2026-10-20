@@ -355,6 +355,9 @@ export interface ResumenRecaudos {
   pagados: { orderId: string; numero: number; cliente: string; guia: string; total: number; recaudo: number; descuentos: number; fecha: string }[];
 }
 export const apiRecaudos = (mes: string) => req<ResumenRecaudos>(`/api/effi-api/recaudos?mes=${encodeURIComponent(mes)}`, 'GET');
+export interface ResumenCalidad { cfg: { avisarContacto: boolean }; bajas: number; proactivos7d: number; tope: number }
+export const apiCalidad = () => req<ResumenCalidad>('/api/calidad', 'GET');
+export const apiGuardarCalidad = (c: { avisarContacto: boolean }) => req<{ avisarContacto: boolean }>('/api/calidad', 'POST', c);
 export interface EstadoNovedades { ts: string; error: string; leidas: number; sinPedido: NovedadPedido[] }
 export const apiNovedadOcultar = (id: string) => req<{ ok: boolean }>(`/api/novedades/${encodeURIComponent(id)}/ocultar`, 'POST');
 export const apiNovedadVincular = (id: string, numero: string) => req<{ ok: true; orderId: string }>(`/api/novedades/${encodeURIComponent(id)}/vincular`, 'POST', { numero });

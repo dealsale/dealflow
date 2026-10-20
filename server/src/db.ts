@@ -459,6 +459,8 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_leads_ad ON leads(store_id, ad_id)');
 // los flujos de remarketing solo se envían a quien lo aceptó. optin_at guarda
 // cuándo se dio, por si hay que auditarlo.
 addColumn('leads', 'promos_optin INTEGER NOT NULL DEFAULT 0');
+addColumn('leads', 'no_contactar INTEGER NOT NULL DEFAULT 0'); // pidió que no le escribamos (calidad.ts)
+addColumn('leads', 'no_contactar_at TEXT');
 addColumn('leads', 'optin_at TEXT');
 // Atribución de venta: el pedido guarda el anuncio del que vino su cliente en el
 // momento de crearse (enlace exacto al chat), no por adivinar el teléfono después.

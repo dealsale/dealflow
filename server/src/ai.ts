@@ -289,6 +289,22 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   }
   const t0 = Date.now(); // para que el bot tarde ~4-5 s en responder (más humano)
 
+  // Calidad del número: si pidió que no le escribamos, se despide una vez y para.
+  {
+    const ult = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(leadId) as { texto: string } | undefined;
+    const { revisarBaja } = await import('./calidad.js');
+    const despedida = revisarBaja(storeId, leadId, ult?.texto || '');
+    if (despedida !== null) {
+      if (despedida) {
+        await esperarRespuestaHumana(t0);
+        const mid = uid();
+        db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, leadId, 'bot', despedida);
+        marcarEnviado(mid, await sendWhatsappText(storeId, lead.wa_id || lead.tel, despedida, lead.tel));
+      }
+      return;
+    }
+  }
+
   const assistant = db.prepare('SELECT instrucciones, reglas, nombre, estilo FROM assistants WHERE store_id = ?').get(storeId) as
     | { instrucciones: string; reglas: string; nombre: string; estilo: string }
     | undefined;
@@ -1146,6 +1162,12 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
         return lista.map((v) => ({ tipo: b.tipo, valor: v }));
       })
     : [...fotos.slice(0, 6).map((v) => ({ tipo: 'imagen', valor: v })), ...videos.slice(0, 2).map((v) => ({ tipo: 'video', valor: v }))];
+  // Calidad del número: una ráfaga larga de mensajes ante un "hola" provoca bloqueos.
+  // Máximo 5 piezas (los textos van primero en el orden que armaste).
+  if (piezas.length > 5) {
+    registrarLog(storeId, 'warn', 'calidad', `El mensaje inicial de "${p.nombre}" tiene ${piezas.length} piezas; se envían solo 5 para no parecer spam. Junta textos o quita fotos.`, leadId);
+    piezas.splice(5);
+  }
   if (!piezas.length) {
     console.log(`[ia] "${p.nombre}": el cliente lo pidió pero no hay fotos/videos cargados`);
     return false;
