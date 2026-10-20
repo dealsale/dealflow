@@ -887,10 +887,22 @@ api.get('/novedades/estado', requireAuth, requireStore, async (req, res) => {
   const { estadoNovedades } = await import('./novedades.js');
   res.json(estadoNovedades(req.user!.storeId!));
 });
+api.post('/novedades/:id/ocultar', requireAuth, requireStore, async (req, res) => {
+  const { ocultarNovedad } = await import('./novedades.js');
+  res.json({ ok: ocultarNovedad(req.user!.storeId!, String(req.params.id)) });
+});
+api.post('/novedades/:id/vincular', requireAuth, requireStore, async (req, res) => {
+  const { vincularNovedad } = await import('./novedades.js');
+  const numero = Number(String(req.body?.numero || '').replace(/\D/g, ''));
+  if (!numero) return res.status(400).json({ error: 'Escribe el número del pedido (ej. 1049).' });
+  const r = vincularNovedad(req.user!.storeId!, String(req.params.id), numero);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
 // Revisa ya en Effi (además del ciclo automático).
 api.post('/novedades/sync', requireAuth, requireStore, async (req, res) => {
   const { sincronizarNovedades } = await import('./novedades.js');
-  const r = await sincronizarNovedades(req.user!.storeId!);
+  const r = await sincronizarNovedades(req.user!.storeId!, true);
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ ok: true, ...r });
 });

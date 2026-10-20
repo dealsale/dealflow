@@ -291,3 +291,87 @@ export function alQuedarDevuelto(storeId: string, orderId: string): void {
   if (!c?.devolucionAuto) return;
   void registrarDevolucion(storeId, orderId, 'auto').catch(() => {});
 }
+
+// ── 5. Guías creadas directamente en Effi (pedidos de antes de la integración) ──
+
+const celulares = (...textos: unknown[]) => {
+  const out = new Set<string>();
+  for (const t of textos) for (const m of String(t || '').replace(/[^\d]+/g, ' ').split(' ')) {
+    const d = m.length > 10 && m.startsWith('57') ? m.slice(2) : m;
+    if (d.length === 10 && d.startsWith('3')) out.add(d);
+  }
+  return [...out];
+};
+const ultimaUnion = new Map<string, number>();
+
+/**
+ * Une las guías que se hicieron a mano en Effi con su pedido de DealFlow (los
+ * pedidos de antes de la integración no tienen número de guía). Se empareja por
+ * el celular del cliente (en Effi va como teléfono o como cédula) y, si no hay,
+ * por el nombre exacto; siempre con un pedido sin guía, creado hasta 30 días
+ * antes de la guía. Solo une si hay UN candidato claro.
+ */
+export async function unirGuiasDeEffi(storeId: string, forzar = false): Promise<{ unidas: number; revisadas: number } | { error: string }> {
+  const c = cfgEffi(storeId);
+  if (!c?.apiKey) return { error: 'Effi no está conectado.' };
+  if (!forzar && Date.now() - (ultimaUnion.get(storeId) || 0) < 30 * 60_000) return { unidas: 0, revisadas: 0 };
+  ultimaUnion.set(storeId, Date.now());
+  const guias: Fila[] = [];
+  for (let pagina = 1; pagina <= 10; pagina++) {
+    const r = await effi<Fila[]>(c.apiKey, 'GET', '/api/guia_transporte', { query: { desde: fechaCO(-45), hasta: fechaCO(1), existe_guia: 1, pagina, por_pagina: 100 } });
+    if (!r.ok) { if (pagina === 1) return { error: mensajeError(r) }; break; }
+    guias.push(...(r.body.data || []));
+    const pg = r.body.paginacion;
+    if (!pg || pagina >= pg.total_paginas) break;
+  }
+  const sinCero = (g: string) => g.replace(/\s/g, '').replace(/^0+/, '');
+  const yaUnidas = new Set((db.prepare("SELECT guia FROM orders WHERE store_id = ? AND COALESCE(guia,'') != ''").all(storeId) as { guia: string }[]).map((o) => sinCero(o.guia)));
+  const libres = db.prepare("SELECT id, numero, cliente, tel, ciudad, estado, created_at FROM orders WHERE store_id = ? AND COALESCE(guia,'') = '' AND created_at > datetime('now','-80 days')").all(storeId) as Fila[];
+  const usados = new Set<string>();
+  let unidas = 0;
+  for (const g of guias) {
+    const num = txt(g.guia);
+    if (!num || yaUnidas.has(sinCero(num))) continue;
+    const fechaGuia = new Date(txt(g.fecha_trans).replace(' ', 'T') + 'Z').getTime() || Date.now();
+    const enVentana = (o: Fila) => { const t = new Date(txt(o.created_at).replace(' ', 'T') + 'Z').getTime(); return t <= fechaGuia + 86400_000 && t >= fechaGuia - 30 * 86400_000; };
+    const cel = celulares(g.telefonos_destinatario, g.id_destinatario);
+    let cands = libres.filter((o) => !usados.has(txt(o.id)) && enVentana(o) && cel.includes(String(o.tel || '').replace(/\D/g, '').slice(-10)));
+    if (!cands.length && txt(g.nombre_destinatario)) {
+      const nom = norm(txt(g.nombre_destinatario));
+      cands = libres.filter((o) => !usados.has(txt(o.id)) && enVentana(o) && norm(txt(o.cliente)) === nom);
+    }
+    // Varios pedidos del mismo cliente: el más cercano antes de la guía.
+    cands.sort((a, b) => txt(b.created_at).localeCompare(txt(a.created_at)));
+    const o = cands[0];
+    if (!o || (cands.length > 1 && txt(cands[1].created_at).slice(0, 10) === txt(o.created_at).slice(0, 10))) continue;
+    usados.add(txt(o.id));
+    const transp = nombreTransportadora(txt(g.nombre_transportadora_efficommerce) || txt(g.nombre_transportadora)) || txt(g.nombre_transportadora_efficommerce);
+    const estadoTxt = txt(g.estado_efficommerce) || txt(g.estado);
+    const { estadoLogistico, siguienteEstado } = await import('./estadosPedido.js');
+    const nuevo = siguienteEstado(txt(o.estado), estadoLogistico(estadoTxt, true));
+    db.prepare(`UPDATE orders SET guia = ?, transportadora = CASE WHEN ? != '' THEN ? ELSE transportadora END,
+        despacho_proveedor = CASE WHEN COALESCE(despacho_proveedor,'') = '' THEN 'effi' ELSE despacho_proveedor END,
+        effi_guia = ?, estado_woo = CASE WHEN ? != '' THEN ? ELSE estado_woo END, estado = COALESCE(?, estado), guia_avisada = 1 WHERE id = ?`)
+      .run(num, transp, transp, JSON.stringify({ sucursal: txt(g.sucursal), id: txt(g.id), id_transaccion: txt(g.id_transaccion), manual: true }), estadoTxt.slice(0, 60), estadoTxt.slice(0, 60), nuevo, txt(o.id));
+    trazar(storeId, txt(o.id), { etapa: 'vinculo', nivel: 'info', titulo: `Guía ${num} (${transp || 'Effi'}) unida a este pedido`, detalle: `Creada en Effi para ${txt(g.nombre_destinatario)}; se unió por ${cel.includes(String(o.tel || '').replace(/\D/g, '').slice(-10)) ? 'el celular' : 'el nombre'} del cliente.` });
+    unidas++;
+  }
+  if (unidas) registrarLog(storeId, 'info', 'despacho', `${unidas} guía(s) creadas en Effi se unieron a su pedido en DealFlow (por el celular o el nombre del cliente).`);
+  return { unidas, revisadas: guias.length };
+}
+
+/** Estado de las guías que se unieron así (no tienen remisión de DealFlow): por número de guía. */
+export async function consultarGuiasSueltas(): Promise<void> {
+  const filas = db.prepare(`SELECT id, store_id, guia FROM orders WHERE despacho_proveedor = 'effi' AND COALESCE(effi_doc,'') = '' AND COALESCE(guia,'') != ''
+      AND estado NOT IN ('Entregado','Devuelto','Cancelado') AND created_at > datetime('now','-45 days') ORDER BY created_at DESC LIMIT 120`).all() as Fila[];
+  const { procesarWebhookEffi } = await import('./effiApi.js');
+  for (const f of filas) {
+    const c = cfgEffi(txt(f.store_id));
+    if (!c?.apiKey) continue;
+    try {
+      const r = await effi<Fila[]>(c.apiKey, 'GET', '/api/guia_transporte', { query: { guia: txt(f.guia), por_pagina: 5 } });
+      const g = r.ok ? (r.body.data || [])[0] : undefined;
+      if (g) await procesarWebhookEffi(txt(f.store_id), 'Consulta de guía', '', { data: g });
+    } catch { /* sigue con la próxima */ }
+  }
+}

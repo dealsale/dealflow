@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
-import { apiNovedadAvisar, apiNovedadSolucion, apiNovedadesEstado, apiNovedadesSync, type EstadoNovedades, type NovedadPedido, type PropuestaNovedad } from '../lib/api';
+import { apiNovedadAvisar, apiNovedadOcultar, apiNovedadSolucion, apiNovedadVincular, apiNovedadesEstado, apiNovedadesSync, type EstadoNovedades, type NovedadPedido, type PropuestaNovedad } from '../lib/api';
 
 /**
  * Novedades de envío (Effi): lo que reporta la transportadora cuando no pudo
@@ -134,6 +134,7 @@ export function NovedadesBandeja({ df }: { df: DealFlowState }) {
   const abiertas = df.allOrders.filter((o) => o.novedad?.abierta).sort((a, b) => (b.novedad!.dias - a.novedad!.dias));
   const conEffi = df.effiApi.conectado || df.allOrders.some((o) => o.despachoProveedor === 'effi');
   const [ver, setVer] = useState(true);
+  const [verOp, setVerOp] = useState(false);
   const [msg, setMsg] = useState('');
   const [estado, setEstado] = useState<EstadoNovedades | null>(null);
   const cargarEstado = () => { void apiNovedadesEstado().then((r) => { if (r.data) setEstado(r.data); }); };
@@ -147,8 +148,14 @@ export function NovedadesBandeja({ df }: { df: DealFlowState }) {
     cargarEstado();
     await df.refrescarPedidos();
   }
+  // Por resolver (requieren solución tuya) vs. operativas (las gestiona la transportadora: solo informativas).
   const sinPedido = estado?.sinPedido || [];
-  const total = abiertas.length + sinPedido.length;
+  const conPedido2 = abiertas.filter((o) => o.novedad!.tipo !== 1);
+  const conPedido1 = abiertas.filter((o) => o.novedad!.tipo === 1);
+  const sinPedido2 = sinPedido.filter((n) => n.tipo !== 1);
+  const sinPedido1 = sinPedido.filter((n) => n.tipo === 1);
+  const total = conPedido2.length + sinPedido2.length;
+  const operativas = conPedido1.length + sinPedido1.length;
   const colorMsg = (m: string) => (m.startsWith('✓') ? 'var(--df-brand-dark)' : m.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)');
   const errorEffi = estado?.error ? (
     <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)', background: 'var(--df-danger-subtle)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '8px 11px', marginTop: 8 }}>
@@ -156,7 +163,7 @@ export function NovedadesBandeja({ df }: { df: DealFlowState }) {
     </div>
   ) : null;
   const ultima = estado?.ts ? `Última revisión: ${new Date(estado.ts.replace(' ', 'T') + 'Z').toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}` : '';
-  if (!total) {
+  if (!total && !operativas) {
     return (
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'var(--df-text-muted)', flexWrap: 'wrap' }}>
@@ -176,7 +183,7 @@ export function NovedadesBandeja({ df }: { df: DealFlowState }) {
         <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, fontWeight: 700, minWidth: 74 }}>{id}</span>
         <span style={{ fontWeight: 700, fontSize: 13, minWidth: 0, flex: '0 1 180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} translate="no">{cliente}</span>
         <span style={{ fontSize: 12.5, color: 'var(--df-text-body)', flex: '1 1 160px', minWidth: 0 }}>{n.nombre}{n.transportadora ? ` · ${n.transportadora}` : ''}{n.tipo === 1 ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)' }}>(operativa)</span> : null}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: av.color, flex: '1 1 200px', minWidth: 0 }}>{av.texto}</span>
+        {onClick ? <span style={{ fontSize: 12, fontWeight: 700, color: av.color, flex: '1 1 200px', minWidth: 0 }}>{av.texto}</span> : <AccionesSinPedido n={n} alTerminar={async () => { cargarEstado(); await df.refrescarPedidos(); }} />}
         <span style={{ fontSize: 11.5, fontWeight: 800, color: n.dias >= 2 ? 'var(--df-danger-dark)' : 'var(--df-warning)', whiteSpace: 'nowrap' }}>{hace(n.dias)}</span>
       </div>
     );
@@ -185,7 +192,7 @@ export function NovedadesBandeja({ df }: { df: DealFlowState }) {
     <div style={{ border: '1px solid var(--df-warning-border)', background: 'var(--df-warning-subtle-2)', borderRadius: 12, marginBottom: 14, overflow: 'hidden' }} className="df-novedad">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
         <button onClick={() => setVer((x) => !x)} aria-expanded={ver} style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, color: 'var(--df-warning)' }}>
-          ⚠️ {total} {total === 1 ? 'novedad' : 'novedades'} por resolver {ver ? '▴' : '▾'}
+          {total ? `⚠️ ${total} ${total === 1 ? 'novedad' : 'novedades'} por resolver` : '✅ Ninguna novedad por resolver'} {ver ? '▴' : '▾'}
         </button>
         <span style={{ fontSize: 12, color: 'var(--df-warning)', opacity: 0.8 }}>Resuélvelas antes de que la transportadora devuelva el pedido.</span>
         <div style={{ flex: 1 }} />
@@ -193,8 +200,50 @@ export function NovedadesBandeja({ df }: { df: DealFlowState }) {
         <button onClick={revisar} style={btn(false)}>↻ Revisar en Effi</button>
       </div>
       {errorEffi && <div style={{ padding: '0 14px 10px' }}>{errorEffi}</div>}
-      {ver && abiertas.map((o) => fila(o.id, o.open, o.id, o.cliente, o.novedad!))}
-      {ver && sinPedido.map((n) => fila(n.id, undefined, `Guía ${n.guia}`, n.destinatario || 'Sin pedido en DealFlow', { ...n, nombre: `${n.nombre} · no encontramos el pedido de esta guía en DealFlow` }))}
+      {ver && conPedido2.map((o) => fila(o.id, o.open, o.id, o.cliente, o.novedad!))}
+      {ver && sinPedido2.map((n) => fila(n.id, undefined, `Guía ${n.guia}`, n.destinatario || 'Sin pedido en DealFlow', { ...n, nombre: `${n.nombre} · sin pedido en DealFlow` }))}
+      {operativas > 0 && (
+        <div style={{ borderTop: '1px solid var(--df-warning-border)' }}>
+          <button onClick={() => setVerOp((x) => !x)} aria-expanded={verOp} style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '9px 14px', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-muted)', cursor: 'pointer' }}>
+            {verOp ? '▾' : '▸'} {operativas} aviso{operativas === 1 ? '' : 's'} operativo{operativas === 1 ? '' : 's'} de la transportadora <span style={{ fontWeight: 500 }}>· los gestiona ella, no necesitas hacer nada</span>
+          </button>
+          {verOp && conPedido1.map((o) => fila(o.id, o.open, o.id, o.cliente, o.novedad!))}
+          {verOp && sinPedido1.map((n) => fila(n.id, undefined, `Guía ${n.guia}`, n.destinatario || 'Sin pedido en DealFlow', { ...n, nombre: `${n.nombre} · sin pedido en DealFlow` }))}
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Novedad cuya guía no encontramos en DealFlow: unirla a un pedido (por número) u ocultarla. */
+function AccionesSinPedido({ n, alTerminar }: { n: NovedadPedido; alTerminar: () => Promise<void> }) {
+  const [abierto, setAbierto] = useState(false);
+  const [numero, setNumero] = useState('');
+  const [msg, setMsg] = useState('');
+  const unir = async () => {
+    setMsg('Uniendo…');
+    const r = await apiNovedadVincular(n.id, numero);
+    if (r.error) { setMsg(r.error); return; }
+    setMsg(''); setAbierto(false); await alTerminar();
+  };
+  const ocultar = async () => { await apiNovedadOcultar(n.id); await alTerminar(); };
+  const b: CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 7, padding: '5px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', color: 'var(--df-text-body)', whiteSpace: 'nowrap' };
+  return (
+    <span style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      {abierto ? (
+        <>
+          <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>DF-</span>
+          <input value={numero} onChange={(e) => setNumero(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => { if (e.key === 'Enter' && numero) void unir(); }} placeholder="1049" aria-label="Número del pedido" style={{ width: 70, border: '1px solid var(--df-border-strong)', borderRadius: 7, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)' }} autoFocus />
+          <button onClick={unir} disabled={!numero} style={{ ...b, background: 'var(--df-purple)', color: '#fff', border: 'none', opacity: numero ? 1 : 0.5 }}>Unir</button>
+          <button onClick={() => { setAbierto(false); setMsg(''); }} style={b}>Cancelar</button>
+        </>
+      ) : (
+        <>
+          <button onClick={() => setAbierto(true)} style={b} title="Si este envío es de un pedido que está en DealFlow, únelo por su número">🔗 Unir a un pedido</button>
+          <button onClick={ocultar} style={{ ...b, color: 'var(--df-text-muted)' }} title="No mostrarla más aquí (la sigues viendo en Effi)">Ocultar</button>
+        </>
+      )}
+      {msg && <span style={{ fontSize: 12, fontWeight: 600, color: msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</span>}
+    </span>
   );
 }
