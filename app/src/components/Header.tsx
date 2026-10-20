@@ -46,7 +46,7 @@ function StoreSwitcher({ df }: { df: DealFlowState }) {
                   <span
                     onClick={async (e) => {
                       e.stopPropagation();
-                      if (await confirmar({ titulo: `Eliminar "${t.nombre}"`, mensaje: 'Se elimina esta tienda y todo su contenido (productos, pedidos, chats). Esta acción no se puede deshacer.', aceptar: 'Eliminar', peligro: true })) df.eliminarMiTienda(t.id);
+                      if (await confirmar({ titulo: `Eliminar "${t.nombre}"`, mensaje: 'Se elimina esta tienda y todo su contenido (productos, pedidos, chats). Si fue un error, escríbenos en los próximos 30 días y la recuperamos.', aceptar: 'Eliminar', peligro: true })) df.eliminarMiTienda(t.id);
                     }}
                     className="df-danger-hover"
                     title="Eliminar esta tienda"

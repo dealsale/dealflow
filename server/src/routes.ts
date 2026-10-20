@@ -10,6 +10,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { urlTienda } from './tiendaPublica.js';
 import * as sa from './shopifyApp.js';
+import { moverAPapelera, listarPapelera, restaurarDePapelera, listarRespaldos, rutaRespaldo, copiaDiaria, DIAS_PAPELERA } from './papelera.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
@@ -237,7 +238,7 @@ api.delete('/mis-tiendas/:id', requireAuth, requireStore, (req, res) => {
   const esMia = mias.some((s) => s.id === req.params.id);
   if (!esMia) return res.status(404).json({ error: 'Esa tienda no es tuya.' });
   try {
-    db.prepare('DELETE FROM stores WHERE id = ?').run(req.params.id); // cascada limpia lo demás
+    moverAPapelera(req.params.id, req.user!.email); // queda 30 días en la papelera (el superadmin la puede restaurar)
   } catch (e) {
     console.error('[eliminar-tienda] error', e);
     return res.status(500).json({ error: 'No pudimos eliminar la tienda. Intenta de nuevo.' });
@@ -2157,9 +2158,28 @@ api.patch('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
 api.delete('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
   const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(req.params.id) as { id: string } | undefined;
   if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
-  // El borrado en cascada (FK ON DELETE CASCADE) limpia usuarios, productos, pedidos, leads, etc.
-  db.prepare('DELETE FROM stores WHERE id = ?').run(s.id);
+  // A la papelera (30 días): se guarda lo que la cascada borra y luego se borra.
+  try { moverAPapelera(s.id, req.user!.email); } catch (e) { console.error('[papelera]', e); return res.status(500).json({ error: 'No pudimos eliminar la cuenta. Intenta de nuevo.' }); }
   res.json({ ok: true });
+});
+
+// ── Papelera de tiendas y copias diarias (solo superadmin) ──
+api.get('/admin/papelera', requireAuth, requireSuperAdmin, (_req, res) => {
+  res.json({ tiendas: listarPapelera(), dias: DIAS_PAPELERA, respaldos: listarRespaldos() });
+});
+api.post('/admin/papelera/:archivo/restaurar', requireAuth, requireSuperAdmin, (req, res) => {
+  const r = restaurarDePapelera(String(req.params.archivo));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+api.post('/admin/respaldos/ahora', requireAuth, requireSuperAdmin, async (_req, res) => {
+  await copiaDiaria();
+  res.json({ respaldos: listarRespaldos() });
+});
+api.get('/admin/respaldos/:archivo', requireAuth, requireSuperAdmin, (req, res) => {
+  const ruta = rutaRespaldo(String(req.params.archivo));
+  if (!ruta) return res.status(404).json({ error: 'Copia no encontrada.' });
+  res.download(ruta);
 });
 
 // Detalle de una tienda para el admin.

@@ -3,7 +3,7 @@ import { estadoLogistico } from './estadosPedido.js';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-const DATA_DIR = process.env.DATA_DIR || './data';
+export const DATA_DIR = process.env.DATA_DIR || './data';
 mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new Database(path.join(DATA_DIR, 'dealflow.db'));
