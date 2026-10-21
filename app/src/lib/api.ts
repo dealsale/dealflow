@@ -787,6 +787,7 @@ export const apiSoltarVariantesDropi = (productId: string) => req<{ ok: true }>(
 
 export interface CfgPedidosShopify { confirmar: boolean; autoDespacho: boolean; modoPrueba: boolean }
 export const apiShopifyPedidosCfg = () => req<CfgPedidosShopify>('/api/shopify/pedidos-config', 'GET');
+export const apiShopifyTraerPedidos = () => req<{ nuevos: number; revisados: number; aviso: string }>('/api/shopify/pedidos/traer', 'POST', {});
 export const apiShopifyPedidosGuardar = (c: Partial<CfgPedidosShopify>) => req<CfgPedidosShopify>('/api/shopify/pedidos-config', 'POST', c);
 export const apiShopifyReenviarConfirmacion = (rowId: string) => req<{ ok: true }>(`/api/orders/${encodeURIComponent(rowId)}/shopify/confirmacion`, 'POST');
 

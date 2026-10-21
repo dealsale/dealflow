@@ -1200,6 +1200,13 @@ api.post('/shopify/pedidos-config', requireAuth, requireStore, requireOwner, asy
   if (!r) return res.status(400).json({ error: 'Conecta Shopify primero.' });
   res.json(r);
 });
+// Traer ya los pedidos recientes de Shopify que no hayan llegado por webhook.
+api.post('/shopify/pedidos/traer', requireAuth, requireStore, async (req, res) => {
+  const { traerPedidosRecientes } = await import('./shopifyPedidos.js');
+  const r = await traerPedidosRecientes(req.user!.storeId!, true);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
 // Reenviar la confirmación por WhatsApp de un pedido de Shopify.
 api.post('/orders/:rowId/shopify/confirmacion', requireAuth, requireStore, async (req, res) => {
   const { enviarConfirmacion } = await import('./shopifyPedidos.js');

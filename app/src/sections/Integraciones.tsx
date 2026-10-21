@@ -1,4 +1,4 @@
-import { apiShopifyPedidosCfg, apiShopifyPedidosGuardar, type CfgPedidosShopify } from '../lib/api';
+import { apiShopifyPedidosCfg, apiShopifyPedidosGuardar, apiShopifyTraerPedidos, type CfgPedidosShopify } from '../lib/api';
 import { useEffect, useRef, useState } from 'react';
 import { EffiApiCard } from '../components/EffiApiCard';
 import type { DealFlowState } from '../hooks/useDealFlowState';
@@ -17,8 +17,20 @@ const GRUPOS: { id: string; titulo: string; sub: string }[] = [
 /** Conexión de Dropi por su API directa (token de integración + URL). Con esto
  *  DealFlow cotiza transportadoras y crea el pedido en Dropi. */
 /** Qué hace DealFlow con cada pedido que llega de Shopify. */
-function PedidosShopifyCfg() {
+function PedidosShopifyCfg({ alTraer }: { alTraer?: () => void }) {
   const [cfg, setCfg] = useState<CfgPedidosShopify | null>(null);
+  const [trayendo, setTrayendo] = useState(false);
+  const [msg, setMsg] = useState('');
+  const traer = () => {
+    setTrayendo(true); setMsg('');
+    void apiShopifyTraerPedidos().then((r) => {
+      setTrayendo(false);
+      if (r.error || !r.data) { setMsg(r.error || 'No se pudo consultar Shopify.'); return; }
+      const d = r.data;
+      setMsg((d.nuevos ? `✅ ${d.nuevos} pedido(s) nuevo(s) traído(s).` : `Sin pedidos nuevos (revisados ${d.revisados} de la última semana).`) + (d.aviso ? ` ⚠️ ${d.aviso}` : ''));
+      if (d.nuevos) alTraer?.();
+    });
+  };
   useEffect(() => { void apiShopifyPedidosCfg().then((r) => r.data && setCfg(r.data)); }, []);
   if (!cfg) return null;
   const cambiar = (k: keyof CfgPedidosShopify) => { const n = { ...cfg, [k]: !cfg[k] }; setCfg(n); void apiShopifyPedidosGuardar({ [k]: n[k] }); };
@@ -33,6 +45,11 @@ function PedidosShopifyCfg() {
       {fila('confirmar', 'Confirmar cada pedido por WhatsApp', 'Al comprador le llega la plantilla "confirmacion_pedido_tienda" con botones Sí / No. Si dice No, el chat pasa a tu equipo.')}
       {fila('autoDespacho', 'Despachar solo cuando el cliente confirma', 'Con Effi: se crea la remisión (y la guía si la tienes activa). Al salir la guía, el pedido se marca enviado en Shopify con el número de guía.')}
       {fila('modoPrueba', 'Modo prueba (no crea envíos reales)', 'Para probar o para la revisión de Shopify: simula el despacho con una guía de prueba.')}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', paddingTop: 8, borderTop: '1px dashed var(--df-border)' }}>
+        <button onClick={traer} disabled={trayendo} style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: trayendo ? 0.6 : 1 }}>{trayendo ? 'Revisando Shopify…' : '↻ Traer pedidos de Shopify'}</button>
+        <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>También se revisa solo cada 5 minutos.</span>
+      </div>
+      {msg && <div style={{ fontSize: 12, marginTop: 6, lineHeight: 1.45 }}>{msg}</div>}
     </div>
   );
 }
@@ -77,7 +94,7 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
           {conectada && df.shopifyVia === 'app' ? (
             <>
               <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', lineHeight: 1.5 }}>✓ Conectada con la <b>app DealFlow</b> instalada en tu tienda. Los pedidos nuevos de Shopify llegan a DealFlow.</div>
-              <PedidosShopifyCfg />
+              <PedidosShopifyCfg alTraer={() => void df.recargarPedidos?.()} />
             </>
           ) : (
             <>
