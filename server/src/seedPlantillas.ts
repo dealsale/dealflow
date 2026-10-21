@@ -55,6 +55,15 @@ const PLANTILLAS: Semilla[] = [
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Misma dirección' }, { tipo: 'QUICK_REPLY', texto: 'Otra dirección' }],
   },
   {
+    // Pedido que entró por la tienda online (Shopify): el comprador confirma con un
+    // botón y, si dice que sí, se despacha solo. Variables: nombre, tienda, productos, total.
+    nombre: 'confirmacion_pedido_tienda', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Recibimos tu pedido en {{2}}:\n{{3}}\nTotal: {{4}}\n\n¿Confirmas que te lo enviemos?',
+    pie: 'Responde con uno de los botones',
+    ejemplos: ['Camila', 'Luna Accesorios', '1× Jean mom fit (Talla 8 · Azul)', '$129.900 · pago contra entrega'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Sí, confirmo' }, { tipo: 'QUICK_REPLY', texto: 'No' }],
+  },
+  {
     nombre: 'recordatorio_abono', categoria: 'UTILITY', idioma: 'es',
     cuerpo: 'Hola {{1}}, te recordamos que tu pedido {{2}} está apartado.\nPara despacharlo necesitamos confirmar el pago de {{3}}.\nCuando quieras, respóndenos por aquí y te ayudamos a completarlo. 🙌',
     ejemplos: ['Camila', '#1098', '$60.000'],

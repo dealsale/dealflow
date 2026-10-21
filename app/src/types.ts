@@ -42,6 +42,9 @@ export interface Order {
   novedad?: import('./lib/api').NovedadPedido | null;
   /** devolución de venta registrada en Effi (ej. DV-12) */
   effiDevolucion?: string;
+  /** Pedidos de Shopify: '' | 'esperando' | 'si' | 'no' (confirmación por WhatsApp). */
+  confirmacion?: string;
+  shopifyEnviado?: boolean;
   /** canal del que vino: whatsapp | instagram | messenger | shopify | web | manual */
   origen?: string;
   envio: number;

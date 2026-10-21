@@ -1,3 +1,4 @@
+import { apiShopifyPedidosCfg, apiShopifyPedidosGuardar, type CfgPedidosShopify } from '../lib/api';
 import { useEffect, useRef, useState } from 'react';
 import { EffiApiCard } from '../components/EffiApiCard';
 import type { DealFlowState } from '../hooks/useDealFlowState';
@@ -15,6 +16,27 @@ const GRUPOS: { id: string; titulo: string; sub: string }[] = [
 
 /** Conexión de Dropi por su API directa (token de integración + URL). Con esto
  *  DealFlow cotiza transportadoras y crea el pedido en Dropi. */
+/** Qué hace DealFlow con cada pedido que llega de Shopify. */
+function PedidosShopifyCfg() {
+  const [cfg, setCfg] = useState<CfgPedidosShopify | null>(null);
+  useEffect(() => { void apiShopifyPedidosCfg().then((r) => r.data && setCfg(r.data)); }, []);
+  if (!cfg) return null;
+  const cambiar = (k: keyof CfgPedidosShopify) => { const n = { ...cfg, [k]: !cfg[k] }; setCfg(n); void apiShopifyPedidosGuardar({ [k]: n[k] }); };
+  const fila = (k: keyof CfgPedidosShopify, titulo: string, ayuda: string) => (
+    <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer', padding: '7px 0', borderTop: '1px dashed var(--df-border)' }}>
+      <input type="checkbox" checked={cfg[k]} onChange={() => cambiar(k)} style={{ marginTop: 2, accentColor: '#5E8E3E' }} />
+      <span><b style={{ fontSize: 12.5 }}>{titulo}</b><br /><span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{ayuda}</span></span>
+    </label>
+  );
+  return (
+    <div style={{ marginTop: 6 }}>
+      {fila('confirmar', 'Confirmar cada pedido por WhatsApp', 'Al comprador le llega la plantilla "confirmacion_pedido_tienda" con botones Sí / No. Si dice No, el chat pasa a tu equipo.')}
+      {fila('autoDespacho', 'Despachar solo cuando el cliente confirma', 'Con Effi: se crea la remisión (y la guía si la tienes activa). Al salir la guía, el pedido se marca enviado en Shopify con el número de guía.')}
+      {fila('modoPrueba', 'Modo prueba (no crea envíos reales)', 'Para probar o para la revisión de Shopify: simula el despacho con una guía de prueba.')}
+    </div>
+  );
+}
+
 function ShopifyCard({ df }: { df: DealFlowState }) {
   const [abierto, setAbierto] = useState(false);
   const [metodo, setMetodo] = useState<'token' | 'cc'>('cc'); // 'cc' = Client ID + Secret (Dev Dashboard)
@@ -53,7 +75,10 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
       {df.shopifyAppDisponible && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           {conectada && df.shopifyVia === 'app' ? (
-            <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', lineHeight: 1.5 }}>✓ Conectada con la <b>app DealFlow</b> instalada en tu tienda. Los pedidos nuevos de Shopify llegan a DealFlow.</div>
+            <>
+              <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', lineHeight: 1.5 }}>✓ Conectada con la <b>app DealFlow</b> instalada en tu tienda. Los pedidos nuevos de Shopify llegan a DealFlow.</div>
+              <PedidosShopifyCfg />
+            </>
           ) : (
             <>
               <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>

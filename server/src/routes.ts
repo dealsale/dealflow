@@ -274,7 +274,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: itemsTienda.get(o.id as string) || [], novedad: novTienda.get(o.id as string) || null,
   }));
   // Resumen (sin todos los mensajes de cada chat): la carga inicial del panel no
@@ -460,7 +460,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const novs = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));
   res.json({ orders });
@@ -1184,6 +1184,24 @@ api.post('/shopify/app/vincular', requireAuth, requireStore, requireOwner, (req,
   const r = sa.vincularConCodigo(req.user!.storeId!, String(req.body?.codigo || ''));
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ ok: true, ...r });
+});
+// Pedidos de Shopify: confirmar por WhatsApp, despachar solo al confirmar y modo prueba.
+api.get('/shopify/pedidos-config', requireAuth, requireStore, async (req, res) => {
+  const { cfgPedidosShopify } = await import('./shopifyPedidos.js');
+  res.json(cfgPedidosShopify(req.user!.storeId!));
+});
+api.post('/shopify/pedidos-config', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { guardarCfgPedidosShopify } = await import('./shopifyPedidos.js');
+  const r = guardarCfgPedidosShopify(req.user!.storeId!, req.body || {});
+  if (!r) return res.status(400).json({ error: 'Conecta Shopify primero.' });
+  res.json(r);
+});
+// Reenviar la confirmación por WhatsApp de un pedido de Shopify.
+api.post('/orders/:rowId/shopify/confirmacion', requireAuth, requireStore, async (req, res) => {
+  const { enviarConfirmacion } = await import('./shopifyPedidos.js');
+  const r = await enviarConfirmacion(req.user!.storeId!, req.params.rowId);
+  if (!r.ok) return res.status(400).json({ error: r.detalle || 'No se pudo enviar.' });
+  res.json({ ok: true });
 });
 // Por si Shopify usa la URL de redirección (instalación heredada): volver a la app dentro de Shopify.
 api.get('/shopify/oauth/callback', (req, res) => {

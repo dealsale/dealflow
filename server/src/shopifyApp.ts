@@ -267,19 +267,21 @@ export function procesarWebhook(topic: string, shop: string, id: string, body: R
       }
       break;
     }
-    case 'shop/redact':
+    case 'shop/redact': {
       // 48 h después de desinstalar: borrar todo lo de esa tienda Shopify.
       db.prepare('DELETE FROM shopify_tiendas WHERE shop = ?').run(shop);
       db.prepare('DELETE FROM shopify_pendientes WHERE shop = ?').run(shop);
+      void import('./shopifyPedidos.js').then((m) => { const n = m.borrarDatosTienda(shop); if (storeId && n) registrarLog(storeId, 'info', 'shopify', `Privacidad: se borraron los datos de compradores de ${n} pedidos de ${shop}.`); });
       break;
+    }
     case 'customers/redact':
+      void import('./shopifyPedidos.js').then((m) => { const n = m.borrarDatosCliente(shop, body); if (storeId) registrarLog(storeId, 'info', 'shopify', `Privacidad: Shopify pidió borrar los datos de un comprador (${n} pedidos anonimizados).`); });
+      break;
     case 'customers/data_request':
-      // DealFlow aún no guarda clientes de Shopify aparte de los pedidos; queda registro.
-      if (storeId) registrarLog(storeId, 'info', 'shopify', `Shopify pidió ${topic === 'customers/redact' ? 'borrar' : 'informar'} los datos de un cliente (privacidad).`);
+      void import('./shopifyPedidos.js').then((m) => { const d = m.datosCliente(shop, body); if (storeId) registrarLog(storeId, 'info', 'shopify', `Privacidad: un comprador pidió sus datos. DealFlow tiene ${d.length} pedido(s) suyos: ${d.map((x) => 'DF-' + x.numero).join(', ') || 'ninguno'}. Entrégaselos si te los pide.`); });
       break;
     case 'orders/create':
-      // Etapa 2: crear el pedido en DealFlow y enviar la confirmación por WhatsApp.
-      if (storeId) registrarLog(storeId, 'info', 'shopify', `Llegó el pedido ${String(body.name || body.id || '')} de Shopify.`);
+      if (storeId) void import('./shopifyPedidos.js').then((m) => m.importarPedido(storeId, shop, body));
       break;
     default:
       break;

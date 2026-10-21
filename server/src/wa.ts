@@ -13,7 +13,7 @@ interface MediaInfo {
   nombre: string;
 }
 
-function ensureLead(storeId: string, waId: string, nombre: string, tel?: string): { id: string; nuevo: boolean } {
+export function ensureLead(storeId: string, waId: string, nombre: string, tel?: string): { id: string; nuevo: boolean } {
   const numPart = String(waId || '').split('@')[0];
   const telMostrar = tel || '+' + numPart; // número legible para el CRM (el @lid no sirve de teléfono)
   // Se busca por la dirección completa, por el número pelado (chats viejos) y
@@ -81,6 +81,11 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
   if (estaBloqueado(storeId, waId, tel)) return leadId;
   void (async () => {
     try {
+      // ¿Es la respuesta Sí/No a la confirmación de un pedido de Shopify? Entonces no contesta el bot.
+      try {
+        const sp = await import('./shopifyPedidos.js');
+        if (await sp.respuestaConfirmacion(storeId, leadId, texto)) return;
+      } catch (e) { console.error('[shopify] respuesta de confirmación', e); }
       const a = await import('./ai.js');
       await a.maybeAutoReply(storeId, leadId);
     } catch (e) { console.error('[ia] error procesando entrante', e); }
