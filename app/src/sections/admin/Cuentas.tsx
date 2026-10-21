@@ -3,7 +3,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
 import { confirmar } from '../../components/dialogs';
-import { apiPapelera, apiPapeleraRestaurar, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
+import { apiCifrado, apiPapelera, apiPapeleraRestaurar, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
 
 const labelStyle: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 };
@@ -371,8 +371,10 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
   const [dias, setDias] = useState(30);
   const [msg, setMsg] = useState('');
   const [ocupado, setOcupado] = useState('');
+  const [cifrado, setCifrado] = useState<{ activo: boolean; llaveSugerida: string } | null>(null);
+  const [verLlave, setVerLlave] = useState(false);
   const cargar = () => void apiPapelera().then((r) => { if (r.data) { setTiendas(r.data.tiendas); setRespaldos(r.data.respaldos); setDias(r.data.dias); } });
-  useEffect(cargar, []);
+  useEffect(() => { cargar(); void apiCifrado().then((r) => r.data && setCifrado(r.data)); }, []);
   const restaurar = async (t: TiendaPapelera) => {
     if (!(await confirmar({ titulo: `Restaurar ${t.nombre}`, mensaje: `Vuelve tal como estaba al eliminarla (${t.pedidos} pedidos, ${t.leads} leads, ${t.productos} productos), con sus usuarios. Sus integraciones y su WhatsApp quedan como estaban.`, aceptar: 'Restaurar' }))) return;
     setOcupado(t.archivo);
@@ -416,11 +418,23 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
           <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Una copia completa cada día; se guardan las últimas 3.</span>
           <button onClick={() => void copiarAhora()} disabled={!!ocupado} style={{ ...linkBtn('var(--df-brand)'), border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px' }}>{ocupado === 'copia' ? 'Copiando…' : 'Hacer copia de hoy'}</button>
         </div>
+        {cifrado && (cifrado.activo ? (
+          <div style={{ fontSize: 12.5, color: 'var(--df-success)', marginTop: 10, fontWeight: 600 }}>🔒 Cifrado propio activo (AES-256): copias, papelera y tokens de Shopify se guardan cifrados. Al descargar una copia se entrega descifrada.</div>
+        ) : (
+          <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', marginTop: 10, lineHeight: 1.6, background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '10px 12px' }}>
+            <b>⚠️ Falta activar el cifrado propio.</b> En Railway → tu servicio → <b>Variables</b>, crea <code>DATA_ENCRYPTION_KEY</code> con esta llave (se generó solo para ti y no se guarda en ningún lado). <b>Guárdala también en un lugar seguro:</b> sin ella no se pueden abrir las copias cifradas.
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+              <code style={{ flex: 1, minWidth: 0, fontSize: 12, overflowWrap: 'anywhere', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 6, padding: '6px 8px' }}>{verLlave ? cifrado.llaveSugerida : '•'.repeat(32)}</code>
+              <button onClick={() => setVerLlave((v) => !v)} style={{ ...linkBtn('var(--df-brand)'), border: '1px solid var(--df-border)', borderRadius: 8 }}>{verLlave ? 'Ocultar' : 'Ver'}</button>
+              <button onClick={() => { void navigator.clipboard?.writeText(cifrado.llaveSugerida).then(() => setMsg('✓ Llave copiada. Pégala en Railway como DATA_ENCRYPTION_KEY.')); }} style={{ ...linkBtn('var(--df-brand)'), border: '1px solid var(--df-border)', borderRadius: 8 }}>Copiar</button>
+            </div>
+          </div>
+        ))}
         {!respaldos.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)', marginTop: 10 }}>Aún no hay copias (la primera se hace pocos minutos después de arrancar el servidor).</div>}
         {respaldos.map((r) => (
           <div key={r.archivo} style={fila}>
             <span style={{ flex: 1, fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}>{r.archivo}</span>
-            <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{r.tamanoMb} MB · {fechaCorta(r.fecha)}</span>
+            <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{r.cifrado ? '🔒 ' : ''}{r.tamanoMb} MB · {fechaCorta(r.fecha)}</span>
             <a href={`/api/admin/respaldos/${encodeURIComponent(r.archivo)}`} style={{ ...linkBtn('var(--df-brand)'), textDecoration: 'none' }}>Descargar</a>
           </div>
         ))}
