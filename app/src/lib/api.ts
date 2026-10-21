@@ -131,6 +131,7 @@ export interface ApiMensaje {
   hora: string;
   createdAt?: string;
   estado?: string;
+  error?: string;
   tipo?: string;
   mediaUrl?: string | null;
   mediaMime?: string | null;

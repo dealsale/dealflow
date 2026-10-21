@@ -328,12 +328,12 @@ function itemsPorPedido(sid: string): Map<string, { qty: number; nombre: string;
 // Mensajes completos de un lead (para el conversación).
 const mapMensaje = (m: Record<string, unknown>) => ({
   id: m.id, de: m.de, texto: m.texto, hora: horaBogota(m.created_at), createdAt: m.created_at,
-  tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '',
+  tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '', error: m.error || '',
   // Respuesta citada (si el cliente respondió citando un mensaje).
   citaTexto: m.cita_texto || '', citaDe: m.cita_de || '',
 });
 const mensajesDe = (leadId: string) =>
-  (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado, cita_texto, cita_de FROM messages WHERE lead_id = ? ORDER BY created_at').all(leadId) as Record<string, unknown>[]).map(mapMensaje);
+  (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado, error, cita_texto, cita_de FROM messages WHERE lead_id = ? ORDER BY created_at').all(leadId) as Record<string, unknown>[]).map(mapMensaje);
 
 /**
  * Lista de leads para el Inbox. En modo `resumen` NO trae todos los mensajes de
@@ -341,16 +341,25 @@ const mensajesDe = (leadId: string) =>
  * segundos): solo el último mensaje + cuántos van sin responder. Solo el chat
  * ABIERTO trae su conversación completa, para que se actualice en vivo.
  */
+// "No leídos" estilo WhatsApp: mensajes del cliente que llegaron después de la última
+// vez que alguien del equipo abrió el chat (aunque el bot ya los haya respondido).
+try {
+  db.exec("ALTER TABLE leads ADD COLUMN visto_equipo_at TEXT");
+  db.exec("UPDATE leads SET visto_equipo_at = datetime('now')"); // arranque: lo viejo cuenta como leído
+} catch { /* ya existe */ }
+const marcarVisto = (sid: string, leadId: string) => db.prepare("UPDATE leads SET visto_equipo_at = datetime('now') WHERE id = ? AND store_id = ?").run(leadId, sid);
+
 function listarLeads(sid: string, resumen: boolean, abierto?: string) {
+  if (abierto) marcarVisto(sid, abierto); // el chat abierto en pantalla se va leyendo
   // Una sola consulta: datos del chat + su último mensaje + cuántos mensajes del
-  // cliente van seguidos sin respuesta (antes eran 2 consultas por chat en cada sondeo).
+  // cliente no ha leído el equipo (antes eran 2 consultas por chat en cada sondeo).
   const rows = db.prepare(resumen
     ? `SELECT l.*,
          (SELECT texto FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_texto,
          (SELECT tipo FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_tipo,
          (SELECT created_at FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_at,
          (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente'
-            AND m.created_at > COALESCE((SELECT MAX(x.created_at) FROM messages x WHERE x.lead_id = l.id AND x.de != 'cliente'), '')) AS sin_responder
+            AND m.created_at > COALESCE(l.visto_equipo_at, '')) AS sin_responder
        FROM leads l WHERE l.store_id = ? ORDER BY l.created_at DESC`
     : 'SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[];
   const etiquetaMedia: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento' };
@@ -454,6 +463,7 @@ api.get('/leads', requireAuth, requireStore, (req, res) => {
 api.get('/leads/:id/mensajes', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
   if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
+  marcarVisto(req.user!.storeId!, req.params.id);
   res.json({ mensajes: mensajesDe(req.params.id) });
 });
 

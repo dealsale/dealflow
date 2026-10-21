@@ -1,11 +1,22 @@
 let ctx: AudioContext | null = null;
+let audio: HTMLAudioElement | null = null;
 
 /**
- * Timbre de dos notas (La5 → Re6) para el pedido nuevo, sintetizado con
- * Web Audio: no depende de archivos externos. Si el navegador aún no
- * permite audio (falta interacción del usuario), falla en silencio.
+ * Sonido de notificación (pedido nuevo): el sonido de DealFlow
+ * (/sonidos/nueva-venta.mp3). Si el archivo no carga o el navegador aún no deja
+ * reproducir audio, cae al timbre sintetizado de dos notas.
  */
 export function playOrderChime() {
+  try {
+    audio = audio || new Audio('/sonidos/nueva-venta.mp3');
+    audio.currentTime = 0;
+    audio.volume = 0.8;
+    void audio.play().catch(() => timbre());
+  } catch { timbre(); }
+}
+
+/** Timbre de respaldo (La5 → Re6) sintetizado con Web Audio. */
+function timbre() {
   try {
     ctx = ctx || new AudioContext();
     if (ctx.state === 'suspended') void ctx.resume();

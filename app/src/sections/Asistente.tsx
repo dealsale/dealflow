@@ -353,9 +353,9 @@ export function Asistente({ df }: { df: DealFlowState }) {
                       <div style={{ fontWeight: 700, fontSize: 14 }}>🙋 Pasar el chat a una persona</div>
                       <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Cuando pase lo que indiques, el asistente avisa al cliente y deja de responder. El chat queda en el Inbox como “Equipo (pidió asesor)” para que lo atiendas.</div>
                     </div>
-                    <Switch on={!!humano.activo} onChange={() => setHumano({ activo: !humano.activo })} />
+                    <Switch on={humano.activo !== false} onChange={() => setHumano({ activo: humano.activo === false })} />
                   </div>
-                  {humano.activo && (
+                  {humano.activo !== false && (
                     <div style={{ marginTop: 12 }}>
                       <Campo titulo="¿Cuándo?" ayuda="Si lo dejas vacío: cuando pidan un asesor, tengan una queja o pregunten algo que no sabe.">
                         <textarea className="df-input" rows={2} value={humano.cuando || ''} onChange={(ev) => setHumano({ cuando: ev.target.value })} placeholder="Ej: pidan hablar con alguien, quieran comprar al por mayor, o tengan un reclamo de un pedido." style={inputSt} />
