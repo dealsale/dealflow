@@ -384,6 +384,34 @@ async function articuloPorId(storeId: string, apiKey: string, id: string): Promi
   return a;
 }
 
+// Convenio dropshipping de cada artículo (aprendido de las ventas anteriores en Effi
+// o de cada remisión que DealFlow crea bien). Effi no lo informa en el artículo.
+db.exec(`CREATE TABLE IF NOT EXISTS effi_convenio_articulo (
+  store_id TEXT NOT NULL, articulo TEXT NOT NULL, convenio TEXT NOT NULL,
+  actualizado TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (store_id, articulo)
+)`);
+const guardarConvenioArticulo = (storeId: string, articulo: string, convenio: string) =>
+  db.prepare("INSERT INTO effi_convenio_articulo (store_id, articulo, convenio, actualizado) VALUES (?,?,?,datetime('now')) ON CONFLICT(store_id, articulo) DO UPDATE SET convenio = excluded.convenio, actualizado = excluded.actualizado").run(storeId, articulo, convenio);
+
+/** El convenio con el que se ha vendido ESTE artículo (el más usado en sus remisiones/facturas). */
+export async function convenioDeArticulo(storeId: string, apiKey: string, articulo: string): Promise<string> {
+  const local = db.prepare('SELECT convenio FROM effi_convenio_articulo WHERE store_id = ? AND articulo = ?').get(storeId, articulo) as { convenio: string } | undefined;
+  if (local?.convenio) return local.convenio;
+  const cuenta = new Map<string, number>();
+  for (const ruta of ['/api/remision_v', '/api/factura_v']) {
+    const r = await effi<Fila[]>(apiKey, 'GET', ruta, { query: { dropshipping_distribuidor: 1, articulo, por_pagina: 100 } });
+    for (const f of r.ok ? r.body.data || [] : []) {
+      const id = txt(f.convenio_dropshipping);
+      if (id && id !== '1') cuenta.set(id, (cuenta.get(id) || 0) + 1);
+    }
+    if (cuenta.size) break;
+  }
+  const mejor = [...cuenta].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+  if (mejor) guardarConvenioArticulo(storeId, articulo, mejor);
+  return mejor;
+}
+
 /**
  * Convenios Dropshipping que la tienda ya usó en Effi (se leen de sus remisiones y
  * facturas como distribuidora). Effi no tiene un listado de convenios en la API.
@@ -760,7 +788,21 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
   // convenio; sin él Effi la toma como mercancía propia y exige stock en tu bodega.
   let convenio = '';
   if (esDrop.some(Boolean)) {
-    convenio = c.convenioDropshipping;
+    // 1) El convenio de cada artículo, según sus ventas anteriores en Effi.
+    const porArticulo = new Map<string, string>();
+    for (let i = 0; i < conceptos.length; i++) {
+      if (!esDrop[i]) continue;
+      const cv = await convenioDeArticulo(storeId, c.apiKey, String(conceptos[i].articulo));
+      if (cv) porArticulo.set(String(conceptos[i].articulo), cv);
+    }
+    const distintos = [...new Set(porArticulo.values())];
+    if (distintos.length > 1) {
+      return { error: 'Este pedido tiene productos de proveedores dropshipping distintos (cada uno con su convenio) y Effi exige un solo convenio por remisión. Divide el pedido en uno por proveedor.' };
+    }
+    if (distintos.length === 1) {
+      convenio = distintos[0];
+      if (porArticulo.size < esDrop.filter(Boolean).length) avisos.push('Algunos productos de proveedor no tienen ventas anteriores en Effi: se usó el convenio de los demás.');
+    } else convenio = c.convenioDropshipping; // 2) el que la tienda dejó por defecto
     if (!convenio) {
       const lista = await conveniosDropshipping(c.apiKey);
       if (lista.length === 1) {
@@ -768,7 +810,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
         guardarCfgEffi(storeId, { convenioDropshipping: convenio });
         avisos.push(`Se detectó y guardó tu convenio dropshipping: ${lista[0].nombre} (${convenio}).`);
       } else if (lista.length > 1) {
-        return { error: `Estos productos son de un proveedor dropshipping y tienes varios convenios (${lista.map((x) => `${x.nombre} = ${x.id}`).join(', ')}). Elige cuál usar en Integraciones → Effi → Convenio dropshipping.` };
+        return { error: `Este producto de proveedor dropshipping todavía no tiene ventas en Effi, así que no sabemos a cuál de tus convenios pertenece (${lista.map((x) => `${x.nombre} = ${x.id}`).join(', ')}). Elige uno por defecto en Integraciones → Effi → Convenio dropshipping; después de la primera venta DealFlow lo aprende solo.` };
       } else {
         return { error: 'Estos productos son de un proveedor dropshipping en Effi, pero falta el código del convenio dropshipping. Escríbelo en Integraciones → Effi → Convenio dropshipping (lo ves en Effi → Dropshipping → Convenios).' };
       }
@@ -869,6 +911,10 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
     return { error: e };
   }
   const remision = txt(doc!.id_transaccion) || `${txt(doc!.prefijo)}-${txt(doc!.id)}`;
+  // Aprender el convenio de cada artículo de esta remisión (para los próximos pedidos).
+  if (body.convenio_dropshipping && Array.isArray(body.articulo)) {
+    for (const a of body.articulo as unknown[]) { try { guardarConvenioArticulo(storeId, String(a), String(body.convenio_dropshipping)); } catch { /* opcional */ } }
+  }
   db.prepare("UPDATE orders SET despacho_proveedor = 'effi', woo_id = ?, effi_remision = ?, effi_doc = ? WHERE id = ?")
     .run(remision, remision, JSON.stringify({ sucursal: txt(doc!.sucursal), id: txt(doc!.id), prefijo: txt(doc!.prefijo), tercero: cli.tercero,
       // Los productos tal como se mandaron (para registrar la devolución si el pedido vuelve).
