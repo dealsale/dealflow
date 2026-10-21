@@ -46,7 +46,9 @@ async function dropi<T>(cred: DropiCred, method: string, path: string, body?: un
 }
 
 async function dropiHttp<T>(cred: DropiCred, method: string, path: string, body?: unknown): Promise<{ ok: boolean; body: DropiResp<T>; http: number }> {
-  const res = await fetch(`${BASE}${path}`, {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -55,7 +57,13 @@ async function dropiHttp<T>(cred: DropiCred, method: string, path: string, body?
       'User-Agent': `${WP_UA}; ${cred.integrationUrl}`,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+    // Sin tope, si Dropi no responde el botón se quedaba "Cotizando…" para siempre.
+    signal: AbortSignal.timeout(30000),
   });
+  } catch (e) {
+    const tiempo = e instanceof Error && /timeout|abort/i.test(e.name + e.message);
+    return { ok: false, http: 0, body: { isSuccess: false, message: tiempo ? 'Dropi no respondió a tiempo (30 s). Intenta de nuevo en un momento.' : 'No pudimos conectar con Dropi.' } as DropiResp<T> };
+  }
   const parsed = (await res.json().catch(() => ({}))) as DropiResp<T>;
   return { ok: res.ok && parsed.isSuccess !== false, body: parsed, http: res.status };
 }
@@ -257,6 +265,10 @@ export async function cotizar(
       else disponibles.push({ id: Number(t.transportadora_id || t.id), nombre, service: String(t.transportadora_service || 'normal'), precio });
     }
     disponibles.sort((a, b) => a.precio - b.precio);
+    if (!disponibles.length) {
+      const motivos = noDisponibles.map((n) => `${n.nombre || 'Transportadora'}: ${n.motivo}`).slice(0, 6).join(' · ');
+      return { error: `Ninguna transportadora de Dropi puede llevar este pedido${conRecaudo ? ' con recaudo' : ''}.${motivos ? ' ' + motivos + '.' : ''}${conRecaudo ? ' Prueba "Sin recaudo" si el cliente ya pagó.' : ''}` };
+    }
     return { disponibles, noDisponibles };
   } catch {
     return { error: 'No pudimos cotizar el envío en Dropi.' };

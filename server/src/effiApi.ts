@@ -333,6 +333,13 @@ db.exec(`CREATE TABLE IF NOT EXISTS effi_articulos (
 // distribuidora): ese artículo no exige stock propio si la remisión lleva convenio.
 try { db.exec('ALTER TABLE effi_articulos ADD COLUMN es_drop INTEGER NOT NULL DEFAULT 0'); } catch { /* ya existe */ }
 
+/** Stock de un artículo: el de la empresa o, si no viene, la suma de sus bodegas. */
+function stockDe(f: Fila): number | null {
+  if (f.stock_empresa != null && !isNaN(Number(f.stock_empresa))) return Number(f.stock_empresa);
+  if (Array.isArray(f.stock_bodegas) && f.stock_bodegas.length) return (f.stock_bodegas as Fila[]).reduce((a, b) => a + Math.max(0, Number(b.stock) || 0), 0);
+  return null;
+}
+
 export interface ArticuloEffi { id: string; descripcion: string; referencia: string; ecommerce: string; stock: number | null; drop?: number }
 
 /**
@@ -361,7 +368,7 @@ export async function descargarArticulos(storeId: string, apiKey: string): Promi
     const ins = db.prepare('INSERT OR REPLACE INTO effi_articulos (store_id, id, descripcion, referencia, ecommerce, stock, es_drop) VALUES (?,?,?,?,?,?,?)');
     for (const f of lista) {
       if (txt(f.vigente) === '0') continue;
-      ins.run(storeId, txt(f.id), txt(f.descripcion), txt(f.referencia), txt(f.articulos_ecommerce), f.stock_empresa == null ? null : Number(f.stock_empresa), idsDrop.has(txt(f.id)) ? 1 : 0);
+      ins.run(storeId, txt(f.id), txt(f.descripcion), txt(f.referencia), txt(f.articulos_ecommerce), stockDe(f), idsDrop.has(txt(f.id)) ? 1 : 0);
     }
   });
   tx(filas);
@@ -376,7 +383,7 @@ async function articuloPorId(storeId: string, apiKey: string, id: string): Promi
   ]);
   const f = r.ok ? r.body.data?.[0] : undefined;
   if (!f || txt(f.vigente) === '0') return undefined;
-  const a: ArticuloEffi = { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: f.stock_empresa == null ? null : Number(f.stock_empresa), drop: d.ok && d.body.data?.length ? 1 : 0 };
+  const a: ArticuloEffi = { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: stockDe(f), drop: d.ok && d.body.data?.length ? 1 : 0 };
   try {
     db.prepare('INSERT OR REPLACE INTO effi_articulos (store_id, id, descripcion, referencia, ecommerce, stock, es_drop) VALUES (?,?,?,?,?,?,?)')
       .run(storeId, a.id, a.descripcion, a.referencia, a.ecommerce, a.stock, a.drop);
@@ -446,7 +453,7 @@ export async function buscarArticulosEffi(storeId: string, q: string): Promise<A
     const id = txt(f.id);
     if (!id || vistos.has(id) || txt(f.vigente) === '0') continue;
     vistos.add(id);
-    out.push({ id, descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: f.stock_empresa == null ? null : Number(f.stock_empresa) });
+    out.push({ id, descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: stockDe(f) });
   }
   return out;
 }
@@ -519,7 +526,7 @@ async function vincularPorNombre(storeId: string, apiKey: string, vars: Variante
   const lista = new Map<string, ArticuloEffi>(arts.map((a) => [a.id, a]));
   for (const f of vivos.ok ? vivos.body.data || [] : []) {
     if (txt(f.vigente) === '0' || lista.has(txt(f.id))) continue;
-    lista.set(txt(f.id), { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: f.stock_empresa == null ? null : Number(f.stock_empresa) });
+    lista.set(txt(f.id), { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: stockDe(f) });
   }
   // Los artículos que ya usan otras variantes del producto no se repiten.
   const usados = new Set(vars.map((v) => v.effiId).filter(Boolean));
@@ -593,7 +600,7 @@ async function vincularTienda(storeId: string, apiKey: string, arts: ArticuloEff
 }
 
 /** Descarga artículos y vincula automáticamente todas las variantes que casen (botón del panel). */
-export async function sincronizarArticulos(storeId: string): Promise<{ total: number; soloVinculados: boolean; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[]; productosEffi: number; sinProveedor: number; marcados: number } | { error: string }> {
+export async function sincronizarArticulos(storeId: string): Promise<{ total: number; soloVinculados: boolean; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[]; productosEffi: number; sinProveedor: number; marcados: number; stockActualizado: number } | { error: string }> {
   const c = cfgEffi(storeId);
   if (!c?.apiKey) return { error: 'Conecta Effi con la API key primero.' };
   const d = await descargarArticulos(storeId, c.apiKey);
@@ -601,6 +608,7 @@ export async function sincronizarArticulos(storeId: string): Promise<{ total: nu
   cacheAt.set(storeId, Date.now());
   const arts = articulosCache(storeId);
   const { todas, deEffi, marcados } = await vincularTienda(storeId, c.apiKey, arts, false);
+  const stock = await sincronizarStockEffi(storeId, c.apiKey);
   let vinculadas = 0;
   const sinVinculo: { variantId: string | null; nombre: string }[] = [];
   for (const v of deEffi) {
@@ -610,7 +618,7 @@ export async function sincronizarArticulos(storeId: string): Promise<{ total: nu
   }
   const productosEffi = new Set(deEffi.map((v) => v.productId)).size;
   const sinProveedor = new Set(todas.filter((v) => !v.proveedor).map((v) => v.productId)).size;
-  return { total: d.total, soloVinculados: d.soloVinculados, vinculadas, sinVinculo, productosEffi, sinProveedor, marcados };
+  return { total: d.total, soloVinculados: d.soloVinculados, vinculadas, sinVinculo, productosEffi, sinProveedor, marcados, stockActualizado: stock.actualizadas };
 }
 
 // ── Vinculación automática (sin botón) ──────────────────────────────────────
@@ -623,14 +631,36 @@ export async function autoVincularEffi(storeId: string): Promise<void> {
   if (!c?.apiKey) return;
   enCurso.add(storeId);
   try {
-    if (!cacheAt.has(storeId) || Date.now() - cacheAt.get(storeId)! > 6 * 3600e3 || !articulosCache(storeId).length) {
+    // La caché (con el stock) se renueva cada 25 min: el stock de Effi cambia seguido.
+    if (!cacheAt.has(storeId) || Date.now() - cacheAt.get(storeId)! > 25 * 60e3 || !articulosCache(storeId).length) {
       const d = await descargarArticulos(storeId, c.apiKey);
       if ('error' in d) return;
       cacheAt.set(storeId, Date.now());
     }
     await vincularTienda(storeId, c.apiKey, articulosCache(storeId), true);
+    await sincronizarStockEffi(storeId, c.apiKey);
   } catch (e) { console.error('[effi] auto-vínculo', e); } finally { enCurso.delete(storeId); }
 }
+/**
+ * Pasa el stock de Effi a las variantes vinculadas (lo que el asistente le dice al
+ * cliente). Usa la caché recién descargada y, para los vinculados que no están en
+ * ella, consulta el artículo en vivo (con tope por vuelta).
+ */
+export async function sincronizarStockEffi(storeId: string, apiKey: string): Promise<{ actualizadas: number; sinDato: number }> {
+  const cache = new Map(articulosCache(storeId).map((a) => [a.id, a]));
+  const vars = db.prepare("SELECT v.id, v.stock, json_extract(v.refs,'$.effi_id') effi FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(p.despacho_proveedor,'') = 'effi' AND COALESCE(json_extract(v.refs,'$.effi_id'),'') != ''").all(storeId) as { id: string; stock: number; effi: string }[];
+  let actualizadas = 0, sinDato = 0, vivos = 0;
+  const upd = db.prepare('UPDATE variants SET stock = ? WHERE id = ?');
+  for (const v of vars) {
+    let a = cache.get(String(v.effi));
+    if (!a && vivos < 150) { vivos++; a = await articuloPorId(storeId, apiKey, String(v.effi)); if (a) cache.set(a.id, a); }
+    if (!a || a.stock == null) { sinDato++; continue; }
+    const nuevo = Math.max(0, Math.floor(a.stock));
+    if (nuevo !== Number(v.stock)) { upd.run(nuevo, v.id); actualizadas++; }
+  }
+  return { actualizadas, sinDato };
+}
+
 const pronto = new Map<string, ReturnType<typeof setTimeout>>();
 /** Tras crear/editar productos o variantes: vincula en unos segundos (agrupa cambios seguidos). */
 export function autoVincularPronto(storeId: string): void {
