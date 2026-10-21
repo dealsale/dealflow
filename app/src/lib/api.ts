@@ -266,6 +266,7 @@ export interface ApiProduct {
   sku?: string;
   /** Por cuál se despacha este producto: 'dropi' | 'effi' | '' (sin definir, se muestran ambos). */
   despachoProveedor?: string;
+  variantesFuente?: string;
   bloqueado?: boolean;
   plantillaId?: string;
   reglas: string[];
@@ -777,3 +778,7 @@ export const apiLeadBloquear = (id: string) => req<{ ok: true; enMeta: boolean; 
 export const apiLeadDesbloquear = (id: string) => req<{ ok: true }>(`/api/leads/${id}/desbloquear`, 'POST');
 export interface AppConectada { id: string; nombre: string; enlace: string; esDealFlow: boolean }
 export const apiAppsConectadas = () => req<{ apps: AppConectada[]; waba: string }>('/api/whatsapp/apps-conectadas', 'GET');
+
+export interface ResultadoSyncDropi { tipo: 'SIMPLE' | 'VARIABLE'; nombreDropi: string; vinculadas: number; creadas: number; conStock: number; sinDropi: string[]; total: number }
+export const apiSincronizarDropi = (productId: string, dropiId: string) => req<ResultadoSyncDropi>(`/api/products/${encodeURIComponent(productId)}/dropi/sincronizar`, 'POST', { dropiId });
+export const apiSoltarVariantesDropi = (productId: string) => req<{ ok: true }>(`/api/products/${encodeURIComponent(productId)}/dropi/soltar-variantes`, 'POST');

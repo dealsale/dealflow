@@ -116,6 +116,8 @@ export interface Product {
   sku?: string;
   /** Por cuál se despacha: 'dropi' | 'effi' | '' (sin definir, se muestran las dos integraciones). */
   despachoProveedor?: string;
+  /** 'dropi' = las variantes las define Dropi (se sincronizan desde su ID), no las opciones. */
+  variantesFuente?: string;
   /** Producto de biblioteca gratuito: estructura bloqueada (solo precio/SKU editables). */
   bloqueado?: boolean;
   reglas: string[];

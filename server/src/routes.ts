@@ -255,7 +255,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
     tipo: p.tipo || 'producto', duracion: p.duracion || '', sku: p.sku || '', plantillaId: p.plantilla_id || '',
-    despachoProveedor: p.despacho_proveedor || '',
+    despachoProveedor: p.despacho_proveedor || '', variantesFuente: p.variantes_fuente || '',
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
     descripcion: p.descripcion || '', caracteristicas: p.caracteristicas || '', mensajeInicial: p.mensaje_inicial || '',
     faqs: pj(p.faqs as string, []), testimonios: pj(p.testimonios as string, []), modosUso: p.modos_uso || '',
@@ -696,8 +696,10 @@ api.post('/products/:id/variants', requireAuth, requireStore, (req, res) => {
  * Es idempotente: correrla dos veces no cambia nada.
  */
 function sincronizarVariantes(productId: string): { creadas: number; eliminadas: number; total: number } {
-  const prod = db.prepare('SELECT opciones FROM products WHERE id = ?').get(productId) as { opciones: string } | undefined;
+  const prod = db.prepare("SELECT opciones, COALESCE(variantes_fuente,'') fuente FROM products WHERE id = ?").get(productId) as { opciones: string; fuente: string } | undefined;
   if (!prod) return { creadas: 0, eliminadas: 0, total: 0 };
+  // Variantes definidas por Dropi (sincronizadas desde su ID): no se arman combinando opciones.
+  if (prod.fuente === 'dropi') return { creadas: 0, eliminadas: 0, total: (db.prepare('SELECT COUNT(*) n FROM variants WHERE product_id = ?').get(productId) as { n: number }).n };
   const grupos = pj<{ nombre: string; valores: { valor: string }[] }[]>(prod.opciones, []);
   const conValores = grupos.filter((g) => (g.valores || []).some((v) => (v.valor || '').trim()));
   const actual = (db.prepare('SELECT COUNT(*) n FROM variants WHERE product_id = ?').get(productId) as { n: number }).n;
@@ -719,7 +721,8 @@ function sincronizarVariantes(productId: string): { creadas: number; eliminadas:
   const objetivo = new Map<string, string>();
   for (const combo of combos) objetivo.set(canon(labelDe(combo)), labelDe(combo));
 
-  const existentes = db.prepare('SELECT id, label, sku, stock FROM variants WHERE product_id = ? ORDER BY orden')
+  // "sku" aquí = tiene algún vínculo (legado o por integración), para no perderlo al quitar repetidas.
+  const existentes = db.prepare("SELECT id, label, CASE WHEN COALESCE(sku,'') != '' OR COALESCE(refs,'{}') NOT IN ('{}','') THEN 'x' ELSE '' END sku, stock FROM variants WHERE product_id = ? ORDER BY orden")
     .all(productId) as { id: string; label: string; sku: string; stock: number }[];
   const porClave = new Map<string, typeof existentes>();
   for (const v of existentes) { const k = canon(v.label); if (!porClave.has(k)) porClave.set(k, []); porClave.get(k)!.push(v); }
@@ -1049,7 +1052,7 @@ const dropiHelpers = {
   async resolverProductosDropi(
     sid: string, o: Record<string, unknown>, _cred: DropiApi.DropiCred, _dropi: typeof DropiApi,
   ): Promise<{ cotProductos: DropiApi.CotProducto[]; ordenProductos: CrearOrdenInputProducto[] } | { error: string }> {
-    const items = db.prepare('SELECT qty, nombre, precio FROM order_items WHERE order_id = ?').all(o.id) as { qty: number; nombre: string; precio: number }[];
+    const items = db.prepare("SELECT qty, nombre, precio, COALESCE(product_id,'') product_id, COALESCE(variant_id,'') variant_id FROM order_items WHERE order_id = ?").all(o.id) as { qty: number; nombre: string; precio: number; product_id: string; variant_id: string }[];
     if (!items.length) return { error: 'El pedido no tiene productos.' };
     // Producto: SKU = ID del producto en Dropi. Variante: SKU = ID de la VARIACIÓN
     // en Dropi (se vincula a mano en Productos → Variantes). Emparejamos el ítem
@@ -1064,16 +1067,24 @@ const dropiHelpers = {
     for (const it of items) {
       const base = it.nombre.split('(')[0].split('—')[0].trim();
       const nItem = norm(it.nombre);
-      const prod = prodRows.find((p) => norm(p.nombre) === norm(base))
+      const prod = (it.product_id ? prodRows.find((p) => p.id === it.product_id) : undefined)
+        || prodRows.find((p) => norm(p.nombre) === norm(base))
         || prodRows.filter((p) => p.nombre && nItem.includes(norm(p.nombre))).sort((a, b) => b.nombre.length - a.nombre.length)[0];
       if (!prod) return { error: `El producto "${base}" no tiene vinculado su ID de Dropi. Vincúlalo en Productos (SKU = ID del producto en Dropi).` };
       const pid = Number(String(prod.sku).replace(/[^0-9]/g, ''));
       if (!pid) return { error: `El ID de Dropi de "${base}" no es válido: "${prod.sku}".` };
 
       // Variantes reales de ESTE producto en DealFlow (con su id de variación de Dropi en `sku`).
-      const variantes = db.prepare("SELECT label, sku FROM variants WHERE product_id = ? AND COALESCE(label,'') != '' AND lower(label) != 'única'").all(prod.id) as { label: string; sku: string }[];
+      // El código de Dropi va en refs.dropi (panel de conexiones) o, si es viejo, en sku.
+      const variantes = (db.prepare("SELECT id, label, sku, COALESCE(refs,'{}') refs FROM variants WHERE product_id = ? AND COALESCE(label,'') != '' AND lower(label) != 'única'").all(prod.id) as { id: string; label: string; sku: string; refs: string }[])
+        .map((v) => ({ ...v, sku: String(pj<Record<string, string>>(v.refs, {}).dropi || v.sku || '') }));
       let variationId: number | undefined;
-      if (variantes.length) {
+      const exacta = it.variant_id ? variantes.find((v) => v.id === it.variant_id) : undefined;
+      if (exacta) {
+        const vid = Number(String(exacta.sku).replace(/[^0-9]/g, ''));
+        if (!vid) return { error: `La variante "${exacta.label}" de "${base}" no está vinculada con Dropi. En Productos → Variantes, toca "Traer variantes de Dropi".` };
+        variationId = vid;
+      } else if (variantes.length) {
         // Emparejamos el ítem con la etiqueta de variante (todos sus tokens presentes; gana la más larga).
         let mejor: { sku: string; len: number } | null = null;
         for (const v of variantes) {
@@ -1085,7 +1096,7 @@ const dropiHelpers = {
         }
         if (!mejor) return { error: `No supimos cuál variante es "${it.nombre}". Revisa las variantes del producto.` };
         const vid = Number(String(mejor.sku).replace(/[^0-9]/g, ''));
-        if (!vid) return { error: `La variante de "${it.nombre}" no está vinculada con Dropi. En Productos → Variantes, vincula cada talla/color con su variación de Dropi.` };
+        if (!vid) return { error: `La variante de "${it.nombre}" no está vinculada con Dropi. En Productos → Variantes, toca "Traer variantes de Dropi".` };
         variationId = vid;
       }
       const tipo: 'SIMPLE' | 'VARIABLE' = variationId ? 'VARIABLE' : 'SIMPLE';
@@ -1249,6 +1260,20 @@ api.post('/shopify/publicar-producto', requireAuth, requireStore, requireOwner, 
 });
 
 // Valida un ID de producto de Dropi (para vincularlo): trae nombre y variaciones.
+// Trae de Dropi todas las variaciones del producto y las crea/vincula en DealFlow.
+api.post('/products/:id/dropi/sincronizar', requireAuth, requireStore, async (req, res) => {
+  if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const { sincronizarProductoDropi } = await import('./dropiSync.js');
+  const r = await sincronizarProductoDropi(req.user!.storeId!, req.params.id, String(req.body?.dropiId || ''));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+// Volver a armar las variantes con las opciones (deja de usar las de Dropi).
+api.post('/products/:id/dropi/soltar-variantes', requireAuth, requireStore, (req, res) => {
+  if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  db.prepare("UPDATE products SET variantes_fuente = '' WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
 api.get('/dropi/producto/:id', requireAuth, requireStore, async (req, res) => {
   const { credDropi, productoDropi } = await import('./dropiApi.js');
   const c = credDropi(req.user!.storeId!);

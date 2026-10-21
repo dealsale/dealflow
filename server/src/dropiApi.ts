@@ -17,7 +17,7 @@ import { trazarApi } from './trazabilidad.js';
  * Base: https://api.dropi.co/integrations
  */
 
-const BASE = 'https://api.dropi.co/integrations';
+const BASE = process.env.DROPI_BASE_URL || 'https://api.dropi.co/integrations'; // DROPI_BASE_URL solo para pruebas locales
 const WP_UA = 'WordPress/6.8.3';
 
 export interface DropiCred { token: string; integrationUrl: string; preferencia: string }
@@ -162,7 +162,7 @@ export async function resolverDestino(
   return { ciudad: { id: Number(found.id), name: nombreDe(found), cod_dane: cod, department_id: depto.id, recaudo: recaudoOk }, depto };
 }
 
-export interface DropiVariacion { id: number; atributos: string; sku: string }
+export interface DropiVariacion { id: number; atributos: string; sku: string; attrs: { nombre: string; valor: string }[]; stock: number | null }
 export interface DropiProducto { id: number; name: string; tipo: 'SIMPLE' | 'VARIABLE'; userId: number; variaciones: DropiVariacion[] }
 
 /** Trae un producto de Dropi por su id, con sus variaciones y el proveedor (user_id). */
@@ -182,10 +182,35 @@ export async function productoDropi(cred: DropiCred, id: number | string): Promi
       partes.push(String(v.name ?? v.nombre ?? ''), String(v.sku ?? ''));
       return partes.filter(Boolean).join(' ');
     };
+    // Atributos estructurados (Talla: M, Color: Negro), vengan como vengan.
+    const attrsDe = (v: Record<string, unknown>): { nombre: string; valor: string }[] => {
+      const av = v.attribute_values ?? v.attributes ?? v.atributos;
+      const out: { nombre: string; valor: string }[] = [];
+      if (Array.isArray(av)) {
+        for (const a of av as Record<string, unknown>[]) {
+          if (!a || typeof a !== 'object') { if (a) out.push({ nombre: '', valor: String(a) }); continue; }
+          const at = (a.attribute && typeof a.attribute === 'object' ? a.attribute : {}) as Record<string, unknown>;
+          const nombre = String(a.attribute_name ?? at.name ?? a.name_attribute ?? a.nombre ?? (a.value !== undefined ? a.name : '') ?? '').trim();
+          const valor = String(a.value ?? a.option ?? a.valor ?? (a.value === undefined ? a.name : '') ?? '').trim();
+          if (valor) out.push({ nombre, valor });
+        }
+      } else if (av && typeof av === 'object') {
+        for (const [k, val] of Object.entries(av as Record<string, unknown>)) if (val) out.push({ nombre: k, valor: String(val) });
+      }
+      return out;
+    };
+    const stockDe = (v: Record<string, unknown>): number | null => {
+      if (v.stock != null && !isNaN(Number(v.stock))) return Number(v.stock);
+      const w = v.warehouse_product_variation ?? v.warehouses;
+      if (Array.isArray(w) && w.length) { const t = (w as Record<string, unknown>[]).reduce((a, x) => a + (Number(x?.stock) || 0), 0); return t; }
+      return null;
+    };
     const variaciones: DropiVariacion[] = varsRaw.map((v) => ({
       id: Number(v.id),
       atributos: attrTexto(v) || String(v.id),
       sku: String(v.sku || ''),
+      attrs: attrsDe(v),
+      stock: stockDe(v),
     }));
     return {
       id: Number(o.id),
