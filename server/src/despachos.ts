@@ -67,7 +67,7 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
       avisado.set(o.id, motivo);
       const { trazar } = await import('./trazabilidad.js');
       if ('error' in rr) trazar(o.store_id, o.id, { etapa: 'despacho', nivel: 'warn', titulo: 'No se pudo leer el pedido en Dropi', detalle: rr.error });
-      else trazar(o.store_id, o.id, { etapa: 'despacho', nivel: 'info', titulo: `Dropi: ${rr.estado || 'sin estado'} · todavía sin guía`, detalle: rr.estado ? 'La guía aparece cuando Dropi (o el proveedor) procesa la orden. Si sigue así, revisa la orden en Dropi: puede estar pendiente de confirmar, sin saldo o sin stock.' : 'Dropi respondió sin estado.', datos: { orden: o.dropi_order_id, llavesRespuesta: rr.llaves } });
+      else trazar(o.store_id, o.id, { etapa: 'despacho', nivel: /guia|generad/i.test(rr.estado) ? 'warn' : 'info', titulo: `Dropi: ${rr.estado || 'sin estado'} · todavía sin guía`, detalle: /guia|generad/i.test(rr.estado) ? 'Dropi dice que la guía ya está generada, pero no encontramos el número en su respuesta. Abajo va la respuesta completa de Dropi para ubicarlo.' : rr.estado ? 'La guía aparece cuando Dropi (o el proveedor) procesa la orden. Si sigue así, revisa la orden en Dropi: puede estar pendiente de confirmar, sin saldo o sin stock.' : 'Dropi respondió sin estado.', datos: { orden: o.dropi_order_id, llavesRespuesta: rr.llaves, ...(/guia|generad/i.test(rr.estado) ? { respuestaDropi: rr.cruda } : {}) } });
     }
   } catch { return { error: 'No pudimos consultar el pedido en Dropi.' }; }
   if ('error' in r) return { error: r.error };
