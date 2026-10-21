@@ -16,12 +16,12 @@ export function MCRM({ df }: { df: DealFlowState }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'baseline' }}>
                 <span style={{ fontWeight: 600, fontSize: 14 }}>{c.nombre}</span>
-                <span style={{ color: c.sinResponder ? 'var(--df-brand)' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
+                <span style={{ color: c.sinResponder ? '#25D366' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ color: c.sinResponder ? 'var(--df-text)' : 'var(--df-text-muted)', fontWeight: c.sinResponder ? 600 : 400, fontSize: 12.5, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{c.ultimo}</div>
                 {c.sinResponder > 0 && (
-                  <span title={`${c.sinResponder} sin responder`} style={{ flexShrink: 0, minWidth: 18, height: 18, borderRadius: 999, background: 'var(--df-brand-mid)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>{c.sinResponder}</span>
+                  <span title={`${c.sinResponder} mensaje(s) sin leer`} style={{ flexShrink: 0, minWidth: 20, height: 20, borderRadius: 999, background: '#25D366', color: '#fff', fontSize: 11.5, fontWeight: 800, boxShadow: '0 0 0 2px var(--df-surface)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>{c.sinResponder}</span>
                 )}
               </div>
               <div style={c.liveStyle}>

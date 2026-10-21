@@ -5,6 +5,55 @@ import { guardarAdEnLead, refDesdeWhatsapp, type AdRef } from './campana.js';
 import { esperarTurno } from './ratelimit.js';
 
 const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
+try { db.exec("ALTER TABLE messages ADD COLUMN error TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+
+/** Explicación en español de los códigos de error de entrega de WhatsApp Cloud API. */
+export function explicarErrorMeta(code: number | string | undefined, titulo = '', detalle = ''): string {
+  const c = Number(code);
+  const base: Record<number, string> = {
+    131047: 'Pasaron más de 24 h desde el último mensaje del cliente: solo se le pueden enviar plantillas aprobadas.',
+    131026: 'WhatsApp no pudo entregarlo: el cliente bloqueó tu número, no tiene WhatsApp activo, usa una versión muy vieja o no ha aceptado los términos nuevos de WhatsApp.',
+    131049: 'Meta frenó el mensaje para cuidar la experiencia del cliente (recibió demasiados mensajes de empresas). Intenta más tarde.',
+    131050: 'El cliente pidió no recibir mensajes de marketing de tu número.',
+    131056: 'Demasiados mensajes seguidos al mismo cliente. Espera un momento antes de escribirle otra vez.',
+    131048: 'Meta limitó tu número porque varios mensajes fueron marcados como spam. Baja el ritmo de mensajes.',
+    130429: 'Se superó el límite de velocidad de envío de tu número. Espera unos minutos.',
+    130472: 'Meta no lo entregó: el cliente está en un experimento de Meta que limita mensajes de marketing.',
+    131031: 'La cuenta de WhatsApp Business está bloqueada o restringida por Meta.',
+    131042: 'Hay un problema con el método de pago de tu cuenta de WhatsApp Business en Meta.',
+    131051: 'Tipo de mensaje no soportado por WhatsApp.',
+    131052: 'No se pudo descargar el archivo que envió el cliente.',
+    131053: 'No se pudo subir el archivo (formato o tamaño no válido).',
+    131021: 'El número de destino es el mismo número de la tienda.',
+    131000: 'Error interno de WhatsApp. Reintenta en unos minutos.',
+    131005: 'Permisos insuficientes del token de WhatsApp.',
+    131008: 'Faltó un dato obligatorio en el mensaje.',
+    131009: 'Algún dato del mensaje no es válido.',
+    132000: 'La plantilla no coincide con sus variables.',
+    132001: 'La plantilla no existe o no está aprobada en ese idioma.',
+    132015: 'La plantilla está pausada por baja calidad.',
+    132016: 'La plantilla fue desactivada por baja calidad.',
+    368: 'Tu número está restringido temporalmente por incumplir políticas de WhatsApp.',
+    100: 'Meta rechazó algún dato del mensaje (número o contenido no válido).',
+    190: 'El token de WhatsApp venció o no es válido: reconecta WhatsApp.',
+    470: 'Pasaron más de 24 h desde el último mensaje del cliente: solo se le pueden enviar plantillas aprobadas.',
+  };
+  const txt = base[c] || [titulo, detalle].filter(Boolean).join(': ') || 'Meta no entregó el mensaje.';
+  return c ? `${txt} (código ${c})` : txt;
+}
+
+/** Guarda el motivo del fallo en el mensaje, lo deja en el registro del chat y, si era del bot, pasa el chat al equipo. */
+function registrarFallo(rowId: string, error: string): void {
+  try {
+    const m = db.prepare('SELECT m.de, m.lead_id, l.store_id FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.id = ?').get(rowId) as { de: string; lead_id: string; store_id: string } | undefined;
+    db.prepare('UPDATE messages SET error = ? WHERE id = ?').run(error.slice(0, 500), rowId);
+    if (!m) return;
+    registrarLog(m.store_id, 'error', 'envio', `No se entregó el mensaje: ${error}`, m.lead_id);
+    if (m.de === 'bot' && !/bloqueaste|bloqueado/i.test(error)) {
+      void import('./pasoHumano.js').then((h) => h.pasarAHumano(m.store_id, m.lead_id, `WhatsApp no entregó la respuesta del asistente (${error})`)).catch(() => {});
+    }
+  } catch { /* nunca tumbar el flujo */ }
+}
 
 interface MediaInfo {
   tipo: string;
@@ -170,9 +219,9 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
       headers: { Authorization: `Bearer ${cfg.access_token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ messaging_product: 'whatsapp', to: numero, type: 'text', text: { body: texto } }),
     });
-    const body = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: { message?: string } };
+    const body = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: { message?: string; code?: number; error_data?: { details?: string } } };
     if (!res.ok) {
-      const msg = body.error?.message || 'Meta no aceptó el mensaje.';
+      const msg = body.error?.code ? explicarErrorMeta(body.error.code, body.error.message, body.error.error_data?.details) : body.error?.message || 'Meta no aceptó el mensaje.';
       registrarLog(storeId, 'error', 'envio', `Meta rechazó el mensaje a ${to}: ${msg}`);
       return { ok: false, error: msg };
     }
@@ -332,6 +381,7 @@ interface WebhookStatus {
   id?: string; // el wamid del mensaje que enviamos
   status?: string; // sent | delivered | read | failed
   recipient_id?: string;
+  errors?: { code?: number; title?: string; message?: string; error_data?: { details?: string } }[];
 }
 interface WebhookValue {
   metadata?: { phone_number_id?: string };
@@ -348,27 +398,32 @@ const RANK_ESTADO: Record<string, number> = { enviado: 1, entregado: 2, visto: 3
  * lo deja en 'enviado'. Si el envío falló, lo deja en 'fallido'. Los envíos por
  * web/QR (sin wamid) no llevan estado (no hay acuses de la Cloud API).
  */
-export function marcarEnviado(rowId: string, r: { ok: boolean; wamid?: string; bloqueadoVentana?: boolean }) {
+export function marcarEnviado(rowId: string, r: { ok: boolean; wamid?: string; bloqueadoVentana?: boolean; error?: string }) {
   if (!rowId) return;
   // Sella created_at al MOMENTO real del envío (después del tope de velocidad),
   // no al de la inserción. Así el historial y la auditoría reflejan el espaciado
   // real entre mensajes (y no marcan ráfagas falsas cuando se insertan en lote).
-  if (r.ok && r.wamid) db.prepare("UPDATE messages SET wa_msg_id = ?, estado = 'enviado', created_at = datetime('now') WHERE id = ?").run(r.wamid, rowId);
-  else if (r.ok) db.prepare("UPDATE messages SET estado = 'enviado', created_at = datetime('now') WHERE id = ?").run(rowId);
+  if (r.ok && r.wamid) db.prepare("UPDATE messages SET wa_msg_id = ?, estado = 'enviado', error = '', created_at = datetime('now') WHERE id = ?").run(r.wamid, rowId);
+  else if (r.ok) db.prepare("UPDATE messages SET estado = 'enviado', error = '', created_at = datetime('now') WHERE id = ?").run(rowId);
   // Bloqueo por ventana de 24 h: es una PROTECCIÓN nuestra, NO una falla de Meta.
   // Se marca aparte ('bloqueado') y se re-sella la hora para no agrupar falsas ráfagas.
-  else if (r.bloqueadoVentana) db.prepare("UPDATE messages SET estado = 'bloqueado', created_at = datetime('now') WHERE id = ?").run(rowId);
-  else db.prepare("UPDATE messages SET estado = 'fallido' WHERE id = ?").run(rowId);
+  else if (r.bloqueadoVentana) { db.prepare("UPDATE messages SET estado = 'bloqueado', error = ?, created_at = datetime('now') WHERE id = ?").run(String(r.error || ''), rowId); }
+  else { db.prepare("UPDATE messages SET estado = 'fallido' WHERE id = ?").run(rowId); registrarFallo(rowId, r.error || 'Meta no aceptó el mensaje.'); }
 }
 
 /** Aplica un acuse de estado de Meta (sent/delivered/read/failed) a nuestro mensaje. */
-function actualizarEstadoMensaje(wamid?: string, metaStatus?: string) {
+function actualizarEstadoMensaje(wamid?: string, metaStatus?: string, errores?: WebhookStatus['errors']) {
   if (!wamid || !metaStatus) return;
   const nuevo = metaStatus === 'read' ? 'visto' : metaStatus === 'delivered' ? 'entregado' : metaStatus === 'sent' ? 'enviado' : metaStatus === 'failed' ? 'fallido' : '';
   if (!nuevo) return;
   const row = db.prepare('SELECT id, estado FROM messages WHERE wa_msg_id = ?').get(wamid) as { id: string; estado: string } | undefined;
   if (!row) return;
-  if (nuevo === 'fallido') { db.prepare("UPDATE messages SET estado = 'fallido' WHERE id = ?").run(row.id); return; }
+  if (nuevo === 'fallido') {
+    db.prepare("UPDATE messages SET estado = 'fallido' WHERE id = ?").run(row.id);
+    const e = errores?.[0];
+    registrarFallo(row.id, explicarErrorMeta(e?.code, e?.title || e?.message, e?.error_data?.details));
+    return;
+  }
   if (row.estado === 'fallido') return; // no revivir un envío fallido
   if ((RANK_ESTADO[nuevo] || 0) > (RANK_ESTADO[row.estado] || 0)) {
     db.prepare('UPDATE messages SET estado = ? WHERE id = ?').run(nuevo, row.id);
@@ -403,7 +458,7 @@ export function handleIncomingWebhook(body: unknown) {
       const value = change.value;
       const phoneNumberId = value?.metadata?.phone_number_id;
       // Acuses de entrega/lectura de los mensajes que ENVIAMOS (no traen `messages`).
-      for (const st of value?.statuses || []) actualizarEstadoMensaje(st.id, st.status);
+      for (const st of value?.statuses || []) actualizarEstadoMensaje(st.id, st.status, st.errors);
       if (!phoneNumberId || !value?.messages?.length) continue;
       const store = db.prepare('SELECT store_id, access_token FROM whatsapp WHERE phone_number_id = ? AND conectado = 1').get(phoneNumberId) as
         | { store_id: string; access_token: string }

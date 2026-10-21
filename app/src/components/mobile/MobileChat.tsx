@@ -116,6 +116,9 @@ export function MobileChat({ df }: { df: DealFlowState }) {
                       </span>
                     )}
                   </span>
+                  {(m.estado === 'fallido' || m.estado === 'bloqueado') && m.error && (
+                    <div style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.4, padding: '5px 8px', borderRadius: 6, background: m.de === 'vendedor' ? 'rgba(0,0,0,.18)' : 'rgba(220,38,38,.08)', color: m.de === 'vendedor' ? '#fff' : 'var(--df-danger)' }}>⚠ {m.error}</div>
+                  )}
                 </div>
               </div>
             </div>

@@ -177,6 +177,8 @@ export interface Mensaje {
   createdAt?: string;
   /** Estado de entrega (salientes Cloud API): '' | enviado | entregado | visto | fallido. */
   estado?: string;
+  /** Motivo del fallo de entrega (explicado), si Meta lo rechazó. */
+  error?: string;
   tipo?: string;
   mediaUrl?: string | null;
   mediaMime?: string | null;

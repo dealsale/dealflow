@@ -1,3 +1,4 @@
+import { pasarAHumano } from './pasoHumano.js';
 import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
@@ -185,7 +186,7 @@ function personalizacionDirectiva(estiloRaw?: string): string {
   if (lim(e.despedida, 600)) out.push(`DESPEDIDA: cuando el cliente se despida o dé las gracias, despídete así (adáptala con naturalidad): «${lim(e.despedida, 600)}»`);
   if (lim(e.prohibido)) out.push(`PROHIBIDO (nunca lo hagas ni lo menciones): ${lim(e.prohibido)}`);
   const h = e.humano || {};
-  if (h.activo) {
+  if (h.activo !== false) { // encendido por defecto: si el bot no sabe, pasa a una persona (no inventa)
     const cuando = lim(h.cuando, 800) || 'el cliente pide hablar con una persona o asesor, tiene un reclamo o queja, o pregunta algo que no puedes resolver con la información que tienes';
     const msg = lim(h.mensaje, 400) || 'Ya mismo te comunico con una persona de nuestro equipo para ayudarte mejor 🙌';
     out.push(`PASAR A UNA PERSONA: si ${cuando}, NO sigas atendiendo tú: responde con este mensaje (adáptalo con naturalidad): «${msg}» y agrega al final, en una línea sola, el marcador ##HUMANO## (el cliente no lo ve). No pongas ##PEDIDO en ese mismo mensaje.`);
@@ -277,6 +278,7 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   if (!ia) {
     console.log('[ia] sin IA configurada para la tienda (ni clave propia ni del servidor): el asistente no responde');
     registrarLog(storeId, 'warn', 'ia', 'El asistente NO respondió: no hay IA configurada (falta la API key de DeepSeek/OpenAI en Integraciones).', leadId);
+    pasarAHumano(storeId, leadId, 'no hay IA configurada para el asistente.');
     return;
   }
   const lead = db.prepare('SELECT id, nombre, asignado, wa_id, tel, pendiente_info FROM leads WHERE id = ?').get(leadId) as
@@ -563,11 +565,12 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       const detalle = await res.text().catch(() => '');
       console.error(`[ia] ${ia.proveedor} respondió`, res.status, detalle);
       registrarLog(storeId, 'error', 'ia', `La IA (${ia.proveedor}) falló (HTTP ${res.status}). Revisa la API key o el saldo. ${String(detalle).slice(0, 160)}`, leadId);
+      pasarAHumano(storeId, leadId, `la IA (${ia.proveedor}) falló (HTTP ${res.status}).`);
       return;
     }
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const brutoRaw = body.choices?.[0]?.message?.content?.trim();
-    if (!brutoRaw) return;
+    if (!brutoRaw) { pasarAHumano(storeId, leadId, 'la IA respondió vacío.'); return; }
     // A veces DeepSeek envuelve su respuesta como JSON ("text": "..."). La
     // desenvolvemos para no mandar esa basura al cliente ni contaminar el marcador.
     const bruto = desenvolver(brutoRaw);
@@ -657,6 +660,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   } catch (e) {
     console.error(`[ia] error llamando a ${ia.proveedor}`, e);
     registrarLog(storeId, 'error', 'ia', `Error inesperado generando la respuesta del asistente: ${String((e as Error)?.message || e).slice(0, 160)}`, leadId);
+    pasarAHumano(storeId, leadId, 'el asistente tuvo un error generando la respuesta.');
   }
 }
 

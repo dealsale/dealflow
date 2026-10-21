@@ -49,7 +49,9 @@ function tiendaMaestraId(): string | undefined {
   return r?.id;
 }
 
-interface Snapshot { source_store_id: string; instrucciones: string; reglas: string; productos: string }
+interface Snapshot { source_store_id: string; instrucciones: string; reglas: string; productos: string; estilo?: string }
+try { db.exec("ALTER TABLE templates_content ADD COLUMN estilo TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+const SNAP_COLS = 'source_store_id, instrucciones, reglas, productos, estilo';
 
 /** ¿El snapshot congelado tiene contenido usable (al menos un producto o instrucciones)? */
 function snapshotUtil(snap: Snapshot | undefined): snap is Snapshot {
@@ -65,18 +67,18 @@ function snapshotUtil(snap: Snapshot | undefined): snap is Snapshot {
  * Devuelve false si la maestra no tiene contenido.
  */
 export function congelarPlantilla(templateId: string, masterId: string): boolean {
-  const a = (db.prepare('SELECT instrucciones, reglas FROM assistants WHERE store_id = ?').get(masterId) as { instrucciones: string; reglas: string } | undefined) || { instrucciones: '', reglas: '[]' };
+  const a = (db.prepare('SELECT instrucciones, reglas, estilo FROM assistants WHERE store_id = ?').get(masterId) as { instrucciones: string; reglas: string; estilo: string } | undefined) || { instrucciones: '', reglas: '[]', estilo: '' };
   const productos = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at').all(masterId) as Record<string, unknown>[]).map((row) => ({
     row,
     variants: db.prepare('SELECT label, stock, fotos, fotos_subidas, orden FROM variants WHERE product_id = ? ORDER BY orden').all(row.id as string),
   }));
   if (productos.length === 0 && !(a.instrucciones || '').trim()) return false;
   db.prepare(
-    `INSERT INTO templates_content (template_id, source_store_id, instrucciones, reglas, productos, updated_at)
-     VALUES (?,?,?,?,?,datetime('now'))
+    `INSERT INTO templates_content (template_id, source_store_id, instrucciones, reglas, productos, estilo, updated_at)
+     VALUES (?,?,?,?,?,?,datetime('now'))
      ON CONFLICT(template_id) DO UPDATE SET source_store_id = excluded.source_store_id, instrucciones = excluded.instrucciones,
-       reglas = excluded.reglas, productos = excluded.productos, updated_at = datetime('now')`,
-  ).run(templateId, masterId, a.instrucciones, a.reglas, j(productos));
+       reglas = excluded.reglas, productos = excluded.productos, estilo = excluded.estilo, updated_at = datetime('now')`,
+  ).run(templateId, masterId, a.instrucciones, a.reglas, j(productos), a.estilo || '');
   return true;
 }
 
@@ -87,7 +89,7 @@ export function congelarPlantilla(templateId: string, masterId: string): boolean
  */
 export function congelarSiFalta() {
   for (const p of PLANTILLAS) {
-    const snap = db.prepare('SELECT source_store_id, instrucciones, reglas, productos FROM templates_content WHERE template_id = ?').get(p.id) as Snapshot | undefined;
+    const snap = db.prepare(`SELECT ${SNAP_COLS} FROM templates_content WHERE template_id = ?`).get(p.id) as Snapshot | undefined;
     if (snapshotUtil(snap)) continue; // ya congelada
     const master = tiendaMaestraId();
     if (master) congelarPlantilla(p.id, master);
@@ -100,10 +102,22 @@ export function congelarSiFalta() {
  * productos se agregan después desde la Biblioteca de productos del admin.
  */
 function aplicarSnapshot(snap: Snapshot, storeId: string, _plantillaId: string) {
+  // Configuración del asistente (personalidad, forma de vender, saludo, prohibido,
+  // pase a humano, preguntas frecuentes…). Lo propio de la tienda maestra (medios de
+  // pago, horario, ubicación) NO se copia: se conserva lo que tenga la tienda.
+  const actual = pj<Record<string, unknown>>((db.prepare('SELECT estilo FROM assistants WHERE store_id = ?').get(storeId) as { estilo: string } | undefined)?.estilo || '', {});
+  const tpl = pj<Record<string, unknown>>(snap.estilo || '', {});
+  const negTpl = (tpl.negocio || {}) as Record<string, string>;
+  const negAct = (actual.negocio || {}) as Record<string, string>;
+  const estilo = {
+    ...actual,
+    ...Object.fromEntries(Object.entries(tpl).filter(([k]) => k !== 'negocio')),
+    negocio: { ...negAct, ...(negTpl.envios ? { envios: negTpl.envios } : {}), ...(negTpl.cambios ? { cambios: negTpl.cambios } : {}) },
+  };
   db.prepare(
-    `INSERT INTO assistants (store_id, instrucciones, reglas) VALUES (?,?,?)
-     ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas`,
-  ).run(storeId, snap.instrucciones, snap.reglas);
+    `INSERT INTO assistants (store_id, instrucciones, reglas, estilo) VALUES (?,?,?,?)
+     ON CONFLICT(store_id) DO UPDATE SET instrucciones = excluded.instrucciones, reglas = excluded.reglas, estilo = excluded.estilo`,
+  ).run(storeId, snap.instrucciones, snap.reglas, j(estilo));
 }
 
 /** Instala una plantilla en la tienda: deja el asistente y los productos listos. */
@@ -114,12 +128,13 @@ export function instalarPlantilla(storeId: string, plantillaId: string, force = 
   if (ya && !force) return { yaInstalada: true, error: 'Esta plantilla ya está instalada en tu tienda.' };
 
   // Contenido CONGELADO de la plantilla (no cambia aunque la tienda maestra agregue productos después).
-  let snap = db.prepare('SELECT source_store_id, instrucciones, reglas, productos FROM templates_content WHERE template_id = ?').get(plantillaId) as Snapshot | undefined;
-  // Si todavía no está congelada, congelamos la versión ACTUAL de la maestra una sola vez.
-  if (!snapshotUtil(snap)) {
+  let snap = db.prepare(`SELECT ${SNAP_COLS} FROM templates_content WHERE template_id = ?`).get(plantillaId) as Snapshot | undefined;
+  // Se instala la versión ACTUAL del asistente de la tienda maestra (lo último que
+  // configuraste ahí: reglas, prohibido, pase a humano…). Si no hay maestra, la congelada.
+  {
     const master = tiendaMaestraId();
     if (master && master !== storeId && congelarPlantilla(plantillaId, master)) {
-      snap = db.prepare('SELECT source_store_id, instrucciones, reglas, productos FROM templates_content WHERE template_id = ?').get(plantillaId) as Snapshot | undefined;
+      snap = db.prepare(`SELECT ${SNAP_COLS} FROM templates_content WHERE template_id = ?`).get(plantillaId) as Snapshot | undefined;
     }
   }
 

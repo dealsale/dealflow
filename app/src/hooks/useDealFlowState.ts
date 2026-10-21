@@ -489,6 +489,7 @@ function mapApiMensajes(mensajes: ApiLead['mensajes']): Mensaje[] {
     hora: m.hora,
     createdAt: m.createdAt,
     estado: m.estado,
+    error: m.error || '',
     tipo: m.tipo,
     mediaUrl: m.mediaUrl,
     mediaMime: m.mediaMime,
@@ -552,7 +553,8 @@ function estadoDeMensaje(m: Mensaje): { texto: string; color: string; titulo: st
     case 'enviado': return { texto: '✓', color: gris, titulo: 'Enviado' };
     case 'entregado': return { texto: '✓✓', color: gris, titulo: 'Entregado' };
     case 'visto': return { texto: '✓✓', color: '#38BDF8', titulo: 'Visto' };
-    case 'fallido': return { texto: '⚠ no enviado', color: vend ? 'var(--df-danger-border)' : 'var(--df-danger)', titulo: 'No se pudo enviar' };
+    case 'fallido': return { texto: '⚠ no enviado', color: vend ? 'var(--df-danger-border)' : 'var(--df-danger)', titulo: m.error ? `No se pudo enviar: ${m.error}` : 'No se pudo enviar' };
+    case 'bloqueado': return { texto: '⛔ no enviado', color: vend ? 'var(--df-danger-border)' : 'var(--df-danger)', titulo: m.error || 'Bloqueado por la ventana de 24 h: usa una plantilla.' };
     default: return null;
   }
 }
@@ -814,8 +816,9 @@ export function useDealFlowState() {
   const [newProdError, setNewProdError] = useState<boolean>(false);
   // Notificaciones del navegador (web/PWA): activar/desactivar y qué tipos recibir.
   const [notifPrefs, setNotifPrefs] = useState<{ on: boolean; pedidos: boolean; contactos: boolean }>(() => {
-    try { return { on: false, pedidos: true, contactos: true, ...JSON.parse(localStorage.getItem('dealflow:notif') || '{}') }; }
-    catch { return { on: false, pedidos: true, contactos: true }; }
+    // Encendidas por defecto para todos (si el navegador aún no dio permiso, se pide al primer clic).
+    try { return { on: true, pedidos: true, contactos: true, ...JSON.parse(localStorage.getItem('dealflow:notif') || '{}') }; }
+    catch { return { on: true, pedidos: true, contactos: true }; }
   });
   const [notifPermiso, setNotifPermiso] = useState<string>(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
   const [variantFormOpen, setVariantFormOpen] = useState<boolean>(false);
@@ -1022,6 +1025,19 @@ export function useDealFlowState() {
       await apiPushSubscribe(sub.toJSON(), { pedidos: prefs.pedidos, contactos: prefs.contactos });
     } catch (e) { console.warn('[push] no se pudo sincronizar', e); }
   }
+  // Notificaciones encendidas por defecto: el permiso del navegador solo se puede pedir
+  // tras un gesto del usuario, así que se pide en el primer clic dentro del panel.
+  useEffect(() => {
+    if (!apiMode || typeof Notification === 'undefined') return;
+    if (Notification.permission === 'granted' && notifPrefsRef.current.on) { void sincronizarPush(notifPrefsRef.current); return; }
+    if (Notification.permission !== 'default') return;
+    const pedir = () => {
+      if (!notifPrefsRef.current.on || Notification.permission !== 'default') return;
+      void Notification.requestPermission().then((p) => { setNotifPermiso(p); if (p === 'granted') void sincronizarPush(notifPrefsRef.current); });
+    };
+    window.addEventListener('click', pedir, { once: true });
+    return () => window.removeEventListener('click', pedir);
+  }, [apiMode]); // eslint-disable-line react-hooks/exhaustive-deps
   // Activa/desactiva las notificaciones. Al activar, pide el permiso del navegador.
   async function toggleNotificaciones() {
     if (notifPrefsRef.current.on) { guardarNotifPrefs({ ...notifPrefsRef.current, on: false }); return; }
@@ -1352,8 +1368,8 @@ export function useDealFlowState() {
         const live = apiMode && apiLeadsState ? l.asignado.includes('bot') || l.asignado.includes('Asistente') : l.id === 1 || l.id === 2;
         const selC = l.id === crmSelectedId;
         const fechaISO = l.ultimoIso ? fechaBogota(l.ultimoIso) : '';
-        // Sin responder = mensajes seguidos del cliente al final (nadie —bot ni
-        // vendedor— ha contestado después). En modo resumen lo calcula el servidor
+        // No leídos = mensajes del cliente que el equipo no ha abierto (el servidor lo calcula;
+        // sin modo resumen se cuentan los del cliente al final).
         // (l.sinResponder); si no, se cuenta de los mensajes. Si el chat está abierto, no molesta el badge.
         let sinResponder = l.sinResponder;
         if (sinResponder === undefined) {
@@ -3137,7 +3153,15 @@ export function useDealFlowState() {
       reloadPlantillas();
       void reloadProducts();
       void apiState().then(({ data }) => {
-        if (data) { setAssistantText(data.assistant?.instrucciones || ''); setRules(data.assistant?.reglas || []); }
+        if (data) {
+          setAssistantText(data.assistant?.instrucciones || ''); setRules(data.assistant?.reglas || []);
+          setEstilo({
+            ...(data.assistant?.estilo || {}),
+            trato: data.assistant?.estilo?.trato === 'usted' ? 'usted' : 'tu',
+            emojis: data.assistant?.estilo?.emojis !== false,
+            largo: data.assistant?.estilo?.largo === 'detallado' || data.assistant?.estilo?.largo === 'medio' ? data.assistant.estilo.largo : 'corto',
+          });
+        }
       });
     });
   }

@@ -252,18 +252,18 @@ export function CRM({ df }: { df: DealFlowState }) {
               <div style={c.avatarStyle}>{c.iniciales}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                  <span style={{ fontWeight: 600, fontSize: 14 }}>{c.nombre}</span>
+                  <span style={{ fontWeight: c.sinResponder ? 800 : 600, fontSize: 14 }}>{c.nombre}</span>
                   {c.canal === 'web' && <span title="Llegó por el chat web" style={{ fontSize: 11 }}>🌐</span>}
                   {c.canal === 'messenger' && <span title="Facebook Messenger" style={{ fontSize: 11 }}>💬</span>}
                   {c.canal === 'instagram' && <span title="Instagram DM" style={{ fontSize: 11 }}>📸</span>}
                   {c.anuncio && (c.anuncio.titular || c.anuncio.id || c.anuncio.url) && <span title={`Vino del anuncio: ${c.anuncio.titular || 'campaña'}`} style={{ fontSize: 11 }}>📢</span>}
                   {c.etiquetaStyle && <span style={c.etiquetaStyle}>{c.etiqueta}</span>}
-                  <span style={{ color: c.sinResponder ? 'var(--df-brand)' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11.5, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
+                  <span style={{ color: c.sinResponder ? '#25D366' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11.5, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <div style={{ color: c.sinResponder ? 'var(--df-text)' : 'var(--df-text-muted)', fontWeight: c.sinResponder ? 600 : 400, fontSize: 12.5, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }} translate="no">{c.ultimo}</div>
                   {c.sinResponder > 0 && (
-                    <span title={`${c.sinResponder} mensaje(s) sin responder`} style={{ flexShrink: 0, minWidth: 18, height: 18, borderRadius: 999, background: 'var(--df-brand-mid)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>{c.sinResponder}</span>
+                    <span title={`${c.sinResponder} mensaje(s) sin leer`} style={{ flexShrink: 0, minWidth: 20, height: 20, borderRadius: 999, background: '#25D366', color: '#fff', fontSize: 11.5, fontWeight: 800, boxShadow: '0 0 0 2px var(--df-surface)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>{c.sinResponder}</span>
                   )}
                 </div>
                 <div style={c.liveStyle}>
@@ -365,6 +365,9 @@ export function CRM({ df }: { df: DealFlowState }) {
                             </span>
                           )}
                         </span>
+                        {(m.estado === 'fallido' || m.estado === 'bloqueado') && m.error && (
+                          <div style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.4, padding: '5px 8px', borderRadius: 6, background: m.de === 'vendedor' ? 'rgba(0,0,0,.18)' : 'var(--df-danger-bg, rgba(220,38,38,.08))', color: m.de === 'vendedor' ? '#fff' : 'var(--df-danger)', maxWidth: 320 }}>⚠ {m.error}</div>
+                        )}
                       </div>
                     </div>
                   </div>
