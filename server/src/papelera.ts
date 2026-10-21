@@ -14,7 +14,7 @@
  * (DATA_DIR/respaldos/dealflow-AAAA-MM-DD.db); se guardan las últimas 3.
  */
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, statfsSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
@@ -171,9 +171,15 @@ function vaciarVencidos(): void {
 
 // ── Copias diarias ─────────────────────────────────────────────────────────
 
-export function listarRespaldos(): { archivo: string; tamanoMb: number; fecha: string; cifrado: boolean }[] {
-  return readdirSync(DIR_RESPALDOS).filter((f) => /^dealflow-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort().reverse()
-    .map((archivo) => { const r = path.join(DIR_RESPALDOS, archivo); const st = statSync(r); return { archivo, tamanoMb: Math.round(st.size / 1048576 * 10) / 10, fecha: st.mtime.toISOString(), cifrado: esArchivoCifrado(r) }; });
+// Automáticas: dealflow-AAAA-MM-DD.db (se guardan las últimas 3).
+// Manuales:     dealflow-AAAA-MM-DD-HHMM-manual.db (se guardan las últimas 3).
+const NOMBRE_COPIA = /^dealflow-\d{4}-\d{2}-\d{2}(-\d{4}-manual)?\.db$/;
+const COPIAS_MANUALES = 3;
+
+export function listarRespaldos(): { archivo: string; tamanoMb: number; fecha: string; cifrado: boolean; manual: boolean }[] {
+  return readdirSync(DIR_RESPALDOS).filter((f) => NOMBRE_COPIA.test(f))
+    .map((archivo) => { const r = path.join(DIR_RESPALDOS, archivo); const st = statSync(r); return { archivo, tamanoMb: Math.round(st.size / 1048576 * 10) / 10, fecha: st.mtime.toISOString(), cifrado: esArchivoCifrado(r), manual: archivo.endsWith('-manual.db') }; })
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 /** Para descargar: la copia descifrada (temporal si estaba cifrada) y cómo limpiarla. */
 export async function prepararDescarga(archivo: string): Promise<{ ruta: string; limpiar: () => void } | null> {
@@ -184,15 +190,65 @@ export async function prepararDescarga(archivo: string): Promise<{ ruta: string;
   await descifrarArchivo(r, tmp);
   return { ruta: tmp, limpiar: () => { try { unlinkSync(tmp); } catch { /* */ } } };
 }
-export const rutaRespaldo = (archivo: string) => (/^dealflow-\d{4}-\d{2}-\d{2}\.db$/.test(archivo) && existsSync(path.join(DIR_RESPALDOS, archivo)) ? path.join(DIR_RESPALDOS, archivo) : null);
+export const rutaRespaldo = (archivo: string) => (NOMBRE_COPIA.test(archivo) && existsSync(path.join(DIR_RESPALDOS, archivo)) ? path.join(DIR_RESPALDOS, archivo) : null);
+
+/** Elimina una copia (a mano, desde el panel). */
+export function eliminarRespaldo(archivo: string): boolean {
+  const r = rutaRespaldo(archivo);
+  if (!r) return false;
+  unlinkSync(r);
+  return true;
+}
+/** Elimina de verdad una tienda de la papelera (ya no se podrá restaurar). */
+export function eliminarDePapelera(archivo: string): boolean {
+  if (!archivoValido(archivo)) return false;
+  unlinkSync(path.join(DIR_PAPELERA, archivo));
+  return true;
+}
+
+/** Tamaño (bytes) de una carpeta, recursivo. */
+function pesoCarpeta(dir: string): number {
+  let n = 0;
+  try {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const r = path.join(dir, e.name);
+      n += e.isDirectory() ? pesoCarpeta(r) : (() => { try { return statSync(r).size; } catch { return 0; } })();
+    }
+  } catch { /* no existe */ }
+  return n;
+}
+const mb = (b: number) => Math.round(b / 1048576 * 10) / 10;
+/** Cómo va el disco del servidor (volumen de datos) y qué lo ocupa. */
+export function espacioDisco(): { totalMb: number; libreMb: number; baseMb: number; copiasMb: number; papeleraMb: number; archivosMb: number } {
+  let totalMb = 0, libreMb = 0;
+  try { const f = statfsSync(DATA_DIR); totalMb = mb(f.blocks * f.bsize); libreMb = mb(f.bavail * f.bsize); } catch { /* */ }
+  const base = ['dealflow.db', 'dealflow.db-wal', 'dealflow.db-shm'].reduce((a, f) => { try { return a + statSync(path.join(DATA_DIR, f)).size; } catch { return a; } }, 0);
+  return { totalMb, libreMb, baseMb: mb(base || (() => { try { return statSync(db.name).size; } catch { return 0; } })()), copiasMb: mb(pesoCarpeta(DIR_RESPALDOS)), papeleraMb: mb(pesoCarpeta(DIR_PAPELERA)), archivosMb: mb(pesoCarpeta(path.join(DATA_DIR, 'media'))) };
+}
+
+/** Borra restos de copias que fallaron a mitad (.tmp / .enc), que ocupan espacio sin servir. */
+function limpiarRestos(): void {
+  for (const f of readdirSync(DIR_RESPALDOS)) if (/\.(tmp|enc)$/.test(f)) { try { unlinkSync(path.join(DIR_RESPALDOS, f)); console.log('[respaldos] resto borrado:', f); } catch { /* */ } }
+}
 
 let copiando = false;
-/** Hace la copia del día (si no existe) y deja solo las últimas 3. */
-export async function copiaDiaria(): Promise<void> {
-  if (copiando) return;
-  const hoy = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10); // día de Colombia
-  const destino = path.join(DIR_RESPALDOS, `dealflow-${hoy}.db`);
-  if (existsSync(destino)) return;
+/** Hace la copia del día (si no existe) o una manual, y deja solo las últimas 3 de cada tipo. */
+export async function copiaDiaria(manual = false): Promise<{ ok: true; archivo: string } | { error: string }> {
+  if (copiando) return { error: 'Ya se está haciendo una copia. Espera un momento.' };
+  limpiarRestos();
+  const ahora = new Date(Date.now() - 5 * 3600e3); // hora de Colombia
+  const hoy = ahora.toISOString().slice(0, 10);
+  const archivo = manual ? `dealflow-${hoy}-${ahora.toISOString().slice(11, 16).replace(':', '')}-manual.db` : `dealflow-${hoy}.db`;
+  const destino = path.join(DIR_RESPALDOS, archivo);
+  if (existsSync(destino)) return manual ? { error: 'Ya hay una copia de este mismo minuto.' } : { ok: true, archivo };
+  // Espacio: la copia ocupa lo mismo que la base y, al cifrarla, el doble por un momento.
+  const e = espacioDisco();
+  const necesita = e.baseMb * (cifradoActivo() ? 2.2 : 1.2) + 30;
+  if (e.totalMb && e.libreMb < necesita) {
+    const msg = `No hay espacio para la copia: quedan ${e.libreMb} MB libres y se necesitan unos ${Math.ceil(necesita)} MB. Elimina copias viejas o tiendas de la papelera, o amplía el volumen en Railway.`;
+    console.error('[respaldos]', msg);
+    return { error: msg };
+  }
   copiando = true;
   try {
     await db.backup(`${destino}.tmp`); // copia consistente aunque la base esté en uso
@@ -203,12 +259,17 @@ export async function copiaDiaria(): Promise<void> {
       unlinkSync(`${destino}.tmp`);
       renameSync(`${destino}.enc`, destino);
     } else renameSync(`${destino}.tmp`, destino);
-    for (const r of listarRespaldos().slice(COPIAS)) unlinkSync(path.join(DIR_RESPALDOS, r.archivo));
-    console.log(`[respaldos] copia del ${hoy} lista`);
-  } catch (e) {
-    console.error('[respaldos] falló la copia diaria', e);
+    const todas = listarRespaldos();
+    for (const r of [...todas.filter((x) => !x.manual).slice(COPIAS), ...todas.filter((x) => x.manual).slice(COPIAS_MANUALES)]) unlinkSync(path.join(DIR_RESPALDOS, r.archivo));
+    try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* */ }
+    console.log(`[respaldos] copia ${archivo} lista`);
+    return { ok: true, archivo };
+  } catch (err) {
+    console.error('[respaldos] falló la copia', err);
     try { unlinkSync(`${destino}.tmp`); } catch { /* */ }
     try { unlinkSync(`${destino}.enc`); } catch { /* */ }
+    const lleno = /ENOSPC|SQLITE_FULL|no space/i.test(String((err as Error)?.message || err));
+    return { error: lleno ? 'Se llenó el disco mientras se hacía la copia. Elimina copias viejas o tiendas de la papelera, o amplía el volumen en Railway.' : `No se pudo hacer la copia: ${String((err as Error)?.message || err).slice(0, 160)}` };
   } finally { copiando = false; }
 }
 
@@ -223,7 +284,7 @@ async function cifrarPendientes(): Promise<void> {
 }
 
 export function iniciarRespaldos(): void {
-  const tarea = () => { void cifrarPendientes().then(() => copiaDiaria()); try { vaciarVencidos(); } catch (e) { console.error('[papelera]', e); } };
+  const tarea = () => { void cifrarPendientes().then(() => copiaDiaria()).catch((e) => console.error('[respaldos]', e)); try { vaciarVencidos(); } catch (e) { console.error('[papelera]', e); } };
   setTimeout(tarea, 2 * 60_000); // poco después de arrancar
   setInterval(tarea, 3 * 3600_000); // cada 3 h revisa si ya toca la del día
 }

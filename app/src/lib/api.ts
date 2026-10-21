@@ -392,11 +392,14 @@ export const apiDropiCrear = (rowId: string, transportadora?: DropiTransportador
 // ── Shopify (Admin API) ──
 export const apiShopifyEstado = () => req<{ conectado: boolean; shop: string; nombre: string; via?: string; appDisponible?: boolean }>('/api/shopify/estado', 'GET');
 export interface TiendaPapelera { archivo: string; storeId: string; nombre: string; correo: string; eliminadaAt: string; eliminadaPor: string; venceAt: string; pedidos: number; leads: number; productos: number; tamanoKb: number }
-export interface Respaldo { archivo: string; tamanoMb: number; fecha: string; cifrado?: boolean }
+export interface Respaldo { archivo: string; tamanoMb: number; fecha: string; cifrado?: boolean; manual?: boolean }
+export interface EspacioDisco { totalMb: number; libreMb: number; baseMb: number; copiasMb: number; papeleraMb: number; archivosMb: number }
+export const apiRespaldoEliminar = (archivo: string) => req<{ ok: true; respaldos: Respaldo[]; espacio: EspacioDisco }>(`/api/admin/respaldos/${encodeURIComponent(archivo)}`, 'DELETE');
+export const apiPapeleraEliminar = (archivo: string) => req<{ ok: true; tiendas: TiendaPapelera[]; espacio: EspacioDisco }>(`/api/admin/papelera/${encodeURIComponent(archivo)}`, 'DELETE');
 export const apiCifrado = () => req<{ activo: boolean; llaveSugerida: string }>('/api/admin/cifrado', 'GET');
-export const apiPapelera = () => req<{ tiendas: TiendaPapelera[]; dias: number; respaldos: Respaldo[] }>('/api/admin/papelera', 'GET');
+export const apiPapelera = () => req<{ tiendas: TiendaPapelera[]; dias: number; respaldos: Respaldo[]; espacio?: EspacioDisco }>('/api/admin/papelera', 'GET');
 export const apiPapeleraRestaurar = (archivo: string) => req<{ ok: true; nombre: string; filas: number }>(`/api/admin/papelera/${encodeURIComponent(archivo)}/restaurar`, 'POST');
-export const apiRespaldoAhora = () => req<{ respaldos: Respaldo[] }>('/api/admin/respaldos/ahora', 'POST');
+export const apiRespaldoAhora = () => req<{ ok: true; archivo: string; respaldos: Respaldo[]; espacio: EspacioDisco }>('/api/admin/respaldos/ahora', 'POST');
 export const apiShopifyAppInstalar = (shop: string) => req<{ url: string }>('/api/shopify/app/instalar', 'POST', { shop });
 export const apiShopifyAppVincular = (codigo: string) => req<{ ok: true; shop: string }>('/api/shopify/app/vincular', 'POST', { codigo });
 export const apiShopifyConectar = (shop: string, creds: { token?: string; clientId?: string; clientSecret?: string }) =>

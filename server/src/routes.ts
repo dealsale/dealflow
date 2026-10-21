@@ -11,7 +11,7 @@ import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { urlTienda } from './tiendaPublica.js';
 import * as sa from './shopifyApp.js';
 import { registrarAccesosEquipo, registrarAccionEquipo, listarAccesos, claveInvalida, estadoSeguridad } from './seguridad.js';
-import { moverAPapelera, listarPapelera, restaurarDePapelera, listarRespaldos, prepararDescarga, copiaDiaria, DIAS_PAPELERA } from './papelera.js';
+import { moverAPapelera, listarPapelera, restaurarDePapelera, listarRespaldos, prepararDescarga, copiaDiaria, DIAS_PAPELERA, eliminarRespaldo, eliminarDePapelera, espacioDisco } from './papelera.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
@@ -2279,7 +2279,17 @@ api.delete('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
 
 // ── Papelera de tiendas y copias diarias (solo superadmin) ──
 api.get('/admin/papelera', requireAuth, requireSuperAdmin, (_req, res) => {
-  res.json({ tiendas: listarPapelera(), dias: DIAS_PAPELERA, respaldos: listarRespaldos() });
+  res.json({ tiendas: listarPapelera(), dias: DIAS_PAPELERA, respaldos: listarRespaldos(), espacio: espacioDisco() });
+});
+api.delete('/admin/papelera/:archivo', requireAuth, requireSuperAdmin, (req, res) => {
+  registrarAccionEquipo(req.user!.email, `Eliminar definitivamente de la papelera (${String(req.params.archivo)})`);
+  if (!eliminarDePapelera(String(req.params.archivo))) return res.status(404).json({ error: 'No está en la papelera.' });
+  res.json({ ok: true, tiendas: listarPapelera(), espacio: espacioDisco() });
+});
+api.delete('/admin/respaldos/:archivo', requireAuth, requireSuperAdmin, (req, res) => {
+  registrarAccionEquipo(req.user!.email, `Eliminar copia de la base (${String(req.params.archivo)})`);
+  if (!eliminarRespaldo(String(req.params.archivo))) return res.status(404).json({ error: 'Copia no encontrada.' });
+  res.json({ ok: true, respaldos: listarRespaldos(), espacio: espacioDisco() });
 });
 api.post('/admin/papelera/:archivo/restaurar', requireAuth, requireSuperAdmin, (req, res) => {
   registrarAccionEquipo(req.user!.email, `Restaurar tienda de la papelera (${String(req.params.archivo)})`);
@@ -2287,9 +2297,11 @@ api.post('/admin/papelera/:archivo/restaurar', requireAuth, requireSuperAdmin, (
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
 });
-api.post('/admin/respaldos/ahora', requireAuth, requireSuperAdmin, async (_req, res) => {
-  await copiaDiaria();
-  res.json({ respaldos: listarRespaldos() });
+api.post('/admin/respaldos/ahora', requireAuth, requireSuperAdmin, async (req, res) => {
+  registrarAccionEquipo(req.user!.email, 'Crear copia manual de la base');
+  const r = await copiaDiaria(true);
+  if ('error' in r) return res.status(400).json({ error: r.error, respaldos: listarRespaldos(), espacio: espacioDisco() });
+  res.json({ ok: true, archivo: r.archivo, respaldos: listarRespaldos(), espacio: espacioDisco() });
 });
 api.get('/admin/respaldos/:archivo', requireAuth, requireSuperAdmin, async (req, res) => {
   registrarAccionEquipo(req.user!.email, `Descargar copia de la base (${String(req.params.archivo)})`);

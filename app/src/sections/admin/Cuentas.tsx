@@ -4,7 +4,7 @@ import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
 import { confirmar } from '../../components/dialogs';
 import { apiSeguridad, type PuntoSeguridad, type AccesoEquipo } from '../../lib/api';
-import { apiCifrado, apiPapelera, apiPapeleraRestaurar, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
+import { apiCifrado, apiPapelera, apiPapeleraRestaurar, apiRespaldoEliminar, apiPapeleraEliminar, type EspacioDisco, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
 
 const labelStyle: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 };
@@ -375,7 +375,8 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
   const [ocupado, setOcupado] = useState('');
   const [cifrado, setCifrado] = useState<{ activo: boolean; llaveSugerida: string } | null>(null);
   const [verLlave, setVerLlave] = useState(false);
-  const cargar = () => void apiPapelera().then((r) => { if (r.data) { setTiendas(r.data.tiendas); setRespaldos(r.data.respaldos); setDias(r.data.dias); } });
+  const [espacio, setEspacio] = useState<EspacioDisco | null>(null);
+  const cargar = () => void apiPapelera().then((r) => { if (r.data) { setTiendas(r.data.tiendas); setRespaldos(r.data.respaldos); setDias(r.data.dias); setEspacio(r.data.espacio || null); } });
   useEffect(() => { cargar(); void apiCifrado().then((r) => r.data && setCifrado(r.data)); }, []);
   const restaurar = async (t: TiendaPapelera) => {
     if (!(await confirmar({ titulo: `Restaurar ${t.nombre}`, mensaje: `Vuelve tal como estaba al eliminarla (${t.pedidos} pedidos, ${t.leads} leads, ${t.productos} productos), con sus usuarios. Sus integraciones y su WhatsApp quedan como estaban.`, aceptar: 'Restaurar' }))) return;
@@ -388,11 +389,30 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
     void df.reloadAdmin();
   };
   const copiarAhora = async () => {
-    setOcupado('copia');
+    setOcupado('copia'); setMsgCopias('');
     const r = await apiRespaldoAhora();
     setOcupado('');
-    if (r.data) { setRespaldos(r.data.respaldos); setMsg('✓ Copia de hoy lista.'); }
+    if (r.error || !r.data) { setMsgCopias(r.error || 'No se pudo hacer la copia.'); cargar(); return; }
+    setRespaldos(r.data.respaldos); setEspacio(r.data.espacio); setMsgCopias('✓ Copia manual lista.');
   };
+  const eliminarCopia = async (x: Respaldo) => {
+    if (!(await confirmar({ titulo: 'Eliminar copia', mensaje: `Se borra ${x.archivo} (${x.tamanoMb} MB). No se puede deshacer.`, aceptar: 'Eliminar', peligro: true }))) return;
+    setOcupado(x.archivo);
+    const r = await apiRespaldoEliminar(x.archivo);
+    setOcupado('');
+    if (r.error || !r.data) { setMsgCopias(r.error || 'No se pudo eliminar.'); return; }
+    setRespaldos(r.data.respaldos); setEspacio(r.data.espacio); setMsgCopias(`✓ ${x.archivo} eliminada.`);
+  };
+  const eliminarTienda = async (t: TiendaPapelera) => {
+    if (!(await confirmar({ titulo: `Eliminar ${t.nombre} para siempre`, mensaje: `Se borra de la papelera (${t.pedidos} pedidos, ${t.leads} leads, ${t.productos} productos). Ya NO se podrá restaurar.`, aceptar: 'Eliminar para siempre', peligro: true }))) return;
+    setOcupado(t.archivo);
+    const r = await apiPapeleraEliminar(t.archivo);
+    setOcupado('');
+    if (r.error || !r.data) { setMsg(r.error || 'No se pudo eliminar.'); return; }
+    setTiendas(r.data.tiendas); setEspacio(r.data.espacio); setMsg(`✓ ${t.nombre} eliminada de la papelera.`);
+  };
+  const [msgCopias, setMsgCopias] = useState('');
+  const pct = espacio && espacio.totalMb ? Math.round((1 - espacio.libreMb / espacio.totalMb) * 100) : 0;
   const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 18 };
   const fila: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 0', borderTop: '1px solid var(--df-border)' };
   return (
@@ -411,15 +431,30 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
               <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Eliminada {fechaCorta(t.eliminadaAt)}{t.eliminadaPor ? ` por ${t.eliminadaPor}` : ''} · {t.pedidos} pedidos · {t.leads} leads · {t.productos} productos · se borra del todo el {fechaCorta(t.venceAt)}</div>
             </div>
             <button onClick={() => void restaurar(t)} disabled={!!ocupado} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', opacity: ocupado ? 0.6 : 1 }}>{ocupado === t.archivo ? 'Restaurando…' : 'Restaurar'}</button>
+            <button onClick={() => void eliminarTienda(t)} disabled={!!ocupado} style={{ ...linkBtn('var(--df-danger)'), border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px' }}>Eliminar para siempre</button>
           </div>
         ))}
       </div>
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>💾 Copias diarias de la base</h2>
-          <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Una copia completa cada día; se guardan las últimas 3.</span>
-          <button onClick={() => void copiarAhora()} disabled={!!ocupado} style={{ ...linkBtn('var(--df-brand)'), border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px' }}>{ocupado === 'copia' ? 'Copiando…' : 'Hacer copia de hoy'}</button>
+          <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>💾 Copias de seguridad de la base</h2>
+          <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Una automática cada día (se guardan las últimas 3) y las que hagas a mano (también las últimas 3).</span>
+          <button onClick={() => void copiarAhora()} disabled={!!ocupado} style={{ ...linkBtn('var(--df-brand)'), border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px' }}>{ocupado === 'copia' ? 'Copiando…' : '＋ Crear copia ahora'}</button>
         </div>
+        {espacio && espacio.totalMb > 0 && (
+          <div style={{ marginTop: 12, fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <b>Disco del servidor: {pct}% usado</b>
+              <span style={{ color: espacio.libreMb < espacio.baseMb * 2.5 ? 'var(--df-danger)' : 'var(--df-text-muted)', fontWeight: 600 }}>{espacio.libreMb} MB libres de {espacio.totalMb} MB</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 999, background: 'var(--df-border)', overflow: 'hidden' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: pct > 90 ? 'var(--df-danger)' : pct > 75 ? 'var(--df-warning)' : 'var(--df-brand)' }} />
+            </div>
+            <div style={{ color: 'var(--df-text-muted)', marginTop: 5 }}>Base de datos {espacio.baseMb} MB · copias {espacio.copiasMb} MB · papelera {espacio.papeleraMb} MB · fotos y archivos {espacio.archivosMb} MB</div>
+            {espacio.libreMb < espacio.baseMb * 2.5 && <div style={{ color: 'var(--df-danger)', marginTop: 5, fontWeight: 600 }}>⚠️ Queda poco espacio: no alcanza para una copia nueva. Elimina copias viejas o tiendas de la papelera, o amplía el volumen en Railway.</div>}
+          </div>
+        )}
+        {msgCopias && <div style={{ fontSize: 12.5, marginTop: 8, color: msgCopias.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msgCopias}</div>}
         {cifrado && (cifrado.activo ? (
           <div style={{ fontSize: 12.5, color: 'var(--df-success)', marginTop: 10, fontWeight: 600 }}>🔒 Cifrado propio activo (AES-256): copias, papelera y tokens de Shopify se guardan cifrados. Al descargar una copia se entrega descifrada.</div>
         ) : (
@@ -435,9 +470,10 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
         {!respaldos.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)', marginTop: 10 }}>Aún no hay copias (la primera se hace pocos minutos después de arrancar el servidor).</div>}
         {respaldos.map((r) => (
           <div key={r.archivo} style={fila}>
-            <span style={{ flex: 1, fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}>{r.archivo}</span>
+            <span style={{ flex: 1, fontSize: 13, fontFamily: "'JetBrains Mono', monospace", minWidth: 0, overflowWrap: 'anywhere' }}>{r.archivo} <span style={{ fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: r.manual ? 'var(--df-purple)' : 'var(--df-text-faint)' }}>{r.manual ? 'MANUAL' : 'AUTOMÁTICA'}</span></span>
             <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{r.cifrado ? '🔒 ' : ''}{r.tamanoMb} MB · {fechaCorta(r.fecha)}</span>
             <a href={`/api/admin/respaldos/${encodeURIComponent(r.archivo)}`} style={{ ...linkBtn('var(--df-brand)'), textDecoration: 'none' }}>Descargar</a>
+            <button onClick={() => void eliminarCopia(r)} disabled={!!ocupado} style={{ ...linkBtn('var(--df-danger)') }}>{ocupado === r.archivo ? 'Eliminando…' : 'Eliminar'}</button>
           </div>
         ))}
       </div>
