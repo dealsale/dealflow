@@ -16,7 +16,18 @@
 import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomBytes } from 'node:crypto';
 import { db, DATA_DIR } from './db.js';
+import { cifradoActivo, cifrarArchivo, cifrarArchivoSync, descifrarArchivo, descifrarArchivoSync, esArchivoCifrado } from './cifrado.js';
+
+/** Si el archivo está cifrado, da una copia descifrada temporal (y cómo borrarla). */
+function abrirPlano(ruta: string): { ruta: string; limpiar: () => void } {
+  if (!esArchivoCifrado(ruta)) return { ruta, limpiar: () => {} };
+  const tmp = path.join(tmpdir(), `dfpap-${randomBytes(6).toString('hex')}.db`);
+  descifrarArchivoSync(ruta, tmp);
+  return { ruta: tmp, limpiar: () => { try { unlinkSync(tmp); } catch { /* */ } } };
+}
 
 const DIR_PAPELERA = path.join(DATA_DIR, 'papelera');
 const DIR_RESPALDOS = path.join(DATA_DIR, 'respaldos');
@@ -90,6 +101,7 @@ export function moverAPapelera(storeId: string, por: string): string {
     throw e;
   }
   db.exec('DETACH DATABASE pap');
+  try { cifrarArchivoSync(ruta); } catch (e) { console.error('[papelera] no se pudo cifrar (queda sin cifrar):', e); }
   console.log(`[papelera] tienda ${s.nombre} (${storeId}) a la papelera por ${por}: ${archivo}`);
   return archivo;
 }
@@ -99,14 +111,16 @@ const archivoValido = (a: string) => /^[a-zA-Z0-9-]+\.db$/.test(a) && existsSync
 export function listarPapelera(): EnPapelera[] {
   const out: EnPapelera[] = [];
   for (const archivo of readdirSync(DIR_PAPELERA).filter((f) => f.endsWith('.db')).sort().reverse()) {
+    let plano: ReturnType<typeof abrirPlano> | null = null;
     try {
-      const p = new Database(path.join(DIR_PAPELERA, archivo), { readonly: true, fileMustExist: true });
+      plano = abrirPlano(path.join(DIR_PAPELERA, archivo));
+      const p = new Database(plano.ruta, { readonly: true, fileMustExist: true });
       const meta = Object.fromEntries((p.prepare('SELECT clave, valor FROM _meta').all() as { clave: string; valor: string }[]).map((r) => [r.clave, r.valor]));
       const n = (t: string) => { try { return (p.prepare(`SELECT COUNT(*) n FROM ${q(t)}`).get() as { n: number }).n; } catch { return 0; } };
       const vence = new Date(new Date(meta.eliminada_at).getTime() + DIAS_PAPELERA * 86400e3).toISOString();
       out.push({ archivo, storeId: meta.store_id, nombre: meta.nombre, correo: meta.correo, eliminadaAt: meta.eliminada_at, eliminadaPor: meta.eliminada_por || '', venceAt: vence, pedidos: n('orders'), leads: n('leads'), productos: n('products'), tamanoKb: Math.round(statSync(path.join(DIR_PAPELERA, archivo)).size / 1024) });
       p.close();
-    } catch (e) { console.warn('[papelera] archivo ilegible', archivo, e); }
+    } catch (e) { console.warn('[papelera] archivo ilegible', archivo, e); } finally { plano?.limpiar(); }
   }
   return out;
 }
@@ -115,10 +129,12 @@ export function listarPapelera(): EnPapelera[] {
 export function restaurarDePapelera(archivo: string): { ok: true; nombre: string; filas: number } | { error: string } {
   if (!archivoValido(archivo)) return { error: 'Archivo de papelera no encontrado.' };
   const ruta = path.join(DIR_PAPELERA, archivo);
-  db.prepare('ATTACH DATABASE ? AS pap').run(ruta);
+  let plano: ReturnType<typeof abrirPlano>;
+  try { plano = abrirPlano(ruta); } catch (e) { return { error: `No se pudo abrir el archivo: ${e instanceof Error ? e.message : e}` }; }
+  db.prepare('ATTACH DATABASE ? AS pap').run(plano.ruta);
   try {
     const meta = Object.fromEntries((db.prepare('SELECT clave, valor FROM pap._meta').all() as { clave: string; valor: string }[]).map((r) => [r.clave, r.valor]));
-    if (db.prepare('SELECT 1 FROM stores WHERE id = ?').get(meta.store_id)) return { error: 'Esa tienda ya existe (ya fue restaurada).' };
+    if (db.prepare('SELECT 1 FROM stores WHERE id = ?').get(meta.store_id)) { db.exec('DETACH DATABASE pap'); plano.limpiar(); return { error: 'Esa tienda ya existe (ya fue restaurada).' }; }
     const orden = JSON.parse(meta.orden || '[]') as string[];
     let filas = 0;
     db.transaction(() => {
@@ -133,11 +149,13 @@ export function restaurarDePapelera(archivo: string): { ok: true; nombre: string
       }
     })();
     db.exec('DETACH DATABASE pap');
+    plano.limpiar();
     unlinkSync(ruta);
     console.log(`[papelera] tienda ${meta.nombre} restaurada (${filas} filas)`);
     return { ok: true, nombre: meta.nombre, filas };
   } catch (e) {
     try { db.exec('DETACH DATABASE pap'); } catch { /* */ }
+    plano.limpiar();
     return { error: `No se pudo restaurar: ${e instanceof Error ? e.message : e}` };
   }
 }
@@ -153,9 +171,18 @@ function vaciarVencidos(): void {
 
 // ── Copias diarias ─────────────────────────────────────────────────────────
 
-export function listarRespaldos(): { archivo: string; tamanoMb: number; fecha: string }[] {
+export function listarRespaldos(): { archivo: string; tamanoMb: number; fecha: string; cifrado: boolean }[] {
   return readdirSync(DIR_RESPALDOS).filter((f) => /^dealflow-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort().reverse()
-    .map((archivo) => { const st = statSync(path.join(DIR_RESPALDOS, archivo)); return { archivo, tamanoMb: Math.round(st.size / 1048576 * 10) / 10, fecha: st.mtime.toISOString() }; });
+    .map((archivo) => { const r = path.join(DIR_RESPALDOS, archivo); const st = statSync(r); return { archivo, tamanoMb: Math.round(st.size / 1048576 * 10) / 10, fecha: st.mtime.toISOString(), cifrado: esArchivoCifrado(r) }; });
+}
+/** Para descargar: la copia descifrada (temporal si estaba cifrada) y cómo limpiarla. */
+export async function prepararDescarga(archivo: string): Promise<{ ruta: string; limpiar: () => void } | null> {
+  const r = rutaRespaldo(archivo);
+  if (!r) return null;
+  if (!esArchivoCifrado(r)) return { ruta: r, limpiar: () => {} };
+  const tmp = path.join(tmpdir(), `dfresp-${randomBytes(6).toString('hex')}.db`);
+  await descifrarArchivo(r, tmp);
+  return { ruta: tmp, limpiar: () => { try { unlinkSync(tmp); } catch { /* */ } } };
 }
 export const rutaRespaldo = (archivo: string) => (/^dealflow-\d{4}-\d{2}-\d{2}\.db$/.test(archivo) && existsSync(path.join(DIR_RESPALDOS, archivo)) ? path.join(DIR_RESPALDOS, archivo) : null);
 
@@ -170,17 +197,33 @@ export async function copiaDiaria(): Promise<void> {
   try {
     await db.backup(`${destino}.tmp`); // copia consistente aunque la base esté en uso
     const { renameSync } = await import('node:fs');
-    renameSync(`${destino}.tmp`, destino);
+    if (cifradoActivo()) {
+      // Se cifra la copia antes de dejarla con su nombre final; la versión sin cifrar se borra.
+      await cifrarArchivo(`${destino}.tmp`, `${destino}.enc`);
+      unlinkSync(`${destino}.tmp`);
+      renameSync(`${destino}.enc`, destino);
+    } else renameSync(`${destino}.tmp`, destino);
     for (const r of listarRespaldos().slice(COPIAS)) unlinkSync(path.join(DIR_RESPALDOS, r.archivo));
     console.log(`[respaldos] copia del ${hoy} lista`);
   } catch (e) {
     console.error('[respaldos] falló la copia diaria', e);
     try { unlinkSync(`${destino}.tmp`); } catch { /* */ }
+    try { unlinkSync(`${destino}.enc`); } catch { /* */ }
   } finally { copiando = false; }
 }
 
+/** Cifra los archivos que quedaron sin cifrar (de antes de configurar la llave). */
+async function cifrarPendientes(): Promise<void> {
+  if (!cifradoActivo()) return;
+  for (const f of readdirSync(DIR_PAPELERA).filter((x) => x.endsWith('.db'))) { try { cifrarArchivoSync(path.join(DIR_PAPELERA, f)); } catch (e) { console.error('[cifrado] papelera', f, e); } }
+  for (const r of listarRespaldos().filter((x) => !x.cifrado)) {
+    const ruta = path.join(DIR_RESPALDOS, r.archivo);
+    try { await cifrarArchivo(ruta, `${ruta}.enc`); const { renameSync } = await import('node:fs'); renameSync(`${ruta}.enc`, ruta); } catch (e) { console.error('[cifrado] copia', r.archivo, e); try { unlinkSync(`${ruta}.enc`); } catch { /* */ } }
+  }
+}
+
 export function iniciarRespaldos(): void {
-  const tarea = () => { void copiaDiaria(); try { vaciarVencidos(); } catch (e) { console.error('[papelera]', e); } };
+  const tarea = () => { void cifrarPendientes().then(() => copiaDiaria()); try { vaciarVencidos(); } catch (e) { console.error('[papelera]', e); } };
   setTimeout(tarea, 2 * 60_000); // poco después de arrancar
   setInterval(tarea, 3 * 3600_000); // cada 3 h revisa si ya toca la del día
 }

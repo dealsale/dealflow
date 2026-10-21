@@ -18,6 +18,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { db, pj, registrarLog } from './db.js';
 import { BASE_TIENDA } from './tiendaPublica.js';
+import { cifrarTexto, descifrarTexto } from './cifrado.js';
 
 export const KEY = () => String(process.env.SHOPIFY_API_KEY || '').trim();
 const SECRET = () => String(process.env.SHOPIFY_API_SECRET || '').trim();
@@ -48,6 +49,20 @@ db.exec(`CREATE TABLE IF NOT EXISTS shopify_webhooks_vistos (
   shop TEXT NOT NULL DEFAULT '',
   at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
+
+// Tokens guardados antes de configurar la llave: se cifran al arrancar.
+try {
+  const { cifradoActivo } = await import('./cifrado.js');
+  if (cifradoActivo()) {
+    for (const r of db.prepare("SELECT shop, token FROM shopify_tiendas WHERE token != '' AND token NOT LIKE 'enc:v1:%'").all() as { shop: string; token: string }[]) {
+      db.prepare('UPDATE shopify_tiendas SET token = ? WHERE shop = ?').run(cifrarTexto(r.token), r.shop);
+    }
+    for (const r of db.prepare("SELECT store_id, config FROM store_integrations WHERE tipo = 'shopify'").all() as { store_id: string; config: string }[]) {
+      const c = pj<Record<string, string>>(r.config, {});
+      if (c.via === 'app' && c.token && !c.token.startsWith('enc:v1:')) db.prepare("UPDATE store_integrations SET config = ? WHERE store_id = ? AND tipo = 'shopify'").run(JSON.stringify({ ...c, token: cifrarTexto(c.token) }), r.store_id);
+    }
+  }
+} catch (e) { console.error('[shopify-app] cifrando tokens', e); }
 
 export const esShopValido = (s: string) => /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(String(s || ''));
 
@@ -175,7 +190,7 @@ export async function abrirSesion(idToken: string): Promise<EstadoSesion | { err
     const x = await intercambiarToken(shop, idToken);
     if ('error' in x) return x;
     db.prepare(`INSERT INTO shopify_tiendas (shop, token, scope, instalada_at, desinstalada_at) VALUES (?,?,?,datetime('now'),NULL)
-      ON CONFLICT(shop) DO UPDATE SET token = excluded.token, scope = excluded.scope, instalada_at = datetime('now'), desinstalada_at = NULL`).run(shop, x.token, x.scope);
+      ON CONFLICT(shop) DO UPDATE SET token = excluded.token, scope = excluded.scope, instalada_at = datetime('now'), desinstalada_at = NULL`).run(shop, cifrarTexto(x.token), x.scope);
     await suscribirWebhooks(shop, x.token);
     fila = db.prepare('SELECT * FROM shopify_tiendas WHERE shop = ?').get(shop) as typeof fila;
   }
@@ -191,7 +206,7 @@ export async function abrirSesion(idToken: string): Promise<EstadoSesion | { err
   const pend = db.prepare('SELECT store_id, exp FROM shopify_pendientes WHERE shop = ?').get(shop) as { store_id: string; exp: number } | undefined;
   if (pend && pend.exp > Date.now()) {
     const r = vincular(shop, pend.store_id);
-    void guardarNombre(shop, fila!.token, pend.store_id).catch(() => {});
+    void guardarNombre(shop, descifrarTexto(fila!.token), pend.store_id).catch(() => {});
     return { shop, vinculada: true, tiendaDF: r.nombreDF };
   }
   // Si no: código de un solo uso para vincular desde DealFlow (vale 1 h).
@@ -210,7 +225,7 @@ export function iniciarInstalacion(storeId: string, shop: string): { url: string
   db.prepare('INSERT OR REPLACE INTO shopify_pendientes (shop, store_id, exp) VALUES (?,?,?)').run(shop, storeId, Date.now() + 2 * 3600_000);
   // Si ya estaba instalada (con token), se vincula de una vez.
   const t = db.prepare('SELECT token, desinstalada_at FROM shopify_tiendas WHERE shop = ?').get(shop) as { token: string; desinstalada_at: string | null } | undefined;
-  if (t?.token && !t.desinstalada_at) { vincular(shop, storeId); void guardarNombre(shop, t.token, storeId).catch(() => {}); }
+  if (t?.token && !t.desinstalada_at) { vincular(shop, storeId); void guardarNombre(shop, descifrarTexto(t.token), storeId).catch(() => {}); }
   return { url: `https://${shop}/admin/oauth/install?client_id=${encodeURIComponent(KEY())}` };
 }
 
@@ -221,7 +236,7 @@ export function vincularConCodigo(storeId: string, codigo: string): { shop: stri
   const f = db.prepare('SELECT shop, token, codigo_exp FROM shopify_tiendas WHERE codigo = ? AND desinstalada_at IS NULL').get(c) as { shop: string; token: string; codigo_exp: number } | undefined;
   if (!f || f.codigo_exp < Date.now()) return { error: 'Código no válido o vencido. Abre de nuevo la app DealFlow en Shopify para ver uno nuevo.' };
   vincular(f.shop, storeId);
-  void guardarNombre(f.shop, f.token, storeId).catch(() => {});
+  void guardarNombre(f.shop, descifrarTexto(f.token), storeId).catch(() => {});
   return { shop: f.shop };
 }
 

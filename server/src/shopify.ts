@@ -1,4 +1,5 @@
 import { db, pj } from './db.js';
+import { descifrarTexto } from './cifrado.js';
 
 /**
  * Integración con Shopify por su Admin API (GraphQL).
@@ -41,7 +42,9 @@ export function credShopify(storeId: string): ShopifyCred | null {
   if (!row) return null;
   const cfg = pj<Record<string, string>>(row.config, {});
   const shop = normalizarShop(cfg.shop || '');
-  const token = String(cfg.token || '').trim();
+  // El token de la app pública se guarda cifrado (enc:v1:…); el manual, como lo pegaron.
+  let token = String(cfg.token || '').trim();
+  try { token = descifrarTexto(token); } catch (e) { console.error('[shopify] no se pudo descifrar el token', e); token = ''; }
   const clientId = String(cfg.clientId || '').trim();
   const clientSecret = String(cfg.clientSecret || '').trim();
   if (!shop || (!token && !(clientId && clientSecret))) return null;

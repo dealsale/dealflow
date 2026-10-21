@@ -10,7 +10,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { urlTienda } from './tiendaPublica.js';
 import * as sa from './shopifyApp.js';
-import { moverAPapelera, listarPapelera, restaurarDePapelera, listarRespaldos, rutaRespaldo, copiaDiaria, DIAS_PAPELERA } from './papelera.js';
+import { moverAPapelera, listarPapelera, restaurarDePapelera, listarRespaldos, prepararDescarga, copiaDiaria, DIAS_PAPELERA } from './papelera.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
@@ -2200,10 +2200,17 @@ api.post('/admin/respaldos/ahora', requireAuth, requireSuperAdmin, async (_req, 
   await copiaDiaria();
   res.json({ respaldos: listarRespaldos() });
 });
-api.get('/admin/respaldos/:archivo', requireAuth, requireSuperAdmin, (req, res) => {
-  const ruta = rutaRespaldo(String(req.params.archivo));
-  if (!ruta) return res.status(404).json({ error: 'Copia no encontrada.' });
-  res.download(ruta);
+api.get('/admin/respaldos/:archivo', requireAuth, requireSuperAdmin, async (req, res) => {
+  // Se entrega descifrada (lista para abrir); el archivo temporal se borra al terminar.
+  const d = await prepararDescarga(String(req.params.archivo)).catch((e) => { console.error('[respaldos] descarga', e); return null; });
+  if (!d) return res.status(404).json({ error: 'Copia no encontrada o no se pudo descifrar.' });
+  res.download(d.ruta, String(req.params.archivo), () => d.limpiar());
+});
+// Estado del cifrado propio y una llave nueva para configurarlo (no se guarda en ningún lado).
+api.get('/admin/cifrado', requireAuth, requireSuperAdmin, async (_req, res) => {
+  const { cifradoActivo, llaveNueva } = await import('./cifrado.js');
+  const activo = cifradoActivo();
+  res.json({ activo, llaveSugerida: activo ? '' : llaveNueva() });
 });
 
 // Detalle de una tienda para el admin.
