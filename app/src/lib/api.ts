@@ -789,3 +789,7 @@ export interface CfgPedidosShopify { confirmar: boolean; autoDespacho: boolean; 
 export const apiShopifyPedidosCfg = () => req<CfgPedidosShopify>('/api/shopify/pedidos-config', 'GET');
 export const apiShopifyPedidosGuardar = (c: Partial<CfgPedidosShopify>) => req<CfgPedidosShopify>('/api/shopify/pedidos-config', 'POST', c);
 export const apiShopifyReenviarConfirmacion = (rowId: string) => req<{ ok: true }>(`/api/orders/${encodeURIComponent(rowId)}/shopify/confirmacion`, 'POST');
+
+export interface PuntoSeguridad { punto: string; ok: boolean; detalle: string }
+export interface AccesoEquipo { usuario: string; rol: string; soporte: number; metodo: string; ruta: string; ip: string; at: string; tienda: string }
+export const apiSeguridad = () => req<{ estado: PuntoSeguridad[]; accesos: AccesoEquipo[] }>('/api/admin/seguridad', 'GET');
