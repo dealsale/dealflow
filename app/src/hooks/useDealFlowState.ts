@@ -621,6 +621,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     duracion: p.duracion || '',
     sku: p.sku || '',
     despachoProveedor: p.despachoProveedor || '',
+    variantesFuente: p.variantesFuente || '',
     bloqueado: !!p.bloqueado,
     reglas: p.reglas || [],
     descripcion: p.descripcion || '',
@@ -3683,6 +3684,7 @@ export function useDealFlowState() {
   const waDot: CSSProperties = { width: '8px', height: '8px', borderRadius: '50%', background: waConnected ? 'var(--df-brand-mid)' : 'var(--df-danger-mid)' };
 
   return {
+    reloadProducts,
     mode,
     isAdmin,
     isVendedor: !isAdmin,

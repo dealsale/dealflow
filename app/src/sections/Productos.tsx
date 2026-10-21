@@ -5,6 +5,7 @@ import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
 import type { Variante, Opcion } from '../types';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
+import { apiSincronizarDropi, apiSoltarVariantesDropi, type ResultadoSyncDropi } from '../lib/api';
 
 
 const TITULO_NEGRO: CSSProperties = { fontSize: 13.5, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '-0.01em', margin: '2px 0 10px' };
@@ -160,6 +161,7 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
           <button onClick={() => df.go('integraciones')} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '5px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', color: 'var(--df-text-body)' }}>Ir a Effi →</button>
         </div>
       )}
+      {conectada('dropi') && <SyncDropi p={p} df={df} />}
       {(activas.length > 0 || !conectada('effi')) && <>
       <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4, letterSpacing: '.02em' }}>🔗 Conexiones por variante</div>
       <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>
@@ -173,6 +175,66 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
         <PanelIntegracion key={integ.id} integ={integ} p={p} df={df} variantes={variantes} />
       ))}
       </>}
+    </div>
+  );
+}
+
+/**
+ * Con el ID del producto en Dropi trae TODAS sus variaciones: vincula las que ya
+ * existen, crea las que falten, completa las opciones y toma el stock de Dropi.
+ */
+function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
+  const [id, setId] = useState(String(p.sku || ''));
+  const [cargando, setCargando] = useState(false);
+  const [res, setRes] = useState<ResultadoSyncDropi | null>(null);
+  const [error, setError] = useState('');
+  const deDropi = p.variantesFuente === 'dropi';
+  const traer = async () => {
+    setCargando(true); setError(''); setRes(null);
+    const r = await apiSincronizarDropi(String(p.id), id.trim());
+    setCargando(false);
+    if (r.error || !r.data) { setError(r.error || 'No se pudo sincronizar.'); return; }
+    setRes(r.data);
+    await df.reloadProducts();
+  };
+  const soltar = async () => { await apiSoltarVariantesDropi(String(p.id)); await df.reloadProducts(); };
+  return (
+    <div style={{ border: '1px solid var(--df-warning-border, var(--df-border))', background: 'var(--df-bg)', borderRadius: 10, padding: '11px 12px', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <img src="/logos/dropi.jpg" alt="Dropi" style={{ height: 18, width: 18, borderRadius: 5, objectFit: 'cover' }} />
+        <b style={{ fontSize: 13 }}>Traer variantes de Dropi</b>
+        {deDropi && <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '2px 8px', background: 'var(--df-warning-subtle)', color: 'var(--df-warning)' }}>Variantes sincronizadas con Dropi</span>}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5, marginBottom: 8 }}>
+        Pon el <b>ID del producto en Dropi</b> y DealFlow trae todas sus tallas y colores: vincula las que ya tienes, crea las que falten y toma el stock de Dropi. Después se actualiza solo cada 6 horas.
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input value={id} onChange={(e) => setId(e.target.value)} placeholder="ID del producto en Dropi (ej: 48213)" inputMode="numeric"
+          style={{ flex: 1, minWidth: 180, border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
+        <button onClick={() => void traer()} disabled={cargando || !id.trim()}
+          style={{ background: 'var(--df-warning)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', opacity: cargando || !id.trim() ? 0.6 : 1 }}>
+          {cargando ? 'Trayendo de Dropi…' : deDropi ? '↻ Actualizar desde Dropi' : '⬇ Traer variantes'}
+        </button>
+      </div>
+      {error && <div style={{ fontSize: 12.5, color: 'var(--df-danger)', marginTop: 8 }}>{error}</div>}
+      {res && (
+        <div style={{ fontSize: 12.5, marginTop: 8, lineHeight: 1.55, color: 'var(--df-text-body)' }}>
+          {res.tipo === 'SIMPLE'
+            ? <>✓ <b>{res.nombreDropi}</b> en Dropi no tiene variantes: quedó vinculado como producto simple.</>
+            : <>✓ <b>{res.nombreDropi}</b>: {res.total} variaciones en Dropi · <b>{res.vinculadas}</b> vinculadas · <b>{res.creadas}</b> nuevas{res.conStock ? ` · stock tomado de Dropi en ${res.conStock}` : ''}.</>}
+          {res.sinDropi.length > 0 && (
+            <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>
+              ⚠️ {res.sinDropi.length} variante{res.sinDropi.length === 1 ? '' : 's'} de DealFlow no existe{res.sinDropi.length === 1 ? '' : 'n'} en Dropi: <b>{res.sinDropi.slice(0, 8).join(', ')}{res.sinDropi.length > 8 ? '…' : ''}</b>. No se borraron; elimínalas si ya no las vendes, o el asistente podría ofrecerlas.
+            </div>
+          )}
+        </div>
+      )}
+      {deDropi && (
+        <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>
+          Las variantes de este producto las define Dropi (no se arman combinando opciones).{' '}
+          <button onClick={() => void soltar()} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--df-text-muted)', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5 }}>Volver a armarlas con las opciones</button>
+        </div>
+      )}
     </div>
   );
 }
