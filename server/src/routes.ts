@@ -10,6 +10,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
 import { urlTienda } from './tiendaPublica.js';
 import * as sa from './shopifyApp.js';
+import { registrarAccesosEquipo, registrarAccionEquipo, listarAccesos, claveInvalida, estadoSeguridad } from './seguridad.js';
 import { moverAPapelera, listarPapelera, restaurarDePapelera, listarRespaldos, prepararDescarga, copiaDiaria, DIAS_PAPELERA } from './papelera.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
@@ -20,6 +21,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import type * as DropiApi from './dropiApi.js';
 
 export const api = Router();
+// Registro de accesos del equipo (administradores y soporte dentro de una tienda).
+api.use(registrarAccesosEquipo);
 // Al crear/editar productos o variantes (o marcarlos de Effi), se vinculan solos con Effi.
 api.use((req, res, next) => {
   if (req.method !== 'GET' && /^\/(products|variants|effi-api\/producto-proveedor)/.test(req.path)) {
@@ -57,6 +60,7 @@ api.post('/auth/login', (req, res) => {
     if (!store?.activa) return res.status(403).json({ error: 'Tu cuenta está desactivada. Escríbenos para reactivarla.' });
   }
   const user: AuthUser = { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id, foto: row.foto || undefined };
+  if ((row.role as string) === 'ADMIN' || (row.role as string) === 'SUPERADMIN') registrarAccionEquipo(row.email, `Inicio de sesión (${String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim()})`);
   setAuthCookie(res, user, req.hostname);
   res.json({ user: { ...user, esDueno: esDuenoDeTienda(user) } });
 });
@@ -68,7 +72,7 @@ api.post('/auth/registro', (req, res) => {
   if (!nombre?.trim() || !correo?.trim() || !password) {
     return res.status(400).json({ error: 'Escribe tu nombre, tu correo y una contraseña.' });
   }
-  if (String(password).length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+  { const e = claveInvalida(String(password), false); if (e) return res.status(400).json({ error: e }); }
   const email = String(correo).toLowerCase().trim();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Escribe un correo válido.' });
   if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
@@ -161,7 +165,7 @@ api.post('/me/password', requireAuth, (req, res) => {
   }
   const { actual, nueva } = req.body || {};
   if (!actual || !nueva) return res.status(400).json({ error: 'Escribe tu contraseña actual y la nueva.' });
-  if (String(nueva).length < 6) return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+  { const e = claveInvalida(String(nueva), false); if (e) return res.status(400).json({ error: e }); }
   const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user!.id) as { password_hash: string } | undefined;
   if (!row || !verifyPassword(String(actual), row.password_hash)) return res.status(401).json({ error: 'Tu contraseña actual no es correcta.' });
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(nueva)), req.user!.id);
@@ -1835,7 +1839,7 @@ api.get('/team', requireAuth, requireStore, requireOwner, (req, res) => {
 api.post('/team', requireAuth, requireStore, requireOwner, (req, res) => {
   const { nombre, email, password } = req.body || {};
   if (!nombre?.trim() || !email?.trim() || !password) return res.status(400).json({ error: 'Faltan el nombre, el correo o la contraseña.' });
-  if (String(password).length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+  { const e = claveInvalida(String(password), false); if (e) return res.status(400).json({ error: e }); }
   const correo = String(email).toLowerCase().trim();
   if (db.prepare('SELECT id FROM users WHERE email = ?').get(correo)) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
   const id = uid();
@@ -2221,7 +2225,7 @@ api.patch('/admin/stores/:id', requireAuth, requireAdmin, (req, res) => {
   }
   if (typeof plan === 'string' && plan.trim()) db.prepare('UPDATE stores SET plan = ? WHERE id = ?').run(plan.trim(), s.id);
   if (typeof password === 'string' && password) {
-    if (password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+    { const e = claveInvalida(password, false); if (e) return res.status(400).json({ error: e }); }
     if (dueno) db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), dueno.id);
   }
   res.json({ ok: true });
@@ -2240,6 +2244,7 @@ api.get('/admin/papelera', requireAuth, requireSuperAdmin, (_req, res) => {
   res.json({ tiendas: listarPapelera(), dias: DIAS_PAPELERA, respaldos: listarRespaldos() });
 });
 api.post('/admin/papelera/:archivo/restaurar', requireAuth, requireSuperAdmin, (req, res) => {
+  registrarAccionEquipo(req.user!.email, `Restaurar tienda de la papelera (${String(req.params.archivo)})`);
   const r = restaurarDePapelera(String(req.params.archivo));
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
@@ -2249,10 +2254,15 @@ api.post('/admin/respaldos/ahora', requireAuth, requireSuperAdmin, async (_req, 
   res.json({ respaldos: listarRespaldos() });
 });
 api.get('/admin/respaldos/:archivo', requireAuth, requireSuperAdmin, async (req, res) => {
+  registrarAccionEquipo(req.user!.email, `Descargar copia de la base (${String(req.params.archivo)})`);
   // Se entrega descifrada (lista para abrir); el archivo temporal se borra al terminar.
   const d = await prepararDescarga(String(req.params.archivo)).catch((e) => { console.error('[respaldos] descarga', e); return null; });
   if (!d) return res.status(404).json({ error: 'Copia no encontrada o no se pudo descifrar.' });
   res.download(d.ruta, String(req.params.archivo), () => d.limpiar());
+});
+// Seguridad: estado de los secretos del servidor y registro de accesos del equipo.
+api.get('/admin/seguridad', requireAuth, requireSuperAdmin, (_req, res) => {
+  res.json({ estado: estadoSeguridad(), accesos: listarAccesos(200) });
 });
 // Estado del cifrado propio y una llave nueva para configurarlo (no se guarda en ningún lado).
 api.get('/admin/cifrado', requireAuth, requireSuperAdmin, async (_req, res) => {

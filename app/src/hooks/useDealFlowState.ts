@@ -2964,7 +2964,7 @@ export function useDealFlowState() {
     const email = teamForm.email.trim();
     const password = teamForm.password;
     if (!nombre || !email || !password) { setTeamError('Completa nombre, correo y contraseña.'); return; }
-    if (password.length < 6) { setTeamError('La contraseña debe tener al menos 6 caracteres.'); return; }
+    if (password.length < 8) { setTeamError('La contraseña debe tener al menos 8 caracteres.'); return; }
     setTeamSaving(true);
     setTeamError('');
     void apiTeamCreate({ nombre, email, password }).then((r) => {

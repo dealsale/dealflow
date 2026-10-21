@@ -74,7 +74,7 @@ export function Equipo({ df }: { df: DealFlowState }) {
               value={df.teamForm.password}
               onChange={(e) => df.setTeamPassword(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') df.addTeamMember(); }}
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Mínimo 8 caracteres"
               style={input}
             />
           </div>

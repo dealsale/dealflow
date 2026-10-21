@@ -351,7 +351,7 @@ export function Login({ df }: { df: DealFlowState }) {
                 <label className="dfl-label" htmlFor="dfl-clave">Contraseña</label>
                 <div className="dfl-field" style={{ marginBottom: 18 }}>
                   <IcoLock />
-                  <input id="dfl-clave" type={verClave ? 'text' : 'password'} className="dfl-input" value={password} onChange={(e) => { setPassword(e.target.value); limpiar(); }} placeholder={esRegistro ? 'Mínimo 6 caracteres' : '••••••••'} autoComplete={esRegistro ? 'new-password' : 'current-password'} />
+                  <input id="dfl-clave" type={verClave ? 'text' : 'password'} className="dfl-input" value={password} onChange={(e) => { setPassword(e.target.value); limpiar(); }} placeholder={esRegistro ? 'Mínimo 8 caracteres' : '••••••••'} autoComplete={esRegistro ? 'new-password' : 'current-password'} />
                   <button type="button" className="dfl-eye" onClick={() => setVerClave((v) => !v)} aria-label={verClave ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
                     {verClave ? (
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M3 3l18 18" /><path d="M10.6 6.1A9.7 9.7 0 0 1 12 6c5 0 8.5 4 9.5 6-.4.8-1.2 2-2.4 3.2M6.5 7.6C4.6 8.9 3.3 10.7 2.5 12c1 2 4.5 6 9.5 6 1.6 0 3-.4 4.3-1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>

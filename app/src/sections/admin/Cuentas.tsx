@@ -3,6 +3,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
 import { confirmar } from '../../components/dialogs';
+import { apiSeguridad, type PuntoSeguridad, type AccesoEquipo } from '../../lib/api';
 import { apiCifrado, apiPapelera, apiPapeleraRestaurar, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
 
 const labelStyle: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
@@ -54,7 +55,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
             <div>
               <div style={labelStyle}>Contraseña</div>
-              <input className="df-input" type="password" value={df.accForm.password} onChange={(e) => df.setAccForm({ password: e.target.value })} placeholder="Mínimo 6 caracteres" style={inputStyle} />
+              <input className="df-input" type="password" value={df.accForm.password} onChange={(e) => df.setAccForm({ password: e.target.value })} placeholder="Mínimo 8 caracteres" style={inputStyle} />
             </div>
             <div>
               <div style={labelStyle}>Plan</div>
@@ -137,6 +138,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
         </div>
         </div>
       )}
+      {df.isSuperadmin && <SeguridadEquipo />}
       {df.isSuperadmin && <PapeleraYCopias df={df} />}
     </section>
   );
@@ -440,5 +442,47 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
         ))}
       </div>
     </>
+  );
+}
+
+/** Solo superadmin: secretos del servidor y registro de accesos del equipo a datos de clientes. */
+function SeguridadEquipo() {
+  const [estado, setEstado] = useState<PuntoSeguridad[]>([]);
+  const [accesos, setAccesos] = useState<AccesoEquipo[]>([]);
+  const [verAccesos, setVerAccesos] = useState(false);
+  useEffect(() => { void apiSeguridad().then((r) => { if (r.data) { setEstado(r.data.estado); setAccesos(r.data.accesos); } }); }, []);
+  const malos = estado.filter((e) => !e.ok);
+  const card: React.CSSProperties = { background: 'var(--df-surface)', border: `1px solid ${malos.length ? 'var(--df-danger-border, var(--df-border))' : 'var(--df-border)'}`, borderRadius: 14, padding: 18, marginTop: 18 };
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>🛡️ Seguridad</h2>
+        <span style={{ fontSize: 12.5, color: malos.length ? 'var(--df-danger)' : 'var(--df-success)', fontWeight: 700 }}>{malos.length ? `${malos.length} punto(s) por corregir en Railway → Variables` : 'Todo en orden'}</span>
+        <a href="/legal/seguridad.html" target="_blank" rel="noopener" style={{ ...linkBtn('var(--df-brand)'), marginLeft: 'auto', textDecoration: 'none' }}>Política de seguridad ↗</a>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+        {estado.map((e) => (
+          <div key={e.punto} style={{ display: 'flex', gap: 8, fontSize: 12.5, alignItems: 'flex-start' }}>
+            <span>{e.ok ? '✅' : '⚠️'}</span>
+            <span><b style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{e.punto}</b> <span style={{ color: 'var(--df-text-muted)' }}>— {e.detalle}</span></span>
+          </div>
+        ))}
+      </div>
+      <button onClick={() => setVerAccesos((v) => !v)} style={{ ...linkBtn('var(--df-brand)'), marginTop: 10, padding: 0 }}>{verAccesos ? 'Ocultar' : 'Ver'} registro de accesos del equipo ({accesos.length})</button>
+      {verAccesos && (
+        <div style={{ marginTop: 8, maxHeight: 320, overflowY: 'auto', border: '1px solid var(--df-border)', borderRadius: 10 }}>
+          {!accesos.length && <div style={{ padding: 12, fontSize: 12.5, color: 'var(--df-text-faint)' }}>Aún no hay accesos registrados.</div>}
+          {accesos.map((a, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12, padding: '7px 10px', borderTop: i ? '1px solid var(--df-border)' : 'none' }}>
+              <span style={{ color: 'var(--df-text-faint)', minWidth: 120 }}>{a.at}</span>
+              <b style={{ minWidth: 160 }}>{a.usuario}</b>
+              <span style={{ color: a.soporte ? 'var(--df-warning)' : 'var(--df-text-muted)' }}>{a.soporte ? 'soporte' : a.rol}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", flex: 1, minWidth: 180 }}>{a.metodo === 'ACCION' ? a.ruta : `${a.metodo} ${a.ruta}`}</span>
+              {a.tienda && <span style={{ color: 'var(--df-text-muted)' }}>{a.tienda}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
