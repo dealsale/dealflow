@@ -360,6 +360,17 @@ export async function estadoOrden(cred: DropiCred, id: string): Promise<{ estado
     const cand = b.objects ?? b.data ?? b;
     const o = (Array.isArray(cand) ? cand[0] : cand) as Record<string, unknown> | undefined;
     if (!o || typeof o !== 'object') return { error: `Dropi no devolvió la orden ${id}.` };
+    // Si la orden dice que ya hay guía pero el detalle no trae el número, se busca la
+    // misma orden en el listado (a veces trae los datos de envío que el detalle no).
+    let extra: Record<string, unknown> | null = null;
+    const estado0 = buscar(o, ['status', 'estado', 'order_status', 'status_name']);
+    if (/guia|generad|transito|entregad/i.test(estado0) && !(buscar(o, ['shipping_guide', 'tracking_number', 'guide_number', 'numero_guia', 'guia']) || guiaPorPatron(o))) {
+      const l = await dropi<unknown>(cred, 'GET', `/orders/myorders?result_number=50&start=0`);
+      const lb = l.body as Record<string, unknown>;
+      const lista = (Array.isArray(lb.objects) ? lb.objects : Array.isArray(lb.data) ? lb.data : []) as Record<string, unknown>[];
+      extra = lista.find((x) => String(x.id ?? x.order_id ?? '') === String(id)) || null;
+    }
+    if (extra) Object.assign(o, Object.fromEntries(Object.entries(extra).filter(([k, v]) => v != null && v !== '' && (o[k] == null || o[k] === ''))));
     const guiaS3 = buscar(o, ['guia_urls3', 'guia_url', 'guide_url', 'url_guia', 'shipping_guide_url', 'sticker', 'sticker_url', 'label_url']);
     const dc = (o.distributionCompany || o.distribution_company || o.transportadora) as unknown;
     return {

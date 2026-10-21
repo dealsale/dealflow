@@ -94,7 +94,10 @@ export async function sincronizarPedidoDropi(storeId: string, rowId: string): Pr
   const o = db.prepare(`SELECT ${COLS} FROM orders WHERE id = ? AND store_id = ?`).get(rowId, storeId) as OrdenSync | undefined;
   if (!o) return { error: 'Pedido no encontrado.' };
   if (!o.dropi_order_id) return { error: 'Este pedido aún no se ha despachado.' };
-  return sincronizarDropi(o);
+  // Desde el botón "Actualizar": la consulta a Dropi (con su respuesta) queda en el registro del pedido.
+  avisado.delete(o.id);
+  const { conPedido } = await import('./trazabilidad.js');
+  return conPedido(storeId, o.id, () => sincronizarDropi(o));
 }
 
 /** Aviso de la guía al chat del pedido y, si el cliente dejó otro celular, plantilla a ese número. */
