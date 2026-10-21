@@ -1579,6 +1579,27 @@ api.post('/orders/:rowId/guia-documento', requireAuth, requireStore, requireOwne
   db.prepare('UPDATE orders SET guia_url = ?, guia_img = ? WHERE id = ?').run(url, img, o.id);
   res.json({ ok: true, guiaUrl: url, guiaImg: img, convertida: mime === 'application/pdf' ? !!img : true });
 });
+// Guía puesta a mano (p.ej. Dropi la generó pero no llegó por la API): se guarda, el
+// pedido pasa a "Guía generada" y se le avisa al cliente por WhatsApp.
+api.post('/orders/:rowId/guia-manual', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT id, estado, guia_avisada, transportadora FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; estado: string; guia_avisada: number; transportadora: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const guia = String(req.body?.guia || '').trim().replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9-]{5,40}$/.test(guia)) return res.status(400).json({ error: 'Escribe un número de guía válido (solo letras, números o guiones).' });
+  const transp = String(req.body?.transportadora || '').trim().slice(0, 60);
+  db.prepare("UPDATE orders SET guia = ?, transportadora = CASE WHEN ? != '' THEN ? ELSE transportadora END, estado = CASE WHEN estado IN ('Nuevo','Confirmado','Despachado','') THEN 'Guía generada' ELSE estado END WHERE id = ?")
+    .run(guia, transp, transp, o.id);
+  const { trazar } = await import('./trazabilidad.js');
+  trazar(sid, o.id, { etapa: 'despacho', nivel: 'ok', titulo: `Guía ${guia} puesta a mano`, detalle: `Por ${req.user!.nombre || req.user!.email}.` });
+  let aviso = '';
+  if (req.body?.avisar !== false) {
+    const { avisarGuia } = await import('./avisoGuia.js');
+    const r = await avisarGuia(sid, o.id, { conArchivo: true });
+    aviso = r.chat === 'enviado' || r.chat === 'plantilla' || r.contacto === 'plantilla' ? 'Se le envió la guía al cliente por WhatsApp.' : (r.detalle.join(' ') || 'No se pudo avisar al cliente.');
+  }
+  res.json({ ok: true, guia, aviso });
+});
 // Envía la guía al cliente: al chat (imagen/PDF/texto) y, si dejó otro celular de
 // contacto, a ese número con la plantilla aprobada (ver avisoGuia.ts).
 api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, res) => {

@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { confirmar } from './dialogs';
-import { apiShopifyReenviarConfirmacion } from '../lib/api';
+import { apiShopifyReenviarConfirmacion, apiGuiaManual } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
 
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
@@ -194,6 +194,34 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
 }
 
 /** Pasos del envío para el pedido ya despachado. */
+/** Plan B: pegar a mano el número de guía (p.ej. Dropi la generó pero no la devolvió por la API). */
+function GuiaManual({ df, sel, destacar }: { df: DealFlowState; sel: DecoratedOrder; destacar: boolean }) {
+  const [abierto, setAbierto] = useState(destacar);
+  const [guia, setGuia] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState('');
+  const guardar = async () => {
+    if (!sel.rowId || !guia.trim()) return;
+    setEnviando(true); setMsg('');
+    const r = await apiGuiaManual(String(sel.rowId), guia.trim());
+    setEnviando(false);
+    if (r.error || !r.data) { setMsg(r.error || 'No se pudo guardar.'); return; }
+    setMsg(`✓ Guía ${r.data.guia} guardada. ${r.data.aviso}`);
+    await df.refrescarPedidos();
+  };
+  if (!abierto) return <button onClick={() => setAbierto(true)} style={{ marginTop: 10, background: 'none', border: 'none', padding: 0, color: 'var(--df-text-muted)', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>¿Ya tienes el número de guía? Ponlo a mano</button>;
+  return (
+    <div style={{ marginTop: 12, background: destacar ? 'var(--df-warning-subtle)' : 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px' }}>
+      <div style={{ fontSize: 12.5, lineHeight: 1.45, marginBottom: 8 }}>{destacar ? <><b>Dropi dice que la guía ya está generada</b>, pero no nos llegó el número. Cópialo de Dropi y pégalo aquí: se guarda y se le envía al cliente por WhatsApp.</> : 'Pega el número de guía que te dio Dropi: se guarda y se le envía al cliente por WhatsApp.'}</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input value={guia} onChange={(e) => setGuia(e.target.value)} placeholder="Número de guía" style={{ flex: 1, minWidth: 160, border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
+        <button onClick={() => void guardar()} disabled={enviando || !guia.trim()} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', opacity: enviando || !guia.trim() ? 0.6 : 1 }}>{enviando ? 'Guardando…' : 'Guardar y enviar al cliente'}</button>
+      </div>
+      {msg && <div style={{ marginTop: 7, fontSize: 12, color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger)' }}>{msg}</div>}
+    </div>
+  );
+}
+
 function PasosEnvio({ sel }: { sel: DecoratedOrder }) {
   const hecho = [true, !!sel.hasGuia, ['En tránsito', 'En reparto', 'Novedad', 'Entregado'].includes(sel.estado) && !!sel.hasGuia, sel.estado === 'Entregado'];
   const nombres = [sel.despachoProveedor === 'dropi' ? 'Orden creada' : 'Remisión creada', 'Guía generada', 'En camino', 'Entregado'];
@@ -392,6 +420,7 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
         {!dropiCreado && !!sel.effiRemision && !sel.hasGuia && df.effiApi.conectado && !sel.effiGuiaCreada && <GuiaEffiForm df={df} sel={sel} />}
         {!sel.hasGuia && sel.effiGuiaCreada && <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--df-text-muted)', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px' }}>🚚 Guía creada en Effi · esperando que la transportadora asigne el número (llega solo).</div>}
         {sel.hasGuia && <GuiaAcciones df={df} sel={sel} />}
+        {dropiCreado && !sel.hasGuia && <GuiaManual df={df} sel={sel} destacar={/guia|generad/i.test(sel.estadoWoo || '')} />}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--df-border)' }}>
           <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', flex: 1 }}>Se actualiza solo. Cuando salga la guía, se la avisamos al cliente por WhatsApp.</span>
           <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Volver a despachar</button>
