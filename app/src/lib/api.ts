@@ -336,6 +336,8 @@ export interface ApiOrder {
   items: { qty: number; nombre: string; precio: number }[];
   novedad?: NovedadPedido | null;
   effiDevolucion?: string;
+  confirmacion?: string;
+  shopifyEnviado?: boolean;
 }
 /** Novedad de envío reportada por la transportadora (Effi). */
 export interface PropuestaNovedad { solucion: 'ofrecer' | 'redireccionar' | 'devolver'; fecha?: string; recibe?: string; direccion?: string; telefono?: string; nota?: string; origen?: 'bot' | 'panel' }
@@ -782,3 +784,8 @@ export const apiAppsConectadas = () => req<{ apps: AppConectada[]; waba: string 
 export interface ResultadoSyncDropi { tipo: 'SIMPLE' | 'VARIABLE'; nombreDropi: string; vinculadas: number; creadas: number; conStock: number; sinDropi: string[]; total: number }
 export const apiSincronizarDropi = (productId: string, dropiId: string) => req<ResultadoSyncDropi>(`/api/products/${encodeURIComponent(productId)}/dropi/sincronizar`, 'POST', { dropiId });
 export const apiSoltarVariantesDropi = (productId: string) => req<{ ok: true }>(`/api/products/${encodeURIComponent(productId)}/dropi/soltar-variantes`, 'POST');
+
+export interface CfgPedidosShopify { confirmar: boolean; autoDespacho: boolean; modoPrueba: boolean }
+export const apiShopifyPedidosCfg = () => req<CfgPedidosShopify>('/api/shopify/pedidos-config', 'GET');
+export const apiShopifyPedidosGuardar = (c: Partial<CfgPedidosShopify>) => req<CfgPedidosShopify>('/api/shopify/pedidos-config', 'POST', c);
+export const apiShopifyReenviarConfirmacion = (rowId: string) => req<{ ok: true }>(`/api/orders/${encodeURIComponent(rowId)}/shopify/confirmacion`, 'POST');

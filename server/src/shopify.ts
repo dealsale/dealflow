@@ -102,11 +102,11 @@ async function resolverToken(cred: ShopifyCred): Promise<{ ok: true; token: stri
 interface GraphResp<T> { data?: T; errors?: { message: string }[] }
 
 /** Llama al Admin API (GraphQL) de una tienda Shopify. */
-async function shopifyGQL<T>(cred: ShopifyCred, query: string, variables?: Record<string, unknown>): Promise<{ ok: boolean; data?: T; error?: string; http: number }> {
+export async function shopifyGQL<T>(cred: ShopifyCred, query: string, variables?: Record<string, unknown>): Promise<{ ok: boolean; data?: T; error?: string; http: number }> {
   const tk = await resolverToken(cred);
   if (!tk.ok) return { ok: false, error: tk.error, http: tk.http };
   try {
-    const res = await fetch(`https://${cred.shop}/admin/api/${API_VERSION}/graphql.json`, {
+    const res = await fetch(`${process.env.SHOPIFY_TEST_BASE || `https://${cred.shop}`}/admin/api/${API_VERSION}/graphql.json`, {
       method: 'POST',
       headers: { 'X-Shopify-Access-Token': tk.token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, variables: variables || {} }),
