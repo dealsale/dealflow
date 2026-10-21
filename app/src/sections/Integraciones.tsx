@@ -91,9 +91,9 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
     >
       {df.shopifyAppDisponible && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-          {conectada && df.shopifyVia === 'app' ? (
+          {conectada ? (
             <>
-              <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', lineHeight: 1.5 }}>✓ Conectada con la <b>app DealFlow</b> instalada en tu tienda. Los pedidos nuevos de Shopify llegan a DealFlow.</div>
+              <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', lineHeight: 1.5 }}>✓ Conectada{df.shopifyVia === 'app' ? <> con la <b>app DealFlow</b> instalada en tu tienda</> : ''}. Los pedidos nuevos de Shopify llegan a DealFlow.</div>
               <PedidosShopifyCfg alTraer={() => void df.recargarPedidos?.()} />
             </>
           ) : (

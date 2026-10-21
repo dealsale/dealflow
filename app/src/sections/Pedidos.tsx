@@ -17,6 +17,7 @@ const celda: CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'e
 
 export function Pedidos({ df }: { df: DealFlowState }) {
   const fp = useFiltrosPedidos(df.allOrders, df.orderQuery);
+  const [trayendo, setTrayendo] = useState(false);
   const [abierto, setAbierto] = useState(false);
   const n = fp.activos.length;
   // Ancho real del área de la tabla (no de la ventana): cambia con el menú lateral abierto o cerrado.
@@ -51,6 +52,16 @@ export function Pedidos({ df }: { df: DealFlowState }) {
         <button onClick={() => df.abrirCrearPedido()} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           ＋ Crear pedido
         </button>
+        {df.shopifyConectado && (
+          <button
+            onClick={() => { setTrayendo(true); void df.traerPedidosShopify(() => setTrayendo(false)); }}
+            disabled={trayendo}
+            title="Trae de Shopify los pedidos de la última semana que aún no estén en DealFlow (también se revisa solo cada 5 minutos)"
+            style={{ background: 'var(--df-surface)', color: '#5E8E3E', border: '1px solid #5E8E3E', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: trayendo ? 0.6 : 1 }}
+          >
+            {trayendo ? 'Revisando Shopify…' : '🛍️ Traer pedidos de Shopify'}
+          </button>
+        )}
         <button
           onClick={() => df.exportarPedidos(fp.filtrados.map((o) => o.id))}
           title="Descarga en Excel (CSV) los pedidos que estás viendo con los filtros actuales"
