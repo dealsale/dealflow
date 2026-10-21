@@ -2732,6 +2732,7 @@ export function useDealFlowState() {
 
   // Shopify (Admin API): si la tienda tiene Shopify conectado.
   const [shopify, setShopify] = useState<{ conectado: boolean; shop: string; nombre: string; via?: string; appDisponible?: boolean }>({ conectado: false, shop: '', nombre: '' });
+  async function recargarPedidos() { const { data } = await apiOrders(); if (data) setOrders(mapApiOrders(data.orders)); }
   async function cargarShopify() { const { data } = await apiShopifyEstado(); if (data) setShopify(data); }
   /** App de Shopify: abre la instalación en Shopify (al volver queda vinculada sola). */
   function instalarShopifyApp(shop: string, cb?: (ok: boolean) => void) {
@@ -4022,6 +4023,7 @@ export function useDealFlowState() {
     instalarShopifyApp,
     vincularShopifyCodigo,
     cargarShopify,
+    recargarPedidos,
     conectarShopify,
     desconectarShopify,
     publicarEnShopify,

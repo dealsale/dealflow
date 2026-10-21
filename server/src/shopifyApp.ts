@@ -130,7 +130,8 @@ async function gql<T>(shop: string, token: string, query: string, variables?: Re
 }
 
 /** Suscribe los webhooks que usa DealFlow (si ya existían, Shopify lo dice y se ignora). */
-async function suscribirWebhooks(shop: string, token: string): Promise<void> {
+async function suscribirWebhooks(shop: string, token: string): Promise<string> {
+  let fallo = '';
   const q = `mutation($topic: WebhookSubscriptionTopic!, $url: URL!) {
     webhookSubscriptionCreate(topic: $topic, webhookSubscription: { callbackUrl: $url, format: JSON }) { userErrors { message } }
   }`;
@@ -138,8 +139,18 @@ async function suscribirWebhooks(shop: string, token: string): Promise<void> {
     const r = await gql<{ webhookSubscriptionCreate: { userErrors: { message: string }[] } }>(shop, token, q, { topic, url: URL_WEBHOOK });
     const errs = r.data?.webhookSubscriptionCreate.userErrors || [];
     const repetido = errs.some((e) => /already|taken|ya /i.test(e.message));
-    if (r.error || (errs.length && !repetido)) console.warn(`[shopify-app] webhook ${topic} en ${shop}:`, r.error || errs.map((e) => e.message).join(' · '));
+    if (r.error || (errs.length && !repetido)) {
+      const m = r.error || errs.map((e) => e.message).join(' · ');
+      console.warn(`[shopify-app] webhook ${topic} en ${shop}:`, m);
+      if (topic === 'ORDERS_CREATE') fallo = m;
+    }
   }
+  return fallo;
+}
+
+/** Vuelve a suscribir orders/create (si Shopify lo rechazó, p.ej. por falta de acceso a datos protegidos). Devuelve el error o ''. */
+export async function asegurarWebhookPedidos(shop: string, tokenPlano: string): Promise<string> {
+  return suscribirWebhooks(shop, tokenPlano);
 }
 
 const nuevoCodigo = () => randomBytes(4).toString('hex').toUpperCase().slice(0, 6);

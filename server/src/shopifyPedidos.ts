@@ -65,7 +65,7 @@ function varianteDeLinea(storeId: string, li: Fila): { productId: string; varian
 }
 
 /** Crea en DealFlow el pedido que llegó de Shopify (orders/create). Nunca lanza. */
-export async function importarPedido(storeId: string, shop: string, o: Fila): Promise<string | null> {
+export async function importarPedido(storeId: string, shop: string, o: Fila, confirmar = true): Promise<string | null> {
   try {
     const sid = txt(o.id);
     if (!sid) return null;
@@ -96,7 +96,8 @@ export async function importarPedido(storeId: string, shop: string, o: Fila): Pr
     registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} llegó de Shopify ${txt(o.name)} (${cliente}).`);
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido de Shopify DF-${numero} 🛍️`, `${cliente} · ${pesos(total)}`, { url: '/' })).catch(() => {});
     if (!tel) trazar(storeId, oid, { etapa: 'pedido', nivel: 'warn', titulo: 'El pedido de Shopify llegó sin teléfono', detalle: 'No se puede confirmar por WhatsApp. ¿Falta aprobar el acceso a datos de clientes en Shopify, o el checkout no pide el teléfono?' });
-    else if (cfgPedidosShopify(storeId).confirmar) await enviarConfirmacion(storeId, oid);
+    else if (confirmar && cfgPedidosShopify(storeId).confirmar) await enviarConfirmacion(storeId, oid);
+    else if (!confirmar) trazar(storeId, oid, { etapa: 'pedido', nivel: 'info', titulo: 'Pedido antiguo: no se envió confirmación automática', detalle: 'Se trajo de Shopify más de 24 h después de creado. Puedes enviar la confirmación con el botón del pedido.' });
     return oid;
   } catch (e) {
     console.error('[shopify] importando pedido', e);
@@ -266,7 +267,98 @@ export async function marcarEnviadoShopify(storeId: string, orderId: string): Pr
 }
 
 /** Cada 5 min: los pedidos de Shopify que ya tienen guía se marcan enviados allá. */
+// ── Respaldo del webhook: traer pedidos recientes por la API ────────────────
+// Si orders/create no llega (webhook rechazado, caído o tienda recién conectada),
+// cada 5 min se consultan los pedidos recientes y se importan los que falten.
+
+const Q_PEDIDOS = (conCliente: boolean) => `query($q: String!) {
+  orders(first: 25, sortKey: CREATED_AT, reverse: true, query: $q) { nodes {
+    id legacyResourceId name createdAt note displayFinancialStatus
+    totalPriceSet { shopMoney { amount } }
+    shippingLines(first: 5) { nodes { originalPriceSet { shopMoney { amount } } } }
+    ${conCliente ? `phone
+    shippingAddress { name address1 address2 city province phone }
+    billingAddress { name phone }
+    customer { firstName lastName phone }` : ''}
+    lineItems(first: 50) { nodes { title variantTitle quantity sku originalUnitPriceSet { shopMoney { amount } } } }
+  } } }`;
+
+type Nodo = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+/** Pedido GraphQL → misma forma del webhook (REST) que entiende importarPedido. */
+function aFormaWebhook(n: Nodo): Fila {
+  const dir = (a: Nodo | null | undefined) => (a ? { ...a } : undefined);
+  return {
+    id: n.legacyResourceId, admin_graphql_api_id: n.id, name: n.name, note: n.note, created_at: n.createdAt,
+    financial_status: String(n.displayFinancialStatus || '').toLowerCase(),
+    total_price: n.totalPriceSet?.shopMoney?.amount, phone: n.phone,
+    shipping_address: dir(n.shippingAddress), billing_address: dir(n.billingAddress),
+    customer: n.customer ? { first_name: n.customer.firstName, last_name: n.customer.lastName, phone: n.customer.phone } : undefined,
+    shipping_lines: (n.shippingLines?.nodes || []).map((x: Nodo) => ({ price: x.originalPriceSet?.shopMoney?.amount })),
+    line_items: (n.lineItems?.nodes || []).map((x: Nodo) => ({ title: x.title, variant_title: x.variantTitle, quantity: x.quantity, sku: x.sku, price: x.originalUnitPriceSet?.shopMoney?.amount })),
+  };
+}
+
+const avisos = new Map<string, string>(); // no repetir el mismo aviso en el registro de la tienda
+function avisarUnaVez(storeId: string, clave: string, msg: string): void {
+  if (avisos.get(storeId + clave) === msg) return;
+  avisos.set(storeId + clave, msg);
+  registrarLog(storeId, 'warn', 'shopify', msg);
+}
+
+/** Trae los pedidos de Shopify creados desde que se conectó la tienda (o la última semana, desde el botón) que aún no estén en DealFlow. */
+export async function traerPedidosRecientes(storeId: string, ultimaSemana = false): Promise<{ nuevos: number; revisados: number; aviso: string } | { error: string }> {
+  const { credShopify, shopifyGQL } = await import('./shopify.js');
+  const cred = credShopify(storeId);
+  if (!cred) return { error: 'Conecta Shopify primero.' };
+  const inst = db.prepare('SELECT instalada_at FROM shopify_tiendas WHERE shop = ?').get(cred.shop) as { instalada_at: string } | undefined;
+  const desde = new Date(Math.max(Date.now() - 7 * 86400_000, !ultimaSemana && inst ? Date.parse(inst.instalada_at.replace(' ', 'T') + 'Z') - 3600_000 : 0));
+  const q = `created_at:>='${desde.toISOString()}'`;
+  let aviso = '';
+  let r = await shopifyGQL<{ orders: { nodes: Nodo[] } }>(cred, Q_PEDIDOS(true), { q });
+  if (!r.ok) {
+    // Sin aprobación de datos protegidos, Shopify niega nombre/teléfono/dirección: se trae el pedido sin ellos.
+    const r2 = await shopifyGQL<{ orders: { nodes: Nodo[] } }>(cred, Q_PEDIDOS(false), { q });
+    if (!r2.ok) return { error: `Shopify no dejó leer los pedidos: ${r.error || r2.error}` };
+    aviso = 'Shopify no entrega nombre, teléfono ni dirección del comprador: falta que Shopify apruebe el "Acceso a datos de cliente protegidos" de la app DealFlow. Sin teléfono no se puede confirmar por WhatsApp.';
+    avisarUnaVez(storeId, 'datos', aviso);
+    r = r2;
+  }
+  const nodos = r.data?.orders.nodes || [];
+  let nuevos = 0;
+  for (const n of nodos) {
+    const ya = db.prepare('SELECT 1 FROM orders WHERE store_id = ? AND shopify_id = ?').get(storeId, String(n.legacyResourceId));
+    if (ya) continue;
+    const reciente = Date.now() - Date.parse(n.createdAt) < 24 * 3600_000;
+    if (await importarPedido(storeId, cred.shop, aFormaWebhook(n), reciente)) nuevos++;
+  }
+  if (nuevos) registrarLog(storeId, 'info', 'shopify', `${nuevos} pedido(s) de Shopify traídos por la API (el aviso automático de Shopify no había llegado).`);
+  return { nuevos, revisados: nodos.length, aviso };
+}
+
+/** Revisa que el webhook de pedidos esté suscrito; si Shopify lo rechaza, lo deja en el registro de la tienda. */
+async function revisarWebhook(storeId: string, shop: string): Promise<void> {
+  const { credShopify } = await import('./shopify.js');
+  const cred = credShopify(storeId);
+  if (!cred?.token) return;
+  const { asegurarWebhookPedidos } = await import('./shopifyApp.js');
+  const err = await asegurarWebhookPedidos(shop, cred.token);
+  if (err) avisarUnaVez(storeId, 'webhook', `Shopify no aceptó el aviso automático de pedidos nuevos (${err.slice(0, 200)}). Mientras tanto DealFlow revisa los pedidos cada 5 minutos.`);
+}
+
+let vueltasPedidos = 0;
 export function iniciarEnviosShopify(): void {
+  const traer = async () => {
+    const tiendas = db.prepare("SELECT store_id, shop FROM shopify_tiendas WHERE store_id IS NOT NULL AND store_id != '' AND desinstalada_at IS NULL").all() as { store_id: string; shop: string }[];
+    for (const t of tiendas) {
+      try {
+        if (vueltasPedidos % 12 === 0) await revisarWebhook(t.store_id, t.shop); // cada hora
+        await traerPedidosRecientes(t.store_id);
+      } catch (e) { console.error('[shopify] trayendo pedidos', e); }
+    }
+    vueltasPedidos++;
+  };
+  setTimeout(() => void traer(), 45_000);
+  setInterval(() => void traer(), 5 * 60_000);
   const vuelta = async () => {
     const pend = db.prepare("SELECT id, store_id FROM orders WHERE origen = 'shopify' AND shopify_gid != '' AND COALESCE(guia,'') != '' AND shopify_fulfilled = 0 AND created_at > datetime('now','-30 days') LIMIT 50").all() as { id: string; store_id: string }[];
     for (const p of pend) { try { await marcarEnviadoShopify(p.store_id, p.id); } catch (e) { console.error('[shopify] envío', e); } }
