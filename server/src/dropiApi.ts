@@ -335,8 +335,23 @@ function buscar(o: unknown, llaves: string[], nivel = 0): string {
   return '';
 }
 
+/** Último recurso: cualquier campo cuyo nombre hable de guía/tracking y traiga un número de guía (6+ caracteres, sin espacios ni URL). */
+function guiaPorPatron(o: unknown, nivel = 0): string {
+  if (!o || typeof o !== 'object' || nivel > 3) return '';
+  for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+    if (v != null && typeof v !== 'object' && /guia|guide|tracking/i.test(k) && !/url|pdf|status|estado|fecha|date|_at$|id$/i.test(k)) {
+      const t = String(v).trim();
+      if (/^[A-Za-z0-9-]{6,40}$/.test(t) && /\d{4}/.test(t)) return t;
+    }
+  }
+  for (const v of Object.values(o as Record<string, unknown>)) {
+    if (v && typeof v === 'object') { const x = guiaPorPatron(Array.isArray(v) ? v[0] : v, nivel + 1); if (x) return x; }
+  }
+  return '';
+}
+
 /** Estado, guía, transportadora asignada y PDF de una orden de Dropi (venga como venga la respuesta). */
-export async function estadoOrden(cred: DropiCred, id: string): Promise<{ estado: string; guia: string; transportadora: string; guiaUrl: string; llaves: string[] } | { error: string }> {
+export async function estadoOrden(cred: DropiCred, id: string): Promise<{ estado: string; guia: string; transportadora: string; guiaUrl: string; llaves: string[]; cruda: Record<string, unknown> } | { error: string }> {
   try {
     const r = await dropi<Record<string, unknown>>(cred, 'GET', `/orders/myorders/${encodeURIComponent(id)}`);
     if (!r.ok) return { error: `Dropi respondió ${r.http || 'sin conexión'} al consultar la orden ${id}: ${r.body.message || 'sin detalle'}` };
@@ -345,14 +360,15 @@ export async function estadoOrden(cred: DropiCred, id: string): Promise<{ estado
     const cand = b.objects ?? b.data ?? b;
     const o = (Array.isArray(cand) ? cand[0] : cand) as Record<string, unknown> | undefined;
     if (!o || typeof o !== 'object') return { error: `Dropi no devolvió la orden ${id}.` };
-    const guiaS3 = buscar(o, ['guia_urls3', 'guia_url', 'guide_url', 'url_guia', 'shipping_guide_url']);
+    const guiaS3 = buscar(o, ['guia_urls3', 'guia_url', 'guide_url', 'url_guia', 'shipping_guide_url', 'sticker', 'sticker_url', 'label_url']);
     const dc = (o.distributionCompany || o.distribution_company || o.transportadora) as unknown;
     return {
       estado: buscar(o, ['status', 'estado', 'order_status', 'status_name']),
-      guia: buscar(o, ['tracking_number', 'shipping_guide', 'guide_number', 'numero_guia', 'guia', 'guide', 'tracking']),
+      guia: buscar(o, ['shipping_guide', 'tracking_number', 'guide_number', 'numero_guia', 'guia', 'guide', 'tracking', 'tracking_code', 'shipping_guide_number', 'guia_transportadora', 'numero_guia_transportadora']) || guiaPorPatron(o),
       transportadora: (typeof dc === 'object' && dc ? buscar(dc, ['name', 'nombre']) : String(dc || '')) || buscar(o, ['distribution_company_name', 'carrier']),
       guiaUrl: guiaS3 ? (guiaS3.startsWith('http') ? guiaS3 : PDF_BASE + guiaS3.replace(/^\/+/, '')) : '',
       llaves: Object.keys(o).slice(0, 40),
+      cruda: o,
     };
   } catch {
     return { error: 'No pudimos consultar la orden en Dropi.' };
