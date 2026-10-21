@@ -19,6 +19,7 @@ interface OrdenSync {
 const COLS = 'id, store_id, numero, tel, guia, estado, dropi_order_id, guia_url, guia_avisada';
 
 let corriendo = false;
+const avisado = new Map<string, string>(); // orderId → último motivo registrado (no repetir)
 
 /** Un ciclo de sincronización de despachos para TODAS las tiendas. */
 export async function sincronizarDespachos(): Promise<void> {
@@ -60,6 +61,14 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
     if (!c) return { error: 'Dropi API sin conectar.' };
     const rr = await estadoOrden(c, o.dropi_order_id);
     r = 'error' in rr ? rr : { estado: rr.estado, guia: rr.guia, guiaUrl: rr.guiaUrl };
+    // Rastro para el dueño (una vez por motivo): por qué no avanza este pedido.
+    const motivo = 'error' in rr ? `error:${rr.error}` : (!rr.guia ? `sin-guia:${rr.estado}` : '');
+    if (motivo && avisado.get(o.id) !== motivo) {
+      avisado.set(o.id, motivo);
+      const { trazar } = await import('./trazabilidad.js');
+      if ('error' in rr) trazar(o.store_id, o.id, { etapa: 'despacho', nivel: 'warn', titulo: 'No se pudo leer el pedido en Dropi', detalle: rr.error });
+      else trazar(o.store_id, o.id, { etapa: 'despacho', nivel: 'info', titulo: `Dropi: ${rr.estado || 'sin estado'} · todavía sin guía`, detalle: rr.estado ? 'La guía aparece cuando Dropi (o el proveedor) procesa la orden. Si sigue así, revisa la orden en Dropi: puede estar pendiente de confirmar, sin saldo o sin stock.' : 'Dropi respondió sin estado.', datos: { orden: o.dropi_order_id, llavesRespuesta: rr.llaves } });
+    }
   } catch { return { error: 'No pudimos consultar el pedido en Dropi.' }; }
   if ('error' in r) return { error: r.error };
 
