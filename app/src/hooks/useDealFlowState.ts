@@ -87,7 +87,7 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiCambiarTienda,
   apiCrearTienda,
   apiEliminarMiTienda,
-  apiShopifyEstado,
+  apiShopifyEstado, apiShopifyTraerPedidos,
   apiShopifyAppInstalar,
   apiShopifyAppVincular,
   apiShopifyConectar,
@@ -2732,6 +2732,14 @@ export function useDealFlowState() {
 
   // Shopify (Admin API): si la tienda tiene Shopify conectado.
   const [shopify, setShopify] = useState<{ conectado: boolean; shop: string; nombre: string; via?: string; appDisponible?: boolean }>({ conectado: false, shop: '', nombre: '' });
+  async function traerPedidosShopify(cb?: () => void) {
+    const r = await apiShopifyTraerPedidos();
+    cb?.();
+    if (r.error || !r.data) { toast(r.error || 'No se pudo consultar Shopify.', 'error', 7000); return; }
+    const d = r.data;
+    if (d.nuevos) await recargarPedidos();
+    toast((d.nuevos ? `✓ ${d.nuevos} pedido(s) de Shopify traído(s).` : 'No hay pedidos nuevos en Shopify.') + (d.aviso ? ` ⚠️ ${d.aviso}` : ''), d.aviso ? 'info' : 'ok', d.aviso ? 10000 : 4000);
+  }
   async function recargarPedidos() { const { data } = await apiOrders(); if (data) setOrders(mapApiOrders(data.orders)); }
   async function cargarShopify() { const { data } = await apiShopifyEstado(); if (data) setShopify(data); }
   /** App de Shopify: abre la instalación en Shopify (al volver queda vinculada sola). */
@@ -4024,6 +4032,7 @@ export function useDealFlowState() {
     vincularShopifyCodigo,
     cargarShopify,
     recargarPedidos,
+    traerPedidosShopify,
     conectarShopify,
     desconectarShopify,
     publicarEnShopify,
