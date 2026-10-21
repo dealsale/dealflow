@@ -1,0 +1,27 @@
+# Configuración de la app pública "DealFlow" en Shopify.
+# Se sube con Shopify CLI:  shopify app deploy   (ver LEEME.md)
+client_id = "fa83d7f952923617b0e439a802bc132c"
+name = "DealFlow"
+application_url = "https://app.dealflow.sbs/shopify/app"
+embedded = true
+
+[access_scopes]
+scopes = "read_products,write_products,read_inventory,read_orders,write_orders,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
+
+[auth]
+redirect_urls = [ "https://app.dealflow.sbs/api/shopify/oauth/callback" ]
+
+[webhooks]
+api_version = "2026-10"
+
+  # Los 3 webhooks de privacidad que Shopify exige (verificados con HMAC en DealFlow).
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "https://app.dealflow.sbs/webhooks/shopify"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "https://app.dealflow.sbs/webhooks/shopify"
+
+[pos]
+embedded = false
