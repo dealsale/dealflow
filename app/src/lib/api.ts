@@ -528,7 +528,7 @@ export const apiEffiApiListas = () => req<EffiListas>('/api/effi-api/listas', 'G
 export const apiEffiApiConfig = (cfg: Partial<EffiApiEstado>) => req<{ ok: true; listo: boolean }>('/api/effi-api/config', 'POST', cfg);
 export const apiEffiApiSecreto = (secreto: string) => req<{ ok: true; secretos: number }>('/api/effi-api/webhook-secreto', 'POST', { secreto });
 export const apiEffiApiDesconectar = () => req<{ ok: true }>('/api/effi-api/desconectar', 'POST');
-export const apiEffiApiSyncArticulos = () => req<{ total: number; soloVinculados: boolean; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[]; productosEffi: number; sinProveedor: number; marcados?: number }>('/api/effi-api/articulos/sync', 'POST');
+export const apiEffiApiSyncArticulos = () => req<{ total: number; soloVinculados: boolean; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[]; productosEffi: number; sinProveedor: number; marcados?: number; stockActualizado?: number }>('/api/effi-api/articulos/sync', 'POST');
 export interface EffiVarianteDF { variantId: string; productId: string; producto: string; proveedor: string; nombre: string; effiId: string; auto?: boolean }
 export const apiEffiApiArticulos = () => req<{ articulos: EffiArticulo[]; variantes: EffiVarianteDF[]; nombres: Record<string, string> }>('/api/effi-api/articulos', 'GET');
 export const apiEffiApiBuscar = (q: string) => req<{ articulos: EffiArticulo[] }>(`/api/effi-api/articulos/buscar?q=${encodeURIComponent(q)}`, 'GET');

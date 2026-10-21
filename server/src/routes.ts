@@ -1286,6 +1286,7 @@ api.get('/dropi/producto/:id', requireAuth, requireStore, async (req, res) => {
 // Cotiza un pedido en Dropi: resuelve destino, arma los productos y devuelve las
 // transportadoras con su precio para que el operador elija.
 api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  try {
   const { resolverProductosDropi, credOrDie } = dropiHelpers;
   const sid = req.user!.storeId!;
   const dropi = await import('./dropiApi.js');
@@ -1302,6 +1303,10 @@ api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requireOwner
   const cot = await dropi.cotizar(c, destino.ciudad, prods.cotProductos, monto, conRecaudo);
   if ('error' in cot) return res.status(400).json({ error: cot.error });
   res.json({ ciudad: destino.ciudad.name, ...cot });
+  } catch (e) {
+    console.error('[dropi] cotizar', e);
+    res.status(500).json({ error: `No pudimos cotizar en Dropi: ${e instanceof Error ? e.message : e}` });
+  }
 });
 
 // Crea el pedido en Dropi con la transportadora elegida (o sin ella si auto).

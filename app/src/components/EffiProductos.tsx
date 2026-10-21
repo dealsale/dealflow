@@ -127,7 +127,7 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
     setCargando(false);
     if (r.error || !r.data) { onMsg(r.error || 'No se pudo sincronizar.'); return; }
     const d = r.data;
-    onMsg(`✓ ${d.total} artículos ${d.soloVinculados ? 'vinculados a tu e-commerce' : 'de venta'} leídos de Effi · ${d.vinculadas} variantes de Effi vinculadas${d.marcados ? ` · ${d.marcados} productos encontrados en Effi y marcados como de Effi` : ''}${d.sinVinculo.length ? ` · ${d.sinVinculo.length} por vincular` : ''}${d.sinProveedor ? ` · ${d.sinProveedor} productos sin definir si son de Effi o Dropi` : ''}.`);
+    onMsg(`✓ ${d.total} artículos ${d.soloVinculados ? 'vinculados a tu e-commerce' : 'de venta'} leídos de Effi · ${d.vinculadas} variantes de Effi vinculadas${d.marcados ? ` · ${d.marcados} productos encontrados en Effi y marcados como de Effi` : ''}${d.sinVinculo.length ? ` · ${d.sinVinculo.length} por vincular` : ''}${d.sinProveedor ? ` · ${d.sinProveedor} productos sin definir si son de Effi o Dropi` : ''}${d.stockActualizado ? ` · stock actualizado en ${d.stockActualizado} variantes` : ''}.`);
     await cargar();
   };
   const vincular = async (v: EffiVarianteDF, a: EffiArticulo) => {
@@ -157,7 +157,7 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
   return (
     <div>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5, margin: '0 0 12px' }}>
-        <b>Se vinculan solos:</b> al crear o editar un producto (y cada 30 min) DealFlow lo busca en Effi y une cada talla/color con su artículo por el <b>nombre y la variante</b>, aunque las palabras estén en otro orden. Marca cada producto como <b>Effi</b> o <b>Dropi</b> (si no usas Dropi, los que aparezcan en Effi se marcan solos). Lo que no case lo eliges aquí mismo.
+        <b>Se vinculan solos:</b> al crear o editar un producto (y cada 30 min) DealFlow lo busca en Effi y une cada talla/color con su artículo por el <b>nombre y la variante</b>, aunque las palabras estén en otro orden. Marca cada producto como <b>Effi</b> o <b>Dropi</b> (si no usas Dropi, los que aparezcan en Effi se marcan solos). Lo que no case lo eliges aquí mismo. <b>El stock se trae de Effi cada 30 min</b> (o al tocar Sincronizar) y es el que usa el asistente.
       </p>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
         <button onClick={sincronizar} disabled={cargando} style={{ ...btn, opacity: cargando ? 0.7 : 1 }}>↻ Sincronizar productos de Effi</button>
