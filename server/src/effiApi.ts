@@ -398,6 +398,11 @@ async function articuloPorId(storeId: string, apiKey: string, id: string): Promi
 
 // Convenio dropshipping de cada artículo (aprendido de las ventas anteriores en Effi
 // o de cada remisión que DealFlow crea bien). Effi no lo informa en el artículo.
+// Convenio elegido a mano para un producto: '' = automático, 'propio' = mercancía propia
+// (sin convenio), o el código del convenio del proveedor.
+try { db.exec("ALTER TABLE products ADD COLUMN effi_convenio TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+const convenioDeProducto = (productId: string) => String((db.prepare('SELECT effi_convenio FROM products WHERE id = ?').get(productId) as { effi_convenio: string } | undefined)?.effi_convenio || '');
+
 db.exec(`CREATE TABLE IF NOT EXISTS effi_convenio_articulo (
   store_id TEXT NOT NULL, articulo TEXT NOT NULL, convenio TEXT NOT NULL,
   actualizado TEXT NOT NULL DEFAULT (datetime('now')),
@@ -780,6 +785,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
   const conceptos: { articulo: number; descripcion: string; cantidad: number; precio: number }[] = [];
   const sinVinculo: string[] = [];
   const esDrop: boolean[] = [];
+  const convManual: string[] = []; // convenio elegido a mano en el producto ('' | 'propio' | código)
   const enVivo = new Set<string>(); // artículos ya consultados en vivo en este pedido
   for (const it of items) {
     const emp = varianteDeItem(it, todas);
@@ -815,7 +821,10 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
       const vivo = await articuloPorId(storeId, c.apiKey, a.id);
       if (vivo) a = { ...a, drop: vivo.drop };
     }
-    esDrop.push(a.drop === 1);
+    const cm = v?.productId ? convenioDeProducto(v.productId) : '';
+    convManual.push(cm);
+    // El convenio puesto a mano manda: con código es de proveedor; "propio" es mercancía tuya.
+    esDrop.push(cm === 'propio' ? false : cm ? true : a.drop === 1);
     lineas.push({ item: `${it.qty}× ${it.nombre}`, articulo: `${a.descripcion}${a.referencia ? ` [${a.referencia}]` : ''} · #${a.id}${a.drop === 1 ? ' · dropshipping' : ''}` });
     conceptos.push({ articulo: Number(a.id), descripcion: it.nombre.slice(0, 250), cantidad: Math.max(1, Number(it.qty) || 1), precio: Math.max(0, Math.round(Number(it.precio) || 0)) });
   }
@@ -829,7 +838,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     const porArticulo = new Map<string, string>();
     for (let i = 0; i < conceptos.length; i++) {
       if (!esDrop[i]) continue;
-      const cv = await convenioDeArticulo(storeId, c.apiKey, String(conceptos[i].articulo));
+      const cv = convManual[i] && convManual[i] !== 'propio' ? convManual[i] : await convenioDeArticulo(storeId, c.apiKey, String(conceptos[i].articulo));
       if (cv) porArticulo.set(String(conceptos[i].articulo), cv);
     }
     const distintos = [...new Set(porArticulo.values())];
@@ -934,7 +943,24 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   if ('error' in cli) { registrarLog(storeId, 'error', 'despacho', `${numDF}: ${cli.error}`); return cli; }
   body.cliente = Number(cli.tercero);
 
-  const r = await effi<Fila>(c.apiKey, 'POST', '/api/remision_v', { body });
+  let r = await effi<Fila>(c.apiKey, 'POST', '/api/remision_v', { body });
+  // Effi exige stock porque la remisión salió como mercancía propia, pero estos artículos
+  // tienen un convenio conocido (puesto a mano, aprendido o el de por defecto): se reintenta
+  // UNA vez como dropshipping con ese convenio.
+  if (!r.ok && !body.convenio_dropshipping && /supera las existencias/i.test(mensajeError(r)) && Array.isArray(body.articulo)) {
+    const arts = (body.articulo as unknown[]).map(String);
+    const conocidos = [...new Set(arts.map((a) => (db.prepare('SELECT convenio FROM effi_convenio_articulo WHERE store_id = ? AND articulo = ?').get(storeId, a) as { convenio: string } | undefined)?.convenio || '').filter(Boolean))];
+    const conv = conocidos.length === 1 ? conocidos[0] : conocidos.length === 0 ? c.convenioDropshipping : '';
+    if (conv) {
+      trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Sin stock propio: se reintenta como dropshipping (convenio ${conv})`, detalle: 'Effi no marcó estos artículos como de proveedor; se usa el convenio conocido.' });
+      body.convenio_dropshipping = /^\d+$/.test(conv) ? Number(conv) : conv;
+      r = await effi<Fila>(c.apiKey, 'POST', '/api/remision_v', { body });
+      if (r.ok) avisos.push(`Se envió como dropshipping con el convenio ${conv} (Effi no lo marcaba como de proveedor).`);
+      else delete body.convenio_dropshipping;
+    } else if (conocidos.length > 1) {
+      avisos.push('Los productos son de proveedores con convenios distintos: divide el pedido.');
+    }
+  }
   let doc = r.body.data;
   if (!r.ok && r.http === 409) {
     // Reintento: Effi ya tiene la remisión de esta llave. Buscamos la que quedó.
@@ -943,7 +969,8 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
     if (d.id) doc = d;
     else { const e = 'Effi ya tiene una remisión para este pedido. Usa "Reenviar" si necesitas crear otra.'; registrarLog(storeId, 'warn', 'despacho', `${numDF}: ${e}`); return { error: e }; }
   } else if (!r.ok || !doc) {
-    const e = `Effi no creó la remisión: ${mensajeError(r)}`;
+    const sinStock = /supera las existencias/i.test(mensajeError(r)) && !body.convenio_dropshipping;
+    const e = `Effi no creó la remisión: ${mensajeError(r)}${sinStock ? ' → Si estos productos los despacha un proveedor, asígnales su convenio en Integraciones → Effi → Artículos (o marca uno por defecto con ★) y vuelve a enviar.' : ''}`;
     registrarLog(storeId, 'error', 'despacho', `${numDF}: ${e}`);
     return { error: e };
   }

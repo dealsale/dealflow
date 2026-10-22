@@ -1505,7 +1505,14 @@ api.get('/effi-api/articulos', requireAuth, requireStore, requireOwner, async (r
   // El nombre del artículo vinculado (aunque no esté en la caché), para mostrarlo.
   const nombres: Record<string, string> = {};
   for (const a of arts) nombres[a.id] = a.descripcion + (a.referencia ? ` [${a.referencia}]` : '');
-  res.json({ articulos: arts, variantes, nombres });
+  // Convenio de cada producto (a mano) y los convenios que la tienda conoce.
+  const conveniosProducto = Object.fromEntries((db.prepare("SELECT id, effi_convenio FROM products WHERE store_id = ? AND effi_convenio != ''").all(sid) as { id: string; effi_convenio: string }[]).map((r) => [r.id, r.effi_convenio]));
+  const c = ef.cfgEffi(sid);
+  const conocidos = new Map<string, string>();
+  for (const x of c?.convenios || []) conocidos.set(x.id, x.nombre);
+  for (const r of db.prepare('SELECT DISTINCT convenio FROM effi_convenio_articulo WHERE store_id = ?').all(sid) as { convenio: string }[]) if (!conocidos.has(r.convenio)) conocidos.set(r.convenio, `Convenio ${r.convenio}`);
+  if (c?.convenioDropshipping && !conocidos.has(c.convenioDropshipping)) conocidos.set(c.convenioDropshipping, `Convenio ${c.convenioDropshipping}`);
+  res.json({ articulos: arts, variantes, nombres, conveniosProducto, convenios: [...conocidos].map(([id, nombre]) => ({ id, nombre })) });
 });
 api.get('/effi-api/articulos/buscar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
@@ -1520,6 +1527,16 @@ api.post('/effi-api/producto-proveedor', requireAuth, requireStore, requireOwner
   const upd = db.prepare('UPDATE products SET despacho_proveedor = ? WHERE id = ? AND store_id = ?');
   let n = 0;
   for (const id of ids) n += upd.run(dp, id, req.user!.storeId!).changes;
+  res.json({ ok: true, actualizados: n });
+});
+// Convenio de un producto: '' = automático, 'propio' = mercancía propia, o el código del convenio.
+api.post('/effi-api/producto-convenio', requireAuth, requireStore, requireOwner, (req, res) => {
+  const raw = String(req.body?.convenio ?? '').trim();
+  const conv = raw === 'propio' ? 'propio' : raw.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+  const ids: string[] = Array.isArray(req.body?.productIds) ? req.body.productIds.map(String) : [String(req.body?.productId || '')];
+  const upd = db.prepare('UPDATE products SET effi_convenio = ? WHERE id = ? AND store_id = ?');
+  let n = 0;
+  for (const id of ids) n += upd.run(conv, id, req.user!.storeId!).changes;
   res.json({ ok: true, actualizados: n });
 });
 api.post('/effi-api/articulos/vincular', requireAuth, requireStore, requireOwner, async (req, res) => {
