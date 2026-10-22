@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from './Dropdown';
 import {
-  apiEffiApiArticulos, apiEffiApiBuscar, apiEffiApiProveedor, apiEffiApiSyncArticulos, apiEffiApiVincular,
+  apiEffiApiArticulos, apiEffiApiBuscar, apiEffiApiProveedor, apiEffiApiConvenioProducto, apiEffiApiSyncArticulos, apiEffiApiVincular,
   type EffiArticulo, type EffiVarianteDF,
 } from '../lib/api';
 
@@ -93,10 +93,17 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
   const [buscarProd, setBuscarProd] = useState('');
   // Acordeón: un producto abierto a la vez (con muchas variantes la lista se hacía eterna).
   const [prodAbierto, setProdAbierto] = useState('');
+  const [convProd, setConvProd] = useState<Record<string, string>>({});
+  const [convenios, setConvenios] = useState<{ id: string; nombre: string }[]>([]);
 
   const cargar = async () => {
     const r = await apiEffiApiArticulos();
-    if (r.data) { setVariantes(r.data.variantes); setCache(r.data.articulos); setNombres(r.data.nombres || {}); }
+    if (r.data) { setVariantes(r.data.variantes); setCache(r.data.articulos); setNombres(r.data.nombres || {}); setConvProd(r.data.conveniosProducto || {}); setConvenios(r.data.convenios || []); }
+  };
+  const cambiarConvenio = async (productId: string, convenio: string) => {
+    setConvProd((m) => ({ ...m, [productId]: convenio }));
+    const r = await apiEffiApiConvenioProducto([productId], convenio);
+    if (r.error) onMsg(r.error);
   };
   useEffect(() => { void cargar(); }, []);
 
@@ -208,6 +215,25 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
                 )}
                 {seg(p)}
               </div>
+              {p.proveedor === 'effi' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)' }}>Convenio:</span>
+                  <div style={{ minWidth: 220, flex: '0 1 300px' }}>
+                    <Dropdown
+                      ariaLabel={`Convenio de ${p.nombre}`}
+                      value={convProd[p.id] || ''}
+                      onChange={(v) => void cambiarConvenio(p.id, v)}
+                      options={[
+                        { value: '', label: 'Automático (según sus ventas en Effi)' },
+                        { value: 'propio', label: 'Mercancía propia (sin convenio)' },
+                        ...convenios.map((c) => ({ value: c.id, label: `${c.nombre} · ${c.id}` })),
+                        ...(convProd[p.id] && convProd[p.id] !== 'propio' && !convenios.some((c) => c.id === convProd[p.id]) ? [{ value: convProd[p.id], label: `Convenio ${convProd[p.id]}` }] : []),
+                      ]}
+                    />
+                  </div>
+                  {!convenios.length && <span style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>Agrega tus convenios en la configuración de Effi (arriba) para elegirlos aquí.</span>}
+                </div>
+              )}
               {desplegado && (
                 <div className="df-expand" style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                   {p.vars.map((v) => {
