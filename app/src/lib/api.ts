@@ -531,6 +531,7 @@ export interface EffiArticulo { id: string; descripcion: string; referencia: str
 export interface EffiEvento { id: number; evento: string; entrega: string; resumen: string; payload: string; created_at: string }
 export interface EffiPreview { lineas: { item: string; articulo: string }[]; ubicacion: string; avisos: string[]; total: number; convenio?: string }
 export const apiEffiApiEstado = () => req<EffiApiEstado>('/api/effi-api/estado', 'GET');
+export const apiEffiAutoconfigurar = (paso: 'config' | 'convenios' | 'productos') => req<{ ok: boolean; detalle: string; listo: boolean }>(`/api/effi-api/autoconfigurar/${paso}`, 'POST', {});
 export const apiEffiApiConectar = (apiKey: string) => req<{ ok: true }>('/api/effi-api/conectar', 'POST', { apiKey });
 export const apiEffiApiListas = () => req<EffiListas>('/api/effi-api/listas', 'GET');
 export const apiEffiApiConfig = (cfg: Partial<EffiApiEstado>) => req<{ ok: true; listo: boolean }>('/api/effi-api/config', 'POST', cfg);
