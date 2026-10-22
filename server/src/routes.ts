@@ -1424,6 +1424,11 @@ api.post('/effi-api/conectar', requireAuth, requireStore, requireOwner, async (r
   res.json({ ok: true });
 });
 // Convenios Dropshipping que la tienda ya usó en Effi (para elegir el de las remisiones).
+// Convenios ya conocidos (rápido, sin consultar Effi): para elegir uno al despachar.
+api.get('/effi-api/convenios-conocidos', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  res.json({ convenios: ef.conveniosConocidos(req.user!.storeId!), porDefecto: ef.cfgEffi(req.user!.storeId!)?.convenioDropshipping || '' });
+});
 api.get('/effi-api/convenios', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
   const c = ef.cfgEffi(req.user!.storeId!);
@@ -1507,12 +1512,7 @@ api.get('/effi-api/articulos', requireAuth, requireStore, requireOwner, async (r
   for (const a of arts) nombres[a.id] = a.descripcion + (a.referencia ? ` [${a.referencia}]` : '');
   // Convenio de cada producto (a mano) y los convenios que la tienda conoce.
   const conveniosProducto = Object.fromEntries((db.prepare("SELECT id, effi_convenio FROM products WHERE store_id = ? AND effi_convenio != ''").all(sid) as { id: string; effi_convenio: string }[]).map((r) => [r.id, r.effi_convenio]));
-  const c = ef.cfgEffi(sid);
-  const conocidos = new Map<string, string>();
-  for (const x of c?.convenios || []) conocidos.set(x.id, x.nombre);
-  for (const r of db.prepare('SELECT DISTINCT convenio FROM effi_convenio_articulo WHERE store_id = ?').all(sid) as { convenio: string }[]) if (!conocidos.has(r.convenio)) conocidos.set(r.convenio, `Convenio ${r.convenio}`);
-  if (c?.convenioDropshipping && !conocidos.has(c.convenioDropshipping)) conocidos.set(c.convenioDropshipping, `Convenio ${c.convenioDropshipping}`);
-  res.json({ articulos: arts, variantes, nombres, conveniosProducto, convenios: [...conocidos].map(([id, nombre]) => ({ id, nombre })) });
+  res.json({ articulos: arts, variantes, nombres, conveniosProducto, convenios: ef.conveniosConocidos(sid) });
 });
 api.get('/effi-api/articulos/buscar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
@@ -1652,9 +1652,11 @@ api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, re
 // Vista previa: lo que se le mandaría a Effi para este pedido (no crea nada).
 api.get('/orders/:rowId/effi/preview', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
-  const r = await ef.prepararRemision(req.user!.storeId!, req.params.rowId);
-  if ('error' in r) return res.status(400).json({ error: r.error });
-  res.json({ lineas: r.lineas, ubicacion: r.ubic.nombre, avisos: r.avisos, total: (r.body.valor_forma_pago as number[])[0], remision: r.body });
+  const forzado = String(req.query.convenio || '').trim() === 'propio' ? 'propio' : String(req.query.convenio || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+  const convenios = ef.conveniosConocidos(req.user!.storeId!);
+  const r = await ef.prepararRemision(req.user!.storeId!, req.params.rowId, false, 'revision', forzado);
+  if ('error' in r) return res.status(400).json({ error: r.error, convenios });
+  res.json({ lineas: r.lineas, ubicacion: r.ubic.nombre, avisos: r.avisos, total: (r.body.valor_forma_pago as number[])[0], remision: r.body, convenio: String(r.body.convenio_dropshipping ?? ''), convenios });
 });
 api.post('/orders/:rowId/effi/despachar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
@@ -1663,7 +1665,9 @@ api.post('/orders/:rowId/effi/despachar', requireAuth, requireStore, requireOwne
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const reintentar = req.body?.reintentar === true;
   if (o.effi_remision && !o.effi_remision.includes('anulada') && !reintentar) return res.json({ ok: true, remision: o.effi_remision, aviso: 'Este pedido ya tiene remisión en Effi.' });
-  const r = await ef.despacharEffi(sid, req.params.rowId, reintentar);
+  const raw = String(req.body?.convenio || '').trim();
+  const forzado = raw === 'propio' ? 'propio' : raw.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+  const r = await ef.despacharEffi(sid, req.params.rowId, reintentar, forzado);
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ ok: true, ...r });
 });
