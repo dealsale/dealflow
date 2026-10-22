@@ -522,6 +522,7 @@ export interface EffiApiEstado {
   sucursal?: string; bodega?: string; centroCostos?: string; formaPago?: string; formaPagoContado?: boolean; medioPago?: string; caja?: string; cuenta?: string;
   vendedor?: string; articuloFlete?: string; diasEntrega?: number; autoDespacho?: boolean; guia?: EffiGuiaCfg;
   convenioDropshipping?: string;
+  convenios?: { id: string; nombre: string }[];
   novedades?: { avisarCliente: boolean; botGestiona: boolean; autoEnviar: boolean };
   devolucionAuto?: boolean;
 }

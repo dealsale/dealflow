@@ -1428,7 +1428,7 @@ api.get('/effi-api/convenios', requireAuth, requireStore, requireOwner, async (r
   const ef = await import('./effiApi.js');
   const c = ef.cfgEffi(req.user!.storeId!);
   if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
-  res.json({ convenios: await ef.conveniosDropshipping(c.apiKey), actual: c.convenioDropshipping });
+  res.json({ convenios: await ef.conveniosDropshipping(c.apiKey, c.convenios), actual: c.convenioDropshipping });
 });
 
 api.get('/effi-api/listas', requireAuth, requireStore, requireOwner, async (req, res) => {
@@ -1448,6 +1448,11 @@ api.post('/effi-api/config', requireAuth, requireStore, requireOwner, async (req
   const parcial: Record<string, unknown> = {};
   for (const k of ['sucursal', 'bodega', 'centroCostos', 'formaPago', 'medioPago', 'caja', 'cuenta', 'vendedor', 'articuloFlete']) if (k in b) parcial[k] = s(b[k]);
   if ('convenioDropshipping' in b) parcial.convenioDropshipping = s(b.convenioDropshipping).replace(/[^A-Za-z0-9_-]/g, '');
+  if (Array.isArray(b.convenios)) {
+    parcial.convenios = (b.convenios as Record<string, unknown>[]).slice(0, 50)
+      .map((x) => ({ id: String(x?.id ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40), nombre: String(x?.nombre ?? '').trim().slice(0, 80) }))
+      .filter((x) => x.id);
+  }
   if ('formaPagoContado' in b) parcial.formaPagoContado = b.formaPagoContado === true;
   if ('autoDespacho' in b) parcial.autoDespacho = b.autoDespacho === true;
   if ('diasEntrega' in b) parcial.diasEntrega = Math.min(60, Math.max(0, Math.round(Number(b.diasEntrega) || 3)));
