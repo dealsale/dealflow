@@ -528,7 +528,7 @@ export interface EffiApiEstado {
 }
 export interface EffiArticulo { id: string; descripcion: string; referencia: string; ecommerce: string; stock: number | null }
 export interface EffiEvento { id: number; evento: string; entrega: string; resumen: string; payload: string; created_at: string }
-export interface EffiPreview { lineas: { item: string; articulo: string }[]; ubicacion: string; avisos: string[]; total: number }
+export interface EffiPreview { lineas: { item: string; articulo: string }[]; ubicacion: string; avisos: string[]; total: number; convenio?: string }
 export const apiEffiApiEstado = () => req<EffiApiEstado>('/api/effi-api/estado', 'GET');
 export const apiEffiApiConectar = (apiKey: string) => req<{ ok: true }>('/api/effi-api/conectar', 'POST', { apiKey });
 export const apiEffiApiListas = () => req<EffiListas>('/api/effi-api/listas', 'GET');
@@ -551,8 +551,9 @@ export const apiGuiaDocumento = (rowId: string, dataUrl: string) => req<{ ok: tr
 export interface ResultadoAvisoGuia { chat: 'enviado' | 'plantilla' | 'bloqueado' | 'error' | 'sin_chat'; contacto: 'plantilla' | 'mismo' | 'sin_plantilla' | 'error' | 'no_aplica'; con: 'image' | 'document' | 'texto'; detalle: string[] }
 export const apiGuiaManual = (rowId: string, guia: string, transportadora = '') => req<{ ok: true; guia: string; aviso: string }>(`/api/orders/${rowId}/guia-manual`, 'POST', { guia, transportadora });
 export const apiGuiaEnviar = (rowId: string) => req<{ ok: true } & ResultadoAvisoGuia>(`/api/orders/${rowId}/guia-enviar`, 'POST');
-export const apiEffiPreview = (rowId: string) => req<EffiPreview>(`/api/orders/${rowId}/effi/preview`, 'GET');
-export const apiEffiDespachar = (rowId: string, reintentar = false) => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar });
+export const apiEffiPreview = (rowId: string, convenio = '') => req<EffiPreview>(`/api/orders/${rowId}/effi/preview${convenio ? `?convenio=${encodeURIComponent(convenio)}` : ''}`, 'GET');
+export const apiEffiConveniosConocidos = () => req<{ convenios: { id: string; nombre: string }[]; porDefecto: string }>('/api/effi-api/convenios-conocidos', 'GET');
+export const apiEffiDespachar = (rowId: string, reintentar = false, convenio = '') => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar, convenio });
 
 // ── Campañas del Marketing IA ──
 export interface Brief {

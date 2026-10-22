@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { confirmar } from './dialogs';
-import { apiShopifyReenviarConfirmacion, apiGuiaManual } from '../lib/api';
+import { apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
 
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
@@ -124,11 +124,15 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
   // la remisión y enseguida la guía (si la guía automática está apagada).
   const g = useGuiaEffi();
   const [conGuia, setConGuia] = useState(true);
-  const revisar = async () => {
+  // Convenio para ESTE envío: '' = automático, 'propio' = sin convenio, o un código.
+  const [convenio, setConvenio] = useState('');
+  const [convenios, setConvenios] = useState<{ id: string; nombre: string }[]>([]);
+  useEffect(() => { void apiEffiConveniosConocidos().then((r) => r.data && setConvenios(r.data.convenios)); }, []);
+  const revisar = async (conv = convenio) => {
     if (!sel.rowId) return;
     setPaso('revisando'); setMsg('');
     if (!guiaAuto) void g.cargar();
-    const r = await apiEffiPreview(sel.rowId);
+    const r = await apiEffiPreview(sel.rowId, conv);
     if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos preparar el envío.'); return; }
     setPrev(r.data); setPaso('listo');
   };
@@ -137,7 +141,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
     if (!sel.rowId) return;
     if (hacerGuia && !g.listo) { setMsg('Elige transportadora, servicio, pago del flete y remitente (o desmarca "Crear también la guía").'); return; }
     setPaso('enviando'); setMsg('Creando la remisión en Effi…');
-    const r = await apiEffiDespachar(sel.rowId, reintentar);
+    const r = await apiEffiDespachar(sel.rowId, reintentar, convenio);
     if (r.error || !r.data) { setPaso('listo'); setMsg(r.error || 'Effi no creó la remisión.'); return; }
     let texto = `✓ Remisión ${r.data.remision} creada en Effi${r.data.guia ? ` · guía ${r.data.guia}` : ''}.${r.data.avisos?.length ? ' ' + r.data.avisos.join(' ') : ''}`;
     if (hacerGuia && !r.data.guia) {
@@ -151,10 +155,28 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
     await df.refrescarPedidos();
     onHecho();
   };
+  const selectorConvenio = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Convenio:</span>
+      <div style={{ flex: 1, minWidth: 200 }}>
+        <Dropdown
+          ariaLabel="Convenio para este envío"
+          value={convenio}
+          onChange={(v) => { setConvenio(v); if (paso === 'listo' || msg) void revisar(v); }}
+          options={[
+            { value: '', label: 'Automático (el de cada producto)' },
+            { value: 'propio', label: 'Mercancía propia (sin convenio)' },
+            ...convenios.map((c) => ({ value: c.id, label: `${c.nombre} · ${c.id}` })),
+          ]}
+        />
+      </div>
+    </div>
+  );
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {selectorConvenio}
       {paso === 'idle' || paso === 'revisando' ? (
-        <button onClick={revisar} disabled={paso === 'revisando'} style={{ ...btnP, opacity: paso === 'revisando' ? 0.7 : 1 }}>
+        <button onClick={() => void revisar()} disabled={paso === 'revisando'} style={{ ...btnP, opacity: paso === 'revisando' ? 0.7 : 1 }}>
           {paso === 'revisando' ? 'Preparando…' : reintentar ? 'Revisar y crear otra remisión' : 'Revisar envío a Effi →'}
         </button>
       ) : prev && (
