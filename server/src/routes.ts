@@ -1423,6 +1423,14 @@ api.post('/effi-api/conectar', requireAuth, requireStore, requireOwner, async (r
   registrarLog(req.user!.storeId!, 'info', 'integracion', 'Effi conectado por API.');
   res.json({ ok: true });
 });
+// Conexión automática: un paso a la vez (para mostrar el avance).
+api.post('/effi-api/autoconfigurar/:paso', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const paso = String(req.params.paso);
+  if (!['config', 'convenios', 'productos'].includes(paso)) return res.status(400).json({ error: 'Paso no válido.' });
+  try { res.json(await ef.autoconfigurarEffi(req.user!.storeId!, paso as 'config' | 'convenios' | 'productos')); }
+  catch (e) { res.json({ ok: false, listo: ef.effiApiListo(req.user!.storeId!), detalle: `Error: ${String((e as Error)?.message || e).slice(0, 160)}` }); }
+});
 // Convenios Dropshipping que la tienda ya usó en Effi (para elegir el de las remisiones).
 // ── Logística Effi: tablero de guías ──
 api.get('/logistica/effi', requireAuth, requireStore, async (req, res) => {

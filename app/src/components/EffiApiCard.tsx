@@ -4,7 +4,7 @@ import { EffiProductos } from './EffiProductos';
 import { IntegracionFila, LogoInteg } from './IntegracionFila';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
-  apiEffiApiConectar, apiEffiApiConfig, apiEffiApiDesconectar, apiEffiApiEventos, apiEffiApiListas,
+  apiEffiApiConectar, apiEffiAutoconfigurar, apiEffiApiConfig, apiEffiApiDesconectar, apiEffiApiEventos, apiEffiApiListas,
   apiEffiApiSecreto, apiEffiConvenios,
   type EffiApiEstado, type EffiEvento, type EffiGuiaCfg, type EffiListas,
 } from '../lib/api';
@@ -73,13 +73,34 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
   const forma = listas?.formasPago.find((f) => f.id === cfg.formaPago);
   const copiar = (t: string, q: string) => { void navigator.clipboard?.writeText(t); setCopiado(q); setTimeout(() => setCopiado(''), 1500); };
 
+  // Conexión automática: se corren los pasos uno por uno y se ven avanzar.
+  type EstadoPaso = 'espera' | 'corriendo' | 'ok' | 'aviso';
+  const PASOS_AUTO: { id: 'config' | 'convenios' | 'productos'; titulo: string; icono: string }[] = [
+    { id: 'config', titulo: 'Configurando de dónde salen tus remisiones', icono: '🏬' },
+    { id: 'convenios', titulo: 'Buscando tus convenios dropshipping', icono: '🤝' },
+    { id: 'productos', titulo: 'Conectando tus productos y su stock', icono: '📦' },
+  ];
+  const [auto, setAuto] = useState<Record<string, { estado: EstadoPaso; detalle: string }> | null>(null);
+  const autoconfigurar = async () => {
+    const st: Record<string, { estado: EstadoPaso; detalle: string }> = Object.fromEntries(PASOS_AUTO.map((p) => [p.id, { estado: 'espera' as EstadoPaso, detalle: '' }]));
+    setAuto({ ...st });
+    for (const p of PASOS_AUTO) {
+      st[p.id] = { estado: 'corriendo', detalle: '' }; setAuto({ ...st });
+      const r = await apiEffiAutoconfigurar(p.id);
+      st[p.id] = { estado: r.data?.ok ? 'ok' : 'aviso', detalle: r.data?.detalle || r.error || 'No se pudo completar.' }; setAuto({ ...st });
+    }
+    void apiEffiApiListas().then((r) => { if (r.data) setListas(r.data); }); // recarga las listas
+    await df.cargarEffiApi();
+    setMsg('✓ Listo. Revisa abajo lo que elegimos y cámbialo si quieres.');
+  };
   const conectar = async () => {
     setCargando(true); setMsg('Verificando la API key con Effi…');
     const r = await apiEffiApiConectar(apiKey.trim());
     setCargando(false);
     if (r.error) { setMsg(r.error); return; }
-    setApiKey(''); setMsg('✓ Effi conectado. Ahora elige de dónde salen tus remisiones.'); setAbierta(true);
+    setApiKey(''); setMsg(''); setAbierta(true);
     await df.cargarEffiApi();
+    await autoconfigurar();
   };
   const guardar = async () => {
     setCargando(true); setMsg('Guardando…');
@@ -139,10 +160,35 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
         </div>
       )}
 
+      {auto && (
+        <div style={{ border: '1px solid var(--df-purple-border)', borderRadius: 12, padding: '12px 14px', background: 'var(--df-purple-subtle)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <style>{`@keyframes dfAutoGira { to { transform: rotate(360deg) } } @keyframes dfAutoEntra { from { opacity: 0; transform: translateX(-6px) } to { opacity: 1; transform: none } } @keyframes dfAutoBarra { 0% { background-position: 0 0 } 100% { background-position: 40px 0 } }`}</style>
+          <div style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--df-purple)' }}>⚡ Conexión automática</div>
+          {PASOS_AUTO.map((p, i) => {
+            const e = auto[p.id];
+            const ico = e.estado === 'corriendo' ? <span style={{ display: 'inline-block', animation: 'dfAutoGira .9s linear infinite' }}>⟳</span> : e.estado === 'ok' ? '✅' : e.estado === 'aviso' ? '⚠️' : '○';
+            return (
+              <div key={p.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', opacity: e.estado === 'espera' ? 0.5 : 1, animation: `dfAutoEntra .4s ${i * 0.08}s both` }}>
+                <span style={{ width: 22, textAlign: 'center', fontSize: 15 }}>{ico}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{p.icono} {p.titulo}</div>
+                  {e.estado === 'corriendo' && <div style={{ marginTop: 5, height: 4, borderRadius: 999, background: 'repeating-linear-gradient(90deg, var(--df-purple) 0 20px, transparent 20px 40px)', animation: 'dfAutoBarra .6s linear infinite', opacity: 0.6 }} />}
+                  {e.detalle && <div style={{ fontSize: 12, color: e.estado === 'aviso' ? 'var(--df-warning)' : 'var(--df-text-muted)', marginTop: 2, lineHeight: 1.45 }}>{e.detalle}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
 
       {est.conectado && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button onClick={() => void autoconfigurar()} disabled={!!auto && Object.values(auto).some((x) => x.estado === 'corriendo')} style={{ ...btn, background: 'linear-gradient(90deg, var(--df-purple), #6366F1)' }}>⚡ Configurar todo automático</button>
+            <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Elige la configuración, detecta tus convenios y conecta tus productos con su stock. No cambia lo que ya elegiste.</span>
+          </div>
           {!listas ? <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Leyendo tu configuración de Effi…</div> : (
             <>
               {/* 1. Remisión */}

@@ -209,6 +209,68 @@ export async function listasEffi(apiKey: string): Promise<Record<string, unknown
   };
 }
 
+// ── Conexión automática: al pegar la API key, DealFlow configura todo solo ──────
+
+export type PasoAuto = 'config' | 'convenios' | 'productos';
+/**
+ * Un paso de la configuración automática. No pisa lo que la tienda ya eligió:
+ *  - config: sucursal, bodega, centro de costos, forma de pago y vendedor (si hay una
+ *    sola opción, esa; si no, la más usada en tus últimas remisiones; la forma de pago
+ *    prefiere crédito/contraentrega para que la remisión quede por cobrar).
+ *  - convenios: detecta tus convenios dropshipping y los guarda.
+ *  - productos: trae tus artículos, vincula productos y variantes por nombre y marca
+ *    como "de Effi" los que encuentra; pasa el stock.
+ */
+export async function autoconfigurarEffi(storeId: string, paso: PasoAuto): Promise<{ ok: boolean; detalle: string; listo: boolean }> {
+  const c = cfgEffi(storeId);
+  if (!c?.apiKey) return { ok: false, detalle: 'Conecta Effi primero.', listo: false };
+  if (paso === 'config') {
+    const l = await listasEffi(c.apiKey);
+    if ('error' in l) return { ok: false, detalle: String(l.error), listo: false };
+    type Op = { id: string; nombre: string; sucursal?: string; contado?: boolean };
+    const L = (k: string) => (l[k] as Op[]) || [];
+    // Lo más usado en las últimas remisiones.
+    const rem = await effi<Fila[]>(c.apiKey, 'GET', '/api/remision_v', { query: { por_pagina: 100 } });
+    const docs = rem.ok ? rem.body.data || [] : [];
+    const masUsado = (...llaves: string[]) => {
+      const cuenta = new Map<string, number>();
+      for (const d of docs) { const v = llaves.map((k) => txt(d[k])).find((x) => x && x !== '0'); if (v) cuenta.set(v, (cuenta.get(v) || 0) + 1); }
+      return [...cuenta].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+    };
+    const elegir = (lista: Op[], usado: string) => (lista.length === 1 ? lista[0].id : lista.find((x) => x.id === usado)?.id || '');
+    const cambios: Partial<EffiCfg> = {};
+    const hechos: string[] = [];
+    const nombreDe = (lista: Op[], id: string) => lista.find((x) => x.id === id)?.nombre || id;
+    if (!c.sucursal) { const v = elegir(L('sucursales'), masUsado('sucursal', 'id_sucursal')) || L('sucursales')[0]?.id || ''; if (v) { cambios.sucursal = v; hechos.push(`sucursal ${nombreDe(L('sucursales'), v)}`); } }
+    const suc = cambios.sucursal || c.sucursal;
+    if (!c.bodega) { const bods = L('bodegas').filter((b) => !suc || !b.sucursal || b.sucursal === suc); const v = elegir(bods, masUsado('bodega', 'id_bodega')) || bods[0]?.id || ''; if (v) { cambios.bodega = v; hechos.push(`bodega ${nombreDe(bods, v)}`); } }
+    if (!c.centroCostos) { const v = elegir(L('centrosCostos'), masUsado('centro_costos', 'id_centro_costos')) || L('centrosCostos')[0]?.id || ''; if (v) { cambios.centroCostos = v; hechos.push(`centro de costos ${nombreDe(L('centrosCostos'), v)}`); } }
+    if (!c.formaPago) {
+      const fps = L('formasPago');
+      const usado = fps.find((x) => x.id === masUsado('forma_pago', 'id_forma_pago'));
+      const credito = fps.find((x) => !x.contado && /contra ?entrega|credito|cr[eé]dito/i.test(x.nombre)) || fps.find((x) => !x.contado);
+      const fp = (usado && !usado.contado ? usado : credito) || usado || fps[0];
+      if (fp) { cambios.formaPago = fp.id; cambios.formaPagoContado = !!fp.contado; hechos.push(`forma de pago ${fp.nombre}`); }
+    }
+    if (!c.vendedor) { const v = masUsado('vendedor', 'id_vendedor'); if (v) { cambios.vendedor = v; hechos.push('vendedor de tus remisiones'); } }
+    if (Object.keys(cambios).length) guardarCfgEffi(storeId, cambios);
+    const listo = effiApiListo(storeId);
+    return { ok: listo, listo, detalle: hechos.length ? `Elegimos ${hechos.join(', ')}.` : listo ? 'Tu configuración ya estaba lista.' : 'No pudimos elegir todo solo: complétalo abajo.' };
+  }
+  if (paso === 'convenios') {
+    const lista = await conveniosDropshipping(c.apiKey, c.convenios);
+    const nuevos = lista.filter((x) => !c.convenios.some((g) => g.id === x.id)).map(({ id, nombre }) => ({ id, nombre }));
+    const cambios: Partial<EffiCfg> = {};
+    if (nuevos.length) cambios.convenios = [...c.convenios, ...nuevos];
+    if (!c.convenioDropshipping && lista.length === 1) cambios.convenioDropshipping = lista[0].id;
+    if (Object.keys(cambios).length) guardarCfgEffi(storeId, cambios);
+    return { ok: true, listo: effiApiListo(storeId), detalle: lista.length ? `${lista.length} convenio${lista.length === 1 ? '' : 's'} dropshipping: ${lista.slice(0, 4).map((x) => x.nombre).join(', ')}${lista.length > 4 ? '…' : ''}.` : 'No vendes con convenios dropshipping (o aún no hay remisiones con convenio).' };
+  }
+  const r = await sincronizarArticulos(storeId);
+  if ('error' in r) return { ok: false, detalle: r.error, listo: effiApiListo(storeId) };
+  return { ok: true, listo: effiApiListo(storeId), detalle: `Leímos ${r.total} artículos de Effi. ${r.productosEffi} producto${r.productosEffi === 1 ? '' : 's'} de tu tienda se despacha${r.productosEffi === 1 ? '' : 'n'} por Effi${r.marcados ? ` (${r.marcados} marcados ahora)` : ''}: ${r.vinculadas} variantes conectadas, stock al día en ${r.stockActualizado}.${r.sinVinculo.length ? ` ${r.sinVinculo.length} variantes no casaron por nombre: revísalas en Artículos.` : ''}` };
+}
+
 /** Solo lo que pide el formulario de guía (más liviano que todas las listas). */
 export async function opcionesGuiaEffi(apiKey: string): Promise<{ transportadoras: unknown[]; remitentes: unknown[] } | { error: string }> {
   const [t, r] = await Promise.all([todo<Fila>(apiKey, '/api/transportadora', {}, 5), todo<Fila>(apiKey, '/api/remitente', {}, 5)]);
