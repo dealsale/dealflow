@@ -68,6 +68,17 @@ export function IconWhatsApp() {
   );
 }
 
+export function IconLogistica() {
+  return (
+    <svg {...common}>
+      <path d="M1 4h13v11H1z"></path>
+      <path d="M14 8h4l3 3v4h-7V8z"></path>
+      <circle cx="5.5" cy="17.5" r="2"></circle>
+      <circle cx="17.5" cy="17.5" r="2"></circle>
+    </svg>
+  );
+}
+
 export function IconPedidos() {
   return (
     <svg {...common}>

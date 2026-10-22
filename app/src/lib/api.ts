@@ -330,6 +330,7 @@ export interface ApiOrder {
   estadoWoo?: string;
   effiRemision?: string;
   origen?: string;
+  leadId?: string;
   envio: number;
   nota: string;
   total: number;
@@ -552,6 +553,18 @@ export interface ResultadoAvisoGuia { chat: 'enviado' | 'plantilla' | 'bloqueado
 export const apiGuiaManual = (rowId: string, guia: string, transportadora = '') => req<{ ok: true; guia: string; aviso: string }>(`/api/orders/${rowId}/guia-manual`, 'POST', { guia, transportadora });
 export const apiGuiaEnviar = (rowId: string) => req<{ ok: true } & ResultadoAvisoGuia>(`/api/orders/${rowId}/guia-enviar`, 'POST');
 export const apiEffiPreview = (rowId: string, convenio = '') => req<EffiPreview>(`/api/orders/${rowId}/effi/preview${convenio ? `?convenio=${encodeURIComponent(convenio)}` : ''}`, 'GET');
+export interface GuiaLogistica {
+  id: string; rowId: string; numero: number; cliente: string; tel: string; leadId: string; ciudad: string; departamento: string;
+  total: number; envioCobrado: number; recaudo: number; flete: number; guia: string; guiaUrl: string; transportadora: string; remision: string;
+  estado: string; estadoEffi: string; etapa: 'sin_guia' | 'por_recoger' | 'transito' | 'reparto' | 'novedad' | 'entregado' | 'devuelto'; creado: string;
+  ultimoMovimiento: { fecha: string; estado: string; observacion: string } | null; entregaEstimada: string; llegaHoy: boolean; entregadoHoy: boolean;
+}
+export interface TableroLogistica {
+  guias: GuiaLogistica[]; actualizado: string; revisadas?: number;
+  resumen: { total: number; activas: number; llegaHoy: number; novedades: number; entregadas: number; devueltas: number; porRecaudar: number; fleteTotal: number; envioCobrado: number; efectividad: number | null };
+}
+export const apiLogistica = (dias = 45) => req<TableroLogistica>(`/api/logistica/effi?dias=${dias}`, 'GET');
+export const apiLogisticaActualizar = (dias = 45) => req<TableroLogistica>('/api/logistica/effi/actualizar', 'POST', { dias });
 export const apiEffiConveniosConocidos = () => req<{ convenios: { id: string; nombre: string }[]; porDefecto: string }>('/api/effi-api/convenios-conocidos', 'GET');
 export const apiEffiDespachar = (rowId: string, reintentar = false, convenio = '') => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar, convenio });
 

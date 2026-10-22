@@ -11,6 +11,7 @@ import {
   IconIntegraciones,
   IconLeads,
   IconPedidos,
+  IconLogistica,
   IconPlanes,
   IconProductos,
   IconResumen,
@@ -77,6 +78,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             'WhatsApp',
             df.waConnected && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)', marginLeft: 'auto' }} />,
           )}
+          {df.effiApi?.conectado && item('logistica', <IconLogistica />, 'Logística Effi')}
           {item(
             'pedidos',
             <IconPedidos />,

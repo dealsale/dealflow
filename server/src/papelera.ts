@@ -34,7 +34,7 @@ const DIR_RESPALDOS = path.join(DATA_DIR, 'respaldos');
 mkdirSync(DIR_PAPELERA, { recursive: true });
 mkdirSync(DIR_RESPALDOS, { recursive: true });
 export const DIAS_PAPELERA = 30;
-const COPIAS = 3;
+const COPIAS = 1; // solo la última copia diaria (la de medianoche)
 
 const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
 
@@ -171,10 +171,10 @@ function vaciarVencidos(): void {
 
 // ── Copias diarias ─────────────────────────────────────────────────────────
 
-// Automáticas: dealflow-AAAA-MM-DD.db (se guardan las últimas 3).
-// Manuales:     dealflow-AAAA-MM-DD-HHMM-manual.db (se guardan las últimas 3).
+// Automática: dealflow-AAAA-MM-DD.db, una cada día a las 12 a. m. (hora Colombia); se
+// guarda SOLO la última. Manual: dealflow-AAAA-MM-DD-HHMM-manual.db (la que hagas a mano);
+// se borra con la siguiente copia de medianoche.
 const NOMBRE_COPIA = /^dealflow-\d{4}-\d{2}-\d{2}(-\d{4}-manual)?\.db$/;
-const COPIAS_MANUALES = 3;
 
 export function listarRespaldos(): { archivo: string; tamanoMb: number; fecha: string; cifrado: boolean; manual: boolean }[] {
   return readdirSync(DIR_RESPALDOS).filter((f) => NOMBRE_COPIA.test(f))
@@ -260,7 +260,10 @@ export async function copiaDiaria(manual = false): Promise<{ ok: true; archivo: 
       renameSync(`${destino}.enc`, destino);
     } else renameSync(`${destino}.tmp`, destino);
     const todas = listarRespaldos();
-    for (const r of [...todas.filter((x) => !x.manual).slice(COPIAS), ...todas.filter((x) => x.manual).slice(COPIAS_MANUALES)]) unlinkSync(path.join(DIR_RESPALDOS, r.archivo));
+    // La de medianoche reemplaza todo lo anterior (automáticas y manuales); una manual
+    // solo reemplaza a la manual anterior.
+    const sobran = manual ? todas.filter((x) => x.manual && x.archivo !== archivo) : todas.filter((x) => x.archivo !== archivo).slice(COPIAS - 1);
+    for (const r of sobran) unlinkSync(path.join(DIR_RESPALDOS, r.archivo));
     try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* */ }
     console.log(`[respaldos] copia ${archivo} lista`);
     return { ok: true, archivo };
@@ -285,6 +288,14 @@ async function cifrarPendientes(): Promise<void> {
 
 export function iniciarRespaldos(): void {
   const tarea = () => { void cifrarPendientes().then(() => copiaDiaria()).catch((e) => console.error('[respaldos]', e)); try { vaciarVencidos(); } catch (e) { console.error('[papelera]', e); } };
-  setTimeout(tarea, 2 * 60_000); // poco después de arrancar
-  setInterval(tarea, 3 * 3600_000); // cada 3 h revisa si ya toca la del día
+  // Al arrancar: si hoy todavía no hay copia (p. ej. el servidor estuvo apagado a medianoche).
+  setTimeout(tarea, 2 * 60_000);
+  // Cada día a las 12:00 a. m. hora Colombia (UTC-5): se programa la siguiente medianoche.
+  const programar = () => {
+    const ahora = Date.now();
+    const col = new Date(ahora - 5 * 3600e3);
+    const siguiente = Date.UTC(col.getUTCFullYear(), col.getUTCMonth(), col.getUTCDate() + 1, 0, 0, 30) + 5 * 3600e3;
+    setTimeout(() => { tarea(); programar(); }, siguiente - ahora);
+  };
+  programar();
 }

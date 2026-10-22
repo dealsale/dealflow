@@ -5,7 +5,6 @@ import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { SearchInput } from '../components/Filters';
 import { Dropdown } from '../components/Dropdown';
 import { confirmar } from '../components/dialogs';
-import { NovedadesBandeja } from '../components/Novedades';
 import { useFiltrosPedidos, PanelFiltros, ResumenFiltros, ORDENES, fechaCorta, valorPedido, type Orden } from '../components/PedidosFiltros';
 
 // Columnas tipo Excel: cada dato en su celda. Una sola tabla que se acomoda al
@@ -88,8 +87,6 @@ export function Pedidos({ df }: { df: DealFlowState }) {
           <Dropdown ariaLabel="Ordenar pedidos" value={fp.f.orden} onChange={(v) => fp.set({ orden: v as Orden })} options={ORDENES.map((o) => ({ value: o.id, label: o.label }))} width={170} />
         </span>
       </div>
-
-      <NovedadesBandeja df={df} />
       {abierto && <PanelFiltros fp={fp} />}
       <ResumenFiltros fp={fp} />
 
