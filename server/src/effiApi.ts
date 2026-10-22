@@ -40,6 +40,8 @@ export interface EffiCfg {
   autoDespacho: boolean;
   /** Código del convenio Dropshipping (artículos de un proveedor: no exigen stock propio). */
   convenioDropshipping: string;
+  /** Convenios que la tienda agregó a mano (Effi no tiene listado de convenios en la API). */
+  convenios: { id: string; nombre: string }[];
   guia: EffiGuiaCfg;
   webhookToken: string; webhookSecret: string;
   /** Novedades de guías: avisar al cliente, que el bot recoja los datos y si envía la solución a Effi él solo. */
@@ -65,6 +67,9 @@ export function cfgEffi(storeId: string): EffiCfg | null {
     vendedor: s('vendedor'), articuloFlete: s('articuloFlete'), diasEntrega: Number(c.diasEntrega) > 0 ? Number(c.diasEntrega) : 3,
     autoDespacho: c.autoDespacho === true,
     convenioDropshipping: s('convenioDropshipping'),
+    convenios: (Array.isArray(c.convenios) ? c.convenios as Record<string, unknown>[] : [])
+      .map((x) => ({ id: String(x?.id ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40), nombre: String(x?.nombre ?? '').trim().slice(0, 80) }))
+      .filter((x) => x.id),
     guia: { ...GUIA_VACIA, ...g, activa: g.activa === true } as EffiGuiaCfg,
     webhookToken: s('webhookToken'), webhookSecret: s('webhookSecret'),
     devolucionAuto: c.devolucionAuto === true,
@@ -420,20 +425,22 @@ export async function convenioDeArticulo(storeId: string, apiKey: string, articu
 }
 
 /**
- * Convenios Dropshipping que la tienda ya usó en Effi (se leen de sus remisiones y
- * facturas como distribuidora). Effi no tiene un listado de convenios en la API.
+ * Convenios Dropshipping de la tienda: los que agregó a mano + los que ya usó en Effi
+ * (se leen de sus remisiones y facturas como distribuidora, hasta ~1.500 documentos).
+ * Effi no tiene un listado de convenios en la API.
  */
-export async function conveniosDropshipping(apiKey: string): Promise<{ id: string; nombre: string }[]> {
-  const out = new Map<string, string>();
-  for (const ruta of ['/api/remision_v', '/api/factura_v']) {
-    if (out.size && ruta === '/api/factura_v') break; // con las remisiones basta (y no todos los usuarios ven facturas)
-    const r = await effi<Fila[]>(apiKey, 'GET', ruta, { query: { dropshipping_distribuidor: 1, por_pagina: 100 } });
-    for (const f of r.ok ? r.body.data || [] : []) {
+export async function conveniosDropshipping(apiKey: string, guardados: { id: string; nombre: string }[] = []): Promise<{ id: string; nombre: string; manual?: boolean }[]> {
+  const out = new Map<string, { nombre: string; manual?: boolean }>();
+  for (const g of guardados) out.set(g.id, { nombre: g.nombre || `Convenio ${g.id}`, manual: true });
+  for (const [ruta, paginas] of [['/api/remision_v', 10], ['/api/factura_v', 5]] as const) {
+    const filas = await todo<Fila>(apiKey, ruta, { dropshipping_distribuidor: 1 }, paginas);
+    if ('error' in filas) continue; // no todos los usuarios ven facturas
+    for (const f of filas) {
       const id = txt(f.convenio_dropshipping);
-      if (id && id !== '1' && !out.has(id)) out.set(id, txt(f.nombre_convenio_dropshipping) || `Convenio ${id}`);
+      if (id && id !== '1' && !out.has(id)) out.set(id, { nombre: txt(f.nombre_convenio_dropshipping) || `Convenio ${id}` });
     }
   }
-  return [...out].map(([id, nombre]) => ({ id, nombre }));
+  return [...out].map(([id, v]) => ({ id, nombre: v.nombre, ...(v.manual ? { manual: true } : {}) }));
 }
 
 /** Búsqueda en vivo en Effi por nombre (palabras) o referencia, para vincular a mano. */
@@ -834,7 +841,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
       if (porArticulo.size < esDrop.filter(Boolean).length) avisos.push('Algunos productos de proveedor no tienen ventas anteriores en Effi: se usó el convenio de los demás.');
     } else convenio = c.convenioDropshipping; // 2) el que la tienda dejó por defecto
     if (!convenio) {
-      const lista = await conveniosDropshipping(c.apiKey);
+      const lista = await conveniosDropshipping(c.apiKey, c.convenios);
       if (lista.length === 1) {
         convenio = lista[0].id;
         guardarCfgEffi(storeId, { convenioDropshipping: convenio });

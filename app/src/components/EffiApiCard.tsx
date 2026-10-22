@@ -54,7 +54,8 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
   const [verEventos, setVerEventos] = useState(false);
   const [copiado, setCopiado] = useState('');
   const [abierta, setAbierta] = useState(false);
-  const [convenios, setConvenios] = useState<{ id: string; nombre: string }[] | null>(null);
+  const [convenios, setConvenios] = useState<{ id: string; nombre: string; manual?: boolean }[] | null>(null);
+  const [nuevoConv, setNuevoConv] = useState({ id: '', nombre: '' });
   const [buscandoConv, setBuscandoConv] = useState(false);
 
   useEffect(() => { void df.cargarEffiApi(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -173,15 +174,38 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                     <input value={cfg.convenioDropshipping || ''} onChange={(e) => set({ convenioDropshipping: e.target.value.replace(/[^A-Za-z0-9_-]/g, '') })} placeholder="Código del convenio" style={{ ...inp, width: 200, flex: '0 0 auto' }} />
                     <button onClick={detectarConvenios} disabled={buscandoConv} style={btnSec}>{buscandoConv ? 'Buscando…' : '🔍 Detectar en Effi'}</button>
                   </div>
-                  {convenios && (
-                    <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>
-                      {convenios.length === 0
-                        ? 'No encontramos remisiones con convenio en tu Effi. Búscalo en Effi → Dropshipping → Convenios y escribe su código.'
-                        : <>Encontrados: {convenios.map((c) => (
-                          <button key={c.id} onClick={() => set({ convenioDropshipping: c.id })} style={{ ...btnSec, padding: '3px 9px', fontSize: 12, marginLeft: 6, borderColor: cfg.convenioDropshipping === c.id ? 'var(--df-purple)' : undefined }}>{c.nombre} · {c.id}</button>
-                        ))}</>}
-                    </div>
-                  )}
+                  {(() => {
+                    // Todos los convenios: los agregados a mano + los detectados en Effi (sin repetir).
+                    const propios = cfg.convenios || [];
+                    const todos = [...propios.map((c) => ({ ...c, manual: true })), ...(convenios || []).filter((c) => !propios.some((p) => p.id === c.id))];
+                    const quitar = (id: string) => set({ convenios: propios.filter((p) => p.id !== id) });
+                    const agregar = () => {
+                      const id = nuevoConv.id.replace(/[^A-Za-z0-9_-]/g, '');
+                      if (!id || propios.some((p) => p.id === id)) return;
+                      set({ convenios: [...propios, { id, nombre: nuevoConv.nombre.trim() || `Convenio ${id}` }] });
+                      setNuevoConv({ id: '', nombre: '' });
+                    };
+                    return (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Tus convenios {todos.length ? `(${todos.length})` : ''}</div>
+                        {convenios && convenios.length === 0 && !propios.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 6 }}>No encontramos remisiones con convenio en tu Effi. Agrégalos abajo (los ves en Effi → Dropshipping → Convenios).</div>}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {todos.map((c) => (
+                            <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: `1px solid ${cfg.convenioDropshipping === c.id ? 'var(--df-purple)' : 'var(--df-border)'}`, borderRadius: 8, padding: '3px 4px 3px 9px', fontSize: 12, background: 'var(--df-surface)' }}>
+                              <button onClick={() => set({ convenioDropshipping: c.id })} title="Usar por defecto para productos de proveedor sin ventas" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, color: 'var(--df-text)' }}>{cfg.convenioDropshipping === c.id ? '★ ' : ''}{c.nombre} · <b>{c.id}</b></button>
+                              {c.manual ? <button onClick={() => quitar(c.id)} title="Quitar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 13, padding: '0 3px' }}>×</button> : <span style={{ fontSize: 10.5, color: 'var(--df-text-faint)', padding: '0 4px' }}>detectado</span>}
+                            </span>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                          <input value={nuevoConv.nombre} onChange={(e) => setNuevoConv((v) => ({ ...v, nombre: e.target.value }))} placeholder="Nombre (ej. Proveedor Ana)" style={{ ...inp, width: 190, flex: '0 0 auto' }} />
+                          <input value={nuevoConv.id} onChange={(e) => setNuevoConv((v) => ({ ...v, id: e.target.value.replace(/[^A-Za-z0-9_-]/g, '') }))} onKeyDown={(e) => e.key === 'Enter' && agregar()} placeholder="Código del convenio" style={{ ...inp, width: 160, flex: '0 0 auto' }} />
+                          <button onClick={agregar} disabled={!nuevoConv.id} style={{ ...btnSec, opacity: nuevoConv.id ? 1 : 0.6 }}>＋ Agregar convenio</button>
+                        </div>
+                        <p style={{ ...ayuda, margin: '6px 0 0', fontSize: 11.5 }}>Toca un convenio para dejarlo <b>por defecto</b> (★). Recuerda <b>guardar</b> los cambios.</p>
+                      </div>
+                    );
+                  })()}
                   <p style={{ ...ayuda, margin: '8px 0 0', fontSize: 11.5 }}>Si lo dejas vacío y el pedido trae artículos de proveedor, DealFlow intenta detectarlo solo la primera vez.</p>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, fontSize: 13, cursor: 'pointer' }}>
