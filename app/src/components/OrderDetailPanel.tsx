@@ -507,7 +507,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
           <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, fontWeight: 600 }}>{sel.id}</span>
           <span style={sel.pillStyle}>{sel.estado}</span>
           <div style={{ flex: 1 }} />
-          <OrigenBadge origen={sel.origen} texto />
+          <button onClick={() => df.abrirChatDePedido({ leadId: sel.leadId, tel: sel.tel })} title="Abrir el chat de este cliente" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'inherit' }}><OrigenBadge origen={sel.origen || (sel.leadId ? 'whatsapp' : '')} texto /><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-brand)' }}>Abrir chat ↗</span></button>
           <span onClick={df.closeOrder} className="df-close-hover" style={{ color: 'var(--df-text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}>
             ✕
           </span>

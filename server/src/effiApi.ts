@@ -401,6 +401,7 @@ async function articuloPorId(storeId: string, apiKey: string, id: string): Promi
 // Convenio elegido a mano para un producto: '' = automático, 'propio' = mercancía propia
 // (sin convenio), o el código del convenio del proveedor.
 try { db.exec("ALTER TABLE products ADD COLUMN effi_convenio TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+try { db.exec("ALTER TABLE orders ADD COLUMN effi_guia_info TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 const convenioDeProducto = (productId: string) => String((db.prepare('SELECT effi_convenio FROM products WHERE id = ?').get(productId) as { effi_convenio: string } | undefined)?.effi_convenio || '');
 
 db.exec(`CREATE TABLE IF NOT EXISTS effi_convenio_articulo (
@@ -1179,6 +1180,8 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
       if (urlDoc && urlDoc !== txt(orden.guia_url)) db.prepare('UPDATE orders SET guia_url = ? WHERE id = ?').run(urlDoc, orden.id);
       if (transp) db.prepare('UPDATE orders SET transportadora = ? WHERE id = ?').run(nombreTransportadora(transp) || transp, orden.id);
       if (estadoTxt) db.prepare('UPDATE orders SET estado_woo = ? WHERE id = ?').run(estadoTxt.slice(0, 60), orden.id);
+      // Datos de la guía (flete, fechas…) para el tablero de Logística.
+      if (datos && typeof datos === 'object') { try { db.prepare('UPDATE orders SET effi_guia_info = ? WHERE id = ?').run(JSON.stringify(datos).slice(0, 8000), orden.id); } catch { /* opcional */ } }
       if (evento !== 'Consulta de guía') db.prepare("UPDATE orders SET historial_ts = '' WHERE id = ?").run(orden.id);
       const nuevo = siguienteEstado(txt(orden.estado), estadoLogistico(estadoTxt, !!(guia || orden.guia)));
       if (nuevo) db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, orden.id);

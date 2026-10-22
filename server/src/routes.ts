@@ -277,7 +277,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const itemsTienda = itemsPorPedido(sid);
   const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: itemsTienda.get(o.id as string) || [], novedad: novTienda.get(o.id as string) || null,
   }));
@@ -473,7 +473,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const items = itemsPorPedido(sid);
   const novs = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));
@@ -1424,6 +1424,16 @@ api.post('/effi-api/conectar', requireAuth, requireStore, requireOwner, async (r
   res.json({ ok: true });
 });
 // Convenios Dropshipping que la tienda ya usó en Effi (para elegir el de las remisiones).
+// ── Logística Effi: tablero de guías ──
+api.get('/logistica/effi', requireAuth, requireStore, async (req, res) => {
+  const { tableroLogistica } = await import('./logistica.js');
+  res.json(tableroLogistica(req.user!.storeId!, Number(req.query.dias) || 45));
+});
+api.post('/logistica/effi/actualizar', requireAuth, requireStore, async (req, res) => {
+  const { refrescarLogistica, tableroLogistica } = await import('./logistica.js');
+  const r = await refrescarLogistica(req.user!.storeId!);
+  res.json({ ...tableroLogistica(req.user!.storeId!, Number(req.body?.dias) || 45), revisadas: r.revisadas });
+});
 // Convenios ya conocidos (rápido, sin consultar Effi): para elegir uno al despachar.
 api.get('/effi-api/convenios-conocidos', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');

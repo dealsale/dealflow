@@ -594,6 +594,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     confirmacion: o.confirmacion || '',
     shopifyEnviado: !!o.shopifyEnviado,
     origen: o.origen || '',
+    leadId: o.leadId || '',
     envio: o.envio || 0,
     nota: o.nota || '',
     total: o.total || 0,
@@ -1081,7 +1082,7 @@ export function useDealFlowState() {
   const isSuperadmin = sessionUser?.role === 'superadmin';
 
   // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
-  const AGENTE_SECCIONES: VendedorSection[] = ['productos', 'crm', 'leads', 'pedidos'];
+  const AGENTE_SECCIONES: VendedorSection[] = ['productos', 'crm', 'leads', 'pedidos', 'logistica'];
   const esAgente = apiMode && sessionUser?.role === 'vendedor' && sessionUser?.esDueno === false;
   const puedeVerSeccion = (sec: VendedorSection) => !esAgente || AGENTE_SECCIONES.includes(sec);
 
@@ -2810,6 +2811,8 @@ export function useDealFlowState() {
   // Effi por API directa: ¿la tienda lo tiene listo para despachar?
   const [effiApi, setEffiApi] = useState<EffiApiEstado>({ conectado: false });
   async function cargarEffiApi() { const { data } = await apiEffiApiEstado(); if (data) setEffiApi(data); return data; }
+  // Al entrar: saber si la tienda tiene Effi (muestra "Logística Effi" en el menú).
+  useEffect(() => { if (apiMode && sessionUser && !isAdmin) void cargarEffiApi(); }, [apiMode, sessionUser, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
   async function refrescarPedidos() { const { data } = await apiOrders(); if (data) setOrders(mapApiOrders(data.orders)); }
   // ── Cupones (gestión del admin de DealFlow) ──
   async function reloadCupones() { const { data } = await apiCupones(); if (data) setCupones(data.cupones); }
@@ -3888,6 +3891,21 @@ export function useDealFlowState() {
     openMenu: () => setMenuOpen(true),
     closeMenu: () => setMenuOpen(false),
     mobileChatOpen,
+    // Abre el detalle de un pedido sin cambiar de sección (p. ej. desde Logística).
+    verPedido: (id: string) => setSelectedOrderId(id),
+    // Desde un pedido: abre el chat del que vino (por su chat guardado o por el celular).
+    abrirChatDePedido: (o: { leadId?: string; tel?: string }) => {
+      const d = (x: string) => String(x || '').replace(/\D/g, '').slice(-10);
+      const lead = o.leadId ? (apiLeadsState || []).find((l) => String(l.id) === String(o.leadId)) : (apiLeadsState || []).find((l) => d(l.tel) && d(l.tel) === d(o.tel || ''));
+      const id = lead?.id ?? o.leadId;
+      if (!id) { toast('Este pedido no tiene un chat asociado (se creó a mano o el cliente no ha escrito).', 'info', 5000); return; }
+      setSelectedOrderId(null);
+      setCrmSelectedId(id);
+      setCrmSendWarn('');
+      if (apiMode) cargarMensajesChat(id);
+      setMobileChatOpen(true);
+      go('crm');
+    },
     // Desde Leads: abre ese chat en el Inbox (en celular, directo la conversación).
     abrirChat: (id: number | string) => {
       setCrmSelectedId(id);

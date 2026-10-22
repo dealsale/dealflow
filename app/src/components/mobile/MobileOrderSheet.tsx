@@ -40,7 +40,7 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
           <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 13, marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
               <div style={{ fontWeight: 700, fontSize: 15 }}>{sel.cliente}</div>
-              <OrigenBadge origen={sel.origen} texto />
+              <button onClick={() => df.abrirChatDePedido({ leadId: sel.leadId, tel: sel.tel })} title="Abrir el chat de este cliente" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'inherit' }}><OrigenBadge origen={sel.origen || (sel.leadId ? 'whatsapp' : '')} texto /><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-brand)' }}>Abrir chat ↗</span></button>
             </div>
             <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 6px' }}>{sel.tel}</div>
             <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{sel.direccion}</div>

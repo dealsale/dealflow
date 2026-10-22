@@ -438,7 +438,7 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>💾 Copias de seguridad de la base</h2>
-          <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Una automática cada día (se guardan las últimas 3) y las que hagas a mano (también las últimas 3).</span>
+          <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Una copia automática cada día a las 12 a. m. (hora Colombia); se guarda solo la última y la anterior se borra. Si haces una a mano, se reemplaza con la de la siguiente medianoche.</span>
           <button onClick={() => void copiarAhora()} disabled={!!ocupado} style={{ ...linkBtn('var(--df-brand)'), border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px' }}>{ocupado === 'copia' ? 'Copiando…' : '＋ Crear copia ahora'}</button>
         </div>
         {espacio && espacio.totalMb > 0 && (

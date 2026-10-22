@@ -47,6 +47,8 @@ export interface Order {
   shopifyEnviado?: boolean;
   /** canal del que vino: whatsapp | instagram | messenger | shopify | web | manual */
   origen?: string;
+  /** Chat del que vino el pedido (Inbox). */
+  leadId?: string;
   envio: number;
   nota: string;
   /** Total del pedido acordado por el asistente (si no hay precios por ítem) */
@@ -274,6 +276,7 @@ export type VendedorSection =
   | 'productos'
   | 'asistente'
   | 'whatsapp'
+  | 'logistica'
   | 'pedidos'
   | 'leads'
   | 'crm'
