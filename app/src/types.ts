@@ -49,6 +49,8 @@ export interface Order {
   origen?: string;
   /** Chat del que vino el pedido (Inbox). */
   leadId?: string;
+  /** Id de la guía en Effi (p. ej. GT-12), aunque la transportadora aún no dé el número. */
+  effiGuiaTx?: string;
   /** Resultado del último aviso de la guía al cliente. */
   guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string } | null;
   envio: number;

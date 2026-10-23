@@ -334,6 +334,7 @@ export interface ApiOrder {
   effiRemision?: string;
   origen?: string;
   leadId?: string;
+  effiGuiaTx?: string;
   guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string } | null;
   envio: number;
   nota: string;
@@ -562,6 +563,9 @@ export const apiEffiGuia = (rowId: string, d: DatosGuia) => req<{ ok: true; guia
 export const apiGuiaDocumento = (rowId: string, dataUrl: string) => req<{ ok: true; guiaUrl: string; guiaImg: string; convertida: boolean }>(`/api/orders/${rowId}/guia-documento`, 'POST', { dataUrl });
 export interface ResultadoAvisoGuia { chat: 'enviado' | 'plantilla' | 'bloqueado' | 'error' | 'sin_chat'; contacto: 'plantilla' | 'mismo' | 'sin_plantilla' | 'error' | 'no_aplica'; con: 'image' | 'document' | 'texto'; detalle: string[] }
 export const apiGuiaManual = (rowId: string, guia: string, transportadora = '') => req<{ ok: true; guia: string; aviso: string }>(`/api/orders/${rowId}/guia-manual`, 'POST', { guia, transportadora });
+export interface VarianteFaltante { itemId: string; qty: number; nombre: string; producto: string; opciones: { variantId: string; label: string }[] }
+export const apiVariantesFaltantes = (rowId: string) => req<{ faltan: VarianteFaltante[] }>(`/api/orders/${rowId}/variantes-faltantes`, 'GET');
+export const apiCorregirVariante = (rowId: string, itemId: string, variantId: string) => req<{ ok: true; nombre: string }>(`/api/orders/${rowId}/items/${itemId}/variante`, 'POST', { variantId });
 export const apiGuiaEnviar = (rowId: string) => req<{ ok: true } & ResultadoAvisoGuia>(`/api/orders/${rowId}/guia-enviar`, 'POST');
 export const apiEffiPreview = (rowId: string, convenio = '') => req<EffiPreview>(`/api/orders/${rowId}/effi/preview${convenio ? `?convenio=${encodeURIComponent(convenio)}` : ''}`, 'GET');
 export interface GuiaLogistica {

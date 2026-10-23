@@ -278,7 +278,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: itemsTienda.get(o.id as string) || [], novedad: novTienda.get(o.id as string) || null,
   }));
   // Resumen (sin todos los mensajes de cada chat): la carga inicial del panel no
@@ -478,7 +478,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const novs = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));
   res.json({ orders });
@@ -1698,6 +1698,38 @@ api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, re
   const ok = r.chat === 'enviado' || r.chat === 'plantilla' || r.contacto === 'plantilla';
   if (!ok) return res.status(400).json({ error: r.detalle.join(' ') || 'No se encontró el chat del cliente ni un número de contacto.' });
   res.json({ ok: true, ...r });
+});
+// Ítems del pedido cuya talla/color no existe en el producto, con las variantes que sí hay
+// (para corregirlos desde el mismo pedido con un selector).
+api.get('/orders/:rowId/variantes-faltantes', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT id FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid);
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const { variantesBase, emparejarItem } = await import('./emparejar.js');
+  const todas = variantesBase(sid);
+  const items = db.prepare("SELECT id, qty, nombre, COALESCE(variant_id,'') variant_id FROM order_items WHERE order_id = ?").all(req.params.rowId) as { id: string; qty: number; nombre: string; variant_id: string }[];
+  const faltan = [];
+  for (const it of items) {
+    if (it.variant_id && todas.some((v) => v.variantId === it.variant_id)) continue;
+    const r = emparejarItem(it.nombre, todas);
+    if (r.v) continue;
+    const prod = r.parecidos[0] && r.parecidos[0].puntaje >= 0.6 ? r.parecidos[0].producto : '';
+    const opciones = todas.filter((v) => v.producto === prod && v.variantId).map((v) => ({ variantId: v.variantId!, label: v.label }));
+    faltan.push({ itemId: it.id, qty: it.qty, nombre: it.nombre, producto: prod, opciones });
+  }
+  res.json({ faltan });
+});
+// Corrige la variante de un ítem del pedido (el nombre queda "Producto (Variante)").
+api.post('/orders/:rowId/items/:itemId/variante', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  const it = db.prepare('SELECT i.id, i.nombre FROM order_items i JOIN orders o ON o.id = i.order_id WHERE i.id = ? AND o.id = ? AND o.store_id = ?').get(req.params.itemId, req.params.rowId, sid) as { id: string; nombre: string } | undefined;
+  if (!it) return res.status(404).json({ error: 'Producto del pedido no encontrado.' });
+  const v = db.prepare('SELECT v.id, v.label, p.id pid, p.nombre FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(String(req.body?.variantId || ''), sid) as { id: string; label: string; pid: string; nombre: string } | undefined;
+  if (!v) return res.status(400).json({ error: 'Elige una variante del producto.' });
+  const nombre = v.label && v.label.toLowerCase() !== 'única' ? `${v.nombre} (${v.label})` : v.nombre;
+  db.prepare('UPDATE order_items SET nombre = ?, product_id = ?, variant_id = ? WHERE id = ?').run(nombre, v.pid, v.id, it.id);
+  trazar(sid, String(req.params.rowId), { etapa: 'pedido', nivel: 'info', titulo: `Variante corregida: ${it.nombre} → ${nombre}`, detalle: `Por ${req.user!.nombre || req.user!.email}.` });
+  res.json({ ok: true, nombre });
 });
 // Vista previa: lo que se le mandaría a Effi para este pedido (no crea nada).
 api.get('/orders/:rowId/effi/preview', requireAuth, requireStore, requireOwner, async (req, res) => {

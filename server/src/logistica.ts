@@ -5,7 +5,7 @@
  * pedir "actualizar", consulta en Effi las guías activas.
  */
 import { db, pj } from './db.js';
-import { cfgEffi, effi, urlDocumentoGuia } from './effiApi.js';
+import { cfgEffi, effi, urlDocumentoGuia, numeroGuiaEffi } from './effiApi.js';
 import { estadoLogistico } from './estadosPedido.js';
 
 type Fila = Record<string, unknown>;
@@ -171,7 +171,7 @@ export async function sincronizarGuiasEffi(storeId: string, dias = 60): Promise<
       for (const f of filas) {
         const id = `${txt(f.sucursal)}:${txt(f.id)}`;
         if (!txt(f.id)) continue;
-        ins.run(storeId, id, txt(f.guia), txt(f.nombre_transportadora_efficommerce) || txt(f.nombre_transportadora),
+        ins.run(storeId, id, numeroGuiaEffi(f), txt(f.nombre_transportadora_efficommerce) || txt(f.nombre_transportadora),
           campo(f, /^estado_efficommerce$|^estado_guia_efficommerce$|^nombre_est_guia$|^estado$/i),
           campo(f, /nombre_destinatario|^destinatario$|nombre_cliente|razon_social_destinatario/i),
           campo(f, /nombre_ciudad_destin|ciudad_destin/i),

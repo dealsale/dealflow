@@ -1316,7 +1316,7 @@ async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, 
     return { error: e };
   }
   const gg = r.body.data?.guias?.[0] || {};
-  const guia = txt(gg.guia);
+  const guia = numeroGuiaEffi(gg);
   const transportadora = nombreTransportadora(txt(gg.nombre_transportadora_efficommerce) || txt(gg.nombre_transportadora));
   const url = urlDocumentoGuia(gg);
   if (url) db.prepare('UPDATE orders SET guia_url = ? WHERE id = ?').run(url, txt(o.id));
@@ -1399,6 +1399,25 @@ function revisarNovedadesPronto(storeId: string): void {
 }
 
 /** Busca un campo por varios nombres posibles (Effi manda los datos "como la API" y anida a veces). */
+/** Número de guía de la transportadora en los datos de Effi (el nombre del campo varía). */
+export function numeroGuiaEffi(datos: unknown): string {
+  const g = campo(datos, 'guia', 'numero_guia', 'guia_transportadora', 'numero_guia_transportadora', 'codigo_guia', 'numero_seguimiento', 'tracking', 'guia_efficommerce');
+  if (g) return g;
+  // Último recurso: cualquier campo con "guia"/"tracking"/"seguimiento" que traiga un número de guía.
+  const buscar = (o: unknown, nivel = 0): string => {
+    if (!o || typeof o !== 'object' || nivel > 3) return '';
+    for (const [k, v] of Object.entries(o as Fila)) {
+      if (v != null && typeof v !== 'object' && /guia|tracking|seguimiento/i.test(k) && !/url|pdf|estado|fecha|id_|_id$|^id$|ref/i.test(k)) {
+        const t = txt(v).trim();
+        if (/^[A-Za-z0-9-]{6,40}$/.test(t) && /\d{5}/.test(t)) return t;
+      }
+    }
+    for (const v of Object.values(o as Fila)) if (v && typeof v === 'object') { const x = buscar(Array.isArray(v) ? v[0] : v, nivel + 1); if (x) return x; }
+    return '';
+  };
+  return buscar(datos);
+}
+
 function campo(obj: unknown, ...claves: string[]): string {
   if (!obj || typeof obj !== 'object') return '';
   const o = obj as Fila;
@@ -1443,10 +1462,26 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
       registrarLog(storeId, 'warn', 'despacho', `Effi anuló la remisión ${txt(orden.effi_remision)} del pedido ${numDF}.`);
       db.prepare("UPDATE orders SET effi_remision = effi_remision || ' (anulada)' WHERE id = ? AND effi_remision NOT LIKE '%anulada%'").run(orden.id);
     } else if (esGuia) {
-      const guia = campo(datos, 'guia');
+      const guia = numeroGuiaEffi(datos);
+      const estadoGuia = campo(datos, 'estado_efficommerce', 'estado_guia_efficommerce', 'estado', 'nombre_est_guia');
+      if (/anulad/i.test(estadoGuia) || /anulac/.test(ev)) {
+        // Guía anulada en Effi: se suelta del pedido (si era la suya) para poder hacer otra.
+        const idG = campo(datos, 'id');
+        const actual = pj<Fila>(txt(orden.effi_guia), {});
+        if (!txt(actual.id) || !idG || txt(actual.id) === idG) {
+          db.prepare("UPDATE orders SET effi_guia = '', guia = CASE WHEN ? != '' AND guia = ? THEN '' ELSE guia END, estado_woo = 'Guía anulada en Effi' WHERE id = ?").run(guia, guia, orden.id);
+          trazar(storeId, txt(orden.id), { etapa: 'despacho', nivel: 'warn', titulo: `Effi anuló la guía${guia ? ` ${guia}` : ''}`, detalle: 'Genera una nueva (con otra transportadora si la primera no llega a la ciudad). La remisión sigue vigente.', datos });
+          registrarLog(storeId, 'warn', 'despacho', `${numDF}: Effi anuló la guía${guia ? ` ${guia}` : ''}. Genera otra desde el pedido.`);
+        }
+        return resumen + ' · guía anulada';
+      }
       const transp = campo(datos, 'nombre_transportadora_efficommerce', 'nombre_transportadora');
       const estadoTxt = campo(datos, 'estado_efficommerce', 'estado_guia_efficommerce', 'estado_new_efficommerce', 'estado_new', 'estado', 'nombre_est_guia');
       if (guia && guia !== txt(orden.guia)) db.prepare('UPDATE orders SET guia = ? WHERE id = ?').run(guia, orden.id);
+      // La guía vigente (p. ej. la nueva tras una anulada) queda como la guía del pedido.
+      if (campo(datos, 'id') && campo(datos, 'id_transaccion') && pj<Fila>(txt(orden.effi_guia), {}).id !== campo(datos, 'id')) {
+        db.prepare('UPDATE orders SET effi_guia = ? WHERE id = ?').run(JSON.stringify({ sucursal: campo(datos, 'sucursal'), id: campo(datos, 'id'), id_transaccion: campo(datos, 'id_transaccion') }), orden.id);
+      }
       const urlDoc = urlDocumentoGuia(datos);
       if (urlDoc && urlDoc !== txt(orden.guia_url)) db.prepare('UPDATE orders SET guia_url = ? WHERE id = ?').run(urlDoc, orden.id);
       if (transp) db.prepare('UPDATE orders SET transportadora = ? WHERE id = ?').run(nombreTransportadora(transp) || transp, orden.id);
@@ -1497,7 +1532,18 @@ export async function consultarEstadoEffi(storeId: string, orderId: string): Pro
   if (!d.id) return { error: 'Este pedido no tiene remisión en Effi.' };
   const r = await effi<Fila[]>(c.apiKey, 'GET', '/api/guia_transporte', { query: { id_ref: txt(d.id), por_pagina: 20 } });
   if (!r.ok) return { error: mensajeError(r) };
-  const g = (r.body.data || []).find((x) => txt(x.t_trans_ref) === String(T_TRANS_REMISION_V) && (!txt(x.sucursal_ref) || txt(x.sucursal_ref) === txt(d.sucursal)));
+  // Si Effi anuló una guía (p. ej. la transportadora no llegaba a la ciudad) y se hizo otra,
+  // vale la más reciente que NO esté anulada.
+  const anulada = (x: Fila) => /anulad/i.test(`${txt(x.estado_efficommerce)} ${txt(x.estado)} ${txt(x.nombre_est_guia)} ${txt(x.estado_guia_efficommerce)}`) || txt(x.vigente) === '0';
+  const deRemision = (r.body.data || []).filter((x) => txt(x.t_trans_ref) === String(T_TRANS_REMISION_V) && (!txt(x.sucursal_ref) || txt(x.sucursal_ref) === txt(d.sucursal)))
+    .sort((a, b) => Number(b.id) - Number(a.id));
+  let g: Fila | undefined = deRemision.find((x) => !anulada(x)) || deRemision[0];
+  // La guía que DealFlow creó: si no aparece por la remisión, se busca por su propio id.
+  const gd = pj<Fila>(txt(o.effi_guia), {});
+  if (!g && txt(gd.id)) {
+    const r2 = await effi<Fila[]>(c.apiKey, 'GET', '/api/guia_transporte', { query: { id: txt(gd.id), por_pagina: 5 } });
+    g = r2.ok ? (r2.body.data || []).find((x) => txt(x.id) === txt(gd.id)) : undefined;
+  }
   if (!g) return { estado: 'Remisión creada · aún sin guía', guia: '' };
   await procesarWebhookEffi(storeId, 'Consulta de guía', '', { data: g });
   const f = db.prepare('SELECT estado_woo, guia FROM orders WHERE id = ?').get(orderId) as { estado_woo: string; guia: string };
