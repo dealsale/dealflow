@@ -5,7 +5,7 @@ import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
 import type { Variante, Opcion } from '../types';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
-import { EffiVinculoProducto } from '../components/EffiProductos';
+import { EffiVinculoProducto, ConvenioProductoEffi } from '../components/EffiProductos';
 import { apiSincronizarDropi, apiSoltarVariantesDropi, type ResultadoSyncDropi } from '../lib/api';
 
 
@@ -119,6 +119,45 @@ const INTEGRACIONES: { id: IntegId; nombre: string; logo?: string; color: string
   { id: 'shopify', nombre: 'Shopify', color: '#5E8E3E', placeholder: 'SKU en Shopify' },
 ];
 
+/** Por quién se despacha el producto (arriba del producto): Effi, Dropi o sin definir. */
+function SeDespachaPor({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
+  if (!df.effiApi?.conectado && !df.dropiConectado) return null;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>🚚 Se despacha por</div>
+      <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }}>
+        {([['effi', 'Effi'], ['dropi', 'Dropi'], ['', 'Sin definir']] as const).map(([k, t]) => {
+          const on = (p.despachoProveedor || '') === k;
+          return (
+            <button key={k || 'none'} onClick={() => p.setDespachoProveedor(k)}
+              style={{ border: 'none', padding: '7px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', background: on ? (k === 'effi' ? 'var(--df-purple)' : k === 'dropi' ? 'var(--df-warning)' : 'var(--df-surface-2)') : 'var(--df-surface)', color: on && k ? '#fff' : 'var(--df-text-muted)' }}>
+              {t}
+            </button>
+          );
+        })}
+      </div>
+      {p.despachoProveedor === 'effi' && df.effiApi?.conectado && <ConvenioProductoEffi productId={String(p.id)} />}
+      {p.despachoProveedor && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>{p.despachoProveedor === 'effi' ? 'El artículo de Effi de cada variante' : 'La conexión con Dropi'} está en <b>Variantes</b> (plegado).</div>}
+    </div>
+  );
+}
+
+/** Bloque plegable de una integración dentro del producto (cerrado por defecto). */
+function BloquePlegable({ logo, titulo, color, resumen, abiertoInicial, children }: { logo: string; titulo: string; color: string; resumen: string; abiertoInicial: boolean; children: ReactNode }) {
+  const [abierto, setAbierto] = useState(abiertoInicial);
+  return (
+    <div style={{ border: '1px solid var(--df-border)', borderLeft: `3px solid ${color}`, borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
+      <button onClick={() => setAbierto((o) => !o)} aria-expanded={abierto} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', background: abierto ? 'var(--df-bg)' : 'var(--df-surface)', border: 'none', padding: '10px 12px', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+        <span style={{ fontSize: 12, color: 'var(--df-text-faint)', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
+        <img src={logo} alt={titulo} style={{ height: 18, maxWidth: 40, borderRadius: 4, objectFit: 'contain' }} />
+        <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--df-text-strong)' }}>{titulo}</span>
+        <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: abierto ? 'normal' : 'nowrap' }}>{resumen}</span>
+      </button>
+      {abierto && <div className="df-expand" style={{ padding: 12, borderTop: '1px solid var(--df-border)' }}>{children}</div>}
+    </div>
+  );
+}
+
 /**
  * Panel UNIFICADO de conexiones por variante. Un producto puede estar en varias
  * integraciones a la vez (Dropi, Effi, Shopify), cada una con su código por variante.
@@ -131,47 +170,33 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
     : id === 'effi' ? !!df.effiApi?.conectado
       : df.shopifyConectado;
   // Effi tiene su propio panel (abajo): artículo por variante y convenio del producto.
-  const activas = INTEGRACIONES.filter((i) => i.id !== 'effi' && conectada(i.id));
+  // Sin definir: nada de Effi ni de Dropi en el producto. Shopify va aparte.
+  const activas = INTEGRACIONES.filter((i) => i.id !== 'effi' && conectada(i.id) && (i.id !== 'dropi' || p.despachoProveedor === 'dropi'));
+  const todasVars = (p.variantes || []).filter((v) => v.id);
+  const effiVinc = todasVars.length ? todasVars.filter((v) => (v.refs?.effi_id || '').trim()).length : null;
+  const hayEffi = conectada('effi') && p.despachoProveedor === 'effi';
+  const hayDropi = conectada('dropi') && p.despachoProveedor === 'dropi';
+  if (!hayEffi && !hayDropi && !activas.length) return null;
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 800 }}>🚚 Se despacha por</span>
-        <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 8, overflow: 'hidden' }}>
-          {([['effi', 'Effi'], ['dropi', 'Dropi'], ['', 'Sin definir']] as const).map(([k, t]) => {
-            const on = (p.despachoProveedor || '') === k;
-            return (
-              <button key={k || 'none'} onClick={() => p.setDespachoProveedor(k)}
-                style={{ border: 'none', padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', background: on ? (k === 'effi' ? 'var(--df-purple)' : k === 'dropi' ? 'var(--df-warning)' : 'var(--df-surface-2)') : 'var(--df-surface)', color: on && k ? '#fff' : 'var(--df-text-muted)' }}>
-                {t}
-              </button>
-            );
-          })}
-        </div>
-        <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>La sincronización con Effi solo toma los productos de Effi.</span>
-      </div>
-      {conectada('effi') && p.despachoProveedor === 'effi' && (
-        <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <img src="/logos/effi.png" alt="Effi" style={{ height: 16 }} />
-            <b style={{ fontSize: 12.5 }}>Vínculo con Effi</b>
-            <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Se vincula solo por nombre y variante; si alguna no casó, elígela aquí.</span>
-          </div>
-          <EffiVinculoProducto productId={String(p.id)} productoNombre={p.nombre} onCambio={() => void df.reloadProducts()} />
-        </div>
+      {hayEffi && (
+        <BloquePlegable logo="/logos/effi.png" titulo="Effi" color="var(--df-purple)" abiertoInicial={false}
+          resumen={`Artículo de Effi de cada variante${effiVinc !== null ? ` · ${effiVinc}/${todasVars.length} vinculadas` : ''} (se vinculan solos por nombre; aquí corriges las que no casaron).`}>
+          <EffiVinculoProducto productId={String(p.id)} productoNombre={p.nombre} conConvenio={false} onCambio={() => void df.reloadProducts()} />
+        </BloquePlegable>
       )}
-      {conectada('effi') && p.despachoProveedor !== 'effi' && p.despachoProveedor !== 'dropi' && (
-        <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 10 }}>¿Lo despacha Effi? Márcalo como <b>Effi</b> arriba para vincular sus variantes con los artículos de Effi.</div>
+      {hayDropi && (
+        <BloquePlegable logo="/logos/dropi.jpg" titulo="Dropi" color="var(--df-warning)" abiertoInicial={false}
+          resumen={p.variantesFuente === 'dropi' ? 'Variantes sincronizadas con Dropi (se actualizan cada 6 h).' : 'Trae las variantes y el stock con el ID del producto en Dropi.'}>
+          <SyncDropi p={p} df={df} />
+        </BloquePlegable>
       )}
-      {conectada('dropi') && <SyncDropi p={p} df={df} />}
-      {(activas.length > 0 || !conectada('effi')) && <>
+      {activas.length > 0 && <>
       <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4, letterSpacing: '.02em' }}>🔗 Conexiones por variante</div>
       <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>
-        Pon el código de cada variante en Dropi o Shopify si vendes este producto por allá. Se guarda al salir del campo.
+        Pon el código de cada variante si vendes este producto por allá. Se guarda al salir del campo.
       </div>
       {!variantes.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Primero genera las variantes (arriba) para poder vincularlas.</div>}
-      {!!variantes.length && !activas.length && (
-        <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes Dropi ni Shopify conectados. Si los conectas en <b>Integraciones</b>, aquí aparece un panel para poner el código de cada variante.</div>
-      )}
       {!!variantes.length && activas.map((integ) => (
         <PanelIntegracion key={integ.id} integ={integ} p={p} df={df} variantes={variantes} />
       ))}
@@ -393,6 +418,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
               <input className="df-input" value={p.duracion || ''} onChange={(e) => p.setDuracion(e.target.value)} placeholder="Ej: 45 minutos" style={inputStyle} />
             </div>
           )}
+          {(p.tipo || 'producto') === 'producto' && <SeDespachaPor p={p} df={df} />}
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 10, marginBottom: 14, maxWidth: 560 }}>
             <div>
               <div style={label}>Nombre</div>
