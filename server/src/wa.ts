@@ -58,6 +58,7 @@ function registrarFallo(rowId: string, error: string): void {
       alertaPago.set(m.store_id, Date.now());
       registrarLog(m.store_id, 'error', 'meta', 'Meta no está entregando los mensajes que cobra (plantillas y mensajes fuera de la ventana gratis): hay un problema con el método de pago de tu cuenta de WhatsApp Business. Arréglalo en business.facebook.com → Cuentas de WhatsApp → Configuración de pago. Las respuestas gratis (dentro de 24 h) siguen saliendo.');
       void import('./push.js').then((p) => p.enviarPush(m.store_id, 'contactos', '⚠️ WhatsApp: problema de pago en Meta', 'Algunos mensajes no se están entregando. Revisa el método de pago de tu cuenta de WhatsApp Business.', { url: '/' })).catch(() => {});
+      void import('./correo.js').then((c) => c.correoATienda(m.store_id, 'alertas', 'WhatsApp: problema de pago en Meta', '⚠️ Meta pide revisar el método de pago', ['Meta no está entregando los mensajes que cobra (plantillas y mensajes fuera de la ventana de 24 h) por un problema con el <b>método de pago</b> de tu cuenta de WhatsApp Business.', 'Arréglalo en <b>business.facebook.com → Cuentas de WhatsApp → Configuración de pago</b>. Las respuestas dentro de las 24 h siguen saliendo.'], { texto: 'Abrir Meta Business', url: 'https://business.facebook.com/' })).catch(() => {});
     }
     if (m.de === 'bot' && !/bloqueaste|bloqueado/i.test(error)) {
       void import('./pasoHumano.js').then((h) => h.pasarAHumano(m.store_id, m.lead_id, `WhatsApp no entregó la respuesta del asistente (${error})`)).catch(() => {});

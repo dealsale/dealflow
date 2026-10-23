@@ -3,7 +3,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
 import { confirmar } from '../../components/dialogs';
-import { apiSeguridad, type PuntoSeguridad, type AccesoEquipo } from '../../lib/api';
+import { apiSeguridad, type PuntoSeguridad, type AccesoEquipo, apiAdminCorreo, apiAdminCorreoPrueba, type EstadoCorreo } from '../../lib/api';
 import { apiCifrado, apiPapelera, apiPapeleraRestaurar, apiRespaldoEliminar, apiPapeleraEliminar, type EspacioDisco, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
 
 const labelStyle: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
@@ -139,6 +139,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
         </div>
       )}
       {df.isSuperadmin && <SeguridadEquipo />}
+      {df.isSuperadmin && <CorreosServidor />}
       {df.isSuperadmin && <PapeleraYCopias df={df} />}
     </section>
   );
@@ -515,6 +516,55 @@ function SeguridadEquipo() {
               <span style={{ color: a.soporte ? 'var(--df-warning)' : 'var(--df-text-muted)' }}>{a.soporte ? 'soporte' : a.rol}</span>
               <span style={{ fontFamily: "'JetBrains Mono', monospace", flex: 1, minWidth: 180 }}>{a.metodo === 'ACCION' ? a.ruta : `${a.metodo} ${a.ruta}`}</span>
               {a.tienda && <span style={{ color: 'var(--df-text-muted)' }}>{a.tienda}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Solo superadmin: estado del envío de correos y los últimos enviados. */
+function CorreosServidor() {
+  const [e, setE] = useState<EstadoCorreo | null>(null);
+  const [para, setPara] = useState('');
+  const [msg, setMsg] = useState('');
+  const cargar = () => void apiAdminCorreo().then((r) => r.data && setE(r.data));
+  useEffect(cargar, []);
+  const probar = async () => {
+    setMsg('');
+    const r = await apiAdminCorreoPrueba(para.trim());
+    setMsg(r.error ? `⚠️ ${r.error}` : '✓ Enviado. Revisa la bandeja (y spam).');
+    cargar();
+  };
+  if (!e) return null;
+  const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 18 };
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>✉️ Correos</h2>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: e.configurado ? 'var(--df-success)' : 'var(--df-danger)' }}>
+          {e.configurado ? `Activo · ${e.proveedor === 'resend' ? 'Resend' : `SMTP ${e.host}`}` : 'Sin configurar'}
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--df-text-muted)', marginLeft: 'auto' }}>Últimas 24 h: {e.ultimos24h} enviados{e.errores24h ? ` · ${e.errores24h} con error` : ''}</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginTop: 8, lineHeight: 1.55 }}>
+        Remitente: <b>{e.desde}</b>{e.responderA ? <> · responder a <b>{e.responderA}</b></> : ''}.
+        {!e.configurado && <> En Railway → Variables agrega <code>RESEND_API_KEY</code>, o <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code> y <code>SMTP_PASS</code>. Opcional: <code>MAIL_FROM</code> y <code>MAIL_REPLY_TO</code>.</>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+        <input value={para} onChange={(ev) => setPara(ev.target.value)} placeholder="Correo de prueba (vacío = el tuyo)" style={{ flex: 1, minWidth: 200, border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 11px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
+        <button onClick={() => void probar()} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>Enviar prueba</button>
+      </div>
+      {msg && <div style={{ fontSize: 12.5, marginTop: 6, color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</div>}
+      {!!e.ultimos.length && (
+        <div style={{ marginTop: 10, maxHeight: 260, overflowY: 'auto', border: '1px solid var(--df-border)', borderRadius: 10 }}>
+          {e.ultimos.map((c, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12, padding: '7px 10px', borderTop: i ? '1px solid var(--df-border)' : 'none' }}>
+              <span style={{ color: 'var(--df-text-faint)', minWidth: 120 }}>{c.created_at}</span>
+              <span>{c.estado === 'enviado' ? '✅' : '⚠️'}</span>
+              <b style={{ minWidth: 160 }}>{c.para}</b>
+              <span style={{ flex: 1, minWidth: 160 }}>{c.asunto}{c.error ? <span style={{ color: 'var(--df-danger)' }}> — {c.error}</span> : ''}</span>
             </div>
           ))}
         </div>

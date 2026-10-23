@@ -95,6 +95,7 @@ export async function importarPedido(storeId: string, shop: string, o: Fila, con
     trazar(storeId, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado desde Shopify ${txt(o.name)}`, detalle: `Origen: shopify (${shop})`, datos: { cliente, tel, ciudad: txt(env.city), total, envio, productos: lineas.map((l) => `${txt(l.quantity)}× ${txt(l.title)} ${txt(l.variant_title)} [${txt(l.sku)}]`) } });
     registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} llegó de Shopify ${txt(o.name)} (${cliente}).`);
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido de Shopify DF-${numero} 🛍️`, `${cliente} · ${pesos(total)}`, { url: '/' })).catch(() => {});
+    void import('./correo.js').then((c) => c.correoPedidoNuevo(storeId, oid, 'Shopify')).catch(() => {});
     if (!tel) trazar(storeId, oid, { etapa: 'pedido', nivel: 'warn', titulo: 'El pedido de Shopify llegó sin teléfono', detalle: 'No se puede confirmar por WhatsApp. ¿Falta aprobar el acceso a datos de clientes en Shopify, o el checkout no pide el teléfono?' });
     else if (confirmar && cfgPedidosShopify(storeId).confirmar) await enviarConfirmacion(storeId, oid);
     else if (!confirmar) trazar(storeId, oid, { etapa: 'pedido', nivel: 'info', titulo: 'Pedido antiguo: no se envió confirmación automática', detalle: 'Se trajo de Shopify más de 24 h después de creado. Puedes enviar la confirmación con el botón del pedido.' });
@@ -192,6 +193,7 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     registrarLog(storeId, 'warn', 'pedido', `${num}: el cliente no confirmó el pedido de Shopify. Escríbele desde el Inbox.`, leadId);
     void etiquetar(storeId, orderId, ['no-confirmado']);
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `${num} no confirmado ❌`, `${txt(o.cliente)} respondió que no. Escríbele desde el Inbox.`, { url: '/' })).catch(() => {});
+    void import('./correo.js').then((c) => c.correoATienda(storeId, 'pedidos', `${num} no confirmado`, `❌ ${num}: el cliente no confirmó`, [`${c.escHtml(txt(o.cliente))} respondió que <b>no</b> confirma el pedido de Shopify.`, 'El chat quedó asignado a tu equipo: escríbele desde el Inbox.'])).catch(() => {});
     return true;
   }
   // Ni sí ni no: se le pide UNA vez que elija; después, el asistente conversa normal.
