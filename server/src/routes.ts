@@ -277,7 +277,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const itemsTienda = itemsPorPedido(sid);
   const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: itemsTienda.get(o.id as string) || [], novedad: novTienda.get(o.id as string) || null,
   }));
@@ -477,7 +477,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const items = itemsPorPedido(sid);
   const novs = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));
@@ -1070,6 +1070,7 @@ const dropiHelpers = {
   async resolverProductosDropi(
     sid: string, o: Record<string, unknown>, _cred: DropiApi.DropiCred, _dropi: typeof DropiApi,
   ): Promise<{ cotProductos: DropiApi.CotProducto[]; ordenProductos: CrearOrdenInputProducto[] } | { error: string }> {
+    { const { separarItemsPedido } = await import('./emparejar.js'); separarItemsPedido(sid, String(o.id)); }
     const items = db.prepare("SELECT qty, nombre, precio, COALESCE(product_id,'') product_id, COALESCE(variant_id,'') variant_id FROM order_items WHERE order_id = ?").all(o.id) as { qty: number; nombre: string; precio: number; product_id: string; variant_id: string }[];
     if (!items.length) return { error: 'El pedido no tiene productos.' };
     // Producto: SKU = ID del producto en Dropi. Variante: SKU = ID de la VARIACIÓN
@@ -1959,6 +1960,20 @@ api.post('/leads/:id/messages', requireAuth, requireStore, async (req, res) => {
   const wa = await sendWhatsappText(req.user!.storeId!, l.wa_id || l.tel, texto, l.tel);
   marcarEnviado(mid, wa);
   res.json({ ok: true, enviadoPorWhatsapp: wa.ok, aviso: wa.ok ? undefined : wa.error });
+});
+
+// Anuncio → producto: para enviar el mensaje inicial correcto aunque no escriban el disparador.
+api.get('/anuncios/:adId/producto', requireAuth, requireStore, async (req, res) => {
+  const { productoDeAnuncio } = await import('./campana.js');
+  const v = productoDeAnuncio(req.user!.storeId!, String(req.params.adId));
+  res.json({ productId: v?.productId || '', auto: !!v?.auto });
+});
+api.post('/anuncios/:adId/producto', requireAuth, requireStore, async (req, res) => {
+  const { vincularAnuncio } = await import('./campana.js');
+  const pid = String(req.body?.productId || '');
+  if (pid && !db.prepare('SELECT 1 FROM products WHERE id = ? AND store_id = ?').get(pid, req.user!.storeId)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  vincularAnuncio(req.user!.storeId!, String(req.params.adId), pid, String(req.body?.titular || ''), false);
+  res.json({ ok: true });
 });
 
 // Disparar MANUALMENTE el mensaje inicial de un producto en este chat (flujo).

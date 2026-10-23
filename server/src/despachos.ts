@@ -20,6 +20,7 @@ const COLS = 'id, store_id, numero, tel, guia, estado, dropi_order_id, guia_url,
 
 let corriendo = false;
 const avisado = new Map<string, string>(); // orderId → último motivo registrado (no repetir)
+const intentoAviso = new Map<string, number>(); // orderId → último intento de avisar la guía
 
 /** Un ciclo de sincronización de despachos para TODAS las tiendas. */
 export async function sincronizarDespachos(): Promise<void> {
@@ -85,7 +86,11 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
     params.push(o.id);
     db.prepare(`UPDATE orders SET ${cambios.join(', ')} WHERE id = ?`).run(...params);
   }
-  if (guiaNueva && !o.guia_avisada && o.tel) await avisarGuiaAlCliente(o.store_id, o.id);
+  // Aviso de la guía: si falla (p. ej. plantilla sin aprobar), se reintenta cada hora, no cada 4 min.
+  if (guiaNueva && !o.guia_avisada && o.tel && Date.now() - (intentoAviso.get(o.id) || 0) > 3600_000) {
+    intentoAviso.set(o.id, Date.now());
+    await avisarGuiaAlCliente(o.store_id, o.id);
+  }
   return { estado: r.estado, guia: guiaNueva };
 }
 

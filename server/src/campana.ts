@@ -104,3 +104,24 @@ export function guardarAdEnLead(leadId: string, ad: AdRef | null): void {
   if (row.ad_id || row.ad_ref) return; // ya tiene un anuncio: no lo cambiamos
   db.prepare('UPDATE leads SET ad_id = ?, ad_ref = ? WHERE id = ?').run(ad.id || '', JSON.stringify(ad), leadId);
 }
+
+// ── Anuncio → producto ─────────────────────────────────────────────────────
+// Si el cliente llega por un anuncio SIN escribir el disparador, igual sabemos de
+// qué anuncio vino: con este vínculo el bot le manda el mensaje inicial de ESE producto.
+db.exec(`CREATE TABLE IF NOT EXISTS anuncio_producto (
+  store_id TEXT NOT NULL, ad_id TEXT NOT NULL, product_id TEXT NOT NULL, titular TEXT NOT NULL DEFAULT '',
+  auto INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (store_id, ad_id)
+)`);
+export function productoDeAnuncio(storeId: string, adId: string): { productId: string; auto: boolean } | null {
+  if (!adId) return null;
+  const r = db.prepare('SELECT product_id, auto FROM anuncio_producto WHERE store_id = ? AND ad_id = ?').get(storeId, adId) as { product_id: string; auto: number } | undefined;
+  return r ? { productId: r.product_id, auto: r.auto === 1 } : null;
+}
+export function vincularAnuncio(storeId: string, adId: string, productId: string, titular = '', auto = false): void {
+  if (!adId) return;
+  if (!productId) { db.prepare('DELETE FROM anuncio_producto WHERE store_id = ? AND ad_id = ?').run(storeId, adId); return; }
+  db.prepare(`INSERT INTO anuncio_producto (store_id, ad_id, product_id, titular, auto, updated_at) VALUES (?,?,?,?,?,datetime('now'))
+    ON CONFLICT(store_id, ad_id) DO UPDATE SET product_id = excluded.product_id, titular = CASE WHEN excluded.titular != '' THEN excluded.titular ELSE anuncio_producto.titular END, auto = excluded.auto, updated_at = excluded.updated_at`)
+    .run(storeId, adId, productId, titular.slice(0, 200), auto ? 1 : 0);
+}

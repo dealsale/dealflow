@@ -382,7 +382,9 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
       d.contacto === 'plantilla' ? 'al celular de contacto con la plantilla aprobada' : '',
     ].filter(Boolean);
     setMsg(`✓ Guía enviada ${partes.join(' y ')}.${d.detalle.length ? ' ⚠ ' + d.detalle.join(' ') : ''}`);
+    await df.refrescarPedidos();
   };
+  const av = sel.guiaAviso;
   const archivo = sel.guiaUrl || sel.guiaImg;
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -397,8 +399,16 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
           📎 {archivo ? 'Cambiar documento' : 'Subir guía (PDF o imagen)'}
           <input type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden onChange={(e) => { subir(e.target.files?.[0]); e.target.value = ''; }} />
         </label>
-        <button onClick={enviar} disabled={ocupado} style={{ ...btnS, background: '#25D366', borderColor: '#25D366', color: '#05301a', fontWeight: 700 }}>💬 Enviar guía al cliente</button>
+        <button onClick={enviar} disabled={ocupado} style={{ ...btnS, background: '#25D366', borderColor: '#25D366', color: '#05301a', fontWeight: 700 }}>💬 {av?.ok ? 'Reenviar guía al cliente' : 'Enviar guía al cliente'}</button>
       </div>
+      {av && (
+        <div style={{ fontSize: 12, lineHeight: 1.45, borderRadius: 8, padding: '8px 10px', background: av.ok ? 'rgba(37,211,102,.1)' : 'var(--df-warning-subtle)', color: av.ok ? '#047857' : 'var(--df-text-body)' }}>
+          {av.ok
+            ? <>✅ <b>La guía le llegó al cliente</b>{av.chat === 'plantilla' ? ' (con plantilla, la ventana de 24 h estaba cerrada)' : av.con === 'image' ? ' (con la imagen de la guía)' : av.con === 'document' ? ' (con el PDF)' : ''}.</>
+            : <>⚠️ <b>No se le pudo enviar la guía al cliente.</b> {av.detalle || 'Revisa el registro del pedido.'} {/plantilla/i.test(av.detalle) && 'Publica y espera la aprobación de la plantilla «guia_envio_pedido» en WhatsApp → Plantillas.'}</>}
+        </div>
+      )}
+      {!av && sel.hasGuia && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>La guía se le envía sola al cliente apenas llega; si no, usa el botón.</div>}
       {!archivo && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Effi no entrega el PDF de la guía por su API: descárgalo de Effi y súbelo aquí para mandárselo al cliente como imagen. Sin archivo, se envía solo el número.</div>}
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
     </div>

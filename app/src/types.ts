@@ -49,6 +49,8 @@ export interface Order {
   origen?: string;
   /** Chat del que vino el pedido (Inbox). */
   leadId?: string;
+  /** Resultado del último aviso de la guía al cliente. */
+  guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string } | null;
   envio: number;
   nota: string;
   /** Total del pedido acordado por el asistente (si no hay precios por ítem) */

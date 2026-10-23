@@ -16,6 +16,7 @@ import { idiomaDe, avisoGuia as avisoGuiaTexto } from './idioma.js';
  */
 
 export const PLANTILLA_GUIA = 'guia_envio_pedido';
+try { db.exec("ALTER TABLE orders ADD COLUMN guia_aviso TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 
 type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));
@@ -42,11 +43,32 @@ export function chatDelPedido(storeId: string, o: Fila): { id: string; tel: stri
     .get(storeId, `%${t}`) as { id: string; tel: string; wa_id: string } | undefined;
 }
 
+/** Baja la guía (PDF o imagen) de un enlace externo, la guarda como imagen y la deja en el pedido. */
+async function bajarGuiaRemota(storeId: string, o: Fila, url: string): Promise<string> {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if (!r.ok) return '';
+    const buf = Buffer.from(await r.arrayBuffer());
+    const ct = r.headers.get('content-type') || '';
+    const { guardarArchivo, pdfAPng } = await import('./media.js');
+    const png = ct.includes('pdf') || /\.pdf(\?|$)/i.test(url) ? pdfAPng(buf) : /image\//.test(ct) ? buf : null;
+    if (!png) return '';
+    const img = guardarArchivo(storeId, `guia-DF${txt(o.numero)}-${uid().slice(0, 6)}.png`, png);
+    db.prepare('UPDATE orders SET guia_img = ? WHERE id = ?').run(img, txt(o.id));
+    return img;
+  } catch { return ''; }
+}
+
 export interface ResultadoAviso { chat: 'enviado' | 'plantilla' | 'bloqueado' | 'error' | 'sin_chat'; contacto: 'plantilla' | 'mismo' | 'sin_plantilla' | 'error' | 'no_aplica'; con: 'image' | 'document' | 'texto'; detalle: string[] }
 
 export async function avisarGuia(storeId: string, orderId: string, opts: { conArchivo?: boolean } = {}): Promise<ResultadoAviso> {
   const r = await avisarGuiaInterno(storeId, orderId, opts);
   const fallo = r.chat === 'error' || r.contacto === 'error' || (r.chat === 'sin_chat' && r.contacto !== 'plantilla');
+  // Resultado visible en el pedido ("¿le llegó la guía al cliente?").
+  try {
+    const ok = r.chat === 'enviado' || r.chat === 'plantilla' || r.contacto === 'plantilla';
+    db.prepare('UPDATE orders SET guia_aviso = ? WHERE id = ?').run(JSON.stringify({ ok, chat: r.chat, contacto: r.contacto, con: r.con, detalle: r.detalle.join(' ').slice(0, 400), at: new Date().toISOString() }), orderId);
+  } catch { /* opcional */ }
   trazar(storeId, orderId, { etapa: 'aviso', nivel: fallo ? 'warn' : 'ok', titulo: `Aviso de guía al cliente: chat ${r.chat}${r.contacto !== 'no_aplica' ? ` · contacto ${r.contacto}` : ''}`, detalle: r.detalle.join(' ') });
   return r;
 }
@@ -80,7 +102,9 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
     const destino = chat.wa_id || chat.tel;
     let archivo = '';
     if (opts.conArchivo !== false) {
-      const img = txt(o.guia_img); const url = txt(o.guia_url);
+      let img = txt(o.guia_img); const url = txt(o.guia_url);
+      // Guía en un enlace externo (PDF de Dropi o de Effi): se baja y se convierte a imagen una vez.
+      if (!img && /^https?:\/\//.test(url)) img = await bajarGuiaRemota(storeId, o, url);
       archivo = img || (url.startsWith('/api/media/') ? url : '');
     }
     let envio: { ok: boolean; error?: string; bloqueadoVentana?: boolean; wamid?: string };

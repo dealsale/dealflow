@@ -334,6 +334,7 @@ export interface ApiOrder {
   effiRemision?: string;
   origen?: string;
   leadId?: string;
+  guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string } | null;
   envio: number;
   nota: string;
   total: number;
@@ -427,6 +428,8 @@ export const apiLeadsResumen = (abierto?: string) =>
   req<{ leads: ApiLead[] }>(`/api/leads?resumen=1${abierto ? `&abierto=${encodeURIComponent(abierto)}` : ''}`, 'GET');
 // Conversación completa de un chat (al abrirlo).
 export const apiLeadMensajes = (id: string) => req<{ mensajes: ApiMensaje[] }>(`/api/leads/${id}/mensajes`, 'GET');
+export const apiAnuncioProducto = (adId: string) => req<{ productId: string; auto: boolean }>(`/api/anuncios/${encodeURIComponent(adId)}/producto`, 'GET');
+export const apiVincularAnuncio = (adId: string, productId: string, titular = '') => req<{ ok: true }>(`/api/anuncios/${encodeURIComponent(adId)}/producto`, 'POST', { productId, titular });
 export const apiSendLeadMessage = (id: string, texto: string) =>
   req<{ ok: true; enviadoPorWhatsapp: boolean; aviso?: string }>(`/api/leads/${id}/messages`, 'POST', { texto });
 export const apiSendLeadMedia = (id: string, dataUrl: string, nombre: string, caption: string) =>

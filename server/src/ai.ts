@@ -2,7 +2,7 @@ import { pasarAHumano } from './pasoHumano.js';
 import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
-import { idsDeItem } from './emparejar.js';
+import { idsDeItem, separarVariantes } from './emparejar.js';
 import { directivaIdioma, idiomaDe, confirmacionPedido, pedidoActualizado, preguntaUnProducto, preguntaVariosProductos } from './idioma.js';
 import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
@@ -531,6 +531,29 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     }
   }
 
+  // Llegó por un ANUNCIO sin escribir el disparador: si el anuncio está vinculado a un
+  // producto (o su título/texto nombra uno), se envía el mensaje inicial de ese producto
+  // la primera vez (al comienzo del chat).
+  if (!presentacionEnviada && activos.length) {
+    const adRow = db.prepare('SELECT ad_id, ad_ref FROM leads WHERE id = ?').get(leadId) as { ad_id: string; ad_ref: string } | undefined;
+    const delCliente = (db.prepare("SELECT COUNT(*) n FROM messages WHERE lead_id = ? AND de = 'cliente'").get(leadId) as { n: number }).n;
+    if (adRow && (adRow.ad_id || adRow.ad_ref) && delCliente <= 3) {
+      const ad = pj<{ id?: string; titular?: string; texto?: string }>(adRow.ad_ref || '', {});
+      const adId = adRow.ad_id || ad.id || '';
+      const { productoDeAnuncio, vincularAnuncio } = await import('./campana.js');
+      let prod = (() => { const v = productoDeAnuncio(storeId, adId); return v ? activos.find((p) => String(p.id) === v.productId) || null : null; })();
+      if (!prod && !productoDeAnuncio(storeId, adId)) {
+        prod = identificarProducto(`${ad.titular || ''} ${ad.texto || ''}`, activos);
+        if (prod && adId) vincularAnuncio(storeId, adId, String(prod.id), ad.titular || '', true);
+      }
+      const yaEnviada = prod ? db.prepare('SELECT 1 FROM sent_presentations WHERE lead_id = ? AND product_id = ?').get(leadId, String(prod.id)) : true;
+      if (prod && !yaEnviada && (await enviarPresentacion(storeId, leadId, destino, prod, pn))) {
+        registrarLog(storeId, 'info', 'anuncio', `Llegó por el anuncio «${ad.titular || adId}» sin el disparador: se envió el mensaje inicial de ${String(prod.nombre)}.`, leadId);
+        presentacionEnviada = true;
+      }
+    }
+  }
+
   // Si el disparador ya envió el mensaje inicial completo, la conversación
   // termina en el último bloque de esa estructura: NO llamamos a la IA para
   // que no agregue una pregunta redundante encima de la presentación.
@@ -978,7 +1001,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
       || productRows.find((p) => String(p.nombre).toLowerCase().includes(base) || base.includes(String(p.nombre).toLowerCase()));
     // Guardamos el nombre COMPLETO (con talla y color): el vendedor lo necesita para despachar.
     return { qty, nombre: completo, precio: prod ? Number(prod.precio) : 0 };
-  }).filter((i) => i.nombre)); // agrupa idénticos: "1x Body, 1x Body" → "2x Body"
+  }).filter((i) => i.nombre).flatMap((i) => separarVariantes(i.qty, i.nombre).map((x) => ({ ...x, precio: i.precio })))); // agrupa idénticos; y "4x Falda (L · Negro, Blanco…)" → un ítem por variante
   if (!items.length || (!direccion && !ciudad)) return false; // datos insuficientes, esperamos
 
   const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
@@ -1229,12 +1252,16 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
         return lista.map((v) => ({ tipo: b.tipo, valor: v }));
       })
     : [...fotos.slice(0, 6).map((v) => ({ tipo: 'imagen', valor: v })), ...videos.slice(0, 2).map((v) => ({ tipo: 'video', valor: v }))];
-  // Calidad del número: una ráfaga larga de mensajes ante un "hola" provoca bloqueos.
-  // Máximo 5 piezas (los textos van primero en el orden que armaste).
-  if (piezas.length > 5) {
-    registrarLog(storeId, 'warn', 'calidad', `El mensaje inicial de "${p.nombre}" tiene ${piezas.length} piezas; se envían solo 5 para no parecer spam. Junta textos o quita fotos.`, leadId);
-    piezas.splice(5);
+  // El mensaje inicial se envía COMPLETO. Para cuidar el número (anti-spam de Meta):
+  //  - los textos seguidos se juntan en un solo mensaje (menos mensajes, mismo contenido);
+  //  - de la 6.ª pieza en adelante la pausa entre piezas es más larga (ritmo de persona).
+  for (let i = piezas.length - 1; i > 0; i--) {
+    if (piezas[i].tipo === 'texto' && piezas[i - 1].tipo === 'texto') {
+      piezas[i - 1] = { tipo: 'texto', valor: `${piezas[i - 1].valor}\n\n${piezas[i].valor}` };
+      piezas.splice(i, 1);
+    }
   }
+  if (piezas.length > 5) registrarLog(storeId, 'info', 'calidad', `El mensaje inicial de "${p.nombre}" tiene ${piezas.length} piezas: se envía completo, con pausas más largas a partir de la 6.ª para no parecer spam.`, leadId);
   if (!piezas.length) {
     console.log(`[ia] "${p.nombre}": el cliente lo pidió pero no hay fotos/videos cargados`);
     return false;
@@ -1276,7 +1303,8 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
     // el tipo de lo que viene, para conservar el orden y no enviar en ráfaga.
     if (ok && idx < piezas.length - 1) {
       const sig = piezas[idx + 1];
-      await dormir(pausaHumana(sig.tipo, sig.tipo === 'texto' ? (sig.valor || '').length : 0));
+      const extra = idx + 1 >= 5 ? 2500 + Math.floor(Math.random() * 2500) : 0; // piezas largas: más calma
+      await dormir(pausaHumana(sig.tipo, sig.tipo === 'texto' ? (sig.valor || '').length : 0) + extra);
     }
     idx++;
   }

@@ -57,7 +57,8 @@ export async function enviarPush(storeId: string, tipo: 'pedidos' | 'contactos',
   await Promise.all(
     subs.map(async (s) => {
       try {
-        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
+        // urgency high: Android la entrega YA aunque el celular esté en reposo (si no, la retrasa).
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { urgency: 'high', TTL: 6 * 3600 });
       } catch (e) {
         const code = (e as { statusCode?: number }).statusCode;
         if (code === 404 || code === 410) eliminarSuscripcion(s.endpoint); // suscripción caducada

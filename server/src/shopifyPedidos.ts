@@ -310,7 +310,8 @@ export async function traerPedidosRecientes(storeId: string, ultimaSemana = fals
   const { credShopify, shopifyGQL } = await import('./shopify.js');
   const cred = credShopify(storeId);
   if (!cred) return { error: 'Conecta Shopify primero.' };
-  const inst = db.prepare('SELECT instalada_at FROM shopify_tiendas WHERE shop = ?').get(cred.shop) as { instalada_at: string } | undefined;
+  const inst = (db.prepare('SELECT instalada_at FROM shopify_tiendas WHERE shop = ?').get(cred.shop) as { instalada_at: string } | undefined)
+    || (db.prepare("SELECT updated_at AS instalada_at FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").get(storeId) as { instalada_at: string } | undefined);
   const desde = new Date(Math.max(Date.now() - 7 * 86400_000, !ultimaSemana && inst ? Date.parse(inst.instalada_at.replace(' ', 'T') + 'Z') - 3600_000 : 0));
   const q = `created_at:>='${desde.toISOString()}'`;
   let aviso = '';
@@ -354,6 +355,14 @@ export function iniciarEnviosShopify(): void {
         if (vueltasPedidos % 12 === 0) await revisarWebhook(t.store_id, t.shop); // cada hora
         await traerPedidosRecientes(t.store_id);
       } catch (e) { console.error('[shopify] trayendo pedidos', e); }
+    }
+    // Tiendas conectadas a MANO (app personalizada del comercio, mientras la app pública no
+    // esté aprobada): no tienen webhook, así que sus pedidos se traen por la API.
+    const conApp = new Set(tiendas.map((t) => t.store_id));
+    const manuales = db.prepare("SELECT store_id, config FROM store_integrations WHERE tipo = 'shopify'").all() as { store_id: string; config: string }[];
+    for (const m of manuales) {
+      if (conApp.has(m.store_id) || pj<Record<string, string>>(m.config, {}).via === 'app') continue;
+      try { await traerPedidosRecientes(m.store_id); } catch (e) { console.error('[shopify] trayendo pedidos (manual)', e); }
     }
     vueltasPedidos++;
   };

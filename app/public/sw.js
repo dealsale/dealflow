@@ -1,7 +1,7 @@
 /* Service worker mínimo de DealFlow: hace la app instalable (PWA).
    No cachea el panel ni la API para que siempre veas datos frescos;
    solo guarda los íconos y el logo para el arranque. */
-const CACHE = 'dealflow-v1';
+const CACHE = 'dealflow-v2';
 const ESTATICOS = ['/logo.png', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -28,11 +28,18 @@ self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = { titulo: 'DealFlow', cuerpo: e.data ? e.data.text() : '' }; }
   const titulo = d.titulo || 'DealFlow';
+  // Cada aviso con su propia etiqueta y renotify: si se repetía la etiqueta, el celular
+  // reemplazaba el aviso anterior EN SILENCIO (sin sonar ni vibrar).
   const opciones = {
     body: d.cuerpo || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    tag: d.tipo || 'dealflow',
+    tag: (d.tipo || 'dealflow') + '-' + Date.now(),
+    renotify: true,
+    silent: false,
+    vibrate: d.tipo === 'pedidos' ? [300, 120, 300, 120, 500] : [200, 100, 200],
+    requireInteraction: d.tipo === 'pedidos',
+    timestamp: Date.now(),
     data: (d.data && d.data.url) ? d.data : { url: '/' },
   };
   e.waitUntil(self.registration.showNotification(titulo, opciones));
