@@ -270,7 +270,7 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
  * Vínculo con Effi DENTRO del producto (Productos → Variantes): el convenio del
  * producto y, por cada variante, su artículo de Effi (con el mismo selector).
  */
-export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { productId: string; productoNombre: string; onCambio?: () => void }) {
+export function EffiVinculoProducto({ productId, productoNombre, onCambio, conConvenio = true }: { productId: string; productoNombre: string; onCambio?: () => void; conConvenio?: boolean }) {
   const [vars, setVars] = useState<EffiVarianteDF[] | null>(null);
   const [cache, setCache] = useState<EffiArticulo[]>([]);
   const [nombres, setNombres] = useState<Record<string, string>>({});
@@ -303,16 +303,13 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { p
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {conConvenio && <>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Convenio:</span>
         <div style={{ minWidth: 220, flex: '0 1 320px' }}>
           <Dropdown ariaLabel="Convenio del producto" value={convenio} onChange={(v) => void cambiarConvenio(v)}
-            options={[
-              { value: '', label: 'Automático (según sus ventas en Effi)' },
-              { value: 'propio', label: 'Mercancía propia (sin convenio)' },
-              ...convenios.map((c) => ({ value: c.id, label: `${c.nombre} · ${c.id}` })),
-              ...(convenio && convenio !== 'propio' && !convenios.some((c) => c.id === convenio) ? [{ value: convenio, label: `Convenio ${convenio}` }] : []),
-            ]} />
+            options={opcionesConvenio(convenio, convenios)} />
         </div>
+        </>}
         <span style={{ fontSize: 12, color: vinculadas === vars.length ? 'var(--df-purple)' : 'var(--df-warning)', fontWeight: 700, marginLeft: 'auto' }}>{vinculadas}/{vars.length} variantes vinculadas</span>
       </div>
       {vars.map((v) => {
@@ -332,6 +329,40 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { p
         );
       })}
       {msg && <div style={{ fontSize: 12, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+const opcionesConvenio = (actual: string, convenios: { id: string; nombre: string }[]) => [
+  { value: '', label: 'Automático (según sus ventas en Effi)' },
+  { value: 'propio', label: 'Mercancía propia (sin convenio)' },
+  ...convenios.map((c) => ({ value: c.id, label: `${c.nombre} · ${c.id}` })),
+  ...(actual && actual !== 'propio' && !convenios.some((c) => c.id === actual) ? [{ value: actual, label: `Convenio ${actual}` }] : []),
+];
+
+/** Convenio dropshipping del producto (arriba del producto, junto a "Se despacha por"). */
+export function ConvenioProductoEffi({ productId }: { productId: string }) {
+  const [convenio, setConvenio] = useState<string | null>(null);
+  const [convenios, setConvenios] = useState<{ id: string; nombre: string }[]>([]);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    void apiEffiApiArticulos(productId).then((r) => { if (r.data) { setConvenio(r.data.conveniosProducto?.[productId] || ''); setConvenios(r.data.convenios || []); } });
+  }, [productId]);
+  if (convenio === null) return null;
+  const cambiar = async (c: string) => {
+    setConvenio(c); setMsg('');
+    const r = await apiEffiApiConvenioProducto([productId], c);
+    setMsg(r.error || '✓ Guardado');
+    if (!r.error) setTimeout(() => setMsg(''), 1500);
+  };
+  return (
+    <div style={{ marginTop: 10, maxWidth: 420 }}>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>🤝 Convenio en Effi {msg && <span style={{ fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>· {msg}</span>}</div>
+      <Dropdown ariaLabel="Convenio del producto en Effi" value={convenio} onChange={(v) => void cambiar(v)} options={opcionesConvenio(convenio, convenios)} />
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>
+        {convenio === 'propio' ? 'Se envía como mercancía tuya: Effi exige stock en tu bodega.' : convenio ? 'Cada pedido de este producto sale a Effi con este convenio, sin preguntar.' : 'Automático: usa el convenio con el que ya se ha vendido en Effi. Si es de un proveedor, elígelo aquí para que salga bien desde la primera venta.'}
+        {!convenios.length && ' Agrega tus convenios en Integraciones → Effi.'}
+      </div>
     </div>
   );
 }
