@@ -1256,6 +1256,26 @@ export function useDealFlowState() {
     setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, dropiOrderId: dropiId, despachoProveedor: 'dropi', transportadora } : x)));
   }
 
+  /**
+   * Resumen para listas: solo el producto y las unidades ("2× Camisa Laila"). La talla, el
+   * color y lo que haya escrito el cliente es detalle interno: se ve al abrir el pedido.
+   */
+  function resumenItems(items: Order['items']): string {
+    const grupos = new Map<string, { n: number; nombre: string }>();
+    for (const it of items) {
+      let nombre = String(it.nombre || '')
+        .replace(/\s*\(.*$/, '') // "(Talla XL · Negro)"
+        .split(/\s+[—–-]\s+|,|\s+talla\b|\s+color\b/i)[0]
+        .replace(/^\s*\d+\s*[xX×]\s*/, '')
+        .trim();
+      if (!nombre) nombre = String(it.nombre || '').trim();
+      const k = nombre.toLowerCase();
+      const g = grupos.get(k);
+      if (g) g.n += Number(it.qty) || 1; else grupos.set(k, { n: Number(it.qty) || 1, nombre });
+    }
+    return [...grupos.values()].map((g) => `${g.n}× ${g.nombre}`).join(' · ');
+  }
+
   function decorateOrder(o: Order): DecoratedOrder {
     const cfg = ESTADOS[o.estado];
     // Total del pedido: el que acordó el asistente, o la suma si hay precios.
@@ -1265,7 +1285,7 @@ export function useDealFlowState() {
       totalFmt: fmt(total),
       envioFmt: fmt(o.envio),
       fechaLabel: etiquetaFechaYMD(o.fecha),
-      itemsResumen: o.items.map((it) => it.qty + '× ' + it.nombre).join(' · '),
+      itemsResumen: resumenItems(o.items),
       itemsDecorated: o.items.map((it) => ({ ...it, precioFmt: '' })), // solo mostramos el total del pedido
       pillStyle: pill(cfg),
       hasNext: !!cfg.next,

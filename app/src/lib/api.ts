@@ -1,3 +1,4 @@
+import { conEspera, textoDeUrl } from '../components/Proceso';
 export interface ApiUser {
   id: string;
   email: string;
@@ -87,6 +88,12 @@ export async function apiUploadAvatar(dataUrl: string): Promise<{ foto?: string;
 export const apiChangePassword = (actual: string, nueva: string) => req<{ ok: true }>('/api/me/password', 'POST', { actual, nueva });
 
 async function req<T>(url: string, method: string, body?: unknown): Promise<{ data?: T; error?: string }> {
+  // Guardados y procesos: ventana de "procesando" que bloquea la pantalla si tarda.
+  const texto = method === 'GET' ? null : textoDeUrl(url, method);
+  return texto ? conEspera(texto, reqBase<T>(url, method, body)) : reqBase<T>(url, method, body);
+}
+
+async function reqBase<T>(url: string, method: string, body?: unknown): Promise<{ data?: T; error?: string }> {
   try {
     const r = await fetch(url, {
       method,
