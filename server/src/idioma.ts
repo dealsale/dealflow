@@ -68,6 +68,10 @@ export const confirmacionPedido = (idi: Idioma, nombre: string, producto: string
   ? `Your order has been placed successfully 🎉\n\nYou'll get a confirmation message with your order number and shipping details shortly 📲\n\nThank you for your purchase, ${nombre}! Enjoy your ${producto} 🙌😊`
   : `Tu pedido ya quedó registrado exitosamente 🎉\n\nTe llegará un mensaje de confirmación con el número de pedido y los detalles del envío en un momento 📲\n\n¡Gracias por tu compra, ${nombre}! Que disfrutes mucho tus ${producto} 🙌😊`;
 
+export const pedidoActualizado = (idi: Idioma, nombre: string, numero: number, detalle: string) => idi === 'en'
+  ? `Done, ${nombre}! ✅ I updated your order #DF-${numero} (no new order was created):\n\n${detalle}\n\nAnything else you'd like to change? 😊`
+  : `¡Listo, ${nombre}! ✅ Actualicé tu pedido #DF-${numero} (no se creó uno nuevo):\n\n${detalle}\n\n¿Quieres cambiar algo más? 😊`;
+
 export const preguntaUnProducto = (idi: Idioma, nombre: string, producto: string) => idi === 'en'
   ? `Hi${nombre}! 😊 I'd be happy to give you all the details. Are you interested in our ${producto}?`
   : `¡Hola${nombre}! 😊 Con gusto te doy toda la información. ¿Te interesa nuestro ${producto}?`;

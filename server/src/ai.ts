@@ -3,7 +3,7 @@ import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
-import { directivaIdioma, idiomaDe, confirmacionPedido, preguntaUnProducto, preguntaVariosProductos } from './idioma.js';
+import { directivaIdioma, idiomaDe, confirmacionPedido, pedidoActualizado, preguntaUnProducto, preguntaVariosProductos } from './idioma.js';
 import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
 import { saveOutgoingMedia, mediaPath, tipoDeMime } from './media.js';
@@ -273,7 +273,26 @@ MUY IMPORTANTE — CUÁNDO NO ESCRIBIR: si la conversación YA ESTÁ CERRADA no 
  * Si la tienda tiene IA disponible y el chat lo atiende el asistente,
  * genera la respuesta con el contexto de la tienda y la envía.
  */
+// Un solo turno del asistente a la vez por chat. Si el cliente manda varios mensajes
+// seguidos mientras el bot responde, se responde UNA vez más al terminar (con todo lo
+// nuevo), en vez de responder en paralelo (doble respuesta y doble pedido).
+const turnos = new Map<string, boolean>(); // leadId → ¿llegó algo nuevo mientras respondía?
 export async function maybeAutoReply(storeId: string, leadId: string) {
+  if (turnos.has(leadId)) { turnos.set(leadId, true); return; }
+  turnos.set(leadId, false);
+  try {
+    for (let vueltas = 0; vueltas < 3; vueltas++) {
+      turnos.set(leadId, false);
+      await responderTurno(storeId, leadId);
+      if (!turnos.get(leadId)) break;
+      // Solo otra vuelta si el último mensaje del chat es del cliente (algo quedó sin responder).
+      const ult = db.prepare('SELECT de FROM messages WHERE lead_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(leadId) as { de: string } | undefined;
+      if (ult?.de !== 'cliente') break;
+    }
+  } finally { turnos.delete(leadId); }
+}
+
+async function responderTurno(storeId: string, leadId: string) {
   const ia = resolverTexto(storeId); // DeepSeek escribe (o el proveedor de la tienda)
   if (!ia) {
     console.log('[ia] sin IA configurada para la tienda (ni clave propia ni del servidor): el asistente no responde');
@@ -632,7 +651,10 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       registrarLog(storeId, 'warn', 'humano', 'El asistente pasó este chat a una persona del equipo (ya no responde solo). Atiéndelo desde el Inbox o devuélvelo al asistente.', leadId);
       return;
     }
-    let pedidoCreado = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
+    const resMarcador = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
+    let pedidoCreado = resMarcador === 'creado' || resMarcador === 'actualizado';
+    // La IA repitió el MISMO pedido: no se vuelve a decir "tu pedido quedó registrado".
+    const repetido = resMarcador === 'igual';
 
     // RED DE SEGURIDAD: la IA mostró el "Resumen de tu pedido" y el cliente confirmó
     // (sí/sisas/dale/correcto…), pero la IA NO puso el marcador o lo puso mal. Tomamos
@@ -640,14 +662,14 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     // un bucle de "¿confirmas?". Aplica aunque hubiera un marcador fallido (mp): el
     // guard anti-duplicado de crearPedido evita crear dos.
     // (No aplica si el chat está resolviendo una novedad de envío: ese "sí" es de la novedad.)
-    if (!pedidoCreado && !novedadTxt && esAfirmacion(ultimo?.texto || '')) {
+    if (!pedidoCreado && !repetido && !novedadTxt && esAfirmacion(ultimo?.texto || '')) {
       const inner = pedidoDesdeResumen(leadId);
-      if (inner) pedidoCreado = await crearPedido(storeId, lead, inner, productRows, destino, pn);
+      if (inner) { const r2 = await crearPedido(storeId, lead, inner, productRows, destino, pn); pedidoCreado = r2 === 'creado' || r2 === 'actualizado'; }
     }
 
     // Si se creó el pedido, el mensaje de confirmación ya lo mandó crearPedido;
     // no repetimos con el texto de la IA.
-    if (texto && !pedidoCreado) {
+    if (texto && !pedidoCreado && !(repetido && /registrad|confirmad|qued[oó] (listo|creado)|placed|confirmed/i.test(texto))) {
       const textoFinal = rellenar(texto, lead);
       await esperarRespuestaHumana(t0); // el bot tarda ~4-5 s en total (parece que "escribe")
       const mid = uid();
@@ -918,7 +940,8 @@ Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefo
   } catch { return ''; }
 }
 
-async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<boolean> {
+type ResultadoPedido = 'creado' | 'actualizado' | 'igual' | false;
+async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<ResultadoPedido> {
   const cliente = campoPedido(inner, 'cliente') || lead.nombre || 'Cliente';
   const ciudad = campoPedido(inner, 'ciudad');
   const direccion = campoPedido(inner, 'direccion');
@@ -958,11 +981,49 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   }).filter((i) => i.nombre)); // agrupa idénticos: "1x Body, 1x Body" → "2x Body"
   if (!items.length || (!direccion && !ciudad)) return false; // datos insuficientes, esperamos
 
-  // Evita duplicados si la IA repite el marcador: un pedido "Nuevo" por número en los últimos 10 min.
-  const dup = db.prepare("SELECT id FROM orders WHERE store_id = ? AND tel = ? AND estado = 'Nuevo' AND created_at > datetime('now','-10 minutes')").get(storeId, lead.tel || '');
-  if (dup) { console.log(`[ia] pedido no creado: ya hay uno reciente para ${lead.tel}`); return false; }
-
   const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
+
+  // ¿Este cliente ya tiene un pedido que todavía no se despacha? Entonces NO se crea otro:
+  // si es igual (la IA repitió el marcador) no se hace nada; si cambió algo (talla, color,
+  // referencia, cantidad, dirección…) se ACTUALIZA ese mismo pedido.
+  const d10 = (t: string) => String(t || '').replace(/\D/g, '').slice(-10);
+  const tels = [...new Set([d10(lead.tel), d10(tel)].filter((x) => x.length === 10))];
+  const previo = db.prepare(
+    `SELECT * FROM orders WHERE store_id = ? AND estado IN ('Nuevo','Confirmado') AND COALESCE(origen,'') NOT IN ('shopify','manual')
+       AND COALESCE(effi_remision,'') = '' AND COALESCE(dropi_order_id,'') = '' AND COALESCE(guia,'') = '' AND COALESCE(woo_id,'') = ''
+       AND created_at > datetime('now','-2 days')
+       AND (lead_id = ? ${tels.map(() => "OR REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-','') LIKE ?").join(' ')})
+     ORDER BY created_at DESC LIMIT 1`,
+  ).get(storeId, lead.id, ...tels.map((t) => `%${t}`)) as Record<string, unknown> | undefined;
+  if (previo) {
+    const firma = (its: { qty: number; nombre: string }[], extra: string[]) => [...its.map((i) => `${i.qty}x${norm(i.nombre)}`).sort(), ...extra.map((x) => norm(String(x || '')))].join('|');
+    const itemsPrev = db.prepare('SELECT qty, nombre FROM order_items WHERE order_id = ?').all(previo.id) as { qty: number; nombre: string }[];
+    const antes = firma(itemsPrev, [String(previo.direccion), String(previo.ciudad), String(previo.departamento), String(previo.tel), String(previo.cliente)]);
+    const ahora = firma(items, [direccion || String(previo.direccion), ciudad || String(previo.ciudad), departamento || String(previo.departamento), tel || String(previo.tel), cliente || String(previo.cliente)]);
+    const numPrev = Number(previo.numero);
+    if (antes === ahora) {
+      console.log(`[ia] pedido DF-${numPrev} ya registrado (marcador repetido): no se crea otro`);
+      trazar(storeId, String(previo.id), { etapa: 'pedido', nivel: 'info', titulo: 'El asistente repitió el pedido: no se creó otro', datos: { marcador: inner } });
+      return 'igual';
+    }
+    db.transaction(() => {
+      db.prepare('UPDATE orders SET cliente = ?, ciudad = ?, tel = ?, direccion = ?, departamento = ?, total = ?, lead_id = ? WHERE id = ?')
+        .run(cliente || previo.cliente, ciudad || previo.ciudad, tel || previo.tel, direccion || previo.direccion, departamento || previo.departamento, total, lead.id, previo.id);
+      db.prepare('DELETE FROM order_items WHERE order_id = ?').run(previo.id);
+      for (const it of items) {
+        const ids = idsDeItem(storeId, it.nombre);
+        db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio, product_id, variant_id) VALUES (?,?,?,?,?,?,?)').run(uid(), previo.id, it.qty, it.nombre, it.precio, ids.productId, ids.variantId);
+      }
+    })();
+    trazar(storeId, String(previo.id), { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numPrev} actualizado por el asistente (el cliente cambió algo)`, detalle: `Antes: ${itemsPrev.map((i) => `${i.qty}x ${i.nombre}`).join(', ')} · ${String(previo.direccion)}, ${String(previo.ciudad)}`, datos: { cliente, tel, ciudad, departamento, direccion, total, items, marcador: inner } });
+    registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numPrev} actualizado: ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}.`, lead.id);
+    const detalle = `${items.map((i) => `• ${i.qty}x ${i.nombre}`).join('\n')}\n📍 ${[direccion || previo.direccion, ciudad || previo.ciudad].filter(Boolean).join(', ')}\n💰 $${total.toLocaleString('es-CO')}`;
+    const msg = pedidoActualizado(idiomaDe(storeId, lead.id), (cliente || 'hola').split(' ')[0], numPrev, detalle);
+    const mid = uid();
+    db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
+    marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
+    return 'actualizado';
+  }
   const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 1048) + 1;
   const oid = uid();
   // Atribución exacta: copiamos el anuncio del que vino este chat al pedido.
@@ -1004,7 +1065,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   const midConf = uid();
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(midConf, lead.id, 'bot', confirmacion);
   marcarEnviado(midConf, await sendWhatsappText(storeId, destino, confirmacion, pn));
-  return true;
+  return 'creado';
 }
 
 /** Normaliza texto: minúsculas, sin acentos ni signos, para comparar. */
