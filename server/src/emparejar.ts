@@ -109,8 +109,10 @@ export function emparejarItem<T extends VarBase>(nombreItem: string, todas: T[])
   }
   if (mejorV) return { v: mejorV, motivo: '', parecidos };
   if (unicas.length === 1 && !tokE.length) return { v: unicas[0], motivo: '', parecidos };
+  // Solo las variantes parecidas (misma talla o mismo color), no la lista completa.
+  const cerca = vs.filter((v) => { const tl = tokensVariante(v.label); return tokE.some((t) => tl.some((x) => mismoToken(x, t))); });
   return {
-    motivo: `el producto ${mejor[1].producto} no tiene la variante "${m ? m[1] : ''}" (sus variantes: ${vs.slice(0, 12).map((v) => v.label || 'única').join(', ')}${vs.length > 12 ? '…' : ''})`,
+    motivo: `el producto ${mejor[1].producto} no tiene la variante "${m ? m[1] : ''}"${cerca.length ? ` (parecidas: ${cerca.slice(0, 10).map((v) => v.label).join(', ')}${cerca.length > 10 ? '…' : ''})` : ` (tiene ${vs.length} variantes y ninguna con esa talla o color)`}. Créala en el producto o corrige el pedido`,
     parecidos,
   };
 }
