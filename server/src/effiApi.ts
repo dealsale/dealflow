@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { db, pj, registrarLog } from './db.js';
 import { conPedido, trazar, trazarApi } from './trazabilidad.js';
-import { emparejarItem, emparejarArticulos, palabrasClave, separarItemsPedido, type Emparejado } from './emparejar.js';
+import { emparejarItem, emparejarArticulos, palabrasClave, separarItemsPedido, type Emparejado, tokensVariante, mismoToken } from './emparejar.js';
 import { nombreTransportadora } from './transportadoras.js';
 import { estadoLogistico, siguienteEstado } from './estadosPedido.js';
 
@@ -556,6 +556,25 @@ export function conveniosConocidos(storeId: string): { id: string; nombre: strin
   return [...m].map(([id, nombre]) => ({ id, nombre }));
 }
 
+/**
+ * Busca en Effi el artículo de un ítem del pedido por texto: nombre del producto +
+ * talla/color ("Falda (Talla XL · Naranja)" → artículos con "falda", "xl" y "naranja").
+ * Devuelve el artículo solo si hay UNO que tenga todas esas palabras.
+ */
+export async function articuloPorTexto(storeId: string, nombreItem: string): Promise<ArticuloEffi | undefined> {
+  const base = nombreItem.split('(')[0].trim();
+  const m = nombreItem.match(/\(([^)]+)\)/);
+  const varTok = tokensVariante(m ? m[1] : '');
+  const prodTok = norm(base).split(' ').filter((t) => t.length >= 3);
+  if (!prodTok.length || !varTok.length) return undefined;
+  const r = await buscarArticulosEffi(storeId, base);
+  if (!Array.isArray(r)) return undefined;
+  const tiene = (desc: string, toks: string[]) => { const d = tokensVariante(desc); return toks.every((t) => d.some((x) => mismoToken(x, t))); };
+  const cands = r.filter((x) => tiene(`${x.descripcion} ${x.referencia}`, [...prodTok, ...varTok]));
+  if (cands.length !== 1) return undefined;
+  return (await articuloPorId(storeId, cfgEffi(storeId)!.apiKey, cands[0].id)) || cands[0];
+}
+
 /** Búsqueda en vivo en Effi por nombre (palabras) o referencia, para vincular a mano. */
 export async function buscarArticulosEffi(storeId: string, q: string): Promise<ArticuloEffi[] | { error: string }> {
   const c = cfgEffi(storeId);
@@ -919,6 +938,16 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
       if (f) a = { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: null };
     }
     if (!a) {
+      // Último recurso: buscar EN EFFI por el nombre del producto + la talla/color pedidos.
+      // Si hay UN solo artículo que tenga todas esas palabras, ese es (así no se traba el pedido).
+      const directo = await articuloPorTexto(storeId, it.nombre);
+      if (directo) {
+        a = directo;
+        avisos.push(`"${it.nombre}" no estaba vinculado en DealFlow: se encontró en Effi como «${directo.descripcion}» (#${directo.id}).`);
+        if (v?.variantId) vincularArticulo(storeId, v.variantId, directo.id, true);
+      }
+    }
+    if (!a) {
       // Mensaje preciso: qué parte del vínculo falta.
       const motivo = !v ? emp.motivo : `la variante ${v.label || 'única'} de ${v.producto} no tiene artículo de Effi vinculado`;
       sinVinculo.push(`${it.nombre} (${motivo})`);
@@ -938,7 +967,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     lineas.push({ item: `${it.qty}× ${it.nombre}`, articulo: `${a.descripcion}${a.referencia ? ` [${a.referencia}]` : ''} · #${a.id}${a.drop === 1 ? ' · dropshipping' : ''}` });
     conceptos.push({ articulo: Number(a.id), descripcion: it.nombre.slice(0, 250), cantidad: Math.max(1, Number(it.qty) || 1), precio: Math.max(0, Math.round(Number(it.precio) || 0)) });
   }
-  if (sinVinculo.length) return { error: `No pudimos emparejar con Effi: ${sinVinculo.join(' · ')}. Revisa el vínculo en Integraciones → Effi → Artículos.` };
+  if (sinVinculo.length) return { error: `No pudimos emparejar con Effi: ${sinVinculo.join(' · ')}. Revísalo en Productos → el producto → Variantes → Effi.` };
 
   // Dropshipping: si los artículos son de un proveedor, la remisión debe llevar el
   // convenio; sin él Effi la toma como mercancía propia y exige stock en tu bodega.
