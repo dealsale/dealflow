@@ -549,6 +549,10 @@ export const apiEffiApiArticulos = (productId = '') => req<{ articulos: EffiArti
 export const apiEffiApiBuscar = (q: string) => req<{ articulos: EffiArticulo[] }>(`/api/effi-api/articulos/buscar?q=${encodeURIComponent(q)}`, 'GET');
 export const apiEffiApiProveedor = (productIds: string[], proveedor: 'effi' | 'dropi' | '') => req<{ ok: true; actualizados: number }>('/api/effi-api/producto-proveedor', 'POST', { productIds, proveedor });
 export const apiEffiApiConvenioProducto = (productIds: string[], convenio: string) => req<{ ok: true; actualizados: number }>('/api/effi-api/producto-convenio', 'POST', { productIds, convenio });
+export interface ArtVinculo { id: string; descripcion: string; drop: boolean; stock: number | null }
+export interface SugerenciaVinculo { variantId: string; label: string; auto: boolean; actual: ArtVinculo | null; sugerido: ArtVinculo | null; estado: 'ok' | 'cambiar' | 'sin' | 'revisar' }
+export const apiRevisarVinculos = (productId: string) => req<{ producto: string; filas: SugerenciaVinculo[] }>(`/api/effi-api/producto/${encodeURIComponent(productId)}/vinculos`, 'GET');
+export const apiAplicarVinculos = (productId: string, cambios: { variantId: string; effiId: string }[]) => req<{ ok: true; cambios: number }>(`/api/effi-api/producto/${encodeURIComponent(productId)}/vinculos`, 'POST', { cambios });
 export const apiEffiApiVincular = (variantId: string, effiId: string) => req<{ ok: true }>('/api/effi-api/articulos/vincular', 'POST', { variantId, effiId });
 export const apiEffiApiEventos = () => req<{ eventos: EffiEvento[] }>('/api/effi-api/eventos', 'GET');
 export interface OpcionesGuia { transportadoras: EffiTransportadora[]; remitentes: EffiOpcion[]; defaults: EffiGuiaCfg }

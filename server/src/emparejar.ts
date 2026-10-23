@@ -142,7 +142,7 @@ export function palabrasClave(producto: string): string[] {
   return norm(producto).split(' ').filter((t) => t.length >= 3 && !GENERICAS.has(t));
 }
 
-export interface ArticuloBase { id: string; descripcion: string; stock?: number | null }
+export interface ArticuloBase { id: string; descripcion: string; stock?: number | null; drop?: number }
 
 /**
  * Empareja las variantes de UN producto con artículos de Effi por nombre, aunque el
@@ -163,7 +163,8 @@ export function emparejarArticulos<A extends ArticuloBase>(producto: string, var
     return { a, ta, resto: ta.filter((t) => !tiene(tp, t) && !VACIAS.has(t) && !GENERICAS.has(t)) };
   }).filter((x) => clave.every((t) => x.ta.includes(t))); // exacto: "Helen" no es "Helena"
   if (!cands.length) return out;
-  const mejor = (lista: typeof cands) => [...lista].sort((x, y) => (Number(y.a.stock ?? -1) - Number(x.a.stock ?? -1)) || Number(y.a.id) - Number(x.a.id))[0];
+  // Entre artículos iguales: primero el del proveedor (dropshipping), luego el de más stock.
+  const mejor = (lista: typeof cands) => [...lista].sort((x, y) => ((y.a.drop === 1 ? 1 : 0) - (x.a.drop === 1 ? 1 : 0)) || (Number(y.a.stock ?? -1) - Number(x.a.stock ?? -1)) || Number(y.a.id) - Number(x.a.id))[0];
   const pendientes = variantes.map((v) => ({ v, tv: tokensVariante(v.label).filter((t) => !VACIAS.has(t)) }));
   // 1) Lo que sobra es EXACTAMENTE la variante (mismas palabras, cualquier orden).
   for (const { v, tv } of pendientes) {
