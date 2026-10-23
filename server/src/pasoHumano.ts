@@ -5,7 +5,9 @@
  */
 import { db, registrarLog } from './db.js';
 
-export const ASIGNADO_EQUIPO = 'Equipo (el asistente no pudo responder)';
+// OJO: no puede contener "asistente" ni "bot": así se reconoce un chat que atiende el bot.
+export const ASIGNADO_EQUIPO = 'Equipo (requiere atención)';
+
 
 /** Pasa el chat al equipo si lo atendía el asistente. Devuelve true si lo pasó. */
 export function pasarAHumano(storeId: string, leadId: string, motivo: string): boolean {

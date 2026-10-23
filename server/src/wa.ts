@@ -6,6 +6,9 @@ import { esperarTurno } from './ratelimit.js';
 
 const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
 try { db.exec("ALTER TABLE messages ADD COLUMN error TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+// Chats pasados al equipo con la etiqueta vieja: contenía "asistente" y el bot seguía
+// creyendo que el chat era suyo (respondía igual). Se corrige al arrancar.
+try { db.prepare("UPDATE leads SET asignado = 'Equipo (requiere atención)' WHERE asignado = 'Equipo (el asistente no pudo responder)'").run(); } catch { /* opcional */ }
 
 /** Explicación en español de los códigos de error de entrega de WhatsApp Cloud API. */
 export function explicarErrorMeta(code: number | string | undefined, titulo = '', detalle = ''): string {
@@ -20,7 +23,7 @@ export function explicarErrorMeta(code: number | string | undefined, titulo = ''
     130429: 'Se superó el límite de velocidad de envío de tu número. Espera unos minutos.',
     130472: 'Meta no lo entregó: el cliente está en un experimento de Meta que limita mensajes de marketing.',
     131031: 'La cuenta de WhatsApp Business está bloqueada o restringida por Meta.',
-    131042: 'Hay un problema con el método de pago de tu cuenta de WhatsApp Business en Meta.',
+    131042: 'Meta no pudo cobrar este mensaje: hay un problema con el método de pago de tu cuenta de WhatsApp Business (business.facebook.com → Cuentas de WhatsApp → Configuración de pago). Las respuestas gratis dentro de 24 h sí salen.',
     131051: 'Tipo de mensaje no soportado por WhatsApp.',
     131052: 'No se pudo descargar el archivo que envió el cliente.',
     131053: 'No se pudo subir el archivo (formato o tamaño no válido).',
@@ -42,6 +45,7 @@ export function explicarErrorMeta(code: number | string | undefined, titulo = ''
   return c ? `${txt} (código ${c})` : txt;
 }
 
+const alertaPago = new Map<string, number>(); // storeId → último aviso de problema de pago en Meta
 /** Guarda el motivo del fallo en el mensaje, lo deja en el registro del chat y, si era del bot, pasa el chat al equipo. */
 function registrarFallo(rowId: string, error: string): void {
   try {
@@ -49,6 +53,12 @@ function registrarFallo(rowId: string, error: string): void {
     db.prepare('UPDATE messages SET error = ? WHERE id = ?').run(error.slice(0, 500), rowId);
     if (!m) return;
     registrarLog(m.store_id, 'error', 'envio', `No se entregó el mensaje: ${error}`, m.lead_id);
+    // Problema de pago en Meta (131042): afecta a toda la tienda → alerta general y al celular (1 vez cada 6 h).
+    if (/131042/.test(error) && Date.now() - (alertaPago.get(m.store_id) || 0) > 6 * 3600e3) {
+      alertaPago.set(m.store_id, Date.now());
+      registrarLog(m.store_id, 'error', 'meta', 'Meta no está entregando los mensajes que cobra (plantillas y mensajes fuera de la ventana gratis): hay un problema con el método de pago de tu cuenta de WhatsApp Business. Arréglalo en business.facebook.com → Cuentas de WhatsApp → Configuración de pago. Las respuestas gratis (dentro de 24 h) siguen saliendo.');
+      void import('./push.js').then((p) => p.enviarPush(m.store_id, 'contactos', '⚠️ WhatsApp: problema de pago en Meta', 'Algunos mensajes no se están entregando. Revisa el método de pago de tu cuenta de WhatsApp Business.', { url: '/' })).catch(() => {});
+    }
     if (m.de === 'bot' && !/bloqueaste|bloqueado/i.test(error)) {
       void import('./pasoHumano.js').then((h) => h.pasarAHumano(m.store_id, m.lead_id, `WhatsApp no entregó la respuesta del asistente (${error})`)).catch(() => {});
     }
