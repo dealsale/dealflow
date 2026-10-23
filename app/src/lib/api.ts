@@ -839,3 +839,15 @@ export const apiShopifyReenviarConfirmacion = (rowId: string) => req<{ ok: true 
 export interface PuntoSeguridad { punto: string; ok: boolean; detalle: string }
 export interface AccesoEquipo { usuario: string; rol: string; soporte: number; metodo: string; ruta: string; ip: string; at: string; tienda: string }
 export const apiSeguridad = () => req<{ estado: PuntoSeguridad[]; accesos: AccesoEquipo[] }>('/api/admin/seguridad', 'GET');
+
+// ── Correos ──
+export const apiOlvide = (correo: string) => req<{ ok: true }>('/api/auth/olvide', 'POST', { correo });
+export const apiValidarRestablecer = (token: string) => req<{ ok: true; correo: string }>(`/api/auth/restablecer/${encodeURIComponent(token)}`, 'GET');
+export const apiRestablecer = (token: string, password: string) => req<{ ok: true }>('/api/auth/restablecer', 'POST', { token, password });
+export interface PrefsCorreo { pedidos: boolean; novedades: boolean; alertas: boolean; para: string; correoCuenta: string; activo: boolean }
+export const apiCorreoPrefs = () => req<PrefsCorreo>('/api/correo/prefs', 'GET');
+export const apiGuardarCorreoPrefs = (p: Partial<PrefsCorreo>) => req<PrefsCorreo>('/api/correo/prefs', 'POST', p);
+export const apiCorreoPrueba = () => req<{ ok: true; para: string }>('/api/correo/prueba', 'POST');
+export interface EstadoCorreo { proveedor: '' | 'resend' | 'smtp'; configurado: boolean; desde: string; responderA: string; host: string; ultimos24h: number; errores24h: number; ultimos: { para: string; asunto: string; estado: string; error: string; created_at: string }[] }
+export const apiAdminCorreo = () => req<EstadoCorreo>('/api/admin/correo', 'GET');
+export const apiAdminCorreoPrueba = (para: string) => req<{ ok: true }>('/api/admin/correo/prueba', 'POST', { para });

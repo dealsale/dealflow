@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { cambiarIdiomaUI, idiomaUI, t } from '../i18n/traductor';
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { apiOlvide, apiRestablecer, apiValidarRestablecer } from '../lib/api';
 import logo from '../assets/logo.png';
 
 /*
@@ -210,6 +211,64 @@ const IcoStore = () => (
   <svg className="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M4 9.5 5.5 4h13L20 9.5" /><path d="M4 9.5h16v2a2.7 2.7 0 0 1-5.3 0 2.7 2.7 0 0 1-5.4 0 2.7 2.7 0 0 1-5.3 0Z" /><path d="M5.5 13v7h13v-7" /></svg>
 );
 
+function Recuperar({ modo, token, correoInicial, onListo }: { modo: 'pedir' | 'nueva'; token: string; correoInicial: string; onListo: (aviso: string) => void }) {
+  const [correo, setCorreo] = useState(correoInicial);
+  const [clave, setClave] = useState('');
+  const [clave2, setClave2] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState('');
+  const [listo, setListo] = useState(false);
+  const [cuenta, setCuenta] = useState('');
+  useEffect(() => {
+    if (modo === 'nueva') void apiValidarRestablecer(token).then((r) => { if (r.error) setError(r.error); else setCuenta(r.data?.correo || ''); });
+  }, [modo, token]);
+  const enviar = async () => {
+    if (enviando) return;
+    setError('');
+    if (modo === 'nueva' && clave !== clave2) { setError('Las dos contraseñas no coinciden.'); return; }
+    setEnviando(true);
+    const r = modo === 'pedir' ? await apiOlvide(correo.trim()) : await apiRestablecer(token, clave);
+    setEnviando(false);
+    if (r.error) { setError(r.error); return; }
+    if (modo === 'pedir') setListo(true);
+    else onListo('✓ Contraseña cambiada. Ya puedes entrar con la nueva.');
+  };
+  return (
+    <div>
+      <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em', marginBottom: 4 }}>{modo === 'pedir' ? 'Recupera tu cuenta 🔑' : 'Elige tu contraseña nueva 🔑'}</div>
+      <div style={{ color: C.muted, fontSize: 13.5, marginBottom: 22, lineHeight: 1.5 }}>
+        {modo === 'pedir' ? 'Escribe el correo de tu cuenta y te enviamos un enlace para cambiar la contraseña.' : cuenta ? <>Para la cuenta <b>{cuenta}</b>.</> : 'Revisando el enlace…'}
+      </div>
+      {listo ? (
+        <div style={{ fontSize: 13.5, lineHeight: 1.55, color: '#A7F3D0', background: 'rgba(16,185,129,.08)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 11, padding: '12px 14px' }}>
+          📬 Si <b>{correo}</b> tiene una cuenta, te llegará un correo en unos minutos. Revisa también spam. El enlace vence en 1 hora.
+        </div>
+      ) : (
+        <form onSubmit={(e) => { e.preventDefault(); void enviar(); }}>
+          {modo === 'pedir' ? (
+            <>
+              <label className="dfl-label" htmlFor="dfl-rec-email">Correo</label>
+              <div className="dfl-field" style={{ marginBottom: 18 }}><IcoMail /><input id="dfl-rec-email" type="email" className="dfl-input" value={correo} onChange={(e) => setCorreo(e.target.value)} placeholder="tucorreo@tienda.co" autoComplete="username" /></div>
+            </>
+          ) : (
+            <>
+              <label className="dfl-label" htmlFor="dfl-rec-c1">Contraseña nueva</label>
+              <div className="dfl-field"><IcoLock /><input id="dfl-rec-c1" type="password" className="dfl-input" value={clave} onChange={(e) => setClave(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="new-password" /></div>
+              <label className="dfl-label" htmlFor="dfl-rec-c2">Repítela</label>
+              <div className="dfl-field" style={{ marginBottom: 18 }}><IcoLock /><input id="dfl-rec-c2" type="password" className="dfl-input" value={clave2} onChange={(e) => setClave2(e.target.value)} autoComplete="new-password" /></div>
+            </>
+          )}
+          {error && <div style={{ display: 'flex', gap: 9, color: '#FFC2CF', fontSize: 13, marginBottom: 14, background: 'rgba(255,107,138,.1)', border: '1px solid rgba(255,107,138,.35)', borderRadius: 11, padding: '10px 12px' }}><span>⚠️</span><span>{error}</span></div>}
+          <button type="submit" className="dfl-btn" disabled={enviando || (modo === 'nueva' && !cuenta)}>
+            {enviando ? <><span className="dfl-spin" />{modo === 'pedir' ? 'Enviando…' : 'Guardando…'}</> : modo === 'pedir' ? 'Enviarme el enlace →' : 'Guardar contraseña →'}
+          </button>
+        </form>
+      )}
+      <button type="button" onClick={() => onListo('')} style={{ display: 'block', margin: '14px auto 0', background: 'none', border: 'none', color: C.muted, fontFamily: 'inherit', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>← Volver a iniciar sesión</button>
+    </div>
+  );
+}
+
 export function Login({ df }: { df: DealFlowState }) {
   const [modo, setModo] = useState<'login' | 'registro'>('login');
   const [nombre, setNombre] = useState('');
@@ -219,6 +278,10 @@ export function Login({ df }: { df: DealFlowState }) {
   const [verClave, setVerClave] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  // Recuperar contraseña: "pedir" el enlace, o "nueva" si se abrió el enlace del correo.
+  const [token, setToken] = useState(() => new URLSearchParams(location.search).get('restablecer') || '');
+  const [recuperar, setRecuperar] = useState<null | 'pedir' | 'nueva'>(() => (new URLSearchParams(location.search).get('restablecer') ? 'nueva' : null));
+  const [aviso, setAviso] = useState('');
 
   const esRegistro = modo === 'registro';
   const entrar = async () => {
@@ -313,6 +376,7 @@ export function Login({ df }: { df: DealFlowState }) {
 
           <div className={`dfl-card-wrap${df.loginError ? ' err' : ''}`} key={df.loginError ? 'e' + df.loginError : 'ok'}>
             <div className="dfl-card" ref={cardRef} onMouseMove={onMove}>
+              {recuperar ? <Recuperar modo={recuperar} token={token} correoInicial={email} onListo={(m) => { setRecuperar(null); setAviso(m); if (token) { setToken(''); history.replaceState(null, '', location.pathname); } }} /> : <>
               <div className="dfl-tabs" role="tablist">
                 <span className="pill" style={{ transform: esRegistro ? 'translateX(calc(100% + 0px))' : 'none', left: 4 }} />
                 <button role="tab" className={!esRegistro ? 'on' : ''} onClick={() => cambiarModo('login')}>Iniciar sesión</button>
@@ -371,6 +435,8 @@ export function Login({ df }: { df: DealFlowState }) {
                 <button type="submit" className="dfl-btn" disabled={enviando}>
                   {enviando ? <><span className="dfl-spin" />{esRegistro ? 'Creando tu cuenta…' : 'Entrando…'}</> : esRegistro ? 'Crear mi cuenta →' : 'Entrar a mi tienda →'}
                 </button>
+                {!esRegistro && <button type="button" onClick={() => { df.clearLoginError(); setRecuperar('pedir'); }} style={{ display: 'block', margin: '12px auto 0', background: 'none', border: 'none', color: C.muted, fontFamily: 'inherit', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>¿Olvidaste tu contraseña?</button>}
+                {aviso && <div style={{ marginTop: 12, fontSize: 13, color: '#A7F3D0', textAlign: 'center' }}>{aviso}</div>}
               </form>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0 0', color: C.faint, fontSize: 11.5, fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>
@@ -378,6 +444,7 @@ export function Login({ df }: { df: DealFlowState }) {
                 <span>🔒 conexión cifrada · API oficial de WhatsApp</span>
                 <span style={{ flex: 1, height: 1, background: C.line }} />
               </div>
+              </>}
             </div>
           </div>
 

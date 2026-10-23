@@ -1101,6 +1101,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   {
     const nprod = items.reduce((a, i) => a + i.qty, 0);
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido DF-${numero} 🛒`, `${cliente} · $${total.toLocaleString('es-CO')} · ${nprod} producto${nprod === 1 ? '' : 's'}`, { url: '/' })).catch(() => {});
+    void import('./correo.js').then((c) => c.correoPedidoNuevo(storeId, oid, origen === 'whatsapp' ? 'WhatsApp (asistente)' : origen)).catch(() => {});
   }
 
   // Auto-despacho a Effi por API (si la tienda lo activó): crea la remisión sola.

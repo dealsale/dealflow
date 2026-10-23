@@ -104,9 +104,62 @@ api.post('/auth/registro', (req, res) => {
   // Créditos de bienvenida (no crítico: si falla, la cuenta ya quedó creada).
   void import('./creditos.js').then(({ abonar, CREDITOS_BIENVENIDA }) => abonar(storeId, CREDITOS_BIENVENIDA, 'Créditos de bienvenida')).catch(() => {});
 
+  void import('./correo.js').then((c) => c.correoBienvenida(email, nombre.trim(), storeId)).catch(() => {});
+
   const user: AuthUser = { id: userId, email, nombre: nombre.trim(), role: 'VENDEDOR', storeId };
   setAuthCookie(res, user, req.hostname);
   res.json({ user: { ...user, esDueno: true } });
+});
+
+// Recuperar contraseña por correo: siempre responde igual (no revela si la cuenta existe).
+api.post('/auth/olvide', async (req, res) => {
+  const correo = String(req.body?.correo || '').toLowerCase().trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) return res.status(400).json({ error: 'Escribe un correo válido.' });
+  const c = await import('./correo.js');
+  if (!c.proveedorCorreo()) return res.status(503).json({ error: 'El envío de correos aún no está activo. Escríbenos por WhatsApp para recuperar tu cuenta.' });
+  await c.solicitarRecuperacion(correo).catch((e) => console.warn('[olvide]', e));
+  res.json({ ok: true });
+});
+api.get('/auth/restablecer/:token', async (req, res) => {
+  const c = await import('./correo.js');
+  const r = c.validarToken(req.params.token, false);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  const u = db.prepare('SELECT email FROM users WHERE id = ?').get(r.userId) as { email: string } | undefined;
+  res.json({ ok: true, correo: u?.email || '' });
+});
+api.post('/auth/restablecer', async (req, res) => {
+  const { token, password } = req.body || {};
+  const u0 = await import('./correo.js');
+  const v = u0.validarToken(String(token || ''), false);
+  if ('error' in v) return res.status(400).json({ error: v.error });
+  const u = db.prepare('SELECT id, email, nombre, role, store_id, foto FROM users WHERE id = ?').get(v.userId) as { id: string; email: string; nombre: string; role: string; store_id: string | null; foto: string } | undefined;
+  if (!u) return res.status(400).json({ error: 'La cuenta ya no existe.' });
+  const equipo = u.role === 'ADMIN' || u.role === 'SUPERADMIN';
+  { const e = claveInvalida(String(password || ''), equipo); if (e) return res.status(400).json({ error: e }); }
+  u0.validarToken(String(token), true);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), u.id);
+  if (equipo) registrarAccionEquipo(u.email, 'Cambió su contraseña con el enlace de recuperación');
+  void u0.enviarCorreo({ para: u.email, tipo: 'clave_cambiada', storeId: u.store_id, asunto: 'Tu contraseña de DealFlow cambió', html: u0.plantillaCorreo('Tu contraseña cambió', ['La contraseña de tu cuenta de DealFlow se cambió hace un momento.', 'Si no fuiste tú, escríbenos de inmediato.']) });
+  res.json({ ok: true });
+});
+
+// Avisos por correo de la tienda (pedido nuevo, novedades, alertas).
+api.get('/correo/prefs', requireAuth, requireStore, async (req, res) => {
+  const c = await import('./correo.js');
+  res.json({ ...c.prefsCorreo(req.user!.storeId!), activo: !!c.proveedorCorreo() });
+});
+api.post('/correo/prefs', requireAuth, requireStore, async (req, res) => {
+  const c = await import('./correo.js');
+  try { res.json({ ...c.guardarPrefsCorreo(req.user!.storeId!, req.body || {}), activo: !!c.proveedorCorreo() }); }
+  catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : 'No se pudo guardar.' }); }
+});
+api.post('/correo/prueba', requireAuth, requireStore, async (req, res) => {
+  const c = await import('./correo.js');
+  const p = c.prefsCorreo(req.user!.storeId!);
+  const para = p.para || p.correoCuenta || req.user!.email;
+  const r = await c.enviarCorreo({ para, tipo: 'prueba', storeId: req.user!.storeId, asunto: 'Correo de prueba de DealFlow ✅', html: c.plantillaCorreo('¡Los correos funcionan! ✅', ['Si lees esto, los avisos por correo de DealFlow te van a llegar a este buzón.', 'Revisa también la carpeta de spam la primera vez y marca el correo como "No es spam".']) });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, para });
 });
 
 api.post('/auth/logout', (req, res) => {
@@ -1026,6 +1079,7 @@ api.post('/orders', requireAuth, requireStore, (req, res) => {
   {
     const nprod = limpios.reduce((a, i) => a + i.qty, 0);
     void import('./push.js').then((p) => p.enviarPush(sid, 'pedidos', `Nuevo pedido DF-${numero} 🛒`, `${cliente} · $${total.toLocaleString('es-CO')} · ${nprod} producto${nprod === 1 ? '' : 's'}`, { url: '/' })).catch(() => {});
+    void import('./correo.js').then((c) => c.correoPedidoNuevo(sid, oid, `creado a mano (${origen})`)).catch(() => {});
   }
   res.json({ ok: true, id: 'DF-' + numero, rowId: oid });
 });
@@ -2436,6 +2490,17 @@ api.get('/admin/respaldos/:archivo', requireAuth, requireSuperAdmin, async (req,
   res.download(d.ruta, String(req.params.archivo), () => d.limpiar());
 });
 // Seguridad: estado de los secretos del servidor y registro de accesos del equipo.
+api.get('/admin/correo', requireAuth, requireSuperAdmin, async (_req, res) => {
+  res.json((await import('./correo.js')).estadoCorreo());
+});
+api.post('/admin/correo/prueba', requireAuth, requireSuperAdmin, async (req, res) => {
+  const c = await import('./correo.js');
+  const para = String(req.body?.para || req.user!.email).trim();
+  const r = await c.enviarCorreo({ para, tipo: 'prueba', asunto: 'Prueba de correos de DealFlow ✅', html: c.plantillaCorreo('¡Los correos de DealFlow funcionan! ✅', [`Proveedor: <b>${c.proveedorCorreo() || 'sin configurar'}</b>.`, 'Si este correo cayó en spam, revisa los registros SPF, DKIM y DMARC del dominio.']) });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+
 api.get('/admin/seguridad', requireAuth, requireSuperAdmin, (_req, res) => {
   res.json({ estado: estadoSeguridad(), accesos: listarAccesos(200) });
 });

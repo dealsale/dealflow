@@ -149,6 +149,7 @@ export async function sincronizarNovedades(storeId: string, forzar = false): Pro
       if (!FINALES.includes(txt(orden.estado))) db.prepare("UPDATE orders SET estado = 'Novedad', estado_woo = ? WHERE id = ?").run(`Novedad: ${motivo}`.slice(0, 60), orderId);
       trazar(storeId, orderId, { etapa: 'novedad', nivel: 'warn', titulo: `Novedad de ${transp || 'la transportadora'}: ${motivo}`, detalle: txt(n.aclaracion), datos: n });
       registrarLog(storeId, 'warn', 'novedad', `El pedido DF-${txt(orden.numero)} tiene una novedad: ${motivo}. Resuélvela en Pedidos → Novedades.`);
+      void import('./correo.js').then((c) => c.correoATienda(storeId, 'novedades', `Novedad en DF-${txt(orden.numero)}: ${motivo}`.slice(0, 120), `📦 Novedad en el pedido DF-${txt(orden.numero)}`, [`<b>${c.escHtml(transp || 'La transportadora')}</b> reportó: <b>${c.escHtml(motivo)}</b>.`, ...(txt(n.aclaracion) ? [c.escHtml(txt(n.aclaracion))] : []), 'Resuélvela en DealFlow → Logística Effi para que el envío no se devuelva.'])).catch(() => {});
       // Al cliente solo le escribimos si la novedad es reciente (las viejas que se unen tarde, no).
       const reciente = !txt(n.fecha_trans_transportadora) || Date.now() - new Date(txt(n.fecha_trans_transportadora).replace(' ', 'T') + 'Z').getTime() < 2 * 86400_000;
       if (c.novedades.avisarCliente && reciente && (Number(n.t_novedad) || 2) === 2) await avisarNovedadCliente(storeId, id).catch((e) => console.warn('[novedad] aviso falló', e));

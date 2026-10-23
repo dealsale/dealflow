@@ -287,6 +287,10 @@ export function aplicarPagoAprobado(referencia: string, transaccion?: string): b
     db.prepare("UPDATE stores SET plan_estado = 'activa', plan_vence = ?, activa = 1 WHERE id = ?").run(nuevaFecha, pago.store_id);
     console.log(`[suscripcion] RENTA aprobada ${referencia} → tienda ${pago.store_id} al día hasta ${nuevaFecha}`);
   }
+  {
+    const plan = (db.prepare('SELECT plan FROM stores WHERE id = ?').get(pago.store_id) as { plan: string } | undefined)?.plan || pago.plan || '';
+    void import('./correo.js').then((c) => c.correoPagoPlan(pago.store_id, plan, nuevaFecha)).catch(() => {});
+  }
   return true;
 }
 

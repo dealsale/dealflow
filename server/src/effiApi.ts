@@ -1472,6 +1472,7 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
           db.prepare("UPDATE orders SET effi_guia = '', guia = CASE WHEN ? != '' AND guia = ? THEN '' ELSE guia END, estado_woo = 'Guía anulada en Effi' WHERE id = ?").run(guia, guia, orden.id);
           trazar(storeId, txt(orden.id), { etapa: 'despacho', nivel: 'warn', titulo: `Effi anuló la guía${guia ? ` ${guia}` : ''}`, detalle: 'Genera una nueva (con otra transportadora si la primera no llega a la ciudad). La remisión sigue vigente.', datos });
           registrarLog(storeId, 'warn', 'despacho', `${numDF}: Effi anuló la guía${guia ? ` ${guia}` : ''}. Genera otra desde el pedido.`);
+          void import('./correo.js').then((c) => c.correoATienda(storeId, 'alertas', `${numDF}: Effi anuló la guía`, `🚫 Effi anuló la guía de ${numDF}`, ['La transportadora no pudo tomar el envío (muchas veces es porque no tiene cobertura en esa ciudad). La remisión sigue vigente.', 'Abre el pedido y genera una guía nueva, con otra transportadora si hace falta.'])).catch(() => {});
         }
         return resumen + ' · guía anulada';
       }
