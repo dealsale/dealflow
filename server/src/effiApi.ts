@@ -503,6 +503,55 @@ export async function repararVinculosDrop(storeId: string, apiKey: string): Prom
   return n;
 }
 
+// ── Revisión de vínculos de un producto (herramienta rápida para corregir) ────────
+
+export interface SugerenciaVinculo {
+  variantId: string; label: string; auto: boolean;
+  actual: { id: string; descripcion: string; drop: boolean; stock: number | null } | null;
+  sugerido: { id: string; descripcion: string; drop: boolean; stock: number | null } | null;
+  /** 'ok' = el actual es el correcto · 'cambiar' = hay uno mejor · 'sin' = no se encontró · 'revisar' = el actual no casa con el nombre */
+  estado: 'ok' | 'cambiar' | 'sin' | 'revisar';
+}
+/**
+ * Para cada variante del producto: su artículo actual y el que DealFlow sugiere, buscado
+ * por nombre EXACTO (producto + talla/color, en cualquier orden) y prefiriendo el del
+ * proveedor. Sirve para ver de un vistazo qué quedó mal vinculado y arreglarlo de una.
+ */
+export async function revisarVinculosProducto(storeId: string, productId: string): Promise<{ producto: string; filas: SugerenciaVinculo[] } | { error: string }> {
+  const c = cfgEffi(storeId);
+  if (!c?.apiKey) return { error: 'Conecta Effi primero.' };
+  const p = db.prepare('SELECT nombre FROM products WHERE id = ? AND store_id = ?').get(productId, storeId) as { nombre: string } | undefined;
+  if (!p) return { error: 'Producto no encontrado.' };
+  const vars = db.prepare("SELECT id, label, json_extract(refs,'$.effi_id') effi, COALESCE(json_extract(refs,'$.effi_auto'),0) auto FROM variants WHERE product_id = ? ORDER BY label").all(productId) as { id: string; label: string; effi: string | null; auto: number }[];
+  // Candidatos: los del proveedor + búsqueda en vivo por el nombre + la caché.
+  const drops = await articulosDrop(storeId, c.apiKey);
+  const idsDrop = new Set(drops.map((d) => d.id));
+  const lista = new Map<string, ArticuloEffi>();
+  for (const a of articulosCache(storeId)) lista.set(a.id, { ...a, drop: idsDrop.has(a.id) ? 1 : 0 });
+  const vivos = await buscarArticulosEffi(storeId, p.nombre);
+  if (Array.isArray(vivos)) for (const a of vivos) lista.set(a.id, { ...a, drop: idsDrop.has(a.id) ? 1 : 0 });
+  for (const d of drops) lista.set(d.id, d);
+  const arts = [...lista.values()];
+  const info = (a: ArticuloEffi | undefined) => (a ? { id: a.id, descripcion: a.descripcion, drop: a.drop === 1, stock: a.stock ?? null } : null);
+  const usados = new Set<string>();
+  const filas: SugerenciaVinculo[] = [];
+  for (const v of vars) {
+    const esperado = `${p.nombre} ${String(v.label || '').replace(/·/g, ' ')}`;
+    const exactos = arts.filter((a) => !usados.has(a.id) && mismasPalabras(a.descripcion, esperado))
+      .sort((x, y) => ((y.drop === 1 ? 1 : 0) - (x.drop === 1 ? 1 : 0)) || (Number(y.stock ?? -1) - Number(x.stock ?? -1)));
+    const sug = exactos[0];
+    if (sug) usados.add(sug.id);
+    let actual = v.effi ? lista.get(String(v.effi)) : undefined;
+    if (v.effi && !actual) actual = await articuloPorId(storeId, c.apiKey, String(v.effi)).then((a) => (a ? { ...a, drop: idsDrop.has(a.id) ? 1 : 0 } : undefined));
+    const actualCasa = !!actual && mismasPalabras(actual.descripcion, esperado);
+    const estado: SugerenciaVinculo['estado'] = actual && sug && actual.id === sug.id ? 'ok'
+      : sug && (!actual || !actualCasa || (sug.drop === 1 && actual.drop !== 1)) ? 'cambiar'
+        : !sug && actual && !actualCasa ? 'revisar' : !sug && !actual ? 'sin' : 'ok';
+    filas.push({ variantId: v.id, label: v.label, auto: Number(v.auto) === 1, actual: info(actual), sugerido: info(sug), estado });
+  }
+  return { producto: p.nombre, filas };
+}
+
 /** Un artículo por id, en vivo (con su marca de dropshipping). Lo guarda en la caché. */
 async function articuloPorId(storeId: string, apiKey: string, id: string): Promise<ArticuloEffi | undefined> {
   // En serie (no en paralelo): Effi responde 429 si le llegan varias a la vez.

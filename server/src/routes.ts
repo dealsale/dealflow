@@ -1566,6 +1566,29 @@ api.post('/effi-api/producto-convenio', requireAuth, requireStore, requireOwner,
   for (const id of ids) n += upd.run(conv, id, req.user!.storeId!).changes;
   res.json({ ok: true, actualizados: n });
 });
+// Revisión rápida de vínculos de un producto: actual vs. sugerido, y aplicar varios de una vez.
+api.get('/effi-api/producto/:id/vinculos', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const r = await ef.revisarVinculosProducto(req.user!.storeId!, String(req.params.id));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/effi-api/producto/:id/vinculos', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const sid = req.user!.storeId!;
+  const cambios = (Array.isArray(req.body?.cambios) ? req.body.cambios : []) as { variantId?: string; effiId?: string }[];
+  let n = 0;
+  for (const c of cambios.slice(0, 500)) {
+    const vid = String(c.variantId || '');
+    const own = db.prepare('SELECT 1 FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.id = ? AND p.store_id = ?').get(vid, String(req.params.id), sid);
+    if (!own) continue;
+    const eid = String(c.effiId || '').replace(/\D/g, '');
+    if (eid) { if (ef.vincularArticulo(sid, vid, eid)) n++; }
+    else { db.prepare("UPDATE variants SET refs = json_remove(COALESCE(refs,'{}'), '$.effi_id', '$.effi_auto') WHERE id = ?").run(vid); n++; }
+  }
+  registrarAccionEquipo(req.user!.email, `Vínculos Effi del producto ${String(req.params.id)}: ${n} cambio(s)`, sid);
+  res.json({ ok: true, cambios: n });
+});
 api.post('/effi-api/articulos/vincular', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
   const ok = ef.vincularArticulo(req.user!.storeId!, String(req.body?.variantId || ''), String(req.body?.effiId || '').replace(/\D/g, ''));

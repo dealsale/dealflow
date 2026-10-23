@@ -5,7 +5,7 @@ import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
 import type { Variante, Opcion } from '../types';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
-import { EffiVinculoProducto, ConvenioProductoEffi } from '../components/EffiProductos';
+import { EffiVinculoProducto, ConvenioProductoEffi, RevisionVinculos } from '../components/EffiProductos';
 import { apiSincronizarDropi, apiSoltarVariantesDropi, type ResultadoSyncDropi } from '../lib/api';
 
 
@@ -182,7 +182,8 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
       {hayEffi && (
         <BloquePlegable logo="/logos/effi.png" titulo="Effi" color="var(--df-purple)" abiertoInicial={false}
           resumen={`Artículo de Effi de cada variante${effiVinc !== null ? ` · ${effiVinc}/${todasVars.length} vinculadas` : ''} (se vinculan solos por nombre; aquí corriges las que no casaron).`}>
-          <EffiVinculoProducto productId={String(p.id)} productoNombre={p.nombre} conConvenio={false} onCambio={() => void df.reloadProducts()} />
+          <RevisionVinculos productId={String(p.id)} onCambio={() => void df.reloadProducts()} />
+          <EffiVinculoProducto key={`${p.id}-${(p.variantes || []).map((v) => v.refs?.effi_id || '').join(',')}`} productId={String(p.id)} productoNombre={p.nombre} conConvenio={false} onCambio={() => void df.reloadProducts()} />
         </BloquePlegable>
       )}
       {hayDropi && (

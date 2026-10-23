@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from './Dropdown';
 import {
-  apiEffiApiArticulos, apiEffiApiBuscar, apiEffiApiProveedor, apiEffiApiConvenioProducto, apiEffiApiSyncArticulos, apiEffiApiVincular,
+  apiEffiApiArticulos, apiEffiApiBuscar, apiRevisarVinculos, apiAplicarVinculos, type SugerenciaVinculo, type ArtVinculo, apiEffiApiProveedor, apiEffiApiConvenioProducto, apiEffiApiSyncArticulos, apiEffiApiVincular,
   type EffiArticulo, type EffiVarianteDF,
 } from '../lib/api';
 
@@ -363,6 +363,80 @@ export function ConvenioProductoEffi({ productId }: { productId: string }) {
         {convenio === 'propio' ? 'Se envía como mercancía tuya: Effi exige stock en tu bodega.' : convenio ? 'Cada pedido de este producto sale a Effi con este convenio, sin preguntar.' : 'Automático: usa el convenio con el que ya se ha vendido en Effi. Si es de un proveedor, elígelo aquí para que salga bien desde la primera venta.'}
         {!convenios.length && ' Agrega tus convenios en Integraciones → Effi.'}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Revisión rápida: todas las variantes del producto con su artículo ACTUAL y el que
+ * DealFlow SUGIERE (mismo nombre exacto, prefiriendo el del proveedor). Marca de una vez
+ * las que están mal y las corrige con un clic.
+ */
+export function RevisionVinculos({ productId, onCambio }: { productId: string; onCambio?: () => void }) {
+  const [filas, setFilas] = useState<SugerenciaVinculo[] | null>(null);
+  const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
+  const [cargando, setCargando] = useState(false);
+  const [msg, setMsg] = useState('');
+  const revisar = async () => {
+    setCargando(true); setMsg('');
+    const r = await apiRevisarVinculos(productId);
+    setCargando(false);
+    if (r.error || !r.data) { setMsg(r.error || 'No se pudo revisar.'); return; }
+    setFilas(r.data.filas);
+    setMarcadas(new Set(r.data.filas.filter((f) => f.estado === 'cambiar').map((f) => f.variantId)));
+  };
+  const aplicar = async (soloQuitar = false) => {
+    if (!filas) return;
+    const cambios = filas.filter((f) => marcadas.has(f.variantId)).map((f) => ({ variantId: f.variantId, effiId: soloQuitar ? '' : f.sugerido?.id || '' }));
+    if (!cambios.length) return;
+    setCargando(true);
+    const r = await apiAplicarVinculos(productId, cambios);
+    setCargando(false);
+    if (r.error || !r.data) { setMsg(r.error || 'No se pudo aplicar.'); return; }
+    setMsg(`✓ ${r.data.cambios} variante(s) ${soloQuitar ? 'desvinculadas' : 'corregidas'}.`);
+    onCambio?.();
+    await revisar();
+  };
+  const chip = (a: ArtVinculo | null) => a ? (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+      <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 999, padding: '1px 6px', background: a.drop ? 'var(--df-purple-subtle)' : 'var(--df-surface-2)', color: a.drop ? 'var(--df-purple)' : 'var(--df-text-muted)', flexShrink: 0 }}>{a.drop ? 'PROVEEDOR' : 'PROPIO'}</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.descripcion} · #{a.id}{a.stock != null ? ` · stock ${a.stock}` : ''}</span>
+    </span>
+  ) : <span style={{ color: 'var(--df-text-faint)' }}>—</span>;
+  const color: Record<SugerenciaVinculo['estado'], string> = { ok: 'var(--df-brand-dark)', cambiar: 'var(--df-warning)', sin: 'var(--df-text-faint)', revisar: 'var(--df-danger)' };
+  const texto: Record<SugerenciaVinculo['estado'], string> = { ok: '✓ bien', cambiar: '↻ cambiar', sin: 'no encontrado', revisar: '⚠ revisar' };
+  const nCambiar = filas?.filter((f) => f.estado === 'cambiar').length || 0;
+  return (
+    <div style={{ border: '1px dashed var(--df-purple-border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={() => void revisar()} disabled={cargando} style={{ ...mini, color: 'var(--df-purple)', borderColor: 'var(--df-purple-border)', fontWeight: 800 }}>{cargando ? 'Revisando en Effi…' : filas ? '↻ Volver a revisar' : '🔍 Revisar todos los vínculos'}</button>
+        <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)', flex: 1, minWidth: 200 }}>Compara cada variante con el artículo de Effi del mismo nombre (prefiere el del <b>proveedor</b>) y te muestra cuáles quedaron mal.</span>
+      </div>
+      {filas && (
+        <>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '10px 0 6px', fontSize: 12 }}>
+            <b>{nCambiar ? `${nCambiar} por corregir` : 'Todo se ve bien'}</b>
+            <span style={{ color: 'var(--df-text-faint)' }}>· {filas.filter((f) => f.estado === 'ok').length} bien · {filas.filter((f) => f.estado === 'revisar').length} para revisar · {filas.filter((f) => f.estado === 'sin').length} sin artículo</span>
+            <span style={{ flex: 1 }} />
+            <button onClick={() => setMarcadas(new Set(filas.filter((f) => f.sugerido).map((f) => f.variantId)))} style={mini}>Marcar todas</button>
+            <button onClick={() => setMarcadas(new Set())} style={mini}>Ninguna</button>
+            <button onClick={() => void aplicar()} disabled={cargando || !marcadas.size} style={{ ...mini, background: 'var(--df-purple)', color: '#fff', borderColor: 'var(--df-purple)', opacity: marcadas.size ? 1 : 0.5 }}>Aplicar sugeridos ({marcadas.size})</button>
+            <button onClick={() => void aplicar(true)} disabled={cargando || !marcadas.size} title="Quita el vínculo de las marcadas (para elegirlas a mano)" style={{ ...mini, color: 'var(--df-danger)' }}>Desvincular marcadas</button>
+          </div>
+          <div style={{ maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            {filas.map((f) => (
+              <label key={f.variantId} style={{ display: 'grid', gridTemplateColumns: '22px minmax(90px,.6fr) minmax(0,1.5fr) minmax(0,1.5fr) 80px', gap: 8, alignItems: 'center', padding: '6px 2px', borderTop: '1px solid var(--df-border)', fontSize: 11.5, cursor: f.sugerido ? 'pointer' : 'default' }}>
+                <input type="checkbox" disabled={!f.sugerido && !f.actual} checked={marcadas.has(f.variantId)} onChange={(e) => setMarcadas((m) => { const n = new Set(m); if (e.target.checked) n.add(f.variantId); else n.delete(f.variantId); return n; })} />
+                <b style={{ fontSize: 12 }}>{f.label || 'Única'}</b>
+                <span style={{ minWidth: 0 }}><span style={{ color: 'var(--df-text-faint)' }}>Ahora: </span>{chip(f.actual)}</span>
+                <span style={{ minWidth: 0 }}><span style={{ color: 'var(--df-text-faint)' }}>Sugerido: </span>{chip(f.sugerido)}</span>
+                <span style={{ fontWeight: 800, color: color[f.estado], textAlign: 'right' }}>{texto[f.estado]}</span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+      {msg && <div style={{ fontSize: 12, marginTop: 6, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>{msg}</div>}
     </div>
   );
 }
