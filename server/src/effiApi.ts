@@ -131,7 +131,7 @@ export async function effi<T>(apiKey: string, method: 'GET' | 'POST' | 'PUT' | '
 
 async function effiHttp<T>(apiKey: string, method: string, path: string, qs: string, cuerpo: unknown): Promise<{ ok: boolean; http: number; body: EffiResp<T> }> {
   const opts = { body: cuerpo };
-  for (let intento = 0; intento < 2; intento++) {
+  for (let intento = 0; intento < 4; intento++) {
     let res: Response;
     try {
       res = await fetch(`${BASE}${path}${qs}`, {
@@ -143,8 +143,9 @@ async function effiHttp<T>(apiKey: string, method: string, path: string, qs: str
     } catch (e) {
       return { ok: false, http: 0, body: { ok: false, mensaje: `No pudimos conectar con Effi (${e instanceof Error ? e.message : 'red'}).` } };
     }
-    if (res.status === 429 && intento === 0) {
-      const espera = Math.min(8, Math.max(1, Number(res.headers.get('retry-after')) || 2));
+    // Effi limita las peticiones por segundo: se espera y se reintenta (hasta 3 veces, cada vez más).
+    if (res.status === 429 && intento < 3) {
+      const espera = Math.min(10, Math.max(1, Number(res.headers.get('retry-after')) || 2 * (intento + 1)));
       await new Promise((r) => setTimeout(r, espera * 1000));
       continue;
     }
@@ -442,15 +443,31 @@ export async function descargarArticulos(storeId: string, apiKey: string): Promi
   return { total: filas.length, soloVinculados };
 }
 
+// Stock de cada artículo por bodega (de la última lectura en vivo), para elegir de qué bodega sale.
+const bodegasDe = new Map<string, { id: string; nombre: string; stock: number }[]>();
+const cacheBodegas = new Map<string, { ts: number; lista: { id: string; nombre: string; sucursal: string }[] }>();
+async function bodegasEffi(storeId: string, apiKey: string): Promise<{ id: string; nombre: string; sucursal: string }[]> {
+  const c = cacheBodegas.get(storeId);
+  if (c && Date.now() - c.ts < 3600e3) return c.lista;
+  const r = await todo<Fila>(apiKey, '/api/bodega', {}, 5);
+  const lista = Array.isArray(r) ? r.map((f) => ({ id: txt(f.id), nombre: txt(f.nombre), sucursal: txt(f.sucursal) })) : [];
+  cacheBodegas.set(storeId, { ts: Date.now(), lista });
+  return lista;
+}
+
 /** Un artículo por id, en vivo (con su marca de dropshipping). Lo guarda en la caché. */
 async function articuloPorId(storeId: string, apiKey: string, id: string): Promise<ArticuloEffi | undefined> {
-  const [r, d] = await Promise.all([
-    effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { id, por_pagina: 1 } }),
-    effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { id, dropshipping_distribuidor: 1, por_pagina: 1 } }),
-  ]);
+  // En serie (no en paralelo): Effi responde 429 si le llegan varias a la vez.
+  const r = await effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { id, por_pagina: 1 } });
+  const d = await effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { id, dropshipping_distribuidor: 1, por_pagina: 1 } });
   const f = r.ok ? r.body.data?.[0] : undefined;
   if (!f || txt(f.vigente) === '0') return undefined;
   const a: ArticuloEffi = { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: stockDe(f), drop: d.ok && d.body.data?.length ? 1 : 0 };
+  if (Array.isArray(f.stock_bodegas)) {
+    bodegasDe.set(`${storeId}:${a.id}`, (f.stock_bodegas as Fila[]).map((b) => ({
+      id: txt(b.bodega ?? b.id_bodega ?? b.id), nombre: txt(b.nombre_bodega ?? b.nombre), stock: Number(b.stock ?? b.existencias ?? b.cantidad) || 0,
+    })).filter((b) => b.id));
+  }
   try {
     db.prepare('INSERT OR REPLACE INTO effi_articulos (store_id, id, descripcion, referencia, ecommerce, stock, es_drop) VALUES (?,?,?,?,?,?,?)')
       .run(storeId, a.id, a.descripcion, a.referencia, a.ecommerce, a.stock, a.drop);
@@ -960,6 +977,37 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     if (esDrop.some((x) => !x)) avisos.push('El pedido mezcla productos propios y de proveedor dropshipping: los propios sí necesitan stock en tu bodega.');
   }
 
+  // Mercancía propia (sin convenio): Effi exige stock en la bodega de la remisión. Si la
+  // bodega configurada no alcanza pero otra de la misma sucursal sí, sale desde esa. Si
+  // ninguna alcanza, se avisa YA (en la revisión) en vez de mandarla para que Effi la rechace.
+  let bodega = c.bodega;
+  if (!convenio) {
+    const necesita = new Map<string, number>();
+    conceptos.forEach((cp, i) => { if (!esDrop[i]) necesita.set(String(cp.articulo), (necesita.get(String(cp.articulo)) || 0) + cp.cantidad); });
+    const datos = [...necesita].map(([id, cant]) => ({ id, cant, b: bodegasDe.get(`${storeId}:${id}`) }));
+    if (datos.length && datos.every((x) => x.b && x.b.length)) {
+      const enBodega = (bid: string, x: typeof datos[number]) => x.b!.find((y) => y.id === bid)?.stock || 0;
+      const alcanza = (bid: string) => datos.every((x) => enBodega(bid, x) >= x.cant);
+      if (!alcanza(c.bodega)) {
+        const lista = await bodegasEffi(storeId, c.apiKey);
+        const nombreB = (bid: string) => lista.find((b) => b.id === bid)?.nombre || datos.flatMap((x) => x.b!).find((y) => y.id === bid)?.nombre || `bodega ${bid}`;
+        const misma = (bid: string) => { const b = lista.find((x) => x.id === bid); return !b || !b.sucursal || b.sucursal === c.sucursal; };
+        const otra = [...new Set(datos.flatMap((x) => x.b!.map((y) => y.id)))].find((bid) => bid !== c.bodega && misma(bid) && alcanza(bid));
+        if (otra) {
+          bodega = otra;
+          avisos.push(`Tu bodega configurada (${nombreB(c.bodega)}) no tiene stock de todo el pedido: la remisión sale desde ${nombreB(otra)}, que sí tiene.`);
+        } else {
+          const detalle = datos.map((x) => {
+            const desc = lineas.find((l) => l.articulo.includes(`#${x.id}`))?.item || `#${x.id}`;
+            const otras = x.b!.filter((y) => y.stock > 0).map((y) => `${nombreB(y.id)}: ${y.stock}`).join(', ');
+            return `${desc} → en ${nombreB(c.bodega)} hay ${enBodega(c.bodega, x)}${otras ? ` (con stock: ${otras})` : ' (0 en todas las bodegas)'}`;
+          }).join(' · ');
+          return { error: `Effi no tiene stock para este pedido y estos artículos no están vinculados a ningún proveedor dropshipping en Effi: ${detalle}. Para que salga: 1) si los despacha un proveedor, en Effi → Dropshipping vincula estos artículos a los del proveedor (en el convenio que corresponda) y elige ese convenio aquí; o 2) si son tuyos, carga el inventario en tu bodega.` };
+        }
+      }
+    }
+  }
+
   const ubic = await resolverUbicacion(c.apiKey, txt(o.departamento), txt(o.ciudad));
   if ('error' in ubic) return ubic;
 
@@ -994,7 +1042,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
   const key = `df-${storeId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}-${numero}${reintento ? `-r${Date.now().toString(36).slice(-5)}` : ''}`.slice(0, 36);
   const body: Record<string, unknown> = {
     idempotency_key: key,
-    sucursal: Number(c.sucursal), bodega: Number(c.bodega), centro_costos: Number(c.centroCostos),
+    sucursal: Number(c.sucursal), bodega: Number(bodega), centro_costos: Number(c.centroCostos),
     fecha_entrega: hoyMas(c.diasEntrega), divisa: 'COP', trm: 1,
     cliente: 0, // se llena con el tercero al despachar
     id_pais_cliente: PAIS_COLOMBIA, id_provincia_cliente: Number(ubic.provincia), id_ciudad_cliente: Number(ubic.ciudad),
@@ -1046,7 +1094,7 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   if (!r.ok && !convenioForzado && !body.convenio_dropshipping && /supera las existencias/i.test(mensajeError(r)) && Array.isArray(body.articulo)) {
     const arts = (body.articulo as unknown[]).map(String);
     const conocidos = [...new Set(arts.map((a) => (db.prepare('SELECT convenio FROM effi_convenio_articulo WHERE store_id = ? AND articulo = ?').get(storeId, a) as { convenio: string } | undefined)?.convenio || '').filter(Boolean))];
-    const conv = conocidos.length === 1 ? conocidos[0] : conocidos.length === 0 ? c.convenioDropshipping : '';
+    const conv = conocidos.length === 1 ? conocidos[0] : '';
     if (conv) {
       trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Sin stock propio: se reintenta como dropshipping (convenio ${conv})`, detalle: 'Effi no marcó estos artículos como de proveedor; se usa el convenio conocido.' });
       body.convenio_dropshipping = /^\d+$/.test(conv) ? Number(conv) : conv;
