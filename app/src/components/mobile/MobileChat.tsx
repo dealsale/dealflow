@@ -1,3 +1,4 @@
+import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../Ventana24h';
 import { BloquearContacto } from '../BloquearContacto';
 import { useEffect, useRef } from 'react';
 import { AttachButton, MediaContent } from '../MediaBubble';
@@ -9,6 +10,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function MobileChat({ df }: { df: DealFlowState }) {
   const chat = df.crmChat;
+  const ventana = useVentana24h(chat);
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = scrollRef.current;
@@ -142,8 +144,15 @@ export function MobileChat({ df }: { df: DealFlowState }) {
             Intervenir yo en este chat
           </button>
         )}
-        {df.crmIntervening && (
+        {df.crmIntervening && ventana.cerrada && (
           <>
+            <BarraVentanaCerrada plantillas={<FlujosButton df={df} size={44} />} />
+            <div onClick={df.backToBot} style={{ textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 13, fontWeight: 600, marginTop: 10, cursor: 'pointer' }}>Devolver al asistente</div>
+          </>
+        )}
+        {df.crmIntervening && !ventana.cerrada && (
+          <>
+            <AvisoVentana restante={ventana.restante} />
             <div style={{ display: 'flex', gap: 8 }}>
               <AttachButton onFile={df.sendCrmMedia} size={44} />
               <FlujosButton df={df} size={44} />

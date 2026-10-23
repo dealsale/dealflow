@@ -170,6 +170,9 @@ export interface ApiLead {
   ultimo?: string;
   ultimoIso?: string | null;
   hora?: string;
+  /** Aplica la ventana de 24 h de WhatsApp y cuándo escribió el cliente por última vez (UTC). */
+  ventana24h?: boolean;
+  ultClienteIso?: string | null;
   sinResponder?: number;
 }
 

@@ -204,6 +204,8 @@ export interface Lead {
   asignado: string;
   etiqueta?: string;
   /** Canal de la conversación: whatsapp (default) o web. */
+  ventana24h?: boolean;
+  ultClienteIso?: string | null;
   canal?: string;
   /** Nota interna del equipo sobre este chat (nunca la ve el cliente). */
   notaInterna?: string;

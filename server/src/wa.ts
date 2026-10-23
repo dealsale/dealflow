@@ -178,6 +178,21 @@ function ventana24hAbierta(storeId: string, to: string, pn?: string): boolean {
   return !isNaN(t) && Date.now() - t < 24 * 3600 * 1000;
 }
 
+/**
+ * Ventana de 24 h de un chat (para bloquear la caja de escribir en el Inbox):
+ * aplica a WhatsApp; `cierra` es cuándo vence (último mensaje del cliente + 24 h).
+ */
+export function ventanaDeLead(storeId: string, leadId: string): { aplica: boolean; abierta: boolean; cierra: string | null } {
+  if (process.env.WA_BLOQUEO_24H === 'off') return { aplica: false, abierta: true, cierra: null };
+  const l = db.prepare('SELECT canal, wa_id, tel FROM leads WHERE id = ? AND store_id = ?').get(leadId, storeId) as { canal: string; wa_id: string; tel: string } | undefined;
+  if (!l || (l.canal && l.canal !== 'whatsapp') || String(l.wa_id || l.tel).startsWith('web:')) return { aplica: false, abierta: true, cierra: null };
+  const row = db.prepare("SELECT created_at FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(leadId) as { created_at: string } | undefined;
+  const t = row ? Date.parse(String(row.created_at).replace(' ', 'T') + 'Z') : NaN;
+  const cierra = isNaN(t) ? null : new Date(t + 24 * 3600e3).toISOString();
+  return { aplica: true, abierta: !!cierra && Date.parse(cierra) > Date.now(), cierra };
+}
+export const MSG_VENTANA_CERRADA = 'Este chat tiene más de 24 h sin mensajes del cliente: WhatsApp no deja escribirle texto libre. Solo puedes enviarle una plantilla aprobada (botón ⚡).';
+
 const CONTACTO_BLOQUEADO = 'Este contacto está bloqueado en tu tienda: DealFlow no le envía mensajes. Desbloquéalo desde el chat si quieres volver a escribirle.';
 
 /** Mensaje de error estándar cuando se bloquea un envío por ventana cerrada. */

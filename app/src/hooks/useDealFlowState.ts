@@ -474,6 +474,8 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     asignado: l.asignado,
     etiqueta: l.etiqueta || '',
     canal: l.canal || 'whatsapp',
+    ventana24h: l.ventana24h,
+    ultClienteIso: l.ultClienteIso ?? null,
     notaInterna: l.notaInterna || '',
     anuncio: l.anuncio || null,
     promosOptin: l.promosOptin || false,
@@ -3349,6 +3351,7 @@ export function useDealFlowState() {
         (st || []).map((l) => (l.id === crmSelectedId ? { ...l, asignado: sessionUser?.nombre || 'Yo', mensajes: [...l.mensajes, { de: 'vendedor' as const, texto: txt, hora: 'ahora' }] } : l)),
       );
       void apiSendLeadMessage(String(crmSelectedId), txt).then((r) => {
+        if (r.error) setCrmSendWarn('⛔ ' + r.error); // no se guardó (p. ej. ventana de 24 h cerrada)
         if (r.data && !r.data.enviadoPorWhatsapp && r.data.aviso) setCrmSendWarn(r.data.aviso);
         refrescarLeadsLiviano();
       });
@@ -3374,6 +3377,7 @@ export function useDealFlowState() {
           ),
         );
         void apiSendLeadMedia(String(crmSelectedId), dataUrl, file.name, '').then((r) => {
+          if (r.error) setCrmSendWarn('⛔ ' + r.error);
           if (r.data && !r.data.enviadoPorWhatsapp && r.data.aviso) setCrmSendWarn(r.data.aviso);
           refrescarLeadsLiviano();
         });
