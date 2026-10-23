@@ -56,9 +56,10 @@ function Tarjeta({ g, df, i }: { g: GuiaLogistica; df: DealFlowState; i: number 
   const [copiado, setCopiado] = useState(false);
   return (
     <div className={`df-log-card${g.llegaHoy ? ' df-log-hoy' : ''}`} style={{ animationDelay: `${Math.min(i, 12) * 35}ms`, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderLeft: `3px solid ${e.color}`, borderRadius: 11, padding: '10px 11px', display: 'flex', flexDirection: 'column', gap: 6, cursor: 'pointer' }}
-      onClick={() => df.verPedido(g.id)}>
+      onClick={() => { if (!g.externa) df.verPedido(g.id); }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <b style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{g.id}</b>
+        <b style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{g.externa ? (g.guia ? 'Sin pedido' : g.id) : g.id}</b>
+        {g.externa && <span title="Esta guía se hizo en Effi, por fuera de DealFlow" style={{ fontSize: 10, fontWeight: 800, color: 'var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 999, padding: '1px 7px' }}>SOLO EFFI</span>}
         {g.llegaHoy && <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: '#F59E0B', borderRadius: 999, padding: '1px 7px' }}>HOY</span>}
         <span style={{ flex: 1 }} />
         {g.transportadora && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-text-muted)', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 6, padding: '1px 6px', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🚚 {g.transportadora}</span>}
@@ -102,6 +103,7 @@ export function Logistica({ df }: { df: DealFlowState }) {
   const [transp, setTransp] = useState('');
   const [dias, setDias] = useState('45');
   const [verCerradas, setVerCerradas] = useState(true);
+  const [origen, setOrigen] = useState<'' | 'df' | 'effi'>('');
 
   const cargar = (d = dias) => { void apiLogistica(Number(d)).then((r) => { if (r.data) { setT(r.data); setError(''); } else setError(r.error || 'No se pudo cargar.'); }); };
   useEffect(() => {
@@ -119,8 +121,8 @@ export function Logistica({ df }: { df: DealFlowState }) {
   const transportadoras = useMemo(() => [...new Set((t?.guias || []).map((g) => g.transportadora).filter(Boolean))].sort(), [t]);
   const filtradas = useMemo(() => {
     const nq = q.trim().toLowerCase();
-    return (t?.guias || []).filter((g) => (!transp || g.transportadora === transp) && (!nq || `${g.id} ${g.cliente} ${g.tel} ${g.guia} ${g.ciudad}`.toLowerCase().includes(nq)));
-  }, [t, q, transp]);
+    return (t?.guias || []).filter((g) => (!origen || (origen === 'effi' ? !!g.externa : !g.externa)) && (!transp || g.transportadora === transp) && (!nq || `${g.id} ${g.cliente} ${g.tel} ${g.guia} ${g.ciudad}`.toLowerCase().includes(nq)));
+  }, [t, q, transp, origen]);
   const columnas = ETAPAS.filter((e) => verCerradas || (e.id !== 'entregado' && e.id !== 'devuelto'));
   const r = t?.resumen;
 
@@ -159,7 +161,7 @@ export function Logistica({ df }: { df: DealFlowState }) {
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 220 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Logística Effi</h1>
-          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Todas tus guías, por dónde va cada una y cuáles llegan hoy. Toca una tarjeta para ver el pedido.</p>
+          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Todas las guías de tu Effi (también las que hiciste por fuera de DealFlow), por dónde va cada una y cuáles llegan hoy.</p>
         </div>
         <button onClick={() => void actualizar()} disabled={actualizando} style={{ background: 'var(--df-purple)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: actualizando ? 0.75 : 1 }}>
           {actualizando ? <><span className="df-log-gira">↻</span> Consultando Effi…</> : '↻ Actualizar desde Effi'}
@@ -187,6 +189,10 @@ export function Logistica({ df }: { df: DealFlowState }) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '12px 0' }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Buscar por pedido, cliente, guía o ciudad…"
           style={{ flex: '1 1 240px', minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 999, padding: '8px 14px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text-body)' }} />
+        {!!r?.soloEffi && (
+          <Dropdown variant="pill" label="Origen" value={origen} onChange={(v) => setOrigen(v as '' | 'df' | 'effi')}
+            options={[{ value: '', label: 'Todas' }, { value: 'df', label: 'Pedidos de DealFlow' }, { value: 'effi', label: `Solo en Effi (${r.soloEffi})` }]} />
+        )}
         {transportadoras.length > 1 && (
           <Dropdown variant="pill" label="Transportadora" value={transp} onChange={setTransp} options={[{ value: '', label: 'Todas' }, ...transportadoras.map((x) => ({ value: x, label: x }))]} />
         )}
@@ -224,7 +230,7 @@ export function Logistica({ df }: { df: DealFlowState }) {
           })}
         </div>
       )}
-      {t && <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 6 }}>Se actualiza solo cada minuto con lo que avisa Effi · última lectura {fecha(t.actualizado)}</div>}
+      {t && <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 6 }}>Se actualiza solo cada minuto con lo que avisa Effi · todas las guías de Effi se traen cada 20 min{t.guiasEffiAt ? ` (última: ${fecha(t.guiasEffiAt)})` : ''}.</div>}
     </section>
   );
 }

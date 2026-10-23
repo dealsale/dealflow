@@ -265,3 +265,73 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
     </div>
   );
 }
+
+/**
+ * Vínculo con Effi DENTRO del producto (Productos → Variantes): el convenio del
+ * producto y, por cada variante, su artículo de Effi (con el mismo selector).
+ */
+export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { productId: string; productoNombre: string; onCambio?: () => void }) {
+  const [vars, setVars] = useState<EffiVarianteDF[] | null>(null);
+  const [cache, setCache] = useState<EffiArticulo[]>([]);
+  const [nombres, setNombres] = useState<Record<string, string>>({});
+  const [convenio, setConvenio] = useState('');
+  const [convenios, setConvenios] = useState<{ id: string; nombre: string }[]>([]);
+  const [abierto, setAbierto] = useState('');
+  const [msg, setMsg] = useState('');
+  const cargar = async () => {
+    const r = await apiEffiApiArticulos(productId);
+    if (!r.data) { setMsg(r.error || 'No pudimos leer Effi.'); return; }
+    setVars(r.data.variantes); setCache(r.data.articulos); setNombres(r.data.nombres || {});
+    setConvenio(r.data.conveniosProducto?.[productId] || ''); setConvenios(r.data.convenios || []);
+  };
+  useEffect(() => { void cargar(); }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const vincular = async (v: EffiVarianteDF, a: EffiArticulo) => {
+    const r = await apiEffiApiVincular(v.variantId, a.id);
+    if (r.error) { setMsg(r.error); return; }
+    setNombres((n) => ({ ...n, [a.id]: a.descripcion + (a.referencia ? ` [${a.referencia}]` : '') }));
+    setVars((vs) => (vs || []).map((x) => (x.variantId === v.variantId ? { ...x, effiId: a.id, auto: false } : x)));
+    setAbierto(''); setMsg(`✓ ${v.nombre} → ${a.descripcion}`);
+    onCambio?.();
+  };
+  const cambiarConvenio = async (c: string) => {
+    setConvenio(c);
+    const r = await apiEffiApiConvenioProducto([productId], c);
+    if (r.error) setMsg(r.error);
+  };
+  if (!vars) return <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{msg || 'Leyendo Effi…'}</div>;
+  const vinculadas = vars.filter((v) => v.effiId).length;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Convenio:</span>
+        <div style={{ minWidth: 220, flex: '0 1 320px' }}>
+          <Dropdown ariaLabel="Convenio del producto" value={convenio} onChange={(v) => void cambiarConvenio(v)}
+            options={[
+              { value: '', label: 'Automático (según sus ventas en Effi)' },
+              { value: 'propio', label: 'Mercancía propia (sin convenio)' },
+              ...convenios.map((c) => ({ value: c.id, label: `${c.nombre} · ${c.id}` })),
+              ...(convenio && convenio !== 'propio' && !convenios.some((c) => c.id === convenio) ? [{ value: convenio, label: `Convenio ${convenio}` }] : []),
+            ]} />
+        </div>
+        <span style={{ fontSize: 12, color: vinculadas === vars.length ? 'var(--df-purple)' : 'var(--df-warning)', fontWeight: 700, marginLeft: 'auto' }}>{vinculadas}/{vars.length} variantes vinculadas</span>
+      </div>
+      {vars.map((v) => {
+        const etiqueta = v.nombre.startsWith(productoNombre) ? (v.nombre.slice(productoNombre.length).replace(/^\s*\(|\)\s*$/g, '') || 'Única') : v.nombre;
+        return (
+          <div key={v.variantId} style={{ borderTop: '1px dashed var(--df-border)', paddingTop: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, minWidth: 90 }}>{etiqueta}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: v.effiId ? 'var(--df-text-body)' : 'var(--df-warning)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {v.effiId ? `→ ${nombres[v.effiId] || `Artículo #${v.effiId}`}` : 'Sin artículo de Effi'}
+              </span>
+              {v.effiId && v.auto && <span title="DealFlow lo vinculó solo por nombre y variante. Si no es el correcto, cámbialo." style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: '2px 7px', background: 'var(--df-purple-subtle)', color: 'var(--df-purple)' }}>⚡ automático</span>}
+              <button onClick={() => setAbierto(abierto === v.variantId ? '' : v.variantId)} style={mini}>{abierto === v.variantId ? 'Cerrar' : v.effiId ? 'Cambiar' : 'Elegir artículo'}</button>
+            </div>
+            {abierto === v.variantId && <div style={{ marginTop: 8 }}><BuscadorArticulo cache={cache} producto={productoNombre} variante={etiqueta} onElegir={(a) => void vincular(v, a)} /></div>}
+          </div>
+        );
+      })}
+      {msg && <div style={{ fontSize: 12, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>{msg}</div>}
+    </div>
+  );
+}

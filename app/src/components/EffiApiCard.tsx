@@ -1,6 +1,5 @@
 import { Dropdown } from './Dropdown';
 import { useEffect, useMemo, useState } from 'react';
-import { EffiProductos } from './EffiProductos';
 import { IntegracionFila, LogoInteg } from './IntegracionFila';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
@@ -92,6 +91,12 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
     void apiEffiApiListas().then((r) => { if (r.data) setListas(r.data); }); // recarga las listas
     await df.cargarEffiApi();
     setMsg('✓ Listo. Revisa abajo lo que elegimos y cámbialo si quieres.');
+  };
+  const sincronizarYa = async () => {
+    setCargando(true); setMsg('Leyendo tus artículos de Effi y vinculando…');
+    const r = await apiEffiAutoconfigurar('productos');
+    setCargando(false);
+    setMsg(r.data ? `${r.data.ok ? '✓ ' : ''}${r.data.detalle}` : r.error || 'No se pudo.');
   };
   const conectar = async () => {
     setCargando(true); setMsg('Verificando la API key con Effi…');
@@ -314,15 +319,17 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                 <span><b>Registrar la devolución en Effi automáticamente</b><br /><span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Cuando un pedido quede «Devuelto», DealFlow crea la devolución de venta y la mercancía vuelve a tu bodega. Si lo apagas, lo haces con un botón dentro del pedido.</span></span>
               </label>
 
-              {/* 3. Productos */}
+              {/* 3. Productos: el vínculo se hace en cada producto (Productos → Variantes). */}
               <div style={seccion}>
-                <div style={titulo}>3 · Productos ↔ artículos de Effi</div>
-                <EffiProductos onMsg={setMsg} />
+                <div style={titulo}>3 · Productos</div>
+                <p style={ayuda}>Los productos se vinculan <b>solos</b> por nombre y variante, y el stock llega de Effi cada 30 min. Si alguna variante no casó, elígela en <b>Productos → el producto → Variantes → Vínculo con Effi</b>.</p>
+                <button onClick={() => void sincronizarYa()} disabled={cargando} style={btnSec}>↻ Volver a vincular y traer stock ahora</button>
               </div>
 
               {/* 4. Webhooks */}
               <div style={seccion}>
-                <div style={titulo}>4 · Webhooks (avisos de Effi a DealFlow)</div>
+                <div style={titulo}>4 · Webhooks <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--df-text-faint)' }}>(opcional)</span></div>
+                <p style={{ ...ayuda, background: 'var(--df-purple-subtle)', borderRadius: 8, padding: '8px 10px', color: 'var(--df-text-body)' }}>✓ <b>No necesitas crearlos.</b> DealFlow consulta a Effi solo: el estado de tus guías y las novedades cada 4 min, y el registro de todas tus guías cada 20 min. Effi no deja que otra app cree webhooks por ti; si los creas tú, los cambios llegan <b>al instante</b> en vez de cada pocos minutos.</p>
                 <p style={ayuda}>En Effi ve a <b>Integraciones → Webhooks → Crear webhook</b> y crea uno por cada evento de la lista con esta misma URL (usa <b>Duplicar</b>). Plataforma destino: <b>Otra</b>. Cada webhook trae su propio <b>secreto</b>, que Effi muestra una sola vez al crearlo: pega aquí el de cada uno.</p>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
                   <code style={{ flex: 1, minWidth: 0, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontSize: 12, wordBreak: 'break-all' }}>{est.webhookUrl}</code>
