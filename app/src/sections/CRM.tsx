@@ -1,3 +1,4 @@
+import { apiAnuncioProducto, apiVincularAnuncio } from '../lib/api';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../components/Ventana24h';
 import { useEffect, useRef, useState } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
@@ -18,10 +19,20 @@ type EstadoPill = 'todos' | 'noleidos' | 'envivo' | 'esperando';
  * con miniatura y un botón para abrir el anuncio directo. Solo aparece cuando el
  * cliente entró por una pauta (Click-to-WhatsApp / Messenger / Instagram).
  */
-export function AnuncioCard({ anuncio }: { anuncio: Anuncio }) {
+export function AnuncioCard({ anuncio, productos }: { anuncio: Anuncio; productos?: { id: number | string; nombre: string }[] }) {
   const titulo = anuncio.titular || 'Anuncio de campaña';
+  // Producto del anuncio: con esto el bot manda su mensaje inicial aunque el cliente no escriba el disparador.
+  const [prod, setProd] = useState<{ productId: string; auto: boolean } | null>(null);
+  const [guardado, setGuardado] = useState(false);
+  useEffect(() => { if (anuncio.id) void apiAnuncioProducto(anuncio.id).then((r) => r.data && setProd(r.data)); }, [anuncio.id]);
+  const elegir = (pid: string) => {
+    if (!anuncio.id) return;
+    setProd({ productId: pid, auto: false });
+    void apiVincularAnuncio(anuncio.id, pid, anuncio.titular || '').then((r) => { if (!r.error) { setGuardado(true); setTimeout(() => setGuardado(false), 1600); } });
+  };
   return (
-    <div style={{ display: 'flex', alignSelf: 'center', gap: 10, alignItems: 'center', maxWidth: 460, width: '100%', background: 'var(--df-brand-subtle)', border: '1px solid var(--df-brand-border)', borderRadius: 10, padding: 10, marginBottom: 4 }}>
+    <div style={{ alignSelf: 'center', maxWidth: 460, width: '100%', background: 'var(--df-brand-subtle)', border: '1px solid var(--df-brand-border)', borderRadius: 10, padding: 10, marginBottom: 4, boxSizing: 'border-box' }}>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
       {anuncio.media && (
         <img src={anuncio.media} alt="" style={{ width: 46, height: 46, borderRadius: 8, objectFit: 'cover', flexShrink: 0, background: 'var(--df-surface-2)' }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
       )}
@@ -33,6 +44,19 @@ export function AnuncioCard({ anuncio }: { anuncio: Anuncio }) {
       {anuncio.url && (
         <a href={anuncio.url} target="_blank" rel="noreferrer" style={{ flexShrink: 0, textDecoration: 'none', background: 'var(--df-brand)', color: '#fff', borderRadius: 8, padding: '7px 12px', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>Ver anuncio</a>
       )}
+    </div>
+    {anuncio.id && productos && productos.length > 0 && prod && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--df-brand-border)', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-brand-dark)' }}>Producto del anuncio:</span>
+        <div style={{ flex: 1, minWidth: 170 }}>
+          <Dropdown ariaLabel="Producto de este anuncio" value={prod.productId} onChange={elegir}
+            options={[{ value: '', label: 'Sin vincular' }, ...productos.map((p) => ({ value: String(p.id), label: p.nombre }))]} />
+        </div>
+        <span style={{ fontSize: 11, color: guardado ? 'var(--df-brand-dark)' : 'var(--df-text-faint)', fontWeight: guardado ? 700 : 400 }}>
+          {guardado ? '✓ Guardado' : prod.productId ? (prod.auto ? '⚡ detectado solo' : 'Llegan sin disparador → su mensaje inicial') : 'Vincúlalo para enviar su mensaje inicial'}
+        </span>
+      </div>
+    )}
     </div>
   );
 }
@@ -334,7 +358,7 @@ export function CRM({ df }: { df: DealFlowState }) {
             </div>
 
             <div ref={scrollRef} translate="no" style={{ flex: 1, background: 'var(--df-bg)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
-              {chat.anuncio && (chat.anuncio.titular || chat.anuncio.id || chat.anuncio.url) && <AnuncioCard anuncio={chat.anuncio} />}
+              {chat.anuncio && (chat.anuncio.titular || chat.anuncio.id || chat.anuncio.url) && <AnuncioCard anuncio={chat.anuncio} productos={df.flujoProductos} />}
               {chat.mensajesDecorated.map((m, i) => {
                 const prev = chat.mensajesDecorated[i - 1];
                 const nuevoDia = !!m.fecha && m.fecha !== (prev?.fecha || '');

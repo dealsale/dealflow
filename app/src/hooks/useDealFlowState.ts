@@ -597,6 +597,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     shopifyEnviado: !!o.shopifyEnviado,
     origen: o.origen || '',
     leadId: o.leadId || '',
+    guiaAviso: o.guiaAviso || null,
     envio: o.envio || 0,
     nota: o.nota || '',
     total: o.total || 0,
@@ -986,7 +987,7 @@ export function useDealFlowState() {
     const p = notifPrefsRef.current;
     if (!p.on || !p[tipo]) return;
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    const opts = { body: cuerpo, icon: '/icon-192.png', badge: '/icon-192.png', tag: tag || tipo } as NotificationOptions;
+    const opts = { body: cuerpo, icon: '/icon-192.png', badge: '/icon-192.png', tag: tag || tipo, renotify: true, silent: false, vibrate: tipo === 'pedidos' ? [300, 120, 300, 120, 500] : [200, 100, 200] } as NotificationOptions;
     try {
       // En PWA/móvil el service worker es más confiable; si no, notificación directa.
       if ('serviceWorker' in navigator) {

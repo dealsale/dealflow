@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { db, pj, registrarLog } from './db.js';
 import { conPedido, trazar, trazarApi } from './trazabilidad.js';
-import { emparejarItem, emparejarArticulos, palabrasClave, type Emparejado } from './emparejar.js';
+import { emparejarItem, emparejarArticulos, palabrasClave, separarItemsPedido, type Emparejado } from './emparejar.js';
 import { nombreTransportadora } from './transportadoras.js';
 import { estadoLogistico, siguienteEstado } from './estadosPedido.js';
 
@@ -845,6 +845,8 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
   if (!c || !effiApiListo(storeId)) return { error: 'Effi no está configurado: conecta la API key y elige sucursal, bodega, centro de costos y forma de pago en Integraciones.' };
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
   if (!o) return { error: 'Pedido no encontrado.' };
+  // Varias variantes en un ítem ("4x Falda (L · Negro, Blanco…)"): en Effi cada una es un artículo.
+  if (separarItemsPedido(storeId, orderId)) trazar(storeId, orderId, { etapa: 'despacho', nivel: 'info', titulo: 'Productos con varias variantes juntas: se separaron en un ítem por variante' });
   const items = db.prepare('SELECT qty, nombre, precio, product_id, variant_id FROM order_items WHERE order_id = ?').all(orderId) as { qty: number; nombre: string; precio: number; product_id: string; variant_id: string }[];
   if (!items.length) return { error: 'El pedido no tiene productos.' };
   if (!txt(o.ciudad).trim()) return { error: 'El pedido no tiene ciudad.' };

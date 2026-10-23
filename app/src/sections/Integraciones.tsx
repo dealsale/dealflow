@@ -119,7 +119,7 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
       )}
       {(manual || !df.shopifyAppDisponible) && (<>
       <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5, marginBottom: 10 }}>
-          Crea una <b>app</b> en Shopify con permisos <b>read_products, read/write_orders, read/write_draft_orders</b>. Hay dos formas de conectar según cómo te dé Shopify las llaves.
+          <b>Mientras Shopify aprueba la app de DealFlow</b>, el comercio puede conectarse así: en <b>dev.shopify.com</b> (Dev Dashboard) crea una app, dale los permisos <b>read_products, read_orders, write_orders, read_merchant_managed_fulfillment_orders y write_merchant_managed_fulfillment_orders</b>, instálala en su tienda y pega aquí el <b>Client ID y el Secret</b>. Los pedidos se traen solos cada 5 min. Hay dos formas de conectar según cómo te dé Shopify las llaves.
         </div>
         <input value={shop} onChange={(e) => setShop(e.target.value)} placeholder="mitienda.myshopify.com" style={inp} />
         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>

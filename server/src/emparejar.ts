@@ -9,6 +9,7 @@
  *    palabras de más/de menos y errores de tipeo.
  */
 import { db } from './db.js';
+import { randomUUID } from 'node:crypto';
 
 export const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
@@ -180,4 +181,47 @@ export function idsDeItem(storeId: string, nombreItem: string): { productId: str
     // Producto claro pero variante no: al menos el producto.
     return { productId: '', variantId: '' };
   } catch { return { productId: '', variantId: '' }; }
+}
+
+/**
+ * Un ítem con VARIAS variantes en el detalle ("4x Falda (Talla L · Verde menta, Verde
+ * militar, Blanco, Negro)") se separa en un ítem por variante: en Effi (y en Dropi)
+ * cada talla/color es un artículo distinto. Solo separa cuando la lista casa con la
+ * cantidad (4 colores y 4 unidades, u 8 unidades = 2 de cada uno).
+ */
+export function separarVariantes(qty: number, nombre: string): { qty: number; nombre: string }[] {
+  const m = String(nombre).match(/^(.*?)\s*\((.*)\)\s*$/);
+  if (!m) return [{ qty, nombre }];
+  const [, base, detalle] = m;
+  const partes = detalle.split(/\s*·\s*/);
+  const conLista = partes.map((p, i) => ({ i, vals: p.split(/\s*(?:,|\by\b|\/)\s*/i).map((x) => x.trim()).filter(Boolean) })).filter((x) => x.vals.length > 1);
+  if (conLista.length !== 1) return [{ qty, nombre }];
+  const { i, vals } = conLista[0];
+  if (qty < vals.length || qty % vals.length !== 0) return [{ qty, nombre }];
+  // "Talla L" + lista de colores: el prefijo de la parte (p. ej. "Color: ") se conserva.
+  const pre = (partes[i].match(/^([^:]+:\s*)/) || ['', ''])[1];
+  return vals.map((v) => {
+    const ps = [...partes];
+    ps[i] = pre && !v.startsWith(pre) ? `${pre}${v.replace(pre, '')}` : v;
+    return { qty: qty / vals.length, nombre: `${base} (${ps.join(' · ')})` };
+  });
+}
+
+/** Separa en la base los ítems de un pedido que traen varias variantes juntas. Devuelve cuántos separó. */
+export function separarItemsPedido(storeId: string, orderId: string): number {
+  const items = db.prepare('SELECT id, qty, nombre, precio FROM order_items WHERE order_id = ?').all(orderId) as { id: string; qty: number; nombre: string; precio: number }[];
+  let n = 0;
+  for (const it of items) {
+    const partes = separarVariantes(Number(it.qty) || 1, it.nombre);
+    if (partes.length < 2) continue;
+    db.transaction(() => {
+      db.prepare('DELETE FROM order_items WHERE id = ?').run(it.id);
+      for (const p of partes) {
+        const ids = idsDeItem(storeId, p.nombre);
+        db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio, product_id, variant_id) VALUES (?,?,?,?,?,?,?)').run(randomUUID(), orderId, p.qty, p.nombre, it.precio, ids.productId, ids.variantId);
+      }
+    })();
+    n++;
+  }
+  return n;
 }

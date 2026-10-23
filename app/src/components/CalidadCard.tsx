@@ -31,7 +31,7 @@ export function CalidadCard({ calidad }: { calidad?: string }) {
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {fila('Respeta la "baja"', 'Si el cliente escribe "no me escriban", "baja" o "es spam", el asistente se despide una vez y DealFlow no le vuelve a escribir por su cuenta.')}
         {fila(`Máximo ${r.tope} mensajes no solicitados por cliente al día`, 'Recordatorios, cambios de estado y avisos cuentan; las respuestas a lo que el cliente pregunta no.')}
-        {fila('Sin ráfagas en el mensaje inicial', 'Se envían máximo 5 piezas (textos, fotos o videos) cuando alguien escribe por un anuncio.')}
+        {fila('Sin ráfagas en el mensaje inicial', 'Se envía completo, pieza por pieza con pausas de persona (más largas desde la 6.ª), y los textos seguidos van en un solo mensaje.')}
       </ul>
       <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--df-border)', cursor: 'pointer' }}>
         <input type="checkbox" checked={r.cfg.avisarContacto} onChange={alternar} style={{ marginTop: 3 }} />
