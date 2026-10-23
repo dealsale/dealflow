@@ -1456,7 +1456,11 @@ api.get('/effi-api/convenios', requireAuth, requireStore, requireOwner, async (r
   const ef = await import('./effiApi.js');
   const c = ef.cfgEffi(req.user!.storeId!);
   if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
-  res.json({ convenios: await ef.conveniosDropshipping(c.apiKey, c.convenios), actual: c.convenioDropshipping });
+  const lista = await ef.conveniosDropshipping(c.apiKey, c.convenios, req.user!.storeId!);
+  // Lo detectado queda guardado: así aparece también al despachar y en cada producto.
+  const nuevos = lista.filter((x) => !c.convenios.some((g) => g.id === x.id)).map(({ id, nombre }) => ({ id, nombre }));
+  if (nuevos.length) ef.guardarCfgEffi(req.user!.storeId!, { convenios: [...c.convenios, ...nuevos] });
+  res.json({ convenios: lista, actual: c.convenioDropshipping });
 });
 
 api.get('/effi-api/listas', requireAuth, requireStore, requireOwner, async (req, res) => {

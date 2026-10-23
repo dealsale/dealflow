@@ -130,6 +130,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
   useEffect(() => { void apiEffiConveniosConocidos().then((r) => r.data && setConvenios(r.data.convenios)); }, []);
   const revisar = async (conv = convenio) => {
     if (!sel.rowId) return;
+    void apiEffiConveniosConocidos().then((r) => r.data && setConvenios(r.data.convenios)); // por si agregaste uno nuevo
     setPaso('revisando'); setMsg('');
     if (!guiaAuto) void g.cargar();
     const r = await apiEffiPreview(sel.rowId, conv);
