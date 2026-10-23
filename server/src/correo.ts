@@ -53,6 +53,7 @@ function transporte(): nodemailer.Transporter {
     port,
     secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === '1' || process.env.SMTP_SECURE === 'true' : port === 465,
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    connectionTimeout: 12_000, greetingTimeout: 10_000, socketTimeout: 20_000,
   });
   return smtp;
 }
@@ -107,7 +108,9 @@ export async function enviarCorreo(c: Correo): Promise<{ ok: boolean; error?: st
     anotar('enviado');
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    let msg = e instanceof Error ? e.message : String(e);
+    // Railway (plan Hobby) bloquea la salida por SMTP: se ve como timeout o red inalcanzable.
+    if (prov === 'smtp' && /ETIMEDOUT|ENETUNREACH|ECONNREFUSED|timeout|unreachable/i.test(msg)) msg = `No se pudo conectar a ${process.env.SMTP_HOST} (${msg}). Railway bloquea SMTP en el plan Hobby: usa RESEND_API_KEY o pasa a Pro.`;
     console.warn('[correo] no se pudo enviar', c.tipo, msg);
     anotar('error', msg);
     return { ok: false, error: msg };
