@@ -71,6 +71,12 @@ export function emparejarItem<T extends VarBase>(nombreItem: string, todas: T[])
   const parecidos = ranking.slice(0, 5).map(([, x]) => ({ producto: x.producto, puntaje: Math.round(x.puntaje * 100) / 100 }));
   const [mejor, segundo] = ranking;
   if (!mejor || mejor[1].puntaje < 0.6) return { motivo: 'el producto no existe con ese nombre en DealFlow', parecidos };
+  // Varios productos con el mismo nombre (o casi): se usa el que SÍ tiene la talla/color pedidos.
+  const empatados = ranking.filter(([, x]) => x.puntaje >= 0.6 && x.puntaje >= mejor[1].puntaje - 0.05);
+  if (empatados.length > 1) {
+    const conVariante = empatados.map(([pid]) => emparejarItem(nombreItem, todas.filter((v) => v.productId === pid))).filter((r) => r.v);
+    if (conVariante.length === 1 || (conVariante.length > 1 && mejor[1].puntaje === 1)) return { ...conVariante[0], parecidos };
+  }
   // Dos productos casi igual de parecidos: preferimos no adivinar (salvo coincidencia exacta).
   if (segundo && mejor[1].puntaje < 1 && segundo[1].puntaje >= mejor[1].puntaje - 0.05 && segundo[1].puntaje >= 0.6) {
     return { motivo: `hay varios productos parecidos (${mejor[1].producto} / ${segundo[1].producto})`, parecidos };
@@ -112,7 +118,7 @@ export function emparejarItem<T extends VarBase>(nombreItem: string, todas: T[])
   // Solo las variantes parecidas (misma talla o mismo color), no la lista completa.
   const cerca = vs.filter((v) => { const tl = tokensVariante(v.label); return tokE.some((t) => tl.some((x) => mismoToken(x, t))); });
   return {
-    motivo: `el producto ${mejor[1].producto} no tiene la variante "${m ? m[1] : ''}"${cerca.length ? ` (parecidas: ${cerca.slice(0, 10).map((v) => v.label).join(', ')}${cerca.length > 10 ? '…' : ''})` : ` (tiene ${vs.length} variantes y ninguna con esa talla o color)`}. Créala en el producto o corrige el pedido`,
+    motivo: `el producto ${mejor[1].producto} no tiene la variante "${m ? m[1] : ''}"${cerca.length ? ` (parecidas: ${cerca.slice(0, 10).map((v) => v.label).join(', ')}${cerca.length > 10 ? '…' : ''})` : ` (tiene ${vs.length} variantes y ninguna con esa talla o color)`}. Créala en el producto o corrige el pedido${empatados.length > 1 ? `. Ojo: tienes ${empatados.length} productos con nombre parecido (${empatados.map(([, x]) => x.producto).join(', ')}) y ninguno tiene esa variante; elimina el duplicado` : ''}`,
     parecidos,
   };
 }
