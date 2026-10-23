@@ -24,7 +24,19 @@ const fmt = (ms: number) => { const h = Math.floor(ms / 3600e3); const m = Math.
 export function BarraVentanaCerrada({ plantillas, extra }: { plantillas: ReactNode; extra?: ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border, var(--df-border))', borderRadius: 10, padding: '10px 12px' }}>
-      {plantillas}
+      <style>{`
+        @keyframes dfRayoAnillo { 0% { box-shadow: 0 0 0 0 rgba(245,158,11,.55) } 70% { box-shadow: 0 0 0 10px rgba(245,158,11,0) } 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0) } }
+        @keyframes dfRayoSalto { 0%, 100% { transform: translateY(0) scale(1) } 12% { transform: translateY(-3px) scale(1.12) rotate(-8deg) } 24% { transform: translateY(0) scale(1) rotate(6deg) } 32% { transform: rotate(0) } }
+        @keyframes dfRayoFlecha { 0%, 100% { transform: translateX(0); opacity: .75 } 50% { transform: translateX(-4px); opacity: 1 } }
+        .df-rayo-destacado { position: relative; border-radius: 12px; animation: dfRayoAnillo 1.8s ease-out infinite }
+        .df-rayo-destacado > div > button { animation: dfRayoSalto 2.4s ease-in-out infinite; border-color: var(--df-warning) !important; background: #FFFBEB !important }
+        .df-rayo-flecha { animation: dfRayoFlecha 1.2s ease-in-out infinite }
+        @media (prefers-reduced-motion: reduce) { .df-rayo-destacado, .df-rayo-destacado > div > button, .df-rayo-flecha { animation: none !important } }
+      `}</style>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span className="df-rayo-destacado">{plantillas}</span>
+        <span className="df-rayo-flecha" style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--df-warning)', whiteSpace: 'nowrap' }}>← Enviar plantilla</span>
+      </div>
       <div style={{ flex: 1, minWidth: 200, fontSize: 12.5, lineHeight: 1.45, color: 'var(--df-text-body)' }}>
         <b>🔒 No puedes escribir en este chat.</b> Pasaron más de 24 h desde el último mensaje del cliente: WhatsApp solo permite enviarle una <b>plantilla aprobada</b> (botón ⚡). Cuando el cliente responda, se desbloquea.
       </div>
