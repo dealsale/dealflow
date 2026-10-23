@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { confirmar } from './dialogs';
+import { enProceso } from './Proceso';
 import { apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
 
@@ -27,8 +28,8 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
 
   const cotizar = () => {
     if (!sel.rowId) return;
-    setPaso('cargando'); setMsg('Cotizando transportadoras en Dropi…');
-    void apiDropiCotizar(sel.rowId, recaudo).then((r) => {
+    setPaso('cargando'); setMsg('');
+    void enProceso('Cotizando transportadoras en Dropi…', () => apiDropiCotizar(sel.rowId!, recaudo)).then((r) => {
       if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos cotizar.'); return; }
       setCiudad(r.data.ciudad); setDisponibles(r.data.disponibles); setNoDisp(r.data.noDisponibles);
       setElegida(r.data.disponibles[0] || null); setAuto(false);
@@ -37,8 +38,8 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
   };
   const crear = () => {
     if (!sel.rowId) return;
-    setPaso('creando'); setMsg('Creando la orden en Dropi…');
-    void apiDropiCrear(sel.rowId, auto ? undefined : (elegida || undefined), false, recaudo).then((r) => {
+    setPaso('creando'); setMsg('');
+    void enProceso('Creando la orden en Dropi…', () => apiDropiCrear(sel.rowId!, auto ? undefined : (elegida || undefined), false, recaudo)).then((r) => {
       if (r.error || !r.data) { setPaso('elegir'); setMsg(r.error || 'No pudimos crear la orden.'); return; }
       df.marcarDropiCreado(sel.id, r.data.dropiId, r.data.transportadora || (auto ? '' : elegida?.nombre || ''));
       setMsg(''); onHecho?.();
@@ -133,7 +134,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
     void apiEffiConveniosConocidos().then((r) => r.data && setConvenios(r.data.convenios)); // por si agregaste uno nuevo
     setPaso('revisando'); setMsg('');
     if (!guiaAuto) void g.cargar();
-    const r = await apiEffiPreview(sel.rowId, conv);
+    const r = await enProceso('Preparando el envío a Effi…', () => apiEffiPreview(sel.rowId!, conv));
     if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos preparar el envío.'); return; }
     setPrev(r.data); setPaso('listo');
   };
@@ -141,20 +142,25 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
   const enviar = async () => {
     if (!sel.rowId) return;
     if (hacerGuia && !g.listo) { setMsg('Elige transportadora, servicio, pago del flete y remitente (o desmarca "Crear también la guía").'); return; }
-    setPaso('enviando'); setMsg('Creando la remisión en Effi…');
-    const r = await apiEffiDespachar(sel.rowId, reintentar, convenio);
-    if (r.error || !r.data) { setPaso('listo'); setMsg(r.error || 'Effi no creó la remisión.'); return; }
-    let texto = `✓ Remisión ${r.data.remision} creada en Effi${r.data.guia ? ` · guía ${r.data.guia}` : ''}.${r.data.avisos?.length ? ' ' + r.data.avisos.join(' ') : ''}`;
-    if (hacerGuia && !r.data.guia) {
-      setMsg(texto + ' Creando la guía…');
-      const rg = await apiEffiGuia(sel.rowId, g.d);
-      texto += rg.error || !rg.data
-        ? ` ⚠ La guía no se pudo crear: ${rg.error || 'Effi no respondió'}. Puedes intentarlo de nuevo abajo con "Generar guía en Effi".`
-        : ` ✓ Guía ${rg.data.guia || rg.data.idTransaccion} creada${rg.data.transportadora ? ` con ${rg.data.transportadora}` : ''}.`;
-    }
-    setMsg(texto);
-    await df.refrescarPedidos();
-    onHecho();
+    setPaso('enviando'); setMsg('');
+    // Todo el despacho en la ventana de "procesando": nadie puede tocar nada a mitad.
+    const ok = await enProceso('Creando la remisión en Effi…', async (paso) => {
+      const r = await apiEffiDespachar(sel.rowId!, reintentar, convenio);
+      if (r.error || !r.data) { setPaso('listo'); setMsg(r.error || 'Effi no creó la remisión.'); return false; }
+      let texto = `✓ Remisión ${r.data.remision} creada en Effi${r.data.guia ? ` · guía ${r.data.guia}` : ''}.${r.data.avisos?.length ? ' ' + r.data.avisos.join(' ') : ''}`;
+      if (hacerGuia && !r.data.guia) {
+        paso('Generando la guía de transporte…');
+        const rg = await apiEffiGuia(sel.rowId!, g.d);
+        texto += rg.error || !rg.data
+          ? ` ⚠ La guía no se pudo crear: ${rg.error || 'Effi no respondió'}. Puedes intentarlo de nuevo abajo con "Generar guía en Effi".`
+          : ` ✓ Guía ${rg.data.guia || rg.data.idTransaccion} creada${rg.data.transportadora ? ` con ${rg.data.transportadora}` : ''}.`;
+      }
+      setMsg(texto);
+      paso('Actualizando el pedido…');
+      await df.refrescarPedidos();
+      return true;
+    });
+    if (ok) onHecho();
   };
   const selectorConvenio = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -232,6 +238,7 @@ function CorregirVariantes({ df, sel, onListo }: { df: DealFlowState; sel: Decor
   const listos = faltan.filter((f) => elegida[f.itemId]).length;
   const guardar = async () => {
     setGuardando(true); setMsg('');
+    await enProceso('Corrigiendo las variantes del pedido…', async () => {
     for (const f of faltan) {
       if (!elegida[f.itemId]) continue;
       const r = await apiCorregirVariante(String(sel.rowId), f.itemId, elegida[f.itemId]);
@@ -242,6 +249,7 @@ function CorregirVariantes({ df, sel, onListo }: { df: DealFlowState; sel: Decor
     const r = await apiVariantesFaltantes(String(sel.rowId));
     setFaltan(r.data?.faltan || []); setElegida({});
     if (!(r.data?.faltan || []).length) onListo();
+    });
   };
   return (
     <div style={{ border: '1px solid var(--df-warning-border, var(--df-border))', background: 'var(--df-warning-subtle)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -379,8 +387,8 @@ function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   const abrir = () => { setAbierto(true); void g.cargar(); };
   const crear = async () => {
     if (!sel.rowId || !g.listo) return;
-    setEnviando(true); setMsg('Creando la guía en Effi…');
-    const r = await apiEffiGuia(sel.rowId, g.d);
+    setEnviando(true); setMsg('');
+    const r = await enProceso('Generando la guía de transporte…', () => apiEffiGuia(sel.rowId!, g.d));
     setEnviando(false);
     if (r.error || !r.data) { setMsg(r.error || 'Effi no creó la guía.'); return; }
     setMsg(`✓ Guía ${r.data.guia || r.data.idTransaccion} creada${r.data.transportadora ? ` con ${r.data.transportadora}` : ''}.`);
@@ -409,8 +417,8 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
     if (file.size > 15 * 1024 * 1024) { setMsg('El archivo pesa más de 15 MB.'); return; }
     const fr = new FileReader();
     fr.onload = async () => {
-      setOcupado(true); setMsg('Subiendo la guía…');
-      const r = await apiGuiaDocumento(sel.rowId!, String(fr.result));
+      setOcupado(true); setMsg('');
+      const r = await enProceso('Subiendo la guía…', () => apiGuiaDocumento(sel.rowId!, String(fr.result)));
       setOcupado(false);
       if (r.error || !r.data) { setMsg(r.error || 'No se pudo subir.'); return; }
       setMsg(r.data.convertida ? '✓ Guía guardada. Ya puedes enviarla al cliente.' : '✓ PDF guardado (no se pudo convertir a imagen: se enviará como PDF).');
@@ -420,8 +428,8 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   };
   const enviar = async () => {
     if (!sel.rowId) return;
-    setOcupado(true); setMsg('Enviando por WhatsApp…');
-    const r = await apiGuiaEnviar(sel.rowId);
+    setOcupado(true); setMsg('');
+    const r = await enProceso('Enviándole la guía al cliente por WhatsApp…', () => apiGuiaEnviar(sel.rowId!));
     setOcupado(false);
     if (r.error || !r.data) { setMsg(r.error || 'No se pudo enviar.'); return; }
     const d = r.data;
@@ -433,6 +441,7 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
     await df.refrescarPedidos();
   };
   const av = sel.guiaAviso;
+  const fallo = !!av && !av.ok;
   const archivo = sel.guiaUrl || sel.guiaImg;
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -442,13 +451,14 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
         {archivo && <a href={archivo} download={`Guia-${sel.id}`} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-purple)', textDecoration: 'none' }}>⬇ Descargar</a>}
       </div>
       {sel.guiaImg && <a href={sel.guiaImg} target="_blank" rel="noreferrer"><img src={sel.guiaImg} alt={`Guía ${sel.guia}`} style={{ width: '100%', maxHeight: 380, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--df-border)', background: '#fff' }} /></a>}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {/* La guía se le envía sola al cliente: subir/enviar a mano solo aparece si ese envío falló. */}
+      {fallo && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <label style={{ ...btnS, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: ocupado ? 'progress' : 'pointer' }}>
           📎 {archivo ? 'Cambiar documento' : 'Subir guía (PDF o imagen)'}
           <input type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden onChange={(e) => { subir(e.target.files?.[0]); e.target.value = ''; }} />
         </label>
-        <button onClick={enviar} disabled={ocupado} style={{ ...btnS, background: '#25D366', borderColor: '#25D366', color: '#05301a', fontWeight: 700 }}>💬 {av?.ok ? 'Reenviar guía al cliente' : 'Enviar guía al cliente'}</button>
-      </div>
+        <button onClick={enviar} disabled={ocupado} style={{ ...btnS, background: '#25D366', borderColor: '#25D366', color: '#05301a', fontWeight: 700 }}>💬 Volver a enviar la guía al cliente</button>
+      </div>}
       {av && (
         <div style={{ fontSize: 12, lineHeight: 1.45, borderRadius: 8, padding: '8px 10px', background: av.ok ? 'rgba(37,211,102,.1)' : 'var(--df-warning-subtle)', color: av.ok ? '#047857' : 'var(--df-text-body)' }}>
           {av.ok
@@ -456,8 +466,7 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
             : <>⚠️ <b>No se le pudo enviar la guía al cliente.</b> {av.detalle || 'Revisa el registro del pedido.'} {/plantilla/i.test(av.detalle) && 'Publica y espera la aprobación de la plantilla «guia_envio_pedido» en WhatsApp → Plantillas.'}</>}
         </div>
       )}
-      {!av && sel.hasGuia && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>La guía se le envía sola al cliente apenas llega; si no, usa el botón.</div>}
-      {!archivo && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Effi no entrega el PDF de la guía por su API: descárgalo de Effi y súbelo aquí para mandárselo al cliente como imagen. Sin archivo, se envía solo el número.</div>}
+      {!av && sel.hasGuia && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>📨 La guía se le está enviando sola al cliente por WhatsApp.</div>}
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
     </div>
   );

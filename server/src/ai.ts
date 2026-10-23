@@ -1030,6 +1030,13 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
       marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
       return 'invalido';
     }
+    // El nombre del ítem queda como en TU catálogo ("Vestido Helen (Talla XL · Morado fusión)"),
+    // no como lo escribió el cliente. Effi/Dropi despachan por el vínculo de esa variante,
+    // aunque allá se llame distinto (p. ej. "Lila").
+    for (const it of items) {
+      const r = emparejarItem(it.nombre, todasV);
+      if (r.v?.producto) it.nombre = r.v.label ? `${r.v.producto} (${r.v.label})` : r.v.producto;
+    }
   }
 
   const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);

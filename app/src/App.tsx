@@ -6,6 +6,7 @@ import { Login } from './components/Login';
 import { OrderDetailPanel } from './components/OrderDetailPanel';
 import { OrderToast } from './components/OrderToast';
 import { DialogHost } from './components/dialogs';
+import { ProcesoOverlay } from './components/Proceso';
 import { ManualOrderModal } from './components/ManualOrderModal';
 import { CompletarPedidoModal } from './components/CompletarPedidoModal';
 import { EditarPedidoModal } from './components/EditarPedidoModal';
@@ -511,6 +512,7 @@ function App() {
       {df.isVendedor && <SuscripcionBanner df={df} />}
       <div style={{ flex: 1, minHeight: 0 }}>{isMobile ? <MobileApp df={df} /> : <DesktopApp df={df} />}</div>
       <DialogHost />
+      <ProcesoOverlay />
     </div>
   );
 }
