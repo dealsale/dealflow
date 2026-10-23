@@ -455,6 +455,54 @@ async function bodegasEffi(storeId: string, apiKey: string): Promise<{ id: strin
   return lista;
 }
 
+// Artículos de la tienda VINCULADOS a un proveedor dropshipping (caché 30 min). En muchas
+// cuentas cada prenda existe dos veces en Effi: el artículo propio (sin stock) y el que
+// está vinculado al proveedor. Para despachar hay que usar el del proveedor.
+const cacheDrop = new Map<string, { ts: number; lista: ArticuloEffi[] }>();
+async function articulosDrop(storeId: string, apiKey: string): Promise<ArticuloEffi[]> {
+  const c = cacheDrop.get(storeId);
+  if (c && Date.now() - c.ts < 30 * 60e3) return c.lista;
+  const r = await todo<Fila>(apiKey, '/api/articulo', { dropshipping_distribuidor: 1 }, 30);
+  const lista = Array.isArray(r) ? r.filter((f) => txt(f.vigente) !== '0').map((f) => ({ id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: stockDe(f), drop: 1 })) : (c?.lista || []);
+  cacheDrop.set(storeId, { ts: Date.now(), lista });
+  return lista;
+}
+const mismasPalabras = (a: string, b: string) => { const x = tokensVariante(a); const y = tokensVariante(b); return x.length > 0 && x.length === y.length && x.every((t) => y.some((u) => mismoToken(t, u))); };
+/** El artículo del PROVEEDOR con el mismo nombre que un artículo propio (si hay uno solo). */
+async function gemeloDrop(storeId: string, apiKey: string, a: ArticuloEffi): Promise<ArticuloEffi | undefined> {
+  const cands = (await articulosDrop(storeId, apiKey)).filter((x) => x.id !== a.id && mismasPalabras(x.descripcion, a.descripcion));
+  return cands.length === 1 ? cands[0] : undefined;
+}
+
+/**
+ * Repara vínculos: variantes de productos de Effi que apuntan a un artículo PROPIO sin
+ * stock, cuando existe su gemelo del proveedor (mismo nombre) → se pasan al del proveedor.
+ * No toca los vínculos de productos marcados como "Mercancía propia".
+ */
+export async function repararVinculosDrop(storeId: string, apiKey: string): Promise<number> {
+  const drops = await articulosDrop(storeId, apiKey);
+  if (!drops.length) return 0;
+  const idsDrop = new Set(drops.map((d) => d.id));
+  const cache = new Map(articulosCache(storeId).map((a) => [a.id, a]));
+  const vars = db.prepare(`SELECT v.id, json_extract(v.refs,'$.effi_id') effi FROM variants v JOIN products p ON p.id = v.product_id
+    WHERE p.store_id = ? AND COALESCE(p.despacho_proveedor,'') = 'effi' AND COALESCE(p.effi_convenio,'') != 'propio' AND COALESCE(json_extract(v.refs,'$.effi_id'),'') != ''`).all(storeId) as { id: string; effi: string }[];
+  const usados = new Set(vars.map((v) => String(v.effi)));
+  let n = 0;
+  for (const v of vars) {
+    const id = String(v.effi);
+    if (idsDrop.has(id)) continue;
+    const a = cache.get(id);
+    if (!a || Number(a.stock) > 0) continue; // sin datos o con stock propio: se deja
+    const gem = drops.filter((d) => mismasPalabras(d.descripcion, a.descripcion));
+    if (gem.length !== 1 || usados.has(gem[0].id)) continue;
+    vincularArticulo(storeId, v.id, gem[0].id, true);
+    usados.add(gem[0].id);
+    n++;
+  }
+  if (n) registrarLog(storeId, 'info', 'effi', `${n} variante(s) estaban vinculadas a tu artículo propio sin stock: se pasaron al artículo del proveedor dropshipping con el mismo nombre.`);
+  return n;
+}
+
 /** Un artículo por id, en vivo (con su marca de dropshipping). Lo guarda en la caché. */
 async function articuloPorId(storeId: string, apiKey: string, id: string): Promise<ArticuloEffi | undefined> {
   // En serie (no en paralelo): Effi responde 429 si le llegan varias a la vez.
@@ -667,9 +715,12 @@ async function vincularPorNombre(storeId: string, apiKey: string, vars: Variante
     if (txt(f.vigente) === '0' || lista.has(txt(f.id))) continue;
     lista.set(txt(f.id), { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: stockDe(f) });
   }
+  // Los del proveedor (dropshipping) primero: si una prenda existe dos veces en Effi, gana esa.
+  for (const d of await articulosDrop(storeId, apiKey)) if (palabrasClave(d.descripcion).some((t) => clave.includes(t))) lista.set(d.id, d);
+  const ordenados = [...lista.values()].sort((x, y) => (y.drop === 1 ? 1 : 0) - (x.drop === 1 ? 1 : 0));
   // Los artículos que ya usan otras variantes del producto no se repiten.
   const usados = new Set(vars.map((v) => v.effiId).filter(Boolean));
-  const m = emparejarArticulos(producto, pendientes.map((v) => ({ variantId: v.variantId, label: v.label })), [...lista.values()], usados);
+  const m = emparejarArticulos(producto, pendientes.map((v) => ({ variantId: v.variantId, label: v.label })), ordenados, usados);
   for (const [variantId, a] of m) {
     vincularArticulo(storeId, variantId, a.id, true);
     const v = pendientes.find((x) => x.variantId === variantId);
@@ -747,6 +798,7 @@ export async function sincronizarArticulos(storeId: string): Promise<{ total: nu
   cacheAt.set(storeId, Date.now());
   const arts = articulosCache(storeId);
   const { todas, deEffi, marcados } = await vincularTienda(storeId, c.apiKey, arts, false);
+  try { await repararVinculosDrop(storeId, c.apiKey); } catch (e) { console.warn('[effi] reparar vínculos', e); }
   const stock = await sincronizarStockEffi(storeId, c.apiKey);
   let vinculadas = 0;
   const sinVinculo: { variantId: string | null; nombre: string }[] = [];
@@ -777,6 +829,7 @@ export async function autoVincularEffi(storeId: string): Promise<void> {
       cacheAt.set(storeId, Date.now());
     }
     await vincularTienda(storeId, c.apiKey, articulosCache(storeId), true);
+    await repararVinculosDrop(storeId, c.apiKey).catch(() => 0);
     await sincronizarStockEffi(storeId, c.apiKey);
   } catch (e) { console.error('[effi] auto-vínculo', e); } finally { enCurso.delete(storeId); }
 }
@@ -963,6 +1016,16 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     const cm = v?.productId ? convenioDeProducto(v.productId) : '';
     convManual.push(cm);
     // El convenio puesto a mano manda: con código es de proveedor; "propio" es mercancía tuya.
+    // Artículo PROPIO sin stock con un "gemelo" vinculado al proveedor (mismo nombre): se usa
+    // el del proveedor y la variante queda vinculada a él (si no, Effi rechaza la remisión).
+    if (a.drop !== 1 && cm !== 'propio' && !(Number(a.stock) > 0)) {
+      const gem = await gemeloDrop(storeId, c.apiKey, a);
+      if (gem) {
+        avisos.push(`"${it.nombre}" estaba vinculado a tu artículo propio #${a.id} (sin stock): se usó el del proveedor «${gem.descripcion}» #${gem.id}, y la variante quedó vinculada a ese.`);
+        a = { ...gem, drop: 1 };
+        if (v?.variantId) vincularArticulo(storeId, v.variantId, gem.id, true);
+      }
+    }
     esDrop.push(cm === 'propio' ? false : cm ? true : a.drop === 1);
     lineas.push({ item: `${it.qty}× ${it.nombre}`, articulo: `${a.descripcion}${a.referencia ? ` [${a.referencia}]` : ''} · #${a.id}${a.drop === 1 ? ' · dropshipping' : ''}` });
     conceptos.push({ articulo: Number(a.id), descripcion: it.nombre.slice(0, 250), cantidad: Math.max(1, Number(it.qty) || 1), precio: Math.max(0, Math.round(Number(it.precio) || 0)) });
