@@ -358,6 +358,7 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
          (SELECT texto FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_texto,
          (SELECT tipo FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_tipo,
          (SELECT created_at FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_at,
+         (SELECT created_at FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' ORDER BY m.created_at DESC LIMIT 1) AS ult_cliente_at,
          (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente'
             AND m.created_at > COALESCE(l.visto_equipo_at, '')) AS sin_responder
        FROM leads l WHERE l.store_id = ? ORDER BY l.created_at DESC`
@@ -369,6 +370,9 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
       etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp', notaInterna: l.nota_interna || '',
       anuncio: l.ad_ref ? pj<Record<string, unknown>>(l.ad_ref as string, null as never) : null,
       promosOptin: Number(l.promos_optin) === 1,
+      // Ventana de 24 h (solo WhatsApp): el Inbox bloquea la caja de escribir cuando vence.
+      ventana24h: process.env.WA_BLOQUEO_24H !== 'off' && (!l.canal || l.canal === 'whatsapp') && !String(l.wa_id || l.tel || '').startsWith('web:'),
+      ultClienteIso: l.ult_cliente_at ?? (db.prepare("SELECT created_at FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(l.id as string) as { created_at: string } | undefined)?.created_at ?? null,
     };
     if (!resumen) return { ...base, mensajes: mensajesDe(l.id as string) };
     const esAbierto = !!abierto && String(l.id) === String(abierto);
@@ -1947,6 +1951,8 @@ api.post('/leads/:id/messages', requireAuth, requireStore, async (req, res) => {
   if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
   const texto = String(req.body?.texto || '').trim();
   if (!texto) return res.status(400).json({ error: 'Escribe el mensaje primero.' });
+  // Ventana de 24 h cerrada: no se guarda ni se envía (solo plantillas aprobadas).
+  { const { ventanaDeLead, MSG_VENTANA_CERRADA } = await import('./wa.js'); const v = ventanaDeLead(req.user!.storeId!, l.id); if (v.aplica && !v.abierta) return res.status(409).json({ error: MSG_VENTANA_CERRADA, ventanaCerrada: true }); }
   const mid = uid();
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, l.id, 'vendedor', texto);
   db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
@@ -2077,6 +2083,7 @@ api.post('/leads/:id/media', requireAuth, requireStore, async (req, res) => {
     | { id: string; tel: string; wa_id: string | null }
     | undefined;
   if (!l) return res.status(404).json({ error: 'Lead no encontrado.' });
+  { const { ventanaDeLead, MSG_VENTANA_CERRADA } = await import('./wa.js'); const v = ventanaDeLead(req.user!.storeId!, l.id); if (v.aplica && !v.abierta) return res.status(409).json({ error: MSG_VENTANA_CERRADA, ventanaCerrada: true }); }
   const { dataUrl, nombre, caption } = req.body || {};
   if (!dataUrl) return res.status(400).json({ error: 'No recibimos el archivo.' });
   const saved = saveOutgoingMedia(req.user!.storeId!, String(dataUrl), String(nombre || ''));

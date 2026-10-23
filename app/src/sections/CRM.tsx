@@ -1,3 +1,4 @@
+import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../components/Ventana24h';
 import { useEffect, useRef, useState } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
 import { VoiceRecorder } from '../components/VoiceRecorder';
@@ -117,6 +118,7 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
 
 export function CRM({ df }: { df: DealFlowState }) {
   const chat = df.crmChat;
+  const ventana = useVentana24h(chat);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [filtroEtiqueta, setFiltroEtiqueta] = useState('');
   const [busca, setBusca] = useState('');
@@ -394,7 +396,13 @@ export function CRM({ df }: { df: DealFlowState }) {
                   </button>
                 </div>
               )}
-              {df.crmIntervening && (
+              {df.crmIntervening && ventana.cerrada && (
+                <BarraVentanaCerrada
+                  plantillas={<FlujosButton df={df} size={40} />}
+                  extra={<button onClick={df.backToBot} style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>Devolver al asistente</button>}
+                />
+              )}
+              {df.crmIntervening && !ventana.cerrada && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <AttachButton onFile={df.sendCrmMedia} size={40} />
                   <FlujosButton df={df} size={40} />
@@ -415,9 +423,10 @@ export function CRM({ df }: { df: DealFlowState }) {
                   </button>
                 </div>
               )}
-              {df.crmSendWarn && (
+              {df.crmIntervening && !ventana.cerrada && <AvisoVentana restante={ventana.restante} />}
+              {df.crmSendWarn && !(ventana.cerrada && df.crmSendWarn.startsWith('⛔')) && (
                 <div style={{ color: 'var(--df-warning)', fontSize: 12.5, marginTop: 8 }}>
-                  Guardado en el CRM, pero no salió por WhatsApp: {df.crmSendWarn}
+                  {df.crmSendWarn.startsWith('⛔') ? df.crmSendWarn : `Guardado en el CRM, pero no salió por WhatsApp: ${df.crmSendWarn}`}
                 </div>
               )}
               {df.flujoMsg && (
