@@ -134,7 +134,10 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
     setBuscandoConv(false);
     if (r.error || !r.data) { setMsg(r.error || 'No pudimos consultar los convenios.'); return; }
     setConvenios(r.data.convenios);
+    // Los detectados quedan guardados en el servidor (aparecen al despachar y en cada producto).
+    setCfg((c) => ({ ...c, convenios: [...(c.convenios || []), ...r.data!.convenios.filter((x) => !(c.convenios || []).some((g) => g.id === x.id)).map(({ id, nombre }) => ({ id, nombre }))] }));
     if (r.data.convenios.length === 1 && !cfg.convenioDropshipping) set({ convenioDropshipping: r.data.convenios[0].id });
+    setMsg(`✓ ${r.data.convenios.length} convenio${r.data.convenios.length === 1 ? '' : 's'} encontrados y guardados.`);
   };
   const cargarEventos = async () => {
     setVerEventos((v) => !v);
@@ -229,11 +232,16 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                     // Todos los convenios: los agregados a mano + los detectados en Effi (sin repetir).
                     const propios = cfg.convenios || [];
                     const todos = [...propios.map((c) => ({ ...c, manual: true })), ...(convenios || []).filter((c) => !propios.some((p) => p.id === c.id))];
-                    const quitar = (id: string) => set({ convenios: propios.filter((p) => p.id !== id) });
+                    // Los convenios se guardan AL INSTANTE (antes solo con "Guardar" y no llegaban al pedido).
+                    const guardarConvenios = (convenios: { id: string; nombre: string }[], extra: Partial<EffiApiEstado> = {}) => {
+                      set({ convenios, ...extra });
+                      void apiEffiApiConfig({ convenios, ...extra }).then((r) => setMsg(r.error ? r.error : '✓ Convenios guardados.'));
+                    };
+                    const quitar = (id: string) => guardarConvenios(propios.filter((p) => p.id !== id), cfg.convenioDropshipping === id ? { convenioDropshipping: '' } : {});
                     const agregar = () => {
                       const id = nuevoConv.id.replace(/[^A-Za-z0-9_-]/g, '');
                       if (!id || propios.some((p) => p.id === id)) return;
-                      set({ convenios: [...propios, { id, nombre: nuevoConv.nombre.trim() || `Convenio ${id}` }] });
+                      guardarConvenios([...propios, { id, nombre: nuevoConv.nombre.trim() || `Convenio ${id}` }]);
                       setNuevoConv({ id: '', nombre: '' });
                     };
                     return (
@@ -243,7 +251,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                           {todos.map((c) => (
                             <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: `1px solid ${cfg.convenioDropshipping === c.id ? 'var(--df-purple)' : 'var(--df-border)'}`, borderRadius: 8, padding: '3px 4px 3px 9px', fontSize: 12, background: 'var(--df-surface)' }}>
-                              <button onClick={() => set({ convenioDropshipping: c.id })} title="Usar por defecto para productos de proveedor sin ventas" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, color: 'var(--df-text)' }}>{cfg.convenioDropshipping === c.id ? '★ ' : ''}{c.nombre} · <b>{c.id}</b></button>
+                              <button onClick={() => guardarConvenios(propios.some((x) => x.id === c.id) ? propios : [...propios, { id: c.id, nombre: c.nombre }], { convenioDropshipping: c.id })} title="Usar por defecto para productos de proveedor sin ventas" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, color: 'var(--df-text)' }}>{cfg.convenioDropshipping === c.id ? '★ ' : ''}{c.nombre} · <b>{c.id}</b></button>
                               {c.manual ? <button onClick={() => quitar(c.id)} title="Quitar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 13, padding: '0 3px' }}>×</button> : <span style={{ fontSize: 10.5, color: 'var(--df-text-faint)', padding: '0 4px' }}>detectado</span>}
                             </span>
                           ))}
@@ -253,7 +261,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                           <input value={nuevoConv.id} onChange={(e) => setNuevoConv((v) => ({ ...v, id: e.target.value.replace(/[^A-Za-z0-9_-]/g, '') }))} onKeyDown={(e) => e.key === 'Enter' && agregar()} placeholder="Código del convenio" style={{ ...inp, width: 160, flex: '0 0 auto' }} />
                           <button onClick={agregar} disabled={!nuevoConv.id} style={{ ...btnSec, opacity: nuevoConv.id ? 1 : 0.6 }}>＋ Agregar convenio</button>
                         </div>
-                        <p style={{ ...ayuda, margin: '6px 0 0', fontSize: 11.5 }}>Toca un convenio para dejarlo <b>por defecto</b> (★). Recuerda <b>guardar</b> los cambios.</p>
+                        <p style={{ ...ayuda, margin: '6px 0 0', fontSize: 11.5 }}>Toca un convenio para dejarlo <b>por defecto</b> (★). Se guardan solos.</p>
                       </div>
                     );
                   })()}
