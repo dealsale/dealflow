@@ -2,7 +2,7 @@ import { pasarAHumano } from './pasoHumano.js';
 import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
-import { idsDeItem, separarVariantes } from './emparejar.js';
+import { idsDeItem, separarVariantes, variantesBase, emparejarItem } from './emparejar.js';
 import { directivaIdioma, idiomaDe, confirmacionPedido, pedidoActualizado, preguntaUnProducto, preguntaVariosProductos } from './idioma.js';
 import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
@@ -675,7 +675,8 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       return;
     }
     const resMarcador = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
-    let pedidoCreado = resMarcador === 'creado' || resMarcador === 'actualizado';
+    // 'invalido': pidió una talla/color que no existe; ya se le respondió con las opciones.
+    let pedidoCreado = resMarcador === 'creado' || resMarcador === 'actualizado' || resMarcador === 'invalido';
     // La IA repitió el MISMO pedido: no se vuelve a decir "tu pedido quedó registrado".
     const repetido = resMarcador === 'igual';
 
@@ -687,7 +688,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     // (No aplica si el chat está resolviendo una novedad de envío: ese "sí" es de la novedad.)
     if (!pedidoCreado && !repetido && !novedadTxt && esAfirmacion(ultimo?.texto || '')) {
       const inner = pedidoDesdeResumen(leadId);
-      if (inner) { const r2 = await crearPedido(storeId, lead, inner, productRows, destino, pn); pedidoCreado = r2 === 'creado' || r2 === 'actualizado'; }
+      if (inner) { const r2 = await crearPedido(storeId, lead, inner, productRows, destino, pn); pedidoCreado = r2 === 'creado' || r2 === 'actualizado' || r2 === 'invalido'; }
     }
 
     // Si se creó el pedido, el mensaje de confirmación ya lo mandó crearPedido;
@@ -963,7 +964,7 @@ Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefo
   } catch { return ''; }
 }
 
-type ResultadoPedido = 'creado' | 'actualizado' | 'igual' | false;
+type ResultadoPedido = 'creado' | 'actualizado' | 'igual' | 'invalido' | false;
 async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<ResultadoPedido> {
   const cliente = campoPedido(inner, 'cliente') || lead.nombre || 'Cliente';
   const ciudad = campoPedido(inner, 'ciudad');
@@ -1003,6 +1004,33 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     return { qty, nombre: completo, precio: prod ? Number(prod.precio) : 0 };
   }).filter((i) => i.nombre).flatMap((i) => separarVariantes(i.qty, i.nombre).map((x) => ({ ...x, precio: i.precio })))); // agrupa idénticos; y "4x Falda (L · Negro, Blanco…)" → un ítem por variante
   if (!items.length || (!direccion && !ciudad)) return false; // datos insuficientes, esperamos
+
+  // ¿Pidió un color/talla que el producto NO tiene? (p. ej. "Naranja" en una falda sin ese
+  // color). No se crea un pedido imposible de despachar: se le dice y se le muestran los que hay.
+  {
+    const todasV = variantesBase(storeId);
+    for (const it of items) {
+      const r = emparejarItem(it.nombre, todasV);
+      if (r.v || !/no tiene la variante/.test(r.motivo) || !r.parecidos[0]) continue;
+      const vs = todasV.filter((v) => v.producto === r.parecidos[0].producto && v.label);
+      if (!vs.length) continue;
+      // Opciones disponibles por posición ("Color · Talla"): valores únicos de cada parte.
+      const partes = vs.map((v) => v.label.split(/\s*·\s*/));
+      const n = Math.max(...partes.map((p) => p.length));
+      const listas = Array.from({ length: n }, (_, i) => [...new Set(partes.map((p) => p[i]).filter(Boolean))]);
+      const disponibles = listas.map((l) => l.join(', ')).join(' / ');
+      const pedido = (it.nombre.match(/\(([^)]+)\)/) || ['', it.nombre])[1];
+      const nombre1 = (cliente || '').split(' ')[0] || '';
+      const msg = idiomaDe(storeId, lead.id) === 'en'
+        ? `Oops${nombre1 ? `, ${nombre1}` : ''}! 😕 We don't have «${pedido}» in ${r.parecidos[0].producto}. Available: ${disponibles}. Which one would you like instead?`
+        : `¡Uy${nombre1 ? `, ${nombre1}` : ''}! 😕 De ${r.parecidos[0].producto} no tenemos «${pedido}». Tenemos: ${disponibles}. ¿Cuál prefieres en su lugar?`;
+      registrarLog(storeId, 'warn', 'pedido', `No se creó el pedido: el cliente pidió «${it.nombre}» y esa talla/color no existe en el producto. Se le mostraron las opciones disponibles.`, lead.id);
+      const mid = uid();
+      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
+      marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
+      return 'invalido';
+    }
+  }
 
   const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
 
