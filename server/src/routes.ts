@@ -1523,7 +1523,7 @@ api.get('/effi-api/articulos', requireAuth, requireStore, requireOwner, async (r
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
   const arts = ef.articulosCache(sid);
-  const variantes = (db.prepare("SELECT v.id, p.id pid, p.nombre producto, v.label, COALESCE(p.despacho_proveedor,'') proveedor, COALESCE(json_extract(v.refs,'$.effi_id'),'') effi_id, COALESCE(json_extract(v.refs,'$.effi_auto'),0) effi_auto FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? ORDER BY p.nombre, v.label").all(sid) as { id: string; pid: string; producto: string; label: string; proveedor: string; effi_id: string; effi_auto: number }[])
+  const variantes = (db.prepare("SELECT v.id, p.id pid, p.nombre producto, v.label, COALESCE(p.despacho_proveedor,'') proveedor, COALESCE(json_extract(v.refs,'$.effi_id'),'') effi_id, COALESCE(json_extract(v.refs,'$.effi_auto'),0) effi_auto FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND (? = '' OR p.id = ?) ORDER BY p.nombre, v.label").all(sid, String(req.query.productId || ''), String(req.query.productId || '')) as { id: string; pid: string; producto: string; label: string; proveedor: string; effi_id: string; effi_auto: number }[])
     .map((v) => ({ variantId: v.id, productId: v.pid, producto: v.producto, proveedor: v.proveedor, nombre: v.label && v.label.toLowerCase() !== 'única' ? `${v.producto} (${v.label})` : v.producto, effiId: String(v.effi_id || ''), auto: Number(v.effi_auto) === 1 }));
   // El nombre del artículo vinculado (aunque no esté en la caché), para mostrarlo.
   const nombres: Record<string, string> = {};

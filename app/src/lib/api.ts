@@ -539,7 +539,7 @@ export const apiEffiApiSecreto = (secreto: string) => req<{ ok: true; secretos: 
 export const apiEffiApiDesconectar = () => req<{ ok: true }>('/api/effi-api/desconectar', 'POST');
 export const apiEffiApiSyncArticulos = () => req<{ total: number; soloVinculados: boolean; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[]; productosEffi: number; sinProveedor: number; marcados?: number; stockActualizado?: number }>('/api/effi-api/articulos/sync', 'POST');
 export interface EffiVarianteDF { variantId: string; productId: string; producto: string; proveedor: string; nombre: string; effiId: string; auto?: boolean }
-export const apiEffiApiArticulos = () => req<{ articulos: EffiArticulo[]; variantes: EffiVarianteDF[]; nombres: Record<string, string>; conveniosProducto?: Record<string, string>; convenios?: { id: string; nombre: string }[] }>('/api/effi-api/articulos', 'GET');
+export const apiEffiApiArticulos = (productId = '') => req<{ articulos: EffiArticulo[]; variantes: EffiVarianteDF[]; nombres: Record<string, string>; conveniosProducto?: Record<string, string>; convenios?: { id: string; nombre: string }[] }>(`/api/effi-api/articulos${productId ? `?productId=${encodeURIComponent(productId)}` : ''}`, 'GET');
 export const apiEffiApiBuscar = (q: string) => req<{ articulos: EffiArticulo[] }>(`/api/effi-api/articulos/buscar?q=${encodeURIComponent(q)}`, 'GET');
 export const apiEffiApiProveedor = (productIds: string[], proveedor: 'effi' | 'dropi' | '') => req<{ ok: true; actualizados: number }>('/api/effi-api/producto-proveedor', 'POST', { productIds, proveedor });
 export const apiEffiApiConvenioProducto = (productIds: string[], convenio: string) => req<{ ok: true; actualizados: number }>('/api/effi-api/producto-convenio', 'POST', { productIds, convenio });
@@ -559,10 +559,12 @@ export interface GuiaLogistica {
   total: number; envioCobrado: number; recaudo: number; flete: number; guia: string; guiaUrl: string; transportadora: string; remision: string;
   estado: string; estadoEffi: string; etapa: 'sin_guia' | 'por_recoger' | 'transito' | 'reparto' | 'novedad' | 'entregado' | 'devuelto'; creado: string;
   ultimoMovimiento: { fecha: string; estado: string; observacion: string } | null; entregaEstimada: string; llegaHoy: boolean; entregadoHoy: boolean;
+  /** Guía que está en Effi pero no es de un pedido de DealFlow. */
+  externa?: boolean;
 }
 export interface TableroLogistica {
-  guias: GuiaLogistica[]; actualizado: string; revisadas?: number;
-  resumen: { total: number; activas: number; llegaHoy: number; novedades: number; entregadas: number; devueltas: number; porRecaudar: number; fleteTotal: number; envioCobrado: number; efectividad: number | null };
+  guias: GuiaLogistica[]; actualizado: string; revisadas?: number; guiasEffiAt?: string;
+  resumen: { total: number; activas: number; llegaHoy: number; novedades: number; entregadas: number; devueltas: number; porRecaudar: number; fleteTotal: number; envioCobrado: number; efectividad: number | null; soloEffi?: number };
 }
 export const apiLogistica = (dias = 45) => req<TableroLogistica>(`/api/logistica/effi?dias=${dias}`, 'GET');
 export const apiLogisticaActualizar = (dias = 45) => req<TableroLogistica>('/api/logistica/effi/actualizar', 'POST', { dias });
