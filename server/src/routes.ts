@@ -310,7 +310,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const store = { id: storeRow.id, nombre: storeRow.nombre, plan: storeRow.plan, temaPremium: !!storeRow.tema_premium };
   const bloqueados = productosBloqueados(sid); // productos de biblioteca gratuitos (estructura no editable)
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
-    id: p.id, nombre: p.nombre, precio: p.precio, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
+    id: p.id, nombre: p.nombre, precio: p.precio, precioPromo: Number(p.precio_promo) || 0, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
     tipo: p.tipo || 'producto', duracion: p.duracion || '', sku: p.sku || '', plantillaId: p.plantilla_id || '',
     despachoProveedor: p.despacho_proveedor || '', variantesFuente: p.variantes_fuente || '',
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
@@ -685,6 +685,7 @@ api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   // cliente no la dañe). Solo dejamos cambiar el precio y el SKU de su tienda.
   if (esImportBloqueado(req.params.id)) {
     if (req.body?.precio !== undefined) db.prepare('UPDATE products SET precio = ? WHERE id = ?').run(Number(req.body.precio) || 0, req.params.id);
+    if (req.body?.precioPromo !== undefined) db.prepare('UPDATE products SET precio_promo = ? WHERE id = ?').run(Math.max(0, Math.round(Number(req.body.precioPromo) || 0)), req.params.id);
     if (req.body?.sku !== undefined) db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(String(req.body.sku).trim(), req.params.id);
     return res.json({ ok: true, bloqueado: true });
   }
@@ -730,6 +731,7 @@ api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   }
   if (Array.isArray(faqs)) db.prepare('UPDATE products SET faqs = ? WHERE id = ?').run(j(faqs), req.params.id);
   if (precio !== undefined) db.prepare('UPDATE products SET precio = ? WHERE id = ?').run(Number(precio) || 0, req.params.id);
+  if (req.body?.precioPromo !== undefined) db.prepare('UPDATE products SET precio_promo = ? WHERE id = ?').run(Math.max(0, Math.round(Number(req.body.precioPromo) || 0)), req.params.id);
   if (Array.isArray(reglas)) db.prepare('UPDATE products SET reglas = ? WHERE id = ?').run(j(reglas), req.params.id);
   if (Array.isArray(fotosSubidas)) db.prepare('UPDATE products SET fotos_subidas = ? WHERE id = ?').run(j(fotosSubidas), req.params.id);
   if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(req.params.id); // producto de biblioteca

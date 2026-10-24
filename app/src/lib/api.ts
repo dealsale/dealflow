@@ -270,6 +270,7 @@ export interface ApiProduct {
   id: string;
   nombre: string;
   precio: number;
+  precioPromo?: number;
   color: string;
   txt: string;
   tipo?: 'producto' | 'servicio';

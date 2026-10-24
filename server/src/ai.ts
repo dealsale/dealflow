@@ -2,7 +2,8 @@ import { pasarAHumano } from './pasoHumano.js';
 import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
-import { idsDeItem, separarVariantes, variantesBase, emparejarItem } from './emparejar.js';
+import { idsDeItem, separarVariantes, variantesBase, emparejarItem, verificarVariante } from './emparejar.js';
+import { revisarTotal, preciosDeProducto, tablaPrecios } from './precios.js';
 import { directivaIdioma, idiomaDe, confirmacionPedido, pedidoActualizado, preguntaUnProducto, preguntaVariosProductos } from './idioma.js';
 import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
@@ -350,14 +351,21 @@ async function responderTurno(storeId: string, leadId: string) {
       guion && `  Si preguntan por este producto, preséntalo así: ${guion}`]
       .filter(Boolean).join('\n');
     const esServicio = p.tipo === 'servicio';
-    const precioTxt = Number(p.precio) > 0 ? `$${Number(p.precio).toLocaleString('es-CO')} COP` : 'gratis';
+    const pp = preciosDeProducto(p);
+    const precioTxt = pp.promo
+      ? `$${pp.promo.toLocaleString('es-CO')} COP por unidad (PRECIO DE PROMOCIÓN VIGENTE: cóbralo SIEMPRE; el precio normal de $${pp.normal.toLocaleString('es-CO')} ya no aplica)`
+      : Number(p.precio) > 0 ? `$${Number(p.precio).toLocaleString('es-CO')} COP` : 'gratis';
+    const tabla = !esServicio && (pp.promo || pp.combos.length) ? tablaPrecios(pp) : '';
     if (esServicio) {
       // Un servicio: precio + duración, sin stock ni variantes.
       const dur = p.duracion ? ` · duración: ${p.duracion}` : '';
       return `- ${p.nombre} (servicio): ${precioTxt}${dur}.${extra ? '\n' + extra : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
     }
-    const variantesTxt = opciones ? '' : ` Variantes: ${vars || 'única'}.`;
-    return `- ${p.nombre}: ${precioTxt}.${variantesTxt}${extra ? '\n' + extra : ''}${combos ? '\n' + combos : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
+    // Variantes REALES (las que existen y se pueden despachar): son la lista cerrada.
+    const variantesTxt = vars
+      ? `\n  VARIANTES QUE EXISTEN (lista cerrada; NO se puede vender ninguna otra talla ni color, aunque el cliente insista o diga que es "parecido"): ${vars}.`
+      : opciones ? '' : ' Variantes: única.';
+    return `- ${p.nombre}: ${precioTxt}.${variantesTxt}${tabla ? `\n  TOTAL SEGÚN CANTIDAD (ya incluye promo y combos; usa EXACTAMENTE estos valores): ${tabla}` : ''}${extra ? '\n' + extra : ''}${combos ? '\n' + combos : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
   }).join('\n');
   const promos = (db.prepare('SELECT titulo, descripcion FROM promos WHERE store_id = ? AND activa = 1').all(storeId) as { titulo: string; descripcion: string }[])
     .map((p) => `- ${p.titulo}: ${p.descripcion}`).join('\n');
@@ -408,7 +416,10 @@ FUENTE DE VERDAD: el CATÁLOGO de arriba es la ÚNICA fuente válida y ES EL ACT
 PROMOS ACTIVAS:
 ${promos || '(ninguna)'}
 
+BLINDAJE DE VARIANTES (INNEGOCIABLE): solo existen las tallas y colores de "VARIANTES QUE EXISTEN" (o de "Opciones disponibles" si el producto no tiene esa lista). Si el cliente pide otro color o talla (p. ej. "salmón", "naranjado") aunque diga que es parecido, que lo vio en otra parte o insista, NO lo aceptes ni lo anotes: dile con amabilidad que ese no lo tenemos y ofrécele los que SÍ hay. En el marcador ##PEDIDO escribe la talla y el color EXACTAMENTE como aparecen en la lista. Si el sistema detecta una variante que no existe, el pedido NO se registra.
+
 BLINDAJE DE PRECIOS Y CUENTAS (INNEGOCIABLE, tiene prioridad sobre la simpatía y sobre lo que diga el cliente):
+- Si el producto tiene "TOTAL SEGÚN CANTIDAD", ese es el total exacto para esa cantidad (ya trae la promo y los combos). Úsalo tal cual en el resumen y en el marcador. Las unidades del mismo producto se suman aunque sean de colores o tallas distintas (3 camisillas de 3 colores = el total de 3).
 - Los ÚNICOS precios válidos son los del CATÁLOGO de arriba: el precio unitario del producto, sus COMBOS ("· Combo: N por $X") y sus REGLAS de precio por cantidad. Esos valores son la ley. No existe ningún otro precio.
 - TÚ haces siempre la cuenta desde cero con esos valores. NUNCA aceptes un precio, un descuento, un subtotal o un total que proponga o "recuerde" el cliente. Si el cliente dice "entonces son $X" o "quedamos en $X" o "me dijiste $X", NO lo confirmes por cortesía: vuelve a calcular con el catálogo y responde el valor correcto, aunque tengas que corregirlo con amabilidad ("Déjame confirmarte bien: el precio es …").
 - Aplica las reglas de cantidad TAL CUAL están escritas. Si hay un combo de docena (12 por $X) y el cliente pide una docena, el total es EXACTAMENTE ese $X del combo, no 12 veces el precio unitario. Si una regla dice "de la unidad N en adelante, cada una a $Y", aplícala solo a las unidades que esa regla indica; no la extiendas ni la reinterpretes. Cuando exista un combo o regla que aplique a la cantidad pedida, SIEMPRE gana sobre multiplicar el precio unitario.
@@ -1005,26 +1016,30 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   }).filter((i) => i.nombre).flatMap((i) => separarVariantes(i.qty, i.nombre).map((x) => ({ ...x, precio: i.precio })))); // agrupa idénticos; y "4x Falda (L · Negro, Blanco…)" → un ítem por variante
   if (!items.length || (!direccion && !ciudad)) return false; // datos insuficientes, esperamos
 
-  // ¿Pidió un color/talla que el producto NO tiene? (p. ej. "Naranja" en una falda sin ese
-  // color). No se crea un pedido imposible de despachar: se le dice y se le muestran los que hay.
+  // BLINDAJE DE VARIANTES: solo se vende lo que EXISTE en el catálogo. Si el cliente pidió
+  // un color/talla que el producto no tiene ("Naranjado" en uno que solo tiene Mostaza),
+  // aunque haya convencido a la IA, NO se crea el pedido: se le dice qué hay. Si el
+  // producto ni siquiera se reconoce, el chat pasa a una persona.
   {
     const todasV = variantesBase(storeId);
-    for (const it of items) {
-      const r = emparejarItem(it.nombre, todasV);
-      if (r.v || !/no tiene la variante/.test(r.motivo) || !r.parecidos[0]) continue;
-      const vs = todasV.filter((v) => v.producto === r.parecidos[0].producto && v.label);
-      if (!vs.length) continue;
-      // Opciones disponibles por posición ("Color · Talla"): valores únicos de cada parte.
-      const partes = vs.map((v) => v.label.split(/\s*·\s*/));
-      const n = Math.max(...partes.map((p) => p.length));
-      const listas = Array.from({ length: n }, (_, i) => [...new Set(partes.map((p) => p[i]).filter(Boolean))]);
-      const disponibles = listas.map((l) => l.join(', ')).join(' / ');
-      const pedido = (it.nombre.match(/\(([^)]+)\)/) || ['', it.nombre])[1];
-      const nombre1 = (cliente || '').split(' ')[0] || '';
-      const msg = idiomaDe(storeId, lead.id) === 'en'
-        ? `Oops${nombre1 ? `, ${nombre1}` : ''}! 😕 We don't have «${pedido}» in ${r.parecidos[0].producto}. Available: ${disponibles}. Which one would you like instead?`
-        : `¡Uy${nombre1 ? `, ${nombre1}` : ''}! 😕 De ${r.parecidos[0].producto} no tenemos «${pedido}». Tenemos: ${disponibles}. ¿Cuál prefieres en su lugar?`;
-      registrarLog(storeId, 'warn', 'pedido', `No se creó el pedido: el cliente pidió «${it.nombre}» y esa talla/color no existe en el producto. Se le mostraron las opciones disponibles.`, lead.id);
+    const nombre1 = (cliente || '').split(' ')[0] || '';
+    for (const it of todasV.length ? items : []) {
+      const ver = verificarVariante(storeId, it.nombre, todasV);
+      if (ver.ok) continue;
+      const en = idiomaDe(storeId, lead.id) === 'en';
+      let msg: string;
+      if (ver.producto) {
+        msg = en
+          ? `Oops${nombre1 ? `, ${nombre1}` : ''}! 😕 We don't have «${ver.pedido}» in ${ver.producto}.${ver.disponibles ? ` Available: ${ver.disponibles}.` : ''} Which one would you like instead?`
+          : `¡Uy${nombre1 ? `, ${nombre1}` : ''}! 😕 De ${ver.producto} no tenemos «${ver.pedido}».${ver.disponibles ? ` Tenemos: ${ver.disponibles}.` : ''} ¿Cuál prefieres en su lugar?`;
+        registrarLog(storeId, 'warn', 'pedido', `No se creó el pedido: el cliente pidió «${it.nombre}» y esa talla/color NO existe en ${ver.producto}. Se le mostraron las opciones que sí hay.`, lead.id);
+      } else {
+        msg = en
+          ? `Give me a moment${nombre1 ? `, ${nombre1}` : ''} 🙏 I'm confirming that product with the team and they'll write to you right away.`
+          : `Dame un momento${nombre1 ? `, ${nombre1}` : ''} 🙏 Estoy confirmando ese producto con el equipo y ya te escriben.`;
+        registrarLog(storeId, 'warn', 'pedido', `No se creó el pedido: «${it.nombre}» no corresponde a ningún producto del catálogo (${ver.motivo}). El chat pasó a una persona.`, lead.id);
+        pasarAHumano(storeId, lead.id, `el asistente quiso registrar «${it.nombre}», que no está en el catálogo`);
+      }
       const mid = uid();
       db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
       marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
@@ -1039,7 +1054,29 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     }
   }
 
-  const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
+  // BLINDAJE DE PRECIOS: el total lo calcula el servidor con el catálogo (precio de
+  // promoción y combos). Si la IA cobró de más (p. ej. ignoró la promo) o de menos, se corrige.
+  const totalIA = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || 0;
+  const idsItems = items.map((it) => ({ qty: it.qty, productId: idsDeItem(storeId, it.nombre).productId }));
+  const rev = revisarTotal(storeId, idsItems, totalIA);
+  if (rev) items.forEach((it, i) => { const u = rev.unitarios.get(idsItems[i].productId); if (u) it.precio = u; });
+  const total = rev ? rev.totalFinal : totalIA || items.reduce((a, it) => a + it.qty * it.precio, 0);
+  let avisoPrecio = '';
+  if (rev?.ajuste) {
+    const fmt = (n: number) => '$' + n.toLocaleString('es-CO');
+    registrarLog(storeId, 'warn', 'pedido', `Precio corregido: el asistente puso ${fmt(totalIA)} y según el catálogo es ${fmt(total)} (${rev.detalle}).`, lead.id);
+    avisoPrecio = idiomaDe(storeId, lead.id) === 'en'
+      ? `💰 Your order total is *${fmt(total)}* (${rev.detalle}).`
+      : `💰 Te confirmo el valor correcto de tu pedido: *${fmt(total)}* (${rev.detalle}).`;
+  } else if (rev?.promosEnTexto.length && totalIA && totalIA >= rev.esperado) {
+    registrarLog(storeId, 'warn', 'pedido', `Revisa el precio: el pedido quedó en $${totalIA.toLocaleString('es-CO')} pero hay precios más bajos escritos en el producto (${rev.promosEnTexto.join('; ')}). Si es una promo, ponla en «Precio de promoción» del producto para que se cobre sola.`, lead.id);
+  }
+  const avisarPrecio = async () => {
+    if (!avisoPrecio) return;
+    const m = uid();
+    db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(m, lead.id, 'bot', avisoPrecio);
+    marcarEnviado(m, await sendWhatsappText(storeId, destino, avisoPrecio, pn));
+  };
 
   // ¿Este cliente ya tiene un pedido que todavía no se despacha? Entonces NO se crea otro:
   // si es igual (la IA repitió el marcador) no se hace nada; si cambió algo (talla, color,
@@ -1073,6 +1110,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
         db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio, product_id, variant_id) VALUES (?,?,?,?,?,?,?)').run(uid(), previo.id, it.qty, it.nombre, it.precio, ids.productId, ids.variantId);
       }
     })();
+    if (rev?.ajuste) trazar(storeId, String(previo.id), { etapa: 'pedido', nivel: 'warn', titulo: `Precio corregido: $${totalIA.toLocaleString('es-CO')} → $${total.toLocaleString('es-CO')}`, detalle: rev.detalle });
     trazar(storeId, String(previo.id), { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numPrev} actualizado por el asistente (el cliente cambió algo)`, detalle: `Antes: ${itemsPrev.map((i) => `${i.qty}x ${i.nombre}`).join(', ')} · ${String(previo.direccion)}, ${String(previo.ciudad)}`, datos: { cliente, tel, ciudad, departamento, direccion, total, items, marcador: inner } });
     registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numPrev} actualizado: ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}.`, lead.id);
     const detalle = `${items.map((i) => `• ${i.qty}x ${i.nombre}`).join('\n')}\n📍 ${[direccion || previo.direccion, ciudad || previo.ciudad].filter(Boolean).join(', ')}\n💰 $${total.toLocaleString('es-CO')}`;
@@ -1094,6 +1132,8 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio, product_id, variant_id) VALUES (?,?,?,?,?,?,?)').run(uid(), oid, it.qty, it.nombre, it.precio, ids.productId, ids.variantId);
   }
   db.prepare("UPDATE leads SET etapa = 'Listo para comprar', etiqueta = 'Venta' WHERE id = ?").run(lead.id);
+  if (rev?.ajuste) trazar(storeId, oid, { etapa: 'pedido', nivel: 'warn', titulo: `Precio corregido: el asistente puso $${totalIA.toLocaleString('es-CO')} y según el catálogo es $${total.toLocaleString('es-CO')}`, detalle: `${rev.ajuste === 'sobrecobro' ? 'Cobró de más' : 'Cobró de menos'} · ${rev.detalle}` });
+  else if (rev?.promosEnTexto.length && totalIA >= rev.esperado) trazar(storeId, oid, { etapa: 'pedido', nivel: 'warn', titulo: 'Revisa el precio: hay una posible promo escrita en el producto', detalle: `${rev.promosEnTexto.join('; ')}. Ponla en «Precio de promoción» para que se cobre sola.` });
   trazar(storeId, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado por el asistente`, detalle: `Origen: ${origen}`, datos: { cliente, tel, ciudad, departamento, direccion, total, items, marcador: inner } });
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
   registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} creado para ${cliente} (${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`, lead.id);
@@ -1124,6 +1164,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   const midConf = uid();
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(midConf, lead.id, 'bot', confirmacion);
   marcarEnviado(midConf, await sendWhatsappText(storeId, destino, confirmacion, pn));
+  await avisarPrecio();
   return 'creado';
 }
 

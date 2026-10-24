@@ -321,6 +321,7 @@ export interface DecoratedProduct extends Product {
   deleteArmed: boolean;
   setNombre: (v: string) => void;
   setPrecio: (v: string) => void;
+  setPrecioPromo: (v: string) => void;
   setSku: (v: string) => void;
   setDespachoProveedor: (v: string) => void;
   /** Suelta el vínculo: limpia el SKU del producto, el de todas sus variantes y el proveedor, para poder cambiar de Dropi a Effi (o al revés). */
@@ -645,6 +646,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
       .map((m) => ({ id: m.id, nombre: m.nombre, activo: m.activo !== false, bloques: bloquesValidos(m.bloques) })),
     mensajeSel: 0,
     bundles: p.bundles || [],
+    precioPromo: Number(p.precioPromo) || 0,
     opciones: (p.opciones || []).filter((o) => o && typeof o.nombre === 'string' && Array.isArray(o.valores)).map((o) => ({
       nombre: o.nombre,
       valores: o.valores.map((v) => (typeof v === 'string' ? { valor: v } : { valor: v.valor, foto: v.foto })),
@@ -2242,6 +2244,7 @@ export function useDealFlowState() {
         deleteArmed: armedDeleteProductId === p.id,
         setNombre: (v: string) => updateProduct(p.id, { nombre: v }),
         setPrecio: (v: string) => updateProduct(p.id, { precio: parseInt(v.replace(/[^0-9]/g, ''), 10) || 0 }),
+        setPrecioPromo: (v: string) => updateProduct(p.id, { precioPromo: parseInt(v.replace(/[^0-9]/g, ''), 10) || 0 }),
         setSku: (v: string) => updateProduct(p.id, { sku: v }),
         setDespachoProveedor: (v: string) => updateProduct(p.id, { despachoProveedor: v }),
         desvincularDespacho: () => {
