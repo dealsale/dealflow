@@ -652,6 +652,18 @@ api.get('/stats', requireAuth, requireStore, (req, res) => {
   });
 });
 
+// Conversión por anuncio: chats → respondieron → pedidos → despachados → entregados, ventas y productos.
+api.get('/stats/anuncios', requireAuth, requireStore, async (req, res) => {
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  let desde = String(req.query.desde || ''); let hasta = String(req.query.hasta || '');
+  if (!re.test(desde)) desde = hoy;
+  if (!re.test(hasta)) hasta = hoy;
+  if (desde > hasta) [desde, hasta] = [hasta, desde];
+  const { conversionPorAnuncio } = await import('./statsAnuncios.js');
+  res.json({ rango: { desde, hasta }, ...conversionPorAnuncio(req.user!.storeId!, desde, hasta) });
+});
+
 // Sube un archivo (foto/video) y devuelve su enlace, para guardarlo liviano en el producto.
 api.post('/upload', requireAuth, requireStore, (req, res) => {
   const { dataUrl, nombre } = req.body || {};
