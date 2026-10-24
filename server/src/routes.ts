@@ -661,7 +661,15 @@ api.get('/stats/anuncios', requireAuth, requireStore, async (req, res) => {
   if (!re.test(hasta)) hasta = hoy;
   if (desde > hasta) [desde, hasta] = [hasta, desde];
   const { conversionPorAnuncio } = await import('./statsAnuncios.js');
-  res.json({ rango: { desde, hasta }, ...conversionPorAnuncio(req.user!.storeId!, desde, hasta) });
+  const { estadoInsights } = await import('./metaInsights.js');
+  res.json({ rango: { desde, hasta }, ...conversionPorAnuncio(req.user!.storeId!, desde, hasta), meta: estadoInsights(req.user!.storeId!) });
+});
+// Trae ya el gasto/impresiones/clics de Meta (hasta 90 días atrás).
+api.post('/stats/anuncios/sincronizar', requireAuth, requireStore, async (req, res) => {
+  const { sincronizarInsights, estadoInsights } = await import('./metaInsights.js');
+  const r = await sincronizarInsights(req.user!.storeId!, Math.min(90, Math.max(1, Number(req.body?.dias) || 30)));
+  if ('error' in r) return res.status(400).json({ error: r.error, meta: estadoInsights(req.user!.storeId!) });
+  res.json({ ok: true, filas: r.filas, meta: estadoInsights(req.user!.storeId!) });
 });
 
 // Sube un archivo (foto/video) y devuelve su enlace, para guardarlo liviano en el producto.
@@ -1995,6 +2003,8 @@ api.post('/ads/seleccionar', requireAuth, requireStore, requireOwner, async (req
     pageId: String(b.pageId || ''), pageNombre: String(b.pageNombre || ''),
   });
   if (r.error) return res.status(400).json({ error: r.error });
+  // Recién conectada: trae de una vez los últimos 30 días de gasto y resultados.
+  void import('./metaInsights.js').then((m) => m.sincronizarInsights(req.user!.storeId!, 30)).catch(() => {});
   res.json({ ads: estadoCuenta(req.user!.storeId!) });
 });
 

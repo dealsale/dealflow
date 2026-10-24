@@ -30,6 +30,7 @@ import('./dropiSync.js').then((m) => m.iniciarSyncDropi()).catch((e) => console.
 import('./shopifyPedidos.js').then((m) => m.iniciarEnviosShopify()).catch((e) => console.error('[shopify]', e));
 import('./logistica.js').then((m) => m.iniciarGuiasEffi()).catch((e) => console.error('[logistica]', e));
 import('./correo.js').then((m) => m.iniciarCorreos()).catch((e) => console.error('[correo]', e));
+import('./metaInsights.js').then((m) => m.iniciarInsights()).catch((e) => console.error('[ads]', e));
 setTimeout(() => { void import('./media.js').then((m) => m.reconvertirGuias()).catch(() => {}); }, 30_000);
 iniciarSeguimiento();
 
@@ -62,7 +63,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'conversion-por-anuncio-clid',
+    build: 'meta-ads-insights',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

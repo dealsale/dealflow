@@ -860,7 +860,12 @@ export interface ConversionAnuncio {
   confirmados: number; despachados: number; enCamino: number; entregados: number; devueltos: number; cancelados: number;
   ventas: number; ventasEntregadas: number; ticket: number; tasaEntrega: number;
   productos: { nombre: string; unidades: number; ventas: number }[];
-  serie: { fecha: string; chats: number; pedidos: number; ventas: number }[];
+  serie: { fecha: string; chats: number; pedidos: number; ventas: number; gasto: number }[];
+  adName: string; campaignId: string; campaignName: string; adsetId: string; adsetName: string;
+  gasto: number; impresiones: number; clics: number; conversacionesMeta: number;
+  costoChat: number; costoPedido: number; costoEntregado: number; roas: number;
 }
+export interface EstadoMetaAds { conectada: boolean; cuenta: string; moneda: string; ultima: string; error: string; filas: number }
+export const apiSincronizarAnuncios = (dias = 30) => req<{ ok: true; filas: number; meta: EstadoMetaAds }>('/api/stats/anuncios/sincronizar', 'POST', { dias });
 export const apiStatsAnuncios = (desde: string, hasta: string) =>
-  req<{ rango: { desde: string; hasta: string }; anuncios: ConversionAnuncio[]; organico: ConversionAnuncio | null }>(`/api/stats/anuncios?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, 'GET');
+  req<{ rango: { desde: string; hasta: string }; anuncios: ConversionAnuncio[]; organico: ConversionAnuncio | null; meta: EstadoMetaAds }>(`/api/stats/anuncios?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, 'GET');
