@@ -8,6 +8,7 @@
  * guardado en el pedido o, en pedidos viejos, por el teléfono). Fechas en hora de Bogotá.
  */
 import { db, pj } from './db.js';
+import { insightsEnRango } from './metaInsights.js';
 
 const ORGANICO = 'organico';
 const EN_CAMINO = ['Guía generada', 'En tránsito', 'En reparto', 'Novedad'];
@@ -18,7 +19,11 @@ export interface FilaAnuncio {
   confirmados: number; despachados: number; enCamino: number; entregados: number; devueltos: number; cancelados: number;
   ventas: number; ventasEntregadas: number; ticket: number; tasaEntrega: number;
   productos: { nombre: string; unidades: number; ventas: number }[];
-  serie: { fecha: string; chats: number; pedidos: number; ventas: number }[];
+  serie: { fecha: string; chats: number; pedidos: number; ventas: number; gasto: number }[];
+  // Del Administrador de anuncios (si está conectado):
+  adName: string; campaignId: string; campaignName: string; adsetId: string; adsetName: string;
+  gasto: number; impresiones: number; clics: number; conversacionesMeta: number;
+  costoChat: number; costoPedido: number; costoEntregado: number; roas: number;
 }
 
 export function conversionPorAnuncio(sid: string, desde: string, hasta: string): { anuncios: FilaAnuncio[]; organico: FilaAnuncio | null } {
@@ -49,15 +54,17 @@ export function conversionPorAnuncio(sid: string, desde: string, hasta: string):
         id, titular: id === ORGANICO ? 'Sin anuncio (orgánico)' : a.titular || 'Anuncio', canal: a.canal || '', url: a.url || '', media: a.media || '', producto: prodDeAd.get(id) || '',
         chats: 0, respondieron: 0, pedidos: 0, conversion: 0, confirmados: 0, despachados: 0, enCamino: 0, entregados: 0, devueltos: 0, cancelados: 0,
         ventas: 0, ventasEntregadas: 0, ticket: 0, tasaEntrega: 0, productos: [], serie: [],
+        adName: '', campaignId: '', campaignName: '', adsetId: '', adsetName: '',
+        gasto: 0, impresiones: 0, clics: 0, conversacionesMeta: 0, costoChat: 0, costoPedido: 0, costoEntregado: 0, roas: 0,
       };
       filas.set(id, f);
     }
     return f;
   };
-  const series = new Map<string, Map<string, { chats: number; pedidos: number; ventas: number }>>();
+  const series = new Map<string, Map<string, { chats: number; pedidos: number; ventas: number; gasto: number }>>();
   const dia = (id: string, d: string) => {
     let m = series.get(id); if (!m) { m = new Map(); series.set(id, m); }
-    let x = m.get(d); if (!x) { x = { chats: 0, pedidos: 0, ventas: 0 }; m.set(d, x); }
+    let x = m.get(d); if (!x) { x = { chats: 0, pedidos: 0, ventas: 0, gasto: 0 }; m.set(d, x); }
     return x;
   };
 
@@ -112,15 +119,33 @@ export function conversionPorAnuncio(sid: string, desde: string, hasta: string):
   const fechas: string[] = [];
   for (let t = new Date(desde + 'T12:00:00Z').getTime(), fin = new Date(hasta + 'T12:00:00Z').getTime(), i = 0; t <= fin && i < 92; t += 86400000, i++) fechas.push(new Date(t).toISOString().slice(0, 10));
 
+  // Gasto, impresiones y clics del Administrador de anuncios (los anuncios con gasto
+  // aparecen aunque no hayan traído chats: así se ve la plata que no rindió).
+  const ins = insightsEnRango(sid, desde, hasta);
+  for (const a of ins.values()) {
+    if (a.gasto <= 0 && !filas.has(a.adId)) continue;
+    const f = fila(a.adId);
+    f.adName = a.adName; f.campaignId = a.campaignId; f.campaignName = a.campaignName; f.adsetId = a.adsetId; f.adsetName = a.adsetName;
+    if (f.titular === 'Anuncio' && a.adName) f.titular = a.adName;
+    f.gasto = Math.round(a.gasto); f.impresiones = a.impresiones; f.clics = a.clics; f.conversacionesMeta = a.conversaciones;
+    for (const [d, g] of a.porDia) dia(a.adId, d).gasto += g;
+  }
+
   for (const f of filas.values()) {
     const efectivos = f.pedidos - f.cancelados;
+    if (f.gasto > 0) {
+      f.costoChat = f.chats ? Math.round(f.gasto / f.chats) : 0;
+      f.costoPedido = efectivos ? Math.round(f.gasto / efectivos) : 0;
+      f.costoEntregado = f.entregados ? Math.round(f.gasto / f.entregados) : 0;
+      f.roas = Math.round((f.ventas / f.gasto) * 100) / 100;
+    }
     f.conversion = f.chats ? Math.round((f.pedidos / f.chats) * 1000) / 10 : 0;
     f.ticket = efectivos ? Math.round(f.ventas / efectivos) : 0;
     const cerrados = f.entregados + f.devueltos;
     f.tasaEntrega = cerrados ? Math.round((f.entregados / cerrados) * 1000) / 10 : 0;
     f.productos = [...(prods.get(f.id) || new Map()).entries()].map(([nombre, p]) => ({ nombre, ...p })).sort((a, b) => b.unidades - a.unidades || b.ventas - a.ventas);
     const s = series.get(f.id);
-    f.serie = fechas.map((fecha) => ({ fecha, ...(s?.get(fecha) || { chats: 0, pedidos: 0, ventas: 0 }) }));
+    f.serie = fechas.map((fecha) => { const x = s?.get(fecha) || { chats: 0, pedidos: 0, ventas: 0, gasto: 0 }; return { fecha, ...x, gasto: Math.round(x.gasto) }; });
   }
   const organico = filas.get(ORGANICO) || null;
   filas.delete(ORGANICO);
