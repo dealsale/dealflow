@@ -1990,7 +1990,7 @@ api.post('/campanas/:id/textos', requireAuth, requireStore, async (req, res) => 
 // ── Administrador de anuncios del cliente (Meta Marketing API) ────────
 api.post('/ads/conectar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { opcionesDeConexion } = await import('./metaAds.js');
-  const r = await opcionesDeConexion(req.user!.storeId!, String(req.body?.code || ''));
+  const r = await opcionesDeConexion(req.user!.storeId!, { code: String(req.body?.code || '') || undefined, accessToken: String(req.body?.accessToken || '') || undefined });
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ opciones: r.opciones });
 });
@@ -2295,9 +2295,9 @@ api.get('/meta/estado', requireAuth, requireStore, async (req, res) => {
 // Alta en un clic: recibe el `code` del popup de Facebook y conecta las páginas.
 api.post('/meta/conectar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { conectarPaginasMeta } = await import('./meta.js');
-  const { code } = req.body || {};
-  if (!code) return res.status(400).json({ error: 'Falta el código de autorización de Meta.' });
-  const r = await conectarPaginasMeta(req.user!.storeId!, String(code));
+  const { code, accessToken } = req.body || {};
+  if (!code && !accessToken) return res.status(400).json({ error: 'Falta la autorización de Meta.' });
+  const r = await conectarPaginasMeta(req.user!.storeId!, { code: code ? String(code) : undefined, accessToken: accessToken ? String(accessToken) : undefined });
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json({ ok: true, paginas: r.paginas });
 });

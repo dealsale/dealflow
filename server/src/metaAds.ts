@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { db, j } from './db.js';
 import { obtener as obtenerCampana } from './campanas.js';
 import { mediaPath } from './media.js';
+import { canjearAcceso, type AccesoMeta } from './metaToken.js';
 
 /**
  * Publicación en el Administrador de anuncios del CLIENTE.
@@ -60,18 +61,7 @@ async function graph<T>(url: string, init?: RequestInit): Promise<{ ok: boolean;
   return { ok: res.ok, body };
 }
 
-/** Canjea el código del popup por el token del negocio del cliente. */
-async function canjearToken(code: string): Promise<{ token: string } | { error: string }> {
-  const appId = process.env.META_APP_ID || '';
-  const secret = process.env.META_APP_SECRET || '';
-  if (!appId || !secret) return { error: 'La conexión con Meta no está configurada en el servidor.' };
-  const { ok, body } = await graph<{ access_token?: string }>(
-    `${GRAPH}/oauth/access_token?client_id=${encodeURIComponent(appId)}&client_secret=${encodeURIComponent(secret)}&code=${encodeURIComponent(code)}`,
-  );
-  const token = String(body.access_token || '');
-  if (!ok || !token) return { error: body.error?.message || 'Meta no entregó el acceso. Intenta conectar de nuevo.' };
-  return { token };
-}
+
 
 /** Lo que el dueño puede elegir tras autorizar: sus cuentas publicitarias y sus páginas. */
 export interface OpcionesAds {
@@ -80,8 +70,8 @@ export interface OpcionesAds {
 }
 
 /** Paso 1 de la conexión: autoriza y devuelve qué cuentas/páginas tiene. */
-export async function opcionesDeConexion(storeId: string, code: string): Promise<{ opciones?: OpcionesAds; error?: string }> {
-  const t = await canjearToken(code);
+export async function opcionesDeConexion(storeId: string, acceso: AccesoMeta): Promise<{ opciones?: OpcionesAds; error?: string }> {
+  const t = await canjearAcceso(acceso);
   if ('error' in t) return { error: t.error };
   const auth = { Authorization: `Bearer ${t.token}` };
 

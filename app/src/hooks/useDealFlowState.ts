@@ -2918,8 +2918,8 @@ export function useDealFlowState() {
       const cfg = waSignup.messagingConfigId || waSignup.configId;
       if (!cfg) { setMetaLoading(false); setMetaMsg('Falta configurar META_MESSAGING_CONFIG_ID en el servidor.'); return; }
       const { abrirLoginConfig } = await import('../lib/metaSignup');
-      const code = await abrirLoginConfig(waSignup.appId, cfg);
-      const r = await apiMetaConectar(code);
+      const acceso = await abrirLoginConfig(waSignup.appId, cfg);
+      const r = await apiMetaConectar(acceso);
       setMetaLoading(false);
       if (r.error || !r.data) { setMetaMsg(r.error || 'No pudimos conectar tus páginas.'); return; }
       setMetaMsg(`✓ Conectadas ${r.data.paginas.length} página(s).`);
@@ -3128,8 +3128,8 @@ export function useDealFlowState() {
       const cfg = waSignup.messagingConfigId || waSignup.configId;
       if (!cfg) { setMkLoading(false); setMkError('Falta configurar META_MESSAGING_CONFIG_ID en el servidor.'); return; }
       const { abrirLoginConfig } = await import('../lib/metaSignup');
-      const code = await abrirLoginConfig(waSignup.appId, cfg);
-      const r = await apiAdsConectar(code);
+      const acceso = await abrirLoginConfig(waSignup.appId, cfg);
+      const r = await apiAdsConectar(acceso);
       setMkLoading(false);
       if (r.error || !r.data) { setMkError(r.error || 'No pudimos leer tus cuentas publicitarias.'); return; }
       setAdsOpciones(r.data.opciones);

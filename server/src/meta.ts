@@ -1,5 +1,6 @@
 import { db, uid, pj, registrarLog } from './db.js';
 import { guardarAdEnLead, refDesdeMeta, type MetaReferral } from './campana.js';
+import { canjearAcceso, type AccesoMeta } from './metaToken.js';
 
 /**
  * Canales de Meta Messaging: Facebook Messenger e Instagram DM.
@@ -151,15 +152,12 @@ export async function sendMetaText(storeId: string, to: string, texto: string): 
  * usuario, lista sus páginas (con token y el IG vinculado), suscribe nuestra app
  * a los webhooks de cada página y las guarda en la tienda.
  */
-export async function conectarPaginasMeta(storeId: string, code: string): Promise<{ ok: true; paginas: { nombre: string; conIg: boolean }[] } | { ok: false; error: string }> {
-  const appId = process.env.META_APP_ID || '';
-  const secret = process.env.META_APP_SECRET || '';
-  if (!appId || !secret) return { ok: false, error: 'Falta configurar META_APP_ID / META_APP_SECRET en el servidor.' };
+export async function conectarPaginasMeta(storeId: string, acceso: AccesoMeta): Promise<{ ok: true; paginas: { nombre: string; conIg: boolean }[] } | { ok: false; error: string }> {
   try {
-    // 1) code → token de usuario (flujo JS SDK: sin redirect_uri, igual que el de anuncios).
-    const tokRes = await fetch(`${GRAPH}/oauth/access_token?client_id=${encodeURIComponent(appId)}&client_secret=${encodeURIComponent(secret)}&code=${encodeURIComponent(code)}`);
-    const tok = (await tokRes.json()) as { access_token?: string; error?: { message?: string } };
-    if (!tok.access_token) return { ok: false, error: tok.error?.message || 'No pudimos validar el acceso con Meta.' };
+    // 1) acceso de la ventana de Facebook → token de usuario de larga duración.
+    const t = await canjearAcceso(acceso);
+    if ('error' in t) return { ok: false, error: t.error };
+    const tok = { access_token: t.token };
     // 2) páginas del usuario (con token de página e IG vinculado).
     const pagRes = await fetch(`${GRAPH}/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${encodeURIComponent(tok.access_token)}`);
     const pag = (await pagRes.json()) as { data?: { id: string; name: string; access_token: string; instagram_business_account?: { id: string } }[]; error?: { message?: string } };
