@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { fmt } from '../lib/format';
 import { RecaudosEffi } from '../components/RecaudosEffi';
+import { ConversionAnuncios } from '../components/ConversionAnuncios';
 import { LineChart, GroupedBars, Donut, TopAnuncios, PALETA } from '../components/Charts';
 
 const card: React.CSSProperties = {
@@ -48,6 +49,11 @@ export function Estadisticas({ df }: { df: DealFlowState }) {
   });
   const dateInput: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text-body)' };
 
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const unDia = df.statsRango.desde === df.statsRango.hasta;
+  const moverDia = (f: string, n: number) => new Date(new Date(f + 'T12:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10);
+  const flecha: React.CSSProperties = { border: '1px solid var(--df-border)', background: 'var(--df-surface)', color: 'var(--df-text-body)', borderRadius: 8, width: 30, height: 32, fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' };
+
   const ventasSerie = (s?.serie || []).map((d) => ({ fecha: d.fecha, valor: d.ventas }));
   const canalData = (s?.porCanal || []).map((c) => ({ label: c.canal, valor: c.n, color: COLOR_CANAL[c.canal] || PALETA[5] }));
   const topAds = s?.topAnuncios || [];
@@ -64,6 +70,13 @@ export function Estadisticas({ df }: { df: DealFlowState }) {
         {PRESETS.map((p) => (
           <button key={p.key} onClick={() => df.elegirStatsPreset(p.key)} style={chip(df.statsPreset === p.key)}>{p.label}</button>
         ))}
+        {/* Un solo día, con flechas para pasar al anterior / siguiente. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', fontWeight: 600 }}>Día:</span>
+          <button onClick={() => { const d = moverDia(df.statsRango.desde, -1); df.setStatsFechas(d, d); }} title="Día anterior" style={flecha}>‹</button>
+          <input type="date" value={unDia ? df.statsRango.desde : ''} max={hoy} onChange={(e) => e.target.value && df.setStatsFechas(e.target.value, e.target.value)} style={dateInput} />
+          <button onClick={() => { const d = moverDia(unDia ? df.statsRango.desde : df.statsRango.hasta, 1); if (d <= hoy) df.setStatsFechas(d, d); }} disabled={unDia && df.statsRango.desde >= hoy} title="Día siguiente" style={flecha}>›</button>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', fontWeight: 600 }}>Rango:</span>
           <input type="date" value={df.statsRango.desde} max={df.statsRango.hasta} onChange={(e) => df.setStatsFechas(e.target.value, df.statsRango.hasta)} style={dateInput} />
@@ -128,6 +141,8 @@ export function Estadisticas({ df }: { df: DealFlowState }) {
               )}
             </div>
           </div>
+
+          <ConversionAnuncios desde={df.statsRango.desde} hasta={df.statsRango.hasta} />
         </>
       )}
     </section>

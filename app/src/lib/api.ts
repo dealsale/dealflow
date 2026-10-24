@@ -852,3 +852,15 @@ export const apiCorreoPrueba = () => req<{ ok: true; para: string }>('/api/corre
 export interface EstadoCorreo { proveedor: '' | 'resend' | 'smtp'; configurado: boolean; desde: string; responderA: string; host: string; ultimos24h: number; errores24h: number; ultimos: { para: string; asunto: string; estado: string; error: string; created_at: string }[] }
 export const apiAdminCorreo = () => req<EstadoCorreo>('/api/admin/correo', 'GET');
 export const apiAdminCorreoPrueba = (para: string) => req<{ ok: true }>('/api/admin/correo/prueba', 'POST', { para });
+
+// ── Conversión por anuncio ──
+export interface ConversionAnuncio {
+  id: string; titular: string; canal: string; url: string; media: string; producto: string;
+  chats: number; respondieron: number; pedidos: number; conversion: number;
+  confirmados: number; despachados: number; enCamino: number; entregados: number; devueltos: number; cancelados: number;
+  ventas: number; ventasEntregadas: number; ticket: number; tasaEntrega: number;
+  productos: { nombre: string; unidades: number; ventas: number }[];
+  serie: { fecha: string; chats: number; pedidos: number; ventas: number }[];
+}
+export const apiStatsAnuncios = (desde: string, hasta: string) =>
+  req<{ rango: { desde: string; hasta: string }; anuncios: ConversionAnuncio[]; organico: ConversionAnuncio | null }>(`/api/stats/anuncios?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, 'GET');
