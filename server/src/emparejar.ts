@@ -234,3 +234,64 @@ export function separarItemsPedido(storeId: string, orderId: string): number {
   }
   return n;
 }
+
+// Palabras de color y talla: si el cliente pide una que el producto no tiene, NO se vende.
+const COLORES = new Set(['negro', 'negra', 'blanco', 'blanca', 'rojo', 'roja', 'azul', 'verde', 'amarillo', 'amarilla', 'naranja', 'naranjado', 'naranjada', 'anaranjado', 'anaranjada',
+  'mostaza', 'salmon', 'rosado', 'rosada', 'rosa', 'fucsia', 'morado', 'morada', 'lila', 'violeta', 'purpura', 'gris', 'beige', 'cafe', 'marron', 'chocolate', 'vinotinto', 'vino',
+  'terracota', 'coral', 'turquesa', 'celeste', 'crema', 'hueso', 'nude', 'camel', 'kaki', 'caqui', 'dorado', 'dorada', 'plateado', 'plateada', 'menta', 'militar', 'oliva', 'mora',
+  'aguamarina', 'arena', 'champana', 'cobre', 'perla', 'marfil', 'ladrillo', 'durazno', 'melon', 'uva', 'lavanda', 'magenta', 'cereza', 'granate', 'bordo', 'azulado', 'jean', 'indigo']);
+const TALLAS = /^(\d{0,1}x{0,3}[sml]|xl|\d?xl|xs|\d{1,2}|unica|u)$/;
+
+export interface Verificacion { ok: boolean; v?: VarBase; motivo: string; producto?: string; pedido?: string; disponibles?: string }
+
+/**
+ * Verifica que lo que se va a vender EXISTE: el producto y, si tiene tallas/colores,
+ * esa talla/color exacta. Más estricto que emparejarItem: si el cliente pidió un color
+ * que el producto no tiene ("Naranjado" en uno que solo tiene Mostaza), aunque el
+ * emparejador haya caído en otra variante, NO se acepta.
+ */
+export function verificarVariante(storeId: string, nombreItem: string, todas: VarBase[] = variantesBase(storeId)): Verificacion {
+  const r = emparejarItem(nombreItem, todas);
+  const detalle = (nombreItem.match(/\(([^)]+)\)/) || ['', ''])[1] || (nombreItem.includes(' - ') ? nombreItem.split(' - ').slice(1).join(' ') : '');
+  const pidio = detalle || nombreItem;
+  const prodId = r.v?.productId || (r.parecidos[0] && r.parecidos[0].puntaje >= 0.6 ? todas.find((v) => v.producto === r.parecidos[0].producto)?.productId : undefined);
+  const vs = prodId ? todas.filter((v) => v.productId === prodId) : [];
+  const fila = prodId ? db.prepare('SELECT nombre, opciones FROM products WHERE id = ?').get(prodId) as { nombre: string; opciones: string } | undefined : undefined;
+  let opciones: { nombre: string; valores: (string | { valor: string })[] }[] = [];
+  try { opciones = JSON.parse(fila?.opciones || '[]'); } catch { /* sin opciones */ }
+  const valoresOpc = opciones.flatMap((o) => (o.valores || []).map((x) => (typeof x === 'string' ? x : x.valor)).filter(Boolean));
+  const etiquetas = vs.map((v) => v.label).filter(Boolean);
+  // Lo que SÍ hay, por posición ("Color · Talla"): para decírselo al cliente.
+  const disponibles = (() => {
+    if (opciones.length) return opciones.filter((o) => o.valores?.length).map((o) => `${o.nombre}: ${o.valores.map((x) => (typeof x === 'string' ? x : x.valor)).join(', ')}`).join(' / ');
+    const partes = etiquetas.map((l) => l.split(/\s*·\s*/));
+    const n = Math.max(0, ...partes.map((p) => p.length));
+    return Array.from({ length: n }, (_, i) => [...new Set(partes.map((p) => p[i]).filter(Boolean))].join(', ')).join(' / ');
+  })();
+  if (!r.v) {
+    if (/no tiene la variante/.test(r.motivo) && fila) return { ok: false, motivo: r.motivo, producto: fila.nombre, pedido: pidio, disponibles };
+    return { ok: false, motivo: r.motivo, pedido: pidio };
+  }
+  // Palabras pedidas que no están en la variante elegida ni en el nombre del producto.
+  const tokPedido = tokensVariante(detalle || nombreItem.replace(new RegExp(r.v.producto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), ''));
+  const tokLabel = tokensVariante(r.v.label);
+  const tokNombre = tokensVariante(r.v.producto);
+  const sobran = tokPedido.filter((t) => !tokLabel.some((x) => mismoToken(x, t)) && !tokNombre.some((x) => mismoToken(x, t)));
+  if (!sobran.length) return { ok: true, v: r.v, motivo: '' };
+  // Valores que este producto maneja (de sus variantes y de sus opciones).
+  const tokValores = [...etiquetas, ...valoresOpc].flatMap(tokensVariante);
+  const hayColores = tokValores.some((t) => COLORES.has(t));
+  const hayTallas = tokValores.some((t) => TALLAS.test(t));
+  const malos = sobran.filter((t) => {
+    // Producto sin variantes creadas: vale cualquier valor de sus opciones.
+    if (!etiquetas.length && valoresOpc.flatMap(tokensVariante).some((x) => mismoToken(x, t))) return false;
+    // Es un valor de OTRA variante/opción del mismo producto (pidió Negro y cayó en Blanco).
+    if (tokValores.some((x) => mismoToken(x, t))) return true;
+    // Es un color/talla que el producto no tiene, en un producto que sí maneja colores/tallas.
+    if (COLORES.has(t)) return hayColores;
+    if (TALLAS.test(t)) return hayTallas;
+    return false;
+  });
+  if (!malos.length) return { ok: true, v: r.v, motivo: '' };
+  return { ok: false, motivo: `el producto ${r.v.producto} no tiene la variante "${pidio}"`, producto: r.v.producto, pedido: pidio, disponibles };
+}

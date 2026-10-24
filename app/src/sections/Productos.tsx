@@ -430,6 +430,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
               <input className="df-input" value={String(p.precio)} onChange={(e) => p.setPrecio(e.target.value)} style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
             </div>
           </div>
+          <PrecioPromo p={p} />
           <div style={{ maxWidth: 560 }}>
             <div style={label}>Referencia / SKU <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· opcional: si es igual a la Referencia del artículo en Effi, se vincula solo</span></div>
             <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: FAJA-NEGRA-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
@@ -670,6 +671,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
               <input className="df-input" value={p.sku || ''} onChange={(e) => p.setSku(e.target.value)} placeholder="Ej: BODY-NEGRO-M" style={{ ...inputStyle, fontFamily: "'JetBrains Mono',monospace" }} />
             </div>
           </div>
+          <PrecioPromo p={p} />
           <div style={{ maxWidth: 560, marginBottom: 16 }}>
             <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Effi, Dropi y Shopify se vinculan en <b>Variantes</b> (más abajo).</div>
           </div>
@@ -968,6 +970,44 @@ function MensajesTabs({ p }: { p: DecoratedProduct }) {
       <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)', lineHeight: 1.5 }}>
         Enciende uno para enviar siempre ese. Si enciendes varios, cada cliente recibe uno de ellos al azar. Doble clic en el nombre para renombrarlo.
       </div>
+    </div>
+  );
+}
+
+/** Precio de promoción por unidad: el bot lo cobra siempre y el servidor corrige el total si no. */
+function PrecioPromo({ p }: { p: { precio: number; precioPromo?: number; setPrecioPromo: (v: string) => void; bundles?: { cantidad: number; precio: number }[] } }) {
+  const promo = Number(p.precioPromo) || 0;
+  const activa = promo > 0 && promo < p.precio;
+  const fmt = (n: number) => '$' + n.toLocaleString('es-CO');
+  // Lo que se le cobra al cliente según la cantidad (promo + combos), igual que el servidor.
+  const unidad = activa ? promo : p.precio;
+  const combos = (p.bundles || []).filter((b) => b.cantidad >= 1 && b.precio > 0);
+  const total = (q: number) => {
+    const best = [0];
+    for (let i = 1; i <= q; i++) {
+      best[i] = unidad > 0 ? best[i - 1] + unidad : Infinity;
+      for (const c of combos) if (c.cantidad <= i) best[i] = Math.min(best[i], best[i - c.cantidad] + c.precio);
+    }
+    return best[q];
+  };
+  return (
+    <div style={{ maxWidth: 560, marginBottom: 14, border: `1px solid ${activa ? 'var(--df-brand)' : 'var(--df-border)'}`, background: activa ? 'var(--df-brand-subtle, var(--df-bg))' : 'var(--df-bg)', borderRadius: 10, padding: '10px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, flex: '1 1 200px' }}>🏷️ Precio de promoción <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· por unidad, opcional</span></div>
+        <input className="df-input" value={promo ? String(promo) : ''} onChange={(e) => p.setPrecioPromo(e.target.value)} placeholder="Sin promo" style={{ width: 140, border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 10px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+        {promo > 0 && !activa
+          ? <span style={{ color: 'var(--df-danger)' }}>Debe ser menor que el precio normal ({fmt(p.precio)}).</span>
+          : activa
+            ? <>El asistente cobra <b>{fmt(promo)}</b> por unidad (en vez de {fmt(p.precio)}). Si escribe otro total, DealFlow lo corrige solo. Bórralo para quitar la promo.</>
+            : 'Úsalo para promos de precio por unidad (no las escribas solo en las reglas): así el asistente no puede cobrar el precio normal por error.'}
+      </div>
+      {(activa || combos.length > 0) && unidad > 0 && (
+        <div style={{ fontSize: 11.5, color: 'var(--df-text-body)', marginTop: 6, fontFamily: "'JetBrains Mono',monospace" }}>
+          {[1, 2, 3, 4, 5, 6].map((q) => `${q} = ${fmt(total(q))}`).join(' · ')}
+        </div>
+      )}
     </div>
   );
 }

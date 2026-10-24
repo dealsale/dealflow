@@ -187,6 +187,7 @@ addColumn('products', "modos_uso TEXT NOT NULL DEFAULT ''");
 addColumn('products', "videos TEXT NOT NULL DEFAULT '[]'");
 addColumn('products', "mensaje_bloques TEXT NOT NULL DEFAULT '[]'");
 addColumn('products', "bundles TEXT NOT NULL DEFAULT '[]'");
+addColumn('products', 'precio_promo INTEGER NOT NULL DEFAULT 0'); // precio por unidad en promoción (0 = sin promo)
 addColumn('products', "opciones TEXT NOT NULL DEFAULT '[]'"); // [{nombre:'Color',valores:[{valor:'Negro',foto:'...'}]}]
 addColumn('products', "contenido_paquete TEXT NOT NULL DEFAULT ''");
 addColumn('products', "disparador TEXT NOT NULL DEFAULT ''");

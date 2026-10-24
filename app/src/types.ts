@@ -116,6 +116,8 @@ export interface Product {
   id: number | string;
   nombre: string;
   precio: number;
+  /** Precio por unidad en promoción (0 = sin promo). El bot lo cobra siempre y el servidor lo exige. */
+  precioPromo?: number;
   stock: number;
   color: string;
   txt: string;
