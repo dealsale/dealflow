@@ -11,7 +11,7 @@ const GRUPOS: { id: string; titulo: string; sub: string }[] = [
   { id: 'ia', titulo: 'Inteligencia artificial', sub: 'El cerebro de tu asistente. Cada tienda pone sus llaves y paga solo lo que consume.' },
   { id: 'canales', titulo: 'Canales', sub: 'Por dónde atiende y vende tu asistente.' },
   { id: 'envios', titulo: 'Envíos y tiendas', sub: 'Despacha tus pedidos, genera guías y sigue su estado.' },
-  // Publicidad (anuncios) retirada temporalmente: por ahora la integración de Meta es solo WhatsApp.
+  { id: 'publicidad', titulo: 'Publicidad', sub: 'Gasto y resultados de tus anuncios, cruzados con tus chats y ventas.' },
 ];
 
 /** Conexión de Dropi por su API directa (token de integración + URL). Con esto
@@ -211,7 +211,7 @@ function DropiApiCard({ df }: { df: DealFlowState }) {
 }
 
 /** Tarjeta especial: Administrador de anuncios de Meta (se conecta con el popup de Facebook). */
-function MetaAdsCard({ df, i }: { df: DealFlowState; i: DealFlowState['integrations'][number] }) {
+function MetaAdsCard({ df }: { df: DealFlowState }) {
   const ads = df.adsCuenta;
   const ops = df.adsOpciones;
   const [cuenta, setCuenta] = useState('');
@@ -221,9 +221,9 @@ function MetaAdsCard({ df, i }: { df: DealFlowState; i: DealFlowState['integrati
   const [abierta, setAbierta] = useState(false);
   return (
     <IntegracionFila
-      logo={<div style={{ ...i.logoStyle, width: 44, height: 44, borderRadius: 11, flexShrink: 0 }}>{i.logoText}</div>}
-      nombre={i.nombre}
-      desc={conectada ? `✓ ${ads!.adAccountNombre}${ads!.pageNombre ? ` · página ${ads!.pageNombre}` : ''}` : i.desc}
+      logo={<LogoInteg fondo="#1877F2">📣</LogoInteg>}
+      nombre="Meta Ads (Administrador de anuncios)"
+      desc={conectada ? `✓ ${ads!.adAccountNombre}${ads!.pageNombre ? ` · página ${ads!.pageNombre}` : ''}` : 'Trae el gasto, las impresiones y los clics de cada anuncio para ver en Estadísticas el costo por chat, por pedido y el ROAS.'}
       estado={conectada ? 'on' : 'off'}
       abierta={abierta}
       onToggle={() => setAbierta((v) => !v)}
@@ -253,6 +253,7 @@ function MetaAdsCard({ df, i }: { df: DealFlowState; i: DealFlowState['integrati
           </>
         )}
         {df.mkError && !conectada && <div style={{ color: 'var(--df-danger-dark)', fontSize: 12.5 }}>{df.mkError}</div>}
+        {conectada && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Se actualiza sola cada hora. Mira los resultados en <b>Estadísticas → Conversión por anuncio</b>.</div>}
         {conectada ? (
           <button onClick={df.desconectarAds} style={btnGhostRed}>Desconectar</button>
         ) : !ops && (
@@ -326,7 +327,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
 
       {GRUPOS.map((g) => {
         const items = df.integrations.filter((i) => (i.grupo || 'canales') === g.id);
-        const extras = g.id === 'envios' ? 3 : g.id === 'canales' ? 1 : 0;
+        const extras = g.id === 'envios' ? 3 : g.id === 'canales' || g.id === 'publicidad' ? 1 : 0;
         if (!items.length && !extras) return null;
         return (
           <div key={g.id} style={{ marginBottom: 26 }}>
@@ -339,8 +340,9 @@ export function Integraciones({ df }: { df: DealFlowState }) {
               {g.id === 'envios' && <DropiApiCard df={df} />}
               {g.id === 'envios' && <ShopifyCard df={df} />}
               {g.id === 'canales' && <MetaCanalesCard df={df} />}
+              {g.id === 'publicidad' && <MetaAdsCard df={df} />}
               {items.map((i) => {
-                if (i.especial === 'meta-ads') return <MetaAdsCard key={i.id} df={df} i={i} />;
+                if (i.especial === 'meta-ads') return null; // se muestra en Publicidad
                 const abiertaEsta = abierta === i.id;
                 const configurada = !!df.integracionesCfg[i.id];
                 const conectado = i.id === 'wa' ? df.waConnected : configurada;
