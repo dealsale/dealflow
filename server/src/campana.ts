@@ -20,6 +20,8 @@ export interface AdRef {
   url: string; // link directo al anuncio (para el botón "Ver anuncio")
   canal: string; // whatsapp | messenger | instagram
   ts: string; // cuándo entró
+  /** ctwa_clid: id del clic en el anuncio. Sirve para reportarle a Meta las ventas (API de Conversiones). */
+  clid?: string;
 }
 
 /** Referral de la Cloud API de WhatsApp (viene dentro de cada `message.referral`). */
@@ -63,6 +65,7 @@ export function refDesdeWhatsapp(r?: WhatsappReferral | null): AdRef | null {
     url: r.source_url || '',
     canal: 'whatsapp',
     ts: new Date().toISOString(),
+    clid: r.ctwa_clid || '',
   };
 }
 
