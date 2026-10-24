@@ -7,7 +7,7 @@
  * Esta función espera a que lleguen ambas y las entrega juntas.
  */
 
-interface AuthResponse { code?: string }
+interface AuthResponse { code?: string; accessToken?: string }
 interface FbSdk {
   init(o: { appId: string; autoLogAppEvents: boolean; xfbml: boolean; version: string }): void;
   login(cb: (r: { authResponse?: AuthResponse }) => void, o: Record<string, unknown>): void;
@@ -68,16 +68,19 @@ export async function abrirLoginMeta(appId: string, permisos: string[]): Promise
  * (Pasar solo una lista de `scope` sin config_id falla con "necesita al menos
  * un supported permission" cuando la app está en modo Login for Business.)
  */
-export async function abrirLoginConfig(appId: string, configId: string): Promise<string> {
+export async function abrirLoginConfig(appId: string, configId: string): Promise<{ accessToken?: string; code?: string }> {
   const FB = await cargarSdk(appId);
-  return new Promise<string>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    // Se pide el token (no el "code"): el code del SDK queda atado a una redirect_uri
+    // interna de Facebook y el servidor no lo puede canjear. El servidor alarga el token.
     FB.login(
       (r) => {
-        const code = r.authResponse?.code;
-        if (!code) return reject(new Error('No autorizaste la conexión con Facebook.'));
-        resolve(code);
+        const a = r.authResponse;
+        if (a?.accessToken) return resolve({ accessToken: a.accessToken });
+        if (a?.code) return resolve({ code: a.code });
+        reject(new Error('No autorizaste la conexión con Facebook.'));
       },
-      { config_id: configId, response_type: 'code', override_default_response_type: true },
+      { config_id: configId },
     );
   });
 }

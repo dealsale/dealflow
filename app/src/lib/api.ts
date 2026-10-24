@@ -629,9 +629,9 @@ export const apiCampanaCreativos = (id: string, b: { instruccion?: string; canti
 export const apiCampanaTextos = (id: string, b: { tono?: string; cantidad?: number }) =>
   req<ConCreditos<{ copys: CopysAnuncio }>>(`/api/campanas/${id}/textos`, 'POST', b);
 // Administrador de anuncios del cliente
-export const apiAdsConectar = (code: string) => req<{ opciones: OpcionesAds }>('/api/ads/conectar', 'POST', { code });
+export const apiAdsConectar = (acceso: { code?: string; accessToken?: string }) => req<{ opciones: OpcionesAds }>('/api/ads/conectar', 'POST', acceso);
 export const apiMetaEstado = () => req<{ messenger: boolean; instagram: boolean; paginas: string[] }>('/api/meta/estado', 'GET');
-export const apiMetaConectar = (code: string) => req<{ ok: true; paginas: { nombre: string; conIg: boolean }[] }>('/api/meta/conectar', 'POST', { code });
+export const apiMetaConectar = (acceso: { code?: string; accessToken?: string }) => req<{ ok: true; paginas: { nombre: string; conIg: boolean }[] }>('/api/meta/conectar', 'POST', acceso);
 export const apiMetaDesconectar = () => req<{ ok: true }>('/api/meta', 'DELETE');
 export const apiAdsSeleccionar = (b: { adAccountId: string; adAccountNombre: string; moneda: string; pageId: string; pageNombre: string }) =>
   req<{ ads: CuentaAds }>('/api/ads/seleccionar', 'POST', b);
