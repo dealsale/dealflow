@@ -96,6 +96,7 @@ export async function importarPedido(storeId: string, shop: string, o: Fila, con
     registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} llegó de Shopify ${txt(o.name)} (${cliente}).`);
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido de Shopify DF-${numero} 🛍️`, `${cliente} · ${pesos(total)}`, { url: '/' })).catch(() => {});
     void import('./correo.js').then((c) => c.correoPedidoNuevo(storeId, oid, 'Shopify')).catch(() => {});
+    void import('./metaCapi.js').then((c) => c.avisarCapi(storeId)).catch(() => {});
     if (!tel) trazar(storeId, oid, { etapa: 'pedido', nivel: 'warn', titulo: 'El pedido de Shopify llegó sin teléfono', detalle: 'No se puede confirmar por WhatsApp. ¿Falta aprobar el acceso a datos de clientes en Shopify, o el checkout no pide el teléfono?' });
     else if (confirmar && cfgPedidosShopify(storeId).confirmar) await enviarConfirmacion(storeId, oid);
     else if (!confirmar) trazar(storeId, oid, { etapa: 'pedido', nivel: 'info', titulo: 'Pedido antiguo: no se envió confirmación automática', detalle: 'Se trajo de Shopify más de 24 h después de creado. Puedes enviar la confirmación con el botón del pedido.' });

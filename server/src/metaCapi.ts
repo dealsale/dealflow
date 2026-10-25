@@ -7,6 +7,8 @@
  * - Messenger: con el page_id y el PSID del cliente.
  * Solo se reportan chats que entraron por un anuncio (los orgánicos no le sirven a Meta).
  *
+ * Se revisa cada minuto y, además, ~2 minutos después de cada pedido nuevo.
+ *
  * Eventos:
  *   - Purchase: al crearse el pedido (por defecto) o cuando se entrega (si la tienda lo
  *     prefiere: contra entrega, solo cuenta lo que se cobró). Con valor y moneda COP.
@@ -163,7 +165,7 @@ export async function procesarCapi(storeId: string): Promise<number> {
   // Compras. Meta acepta eventos de hasta 7 días: más viejos no se envían.
   const filtro = cfg.compra === 'entregado'
     ? "o.estado = 'Entregado'"
-    : "o.estado != 'Cancelado' AND (o.estado != 'Nuevo' OR o.created_at < datetime('now', '-15 minutes'))"; // 15 min: el bot aún puede ajustar el pedido
+    : "o.estado != 'Cancelado' AND (o.estado != 'Nuevo' OR o.created_at < datetime('now', '-2 minutes'))"; // 2 min: por si el cliente cambia algo enseguida (talla, cantidad)
   const pedidos = db.prepare(`SELECT o.id, o.total, o.created_at, o.estado, l.wa_id, l.canal, l.ad_ref
     FROM orders o JOIN leads l ON l.id = o.lead_id
     WHERE o.store_id = ? AND ${filtro} AND o.created_at > datetime('now', '-7 days') AND COALESCE(l.ad_ref, '') != ''`).all(storeId) as { id: string; total: number; created_at: string; estado: string; wa_id: string; canal: string; ad_ref: string }[];
@@ -214,6 +216,19 @@ export function iniciarCapi(): void {
       await procesarCapi(t.store_id).catch((e) => console.warn('[capi]', e));
     }
   };
-  setTimeout(() => void ronda(), 120_000);
-  setInterval(() => void ronda(), 5 * 60_000);
+  setTimeout(() => void ronda(), 60_000);
+  setInterval(() => void ronda(), 60_000); // cada minuto
+}
+
+/**
+ * Llamar cuando entra o se confirma un pedido: lo reporta en ~2 minutos (no espera la
+ * ronda). Si llegan varios seguidos, se agrupan en un solo envío.
+ */
+const pendientes = new Map<string, ReturnType<typeof setTimeout>>();
+export function avisarCapi(storeId: string, demoraMs = 125_000): void {
+  if (pendientes.has(storeId)) return;
+  pendientes.set(storeId, setTimeout(() => {
+    pendientes.delete(storeId);
+    void procesarCapi(storeId).catch((e) => console.warn('[capi]', e));
+  }, demoraMs));
 }

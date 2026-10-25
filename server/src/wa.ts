@@ -209,7 +209,44 @@ const CONTACTO_BLOQUEADO = 'Este contacto está bloqueado en tu tienda: DealFlow
 /** Mensaje de error estándar cuando se bloquea un envío por ventana cerrada. */
 const BLOQUEO_VENTANA = 'Fuera de la ventana de 24 h de WhatsApp: a este cliente (escribió hace más de 24 h) solo se le pueden enviar plantillas aprobadas, no texto libre.';
 
-export async function sendWhatsappText(storeId: string, to: string, texto: string, pn?: string, esPlantilla = false): Promise<{ ok: boolean; error?: string; wamid?: string; bloqueadoVentana?: boolean }> {
+// ── Anti-repetidos ──
+// Meta toma como spam el mismo mensaje varias veces seguidas al mismo número. Si el
+// MISMO contenido va al MISMO contacto dentro de la ventana (doble clic, dos procesos a la
+// vez, un reintento), el segundo no se envía. Se marca al revisar, así dos envíos
+// simultáneos tampoco pasan los dos.
+const recientes = new Map<string, number>();
+function huella(texto: string): string {
+  let h = 0;
+  const t = String(texto || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0;
+  return `${t.length}:${h}`;
+}
+export function esRepetido(storeId: string, to: string, pn: string | undefined, contenido: string, ventanaMs = 90_000): boolean {
+  if (!String(contenido || '').trim()) return false;
+  const k = `${storeId}|${String(pn || to).replace(/[^0-9a-z:]/gi, '').slice(-24)}|${huella(contenido)}`;
+  const ahora = Date.now();
+  if (recientes.size > 5000) for (const [x, t] of recientes) if (ahora - t > 15 * 60_000) recientes.delete(x);
+  const prev = recientes.get(k);
+  if (prev && ahora - prev < ventanaMs) return true;
+  recientes.set(k, ahora);
+  return false;
+}
+/** Para desmarcar cuando el envío falló (así un reintento real sí sale). */
+function olvidarEnvio(storeId: string, to: string, pn: string | undefined, contenido: string) {
+  recientes.delete(`${storeId}|${String(pn || to).replace(/[^0-9a-z:]/gi, '').slice(-24)}|${huella(contenido)}`);
+}
+
+export async function sendWhatsappText(storeId: string, to: string, texto: string, pn?: string, esPlantilla = false): Promise<{ ok: boolean; error?: string; wamid?: string; bloqueadoVentana?: boolean; repetido?: boolean }> {
+  if (!String(to).startsWith('web:') && esRepetido(storeId, to, pn, texto)) {
+    console.warn(`[wa] mensaje repetido a ${to} en menos de 90 s: no se envía`);
+    return { ok: true, repetido: true };
+  }
+  const r = await enviarTextoReal(storeId, to, texto, pn, esPlantilla);
+  if (!r.ok) olvidarEnvio(storeId, to, pn, texto);
+  return r;
+}
+
+async function enviarTextoReal(storeId: string, to: string, texto: string, pn?: string, esPlantilla = false): Promise<{ ok: boolean; error?: string; wamid?: string; bloqueadoVentana?: boolean }> {
   // Canal WEB: el mensaje ya queda guardado en la BD y el chat web lo lee por
   // polling; no hay nada que "enviar" fuera.
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
@@ -266,8 +303,23 @@ export async function sendWhatsappText(storeId: string, to: string, texto: strin
 export async function sendWhatsappTemplate(
   storeId: string, to: string, plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string },
   params: string[] = [], pn?: string,
-): Promise<{ ok: boolean; error?: string; wamid?: string; textoRender?: string }> {
+): Promise<{ ok: boolean; error?: string; wamid?: string; textoRender?: string; repetido?: boolean }> {
   if (estaBloqueado(storeId, to, pn)) return { ok: false, error: CONTACTO_BLOQUEADO };
+  // La misma plantilla con los mismos datos al mismo contacto: una sola vez cada 10 min.
+  const firmaPl = `plantilla:${plantilla.nombre}:${params.join('|')}`;
+  if (esRepetido(storeId, to, pn, firmaPl, 10 * 60_000)) {
+    console.warn(`[wa] plantilla ${plantilla.nombre} repetida a ${to}: no se envía`);
+    return { ok: true, repetido: true };
+  }
+  const r = await enviarPlantillaReal(storeId, to, plantilla, params, pn);
+  if (!r.ok) olvidarEnvio(storeId, to, pn, firmaPl);
+  return r;
+}
+
+async function enviarPlantillaReal(
+  storeId: string, to: string, plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string },
+  params: string[] = [], pn?: string,
+): Promise<{ ok: boolean; error?: string; wamid?: string; textoRender?: string }> {
   await esperarTurno(storeId, to);
   const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
     | { phone_number_id: string; access_token: string; conectado: number; modo: string } | undefined;
@@ -346,9 +398,29 @@ export async function sendWhatsappMedia(
   nombre: string,
   pn?: string,
   esPlantilla = false,
-): Promise<{ ok: boolean; error?: string; wamid?: string; bloqueadoVentana?: boolean }> {
+): Promise<{ ok: boolean; error?: string; wamid?: string; bloqueadoVentana?: boolean; repetido?: boolean }> {
   // Canal WEB: la multimedia ya queda en la BD (media_url) y el chat web la muestra.
   if (String(to).startsWith('web:') || String(pn || '').startsWith('web:')) return { ok: true };
+  // El mismo archivo (mismo tamaño, tipo y nombre) al mismo contacto: una vez cada 90 s.
+  const firmaMedia = `media:${media.mime}:${media.buffer.length}:${nombre}:${caption}`;
+  if (esRepetido(storeId, to, pn, firmaMedia)) {
+    console.warn(`[wa] archivo repetido a ${to}: no se envía`);
+    return { ok: true, repetido: true };
+  }
+  const r = await enviarMediaReal(storeId, to, media, caption, nombre, pn, esPlantilla);
+  if (!r.ok) olvidarEnvio(storeId, to, pn, firmaMedia);
+  return r;
+}
+
+async function enviarMediaReal(
+  storeId: string,
+  to: string,
+  media: { buffer: Buffer; mime: string; tipo: string },
+  caption: string,
+  nombre: string,
+  pn?: string,
+  esPlantilla = false,
+): Promise<{ ok: boolean; error?: string; wamid?: string; bloqueadoVentana?: boolean }> {
   // Canales de Meta (Messenger / Instagram DM): tienen su propia ventana; no aplica el bloqueo de WhatsApp.
   const esMeta = String(to).startsWith('fb:') || String(to).startsWith('ig:');
   if (!esMeta && estaBloqueado(storeId, to, pn)) return { ok: false, error: CONTACTO_BLOQUEADO };
@@ -424,8 +496,10 @@ const RANK_ESTADO: Record<string, number> = { enviado: 1, entregado: 2, visto: 3
  * lo deja en 'enviado'. Si el envío falló, lo deja en 'fallido'. Los envíos por
  * web/QR (sin wamid) no llevan estado (no hay acuses de la Cloud API).
  */
-export function marcarEnviado(rowId: string, r: { ok: boolean; wamid?: string; bloqueadoVentana?: boolean; error?: string }) {
+export function marcarEnviado(rowId: string, r: { ok: boolean; wamid?: string; bloqueadoVentana?: boolean; error?: string; repetido?: boolean }) {
   if (!rowId) return;
+  // Repetido (no salió): se borra del chat para que no aparezca dos veces.
+  if (r.repetido) { db.prepare('DELETE FROM messages WHERE id = ?').run(rowId); return; }
   // Sella created_at al MOMENTO real del envío (después del tope de velocidad),
   // no al de la inserción. Así el historial y la auditoría reflejan el espaciado
   // real entre mensajes (y no marcan ráfagas falsas cuando se insertan en lote).
