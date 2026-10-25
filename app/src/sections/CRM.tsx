@@ -1,4 +1,5 @@
 import { apiAnuncioProducto, apiVincularAnuncio } from '../lib/api';
+import { CargandoChat } from '../components/CargandoChat';
 import { useRecordado } from '../lib/rutas';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../components/Ventana24h';
 import { useEffect, useRef, useState } from 'react';
@@ -454,11 +455,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                   {df.crmSendWarn.startsWith('⛔') ? df.crmSendWarn : `Guardado en el CRM, pero no salió por WhatsApp: ${df.crmSendWarn}`}
                 </div>
               )}
-              {df.flujoMsg && (
-                <div style={{ color: df.flujoMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.flujoMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)', fontSize: 12.5, marginTop: 8 }}>
-                  {df.flujoMsg}
-                </div>
-              )}
+              <CargandoChat texto={df.flujoMsg} />
             </div>
           </div>
 

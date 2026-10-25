@@ -121,6 +121,8 @@ export function textoDeUrl(url: string, method: string): string | null {
   // Lo que se hace mientras chateas o en segundo plano no bloquea la pantalla.
   if (/\/(messages|media|webchat|push|logs|calidad|optin|auth|suscripcion|whatsapp\/qr)\b/.test(u)) return null;
   if (/\/leads\/[^/]+$/.test(u) && method === 'PATCH') return null;
+  // Acciones del chat (flujo, plantilla): su progreso se ve debajo de la caja de escritura.
+  if (/\/leads\/[^/]+\/(flujo-inicial|enviar-plantilla|estado|bloquear|desbloquear)$/.test(u)) return null;
   if (method === 'DELETE') return 'Eliminando…';
   if (/effi\/despachar/.test(u)) return 'Creando la remisión en Effi…';
   if (/effi\/guia|guia-manual/.test(u)) return 'Generando la guía de transporte…';
