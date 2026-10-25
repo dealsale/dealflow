@@ -352,6 +352,7 @@ export interface ApiOrder {
   novedad?: NovedadPedido | null;
   effiDevolucion?: string;
   confirmacion?: string;
+  confirmacionError?: string;
   shopifyEnviado?: boolean;
 }
 /** Novedad de envío reportada por la transportadora (Effi). */

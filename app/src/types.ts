@@ -44,6 +44,7 @@ export interface Order {
   effiDevolucion?: string;
   /** Pedidos de Shopify: '' | 'esperando' | 'si' | 'no' (confirmación por WhatsApp). */
   confirmacion?: string;
+  confirmacionError?: string;
   shopifyEnviado?: boolean;
   /** canal del que vino: whatsapp | instagram | messenger | shopify | web | manual */
   origen?: string;
