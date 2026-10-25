@@ -940,11 +940,12 @@ export interface LandingDatos {
 export interface LandingResumen { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string }
 export interface Landing extends LandingResumen { datos: LandingDatos }
 export interface CuotaLandings { gratisTotal: number; gratisUsadas: number; gratisRestantes: number; precio: number }
-export interface DominioLandings { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string }
+export interface DominioLandings { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string }
 export const apiLandings = () => req<{ landings: LandingResumen[]; cuota: CuotaLandings; dominio: DominioLandings }>('/api/landings', 'GET');
 export const apiConectarDominio = (dominio: string) => req<DominioLandings>('/api/landings/dominio', 'POST', { dominio });
 export const apiVerificarDominio = () => req<DominioLandings>('/api/landings/dominio/verificar', 'POST');
 export const apiQuitarDominio = () => req<DominioLandings>('/api/landings/dominio', 'DELETE');
+export const apiSubdominio = (sub: string) => req<DominioLandings>('/api/landings/dominio/sub', 'PUT', { sub });
 export const apiInicioDominio = (landingId: string) => req<DominioLandings>('/api/landings/dominio/inicio', 'PUT', { landingId });
 export const apiCrearLanding = (nombre: string, productId: string) => req<{ landing: Landing }>('/api/landings', 'POST', { nombre, productId });
 export const apiLanding = (id: string) => req<{ landing: Landing }>(`/api/landings/${encodeURIComponent(id)}`, 'GET');

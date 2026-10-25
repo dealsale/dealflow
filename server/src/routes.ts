@@ -3571,6 +3571,12 @@ api.delete('/landings/dominio', requireAuth, requireStore, requireOwner, conLand
   await L.quitarDominio(req.user!.storeId!);
   res.json(L.estadoDominio(req.user!.storeId!));
 });
+api.put('/landings/dominio/sub', requireAuth, requireStore, requireOwner, conLandings, async (req, res) => {
+  const L = await import('./landings.js');
+  const r = L.cambiarSubdominio(req.user!.storeId!, String(req.body?.sub || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(L.estadoDominio(req.user!.storeId!));
+});
 api.put('/landings/dominio/inicio', requireAuth, requireStore, conLandings, async (req, res) => {
   const L = await import('./landings.js');
   if (!L.elegirInicio(req.user!.storeId!, String(req.body?.landingId || ''))) return res.status(404).json({ error: 'Landing no encontrada.' });

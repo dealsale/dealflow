@@ -1,48 +1,58 @@
-# Dominios propios para las landings (configuración única)
+# Landings en dflw.store (configuración única en Cloudflare)
 
-Cada tienda conecta su dominio en **Landings → Dominio propio**. DealFlow le dice qué
-CNAME crear (`www` → `landings.dealflow.sbs`) y luego verifica que el dominio ya cargue
-con HTTPS. El código ya enruta por dominio: en `tutienda.com/<landing>` solo se ven las
-landings de esa tienda (nada del panel responde ahí).
+Con esto cada tienda tiene gratis `sutienda.dflw.store/<landing>` y, si quiere, conecta su
+propio dominio (CNAME a `landings.dflw.store`). `dealflow.sbs` no se toca.
 
-Lo único que falta es la pieza de red que reciba esos dominios y les ponga certificado.
-Railway no sirve para esto: su plan Hobby permite 2 dominios por servicio y el Pro 20.
+El código ya está listo: se activa poniendo `LANDINGS_RAIZ=dflw.store` en Railway (paso 7).
+Mientras esa variable no exista, las landings siguen en `app.dealflow.sbs/l/…`.
 
-## Opción recomendada: Cloudflare for SaaS (una sola vez)
+## 1. Registros DNS de dflw.store (todos con la nube NARANJA, proxy)
 
-Requisito: que el DNS de `dealflow.sbs` esté en Cloudflare (plan gratis sirve).
+| Tipo  | Nombre     | Contenido                 |
+|-------|------------|---------------------------|
+| CNAME | `@`        | `sjd7oora.up.railway.app` |
+| CNAME | `*`        | `sjd7oora.up.railway.app` |
+| CNAME | `landings` | `sjd7oora.up.railway.app` |
 
-1. **Origen de respaldo.** En Cloudflare → DNS de `dealflow.sbs`, crea
-   `landings` como CNAME hacia el dominio de Railway del servicio
-   (`xxxx.up.railway.app`), **con la nube naranja (proxy) encendida**.
-2. **Activar Custom Hostnames.** Cloudflare → `dealflow.sbs` → SSL/TLS → Custom
-   Hostnames → *Enable* y pon `landings.dealflow.sbs` como *Fallback Origin*.
-   Los primeros 100 dominios son gratis; después ~USD 0,10 por dominio al mes.
-3. **Railway responde por un solo nombre.** Cloudflare → Rules → Origin Rules → nueva
-   regla «Todo lo de custom hostnames» (cuando *Hostname* no termina en `dealflow.sbs`):
-   - *Host Header* → reescribir a `xxxx.up.railway.app`.
-4. **Pasar el dominio original.** Rules → Transform Rules → *Modify Request Header* →
-   agregar `X-DF-Host` con el valor dinámico `http.host`, con la misma condición.
-   DealFlow usa ese encabezado para saber de qué tienda es la visita.
-5. **Token para DealFlow.** Cloudflare → My Profile → API Tokens → *Create Token* con el
-   permiso *Zone → SSL and Certificates → Edit* sobre `dealflow.sbs`.
-6. **Variables nuevas en Railway** (no se toca ninguna de las existentes):
-   - `CF_API_TOKEN` = el token del paso 5
-   - `CF_ZONE_ID` = el *Zone ID* de `dealflow.sbs` (Cloudflare → Overview, columna derecha)
-   - `LANDINGS_CNAME` = `landings.dealflow.sbs` (opcional, es el valor por defecto)
+(`sjd7oora.up.railway.app` es el destino que hoy usa `app.dealflow.sbs` en Railway.)
 
-Con eso, cuando una tienda conecta su dominio, DealFlow lo registra solo en Cloudflare,
-Cloudflare emite el certificado en cuanto el CNAME apunta y el botón «Verificar» lo
-marca como **Activo**.
+## 2. SSL/TLS → Descripción general
+Modo de cifrado: **Completo (Full)**.
 
-## Sin Cloudflare (pocas tiendas)
+## 3. Reglas → Reglas de origen (Origin Rules) → Crear regla
+- Nombre: `DealFlow`
+- Si: **Todas las solicitudes entrantes**
+- Encabezado de host (Host Header) → **Reescribir a** `app.dealflow.sbs`
 
-Agrega el dominio de la tienda a mano en Railway → servicio → Settings → Domains y
-pídele que cree el CNAME que Railway indique. Sirve para 1 o 2 dominios (límite de Railway).
+## 4. Reglas → Reglas de transformación → Modificar encabezado de la solicitud → Crear regla
+- Nombre: `Host original`
+- Si: **Todas las solicitudes entrantes**
+- **Establecer dinámico**: nombre `X-DF-Host`, valor `http.host`
 
-## Lo que ve la tienda
+## 5. SSL/TLS → Nombres de host personalizados (Custom Hostnames)
+- Habilitar Cloudflare for SaaS (pide un método de pago; los primeros 100 dominios son gratis,
+  después ~USD 0,10 por dominio al mes).
+- Origen de respaldo (Fallback Origin): `landings.dflw.store`.
 
-1. Escribe `www.sutienda.com` → DealFlow le muestra el registro CNAME a crear.
-2. Lo crea en GoDaddy, Hostinger, etc. (y redirige `sutienda.com` → `www.sutienda.com`).
-3. Le da a «Verificar». Cuando quede **Activo**, sus enlaces pasan a ser
-   `https://www.sutienda.com/<landing>` y puede elegir qué landing se abre en la raíz.
+Este paso solo hace falta para los dominios propios de las tiendas. Los subdominios
+`sutienda.dflw.store` funcionan sin él.
+
+## 6. Token de API
+Mi perfil → Tokens de API → Crear token → *Plantilla personalizada*:
+- Permiso: **Zona → SSL y certificados → Editar**
+- Recursos de zona: **dflw.store**
+
+Copia también el **ID de zona** (Zone ID), que está en la página de Descripción general de
+dflw.store, columna derecha.
+
+## 7. Variables nuevas en Railway (servicio de la app; no se cambia ninguna existente)
+- `LANDINGS_RAIZ` = `dflw.store`
+- `CF_API_TOKEN` = el token del paso 6
+- `CF_ZONE_ID` = el ID de zona
+
+## Prueba
+- `https://dflw.store` → redirige a dealflow.sbs.
+- `https://<subdominio-de-una-tienda>.dflw.store` → su landing (la tienda debe tener
+  Landings activado y al menos una publicada; su subdominio se ve y se cambia en
+  Landings → Dirección de tus landings).
+- `https://dflw.store/l/ping` → `{"df":"landings", …}`.

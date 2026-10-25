@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
   apiBorrarLanding, apiCrearLanding, apiDespublicarLanding, apiDuplicarLanding, apiGuardarLanding, apiImagenLanding, apiLanding, apiLandings,
-  apiPagarLanding, apiPublicarLanding, apiVistaLanding, apiConectarDominio, apiVerificarDominio, apiQuitarDominio, apiInicioDominio,
+  apiPagarLanding, apiPublicarLanding, apiVistaLanding, apiConectarDominio, apiVerificarDominio, apiQuitarDominio, apiInicioDominio, apiSubdominio,
 } from '../lib/api';
 import type { CuotaLandings, DominioLandings, Landing, LandingBundle, LandingDatos, LandingResumen } from '../lib/api';
 import { confirmar, notificar } from '../components/dialogs';
@@ -683,6 +683,8 @@ function DominioCard({ d, landings, onCambio }: { d: DominioLandings; landings: 
     await accion(apiQuitarDominio);
   };
   const activo = d.estado === 'activo';
+  const [sub, setSub] = useState(d.sub);
+  useEffect(() => { setSub(d.sub); }, [d.sub]);
   const publicadas = landings.filter((l) => l.estado === 'publicada');
   const fila = (k: string, v: string) => (
     <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr auto', gap: 8, alignItems: 'center', fontSize: 13, padding: '6px 0', borderTop: '1px solid var(--df-border)' }}>
@@ -696,13 +698,28 @@ function DominioCard({ d, landings, onCambio }: { d: DominioLandings; landings: 
       <button onClick={() => setAbierto(!abierto)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', padding: '12px 14px', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left', color: 'var(--df-text-strong)' }}>
         <span style={{ fontSize: 18 }}>🌐</span>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ fontWeight: 700, fontSize: 14 }}>Dominio propio</span>
-          <span style={{ display: 'block', fontSize: 12.5, color: 'var(--df-text-muted)' }}>{d.dominio ? <>{d.dominio} · {activo ? <b style={{ color: 'var(--df-success, #16a34a)' }}>Activo</b> : <b style={{ color: 'var(--df-warning)' }}>Pendiente</b>}</> : 'Muestra tus landings en tutienda.com/producto'}</span>
+          <span style={{ fontWeight: 700, fontSize: 14 }}>{d.raiz ? 'Dirección de tus landings' : 'Dominio propio'}</span>
+          <span style={{ display: 'block', fontSize: 12.5, color: 'var(--df-text-muted)' }}>{d.dominio ? <>{d.dominio} · {activo ? <b style={{ color: 'var(--df-success, #16a34a)' }}>Activo</b> : <b style={{ color: 'var(--df-warning)' }}>Pendiente</b>}</> : d.raiz ? <><b style={{ color: 'var(--df-text-body)' }}>{d.sub}.{d.raiz}</b> · gratis · o conecta tu propio dominio</> : 'Muestra tus landings en tutienda.com/producto'}</span>
         </span>
         <span style={{ color: 'var(--df-text-faint)', fontSize: 11, transform: abierto ? 'rotate(180deg)' : 'none' }}>▼</span>
       </button>
       {abierto && (
         <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {d.raiz && (
+            <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>🎁 Tu dirección gratis</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 13 }}>
+                <span style={{ color: 'var(--df-text-muted)' }}>https://</span>
+                <input value={sub} onChange={(e) => setSub(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} aria-label="Nombre de tu tienda en la dirección" style={{ ...inp, width: 170, padding: '5px 8px' }} />
+                <b>.{d.raiz}</b>
+                {sub !== d.sub
+                  ? <button onClick={() => void accion(() => apiSubdominio(sub))} disabled={ocupado || sub.length < 3} style={{ ...btnPri, padding: '5px 10px' }}>Guardar</button>
+                  : <a href={`https://${d.sub}.${d.raiz}`} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 10px', textDecoration: 'none' }}>Abrir ↗</a>}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Tus landings quedan en {d.sub}.{d.raiz}/nombre-del-producto. Si cambias el nombre, los enlaces anteriores dejan de funcionar.</div>
+            </div>
+          )}
+          {d.raiz && !d.dominio && <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>🌐 ¿Tienes tu propio dominio? (opcional)</div>}
           {!d.dominio ? (
             <>
               <div style={{ fontSize: 13, color: 'var(--df-text-body)' }}>Escribe el dominio que compraste (te recomendamos usar <b>www</b>, por ejemplo <b>www.tutienda.com</b>).</div>

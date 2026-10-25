@@ -383,10 +383,41 @@ export function landingDeTienda(storeId: string, slug: string): { storeId: strin
  * https://sudominio.com/<landing>. El certificado lo pone el proxy (Cloudflare for SaaS
  * si están CF_API_TOKEN y CF_ZONE_ID; si no, el dominio se agrega a mano en el hosting).
  */
-export const CNAME_LANDINGS = (process.env.LANDINGS_CNAME || 'landings.dealflow.sbs').toLowerCase();
-const cf = () => (process.env.CF_API_TOKEN && process.env.CF_ZONE_ID ? { token: process.env.CF_API_TOKEN, zona: process.env.CF_ZONE_ID } : null);
+/**
+ * Dominio de DealFlow para las landings (ej. dflw.store, en Cloudflare). Con él cada tienda
+ * tiene gratis <su-nombre>.dflw.store y los dominios propios apuntan a landings.dflw.store.
+ * Vacío = todavía no está configurado: las landings siguen en app.dealflow.sbs/l/…
+ */
 let hosts: Map<string, string> | null = null;
 const refrescarHosts = () => { hosts = null; };
+export const RAIZ_LANDINGS = (process.env.LANDINGS_RAIZ || '').toLowerCase().replace(/^\.+|\.+$/g, '');
+export const CNAME_LANDINGS = (process.env.LANDINGS_CNAME || (RAIZ_LANDINGS ? `landings.${RAIZ_LANDINGS}` : 'landings.dealflow.sbs')).toLowerCase();
+try { db.exec("ALTER TABLE stores ADD COLUMN landing_sub TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_landing_sub ON stores(landing_sub) WHERE landing_sub <> ''");
+const SUB_RESERVADOS = new Set(['www', 'landings', 'app', 'api', 'admin', 'mail', 'correo', 'smtp', 'ftp', 'dealflow', 'soporte', 'ayuda', 'blog', 'tienda', 'tiendas', 'static', 'cdn', 'dev', 'test', 'staging', 'l']);
+/** Subdominio gratis de la tienda (la primera vez sale del nombre de la tienda). */
+export function subdominioTienda(storeId: string): string {
+  const r = db.prepare('SELECT landing_sub FROM stores WHERE id = ?').get(storeId) as { landing_sub: string } | undefined;
+  if (!r) return '';
+  if (r.landing_sub) return r.landing_sub;
+  let base = slugTienda(storeId).replace(/-+/g, '-').slice(0, 40) || 'tienda';
+  if (SUB_RESERVADOS.has(base)) base += '-shop';
+  let sub = base;
+  for (let n = 2; db.prepare('SELECT 1 FROM stores WHERE landing_sub = ?').get(sub); n++) sub = `${base}-${n}`;
+  db.prepare("UPDATE stores SET landing_sub = ? WHERE id = ? AND landing_sub = ''").run(sub, storeId);
+  return (db.prepare('SELECT landing_sub FROM stores WHERE id = ?').get(storeId) as { landing_sub: string }).landing_sub;
+}
+export function cambiarSubdominio(storeId: string, valor: string): { ok: true } | { error: string } {
+  const sub = String(valor || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  if (sub.length < 3) return { error: 'El nombre debe tener al menos 3 letras o números.' };
+  if (SUB_RESERVADOS.has(sub)) return { error: `"${sub}" está reservado. Elige otro.` };
+  if (db.prepare('SELECT 1 FROM stores WHERE landing_sub = ? AND id != ?').get(sub, storeId)) return { error: `${sub}.${RAIZ_LANDINGS || 'dflw.store'} ya lo tiene otra tienda. Elige otro.` };
+  db.prepare('UPDATE stores SET landing_sub = ? WHERE id = ?').run(sub, storeId);
+  refrescarHosts();
+  return { ok: true };
+}
+const cf = () => (process.env.CF_API_TOKEN && process.env.CF_ZONE_ID ? { token: process.env.CF_API_TOKEN, zona: process.env.CF_ZONE_ID } : null);
+
 /** Tienda dueña de un host (con o sin www). */
 export function tiendaDeHost(host: string): string | null {
   if (!hosts) {
@@ -397,24 +428,36 @@ export function tiendaDeHost(host: string): string | null {
     }
     setTimeout(refrescarHosts, 60e3).unref?.();
   }
-  return hosts.get(String(host || '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '')) || null;
+  const h = String(host || '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
+  const propio = hosts.get(h);
+  if (propio) return propio;
+  // <tienda>.dflw.store (el subdominio gratis)
+  if (RAIZ_LANDINGS && h.endsWith('.' + RAIZ_LANDINGS)) {
+    const sub = h.slice(0, -RAIZ_LANDINGS.length - 1);
+    if (!sub.includes('.') && !SUB_RESERVADOS.has(sub)) {
+      const r = db.prepare('SELECT id FROM stores WHERE landing_sub = ? AND landings_habilitado = 1').get(sub) as { id: string } | undefined;
+      if (r) return r.id;
+    }
+  }
+  return null;
 }
 function dominioActivo(storeId: string): string {
   const r = db.prepare('SELECT landing_dominio, landing_dominio_estado FROM stores WHERE id = ?').get(storeId) as { landing_dominio: string; landing_dominio_estado: string } | undefined;
-  return r?.landing_dominio && r.landing_dominio_estado === 'activo' ? r.landing_dominio : '';
+  if (r?.landing_dominio && r.landing_dominio_estado === 'activo') return r.landing_dominio;
+  return RAIZ_LANDINGS ? `${subdominioTienda(storeId)}.${RAIZ_LANDINGS}` : '';
 }
 export function normalizarDominio(v: string): string | null {
   const d = String(v || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/?#].*$/, '').replace(/\.$/, '');
   if (!/^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(d)) return null;
-  if (/(^|\.)dealflow\.(sbs|co)$/.test(d) || /(^|\.)(railway\.app|up\.railway\.app|myshopify\.com)$/.test(d)) return null;
+  if ((RAIZ_LANDINGS && (d === RAIZ_LANDINGS || d.endsWith('.' + RAIZ_LANDINGS))) || /(^|\.)dealflow\.(sbs|co)$/.test(d) || /(^|\.)(railway\.app|up\.railway\.app|myshopify\.com)$/.test(d)) return null;
   return d;
 }
-export interface EstadoDominio { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string }
+export interface EstadoDominio { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string }
 export function estadoDominio(storeId: string): EstadoDominio {
   const r = db.prepare('SELECT landing_dominio, landing_dominio_estado, landing_dominio_detalle, landing_inicio FROM stores WHERE id = ?').get(storeId) as Fila | undefined;
   const dom = txt(r?.landing_dominio);
   const partes = dom.split('.');
-  return { dominio: dom, estado: txt(r?.landing_dominio_estado), detalle: txt(r?.landing_dominio_detalle), cname: CNAME_LANDINGS, nombreRegistro: partes.length > 2 ? partes.slice(0, partes.length - 2).join('.') : '@', inicio: txt(r?.landing_inicio) };
+  return { dominio: dom, estado: txt(r?.landing_dominio_estado), detalle: txt(r?.landing_dominio_detalle), cname: CNAME_LANDINGS, nombreRegistro: partes.length > 2 ? partes.slice(0, partes.length - 2).join('.') : '@', inicio: txt(r?.landing_inicio), raiz: RAIZ_LANDINGS, sub: RAIZ_LANDINGS ? subdominioTienda(storeId) : '' };
 }
 async function cfApi(metodo: string, ruta: string, cuerpo?: unknown): Promise<Fila | null> {
   const c = cf();
