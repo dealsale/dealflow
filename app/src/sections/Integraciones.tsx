@@ -4,7 +4,7 @@ import { EffiApiCard } from '../components/EffiApiCard';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { IntegracionFila, LogoInteg } from '../components/IntegracionFila';
-import { DiagnosticoMessenger, CapiCard } from '../components/MetaExtras';
+import { DiagnosticoMessenger, CapiCard, AnunciosProductos } from '../components/MetaExtras';
 
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13 };
 
@@ -260,6 +260,7 @@ function MetaAdsCard({ df }: { df: DealFlowState }) {
         {df.mkError && !conectada && <div style={{ color: 'var(--df-danger-dark)', fontSize: 12.5 }}>{df.mkError}</div>}
         {!conectada && !ops && <div style={{ fontSize: 12, color: 'var(--df-text-faint)' }}>Si Facebook entra solo con la cuenta equivocada, cierra sesión en facebook.com o abre DealFlow en una ventana de incógnito.</div>}
         {conectada && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Se actualiza sola cada 30 minutos. Mira los resultados en <b>Estadísticas → Conversión por anuncio</b>.</div>}
+        {conectada && <AnunciosProductos productos={df.products.filter((p) => (p.tipo || 'producto') === 'producto').map((p) => ({ id: String(p.id), nombre: p.nombre }))} />}
         {conectada ? (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={() => void df.cambiarCuentaAds()} disabled={df.mkLoading} style={btnGhost}>Cambiar de cuenta de Facebook</button>

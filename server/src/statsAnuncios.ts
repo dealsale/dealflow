@@ -8,7 +8,7 @@
  * guardado en el pedido o, en pedidos viejos, por el teléfono). Fechas en hora de Bogotá.
  */
 import { db, pj } from './db.js';
-import { insightsEnRango } from './metaInsights.js';
+import { insightsEnRango, miniaturas } from './metaInsights.js';
 
 const ORGANICO = 'organico';
 const EN_CAMINO = ['Guía generada', 'En tránsito', 'En reparto', 'Novedad'];
@@ -131,7 +131,10 @@ export function conversionPorAnuncio(sid: string, desde: string, hasta: string):
     for (const [d, g] of a.porDia) dia(a.adId, d).gasto += g;
   }
 
+  const mini = miniaturas(sid);
   for (const f of filas.values()) {
+    const m = mini.get(f.id);
+    if (m) { if (!f.media) f.media = m.thumb; if (!f.url) f.url = m.url; }
     const efectivos = f.pedidos - f.cancelados;
     if (f.gasto > 0) {
       f.costoChat = f.chats ? Math.round(f.gasto / f.chats) : 0;
