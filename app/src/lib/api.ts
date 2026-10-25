@@ -463,7 +463,7 @@ export const apiEnviarPlantilla = (leadId: string, plantillaId: string, params?:
 // ── Completar pedido desde el chat ──
 export interface PropuestaPedido {
   cliente: string; tel: string; departamento: string; ciudad: string; direccion: string;
-  items: { qty: number; nombre: string; precio: number }[]; total: number;
+  items: { qty: number; nombre: string; precio: number; productId?: string; variantId?: string; label?: string }[]; total: number;
 }
 export const apiExtraerPedido = (leadId: string) =>
   req<{ propuesta: PropuestaPedido | null; ordenExistente: { rowId: string; id: string } | null }>(`/api/leads/${leadId}/extraer-pedido`, 'POST');

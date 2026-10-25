@@ -31,13 +31,18 @@ export function productoDeTexto(texto: string, productos: Product[]): Product | 
 }
 
 /** Convierte un ítem guardado ("Jogger (M · Gris)") en una fila con producto y opciones elegidas. */
-export function filaDesdeItem(it: { qty: number; nombre: string; precio: number }, productos: Product[]): FilaItem {
-  const p = productoDeTexto(it.nombre, productos);
+export function filaDesdeItem(it: { qty: number; nombre: string; precio: number; productId?: string; label?: string }, productos: Product[]): FilaItem {
+  // Si el servidor ya identificó el producto (y su variante), se usa tal cual.
+  const p = (it.productId && productos.find((x) => String(x.id) === it.productId)) || productoDeTexto(it.nombre, productos);
   if (!p) return { productId: '', opciones: {}, qty: Math.max(1, it.qty || 1), precio: Math.max(0, it.precio || 0), libre: it.nombre };
   const txt = norm(it.nombre);
+  const partes = (it.label || '').split(/\s*·\s*/).map(norm).filter(Boolean);
   const opciones: Record<string, string> = {};
   for (const g of p.opciones || []) {
-    const val = (g.valores || []).map((x) => x.valor).filter((v) => conPalabra(txt, norm(v))).sort((a, b) => b.length - a.length)[0];
+    const valores = (g.valores || []).map((x) => x.valor);
+    // 1) Valor exacto de la variante que eligió el servidor; 2) si no, por el texto.
+    const val = valores.find((v) => partes.includes(norm(v)))
+      || valores.filter((v) => conPalabra(txt, norm(v))).sort((a, b) => b.length - a.length)[0];
     if (val) opciones[g.nombre] = val;
   }
   return { productId: String(p.id), opciones, qty: Math.max(1, it.qty || 1), precio: it.precio > 0 ? it.precio : p.precio };
