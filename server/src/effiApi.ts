@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { resolverNombreCliente, nombreValido } from './nombres.js';
 import { db, pj, registrarLog } from './db.js';
 import { conPedido, trazar, trazarApi } from './trazabilidad.js';
 import { emparejarItem, emparejarArticulos, palabrasClave, separarItemsPedido, type Emparejado, tokensVariante, mismoToken } from './emparejar.js';
@@ -959,8 +960,16 @@ async function clienteEffi(c: EffiCfg, o: Fila, ubic: { provincia: string; ciuda
   const numero = celular10(txt(o.tel));
   if (numero.length < 7) return { error: 'El pedido no tiene un celular válido (se usa como documento del cliente en Effi).' };
   const busca = await effi<Fila[]>(c.apiKey, 'GET', '/api/cliente', { query: { t_dni: T_DNI_CEDULA, numero, por_pagina: 5 } });
-  if (busca.ok && busca.body.data?.length) return { tercero: txt(busca.body.data[0].tercero) };
-  const nombre = txt(o.cliente).trim().slice(0, 120) || 'Cliente';
+  // Nombre real del cliente (el que escribió en el chat), nunca un correo o un apodo de perfil.
+  const nombre = resolverNombreCliente(txt(o.lead_id), txt(o.cliente), '').slice(0, 120);
+  if (busca.ok && busca.body.data?.length) {
+    const yaEnEffi = txt(busca.body.data[0].nombre);
+    // El cliente ya existía en Effi (mismo celular) con un nombre que no es de persona: se avisa.
+    if (yaEnEffi && !nombreValido(yaEnEffi) && nombre !== 'Cliente') {
+      trazar(txt(o.store_id), txt(o.id), { etapa: 'despacho', nivel: 'warn', titulo: `En Effi este cliente se llama «${yaEnEffi}»`, detalle: `Effi reutiliza el cliente por su celular. Cámbiale el nombre en Effi → Clientes a «${nombre}» para que la guía salga bien.` });
+    }
+    return { tercero: txt(busca.body.data[0].tercero) };
+  }
   const r = await effi<Fila>(c.apiKey, 'POST', '/api/cliente', {
     body: {
       t_dni: T_DNI_CEDULA, numero, nombre, celular: numero, whatsapp: numero,
