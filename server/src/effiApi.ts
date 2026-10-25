@@ -562,13 +562,13 @@ export async function revisarVinculosProducto(storeId: string, productId: string
 
 /** Un artículo por id, en vivo (con su marca de dropshipping). Lo guarda en la caché. */
 /** Todos los artículos para el selector: los tuyos (catálogo) y los de tus proveedores dropshipping. */
-export async function todosLosArticulos(storeId: string): Promise<{ id: string; descripcion: string; referencia: string; drop: number }[]> {
+export async function todosLosArticulos(storeId: string, refrescar = false): Promise<{ id: string; descripcion: string; referencia: string; drop: number; stock: number | null }[]> {
   const c = cfgEffi(storeId);
   if (!c?.apiKey) return [];
-  if (!articulosCache(storeId).length) await descargarArticulos(storeId, c.apiKey);
-  const m = new Map<string, { id: string; descripcion: string; referencia: string; drop: number }>();
-  for (const a of articulosCache(storeId)) m.set(a.id, { id: a.id, descripcion: a.descripcion, referencia: a.referencia, drop: a.drop === 1 ? 1 : 0 });
-  try { for (const a of await articulosDrop(storeId, c.apiKey)) m.set(a.id, { id: a.id, descripcion: a.descripcion, referencia: a.referencia, drop: 1 }); } catch { /* sin proveedores */ }
+  if (refrescar || !articulosCache(storeId).length) await descargarArticulos(storeId, c.apiKey);
+  const m = new Map<string, { id: string; descripcion: string; referencia: string; drop: number; stock: number | null }>();
+  for (const a of articulosCache(storeId)) m.set(a.id, { id: a.id, descripcion: a.descripcion, referencia: a.referencia, drop: a.drop === 1 ? 1 : 0, stock: a.stock });
+  try { for (const a of await articulosDrop(storeId, c.apiKey)) m.set(a.id, { id: a.id, descripcion: a.descripcion, referencia: a.referencia, drop: 1, stock: a.stock }); } catch { /* sin proveedores */ }
   return [...m.values()].sort((a, b) => a.descripcion.localeCompare(b.descripcion, 'es'));
 }
 

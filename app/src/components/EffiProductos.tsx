@@ -276,16 +276,24 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { p
   const [lista, setLista] = useState<ArticuloSimple[] | null>(null);
   const [msg, setMsg] = useState('');
   const [guardando, setGuardando] = useState('');
+  const [guardados, setGuardados] = useState<Record<string, string>>({}); // variante → ID recién guardado
+  const [actualizando, setActualizando] = useState(false);
   useEffect(() => {
     void apiEffiApiArticulos(productId).then((r) => { if (r.data) setVars(r.data.variantes); else setMsg(r.error || 'No pudimos leer Effi.'); });
-    void cargarTodos().then(setLista);
-  }, [productId]);
+    void cargarTodos().then((l) => setLista(ordenarPorProducto(l, productoNombre)));
+  }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const actualizar = async () => {
+    setActualizando(true);
+    setLista(ordenarPorProducto(await cargarTodos(true), productoNombre));
+    setActualizando(false);
+  };
   const elegir = async (v: EffiVarianteDF, id: string) => {
     setGuardando(v.variantId); setMsg('');
     const r = await apiEffiApiVincular(v.variantId, id);
     setGuardando('');
     if (r.error) { setMsg(`⚠️ ${r.error}`); return; }
     setVars((vs) => (vs || []).map((x) => (x.variantId === v.variantId ? { ...x, effiId: id, provId: '', auto: false } : x)));
+    setGuardados((g) => ({ ...g, [v.variantId]: id }));
     onCambio?.();
   };
   if (!vars) return <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{msg || 'Leyendo Effi…'}</div>;
@@ -293,7 +301,10 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { p
   const vinculadas = vars.filter(actual).length;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: vinculadas === vars.length ? 'var(--df-purple)' : 'var(--df-warning)' }}>{vinculadas}/{vars.length} variantes con artículo de Effi</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: vinculadas === vars.length ? 'var(--df-purple)' : 'var(--df-warning)' }}>{vinculadas}/{vars.length} variantes con artículo de Effi</span>
+        <button onClick={() => void actualizar()} disabled={actualizando} style={{ ...mini, marginLeft: 'auto' }}>{actualizando ? 'Trayendo de Effi…' : '↻ Traer artículos de Effi'}</button>
+      </div>
       {vars.map((v) => {
         const etiqueta = v.nombre.startsWith(productoNombre) ? (v.nombre.slice(productoNombre.length).replace(/^\s*\(|\)\s*$/g, '') || 'Única') : v.nombre;
         return (
@@ -302,6 +313,11 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { p
             <div style={{ flex: '1 1 260px', minWidth: 220 }}>
               <SelectorArticulo lista={lista} valor={actual(v)} ocupado={guardando === v.variantId} onElegir={(id) => void elegir(v, id)} />
             </div>
+            {guardados[v.variantId] !== undefined && (
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: guardados[v.variantId] ? 'var(--df-success)' : 'var(--df-text-muted)' }}>
+                {guardados[v.variantId] ? `✓ Guardado #${guardados[v.variantId]}` : '✓ Quitado'}
+              </span>
+            )}
           </div>
         );
       })}
@@ -310,14 +326,20 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { p
   );
 }
 
-interface ArticuloSimple { id: string; descripcion: string; referencia: string; drop: number }
+interface ArticuloSimple { id: string; descripcion: string; referencia: string; drop: number; stock: number | null }
 // La lista de artículos se trae una vez y se comparte entre productos (5 min).
 let todosCache: { at: number; p: Promise<ArticuloSimple[]> } | null = null;
-function cargarTodos(): Promise<ArticuloSimple[]> {
-  if (!todosCache || Date.now() - todosCache.at > 5 * 60_000) {
-    todosCache = { at: Date.now(), p: apiEffiTodos().then((r) => r.data?.articulos || []) };
+function cargarTodos(refrescar = false): Promise<ArticuloSimple[]> {
+  if (refrescar || !todosCache || Date.now() - todosCache.at > 5 * 60_000) {
+    todosCache = { at: Date.now(), p: apiEffiTodos(refrescar).then((r) => r.data?.articulos || []) };
   }
   return todosCache.p;
+}
+/** Los artículos que se parecen al producto, primero (los demás siguen en la lista). */
+function ordenarPorProducto(lista: ArticuloSimple[], producto: string): ArticuloSimple[] {
+  const pal = producto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+  const puntos = (a: ArticuloSimple) => { const d = a.descripcion.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); return pal.filter((w) => d.includes(w.slice(0, -1))).length; };
+  return [...lista].sort((a, b) => puntos(b) - puntos(a));
 }
 
 /** Selector con buscador: muestra el artículo elegido (con su ID) y todos los de Effi. */
@@ -338,7 +360,8 @@ function SelectorArticulo({ lista, valor, ocupado, onElegir }: { lista: Articulo
     <>
       <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 800, color: 'var(--df-purple)' }}>#{a.id}</span>
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.descripcion}{a.referencia ? <span style={{ color: 'var(--df-text-faint)' }}> · {a.referencia}</span> : ''}</span>
-      {a.drop === 1 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-success)' }}>PROVEEDOR</span>}
+      {a.stock != null && <span style={{ fontSize: 11, fontWeight: 700, color: Number(a.stock) > 0 ? 'var(--df-success)' : 'var(--df-text-faint)', whiteSpace: 'nowrap' }}>stock {a.stock}</span>}
+      {a.drop === 1 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-purple)' }}>PROVEEDOR</span>}
     </>
   );
   return (

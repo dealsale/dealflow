@@ -1668,7 +1668,7 @@ api.get('/effi-api/articulos', requireAuth, requireStore, requireOwner, async (r
 });
 api.get('/effi-api/articulos/todos', requireAuth, requireStore, async (req, res) => {
   const ef = await import('./effiApi.js');
-  res.json({ articulos: await ef.todosLosArticulos(req.user!.storeId!) });
+  res.json({ articulos: await ef.todosLosArticulos(req.user!.storeId!, req.query.refrescar === '1') });
 });
 api.get('/effi-api/articulos/buscar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');

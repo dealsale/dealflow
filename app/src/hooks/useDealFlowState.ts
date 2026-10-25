@@ -972,7 +972,7 @@ export function useDealFlowState() {
     if (!sessionUser) return;
     const r = leerRuta();
     if (!r.chat) setMobileChatOpen(false);
-    aplicarRuta(r, sessionUser.role, sessionUser.role === 'vendedor' && sessionUser.esDueno === false);
+    aplicarRuta(r, sessionUser.role, sessionUser.role === 'vendedor' && sessionUser.esDueno === false, !!sessionUser.impersonando);
   };
   useEffect(() => {
     const onPop = () => aplicarRutaRef.current();
@@ -1123,8 +1123,13 @@ export function useDealFlowState() {
   const rutaLista = useRef(false);
   const PRESETS_STATS = ['hoy', 'ayer', '7d', '30d', 'mes', 'mesPasado'];
   /** Lleva la app a lo que dice la URL (al entrar, con F5 o con atrás/adelante). */
-  function aplicarRuta(r: Ruta, rol: string, agente: boolean) {
+  function aplicarRuta(r: Ruta, rol: string, agente: boolean, impersonando = false) {
     const esAdm = rol === 'admin' || rol === 'superadmin';
+    // El equipo DealFlow fuera del modo soporte siempre abre en el panel administrativo:
+    // una dirección de tienda (/pedidos, /inbox…) no lo debe llevar a ninguna tienda.
+    if (esAdm && !impersonando && r.mode !== 'admin') { setSelectedOrderId(null); return; }
+    // En modo soporte se trabaja en la tienda: las direcciones /admin/… no aplican.
+    if (impersonando && r.mode === 'admin') return;
     if (r.mode === 'admin' && r.adminSection && esAdm) {
       if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
     } else if (r.section && (!agente || AGENTE_SECCIONES.includes(r.section))) {
@@ -1700,7 +1705,7 @@ export function useDealFlowState() {
         if (rol === 'superadmin') setAdminSection('superadmin');
         if (user && user.role === 'VENDEDOR' && user.esDueno === false) setSection('crm'); // el agente arranca en su CRM
         // Si la URL dice dónde estaba (F5, enlace compartido), se abre ahí mismo.
-        if (user) aplicarRuta(leerRuta(), rol, user.role === 'VENDEDOR' && user.esDueno === false);
+        if (user) aplicarRuta(leerRuta(), rol, user.role === 'VENDEDOR' && user.esDueno === false, !!user.impersonando);
       }
     }).finally(() => { rutaLista.current = true; setArrancando(false); }); // ya sabemos si hay sesión: quita el preloader de arranque
   }, []);
@@ -2753,7 +2758,7 @@ export function useDealFlowState() {
   function editarBibliotecaItem(id: string) {
     void apiSuperBibliotecaEditar(id).then((r) => {
       if (r.error || !r.data) { toast(r.error || 'No se pudo abrir el producto para editar.', 'error'); return; }
-      window.location.reload(); // ya quedamos como la tienda master: se ve en Productos
+      window.location.href = '/productos'; // ya quedamos como la tienda master: se ve en Productos
     });
   }
   // Enviar un producto de la biblioteca directamente a una tienda (clonarlo ahí).
@@ -3735,13 +3740,13 @@ export function useDealFlowState() {
   function entrarATienda(id: string) {
     void apiImpersonate(id).then((r) => {
       if (r.error) { setEditStoreMsg(r.error); return; }
-      window.location.reload();
+      window.location.href = '/resumen'; // entra al inicio de esa tienda (no a la página donde estaba)
     });
   }
   function volverAlAdmin() {
     void apiStopImpersonate().then((r) => {
       if (r.error) return;
-      window.location.reload();
+      window.location.href = '/admin/cuentas'; // de vuelta al panel administrativo, nunca a una tienda
     });
   }
   // Entra a la tienda interna "master" para crear/editar productos de la biblioteca
@@ -3749,7 +3754,7 @@ export function useDealFlowState() {
   function entrarBiblioteca() {
     void apiEntrarBiblioteca().then((r) => {
       if (r.error) return;
-      window.location.reload();
+      window.location.href = '/productos';
     });
   }
 
