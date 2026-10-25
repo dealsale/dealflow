@@ -73,11 +73,17 @@ function asegurarLeadMeta(storeId: string, canal: 'messenger' | 'instagram', rou
  * Procesa un webhook de Messenger (object='page') o Instagram (object='instagram').
  * Crea/actualiza el lead, guarda el mensaje entrante y dispara al asistente.
  */
+// Diagnóstico: cuándo llegó el último aviso de Meta por cada página (y de páginas no conectadas).
+const ultimoAviso = new Map<string, string>();
+const noConectadas = new Map<string, string>();
+
 export function handleMetaWebhook(object: 'page' | 'instagram', body: unknown): void {
   const canal = object === 'instagram' ? 'instagram' : 'messenger';
   const b = body as { entry?: { id?: string; messaging?: Record<string, unknown>[] }[] };
   for (const entry of b.entry || []) {
     const routeId = String(entry.id || '');
+    ultimoAviso.set(routeId, new Date().toISOString());
+    if (!resolverPagina(routeId)) noConectadas.set(routeId, new Date().toISOString());
     for (const m of entry.messaging || []) {
       const msg = m as {
         sender?: { id?: string };
@@ -166,10 +172,12 @@ export async function conectarPaginasMeta(storeId: string, acceso: AccesoMeta): 
     for (const p of pag.data) {
       // 3) suscribir nuestra app a los webhooks de la página.
       try {
-        await fetch(`${GRAPH}/${p.id}/subscribed_apps?access_token=${encodeURIComponent(p.access_token)}`, {
+        const sr = await fetch(`${GRAPH}/${p.id}/subscribed_apps?access_token=${encodeURIComponent(p.access_token)}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ subscribed_fields: 'messages,messaging_postbacks,messaging_referrals,message_reactions,feed' }),
         });
+        const sb = (await sr.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
+        if (!sb.success) registrarLog(storeId, 'warn', 'meta', `La página ${p.name} se conectó, pero Meta no aceptó suscribirla a los mensajes: ${sb.error?.message || 'sin detalle'}.`);
       } catch { /* seguimos: al menos guardamos la página */ }
       paginas.push({ pageId: p.id, nombre: p.name, token: p.access_token, igId: p.instagram_business_account?.id });
     }
@@ -185,4 +193,50 @@ export async function conectarPaginasMeta(storeId: string, acceso: AccesoMeta): 
 export function metaConectado(storeId: string): { messenger: boolean; instagram: boolean; paginas: string[] } {
   const paginas = paginasDeTienda(storeId);
   return { messenger: paginas.length > 0, instagram: paginas.some((p) => !!p.igId), paginas: paginas.map((p) => p.nombre) };
+}
+
+const SUSCRIPCION = 'messages,messaging_postbacks,messaging_referrals,message_reactions,feed';
+
+/**
+ * Revisa por qué no llegan los mensajes de Messenger: si cada página tiene a DealFlow
+ * suscrito (y con qué campos), si su acceso sirve, y cuándo llegó el último aviso de Meta.
+ */
+export async function diagnosticoMeta(storeId: string) {
+  const appId = process.env.META_APP_ID || '';
+  const paginas = paginasDeTienda(storeId);
+  const out = [] as { pageId: string; nombre: string; ig: boolean; accesoOk: boolean; suscrita: boolean; campos: string[]; faltan: string[]; ultimoAviso: string; error: string }[];
+  for (const p of paginas) {
+    const r = { pageId: p.pageId, nombre: p.nombre, ig: !!p.igId, accesoOk: false, suscrita: false, campos: [] as string[], faltan: [] as string[], ultimoAviso: ultimoAviso.get(p.pageId) || (p.igId ? ultimoAviso.get(p.igId) || '' : ''), error: '' };
+    try {
+      const res = await fetch(`${GRAPH}/${p.pageId}/subscribed_apps?access_token=${encodeURIComponent(p.token)}`, { signal: AbortSignal.timeout(15_000) });
+      const b = (await res.json().catch(() => ({}))) as { data?: { id?: string; name?: string; subscribed_fields?: string[] }[]; error?: { message?: string; code?: number } };
+      if (b.error) r.error = b.error.code === 190 ? 'El acceso de la página venció: dale "Reconectar".' : b.error.message || 'Meta no respondió.';
+      else {
+        r.accesoOk = true;
+        const nuestra = (b.data || []).find((a) => !appId || a.id === appId);
+        r.suscrita = !!nuestra;
+        r.campos = nuestra?.subscribed_fields || [];
+        r.faltan = ['messages', 'messaging_postbacks', 'messaging_referrals'].filter((c) => !r.campos.includes(c));
+      }
+    } catch { r.error = 'No pudimos hablar con Meta.'; }
+    out.push(r);
+  }
+  // Mensajes de Messenger que sí llegaron a esta tienda (para saber si alguna vez funcionó).
+  const ultimoMsg = (db.prepare("SELECT MAX(m.created_at) t FROM messages m JOIN leads l ON l.id = m.lead_id WHERE l.store_id = ? AND l.canal IN ('messenger','instagram') AND m.de = 'cliente'").get(storeId) as { t: string | null }).t || '';
+  return { paginas: out, ultimoMensaje: ultimoMsg, avisosDePaginasNoConectadas: [...noConectadas.entries()].slice(-5).map(([id, at]) => ({ id, at })) };
+}
+
+/** Vuelve a suscribir a DealFlow a los avisos de cada página conectada. */
+export async function resuscribirPaginas(storeId: string): Promise<{ ok: number; errores: string[] }> {
+  let ok = 0; const errores: string[] = [];
+  for (const p of paginasDeTienda(storeId)) {
+    try {
+      const res = await fetch(`${GRAPH}/${p.pageId}/subscribed_apps?access_token=${encodeURIComponent(p.token)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscribed_fields: SUSCRIPCION }),
+      });
+      const b = (await res.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
+      if (b.success) ok++; else errores.push(`${p.nombre}: ${b.error?.message || 'Meta no aceptó la suscripción.'}`);
+    } catch { errores.push(`${p.nombre}: no pudimos hablar con Meta.`); }
+  }
+  return { ok, errores };
 }

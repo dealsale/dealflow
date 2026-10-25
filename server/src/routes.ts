@@ -2302,6 +2302,37 @@ api.post('/meta/conectar', requireAuth, requireStore, requireOwner, async (req, 
   res.json({ ok: true, paginas: r.paginas });
 });
 
+// Diagnóstico de Messenger/Instagram: suscripción de cada página y último aviso de Meta.
+api.get('/meta/diagnostico', requireAuth, requireStore, async (req, res) => {
+  const m = await import('./meta.js');
+  res.json({ ...(await m.diagnosticoMeta(req.user!.storeId!)), urlWebhook: `${(process.env.PUBLIC_APP_URL || `https://${req.get('host')}`).replace(/\/+$/, '')}/webhooks/whatsapp`, webhookSalud: { ultimoRecibido: webhookSalud.ultimoRecibido, rechazadosFirma: webhookSalud.rechazadosFirma } });
+});
+api.post('/meta/resuscribir', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const m = await import('./meta.js');
+  res.json(await m.resuscribirPaginas(req.user!.storeId!));
+});
+
+// Fase C: API de Conversiones (reportar ventas y chats calificados a Meta).
+api.get('/meta/capi', requireAuth, requireStore, async (req, res) => {
+  res.json((await import('./metaCapi.js')).estadoCapi(req.user!.storeId!));
+});
+api.post('/meta/capi', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const c = await import('./metaCapi.js');
+  c.guardarCfgCapi(req.user!.storeId!, req.body || {});
+  res.json(c.estadoCapi(req.user!.storeId!));
+});
+api.post('/meta/capi/detectar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const c = await import('./metaCapi.js');
+  const r = await c.detectarDataset(req.user!.storeId!);
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(c.estadoCapi(req.user!.storeId!));
+});
+api.post('/meta/capi/enviar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const c = await import('./metaCapi.js');
+  const n = await c.procesarCapi(req.user!.storeId!);
+  res.json({ ...c.estadoCapi(req.user!.storeId!), enviados: n });
+});
+
 // Desconectar Messenger/Instagram.
 api.delete('/meta', requireAuth, requireStore, requireOwner, (req, res) => {
   db.prepare("DELETE FROM store_integrations WHERE store_id = ? AND tipo = 'meta_paginas'").run(req.user!.storeId);

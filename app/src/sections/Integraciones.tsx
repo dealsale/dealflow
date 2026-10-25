@@ -4,6 +4,7 @@ import { EffiApiCard } from '../components/EffiApiCard';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { IntegracionFila, LogoInteg } from '../components/IntegracionFila';
+import { DiagnosticoMessenger, CapiCard } from '../components/MetaExtras';
 
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13 };
 
@@ -294,6 +295,7 @@ function MetaCanalesCard({ df }: { df: DealFlowState }) {
         {on && <button onClick={df.desconectarMeta} style={btnGhostRed}>Desconectar</button>}
       </div>
       {df.metaMsg && <div style={{ fontSize: 12.5, marginTop: 8, color: df.metaMsg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)' }}>{df.metaMsg}</div>}
+      {on && <DiagnosticoMessenger />}
     </IntegracionFila>
   );
 }
@@ -351,6 +353,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
               {g.id === 'envios' && <ShopifyCard df={df} />}
               {g.id === 'canales' && <MetaCanalesCard df={df} />}
               {g.id === 'publicidad' && <MetaAdsCard df={df} />}
+              {g.id === 'publicidad' && <CapiCard />}
               {items.map((i) => {
                 if (i.especial === 'meta-ads') return null; // se muestra en Publicidad
                 const abiertaEsta = abierta === i.id;
