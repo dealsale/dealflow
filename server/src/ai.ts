@@ -74,7 +74,7 @@ function keyProveedor(storeId: string, prov: 'deepseek' | 'openai'): string {
  * IA híbrida (optimiza el gasto): DeepSeek escribe los textos (más barato); si la
  * tienda no tiene DeepSeek, cae a su proveedor elegido.
  */
-function resolverTexto(storeId: string): { url: string; model: string; key: string; proveedor: string } | null {
+export function resolverTexto(storeId: string): { url: string; model: string; key: string; proveedor: string } | null {
   const key = keyProveedor(storeId, 'deepseek');
   if (key) return { url: PROVEEDORES_IA.deepseek.url, model: PROVEEDORES_IA.deepseek.model, key, proveedor: 'deepseek' };
   return resolverIA(storeId);

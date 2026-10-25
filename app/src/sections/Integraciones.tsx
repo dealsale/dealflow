@@ -5,6 +5,7 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { IntegracionFila, LogoInteg } from '../components/IntegracionFila';
 import { DiagnosticoMessenger, CapiCard, AnunciosProductos } from '../components/MetaExtras';
+import { ExtensionShopify } from '../components/ExtensionShopify';
 
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13 };
 
@@ -145,6 +146,7 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
         </div>
         </>)}
       {conectada && df.shopifyAppDisponible && !manual && <div style={{ marginTop: 4 }}><button onClick={df.desconectarShopify} style={btnGhostRed}>Desconectar</button></div>}
+      <ExtensionShopify />
     </IntegracionFila>
   );
 }

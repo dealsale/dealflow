@@ -915,3 +915,9 @@ export const apiAnalisis = (desde: string, hasta: string, f: FiltrosAnalisis) =>
   for (const [k, v] of Object.entries(f)) if (v) p.set(k, v);
   return req<Analisis>(`/api/stats/analisis?${p}`, 'GET');
 };
+
+// ── Extensión DealFlow x Shopify ──
+export interface CodigoExt { id: string; nombre: string; ultimo_uso: string; created_at: string }
+export const apiCodigosExt = () => req<{ codigos: CodigoExt[] }>('/api/ext/codigos', 'GET');
+export const apiCrearCodigoExt = (nombre: string) => req<{ id: string; codigo: string }>('/api/ext/codigos', 'POST', { nombre });
+export const apiBorrarCodigoExt = (id: string) => req<{ ok: true }>(`/api/ext/codigos/${encodeURIComponent(id)}`, 'DELETE');
