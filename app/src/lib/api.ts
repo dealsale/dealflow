@@ -929,18 +929,23 @@ export const apiBorrarCodigoExt = (id: string) => req<{ ok: true }>(`/api/ext/co
 // ── Creador de landings ──────────────────────────────────────────────
 export interface LandingOpcion { nombre: string; valores: { valor: string; foto: string }[] }
 export interface LandingBundle { cantidad: number; titulo: string; subtitulo: string; precio: number; precioAntes: number; insignia: string; imagen: string }
-export interface LandingTestimonio { autor: string; avatar: string; tiempo: string; texto: string; imagen: string; reacciones: string }
+export interface LandingTestimonio { autor: string; avatar: string; tiempo: string; texto: string; imagen: string; reacciones: string; comentarioAutor: string; comentarioAvatar: string; comentarioTexto: string }
 export interface LandingDatos {
-  nombre: string; precio: number; precioAntes: number; calificacion: number; resenas: string; destacado: string; anuncio: string;
+  plantilla: string; nombre: string; mostrarTitulo: boolean; precio: number; precioAntes: number; calificacion: number; resenas: string; destacado: string; anuncios: string[];
   bannerSuperior: string; galeria: string[]; opciones: LandingOpcion[]; tituloOfertas: string; bundles: LandingBundle[]; bundleInicial: number;
-  boton: string; beneficios: string[]; descripcion: string; envioMin: number; envioMax: number; imagenes: string[];
-  tituloTestimonios: string; testimonios: LandingTestimonio[]; colorPrincipal: string; colorBoton: string; logo: string; nombreTienda: string;
+  boton: string; botonSub: string; tituloForm: string; botonForm: string; beneficios: string[]; descripcion: string; envioMin: number; envioMax: number; imagenes: string[];
+  tituloTestimonios: string; testimonios: LandingTestimonio[]; colorPrincipal: string; colorBoton: string; colorAcento: string; logo: string; nombreTienda: string;
   whatsapp: string; pixelMeta: string; confirmarWhatsapp: boolean; autoDespacho: boolean; pedirCorreo: boolean; gracias: string;
 }
 export interface LandingResumen { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string }
 export interface Landing extends LandingResumen { datos: LandingDatos }
 export interface CuotaLandings { gratisTotal: number; gratisUsadas: number; gratisRestantes: number; precio: number }
-export const apiLandings = () => req<{ landings: LandingResumen[]; cuota: CuotaLandings }>('/api/landings', 'GET');
+export interface DominioLandings { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string }
+export const apiLandings = () => req<{ landings: LandingResumen[]; cuota: CuotaLandings; dominio: DominioLandings }>('/api/landings', 'GET');
+export const apiConectarDominio = (dominio: string) => req<DominioLandings>('/api/landings/dominio', 'POST', { dominio });
+export const apiVerificarDominio = () => req<DominioLandings>('/api/landings/dominio/verificar', 'POST');
+export const apiQuitarDominio = () => req<DominioLandings>('/api/landings/dominio', 'DELETE');
+export const apiInicioDominio = (landingId: string) => req<DominioLandings>('/api/landings/dominio/inicio', 'PUT', { landingId });
 export const apiCrearLanding = (nombre: string, productId: string) => req<{ landing: Landing }>('/api/landings', 'POST', { nombre, productId });
 export const apiLanding = (id: string) => req<{ landing: Landing }>(`/api/landings/${encodeURIComponent(id)}`, 'GET');
 export const apiGuardarLanding = (id: string, b: { datos?: LandingDatos; slug?: string; productId?: string }) => req<{ landing: Landing }>(`/api/landings/${encodeURIComponent(id)}`, 'PUT', b);
@@ -953,6 +958,6 @@ export const apiDespublicarLanding = (id: string) => req<{ ok: true }>(`/api/lan
 export const apiPagarLanding = (id: string) => req<{ url: string }>(`/api/landings/${encodeURIComponent(id)}/pagar`, 'POST');
 export const apiAdminLandings = () => req<{ ajustes: { precio: number; gratis: number }; stats: { total: number; publicadas: number | null; pagadas: number | null; pedidos: number | null } }>('/api/admin/landings', 'GET');
 export const apiAdminGuardarLandings = (b: { precio: number; gratis: number }) => req<{ ajustes: { precio: number; gratis: number } }>('/api/admin/landings', 'PUT', b);
-export interface TiendaLandings { id: string; tienda: string; correo: string; plan: string; activa: boolean; habilitado: boolean; landings: number; publicadas: number; pedidos: number }
+export interface TiendaLandings { id: string; tienda: string; correo: string; plan: string; activa: boolean; habilitado: boolean; landings: number; publicadas: number; pedidos: number; dominio: string; dominioEstado: string }
 export const apiAdminTiendasLandings = () => req<{ tiendas: TiendaLandings[] }>('/api/admin/landings/tiendas', 'GET');
 export const apiAdminHabilitarLandings = (id: string, habilitado: boolean) => reqSilencioso<{ ok: true }>(`/api/admin/landings/tiendas/${encodeURIComponent(id)}`, 'PUT', { habilitado });

@@ -59,6 +59,24 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5183'], credentials: true }));
 }
 
+// Dominio propio de una tienda (tutienda.com/producto): solo se sirven sus landings,
+// sus imágenes y su formulario; nada del panel de DealFlow responde en ese dominio.
+app.get('/l/ping', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ df: 'landings', host: String(req.headers['x-df-host'] || req.headers['x-forwarded-host'] || req.headers.host || '') }); });
+app.use(async (req, res, next) => {
+  const host = String(req.headers['x-df-host'] || req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase();
+  if (!host || /(^|\.)dealflow\.(sbs|co)(:\d+)?$|^localhost|^127\.|railway\.app(:\d+)?$/.test(host)) return next();
+  const L = await import('./landings.js');
+  const storeId = L.tiendaDeHost(host);
+  if (!storeId) return next();
+  if (/^\/l\/(media|api)\//.test(req.path)) return next();
+  if (req.path === '/robots.txt') return res.type('text/plain').send('User-agent: *\nAllow: /\n');
+  const m = req.method === 'GET' ? req.path.match(/^\/([a-z0-9-]{0,60})\/?$/i) : null;
+  const l = m ? L.landingDeTienda(storeId, m[1] || '') : null;
+  res.setHeader('Cache-Control', 'no-cache');
+  if (!l) return res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página no disponible</title><p style="font-family:system-ui;padding:24px;text-align:center">Esta página no está disponible.</p>');
+  if (!/bot|crawl|spider|facebookexternalhit/i.test(String(req.headers['user-agent'] || ''))) L.contarVista(l.id);
+  res.type('html').send(L.renderLanding(l.datos, { id: l.id }));
+});
 app.use('/api', api);
 app.use('/webhooks', webhooks);
 // Landings públicas del Creador de landings: /l/<tienda>/<landing>, sus imágenes y el formulario.
@@ -86,7 +104,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'landings-por-tienda',
+    build: 'landing-premium-dominios',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

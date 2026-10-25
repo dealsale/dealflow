@@ -3553,9 +3553,32 @@ const conLandings = async (req: ExRequest, res: ExResponse, next: () => void) =>
   if ((await import('./landings.js')).landingsHabilitadas(req.user!.storeId!)) return next();
   res.status(403).json({ error: 'El Creador de landings no está activo en tu cuenta. Escríbele al equipo de DealFlow para activarlo.' });
 };
+// Dominio propio de las landings de la tienda.
+api.get('/landings/dominio', requireAuth, requireStore, conLandings, async (req, res) => {
+  res.json((await import('./landings.js')).estadoDominio(req.user!.storeId!));
+});
+api.post('/landings/dominio', requireAuth, requireStore, requireOwner, conLandings, async (req, res) => {
+  const L = await import('./landings.js');
+  const r = await L.conectarDominio(req.user!.storeId!, String(req.body?.dominio || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(await L.verificarDominio(req.user!.storeId!));
+});
+api.post('/landings/dominio/verificar', requireAuth, requireStore, conLandings, async (req, res) => {
+  res.json(await (await import('./landings.js')).verificarDominio(req.user!.storeId!));
+});
+api.delete('/landings/dominio', requireAuth, requireStore, requireOwner, conLandings, async (req, res) => {
+  const L = await import('./landings.js');
+  await L.quitarDominio(req.user!.storeId!);
+  res.json(L.estadoDominio(req.user!.storeId!));
+});
+api.put('/landings/dominio/inicio', requireAuth, requireStore, conLandings, async (req, res) => {
+  const L = await import('./landings.js');
+  if (!L.elegirInicio(req.user!.storeId!, String(req.body?.landingId || ''))) return res.status(404).json({ error: 'Landing no encontrada.' });
+  res.json(L.estadoDominio(req.user!.storeId!));
+});
 api.get('/landings', requireAuth, requireStore, conLandings, async (req, res) => {
   const L = await import('./landings.js');
-  res.json({ landings: L.listarLandings(req.user!.storeId!), cuota: L.cuotaLandings(req.user!.storeId!) });
+  res.json({ landings: L.listarLandings(req.user!.storeId!), cuota: L.cuotaLandings(req.user!.storeId!), dominio: L.estadoDominio(req.user!.storeId!) });
 });
 api.post('/landings', requireAuth, requireStore, conLandings, async (req, res) => {
   const L = await import('./landings.js');

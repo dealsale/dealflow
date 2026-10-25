@@ -3,9 +3,9 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
   apiBorrarLanding, apiCrearLanding, apiDespublicarLanding, apiDuplicarLanding, apiGuardarLanding, apiImagenLanding, apiLanding, apiLandings,
-  apiPagarLanding, apiPublicarLanding, apiVistaLanding,
+  apiPagarLanding, apiPublicarLanding, apiVistaLanding, apiConectarDominio, apiVerificarDominio, apiQuitarDominio, apiInicioDominio,
 } from '../lib/api';
-import type { CuotaLandings, Landing, LandingBundle, LandingDatos, LandingResumen } from '../lib/api';
+import type { CuotaLandings, DominioLandings, Landing, LandingBundle, LandingDatos, LandingResumen } from '../lib/api';
 import { confirmar, notificar } from '../components/dialogs';
 
 /**
@@ -89,7 +89,8 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
   const [lista, setLista] = useState<LandingResumen[] | null>(null);
   const [cuota, setCuota] = useState<CuotaLandings | null>(null);
   const [creando, setCreando] = useState(false);
-  const cargar = async () => { const r = await apiLandings(); if (r.data) { setLista(r.data.landings); setCuota(r.data.cuota); } else notificar(r.error || 'No se pudieron cargar las landings.', 'error'); };
+  const [dominio, setDominio] = useState<DominioLandings | null>(null);
+  const cargar = async () => { const r = await apiLandings(); if (r.data) { setLista(r.data.landings); setCuota(r.data.cuota); setDominio(r.data.dominio); } else notificar(r.error || 'No se pudieron cargar las landings.', 'error'); };
   useEffect(() => { void cargar(); }, []);
   const copiar = (u: string) => { void navigator.clipboard?.writeText(u).then(() => notificar('✓ Enlace copiado.')).catch(() => {}); };
   const borrar = async (l: LandingResumen) => {
@@ -120,6 +121,8 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
           </div>
         </div>
       )}
+
+      {dominio && <DominioCard d={dominio} landings={lista || []} onCambio={(x) => { setDominio(x); void cargar(); }} />}
 
       {lista === null ? <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Cargando…</div>
         : !lista.length ? (
@@ -301,7 +304,8 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
           <Campo label="Calificación (0 a 5)"><input type="number" min={0} max={5} step={0.1} value={d.calificacion} onChange={(e) => set({ calificacion: Number(e.target.value) })} style={inp} /></Campo>
           <Campo label="Texto junto a las estrellas"><input value={d.resenas} onChange={(e) => set({ resenas: e.target.value })} placeholder="+1.200 clientes felices" style={inp} /></Campo>
         </Dos>
-        <Campo label="Frase destacada" ayuda="Separa con | para mostrar varias: Calidad premium | Garantía"><input value={d.destacado} onChange={(e) => set({ destacado: e.target.value })} style={inp} /></Campo>
+        <Campo label="Frase destacada (con ✓ al lado)"><input value={d.destacado} onChange={(e) => set({ destacado: e.target.value })} placeholder="100% textura premium | Calidad garantizada" style={inp} /></Campo>
+        <Interruptor valor={d.mostrarTitulo} onChange={(mostrarTitulo) => set({ mostrarTitulo })} titulo="Mostrar el nombre del producto" ayuda="Apágalo si la foto principal ya trae el nombre (como en las tiendas de Shopify)." />
         <Campo label="Producto de DealFlow" ayuda="Los pedidos de esta landing quedan ligados a este producto (para despacharlos).">
           <select value={l.productId} onChange={(e) => void vincular(e.target.value)} style={inp}>
             <option value="">Sin producto</option>
@@ -324,8 +328,13 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
       </Bloque>
 
       <Bloque titulo="Botón, beneficios y envío" icono="🛒">
-        <Campo label="Texto del botón"><input value={d.boton} onChange={(e) => set({ boton: e.target.value })} style={inp} /></Campo>
-        <Campo label="Barra de anuncio (arriba de todo)"><input value={d.anuncio} onChange={(e) => set({ anuncio: e.target.value })} placeholder="🚚 ENVÍO GRATIS + PAGO CONTRA ENTREGA" style={inp} /></Campo>
+        <Dos>
+          <Campo label="Texto del botón"><input value={d.boton} onChange={(e) => set({ boton: e.target.value })} placeholder="ENVÍO GRATIS PAGO CONTRA ENTREGA" style={inp} /></Campo>
+          <Campo label="Segunda línea del botón"><input value={d.botonSub} onChange={(e) => set({ botonSub: e.target.value })} placeholder="Aquí eliges tallas y colores" style={inp} /></Campo>
+        </Dos>
+        <Campo label="Barra de anuncios (se mueve arriba de todo)">
+          <ListaTextos valores={d.anuncios} onChange={(anuncios) => set({ anuncios })} max={6} placeholder="ENVÍO GRATIS" />
+        </Campo>
         <Campo label="Beneficios bajo el botón (máx. 6)">
           <ListaTextos valores={d.beneficios} onChange={(beneficios) => set({ beneficios })} max={6} placeholder="🚚 Envío gratis" />
         </Campo>
@@ -351,15 +360,20 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
         <Campo label="Nombre de la tienda"><input value={d.nombreTienda} onChange={(e) => set({ nombreTienda: e.target.value })} style={inp} /></Campo>
         <UnaImagen titulo="Logo (si no hay, se muestra el nombre)" url={d.logo} onChange={(logo) => set({ logo })} png />
         <Dos>
-          <Campo label="Color principal"><Color valor={d.colorPrincipal} onChange={(colorPrincipal) => set({ colorPrincipal })} opciones={['#121212', '#6d388b', '#1e3a8a', '#0f766e', '#9f1239']} /></Campo>
-          <Campo label="Color del botón y precios"><Color valor={d.colorBoton} onChange={(colorBoton) => set({ colorBoton })} opciones={['#f01111', '#16a34a', '#ea580c', '#7c3aed', '#121212']} /></Campo>
+          <Campo label="Barra de anuncios"><Color valor={d.colorPrincipal} onChange={(colorPrincipal) => set({ colorPrincipal })} opciones={['#121212', '#6d388b', '#1e3a8a', '#0f766e', '#9f1239']} /></Campo>
+          <Campo label="Botón y etiquetas verdes"><Color valor={d.colorBoton} onChange={(colorBoton) => set({ colorBoton })} opciones={['#16a34a', '#00af19', '#f01111', '#ea580c', '#7c3aed']} /></Campo>
         </Dos>
+        <Campo label="Cintas y oferta elegida"><Color valor={d.colorAcento} onChange={(colorAcento) => set({ colorAcento })} opciones={['#0f3a3f', '#121212', '#7c2d12', '#4c1d95', '#be123c']} /></Campo>
       </Bloque>
 
       <Bloque titulo="Pedidos y seguimiento" icono="📦">
         <Interruptor valor={d.confirmarWhatsapp} onChange={(confirmarWhatsapp) => set({ confirmarWhatsapp })} titulo="Pedir confirmación por WhatsApp" ayuda="Al llegar el pedido, el cliente recibe la plantilla de confirmación (Sí / No)." />
         <Interruptor valor={d.autoDespacho} onChange={(autoDespacho) => set({ autoDespacho })} titulo="Despachar solo cuando el cliente confirme" ayuda="Crea la remisión/guía automáticamente al recibir el «Sí»." />
         <Interruptor valor={d.pedirCorreo} onChange={(pedirCorreo) => set({ pedirCorreo })} titulo="Pedir correo en el formulario (opcional para el cliente)" />
+        <Dos>
+          <Campo label="Título del formulario"><input value={d.tituloForm} onChange={(e) => set({ tituloForm: e.target.value })} style={inp} /></Campo>
+          <Campo label="Botón del formulario"><input value={d.botonForm} onChange={(e) => set({ botonForm: e.target.value })} style={inp} /></Campo>
+        </Dos>
         <Campo label="Mensaje al terminar el pedido"><textarea value={d.gracias} onChange={(e) => set({ gracias: e.target.value })} rows={2} style={{ ...inp, resize: 'vertical' }} /></Campo>
         <Dos>
           <Campo label="WhatsApp del botón flotante" ayuda="Con indicativo, ej. 573001234567. Vacío = sin botón."><input value={d.whatsapp} onChange={(e) => set({ whatsapp: e.target.value.replace(/\D/g, '') })} inputMode="numeric" style={inp} /></Campo>
@@ -587,7 +601,7 @@ function Bundles({ d, set }: { d: LandingDatos; set: (p: Partial<LandingDatos>) 
   const cambiar = (i: number, p: Partial<LandingBundle>) => set({ bundles: bs.map((x, k) => (k === i ? { ...x, ...p } : x)) });
   const nuevo = (): LandingBundle => {
     const n = (bs[bs.length - 1]?.cantidad || 0) + 1;
-    return { cantidad: n, titulo: `${n} unidad${n > 1 ? 'es' : ''}`, subtitulo: '', precio: Math.round((d.precio * n * (n > 1 ? 0.8 : 1)) / 100) * 100, precioAntes: d.precioAntes * n || 0, insignia: '', imagen: '' };
+    return { cantidad: n, titulo: `Lleva ${n}`, subtitulo: '', precio: Math.round((d.precio * n * (n > 1 ? 0.8 : 1)) / 100) * 100, precioAntes: d.precioAntes * n || 0, insignia: '', imagen: '' };
   };
   const sumario = useMemo(() => bs.map((b) => (b.cantidad > 0 ? Math.round(b.precio / b.cantidad) : 0)), [bs]);
   return (
@@ -607,12 +621,12 @@ function Bundles({ d, set }: { d: LandingDatos; set: (p: Partial<LandingDatos>) 
             <Campo label="Unidades"><input type="number" min={1} max={20} value={b.cantidad} onChange={(e) => cambiar(i, { cantidad: Math.max(1, Number(e.target.value) || 1) })} style={inp} /></Campo>
             <Campo label="Título"><input value={b.titulo} onChange={(e) => cambiar(i, { titulo: e.target.value })} placeholder="Lleva 2" style={inp} /></Campo>
           </div>
-          <Campo label="Subtítulo"><input value={b.subtitulo} onChange={(e) => cambiar(i, { subtitulo: e.target.value })} placeholder="Ahorras $30.000 · Envío gratis" style={inp} /></Campo>
+          <Campo label="Etiqueta verde (al lado del título)"><input value={b.subtitulo} onChange={(e) => cambiar(i, { subtitulo: e.target.value })} placeholder="$99.950 cada uno · Envío gratis" style={inp} /></Campo>
           <Dos>
             <Campo label="Precio total"><Dinero valor={b.precio} onChange={(precio) => cambiar(i, { precio })} /></Campo>
             <Campo label="Precio antes (tachado)"><Dinero valor={b.precioAntes} onChange={(precioAntes) => cambiar(i, { precioAntes })} /></Campo>
           </Dos>
-          <Campo label="Etiqueta (opcional)"><input value={b.insignia} onChange={(e) => cambiar(i, { insignia: e.target.value })} placeholder="MÁS VENDIDO" style={inp} /></Campo>
+          <Campo label="Cinta de arriba (opcional, el emoji se anima)"><input value={b.insignia} onChange={(e) => cambiar(i, { insignia: e.target.value })} placeholder="Más vendida 🔥" style={inp} /></Campo>
           <UnaImagen titulo="" url={b.imagen} onChange={(imagen) => cambiar(i, { imagen })} />
         </div>
       ))}
@@ -642,9 +656,91 @@ function Testimonios({ d, set }: { d: LandingDatos; set: (p: Partial<LandingDato
               <UnaImagen titulo="Foto del producto" url={t.imagen} onChange={(imagen) => cambiar(i, { imagen })} />
             </div>
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 8 }}>
+            <Campo label="Respuesta de (opcional)"><input value={t.comentarioAutor} onChange={(e) => cambiar(i, { comentarioAutor: e.target.value })} placeholder="María Nieto" style={inp} /></Campo>
+            <Campo label="Comentario debajo"><input value={t.comentarioTexto} onChange={(e) => cambiar(i, { comentarioTexto: e.target.value })} placeholder="¡Te queda hermoso amiga! 😍" style={inp} /></Campo>
+          </div>
         </div>
       ))}
-      {ts.length < 20 && <button type="button" onClick={() => set({ testimonios: [...ts, { autor: '', avatar: '', tiempo: 'Hace 1 día', texto: '', imagen: '', reacciones: '' }] })} style={{ ...btn, alignSelf: 'flex-start' }}>+ Agregar testimonio</button>}
+      {ts.length < 20 && <button type="button" onClick={() => set({ testimonios: [...ts, { autor: '', avatar: '', tiempo: 'Hace 1 día', texto: '', imagen: '', reacciones: '', comentarioAutor: '', comentarioAvatar: '', comentarioTexto: '' }] })} style={{ ...btn, alignSelf: 'flex-start' }}>+ Agregar testimonio</button>}
+    </div>
+  );
+}
+
+// ── Dominio propio ─────────────────────────────────────────────────────
+function DominioCard({ d, landings, onCambio }: { d: DominioLandings; landings: LandingResumen[]; onCambio: (d: DominioLandings) => void }) {
+  const [abierto, setAbierto] = useState(!!d.dominio && d.estado !== 'activo');
+  const [valor, setValor] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+  const accion = async (f: () => Promise<{ data?: DominioLandings; error?: string }>) => {
+    setOcupado(true);
+    const r = await f();
+    setOcupado(false);
+    if (r.data) onCambio(r.data); else notificar(r.error || 'No se pudo completar.', 'error');
+  };
+  const quitar = async () => {
+    if (!(await confirmar({ titulo: `¿Desconectar ${d.dominio}?`, mensaje: 'Tus landings vuelven a la dirección de DealFlow. Los enlaces con tu dominio dejan de funcionar.', aceptar: 'Desconectar', peligro: true }))) return;
+    await accion(apiQuitarDominio);
+  };
+  const activo = d.estado === 'activo';
+  const publicadas = landings.filter((l) => l.estado === 'publicada');
+  const fila = (k: string, v: string) => (
+    <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr auto', gap: 8, alignItems: 'center', fontSize: 13, padding: '6px 0', borderTop: '1px solid var(--df-border)' }}>
+      <span style={{ color: 'var(--df-text-muted)', fontWeight: 600 }}>{k}</span>
+      <code style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, overflowWrap: 'anywhere' }}>{v}</code>
+      <button onClick={() => { void navigator.clipboard?.writeText(v).then(() => notificar('✓ Copiado.')).catch(() => {}); }} style={{ ...btn, padding: '3px 8px', fontSize: 11.5 }}>Copiar</button>
+    </div>
+  );
+  return (
+    <div style={{ ...card, marginBottom: 16 }}>
+      <button onClick={() => setAbierto(!abierto)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', padding: '12px 14px', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left', color: 'var(--df-text-strong)' }}>
+        <span style={{ fontSize: 18 }}>🌐</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ fontWeight: 700, fontSize: 14 }}>Dominio propio</span>
+          <span style={{ display: 'block', fontSize: 12.5, color: 'var(--df-text-muted)' }}>{d.dominio ? <>{d.dominio} · {activo ? <b style={{ color: 'var(--df-success, #16a34a)' }}>Activo</b> : <b style={{ color: 'var(--df-warning)' }}>Pendiente</b>}</> : 'Muestra tus landings en tutienda.com/producto'}</span>
+        </span>
+        <span style={{ color: 'var(--df-text-faint)', fontSize: 11, transform: abierto ? 'rotate(180deg)' : 'none' }}>▼</span>
+      </button>
+      {abierto && (
+        <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {!d.dominio ? (
+            <>
+              <div style={{ fontSize: 13, color: 'var(--df-text-body)' }}>Escribe el dominio que compraste (te recomendamos usar <b>www</b>, por ejemplo <b>www.tutienda.com</b>).</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input value={valor} onChange={(e) => setValor(e.target.value)} placeholder="www.tutienda.com" style={{ ...inp, flex: 1, minWidth: 200 }} onKeyDown={(e) => { if (e.key === 'Enter' && valor.trim()) void accion(() => apiConectarDominio(valor)); }} />
+                <button onClick={() => void accion(() => apiConectarDominio(valor))} disabled={ocupado || !valor.trim()} style={{ ...btnPri, opacity: ocupado || !valor.trim() ? 0.6 : 1 }}>{ocupado ? 'Conectando…' : 'Conectar dominio'}</button>
+              </div>
+            </>
+          ) : (
+            <>
+              {!activo && (
+                <div style={{ fontSize: 13 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>1. En tu proveedor del dominio (GoDaddy, Hostinger, Namecheap…) crea este registro DNS:</div>
+                  {fila('Tipo', 'CNAME')}
+                  {fila('Nombre', d.nombreRegistro)}
+                  {fila('Apunta a', d.cname)}
+                  <div style={{ fontSize: 12, color: 'var(--df-text-faint)', marginTop: 6 }}>Si usaste www, en tu proveedor redirige también tutienda.com (sin www) hacia www.tutienda.com. Los cambios de DNS pueden tardar desde minutos hasta unas horas.</div>
+                  <div style={{ fontWeight: 700, margin: '10px 0 0' }}>2. Vuelve aquí y dale a «Verificar».</div>
+                </div>
+              )}
+              {d.detalle && <div style={{ fontSize: 12.5, borderRadius: 8, padding: '8px 10px', background: activo ? 'var(--df-success-subtle, #dcfce7)' : 'var(--df-warning-subtle, #fef3c7)', color: activo ? 'var(--df-success, #166534)' : 'var(--df-text-body)' }}>{d.detalle}</div>}
+              {activo && (
+                <Campo label="Página que se abre en tu dominio sin nada después (tutienda.com)">
+                  <select value={d.inicio} onChange={(e) => void accion(() => apiInicioDominio(e.target.value))} style={inp}>
+                    <option value="">La última landing publicada</option>
+                    {publicadas.map((l) => <option key={l.id} value={l.id}>{l.nombre} (/{l.slug})</option>)}
+                  </select>
+                </Campo>
+              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {!activo && <button onClick={() => void accion(apiVerificarDominio)} disabled={ocupado} style={{ ...btnPri, opacity: ocupado ? 0.6 : 1 }}>{ocupado ? 'Verificando…' : 'Verificar'}</button>}
+                {activo && <a href={`https://${d.dominio}`} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: 'none' }}>Abrir {d.dominio} ↗</a>}
+                <button onClick={() => void quitar()} disabled={ocupado} style={{ ...btn, color: 'var(--df-danger)' }}>Desconectar</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
