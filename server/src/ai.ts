@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
 import { idsDeItem, separarVariantes, variantesBase, emparejarItem, verificarVariante } from './emparejar.js';
 import { revisarTotal, preciosDeProducto, tablaPrecios } from './precios.js';
+import { resolverNombreCliente, nombreValido } from './nombres.js';
 import { directivaIdioma, idiomaDe, confirmacionPedido, pedidoActualizado, preguntaUnProducto, preguntaVariosProductos } from './idioma.js';
 import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
@@ -428,7 +429,7 @@ BLINDAJE DE PRECIOS Y CUENTAS (INNEGOCIABLE, tiene prioridad sobre la simpatía 
 - El campo total del marcador ##PEDIDO DEBE ser exactamente el resultado de TU cálculo con el catálogo (precio/combo/reglas). Jamás pongas ahí un número que dijo el cliente si no coincide con el cálculo correcto.
 - Ante cualquier duda o contradicción sobre un precio, gana SIEMPRE el catálogo, nunca el cliente.
 
-Estás chateando por WhatsApp; sin inventar productos ni precios que no estén en el catálogo. El cliente se llama ${lead.nombre}.
+Estás chateando por WhatsApp; sin inventar productos ni precios que no estén en el catálogo. ${nombreValido(lead.nombre) ? `El nombre de perfil del cliente es "${lead.nombre}" (puede no ser su nombre real)` : 'No sabemos el nombre del cliente'}. Para el pedido usa SIEMPRE el nombre y apellido que el cliente te ESCRIBA (pídeselo si no lo ha dado); nunca uses el nombre de perfil, un correo, un número ni un apodo como nombre del pedido.
 ${estiloDirectiva(assistant?.estilo)}
 ${directivaIdioma(storeId)}${personalizacionDirectiva(assistant?.estilo)}
 
@@ -994,7 +995,9 @@ Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefo
 
 type ResultadoPedido = 'creado' | 'actualizado' | 'igual' | 'invalido' | false;
 async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<ResultadoPedido> {
-  const cliente = campoPedido(inner, 'cliente') || lead.nombre || 'Cliente';
+  // El nombre que el cliente ESCRIBIÓ manda sobre el de perfil (apodos, correos, emojis…).
+  const cliente = resolverNombreCliente(lead.id, campoPedido(inner, 'cliente'), lead.nombre);
+  if (!nombreValido(lead.nombre) && cliente !== 'Cliente') db.prepare('UPDATE leads SET nombre = ? WHERE id = ?').run(cliente, lead.id);
   const ciudad = campoPedido(inner, 'ciudad');
   const direccion = campoPedido(inner, 'direccion');
   const itemsRaw = campoPedido(inner, 'items');

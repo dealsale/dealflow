@@ -1475,10 +1475,12 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, 
   if ('error' in prods) return res.status(400).json({ error: prods.error });
 
   const t = req.body?.transportadora as { id: number; nombre: string; service: string; precio: number } | undefined;
-  const [nombre, ...resto] = String(o.cliente || '').trim().split(' ');
+  // Nombre real del cliente (el que escribió en el chat), no el de perfil ni un correo.
+  const nombreReal = (await import('./nombres.js')).resolverNombreCliente(String(o.lead_id || ''), String(o.cliente || ''), '');
+  const [nombre, ...resto] = nombreReal.split(' ');
   const crear = await dropi.crearOrden(c, {
     total: Number(o.total || 0), notas: `DealFlow DF-${o.numero || ''}${o.nota ? ' · ' + o.nota : ''}`,
-    nombre: nombre || String(o.cliente || ''), apellido: resto.join(' '),
+    nombre: nombre || nombreReal, apellido: resto.join(' '),
     direccion: String(o.direccion || ''), departamento: destino.depto.name, ciudad: destino.ciudad.name,
     telefono: String(o.tel || ''), conRecaudo, shopOrderId: `df-${o.id}`,
     productos: prods.ordenProductos, transportadora: t, ciudadDropi: destino.ciudad,
@@ -2217,7 +2219,7 @@ api.post('/leads/:id/extraer-pedido', requireAuth, requireStore, async (req, res
     ? db.prepare("SELECT id, numero FROM orders WHERE store_id = ? AND replace(replace(replace(replace(tel,'+',''),' ',''),'-',''),'(','') LIKE ? ORDER BY numero DESC LIMIT 1").get(sid, '%' + telNorm) as { id: string; numero: number } | undefined
     : undefined;
   res.json({
-    propuesta: p ? { cliente: p.cliente || l.nombre || '', tel: l.tel || '', departamento: p.departamento, ciudad: p.ciudad, direccion: p.direccion, items: p.items, total: p.total } : null,
+    propuesta: p ? { cliente: (await import('./nombres.js')).resolverNombreCliente(l.id, p.cliente, l.nombre || ''), tel: l.tel || '', departamento: p.departamento, ciudad: p.ciudad, direccion: p.direccion, items: p.items, total: p.total } : null,
     ordenExistente: orden ? { rowId: orden.id, id: 'DF-' + orden.numero } : null,
   });
 });
