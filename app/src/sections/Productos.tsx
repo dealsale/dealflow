@@ -5,7 +5,7 @@ import { AutoTextarea } from '../components/AutoTextarea';
 import { BloquesBuilder } from '../components/BloquesBuilder';
 import type { Variante, Opcion } from '../types';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
-import { EffiVinculoProducto, ConvenioProductoEffi, RevisionVinculos } from '../components/EffiProductos';
+import { EffiVinculoProducto, ConvenioProductoEffi } from '../components/EffiProductos';
 import { apiSincronizarDropi, apiSoltarVariantesDropi, type ResultadoSyncDropi } from '../lib/api';
 
 
@@ -146,7 +146,7 @@ function SeDespachaPor({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
 function BloquePlegable({ logo, titulo, color, resumen, abiertoInicial, children }: { logo: string; titulo: string; color: string; resumen: string; abiertoInicial: boolean; children: ReactNode }) {
   const [abierto, setAbierto] = useState(abiertoInicial);
   return (
-    <div style={{ border: '1px solid var(--df-border)', borderLeft: `3px solid ${color}`, borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
+    <div style={{ border: '1px solid var(--df-border)', borderLeft: `3px solid ${color}`, borderRadius: 10, marginBottom: 10, overflow: 'visible' }}>
       <button onClick={() => setAbierto((o) => !o)} aria-expanded={abierto} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', background: abierto ? 'var(--df-bg)' : 'var(--df-surface)', border: 'none', padding: '10px 12px', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
         <span style={{ fontSize: 12, color: 'var(--df-text-faint)', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
         <img src={logo} alt={titulo} style={{ height: 18, maxWidth: 40, borderRadius: 4, objectFit: 'contain' }} />
@@ -181,8 +181,7 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
       {hayEffi && (
         <BloquePlegable logo="/logos/effi.png" titulo="Effi" color="var(--df-purple)" abiertoInicial={false}
-          resumen={`Artículo de Effi de cada variante${effiVinc !== null ? ` · ${effiVinc}/${todasVars.length} vinculadas` : ''} (se vinculan solos por nombre; aquí corriges las que no casaron).`}>
-          <RevisionVinculos productId={String(p.id)} onCambio={() => void df.reloadProducts()} />
+          resumen={`Artículo de Effi de cada variante${effiVinc !== null ? ` · ${effiVinc}/${todasVars.length} vinculadas` : ''}. Con ese artículo se despacha.`}>
           <EffiVinculoProducto key={`${p.id}-${(p.variantes || []).map((v) => v.refs?.effi_id || '').join(',')}`} productId={String(p.id)} productoNombre={p.nombre} conConvenio={false} onCambio={() => void df.reloadProducts()} />
         </BloquePlegable>
       )}

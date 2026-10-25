@@ -339,7 +339,7 @@ async function responderTurno(storeId: string, leadId: string) {
   const productRows = db.prepare('SELECT * FROM products WHERE store_id = ?').all(storeId) as Record<string, unknown>[];
   const products = productRows.map((p) => {
     const vars = (db.prepare('SELECT label, stock FROM variants WHERE product_id = ?').all(p.id as string) as { label: string; stock: number }[])
-      .map((v) => `${v.label} (${v.stock} disp.)`).join(', ');
+      .map((v) => v.label).filter(Boolean).join(', '); // sin stock: el asistente vende todas las variantes que existen
     const reglas = pj<string[]>(p.reglas as string, []).map((r) => `  · Regla: ${r}`).join('\n');
     const faqs = pj<{ pregunta: string; respuesta: string }[]>(p.faqs as string, []).map((f) => `  · P: ${f.pregunta} → R: ${f.respuesta}`).join('\n');
     const bloques = pj<{ tipo: string; valor?: string }[]>(p.mensaje_bloques as string, [])
@@ -420,6 +420,8 @@ FUENTE DE VERDAD: el CATÁLOGO de arriba es la ÚNICA fuente válida y ES EL ACT
 
 PROMOS ACTIVAS:
 ${promos || '(ninguna)'}
+
+STOCK: no hables de inventario, unidades disponibles ni de "agotado". Todas las variantes de la lista se pueden vender; la disponibilidad la maneja la tienda.
 
 BLINDAJE DE VARIANTES (INNEGOCIABLE): solo existen las tallas y colores de "VARIANTES QUE EXISTEN" (o de "Opciones disponibles" si el producto no tiene esa lista). Si el cliente pide otro color o talla (p. ej. "salmón", "naranjado") aunque diga que es parecido, que lo vio en otra parte o insista, NO lo aceptes ni lo anotes: dile con amabilidad que ese no lo tenemos y ofrécele los que SÍ hay. En el marcador ##PEDIDO escribe la talla y el color EXACTAMENTE como aparecen en la lista. Si el sistema detecta una variante que no existe, el pedido NO se registra.
 

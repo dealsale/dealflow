@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from './Dropdown';
 import {
-  type ArticuloVerificado, apiProveedorSugerido,
+  apiEffiTodos,
   apiEffiApiArticulos, apiEffiApiBuscar, apiRevisarVinculos, apiAplicarVinculos, type SugerenciaVinculo, type ArtVinculo, apiEffiApiProveedor, apiEffiApiConvenioProducto, apiEffiApiSyncArticulos, apiEffiApiVincular,
   type EffiArticulo, type EffiVarianteDF,
 } from '../lib/api';
@@ -271,133 +271,103 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
  * Vínculo con Effi DENTRO del producto (Productos → Variantes): el convenio del
  * producto y, por cada variante, su artículo de Effi (con el mismo selector).
  */
-export function EffiVinculoProducto({ productId, productoNombre, onCambio, conConvenio = true }: { productId: string; productoNombre: string; onCambio?: () => void; conConvenio?: boolean }) {
+export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { productId: string; productoNombre: string; onCambio?: () => void; conConvenio?: boolean }) {
   const [vars, setVars] = useState<EffiVarianteDF[] | null>(null);
-  const [cache, setCache] = useState<EffiArticulo[]>([]);
-  const [nombres, setNombres] = useState<Record<string, string>>({});
-  const [convenio, setConvenio] = useState('');
-  const [convenios, setConvenios] = useState<{ id: string; nombre: string }[]>([]);
-  const [abierto, setAbierto] = useState('');
+  const [lista, setLista] = useState<ArticuloSimple[] | null>(null);
   const [msg, setMsg] = useState('');
-  // ID escrito a mano por variante (vínculo directo por el ID del artículo en Effi).
-  const [ids, setIds] = useState<Record<string, string>>({});
-  const [info, setInfo] = useState<Record<string, ArticuloVerificado>>({});
   const [guardando, setGuardando] = useState('');
-  const [idsProv, setIdsProv] = useState<Record<string, string>>({});
-  const [sugeridos, setSugeridos] = useState<Record<string, ArticuloVerificado | null>>({});
-  const [buscandoSug, setBuscandoSug] = useState(false);
-  const porId = async (v: EffiVarianteDF, id: string, tipo: 'propio' | 'proveedor' = 'propio') => {
-    const limpio = id.replace(/\D/g, '');
-    setGuardando(v.variantId + tipo); setMsg('');
-    const r = await apiEffiApiVincular(v.variantId, limpio, tipo);
+  useEffect(() => {
+    void apiEffiApiArticulos(productId).then((r) => { if (r.data) setVars(r.data.variantes); else setMsg(r.error || 'No pudimos leer Effi.'); });
+    void cargarTodos().then(setLista);
+  }, [productId]);
+  const elegir = async (v: EffiVarianteDF, id: string) => {
+    setGuardando(v.variantId); setMsg('');
+    const r = await apiEffiApiVincular(v.variantId, id);
     setGuardando('');
-    if (r.error) { setMsg(`⚠️ ${v.nombre}: ${r.error}`); return; }
-    const a = r.data?.articulo;
-    if (a) { setInfo((x) => ({ ...x, [a.id]: a })); setNombres((n) => ({ ...n, [a.id]: a.descripcion + (a.referencia ? ` [${a.referencia}]` : '') })); }
-    setVars((vs) => (vs || []).map((x) => (x.variantId === v.variantId ? (tipo === 'proveedor' ? { ...x, provId: limpio } : { ...x, effiId: limpio, auto: false }) : x)));
-    if (tipo === 'proveedor') setIdsProv((x) => ({ ...x, [v.variantId]: '' })); else setIds((x) => ({ ...x, [v.variantId]: '' }));
-    setMsg(limpio ? `✓ ${v.nombre} → ${tipo === 'proveedor' ? 'proveedor ' : ''}#${limpio}${a ? ` ${a.descripcion}` : ''}` : `✓ ${v.nombre}: vínculo ${tipo === 'proveedor' ? 'del proveedor ' : ''}quitado.`);
+    if (r.error) { setMsg(`⚠️ ${r.error}`); return; }
+    setVars((vs) => (vs || []).map((x) => (x.variantId === v.variantId ? { ...x, effiId: id, provId: '', auto: false } : x)));
     onCambio?.();
-  };
-  // Busca, para cada variante con artículo propio y sin proveedor, el artículo del
-  // proveedor con el mismo nombre. Solo SUGIERE: tú decides con "Usar".
-  const buscarSugerencias = async () => {
-    setBuscandoSug(true); setMsg('');
-    const out: Record<string, ArticuloVerificado | null> = {};
-    for (const v of vars || []) {
-      if (!v.effiId || v.provId) continue;
-      const r = await apiProveedorSugerido(v.effiId);
-      out[v.variantId] = r.data?.articulo || null;
-      setSugeridos({ ...out });
-    }
-    setBuscandoSug(false);
-    if (!Object.values(out).some(Boolean)) setMsg('No encontramos artículos del proveedor con el mismo nombre. Pega su ID a mano en "Proveedor".');
-  };
-  const cargar = async () => {
-    const r = await apiEffiApiArticulos(productId);
-    if (!r.data) { setMsg(r.error || 'No pudimos leer Effi.'); return; }
-    setVars(r.data.variantes); setCache(r.data.articulos); setNombres(r.data.nombres || {});
-    setConvenio(r.data.conveniosProducto?.[productId] || ''); setConvenios(r.data.convenios || []);
-  };
-  useEffect(() => { void cargar(); }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const vincular = async (v: EffiVarianteDF, a: EffiArticulo) => {
-    const r = await apiEffiApiVincular(v.variantId, a.id);
-    if (r.error) { setMsg(r.error); return; }
-    setNombres((n) => ({ ...n, [a.id]: a.descripcion + (a.referencia ? ` [${a.referencia}]` : '') }));
-    setVars((vs) => (vs || []).map((x) => (x.variantId === v.variantId ? { ...x, effiId: a.id, auto: false } : x)));
-    setAbierto(''); setMsg(`✓ ${v.nombre} → ${a.descripcion}`);
-    onCambio?.();
-  };
-  const cambiarConvenio = async (c: string) => {
-    setConvenio(c);
-    const r = await apiEffiApiConvenioProducto([productId], c);
-    if (r.error) setMsg(r.error);
   };
   if (!vars) return <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{msg || 'Leyendo Effi…'}</div>;
-  const vinculadas = vars.filter((v) => v.effiId).length;
+  const actual = (v: EffiVarianteDF) => v.provId || v.effiId;
+  const vinculadas = vars.filter(actual).length;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        {conConvenio && <>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Convenio:</span>
-        <div style={{ minWidth: 220, flex: '0 1 320px' }}>
-          <Dropdown ariaLabel="Convenio del producto" value={convenio} onChange={(v) => void cambiarConvenio(v)}
-            options={opcionesConvenio(convenio, convenios)} />
-        </div>
-        </>}
-        <span style={{ fontSize: 12, color: vinculadas === vars.length ? 'var(--df-purple)' : 'var(--df-warning)', fontWeight: 700, marginLeft: 'auto' }}>{vinculadas}/{vars.length} variantes vinculadas</span>
-      </div>
-      <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>
-        <b>Tu artículo</b> = el tuyo en Effi. <b>Proveedor</b> = el del proveedor dropshipping: si lo pones, se despacha con ese y el stock que ve el asistente es el del proveedor.
-        {vars.some((v) => v.effiId && !v.provId) && <button onClick={() => void buscarSugerencias()} disabled={buscandoSug} style={{ ...mini, marginLeft: 8 }}>{buscandoSug ? 'Buscando…' : '💡 Buscar los artículos del proveedor'}</button>}
-      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: vinculadas === vars.length ? 'var(--df-purple)' : 'var(--df-warning)' }}>{vinculadas}/{vars.length} variantes con artículo de Effi</div>
       {vars.map((v) => {
         const etiqueta = v.nombre.startsWith(productoNombre) ? (v.nombre.slice(productoNombre.length).replace(/^\s*\(|\)\s*$/g, '') || 'Única') : v.nombre;
         return (
-          <div key={v.variantId} style={{ borderTop: '1px dashed var(--df-border)', paddingTop: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600, minWidth: 90 }}>{etiqueta}</span>
-              {/* El ID del artículo vinculado, siempre visible: para saber cuál está y cuál poner. */}
-              {v.effiId
-                ? <span title="ID del artículo en Effi" style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 800, background: 'var(--df-purple-subtle)', color: 'var(--df-purple)', borderRadius: 6, padding: '2px 7px' }}>#{v.effiId}</span>
-                : <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-warning)' }}>⚠ sin artículo</span>}
-              <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--df-text-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {v.effiId ? (nombres[v.effiId] || '') : ''}
-                {v.effiId && info[v.effiId] && <span style={{ color: 'var(--df-text-muted)' }}> · {info[v.effiId].drop === 1 ? 'proveedor' : 'propio'}{info[v.effiId].stock != null ? ` · stock ${info[v.effiId].stock}` : ''}</span>}
-              </span>
-              {v.effiId && v.auto && <span title="Este vínculo lo puso DealFlow solo (antes). Revisa que sea el correcto." style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: '2px 7px', background: 'var(--df-warning-subtle)', color: 'var(--df-warning)' }}>revisar</span>}
+          <div key={v.variantId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', borderTop: '1px dashed var(--df-border)', paddingTop: 7 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, minWidth: 110 }}>{etiqueta}</span>
+            <div style={{ flex: '1 1 260px', minWidth: 220 }}>
+              <SelectorArticulo lista={lista} valor={actual(v)} ocupado={guardando === v.variantId} onElegir={(id) => void elegir(v, id)} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 5 }}>
-              <input value={ids[v.variantId] || ''} onChange={(e) => setIds((x) => ({ ...x, [v.variantId]: e.target.value.replace(/\D/g, '') }))}
-                onKeyDown={(e) => { if (e.key === 'Enter' && ids[v.variantId]) void porId(v, ids[v.variantId]); }}
-                placeholder={v.effiId ? `Cambiar: otro ID (ahora #${v.effiId})` : 'ID del artículo en Effi'} inputMode="numeric"
-                style={{ width: 190, border: '1px solid var(--df-border)', borderRadius: 7, padding: '5px 8px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
-              <button onClick={() => void porId(v, ids[v.variantId] || '')} disabled={!ids[v.variantId] || guardando === v.variantId + 'propio'} style={{ ...mini, opacity: ids[v.variantId] ? 1 : 0.5 }}>{guardando === v.variantId + 'propio' ? 'Verificando…' : 'Vincular ID'}</button>
-              <button onClick={() => setAbierto(abierto === v.variantId ? '' : v.variantId)} style={mini}>{abierto === v.variantId ? 'Cerrar' : 'Buscar por nombre'}</button>
-              {v.effiId && <button onClick={() => void porId(v, '')} style={{ ...mini, color: 'var(--df-danger)' }}>Quitar</button>}
-            </div>
-            {/* Artículo del proveedor: con este se despacha y de aquí sale el stock. */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 5 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', minWidth: 70 }}>Proveedor:</span>
-              {v.provId
-                ? <><span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 800, background: 'var(--df-success-subtle, var(--df-bg))', color: 'var(--df-success)', borderRadius: 6, padding: '2px 7px' }}>#{v.provId}</span>
-                    <span style={{ fontSize: 12, color: 'var(--df-text-body)' }}>{nombres[v.provId] || ''}{info[v.provId]?.stock != null ? <span style={{ color: 'var(--df-text-muted)' }}> · stock proveedor {info[v.provId].stock}</span> : ''}</span>
-                    <button onClick={() => void porId(v, '', 'proveedor')} style={{ ...mini, color: 'var(--df-danger)' }}>Quitar</button></>
-                : <>
-                    <input value={idsProv[v.variantId] || ''} onChange={(e) => setIdsProv((x) => ({ ...x, [v.variantId]: e.target.value.replace(/\D/g, '') }))}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && idsProv[v.variantId]) void porId(v, idsProv[v.variantId], 'proveedor'); }}
-                      placeholder="ID del artículo del proveedor" inputMode="numeric"
-                      style={{ width: 190, border: '1px solid var(--df-border)', borderRadius: 7, padding: '5px 8px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
-                    <button onClick={() => void porId(v, idsProv[v.variantId] || '', 'proveedor')} disabled={!idsProv[v.variantId] || guardando === v.variantId + 'proveedor'} style={{ ...mini, opacity: idsProv[v.variantId] ? 1 : 0.5 }}>{guardando === v.variantId + 'proveedor' ? 'Verificando…' : 'Vincular'}</button>
-                    {sugeridos[v.variantId] && <button onClick={() => void porId(v, sugeridos[v.variantId]!.id, 'proveedor')} title="Sugerencia por nombre: revisa que sea el correcto" style={{ ...mini, color: 'var(--df-purple)', borderColor: 'var(--df-purple)' }}>Usar #{sugeridos[v.variantId]!.id} · {sugeridos[v.variantId]!.descripcion}{sugeridos[v.variantId]!.stock != null ? ` (stock ${sugeridos[v.variantId]!.stock})` : ''}</button>}
-                    {sugeridos[v.variantId] === null && <span style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>sin sugerencia</span>}
-                  </>}
-            </div>
-            {abierto === v.variantId && <div style={{ marginTop: 8 }}><BuscadorArticulo cache={cache} producto={productoNombre} variante={etiqueta} onElegir={(a) => void vincular(v, a)} /></div>}
           </div>
         );
       })}
-      {msg && <div style={{ fontSize: 12, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12, color: 'var(--df-danger)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+interface ArticuloSimple { id: string; descripcion: string; referencia: string; drop: number }
+// La lista de artículos se trae una vez y se comparte entre productos (5 min).
+let todosCache: { at: number; p: Promise<ArticuloSimple[]> } | null = null;
+function cargarTodos(): Promise<ArticuloSimple[]> {
+  if (!todosCache || Date.now() - todosCache.at > 5 * 60_000) {
+    todosCache = { at: Date.now(), p: apiEffiTodos().then((r) => r.data?.articulos || []) };
+  }
+  return todosCache.p;
+}
+
+/** Selector con buscador: muestra el artículo elegido (con su ID) y todos los de Effi. */
+function SelectorArticulo({ lista, valor, ocupado, onElegir }: { lista: ArticuloSimple[] | null; valor: string; ocupado: boolean; onElegir: (id: string) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!abierto) return;
+    const fuera = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false); };
+    document.addEventListener('mousedown', fuera);
+    return () => document.removeEventListener('mousedown', fuera);
+  }, [abierto]);
+  const sel = lista?.find((a) => a.id === valor);
+  const nq = q.trim().toLowerCase();
+  const filtrados = (lista || []).filter((a) => !nq || `${a.id} ${a.descripcion} ${a.referencia}`.toLowerCase().includes(nq)).slice(0, 80);
+  const linea = (a: ArticuloSimple) => (
+    <>
+      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 800, color: 'var(--df-purple)' }}>#{a.id}</span>
+      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.descripcion}{a.referencia ? <span style={{ color: 'var(--df-text-faint)' }}> · {a.referencia}</span> : ''}</span>
+      {a.drop === 1 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-success)' }}>PROVEEDOR</span>}
+    </>
+  );
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setAbierto((x) => !x)} disabled={ocupado}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', border: `1px solid ${valor ? 'var(--df-purple-border, var(--df-border))' : 'var(--df-warning)'}`, borderRadius: 8, padding: '7px 10px', background: 'var(--df-surface)', color: 'var(--df-text)', fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer' }}>
+        {ocupado ? <span style={{ color: 'var(--df-text-muted)' }}>Guardando…</span>
+          : sel ? linea(sel)
+          : valor ? <><span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 800, color: 'var(--df-purple)' }}>#{valor}</span><span style={{ flex: 1, color: 'var(--df-text-muted)' }}>{lista ? 'vinculado' : 'cargando…'}</span></>
+          : <span style={{ flex: 1, color: 'var(--df-warning)', fontWeight: 600 }}>Elegir artículo de Effi…</span>}
+        <span style={{ color: 'var(--df-text-faint)', fontSize: 10 }}>▼</span>
+      </button>
+      {abierto && (
+        <div style={{ position: 'absolute', zIndex: 30, top: '105%', left: 0, right: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, boxShadow: '0 18px 40px -18px rgba(15,23,42,.35)', padding: 6 }}>
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Escribe nombre, referencia o ID…"
+            style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 7, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)', marginBottom: 6 }} />
+          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+            {!lista && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', padding: 8 }}>Cargando artículos de Effi…</div>}
+            {valor && <button type="button" onClick={() => { onElegir(''); setAbierto(false); }} style={{ width: '100%', textAlign: 'left', border: 'none', background: 'none', padding: '7px 8px', fontFamily: 'inherit', fontSize: 12, color: 'var(--df-danger)', cursor: 'pointer' }}>Quitar el artículo</button>}
+            {filtrados.map((a) => (
+              <button key={a.id} type="button" onClick={() => { onElegir(a.id); setAbierto(false); setQ(''); }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', border: 'none', borderRadius: 6, background: a.id === valor ? 'var(--df-purple-subtle)' : 'none', padding: '7px 8px', fontFamily: 'inherit', fontSize: 12.5, color: 'var(--df-text)', cursor: 'pointer' }}>
+                {linea(a)}{a.id === valor && <span style={{ color: 'var(--df-purple)', fontWeight: 800 }}>✓</span>}
+              </button>
+            ))}
+            {lista && !filtrados.length && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', padding: 8 }}>Ningún artículo coincide.</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
