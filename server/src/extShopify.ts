@@ -89,9 +89,9 @@ export async function recibirPedido(storeId: string, b: { shop?: string; orderId
     o = r;
   } else return { error: 'La extensión no pudo leer el pedido de la página.' };
   const { importarPedido } = await import('./shopifyPedidos.js');
-  const creado = Date.parse(txt(o.created_at));
-  const reciente = !creado || Date.now() - creado < 24 * 3600e3; // confirmación por WhatsApp solo si es de las últimas 24 h
-  const oid = await importarPedido(storeId, shop || 'shopify', o, reciente);
+  // Lo importas tú a mano desde el pedido: la confirmación por WhatsApp sale siempre (es
+  // una plantilla, no depende de la ventana de 24 h), aunque el pedido sea de días atrás.
+  const oid = await importarPedido(storeId, shop || 'shopify', o, true);
   if (!oid) return { error: 'No se pudo crear el pedido en DealFlow.' };
   const n = (db.prepare('SELECT numero FROM orders WHERE id = ?').get(oid) as { numero: number }).numero;
   registrarLog(storeId, 'info', 'pedido', `DF-${n} creado desde la extensión DealFlow x Shopify (${txt(o.name) || orderId}).`);

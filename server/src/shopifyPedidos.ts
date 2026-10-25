@@ -19,7 +19,7 @@ import { db, pj, uid, registrarLog } from './db.js';
 import { trazar } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
 
-for (const col of ["shopify_id TEXT NOT NULL DEFAULT ''", "shopify_shop TEXT NOT NULL DEFAULT ''", "shopify_gid TEXT NOT NULL DEFAULT ''", "confirmacion TEXT NOT NULL DEFAULT ''", "shopify_fulfilled INTEGER NOT NULL DEFAULT 0"]) {
+for (const col of ["shopify_id TEXT NOT NULL DEFAULT ''", "shopify_shop TEXT NOT NULL DEFAULT ''", "shopify_gid TEXT NOT NULL DEFAULT ''", "confirmacion TEXT NOT NULL DEFAULT ''", "shopify_fulfilled INTEGER NOT NULL DEFAULT 0", "confirmacion_error TEXT NOT NULL DEFAULT ''"]) {
   try { db.exec(`ALTER TABLE orders ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_orders_shopify ON orders(store_id, shopify_id)");
@@ -121,12 +121,14 @@ export async function enviarConfirmacion(storeId: string, orderId: string): Prom
 
   const { ensureLead, sendWhatsappTemplate, sendWhatsappText, marcarEnviado } = await import('./wa.js');
   const { id: leadId } = ensureLead(storeId, wa, txt(o.cliente), '+' + wa);
-  db.prepare("UPDATE orders SET lead_id = ?, confirmacion = 'esperando' WHERE id = ?").run(leadId, orderId);
+  // "Esperando" solo cuando el mensaje SÍ salió; si no salió, queda "fallo" con el motivo.
+  db.prepare('UPDATE orders SET lead_id = ? WHERE id = ?').run(leadId, orderId);
+  const fallo = (motivo: string) => db.prepare("UPDATE orders SET confirmacion = 'fallo', confirmacion_error = ? WHERE id = ?").run(motivo.slice(0, 400), orderId);
   db.prepare("UPDATE leads SET asignado = 'Asistente (bot)', etiqueta = 'Venta', seguimiento_nivel = 3 WHERE id = ?").run(leadId);
 
   const { puedeEscribirle, contarProactivo } = await import('./calidad.js');
   const permiso = puedeEscribirle(storeId, wa, leadId);
-  if (!permiso.ok) { trazar(storeId, orderId, { etapa: 'pedido', nivel: 'warn', titulo: 'No se envió la confirmación por WhatsApp', detalle: permiso.motivo }); return { ok: false, detalle: permiso.motivo }; }
+  if (!permiso.ok) { fallo(permiso.motivo || 'WhatsApp no permite escribirle a este número ahora.'); trazar(storeId, orderId, { etapa: 'pedido', nivel: 'warn', titulo: 'No se envió la confirmación por WhatsApp', detalle: permiso.motivo }); return { ok: false, detalle: permiso.motivo }; }
 
   const { plantillaAprobada } = await import('./avisoGuia.js');
   const pl = plantillaAprobada(storeId, PLANTILLA_CONFIRMACION);
@@ -145,7 +147,13 @@ export async function enviarConfirmacion(storeId: string, orderId: string): Prom
   }
   db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, leadId, texto);
   marcarEnviado(mid, r);
-  if (r.ok) contarProactivo(storeId, wa);
+  if (r.ok) {
+    contarProactivo(storeId, wa);
+    db.prepare("UPDATE orders SET confirmacion = 'esperando', confirmacion_error = '' WHERE id = ?").run(orderId);
+  } else {
+    fallo(pl ? `WhatsApp rechazó la plantilla: ${r.error || 'error desconocido'}`
+      : `La plantilla "${PLANTILLA_CONFIRMACION}" no está aprobada en Meta y el cliente no te ha escrito en las últimas 24 h, así que WhatsApp no deja escribirle. Apruébala en Plantillas o llámalo/escríbele primero.`);
+  }
   trazar(storeId, orderId, { etapa: 'pedido', nivel: r.ok ? 'ok' : 'warn', titulo: r.ok ? 'Confirmación enviada por WhatsApp (Sí / No)' : 'No se pudo enviar la confirmación', detalle: r.ok ? (pl ? 'Plantilla aprobada' : 'Texto (ventana de 24 h abierta)') : `${r.error || ''}${pl ? '' : ` · La plantilla "${PLANTILLA_CONFIRMACION}" aún no está aprobada en Meta para esta tienda.`}` });
   return { ok: r.ok, detalle: r.error || '' };
 }

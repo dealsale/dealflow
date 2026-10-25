@@ -696,11 +696,13 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
 function ConfirmacionShopify({ sel }: { sel: DecoratedOrder }) {
   const [msg, setMsg] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const c = sel.confirmacion || '';
+  const [enviada, setEnviada] = useState(false);
+  const c = enviada && sel.confirmacion !== 'si' && sel.confirmacion !== 'no' ? 'esperando' : sel.confirmacion || '';
   const info: Record<string, [string, string, string]> = {
     esperando: ['⏳', 'Esperando que el cliente confirme por WhatsApp', 'var(--df-warning)'],
     si: ['✅', 'El cliente confirmó el pedido por WhatsApp', 'var(--df-success)'],
     no: ['❌', 'El cliente respondió que NO: escríbele desde el Inbox', 'var(--df-danger)'],
+    fallo: ['⚠️', 'No se pudo enviar la confirmación por WhatsApp', 'var(--df-danger)'],
     '': ['💬', 'Aún no se ha pedido confirmación por WhatsApp', 'var(--df-text-muted)'],
   };
   const [ico, texto, color] = info[c] || info[''];
@@ -710,6 +712,7 @@ function ConfirmacionShopify({ sel }: { sel: DecoratedOrder }) {
     const r = await apiShopifyReenviarConfirmacion(sel.rowId);
     setEnviando(false);
     setMsg(r.error ? r.error : '✓ Confirmación enviada.');
+    if (!r.error) setEnviada(true);
   };
   return (
     <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: '11px 13px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -718,6 +721,7 @@ function ConfirmacionShopify({ sel }: { sel: DecoratedOrder }) {
         <span style={{ fontSize: 13, fontWeight: 700, color, flex: 1, minWidth: 180 }}>{texto}</span>
         {c !== 'si' && <button onClick={() => void reenviar()} disabled={enviando} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', color: 'var(--df-text-body)', opacity: enviando ? 0.6 : 1 }}>{enviando ? 'Enviando…' : c ? 'Reenviar confirmación' : 'Pedir confirmación'}</button>}
       </div>
+      {c === 'fallo' && sel.confirmacionError && !msg && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.45 }}>{sel.confirmacionError}</div>}
       {sel.shopifyEnviado && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>🛍️ Marcado como enviado en Shopify con su guía.</div>}
       {msg && <div style={{ fontSize: 12, color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</div>}
     </div>
