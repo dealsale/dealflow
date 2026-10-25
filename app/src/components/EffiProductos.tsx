@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Dropdown } from './Dropdown';
 import {
   apiEffiTodos,
@@ -347,11 +348,36 @@ function SelectorArticulo({ lista, valor, ocupado, onElegir }: { lista: Articulo
   const [abierto, setAbierto] = useState(false);
   const [q, setQ] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // El menú se pinta encima de todo (portal en <body>) para que ningún contenedor lo
+  // recorte ni lo tape; se ubica junto al botón y se abre hacia arriba si no cabe abajo.
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; alto: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!abierto) { setPos(null); return; }
+    const ubicar = () => {
+      const r = ref.current?.getBoundingClientRect();
+      if (!r) return;
+      const abajo = window.innerHeight - r.bottom - 12; const arriba = r.top - 12;
+      const haciaArriba = abajo < 240 && arriba > abajo;
+      const alto = Math.max(140, Math.min(340, haciaArriba ? arriba : abajo));
+      setPos(haciaArriba ? { left: r.left, width: r.width, bottom: window.innerHeight - r.top + 4, alto } : { left: r.left, width: r.width, top: r.bottom + 4, alto });
+    };
+    ubicar();
+    window.addEventListener('resize', ubicar);
+    window.addEventListener('scroll', ubicar, true);
+    return () => { window.removeEventListener('resize', ubicar); window.removeEventListener('scroll', ubicar, true); };
+  }, [abierto]);
   useEffect(() => {
     if (!abierto) return;
-    const fuera = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false); };
+    const fuera = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setAbierto(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setAbierto(false); };
     document.addEventListener('mousedown', fuera);
-    return () => document.removeEventListener('mousedown', fuera);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('keydown', esc); };
   }, [abierto]);
   const sel = lista?.find((a) => a.id === valor);
   const nq = q.trim().toLowerCase();
@@ -374,11 +400,11 @@ function SelectorArticulo({ lista, valor, ocupado, onElegir }: { lista: Articulo
           : <span style={{ flex: 1, color: 'var(--df-warning)', fontWeight: 600 }}>Elegir artículo de Effi…</span>}
         <span style={{ color: 'var(--df-text-faint)', fontSize: 10 }}>▼</span>
       </button>
-      {abierto && (
-        <div style={{ position: 'absolute', zIndex: 30, top: '105%', left: 0, right: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, boxShadow: '0 18px 40px -18px rgba(15,23,42,.35)', padding: 6 }}>
+      {abierto && pos && createPortal(
+        <div ref={menuRef} style={{ position: 'fixed', zIndex: 99999, top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', maxHeight: pos.alto, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, boxShadow: '0 18px 40px -12px rgba(15,23,42,.45)', padding: 6 }}>
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Escribe nombre, referencia o ID…"
             style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 7, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)', marginBottom: 6 }} />
-          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
             {!lista && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', padding: 8 }}>Cargando artículos de Effi…</div>}
             {valor && <button type="button" onClick={() => { onElegir(''); setAbierto(false); }} style={{ width: '100%', textAlign: 'left', border: 'none', background: 'none', padding: '7px 8px', fontFamily: 'inherit', fontSize: 12, color: 'var(--df-danger)', cursor: 'pointer' }}>Quitar el artículo</button>}
             {filtrados.map((a) => (
@@ -389,7 +415,8 @@ function SelectorArticulo({ lista, valor, ocupado, onElegir }: { lista: Articulo
             ))}
             {lista && !filtrados.length && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', padding: 8 }}>Ningún artículo coincide.</div>}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
