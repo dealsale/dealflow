@@ -93,6 +93,9 @@ async function req<T>(url: string, method: string, body?: unknown): Promise<{ da
   return texto ? conEspera(texto, reqBase<T>(url, method, body), ambitoDeUrl(url)) : reqBase<T>(url, method, body);
 }
 
+/** Igual que req, sin la ventana de "procesando" (para interruptores instantáneos). */
+const reqSilencioso = <T,>(url: string, method: string, body?: unknown) => reqBase<T>(url, method, body);
+
 async function reqBase<T>(url: string, method: string, body?: unknown): Promise<{ data?: T; error?: string }> {
   try {
     const r = await fetch(url, {
@@ -384,7 +387,7 @@ export const apiNovedadesEstado = () => req<EstadoNovedades>('/api/novedades/est
 export const apiNovedadesSync = () => req<{ ok: true; abiertas: number; nuevas: number }>('/api/novedades/sync', 'POST');
 export const apiNovedadSolucion = (id: string, p: PropuestaNovedad) => req<{ ok: true; estado: string }>(`/api/novedades/${encodeURIComponent(id)}/solucion`, 'POST', p);
 export const apiNovedadAvisar = (id: string) => req<{ ok: true; via: string }>(`/api/novedades/${encodeURIComponent(id)}/avisar`, 'POST');
-export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
+export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean; landings?: boolean }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
 export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET');
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
 export const apiOrderEstado = (rowId: string, estado: string) => req<{ estado: string }>(`/api/orders/${rowId}/estado`, 'POST', { estado });
@@ -950,3 +953,6 @@ export const apiDespublicarLanding = (id: string) => req<{ ok: true }>(`/api/lan
 export const apiPagarLanding = (id: string) => req<{ url: string }>(`/api/landings/${encodeURIComponent(id)}/pagar`, 'POST');
 export const apiAdminLandings = () => req<{ ajustes: { precio: number; gratis: number }; stats: { total: number; publicadas: number | null; pagadas: number | null; pedidos: number | null } }>('/api/admin/landings', 'GET');
 export const apiAdminGuardarLandings = (b: { precio: number; gratis: number }) => req<{ ajustes: { precio: number; gratis: number } }>('/api/admin/landings', 'PUT', b);
+export interface TiendaLandings { id: string; tienda: string; correo: string; plan: string; activa: boolean; habilitado: boolean; landings: number; publicadas: number; pedidos: number }
+export const apiAdminTiendasLandings = () => req<{ tiendas: TiendaLandings[] }>('/api/admin/landings/tiendas', 'GET');
+export const apiAdminHabilitarLandings = (id: string, habilitado: boolean) => reqSilencioso<{ ok: true }>(`/api/admin/landings/tiendas/${encodeURIComponent(id)}`, 'PUT', { habilitado });

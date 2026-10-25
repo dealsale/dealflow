@@ -69,7 +69,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
               <>
                 {item('resumen', <IconResumen />, 'Resumen')}
                 {item('productos', <IconProductos />, 'Productos')}
-                {item('landings', <IconLandings />, 'Landings')}
+                {df.landingsHabilitadas && item('landings', <IconLandings />, 'Landings')}
                 {item('asistente', <IconAsistente />, 'Asistente')}
                 {item('whatsapp', <IconWhatsApp />, 'WhatsApp', df.waConnected && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)' }} />)}
                 {df.effiApi?.conectado && item('logistica', <IconLogistica />, 'Logística Effi')}
@@ -93,6 +93,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                   <>
                     {fila(aSection === 'superadmin', () => goA('superadmin'), <IconCuentas />, 'Todas las tiendas')}
                     {fila(aSection === 'plantillas', () => goA('plantillas'), <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA')}
+                    {fila(aSection === 'landings', () => goA('landings'), <span style={{ fontSize: 16 }}>🛍️</span>, 'Landings')}
                   </>
                 ) : (
                   <>

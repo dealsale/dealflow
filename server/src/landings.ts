@@ -38,6 +38,23 @@ db.exec(`CREATE TABLE IF NOT EXISTS landings (
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_landings_slug ON landings(store_id, slug)');
 db.exec('CREATE TABLE IF NOT EXISTS landings_ajustes (clave TEXT PRIMARY KEY, valor TEXT NOT NULL)');
 try { db.exec("ALTER TABLE orders ADD COLUMN landing_id TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+// El superadmin decide qué tiendas pueden usar el Creador de landings.
+try { db.exec('ALTER TABLE stores ADD COLUMN landings_habilitado INTEGER NOT NULL DEFAULT 0'); } catch { /* ya existe */ }
+
+export const landingsHabilitadas = (storeId: string) =>
+  !!(db.prepare('SELECT landings_habilitado FROM stores WHERE id = ?').get(storeId) as { landings_habilitado: number } | undefined)?.landings_habilitado;
+export function habilitarLandings(storeId: string, si: boolean): boolean {
+  return db.prepare('UPDATE stores SET landings_habilitado = ? WHERE id = ?').run(si ? 1 : 0, storeId).changes > 0;
+}
+/** Tiendas con su permiso y cuántas landings tienen (para el menú del superadmin). */
+export function tiendasLandings(): { id: string; tienda: string; correo: string; plan: string; activa: boolean; habilitado: boolean; landings: number; publicadas: number; pedidos: number }[] {
+  return (db.prepare(`SELECT s.id, s.nombre, s.correo, s.plan, s.activa, s.landings_habilitado,
+      (SELECT COUNT(*) FROM landings l WHERE l.store_id = s.id) n,
+      (SELECT COUNT(*) FROM landings l WHERE l.store_id = s.id AND l.estado = 'publicada') pub,
+      (SELECT COALESCE(SUM(pedidos),0) FROM landings l WHERE l.store_id = s.id) ped
+    FROM stores s WHERE COALESCE(s.oculta,0) = 0 ORDER BY s.landings_habilitado DESC, s.nombre COLLATE NOCASE`).all() as Fila[])
+    .map((r) => ({ id: txt(r.id), tienda: txt(r.nombre), correo: txt(r.correo), plan: txt(r.plan), activa: !!r.activa, habilitado: !!r.landings_habilitado, landings: num(r.n), publicadas: num(r.pub), pedidos: num(r.ped) }));
+}
 
 type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));

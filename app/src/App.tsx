@@ -33,6 +33,7 @@ import { Equipo } from './sections/Equipo';
 import { DealShop } from './sections/DealShop';
 import { Biblioteca } from './sections/Biblioteca';
 import { Landings } from './sections/Landings';
+import { LandingsAdmin } from './sections/admin/LandingsAdmin';
 import { Resumen } from './sections/Resumen';
 import { Estadisticas } from './sections/Estadisticas';
 import { WhatsAppSection } from './sections/WhatsApp';
@@ -326,6 +327,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
     <>
       {df.adminSection === 'superadmin' && df.isSuperadmin && <Superadmin df={df} />}
       {df.adminSection === 'plantillas' && df.isSuperadmin && <PlantillasWA df={df} />}
+      {df.adminSection === 'landings' && df.isSuperadmin && <LandingsAdmin />}
       {df.adminSection === 'trazabilidad' && <Trazabilidad df={df} />}
       {df.adminSection === 'ventas' && <Ventas df={df} />}
       {df.adminSection === 'planes' && <Planes df={df} />}

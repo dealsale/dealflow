@@ -72,6 +72,15 @@ export function Landings({ df }: { df: DealFlowState }) {
     if (q.get('pago') === 'ok') notificar('✓ Pago recibido. Tu landing queda publicada en unos segundos.', 'ok', 6000);
   }, []);
   const abrir = (id: string) => { setAbierta(id); escribirAbierta(id); };
+  if (!df.landingsHabilitadas) {
+    return (
+      <section data-screen-label="Landings" style={{ ...card, padding: '34px 20px', textAlign: 'center', maxWidth: 560, margin: '30px auto' }}>
+        <div style={{ fontSize: 40 }}>🔒</div>
+        <div style={{ fontWeight: 800, fontSize: 16, margin: '6px 0 4px' }}>El Creador de landings no está activo en tu cuenta</div>
+        <div style={{ color: 'var(--df-text-muted)', fontSize: 13.5 }}>Escríbele al equipo de DealFlow para activarlo.</div>
+      </section>
+    );
+  }
   return abierta ? <Editor id={abierta} df={df} onSalir={() => abrir('')} /> : <Lista df={df} onAbrir={abrir} />;
 }
 
