@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import type { AdminSection, VendedorSection } from '../types';
 
-const VENDEDOR: VendedorSection[] = ['resumen', 'estadisticas', 'productos', 'asistente', 'whatsapp', 'logistica', 'pedidos', 'leads', 'crm', 'equipo', 'marketing', 'dealshop', 'biblioteca', 'integraciones'];
+const VENDEDOR: VendedorSection[] = ['resumen', 'estadisticas', 'productos', 'asistente', 'whatsapp', 'logistica', 'pedidos', 'leads', 'crm', 'equipo', 'marketing', 'dealshop', 'biblioteca', 'integraciones', 'landings'];
 const ADMIN: AdminSection[] = ['ventas', 'planes', 'cuentas', 'cupones', 'superadmin', 'biblioteca', 'plantillas', 'trazabilidad'];
 // Nombre en la URL distinto al interno (más claro para el usuario).
 const A_URL: Partial<Record<VendedorSection, string>> = { crm: 'inbox' };
@@ -58,6 +58,8 @@ export function urlDe(r: Ruta): string {
     if (r.preset && r.preset !== 'rango') q.set('p', r.preset);
     else { q.set('desde', r.desde); q.set('hasta', r.hasta); }
   }
+  // El editor de landings guarda la landing abierta en ?landing=… (la maneja la sección).
+  if (r.mode !== 'admin' && r.section === 'landings') { try { const l = new URLSearchParams(window.location.search).get('landing'); if (l) q.set('landing', l); } catch { /* nada */ } }
   const s = q.toString();
   return s ? `${path}?${s}` : path;
 }

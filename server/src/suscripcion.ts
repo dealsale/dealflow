@@ -246,6 +246,31 @@ export function crearCheckoutBiblioteca(storeId: string, correo: string, redirec
   return { url: `${CHECKOUT}?${params.toString()}` };
 }
 
+/**
+ * Pago único para desbloquear una landing del Creador de landings. El id de la landing
+ * viaja en `plan`; al aprobarse, la landing queda desbloqueada para siempre y publicada.
+ */
+export function crearCheckoutLanding(storeId: string, correo: string, redirectBase: string, landingId: string, monto: number): { url?: string; error?: string } {
+  const pub = process.env.WOMPI_PUBLIC_KEY;
+  const integrity = process.env.WOMPI_INTEGRITY;
+  if (monto <= 0) return { error: 'Esta landing no tiene costo.' };
+  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
+  const referencia = `DF-LND-${storeId.slice(0, 8)}-${Date.now()}`;
+  db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo) VALUES (?,?,?,?,?,?,?,?)')
+    .run(uid(), storeId, landingId, Math.round(monto), referencia, 'pendiente', 'wompi', 'landing');
+  const montoCents = Math.round(monto) * 100;
+  const params = new URLSearchParams({
+    'public-key': pub,
+    currency: 'COP',
+    'amount-in-cents': String(montoCents),
+    reference: referencia,
+    'redirect-url': `${redirectBase}/landings?landing=${encodeURIComponent(landingId)}&pago=ok`,
+    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+  });
+  if (correo) params.set('customer-data:email', correo);
+  return { url: `${CHECKOUT}?${params.toString()}` };
+}
+
 /** Marca un pago como aprobado: activa la cuenta / extiende la renta / suma créditos. */
 export function aplicarPagoAprobado(referencia: string, transaccion?: string): boolean {
   const pago = db.prepare('SELECT id, store_id, estado, tipo, plan, cupon, creditos FROM pagos WHERE referencia = ?').get(referencia) as
@@ -260,6 +285,13 @@ export function aplicarPagoAprobado(referencia: string, transaccion?: string): b
   if (pago.tipo === 'creditos') {
     abonar(pago.store_id, pago.creditos, 'Recarga de créditos', referencia);
     console.log(`[creditos] recarga aprobada ${referencia} → tienda ${pago.store_id} +${pago.creditos} créditos`);
+    return true;
+  }
+
+  // Landing del Creador de landings: queda desbloqueada para siempre y se publica.
+  if (pago.tipo === 'landing') {
+    db.prepare("UPDATE landings SET desbloqueada = 1, modo = 'pago', estado = 'publicada', publicada_at = COALESCE(publicada_at, datetime('now')), updated_at = datetime('now') WHERE id = ? AND store_id = ?").run(pago.plan, pago.store_id);
+    console.log(`[landings] pago aprobado ${referencia} → landing ${pago.plan} publicada`);
     return true;
   }
 

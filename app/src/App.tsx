@@ -32,6 +32,7 @@ import { Productos } from './sections/Productos';
 import { Equipo } from './sections/Equipo';
 import { DealShop } from './sections/DealShop';
 import { Biblioteca } from './sections/Biblioteca';
+import { Landings } from './sections/Landings';
 import { Resumen } from './sections/Resumen';
 import { Estadisticas } from './sections/Estadisticas';
 import { WhatsAppSection } from './sections/WhatsApp';
@@ -390,6 +391,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
           {df.isVendedor && df.section === 'resumen' && <Resumen df={df} />}
           {df.isVendedor && df.section === 'estadisticas' && <Estadisticas df={df} />}
           {df.isVendedor && df.section === 'productos' && <Productos df={df} />}
+          {df.isVendedor && df.section === 'landings' && <Landings df={df} />}
           {df.isVendedor && df.section === 'asistente' && <Asistente df={df} />}
           {df.isVendedor && df.section === 'whatsapp' && <WhatsAppSection df={df} />}
           {df.isVendedor && df.section === 'equipo' && <Equipo df={df} />}
@@ -440,6 +442,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
         {df.isVendedor && df.section === 'pedidos' && <MPedidos df={df} />}
         {df.isVendedor && df.section === 'productos' && <Productos df={df} />}
         {df.isVendedor && df.section === 'crm' && <MCRM df={df} />}
+        {df.isVendedor && df.section === 'landings' && <Landings df={df} />}
         {df.isVendedor && df.section === 'leads' && <MLeads df={df} />}
         {df.isVendedor && df.section === 'asistente' && <Asistente df={df} />}
         {df.isVendedor && df.section === 'whatsapp' && <WhatsAppSection df={df} />}

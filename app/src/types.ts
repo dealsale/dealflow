@@ -292,6 +292,7 @@ export type VendedorSection =
   | 'equipo'
   | 'marketing'
   | 'dealshop'
+  | 'landings'
   | 'biblioteca'
   | 'integraciones';
 

@@ -171,7 +171,7 @@ const reintentos = new Map<string, number>();
  * no debe contestar por su cuenta).
  */
 export async function respuestaConfirmacion(storeId: string, leadId: string, texto: string): Promise<boolean> {
-  const o = db.prepare(`SELECT * FROM orders WHERE store_id = ? AND lead_id = ? AND origen = 'shopify' AND confirmacion = 'esperando'
+  const o = db.prepare(`SELECT * FROM orders WHERE store_id = ? AND lead_id = ? AND origen IN ('shopify','landing') AND confirmacion = 'esperando'
     AND created_at > datetime('now','-7 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as Fila | undefined;
   if (!o) return false;
   const t = txt(texto).trim();
@@ -191,7 +191,11 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     trazar(storeId, orderId, { etapa: 'pedido', nivel: 'ok', titulo: 'El cliente confirmó el pedido por WhatsApp', detalle: texto });
     await decir(`¡Gracias${nombre ? ', ' + nombre : ''}! 🎉 Tu pedido quedó confirmado. Apenas salga te enviamos por aquí el número de guía. 🚚`);
     void etiquetar(storeId, orderId, ['confirmado-whatsapp']);
-    if (cfgPedidosShopify(storeId).autoDespacho) void despacharConfirmado(storeId, orderId);
+    // Landing: despacha solo si esa landing lo tiene activo. Shopify: según su configuración.
+    const auto = txt(o.origen) === 'landing'
+      ? (await import('./landings.js')).autoDespachoDeLanding(txt(o.landing_id))
+      : cfgPedidosShopify(storeId).autoDespacho;
+    if (auto) void despacharConfirmado(storeId, orderId);
     return true;
   }
   if (esNo(t)) {
@@ -199,7 +203,7 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     // El chat queda para el equipo: el bot no contesta, una persona le pregunta qué pasó.
     db.prepare("UPDATE leads SET asignado = 'Vendedor', etiqueta = 'Seguimiento' WHERE id = ?").run(leadId);
     trazar(storeId, orderId, { etapa: 'pedido', nivel: 'warn', titulo: 'El cliente respondió que NO confirma el pedido', detalle: `${texto} · El chat quedó asignado al equipo.` });
-    registrarLog(storeId, 'warn', 'pedido', `${num}: el cliente no confirmó el pedido de Shopify. Escríbele desde el Inbox.`, leadId);
+    registrarLog(storeId, 'warn', 'pedido', `${num}: el cliente no confirmó el pedido${txt(o.origen) === 'landing' ? ' de la landing' : ' de Shopify'}. Escríbele desde el Inbox.`, leadId);
     void etiquetar(storeId, orderId, ['no-confirmado']);
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `${num} no confirmado ❌`, `${txt(o.cliente)} respondió que no. Escríbele desde el Inbox.`, { url: '/' })).catch(() => {});
     void import('./correo.js').then((c) => c.correoATienda(storeId, 'pedidos', `${num} no confirmado`, `❌ ${num}: el cliente no confirmó`, [`${c.escHtml(txt(o.cliente))} respondió que <b>no</b> confirma el pedido de Shopify.`, 'El chat quedó asignado a tu equipo: escríbele desde el Inbox.'])).catch(() => {});

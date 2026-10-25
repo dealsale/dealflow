@@ -922,3 +922,31 @@ export interface CodigoExt { id: string; nombre: string; ultimo_uso: string; cre
 export const apiCodigosExt = () => req<{ codigos: CodigoExt[] }>('/api/ext/codigos', 'GET');
 export const apiCrearCodigoExt = (nombre: string) => req<{ id: string; codigo: string }>('/api/ext/codigos', 'POST', { nombre });
 export const apiBorrarCodigoExt = (id: string) => req<{ ok: true }>(`/api/ext/codigos/${encodeURIComponent(id)}`, 'DELETE');
+
+// ── Creador de landings ──────────────────────────────────────────────
+export interface LandingOpcion { nombre: string; valores: { valor: string; foto: string }[] }
+export interface LandingBundle { cantidad: number; titulo: string; subtitulo: string; precio: number; precioAntes: number; insignia: string; imagen: string }
+export interface LandingTestimonio { autor: string; avatar: string; tiempo: string; texto: string; imagen: string; reacciones: string }
+export interface LandingDatos {
+  nombre: string; precio: number; precioAntes: number; calificacion: number; resenas: string; destacado: string; anuncio: string;
+  bannerSuperior: string; galeria: string[]; opciones: LandingOpcion[]; tituloOfertas: string; bundles: LandingBundle[]; bundleInicial: number;
+  boton: string; beneficios: string[]; descripcion: string; envioMin: number; envioMax: number; imagenes: string[];
+  tituloTestimonios: string; testimonios: LandingTestimonio[]; colorPrincipal: string; colorBoton: string; logo: string; nombreTienda: string;
+  whatsapp: string; pixelMeta: string; confirmarWhatsapp: boolean; autoDespacho: boolean; pedirCorreo: boolean; gracias: string;
+}
+export interface LandingResumen { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string }
+export interface Landing extends LandingResumen { datos: LandingDatos }
+export interface CuotaLandings { gratisTotal: number; gratisUsadas: number; gratisRestantes: number; precio: number }
+export const apiLandings = () => req<{ landings: LandingResumen[]; cuota: CuotaLandings }>('/api/landings', 'GET');
+export const apiCrearLanding = (nombre: string, productId: string) => req<{ landing: Landing }>('/api/landings', 'POST', { nombre, productId });
+export const apiLanding = (id: string) => req<{ landing: Landing }>(`/api/landings/${encodeURIComponent(id)}`, 'GET');
+export const apiGuardarLanding = (id: string, b: { datos?: LandingDatos; slug?: string; productId?: string }) => req<{ landing: Landing }>(`/api/landings/${encodeURIComponent(id)}`, 'PUT', b);
+export const apiBorrarLanding = (id: string) => req<{ ok: true }>(`/api/landings/${encodeURIComponent(id)}`, 'DELETE');
+export const apiDuplicarLanding = (id: string) => req<{ landing: Landing }>(`/api/landings/${encodeURIComponent(id)}/duplicar`, 'POST');
+export const apiVistaLanding = (id: string, datos: LandingDatos) => req<{ html: string }>(`/api/landings/${encodeURIComponent(id)}/vista`, 'POST', { datos });
+export const apiImagenLanding = (dataUrl: string) => req<{ url: string }>('/api/landings/imagen', 'POST', { dataUrl });
+export const apiPublicarLanding = (id: string) => req<{ ok?: true; landing?: LandingResumen; requierePago?: true; precio?: number }>(`/api/landings/${encodeURIComponent(id)}/publicar`, 'POST');
+export const apiDespublicarLanding = (id: string) => req<{ ok: true }>(`/api/landings/${encodeURIComponent(id)}/despublicar`, 'POST');
+export const apiPagarLanding = (id: string) => req<{ url: string }>(`/api/landings/${encodeURIComponent(id)}/pagar`, 'POST');
+export const apiAdminLandings = () => req<{ ajustes: { precio: number; gratis: number }; stats: { total: number; publicadas: number | null; pagadas: number | null; pedidos: number | null } }>('/api/admin/landings', 'GET');
+export const apiAdminGuardarLandings = (b: { precio: number; gratis: number }) => req<{ ajustes: { precio: number; gratis: number } }>('/api/admin/landings', 'PUT', b);

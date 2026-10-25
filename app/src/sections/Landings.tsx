@@ -1,0 +1,641 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import type { DealFlowState } from '../hooks/useDealFlowState';
+import {
+  apiBorrarLanding, apiCrearLanding, apiDespublicarLanding, apiDuplicarLanding, apiGuardarLanding, apiImagenLanding, apiLanding, apiLandings,
+  apiPagarLanding, apiPublicarLanding, apiVistaLanding,
+} from '../lib/api';
+import type { CuotaLandings, Landing, LandingBundle, LandingDatos, LandingResumen } from '../lib/api';
+import { confirmar, notificar } from '../components/dialogs';
+
+/**
+ * Creador de landings: una página de aterrizaje por producto (galería, variantes,
+ * ofertas por cantidad, formulario contra entrega, imágenes largas y testimonios).
+ * La primera se publica gratis; las siguientes se pagan una sola vez.
+ */
+const pesos = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CO');
+const inp: CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' };
+const btn: CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', color: 'var(--df-text-body)', whiteSpace: 'nowrap' };
+const btnPri: CSSProperties = { ...btn, background: 'var(--df-brand)', borderColor: 'var(--df-brand)', color: '#fff' };
+const card: CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12 };
+
+// La landing abierta va en la URL (?landing=…) para que F5 deje al usuario en el editor.
+const leerAbierta = () => { try { return new URLSearchParams(window.location.search).get('landing') || ''; } catch { return ''; } };
+function escribirAbierta(id: string) {
+  try {
+    const u = new URL(window.location.href);
+    if (id) u.searchParams.set('landing', id); else u.searchParams.delete('landing');
+    u.searchParams.delete('pago');
+    window.history.replaceState(null, '', u.pathname + u.search);
+  } catch { /* nada */ }
+}
+
+/** Prepara una imagen para la landing: ancho máximo ~1500 px (las largas conservan su alto). */
+function prepararImagen(file: File, conservarPng = false): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(r.error);
+    r.onload = () => {
+      const src = String(r.result);
+      if (file.type === 'image/gif' || (conservarPng && file.type === 'image/png' && file.size < 1.5e6)) return resolve(src);
+      const img = new Image();
+      img.onload = () => {
+        const max = 1500;
+        const k = img.width > max ? max / img.width : 1;
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        const ctx = c.getContext('2d');
+        if (!ctx) return resolve(src);
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', 0.86));
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    };
+    r.readAsDataURL(file);
+  });
+}
+async function subir(files: File[], conservarPng = false): Promise<string[]> {
+  const urls: string[] = [];
+  for (const f of files.filter((x) => x.type.startsWith('image/'))) {
+    const r = await apiImagenLanding(await prepararImagen(f, conservarPng));
+    if (r.data?.url) urls.push(r.data.url); else notificar(r.error || 'No se pudo subir la imagen.', 'error');
+  }
+  return urls;
+}
+
+export function Landings({ df }: { df: DealFlowState }) {
+  const [abierta, setAbierta] = useState(leerAbierta);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('pago') === 'ok') notificar('✓ Pago recibido. Tu landing queda publicada en unos segundos.', 'ok', 6000);
+  }, []);
+  const abrir = (id: string) => { setAbierta(id); escribirAbierta(id); };
+  return abierta ? <Editor id={abierta} df={df} onSalir={() => abrir('')} /> : <Lista df={df} onAbrir={abrir} />;
+}
+
+// ── Lista ──────────────────────────────────────────────────────────────
+function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => void }) {
+  const [lista, setLista] = useState<LandingResumen[] | null>(null);
+  const [cuota, setCuota] = useState<CuotaLandings | null>(null);
+  const [creando, setCreando] = useState(false);
+  const cargar = async () => { const r = await apiLandings(); if (r.data) { setLista(r.data.landings); setCuota(r.data.cuota); } else notificar(r.error || 'No se pudieron cargar las landings.', 'error'); };
+  useEffect(() => { void cargar(); }, []);
+  const copiar = (u: string) => { void navigator.clipboard?.writeText(u).then(() => notificar('✓ Enlace copiado.')).catch(() => {}); };
+  const borrar = async (l: LandingResumen) => {
+    const ok = await confirmar({ titulo: `¿Eliminar "${l.nombre}"?`, mensaje: l.modo === 'pago' ? 'Esta landing está pagada: si la eliminas, el pago no se recupera y su enlace deja de funcionar.' : 'Su enlace deja de funcionar. Esto no se puede deshacer.', aceptar: 'Eliminar', peligro: true });
+    if (!ok) return;
+    const r = await apiBorrarLanding(l.id);
+    if (r.error) notificar(r.error, 'error'); else void cargar();
+  };
+  const duplicar = async (l: LandingResumen) => { const r = await apiDuplicarLanding(l.id); if (r.data) onAbrir(r.data.landing.id); else notificar(r.error || 'No se pudo duplicar.', 'error'); };
+
+  return (
+    <section data-screen-label="Landings">
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Landings</h1>
+          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Páginas de venta por producto, con pago contra entrega. Los pedidos llegan directo a DealFlow.</p>
+        </div>
+        <button onClick={() => setCreando(true)} className="df-btn-primary" style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Crear landing</button>
+      </div>
+
+      {cuota && (
+        <div style={{ ...card, padding: '12px 14px', marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', background: 'var(--df-purple-subtle, var(--df-surface))', borderColor: 'var(--df-purple-border, var(--df-border))' }}>
+          <span style={{ fontSize: 20 }}>🎁</span>
+          <div style={{ fontSize: 13.5, flex: 1, minWidth: 220 }}>
+            {cuota.precio <= 0 ? <b>Publicar landings no tiene costo por ahora.</b>
+              : cuota.gratisRestantes > 0 ? <><b>Te {cuota.gratisRestantes === 1 ? 'queda 1 landing gratis' : `quedan ${cuota.gratisRestantes} landings gratis`}.</b> Después, cada landing nueva cuesta <b>{pesos(cuota.precio)}</b>: pago único, sin mensualidad, y es tuya para siempre.</>
+              : <>Cada landing nueva cuesta <b>{pesos(cuota.precio)}</b>: pago único, sin mensualidad. Editarla o volver a publicarla después no cuesta nada.</>}
+          </div>
+        </div>
+      )}
+
+      {lista === null ? <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Cargando…</div>
+        : !lista.length ? (
+          <div style={{ ...card, padding: '34px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: 40 }}>🛍️</div>
+            <div style={{ fontWeight: 800, fontSize: 16, margin: '6px 0 4px' }}>Crea tu primera landing</div>
+            <div style={{ color: 'var(--df-text-muted)', fontSize: 13.5, maxWidth: 460, margin: '0 auto 14px' }}>Elige un producto de tu catálogo y DealFlow arma la página con sus fotos, variantes y combos. Tú ajustas textos, ofertas e imágenes.</div>
+            <button onClick={() => setCreando(true)} style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Crear landing</button>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+            {lista.map((l) => (
+              <div key={l.id} style={{ ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <button onClick={() => onAbrir(l.id)} style={{ border: 'none', padding: 0, background: 'var(--df-surface-2, #f4f4f5)', cursor: 'pointer', aspectRatio: '16/10', overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+                  <Miniatura id={l.id} />
+                </button>
+                <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <div style={{ fontWeight: 700, fontSize: 14.5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nombre}</div>
+                    <Estado l={l} />
+                  </div>
+                  {l.estado === 'publicada' && (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <a href={l.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--df-purple)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.url.replace(/^https?:\/\//, '')}</a>
+                      <button onClick={() => copiar(l.url)} style={{ ...btn, padding: '3px 8px', fontSize: 11.5 }}>Copiar</button>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--df-text-muted)' }}>
+                    <span>👁 {l.vistas.toLocaleString('es-CO')} visitas</span>
+                    <span>🛒 {l.pedidos} pedidos</span>
+                    {l.vistas > 0 && <span>{((l.pedidos / l.vistas) * 100).toFixed(1)}% conv.</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 'auto', flexWrap: 'wrap' }}>
+                    <button onClick={() => onAbrir(l.id)} style={btnPri}>Editar</button>
+                    <button onClick={() => void duplicar(l)} style={btn}>Duplicar</button>
+                    <button onClick={() => void borrar(l)} style={{ ...btn, color: 'var(--df-danger)' }}>Eliminar</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      {creando && <CrearModal df={df} onCerrar={() => setCreando(false)} onCreada={(id) => { setCreando(false); onAbrir(id); }} />}
+    </section>
+  );
+}
+
+function Estado({ l }: { l: { estado: string; desbloqueada: boolean } }) {
+  const pub = l.estado === 'publicada';
+  return <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '2px 9px', background: pub ? 'var(--df-success-subtle, #dcfce7)' : 'var(--df-surface-2, #f4f4f5)', color: pub ? 'var(--df-success, #16a34a)' : 'var(--df-text-muted)', whiteSpace: 'nowrap' }}>{pub ? '● Publicada' : 'Borrador'}</span>;
+}
+
+// Miniatura: la primera foto de la galería (se pide la landing completa una vez).
+const fotos = new Map<string, string>();
+function Miniatura({ id }: { id: string }) {
+  const [src, setSrc] = useState(fotos.get(id) || '');
+  useEffect(() => {
+    if (fotos.has(id)) return;
+    void apiLanding(id).then((r) => { const f = r.data?.landing.datos.galeria[0] || ''; fotos.set(id, f); setSrc(f); });
+  }, [id]);
+  return src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 34, opacity: 0.5 }}>🖼️</span>;
+}
+
+function CrearModal({ df, onCerrar, onCreada }: { df: DealFlowState; onCerrar: () => void; onCreada: (id: string) => void }) {
+  const [pid, setPid] = useState('');
+  const [nombre, setNombre] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const productos = df.products.filter((p) => p.tipo !== 'servicio');
+  const crear = async () => {
+    setEnviando(true);
+    const r = await apiCrearLanding(nombre, pid);
+    setEnviando(false);
+    if (r.data) onCreada(r.data.landing.id); else notificar(r.error || 'No se pudo crear.', 'error');
+  };
+  return (
+    <div onClick={onCerrar} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 1000, display: 'grid', placeItems: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: 'min(460px, 100%)', padding: 20 }}>
+        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4 }}>Nueva landing</div>
+        <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 14 }}>Elige el producto: traemos sus fotos, variantes, precio y combos. Los pedidos de la landing quedan ligados a ese producto.</div>
+        <label style={{ fontSize: 12.5, fontWeight: 600 }}>Producto</label>
+        <select value={pid} onChange={(e) => setPid(e.target.value)} style={{ ...inp, margin: '5px 0 12px' }}>
+          <option value="">Empezar en blanco</option>
+          {productos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+        </select>
+        <label style={{ fontSize: 12.5, fontWeight: 600 }}>Nombre en la landing <span style={{ color: 'var(--df-text-faint)', fontWeight: 400 }}>(opcional)</span></label>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Blusa Valery Manga Larga" style={{ ...inp, margin: '5px 0 16px' }} />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onCerrar} style={btn}>Cancelar</button>
+          <button onClick={() => void crear()} disabled={enviando} style={{ ...btnPri, opacity: enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Crear y editar'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Editor ─────────────────────────────────────────────────────────────
+function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: () => void }) {
+  const [l, setL] = useState<Landing | null>(null);
+  const [d, setD] = useState<LandingDatos | null>(null);
+  const [estadoGuardado, setEstadoGuardado] = useState<'' | 'pendiente' | 'guardando' | 'ok' | 'error'>('');
+  const [html, setHtml] = useState('');
+  const [disp, setDisp] = useState<'cel' | 'pc'>('cel');
+  const [pestana, setPestana] = useState<'editar' | 'ver'>('editar');
+  const [slug, setSlug] = useState('');
+  const ultimo = useRef('');
+  const angosto = typeof window !== 'undefined' && window.innerWidth < 980;
+
+  useEffect(() => {
+    void apiLanding(id).then((r) => {
+      if (!r.data) { notificar(r.error || 'Landing no encontrada.', 'error'); onSalir(); return; }
+      setL(r.data.landing); setD(r.data.landing.datos); setSlug(r.data.landing.slug); ultimo.current = JSON.stringify(r.data.landing.datos);
+    });
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Autoguardado (1,2 s después del último cambio) y vista previa (0,5 s).
+  useEffect(() => {
+    if (!d) return;
+    const s = JSON.stringify(d);
+    const tv = setTimeout(() => { void apiVistaLanding(id, d).then((r) => { if (r.data) setHtml(r.data.html); }); }, 450);
+    if (s === ultimo.current) return () => clearTimeout(tv);
+    setEstadoGuardado('pendiente');
+    const tg = setTimeout(async () => {
+      setEstadoGuardado('guardando');
+      const r = await apiGuardarLanding(id, { datos: d });
+      if (r.data) { ultimo.current = s; setL(r.data.landing); setEstadoGuardado('ok'); fotos.set(id, d.galeria[0] || ''); } else { setEstadoGuardado('error'); notificar(r.error || 'No se pudo guardar.', 'error'); }
+    }, 1200);
+    return () => { clearTimeout(tv); clearTimeout(tg); };
+  }, [d, id]);
+
+  if (!l || !d) return <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Cargando la landing…</div>;
+  const set = (p: Partial<LandingDatos>) => setD((x) => (x ? { ...x, ...p } : x));
+
+  const guardarYa = async () => {
+    const s = JSON.stringify(d);
+    if (s === ultimo.current) return true;
+    const r = await apiGuardarLanding(id, { datos: d });
+    if (r.data) { ultimo.current = s; setL(r.data.landing); setEstadoGuardado('ok'); return true; }
+    notificar(r.error || 'No se pudo guardar.', 'error'); return false;
+  };
+  const publicar = async () => {
+    if (!(await guardarYa())) return;
+    const r = await apiPublicarLanding(id);
+    if (r.error) return notificar(r.error, 'error');
+    if (r.data?.requierePago) {
+      const ok = await confirmar({ titulo: `Publicar por ${pesos(r.data.precio || 0)}`, mensaje: `Ya usaste tus landings gratis. Esta landing cuesta ${pesos(r.data.precio || 0)}: es un pago único (sin mensualidad) y después puedes editarla y republicarla las veces que quieras. Te llevamos al pago seguro de Wompi.`, aceptar: 'Ir a pagar' });
+      if (!ok) return;
+      const p = await apiPagarLanding(id);
+      if (p.data?.url) window.location.href = p.data.url; else notificar(p.error || 'No se pudo abrir el pago.', 'error');
+      return;
+    }
+    if (r.data?.landing) { setL({ ...l, ...r.data.landing }); notificar('✓ ¡Landing publicada! Ya puedes compartir el enlace.', 'ok', 5000); }
+  };
+  const despublicar = async () => {
+    const ok = await confirmar({ titulo: '¿Despublicar la landing?', mensaje: 'El enlace deja de mostrar la página hasta que la publiques de nuevo (volver a publicarla no se cobra).', aceptar: 'Despublicar' });
+    if (!ok) return;
+    const r = await apiDespublicarLanding(id);
+    if (r.error) notificar(r.error, 'error'); else setL({ ...l, estado: 'borrador' });
+  };
+  const guardarSlug = async () => {
+    if (slug === l.slug) return;
+    const r = await apiGuardarLanding(id, { slug });
+    if (r.data) { setL(r.data.landing); setSlug(r.data.landing.slug); notificar('✓ Dirección actualizada.'); } else { notificar(r.error || 'No se pudo cambiar.', 'error'); setSlug(l.slug); }
+  };
+  const vincular = async (productId: string) => {
+    const r = await apiGuardarLanding(id, { productId });
+    if (r.data) setL(r.data.landing);
+  };
+  const base = l.url.slice(0, l.url.length - l.slug.length);
+
+  const formularios = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Bloque titulo="Producto y precio" icono="🏷️" abierto>
+        <Campo label="Nombre del producto"><input value={d.nombre} onChange={(e) => set({ nombre: e.target.value })} style={inp} /></Campo>
+        <Dos>
+          <Campo label="Precio (1 unidad)"><Dinero valor={d.precio} onChange={(v) => set({ precio: v })} /></Campo>
+          <Campo label="Precio antes (tachado)"><Dinero valor={d.precioAntes} onChange={(v) => set({ precioAntes: v })} /></Campo>
+        </Dos>
+        <Dos>
+          <Campo label="Calificación (0 a 5)"><input type="number" min={0} max={5} step={0.1} value={d.calificacion} onChange={(e) => set({ calificacion: Number(e.target.value) })} style={inp} /></Campo>
+          <Campo label="Texto junto a las estrellas"><input value={d.resenas} onChange={(e) => set({ resenas: e.target.value })} placeholder="+1.200 clientes felices" style={inp} /></Campo>
+        </Dos>
+        <Campo label="Frase destacada" ayuda="Separa con | para mostrar varias: Calidad premium | Garantía"><input value={d.destacado} onChange={(e) => set({ destacado: e.target.value })} style={inp} /></Campo>
+        <Campo label="Producto de DealFlow" ayuda="Los pedidos de esta landing quedan ligados a este producto (para despacharlos).">
+          <select value={l.productId} onChange={(e) => void vincular(e.target.value)} style={inp}>
+            <option value="">Sin producto</option>
+            {df.products.filter((p) => p.tipo !== 'servicio').map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+          </select>
+        </Campo>
+      </Bloque>
+
+      <Bloque titulo="Fotos del producto" icono="📸" abierto>
+        <ListaImagenes titulo="Galería (la primera es la principal)" urls={d.galeria} onChange={(galeria) => set({ galeria })} max={15} cuadrada />
+        <UnaImagen titulo="Banner de arriba (opcional, encima del producto)" url={d.bannerSuperior} onChange={(bannerSuperior) => set({ bannerSuperior })} />
+      </Bloque>
+
+      <Bloque titulo="Variantes" icono="🎨">
+        <Opciones d={d} set={set} />
+      </Bloque>
+
+      <Bloque titulo="Ofertas (bundles)" icono="🎁">
+        <Bundles d={d} set={set} />
+      </Bloque>
+
+      <Bloque titulo="Botón, beneficios y envío" icono="🛒">
+        <Campo label="Texto del botón"><input value={d.boton} onChange={(e) => set({ boton: e.target.value })} style={inp} /></Campo>
+        <Campo label="Barra de anuncio (arriba de todo)"><input value={d.anuncio} onChange={(e) => set({ anuncio: e.target.value })} placeholder="🚚 ENVÍO GRATIS + PAGO CONTRA ENTREGA" style={inp} /></Campo>
+        <Campo label="Beneficios bajo el botón (máx. 6)">
+          <ListaTextos valores={d.beneficios} onChange={(beneficios) => set({ beneficios })} max={6} placeholder="🚚 Envío gratis" />
+        </Campo>
+        <Dos>
+          <Campo label="Entrega desde (días)"><input type="number" min={0} max={60} value={d.envioMin} onChange={(e) => set({ envioMin: Number(e.target.value) })} style={inp} /></Campo>
+          <Campo label="Hasta (días)" ayuda="0 = no mostrar las fechas"><input type="number" min={0} max={60} value={d.envioMax} onChange={(e) => set({ envioMax: Number(e.target.value) })} style={inp} /></Campo>
+        </Dos>
+        <Campo label="Descripción" ayuda="Deja una línea en blanco entre párrafos. Líneas que empiezan con - o ✓ se vuelven lista. **texto** = negrita.">
+          <textarea value={d.descripcion} onChange={(e) => set({ descripcion: e.target.value })} rows={7} style={{ ...inp, resize: 'vertical', lineHeight: 1.5 }} />
+        </Campo>
+      </Bloque>
+
+      <Bloque titulo="Imágenes de abajo" icono="🖼️">
+        <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 8 }}>Las imágenes largas que van debajo del producto (beneficios, tallas, antes y después…). Se muestran a lo ancho, una tras otra.</div>
+        <ListaImagenes titulo="" urls={d.imagenes} onChange={(imagenes) => set({ imagenes })} max={30} />
+      </Bloque>
+
+      <Bloque titulo="Testimonios" icono="💬">
+        <Testimonios d={d} set={set} />
+      </Bloque>
+
+      <Bloque titulo="Marca y colores" icono="✨">
+        <Campo label="Nombre de la tienda"><input value={d.nombreTienda} onChange={(e) => set({ nombreTienda: e.target.value })} style={inp} /></Campo>
+        <UnaImagen titulo="Logo (si no hay, se muestra el nombre)" url={d.logo} onChange={(logo) => set({ logo })} png />
+        <Dos>
+          <Campo label="Color principal"><Color valor={d.colorPrincipal} onChange={(colorPrincipal) => set({ colorPrincipal })} opciones={['#121212', '#6d388b', '#1e3a8a', '#0f766e', '#9f1239']} /></Campo>
+          <Campo label="Color del botón y precios"><Color valor={d.colorBoton} onChange={(colorBoton) => set({ colorBoton })} opciones={['#f01111', '#16a34a', '#ea580c', '#7c3aed', '#121212']} /></Campo>
+        </Dos>
+      </Bloque>
+
+      <Bloque titulo="Pedidos y seguimiento" icono="📦">
+        <Interruptor valor={d.confirmarWhatsapp} onChange={(confirmarWhatsapp) => set({ confirmarWhatsapp })} titulo="Pedir confirmación por WhatsApp" ayuda="Al llegar el pedido, el cliente recibe la plantilla de confirmación (Sí / No)." />
+        <Interruptor valor={d.autoDespacho} onChange={(autoDespacho) => set({ autoDespacho })} titulo="Despachar solo cuando el cliente confirme" ayuda="Crea la remisión/guía automáticamente al recibir el «Sí»." />
+        <Interruptor valor={d.pedirCorreo} onChange={(pedirCorreo) => set({ pedirCorreo })} titulo="Pedir correo en el formulario (opcional para el cliente)" />
+        <Campo label="Mensaje al terminar el pedido"><textarea value={d.gracias} onChange={(e) => set({ gracias: e.target.value })} rows={2} style={{ ...inp, resize: 'vertical' }} /></Campo>
+        <Dos>
+          <Campo label="WhatsApp del botón flotante" ayuda="Con indicativo, ej. 573001234567. Vacío = sin botón."><input value={d.whatsapp} onChange={(e) => set({ whatsapp: e.target.value.replace(/\D/g, '') })} inputMode="numeric" style={inp} /></Campo>
+          <Campo label="ID del Píxel de Meta" ayuda="Registra visitas, inicio de compra y compras."><input value={d.pixelMeta} onChange={(e) => set({ pixelMeta: e.target.value.replace(/\D/g, '') })} inputMode="numeric" style={inp} /></Campo>
+        </Dos>
+      </Bloque>
+    </div>
+  );
+
+  const vista = (
+    <div style={{ ...card, padding: 10, position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', height: angosto ? '78vh' : 'calc(100vh - 170px)' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', flex: 1 }}>Vista previa</span>
+        <button onClick={() => setDisp('cel')} style={{ ...btn, ...(disp === 'cel' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>📱 Celular</button>
+        <button onClick={() => setDisp('pc')} style={{ ...btn, ...(disp === 'pc' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>🖥️ Computador</button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, background: 'var(--df-surface-2, #f4f4f5)', borderRadius: 10, display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
+        <iframe title="Vista previa de la landing" srcDoc={html} sandbox="allow-scripts allow-same-origin"
+          style={{ width: disp === 'cel' ? 390 : '100%', maxWidth: '100%', height: '100%', border: 'none', background: '#fff', boxShadow: disp === 'cel' ? '0 0 0 1px var(--df-border)' : 'none' }} />
+      </div>
+    </div>
+  );
+
+  return (
+    <section data-screen-label="Editor de landing">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <button onClick={onSalir} style={btn}>← Landings</button>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h1 style={{ fontSize: 19, fontWeight: 800, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nombre}</h1>
+            <Estado l={l} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--df-text-muted)', marginTop: 3, flexWrap: 'wrap' }}>
+            <span>{base.replace(/^https?:\/\//, '')}</span>
+            <input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} onBlur={() => void guardarSlug()} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              aria-label="Dirección de la landing" style={{ ...inp, width: 190, padding: '2px 6px', fontSize: 12 }} />
+          </div>
+        </div>
+        <span style={{ fontSize: 12, color: estadoGuardado === 'error' ? 'var(--df-danger)' : 'var(--df-text-muted)', minWidth: 90, textAlign: 'right' }}>
+          {estadoGuardado === 'pendiente' || estadoGuardado === 'guardando' ? 'Guardando…' : estadoGuardado === 'ok' ? '✓ Guardado' : estadoGuardado === 'error' ? 'Sin guardar' : ''}
+        </span>
+        {l.estado === 'publicada' && <a href={l.url} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: 'none' }}>Ver landing ↗</a>}
+        {l.estado === 'publicada' ? <button onClick={() => void despublicar()} style={btn}>Despublicar</button>
+          : <button onClick={() => void publicar()} className="df-btn-primary" style={{ ...btnPri, padding: '8px 16px' }}>{l.desbloqueada ? 'Publicar' : 'Publicar landing'}</button>}
+      </div>
+
+      {angosto ? (
+        <>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            <button onClick={() => setPestana('editar')} style={{ ...btn, flex: 1, ...(pestana === 'editar' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>✏️ Editar</button>
+            <button onClick={() => setPestana('ver')} style={{ ...btn, flex: 1, ...(pestana === 'ver' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>👁 Vista previa</button>
+          </div>
+          {pestana === 'editar' ? formularios : vista}
+        </>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 460px) 1fr', gap: 16, alignItems: 'start' }}>
+          <div>{formularios}</div>
+          {vista}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Piezas del formulario ──────────────────────────────────────────────
+function Bloque({ titulo, icono, abierto = false, children }: { titulo: string; icono: string; abierto?: boolean; children: ReactNode }) {
+  const [a, setA] = useState(abierto);
+  return (
+    <div style={card}>
+      <button onClick={() => setA(!a)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', padding: '12px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', color: 'var(--df-text-strong)', textAlign: 'left' }}>
+        <span>{icono}</span><span style={{ flex: 1 }}>{titulo}</span><span style={{ color: 'var(--df-text-faint)', fontSize: 11, transform: a ? 'rotate(180deg)' : 'none' }}>▼</span>
+      </button>
+      {a && <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>{children}</div>}
+    </div>
+  );
+}
+function Campo({ label, ayuda, children }: { label: string; ayuda?: string; children: ReactNode }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--df-text-body)' }}>{label}</span>
+      {children}
+      {ayuda && <span style={{ fontSize: 11, color: 'var(--df-text-faint)', lineHeight: 1.4 }}>{ayuda}</span>}
+    </label>
+  );
+}
+const Dos = ({ children }: { children: ReactNode }) => <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{children}</div>;
+function Dinero({ valor, onChange }: { valor: number; onChange: (n: number) => void }) {
+  return (
+    <div style={{ position: 'relative' }}>
+      <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--df-text-faint)' }}>$</span>
+      <input inputMode="numeric" value={valor ? valor.toLocaleString('es-CO') : ''} onChange={(e) => onChange(Number(e.target.value.replace(/\D/g, '')) || 0)} style={{ ...inp, paddingLeft: 22, fontFamily: "'JetBrains Mono',monospace" }} />
+    </div>
+  );
+}
+function Color({ valor, onChange, opciones }: { valor: string; onChange: (c: string) => void; opciones: string[] }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <input type="color" value={valor} onChange={(e) => onChange(e.target.value)} style={{ width: 34, height: 30, border: '1px solid var(--df-border)', borderRadius: 6, padding: 1, background: 'none' }} />
+      {opciones.map((c) => <button key={c} type="button" onClick={() => onChange(c)} aria-label={c} style={{ width: 20, height: 20, borderRadius: '50%', border: valor.toLowerCase() === c ? '2px solid var(--df-text-strong)' : '1px solid var(--df-border)', background: c, cursor: 'pointer', padding: 0 }} />)}
+    </div>
+  );
+}
+function Interruptor({ valor, onChange, titulo, ayuda }: { valor: boolean; onChange: (v: boolean) => void; titulo: string; ayuda?: string }) {
+  return (
+    <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
+      <input type="checkbox" checked={valor} onChange={(e) => onChange(e.target.checked)} style={{ marginTop: 3, accentColor: 'var(--df-purple)' }} />
+      <span><span style={{ fontSize: 13, fontWeight: 600 }}>{titulo}</span>{ayuda && <span style={{ display: 'block', fontSize: 11.5, color: 'var(--df-text-faint)' }}>{ayuda}</span>}</span>
+    </label>
+  );
+}
+function ListaTextos({ valores, onChange, max, placeholder }: { valores: string[]; onChange: (v: string[]) => void; max: number; placeholder: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {valores.map((v, i) => (
+        <div key={i} style={{ display: 'flex', gap: 6 }}>
+          <input value={v} onChange={(e) => onChange(valores.map((x, k) => (k === i ? e.target.value : x)))} style={inp} />
+          <button type="button" onClick={() => onChange(valores.filter((_, k) => k !== i))} style={{ ...btn, color: 'var(--df-danger)' }} aria-label="Quitar">✕</button>
+        </div>
+      ))}
+      {valores.length < max && <button type="button" onClick={() => onChange([...valores, ''])} style={{ ...btn, alignSelf: 'flex-start' }}>+ Agregar {placeholder ? `(ej. ${placeholder})` : ''}</button>}
+    </div>
+  );
+}
+
+function SubirBoton({ onArchivos, multiple = false, texto, png = false }: { onArchivos: (urls: string[]) => void; multiple?: boolean; texto: string; png?: boolean }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [subiendo, setSubiendo] = useState(false);
+  return (
+    <>
+      <input ref={ref} type="file" accept="image/*" multiple={multiple} hidden onChange={async (e) => {
+        const fs = Array.from(e.target.files || []);
+        e.target.value = '';
+        if (!fs.length) return;
+        setSubiendo(true);
+        const urls = await subir(fs, png);
+        setSubiendo(false);
+        if (urls.length) onArchivos(urls);
+      }} />
+      <button type="button" onClick={() => ref.current?.click()} disabled={subiendo} style={{ ...btn, opacity: subiendo ? 0.6 : 1 }}>{subiendo ? 'Subiendo…' : texto}</button>
+    </>
+  );
+}
+function UnaImagen({ titulo, url, onChange, png = false }: { titulo: string; url: string; onChange: (u: string) => void; png?: boolean }) {
+  return (
+    <div>
+      {titulo && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{titulo}</div>}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {url && <img src={url} alt="" style={{ width: 64, height: 44, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--df-border)' }} />}
+        <SubirBoton texto={url ? 'Cambiar' : 'Subir imagen'} onArchivos={(u) => onChange(u[0])} png={png} />
+        {url && <button type="button" onClick={() => onChange('')} style={{ ...btn, color: 'var(--df-danger)' }}>Quitar</button>}
+      </div>
+    </div>
+  );
+}
+function ListaImagenes({ titulo, urls, onChange, max, cuadrada = false }: { titulo: string; urls: string[]; onChange: (u: string[]) => void; max: number; cuadrada?: boolean }) {
+  const mover = (i: number, k: number) => { const n = [...urls]; const [x] = n.splice(i, 1); n.splice(Math.max(0, Math.min(n.length, i + k)), 0, x); onChange(n); };
+  return (
+    <div>
+      {titulo && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{titulo}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: 8, marginBottom: 8 }}>
+        {urls.map((u, i) => (
+          <div key={u + i} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--df-border)', aspectRatio: cuadrada ? '1/1' : '3/4', background: 'var(--df-surface-2, #f4f4f5)' }}>
+            <img src={u} alt="" style={{ width: '100%', height: '100%', objectFit: cuadrada ? 'cover' : 'cover', objectPosition: 'top' }} />
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,.55)' }}>
+              <button type="button" onClick={() => mover(i, -1)} disabled={!i} style={miniBtn} aria-label="Mover a la izquierda">‹</button>
+              <button type="button" onClick={() => onChange(urls.filter((_, k) => k !== i))} style={miniBtn} aria-label="Quitar">✕</button>
+              <button type="button" onClick={() => mover(i, 1)} disabled={i === urls.length - 1} style={miniBtn} aria-label="Mover a la derecha">›</button>
+            </div>
+            {i === 0 && cuadrada && <span style={{ position: 'absolute', top: 4, left: 4, fontSize: 9.5, fontWeight: 800, background: 'var(--df-purple)', color: '#fff', borderRadius: 4, padding: '1px 5px' }}>PRINCIPAL</span>}
+          </div>
+        ))}
+      </div>
+      {urls.length < max && <SubirBoton multiple texto="+ Subir imágenes" onArchivos={(u) => onChange([...urls, ...u].slice(0, max))} />}
+    </div>
+  );
+}
+const miniBtn: CSSProperties = { flex: 1, background: 'none', border: 'none', color: '#fff', fontSize: 13, cursor: 'pointer', padding: '3px 0' };
+
+function Opciones({ d, set }: { d: LandingDatos; set: (p: Partial<LandingDatos>) => void }) {
+  const ops = d.opciones;
+  const cambiar = (i: number, o: LandingDatos['opciones'][number]) => set({ opciones: ops.map((x, k) => (k === i ? o : x)) });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Ej. Color (Negro, Blanco…) y Talla (S, M, L…). Si el cliente lleva varias unidades, elige la variante de cada una en el formulario.</div>
+      {ops.map((o, i) => (
+        <div key={i} style={{ border: '1px dashed var(--df-border)', borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input value={o.nombre} onChange={(e) => cambiar(i, { ...o, nombre: e.target.value })} placeholder="Nombre (ej. Color)" style={{ ...inp, fontWeight: 600 }} />
+            <button type="button" onClick={() => set({ opciones: ops.filter((_, k) => k !== i) })} style={{ ...btn, color: 'var(--df-danger)' }}>Quitar</button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {o.valores.map((v, vi) => (
+              <span key={vi} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid var(--df-border)', borderRadius: 999, padding: '3px 6px 3px 4px', fontSize: 12.5 }}>
+                <FotoValor url={v.foto} onChange={(foto) => cambiar(i, { ...o, valores: o.valores.map((x, k) => (k === vi ? { ...x, foto } : x)) })} />
+                <input value={v.valor} onChange={(e) => cambiar(i, { ...o, valores: o.valores.map((x, k) => (k === vi ? { ...x, valor: e.target.value } : x)) })} style={{ border: 'none', background: 'none', width: Math.max(36, v.valor.length * 7.5), fontFamily: 'inherit', fontSize: 12.5, color: 'var(--df-text)', padding: 0 }} />
+                <button type="button" onClick={() => cambiar(i, { ...o, valores: o.valores.filter((_, k) => k !== vi) })} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--df-text-faint)', padding: 0 }} aria-label="Quitar valor">✕</button>
+              </span>
+            ))}
+            <input placeholder="+ valor y Enter" onKeyDown={(e) => {
+              const t = e.currentTarget;
+              if (e.key === 'Enter' && t.value.trim()) { e.preventDefault(); cambiar(i, { ...o, valores: [...o.valores, ...t.value.split(',').map((x) => ({ valor: x.trim(), foto: '' })).filter((x) => x.valor)] }); t.value = ''; }
+            }} style={{ ...inp, width: 130, padding: '4px 8px', fontSize: 12.5 }} />
+          </div>
+        </div>
+      ))}
+      {ops.length < 3 && <button type="button" onClick={() => set({ opciones: [...ops, { nombre: ops.length ? 'Talla' : 'Color', valores: [] }] })} style={{ ...btn, alignSelf: 'flex-start' }}>+ Agregar variante</button>}
+    </div>
+  );
+}
+function FotoValor({ url, onChange }: { url: string; onChange: (u: string) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input ref={ref} type="file" accept="image/*" hidden onChange={async (e) => { const f = Array.from(e.target.files || []); e.target.value = ''; const u = await subir(f); if (u[0]) onChange(u[0]); }} />
+      <button type="button" title={url ? 'Cambiar foto (clic derecho para quitar)' : 'Foto de esta variante (opcional)'} onClick={() => ref.current?.click()} onContextMenu={(e) => { e.preventDefault(); onChange(''); }}
+        style={{ width: 22, height: 22, borderRadius: '50%', border: '1px solid var(--df-border)', padding: 0, cursor: 'pointer', overflow: 'hidden', background: 'var(--df-surface-2, #f4f4f5)', fontSize: 10 }}>
+        {url ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📷'}
+      </button>
+    </>
+  );
+}
+
+function Bundles({ d, set }: { d: LandingDatos; set: (p: Partial<LandingDatos>) => void }) {
+  const bs = d.bundles;
+  const cambiar = (i: number, p: Partial<LandingBundle>) => set({ bundles: bs.map((x, k) => (k === i ? { ...x, ...p } : x)) });
+  const nuevo = (): LandingBundle => {
+    const n = (bs[bs.length - 1]?.cantidad || 0) + 1;
+    return { cantidad: n, titulo: `${n} unidad${n > 1 ? 'es' : ''}`, subtitulo: '', precio: Math.round((d.precio * n * (n > 1 ? 0.8 : 1)) / 100) * 100, precioAntes: d.precioAntes * n || 0, insignia: '', imagen: '' };
+  };
+  const sumario = useMemo(() => bs.map((b) => (b.cantidad > 0 ? Math.round(b.precio / b.cantidad) : 0)), [bs]);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Campo label="Título de las ofertas"><input value={d.tituloOfertas} onChange={(e) => set({ tituloOfertas: e.target.value })} placeholder="¡Aprovecha nuestras ofertas!" style={inp} /></Campo>
+      {!bs.length && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Sin ofertas se vende 1 unidad al precio del producto. Agrega ofertas tipo «Lleva 2 por…».</div>}
+      {bs.map((b, i) => (
+        <div key={i} style={{ border: `1px ${d.bundleInicial === i ? 'solid var(--df-purple)' : 'dashed var(--df-border)'}`, borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <label style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 12, fontWeight: 600, flex: 1, cursor: 'pointer' }}>
+              <input type="radio" checked={d.bundleInicial === i} onChange={() => set({ bundleInicial: i })} style={{ accentColor: 'var(--df-purple)' }} /> Seleccionada al entrar
+            </label>
+            <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>{pesos(sumario[i])} c/u</span>
+            <button type="button" onClick={() => set({ bundles: bs.filter((_, k) => k !== i), bundleInicial: Math.max(0, Math.min(d.bundleInicial, bs.length - 2)) })} style={{ ...btn, color: 'var(--df-danger)', padding: '4px 8px' }}>Quitar</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 8 }}>
+            <Campo label="Unidades"><input type="number" min={1} max={20} value={b.cantidad} onChange={(e) => cambiar(i, { cantidad: Math.max(1, Number(e.target.value) || 1) })} style={inp} /></Campo>
+            <Campo label="Título"><input value={b.titulo} onChange={(e) => cambiar(i, { titulo: e.target.value })} placeholder="Lleva 2" style={inp} /></Campo>
+          </div>
+          <Campo label="Subtítulo"><input value={b.subtitulo} onChange={(e) => cambiar(i, { subtitulo: e.target.value })} placeholder="Ahorras $30.000 · Envío gratis" style={inp} /></Campo>
+          <Dos>
+            <Campo label="Precio total"><Dinero valor={b.precio} onChange={(precio) => cambiar(i, { precio })} /></Campo>
+            <Campo label="Precio antes (tachado)"><Dinero valor={b.precioAntes} onChange={(precioAntes) => cambiar(i, { precioAntes })} /></Campo>
+          </Dos>
+          <Campo label="Etiqueta (opcional)"><input value={b.insignia} onChange={(e) => cambiar(i, { insignia: e.target.value })} placeholder="MÁS VENDIDO" style={inp} /></Campo>
+          <UnaImagen titulo="" url={b.imagen} onChange={(imagen) => cambiar(i, { imagen })} />
+        </div>
+      ))}
+      {bs.length < 6 && <button type="button" onClick={() => set({ bundles: [...bs, nuevo()] })} style={{ ...btn, alignSelf: 'flex-start' }}>+ Agregar oferta</button>}
+    </div>
+  );
+}
+
+function Testimonios({ d, set }: { d: LandingDatos; set: (p: Partial<LandingDatos>) => void }) {
+  const ts = d.testimonios;
+  const cambiar = (i: number, p: Partial<LandingDatos['testimonios'][number]>) => set({ testimonios: ts.map((x, k) => (k === i ? { ...x, ...p } : x)) });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Campo label="Título"><input value={d.tituloTestimonios} onChange={(e) => set({ tituloTestimonios: e.target.value })} style={inp} /></Campo>
+      {ts.map((t, i) => (
+        <div key={i} style={{ border: '1px dashed var(--df-border)', borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px auto', gap: 6, alignItems: 'end' }}>
+            <Campo label="Nombre"><input value={t.autor} onChange={(e) => cambiar(i, { autor: e.target.value })} style={inp} /></Campo>
+            <Campo label="Cuándo"><input value={t.tiempo} onChange={(e) => cambiar(i, { tiempo: e.target.value })} placeholder="Hace 2 días" style={inp} /></Campo>
+            <button type="button" onClick={() => set({ testimonios: ts.filter((_, k) => k !== i) })} style={{ ...btn, color: 'var(--df-danger)' }}>✕</button>
+          </div>
+          <Campo label="Comentario"><textarea value={t.texto} onChange={(e) => cambiar(i, { texto: e.target.value })} rows={2} style={{ ...inp, resize: 'vertical' }} /></Campo>
+          <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 8, alignItems: 'end' }}>
+            <Campo label="Reacciones"><input value={t.reacciones} onChange={(e) => cambiar(i, { reacciones: e.target.value })} placeholder="39" style={inp} /></Campo>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <UnaImagen titulo="Foto de perfil" url={t.avatar} onChange={(avatar) => cambiar(i, { avatar })} />
+              <UnaImagen titulo="Foto del producto" url={t.imagen} onChange={(imagen) => cambiar(i, { imagen })} />
+            </div>
+          </div>
+        </div>
+      ))}
+      {ts.length < 20 && <button type="button" onClick={() => set({ testimonios: [...ts, { autor: '', avatar: '', tiempo: 'Hace 1 día', texto: '', imagen: '', reacciones: '' }] })} style={{ ...btn, alignSelf: 'flex-start' }}>+ Agregar testimonio</button>}
+    </div>
+  );
+}

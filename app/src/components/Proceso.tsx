@@ -123,6 +123,10 @@ export function textoDeUrl(url: string, method: string): string | null {
   if (/\/leads\/[^/]+$/.test(u) && method === 'PATCH') return null;
   // Acciones del chat (flujo, plantilla): su progreso se ve debajo de la caja de escritura.
   if (/\/leads\/[^/]+\/(flujo-inicial|enviar-plantilla|estado|bloquear|desbloquear)$/.test(u)) return null;
+  // Editor de landings: el autoguardado, la vista previa y las imágenes van en segundo plano.
+  if (/\/landings(\/[^/]+)?$|\/landings\/(imagen|[^/]+\/vista)$/.test(u) && method !== 'DELETE') return null;
+  if (/\/landings\/[^/]+\/publicar$/.test(u)) return 'Publicando tu landing…';
+  if (/\/landings\/[^/]+\/pagar$/.test(u)) return 'Abriendo el pago seguro…';
   if (method === 'DELETE') return 'Eliminando…';
   if (/effi\/despachar/.test(u)) return 'Creando la remisión en Effi…';
   if (/effi\/guia|guia-manual/.test(u)) return 'Generando la guía de transporte…';

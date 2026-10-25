@@ -8,6 +8,7 @@ import {
   IconEquipo,
   IconDealShop,
   IconBiblioteca,
+  IconLandings,
   IconIntegraciones,
   IconLeads,
   IconPedidos,
@@ -68,6 +69,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
               <>
                 {item('resumen', <IconResumen />, 'Resumen')}
                 {item('productos', <IconProductos />, 'Productos')}
+                {item('landings', <IconLandings />, 'Landings')}
                 {item('asistente', <IconAsistente />, 'Asistente')}
                 {item('whatsapp', <IconWhatsApp />, 'WhatsApp', df.waConnected && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)' }} />)}
                 {df.effiApi?.conectado && item('logistica', <IconLogistica />, 'Logística Effi')}

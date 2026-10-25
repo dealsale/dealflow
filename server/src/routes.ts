@@ -3547,6 +3547,77 @@ api.post('/biblioteca/:id/checkout', requireAuth, requireStore, requireOwner, as
   res.json({ url: r.url });
 });
 
+// ── Creador de landings ──────────────────────────────────────────────
+api.get('/landings', requireAuth, requireStore, async (req, res) => {
+  const L = await import('./landings.js');
+  res.json({ landings: L.listarLandings(req.user!.storeId!), cuota: L.cuotaLandings(req.user!.storeId!) });
+});
+api.post('/landings', requireAuth, requireStore, async (req, res) => {
+  const L = await import('./landings.js');
+  res.json({ landing: L.crearLanding(req.user!.storeId!, String(req.body?.nombre || ''), String(req.body?.productId || '')) });
+});
+api.get('/landings/:id', requireAuth, requireStore, async (req, res) => {
+  const l = (await import('./landings.js')).verLanding(req.user!.storeId!, req.params.id);
+  if (!l) return res.status(404).json({ error: 'Landing no encontrada.' });
+  res.json({ landing: l });
+});
+api.put('/landings/:id', requireAuth, requireStore, async (req, res) => {
+  const r = (await import('./landings.js')).guardarLanding(req.user!.storeId!, req.params.id, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ landing: r });
+});
+api.delete('/landings/:id', requireAuth, requireStore, async (req, res) => {
+  if (!(await import('./landings.js')).borrarLanding(req.user!.storeId!, req.params.id)) return res.status(404).json({ error: 'Landing no encontrada.' });
+  res.json({ ok: true });
+});
+api.post('/landings/:id/duplicar', requireAuth, requireStore, async (req, res) => {
+  const l = (await import('./landings.js')).duplicarLanding(req.user!.storeId!, req.params.id);
+  if (!l) return res.status(404).json({ error: 'Landing no encontrada.' });
+  res.json({ landing: l });
+});
+// Vista previa en vivo del editor (con lo que aún no se ha guardado).
+api.post('/landings/:id/vista', requireAuth, requireStore, async (req, res) => {
+  const L = await import('./landings.js');
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ html: L.renderLanding(L.limpiarDatos(req.body?.datos), { id: req.params.id, vista: true }) });
+});
+api.post('/landings/imagen', requireAuth, requireStore, async (req, res) => {
+  const r = (await import('./landings.js')).subirImagen(req.user!.storeId!, String(req.body?.dataUrl || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/landings/:id/publicar', requireAuth, requireStore, async (req, res) => {
+  const r = (await import('./landings.js')).publicarLanding(req.user!.storeId!, req.params.id);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/landings/:id/despublicar', requireAuth, requireStore, async (req, res) => {
+  (await import('./landings.js')).despublicarLanding(req.user!.storeId!, req.params.id);
+  res.json({ ok: true });
+});
+// Pago único (Wompi) para desbloquear una landing cuando ya no quedan gratis.
+api.post('/landings/:id/pagar', requireAuth, requireStore, async (req, res) => {
+  const L = await import('./landings.js');
+  const l = L.verLanding(req.user!.storeId!, req.params.id);
+  if (!l) return res.status(404).json({ error: 'Landing no encontrada.' });
+  if (l.desbloqueada) return res.status(400).json({ error: 'Esta landing ya está pagada.' });
+  const { crearCheckoutLanding } = await import('./suscripcion.js');
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+  const r = crearCheckoutLanding(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, l.id, L.cuotaLandings(req.user!.storeId!).precio);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ url: r.url });
+});
+// Precio de las landings y cuántas gratis tiene cada tienda (equipo DealFlow).
+api.get('/admin/landings', requireAuth, requireSuperAdmin, async (_req, res) => {
+  const L = await import('./landings.js');
+  const stats = db.prepare("SELECT COUNT(*) total, SUM(estado = 'publicada') publicadas, SUM(modo = 'pago') pagadas, SUM(pedidos) pedidos FROM landings").get();
+  res.json({ ajustes: L.ajustesLandings(), stats });
+});
+api.put('/admin/landings', requireAuth, requireSuperAdmin, async (req, res) => {
+  const L = await import('./landings.js');
+  res.json({ ajustes: L.guardarAjustesLandings({ precio: req.body?.precio, gratis: req.body?.gratis }) });
+});
+
 // ── Registro de actividad / errores de la tienda (diagnóstico del Inbox) ──
 api.get('/logs', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;

@@ -146,6 +146,15 @@ export function IconCuentas() {
   );
 }
 
+export function IconLandings() {
+  return (
+    <svg {...common}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9h18M8 13h5M8 16h8" />
+    </svg>
+  );
+}
+
 export function IconDealShop() {
   return (
     <svg {...common}>
