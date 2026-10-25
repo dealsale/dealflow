@@ -108,7 +108,6 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                   <span style={a.estadoStyle}>{a.estadoLabel}</span>
-                  {a.temaPremium && <span title="Tema Premium habilitado" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-purple)' }}>💎 Premium</span>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <button onClick={() => df.abrirDetalleStore(id)} style={linkBtn('var(--df-text-body)')}>Detalle</button>
@@ -290,13 +289,6 @@ function EditarTiendaInline({ df, a, creditosDelta, setCreditosDelta, diasDelta,
             <button onClick={() => { if (diasDelta) { df.extenderSuscripcion(id, Number(diasDelta)); setAjusteMsg('✓ Renta ajustada'); setDiasDelta(''); } }} disabled={!diasDelta}
               style={{ background: 'var(--df-surface)', border: '1px solid var(--df-brand-border)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: diasDelta ? 'pointer' : 'default', opacity: diasDelta ? 1 : 0.5, whiteSpace: 'nowrap' }}>Ajustar</button>
           </div>
-        </div>
-        <div>
-          <div style={labelStyle}>Tema Premium (upsell)</div>
-          <button onClick={a.togglePremium}
-            style={{ background: a.temaPremium ? 'linear-gradient(135deg,#7C3AED,#2563EB)' : 'var(--df-surface)', border: '1px solid ' + (a.temaPremium ? 'transparent' : 'var(--df-border)'), color: a.temaPremium ? '#fff' : 'var(--df-text-body)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', width: '100%' }}>
-            💎 {a.temaPremium ? 'Premium activado' : 'Activar Premium'}
-          </button>
         </div>
         {ajusteMsg && <div style={{ gridColumn: '1 / -1', fontSize: 12.5, color: 'var(--df-brand-dark)', fontWeight: 600 }}>{ajusteMsg}</div>}
       </div>

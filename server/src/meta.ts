@@ -174,7 +174,7 @@ export async function conectarPaginasMeta(storeId: string, acceso: AccesoMeta): 
       try {
         const sr = await fetch(`${GRAPH}/${p.id}/subscribed_apps?access_token=${encodeURIComponent(p.access_token)}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscribed_fields: 'messages,messaging_postbacks,messaging_referrals,message_reactions,feed' }),
+          body: JSON.stringify({ subscribed_fields: 'messages,messaging_postbacks,messaging_referrals,message_reactions' }),
         });
         const sb = (await sr.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
         if (!sb.success) registrarLog(storeId, 'warn', 'meta', `La página ${p.name} se conectó, pero Meta no aceptó suscribirla a los mensajes: ${sb.error?.message || 'sin detalle'}.`);
@@ -195,7 +195,7 @@ export function metaConectado(storeId: string): { messenger: boolean; instagram:
   return { messenger: paginas.length > 0, instagram: paginas.some((p) => !!p.igId), paginas: paginas.map((p) => p.nombre) };
 }
 
-const SUSCRIPCION = 'messages,messaging_postbacks,messaging_referrals,message_reactions,feed';
+const SUSCRIPCION = 'messages,messaging_postbacks,messaging_referrals,message_reactions';
 
 /**
  * Revisa por qué no llegan los mensajes de Messenger: si cada página tiene a DealFlow
@@ -230,13 +230,27 @@ export async function diagnosticoMeta(storeId: string) {
 export async function resuscribirPaginas(storeId: string): Promise<{ ok: number; errores: string[] }> {
   let ok = 0; const errores: string[] = [];
   for (const p of paginasDeTienda(storeId)) {
-    try {
-      const res = await fetch(`${GRAPH}/${p.pageId}/subscribed_apps?access_token=${encodeURIComponent(p.token)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscribed_fields: SUSCRIPCION }),
-      });
-      const b = (await res.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
-      if (b.success) ok++; else errores.push(`${p.nombre}: ${b.error?.message || 'Meta no aceptó la suscripción.'}`);
-    } catch { errores.push(`${p.nombre}: no pudimos hablar con Meta.`); }
+    // Si Meta rechaza algún campo (p. ej. "feed" sin permiso), se reintenta con los esenciales.
+    let ultimo = '';
+    for (const campos of [SUSCRIPCION, 'messages,messaging_postbacks,messaging_referrals', 'messages']) {
+      try {
+        const res = await fetch(`${GRAPH}/${p.pageId}/subscribed_apps?access_token=${encodeURIComponent(p.token)}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscribed_fields: campos }),
+        });
+        const b = (await res.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string; code?: number } };
+        if (b.success) { ok++; ultimo = ''; break; }
+        ultimo = b.error?.message || 'Meta no aceptó la suscripción.';
+        if (b.error?.code === 190) { ultimo = 'el acceso de la página venció: dale «Reconectar».'; break; }
+      } catch { ultimo = 'no pudimos hablar con Meta.'; break; }
+    }
+    if (ultimo) errores.push(`${p.nombre}: ${traducirErrorSuscripcion(ultimo)}`);
   }
   return { ok, errores };
+}
+
+/** Explica en simple los rechazos típicos de Meta al suscribir una página. */
+function traducirErrorSuscripcion(m: string): string {
+  if (/callback|webhook|subscri.*app|app.*subscri/i.test(m)) return `${m} → En developers.facebook.com → Casos de uso → Messenger from Meta → Configuración de la API de Messenger → Webhooks, agrega la URL de devolución de llamada y el token de verificación, y suscribe "messages", "messaging_postbacks" y "messaging_referrals".`;
+  if (/permission|permiso|pages_messaging|pages_manage_metadata/i.test(m)) return `${m} → Falta un permiso en la configuración de inicio de sesión: revisa que tenga pages_messaging y pages_manage_metadata, y vuelve a conectar.`;
+  return m;
 }

@@ -665,6 +665,24 @@ api.get('/stats/anuncios', requireAuth, requireStore, async (req, res) => {
   res.json({ rango: { desde, hasta }, ...conversionPorAnuncio(req.user!.storeId!, desde, hasta), meta: estadoInsights(req.user!.storeId!) });
 });
 // Trae ya el gasto/impresiones/clics de Meta (hasta 90 días atrás).
+// Análisis con filtros cruzados (canal, origen, producto, campaña, anuncio, ciudad, estado).
+api.get('/stats/analisis', requireAuth, requireStore, async (req, res) => {
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  let desde = String(req.query.desde || ''); let hasta = String(req.query.hasta || '');
+  if (!re.test(desde)) desde = hoy;
+  if (!re.test(hasta)) hasta = hoy;
+  if (desde > hasta) [desde, hasta] = [hasta, desde];
+  const q = (k: string) => String(req.query[k] || '').slice(0, 120) || undefined;
+  const { analisis } = await import('./statsAnalisis.js');
+  res.json(analisis(req.user!.storeId!, desde, hasta, { canal: q('canal'), origen: q('origen'), producto: q('producto'), campana: q('campana'), ad: q('ad'), ciudad: q('ciudad'), estado: q('estado') }));
+});
+
+// Anuncios de Meta con su producto vinculado (para vincular a mano desde Integraciones).
+api.get('/ads/anuncios', requireAuth, requireStore, async (req, res) => {
+  const { anunciosConProducto } = await import('./metaInsights.js');
+  res.json({ anuncios: anunciosConProducto(req.user!.storeId!) });
+});
 api.post('/stats/anuncios/sincronizar', requireAuth, requireStore, async (req, res) => {
   const { sincronizarInsights, estadoInsights } = await import('./metaInsights.js');
   const r = await sincronizarInsights(req.user!.storeId!, Math.min(90, Math.max(1, Number(req.body?.dias) || 30)));

@@ -31,6 +31,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS ads_insights (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (store_id, ad_id, fecha)
 )`);
+// Miniatura y post de cada anuncio (para mostrarlos aunque el anuncio no haya traído chats).
+db.exec(`CREATE TABLE IF NOT EXISTS ads_meta (
+  store_id TEXT NOT NULL, ad_id TEXT NOT NULL, thumb TEXT NOT NULL DEFAULT '', post_id TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (store_id, ad_id)
+)`);
 db.exec(`CREATE TABLE IF NOT EXISTS ads_sync (
   store_id TEXT PRIMARY KEY,
   ultima TEXT NOT NULL DEFAULT '',
@@ -107,6 +112,7 @@ export async function sincronizarInsights(storeId: string, dias = 3): Promise<{ 
       url = body.paging?.next;
     }
     anotar('');
+    await traerMiniaturas(storeId, c.access_token).catch((e) => console.warn('[ads] miniaturas', e));
     try { autoVincularPorNombre(storeId); } catch (e) { console.warn('[ads] auto-vínculo', e); }
     return { ok: true, filas };
   } catch (e) {
@@ -114,6 +120,46 @@ export async function sincronizarInsights(storeId: string, dias = 3): Promise<{ 
     anotar(msg);
     return { error: msg };
   }
+}
+
+/** Miniatura, post y estado (activo/pausado) de los anuncios que aún no los tienen (o de hace más de 1 día). */
+async function traerMiniaturas(storeId: string, token: string): Promise<void> {
+  const ids = (db.prepare(`SELECT DISTINCT i.ad_id FROM ads_insights i LEFT JOIN ads_meta m ON m.store_id = i.store_id AND m.ad_id = i.ad_id
+    WHERE i.store_id = ? AND (m.ad_id IS NULL OR m.updated_at < datetime('now', '-1 day')) LIMIT 100`).all(storeId) as { ad_id: string }[]).map((r) => r.ad_id);
+  for (let i = 0; i < ids.length; i += 50) {
+    const parte = ids.slice(i, i + 50);
+    const r = await fetch(`${GRAPH}/?ids=${parte.join(',')}&fields=effective_status,creative{thumbnail_url,image_url,effective_object_story_id}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+    const b = (await r.json().catch(() => ({}))) as Record<string, { effective_status?: string; creative?: { thumbnail_url?: string; image_url?: string; effective_object_story_id?: string } }> & { error?: unknown };
+    if (!r.ok || b.error) return;
+    const g = db.prepare(`INSERT INTO ads_meta (store_id, ad_id, thumb, post_id, estado, updated_at) VALUES (?,?,?,?,?, datetime('now'))
+      ON CONFLICT(store_id, ad_id) DO UPDATE SET thumb = excluded.thumb, post_id = excluded.post_id, estado = excluded.estado, updated_at = excluded.updated_at`);
+    for (const id of parte) {
+      const a = b[id];
+      if (!a) continue;
+      g.run(storeId, id, a.creative?.image_url || a.creative?.thumbnail_url || '', a.creative?.effective_object_story_id || '', a.effective_status || '');
+    }
+  }
+}
+
+/** Anuncios conocidos (de Meta y de los chats) con su producto vinculado, para vincularlos a mano. */
+export function anunciosConProducto(storeId: string) {
+  const filas = db.prepare(`
+    SELECT i.ad_id, MAX(i.ad_name) ad_name, MAX(i.campaign_name) campaign_name, MAX(i.adset_name) adset_name, SUM(i.gasto) gasto, MAX(i.fecha) ultima,
+      m.thumb, m.post_id, m.estado
+    FROM ads_insights i LEFT JOIN ads_meta m ON m.store_id = i.store_id AND m.ad_id = i.ad_id
+    WHERE i.store_id = ? AND i.fecha >= date('now', '-60 days') GROUP BY i.ad_id ORDER BY ultima DESC, gasto DESC`).all(storeId) as { ad_id: string; ad_name: string; campaign_name: string; adset_name: string; gasto: number; ultima: string; thumb: string | null; post_id: string | null; estado: string | null }[];
+  const vinc = new Map((db.prepare('SELECT ad_id, product_id, auto FROM anuncio_producto WHERE store_id = ?').all(storeId) as { ad_id: string; product_id: string; auto: number }[]).map((v) => [v.ad_id, v]));
+  return filas.map((f) => ({
+    adId: f.ad_id, nombre: f.ad_name || f.ad_id, campana: f.campaign_name, conjunto: f.adset_name, gasto: Math.round(f.gasto), ultima: f.ultima,
+    thumb: f.thumb || '', url: f.post_id ? `https://www.facebook.com/${f.post_id}` : '', estado: f.estado || '',
+    productId: vinc.get(f.ad_id)?.product_id || '', auto: vinc.get(f.ad_id)?.auto === 1,
+  }));
+}
+
+/** Miniatura guardada de un anuncio (para las estadísticas). */
+export function miniaturas(storeId: string): Map<string, { thumb: string; url: string }> {
+  return new Map((db.prepare('SELECT ad_id, thumb, post_id FROM ads_meta WHERE store_id = ?').all(storeId) as { ad_id: string; thumb: string; post_id: string }[])
+    .map((m) => [m.ad_id, { thumb: m.thumb, url: m.post_id ? `https://www.facebook.com/${m.post_id}` : '' }]));
 }
 
 // Palabras que no identifican un producto en el nombre de un anuncio.

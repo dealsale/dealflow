@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { apiMetaDiagnostico, apiMetaResuscribir, apiCapi, apiGuardarCapi, apiCapiDetectar, apiCapiEnviar, type DiagnosticoMeta, type EstadoCapi } from '../lib/api';
+import { apiMetaDiagnostico, apiMetaResuscribir, apiCapi, apiGuardarCapi, apiCapiDetectar, apiCapiEnviar, apiAnunciosMeta, apiVincularAnuncio, type DiagnosticoMeta, type EstadoCapi, type AnuncioMeta } from '../lib/api';
+import { Dropdown } from './Dropdown';
 import { IntegracionFila, LogoInteg } from './IntegracionFila';
 import { fmt } from '../lib/format';
 
@@ -12,8 +13,9 @@ export function DiagnosticoMessenger() {
   const [d, setD] = useState<DiagnosticoMeta | null>(null);
   const [cargando, setCargando] = useState(false);
   const [msg, setMsg] = useState('');
-  const revisar = async () => { setCargando(true); setMsg(''); const r = await apiMetaDiagnostico(); setCargando(false); if (r.data) setD(r.data); else setMsg(r.error || 'No se pudo revisar.'); };
-  const resuscribir = async () => { const r = await apiMetaResuscribir(); setMsg(r.data ? (r.data.errores.length ? `⚠️ ${r.data.errores.join(' · ')}` : `✓ ${r.data.ok} página(s) suscritas de nuevo.`) : r.error || ''); void revisar(); };
+  const revisar = async (limpiar = true) => { setCargando(true); if (limpiar) setMsg(''); const r = await apiMetaDiagnostico(); setCargando(false); if (r.data) setD(r.data); else setMsg(r.error || 'No se pudo revisar.'); };
+  // El resultado de suscribir se queda visible (antes "revisar" lo borraba al instante).
+  const resuscribir = async () => { const r = await apiMetaResuscribir(); setMsg(r.data ? (r.data.errores.length ? `⚠️ ${r.data.errores.join(' · ')}` : `✓ ${r.data.ok} página(s) suscritas de nuevo.`) : r.error || ''); void revisar(false); };
   const algunaMal = d?.paginas.some((p) => !p.suscrita || p.faltan.length || p.error);
   return (
     <div style={{ marginTop: 12, borderTop: '1px dashed var(--df-border)', paddingTop: 12 }}>
@@ -122,5 +124,61 @@ export function CapiCard() {
         )}
       </div>
     </IntegracionFila>
+  );
+}
+
+/**
+ * Anuncios de Meta ↔ productos: cada anuncio queda ligado a su producto para que el bot
+ * mande el mensaje inicial correcto aunque el cliente no escriba la frase, y para que las
+ * estadísticas sepan qué producto vende cada pauta.
+ */
+export function AnunciosProductos({ productos }: { productos: { id: string; nombre: string }[] }) {
+  const [lista, setLista] = useState<AnuncioMeta[] | null>(null);
+  const [verTodos, setVerTodos] = useState(false);
+  const [q, setQ] = useState('');
+  const [msg, setMsg] = useState('');
+  useEffect(() => { void apiAnunciosMeta().then((r) => r.data && setLista(r.data.anuncios)); }, []);
+  if (!lista) return null;
+  if (!lista.length) return <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Todavía no hay anuncios traídos de Meta. Ve a Estadísticas → Conversión por anuncio → «Traer ahora».</div>;
+  const elegir = async (a: AnuncioMeta, productId: string) => {
+    setLista((l) => (l || []).map((x) => (x.adId === a.adId ? { ...x, productId, auto: false } : x)));
+    const r = await apiVincularAnuncio(a.adId, productId, a.nombre);
+    setMsg(r.error ? `⚠️ ${r.error}` : productId ? `✓ «${a.nombre}» quedó con ${productos.find((p) => p.id === productId)?.nombre || 'el producto'}.` : `✓ «${a.nombre}» quedó sin producto.`);
+  };
+  const sinVinculo = lista.filter((a) => !a.productId).length;
+  const filtrada = lista.filter((a) => !q || `${a.nombre} ${a.campana} ${a.conjunto}`.toLowerCase().includes(q.toLowerCase()));
+  const visibles = verTodos || q ? filtrada : filtrada.slice(0, 8);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <b style={{ fontSize: 13 }}>🏷️ Anuncios y productos</b>
+        <span style={{ fontSize: 12, color: sinVinculo ? 'var(--df-warning-mid)' : 'var(--df-success)', fontWeight: 700 }}>{sinVinculo ? `${sinVinculo} sin producto` : 'Todos vinculados'}</span>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar anuncio…" style={{ marginLeft: 'auto', border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 9px', fontFamily: 'inherit', fontSize: 12, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>El bot usa este vínculo para mandar el mensaje inicial del producto correcto. «Auto» = DealFlow lo vinculó por el nombre del anuncio; si eliges uno a mano, se respeta siempre.</div>
+      {visibles.map((a) => (
+        <div key={a.adId} style={{ display: 'flex', alignItems: 'center', gap: 9, border: '1px solid var(--df-border)', borderRadius: 9, padding: 7, flexWrap: 'wrap' }}>
+          <span style={{ width: 40, height: 40, borderRadius: 7, overflow: 'hidden', background: 'var(--df-surface-2)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+            {a.thumb ? <img src={a.thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span>📢</span>}
+          </span>
+          <span style={{ flex: '1 1 180px', minWidth: 0 }}>
+            <span style={{ display: 'block', fontWeight: 700, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nombre}</span>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--df-text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {[a.campana, a.estado === 'ACTIVE' ? '🟢 activo' : a.estado ? '⏸ ' + a.estado.toLowerCase() : '', a.gasto ? `${fmt(a.gasto)} en 60 días` : ''].filter(Boolean).join(' · ')}
+              {a.url && <> · <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--df-brand-dark)' }}>ver ↗</a></>}
+            </span>
+          </span>
+          <div style={{ flex: '1 1 200px', minWidth: 180, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ flex: 1 }}>
+              <Dropdown ariaLabel={`Producto de ${a.nombre}`} buscar value={a.productId} onChange={(v) => void elegir(a, v)} placeholder="Sin producto"
+                options={[{ value: '', label: 'Sin producto' }, ...productos.map((p) => ({ value: p.id, label: p.nombre }))]} />
+            </div>
+            {a.auto && a.productId && <span title="Vinculado automáticamente por el nombre del anuncio" style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--df-purple)' }}>AUTO</span>}
+          </div>
+        </div>
+      ))}
+      {!q && filtrada.length > 8 && <button onClick={() => setVerTodos((v) => !v)} style={{ ...btn, alignSelf: 'flex-start' }}>{verTodos ? 'Ver menos' : `Ver los ${filtrada.length} anuncios`}</button>}
+      {msg && <div style={{ fontSize: 12.5, color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</div>}
+    </div>
   );
 }

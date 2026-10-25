@@ -887,3 +887,27 @@ export const apiCapi = () => req<EstadoCapi>('/api/meta/capi', 'GET');
 export const apiGuardarCapi = (c: Partial<EstadoCapi>) => req<EstadoCapi>('/api/meta/capi', 'POST', c);
 export const apiCapiDetectar = () => req<EstadoCapi>('/api/meta/capi/detectar', 'POST');
 export const apiCapiEnviar = () => req<EstadoCapi & { enviados: number }>('/api/meta/capi/enviar', 'POST');
+export interface AnuncioMeta { adId: string; nombre: string; campana: string; conjunto: string; gasto: number; ultima: string; thumb: string; url: string; estado: string; productId: string; auto: boolean }
+export const apiAnunciosMeta = () => req<{ anuncios: AnuncioMeta[] }>('/api/ads/anuncios', 'GET');
+
+// ── Análisis con filtros ──
+export interface FiltrosAnalisis { canal?: string; origen?: string; producto?: string; campana?: string; ad?: string; ciudad?: string; estado?: string }
+export interface Analisis {
+  rango: { desde: string; hasta: string };
+  kpis: { chats: number; chatsAnuncio: number; respondieron: number; pedidos: number; cancelados: number; despachados: number; entregados: number; devueltos: number; ventas: number; ventasEntregadas: number; unidades: number; ticket: number; conversion: number; tasaEntrega: number; gasto: number; roas: number; costoPedido: number; costoChat: number };
+  serie: { fecha: string; chats: number; pedidos: number; ventas: number; gasto: number; entregados: number }[];
+  embudo: { paso: string; n: number }[];
+  porProducto: { id: string; nombre: string; unidades: number; pedidos: number; ventas: number }[];
+  porCiudad: { ciudad: string; pedidos: number; ventas: number; entregados: number; devueltos: number }[];
+  porEstado: { estado: string; n: number }[];
+  porCanal: { canal: string; chats: number; pedidos: number; ventas: number }[];
+  porOrigen: { anuncio: { chats: number; pedidos: number; ventas: number }; organico: { chats: number; pedidos: number; ventas: number } };
+  porHora: { h: number; chats: number; pedidos: number }[];
+  porSemana: { dia: string; pedidos: number; ventas: number }[];
+  opciones: { canales: string[]; ciudades: string[]; estados: string[]; productos: { id: string; nombre: string }[]; campanas: { id: string; nombre: string }[]; anuncios: { id: string; nombre: string }[] };
+}
+export const apiAnalisis = (desde: string, hasta: string, f: FiltrosAnalisis) => {
+  const p = new URLSearchParams({ desde, hasta });
+  for (const [k, v] of Object.entries(f)) if (v) p.set(k, v);
+  return req<Analisis>(`/api/stats/analisis?${p}`, 'GET');
+};

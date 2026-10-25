@@ -867,15 +867,8 @@ export function useDealFlowState() {
   const [arrancando, setArrancando] = useState<boolean>(bootServed);
   const [storeNombre, setStoreNombre] = useState<string>('');
   const [storeId, setStoreId] = useState<string>('');
-  // Tema Premium: solo lo puede elegir la tienda si el Admin se lo habilitó —
-  // EXCEPTO el propio Admin/Superadmin, que siempre lo tiene disponible (además
-  // de Claro/Dark System) en su propia cuenta.
-  const [premiumHabilitado, setPremiumHabilitado] = useState(false);
-  const premiumPermitido = premiumHabilitado || sessionUser?.role === 'admin' || sessionUser?.role === 'superadmin';
-  useEffect(() => {
-    if (theme === 'premium' && !premiumPermitido && apiMode) setThemeState('dark');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [premiumPermitido]);
+  // El tema Premium está disponible para TODAS las cuentas (ya no se activa por tienda).
+  const premiumPermitido = true;
   const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
   const [iaPredeterminada, setIaPredeterminada] = useState('deepseek');
   // Los avisos de integraciones (guardar, probar conexión, sincronizar…) ahora
@@ -1950,7 +1943,6 @@ export function useDealFlowState() {
         }
         if (data.store?.nombre) setStoreNombre(data.store.nombre);
         if (data.store?.id) setStoreId(data.store.id);
-        setPremiumHabilitado(!!data.store?.temaPremium);
         setSuscripcion(data.suscripcion ?? null);
         if (data.whatsapp.verifyToken) setWaVerifyToken(data.whatsapp.verifyToken);
         setWaSignup(data.whatsapp.signup ?? null);
