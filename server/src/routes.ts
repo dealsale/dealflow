@@ -1639,6 +1639,10 @@ api.get('/effi-api/articulos', requireAuth, requireStore, requireOwner, async (r
   const conveniosProducto = Object.fromEntries((db.prepare("SELECT id, effi_convenio FROM products WHERE store_id = ? AND effi_convenio != ''").all(sid) as { id: string; effi_convenio: string }[]).map((r) => [r.id, r.effi_convenio]));
   res.json({ articulos: arts, variantes, nombres, conveniosProducto, convenios: ef.conveniosConocidos(sid) });
 });
+api.get('/effi-api/articulos/todos', requireAuth, requireStore, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  res.json({ articulos: await ef.todosLosArticulos(req.user!.storeId!) });
+});
 api.get('/effi-api/articulos/buscar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
   const r = await ef.buscarArticulosEffi(req.user!.storeId!, String(req.query.q || ''));

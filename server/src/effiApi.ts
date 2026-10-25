@@ -561,6 +561,17 @@ export async function revisarVinculosProducto(storeId: string, productId: string
 }
 
 /** Un artículo por id, en vivo (con su marca de dropshipping). Lo guarda en la caché. */
+/** Todos los artículos para el selector: los tuyos (catálogo) y los de tus proveedores dropshipping. */
+export async function todosLosArticulos(storeId: string): Promise<{ id: string; descripcion: string; referencia: string; drop: number }[]> {
+  const c = cfgEffi(storeId);
+  if (!c?.apiKey) return [];
+  if (!articulosCache(storeId).length) await descargarArticulos(storeId, c.apiKey);
+  const m = new Map<string, { id: string; descripcion: string; referencia: string; drop: number }>();
+  for (const a of articulosCache(storeId)) m.set(a.id, { id: a.id, descripcion: a.descripcion, referencia: a.referencia, drop: a.drop === 1 ? 1 : 0 });
+  try { for (const a of await articulosDrop(storeId, c.apiKey)) m.set(a.id, { id: a.id, descripcion: a.descripcion, referencia: a.referencia, drop: 1 }); } catch { /* sin proveedores */ }
+  return [...m.values()].sort((a, b) => a.descripcion.localeCompare(b.descripcion, 'es'));
+}
+
 /** Consulta un artículo de Effi por su ID (para vincular a mano con verificación). */
 export async function verArticuloEffi(storeId: string, id: string): Promise<ArticuloEffi | undefined> {
   const c = cfgEffi(storeId);
@@ -821,7 +832,8 @@ export function vincularArticulo(storeId: string, variantId: string, effiId: str
   const own = db.prepare('SELECT v.id FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(variantId, storeId);
   if (!own) return false;
   if (auto) db.prepare("UPDATE variants SET refs = json_set(COALESCE(refs,'{}'), '$.effi_id', ?, '$.effi_auto', 1) WHERE id = ?").run(effiId, variantId);
-  else db.prepare("UPDATE variants SET refs = json_remove(json_set(COALESCE(refs,'{}'), '$.effi_id', ?), '$.effi_auto') WHERE id = ?").run(effiId, variantId);
+  // Elegido a mano: es EL artículo de la variante (se quita cualquier otro vínculo de proveedor).
+  else db.prepare("UPDATE variants SET refs = json_remove(json_set(COALESCE(refs,'{}'), '$.effi_id', ?), '$.effi_auto', '$.effi_prov_id') WHERE id = ?").run(effiId, variantId);
   return true;
 }
 
