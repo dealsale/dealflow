@@ -50,6 +50,7 @@ export function LandingsAdmin() {
                   <div style={{ flex: 1, minWidth: 200 }}>
                     <div style={{ fontWeight: 700, fontSize: 14 }}>{t.tienda}{!t.activa && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--df-text-faint)', fontWeight: 600 }}>(inactiva)</span>}</div>
                     <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{t.correo}{t.plan ? ` · ${t.plan}` : ''}</div>
+                    {t.dominio && <div style={{ fontSize: 12, color: t.dominioEstado === 'activo' ? 'var(--df-success, #16a34a)' : 'var(--df-warning)' }}>🌐 {t.dominio} · {t.dominioEstado === 'activo' ? 'activo' : 'pendiente'}</div>}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--df-text-muted)', minWidth: 170 }}>{t.landings ? `${t.landings} landing${t.landings === 1 ? '' : 's'} · ${t.publicadas} publicada${t.publicadas === 1 ? '' : 's'} · ${t.pedidos} pedidos` : 'Sin landings'}</div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: t.habilitado ? 'var(--df-success, #16a34a)' : 'var(--df-text-muted)', minWidth: 112 }}>
