@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useRecordado } from '../lib/rutas';
 import { apiAnalisis, type Analisis, type FiltrosAnalisis } from '../lib/api';
 import { fmt } from '../lib/format';
 import { GroupedBars, Donut, PALETA } from './Charts';
@@ -103,7 +104,7 @@ const NOMBRE_CANAL: Record<string, string> = { whatsapp: 'WhatsApp', messenger: 
  * Tocar una barra (producto, ciudad, estado, canal) filtra por eso.
  */
 export function AnalisisVentas({ desde, hasta }: { desde: string; hasta: string }) {
-  const [f, setF] = useState<FiltrosAnalisis>({});
+  const [f, setF] = useRecordado<FiltrosAnalisis>('stats:filtros', {});
   const [a, setA] = useState<Analisis | null>(null);
   const [cargando, setCargando] = useState(false);
   useEffect(() => {

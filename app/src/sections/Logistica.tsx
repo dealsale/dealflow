@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRecordado } from '../lib/rutas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { NovedadesBandeja } from '../components/Novedades';
@@ -100,10 +101,10 @@ export function Logistica({ df }: { df: DealFlowState }) {
   const [error, setError] = useState('');
   const [actualizando, setActualizando] = useState(false);
   const [q, setQ] = useState('');
-  const [transp, setTransp] = useState('');
-  const [dias, setDias] = useState('45');
-  const [verCerradas, setVerCerradas] = useState(true);
-  const [origen, setOrigen] = useState<'' | 'df' | 'effi'>('');
+  const [transp, setTransp] = useRecordado('logistica:transp', '');
+  const [dias, setDias] = useRecordado('logistica:dias', '45');
+  const [verCerradas, setVerCerradas] = useRecordado('logistica:cerradas', true);
+  const [origen, setOrigen] = useRecordado<'' | 'df' | 'effi'>('logistica:origen', '');
 
   const cargar = (d = dias) => { void apiLogistica(Number(d)).then((r) => { if (r.data) { setT(r.data); setError(''); } else setError(r.error || 'No se pudo cargar.'); }); };
   useEffect(() => {

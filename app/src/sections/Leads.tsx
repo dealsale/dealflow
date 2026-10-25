@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useRecordado } from '../lib/rutas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { OrigenBadge } from '../components/OrigenPedido';
@@ -63,7 +64,7 @@ function Tarjeta({ l, onAbrir, onMover }: { l: LeadEstado; onAbrir: () => void; 
 export function Leads({ df }: { df: DealFlowState }) {
   const [leads, setLeads] = useState<LeadEstado[] | null>(null);
   const [q, setQ] = useState('');
-  const [rango, setRango] = useState<Rango>('todo');
+  const [rango, setRango] = useRecordado<Rango>('leads:rango', 'todo');
   const [verPerdidos, setVerPerdidos] = useState(false);
   const [limite, setLimite] = useState<Record<string, number>>({});
 

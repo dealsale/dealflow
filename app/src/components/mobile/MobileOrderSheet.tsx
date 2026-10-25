@@ -4,6 +4,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../Dropdown';
 import { confirmar } from '../dialogs';
 import { DespachoPedido } from '../OrderDetailPanel';
+import { ProcesoPedido } from '../Proceso';
 
 export function MobileOrderSheet({ df }: { df: DealFlowState }) {
   useEffect(() => { void df.cargarEffiApi?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -24,6 +25,7 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
           boxShadow: '0 -12px 40px rgba(15,23,42,.2)',
         }}
       >
+        <ProcesoPedido />
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}>
           <div style={{ width: 40, height: 4, borderRadius: 999, background: 'var(--df-border)' }} />
         </div>
