@@ -11,6 +11,8 @@ interface AuthResponse { code?: string; accessToken?: string }
 interface FbSdk {
   init(o: { appId: string; autoLogAppEvents: boolean; xfbml: boolean; version: string }): void;
   login(cb: (r: { authResponse?: AuthResponse }) => void, o: Record<string, unknown>): void;
+  getLoginStatus(cb: (r: { status?: string }) => void): void;
+  logout(cb: () => void): void;
 }
 declare global {
   interface Window { FB?: FbSdk; fbAsyncInit?: () => void }
@@ -141,4 +143,21 @@ export async function abrirSignupMeta(appId: string, configId: string): Promise<
       },
     );
   });
+}
+
+/**
+ * Cierra la sesión de Facebook EN ESTA APP para que la próxima ventana pregunte con qué
+ * cuenta entrar (sirve cuando se conectó la cuenta equivocada).
+ */
+export async function salirDeFacebook(appId: string): Promise<void> {
+  try {
+    const FB = await cargarSdk(appId);
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, 4000);
+      FB.getLoginStatus((r) => {
+        if (r.status === 'connected') FB.logout(() => { clearTimeout(t); resolve(); });
+        else { clearTimeout(t); resolve(); }
+      });
+    });
+  } catch { /* si no carga, seguimos: Facebook igual dejará elegir */ }
 }

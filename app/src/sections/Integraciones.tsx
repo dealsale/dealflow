@@ -250,12 +250,20 @@ function MetaAdsCard({ df }: { df: DealFlowState }) {
               disabled={!cuenta}
               style={{ ...btnPrimary, opacity: cuenta ? 1 : 0.6, alignSelf: 'flex-start' }}
             >Guardar conexión</button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => void df.cambiarCuentaAds()} disabled={df.mkLoading} style={btnGhost}>¿No es tu cuenta? Usar otra cuenta de Facebook</button>
+              <button onClick={df.desconectarAds} style={btnGhostRed}>Cancelar</button>
+            </div>
           </>
         )}
         {df.mkError && !conectada && <div style={{ color: 'var(--df-danger-dark)', fontSize: 12.5 }}>{df.mkError}</div>}
+        {!conectada && !ops && <div style={{ fontSize: 12, color: 'var(--df-text-faint)' }}>Si Facebook entra solo con la cuenta equivocada, cierra sesión en facebook.com o abre DealFlow en una ventana de incógnito.</div>}
         {conectada && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Se actualiza sola cada hora. Mira los resultados en <b>Estadísticas → Conversión por anuncio</b>.</div>}
         {conectada ? (
-          <button onClick={df.desconectarAds} style={btnGhostRed}>Desconectar</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => void df.cambiarCuentaAds()} disabled={df.mkLoading} style={btnGhost}>Cambiar de cuenta de Facebook</button>
+            <button onClick={df.desconectarAds} style={btnGhostRed}>Desconectar</button>
+          </div>
         ) : !ops && (
           <button onClick={df.conectarAds} disabled={df.mkLoading} style={{ ...btnFacebook, opacity: df.mkLoading ? 0.7 : 1, alignSelf: 'flex-start' }}>
             {df.mkLoading ? 'Conectando…' : 'Conectar con Facebook'}
@@ -282,6 +290,7 @@ function MetaCanalesCard({ df }: { df: DealFlowState }) {
     >
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={df.conectarMeta} disabled={df.metaLoading} style={{ ...btnFacebook, opacity: df.metaLoading ? 0.7 : 1 }}>{df.metaLoading ? 'Conectando…' : on ? 'Reconectar' : 'Conectar con Facebook'}</button>
+        {on && <button onClick={() => void df.cambiarCuentaMeta()} disabled={df.metaLoading} style={btnGhost}>Cambiar de cuenta de Facebook</button>}
         {on && <button onClick={df.desconectarMeta} style={btnGhostRed}>Desconectar</button>}
       </div>
       {df.metaMsg && <div style={{ fontSize: 12.5, marginTop: 8, color: df.metaMsg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)' }}>{df.metaMsg}</div>}
@@ -292,6 +301,7 @@ function MetaCanalesCard({ df }: { df: DealFlowState }) {
 const lbl: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600, marginBottom: 4 };
 const btnPrimary: React.CSSProperties = { background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
 const btnFacebook: React.CSSProperties = { background: '#1877F2', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
+const btnGhost: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', alignSelf: 'flex-start' };
 const btnGhostRed: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-danger-dark)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', alignSelf: 'flex-start' };
 
 export function Integraciones({ df }: { df: DealFlowState }) {

@@ -2932,6 +2932,11 @@ export function useDealFlowState() {
   function desconectarMeta() {
     void apiMetaDesconectar().then(() => { setMetaMsg(''); void reloadMetaEstado(); });
   }
+  async function cambiarCuentaMeta() {
+    await apiMetaDesconectar(); setMetaMsg(''); await reloadMetaEstado();
+    if (waSignup?.appId) { const { salirDeFacebook } = await import('../lib/metaSignup'); await salirDeFacebook(waSignup.appId); }
+    setMetaMsg('✓ Listo. Dale «Conectar con Facebook» y entra con la cuenta correcta.');
+  }
   function guardarIntegracion(tipo: string, config: Record<string, string>, predeterminada?: boolean) {
     setIntegracionMsg('Guardando…');
     void apiGuardarIntegracion(tipo, config, predeterminada).then((r) => {
@@ -3145,7 +3150,17 @@ export function useDealFlowState() {
     });
   }
   function desconectarAds() {
+    setAdsOpciones(null); setMkError('');
     void apiAdsDesconectar().then((r) => { if (r.data) setAdsCuenta(r.data.ads); });
+  }
+  // Se conectó la cuenta de Facebook equivocada: se suelta la conexión y se cierra la
+  // sesión de Facebook en DealFlow, para que la próxima ventana deje elegir otra cuenta.
+  async function cambiarCuentaAds() {
+    setAdsOpciones(null); setMkError('');
+    const r = await apiAdsDesconectar();
+    if (r.data) setAdsCuenta(r.data.ads);
+    if (waSignup?.appId) { const { salirDeFacebook } = await import('../lib/metaSignup'); await salirDeFacebook(waSignup.appId); }
+    // La ventana NO se abre sola (el navegador la bloquearía): queda el botón "Conectar con Facebook".
   }
   function publicarCampana(id: string, b: { presupuesto: number; textoIdx?: number; tituloIdx?: number; descripcionIdx?: number; creativoIdx?: number }) {
     setMkLoading(true); setMkError('');
@@ -4032,8 +4047,8 @@ export function useDealFlowState() {
     pasoProducto, pasoCreativos, pasoTextos,
     mkLoading, mkError, setMkError,
     mkCopied, copiarCopy,
-    adsCuenta, adsOpciones, conectarAds, elegirCuentaAds, desconectarAds, publicarCampana,
-    metaEstado, metaMsg, metaLoading, conectarMeta, desconectarMeta,
+    adsCuenta, adsOpciones, conectarAds, elegirCuentaAds, desconectarAds, cambiarCuentaAds, publicarCampana,
+    metaEstado, metaMsg, metaLoading, conectarMeta, desconectarMeta, cambiarCuentaMeta,
     mkSinCreditos,
     creditos,
     creditosMov,
