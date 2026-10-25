@@ -142,7 +142,7 @@ export function Estadisticas({ df }: { df: DealFlowState }) {
             </div>
           </div>
 
-          <ConversionAnuncios desde={df.statsRango.desde} hasta={df.statsRango.hasta} />
+          <ConversionAnuncios desde={df.statsRango.desde} hasta={df.statsRango.hasta} onDia={(d) => df.setStatsFechas(d, d)} />
         </>
       )}
     </section>

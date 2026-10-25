@@ -5,10 +5,12 @@
  * ventas de DealFlow (statsAnuncios.ts) para sacar costo por chat, por pedido y ROAS.
  *
  * Usa la cuenta que la tienda conectó en Marketing (tabla ads_cuentas). Se sincroniza
- * sola cada hora (últimos 3 días, que es lo que Meta todavía ajusta) y a mano desde
+ * sola cada 30 minutos (últimos 3 días, que es lo que Meta todavía ajusta) y a mano desde
  * Estadísticas (hasta 90 días).
  */
 import { db } from './db.js';
+import { norm, mismoToken } from './emparejar.js';
+import { productoDeAnuncio, vincularAnuncio } from './campana.js';
 
 const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
 
@@ -105,12 +107,49 @@ export async function sincronizarInsights(storeId: string, dias = 3): Promise<{ 
       url = body.paging?.next;
     }
     anotar('');
+    try { autoVincularPorNombre(storeId); } catch (e) { console.warn('[ads] auto-vínculo', e); }
     return { ok: true, filas };
   } catch (e) {
     const msg = e instanceof Error && e.name === 'TimeoutError' ? 'Meta tardó demasiado en responder.' : 'No pudimos hablar con Meta.';
     anotar(msg);
     return { error: msg };
   }
+}
+
+// Palabras que no identifican un producto en el nombre de un anuncio.
+const RELLENO = new Set(['de', 'la', 'el', 'los', 'las', 'para', 'con', 'sin', 'y', 'en', 'del', 'por', 'un', 'una']);
+
+/**
+ * Anuncio → producto por el NOMBRE que tiene en Meta (anuncio, conjunto o campaña):
+ * si todas las palabras de un producto aparecen ("Camisilla compresión - Video 2" →
+ * Camisilla de compresión), el anuncio queda ligado a ese producto y el bot sabe qué
+ * mensaje inicial mandar aunque el cliente no escriba la frase. Nunca pisa un vínculo
+ * que la tienda puso a mano.
+ */
+export function autoVincularPorNombre(storeId: string): number {
+  const prods = (db.prepare("SELECT id, nombre FROM products WHERE store_id = ? AND COALESCE(tipo,'producto') = 'producto'").all(storeId) as { id: string; nombre: string }[])
+    .map((p) => ({ ...p, toks: norm(p.nombre).split(' ').filter((t) => t.length >= 2 && !RELLENO.has(t)) }))
+    .filter((p) => p.toks.length);
+  if (!prods.length) return 0;
+  const ads = db.prepare(`SELECT ad_id, MAX(ad_name) ad_name, MAX(adset_name) adset_name, MAX(campaign_name) campaign_name FROM ads_insights WHERE store_id = ? GROUP BY ad_id`).all(storeId) as { ad_id: string; ad_name: string; adset_name: string; campaign_name: string }[];
+  let n = 0;
+  for (const a of ads) {
+    const ya = productoDeAnuncio(storeId, a.ad_id);
+    if (ya && !ya.auto) continue; // vínculo manual: se respeta
+    // Primero el nombre del anuncio; si no dice el producto, el conjunto y luego la campaña.
+    for (const texto of [a.ad_name, a.adset_name, a.campaign_name]) {
+      const tt = norm(texto || '').split(' ').filter(Boolean);
+      if (!tt.length) continue;
+      const cands = prods.filter((p) => p.toks.every((t) => tt.some((x) => mismoToken(x, t) || (t.length >= 4 && x.startsWith(t.slice(0, -1))))));
+      if (!cands.length) continue;
+      // El más específico (más palabras); si dos empatan, no se adivina.
+      cands.sort((x, y) => y.toks.length - x.toks.length);
+      if (cands[1] && cands[1].toks.length === cands[0].toks.length) break;
+      if (ya?.productId !== cands[0].id) { vincularAnuncio(storeId, a.ad_id, cands[0].id, a.ad_name || '', true); n++; }
+      break;
+    }
+  }
+  return n;
 }
 
 export interface InsightAd { adId: string; adName: string; adsetId: string; adsetName: string; campaignId: string; campaignName: string; gasto: number; impresiones: number; alcance: number; clics: number; conversaciones: number; porDia: Map<string, number> }
@@ -133,7 +172,7 @@ export function insightsEnRango(storeId: string, desde: string, hasta: string): 
   return out;
 }
 
-/** Cada hora: últimos 3 días de cada tienda con anuncios conectados. La primera vez, 30 días. */
+/** Cada 30 minutos: últimos 3 días de cada tienda con anuncios conectados. La primera vez, 30 días. */
 let iniciado = false;
 export function iniciarInsights(): void {
   if (iniciado) return;
@@ -147,5 +186,5 @@ export function iniciarInsights(): void {
     }
   };
   setTimeout(() => void ronda(), 90_000);
-  setInterval(() => void ronda(), 3600_000);
+  setInterval(() => void ronda(), 30 * 60_000); // cada 30 minutos
 }
