@@ -1,4 +1,5 @@
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../Ventana24h';
+import { CargandoChat } from '../CargandoChat';
 import { BloquearContacto } from '../BloquearContacto';
 import { useEffect, useRef } from 'react';
 import { AttachButton, MediaContent } from '../MediaBubble';
@@ -172,9 +173,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
             </div>
           </>
         )}
-        {df.flujoMsg && (
-          <div style={{ textAlign: 'center', color: df.flujoMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.flujoMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)', fontSize: 12.5, marginTop: 8 }}>{df.flujoMsg}</div>
-        )}
+        <CargandoChat texto={df.flujoMsg} centrado />
       </div>
       <ActivityLog df={df} />
     </div>

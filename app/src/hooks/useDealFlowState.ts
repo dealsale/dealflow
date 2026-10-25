@@ -4037,7 +4037,7 @@ export function useDealFlowState() {
     // al asistente esperando la respuesta (para cuando Meta/el disparador falla).
     enviarFlujoInicial: (productId: number | string) => {
       if (crmSelectedId == null || !apiMode) return;
-      setFlujoMsg('Enviando mensaje inicial…');
+      setFlujoMsg('Enviando el flujo… sale pieza por pieza, puedes seguir usando el chat…');
       void apiEnviarFlujoInicial(String(crmSelectedId), String(productId)).then((r) => {
         if (r.error) { setFlujoMsg(r.error); return; }
         setFlujoMsg('✓ Mensaje inicial enviado. El asistente queda esperando la respuesta.');
