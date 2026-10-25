@@ -869,3 +869,21 @@ export interface EstadoMetaAds { conectada: boolean; cuenta: string; moneda: str
 export const apiSincronizarAnuncios = (dias = 30) => req<{ ok: true; filas: number; meta: EstadoMetaAds }>('/api/stats/anuncios/sincronizar', 'POST', { dias });
 export const apiStatsAnuncios = (desde: string, hasta: string) =>
   req<{ rango: { desde: string; hasta: string }; anuncios: ConversionAnuncio[]; organico: ConversionAnuncio | null; meta: EstadoMetaAds }>(`/api/stats/anuncios?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, 'GET');
+
+// ── Meta: diagnóstico de Messenger y API de Conversiones ──
+export interface DiagnosticoMeta {
+  paginas: { pageId: string; nombre: string; ig: boolean; accesoOk: boolean; suscrita: boolean; campos: string[]; faltan: string[]; ultimoAviso: string; error: string }[];
+  ultimoMensaje: string; avisosDePaginasNoConectadas: { id: string; at: string }[];
+  urlWebhook: string; webhookSalud: { ultimoRecibido: string; rechazadosFirma: number };
+}
+export const apiMetaDiagnostico = () => req<DiagnosticoMeta>('/api/meta/diagnostico', 'GET');
+export const apiMetaResuscribir = () => req<{ ok: number; errores: string[] }>('/api/meta/resuscribir', 'POST');
+export interface EstadoCapi {
+  activo: boolean; datasetId: string; compra: 'pedido' | 'entregado'; leads: boolean; testCode: string; whatsapp: boolean;
+  compras30: number; valor30: number; leads30: number; errores30: number;
+  ultimos: { evento: string; valor: number; canal: string; estado: string; error: string; created_at: string }[];
+}
+export const apiCapi = () => req<EstadoCapi>('/api/meta/capi', 'GET');
+export const apiGuardarCapi = (c: Partial<EstadoCapi>) => req<EstadoCapi>('/api/meta/capi', 'POST', c);
+export const apiCapiDetectar = () => req<EstadoCapi>('/api/meta/capi/detectar', 'POST');
+export const apiCapiEnviar = () => req<EstadoCapi & { enviados: number }>('/api/meta/capi/enviar', 'POST');
