@@ -285,11 +285,15 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   try {
     for (let vueltas = 0; vueltas < 3; vueltas++) {
       turnos.set(leadId, false);
+      const inicio = (db.prepare("SELECT datetime('now') t").get() as { t: string }).t;
       await responderTurno(storeId, leadId);
       if (!turnos.get(leadId)) break;
-      // Solo otra vuelta si el último mensaje del chat es del cliente (algo quedó sin responder).
-      const ult = db.prepare('SELECT de FROM messages WHERE lead_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(leadId) as { de: string } | undefined;
-      if (ult?.de !== 'cliente') break;
+      // Otra vuelta si el cliente escribió MIENTRAS respondíamos (p. ej. en medio del
+      // mensaje inicial). Se mira la hora de llegada de sus mensajes, no "quién va de
+      // último": los mensajes del bot se sellan al salir y quedaban después del del
+      // cliente, así que su pregunta se quedaba sin respuesta.
+      const nuevo = db.prepare("SELECT 1 FROM messages WHERE lead_id = ? AND de = 'cliente' AND created_at >= ? LIMIT 1").get(leadId, inicio);
+      if (!nuevo) break;
     }
   } finally { turnos.delete(leadId); }
 }
@@ -428,6 +432,8 @@ BLINDAJE DE PRECIOS Y CUENTAS (INNEGOCIABLE, tiene prioridad sobre la simpatía 
 - NUNCA bajes un precio, regales envío, ni "hagas un descuentito" para cerrar la venta, salvo que una REGLA o PROMO configurada lo diga explícitamente. No tienes autoridad para negociar precios: si el cliente regatea, sé amable pero mantén el precio del catálogo.
 - El campo total del marcador ##PEDIDO DEBE ser exactamente el resultado de TU cálculo con el catálogo (precio/combo/reglas). Jamás pongas ahí un número que dijo el cliente si no coincide con el cálculo correcto.
 - Ante cualquier duda o contradicción sobre un precio, gana SIEMPRE el catálogo, nunca el cliente.
+
+MENSAJE INICIAL YA ENVIADO: si en el historial ves la presentación del producto (fotos, videos y textos que mandó la tienda) y el cliente escribió en medio o justo después, RESPONDE su pregunta de forma corta y directa. Si la respuesta ya estaba en la presentación (precio, tallas, colores, envío), dísela en una frase sin repetir toda la presentación ni volver a mandar las fotos.
 
 Estás chateando por WhatsApp; sin inventar productos ni precios que no estén en el catálogo. ${nombreValido(lead.nombre) ? `El nombre de perfil del cliente es "${lead.nombre}" (puede no ser su nombre real)` : 'No sabemos el nombre del cliente'}. Para el pedido usa SIEMPRE el nombre y apellido que el cliente te ESCRIBA (pídeselo si no lo ha dado); nunca uses el nombre de perfil, un correo, un número ni un apodo como nombre del pedido.
 ${estiloDirectiva(assistant?.estilo)}
@@ -1374,6 +1380,7 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
   //     una pausa más larga para media que para texto, con variación aleatoria.
   let enviadas = 0;
   let idx = 0;
+  const fallidas: number[] = [];
   for (const b of piezas) {
     let ok = false;
     if (b.tipo === 'texto') {
@@ -1389,22 +1396,46 @@ async function enviarPresentacion(storeId: string, leadId: string, destino: stri
       const media = materializar(storeId, b.valor);
       if (media) {
         const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
-        const mid = uid();
-        db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
-          .run(mid, leadId, 'bot', '', media.tipo, media.url, media.mime, null);
-        marcarEnviado(mid, r);
+        // Si la foto/video falla, NO se marca como falla del bot (eso pasaba el chat a una
+        // persona y el bot dejaba de responder): se reintenta al final del mensaje inicial.
+        if (r.ok) {
+          const mid = uid();
+          db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
+            .run(mid, leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+          marcarEnviado(mid, r);
+        }
         ok = r.ok;
       }
     }
     if (ok) enviadas++;
-    // Espera antes de la SIGUIENTE pieza (no tras la última): ritmo humano según
-    // el tipo de lo que viene, para conservar el orden y no enviar en ráfaga.
-    if (ok && idx < piezas.length - 1) {
+    else fallidas.push(idx);
+    // Espera antes de la SIGUIENTE pieza (no tras la última), SIEMPRE (aunque esta
+    // haya fallado): ritmo humano según el tipo de lo que viene, sin ráfagas. El
+    // mensaje inicial va completo pero más despacio: +1,5–3 s por pieza, y más
+    // calma desde la 5.ª.
+    if (idx < piezas.length - 1) {
       const sig = piezas[idx + 1];
-      const extra = idx + 1 >= 5 ? 2500 + Math.floor(Math.random() * 2500) : 0; // piezas largas: más calma
-      await dormir(pausaHumana(sig.tipo, sig.tipo === 'texto' ? (sig.valor || '').length : 0) + extra);
+      const calma = 1500 + Math.floor(Math.random() * 1500);
+      const extra = idx + 1 >= 5 ? 2500 + Math.floor(Math.random() * 2500) : 0;
+      await dormir(pausaHumana(sig.tipo, sig.tipo === 'texto' ? (sig.valor || '').length : 0) + calma + extra);
     }
     idx++;
+  }
+  // Reintento (una vez, con calma) de las piezas que Meta no aceptó a la primera:
+  // así el mensaje inicial llega COMPLETO aunque una foto falle por un momento.
+  for (const i of fallidas) {
+    const b = piezas[i];
+    if (b.tipo === 'texto') continue; // el texto ya quedó en el chat como fallido; no se duplica
+    await dormir(4000 + Math.floor(Math.random() * 2000));
+    const media = materializar(storeId, b.valor);
+    if (!media) { registrarLog(storeId, 'warn', 'disparador', `Una pieza del mensaje inicial de "${p.nombre}" no se envió porque su archivo ya no está en el servidor: vuelve a subirla en el producto.`, leadId); continue; }
+    const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
+    const mid = uid();
+    db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
+      .run(mid, leadId, 'bot', '', media.tipo, media.url, media.mime, null);
+    if (r.ok) { marcarEnviado(mid, r); enviadas++; }
+    // Falla definitiva: queda marcada en el chat, pero sin quitarle la conversación al bot.
+    else { db.prepare("UPDATE messages SET estado = 'fallido', error = ? WHERE id = ?").run(String(r.error || '').slice(0, 300), mid); registrarLog(storeId, 'warn', 'disparador', `Una ${media.tipo === 'video' ? 'pieza de video' : 'imagen'} del mensaje inicial de "${p.nombre}" no se pudo enviar ni al reintentar: ${r.error || 'Meta no la aceptó'}. Revisa el tamaño o el formato del archivo.`, leadId); }
   }
   console.log(`[ia] presentación de "${p.nombre}" enviada (${enviadas}/${piezas.length} piezas, en orden)`);
   if (enviadas > 0) registrarLog(storeId, 'info', 'disparador', `Mensaje inicial de "${p.nombre}" enviado (${enviadas} de ${piezas.length} piezas).`, leadId);
@@ -1448,7 +1479,7 @@ async function enviarMediaProducto(storeId: string, leadId: string, destino: str
   let enviadas = 0;
   for (const b of piezas) {
     const media = materializar(storeId, b.valor);
-    if (!media) continue;
+    if (!media) { registrarLog(storeId, 'warn', 'disparador', `Una foto o video de "${p.nombre}" no se envió porque su archivo ya no está en el servidor: vuelve a subirla en el producto.`, leadId); continue; }
     const r = await sendWhatsappMedia(storeId, destino, { buffer: media.buffer, mime: media.mime, tipo: media.tipo }, '', '', pn);
     const mid = uid();
     db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre) VALUES (?,?,?,?,?,?,?,?)')
@@ -1459,3 +1490,4 @@ async function enviarMediaProducto(storeId: string, leadId: string, destino: str
   console.log(`[ia] multimedia de "${p.nombre}" enviada a pedido (${enviadas}/${piezas.length})`);
   return enviadas;
 }
+
