@@ -877,6 +877,8 @@ export function useDealFlowState() {
   const [arrancando, setArrancando] = useState<boolean>(bootServed);
   const [storeNombre, setStoreNombre] = useState<string>('');
   const [storeId, setStoreId] = useState<string>('');
+  // El superadmin activa el Creador de landings tienda por tienda.
+  const [landingsHabilitadas, setLandingsHabilitadas] = useState(false);
   // El tema Premium está disponible para TODAS las cuentas (ya no se activa por tienda).
   const premiumPermitido = true;
   const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
@@ -1117,7 +1119,7 @@ export function useDealFlowState() {
   // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
   const AGENTE_SECCIONES: VendedorSection[] = ['productos', 'crm', 'leads', 'pedidos', 'logistica'];
   const esAgente = apiMode && sessionUser?.role === 'vendedor' && sessionUser?.esDueno === false;
-  const puedeVerSeccion = (sec: VendedorSection) => !esAgente || AGENTE_SECCIONES.includes(sec);
+  const puedeVerSeccion = (sec: VendedorSection) => (sec !== 'landings' || landingsHabilitadas) && (!esAgente || AGENTE_SECCIONES.includes(sec));
 
   // ── Direcciones por página (F5 deja al usuario donde estaba) ──
   const rutaLista = useRef(false);
@@ -2010,6 +2012,7 @@ export function useDealFlowState() {
         }
         if (data.store?.nombre) setStoreNombre(data.store.nombre);
         if (data.store?.id) setStoreId(data.store.id);
+        setLandingsHabilitadas(!!data.store?.landings);
         setSuscripcion(data.suscripcion ?? null);
         if (data.whatsapp.verifyToken) setWaVerifyToken(data.whatsapp.verifyToken);
         setWaSignup(data.whatsapp.signup ?? null);
@@ -4276,6 +4279,7 @@ export function useDealFlowState() {
     theme,
     setTheme,
     premiumHabilitado: premiumPermitido,
+    landingsHabilitadas,
 
     // Perfil de la cuenta: nombre, foto, contraseña.
     actualizarNombrePerfil,

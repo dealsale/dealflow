@@ -306,8 +306,8 @@ api.delete('/mis-tiendas/:id', requireAuth, requireStore, (req, res) => {
 // ── Estado completo de la tienda (una llamada para pintar el panel) ───
 api.get('/state', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
-  const storeRow = db.prepare('SELECT id, nombre, plan, tema_premium FROM stores WHERE id = ?').get(sid) as { id: string; nombre: string; plan: string; tema_premium: number };
-  const store = { id: storeRow.id, nombre: storeRow.nombre, plan: storeRow.plan, temaPremium: !!storeRow.tema_premium };
+  const storeRow = db.prepare('SELECT id, nombre, plan, tema_premium, landings_habilitado FROM stores WHERE id = ?').get(sid) as { id: string; nombre: string; plan: string; tema_premium: number; landings_habilitado?: number };
+  const store = { id: storeRow.id, nombre: storeRow.nombre, plan: storeRow.plan, temaPremium: !!storeRow.tema_premium, landings: !!storeRow.landings_habilitado };
   const bloqueados = productosBloqueados(sid); // productos de biblioteca gratuitos (estructura no editable)
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, precioPromo: Number(p.precio_promo) || 0, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
@@ -3548,55 +3548,60 @@ api.post('/biblioteca/:id/checkout', requireAuth, requireStore, requireOwner, as
 });
 
 // ── Creador de landings ──────────────────────────────────────────────
-api.get('/landings', requireAuth, requireStore, async (req, res) => {
+// Solo las tiendas a las que el superadmin les activó la función.
+const conLandings = async (req: ExRequest, res: ExResponse, next: () => void) => {
+  if ((await import('./landings.js')).landingsHabilitadas(req.user!.storeId!)) return next();
+  res.status(403).json({ error: 'El Creador de landings no está activo en tu cuenta. Escríbele al equipo de DealFlow para activarlo.' });
+};
+api.get('/landings', requireAuth, requireStore, conLandings, async (req, res) => {
   const L = await import('./landings.js');
   res.json({ landings: L.listarLandings(req.user!.storeId!), cuota: L.cuotaLandings(req.user!.storeId!) });
 });
-api.post('/landings', requireAuth, requireStore, async (req, res) => {
+api.post('/landings', requireAuth, requireStore, conLandings, async (req, res) => {
   const L = await import('./landings.js');
   res.json({ landing: L.crearLanding(req.user!.storeId!, String(req.body?.nombre || ''), String(req.body?.productId || '')) });
 });
-api.get('/landings/:id', requireAuth, requireStore, async (req, res) => {
+api.get('/landings/:id', requireAuth, requireStore, conLandings, async (req, res) => {
   const l = (await import('./landings.js')).verLanding(req.user!.storeId!, req.params.id);
   if (!l) return res.status(404).json({ error: 'Landing no encontrada.' });
   res.json({ landing: l });
 });
-api.put('/landings/:id', requireAuth, requireStore, async (req, res) => {
+api.put('/landings/:id', requireAuth, requireStore, conLandings, async (req, res) => {
   const r = (await import('./landings.js')).guardarLanding(req.user!.storeId!, req.params.id, req.body || {});
   if ('error' in r) return res.status(400).json(r);
   res.json({ landing: r });
 });
-api.delete('/landings/:id', requireAuth, requireStore, async (req, res) => {
+api.delete('/landings/:id', requireAuth, requireStore, conLandings, async (req, res) => {
   if (!(await import('./landings.js')).borrarLanding(req.user!.storeId!, req.params.id)) return res.status(404).json({ error: 'Landing no encontrada.' });
   res.json({ ok: true });
 });
-api.post('/landings/:id/duplicar', requireAuth, requireStore, async (req, res) => {
+api.post('/landings/:id/duplicar', requireAuth, requireStore, conLandings, async (req, res) => {
   const l = (await import('./landings.js')).duplicarLanding(req.user!.storeId!, req.params.id);
   if (!l) return res.status(404).json({ error: 'Landing no encontrada.' });
   res.json({ landing: l });
 });
 // Vista previa en vivo del editor (con lo que aún no se ha guardado).
-api.post('/landings/:id/vista', requireAuth, requireStore, async (req, res) => {
+api.post('/landings/:id/vista', requireAuth, requireStore, conLandings, async (req, res) => {
   const L = await import('./landings.js');
   res.setHeader('Cache-Control', 'no-store');
   res.json({ html: L.renderLanding(L.limpiarDatos(req.body?.datos), { id: req.params.id, vista: true }) });
 });
-api.post('/landings/imagen', requireAuth, requireStore, async (req, res) => {
+api.post('/landings/imagen', requireAuth, requireStore, conLandings, async (req, res) => {
   const r = (await import('./landings.js')).subirImagen(req.user!.storeId!, String(req.body?.dataUrl || ''));
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
 });
-api.post('/landings/:id/publicar', requireAuth, requireStore, async (req, res) => {
+api.post('/landings/:id/publicar', requireAuth, requireStore, conLandings, async (req, res) => {
   const r = (await import('./landings.js')).publicarLanding(req.user!.storeId!, req.params.id);
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
 });
-api.post('/landings/:id/despublicar', requireAuth, requireStore, async (req, res) => {
+api.post('/landings/:id/despublicar', requireAuth, requireStore, conLandings, async (req, res) => {
   (await import('./landings.js')).despublicarLanding(req.user!.storeId!, req.params.id);
   res.json({ ok: true });
 });
 // Pago único (Wompi) para desbloquear una landing cuando ya no quedan gratis.
-api.post('/landings/:id/pagar', requireAuth, requireStore, async (req, res) => {
+api.post('/landings/:id/pagar', requireAuth, requireStore, conLandings, async (req, res) => {
   const L = await import('./landings.js');
   const l = L.verLanding(req.user!.storeId!, req.params.id);
   if (!l) return res.status(404).json({ error: 'Landing no encontrada.' });
@@ -3612,6 +3617,14 @@ api.get('/admin/landings', requireAuth, requireSuperAdmin, async (_req, res) => 
   const L = await import('./landings.js');
   const stats = db.prepare("SELECT COUNT(*) total, SUM(estado = 'publicada') publicadas, SUM(modo = 'pago') pagadas, SUM(pedidos) pedidos FROM landings").get();
   res.json({ ajustes: L.ajustesLandings(), stats });
+});
+api.get('/admin/landings/tiendas', requireAuth, requireSuperAdmin, async (_req, res) => {
+  res.json({ tiendas: (await import('./landings.js')).tiendasLandings() });
+});
+api.put('/admin/landings/tiendas/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+  if (!(await import('./landings.js')).habilitarLandings(req.params.id, !!req.body?.habilitado)) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  registrarAccionEquipo(req.user!.email, `${req.body?.habilitado ? 'Activó' : 'Desactivó'} el Creador de landings`, req.params.id);
+  res.json({ ok: true });
 });
 api.put('/admin/landings', requireAuth, requireSuperAdmin, async (req, res) => {
   const L = await import('./landings.js');
