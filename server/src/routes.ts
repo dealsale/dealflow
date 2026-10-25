@@ -1630,8 +1630,8 @@ api.get('/effi-api/articulos', requireAuth, requireStore, requireOwner, async (r
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
   const arts = ef.articulosCache(sid);
-  const variantes = (db.prepare("SELECT v.id, p.id pid, p.nombre producto, v.label, COALESCE(p.despacho_proveedor,'') proveedor, COALESCE(json_extract(v.refs,'$.effi_id'),'') effi_id, COALESCE(json_extract(v.refs,'$.effi_auto'),0) effi_auto FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND (? = '' OR p.id = ?) ORDER BY p.nombre, v.label").all(sid, String(req.query.productId || ''), String(req.query.productId || '')) as { id: string; pid: string; producto: string; label: string; proveedor: string; effi_id: string; effi_auto: number }[])
-    .map((v) => ({ variantId: v.id, productId: v.pid, producto: v.producto, proveedor: v.proveedor, nombre: v.label && v.label.toLowerCase() !== 'única' ? `${v.producto} (${v.label})` : v.producto, effiId: String(v.effi_id || ''), auto: Number(v.effi_auto) === 1 }));
+  const variantes = (db.prepare("SELECT v.id, p.id pid, p.nombre producto, v.label, COALESCE(p.despacho_proveedor,'') proveedor, COALESCE(json_extract(v.refs,'$.effi_id'),'') effi_id, COALESCE(json_extract(v.refs,'$.effi_auto'),0) effi_auto, COALESCE(json_extract(v.refs,'$.effi_prov_id'),'') prov_id FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND (? = '' OR p.id = ?) ORDER BY p.nombre, v.label").all(sid, String(req.query.productId || ''), String(req.query.productId || '')) as { id: string; pid: string; producto: string; label: string; proveedor: string; effi_id: string; effi_auto: number; prov_id: string }[])
+    .map((v) => ({ variantId: v.id, productId: v.pid, producto: v.producto, proveedor: v.proveedor, nombre: v.label && v.label.toLowerCase() !== 'única' ? `${v.producto} (${v.label})` : v.producto, effiId: String(v.effi_id || ''), auto: Number(v.effi_auto) === 1, provId: String(v.prov_id || '') }));
   // El nombre del artículo vinculado (aunque no esté en la caché), para mostrarlo.
   const nombres: Record<string, string> = {};
   for (const a of arts) nombres[a.id] = a.descripcion + (a.referencia ? ` [${a.referencia}]` : '');
@@ -1693,6 +1693,12 @@ api.get('/effi-api/articulo/:id', requireAuth, requireStore, async (req, res) =>
   if (!a) return res.status(404).json({ error: 'No existe ese artículo en Effi.' });
   res.json({ articulo: { id: a.id, descripcion: a.descripcion, referencia: a.referencia, stock: a.stock, drop: a.drop } });
 });
+// Sugerencia del artículo del proveedor para un artículo propio (no se aplica sola).
+api.get('/effi-api/proveedor-sugerido/:id', requireAuth, requireStore, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const a = await ef.proveedorSugerido(req.user!.storeId!, String(req.params.id).replace(/\D/g, ''));
+  res.json({ articulo: a ? { id: a.id, descripcion: a.descripcion, referencia: a.referencia, stock: a.stock, drop: 1 } : null });
+});
 api.post('/effi-api/articulos/vincular', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
   const id = String(req.body?.effiId || '').replace(/\D/g, '');
@@ -1702,7 +1708,10 @@ api.post('/effi-api/articulos/vincular', requireAuth, requireStore, requireOwner
     articulo = await ef.verArticuloEffi(req.user!.storeId!, id);
     if (!articulo) return res.status(400).json({ error: `En Effi no existe el artículo #${id} (o tu API key no lo puede ver). Revisa el ID en Effi → Inventario → Artículos.` });
   }
-  const ok = ef.vincularArticulo(req.user!.storeId!, String(req.body?.variantId || ''), id);
+  if (articulo && req.body?.tipo === 'proveedor' && articulo.drop !== 1) return res.status(400).json({ error: `El artículo #${id} (${articulo.descripcion}) es tuyo, no de un proveedor dropshipping. Pon aquí el ID del artículo del PROVEEDOR.` });
+  const ok = req.body?.tipo === 'proveedor'
+    ? ef.vincularProveedor(req.user!.storeId!, String(req.body?.variantId || ''), id)
+    : ef.vincularArticulo(req.user!.storeId!, String(req.body?.variantId || ''), id);
   if (!ok) return res.status(404).json({ error: 'Variante no encontrada.' });
   res.json({ ok: true, articulo: articulo ? { id: articulo.id, descripcion: articulo.descripcion, referencia: articulo.referencia, stock: articulo.stock, drop: articulo.drop } : null });
 });
