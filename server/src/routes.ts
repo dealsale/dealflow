@@ -1603,6 +1603,7 @@ api.post('/effi-api/config', requireAuth, requireStore, requireOwner, async (req
     };
   }
   if ('devolucionAuto' in b) parcial.devolucionAuto = b.devolucionAuto === true;
+  if ('vinculoManual' in b) parcial.vinculoManual = b.vinculoManual !== false;
   ef.guardarCfgEffi(sid, parcial);
   res.json({ ok: true, listo: ef.effiApiListo(sid) });
 });
@@ -1686,11 +1687,24 @@ api.post('/effi-api/producto/:id/vinculos', requireAuth, requireStore, requireOw
   registrarAccionEquipo(req.user!.email, `Vínculos Effi del producto ${String(req.params.id)}: ${n} cambio(s)`, sid);
   res.json({ ok: true, cambios: n });
 });
+api.get('/effi-api/articulo/:id', requireAuth, requireStore, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const a = await ef.verArticuloEffi(req.user!.storeId!, String(req.params.id).replace(/\D/g, ''));
+  if (!a) return res.status(404).json({ error: 'No existe ese artículo en Effi.' });
+  res.json({ articulo: { id: a.id, descripcion: a.descripcion, referencia: a.referencia, stock: a.stock, drop: a.drop } });
+});
 api.post('/effi-api/articulos/vincular', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
-  const ok = ef.vincularArticulo(req.user!.storeId!, String(req.body?.variantId || ''), String(req.body?.effiId || '').replace(/\D/g, ''));
+  const id = String(req.body?.effiId || '').replace(/\D/g, '');
+  // Vínculo a mano por ID: se verifica en Effi que el artículo exista antes de guardarlo.
+  let articulo: Awaited<ReturnType<typeof ef.verArticuloEffi>>;
+  if (id) {
+    articulo = await ef.verArticuloEffi(req.user!.storeId!, id);
+    if (!articulo) return res.status(400).json({ error: `En Effi no existe el artículo #${id} (o tu API key no lo puede ver). Revisa el ID en Effi → Inventario → Artículos.` });
+  }
+  const ok = ef.vincularArticulo(req.user!.storeId!, String(req.body?.variantId || ''), id);
   if (!ok) return res.status(404).json({ error: 'Variante no encontrada.' });
-  res.json({ ok: true });
+  res.json({ ok: true, articulo: articulo ? { id: articulo.id, descripcion: articulo.descripcion, referencia: articulo.referencia, stock: articulo.stock, drop: articulo.drop } : null });
 });
 api.get('/effi-api/eventos', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');

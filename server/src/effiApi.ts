@@ -49,6 +49,12 @@ export interface EffiCfg {
   novedades: NovedadesCfg;
   /** Registrar sola la devolución de venta en Effi cuando el pedido quede Devuelto. */
   devolucionAuto: boolean;
+  /**
+   * Vínculos 100 % manuales (por defecto): DealFlow NUNCA vincula, busca ni cambia el
+   * artículo de una variante por su cuenta. Se despacha exactamente el artículo que la
+   * tienda eligió (o el de la referencia/SKU que puso). false = modo automático anterior.
+   */
+  vinculoManual: boolean;
 }
 export interface NovedadesCfg { avisarCliente: boolean; botGestiona: boolean; autoEnviar: boolean }
 
@@ -74,6 +80,7 @@ export function cfgEffi(storeId: string): EffiCfg | null {
     guia: { ...GUIA_VACIA, ...g, activa: g.activa === true } as EffiGuiaCfg,
     webhookToken: s('webhookToken'), webhookSecret: s('webhookSecret'),
     devolucionAuto: c.devolucionAuto === true,
+    vinculoManual: c.vinculoManual !== false,
     novedades: (() => { const n = (c.novedades && typeof c.novedades === 'object' ? c.novedades : {}) as Record<string, unknown>; return { avisarCliente: n.avisarCliente !== false, botGestiona: n.botGestiona !== false, autoEnviar: n.autoEnviar === true }; })(),
   };
 }
@@ -554,6 +561,13 @@ export async function revisarVinculosProducto(storeId: string, productId: string
 }
 
 /** Un artículo por id, en vivo (con su marca de dropshipping). Lo guarda en la caché. */
+/** Consulta un artículo de Effi por su ID (para vincular a mano con verificación). */
+export async function verArticuloEffi(storeId: string, id: string): Promise<ArticuloEffi | undefined> {
+  const c = cfgEffi(storeId);
+  if (!c?.apiKey || !/^\d+$/.test(id)) return undefined;
+  return articuloPorId(storeId, c.apiKey, id);
+}
+
 async function articuloPorId(storeId: string, apiKey: string, id: string): Promise<ArticuloEffi | undefined> {
   // En serie (no en paralelo): Effi responde 429 si le llegan varias a la vez.
   const r = await effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { id, por_pagina: 1 } });
@@ -847,8 +861,11 @@ export async function sincronizarArticulos(storeId: string): Promise<{ total: nu
   if ('error' in d) return d;
   cacheAt.set(storeId, Date.now());
   const arts = articulosCache(storeId);
-  const { todas, deEffi, marcados } = await vincularTienda(storeId, c.apiKey, arts, false);
-  try { await repararVinculosDrop(storeId, c.apiKey); } catch (e) { console.warn('[effi] reparar vínculos', e); }
+  // Modo manual: solo se descarga el catálogo y el stock; no se toca ningún vínculo.
+  const { todas, deEffi, marcados } = c.vinculoManual
+    ? (() => { const t = variantesTienda(storeId); return { todas: t, deEffi: t.filter((v) => v.proveedor === 'effi'), marcados: 0 }; })()
+    : await vincularTienda(storeId, c.apiKey, arts, false);
+  if (!c.vinculoManual) { try { await repararVinculosDrop(storeId, c.apiKey); } catch (e) { console.warn('[effi] reparar vínculos', e); } }
   const stock = await sincronizarStockEffi(storeId, c.apiKey);
   let vinculadas = 0;
   const sinVinculo: { variantId: string | null; nombre: string }[] = [];
@@ -878,9 +895,11 @@ export async function autoVincularEffi(storeId: string): Promise<void> {
       if ('error' in d) return;
       cacheAt.set(storeId, Date.now());
     }
-    await vincularTienda(storeId, c.apiKey, articulosCache(storeId), true);
-    await repararVinculosDrop(storeId, c.apiKey).catch(() => 0);
-    await sincronizarStockEffi(storeId, c.apiKey);
+    if (!c.vinculoManual) {
+      await vincularTienda(storeId, c.apiKey, articulosCache(storeId), true);
+      await repararVinculosDrop(storeId, c.apiKey).catch(() => 0);
+    }
+    await sincronizarStockEffi(storeId, c.apiKey); // el stock sí se actualiza siempre
   } catch (e) { console.error('[effi] auto-vínculo', e); } finally { enCurso.delete(storeId); }
 }
 /**
@@ -1037,7 +1056,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
       enVivo.add(v.effiId);
       a = (await articuloPorId(storeId, c.apiKey, v.effiId)) || { id: v.effiId, descripcion: v.producto, referencia: v.ref, ecommerce: '', stock: null };
     }
-    if (!a && v?.variantId && !v.effiId && v.proveedor !== 'dropi') {
+    if (!a && v?.variantId && !v.effiId && v.proveedor !== 'dropi' && !c.vinculoManual) {
       // Variante sin vínculo: se busca el producto en vivo en Effi y se vincula por nombre.
       await vincularPorNombre(storeId, c.apiKey, todas.filter((x) => x.productId === v.productId), arts);
       if (v.effiId) { enVivo.add(v.effiId); a = await articuloPorId(storeId, c.apiKey, v.effiId); }
@@ -1048,7 +1067,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
       const f = r.ok ? r.body.data?.[0] : undefined;
       if (f) a = { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: null };
     }
-    if (!a) {
+    if (!a && !c.vinculoManual) {
       // Último recurso: buscar EN EFFI por el nombre del producto + la talla/color pedidos.
       // Si hay UN solo artículo que tenga todas esas palabras, ese es (así no se traba el pedido).
       const directo = await articuloPorTexto(storeId, it.nombre);
@@ -1060,12 +1079,12 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     }
     if (!a) {
       // Mensaje preciso: qué parte del vínculo falta.
-      const motivo = !v ? emp.motivo : `la variante ${v.label || 'única'} de ${v.producto} no tiene artículo de Effi vinculado`;
+      const motivo = !v ? emp.motivo : `la variante ${v.label || 'única'} de ${v.producto} no tiene artículo de Effi vinculado${c.vinculoManual ? ': vincúlala a mano con el ID del artículo' : ''}`;
       sinVinculo.push(`${it.nombre} (${motivo})`);
       trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Sin vínculo: ${it.nombre}`, detalle: motivo, datos: { item: it.nombre, idsGuardados: { producto: it.product_id, variante: it.variant_id }, productosParecidos: emp.parecidos, variante: v ? { producto: v.producto, label: v.label, ref: v.ref, effiId: v.effiId, proveedor: v.proveedor } : null } });
       continue;
     }
-    if (v?.variantId && v.effiId !== a.id) vincularArticulo(storeId, v.variantId, a.id, true);
+    if (v?.variantId && v.effiId !== a.id && !c.vinculoManual) vincularArticulo(storeId, v.variantId, a.id, true);
     // ¿Artículo de proveedor dropshipping? La caché vieja no traía la marca: se confirma en vivo.
     if (a.drop !== 1 && !enVivo.has(a.id)) {
       const vivo = await articuloPorId(storeId, c.apiKey, a.id);
@@ -1076,7 +1095,10 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     // El convenio puesto a mano manda: con código es de proveedor; "propio" es mercancía tuya.
     // Artículo PROPIO sin stock con un "gemelo" vinculado al proveedor (mismo nombre): se usa
     // el del proveedor y la variante queda vinculada a él (si no, Effi rechaza la remisión).
-    if (a.drop !== 1 && cm !== 'propio' && !(Number(a.stock) > 0)) {
+    if (c.vinculoManual && a.drop !== 1 && cm !== 'propio' && a.stock != null && !(Number(a.stock) > 0)) {
+      avisos.push(`"${it.nombre}" está vinculado a tu artículo propio #${a.id} y Effi dice que no tiene stock. Si es de un proveedor, vincula la variante al artículo del proveedor.`);
+    }
+    if (!c.vinculoManual && a.drop !== 1 && cm !== 'propio' && !(Number(a.stock) > 0)) {
       const gem = await gemeloDrop(storeId, c.apiKey, a);
       if (gem) {
         avisos.push(`"${it.nombre}" estaba vinculado a tu artículo propio #${a.id} (sin stock): se usó el del proveedor «${gem.descripcion}» #${gem.id}, y la variante quedó vinculada a ese.`);
@@ -1264,7 +1286,11 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
     else { const e = 'Effi ya tiene una remisión para este pedido. Usa "Reenviar" si necesitas crear otra.'; registrarLog(storeId, 'warn', 'despacho', `${numDF}: ${e}`); return { error: e }; }
   } else if (!r.ok || !doc) {
     const sinStock = /supera las existencias/i.test(mensajeError(r)) && !body.convenio_dropshipping;
-    const e = `Effi no creó la remisión: ${mensajeError(r)}${sinStock ? ' → Si estos productos los despacha un proveedor, asígnales su convenio en Integraciones → Effi → Artículos (o marca uno por defecto con ★) y vuelve a enviar.' : ''}`;
+    // "El convenio Dropshipping no es válido": Effi no reconoce ESE código (mal copiado, de
+    // otro proveedor o inactivo). No es un problema de los artículos.
+    const convMalo = /convenio.*no es v[aá]lido|2002/i.test(mensajeError(r)) && !!body.convenio_dropshipping;
+    const ambiguo = convMalo && /[Il10O]/.test(String(body.convenio_dropshipping));
+    const e = `Effi no creó la remisión: ${mensajeError(r)}${sinStock ? ' → Si estos productos los despacha un proveedor, asígnales su convenio en Integraciones → Effi → Artículos (o marca uno por defecto con ★) y vuelve a enviar.' : ''}${convMalo ? ` → Effi no reconoce el código de convenio «${String(body.convenio_dropshipping)}». Ábrelo en Effi → Dropshipping → Convenios y cópialo EXACTO${ambiguo ? ' (ojo: este código tiene letras que se confunden, como I mayúscula y l minúscula, o 0 y O)' : ''}. Revisa también que el convenio esté activo y que sea del proveedor de estos artículos. Corrígelo en el producto (Convenio) o en Integraciones → Effi.` : ''}`;
     registrarLog(storeId, 'error', 'despacho', `${numDF}: ${e}`);
     return { error: e };
   }

@@ -330,8 +330,15 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
               {/* 3. Productos: el vínculo se hace en cada producto (Productos → Variantes). */}
               <div style={seccion}>
                 <div style={titulo}>3 · Productos</div>
-                <p style={ayuda}>Los productos se vinculan <b>solos</b> por nombre y variante, y el stock llega de Effi cada 30 min. Si alguna variante no casó, elígela en <b>Productos → el producto → Variantes → Vínculo con Effi</b>.</p>
-                <button onClick={() => void sincronizarYa()} disabled={cargando} style={btnSec}>↻ Volver a vincular y traer stock ahora</button>
+                <div style={{ display: 'flex', gap: 6, margin: '4px 0 10px', flexWrap: 'wrap' }}>
+                  {([[true, '✋ Manual (recomendado)'], [false, '⚡ Automático']] as [boolean, string][]).map(([v, t]) => (
+                    <button key={t} onClick={() => set({ vinculoManual: v })} style={{ ...btnSec, background: (cfg.vinculoManual !== false) === v ? 'var(--df-purple)' : 'var(--df-surface)', color: (cfg.vinculoManual !== false) === v ? '#fff' : 'var(--df-text-body)', borderColor: (cfg.vinculoManual !== false) === v ? 'var(--df-purple)' : 'var(--df-border)' }}>{t}</button>
+                  ))}
+                </div>
+                {cfg.vinculoManual !== false
+                  ? <p style={ayuda}><b>Manual:</b> cada variante se despacha EXACTAMENTE con el artículo de Effi que tú le pongas (por su <b>ID</b> o buscándolo), en <b>Productos → el producto → Variantes → Vínculo con Effi</b>. DealFlow nunca lo cambia ni lo busca solo. El stock sí llega de Effi cada 30 min.</p>
+                  : <p style={ayuda}><b>Automático:</b> DealFlow vincula solo por nombre y variante, y si un artículo propio no tiene stock usa el del proveedor. Úsalo solo si cada variante tiene un único artículo en Effi.</p>}
+                <button onClick={() => void sincronizarYa()} disabled={cargando} style={btnSec}>{cfg.vinculoManual !== false ? '↻ Traer catálogo y stock de Effi ahora' : '↻ Volver a vincular y traer stock ahora'}</button>
               </div>
 
               {/* 4. Webhooks */}
