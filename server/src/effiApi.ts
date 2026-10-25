@@ -574,7 +574,9 @@ async function articuloPorId(storeId: string, apiKey: string, id: string): Promi
   const d = await effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { id, dropshipping_distribuidor: 1, por_pagina: 1 } });
   const f = r.ok ? r.body.data?.[0] : undefined;
   if (!f || txt(f.vigente) === '0') return undefined;
-  const a: ArticuloEffi = { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: stockDe(f), drop: d.ok && d.body.data?.length ? 1 : 0 };
+  const fd = d.ok ? d.body.data?.[0] : undefined;
+  // Artículo de proveedor: el stock que vale es el que reporta el proveedor.
+  const a: ArticuloEffi = { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: (fd ? stockDe(fd) : null) ?? stockDe(f), drop: fd ? 1 : 0 };
   if (Array.isArray(f.stock_bodegas)) {
     bodegasDe.set(`${storeId}:${a.id}`, (f.stock_bodegas as Fila[]).map((b) => ({
       id: txt(b.bodega ?? b.id_bodega ?? b.id), nombre: txt(b.nombre_bodega ?? b.nombre), stock: Number(b.stock ?? b.existencias ?? b.cantidad) || 0,
@@ -723,7 +725,9 @@ function idEcommerceDeRef(storeId: string, ref: string): number | null {
 }
 
 // refPropia: la referencia es de ESTA variante (no la heredada del producto, que comparten todas).
-interface VarianteDF { productId: string; variantId: string | null; producto: string; label: string; ref: string; effiId: string; proveedor: string; refPropia?: boolean }
+interface VarianteDF { productId: string; variantId: string | null; producto: string; label: string; ref: string; effiId: string; proveedor: string; refPropia?: boolean;
+  /** Artículo del PROVEEDOR dropshipping elegido a mano: con este se despacha y de este sale el stock. */
+  provId?: string }
 
 /** Todas las variantes (y productos sin variantes) de la tienda con su vínculo actual. */
 function variantesTienda(storeId: string): VarianteDF[] {
@@ -736,7 +740,7 @@ function variantesTienda(storeId: string): VarianteDF[] {
     for (const v of vs) {
       const refs = pj<Record<string, string>>(v.refs, {});
       const propia = String(refs.effi || v.sku || '');
-      out.push({ productId: p.id, variantId: v.id, producto: p.nombre, label: v.label || '', ref: propia || String(p.sku || ''), effiId: String(refs.effi_id || ''), proveedor: p.proveedor, refPropia: !!propia || vs.length === 1 });
+      out.push({ productId: p.id, variantId: v.id, producto: p.nombre, label: v.label || '', ref: propia || String(p.sku || ''), effiId: String(refs.effi_id || ''), proveedor: p.proveedor, refPropia: !!propia || vs.length === 1, provId: String(refs.effi_prov_id || '') });
     }
   }
   return out;
@@ -795,6 +799,24 @@ async function vincularPorNombre(storeId: string, apiKey: string, vars: Variante
 
 /** Guarda el id del artículo de Effi en la variante (refs.effi_id). */
 // auto = lo vinculó DealFlow solo (se muestra así en el panel); a mano lo quita.
+/** Artículo del proveedor de una variante (vacío = quitarlo). */
+export function vincularProveedor(storeId: string, variantId: string, provId: string): boolean {
+  const own = db.prepare('SELECT v.id FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(variantId, storeId);
+  if (!own) return false;
+  if (provId) db.prepare("UPDATE variants SET refs = json_set(COALESCE(refs,'{}'), '$.effi_prov_id', ?) WHERE id = ?").run(provId, variantId);
+  else db.prepare("UPDATE variants SET refs = json_remove(COALESCE(refs,'{}'), '$.effi_prov_id') WHERE id = ?").run(variantId);
+  return true;
+}
+
+/** Sugerencia (NO se aplica sola): el artículo del proveedor con el mismo nombre que tu artículo propio. */
+export async function proveedorSugerido(storeId: string, effiId: string): Promise<ArticuloEffi | undefined> {
+  const c = cfgEffi(storeId);
+  if (!c?.apiKey || !effiId) return undefined;
+  const propio = articulosCache(storeId).find((a) => a.id === effiId) || await articuloPorId(storeId, c.apiKey, effiId);
+  if (!propio || propio.drop === 1) return undefined;
+  return gemeloDrop(storeId, c.apiKey, propio);
+}
+
 export function vincularArticulo(storeId: string, variantId: string, effiId: string, auto = false): boolean {
   const own = db.prepare('SELECT v.id FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(variantId, storeId);
   if (!own) return false;
@@ -909,7 +931,8 @@ export async function autoVincularEffi(storeId: string): Promise<void> {
  */
 export async function sincronizarStockEffi(storeId: string, apiKey: string): Promise<{ actualizadas: number; sinDato: number }> {
   const cache = new Map(articulosCache(storeId).map((a) => [a.id, a]));
-  const vars = db.prepare("SELECT v.id, v.stock, json_extract(v.refs,'$.effi_id') effi FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(p.despacho_proveedor,'') = 'effi' AND COALESCE(json_extract(v.refs,'$.effi_id'),'') != ''").all(storeId) as { id: string; stock: number; effi: string }[];
+  // El stock que importa es el del artículo del PROVEEDOR si la variante tiene uno; si no, el propio.
+  const vars = db.prepare("SELECT v.id, v.stock, COALESCE(NULLIF(json_extract(v.refs,'$.effi_prov_id'),''), json_extract(v.refs,'$.effi_id')) effi FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND COALESCE(p.despacho_proveedor,'') = 'effi' AND COALESCE(NULLIF(json_extract(v.refs,'$.effi_prov_id'),''), json_extract(v.refs,'$.effi_id'), '') != ''").all(storeId) as { id: string; stock: number; effi: string }[];
   let actualizadas = 0, sinDato = 0, vivos = 0;
   const upd = db.prepare('UPDATE variants SET stock = ? WHERE id = ?');
   for (const v of vars) {
@@ -1050,9 +1073,15 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     const emp = varianteDeItem(it, todas);
     const v = emp.v;
     let a = v ? articuloPara(storeId, v, arts) : undefined;
+    // Artículo del PROVEEDOR elegido a mano: manda sobre el propio (con ese se despacha).
+    if (v?.provId) {
+      enVivo.add(v.provId);
+      const ap = await articuloPorId(storeId, c.apiKey, v.provId);
+      a = { ...(ap || { id: v.provId, descripcion: v.producto, referencia: '', ecommerce: '', stock: null }), drop: 1 };
+    }
     // El vínculo guardado (manual o automático) es la verdad aunque el artículo no
     // esté en la caché (p. ej. artículos de un proveedor dropshipping): lo traemos en vivo.
-    if (v?.effiId && (!a || a.id !== v.effiId)) {
+    if (!v?.provId && v?.effiId && (!a || a.id !== v.effiId)) {
       enVivo.add(v.effiId);
       a = (await articuloPorId(storeId, c.apiKey, v.effiId)) || { id: v.effiId, descripcion: v.producto, referencia: v.ref, ecommerce: '', stock: null };
     }
@@ -1096,7 +1125,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     // Artículo PROPIO sin stock con un "gemelo" vinculado al proveedor (mismo nombre): se usa
     // el del proveedor y la variante queda vinculada a él (si no, Effi rechaza la remisión).
     if (c.vinculoManual && a.drop !== 1 && cm !== 'propio' && a.stock != null && !(Number(a.stock) > 0)) {
-      avisos.push(`"${it.nombre}" está vinculado a tu artículo propio #${a.id} y Effi dice que no tiene stock. Si es de un proveedor, vincula la variante al artículo del proveedor.`);
+      avisos.push(`"${it.nombre}" está vinculado a tu artículo propio #${a.id} y Effi dice que no tiene stock. Si lo despacha un proveedor, pon el ID del artículo del proveedor en «Proveedor» (Productos → el producto → Vínculo con Effi).`);
     }
     if (!c.vinculoManual && a.drop !== 1 && cm !== 'propio' && !(Number(a.stock) > 0)) {
       const gem = await gemeloDrop(storeId, c.apiKey, a);

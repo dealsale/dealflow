@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from './Dropdown';
 import {
-  type ArticuloVerificado,
+  type ArticuloVerificado, apiProveedorSugerido,
   apiEffiApiArticulos, apiEffiApiBuscar, apiRevisarVinculos, apiAplicarVinculos, type SugerenciaVinculo, type ArtVinculo, apiEffiApiProveedor, apiEffiApiConvenioProducto, apiEffiApiSyncArticulos, apiEffiApiVincular,
   type EffiArticulo, type EffiVarianteDF,
 } from '../lib/api';
@@ -283,18 +283,35 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio, conCo
   const [ids, setIds] = useState<Record<string, string>>({});
   const [info, setInfo] = useState<Record<string, ArticuloVerificado>>({});
   const [guardando, setGuardando] = useState('');
-  const porId = async (v: EffiVarianteDF, id: string) => {
+  const [idsProv, setIdsProv] = useState<Record<string, string>>({});
+  const [sugeridos, setSugeridos] = useState<Record<string, ArticuloVerificado | null>>({});
+  const [buscandoSug, setBuscandoSug] = useState(false);
+  const porId = async (v: EffiVarianteDF, id: string, tipo: 'propio' | 'proveedor' = 'propio') => {
     const limpio = id.replace(/\D/g, '');
-    setGuardando(v.variantId); setMsg('');
-    const r = await apiEffiApiVincular(v.variantId, limpio);
+    setGuardando(v.variantId + tipo); setMsg('');
+    const r = await apiEffiApiVincular(v.variantId, limpio, tipo);
     setGuardando('');
     if (r.error) { setMsg(`⚠️ ${v.nombre}: ${r.error}`); return; }
     const a = r.data?.articulo;
     if (a) { setInfo((x) => ({ ...x, [a.id]: a })); setNombres((n) => ({ ...n, [a.id]: a.descripcion + (a.referencia ? ` [${a.referencia}]` : '') })); }
-    setVars((vs) => (vs || []).map((x) => (x.variantId === v.variantId ? { ...x, effiId: limpio, auto: false } : x)));
-    setIds((x) => ({ ...x, [v.variantId]: '' }));
-    setMsg(limpio ? `✓ ${v.nombre} → #${limpio}${a ? ` ${a.descripcion}` : ''}` : `✓ ${v.nombre} quedó sin artículo.`);
+    setVars((vs) => (vs || []).map((x) => (x.variantId === v.variantId ? (tipo === 'proveedor' ? { ...x, provId: limpio } : { ...x, effiId: limpio, auto: false }) : x)));
+    if (tipo === 'proveedor') setIdsProv((x) => ({ ...x, [v.variantId]: '' })); else setIds((x) => ({ ...x, [v.variantId]: '' }));
+    setMsg(limpio ? `✓ ${v.nombre} → ${tipo === 'proveedor' ? 'proveedor ' : ''}#${limpio}${a ? ` ${a.descripcion}` : ''}` : `✓ ${v.nombre}: vínculo ${tipo === 'proveedor' ? 'del proveedor ' : ''}quitado.`);
     onCambio?.();
+  };
+  // Busca, para cada variante con artículo propio y sin proveedor, el artículo del
+  // proveedor con el mismo nombre. Solo SUGIERE: tú decides con "Usar".
+  const buscarSugerencias = async () => {
+    setBuscandoSug(true); setMsg('');
+    const out: Record<string, ArticuloVerificado | null> = {};
+    for (const v of vars || []) {
+      if (!v.effiId || v.provId) continue;
+      const r = await apiProveedorSugerido(v.effiId);
+      out[v.variantId] = r.data?.articulo || null;
+      setSugeridos({ ...out });
+    }
+    setBuscandoSug(false);
+    if (!Object.values(out).some(Boolean)) setMsg('No encontramos artículos del proveedor con el mismo nombre. Pega su ID a mano en "Proveedor".');
   };
   const cargar = async () => {
     const r = await apiEffiApiArticulos(productId);
@@ -330,6 +347,10 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio, conCo
         </>}
         <span style={{ fontSize: 12, color: vinculadas === vars.length ? 'var(--df-purple)' : 'var(--df-warning)', fontWeight: 700, marginLeft: 'auto' }}>{vinculadas}/{vars.length} variantes vinculadas</span>
       </div>
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>
+        <b>Tu artículo</b> = el tuyo en Effi. <b>Proveedor</b> = el del proveedor dropshipping: si lo pones, se despacha con ese y el stock que ve el asistente es el del proveedor.
+        {vars.some((v) => v.effiId && !v.provId) && <button onClick={() => void buscarSugerencias()} disabled={buscandoSug} style={{ ...mini, marginLeft: 8 }}>{buscandoSug ? 'Buscando…' : '💡 Buscar los artículos del proveedor'}</button>}
+      </div>
       {vars.map((v) => {
         const etiqueta = v.nombre.startsWith(productoNombre) ? (v.nombre.slice(productoNombre.length).replace(/^\s*\(|\)\s*$/g, '') || 'Única') : v.nombre;
         return (
@@ -351,9 +372,26 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio, conCo
                 onKeyDown={(e) => { if (e.key === 'Enter' && ids[v.variantId]) void porId(v, ids[v.variantId]); }}
                 placeholder={v.effiId ? `Cambiar: otro ID (ahora #${v.effiId})` : 'ID del artículo en Effi'} inputMode="numeric"
                 style={{ width: 190, border: '1px solid var(--df-border)', borderRadius: 7, padding: '5px 8px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
-              <button onClick={() => void porId(v, ids[v.variantId] || '')} disabled={!ids[v.variantId] || guardando === v.variantId} style={{ ...mini, opacity: ids[v.variantId] ? 1 : 0.5 }}>{guardando === v.variantId ? 'Verificando…' : 'Vincular ID'}</button>
+              <button onClick={() => void porId(v, ids[v.variantId] || '')} disabled={!ids[v.variantId] || guardando === v.variantId + 'propio'} style={{ ...mini, opacity: ids[v.variantId] ? 1 : 0.5 }}>{guardando === v.variantId + 'propio' ? 'Verificando…' : 'Vincular ID'}</button>
               <button onClick={() => setAbierto(abierto === v.variantId ? '' : v.variantId)} style={mini}>{abierto === v.variantId ? 'Cerrar' : 'Buscar por nombre'}</button>
               {v.effiId && <button onClick={() => void porId(v, '')} style={{ ...mini, color: 'var(--df-danger)' }}>Quitar</button>}
+            </div>
+            {/* Artículo del proveedor: con este se despacha y de aquí sale el stock. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 5 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', minWidth: 70 }}>Proveedor:</span>
+              {v.provId
+                ? <><span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 800, background: 'var(--df-success-subtle, var(--df-bg))', color: 'var(--df-success)', borderRadius: 6, padding: '2px 7px' }}>#{v.provId}</span>
+                    <span style={{ fontSize: 12, color: 'var(--df-text-body)' }}>{nombres[v.provId] || ''}{info[v.provId]?.stock != null ? <span style={{ color: 'var(--df-text-muted)' }}> · stock proveedor {info[v.provId].stock}</span> : ''}</span>
+                    <button onClick={() => void porId(v, '', 'proveedor')} style={{ ...mini, color: 'var(--df-danger)' }}>Quitar</button></>
+                : <>
+                    <input value={idsProv[v.variantId] || ''} onChange={(e) => setIdsProv((x) => ({ ...x, [v.variantId]: e.target.value.replace(/\D/g, '') }))}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && idsProv[v.variantId]) void porId(v, idsProv[v.variantId], 'proveedor'); }}
+                      placeholder="ID del artículo del proveedor" inputMode="numeric"
+                      style={{ width: 190, border: '1px solid var(--df-border)', borderRadius: 7, padding: '5px 8px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
+                    <button onClick={() => void porId(v, idsProv[v.variantId] || '', 'proveedor')} disabled={!idsProv[v.variantId] || guardando === v.variantId + 'proveedor'} style={{ ...mini, opacity: idsProv[v.variantId] ? 1 : 0.5 }}>{guardando === v.variantId + 'proveedor' ? 'Verificando…' : 'Vincular'}</button>
+                    {sugeridos[v.variantId] && <button onClick={() => void porId(v, sugeridos[v.variantId]!.id, 'proveedor')} title="Sugerencia por nombre: revisa que sea el correcto" style={{ ...mini, color: 'var(--df-purple)', borderColor: 'var(--df-purple)' }}>Usar #{sugeridos[v.variantId]!.id} · {sugeridos[v.variantId]!.descripcion}{sugeridos[v.variantId]!.stock != null ? ` (stock ${sugeridos[v.variantId]!.stock})` : ''}</button>}
+                    {sugeridos[v.variantId] === null && <span style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>sin sugerencia</span>}
+                  </>}
             </div>
             {abierto === v.variantId && <div style={{ marginTop: 8 }}><BuscadorArticulo cache={cache} producto={productoNombre} variante={etiqueta} onElegir={(a) => void vincular(v, a)} /></div>}
           </div>
