@@ -61,6 +61,16 @@ export function saveOutgoingMedia(storeId: string, dataUrl: string, nombre: stri
 }
 
 /**
+ * ¿La guía de este pedido es de Interrapidísimo (su etiqueta viene acostada)? Se mira la
+ * transportadora y, como en los pedidos de Effi a veces viene vacía, también los datos de
+ * la guía de Effi, el estado y el enlace del documento.
+ */
+export function guiaAcostada(o: Record<string, unknown>): boolean {
+  const t = [o.transportadora, o.effi_guia_info, o.estado_woo, o.guia_url].map((x) => String(x ?? '')).join(' ');
+  return /inter\s*-?\s*rap/i.test(t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+}
+
+/**
  * Primera página de un PDF como PNG (pdftoppm), lista para WhatsApp:
  *  - se recorta el margen blanco (muchas guías vienen en una hoja carta con la
  *    etiqueta chiquita en una esquina);
@@ -182,10 +192,11 @@ export function saveOutgoingMessage(leadId: string, texto: string, tipo: string,
  * de lado). Corre en segundo plano al arrancar.
  */
 export async function reconvertirGuias(): Promise<void> {
-  const flag = 'guias_png_v2';
+  const flag = 'guias_png_v3'; // v3: también endereza las de Interrapidísimo que llegaron por el aviso automático
   if (db.prepare('SELECT 1 FROM app_flags WHERE clave = ?').get(flag)) return;
   db.prepare('INSERT INTO app_flags (clave) VALUES (?)').run(flag);
-  const filas = db.prepare("SELECT id, store_id, numero, guia_url, transportadora FROM orders WHERE guia_url LIKE '%.pdf%' AND created_at > datetime('now','-60 days')").all() as { id: string; store_id: string; numero: number; guia_url: string; transportadora: string }[];
+  const filas = (db.prepare("SELECT id, store_id, numero, guia_url, transportadora, effi_guia_info, estado_woo FROM orders WHERE guia_url LIKE '%.pdf%' AND created_at > datetime('now','-60 days')").all() as { id: string; store_id: string; numero: number; guia_url: string; transportadora: string; effi_guia_info: string; estado_woo: string }[])
+    .filter((f) => guiaAcostada(f)); // solo las que hay que enderezar
   let n = 0;
   for (const f of filas) {
     try {
@@ -198,8 +209,7 @@ export async function reconvertirGuias(): Promise<void> {
         if (r.ok) pdf = Buffer.from(await r.arrayBuffer());
       }
       if (!pdf) continue;
-      const enderezar = /inter\s*rap/i.test(String(f.transportadora || '').normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
-      const png = pdfAPng(pdf, { enderezar });
+      const png = pdfAPng(pdf, { enderezar: guiaAcostada(f) });
       if (!png) continue;
       const url = guardarArchivo(f.store_id, `guia-DF${f.numero}-${uid().slice(0, 6)}.png`, png);
       db.prepare('UPDATE orders SET guia_img = ? WHERE id = ?').run(url, f.id);

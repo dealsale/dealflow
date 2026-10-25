@@ -1775,7 +1775,6 @@ api.post('/orders/:rowId/effi/guia', requireAuth, requireStore, requireOwner, as
   res.json({ ok: true, ...r });
 });
 // Transportadoras cuya guía en PDF viene "acostada" en la hoja (hay que enderezarla).
-const guiaAcostada = (transp: string) => /inter\s*rap/i.test(String(transp || '').normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
 // Documento de la guía (PDF o imagen) que el dueño sube al pedido. Si es PDF,
 // guardamos también la primera página como PNG para mandarla por WhatsApp.
 api.post('/orders/:rowId/guia-documento', requireAuth, requireStore, requireOwner, async (req, res) => {
@@ -1788,12 +1787,12 @@ api.post('/orders/:rowId/guia-documento', requireAuth, requireStore, requireOwne
   const mime = dataUrl.slice(5, i).split(';')[0].trim();
   const buf = Buffer.from(dataUrl.slice(i + 8), 'base64');
   if (buf.length > 15 * 1024 * 1024) return res.status(400).json({ error: 'El archivo pesa más de 15 MB.' });
-  const { guardarArchivo, pdfAPng } = await import('./media.js');
+  const { guardarArchivo, pdfAPng, guiaAcostada } = await import('./media.js');
   const base = `guia-DF${o.numero}-${uid().slice(0, 6)}`;
   let url = ''; let img = '';
   if (mime === 'application/pdf') {
     url = guardarArchivo(sid, `${base}.pdf`, buf);
-    const png = pdfAPng(buf, { enderezar: guiaAcostada(o.transportadora) });
+    const png = pdfAPng(buf, { enderezar: guiaAcostada(o) });
     if (png) img = guardarArchivo(sid, `${base}.png`, png);
   } else if (/^image\/(png|jpe?g|webp)$/.test(mime)) {
     img = guardarArchivo(sid, `${base}.${mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg'}`, buf);
@@ -1831,7 +1830,7 @@ api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, re
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const guia = String(o.guia || '').trim();
   if (!guia) return res.status(400).json({ error: 'El pedido todavía no tiene número de guía.' });
-  const { guardarArchivo, pdfAPng } = await import('./media.js');
+  const { guardarArchivo, pdfAPng, guiaAcostada } = await import('./media.js');
   let img = String(o.guia_img || '');
   const url = String(o.guia_url || '');
   // Guía externa (enlace que mandó Effi): la bajamos y la convertimos una vez.
@@ -1840,7 +1839,7 @@ api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, re
       const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
       const buf = Buffer.from(await r.arrayBuffer());
       const ct = r.headers.get('content-type') || '';
-      const png = ct.includes('pdf') || /\.pdf(\?|$)/i.test(url) ? pdfAPng(buf, { enderezar: guiaAcostada(String(o.transportadora || '')) }) : /image\//.test(ct) ? buf : null;
+      const png = ct.includes('pdf') || /\.pdf(\?|$)/i.test(url) ? pdfAPng(buf, { enderezar: guiaAcostada({ ...o, guia_url: url }) }) : /image\//.test(ct) ? buf : null;
       if (png) { img = guardarArchivo(sid, `guia-DF${o.numero}-${uid().slice(0, 6)}.png`, png); db.prepare('UPDATE orders SET guia_img = ? WHERE id = ?').run(img, o.id); }
     } catch { /* seguimos con texto */ }
   }
