@@ -616,6 +616,23 @@ db.exec(`CREATE TABLE IF NOT EXISTS effi_convenio_articulo (
 const guardarConvenioArticulo = (storeId: string, articulo: string, convenio: string) =>
   db.prepare("INSERT INTO effi_convenio_articulo (store_id, articulo, convenio, actualizado) VALUES (?,?,?,datetime('now')) ON CONFLICT(store_id, articulo) DO UPDATE SET convenio = excluded.convenio, actualizado = excluded.actualizado").run(storeId, articulo, convenio);
 
+// Convenio con el que se vendió por última vez cada PRODUCTO (aprendido de la remisión que
+// Effi aceptó). Así la siguiente venta del mismo producto, aunque sea de otra talla o color
+// (otro artículo en Effi), sale con ese convenio sin tener que ponerlo a mano.
+db.exec(`CREATE TABLE IF NOT EXISTS effi_convenio_producto (
+  store_id TEXT NOT NULL, product_id TEXT NOT NULL, convenio TEXT NOT NULL,
+  actualizado TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (store_id, product_id)
+)`);
+const convenioAprendidoProducto = (storeId: string, productId: string) =>
+  String((db.prepare('SELECT convenio FROM effi_convenio_producto WHERE store_id = ? AND product_id = ?').get(storeId, productId) as { convenio: string } | undefined)?.convenio || '');
+function aprenderConvenioProductos(storeId: string, productos: string[], convenio: string) {
+  for (const pid of new Set(productos.filter(Boolean))) {
+    if (convenio) db.prepare("INSERT INTO effi_convenio_producto (store_id, product_id, convenio, actualizado) VALUES (?,?,?,datetime('now')) ON CONFLICT(store_id, product_id) DO UPDATE SET convenio = excluded.convenio, actualizado = excluded.actualizado").run(storeId, pid, convenio);
+    else db.prepare('DELETE FROM effi_convenio_producto WHERE store_id = ? AND product_id = ?').run(storeId, pid);
+  }
+}
+
 /** El convenio con el que se ha vendido ESTE artículo (el más usado en sus remisiones/facturas). */
 export async function convenioDeArticulo(storeId: string, apiKey: string, articulo: string): Promise<string> {
   const local = db.prepare('SELECT convenio FROM effi_convenio_articulo WHERE store_id = ? AND articulo = ?').get(storeId, articulo) as { convenio: string } | undefined;
@@ -1059,7 +1076,7 @@ export function prepararRemision(storeId: string, orderId: string, reintento = f
   });
 }
 
-async function prepararRemisionInterna(storeId: string, orderId: string, reintento = false, convenioForzado = ''): Promise<{ body: Record<string, unknown>; o: Fila; ubic: { provincia: string; ciudad: string; nombre: string }; lineas: { item: string; articulo: string }[]; avisos: string[] } | { error: string }> {
+async function prepararRemisionInterna(storeId: string, orderId: string, reintento = false, convenioForzado = ''): Promise<{ body: Record<string, unknown>; o: Fila; ubic: { provincia: string; ciudad: string; nombre: string }; lineas: { item: string; articulo: string }[]; avisos: string[]; productos: string[] } | { error: string }> {
   const c = cfgEffi(storeId);
   if (!c || !effiApiListo(storeId)) return { error: 'Effi no está configurado: conecta la API key y elige sucursal, bodega, centro de costos y forma de pago en Integraciones.' };
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
@@ -1080,6 +1097,8 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
   const sinVinculo: string[] = [];
   const esDrop: boolean[] = [];
   const convManual: string[] = []; // convenio elegido a mano en el producto ('' | 'propio' | código)
+  const convAprendido: string[] = []; // convenio de la última venta del producto (modo automático)
+  const productos: string[] = []; // producto de DealFlow de cada concepto
   const enVivo = new Set<string>(); // artículos ya consultados en vivo en este pedido
   for (const it of items) {
     const emp = varianteDeItem(it, todas);
@@ -1147,7 +1166,10 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
         if (v?.variantId) vincularArticulo(storeId, v.variantId, gem.id, true);
       }
     }
-    esDrop.push(cm === 'propio' ? false : cm ? true : a.drop === 1);
+    const ca = !cm && v?.productId ? convenioAprendidoProducto(storeId, v.productId) : '';
+    convAprendido.push(ca);
+    productos.push(v?.productId || it.product_id || '');
+    esDrop.push(cm === 'propio' ? false : cm ? true : a.drop === 1 || !!ca);
     lineas.push({ item: `${it.qty}× ${it.nombre}`, articulo: `${a.descripcion}${a.referencia ? ` [${a.referencia}]` : ''} · #${a.id}${a.drop === 1 ? ' · dropshipping' : ''}` });
     conceptos.push({ articulo: Number(a.id), descripcion: it.nombre.slice(0, 250), cantidad: Math.max(1, Number(it.qty) || 1), precio: Math.max(0, Math.round(Number(it.precio) || 0)) });
   }
@@ -1164,7 +1186,8 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     const porArticulo = new Map<string, string>();
     for (let i = 0; i < conceptos.length; i++) {
       if (!esDrop[i]) continue;
-      const cv = convManual[i] && convManual[i] !== 'propio' ? convManual[i] : await convenioDeArticulo(storeId, c.apiKey, String(conceptos[i].articulo));
+      // Orden: el puesto a mano en el producto → el de su última venta → el del artículo en Effi.
+      const cv = convManual[i] && convManual[i] !== 'propio' ? convManual[i] : convAprendido[i] || await convenioDeArticulo(storeId, c.apiKey, String(conceptos[i].articulo));
       if (cv) porArticulo.set(String(conceptos[i].articulo), cv);
     }
     const distintos = [...new Set(porArticulo.values())];
@@ -1275,7 +1298,8 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     if (c.caja) { const [s, id] = c.caja.split(':'); body.sucursal_caja_medio_pago = [Number(s)]; body.id_caja_medio_pago = [Number(id)]; }
     if (c.cuenta) body.cuenta_medio_pago = [Number(c.cuenta)];
   }
-  return { body, o, ubic, lineas, avisos };
+  // Con convenio se aprende solo en los productos de proveedor (no en los propios del mismo pedido).
+  return { body, o, ubic, lineas, avisos, productos: convenio ? productos.filter((_, i) => (convenioForzado ? convManual[i] !== 'propio' : esDrop[i])) : productos };
 }
 
 /** Despacha el pedido a Effi: cliente + remisión (+ guía si está activa). */
@@ -1293,7 +1317,7 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   const c = cfgEffi(storeId)!;
   const prep = await prepararRemision(storeId, orderId, reintento, 'despacho', convenioForzado);
   if ('error' in prep) return prep;
-  const { body, o, ubic, avisos } = prep;
+  const { body, o, ubic, avisos, productos } = prep;
   const numDF = `DF-${txt(o.numero)}`;
 
   const cli = await clienteEffi(c, o, ubic);
@@ -1340,6 +1364,8 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   if (body.convenio_dropshipping && Array.isArray(body.articulo)) {
     for (const a of body.articulo as unknown[]) { try { guardarConvenioArticulo(storeId, String(a), String(body.convenio_dropshipping)); } catch { /* opcional */ } }
   }
+  // …y el de cada producto (sin convenio = salió como mercancía propia: se olvida).
+  try { aprenderConvenioProductos(storeId, productos, String(body.convenio_dropshipping ?? '')); } catch { /* opcional */ }
   db.prepare("UPDATE orders SET despacho_proveedor = 'effi', woo_id = ?, effi_remision = ?, effi_doc = ? WHERE id = ?")
     .run(remision, remision, JSON.stringify({ sucursal: txt(doc!.sucursal), id: txt(doc!.id), prefijo: txt(doc!.prefijo), tercero: cli.tercero,
       // Los productos tal como se mandaron (para registrar la devolución si el pedido vuelve).
