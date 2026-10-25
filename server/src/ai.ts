@@ -439,9 +439,9 @@ PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma ge
 FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
 
 CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
-##PEDIDO cliente="Nombre Apellido"; telefono="3001234567"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="2x Nombre exacto del producto (Talla M · Negro, Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
+##PEDIDO cliente="Nombre Apellido"; telefono="3001234567"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="1x Nombre exacto del producto (Talla M · Negro), 1x Nombre exacto del producto (Talla M · Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
 El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
-En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar.
+En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar. Si el cliente lleva varias unidades del mismo producto en tallas o colores DISTINTOS, escribe UNA LÍNEA POR CADA VARIANTE con su cantidad (ej.: 1x Camisilla (Negro · M), 2x Camisilla (Blanco · L)); nunca "3x Camisilla" sin la variante.
 El campo telefono es el CELULAR DE CONTACTO para la entrega (10 dígitos, sin +57). Si el cliente ya escribió un celular en la conversación, USA ese y no lo vuelvas a pedir. Si no ha dado ninguno, pídelo JUNTO con los demás datos que falten ("¿A qué número te llama la transportadora?"). Si dice que es el mismo de WhatsApp, ponlo en el marcador.
 El campo departamento es OBLIGATORIO. Si la ciudad es inconfundible (capitales y ciudades grandes: Medellín → Antioquia, Cali → Valle del Cauca, Barranquilla → Atlántico, Bogotá → Cundinamarca/Bogotá D.C., Bucaramanga → Santander, etc.), dedúcelo tú y NO lo preguntes. Pregúntalo solo si la ciudad existe en varios departamentos o no la reconoces, y hazlo junto con los otros datos que falten.
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
@@ -883,7 +883,7 @@ function pedidoDesdeResumen(leadId: string): string {
 }
 
 /** Registra el pedido cuando la IA cierra la venta y le confirma al cliente. Devuelve true si lo creó. */
-export interface PedidoItem { qty: number; nombre: string; precio: number }
+export interface PedidoItem { qty: number; nombre: string; precio: number; productId?: string; variantId?: string; label?: string }
 export interface PedidoExtraido { cliente: string; departamento: string; ciudad: string; direccion: string; items: PedidoItem[]; total: number }
 
 /**
@@ -931,7 +931,20 @@ export function parsearPedidoInner(storeId: string, inner: string): PedidoExtrai
     const prod = productRows.find((p) => String(p.nombre).toLowerCase() === base)
       || productRows.find((p) => String(p.nombre).toLowerCase().includes(base) || base.includes(String(p.nombre).toLowerCase()));
     return { qty, nombre: completo, precio: prod ? Number(prod.precio) : 0 };
-  }).filter((i) => i.nombre));
+  }).filter((i) => i.nombre)
+    // "3x Camisilla (M · Negro, Blanco, Mostaza)" → una línea por cada variante.
+    .flatMap((i) => separarVariantes(i.qty, i.nombre).map((x) => ({ ...x, precio: i.precio }))));
+  // Cada ítem queda con SU producto y SU variante del catálogo (para que la ventana de
+  // completar pedido ya traiga la talla y el color elegidos, no adivine por texto).
+  const todasV = variantesBase(storeId);
+  for (const it of items as PedidoItem[]) {
+    const r = emparejarItem(it.nombre, todasV);
+    if (!r.v) continue;
+    it.productId = r.v.productId;
+    it.variantId = r.v.variantId || '';
+    it.label = r.v.label || '';
+    it.nombre = r.v.label ? `${r.v.producto} (${r.v.label})` : r.v.producto;
+  }
   const total = parseInt(campoPedido(inner, 'total').replace(/[^0-9]/g, ''), 10) || items.reduce((a, it) => a + it.qty * it.precio, 0);
   return { cliente, departamento, ciudad, direccion, items, total };
 }
@@ -948,8 +961,12 @@ export async function extraerPedidoDelChat(storeId: string, leadId: string): Pro
   // 2) IA sobre la conversación.
   const ia = resolverTexto(storeId);
   if (!ia) return '';
-  const productos = (db.prepare('SELECT nombre, precio FROM products WHERE store_id = ? LIMIT 80').all(storeId) as { nombre: string; precio: number }[])
-    .map((p) => `- ${p.nombre}: ${Number(p.precio) > 0 ? '$' + Number(p.precio).toLocaleString('es-CO') : 'gratis'}`).join('\n');
+  const variantesDe = db.prepare('SELECT label FROM variants WHERE product_id = ? ORDER BY orden LIMIT 120');
+  const productos = (db.prepare('SELECT id, nombre, precio FROM products WHERE store_id = ? LIMIT 80').all(storeId) as { id: string; nombre: string; precio: number }[])
+    .map((p) => {
+      const vs = (variantesDe.all(p.id) as { label: string }[]).map((v) => v.label).filter((l) => l && l.toLowerCase() !== 'única');
+      return `- ${p.nombre}: ${Number(p.precio) > 0 ? '$' + Number(p.precio).toLocaleString('es-CO') : 'gratis'}${vs.length ? ` · variantes: ${vs.join(', ')}` : ''}`;
+    }).join('\n');
   const historia = (db.prepare('SELECT de, texto, tipo FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 40').all(leadId) as { de: string; texto: string; tipo: string }[])
     .reverse()
     .map((m) => `${m.de === 'cliente' ? 'CLIENTE' : 'TIENDA'}: ${(m.texto || '').trim() || `[${m.tipo}]`}`)
@@ -958,7 +975,7 @@ export async function extraerPedidoDelChat(storeId: string, leadId: string): Pro
   if (!historia.trim()) return '';
   const system = `Eres un extractor de pedidos de una tienda por WhatsApp en Colombia. Te doy una conversación y el catálogo. Devuelve EXCLUSIVAMENTE una línea con el marcador, sin explicaciones ni texto extra:
 ##PEDIDO cliente="Nombre y apellido"; telefono="3001234567"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre EXACTO del catálogo (Talla M · Negro), 1x Otro producto (Talla L · Rojo)"; total="139900"##
-Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefono pon el celular de contacto para la entrega (10 dígitos) si el cliente lo dio. Si un dato no está, déjalo vacío ("" ). En items pon la cantidad, el nombre EXACTO del catálogo y entre paréntesis la talla y el color que el cliente pidió. En total pon el valor final acordado (solo números). Si no hay un pedido real en la conversación, responde exactamente: SIN_PEDIDO`;
+Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefono pon el celular de contacto para la entrega (10 dígitos) si el cliente lo dio. Si un dato no está, déjalo vacío ("" ). En items pon la cantidad, el nombre EXACTO del catálogo y entre paréntesis la variante EXACTA de la lista del catálogo. Si el cliente pidió varias tallas o colores, pon UNA LÍNEA POR CADA VARIANTE (ej.: "1x Camisilla (Negro · M), 1x Camisilla (Blanco · L), 1x Camisilla (Mostaza · M)"), nunca "3x Camisilla" sin variantes. En total pon el valor final acordado (solo números). Si no hay un pedido real en la conversación, responde exactamente: SIN_PEDIDO`;
   try {
     const res = await fetch(ia.url, {
       method: 'POST',
