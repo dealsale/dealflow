@@ -597,7 +597,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
             </span>
           </div>
 
-          {sel.origen === 'shopify' && <ConfirmacionShopify sel={sel} />}
+          {(sel.origen === 'shopify' || sel.origen === 'landing') && <ConfirmacionShopify sel={sel} />}
 
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Datos de envío</div>
           <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 14, marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 7 }}>

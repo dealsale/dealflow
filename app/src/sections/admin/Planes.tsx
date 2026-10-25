@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { apiAdminGuardarLandings, apiAdminLandings } from '../../lib/api';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function Planes({ df }: { df: DealFlowState }) {
@@ -97,6 +99,39 @@ export function Planes({ df }: { df: DealFlowState }) {
           {df.planError && <span style={{ color: 'var(--df-danger)', fontSize: 13 }}>Falta el nombre o el precio. Complétalos y vuelve a intentar.</span>}
         </div>
       </div>
+      {df.isSuperadmin && <PrecioLandings />}
     </section>
+  );
+}
+
+/** Precio del Creador de landings: cuánto cuesta cada landing nueva y cuántas son gratis por tienda. */
+function PrecioLandings() {
+  const [precio, setPrecio] = useState('');
+  const [gratis, setGratis] = useState('');
+  const [stats, setStats] = useState<{ total: number; publicadas: number | null; pagadas: number | null; pedidos: number | null } | null>(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    void apiAdminLandings().then((r) => { if (r.data) { setPrecio(String(r.data.ajustes.precio)); setGratis(String(r.data.ajustes.gratis)); setStats(r.data.stats); } });
+  }, []);
+  const guardar = async () => {
+    const r = await apiAdminGuardarLandings({ precio: Number(precio) || 0, gratis: Number(gratis) || 0 });
+    setMsg(r.error || '✓ Guardado');
+    if (r.data) { setPrecio(String(r.data.ajustes.precio)); setGratis(String(r.data.ajustes.gratis)); }
+  };
+  const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 };
+  return (
+    <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, marginTop: 22, maxWidth: 560 }}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>🛍️ Creador de landings</div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14 }}>Cada landing nueva se paga una vez (Wompi) y queda de la tienda para siempre. Precio 0 = gratis para todos.</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+        <label style={{ fontSize: 12, fontWeight: 600 }}>Precio por landing (COP)<input className="df-input" value={precio} onChange={(e) => setPrecio(e.target.value.replace(/\D/g, ''))} style={{ ...inp, marginTop: 4 }} /></label>
+        <label style={{ fontSize: 12, fontWeight: 600 }}>Landings gratis por tienda<input className="df-input" value={gratis} onChange={(e) => setGratis(e.target.value.replace(/\D/g, ''))} style={{ ...inp, marginTop: 4 }} /></label>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button onClick={() => void guardar()} className="df-btn-primary" style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Guardar</button>
+        {msg && <span style={{ fontSize: 12.5, color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</span>}
+        {stats && <span style={{ fontSize: 12, color: 'var(--df-text-muted)', marginLeft: 'auto' }}>{stats.total} creadas · {stats.publicadas || 0} publicadas · {stats.pagadas || 0} pagadas · {stats.pedidos || 0} pedidos</span>}
+      </div>
+    </div>
   );
 }

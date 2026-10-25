@@ -1,3 +1,4 @@
+import './landings.js'; // tablas del Creador de landings (los pagos aprobados las usan)
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -60,11 +61,32 @@ if (process.env.NODE_ENV !== 'production') {
 
 app.use('/api', api);
 app.use('/webhooks', webhooks);
+// Landings públicas del Creador de landings: /l/<tienda>/<landing>, sus imágenes y el formulario.
+app.get('/l/media/:storeId/:file', async (req, res) => {
+  const p = (await import('./landings.js')).archivoPublico(req.params.storeId, req.params.file);
+  if (!p) return res.status(404).end();
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.sendFile(p);
+});
+app.get('/l/:tienda/:slug', async (req, res) => {
+  const L = await import('./landings.js');
+  const l = L.landingPublica(req.params.tienda, req.params.slug);
+  res.setHeader('Cache-Control', 'no-cache');
+  if (!l) return res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página no disponible</title><p style="font-family:system-ui;padding:24px;text-align:center">Esta página no está disponible.</p>');
+  if (!/bot|crawl|spider|facebookexternalhit/i.test(String(req.headers['user-agent'] || ''))) L.contarVista(l.id);
+  res.type('html').send(L.renderLanding(l.datos, { id: l.id }));
+});
+app.post('/l/api/:id/pedido', async (req, res) => {
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const r = await (await import('./landings.js')).pedidoLanding(req.params.id, req.body || {}, ip);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
 app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'confirmacion-shopify',
+    build: 'creador-landings',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
