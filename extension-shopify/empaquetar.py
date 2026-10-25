@@ -1,0 +1,11 @@
+"""Empaqueta la extensión en app/public/descargas/dealflow-x-shopify.zip (lo que se descarga desde DealFlow).
+Correr después de cambiar cualquier archivo de esta carpeta:  python3 extension-shopify/empaquetar.py"""
+import os, zipfile
+aqui = os.path.dirname(os.path.abspath(__file__))
+destino = os.path.join(aqui, '..', 'app', 'public', 'descargas', 'dealflow-x-shopify.zip')
+os.makedirs(os.path.dirname(destino), exist_ok=True)
+archivos = ['manifest.json', 'background.js', 'content.js', 'popup.html', 'popup.js'] + ['icons/' + x for x in sorted(os.listdir(os.path.join(aqui, 'icons')))]
+with zipfile.ZipFile(destino, 'w', zipfile.ZIP_DEFLATED) as z:
+    for f in archivos:
+        z.write(os.path.join(aqui, f), 'dealflow-x-shopify/' + f)
+print('Listo:', destino)

@@ -678,6 +678,33 @@ api.get('/stats/analisis', requireAuth, requireStore, async (req, res) => {
   res.json(analisis(req.user!.storeId!, desde, hasta, { canal: q('canal'), origen: q('origen'), producto: q('producto'), campana: q('campana'), ad: q('ad'), ciudad: q('ciudad'), estado: q('estado') }));
 });
 
+// ── Extensión de Chrome "DealFlow x Shopify" ──
+// Códigos de conexión (los administra el dueño desde Integraciones → Shopify).
+api.get('/ext/codigos', requireAuth, requireStore, requireOwner, async (req, res) => {
+  res.json({ codigos: (await import('./extShopify.js')).listarCodigos(req.user!.storeId!) });
+});
+api.post('/ext/codigos', requireAuth, requireStore, requireOwner, async (req, res) => {
+  res.json((await import('./extShopify.js')).crearCodigo(req.user!.storeId!, String(req.body?.nombre || '')));
+});
+api.delete('/ext/codigos/:id', requireAuth, requireStore, requireOwner, async (req, res) => {
+  (await import('./extShopify.js')).borrarCodigo(req.user!.storeId!, req.params.id);
+  res.json({ ok: true });
+});
+// Lo que llama la extensión (autenticada con el código, sin cookie de sesión).
+const tiendaExt = async (req: { headers: Record<string, unknown> }) => (await import('./extShopify.js')).tiendaDeCodigo(String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim());
+api.get('/ext/yo', async (req, res) => {
+  const t = await tiendaExt(req);
+  if (!t) return res.status(401).json({ error: 'Código no válido. Genera uno en DealFlow → Integraciones → Shopify → Extensión.' });
+  res.json({ tienda: t.nombre });
+});
+api.post('/ext/shopify/pedido', async (req, res) => {
+  const t = await tiendaExt(req);
+  if (!t) return res.status(401).json({ error: 'Código no válido. Genera uno en DealFlow → Integraciones → Shopify → Extensión.' });
+  const r = await (await import('./extShopify.js')).recibirPedido(t.storeId, req.body || {});
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json({ ...r, id: `DF-${r.numero}`, tienda: t.nombre });
+});
+
 // Anuncios de Meta con su producto vinculado (para vincular a mano desde Integraciones).
 api.get('/ads/anuncios', requireAuth, requireStore, async (req, res) => {
   const { anunciosConProducto } = await import('./metaInsights.js');
