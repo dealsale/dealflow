@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { confirmar } from './dialogs';
-import { enProceso } from './Proceso';
+import { enProceso, ProcesoPedido } from './Proceso';
 import { apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
 
@@ -29,7 +29,7 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
   const cotizar = () => {
     if (!sel.rowId) return;
     setPaso('cargando'); setMsg('');
-    void enProceso('Cotizando transportadoras en Dropi…', () => apiDropiCotizar(sel.rowId!, recaudo)).then((r) => {
+    void enProceso('Cotizando transportadoras en Dropi…', () => apiDropiCotizar(sel.rowId!, recaudo), 'pedido').then((r) => {
       if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos cotizar.'); return; }
       setCiudad(r.data.ciudad); setDisponibles(r.data.disponibles); setNoDisp(r.data.noDisponibles);
       setElegida(r.data.disponibles[0] || null); setAuto(false);
@@ -39,7 +39,7 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
   const crear = () => {
     if (!sel.rowId) return;
     setPaso('creando'); setMsg('');
-    void enProceso('Creando la orden en Dropi…', () => apiDropiCrear(sel.rowId!, auto ? undefined : (elegida || undefined), false, recaudo)).then((r) => {
+    void enProceso('Creando la orden en Dropi…', () => apiDropiCrear(sel.rowId!, auto ? undefined : (elegida || undefined), false, recaudo), 'pedido').then((r) => {
       if (r.error || !r.data) { setPaso('elegir'); setMsg(r.error || 'No pudimos crear la orden.'); return; }
       df.marcarDropiCreado(sel.id, r.data.dropiId, r.data.transportadora || (auto ? '' : elegida?.nombre || ''));
       setMsg(''); onHecho?.();
@@ -134,7 +134,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
     void apiEffiConveniosConocidos().then((r) => r.data && setConvenios(r.data.convenios)); // por si agregaste uno nuevo
     setPaso('revisando'); setMsg('');
     if (!guiaAuto) void g.cargar();
-    const r = await enProceso('Preparando el envío a Effi…', () => apiEffiPreview(sel.rowId!, conv));
+    const r = await enProceso('Preparando el envío a Effi…', () => apiEffiPreview(sel.rowId!, conv), 'pedido');
     if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos preparar el envío.'); return; }
     setPrev(r.data); setPaso('listo');
   };
@@ -159,7 +159,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
       paso('Actualizando el pedido…');
       await df.refrescarPedidos();
       return true;
-    });
+    }, 'pedido');
     if (ok) onHecho();
   };
   const selectorConvenio = (
@@ -249,7 +249,7 @@ function CorregirVariantes({ df, sel, onListo }: { df: DealFlowState; sel: Decor
     const r = await apiVariantesFaltantes(String(sel.rowId));
     setFaltan(r.data?.faltan || []); setElegida({});
     if (!(r.data?.faltan || []).length) onListo();
-    });
+    }, 'pedido');
   };
   return (
     <div style={{ border: '1px solid var(--df-warning-border, var(--df-border))', background: 'var(--df-warning-subtle)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -388,7 +388,7 @@ function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   const crear = async () => {
     if (!sel.rowId || !g.listo) return;
     setEnviando(true); setMsg('');
-    const r = await enProceso('Generando la guía de transporte…', () => apiEffiGuia(sel.rowId!, g.d));
+    const r = await enProceso('Generando la guía de transporte…', () => apiEffiGuia(sel.rowId!, g.d), 'pedido');
     setEnviando(false);
     if (r.error || !r.data) { setMsg(r.error || 'Effi no creó la guía.'); return; }
     setMsg(`✓ Guía ${r.data.guia || r.data.idTransaccion} creada${r.data.transportadora ? ` con ${r.data.transportadora}` : ''}.`);
@@ -418,7 +418,7 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
     const fr = new FileReader();
     fr.onload = async () => {
       setOcupado(true); setMsg('');
-      const r = await enProceso('Subiendo la guía…', () => apiGuiaDocumento(sel.rowId!, String(fr.result)));
+      const r = await enProceso('Subiendo la guía…', () => apiGuiaDocumento(sel.rowId!, String(fr.result)), 'pedido');
       setOcupado(false);
       if (r.error || !r.data) { setMsg(r.error || 'No se pudo subir.'); return; }
       setMsg(r.data.convertida ? '✓ Guía guardada. Ya puedes enviarla al cliente.' : '✓ PDF guardado (no se pudo convertir a imagen: se enviará como PDF).');
@@ -429,7 +429,7 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   const enviar = async () => {
     if (!sel.rowId) return;
     setOcupado(true); setMsg('');
-    const r = await enProceso('Enviándole la guía al cliente por WhatsApp…', () => apiGuiaEnviar(sel.rowId!));
+    const r = await enProceso('Enviándole la guía al cliente por WhatsApp…', () => apiGuiaEnviar(sel.rowId!), 'pedido');
     setOcupado(false);
     if (r.error || !r.data) { setMsg(r.error || 'No se pudo enviar.'); return; }
     const d = r.data;
@@ -578,6 +578,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
     <div style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'flex', justifyContent: 'flex-end' }}>
       <div onClick={df.closeOrder} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,.45)' }} />
       <div style={{ position: 'relative', width: 430, maxWidth: '92%', background: 'var(--df-surface)', height: '100%', boxShadow: '-12px 0 40px rgba(15,23,42,.18)', display: 'flex', flexDirection: 'column' }}>
+        <ProcesoPedido />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px', borderBottom: '1px solid var(--df-border)' }}>
           <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, fontWeight: 600 }}>{sel.id}</span>
           <span style={sel.pillStyle}>{sel.estado}</span>

@@ -180,6 +180,7 @@ import type {
   VendedorSection,
 } from '../types';
 import { COLOR_ETIQUETA, ETIQUETAS_CRM } from '../types';
+import { leerRuta, escribirRuta, useRecordado, recordado, recordar, type Ruta } from '../lib/rutas';
 import type { Bundle, MensajeBloque, MensajeInicialVar } from '../types';
 
 /** Piezas de un bloque de imagen/video (normaliza el `valor` antiguo de una sola pieza). */
@@ -743,7 +744,14 @@ export function useDealFlowState() {
     setStatsPreset('rango');
     setStatsRango({ desde, hasta });
   };
-  const [filter, setFilter] = useState<string>('Todos');
+  // Estadísticas: abre con el último periodo que se usó (la URL, si trae fechas, manda).
+  useEffect(() => {
+    const p = recordado<StatsPreset>('stats:preset', '7d');
+    if (p === 'rango') { const r = recordado<{ desde: string; hasta: string } | null>('stats:rango', null); if (r?.desde && r?.hasta) { setStatsPreset('rango'); setStatsRango(r); } }
+    else if (p !== '7d') { setStatsPreset(p); setStatsRango(rangoDePreset(p)); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { recordar('stats:preset', statsPreset); if (statsPreset === 'rango') recordar('stats:rango', statsRango); }, [statsPreset, statsRango]);
+  const [filter, setFilter] = useRecordado<string>('pedidos:filtro', 'Todos');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [expandedProductId, setExpandedProductId] = useState<number | string | null>(7);
   const [selectedLeadId, setSelectedLeadId] = useState<number | string>(1);
@@ -859,6 +867,8 @@ export function useDealFlowState() {
   });
   const [loginError, setLoginError] = useState<string>('');
   const [apiMode, setApiMode] = useState<boolean>(false);
+  const apiModeRef = useRef(false);
+  apiModeRef.current = apiMode;
   // Arranque: si el backend ya nos sirvió antes (bootServed), NO sabemos aún si la
   // sesión sigue viva hasta que responda apiMe(). Mientras tanto mostramos el
   // preloader en vez del login, para que no parpadee la pantalla de iniciar sesión
@@ -945,6 +955,30 @@ export function useDealFlowState() {
   const [qrError, setQrError] = useState<string>('');
   const [apiLeadsState, setApiLeadsState] = useState<Lead[] | null>(null);
   const [crmSendWarn, setCrmSendWarn] = useState('');
+
+  // La URL sigue a la pantalla: sección, pedido abierto, chat abierto y fechas.
+  useEffect(() => {
+    if (!rutaLista.current || !sessionUser) return;
+    const chatAbierto = section === 'crm' && (mobileChatOpen || window.innerWidth > 900) && typeof crmSelectedId === 'string';
+    escribirRuta({
+      mode, section, adminSection, pedido: selectedOrderId || undefined,
+      chat: chatAbierto ? String(crmSelectedId) : undefined,
+      desde: statsRango.desde, hasta: statsRango.hasta, preset: statsPreset,
+    });
+  }, [mode, section, adminSection, selectedOrderId, crmSelectedId, mobileChatOpen, statsRango.desde, statsRango.hasta, statsPreset, sessionUser]);
+  // Atrás / adelante del navegador.
+  const aplicarRutaRef = useRef<() => void>(() => {});
+  aplicarRutaRef.current = () => {
+    if (!sessionUser) return;
+    const r = leerRuta();
+    if (!r.chat) setMobileChatOpen(false);
+    aplicarRuta(r, sessionUser.role, sessionUser.role === 'vendedor' && sessionUser.esDueno === false);
+  };
+  useEffect(() => {
+    const onPop = () => aplicarRutaRef.current();
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // Guarda los datos SOLO en modo demo (sin backend). Con backend real no se guarda:
   // los datos de una tienda no deben quedar cacheados y reaparecer al recargar (era
@@ -1084,6 +1118,29 @@ export function useDealFlowState() {
   const AGENTE_SECCIONES: VendedorSection[] = ['productos', 'crm', 'leads', 'pedidos', 'logistica'];
   const esAgente = apiMode && sessionUser?.role === 'vendedor' && sessionUser?.esDueno === false;
   const puedeVerSeccion = (sec: VendedorSection) => !esAgente || AGENTE_SECCIONES.includes(sec);
+
+  // ── Direcciones por página (F5 deja al usuario donde estaba) ──
+  const rutaLista = useRef(false);
+  const PRESETS_STATS = ['hoy', 'ayer', '7d', '30d', 'mes', 'mesPasado'];
+  /** Lleva la app a lo que dice la URL (al entrar, con F5 o con atrás/adelante). */
+  function aplicarRuta(r: Ruta, rol: string, agente: boolean) {
+    const esAdm = rol === 'admin' || rol === 'superadmin';
+    if (r.mode === 'admin' && r.adminSection && esAdm) {
+      if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
+    } else if (r.section && (!agente || AGENTE_SECCIONES.includes(r.section))) {
+      setMode('vendedor'); setSection(r.section);
+    }
+    setSelectedOrderId(r.pedido || null);
+    if (r.chat && r.section === 'crm') {
+      setCrmSelectedId(r.chat); setCrmSendWarn('');
+      if (apiModeRef.current) cargarMensajesChat(r.chat);
+      setMobileChatOpen(true);
+    }
+    if (r.section === 'estadisticas') {
+      if (r.preset && PRESETS_STATS.includes(r.preset)) { setStatsPreset(r.preset as StatsPreset); setStatsRango(rangoDePreset(r.preset as StatsPreset)); }
+      else if (r.desde && r.hasta) { setStatsPreset('rango'); setStatsRango({ desde: r.desde, hasta: r.hasta }); }
+    }
+  }
 
   function go(id: VendedorSection) {
     if (!puedeVerSeccion(id)) return; // el agente no entra a secciones bloqueadas
@@ -1629,6 +1686,7 @@ export function useDealFlowState() {
   useEffect(() => {
     void apiMe().then(({ available, user }) => {
       setApiMode(available);
+      apiModeRef.current = available;
       // Recuerda si hay backend (para el próximo arranque) y purga el snapshot de la
       // demo, que en modo servidor no debe usarse nunca.
       try {
@@ -1641,8 +1699,10 @@ export function useDealFlowState() {
         if (user) setMode(rol === 'vendedor' ? 'vendedor' : 'admin');
         if (rol === 'superadmin') setAdminSection('superadmin');
         if (user && user.role === 'VENDEDOR' && user.esDueno === false) setSection('crm'); // el agente arranca en su CRM
+        // Si la URL dice dónde estaba (F5, enlace compartido), se abre ahí mismo.
+        if (user) aplicarRuta(leerRuta(), rol, user.role === 'VENDEDOR' && user.esDueno === false);
       }
-    }).finally(() => setArrancando(false)); // ya sabemos si hay sesión: quita el preloader de arranque
+    }).finally(() => { rutaLista.current = true; setArrancando(false); }); // ya sabemos si hay sesión: quita el preloader de arranque
   }, []);
 
   // Cuentas de la demo estática (sin backend).
@@ -1657,6 +1717,8 @@ export function useDealFlowState() {
     setSection(user.role === 'vendedor' && user.esDueno === false ? 'crm' : 'resumen');
     setAdminSection(user.role === 'superadmin' ? 'superadmin' : 'ventas');
     setLoginError('');
+    aplicarRuta(leerRuta(), user.role, user.role === 'vendedor' && user.esDueno === false);
+    rutaLista.current = true;
   }
 
   async function login(email: string, password: string) {
@@ -1921,7 +1983,7 @@ export function useDealFlowState() {
   }
   // Al abrir un chat, trae su conversación completa al instante (sin esperar el sondeo).
   function cargarMensajesChat(id: number | string) {
-    if (!apiMode) return;
+    if (!apiModeRef.current) return;
     void apiLeadMensajes(String(id)).then(({ data }) => {
       if (!data) return;
       const msgs = mapApiMensajes(data.mensajes);
@@ -3312,7 +3374,7 @@ export function useDealFlowState() {
   const filterList = ['Todos', ...ESTADOS_TODOS];
   const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   // Filtro por fecha del pedido (zona horaria de Bogot\u00e1).
-  const [fechaFilter, setFechaFilter] = useState<'Todas' | 'Hoy' | 'Ayer' | '7 d\u00edas'>('Todas');
+  const [fechaFilter, setFechaFilter] = useRecordado<'Todas' | 'Hoy' | 'Ayer' | '7 d\u00edas'>('pedidos:fecha', 'Todas');
   const hace7 = new Date(Date.now() - 6 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const pasaFecha = (o: Order) => {
     const f = o.fecha || hoyStr;

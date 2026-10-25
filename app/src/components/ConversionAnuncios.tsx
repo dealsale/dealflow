@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useRecordado } from '../lib/rutas';
 import { apiStatsAnuncios, apiSincronizarAnuncios, type ConversionAnuncio, type EstadoMetaAds } from '../lib/api';
 import { fmt } from '../lib/format';
 import { GroupedBars, PALETA } from './Charts';
@@ -58,17 +59,17 @@ export function ConversionAnuncios({ desde, hasta, onDia }: { desde: string; has
   const [datos, setDatos] = useState<{ anuncios: ConversionAnuncio[]; organico: ConversionAnuncio | null; meta: EstadoMetaAds } | null>(null);
   const [cargando, setCargando] = useState(false);
   const [abierto, setAbierto] = useState<string>('');
-  const [orden, setOrden] = useState<Orden>('ventas');
-  const [nivel, setNivel] = useState<Nivel>('anuncio');
+  const [orden, setOrden] = useRecordado<Orden>('anuncios:orden', 'ventas');
+  const [nivel, setNivel] = useRecordado<Nivel>('anuncios:nivel', 'anuncio');
   const [msg, setMsg] = useState('');
   const [recarga, setRecarga] = useState(0);
   // Filtros y vista.
-  const [vista, setVista] = useState<'anuncio' | 'dia'>('anuncio');
+  const [vista, setVista] = useRecordado<'anuncio' | 'dia'>('anuncios:vista', 'anuncio');
   const [fCamp, setFCamp] = useState('');
   const [fAd, setFAd] = useState('');
-  const [soloVentas, setSoloVentas] = useState(false);
+  const [soloVentas, setSoloVentas] = useRecordado('anuncios:soloVentas', false);
   const [buscar, setBuscar] = useState('');
-  const [conOrganico, setConOrganico] = useState(false);
+  const [conOrganico, setConOrganico] = useRecordado('anuncios:organico', false);
   useEffect(() => {
     let vivo = true;
     setCargando(true);

@@ -1,4 +1,4 @@
-import { conEspera, textoDeUrl } from '../components/Proceso';
+import { conEspera, textoDeUrl, ambitoDeUrl } from '../components/Proceso';
 export interface ApiUser {
   id: string;
   email: string;
@@ -90,7 +90,7 @@ export const apiChangePassword = (actual: string, nueva: string) => req<{ ok: tr
 async function req<T>(url: string, method: string, body?: unknown): Promise<{ data?: T; error?: string }> {
   // Guardados y procesos: ventana de "procesando" que bloquea la pantalla si tarda.
   const texto = method === 'GET' ? null : textoDeUrl(url, method);
-  return texto ? conEspera(texto, reqBase<T>(url, method, body)) : reqBase<T>(url, method, body);
+  return texto ? conEspera(texto, reqBase<T>(url, method, body), ambitoDeUrl(url)) : reqBase<T>(url, method, body);
 }
 
 async function reqBase<T>(url: string, method: string, body?: unknown): Promise<{ data?: T; error?: string }> {

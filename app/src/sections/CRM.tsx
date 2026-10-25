@@ -1,4 +1,5 @@
 import { apiAnuncioProducto, apiVincularAnuncio } from '../lib/api';
+import { useRecordado } from '../lib/rutas';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../components/Ventana24h';
 import { useEffect, useRef, useState } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
@@ -149,7 +150,7 @@ export function CRM({ df }: { df: DealFlowState }) {
   const [rangoFecha, setRangoFecha] = useState<'Todas' | 'Hoy' | 'Ayer' | '7 días' | 'Personalizado'>('Todas');
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
-  const [estadoPill, setEstadoPill] = useState<EstadoPill>('todos');
+  const [estadoPill, setEstadoPill] = useRecordado<EstadoPill>('inbox:estado', 'todos');
   const [nota, setNota] = useState('');
   const [panelCliente, setPanelCliente] = useState(false);
   useEffect(() => {
