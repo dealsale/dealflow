@@ -50,8 +50,9 @@ async function bajarGuiaRemota(storeId: string, o: Fila, url: string): Promise<s
     if (!r.ok) return '';
     const buf = Buffer.from(await r.arrayBuffer());
     const ct = r.headers.get('content-type') || '';
-    const { guardarArchivo, pdfAPng } = await import('./media.js');
-    const png = ct.includes('pdf') || /\.pdf(\?|$)/i.test(url) ? pdfAPng(buf) : /image\//.test(ct) ? buf : null;
+    const { guardarArchivo, pdfAPng, guiaAcostada } = await import('./media.js');
+    // Interrapidísimo: su etiqueta viene acostada → se endereza (también en el aviso automático).
+    const png = ct.includes('pdf') || /\.pdf(\?|$)/i.test(url) ? pdfAPng(buf, { enderezar: guiaAcostada({ ...o, guia_url: url }) }) : /image\//.test(ct) ? buf : null;
     if (!png) return '';
     const img = guardarArchivo(storeId, `guia-DF${txt(o.numero)}-${uid().slice(0, 6)}.png`, png);
     db.prepare('UPDATE orders SET guia_img = ? WHERE id = ?').run(img, txt(o.id));
