@@ -1120,6 +1120,7 @@ api.post('/orders', requireAuth, requireStore, (req, res) => {
     const nprod = limpios.reduce((a, i) => a + i.qty, 0);
     void import('./push.js').then((p) => p.enviarPush(sid, 'pedidos', `Nuevo pedido DF-${numero} 🛒`, `${cliente} · $${total.toLocaleString('es-CO')} · ${nprod} producto${nprod === 1 ? '' : 's'}`, { url: '/' })).catch(() => {});
     void import('./correo.js').then((c) => c.correoPedidoNuevo(sid, oid, `creado a mano (${origen})`)).catch(() => {});
+    void import('./metaCapi.js').then((c) => c.avisarCapi(sid)).catch(() => {});
   }
   res.json({ ok: true, id: 'DF-' + numero, rowId: oid });
 });

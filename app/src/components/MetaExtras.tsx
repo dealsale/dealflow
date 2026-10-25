@@ -79,7 +79,7 @@ export function CapiCard() {
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.55 }}>
-          Cada pedido de un cliente que llegó por un anuncio (Click a WhatsApp o Messenger) se le reporta a Meta con su valor. Los chats orgánicos no se envían. Se revisa solo cada 5 minutos.
+          Cada pedido de un cliente que llegó por un anuncio (Click a WhatsApp o Messenger) se le reporta a Meta con su valor. Los chats orgánicos no se envían. Es automático: cada venta se reporta unos 2 minutos después de entrar (y se revisa cada minuto).
         </div>
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5 }}>1. Dataset de Meta</div>
