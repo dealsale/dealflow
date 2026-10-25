@@ -67,7 +67,12 @@ app.use(async (req, res, next) => {
   if (!host || /(^|\.)dealflow\.(sbs|co)(:\d+)?$|^localhost|^127\.|railway\.app(:\d+)?$/.test(host)) return next();
   const L = await import('./landings.js');
   const storeId = L.tiendaDeHost(host);
-  if (!storeId) return next();
+  if (!storeId) {
+    // El dominio de las landings sin tienda (dflw.store, www., landings.): a la página de DealFlow.
+    const h = host.replace(/:\d+$/, '');
+    if (L.RAIZ_LANDINGS && (h === L.RAIZ_LANDINGS || h.endsWith('.' + L.RAIZ_LANDINGS)) && req.path !== '/l/ping') return res.redirect(302, 'https://dealflow.sbs');
+    return next();
+  }
   if (/^\/l\/(media|api)\//.test(req.path)) return next();
   if (req.path === '/robots.txt') return res.type('text/plain').send('User-agent: *\nAllow: /\n');
   const m = req.method === 'GET' ? req.path.match(/^\/([a-z0-9-]{0,60})\/?$/i) : null;
@@ -104,7 +109,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'landing-premium-dominios',
+    build: 'landings-dflw-store',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
