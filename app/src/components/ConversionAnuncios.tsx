@@ -3,6 +3,7 @@ import { apiStatsAnuncios, apiSincronizarAnuncios, type ConversionAnuncio, type 
 import { fmt } from '../lib/format';
 import { GroupedBars, PALETA } from './Charts';
 import { enProceso } from './Proceso';
+import { Dropdown } from './Dropdown';
 
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 18, boxShadow: '0 1px 2px rgba(15,23,42,.04)' };
 type Orden = 'ventas' | 'chats' | 'conversion' | 'entregados' | 'gasto' | 'roas';
@@ -53,7 +54,7 @@ function agrupar(filas: ConversionAnuncio[], nivel: Nivel): ConversionAnuncio[] 
  * pedidos → despachados → entregados), el dinero que dejó, los productos que vendió y,
  * con el Administrador de anuncios conectado, cuánto costó (costo por chat, por pedido y ROAS).
  */
-export function ConversionAnuncios({ desde, hasta }: { desde: string; hasta: string }) {
+export function ConversionAnuncios({ desde, hasta, onDia }: { desde: string; hasta: string; onDia?: (fecha: string) => void }) {
   const [datos, setDatos] = useState<{ anuncios: ConversionAnuncio[]; organico: ConversionAnuncio | null; meta: EstadoMetaAds } | null>(null);
   const [cargando, setCargando] = useState(false);
   const [abierto, setAbierto] = useState<string>('');
@@ -61,6 +62,13 @@ export function ConversionAnuncios({ desde, hasta }: { desde: string; hasta: str
   const [nivel, setNivel] = useState<Nivel>('anuncio');
   const [msg, setMsg] = useState('');
   const [recarga, setRecarga] = useState(0);
+  // Filtros y vista.
+  const [vista, setVista] = useState<'anuncio' | 'dia'>('anuncio');
+  const [fCamp, setFCamp] = useState('');
+  const [fAd, setFAd] = useState('');
+  const [soloVentas, setSoloVentas] = useState(false);
+  const [buscar, setBuscar] = useState('');
+  const [conOrganico, setConOrganico] = useState(false);
   useEffect(() => {
     let vivo = true;
     setCargando(true);
@@ -78,8 +86,21 @@ export function ConversionAnuncios({ desde, hasta }: { desde: string; hasta: str
 
   const meta = datos?.meta;
   const conGasto = (datos?.anuncios || []).some((f) => f.gasto > 0);
-  const filas = agrupar(datos?.anuncios || [], nivel).sort((a, b) => (b[orden] as number) - (a[orden] as number) || b.chats - a.chats);
-  const todas = datos?.organico && nivel === 'anuncio' ? [...filas, datos.organico] : filas;
+  const campanas = [...new Map((datos?.anuncios || []).filter((f) => f.campaignId).map((f) => [f.campaignId, f.campaignName || f.campaignId])).entries()];
+  const q = buscar.trim().toLowerCase();
+  const filtrados = (datos?.anuncios || []).filter((f) =>
+    (!fCamp || f.campaignId === fCamp) && (!fAd || f.id === fAd) && (!soloVentas || f.ventas > 0)
+    && (!q || [f.titular, f.adName, f.campaignName, f.adsetName, f.producto].some((x) => (x || '').toLowerCase().includes(q))));
+  const hayFiltro = !!(fCamp || fAd || soloVentas || q);
+  const filas = agrupar(filtrados, nivel).sort((a, b) => (b[orden] as number) - (a[orden] as number) || b.chats - a.chats);
+  const todas = datos?.organico && nivel === 'anuncio' && !hayFiltro ? [...filas, datos.organico] : filas;
+  // Vista por día: suma de los anuncios filtrados (y el orgánico si se pide).
+  const fuentesDia = [...filtrados, ...(conOrganico && datos?.organico && !hayFiltro ? [datos.organico] : [])];
+  const porDia = (fuentesDia[0]?.serie || []).map((d, i) => {
+    const x = { fecha: d.fecha, gasto: 0, chats: 0, pedidos: 0, ventas: 0 };
+    for (const f of fuentesDia) { const s = f.serie[i]; if (s) { x.gasto += s.gasto; x.chats += s.chats; x.pedidos += s.pedidos; x.ventas += s.ventas; } }
+    return x;
+  });
   const tot = derivar(filas.reduce((a, f) => ({ ...a, chats: a.chats + f.chats, pedidos: a.pedidos + f.pedidos, cancelados: a.cancelados + f.cancelados, ventas: a.ventas + f.ventas, entregados: a.entregados + f.entregados, devueltos: a.devueltos + f.devueltos, gasto: a.gasto + f.gasto }), { ...(filas[0] || ({} as ConversionAnuncio)), chats: 0, pedidos: 0, cancelados: 0, ventas: 0, entregados: 0, devueltos: 0, gasto: 0 }));
   const th: React.CSSProperties = { textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', padding: '8px 8px', whiteSpace: 'nowrap', borderBottom: '1px solid var(--df-border)' };
   const td: React.CSSProperties = { textAlign: 'right', fontSize: 13, padding: '9px 8px', whiteSpace: 'nowrap', borderBottom: '1px solid var(--df-border)', fontVariantNumeric: 'tabular-nums' };
@@ -107,7 +128,7 @@ export function ConversionAnuncios({ desde, hasta }: { desde: string; hasta: str
         {meta?.conectada ? (
           <>
             <span style={{ fontWeight: 700, color: meta.error ? 'var(--df-danger)' : 'var(--df-success)' }}>● Meta Ads{meta.cuenta ? `: ${meta.cuenta}` : ''}</span>
-            <span>{meta.error ? meta.error : meta.ultima ? `actualizado ${new Date(meta.ultima.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' })} · se actualiza solo cada hora` : 'aún no se ha sincronizado'}</span>
+            <span>{meta.error ? meta.error : meta.ultima ? `actualizado ${new Date(meta.ultima.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' })} · se actualiza solo cada 30 minutos` : 'aún no se ha sincronizado'}</span>
             <button onClick={() => void sincronizar()} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--df-brand-dark)', fontWeight: 700, fontFamily: 'inherit', fontSize: 12, cursor: 'pointer' }}>↻ Traer ahora</button>
           </>
         ) : (
@@ -116,6 +137,28 @@ export function ConversionAnuncios({ desde, hasta }: { desde: string; hasta: str
         {msg && <span style={{ color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</span>}
       </div>
 
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '10px 0 6px' }}>
+        <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 8, overflow: 'hidden' }}>
+          <button onClick={() => setVista('anuncio')} style={seg(vista === 'anuncio')}>📢 Por anuncio</button>
+          <button onClick={() => setVista('dia')} style={seg(vista === 'dia')}>📅 Por día</button>
+        </div>
+        {campanas.length > 0 && (
+          <div style={{ minWidth: 190 }}>
+            <Dropdown ariaLabel="Campaña" value={fCamp} onChange={(v) => { setFCamp(v); setFAd(''); }} options={[{ value: '', label: 'Todas las campañas' }, ...campanas.map(([id, n]) => ({ value: id, label: n }))]} />
+          </div>
+        )}
+        <div style={{ minWidth: 200 }}>
+          <Dropdown ariaLabel="Anuncio" buscar value={fAd} onChange={setFAd}
+            options={[{ value: '', label: 'Todos los anuncios' }, ...(datos?.anuncios || []).filter((f) => !fCamp || f.campaignId === fCamp).map((f) => ({ value: f.id, label: f.titular }))]} />
+        </div>
+        <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar anuncio, campaña o producto…" style={{ flex: '1 1 180px', minWidth: 160, border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}><input type="checkbox" checked={soloVentas} onChange={(e) => setSoloVentas(e.target.checked)} /> Solo con ventas</label>
+        {vista === 'dia' && !hayFiltro && <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}><input type="checkbox" checked={conOrganico} onChange={(e) => setConOrganico(e.target.checked)} /> Incluir orgánico</label>}
+        {hayFiltro && <button onClick={() => { setFCamp(''); setFAd(''); setSoloVentas(false); setBuscar(''); }} style={{ background: 'none', border: 'none', color: 'var(--df-brand-dark)', fontWeight: 700, fontFamily: 'inherit', fontSize: 12, cursor: 'pointer' }}>Quitar filtros</button>}
+      </div>
+
+      {vista === 'dia' ? <TablaDias dias={porDia} conGasto={conGasto} onDia={onDia} /> : <>
       <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', margin: '4px 0 12px', lineHeight: 1.5 }}>
         Por cada anuncio: cuántos chats llegaron, cuántos respondieron, cuántos compraron, cuántos pedidos llegaron al cliente y qué productos vendió. Toca una fila para ver el detalle.
         {filas.length > 0 && <> En el periodo, los anuncios trajeron <b>{tot.chats}</b> chats, <b>{tot.pedidos}</b> pedidos (<b>{tot.conversion}%</b>) y <b>{fmt(tot.ventas)}</b>{tot.gasto > 0 && <> con una inversión de <b>{fmt(tot.gasto)}</b>: <b>{fmt(tot.costoChat)}</b> por chat, <b>{fmt(tot.costoPedido)}</b> por pedido y ROAS <b>{tot.roas}x</b></>}.</>}
@@ -152,6 +195,73 @@ export function ConversionAnuncios({ desde, hasta }: { desde: string; hasta: str
             </table>
           </div>
         )}
+      </>}
+    </div>
+  );
+}
+
+/** Vista por día: gasto, chats, pedidos y ventas de los anuncios filtrados, día por día. */
+function TablaDias({ dias, conGasto, onDia }: { dias: { fecha: string; gasto: number; chats: number; pedidos: number; ventas: number }[]; conGasto: boolean; onDia?: (fecha: string) => void }) {
+  const filas = [...dias].reverse();
+  const tot = dias.reduce((a, d) => ({ gasto: a.gasto + d.gasto, chats: a.chats + d.chats, pedidos: a.pedidos + d.pedidos, ventas: a.ventas + d.ventas }), { gasto: 0, chats: 0, pedidos: 0, ventas: 0 });
+  const th: React.CSSProperties = { textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', padding: '8px 8px', whiteSpace: 'nowrap', borderBottom: '1px solid var(--df-border)' };
+  const td: React.CSSProperties = { textAlign: 'right', fontSize: 13, padding: '8px 8px', whiteSpace: 'nowrap', borderBottom: '1px solid var(--df-border)', fontVariantNumeric: 'tabular-nums' };
+  const d0 = (n: number) => (n ? fmt(n) : '—');
+  const celdas = (d: { gasto: number; chats: number; pedidos: number; ventas: number }) => {
+    const roas = d.gasto ? Math.round((d.ventas / d.gasto) * 100) / 100 : 0;
+    return (
+      <>
+        {conGasto && <td style={{ ...td, fontWeight: 700 }}>{d0(Math.round(d.gasto))}</td>}
+        <td style={td}>{d.chats}</td>
+        {conGasto && <td style={td}>{d.gasto && d.chats ? fmt(Math.round(d.gasto / d.chats)) : '—'}</td>}
+        <td style={{ ...td, fontWeight: 700 }}>{d.pedidos}</td>
+        <td style={td}>{d.chats ? `${Math.round((d.pedidos / d.chats) * 1000) / 10}%` : '—'}</td>
+        {conGasto && <td style={td}>{d.gasto && d.pedidos ? fmt(Math.round(d.gasto / d.pedidos)) : '—'}</td>}
+        <td style={{ ...td, fontWeight: 800 }}>{fmt(d.ventas)}</td>
+        {conGasto && <td style={{ ...td, fontWeight: 800, color: !d.gasto ? undefined : roas >= 3 ? 'var(--df-success)' : roas >= 1.5 ? 'var(--df-warning-mid)' : 'var(--df-danger)' }}>{d.gasto ? `${roas}x` : '—'}</td>}
+      </>
+    );
+  };
+  const etiqueta = (f: string) => new Date(f + 'T12:00:00Z').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  if (!dias.length) return <div style={{ color: 'var(--df-text-faint)', fontSize: 13, padding: '18px 0' }}>Sin datos en este periodo.</div>;
+  return (
+    <div>
+      {dias.length > 1 && (
+        <div style={{ margin: '6px 0 12px' }}>
+          <GroupedBars alto={170} data={dias.map((d) => ({ fecha: d.fecha, chats: d.chats, pedidos: d.pedidos }))}
+            series={[{ key: 'chats', label: 'Chats', color: PALETA[1] }, { key: 'pedidos', label: 'Pedidos', color: PALETA[3] }]} />
+        </div>
+      )}
+      <div style={{ overflowX: 'auto', margin: '0 -6px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: conGasto ? 760 : 480 }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, textAlign: 'left' }}>Día</th>
+              {conGasto && <th style={th}>💸 Gasto</th>}
+              <th style={th}>💬 Chats</th>
+              {conGasto && <th style={th}>Costo/chat</th>}
+              <th style={th}>🛒 Pedidos</th>
+              <th style={th}>Conversión</th>
+              {conGasto && <th style={th}>Costo/pedido</th>}
+              <th style={th}>💰 Ventas</th>
+              {conGasto && <th style={th}>ROAS</th>}
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={{ background: 'var(--df-bg)' }}>
+              <td style={{ ...td, textAlign: 'left', fontWeight: 800 }}>Total</td>
+              {celdas(tot)}
+            </tr>
+            {filas.map((d) => (
+              <tr key={d.fecha} onClick={onDia ? () => onDia(d.fecha) : undefined} title={onDia ? 'Ver solo este día' : undefined} style={{ cursor: onDia ? 'pointer' : 'default' }}>
+                <td style={{ ...td, textAlign: 'left', textTransform: 'capitalize' }}>{etiqueta(d.fecha)}</td>
+                {celdas(d)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {onDia && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Toca un día para ver solo ese día en todas las estadísticas.</div>}
     </div>
   );
 }
