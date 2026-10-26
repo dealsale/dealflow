@@ -1,6 +1,7 @@
+import { clicAparte } from '../components/EnlaceApp';
 import { apiAnuncioProducto, apiVincularAnuncio } from '../lib/api';
 import { CargandoChat } from '../components/CargandoChat';
-import { useRecordado } from '../lib/rutas';
+import { urlDe, useRecordado } from '../lib/rutas';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../components/Ventana24h';
 import { useEffect, useRef, useState } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
@@ -276,7 +277,7 @@ export function CRM({ df }: { df: DealFlowState }) {
             </div>
           )}
           {chatsVisibles.map((c) => (
-            <div key={c.id} onClick={c.select} style={c.crmRowStyle}>
+            <div key={c.id} {...clicAparte(urlDe({ mode: 'vendedor', section: 'crm', chat: String(c.id) }), c.select)} style={c.crmRowStyle}>
               <div style={c.avatarStyle}>{c.iniciales}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>

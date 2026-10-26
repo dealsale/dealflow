@@ -21,6 +21,8 @@ import {
   IconWhatsApp,
 } from './icons';
 import type { AdminSection, VendedorSection } from '../types';
+import { EnlaceApp } from './EnlaceApp';
+import { urlDe } from '../lib/rutas';
 
 export function Sidebar({ df }: { df: DealFlowState }) {
   const vSection = df.isVendedor ? df.section : null;
@@ -46,18 +48,18 @@ export function Sidebar({ df }: { df: DealFlowState }) {
     extra?: React.ReactNode,
   ) =>
     df.puedeVerSeccion(id) ? (
-      <div key={id} onClick={() => df.go(id)} style={navStylePremium(vSection === id)}>
+      <EnlaceApp key={id} href={urlDe({ mode: 'vendedor', section: id })} onAbrir={() => df.go(id)} title="Ctrl + clic para abrir en otra pestaña" style={navStylePremium(vSection === id)}>
         {icon}
         <span>{label}</span>
         {extra}
-      </div>
+      </EnlaceApp>
     ) : null;
 
   const adminItem = (id: AdminSection, icon: React.ReactNode, label: string) => (
-    <div key={id} onClick={() => df.goAdmin(id)} style={navStylePremium(aSection === id)}>
+    <EnlaceApp key={id} href={urlDe({ mode: 'admin', adminSection: id })} onAbrir={() => df.goAdmin(id)} style={navStylePremium(aSection === id)}>
       {icon}
       <span>{label}</span>
-    </div>
+    </EnlaceApp>
   );
 
   return (
@@ -72,7 +74,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
           {item('resumen', <IconResumen />, 'Resumen')}
           {item('estadisticas', <IconEstadisticas />, 'Estadísticas')}
           {item('productos', <IconProductos />, 'Productos')}
-          {df.landingsHabilitadas && item('landings', <IconLandings />, 'Landings')}
+          {item('landings', <IconLandings />, 'Tienda en línea')}
           {item('asistente', <IconAsistente />, 'Asistente')}
           {item(
             'whatsapp',
@@ -114,7 +116,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             {/* El superadmin ve TODO lo del admin y, además, "Todas las tiendas". */}
             {df.isSuperadmin && adminItem('superadmin', <span style={{ fontSize: 16 }}>🌐</span>, 'Todas las tiendas')}
             {df.isSuperadmin && adminItem('plantillas', <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA')}
-            {df.isSuperadmin && adminItem('landings', <span style={{ fontSize: 16 }}>🛍️</span>, 'Landings')}
+            {df.isSuperadmin && adminItem('landings', <span style={{ fontSize: 16 }}>🛍️</span>, 'Tienda en línea')}
             {adminItem('trazabilidad', <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad')}
             {adminItem('ventas', <IconVentas />, 'Ventas')}
             {adminItem('planes', <IconPlanes />, 'Planes')}

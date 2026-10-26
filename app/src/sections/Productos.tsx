@@ -1,3 +1,5 @@
+import { clicAparte } from '../components/EnlaceApp';
+import { urlDe } from '../lib/rutas';
 import { useState, useEffect } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
@@ -870,7 +872,8 @@ export function Productos({ df }: { df: DealFlowState }) {
         {df.products.map((p) => (
           <div key={p.id}>
             <div
-              onClick={p.toggle}
+              {...clicAparte(urlDe({ mode: 'vendedor', section: 'productos', producto: String(p.id) }), p.toggle)}
+              title="Ctrl + clic para abrir este producto en otra pestaña"
               className="df-row-hover df-prow"
               style={{ display: 'grid', gridTemplateColumns: '52px 1fr 120px 130px 24px', alignItems: 'center', gap: 14, padding: '12px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}
             >

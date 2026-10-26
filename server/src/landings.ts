@@ -18,6 +18,7 @@ import { slugTienda, BASE_TIENDA } from './tiendaPublica.js';
 import { trazar } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
 import { mediaPath } from './media.js';
+import { renderLanding, renderCatalogo } from './landingPlantillas.js';
 
 db.exec(`CREATE TABLE IF NOT EXISTS landings (
   id TEXT PRIMARY KEY,
@@ -46,19 +47,46 @@ for (const col of ["landing_dominio TEXT NOT NULL DEFAULT ''", "landing_dominio_
   try { db.exec(`ALTER TABLE stores ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 
-export const landingsHabilitadas = (storeId: string) =>
-  !!(db.prepare('SELECT landings_habilitado FROM stores WHERE id = ?').get(storeId) as { landings_habilitado: number } | undefined)?.landings_habilitado;
+// Tienda en línea: membresía mensual. landings_habilitado = cortesía del superadmin (sin pago).
+for (const col of ["tienda_vence TEXT NOT NULL DEFAULT ''", "tienda_config TEXT NOT NULL DEFAULT '{}'"]) {
+  try { db.exec(`ALTER TABLE stores ADD COLUMN ${col}`); } catch { /* ya existe */ }
+}
+const hoyCo = () => new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+const masDias = (fecha: string, n: number) => { const d = new Date(fecha + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+/** Días de gracia después de vencer: las páginas siguen en línea mientras renueva. */
+export const GRACIA_DIAS = 3;
+export interface Membresia { activa: boolean; cortesia: boolean; vence: string; diasRestantes: number; enGracia: boolean; precio: number }
+export function membresiaTienda(storeId: string): Membresia {
+  const r = db.prepare('SELECT landings_habilitado, tienda_vence FROM stores WHERE id = ?').get(storeId) as { landings_habilitado: number; tienda_vence: string } | undefined;
+  const cortesia = !!r?.landings_habilitado;
+  const vence = txt(r?.tienda_vence);
+  const hoy = hoyCo();
+  const dias = vence ? Math.round((Date.parse(vence + 'T12:00:00Z') - Date.parse(hoy + 'T12:00:00Z')) / 864e5) : -1;
+  return { activa: cortesia || dias >= 0, cortesia, vence, diasRestantes: dias, enGracia: !cortesia && !!vence && dias < 0 && dias >= -GRACIA_DIAS, precio: ajustesLandings().mensualidad };
+}
+/** ¿Puede crear y publicar? (membresía al día o cortesía) */
+export const landingsHabilitadas = (storeId: string) => membresiaTienda(storeId).activa;
+/** ¿Sus páginas siguen en línea? (incluye los días de gracia) */
+export const tiendaEnLinea = (storeId: string) => { const m = membresiaTienda(storeId); return m.activa || m.enGracia; };
+/** Suma un mes (30 días) desde hoy o desde el vencimiento, si aún no vence. */
+export function extenderMembresia(storeId: string, dias = 30): string {
+  const m = membresiaTienda(storeId);
+  const base = m.vence && m.vence >= hoyCo() ? m.vence : hoyCo();
+  const nueva = masDias(base, dias);
+  db.prepare('UPDATE stores SET tienda_vence = ? WHERE id = ?').run(nueva, storeId);
+  return nueva;
+}
 export function habilitarLandings(storeId: string, si: boolean): boolean {
   return db.prepare('UPDATE stores SET landings_habilitado = ? WHERE id = ?').run(si ? 1 : 0, storeId).changes > 0;
 }
 /** Tiendas con su permiso y cuántas landings tienen (para el menú del superadmin). */
-export function tiendasLandings(): { id: string; tienda: string; correo: string; plan: string; activa: boolean; habilitado: boolean; landings: number; publicadas: number; pedidos: number; dominio: string; dominioEstado: string }[] {
-  return (db.prepare(`SELECT s.id, s.nombre, s.correo, s.plan, s.activa, s.landings_habilitado, s.landing_dominio, s.landing_dominio_estado,
+export function tiendasLandings(): { id: string; tienda: string; correo: string; plan: string; activa: boolean; habilitado: boolean; vence: string; landings: number; publicadas: number; pedidos: number; dominio: string; dominioEstado: string }[] {
+  return (db.prepare(`SELECT s.id, s.nombre, s.correo, s.plan, s.activa, s.landings_habilitado, s.tienda_vence, s.landing_dominio, s.landing_dominio_estado,
       (SELECT COUNT(*) FROM landings l WHERE l.store_id = s.id) n,
       (SELECT COUNT(*) FROM landings l WHERE l.store_id = s.id AND l.estado = 'publicada') pub,
       (SELECT COALESCE(SUM(pedidos),0) FROM landings l WHERE l.store_id = s.id) ped
-    FROM stores s WHERE COALESCE(s.oculta,0) = 0 ORDER BY s.landings_habilitado DESC, s.nombre COLLATE NOCASE`).all() as Fila[])
-    .map((r) => ({ id: txt(r.id), tienda: txt(r.nombre), correo: txt(r.correo), plan: txt(r.plan), activa: !!r.activa, habilitado: !!r.landings_habilitado, landings: num(r.n), publicadas: num(r.pub), pedidos: num(r.ped), dominio: txt(r.landing_dominio), dominioEstado: txt(r.landing_dominio_estado) }));
+    FROM stores s WHERE COALESCE(s.oculta,0) = 0 ORDER BY (s.landings_habilitado = 1 OR s.tienda_vence >= date('now','-5 hours')) DESC, s.nombre COLLATE NOCASE`).all() as Fila[])
+    .map((r) => ({ id: txt(r.id), tienda: txt(r.nombre), correo: txt(r.correo), plan: txt(r.plan), activa: !!r.activa, habilitado: !!r.landings_habilitado, vence: txt(r.tienda_vence), landings: num(r.n), publicadas: num(r.pub), pedidos: num(r.ped), dominio: txt(r.landing_dominio), dominioEstado: txt(r.landing_dominio_estado) }));
 }
 
 type Fila = Record<string, unknown>;
@@ -70,23 +98,15 @@ const slugify = (s: string) => String(s || '').toLowerCase().normalize('NFD').re
   .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'producto';
 
 // ── Ajustes del equipo DealFlow ─────────────────────────────────────────
-export interface AjustesLandings { precio: number; gratis: number }
+export interface AjustesLandings { mensualidad: number }
 export function ajustesLandings(): AjustesLandings {
   const g = (k: string, d: number) => num((db.prepare('SELECT valor FROM landings_ajustes WHERE clave = ?').get(k) as { valor: string } | undefined)?.valor, d);
-  return { precio: Math.max(0, Math.round(g('precio', 49900))), gratis: Math.max(0, Math.round(g('gratis', 1))) };
+  return { mensualidad: Math.max(0, Math.round(g('mensualidad', 25000))) };
 }
 export function guardarAjustesLandings(p: Partial<AjustesLandings>): AjustesLandings {
   const up = db.prepare('INSERT INTO landings_ajustes (clave, valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor');
-  if (p.precio !== undefined) up.run('precio', String(Math.max(0, Math.round(num(p.precio)))));
-  if (p.gratis !== undefined) up.run('gratis', String(Math.max(0, Math.min(50, Math.round(num(p.gratis))))));
+  if (p.mensualidad !== undefined) up.run('mensualidad', String(Math.max(0, Math.round(num(p.mensualidad)))));
   return ajustesLandings();
-}
-
-/** Cuántas landings gratis le quedan a la tienda y cuánto cuesta una nueva. */
-export function cuotaLandings(storeId: string): { gratisTotal: number; gratisUsadas: number; gratisRestantes: number; precio: number } {
-  const a = ajustesLandings();
-  const usadas = (db.prepare("SELECT COUNT(*) n FROM landings WHERE store_id = ? AND modo = 'gratis'").get(storeId) as { n: number }).n;
-  return { gratisTotal: a.gratis, gratisUsadas: usadas, gratisRestantes: Math.max(0, a.gratis - usadas), precio: a.precio };
 }
 
 // ── Datos de una landing ───────────────────────────────────────────────
@@ -343,12 +363,8 @@ export function publicarLanding(storeId: string, id: string): { ok: true; landin
   const d = limpiarDatos(pj(txt(r.datos), {}));
   if (!d.galeria.length) return { error: 'Agrega al menos una foto del producto en la galería antes de publicar.' };
   if (!d.precio && !d.bundles.length) return { error: 'Ponle precio al producto (o al menos una oferta) antes de publicar.' };
-  if (!r.desbloqueada) {
-    const c = cuotaLandings(storeId);
-    if (c.gratisRestantes > 0 || c.precio <= 0) {
-      db.prepare("UPDATE landings SET desbloqueada = 1, modo = ? WHERE id = ?").run(c.gratisRestantes > 0 ? 'gratis' : 'sin-costo', id);
-    } else return { requierePago: true, precio: c.precio };
-  }
+  const m = membresiaTienda(storeId);
+  if (!m.activa && m.precio > 0) return { requierePago: true, precio: m.precio };
   db.prepare("UPDATE landings SET estado = 'publicada', publicada_at = COALESCE(publicada_at, datetime('now')), updated_at = datetime('now') WHERE id = ?").run(id);
   registrarLog(storeId, 'info', 'landing', `Landing publicada: ${d.nombre}.`);
   return { ok: true, landing: verLanding(storeId, id)! };
@@ -360,13 +376,55 @@ export function despublicarLanding(storeId: string, id: string): boolean {
 // ── Página pública ─────────────────────────────────────────────────────
 export function landingPublica(tienda: string, slug: string): { storeId: string; id: string; datos: LandingDatos } | null {
   const s = db.prepare('SELECT id FROM stores WHERE slug = ?').get(String(tienda).toLowerCase()) as { id: string } | undefined;
-  if (!s) return null;
+  if (!s || !tiendaEnLinea(s.id)) return null;
   const r = db.prepare("SELECT id, datos FROM landings WHERE store_id = ? AND slug = ? AND estado = 'publicada'").get(s.id, String(slug).toLowerCase()) as { id: string; datos: string } | undefined;
   if (!r) return null;
   return { storeId: s.id, id: r.id, datos: limpiarDatos(pj(r.datos, {})) };
 }
+// ── La tienda (página de inicio con todos los productos publicados) ─────
+export interface TiendaConfig { nombre: string; logo: string; banner: string; titulo: string; descripcion: string; anuncios: string[]; colorPrincipal: string; colorBoton: string; colorAcento: string; whatsapp: string; pixelMeta: string }
+export function configTienda(storeId: string): TiendaConfig {
+  const r = db.prepare('SELECT nombre, tienda_config FROM stores WHERE id = ?').get(storeId) as { nombre: string; tienda_config: string } | undefined;
+  const c = pj<Fila>(txt(r?.tienda_config), {}) || {};
+  return {
+    nombre: corto(c.nombre, 60) || txt(r?.nombre), logo: url(c.logo), banner: url(c.banner),
+    titulo: corto(c.titulo, 90), descripcion: largo(c.descripcion, 400),
+    anuncios: (Array.isArray(c.anuncios) ? c.anuncios : ['ENVÍO GRATIS', 'PAGO CONTRA ENTREGA']).map((x) => corto(x, 60)).filter(Boolean).slice(0, 6),
+    colorPrincipal: color(c.colorPrincipal, '#121212'), colorBoton: color(c.colorBoton, '#16a34a'), colorAcento: color(c.colorAcento, '#0f3a3f'),
+    whatsapp: txt(c.whatsapp).replace(/\D/g, '').slice(0, 15), pixelMeta: txt(c.pixelMeta).replace(/\D/g, '').slice(0, 20),
+  };
+}
+export function guardarConfigTienda(storeId: string, raw: unknown): TiendaConfig {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Fila;
+  db.prepare('UPDATE stores SET tienda_config = ? WHERE id = ?').run(JSON.stringify({ ...configTienda(storeId), ...r }), storeId);
+  const limpio = configTienda(storeId);
+  db.prepare('UPDATE stores SET tienda_config = ? WHERE id = ?').run(JSON.stringify(limpio), storeId);
+  return limpio;
+}
+export interface ProductoCatalogo { slug: string; nombre: string; foto: string; foto2: string; precio: number; precioAntes: number; calificacion: number; resenas: string }
+export function catalogoTienda(storeId: string): ProductoCatalogo[] {
+  return (db.prepare("SELECT slug, datos FROM landings WHERE store_id = ? AND estado = 'publicada' ORDER BY publicada_at DESC").all(storeId) as { slug: string; datos: string }[]).map((r) => {
+    const d = limpiarDatos(pj(r.datos, {}));
+    const b = d.bundles[0];
+    const precio = b ? b.precio / b.cantidad : d.precio;
+    const antes = b ? b.precioAntes / b.cantidad : d.precioAntes;
+    return { slug: r.slug, nombre: d.nombre, foto: d.galeria[0] || '', foto2: d.galeria[1] || '', precio: Math.round(precio), precioAntes: Math.round(antes > precio ? antes : 0), calificacion: d.calificacion, resenas: d.resenas };
+  });
+}
+/** Página de inicio de la tienda: la landing elegida o, si no hay, el catálogo. `base` = prefijo de los enlaces. */
+export function inicioTienda(storeId: string, base: string): { html: string; landingId: string } | null {
+  if (!tiendaEnLinea(storeId)) return null;
+  const ini = txt((db.prepare('SELECT landing_inicio FROM stores WHERE id = ?').get(storeId) as { landing_inicio: string } | undefined)?.landing_inicio);
+  if (ini) {
+    const r = db.prepare("SELECT id, datos FROM landings WHERE store_id = ? AND id = ? AND estado = 'publicada'").get(storeId, ini) as { id: string; datos: string } | undefined;
+    if (r) return { html: renderLanding(limpiarDatos(pj(r.datos, {})), { id: r.id, inicio: base }), landingId: r.id };
+  }
+  return { html: renderCatalogo(configTienda(storeId), catalogoTienda(storeId), base), landingId: '' };
+}
+
 /** Landing publicada de una tienda por su dirección (para el dominio propio). Sin slug = la de inicio. */
 export function landingDeTienda(storeId: string, slug: string): { storeId: string; id: string; datos: LandingDatos } | null {
+  if (!tiendaEnLinea(storeId)) return null;
   let r: { id: string; datos: string } | undefined;
   if (slug) r = db.prepare("SELECT id, datos FROM landings WHERE store_id = ? AND slug = ? AND estado = 'publicada'").get(storeId, slug.toLowerCase()) as typeof r;
   else {
@@ -422,7 +480,7 @@ const cf = () => (process.env.CF_API_TOKEN && process.env.CF_ZONE_ID ? { token: 
 export function tiendaDeHost(host: string): string | null {
   if (!hosts) {
     hosts = new Map();
-    for (const r of db.prepare("SELECT id, landing_dominio FROM stores WHERE landing_dominio != '' AND landings_habilitado = 1").all() as { id: string; landing_dominio: string }[]) {
+    for (const r of db.prepare("SELECT id, landing_dominio FROM stores WHERE landing_dominio != ''").all() as { id: string; landing_dominio: string }[]) {
       hosts.set(r.landing_dominio, r.id);
       hosts.set(r.landing_dominio.startsWith('www.') ? r.landing_dominio.slice(4) : 'www.' + r.landing_dominio, r.id);
     }
@@ -435,7 +493,7 @@ export function tiendaDeHost(host: string): string | null {
   if (RAIZ_LANDINGS && h.endsWith('.' + RAIZ_LANDINGS)) {
     const sub = h.slice(0, -RAIZ_LANDINGS.length - 1);
     if (!sub.includes('.') && !SUB_RESERVADOS.has(sub)) {
-      const r = db.prepare('SELECT id FROM stores WHERE landing_sub = ? AND landings_habilitado = 1').get(sub) as { id: string } | undefined;
+      const r = db.prepare('SELECT id FROM stores WHERE landing_sub = ?').get(sub) as { id: string } | undefined;
       if (r) return r.id;
     }
   }
@@ -527,7 +585,7 @@ export function elegirInicio(storeId: string, landingId: string): boolean {
 export function contarVista(id: string) { try { db.prepare('UPDATE landings SET vistas = vistas + 1 WHERE id = ?').run(id); } catch { /* opcional */ } }
 
 /** HTML de la landing con su plantilla. */
-export { renderLanding } from './landingPlantillas.js';
+export { renderLanding, renderCatalogo } from './landingPlantillas.js';
 
 // ── Pedido desde la landing ────────────────────────────────────────────
 const intentos = new Map<string, number[]>();
@@ -540,7 +598,7 @@ export async function pedidoLanding(landingId: string, b: Fila, ip: string): Pro
   lista.push(ahora); intentos.set(ip, lista);
 
   const l = db.prepare("SELECT * FROM landings WHERE id = ? AND estado = 'publicada'").get(landingId) as Fila | undefined;
-  if (!l) return { error: 'Esta página ya no está recibiendo pedidos.' };
+  if (!l || !tiendaEnLinea(txt(l.store_id))) return { error: 'Esta página ya no está recibiendo pedidos.' };
   const storeId = txt(l.store_id);
   const d = limpiarDatos(pj(txt(l.datos), {}));
   const bundles = d.bundles.length ? d.bundles : [{ cantidad: 1, titulo: '1 unidad', subtitulo: '', precio: d.precio, precioAntes: 0, insignia: '', imagen: '' }];

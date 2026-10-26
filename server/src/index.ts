@@ -76,11 +76,19 @@ app.use(async (req, res, next) => {
   if (/^\/l\/(media|api)\//.test(req.path)) return next();
   if (req.path === '/robots.txt') return res.type('text/plain').send('User-agent: *\nAllow: /\n');
   const m = req.method === 'GET' ? req.path.match(/^\/([a-z0-9-]{0,60})\/?$/i) : null;
-  const l = m ? L.landingDeTienda(storeId, m[1] || '') : null;
   res.setHeader('Cache-Control', 'no-cache');
+  const humano = !/bot|crawl|spider|facebookexternalhit/i.test(String(req.headers['user-agent'] || ''));
+  // Raíz: la página de inicio de la tienda (todos sus productos, o la landing que eligió).
+  if (m && !m[1]) {
+    const ini = L.inicioTienda(storeId, '/');
+    if (!ini) return res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página no disponible</title><p style="font-family:system-ui;padding:24px;text-align:center">Esta página no está disponible.</p>');
+    if (ini.landingId && humano) L.contarVista(ini.landingId);
+    return res.type('html').send(ini.html);
+  }
+  const l = m ? L.landingDeTienda(storeId, m[1]) : null;
   if (!l) return res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página no disponible</title><p style="font-family:system-ui;padding:24px;text-align:center">Esta página no está disponible.</p>');
-  if (!/bot|crawl|spider|facebookexternalhit/i.test(String(req.headers['user-agent'] || ''))) L.contarVista(l.id);
-  res.type('html').send(L.renderLanding(l.datos, { id: l.id }));
+  if (humano) L.contarVista(l.id);
+  res.type('html').send(L.renderLanding(l.datos, { id: l.id, inicio: '/' }));
 });
 app.use('/api', api);
 app.use('/webhooks', webhooks);
@@ -91,13 +99,22 @@ app.get('/l/media/:storeId/:file', async (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   res.sendFile(p);
 });
+app.get('/l/:tienda', async (req, res) => {
+  const L = await import('./landings.js');
+  const t = String(req.params.tienda).toLowerCase();
+  const s = db.prepare('SELECT id FROM stores WHERE slug = ?').get(t) as { id: string } | undefined;
+  const ini = s ? L.inicioTienda(s.id, `/l/${t}/`) : null;
+  res.setHeader('Cache-Control', 'no-cache');
+  if (!ini) return res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página no disponible</title><p style="font-family:system-ui;padding:24px;text-align:center">Esta página no está disponible.</p>');
+  res.type('html').send(ini.html);
+});
 app.get('/l/:tienda/:slug', async (req, res) => {
   const L = await import('./landings.js');
   const l = L.landingPublica(req.params.tienda, req.params.slug);
   res.setHeader('Cache-Control', 'no-cache');
   if (!l) return res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página no disponible</title><p style="font-family:system-ui;padding:24px;text-align:center">Esta página no está disponible.</p>');
   if (!/bot|crawl|spider|facebookexternalhit/i.test(String(req.headers['user-agent'] || ''))) L.contarVista(l.id);
-  res.type('html').send(L.renderLanding(l.datos, { id: l.id }));
+  res.type('html').send(L.renderLanding(l.datos, { id: l.id, inicio: `/l/${String(req.params.tienda).toLowerCase()}/` }));
 });
 app.post('/l/api/:id/pedido', async (req, res) => {
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
@@ -109,7 +126,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'landings-dflw-store',
+    build: 'tienda-en-linea',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

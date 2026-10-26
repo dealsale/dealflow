@@ -126,7 +126,8 @@ export function textoDeUrl(url: string, method: string): string | null {
   // Editor de landings: el autoguardado, la vista previa y las imágenes van en segundo plano.
   if (/\/landings(\/[^/]+)?$|\/landings\/(imagen|[^/]+\/vista)$/.test(u) && method !== 'DELETE') return null;
   if (/\/landings\/[^/]+\/publicar$/.test(u)) return 'Publicando tu landing…';
-  if (/\/landings\/[^/]+\/pagar$/.test(u)) return 'Abriendo el pago seguro…';
+  if (/\/landings\/membresia\/pagar$/.test(u)) return 'Abriendo el pago seguro…';
+  if (/\/landings\/tienda(\/vista)?$/.test(u)) return null;
   if (method === 'DELETE') return 'Eliminando…';
   if (/effi\/despachar/.test(u)) return 'Creando la remisión en Effi…';
   if (/effi\/guia|guia-manual/.test(u)) return 'Generando la guía de transporte…';

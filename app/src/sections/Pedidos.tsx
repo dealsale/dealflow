@@ -1,3 +1,5 @@
+import { clicAparte } from '../components/EnlaceApp';
+import { urlDe } from '../lib/rutas';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { OrigenBadge } from '../components/OrigenPedido';
@@ -180,7 +182,7 @@ function Fila({ o, modo }: { o: DecoratedOrder; modo: Modo }) {
 
   if (modo === 'tarjetas') {
     return (
-      <div onClick={o.open} className="df-row-hover df-card" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div {...clicAparte(urlDe({ mode: 'vendedor', section: 'pedidos', pedido: String(o.id) }), o.open)} className="df-row-hover df-card" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>{numero}</div>
           {total}
@@ -196,7 +198,7 @@ function Fila({ o, modo }: { o: DecoratedOrder; modo: Modo }) {
     );
   }
   return (
-    <div onClick={o.open} className="df-row-hover" style={{ display: 'grid', gridTemplateColumns: COLS, gap: 14, alignItems: 'center', padding: '13px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}>
+    <div {...clicAparte(urlDe({ mode: 'vendedor', section: 'pedidos', pedido: String(o.id) }), o.open)} className="df-row-hover" style={{ display: 'grid', gridTemplateColumns: COLS, gap: 14, alignItems: 'center', padding: '13px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}>
       {numero}
       {cliente}
       {productos}

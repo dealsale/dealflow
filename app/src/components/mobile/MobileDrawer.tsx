@@ -8,7 +8,7 @@ const VENDOR_ITEMS: { id: VendedorSection; label: string }[] = [
   { id: 'resumen', label: 'Resumen' },
   { id: 'estadisticas', label: 'Estadísticas' },
   { id: 'productos', label: 'Productos' },
-  { id: 'landings', label: 'Landings' },
+  { id: 'landings', label: 'Tienda en línea' },
   { id: 'asistente', label: 'Asistente' },
   { id: 'whatsapp', label: 'WhatsApp' },
   { id: 'logistica', label: 'Logística Effi' },
