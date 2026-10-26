@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tutorial Tienda en línea · DealFlow</title>
+<meta name="description" content="Guía paso a paso con capturas reales: activa tu Tienda en línea, arma la página de cada producto, conecta el Píxel de Meta y recibe los pedidos en DealFlow.">
+<link rel="icon" href="/icon-192.png">
+<meta property="og:title" content="Tutorial Tienda en línea · DealFlow">
+<meta property="og:description" content="Del producto al pedido: tienda, Píxel de Meta, dominio propio y pedidos contra entrega.">
+<meta property="og:image" content="/tutorial-tienda-en-linea/img/16-producto-pc.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: barra superior fija con progreso de lectura, portada oscura, y cuerpo de dos columnas
+   (índice con seguimiento de sección + pasos). Las capturas se abren en grande al tocarlas. */
+:root {
+  --bg: #F5F7FA;
+  --surface: #FFFFFF;
+  --surface-2: #EEF2F6;
+  --line: #E1E6ED;
+  --ink: #0F172A;
+  --ink-2: #334155;
+  --muted: #64748B;
+  --brand: #059669;
+  --brand-ink: #047857;
+  --brand-soft: #E3F6EE;
+  --azul: #2563EB;
+  --warn: #B45309;
+  --warn-soft: #FEF3E2;
+  --pixel: #1877F2;
+  --pixel-soft: #EAF2FE;
+  --shadow-s: 0 1px 2px rgba(15, 23, 42, .06), 0 4px 14px -6px rgba(15, 23, 42, .12);
+  --shadow: 0 2px 4px rgba(15, 23, 42, .04), 0 24px 48px -28px rgba(15, 23, 42, .38);
+  --hero-1: #06231C;
+  --hero-2: #0B1730;
+  --f-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-titulo: 'Sora', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --f-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0A0F1C; --surface: #111A2C; --surface-2: #172238; --line: #243049; --ink: #F1F5FF; --ink-2: #CBD5E8; --muted: #8E9BB8;
+    --brand: #1FD8A8; --brand-ink: #5EEAC6; --brand-soft: rgba(31, 216, 168, .12); --azul: #7AA2FF;
+    --warn: #F5B66A; --warn-soft: rgba(245, 182, 106, .12); --pixel: #78AEFF; --pixel-soft: rgba(120, 174, 255, .12);
+    --shadow-s: 0 1px 2px rgba(0, 0, 0, .4); --shadow: 0 24px 48px -24px rgba(0, 0, 0, .75);
+    --hero-1: #041712; --hero-2: #070D1C; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0A0F1C; --surface: #111A2C; --surface-2: #172238; --line: #243049; --ink: #F1F5FF; --ink-2: #CBD5E8; --muted: #8E9BB8;
+  --brand: #1FD8A8; --brand-ink: #5EEAC6; --brand-soft: rgba(31, 216, 168, .12); --azul: #7AA2FF;
+  --warn: #F5B66A; --warn-soft: rgba(245, 182, 106, .12); --pixel: #78AEFF; --pixel-soft: rgba(120, 174, 255, .12);
+  --shadow-s: 0 1px 2px rgba(0, 0, 0, .4); --shadow: 0 24px 48px -24px rgba(0, 0, 0, .75);
+  --hero-1: #041712; --hero-2: #070D1C; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 var(--f-ui); -webkit-font-smoothing: antialiased; }
+a { color: var(--brand-ink); text-underline-offset: 3px; }
+h1, h2, h3 { font-family: var(--f-titulo); letter-spacing: -0.025em; line-height: 1.15; margin: 0; text-wrap: balance; }
+code { font-family: var(--f-mono); font-size: .86em; background: var(--brand-soft); color: var(--brand-ink); padding: 2px 7px; border-radius: 6px; white-space: nowrap; }
+b { font-weight: 700; color: var(--ink); }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+.lado { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+.ancho { max-width: 1200px; margin: 0 auto; }
+
+/* Barra superior */
+.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top, 0px); }
+.top .ancho { display: flex; align-items: center; gap: 14px; height: 60px; }
+.marca { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 16px; letter-spacing: -.01em; color: var(--ink); text-decoration: none; white-space: nowrap; }
+.marca i { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, #10B981, #2563EB); display: grid; place-items: center; color: #fff; font-style: normal; font-size: 15px; box-shadow: 0 6px 14px -6px rgba(16, 185, 129, .7); }
+.marca small { font-weight: 600; color: var(--muted); font-size: 13.5px; padding-left: 10px; border-left: 1px solid var(--line); }
+.top .esp { flex: 1; }
+.top nav { display: flex; gap: 6px; align-items: center; }
+.top nav a { font-size: 13.5px; font-weight: 600; text-decoration: none; color: var(--ink-2); padding: 8px 12px; border-radius: 9px; white-space: nowrap; }
+.top nav a:hover { background: var(--surface-2); }
+.top nav a.pri { background: var(--brand); color: #fff; box-shadow: 0 6px 16px -8px var(--brand); }
+.top nav a.pri:hover { filter: brightness(1.06); }
+.progreso { position: absolute; left: 0; bottom: -1px; height: 2px; width: 100%; background: linear-gradient(90deg, #10B981, #2563EB); transform-origin: 0 50%; transform: scaleX(0); }
+
+/* Portada */
+.hero { position: relative; overflow: hidden; color: #E8F1EE; background: radial-gradient(900px 480px at 85% 10%, rgba(37, 99, 235, .35), transparent 60%), radial-gradient(700px 520px at 5% 100%, rgba(16, 185, 129, .32), transparent 60%), linear-gradient(160deg, var(--hero-1), var(--hero-2)); }
+.hero::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .045) 1px, transparent 1px); background-size: 44px 44px; mask-image: radial-gradient(ellipse at 30% 40%, #000 20%, transparent 75%); -webkit-mask-image: radial-gradient(ellipse at 30% 40%, #000 20%, transparent 75%); pointer-events: none; }
+.hero .ancho { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 56px; align-items: center; padding-block: 72px 96px; }
+.sello { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #A7F3D0; background: rgba(16, 185, 129, .14); border: 1px solid rgba(110, 231, 183, .28); padding: 6px 12px; border-radius: 999px; }
+.sello::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #34D399; box-shadow: 0 0 0 4px rgba(52, 211, 153, .2); }
+.hero h1 { color: #fff; font-size: clamp(36px, 5.2vw, 60px); font-weight: 800; margin: 20px 0 0; }
+.hero h1 span { background: linear-gradient(90deg, #6EE7B7, #93C5FD); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero p.lead { font-size: 18px; line-height: 1.65; color: rgba(232, 241, 238, .78); max-width: 54ch; margin: 20px 0 30px; }
+.datos { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid rgba(255, 255, 255, .12); border-radius: 14px; background: rgba(255, 255, 255, .04); width: fit-content; max-width: 100%; }
+.datos div { padding: 12px 20px; border-right: 1px solid rgba(255, 255, 255, .1); }
+.datos div:last-child { border-right: 0; }
+.datos strong { display: block; font: 700 19px/1.2 var(--f-titulo); color: #fff; letter-spacing: -.01em; }
+.datos span { font-size: 12.5px; color: rgba(232, 241, 238, .62); }
+.hero-acc { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+.boton { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; text-decoration: none; padding: 13px 20px; border-radius: 12px; }
+.boton.pri { background: #10B981; color: #04221A; box-shadow: 0 12px 28px -12px rgba(16, 185, 129, .9); }
+.boton.pri:hover { background: #34D399; }
+.boton.sec { color: #fff; border: 1px solid rgba(255, 255, 255, .22); }
+.boton.sec:hover { background: rgba(255, 255, 255, .07); }
+.vitrina { position: relative; padding-right: 9%; }
+.vitrina .pc { box-shadow: 0 40px 80px -30px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .08); border-color: transparent; transform: perspective(1600px) rotateY(-6deg) rotateX(2deg); }
+.vitrina .tel { position: absolute; right: 0; bottom: -44px; width: 30%; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .8); }
+
+/* Marcos de captura */
+.pc { border-radius: 14px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.pc .barra { display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.pc .barra i { width: 10px; height: 10px; border-radius: 50%; background: #F87171; }
+.pc .barra i:nth-child(2) { background: #FBBF24; }
+.pc .barra i:nth-child(3) { background: #34D399; }
+.pc .barra span { flex: 1; margin-left: 12px; font: 500 12px var(--f-mono); color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 4px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; }
+.pc img, .tel img { display: block; width: 100%; height: auto; }
+.tel { border-radius: 32px; padding: 8px; background: #0B1220; box-shadow: var(--shadow); position: relative; }
+.tel::before { content: ""; position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 26%; height: 5px; border-radius: 9px; background: rgba(255, 255, 255, .14); z-index: 1; }
+.tel img { border-radius: 25px; }
+.zoom { cursor: zoom-in; display: block; width: 100%; font: inherit; color: inherit; text-align: inherit; }
+.zoom.pc { padding: 0; }
+.zoom.tel { border: 0; }
+figure { margin: 0; display: grid; gap: 12px; }
+figcaption { font-size: 14px; color: var(--muted); line-height: 1.6; padding-left: 14px; border-left: 2px solid var(--line); }
+
+/* Cuerpo con índice */
+.cuerpo { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 56px; align-items: start; padding-block: 64px 40px; }
+nav.indice { position: sticky; top: 84px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 12px; box-shadow: var(--shadow-s); }
+nav.indice .tit { font-size: 11.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 0 10px 10px; display: flex; justify-content: space-between; }
+nav.indice .tit span { color: var(--brand-ink); font-family: var(--f-mono); letter-spacing: 0; }
+nav.indice ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+nav.indice a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; color: var(--ink-2); text-decoration: none; font-size: 14px; font-weight: 600; line-height: 1.35; transition: background .15s, color .15s; }
+nav.indice a .n { flex-shrink: 0; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font: 600 11.5px var(--f-mono); color: var(--muted); background: var(--surface-2); transition: background .15s, color .15s; }
+nav.indice a:hover { background: var(--surface-2); color: var(--ink); }
+nav.indice a[aria-current="true"] { background: var(--brand-soft); color: var(--brand-ink); }
+nav.indice a[aria-current="true"] .n { background: var(--brand); color: #fff; }
+nav.indice a.visto .n { color: var(--brand-ink); }
+
+section.paso { display: grid; gap: 26px; padding-bottom: 72px; margin-bottom: 72px; border-bottom: 1px solid var(--line); }
+section.paso:last-of-type { border-bottom: 0; margin-bottom: 0; }
+.paso-cab { display: grid; gap: 12px; }
+.paso-cab .et { font: 600 12.5px var(--f-mono); color: var(--brand-ink); letter-spacing: .04em; display: flex; align-items: center; gap: 10px; }
+.paso-cab .et::after { content: ""; height: 1px; width: 48px; background: color-mix(in srgb, var(--brand) 45%, transparent); }
+.paso h2 { font-size: clamp(26px, 3.2vw, 36px); font-weight: 800; }
+.paso .intro { color: var(--ink-2); font-size: 17.5px; max-width: 62ch; margin: 0; }
+.paso p { margin: 0; max-width: 68ch; }
+ul.lista, ol.lista { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; max-width: 70ch; }
+ul.lista li { position: relative; padding-left: 28px; }
+ul.lista li::before { content: ""; position: absolute; left: 4px; top: .62em; width: 8px; height: 8px; border-radius: 3px; background: var(--brand); transform: rotate(45deg); }
+ol.lista { counter-reset: l; }
+ol.lista[start="3"] { counter-reset: l 2; }
+ol.lista li { position: relative; padding-left: 38px; counter-increment: l; }
+ol.lista li::before { content: counter(l); position: absolute; left: 0; top: 1px; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font: 700 13px var(--f-ui); background: var(--brand-soft); color: var(--brand-ink); }
+.tarjetas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.tarjeta { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; box-shadow: var(--shadow-s); }
+.tarjeta h3 { font-size: 16.5px; margin-bottom: 6px; display: flex; gap: 10px; align-items: center; }
+.tarjeta h3 .ic { width: 30px; height: 30px; border-radius: 9px; background: var(--brand-soft); display: grid; place-items: center; font-size: 15px; }
+.tarjeta p { color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+.moviles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.moviles figcaption { border-left: 0; padding-left: 0; text-align: center; font-size: 13px; }
+.nota { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; padding: 16px 18px; border-radius: 14px; background: var(--brand-soft); border: 1px solid color-mix(in srgb, var(--brand) 22%, transparent); font-size: 15px; line-height: 1.6; max-width: 76ch; color: var(--ink-2); }
+.nota.aviso { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 25%, transparent); }
+.nota .ic { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 800 13px var(--f-ui); background: var(--brand); color: #fff; }
+.nota.aviso .ic { background: var(--warn); }
+
+/* Píxel */
+.pixel { border-radius: 18px; border: 1px solid var(--line); background: var(--surface); overflow: hidden; box-shadow: var(--shadow-s); }
+.pixel-cab { padding: 18px 22px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); background: linear-gradient(90deg, var(--pixel-soft), transparent); }
+.pixel-cab .letra { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font: 800 16px var(--f-titulo); background: var(--pixel); color: #fff; flex-shrink: 0; }
+.pixel-cab small { display: block; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--pixel); }
+.pixel-cab h3 { font-size: 19px; }
+.pixel-cuerpo { padding: 22px; display: grid; gap: 20px; }
+ol.meta { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; counter-reset: m; }
+ol.meta li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start; }
+ol.meta li::before { counter-increment: m; content: counter(m); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 700 12.5px var(--f-ui); border: 1.5px solid var(--pixel); color: var(--pixel); margin-top: 1px; }
+.ruta { font: 500 13px var(--f-mono); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; display: inline-block; max-width: 100%; overflow-x: auto; white-space: nowrap; margin-top: 6px; }
+.sub { font-size: 21px; font-weight: 700; margin-top: 6px; }
+.eventos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.evento { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 6px; align-content: start; box-shadow: var(--shadow-s); }
+.evento .nom { font: 600 13.5px var(--f-mono); color: var(--pixel); }
+.evento .cuando { font-weight: 700; font-size: 14.5px; line-height: 1.4; }
+.evento .lleva { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+.evento:not(:last-child)::after { content: "→"; position: absolute; right: -11px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; background: var(--bg); color: var(--muted); display: grid; place-items: center; font-size: 12px; z-index: 1; }
+
+/* DNS */
+.dns { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; max-width: 640px; background: var(--surface); box-shadow: var(--shadow-s); }
+.dns table { width: 100%; border-collapse: collapse; }
+.dns th, .dns td { text-align: left; padding: 12px 16px; }
+.dns th { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); }
+.dns td { font: 600 14px var(--f-mono); overflow-wrap: anywhere; }
+
+/* Preguntas */
+.faq { display: grid; gap: 10px; max-width: 80ch; }
+details { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-s); }
+summary { cursor: pointer; font-weight: 700; padding: 16px 20px; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; font: 500 22px/1 var(--f-ui); color: var(--muted); transition: transform .2s; }
+details[open] summary::after { transform: rotate(45deg); }
+details p { margin: 0; padding: 0 20px 18px; color: var(--muted); }
+
+/* Cierre */
+.cierre { margin-top: 24px; border-radius: 22px; padding: 40px; color: #E8F1EE; background: radial-gradient(600px 300px at 100% 0%, rgba(37, 99, 235, .4), transparent 60%), linear-gradient(140deg, var(--hero-1), var(--hero-2)); display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between; }
+.cierre h2 { color: #fff; font-size: clamp(24px, 3vw, 32px); }
+.cierre p { color: rgba(232, 241, 238, .72); margin: 8px 0 0; max-width: 52ch; }
+footer { color: var(--muted); font-size: 13.5px; padding-block: 28px 48px; text-align: center; }
+
+/* Visor de capturas */
+dialog.visor { border: 0; padding: 0; background: transparent; max-width: min(1400px, 96vw); max-height: 94vh; overflow: visible; }
+dialog.visor::backdrop { background: rgba(5, 10, 20, .86); backdrop-filter: blur(4px); }
+dialog.visor img { display: block; max-width: min(1400px, 96vw); max-height: 88vh; width: auto; height: auto; border-radius: 12px; box-shadow: 0 30px 80px rgba(0, 0, 0, .6); }
+dialog.visor p { color: rgba(255, 255, 255, .8); text-align: center; font-size: 14px; margin: 12px auto 0; max-width: 70ch; }
+dialog.visor button { position: absolute; top: -14px; right: -14px; width: 36px; height: 36px; border-radius: 50%; border: 0; background: #fff; color: #0F172A; font-size: 20px; line-height: 1; cursor: pointer; box-shadow: 0 6px 16px rgba(0, 0, 0, .4); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .vitrina .tel { animation: flota 7s ease-in-out infinite; }
+  @keyframes flota { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  .zoom img { transition: transform .35s ease; }
+  .zoom:hover img { transform: scale(1.012); }
+}
+@media (max-width: 1080px) {
+  .moviles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .eventos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .evento::after { display: none; }
+}
+@media (max-width: 960px) {
+  .hero .ancho { grid-template-columns: minmax(0, 1fr); padding-block: 48px 84px; gap: 40px; }
+  .vitrina .pc { transform: none; }
+  .cuerpo { grid-template-columns: minmax(0, 1fr); gap: 32px; padding-top: 40px; }
+  nav.indice { position: static; }
+  nav.indice ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .top nav a.solo-pc { display: none; }
+}
+@media (max-width: 640px) {
+  body { font-size: 15.5px; }
+  .marca small { display: none; }
+  .datos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .datos div { padding: 11px 16px; }
+  .datos div:nth-child(2n) { border-right: 0; }
+  .datos div:nth-child(-n+2) { border-bottom: 1px solid rgba(255, 255, 255, .1); }
+  .tarjetas, .eventos { grid-template-columns: minmax(0, 1fr); }
+  .moviles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  nav.indice ol { grid-template-columns: minmax(0, 1fr); }
+  section.paso { padding-bottom: 52px; margin-bottom: 52px; }
+  .cierre { padding: 28px 22px; }
+  .pixel-cuerpo { padding: 18px; }
+}
+</style>
+</head>
+<body>
+
+<header class="top lado">
+  <div class="ancho">
+    <a class="marca" href="/"><i>✦</i> DealFlow <small>Tutorial · Tienda en línea</small></a>
+    <div class="esp"></div>
+    <nav aria-label="DealFlow">
+      <a class="solo-pc" href="/tutoriales">Más tutoriales</a>
+      <a class="pri" href="/tienda-en-linea">Ir a mi tienda</a>
+    </nav>
+  </div>
+  <div class="progreso" id="progreso" aria-hidden="true"></div>
+</header>
+
+<section class="hero lado">
+  <div class="ancho">
+    <div>
+      <span class="sello">Guía oficial · capturas reales</span>
+      <h1>Tu <span>Tienda en línea</span>, del producto al pedido</h1>
+      <p class="lead">Arma una página de venta por cada producto, conecta tu Píxel de Meta para medir tus anuncios y recibe los pedidos contra entrega directo en DealFlow.</p>
+      <div class="datos">
+        <div><strong>$25.000</strong><span>al mes</span></div>
+        <div><strong>Ilimitados</strong><span>productos</span></div>
+        <div><strong>Gratis</strong><span>tu-tienda.dflw.store</span></div>
+        <div><strong>12 min</strong><span>de lectura</span></div>
+      </div>
+      <div class="hero-acc">
+        <a class="boton pri" href="#membresia">Empezar la guía ↓</a>
+        <a class="boton sec" href="#pixel">Ir al Píxel de Meta</a>
+      </div>
+    </div>
+    <div class="vitrina" aria-hidden="true">
+      <div class="pc"><div class="barra"><i></i><i></i><i></i><span>layla.dflw.store/vestido-layla</span></div><img src="/tutorial-tienda-en-linea/img/16-producto-pc.jpg" width="1500" height="904" alt=""></div>
+      <div class="tel"><img src="/tutorial-tienda-en-linea/img/13-ofertas-movil.jpg" width="780" height="1688" alt=""></div>
+    </div>
+  </div>
+</section>
+
+<div class="lado">
+<div class="ancho cuerpo">
+  <nav class="indice" aria-label="Índice">
+    <div class="tit">En esta guía <span id="avance">0/10</span></div>
+    <ol>
+      <li><a href="#membresia"><span class="n">01</span>Activa la membresía</a></li>
+      <li><a href="#producto"><span class="n">02</span>Agrega un producto</a></li>
+      <li><a href="#pagina"><span class="n">03</span>Arma la página</a></li>
+      <li><a href="#pixel"><span class="n">04</span>Conecta el Píxel de Meta</a></li>
+      <li><a href="#seo"><span class="n">05</span>SEO y vista al compartir</a></li>
+      <li><a href="#publicar"><span class="n">06</span>Publica</a></li>
+      <li><a href="#tienda"><span class="n">07</span>Tu tienda y tu dominio</a></li>
+      <li><a href="#cliente"><span class="n">08</span>Así compra tu cliente</a></li>
+      <li><a href="#pedidos"><span class="n">09</span>El pedido en DealFlow</a></li>
+      <li><a href="#preguntas"><span class="n">10</span>Preguntas frecuentes</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section class="paso" id="membresia">
+      <div class="paso-cab"><span class="et">PASO 01</span><h2>Activa tu membresía</h2><p class="intro">Entra a <b>Tienda en línea</b> en el menú de la izquierda. Puedes armar tus productos desde ya; para publicarlos necesitas la membresía activa.</p></div>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>app.dealflow.sbs/tienda-en-linea</span></div><img src="/tutorial-tienda-en-linea/img/01-sin-membresia.jpg" width="1500" height="904" alt="Pantalla Tienda en línea con el aviso Activa tu Tienda en línea y el botón Activar membresía" loading="lazy"></button>
+        <figcaption>Dale a <b>Activar membresía</b>: pagas con Wompi y se suman 30 días. Antes de vencer te aparece el botón para renovar.</figcaption>
+      </figure>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>app.dealflow.sbs/tienda-en-linea</span></div><img src="/tutorial-tienda-en-linea/img/02-lista.jpg" width="1500" height="904" alt="Tienda en línea con la membresía activa y la fecha de vencimiento" loading="lazy"></button>
+        <figcaption>Con la membresía activa ves hasta cuándo va y el botón <b>Ver mi tienda</b>.</figcaption>
+      </figure>
+      <div class="nota aviso"><span class="ic">!</span><span>Si la membresía vence tienes <b>3 días de gracia</b>. Después tus páginas se apagan hasta que renueves; no se borra nada de lo que armaste.</span></div>
+    </section>
+
+    <section class="paso" id="producto">
+      <div class="paso-cab"><span class="et">PASO 02</span><h2>Agrega un producto</h2><p class="intro">Dale a <b>+ Agregar producto</b> y elige de dónde sale.</p></div>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>Agregar producto a la tienda</span></div><img src="/tutorial-tienda-en-linea/img/03-agregar.jpg" width="1500" height="904" alt="Ventana para agregar un producto de mi catálogo o un producto nuevo" loading="lazy"></button>
+      </figure>
+      <div class="tarjetas">
+        <div class="tarjeta"><h3><span class="ic">📦</span>De mi catálogo</h3><p>Trae las fotos, variantes, precio y combos del producto que ya tienes en DealFlow. Los pedidos quedan ligados a ese producto para despacharlos con Effi o Dropi.</p></div>
+        <div class="tarjeta"><h3><span class="ic">✨</span>Producto nuevo</h3><p>Solo para la tienda en línea. Lo armas desde cero, sin tocar tu catálogo.</p></div>
+      </div>
+    </section>
+
+    <section class="paso" id="pagina">
+      <div class="paso-cab"><span class="et">PASO 03</span><h2>Arma la página</h2><p class="intro">A la izquierda llenas los bloques; a la derecha ves la página como la verá tu cliente, en celular o computador. Todo se guarda solo.</p></div>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>Editor de producto</span></div><img src="/tutorial-tienda-en-linea/img/04-editor.jpg" width="1500" height="904" alt="Editor con los bloques de producto y la vista previa en celular" loading="lazy"></button>
+        <figcaption>Nombre, precio, estrellas, frase destacada y fotos. Las fotos se muestran completas, sin recortes, así que los marcos de tus diseños se conservan.</figcaption>
+      </figure>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>Ofertas (bundles)</span></div><img src="/tutorial-tienda-en-linea/img/05-ofertas.jpg" width="1500" height="904" alt="Bloque de ofertas con título, etiqueta verde, precio y cinta" loading="lazy"></button>
+        <figcaption>Cada oferta tiene unidades, título (“Paga 1 Lleva 2”), etiqueta verde (“$99.950 cada uno”), precio, precio tachado y la cinta de arriba (“Más vendida 🔥”, el emoji se anima).</figcaption>
+      </figure>
+      <div class="tarjetas">
+        <div class="tarjeta"><h3><span class="ic">🎨</span>Variantes</h3><p>Color y talla. Si el cliente lleva 3 unidades, elige la variante de cada una.</p></div>
+        <div class="tarjeta"><h3><span class="ic">🛒</span>Botón, beneficios y envío</h3><p>El texto del botón, la barra de anuncios que se mueve arriba y las fechas de entrega.</p></div>
+        <div class="tarjeta"><h3><span class="ic">🖼️</span>Imágenes de abajo</h3><p>Las imágenes largas de beneficios, colores o tallas, una debajo de otra.</p></div>
+        <div class="tarjeta"><h3><span class="ic">💬</span>Testimonios</h3><p>Estilo Facebook, con foto, reacciones y un comentario de respuesta.</p></div>
+      </div>
+    </section>
+
+    <section class="paso" id="pixel">
+      <div class="paso-cab"><span class="et">PASO 04</span><h2>Conecta el Píxel de Meta</h2><p class="intro">Con el píxel, Meta sabe quién vio tu producto, quién abrió el formulario y quién compró. Así tus anuncios aprenden a buscar compradores y ves el retorno de cada campaña.</p></div>
+
+      <div class="pixel">
+        <div class="pixel-cab"><span class="letra">A</span><div><small>En Meta</small><h3>Copia el ID de tu píxel</h3></div></div>
+        <div class="pixel-cuerpo">
+          <ol class="meta">
+            <li><span>Entra a <b>business.facebook.com</b> con la cuenta que maneja tus anuncios.</span></li>
+            <li><span>Abre el <b>Administrador de eventos</b> (Events Manager):<br><span class="ruta">Menú ☰ → Administrador de eventos → Orígenes de datos</span></span></li>
+            <li><span>Elige tu píxel (o conjunto de datos). Si no tienes, dale a <b>Conectar orígenes de datos → Web</b> y créalo con el nombre de tu tienda.</span></li>
+            <li><span>En <b>Configuración</b> copia el <b>Identificador</b>: un número de 15 o 16 dígitos, por ejemplo <code>1234567890123456</code>.</span></li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="pixel">
+        <div class="pixel-cab"><span class="letra">B</span><div><small>En DealFlow</small><h3>Pégalo en tu producto</h3></div></div>
+        <div class="pixel-cuerpo">
+          <figure>
+            <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>Pedidos y seguimiento</span></div><img src="/tutorial-tienda-en-linea/img/06-pixel.jpg" width="1500" height="904" alt="Bloque Pedidos y seguimiento con el campo ID del Píxel de Meta resaltado" loading="lazy"></button>
+            <figcaption>En el editor del producto abre <b>Pedidos y seguimiento</b> y pega el número en <b>ID del Píxel de Meta</b> (resaltado en naranja).</figcaption>
+          </figure>
+          <ul class="lista">
+            <li>Hazlo en <b>cada producto</b> que vayas a pautar.</li>
+            <li>Para medir también la página de inicio de tu tienda, pega el mismo ID en <b>Mi tienda → ID del Píxel de Meta</b>.</li>
+            <li>La vista previa del editor no dispara el píxel; solo cuenta la página publicada.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 class="sub">Qué le envía tu tienda a Meta</h3>
+      <div class="eventos">
+        <div class="evento"><span class="nom">PageView</span><span class="cuando">Abre la página</span><span class="lleva">La visita.</span></div>
+        <div class="evento"><span class="nom">ViewContent</span><span class="cuando">Ve el producto</span><span class="lleva">Nombre del producto y precio en COP.</span></div>
+        <div class="evento"><span class="nom">InitiateCheckout</span><span class="cuando">Abre el formulario</span><span class="lleva">Valor de la oferta elegida y unidades.</span></div>
+        <div class="evento"><span class="nom">Purchase</span><span class="cuando">Envía el pedido</span><span class="lleva">Valor real en COP, unidades y número del pedido para no contarlo dos veces.</span></div>
+      </div>
+
+      <div class="pixel">
+        <div class="pixel-cab"><span class="letra">C</span><div><small>Comprueba que funciona</small><h3>Haz una prueba</h3></div></div>
+        <div class="pixel-cuerpo">
+          <ol class="meta">
+            <li><span>En el Administrador de eventos abre la pestaña <b>Probar eventos</b>, escribe la dirección de tu producto (por ejemplo <code>layla.dflw.store/vestido-layla</code>) y dale a <b>Abrir sitio web</b>.</span></li>
+            <li><span>En esa ventana mira el producto, abre el formulario y haz un pedido de prueba.</span></li>
+            <li><span>En Meta deben aparecer <b>PageView</b>, <b>ViewContent</b>, <b>InitiateCheckout</b> y <b>Purchase</b> en unos segundos. Después borra el pedido de prueba en DealFlow.</span></li>
+          </ol>
+          <div class="nota"><span class="ic">✓</span><span>También puedes instalar la extensión de Chrome <b>Meta Pixel Helper</b>: al abrir tu producto muestra el píxel y los eventos que se envían.</span></div>
+        </div>
+      </div>
+
+      <h3 class="sub">Úsalo en tus campañas</h3>
+      <ul class="lista">
+        <li>Crea la campaña con objetivo <b>Ventas</b> y elige <b>Sitio web</b> como lugar de conversión.</li>
+        <li>Selecciona tu píxel y el evento <b>Compra</b> (Purchase).</li>
+        <li>En el anuncio, pon como enlace la dirección del producto que copias en Tienda en línea.</li>
+      </ul>
+    </section>
+
+    <section class="paso" id="seo">
+      <div class="paso-cab"><span class="et">PASO 05</span><h2>SEO y vista al compartir</h2><p class="intro">Decide qué sale en Google y en la tarjeta cuando compartes el enlace por WhatsApp o Facebook.</p></div>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>SEO y vista al compartir</span></div><img src="/tutorial-tienda-en-linea/img/07-seo.jpg" width="1500" height="904" alt="Bloque SEO con vista de cómo sale en Google y en WhatsApp" loading="lazy"></button>
+        <figcaption>Título (hasta 60 caracteres), descripción (hasta 160) e imagen para compartir (ideal 1200×630). Abajo ves cómo queda en Google y en WhatsApp.</figcaption>
+      </figure>
+      <div class="nota"><span class="ic">i</span><span>Si los dejas vacíos se arman solos con el nombre, la descripción y la primera foto. Tu tienda también trae favicon, mapa del sitio para Google y datos del producto (precio en COP) sin que hagas nada.</span></div>
+    </section>
+
+    <section class="paso" id="publicar">
+      <div class="paso-cab"><span class="et">PASO 06</span><h2>Publica</h2><p class="intro">Arriba a la derecha del editor dale a <b>Publicar</b>. El producto aparece en tu tienda y ya puedes pautar su enlace.</p></div>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>Producto publicado</span></div><img src="/tutorial-tienda-en-linea/img/08-publicado.jpg" width="1500" height="904" alt="Editor con el aviso Publicado y la dirección del producto" loading="lazy"></button>
+        <figcaption>Debajo del nombre está la dirección del producto, que puedes cambiar. Con <b>Ver página</b> lo abres como lo ve tu cliente.</figcaption>
+      </figure>
+    </section>
+
+    <section class="paso" id="tienda">
+      <div class="paso-cab"><span class="et">PASO 07</span><h2>Tu tienda y tu dominio</h2><p class="intro">Todos tus productos publicados aparecen juntos en la página de inicio de tu tienda.</p></div>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>Mi tienda · página de inicio</span></div><img src="/tutorial-tienda-en-linea/img/09-mi-tienda.jpg" width="1500" height="904" alt="Datos de Mi tienda con vista previa de la página de inicio" loading="lazy"></button>
+        <figcaption>En <b>Mi tienda</b> pones nombre, logo, favicon, portada, título, frases de la barra, colores, WhatsApp y píxel. A la derecha ves la vista previa.</figcaption>
+      </figure>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>Dirección de tu tienda</span></div><img src="/tutorial-tienda-en-linea/img/10-direccion.jpg" width="1500" height="904" alt="Dirección gratis de la tienda y opción para conectar un dominio propio" loading="lazy"></button>
+        <figcaption>Tu dirección gratis es <code>tu-nombre.dflw.store</code> y la puedes cambiar. Si tienes tu propio dominio, lo conectas aquí mismo.</figcaption>
+      </figure>
+      <p><b>Para conectar tu propio dominio</b> (por ejemplo <code>www.mitienda.com</code>):</p>
+      <ol class="lista">
+        <li>Escríbelo con <b>www</b> y dale a <b>Conectar dominio</b>.</li>
+        <li>En tu proveedor del dominio (Hostinger, GoDaddy, Namecheap…) crea este registro DNS:</li>
+      </ol>
+      <div class="dns">
+        <table>
+          <thead><tr><th>Tipo</th><th>Nombre</th><th>Apunta a</th></tr></thead>
+          <tbody><tr><td>CNAME</td><td>www</td><td>landings.dflw.store</td></tr></tbody>
+        </table>
+      </div>
+      <ol class="lista" start="3">
+        <li>Espera unos minutos y dale a <b>Verificar</b>. Cuando diga <b>Activo</b>, tus enlaces pasan a ser <code>https://www.mitienda.com/producto</code>.</li>
+      </ol>
+    </section>
+
+    <section class="paso" id="cliente">
+      <div class="paso-cab"><span class="et">PASO 08</span><h2>Así compra tu cliente</h2><p class="intro">Capturas reales de la tienda publicada, vista desde un celular.</p></div>
+      <div class="moviles">
+        <figure><button class="zoom tel" type="button"><img src="/tutorial-tienda-en-linea/img/11-tienda-movil.jpg" width="780" height="1688" alt="Página de inicio de la tienda en celular" loading="lazy"></button><figcaption>Inicio con todos los productos</figcaption></figure>
+        <figure><button class="zoom tel" type="button"><img src="/tutorial-tienda-en-linea/img/12-producto-movil.jpg" width="780" height="1688" alt="Página del producto en celular con la barra de anuncios" loading="lazy"></button><figcaption>El producto y su galería</figcaption></figure>
+        <figure><button class="zoom tel" type="button"><img src="/tutorial-tienda-en-linea/img/13-ofertas-movil.jpg" width="780" height="1688" alt="Ofertas con variantes por unidad y botón animado" loading="lazy"></button><figcaption>Oferta y variantes por unidad</figcaption></figure>
+        <figure><button class="zoom tel" type="button"><img src="/tutorial-tienda-en-linea/img/14-formulario.jpg" width="780" height="1688" alt="Formulario contra entrega con resumen de precios" loading="lazy"></button><figcaption>Formulario contra entrega</figcaption></figure>
+        <figure><button class="zoom tel" type="button"><img src="/tutorial-tienda-en-linea/img/15-pedido-ok.jpg" width="780" height="1688" alt="Mensaje de pedido recibido" loading="lazy"></button><figcaption>Pedido recibido</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="paso" id="pedidos">
+      <div class="paso-cab"><span class="et">PASO 09</span><h2>El pedido llega a DealFlow</h2><p class="intro">Aparece en <b>Pedidos</b> con el ícono de DealFlow, que indica que vino de tu Tienda en línea.</p></div>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>app.dealflow.sbs/pedidos</span></div><img src="/tutorial-tienda-en-linea/img/17-pedidos.jpg" width="1500" height="904" alt="Lista de pedidos con el pedido de la tienda en línea" loading="lazy"></button>
+      </figure>
+      <figure>
+        <button class="zoom pc" type="button"><div class="barra"><i></i><i></i><i></i><span>Detalle del pedido</span></div><img src="/tutorial-tienda-en-linea/img/18-detalle.jpg" width="1500" height="904" alt="Detalle del pedido con datos de envío y lo que pidió" loading="lazy"></button>
+        <figcaption>Datos de envío, lo que pidió (una línea por variante) y la oferta elegida. Desde aquí lo despachas con Effi o Dropi como cualquier otro pedido.</figcaption>
+      </figure>
+      <div class="nota aviso"><span class="ic">!</span><span>Al llegar el pedido, DealFlow le envía al cliente la confirmación por WhatsApp (Sí / No). Si ves <b>“No se pudo enviar la confirmación”</b> como en la captura, revisa que WhatsApp esté conectado y que la plantilla <code>confirmacion_pedido_tienda</code> esté aprobada en Meta. Luego dale a <b>Reenviar confirmación</b>.</span></div>
+    </section>
+
+    <section class="paso" id="preguntas">
+      <div class="paso-cab"><span class="et">PASO 10</span><h2>Preguntas frecuentes</h2></div>
+      <div class="faq">
+        <details><summary>¿Puedo usar un píxel distinto por producto?</summary><p>Sí. Cada producto tiene su propio campo de píxel. Lo normal es usar el mismo en todos para que Meta junte la información de tu tienda.</p></details>
+        <details><summary>No veo los eventos en Meta</summary><p>Revisa que el producto esté publicado y que el ID tenga solo números. Abre la página publicada, no la vista previa. Algunos bloqueadores de anuncios frenan el píxel: prueba en una ventana sin extensiones o desde el celular.</p></details>
+        <details><summary>¿Qué pasa con los pedidos si dejo de pagar?</summary><p>Tienes 3 días de gracia. Después la tienda deja de mostrarse y no recibe pedidos hasta que renueves. Tus productos y pedidos se conservan.</p></details>
+        <details><summary>¿Las imágenes se recortan?</summary><p>No. Todas las imágenes se muestran completas, con su proporción real. Para la galería, una proporción vertical como 4:5 o 9:16 se ve mejor en celular.</p></details>
+        <details><summary>¿Puedo despachar automáticamente cuando el cliente confirma?</summary><p>Sí. En <b>Pedidos y seguimiento</b> activa “Despachar solo cuando el cliente confirme” y la remisión o guía se crea al recibir el “Sí”.</p></details>
+      </div>
+
+      <div class="cierre">
+        <div><h2>¿Listo para vender?</h2><p>Abre Tienda en línea, agrega tu primer producto y comparte el enlace en tus anuncios.</p></div>
+        <a class="boton pri" href="/tienda-en-linea">Ir a Tienda en línea →</a>
+      </div>
+    </section>
+  </main>
+</div>
+</div>
+
+<footer class="lado">DealFlow · Tienda en línea. Las capturas son de una tienda de prueba con productos de ejemplo.</footer>
+
+<dialog class="visor" id="visor" aria-label="Captura ampliada">
+  <button type="button" id="cerrarVisor" aria-label="Cerrar">×</button>
+  <img id="visorImg" alt="">
+  <p id="visorTxt"></p>
+</dialog>
+
+<script>
+(() => {
+  const barra = document.getElementById('progreso');
+  const enlaces = [...document.querySelectorAll('nav.indice a')];
+  const pasos = enlaces.map((a) => document.querySelector(a.getAttribute('href')));
+  const avance = document.getElementById('avance');
+  let maxVisto = -1;
+
+  function alMover() {
+    const h = document.documentElement;
+    const total = h.scrollHeight - h.clientHeight;
+    barra.style.transform = `scaleX(${total > 0 ? Math.min(1, h.scrollTop / total) : 0})`;
+    let actual = -1;
+    pasos.forEach((s, i) => { if (s && s.getBoundingClientRect().top < 160) actual = i; });
+    if (h.scrollTop + h.clientHeight >= h.scrollHeight - 4) actual = pasos.length - 1;
+    maxVisto = Math.max(maxVisto, actual);
+    enlaces.forEach((a, i) => {
+      a.setAttribute('aria-current', String(i === actual));
+      a.classList.toggle('visto', i <= maxVisto && i !== actual);
+    });
+    avance.textContent = `${Math.max(0, actual + 1)}/${pasos.length}`;
+  }
+  let pend = false;
+  addEventListener('scroll', () => { if (!pend) { pend = true; requestAnimationFrame(() => { pend = false; alMover(); }); } }, { passive: true });
+  addEventListener('resize', alMover);
+  alMover();
+
+  // Capturas en grande al tocarlas.
+  const visor = document.getElementById('visor');
+  const img = document.getElementById('visorImg');
+  const txt = document.getElementById('visorTxt');
+  document.querySelectorAll('button.zoom').forEach((b) => {
+    const im = b.querySelector('img');
+    b.setAttribute('aria-label', `Ampliar: ${im.alt}`);
+    b.addEventListener('click', () => {
+      img.src = im.currentSrc || im.src; img.alt = im.alt;
+      const cap = b.closest('figure')?.querySelector('figcaption');
+      txt.textContent = cap ? cap.textContent : im.alt;
+      if (typeof visor.showModal === 'function') visor.showModal(); else window.open(img.src, '_blank');
+    });
+  });
+  document.getElementById('cerrarVisor').addEventListener('click', () => visor.close());
+  visor.addEventListener('click', (e) => { if (e.target === visor) visor.close(); });
+})();
+</script>
+</body>
+</html>

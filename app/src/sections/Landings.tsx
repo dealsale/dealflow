@@ -100,6 +100,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Tienda en línea</h1>
           <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Tu tienda con todos tus productos y una página de venta (landing) por producto para pautar. Pago contra entrega; los pedidos llegan directo a DealFlow.</p>
         </div>
+        <a href="/tutorial-tienda-en-linea" target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>📘 Ver tutorial</a>
         {dominio && membresia?.activa && (dominio.estado === 'activo' || dominio.raiz) && <a href={`https://${dominio.estado === 'activo' ? dominio.dominio : `${dominio.sub}.${dominio.raiz}`}`} target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>Ver mi tienda ↗</a>}
         <button onClick={() => setCreando(true)} className="df-btn-primary" style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Agregar producto</button>
       </div>
