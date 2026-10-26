@@ -19,6 +19,7 @@ import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappTe
 import { mediaPath, saveOutgoingMedia, saveOutgoingMessage, tipoDeMime } from './media.js';
 import { existsSync, readFileSync } from 'node:fs';
 import type * as DropiApi from './dropiApi.js';
+import { problemaVariables } from './seedPlantillas.js';
 
 export const api = Router();
 // Registro de accesos del equipo (administradores y soporte dentro de una tienda).
@@ -3163,6 +3164,7 @@ api.post('/superadmin/meta-templates', requireAuth, requireSuperAdmin, (req, res
   const nombre = String(b.nombre || '').trim().toLowerCase();
   if (!NOMBRE_TPL.test(nombre)) return res.status(400).json({ error: 'El nombre debe ser minúsculas, números y guion bajo (sin espacios ni tildes).' });
   if (!String(b.cuerpo || '').trim()) return res.status(400).json({ error: 'El cuerpo del mensaje es obligatorio.' });
+  { const malo = problemaVariables(String(b.cuerpo)); if (malo) return res.status(400).json({ error: malo }); }
   if (db.prepare('SELECT 1 FROM meta_templates WHERE nombre = ?').get(nombre)) return res.status(400).json({ error: 'Ya existe una plantilla con ese nombre.' });
   const id = uid();
   db.prepare(
@@ -3179,6 +3181,7 @@ api.put('/superadmin/meta-templates/:id', requireAuth, requireSuperAdmin, (req, 
   if (!t) return res.status(404).json({ error: 'Plantilla no encontrada.' });
   const b = req.body || {};
   if (!String(b.cuerpo || '').trim()) return res.status(400).json({ error: 'El cuerpo del mensaje es obligatorio.' });
+  { const malo = problemaVariables(String(b.cuerpo)); if (malo) return res.status(400).json({ error: malo }); }
   db.prepare(
     `UPDATE meta_templates SET categoria = ?, idioma = ?, encabezado = ?, cuerpo = ?, pie = ?, botones = ?, ejemplos = ? WHERE id = ?`,
   ).run(b.categoria === 'MARKETING' ? 'MARKETING' : 'UTILITY', String(b.idioma || 'es'),

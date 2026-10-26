@@ -77,7 +77,7 @@ const PLANTILLAS: Semilla[] = [
   // ── Marketing (requieren opt-in) ──
   {
     nombre: 'nueva_coleccion', categoria: 'MARKETING', idioma: 'es',
-    cuerpo: '{{1}}, ya llegó lo nuevo 🔥\nEstrenamos {{2}} y sabemos que te va a encantar.\nMíralo antes de que se agote y aparta el tuyo respondiéndonos por aquí.',
+    cuerpo: 'Hola {{1}}, ya llegó lo nuevo 🔥\nEstrenamos {{2}} y sabemos que te va a encantar.\nMíralo antes de que se agote y aparta el tuyo respondiéndonos por aquí.',
     pie: 'Responde BAJA para no recibir más novedades.',
     ejemplos: ['Camila', 'la colección de verano'],
   },
@@ -89,14 +89,14 @@ const PLANTILLAS: Semilla[] = [
   },
   {
     nombre: 'promo_tiempo_limitado', categoria: 'MARKETING', idioma: 'es',
-    cuerpo: '{{1}}, solo por hoy: {{2}} 🛍️\nAprovecha antes de que termine {{3}}.\nResponde por aquí y te ayudamos a elegir tu talla y color.',
+    cuerpo: '¡Hola {{1}}! Solo por hoy: {{2}} 🛍️\nAprovecha antes de que termine {{3}}.\nResponde por aquí y te ayudamos a elegir tu talla y color.',
     pie: 'Responde BAJA para no recibir promociones.',
     ejemplos: ['Camila', '20% en toda la tienda', 'hoy a medianoche'],
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Quiero aprovechar' }, { tipo: 'QUICK_REPLY', texto: 'BAJA' }],
   },
   {
     nombre: 'carrito_abandonado', categoria: 'MARKETING', idioma: 'es',
-    cuerpo: '{{1}}, ¿te quedaste pensando en {{2}}? 👀\nTodavía lo tenemos disponible para ti.\nRespóndenos y lo dejamos apartado hoy mismo.',
+    cuerpo: 'Hola {{1}}, ¿te quedaste pensando en {{2}}? 👀\nTodavía lo tenemos disponible para ti.\nRespóndenos y lo dejamos apartado hoy mismo.',
     pie: 'Responde BAJA para no recibir promociones.',
     ejemplos: ['Camila', 'el bolso café'],
   },
@@ -116,4 +116,23 @@ export function seedPlantillas(): void {
     nuevas++;
   }
   if (nuevas) console.log(`[seed] ${nuevas} plantilla(s) de Meta precargadas`);
+  // Meta rechaza el cuerpo que empieza o termina con una variable: las precargadas que
+  // quedaron así se corrigen con el texto nuevo (las que el equipo cambió no se tocan).
+  const mala = db.prepare('SELECT id, cuerpo FROM meta_templates WHERE nombre = ?');
+  const arreglar = db.prepare('UPDATE meta_templates SET cuerpo = ? WHERE id = ?');
+  for (const p of PLANTILLAS) {
+    const r = mala.get(p.nombre) as { id: string; cuerpo: string } | undefined;
+    if (r && r.cuerpo !== p.cuerpo && problemaVariables(r.cuerpo) && !problemaVariables(p.cuerpo)) {
+      arreglar.run(p.cuerpo, r.id);
+      console.log(`[seed] plantilla ${p.nombre}: se quitó la variable del inicio/final`);
+    }
+  }
+}
+
+/** Meta no acepta un cuerpo que empiece o termine con una variable ({{1}}…). */
+export function problemaVariables(cuerpo: string): string {
+  const t = String(cuerpo || '').trim();
+  if (/^\{\{\s*\d+\s*\}\}/.test(t)) return 'Meta no acepta plantillas que empiecen con una variable. Pon texto antes, por ejemplo: "Hola {{1}}, …".';
+  if (/\{\{\s*\d+\s*\}\}[\s.!?¡¿,;:)]*$/.test(t)) return 'Meta no acepta plantillas que terminen con una variable. Agrega una frase después, por ejemplo: "… {{3}}. ¡Gracias!".';
+  return '';
 }
