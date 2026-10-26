@@ -549,6 +549,7 @@ button { font-family: inherit; }
       if (t.grupo !== g) { g = t.grupo; html += `<h3>${g}</h3>`; }
       html += `<button class="tuto-btn" type="button" data-i="${i}" aria-current="${i === ti}"><span class="ic">${t.ic}</span><span><b>${t.titulo}</b><span class="m">${t.min} min · ${t.pasos.filter((x) => x.t).length} pasos</span></span>${hechos.has(t.id) ? '<span class="ok">✓</span>' : ''}</button>`;
     });
+    html += '<h3>Guías completas</h3><a class="tuto-btn" href="/tutorial-tienda-en-linea" style="text-decoration:none"><span class="ic">🛍️</span><span><b>Tienda en línea y Píxel de Meta</b><span class="m">12 min · guía con capturas</span></span></a>';
     $('riel').innerHTML = html;
     $('avanceGlobal').textContent = `${hechos.size} de ${T.length} completados`;
   }
@@ -629,7 +630,7 @@ button { font-family: inherit; }
   });
   $('sig').onclick = siguiente;
   $('ant').onclick = () => { if (pi > 0) { pi--; pintar(); } };
-  $('riel').addEventListener('click', (e) => { const b = e.target.closest('.tuto-btn'); if (b) irA(Number(b.dataset.i), 0); });
+  $('riel').addEventListener('click', (e) => { const b = e.target.closest('button.tuto-btn'); if (b) irA(Number(b.dataset.i), 0); });
   document.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight') siguiente(); if (e.key === 'ArrowLeft' && pi > 0) { pi--; pintar(); } });
   window.addEventListener('resize', () => { medir(); const p = T[ti].pasos[pi]; if (p.t) enfocar(p); });
 

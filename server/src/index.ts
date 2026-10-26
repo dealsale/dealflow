@@ -130,7 +130,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'imagenes-completas',
+    build: 'tutorial-tienda',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -197,6 +197,8 @@ const raizDeSub = (host: string) => LANDING_HOSTS.map(raizDe).find((r) => host.e
 const SIN_CACHE = 'no-cache, no-store, must-revalidate';
 const enviarHtml = (res: express.Response, archivo: string) => { res.setHeader('Cache-Control', SIN_CACHE); res.sendFile(archivo); };
 if (existsSync(APP_DIST)) {
+  // Guía de Tienda en línea (antes del estático: es una carpeta con sus capturas y no debe redirigir a «/»).
+  app.get(/^\/tutorial-tienda-en-linea\/?$/i, (_req, res) => enviarHtml(res, path.join(APP_DIST, 'tutorial-tienda-en-linea', 'index.html')));
   app.use(express.static(APP_DIST, {
     index: false, // sirve /logo.png y /assets/* en cualquier host
     setHeaders: (res, ruta) => {
