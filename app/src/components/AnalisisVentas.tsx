@@ -7,7 +7,7 @@ import { Dropdown } from './Dropdown';
 
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 18, boxShadow: '0 1px 2px rgba(15,23,42,.04)', minWidth: 0 };
 const titulo: React.CSSProperties = { fontWeight: 700, fontSize: 15, marginBottom: 10 };
-const COLOR_CANAL: Record<string, string> = { whatsapp: '#10B981', messenger: '#3B82F6', instagram: '#EC4899', web: '#F59E0B', shopify: '#5E8E3E', manual: '#94A3B8' };
+const COLOR_CANAL: Record<string, string> = { whatsapp: '#10B981', messenger: '#3B82F6', instagram: '#EC4899', web: '#F59E0B', shopify: '#5E8E3E', landing: '#8B5CF6', manual: '#94A3B8' };
 const COLOR_ESTADO: Record<string, string> = { Nuevo: '#3B82F6', Confirmado: '#6366F1', 'Guía generada': '#8B5CF6', 'En tránsito': '#F59E0B', 'En reparto': '#F97316', Novedad: '#EF4444', Entregado: '#10B981', Devuelto: '#DC2626', Cancelado: '#94A3B8' };
 const money = (n: number) => (Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : Math.abs(n) >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`);
 
@@ -97,7 +97,9 @@ function Columnas({ datos, color, etiqueta }: { datos: { label: string; valor: n
   );
 }
 
-const NOMBRE_CANAL: Record<string, string> = { whatsapp: 'WhatsApp', messenger: 'Messenger', instagram: 'Instagram', web: 'Chat web', shopify: 'Shopify', manual: 'Manual' };
+const NOMBRE_CANAL: Record<string, string> = { whatsapp: 'WhatsApp', messenger: 'Messenger', instagram: 'Instagram', web: 'Chat web', shopify: 'Shopify', landing: 'Tienda en línea', manual: 'Manual' };
+/** Pesos abreviados para el centro de las donas: $15,7 M · $420 mil. */
+const pesosCorto = (n: number) => (Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(1).replace('.', ',')} M` : Math.abs(n) >= 1e3 ? `$${Math.round(n / 1e3)} mil` : `$${Math.round(n)}`);
 
 /**
  * Análisis de ventas con filtros cruzados: todo (KPI y gráficas) responde a los filtros.
@@ -211,11 +213,11 @@ export function AnalisisVentas({ desde, hasta }: { desde: string; hasta: string 
             </div>
             <div style={card}>
               <div style={titulo}>Ventas por canal</div>
-              <Donut data={a.porCanal.map((c) => ({ label: NOMBRE_CANAL[c.canal] || c.canal, valor: c.ventas || c.chats, color: COLOR_CANAL[c.canal] || PALETA[5] }))} />
+              <Donut formato={fmt} corto={pesosCorto} data={a.porCanal.map((c) => ({ label: NOMBRE_CANAL[c.canal] || c.canal, valor: c.ventas, color: COLOR_CANAL[c.canal] || PALETA[5] }))} />
             </div>
             <div style={card}>
               <div style={titulo}>Anuncios vs. orgánico</div>
-              <Donut data={[{ label: 'Desde anuncios', valor: a.porOrigen.anuncio.ventas, color: PALETA[1] }, { label: 'Orgánico', valor: a.porOrigen.organico.ventas, color: PALETA[0] }]} />
+              <Donut formato={fmt} corto={pesosCorto} data={[{ label: 'Desde anuncios', valor: a.porOrigen.anuncio.ventas, color: PALETA[1] }, { label: 'Orgánico', valor: a.porOrigen.organico.ventas, color: PALETA[0] }]} />
               <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 6, lineHeight: 1.5 }}>
                 Anuncios: {a.porOrigen.anuncio.chats} chats · {a.porOrigen.anuncio.pedidos} pedidos<br />Orgánico: {a.porOrigen.organico.chats} chats · {a.porOrigen.organico.pedidos} pedidos
               </div>

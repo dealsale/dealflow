@@ -12,6 +12,10 @@ import './metaInsights.js'; // crea ads_insights / anuncio_producto si aún no e
 export interface FiltrosAnalisis { canal?: string; origen?: string; producto?: string; campana?: string; ad?: string; ciudad?: string; estado?: string }
 
 const EN_CAMINO = ['Guía generada', 'En tránsito', 'En reparto', 'Novedad'];
+// Pedidos que llegan por su propio canal (el chat que se abre después es solo para confirmar).
+const ORIGEN_PROPIO = ['shopify', 'landing', 'web'];
+// Las ventas no cuentan los pedidos cancelados ni los devueltos (esa plata no entró).
+const NO_VENTA = ['Cancelado', 'Devuelto'];
 const normCiudad = (c: string) => String(c || '').trim().replace(/\s+/g, ' ').toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase());
 
 export function analisis(sid: string, desde: string, hasta: string, f: FiltrosAnalisis) {
@@ -57,7 +61,7 @@ export function analisis(sid: string, desde: string, hasta: string, f: FiltrosAn
   const itemsDe = db.prepare('SELECT i.qty, i.nombre, i.precio, i.product_id pid, p.nombre prod FROM order_items i LEFT JOIN products p ON p.id = i.product_id WHERE i.order_id = ?');
   const pedidos = pedidosRaw.map((o) => {
     const ad = o.adId || telAAd.get(normTel(o.tel)) || '';
-    const canal = o.leadId ? canalLead.get(o.leadId) || 'whatsapp' : o.origen || 'manual';
+    const canal = ORIGEN_PROPIO.includes(o.origen) ? o.origen : o.leadId ? canalLead.get(o.leadId) || 'whatsapp' : o.origen || 'manual';
     const items = itemsDe.all(o.id) as { qty: number; nombre: string; precio: number; pid: string | null; prod: string | null }[];
     return { ...o, ad, canal, ciudad: normCiudad(o.ciudad), items, val: Number(o.val) || 0 };
   }).filter((o) =>
@@ -91,7 +95,7 @@ export function analisis(sid: string, desde: string, hasta: string, f: FiltrosAn
   }
 
   // ── KPI ──
-  const validos = pedidos.filter((o) => o.estado !== 'Cancelado');
+  const validos = pedidos.filter((o) => !NO_VENTA.includes(o.estado));
   const ventas = validos.reduce((a, o) => a + o.val, 0);
   const entregados = pedidos.filter((o) => o.estado === 'Entregado');
   const devueltos = pedidos.filter((o) => o.estado === 'Devuelto').length;
@@ -101,7 +105,7 @@ export function analisis(sid: string, desde: string, hasta: string, f: FiltrosAn
   const respondieron = leads.filter((l) => l.nc >= 2).length;
   const kpis = {
     chats, chatsAnuncio: leads.filter((l) => l.ad).length, respondieron,
-    pedidos: pedidos.length, cancelados: pedidos.length - validos.length, despachados, entregados: entregados.length, devueltos,
+    pedidos: pedidos.length, cancelados: pedidos.filter((o) => o.estado === 'Cancelado').length, despachados, entregados: entregados.length, devueltos,
     ventas, ventasEntregadas: entregados.reduce((a, o) => a + o.val, 0), unidades,
     ticket: validos.length ? Math.round(ventas / validos.length) : 0,
     conversion: chats ? Math.round((pedidos.length / chats) * 1000) / 10 : 0,
@@ -122,7 +126,7 @@ export function analisis(sid: string, desde: string, hasta: string, f: FiltrosAn
   for (const o of pedidos) {
     const i = idx.get(o.d); if (i === undefined) continue;
     serie[i].pedidos++;
-    if (o.estado !== 'Cancelado') serie[i].ventas += o.val;
+    if (!NO_VENTA.includes(o.estado)) serie[i].ventas += o.val;
     if (o.estado === 'Entregado') serie[i].entregados++;
   }
 
@@ -153,7 +157,7 @@ export function analisis(sid: string, desde: string, hasta: string, f: FiltrosAn
   const ciudades = new Map<string, { ciudad: string; pedidos: number; ventas: number; entregados: number; devueltos: number }>();
   for (const o of pedidos) {
     const c = ciudades.get(o.ciudad || '—') || { ciudad: o.ciudad || '—', pedidos: 0, ventas: 0, entregados: 0, devueltos: 0 };
-    c.pedidos++; if (o.estado !== 'Cancelado') c.ventas += o.val; if (o.estado === 'Entregado') c.entregados++; if (o.estado === 'Devuelto') c.devueltos++;
+    c.pedidos++; if (!NO_VENTA.includes(o.estado)) c.ventas += o.val; if (o.estado === 'Entregado') c.entregados++; if (o.estado === 'Devuelto') c.devueltos++;
     ciudades.set(c.ciudad, c);
   }
   const porEstado = new Map<string, number>();
@@ -161,14 +165,14 @@ export function analisis(sid: string, desde: string, hasta: string, f: FiltrosAn
   const porCanal = new Map<string, { canal: string; chats: number; pedidos: number; ventas: number }>();
   const canalDe = (c: string) => { let x = porCanal.get(c); if (!x) { x = { canal: c, chats: 0, pedidos: 0, ventas: 0 }; porCanal.set(c, x); } return x; };
   for (const l of leads) canalDe(l.canal).chats++;
-  for (const o of pedidos) { const x = canalDe(o.canal); x.pedidos++; if (o.estado !== 'Cancelado') x.ventas += o.val; }
+  for (const o of pedidos) { const x = canalDe(o.canal); x.pedidos++; if (!NO_VENTA.includes(o.estado)) x.ventas += o.val; }
   const porOrigen = { anuncio: { chats: 0, pedidos: 0, ventas: 0 }, organico: { chats: 0, pedidos: 0, ventas: 0 } };
   for (const l of leads) porOrigen[l.ad ? 'anuncio' : 'organico'].chats++;
-  for (const o of pedidos) { const x = porOrigen[o.ad ? 'anuncio' : 'organico']; x.pedidos++; if (o.estado !== 'Cancelado') x.ventas += o.val; }
+  for (const o of pedidos) { const x = porOrigen[o.ad ? 'anuncio' : 'organico']; x.pedidos++; if (!NO_VENTA.includes(o.estado)) x.ventas += o.val; }
 
   // ── Opciones de los filtros (de todo el rango, sin filtrar) ──
   const opciones = {
-    canales: [...new Set([...leadsRaw.map((l) => l.canal), ...pedidosRaw.map((o) => (o.leadId ? canalLead.get(o.leadId) || 'whatsapp' : o.origen || 'manual'))])].filter(Boolean),
+    canales: [...new Set([...leadsRaw.map((l) => l.canal), ...pedidosRaw.map((o) => (ORIGEN_PROPIO.includes(o.origen) ? o.origen : o.leadId ? canalLead.get(o.leadId) || 'whatsapp' : o.origen || 'manual'))])].filter(Boolean),
     ciudades: [...new Map(pedidosRaw.map((o) => [normCiudad(o.ciudad), 0])).keys()].filter(Boolean).sort(),
     estados: [...new Set(pedidosRaw.map((o) => o.estado))],
     productos: (db.prepare("SELECT id, nombre FROM products WHERE store_id = ? ORDER BY nombre").all(sid) as { id: string; nombre: string }[]),

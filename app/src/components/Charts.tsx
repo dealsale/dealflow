@@ -136,35 +136,43 @@ export function GroupedBars({ data, series, alto = 220 }: {
   );
 }
 
-/** Dona con leyenda (ej. chats por canal). */
-export function Donut({ data, alto = 200 }: { data: { label: string; valor: number; color: string }[]; alto?: number }) {
-  const total = data.reduce((a, d) => a + d.valor, 0);
+/**
+ * Dona con leyenda (ej. chats por canal). `formato` muestra cada valor (p. ej. en pesos) y
+ * `corto` el total del centro (abreviado para que quepa: $15,7 M).
+ */
+export function Donut({ data, alto = 170, formato, corto }: { data: { label: string; valor: number; color: string }[]; alto?: number; formato?: (n: number) => string; corto?: (n: number) => string }) {
+  const visibles = data.filter((d) => d.valor > 0);
+  const total = visibles.reduce((a, d) => a + d.valor, 0);
   if (!total) return <SinDatos alto={alto} />;
-  const R = 80, r = 50, cx = 100, cy = 100;
+  const R = 80, r = 54, cx = 100, cy = 100;
   let ang = -Math.PI / 2;
-  const arcs = data.filter((d) => d.valor > 0).map((d) => {
+  const arcs = visibles.map((d) => {
     const frac = d.valor / total;
-    const a0 = ang, a1 = ang + frac * Math.PI * 2;
-    ang = a1;
+    const a0 = ang, a1 = ang + frac * Math.PI * 2 - (visibles.length > 1 ? 0.0001 : 0);
+    ang = a0 + frac * Math.PI * 2;
     const large = frac > 0.5 ? 1 : 0;
     const p = (rad: number, a: number) => `${cx + rad * Math.cos(a)},${cy + rad * Math.sin(a)}`;
-    const dPath = `M ${p(R, a0)} A ${R} ${R} 0 ${large} 1 ${p(R, a1)} L ${p(r, a1)} A ${r} ${r} 0 ${large} 0 ${p(r, a0)} Z`;
-    return { d, dPath, frac };
+    const dPath = frac >= 0.9999
+      ? `M ${cx} ${cy - R} A ${R} ${R} 0 1 1 ${cx - 0.01} ${cy - R} L ${cx - 0.01} ${cy - r} A ${r} ${r} 0 1 0 ${cx} ${cy - r} Z`
+      : `M ${p(R, a0)} A ${R} ${R} 0 ${large} 1 ${p(R, a1)} L ${p(r, a1)} A ${r} ${r} 0 ${large} 0 ${p(r, a0)} Z`;
+    return { d, dPath };
   });
+  const f = formato || ((n: number) => n.toLocaleString('es-CO'));
+  const centro = (corto || f)(total);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
-      <svg viewBox="0 0 200 200" width={alto} height={alto} style={{ maxWidth: '45%' }}>
-        {arcs.map((a, i) => <path key={i} d={a.dPath} fill={a.d.color}><title>{a.d.label}: {a.d.valor}</title></path>)}
-        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="26" fontWeight="800" fill="var(--df-text)">{total}</text>
-        <text x={cx} y={cy + 16} textAnchor="middle" fontSize="11" fill="var(--df-text-muted)">total</text>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+      <svg viewBox="0 0 200 200" width={alto} height={alto} style={{ flex: '0 0 auto', maxWidth: '100%' }}>
+        {arcs.map((a, i) => <path key={i} d={a.dPath} fill={a.d.color}><title>{a.d.label}: {f(a.d.valor)}</title></path>)}
+        <text x={cx} y={cy + 2} textAnchor="middle" fontSize={centro.length > 7 ? 21 : 27} fontWeight="800" fill="var(--df-text)">{centro}</text>
+        <text x={cx} y={cy + 22} textAnchor="middle" fontSize="11.5" fill="var(--df-text-muted)">total</text>
       </svg>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 120 }}>
-        {data.filter((d) => d.valor > 0).map((d) => (
-          <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-            <span style={{ width: 11, height: 11, borderRadius: 3, background: d.color, flexShrink: 0 }} />
-            <span style={{ flex: 1, color: 'var(--df-text-body)', textTransform: 'capitalize' }}>{d.label}</span>
-            <span style={{ fontWeight: 700 }}>{d.valor}</span>
-            <span style={{ color: 'var(--df-text-faint)', fontSize: 12, width: 40, textAlign: 'right' }}>{Math.round((d.valor / total) * 100)}%</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9, flex: '1 1 150px', minWidth: 0 }}>
+        {visibles.map((d) => (
+          <div key={d.label} style={{ display: 'grid', gridTemplateColumns: '11px minmax(0,1fr) auto 38px', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+            <span style={{ width: 11, height: 11, borderRadius: 3, background: d.color }} />
+            <span title={d.label} style={{ color: 'var(--df-text-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.label}</span>
+            <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{f(d.valor)}</span>
+            <span style={{ color: 'var(--df-text-faint)', fontSize: 11.5, textAlign: 'right' }}>{Math.round((d.valor / total) * 100)}%</span>
           </div>
         ))}
       </div>
