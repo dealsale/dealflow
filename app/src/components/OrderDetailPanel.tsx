@@ -203,7 +203,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                 <input type="checkbox" checked={conGuia} onChange={(e) => setConGuia(e.target.checked)} /> 🚚 Crear también la guía de transporte
               </label>
-              {conGuia && <CamposGuia g={g} />}
+              {conGuia && <CamposGuia g={g} items={sel.items} />}
             </div>
           )}
           <div style={{ padding: 12, borderTop: '1px solid var(--df-border)', display: 'flex', gap: 8 }}>
@@ -336,8 +336,24 @@ function useGuiaEffi() {
   return { ops, d, setD, cargar, cargaMsg, listo };
 }
 
+/**
+ * Contenido abreviado del paquete a partir de los productos del pedido, para la guía:
+ * "2 Blusa Verona, 1 Jogger Jaspeado" (sin tallas ni colores, sumando las variantes).
+ */
+function contenidoDeItems(items: { qty: number; nombre: string }[]): string {
+  const grupos = new Map<string, number>();
+  for (const it of items) {
+    const base = it.nombre.replace(/\s*\(.*\)\s*$/, '').replace(/\s+-\s+.*$/, '').replace(/\s+/g, ' ').trim() || it.nombre;
+    const corto = base.split(' ').slice(0, 3).join(' ');
+    grupos.set(corto, (grupos.get(corto) || 0) + (Number(it.qty) || 1));
+  }
+  let t = [...grupos].map(([n, q]) => `${q} ${n}`).join(', ');
+  if (t.length > 80) t = [...grupos].map(([n, q]) => `${q} ${n.split(' ')[0]}`).join(', ');
+  return t.slice(0, 80);
+}
+
 /** Campos de la guía (transportadora, servicio, paquete…). */
-function CamposGuia({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
+function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; items?: { qty: number; nombre: string }[] }) {
   const { ops, d, setD } = g;
   if (!ops) return g.cargaMsg ? <div style={{ fontSize: 12.5, color: g.cargaMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{g.cargaMsg}</div> : null;
   const set = (p: Partial<DatosGuia>) => setD((x) => ({ ...x, ...p }));
@@ -366,7 +382,10 @@ function CamposGuia({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
         <div><label style={lb}>Largo (cm)</label><input type="number" min={1} value={d.largo} onChange={(e) => set({ largo: Number(e.target.value) })} style={sel_} /></div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <div><label style={lb}>Contenido (opcional)</label><input value={d.contenido} onChange={(e) => set({ contenido: e.target.value })} placeholder="Se copia de la remisión" style={sel_} /></div>
+        <div><label style={lb}>Contenido (opcional)</label><input value={d.contenido} onChange={(e) => set({ contenido: e.target.value })} placeholder="Se copia de la remisión" style={sel_} />
+          {items.length > 0 && <button type="button" onClick={() => set({ contenido: contenidoDeItems(items) })} title={contenidoDeItems(items)}
+            style={{ marginTop: 5, background: 'none', border: '1px dashed var(--df-purple-border, var(--df-border))', borderRadius: 7, padding: '4px 8px', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: 'var(--df-purple)', cursor: 'pointer' }}>📋 Copiar de los artículos</button>}
+        </div>
         <div><label style={lb}>Valor declarado (opcional)</label><input type="number" min={0} value={d.valorDeclarado || ''} onChange={(e) => set({ valorDeclarado: Number(e.target.value) })} placeholder="Del total de la remisión" style={sel_} /></div>
         <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Nota en la guía (opcional)</label><input value={d.nota} onChange={(e) => set({ nota: e.target.value })} placeholder="Ej: llamar antes de entregar" style={sel_} /></div>
       </div>
@@ -401,7 +420,7 @@ function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
         <b style={{ fontSize: 13.5, flex: 1 }}>Guía de transporte</b>
         <button onClick={() => setAbierto(false)} style={{ ...btnS, padding: '5px 10px' }}>Cerrar</button>
       </div>
-      <CamposGuia g={g} />
+      <CamposGuia g={g} items={sel.items} />
       {g.ops && <button onClick={crear} disabled={!g.listo || enviando} style={{ ...btnP, opacity: !g.listo || enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Crear guía en Effi'}</button>}
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
     </div>
