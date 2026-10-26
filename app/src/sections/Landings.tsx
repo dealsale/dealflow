@@ -544,7 +544,7 @@ function ListaImagenes({ titulo, urls, onChange, max, cuadrada = false }: { titu
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: 8, marginBottom: 8 }}>
         {urls.map((u, i) => (
           <div key={u + i} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--df-border)', aspectRatio: cuadrada ? '1/1' : '3/4', background: 'var(--df-surface-2, #f4f4f5)' }}>
-            <img src={u} alt="" style={{ width: '100%', height: '100%', objectFit: cuadrada ? 'cover' : 'cover', objectPosition: 'top' }} />
+            <img src={u} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,.55)' }}>
               <button type="button" onClick={() => mover(i, -1)} disabled={!i} style={miniBtn} aria-label="Mover a la izquierda">‹</button>
               <button type="button" onClick={() => onChange(urls.filter((_, k) => k !== i))} style={miniBtn} aria-label="Quitar">✕</button>
