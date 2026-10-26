@@ -14,13 +14,14 @@ export type OrigenPedido = 'whatsapp' | 'instagram' | 'messenger' | 'shopify' | 
 const L_WEB = 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18';
 const L_MANUAL = 'M4 20h4L19 9l-4-4L4 16v4M14 6l4 4';
 
-const ORIGENES: Record<string, { label: string; fondo: string; path?: string; linea?: string }> = {
+const ORIGENES: Record<string, { label: string; fondo: string; path?: string; linea?: string; img?: string }> = {
   whatsapp: { label: 'WhatsApp', fondo: '#25D366', path: P_WHATSAPP },
   instagram: { label: 'Instagram', fondo: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)', path: P_INSTAGRAM },
   messenger: { label: 'Messenger', fondo: 'linear-gradient(135deg, #00B2FF 0%, #6A5CFF 55%, #FF5C87 100%)', path: P_MESSENGER },
   shopify: { label: 'Shopify', fondo: '#95BF47', path: P_SHOPIFY },
   web: { label: 'Chat web', fondo: '#4F46E5', linea: L_WEB },
-  landing: { label: 'Landing', fondo: '#4F46E5', linea: L_WEB },
+  // Pedidos de la Tienda en línea (landings) de cualquier tienda: logo de DealFlow.
+  landing: { label: 'Tienda en línea', fondo: '#020617', img: '/logos/dealflow-tienda.webp' },
   manual: { label: 'Manual', fondo: '#64748B', linea: L_MANUAL },
 };
 
@@ -34,7 +35,9 @@ export function OrigenBadge({ origen, size = 20, texto = false }: { origen?: str
       aria-label={`Origen: ${o.label}`}
       style={{ width: size, height: size, borderRadius: '50%', background: o.fondo, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, verticalAlign: 'middle', boxShadow: '0 1px 2px rgba(15,23,42,.18)' }}
     >
-      {o.path ? (
+      {o.img ? (
+        <img src={o.img} alt="" width={size} height={size} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
+      ) : o.path ? (
         <svg viewBox="0 0 24 24" width={Math.round(size * 0.62)} height={Math.round(size * 0.62)} fill="#fff" aria-hidden="true"><path d={o.path} /></svg>
       ) : (
         <svg viewBox="0 0 24 24" width={Math.round(size * 0.66)} height={Math.round(size * 0.66)} fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={o.linea} /></svg>
