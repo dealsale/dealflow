@@ -1134,7 +1134,7 @@ export function useDealFlowState() {
     // En modo soporte se trabaja en la tienda: las direcciones /admin/… no aplican.
     if (impersonando && r.mode === 'admin') return;
     if (r.mode === 'admin' && r.adminSection && esAdm) {
-      if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'landings' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
+      if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
     } else if (r.section && (!agente || AGENTE_SECCIONES.includes(r.section))) {
       setMode('vendedor'); setSection(r.section);
     }

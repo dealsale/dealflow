@@ -307,8 +307,8 @@ api.delete('/mis-tiendas/:id', requireAuth, requireStore, (req, res) => {
 // ── Estado completo de la tienda (una llamada para pintar el panel) ───
 api.get('/state', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
-  const storeRow = db.prepare('SELECT id, nombre, plan, tema_premium, landings_habilitado FROM stores WHERE id = ?').get(sid) as { id: string; nombre: string; plan: string; tema_premium: number; landings_habilitado?: number };
-  const store = { id: storeRow.id, nombre: storeRow.nombre, plan: storeRow.plan, temaPremium: !!storeRow.tema_premium, landings: !!storeRow.landings_habilitado };
+  const storeRow = db.prepare('SELECT id, nombre, plan, tema_premium FROM stores WHERE id = ?').get(sid) as { id: string; nombre: string; plan: string; tema_premium: number };
+  const store = { id: storeRow.id, nombre: storeRow.nombre, plan: storeRow.plan, temaPremium: !!storeRow.tema_premium };
   const bloqueados = productosBloqueados(sid); // productos de biblioteca gratuitos (estructura no editable)
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, precioPromo: Number(p.precio_promo) || 0, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
@@ -3653,32 +3653,15 @@ api.post('/landings/:id/despublicar', requireAuth, requireStore, sinMembresia, a
   (await import('./landings.js')).despublicarLanding(req.user!.storeId!, req.params.id);
   res.json({ ok: true });
 });
-// Mensualidad de la Tienda en línea y membresías (equipo DealFlow).
-api.get('/admin/landings', requireAuth, requireSuperAdmin, async (_req, res) => {
-  const L = await import('./landings.js');
-  const stats = { ...(db.prepare("SELECT COUNT(*) total, SUM(estado = 'publicada') publicadas, SUM(pedidos) pedidos FROM landings").get() as object),
-    miembros: (db.prepare("SELECT COUNT(*) n FROM stores WHERE tienda_vence >= date('now','-5 hours')").get() as { n: number }).n };
-  res.json({ ajustes: L.ajustesLandings(), stats });
+// Precios de los servicios aparte del plan (Tienda en línea y, luego, microtransacciones).
+api.get('/admin/precios', requireAuth, requireAdmin, async (_req, res) => {
+  res.json({ precios: (await import('./preciosServicios.js')).listarPrecios() });
 });
-api.get('/admin/landings/tiendas', requireAuth, requireSuperAdmin, async (_req, res) => {
-  res.json({ tiendas: (await import('./landings.js')).tiendasLandings() });
-});
-api.put('/admin/landings/tiendas/:id', requireAuth, requireSuperAdmin, async (req, res) => {
-  if (!(await import('./landings.js')).habilitarLandings(req.params.id, !!req.body?.habilitado)) return res.status(404).json({ error: 'Tienda no encontrada.' });
-  registrarAccionEquipo(req.user!.email, `${req.body?.habilitado ? 'Dio' : 'Quitó'} la Tienda en línea de cortesía`, req.params.id);
-  res.json({ ok: true });
-});
-// Sumar días de membresía a mano (ej. pagó por otro medio).
-api.post('/admin/landings/tiendas/:id/extender', requireAuth, requireSuperAdmin, async (req, res) => {
-  const dias = Math.max(1, Math.min(366, Math.round(Number(req.body?.dias) || 30)));
-  if (!db.prepare('SELECT 1 FROM stores WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'Tienda no encontrada.' });
-  const vence = (await import('./landings.js')).extenderMembresia(req.params.id, dias);
-  registrarAccionEquipo(req.user!.email, `Sumó ${dias} días a la Tienda en línea (vence ${vence})`, req.params.id);
-  res.json({ ok: true, vence });
-});
-api.put('/admin/landings', requireAuth, requireSuperAdmin, async (req, res) => {
-  const L = await import('./landings.js');
-  res.json({ ajustes: L.guardarAjustesLandings({ mensualidad: req.body?.mensualidad }) });
+api.put('/admin/precios/:clave', requireAuth, requireAdmin, async (req, res) => {
+  const p = (await import('./preciosServicios.js')).cambiarPrecio(req.params.clave, Number(req.body?.precio));
+  if (!p) return res.status(404).json({ error: 'Servicio no encontrado.' });
+  registrarAccionEquipo(req.user!.email, `Cambió el precio de ${p.nombre} a ${p.precio}`);
+  res.json({ precio: p });
 });
 
 // ── Registro de actividad / errores de la tienda (diagnóstico del Inbox) ──

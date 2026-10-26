@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
+import { apiCambiarPrecioServicio, apiPreciosServicios, type PrecioServicio } from '../../lib/api';
 
 export function Planes({ df }: { df: DealFlowState }) {
   return (
@@ -97,6 +99,54 @@ export function Planes({ df }: { df: DealFlowState }) {
           {df.planError && <span style={{ color: 'var(--df-danger)', fontSize: 13 }}>Falta el nombre o el precio. Complétalos y vuelve a intentar.</span>}
         </div>
       </div>
+      <PreciosServicios />
     </section>
+  );
+}
+
+/**
+ * Precios de los servicios que se cobran aparte del plan (hoy la membresía de Tienda en
+ * línea; luego, microtransacciones). Cada tienda los paga por Wompi con el precio de aquí.
+ */
+function PreciosServicios() {
+  const [lista, setLista] = useState<PrecioServicio[] | null>(null);
+  const [borrador, setBorrador] = useState<Record<string, string>>({});
+  const [msg, setMsg] = useState<Record<string, string>>({});
+  useEffect(() => { void apiPreciosServicios().then((r) => { if (r.data) setLista(r.data.precios); }); }, []);
+  const guardar = async (p: PrecioServicio) => {
+    const r = await apiCambiarPrecioServicio(p.clave, Number(borrador[p.clave] ?? p.precio) || 0);
+    setMsg((m) => ({ ...m, [p.clave]: r.error || '✓ Guardado' }));
+    if (r.data) { setLista((l) => l && l.map((x) => (x.clave === p.clave ? r.data!.precio : x))); setBorrador((b) => { const n = { ...b }; delete n[p.clave]; return n; }); }
+  };
+  const unidad = { mes: '/mes', unico: 'pago único', uso: 'por uso' } as const;
+  return (
+    <div style={{ marginTop: 26 }}>
+      <h2 style={{ fontSize: 17, fontWeight: 800, margin: '0 0 4px' }}>Servicios adicionales</h2>
+      <p style={{ color: 'var(--df-text-muted)', fontSize: 13.5, margin: '0 0 14px' }}>Lo que las tiendas pagan aparte de su plan, por Wompi. Precio 0 = gratis.</p>
+      {!lista ? <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>Cargando…</div> : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+          {lista.map((p) => {
+            const v = borrador[p.clave] ?? String(p.precio);
+            const cambio = v !== String(p.precio);
+            return (
+              <div key={p.clave} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 18 }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', margin: '3px 0 12px' }}>{p.descripcion}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ color: 'var(--df-text-faint)' }}>$</span>
+                  <input className="df-input" inputMode="numeric" value={Number(v || 0).toLocaleString('es-CO')} onChange={(e) => setBorrador((b) => ({ ...b, [p.clave]: e.target.value.replace(/\D/g, '') }))}
+                    style={{ flex: 1, border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: "'JetBrains Mono',monospace", fontSize: 14 }} />
+                  <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', whiteSpace: 'nowrap' }}>{unidad[p.unidad] || ''}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+                  <button onClick={() => void guardar(p)} disabled={!cambio} className="df-btn-primary" style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: cambio ? 'pointer' : 'default', opacity: cambio ? 1 : 0.5 }}>Guardar</button>
+                  {msg[p.clave] && <span style={{ fontSize: 12.5, color: msg[p.clave].startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg[p.clave]}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-# Landings en dflw.store (configuración única en Cloudflare)
+# Tienda en línea en dflw.store (configuración única en Cloudflare)
 
 Con esto cada tienda tiene gratis `sutienda.dflw.store/<landing>` y, si quiere, conecta su
 propio dominio (CNAME a `landings.dflw.store`). `dealflow.sbs` no se toca.
@@ -19,8 +19,10 @@ Mientras esa variable no exista, las landings siguen en `app.dealflow.sbs/l/…`
 ## 2. Worker (en vez de reglas de origen: el Host header es solo para Enterprise)
 Workers & Pages → Create → Worker → nombre `dflw-landings` → Deploy → Edit code →
 pega `infra/cloudflare-worker-landings.js` → Deploy.
-Luego en el Worker → Settings → Domains & Routes → Add → **Route**:
-`*dflw.store/*` en la zona `dflw.store`.
+Luego en el Worker → Settings → Domains & Routes → Add → **Route** (dos rutas, zona `dflw.store`):
+- `*dflw.store/*` → para `dflw.store` y los subdominios gratis.
+- `*/*` → para los dominios propios de las tiendas (Custom Hostnames). Sin esta ruta, el
+  dominio de la tienda llega a Cloudflare pero no a DealFlow.
 
 Gratis hasta 100.000 visitas al día (plan Workers Paid: USD 5/mes por 10 millones).
 
@@ -47,7 +49,9 @@ dflw.store, columna derecha.
 
 ## Prueba
 - `https://dflw.store` → redirige a dealflow.sbs.
-- `https://<subdominio-de-una-tienda>.dflw.store` → su landing (la tienda debe tener
-  Landings activado y al menos una publicada; su subdominio se ve y se cambia en
-  Landings → Dirección de tus landings).
+- `https://<subdominio-de-una-tienda>.dflw.store` → su tienda (con la membresía al día y al
+  menos un producto publicado; el subdominio se ve y se cambia en Tienda en línea →
+  Dirección de tu tienda).
+- Dominio propio: la tienda lo conecta en Tienda en línea → Dirección de tu tienda, crea el
+  CNAME `www` → `landings.dflw.store` en su proveedor y le da «Verificar».
 - `https://dflw.store/l/ping` → `{"df":"landings", …}`.
