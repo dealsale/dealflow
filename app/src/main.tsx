@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { Academy } from './academy/Academy.tsx'
+import { PortalProveedores } from './proveedores/Portal.tsx'
 import { iniciarAutoActualizacion } from './lib/autoUpdate'
 import { iniciarTraduccion } from './i18n/traductor'
 
@@ -12,10 +13,12 @@ iniciarAutoActualizacion()
 // se puede abrir por la ruta /academy en el host actual (útil para probarlo antes
 // de configurar el subdominio). La sesión se comparte por la cookie.
 const esAcademy = /^academy\./i.test(window.location.hostname) || /^\/academy(\/|$)/i.test(window.location.pathname);
+// Portal de proveedores: proveedores.<dominio> o la ruta /proveedores (sesión propia).
+const esProveedores = /^proveedores\./i.test(window.location.hostname) || /^\/proveedores(\/|$)/i.test(window.location.pathname);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {esAcademy ? <Academy /> : <App />}
+    {esProveedores ? <PortalProveedores /> : esAcademy ? <Academy /> : <App />}
   </StrictMode>,
 )
 
