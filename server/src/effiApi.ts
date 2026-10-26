@@ -606,6 +606,8 @@ async function articuloPorId(storeId: string, apiKey: string, id: string): Promi
 // (sin convenio), o el código del convenio del proveedor.
 try { db.exec("ALTER TABLE products ADD COLUMN effi_convenio TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 try { db.exec("ALTER TABLE orders ADD COLUMN effi_guia_info TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+// Convenio con el que salió el pedido a Effi ('-' = mercancía propia). Lo usa el portal de proveedores.
+try { db.exec("ALTER TABLE orders ADD COLUMN effi_convenio TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 const convenioDeProducto = (productId: string) => String((db.prepare('SELECT effi_convenio FROM products WHERE id = ?').get(productId) as { effi_convenio: string } | undefined)?.effi_convenio || '');
 
 db.exec(`CREATE TABLE IF NOT EXISTS effi_convenio_articulo (
@@ -1366,10 +1368,10 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   }
   // …y el de cada producto (sin convenio = salió como mercancía propia: se olvida).
   try { aprenderConvenioProductos(storeId, productos, String(body.convenio_dropshipping ?? '')); } catch { /* opcional */ }
-  db.prepare("UPDATE orders SET despacho_proveedor = 'effi', woo_id = ?, effi_remision = ?, effi_doc = ? WHERE id = ?")
+  db.prepare("UPDATE orders SET despacho_proveedor = 'effi', woo_id = ?, effi_remision = ?, effi_doc = ?, effi_convenio = ? WHERE id = ?")
     .run(remision, remision, JSON.stringify({ sucursal: txt(doc!.sucursal), id: txt(doc!.id), prefijo: txt(doc!.prefijo), tercero: cli.tercero,
       // Los productos tal como se mandaron (para registrar la devolución si el pedido vuelve).
-      conceptos: { articulo: body.articulo, descripcion: body.descripcion, cantidad: body.cantidad, precio: body.precio, descuento: body.descuento } }), orderId);
+      conceptos: { articulo: body.articulo, descripcion: body.descripcion, cantidad: body.cantidad, precio: body.precio, descuento: body.descuento } }), String(body.convenio_dropshipping ?? '') || '-', orderId);
   registrarLog(storeId, 'info', 'despacho', `${numDF} enviado a Effi: remisión ${remision} (cliente ${cli.tercero}).${avisos.length ? ' ' + avisos.join(' ') : ''}`);
 
   let guia = ''; let transportadora = '';

@@ -20,6 +20,7 @@ import { mediaPath, saveOutgoingMedia, saveOutgoingMessage, tipoDeMime } from '.
 import { existsSync, readFileSync } from 'node:fs';
 import type * as DropiApi from './dropiApi.js';
 import { problemaVariables } from './seedPlantillas.js';
+import { listarProveedores, crearProveedor, editarProveedor, borrarProveedor } from './proveedores.js';
 
 export const api = Router();
 // Registro de accesos del equipo (administradores y soporte dentro de una tienda).
@@ -1576,6 +1577,23 @@ api.post('/logistica/effi/actualizar', requireAuth, requireStore, async (req, re
   res.json({ ...tableroLogistica(req.user!.storeId!, Number(req.body?.dias) || 45), revisadas: r.revisadas });
 });
 // Convenios ya conocidos (rápido, sin consultar Effi): para elegir uno al despachar.
+// Portal de proveedores: accesos por convenio que el dueño crea para sus proveedores.
+api.get('/proveedores', requireAuth, requireStore, requireOwner, (req, res) => res.json(listarProveedores(req.user!.storeId!)));
+api.post('/proveedores', requireAuth, requireStore, requireOwner, (req, res) => {
+  const r = crearProveedor(req.user!.storeId!, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.put('/proveedores/:id', requireAuth, requireStore, requireOwner, (req, res) => {
+  const r = editarProveedor(req.user!.storeId!, String(req.params.id), req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.delete('/proveedores/:id', requireAuth, requireStore, requireOwner, (req, res) => {
+  if (!borrarProveedor(req.user!.storeId!, String(req.params.id))) return res.status(404).json({ error: 'Proveedor no encontrado.' });
+  res.json({ ok: true });
+});
+
 api.get('/effi-api/convenios-conocidos', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
   res.json({ convenios: ef.conveniosConocidos(req.user!.storeId!), porDefecto: ef.cfgEffi(req.user!.storeId!)?.convenioDropshipping || '' });

@@ -5,6 +5,7 @@ import cors from 'cors';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { api, webhooks } from './routes.js';
+import { proveedorApi } from './proveedores.js';
 import { db } from './db.js';
 import { paginaTienda } from './tiendaPublica.js';
 import { paginaApp, cspIncrustada } from './shopifyApp.js';
@@ -92,6 +93,8 @@ app.use(async (req, res, next) => {
   if (humano) L.contarVista(l.id);
   res.type('html').send(L.renderLanding(l.datos, { id: l.id, inicio: '/', tienda: L.configTienda(storeId), url: `${origen}/${m![1]}` }));
 });
+// Portal de proveedores: su propia sesión (no pasa por la API del panel).
+app.use('/api/proveedor', proveedorApi);
 app.use('/api', api);
 app.use('/webhooks', webhooks);
 const BASE_PUBLICA = (process.env.PUBLIC_APP_URL || 'https://app.dealflow.sbs').replace(/\/+$/, '');
@@ -130,7 +133,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'tutorial-tienda',
+    build: 'portal-proveedores',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -220,7 +223,7 @@ if (existsSync(APP_DIST)) {
     const waLink = 'https://wa.me/' + waNum + '?text=' + encodeURIComponent('Hola, quiero más información sobre el dropshipping con IA de DealFlow');
     adsHtml = readFileSync(ADS_FILE, 'utf8').replace(/__WA_LINK__/g, waLink);
   }
-  const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app|academy)(\/|$)/i;
+  const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app|academy|proveedores)(\/|$)/i;
   const urlEn = (req: express.Request, host: string) => `${req.protocol === 'http' && !/^localhost/.test(host) ? 'https' : req.protocol}://${host}${req.originalUrl}`;
 
   app.get(/^\/(?!api|webhooks).*/, (req, res) => {
@@ -262,6 +265,8 @@ if (existsSync(APP_DIST)) {
     const raiz = raizDeSub(host);
     if (raiz) {
       if (/^academy\./.test(host) && !esInicio) return enviarHtml(res, path.join(APP_DIST, 'index.html'));
+      // proveedores.<dominio>: el portal de proveedores (lo resuelve la app).
+      if (/^proveedores\./.test(host)) return enviarHtml(res, path.join(APP_DIST, 'index.html'));
       return res.redirect(302, `https://${raiz}/`);
     }
     // 4) Otros hosts (URL de Railway, localhost): como siempre, la landing para el
