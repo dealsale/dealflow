@@ -20,7 +20,7 @@ import { mediaPath, saveOutgoingMedia, saveOutgoingMessage, tipoDeMime } from '.
 import { existsSync, readFileSync } from 'node:fs';
 import type * as DropiApi from './dropiApi.js';
 import { problemaVariables } from './seedPlantillas.js';
-import { listarProveedores, crearProveedor, editarProveedor, borrarProveedor } from './proveedores.js';
+import { listarProveedores, crearProveedor, editarProveedor, borrarProveedor, abrirSesionProveedor } from './proveedores.js';
 
 export const api = Router();
 // Registro de accesos del equipo (administradores y soporte dentro de una tienda).
@@ -1577,20 +1577,26 @@ api.post('/logistica/effi/actualizar', requireAuth, requireStore, async (req, re
   res.json({ ...tableroLogistica(req.user!.storeId!, Number(req.body?.dias) || 45), revisadas: r.revisadas });
 });
 // Convenios ya conocidos (rápido, sin consultar Effi): para elegir uno al despachar.
-// Portal de proveedores: accesos por convenio que el dueño crea para sus proveedores.
-api.get('/proveedores', requireAuth, requireStore, requireOwner, (req, res) => res.json(listarProveedores(req.user!.storeId!)));
-api.post('/proveedores', requireAuth, requireStore, requireOwner, (req, res) => {
-  const r = crearProveedor(req.user!.storeId!, req.body || {});
+// Portal de proveedores: el equipo de DealFlow crea las cuentas y les vincula convenios de Effi.
+api.get('/admin/proveedores', requireAuth, requireAdmin, (_req, res) => res.json(listarProveedores()));
+api.post('/admin/proveedores', requireAuth, requireAdmin, (req, res) => {
+  const r = crearProveedor(req.body || {});
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
 });
-api.put('/proveedores/:id', requireAuth, requireStore, requireOwner, (req, res) => {
-  const r = editarProveedor(req.user!.storeId!, String(req.params.id), req.body || {});
+api.put('/admin/proveedores/:id', requireAuth, requireAdmin, (req, res) => {
+  const r = editarProveedor(String(req.params.id), req.body || {});
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
 });
-api.delete('/proveedores/:id', requireAuth, requireStore, requireOwner, (req, res) => {
-  if (!borrarProveedor(req.user!.storeId!, String(req.params.id))) return res.status(404).json({ error: 'Proveedor no encontrado.' });
+api.delete('/admin/proveedores/:id', requireAuth, requireAdmin, (req, res) => {
+  if (!borrarProveedor(String(req.params.id))) return res.status(404).json({ error: 'Proveedor no encontrado.' });
+  res.json({ ok: true });
+});
+// "Ver como proveedor": abre el portal con esa cuenta (sesión de 2 horas, solo lectura).
+api.post('/admin/proveedores/:id/ver', requireAuth, requireAdmin, (req, res) => {
+  if (!db.prepare('SELECT 1 FROM proveedor_cuentas WHERE id = ?').get(String(req.params.id))) return res.status(404).json({ error: 'Proveedor no encontrado.' });
+  abrirSesionProveedor(res, String(req.params.id), true);
   res.json({ ok: true });
 });
 

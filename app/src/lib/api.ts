@@ -962,9 +962,11 @@ export interface PrecioServicio { clave: string; nombre: string; descripcion: st
 export const apiPreciosServicios = () => req<{ precios: PrecioServicio[] }>('/api/admin/precios', 'GET');
 export const apiCambiarPrecioServicio = (clave: string, precio: number) => req<{ precio: PrecioServicio }>(`/api/admin/precios/${encodeURIComponent(clave)}`, 'PUT', { precio });
 
-// Portal de proveedores: accesos por convenio que crea el dueño de la tienda.
-export interface ProveedorAcceso { id: string; nombre: string; email: string; convenios: string[]; activo: boolean; creado: string; ultimoAcceso: string }
-export const apiProveedores = () => req<{ proveedores: ProveedorAcceso[]; convenios: { id: string; nombre: string }[] }>('/api/proveedores', 'GET');
-export const apiCrearProveedor = (b: { nombre: string; email: string; password: string; convenios: string[] }) => req<{ proveedor: ProveedorAcceso }>('/api/proveedores', 'POST', b);
-export const apiEditarProveedor = (id: string, b: Partial<{ nombre: string; email: string; password: string; convenios: string[]; activo: boolean }>) => req<{ proveedor: ProveedorAcceso }>(`/api/proveedores/${encodeURIComponent(id)}`, 'PUT', b);
-export const apiBorrarProveedor = (id: string) => req<{ ok: true }>(`/api/proveedores/${encodeURIComponent(id)}`, 'DELETE');
+// Portal de proveedores: cuentas que crea el equipo de DealFlow y sus convenios de Effi.
+export interface ProveedorAcceso { id: string; nombre: string; email: string; convenios: string[]; activo: boolean; creado: string; ultimoAcceso: string; pedidos30: number }
+export interface ConvenioConocido { id: string; nombre: string; tiendas: string[]; pedidos: number }
+export const apiProveedores = () => req<{ proveedores: ProveedorAcceso[]; convenios: ConvenioConocido[] }>('/api/admin/proveedores', 'GET');
+export const apiCrearProveedor = (b: { nombre: string; email: string; password: string; convenios: string[] }) => req<{ proveedor: ProveedorAcceso }>('/api/admin/proveedores', 'POST', b);
+export const apiEditarProveedor = (id: string, b: Partial<{ nombre: string; email: string; password: string; convenios: string[]; activo: boolean }>) => req<{ proveedor: ProveedorAcceso }>(`/api/admin/proveedores/${encodeURIComponent(id)}`, 'PUT', b);
+export const apiBorrarProveedor = (id: string) => req<{ ok: true }>(`/api/admin/proveedores/${encodeURIComponent(id)}`, 'DELETE');
+export const apiVerComoProveedor = (id: string) => reqBase<{ ok: true }>(`/api/admin/proveedores/${encodeURIComponent(id)}/ver`, 'POST');
