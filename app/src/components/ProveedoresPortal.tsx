@@ -5,11 +5,10 @@ import { confirmar, notificar } from './dialogs';
 
 /**
  * Accesos al Portal de proveedores: el dueño crea un usuario por proveedor y le asigna
- * sus convenios de Effi. El proveedor entra en proveedores.<dominio> y ve solo esos pedidos.
+ * sus convenios de Effi. El proveedor entra en app.<dominio>/proveedores y ve solo esos pedidos.
  */
 export function urlPortalProveedores(): string {
-  const h = window.location.hostname;
-  return /^app\./i.test(h) ? `https://${h.replace(/^app\./i, 'proveedores.')}` : `${window.location.origin}/proveedores`;
+  return `${window.location.origin}/proveedores`;
 }
 
 const claveAleatoria = () => {
