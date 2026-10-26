@@ -173,7 +173,8 @@ header img{max-height:48px;width:auto}header b{font:800 20px Poppins,sans-serif;
 .principal{position:relative;border-radius:12px;overflow:hidden;background:var(--g)}
 .slides{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
 .slides::-webkit-scrollbar{display:none}
-.slides img{flex:0 0 100%;width:100%;aspect-ratio:4/5;object-fit:cover;scroll-snap-align:center}
+.slides{align-items:center}
+.slides img{flex:0 0 100%;width:100%;height:auto;object-fit:contain;scroll-snap-align:center}
 .puntos{position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:6px}
 .puntos i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.55);transition:all .25s}
 .puntos i.on{width:20px;border-radius:5px;background:#fff}
@@ -183,7 +184,7 @@ header img{max-height:48px;width:auto}header b{font:800 20px Poppins,sans-serif;
 .flecha.izq{left:12px}.flecha.der{right:12px}
 .miniaturas{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:9px}
 @media(min-width:900px){.miniaturas{grid-template-columns:repeat(6,1fr)}}
-.miniaturas img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:7px;cursor:pointer;border:2px solid transparent;opacity:.82;transition:all .2s}
+.miniaturas img{width:100%;aspect-ratio:3/4;object-fit:contain;background:var(--g);border-radius:7px;cursor:pointer;border:2px solid transparent;opacity:.82;transition:all .2s}
 .miniaturas img:hover{opacity:1;transform:translateY(-2px)}
 .miniaturas img.on{border-color:var(--t);opacity:1}
 .rating{display:flex;align-items:center;gap:8px;font-size:13px;color:#333;margin-bottom:8px}
@@ -211,7 +212,7 @@ h1{font:700 24px/1.2 Poppins,sans-serif;margin:4px 0 10px}
 .of .verde:after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-60%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);animation:brillo 3.2s ease-in-out infinite}
 @keyframes brillo{0%,55%{left:-60%}100%{left:130%}}
 .of .pp{text-align:right;white-space:nowrap}.of .pp b{display:block;font:800 17px Poppins,sans-serif}.of .pp s{font-size:13px}
-.of img.mini{width:46px;height:46px;border-radius:6px;object-fit:cover}
+.of img.mini{width:46px;height:46px;border-radius:6px;object-fit:contain;background:#fff}
 .cinta{position:absolute;top:-12px;right:10px;background:var(--a);color:#fff;font:700 12.5px/1 Poppins,sans-serif;padding:5px 10px 5px;border-radius:3px 3px 0 0;white-space:nowrap}
 .cinta:before,.cinta:after{content:"";position:absolute;bottom:-5px;border-style:solid;border-color:transparent}
 .cinta:before{left:0;border-width:5px 0 0 6px;border-top-color:color-mix(in srgb,var(--a) 55%,#000)}
@@ -507,7 +508,7 @@ header img{max-height:54px;width:auto}header b{font:800 22px Poppins,sans-serif;
 .card{text-decoration:none;display:flex;flex-direction:column;opacity:0;transform:translateY(16px);animation:sube .6s ease forwards}
 @keyframes sube{to{opacity:1;transform:none}}
 .foto{position:relative;border-radius:12px;overflow:hidden;background:var(--g);aspect-ratio:4/5}
-.foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .4s,transform .6s}
+.foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transition:opacity .4s,transform .6s}
 .foto img.dos{opacity:0}.card:hover .foto img.uno{transform:scale(1.04)}.card:hover .foto img.dos{opacity:1}
 .desc{position:absolute;top:10px;left:10px;background:var(--b);color:#fff;font:700 11.5px Poppins,sans-serif;padding:4px 8px;border-radius:5px}
 .st{color:#ffb400;font-size:12.5px;letter-spacing:1px;margin-top:9px}.st span{color:var(--m);letter-spacing:0;margin-left:4px}
