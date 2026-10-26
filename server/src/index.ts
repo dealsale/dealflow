@@ -74,13 +74,15 @@ app.use(async (req, res, next) => {
     return next();
   }
   if (/^\/l\/(media|api)\//.test(req.path)) return next();
-  if (req.path === '/robots.txt') return res.type('text/plain').send('User-agent: *\nAllow: /\n');
+  const origen = `https://${host.replace(/:\d+$/, '')}`;
+  if (req.path === '/robots.txt') return res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /l/api/\nSitemap: ${origen}/sitemap.xml\n`);
+  if (req.path === '/sitemap.xml') { if (!L.tiendaEnLinea(storeId)) return res.status(404).end(); return res.type('application/xml').send(L.sitemapTienda(storeId, origen)); }
   const m = req.method === 'GET' ? req.path.match(/^\/([a-z0-9-]{0,60})\/?$/i) : null;
   res.setHeader('Cache-Control', 'no-cache');
   const humano = !/bot|crawl|spider|facebookexternalhit/i.test(String(req.headers['user-agent'] || ''));
   // Raíz: la página de inicio de la tienda (todos sus productos, o la landing que eligió).
   if (m && !m[1]) {
-    const ini = L.inicioTienda(storeId, '/');
+    const ini = L.inicioTienda(storeId, '/', origen);
     if (!ini) return res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página no disponible</title><p style="font-family:system-ui;padding:24px;text-align:center">Esta página no está disponible.</p>');
     if (ini.landingId && humano) L.contarVista(ini.landingId);
     return res.type('html').send(ini.html);
@@ -88,10 +90,11 @@ app.use(async (req, res, next) => {
   const l = m ? L.landingDeTienda(storeId, m[1]) : null;
   if (!l) return res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página no disponible</title><p style="font-family:system-ui;padding:24px;text-align:center">Esta página no está disponible.</p>');
   if (humano) L.contarVista(l.id);
-  res.type('html').send(L.renderLanding(l.datos, { id: l.id, inicio: '/' }));
+  res.type('html').send(L.renderLanding(l.datos, { id: l.id, inicio: '/', tienda: L.configTienda(storeId), url: `${origen}/${m![1]}` }));
 });
 app.use('/api', api);
 app.use('/webhooks', webhooks);
+const BASE_PUBLICA = (process.env.PUBLIC_APP_URL || 'https://app.dealflow.sbs').replace(/\/+$/, '');
 // Landings públicas del Creador de landings: /l/<tienda>/<landing>, sus imágenes y el formulario.
 app.get('/l/media/:storeId/:file', async (req, res) => {
   const p = (await import('./landings.js')).archivoPublico(req.params.storeId, req.params.file);
@@ -103,7 +106,7 @@ app.get('/l/:tienda', async (req, res) => {
   const L = await import('./landings.js');
   const t = String(req.params.tienda).toLowerCase();
   const s = db.prepare('SELECT id FROM stores WHERE slug = ?').get(t) as { id: string } | undefined;
-  const ini = s ? L.inicioTienda(s.id, `/l/${t}/`) : null;
+  const ini = s ? L.inicioTienda(s.id, `/l/${t}/`, BASE_PUBLICA) : null;
   res.setHeader('Cache-Control', 'no-cache');
   if (!ini) return res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página no disponible</title><p style="font-family:system-ui;padding:24px;text-align:center">Esta página no está disponible.</p>');
   res.type('html').send(ini.html);
@@ -114,7 +117,8 @@ app.get('/l/:tienda/:slug', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   if (!l) return res.status(404).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Página no disponible</title><p style="font-family:system-ui;padding:24px;text-align:center">Esta página no está disponible.</p>');
   if (!/bot|crawl|spider|facebookexternalhit/i.test(String(req.headers['user-agent'] || ''))) L.contarVista(l.id);
-  res.type('html').send(L.renderLanding(l.datos, { id: l.id, inicio: `/l/${String(req.params.tienda).toLowerCase()}/` }));
+  const t = String(req.params.tienda).toLowerCase();
+  res.type('html').send(L.renderLanding(l.datos, { id: l.id, inicio: `/l/${t}/`, tienda: L.configTienda(l.storeId), url: `${BASE_PUBLICA}/l/${t}/${String(req.params.slug).toLowerCase()}` }));
 });
 app.post('/l/api/:id/pedido', async (req, res) => {
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
@@ -126,7 +130,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'tienda-para-todos',
+    build: 'tienda-seo-favicon',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

@@ -17,7 +17,50 @@ const esc = (s: unknown) => txt(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const pesos = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
 const json = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c').replace(/[\u2028\u2029]/g, '');
 
-export interface OpcionesRender { id: string; vista?: boolean; titulo?: string; urlBase?: string; /** Enlace a la página de inicio de la tienda (catálogo). */ inicio?: string }
+export interface OpcionesRender {
+  id: string; vista?: boolean; titulo?: string; urlBase?: string;
+  /** Enlace a la página de inicio de la tienda (catálogo). */ inicio?: string;
+  /** Datos de la tienda (favicon y nombre del sitio para el SEO). */ tienda?: TiendaConfig;
+  /** Dirección pública completa de esta página (canonical, og:url). */ url?: string;
+}
+
+/** Ícono por defecto: la inicial de la tienda en su color (si no subió favicon ni logo). */
+const faviconInicial = (nombre: string, color: string) =>
+  'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${color}"/><text x="32" y="44" font-family="Arial,sans-serif" font-size="36" font-weight="700" text-anchor="middle" fill="#fff">${(nombre.trim()[0] || 'T').toUpperCase().replace(/[<&>]/g, '')}</text></svg>`);
+
+/**
+ * Cabecera común: favicon, título, descripción, canonical, Open Graph (WhatsApp, Facebook),
+ * Twitter y datos estructurados para Google. `abs` vuelve absolutas las rutas /l/media/….
+ */
+function cabeceraSeo(c: { titulo: string; descripcion: string; imagen: string; url?: string; favicon: string; sitio: string; color: string; tipo: 'website' | 'product'; precio?: number; jsonld?: unknown; vista?: boolean }): string {
+  const origen = c.url ? (/^https?:\/\/[^/]+/.exec(c.url)?.[0] || BASE_TIENDA) : BASE_TIENDA;
+  const abs = (u: string) => (!u ? '' : u.startsWith('/') ? origen + u : u);
+  const img = abs(c.imagen);
+  const fav = c.favicon ? abs(c.favicon) : faviconInicial(c.sitio, c.color);
+  const desc = c.descripcion.replace(/\s+/g, ' ').trim().slice(0, 165);
+  return [
+    `<title>${esc(c.titulo)}</title>`,
+    `<meta name="description" content="${esc(desc)}">`,
+    c.vista ? '<meta name="robots" content="noindex,nofollow">' : '<meta name="robots" content="index,follow,max-image-preview:large">',
+    c.url ? `<link rel="canonical" href="${esc(c.url)}">` : '',
+    `<link rel="icon" href="${esc(fav)}">`,
+    `<link rel="apple-touch-icon" href="${esc(fav)}">`,
+    `<meta name="theme-color" content="${esc(c.color)}">`,
+    `<meta property="og:type" content="${c.tipo}">`,
+    `<meta property="og:site_name" content="${esc(c.sitio)}">`,
+    `<meta property="og:locale" content="es_CO">`,
+    `<meta property="og:title" content="${esc(c.titulo)}">`,
+    `<meta property="og:description" content="${esc(desc)}">`,
+    c.url ? `<meta property="og:url" content="${esc(c.url)}">` : '',
+    img ? `<meta property="og:image" content="${esc(img)}"><meta property="og:image:alt" content="${esc(c.titulo)}">` : '',
+    c.precio ? `<meta property="product:price:amount" content="${Math.round(c.precio)}"><meta property="product:price:currency" content="COP">` : '',
+    `<meta name="twitter:card" content="${img ? 'summary_large_image' : 'summary'}">`,
+    `<meta name="twitter:title" content="${esc(c.titulo)}">`,
+    `<meta name="twitter:description" content="${esc(desc)}">`,
+    img ? `<meta name="twitter:image" content="${esc(img)}">` : '',
+    c.jsonld ? `<script type="application/ld+json">${json(c.jsonld)}</script>` : '',
+  ].filter(Boolean).join('\n');
+}
 
 export function renderLanding(d: LandingDatos, o: OpcionesRender): string {
   return premium(d, o);
@@ -66,6 +109,7 @@ function premium(d: LandingDatos, o: OpcionesRender): string {
   const bundles: BundleL[] = d.bundles.length ? d.bundles : [{ cantidad: 1, titulo: 'Lleva 1', subtitulo: '', precio: d.precio, precioAntes: d.precioAntes, insignia: '', imagen: '' }];
   const inicial = Math.min(d.bundleInicial, bundles.length - 1);
   const conOfertas = d.bundles.length > 0;
+  const sel = bundles[inicial];
   const pixel = o.vista ? '' : d.pixelMeta;
   const cfg = {
     id: o.id, vista: !!o.vista, nombre: d.nombre, opciones: d.opciones, bundles, inicial, foto: d.galeria[0] || '',
@@ -82,21 +126,25 @@ function premium(d: LandingDatos, o: OpcionesRender): string {
     const may = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
     return `${may(sem)}, ${x.getUTCDate()}. ${may(mes)}`;
   };
-  const titulo = esc(o.titulo || `${d.nombre}${d.nombreTienda ? ' | ' + d.nombreTienda : ''}`);
-  const imgAbs = d.galeria[0] ? (d.galeria[0].startsWith('/') ? BASE_TIENDA + d.galeria[0] : d.galeria[0]) : '';
+  const sitio = o.tienda?.nombre || d.nombreTienda || d.nombre;
+  const tituloSeo = d.seoTitulo || o.titulo || `${d.nombre}${sitio && sitio !== d.nombre ? ' | ' + sitio : ''}`;
+  const descSeo = d.seoDescripcion || [d.destacado, d.descripcion.replace(/\*\*/g, '')].filter(Boolean).join('. ') || `${d.nombre}. Pago contra entrega y envío a toda Colombia.`;
+  const imagenSeo = d.seoImagen || d.galeria[0] || '';
+  const abs = (u: string) => (u.startsWith('/') ? ((o.url && /^https?:\/\/[^/]+/.exec(o.url)?.[0]) || BASE_TIENDA) + u : u);
+  const jsonld = {
+    '@context': 'https://schema.org', '@type': 'Product', name: d.nombre, description: descSeo.slice(0, 500),
+    image: d.galeria.slice(0, 6).map(abs), brand: { '@type': 'Brand', name: sitio },
+    offers: { '@type': 'Offer', priceCurrency: 'COP', price: Math.round(sel.precio), availability: 'https://schema.org/InStock', url: o.url || undefined, seller: { '@type': 'Organization', name: sitio } },
+  };
   const anuncios = d.anuncios.length ? d.anuncios : [];
   // La barra se repite lo suficiente para llenar pantallas anchas y se mueve en bucle.
   const tira = anuncios.length ? Array.from({ length: Math.max(4, Math.ceil(8 / anuncios.length)) }, () => anuncios).flat() : [];
-  const sel = bundles[inicial];
   const ahorro = sel.precioAntes > sel.precio && sel.precio > 0 ? Math.round((1 - sel.precio / sel.precioAntes) * 100) : 0;
 
   return `<!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>${titulo}</title>
-<meta name="description" content="${esc((d.destacado || d.descripcion).slice(0, 160))}">
-<meta property="og:title" content="${titulo}">${imgAbs ? `<meta property="og:image" content="${esc(imgAbs)}">` : ''}
-<meta name="theme-color" content="${esc(d.colorPrincipal)}">
+${cabeceraSeo({ titulo: tituloSeo, descripcion: descSeo, imagen: imagenSeo, url: o.url, favicon: o.tienda?.favicon || o.tienda?.logo || d.logo, sitio, color: d.colorPrincipal, tipo: 'product', precio: sel.precio, jsonld, vista: o.vista })}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 ${d.galeria[0] ? `<link rel="preload" as="image" href="${esc(d.galeria[0])}">` : ''}
@@ -422,16 +470,21 @@ ${o.vista ? GUARDA_VISTA : ''}
 }
 
 /** Página de inicio de la tienda: todos sus productos publicados (cada uno lleva a su landing). */
-export function renderCatalogo(t: TiendaConfig, productos: ProductoCatalogo[], base: string, vista = false): string {
+export function renderCatalogo(t: TiendaConfig, productos: ProductoCatalogo[], base: string, vista = false, origen = ''): string {
   const tira = t.anuncios.length ? Array.from({ length: Math.max(4, Math.ceil(8 / t.anuncios.length)) }, () => t.anuncios).flat() : [];
   const titulo = esc(t.nombre || 'Tienda');
+  const url = origen ? origen + base : '';
+  const abs = (u: string) => (u.startsWith('/') ? (origen || BASE_TIENDA) + u : u);
+  const tituloSeo = t.seoTitulo || `${t.nombre || 'Tienda'}${t.titulo ? ' | ' + t.titulo : ''}`;
+  const descSeo = t.seoDescripcion || t.descripcion || `${t.nombre}: ${productos.slice(0, 4).map((p) => p.nombre).join(', ')}. Pago contra entrega y envío a toda Colombia.`;
+  const jsonld = [
+    { '@context': 'https://schema.org', '@type': 'Organization', name: t.nombre, url: url || undefined, logo: t.logo ? abs(t.logo) : undefined },
+    { '@context': 'https://schema.org', '@type': 'ItemList', itemListElement: productos.map((p, i) => ({ '@type': 'ListItem', position: i + 1, url: origen ? origen + base + p.slug : undefined, name: p.nombre })) },
+  ];
   return `<!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>${titulo}${t.titulo ? ' | ' + esc(t.titulo) : ''}</title>
-<meta name="description" content="${esc(t.descripcion || t.titulo || t.nombre)}">
-<meta property="og:title" content="${titulo}">${productos[0]?.foto ? `<meta property="og:image" content="${esc(productos[0].foto.startsWith('/') ? BASE_TIENDA + productos[0].foto : productos[0].foto)}">` : ''}
-<meta name="theme-color" content="${esc(t.colorPrincipal)}">
+${cabeceraSeo({ titulo: tituloSeo, descripcion: descSeo, imagen: t.seoImagen || t.banner || productos[0]?.foto || t.logo, url, favicon: t.favicon || t.logo, sitio: t.nombre, color: t.colorPrincipal, tipo: 'website', jsonld, vista })}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 ${t.pixelMeta ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${t.pixelMeta}');fbq('track','PageView');</script>` : ''}

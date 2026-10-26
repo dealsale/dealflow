@@ -366,6 +366,14 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
         <Campo label="Cintas y oferta elegida"><Color valor={d.colorAcento} onChange={(colorAcento) => set({ colorAcento })} opciones={['#0f3a3f', '#121212', '#7c2d12', '#4c1d95', '#be123c']} /></Campo>
       </Bloque>
 
+      <Bloque titulo="SEO y vista al compartir" icono="🔎">
+        <SeoCampos titulo={d.seoTitulo} descripcion={d.seoDescripcion} imagen={d.seoImagen}
+          autoTitulo={`${d.nombre}${d.nombreTienda ? ' | ' + d.nombreTienda : ''}`}
+          autoDescripcion={[d.destacado, d.descripcion.replace(/\*\*/g, '')].filter(Boolean).join('. ') || `${d.nombre}. Pago contra entrega y envío a toda Colombia.`}
+          autoImagen={d.galeria[0] || ''} url={l.url}
+          onChange={(p) => set(p)} />
+      </Bloque>
+
       <Bloque titulo="Pedidos y seguimiento" icono="📦">
         <Interruptor valor={d.confirmarWhatsapp} onChange={(confirmarWhatsapp) => set({ confirmarWhatsapp })} titulo="Pedir confirmación por WhatsApp" ayuda="Al llegar el pedido, el cliente recibe la plantilla de confirmación (Sí / No)." />
         <Interruptor valor={d.autoDespacho} onChange={(autoDespacho) => set({ autoDespacho })} titulo="Despachar solo cuando el cliente confirme" ayuda="Crea la remisión/guía automáticamente al recibir el «Sí»." />
@@ -450,7 +458,7 @@ function Bloque({ titulo, icono, abierto = false, children }: { titulo: string; 
     </div>
   );
 }
-function Campo({ label, ayuda, children }: { label: string; ayuda?: string; children: ReactNode }) {
+function Campo({ label, ayuda, children }: { label: ReactNode; ayuda?: string; children: ReactNode }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
       <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--df-text-body)' }}>{label}</span>
@@ -833,6 +841,7 @@ function TiendaCard({ t, onGuardada }: { t: TiendaConfig; onGuardada: (t: Tienda
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Campo label="Nombre de la tienda"><input value={c.nombre} onChange={(e) => set({ nombre: e.target.value })} style={inp} /></Campo>
             <UnaImagen titulo="Logo" url={c.logo} onChange={(logo) => set({ logo })} png />
+            <UnaImagen titulo="Favicon (el iconito de la pestaña del navegador; cuadrado, si no se usa el logo)" url={c.favicon} onChange={(favicon) => set({ favicon })} png />
             <UnaImagen titulo="Portada (banner ancho, opcional)" url={c.banner} onChange={(banner) => set({ banner })} />
             <Campo label="Título"><input value={c.titulo} onChange={(e) => set({ titulo: e.target.value })} placeholder="Nueva colección · Envío gratis a toda Colombia" style={inp} /></Campo>
             <Campo label="Descripción corta"><textarea value={c.descripcion} onChange={(e) => set({ descripcion: e.target.value })} rows={2} style={{ ...inp, resize: 'vertical' }} /></Campo>
@@ -845,6 +854,12 @@ function TiendaCard({ t, onGuardada }: { t: TiendaConfig; onGuardada: (t: Tienda
               <Campo label="WhatsApp (botón flotante)"><input value={c.whatsapp} onChange={(e) => set({ whatsapp: e.target.value.replace(/\D/g, '') })} placeholder="573001234567" inputMode="numeric" style={inp} /></Campo>
               <Campo label="ID del Píxel de Meta"><input value={c.pixelMeta} onChange={(e) => set({ pixelMeta: e.target.value.replace(/\D/g, '') })} inputMode="numeric" style={inp} /></Campo>
             </Dos>
+            <div style={{ borderTop: '1px solid var(--df-border)', paddingTop: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🔎 SEO de la página de inicio</div>
+              <SeoCampos titulo={c.seoTitulo} descripcion={c.seoDescripcion} imagen={c.seoImagen}
+                autoTitulo={`${c.nombre}${c.titulo ? ' | ' + c.titulo : ''}`} autoDescripcion={c.descripcion || `${c.nombre}: pago contra entrega y envío a toda Colombia.`}
+                autoImagen={c.banner || c.logo} url="" onChange={(p) => set(p)} />
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => void guardar()} disabled={guardando || !cambios} style={{ ...btnPri, opacity: guardando || !cambios ? 0.6 : 1 }}>{guardando ? 'Guardando…' : 'Guardar tienda'}</button>
               {cambios && <button onClick={() => setC(t)} style={btn}>Descartar</button>}
@@ -855,6 +870,45 @@ function TiendaCard({ t, onGuardada }: { t: TiendaConfig; onGuardada: (t: Tienda
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── SEO: lo que sale en Google y al compartir el enlace ───────────────
+function SeoCampos({ titulo, descripcion, imagen, autoTitulo, autoDescripcion, autoImagen, url, onChange }: {
+  titulo: string; descripcion: string; imagen: string; autoTitulo: string; autoDescripcion: string; autoImagen: string; url: string;
+  onChange: (p: { seoTitulo?: string; seoDescripcion?: string; seoImagen?: string }) => void;
+}) {
+  const t = titulo || autoTitulo;
+  const dsc = (descripcion || autoDescripcion).replace(/\s+/g, ' ').trim();
+  const img = imagen || autoImagen;
+  const dominio = url ? url.replace(/^https?:\/\//, '').split('/')[0] : 'tutienda.dflw.store';
+  const cuenta = (n: number, max: number) => <span style={{ color: n > max ? 'var(--df-danger)' : 'var(--df-text-faint)', fontWeight: 400 }}> · {n}/{max}</span>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Si los dejas vacíos se arman solos con el nombre, la descripción y la primera foto.</div>
+      <Campo label={<>Título para Google{cuenta(t.length, 60)}</>}><input value={titulo} onChange={(e) => onChange({ seoTitulo: e.target.value })} placeholder={autoTitulo} style={inp} /></Campo>
+      <Campo label={<>Descripción para Google{cuenta(dsc.length, 160)}</>}><textarea value={descripcion} onChange={(e) => onChange({ seoDescripcion: e.target.value })} placeholder={autoDescripcion.slice(0, 160)} rows={2} style={{ ...inp, resize: 'vertical' }} /></Campo>
+      <UnaImagen titulo="Imagen al compartir (WhatsApp, Facebook; ideal 1200×630)" url={imagen} onChange={(seoImagen) => onChange({ seoImagen })} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+        <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', background: '#fff', color: '#202124' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: '#5f6368', marginBottom: 5 }}>ASÍ SE VE EN GOOGLE</div>
+          <div style={{ fontSize: 12, color: '#4d5156', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dominio}</div>
+          <div style={{ fontSize: 16, color: '#1a0dab', lineHeight: 1.3, margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t}</div>
+          <div style={{ fontSize: 12.5, color: '#4d5156', lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{dsc.slice(0, 160)}</div>
+        </div>
+        <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, overflow: 'hidden', background: '#e7ffdb', color: '#111' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: '#5f6368', padding: '8px 10px 6px' }}>ASÍ SE VE EN WHATSAPP</div>
+          <div style={{ margin: '0 8px 8px', background: '#f7f8fa', borderRadius: 8, overflow: 'hidden' }}>
+            {img ? <img src={img} alt="" style={{ width: '100%', aspectRatio: '1.91/1', objectFit: 'cover', display: 'block' }} /> : <div style={{ aspectRatio: '1.91/1', display: 'grid', placeItems: 'center', fontSize: 12, color: '#999' }}>Sin imagen</div>}
+            <div style={{ padding: '7px 9px' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t}</div>
+              <div style={{ fontSize: 11.5, color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dsc}</div>
+              <div style={{ fontSize: 11, color: '#888' }}>{dominio}</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

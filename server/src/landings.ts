@@ -136,6 +136,10 @@ export interface LandingDatos {
   autoDespacho: boolean;
   pedirCorreo: boolean;
   gracias: string;
+  /** SEO: lo que sale en Google y al compartir el enlace (vacío = se arma solo). */
+  seoTitulo: string;
+  seoDescripcion: string;
+  seoImagen: string;
 }
 
 const color = (v: unknown, d: string) => (/^#[0-9a-f]{3,8}$/i.test(txt(v).trim()) ? txt(v).trim() : d);
@@ -194,6 +198,9 @@ export function limpiarDatos(raw: unknown): LandingDatos {
     autoDespacho: r.autoDespacho === true,
     pedirCorreo: r.pedirCorreo === true,
     gracias: largo(r.gracias, 400),
+    seoTitulo: corto(r.seoTitulo, 70),
+    seoDescripcion: corto(r.seoDescripcion, 170),
+    seoImagen: url(r.seoImagen),
   };
 }
 
@@ -365,16 +372,17 @@ export function landingPublica(tienda: string, slug: string): { storeId: string;
   return { storeId: s.id, id: r.id, datos: limpiarDatos(pj(r.datos, {})) };
 }
 // ── La tienda (página de inicio con todos los productos publicados) ─────
-export interface TiendaConfig { nombre: string; logo: string; banner: string; titulo: string; descripcion: string; anuncios: string[]; colorPrincipal: string; colorBoton: string; colorAcento: string; whatsapp: string; pixelMeta: string }
+export interface TiendaConfig { nombre: string; logo: string; favicon: string; banner: string; titulo: string; descripcion: string; anuncios: string[]; colorPrincipal: string; colorBoton: string; colorAcento: string; whatsapp: string; pixelMeta: string; seoTitulo: string; seoDescripcion: string; seoImagen: string }
 export function configTienda(storeId: string): TiendaConfig {
   const r = db.prepare('SELECT nombre, tienda_config FROM stores WHERE id = ?').get(storeId) as { nombre: string; tienda_config: string } | undefined;
   const c = pj<Fila>(txt(r?.tienda_config), {}) || {};
   return {
-    nombre: corto(c.nombre, 60) || txt(r?.nombre), logo: url(c.logo), banner: url(c.banner),
+    nombre: corto(c.nombre, 60) || txt(r?.nombre), logo: url(c.logo), favicon: url(c.favicon), banner: url(c.banner),
     titulo: corto(c.titulo, 90), descripcion: largo(c.descripcion, 400),
     anuncios: (Array.isArray(c.anuncios) ? c.anuncios : ['ENVÍO GRATIS', 'PAGO CONTRA ENTREGA']).map((x) => corto(x, 60)).filter(Boolean).slice(0, 6),
     colorPrincipal: color(c.colorPrincipal, '#121212'), colorBoton: color(c.colorBoton, '#16a34a'), colorAcento: color(c.colorAcento, '#0f3a3f'),
     whatsapp: txt(c.whatsapp).replace(/\D/g, '').slice(0, 15), pixelMeta: txt(c.pixelMeta).replace(/\D/g, '').slice(0, 20),
+    seoTitulo: corto(c.seoTitulo, 70), seoDescripcion: corto(c.seoDescripcion, 170), seoImagen: url(c.seoImagen),
   };
 }
 export function guardarConfigTienda(storeId: string, raw: unknown): TiendaConfig {
@@ -395,14 +403,14 @@ export function catalogoTienda(storeId: string): ProductoCatalogo[] {
   });
 }
 /** Página de inicio de la tienda: la landing elegida o, si no hay, el catálogo. `base` = prefijo de los enlaces. */
-export function inicioTienda(storeId: string, base: string): { html: string; landingId: string } | null {
+export function inicioTienda(storeId: string, base: string, origen = ''): { html: string; landingId: string } | null {
   if (!tiendaEnLinea(storeId)) return null;
   const ini = txt((db.prepare('SELECT landing_inicio FROM stores WHERE id = ?').get(storeId) as { landing_inicio: string } | undefined)?.landing_inicio);
   if (ini) {
     const r = db.prepare("SELECT id, datos FROM landings WHERE store_id = ? AND id = ? AND estado = 'publicada'").get(storeId, ini) as { id: string; datos: string } | undefined;
-    if (r) return { html: renderLanding(limpiarDatos(pj(r.datos, {})), { id: r.id, inicio: base }), landingId: r.id };
+    if (r) return { html: renderLanding(limpiarDatos(pj(r.datos, {})), { id: r.id, inicio: base, tienda: configTienda(storeId), url: origen ? origen + base : '' }), landingId: r.id };
   }
-  return { html: renderCatalogo(configTienda(storeId), catalogoTienda(storeId), base), landingId: '' };
+  return { html: renderCatalogo(configTienda(storeId), catalogoTienda(storeId), base, false, origen), landingId: '' };
 }
 
 /** Landing publicada de una tienda por su dirección (para el dominio propio). Sin slug = la de inicio. */
@@ -631,4 +639,11 @@ export async function pedidoLanding(landingId: string, b: Fila, ip: string): Pro
 export function autoDespachoDeLanding(landingId: string): boolean {
   const r = db.prepare('SELECT datos FROM landings WHERE id = ?').get(landingId) as { datos: string } | undefined;
   return r ? limpiarDatos(pj(r.datos, {})).autoDespacho : false;
+}
+
+/** sitemap.xml de la tienda (página de inicio + cada producto publicado). */
+export function sitemapTienda(storeId: string, origen: string): string {
+  const filas = db.prepare("SELECT slug, updated_at FROM landings WHERE store_id = ? AND estado = 'publicada' ORDER BY publicada_at DESC").all(storeId) as { slug: string; updated_at: string }[];
+  const u = (loc: string, mod?: string) => `<url><loc>${loc.replace(/&/g, '&amp;')}</loc>${mod ? `<lastmod>${mod.slice(0, 10)}</lastmod>` : ''}</url>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${u(origen + '/')}${filas.map((f) => u(`${origen}/${f.slug}`, f.updated_at)).join('')}</urlset>`;
 }
