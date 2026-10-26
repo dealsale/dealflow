@@ -3,15 +3,15 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
   apiBorrarLanding, apiCrearLanding, apiDespublicarLanding, apiDuplicarLanding, apiGuardarLanding, apiImagenLanding, apiLanding, apiLandings,
-  apiPagarLanding, apiPublicarLanding, apiVistaLanding, apiConectarDominio, apiVerificarDominio, apiQuitarDominio, apiInicioDominio, apiSubdominio,
+  apiPagarMembresia, apiGuardarTienda, apiVistaTienda, apiPublicarLanding, apiVistaLanding, apiConectarDominio, apiVerificarDominio, apiQuitarDominio, apiInicioDominio, apiSubdominio,
 } from '../lib/api';
-import type { CuotaLandings, DominioLandings, Landing, LandingBundle, LandingDatos, LandingResumen } from '../lib/api';
+import type { MembresiaTienda, TiendaConfig, DominioLandings, Landing, LandingBundle, LandingDatos, LandingResumen } from '../lib/api';
 import { confirmar, notificar } from '../components/dialogs';
 
 /**
- * Creador de landings: una página de aterrizaje por producto (galería, variantes,
- * ofertas por cantidad, formulario contra entrega, imágenes largas y testimonios).
- * La primera se publica gratis; las siguientes se pagan una sola vez.
+ * Tienda en línea: una página de inicio con todos los productos publicados y una
+ * landing por producto (galería, variantes, ofertas por cantidad, formulario contra
+ * entrega, imágenes largas y testimonios). Membresía mensual; los pedidos caen a DealFlow.
  */
 const pesos = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CO');
 const inp: CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' };
@@ -69,32 +69,24 @@ export function Landings({ df }: { df: DealFlowState }) {
   const [abierta, setAbierta] = useState(leerAbierta);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-    if (q.get('pago') === 'ok') notificar('✓ Pago recibido. Tu landing queda publicada en unos segundos.', 'ok', 6000);
+    if (q.get('pago') === 'ok') notificar('✓ Pago recibido. Tu Tienda en línea queda activa en unos segundos.', 'ok', 6000);
   }, []);
   const abrir = (id: string) => { setAbierta(id); escribirAbierta(id); };
-  if (!df.landingsHabilitadas) {
-    return (
-      <section data-screen-label="Landings" style={{ ...card, padding: '34px 20px', textAlign: 'center', maxWidth: 560, margin: '30px auto' }}>
-        <div style={{ fontSize: 40 }}>🔒</div>
-        <div style={{ fontWeight: 800, fontSize: 16, margin: '6px 0 4px' }}>El Creador de landings no está activo en tu cuenta</div>
-        <div style={{ color: 'var(--df-text-muted)', fontSize: 13.5 }}>Escríbele al equipo de DealFlow para activarlo.</div>
-      </section>
-    );
-  }
   return abierta ? <Editor id={abierta} df={df} onSalir={() => abrir('')} /> : <Lista df={df} onAbrir={abrir} />;
 }
 
 // ── Lista ──────────────────────────────────────────────────────────────
 function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => void }) {
   const [lista, setLista] = useState<LandingResumen[] | null>(null);
-  const [cuota, setCuota] = useState<CuotaLandings | null>(null);
+  const [membresia, setMembresia] = useState<MembresiaTienda | null>(null);
+  const [tienda, setTienda] = useState<TiendaConfig | null>(null);
   const [creando, setCreando] = useState(false);
   const [dominio, setDominio] = useState<DominioLandings | null>(null);
-  const cargar = async () => { const r = await apiLandings(); if (r.data) { setLista(r.data.landings); setCuota(r.data.cuota); setDominio(r.data.dominio); } else notificar(r.error || 'No se pudieron cargar las landings.', 'error'); };
+  const cargar = async () => { const r = await apiLandings(); if (r.data) { setLista(r.data.landings); setMembresia(r.data.membresia); setDominio(r.data.dominio); setTienda(r.data.tienda); } else notificar(r.error || 'No se pudo cargar tu tienda.', 'error'); };
   useEffect(() => { void cargar(); }, []);
   const copiar = (u: string) => { void navigator.clipboard?.writeText(u).then(() => notificar('✓ Enlace copiado.')).catch(() => {}); };
   const borrar = async (l: LandingResumen) => {
-    const ok = await confirmar({ titulo: `¿Eliminar "${l.nombre}"?`, mensaje: l.modo === 'pago' ? 'Esta landing está pagada: si la eliminas, el pago no se recupera y su enlace deja de funcionar.' : 'Su enlace deja de funcionar. Esto no se puede deshacer.', aceptar: 'Eliminar', peligro: true });
+    const ok = await confirmar({ titulo: `¿Eliminar "${l.nombre}"?`, mensaje: 'Sale de tu tienda y su enlace deja de funcionar. Esto no se puede deshacer.', aceptar: 'Eliminar', peligro: true });
     if (!ok) return;
     const r = await apiBorrarLanding(l.id);
     if (r.error) notificar(r.error, 'error'); else void cargar();
@@ -102,25 +94,19 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
   const duplicar = async (l: LandingResumen) => { const r = await apiDuplicarLanding(l.id); if (r.data) onAbrir(r.data.landing.id); else notificar(r.error || 'No se pudo duplicar.', 'error'); };
 
   return (
-    <section data-screen-label="Landings">
+    <section data-screen-label="Tienda en línea">
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <div style={{ flex: 1, minWidth: 240 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Landings</h1>
-          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Páginas de venta por producto, con pago contra entrega. Los pedidos llegan directo a DealFlow.</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Tienda en línea</h1>
+          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Tu tienda con todos tus productos y una página de venta (landing) por producto para pautar. Pago contra entrega; los pedidos llegan directo a DealFlow.</p>
         </div>
-        <button onClick={() => setCreando(true)} className="df-btn-primary" style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Crear landing</button>
+        {dominio && membresia?.activa && (dominio.estado === 'activo' || dominio.raiz) && <a href={`https://${dominio.estado === 'activo' ? dominio.dominio : `${dominio.sub}.${dominio.raiz}`}`} target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>Ver mi tienda ↗</a>}
+        <button onClick={() => setCreando(true)} className="df-btn-primary" style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Agregar producto</button>
       </div>
 
-      {cuota && (
-        <div style={{ ...card, padding: '12px 14px', marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', background: 'var(--df-purple-subtle, var(--df-surface))', borderColor: 'var(--df-purple-border, var(--df-border))' }}>
-          <span style={{ fontSize: 20 }}>🎁</span>
-          <div style={{ fontSize: 13.5, flex: 1, minWidth: 220 }}>
-            {cuota.precio <= 0 ? <b>Publicar landings no tiene costo por ahora.</b>
-              : cuota.gratisRestantes > 0 ? <><b>Te {cuota.gratisRestantes === 1 ? 'queda 1 landing gratis' : `quedan ${cuota.gratisRestantes} landings gratis`}.</b> Después, cada landing nueva cuesta <b>{pesos(cuota.precio)}</b>: pago único, sin mensualidad, y es tuya para siempre.</>
-              : <>Cada landing nueva cuesta <b>{pesos(cuota.precio)}</b>: pago único, sin mensualidad. Editarla o volver a publicarla después no cuesta nada.</>}
-          </div>
-        </div>
-      )}
+      {membresia && <MembresiaCard m={membresia} />}
+
+      {tienda && <TiendaCard t={tienda} onGuardada={setTienda} />}
 
       {dominio && <DominioCard d={dominio} landings={lista || []} onCambio={(x) => { setDominio(x); void cargar(); }} />}
 
@@ -128,9 +114,9 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
         : !lista.length ? (
           <div style={{ ...card, padding: '34px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 40 }}>🛍️</div>
-            <div style={{ fontWeight: 800, fontSize: 16, margin: '6px 0 4px' }}>Crea tu primera landing</div>
-            <div style={{ color: 'var(--df-text-muted)', fontSize: 13.5, maxWidth: 460, margin: '0 auto 14px' }}>Elige un producto de tu catálogo y DealFlow arma la página con sus fotos, variantes y combos. Tú ajustas textos, ofertas e imágenes.</div>
-            <button onClick={() => setCreando(true)} style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Crear landing</button>
+            <div style={{ fontWeight: 800, fontSize: 16, margin: '6px 0 4px' }}>Agrega tu primer producto</div>
+            <div style={{ color: 'var(--df-text-muted)', fontSize: 13.5, maxWidth: 460, margin: '0 auto 14px' }}>Tráelo de tu catálogo de DealFlow (con fotos, variantes y combos) o crea uno solo para la tienda. Cada producto tiene su propia página y su enlace para pautar.</div>
+            <button onClick={() => setCreando(true)} style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Agregar producto</button>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
@@ -172,7 +158,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
 
 function Estado({ l }: { l: { estado: string; desbloqueada: boolean } }) {
   const pub = l.estado === 'publicada';
-  return <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '2px 9px', background: pub ? 'var(--df-success-subtle, #dcfce7)' : 'var(--df-surface-2, #f4f4f5)', color: pub ? 'var(--df-success, #16a34a)' : 'var(--df-text-muted)', whiteSpace: 'nowrap' }}>{pub ? '● Publicada' : 'Borrador'}</span>;
+  return <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '2px 9px', background: pub ? 'var(--df-success-subtle, #dcfce7)' : 'var(--df-surface-2, #f4f4f5)', color: pub ? 'var(--df-success, #16a34a)' : 'var(--df-text-muted)', whiteSpace: 'nowrap' }}>{pub ? '● Publicado' : 'Borrador'}</span>;
 }
 
 // Miniatura: la primera foto de la galería (se pide la landing completa una vez).
@@ -187,31 +173,45 @@ function Miniatura({ id }: { id: string }) {
 }
 
 function CrearModal({ df, onCerrar, onCreada }: { df: DealFlowState; onCerrar: () => void; onCreada: (id: string) => void }) {
+  const [origen, setOrigen] = useState<'catalogo' | 'nuevo'>('catalogo');
   const [pid, setPid] = useState('');
   const [nombre, setNombre] = useState('');
   const [enviando, setEnviando] = useState(false);
   const productos = df.products.filter((p) => p.tipo !== 'servicio');
   const crear = async () => {
+    if (origen === 'catalogo' && !pid) return notificar('Elige el producto de tu catálogo.', 'error');
+    if (origen === 'nuevo' && !nombre.trim()) return notificar('Escribe el nombre del producto.', 'error');
     setEnviando(true);
-    const r = await apiCrearLanding(nombre, pid);
+    const r = await apiCrearLanding(nombre, origen === 'catalogo' ? pid : '');
     setEnviando(false);
     if (r.data) onCreada(r.data.landing.id); else notificar(r.error || 'No se pudo crear.', 'error');
   };
   return (
     <div onClick={onCerrar} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 1000, display: 'grid', placeItems: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: 'min(460px, 100%)', padding: 20 }}>
-        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4 }}>Nueva landing</div>
-        <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 14 }}>Elige el producto: traemos sus fotos, variantes, precio y combos. Los pedidos de la landing quedan ligados a ese producto.</div>
-        <label style={{ fontSize: 12.5, fontWeight: 600 }}>Producto</label>
-        <select value={pid} onChange={(e) => setPid(e.target.value)} style={{ ...inp, margin: '5px 0 12px' }}>
-          <option value="">Empezar en blanco</option>
-          {productos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
-        </select>
-        <label style={{ fontSize: 12.5, fontWeight: 600 }}>Nombre en la landing <span style={{ color: 'var(--df-text-faint)', fontWeight: 400 }}>(opcional)</span></label>
+        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 12 }}>Agregar producto a la tienda</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+          {([['catalogo', '📦 De mi catálogo', 'Trae fotos, variantes, precio y combos. Los pedidos quedan ligados al producto para despacharlos.'], ['nuevo', '✨ Producto nuevo', 'Solo para la tienda en línea. Lo armas desde cero.']] as const).map(([k, t, dsc]) => (
+            <button key={k} type="button" onClick={() => setOrigen(k)} style={{ textAlign: 'left', border: `1.5px solid ${origen === k ? 'var(--df-purple)' : 'var(--df-border)'}`, background: origen === k ? 'var(--df-purple-subtle, var(--df-surface))' : 'var(--df-surface)', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--df-text)' }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 3 }}>{dsc}</div>
+            </button>
+          ))}
+        </div>
+        {origen === 'catalogo' && (
+          <>
+            <label style={{ fontSize: 12.5, fontWeight: 600 }}>Producto de DealFlow</label>
+            <select value={pid} onChange={(e) => setPid(e.target.value)} style={{ ...inp, margin: '5px 0 12px' }}>
+              <option value="">Elige un producto…</option>
+              {productos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+            </select>
+          </>
+        )}
+        <label style={{ fontSize: 12.5, fontWeight: 600 }}>Nombre en la tienda {origen === 'catalogo' && <span style={{ color: 'var(--df-text-faint)', fontWeight: 400 }}>(opcional)</span>}</label>
         <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Blusa Valery Manga Larga" style={{ ...inp, margin: '5px 0 16px' }} />
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCerrar} style={btn}>Cancelar</button>
-          <button onClick={() => void crear()} disabled={enviando} style={{ ...btnPri, opacity: enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Crear y editar'}</button>
+          <button onClick={() => void crear()} disabled={enviando} style={{ ...btnPri, opacity: enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Agregar y editar'}</button>
         </div>
       </div>
     </div>
@@ -267,16 +267,16 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
     const r = await apiPublicarLanding(id);
     if (r.error) return notificar(r.error, 'error');
     if (r.data?.requierePago) {
-      const ok = await confirmar({ titulo: `Publicar por ${pesos(r.data.precio || 0)}`, mensaje: `Ya usaste tus landings gratis. Esta landing cuesta ${pesos(r.data.precio || 0)}: es un pago único (sin mensualidad) y después puedes editarla y republicarla las veces que quieras. Te llevamos al pago seguro de Wompi.`, aceptar: 'Ir a pagar' });
+      const ok = await confirmar({ titulo: 'Activa tu Tienda en línea', mensaje: `Para publicar necesitas la membresía de Tienda en línea: ${pesos(r.data.precio || 0)} al mes, con todos los productos y landings que quieras, tu dirección gratis y tu propio dominio. Te llevamos al pago seguro de Wompi.`, aceptar: 'Activar membresía' });
       if (!ok) return;
-      const p = await apiPagarLanding(id);
+      const p = await apiPagarMembresia();
       if (p.data?.url) window.location.href = p.data.url; else notificar(p.error || 'No se pudo abrir el pago.', 'error');
       return;
     }
-    if (r.data?.landing) { setL({ ...l, ...r.data.landing }); notificar('✓ ¡Landing publicada! Ya puedes compartir el enlace.', 'ok', 5000); }
+    if (r.data?.landing) { setL({ ...l, ...r.data.landing }); notificar('✓ ¡Publicado! Ya aparece en tu tienda y puedes pautar su enlace.', 'ok', 5000); }
   };
   const despublicar = async () => {
-    const ok = await confirmar({ titulo: '¿Despublicar la landing?', mensaje: 'El enlace deja de mostrar la página hasta que la publiques de nuevo (volver a publicarla no se cobra).', aceptar: 'Despublicar' });
+    const ok = await confirmar({ titulo: '¿Despublicar este producto?', mensaje: 'Sale de tu tienda y su enlace deja de mostrar la página hasta que lo publiques de nuevo.', aceptar: 'Despublicar' });
     if (!ok) return;
     const r = await apiDespublicarLanding(id);
     if (r.error) notificar(r.error, 'error'); else setL({ ...l, estado: 'borrador' });
@@ -306,9 +306,9 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
         </Dos>
         <Campo label="Frase destacada (con ✓ al lado)"><input value={d.destacado} onChange={(e) => set({ destacado: e.target.value })} placeholder="100% textura premium | Calidad garantizada" style={inp} /></Campo>
         <Interruptor valor={d.mostrarTitulo} onChange={(mostrarTitulo) => set({ mostrarTitulo })} titulo="Mostrar el nombre del producto" ayuda="Apágalo si la foto principal ya trae el nombre (como en las tiendas de Shopify)." />
-        <Campo label="Producto de DealFlow" ayuda="Los pedidos de esta landing quedan ligados a este producto (para despacharlos).">
+        <Campo label="Producto de DealFlow" ayuda="Los pedidos de esta página quedan ligados a este producto (para despacharlos con Effi o Dropi).">
           <select value={l.productId} onChange={(e) => void vincular(e.target.value)} style={inp}>
-            <option value="">Sin producto</option>
+            <option value="">Producto solo de la tienda en línea</option>
             {df.products.filter((p) => p.tipo !== 'servicio').map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
           </select>
         </Campo>
@@ -400,7 +400,7 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
   return (
     <section data-screen-label="Editor de landing">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <button onClick={onSalir} style={btn}>← Landings</button>
+        <button onClick={onSalir} style={btn}>← Tienda en línea</button>
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: 19, fontWeight: 800, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nombre}</h1>
@@ -415,9 +415,9 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
         <span style={{ fontSize: 12, color: estadoGuardado === 'error' ? 'var(--df-danger)' : 'var(--df-text-muted)', minWidth: 90, textAlign: 'right' }}>
           {estadoGuardado === 'pendiente' || estadoGuardado === 'guardando' ? 'Guardando…' : estadoGuardado === 'ok' ? '✓ Guardado' : estadoGuardado === 'error' ? 'Sin guardar' : ''}
         </span>
-        {l.estado === 'publicada' && <a href={l.url} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: 'none' }}>Ver landing ↗</a>}
+        {l.estado === 'publicada' && <a href={l.url} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: 'none' }}>Ver página ↗</a>}
         {l.estado === 'publicada' ? <button onClick={() => void despublicar()} style={btn}>Despublicar</button>
-          : <button onClick={() => void publicar()} className="df-btn-primary" style={{ ...btnPri, padding: '8px 16px' }}>{l.desbloqueada ? 'Publicar' : 'Publicar landing'}</button>}
+          : <button onClick={() => void publicar()} className="df-btn-primary" style={{ ...btnPri, padding: '8px 16px' }}>Publicar</button>}
       </div>
 
       {angosto ? (
@@ -679,7 +679,7 @@ function DominioCard({ d, landings, onCambio }: { d: DominioLandings; landings: 
     if (r.data) onCambio(r.data); else notificar(r.error || 'No se pudo completar.', 'error');
   };
   const quitar = async () => {
-    if (!(await confirmar({ titulo: `¿Desconectar ${d.dominio}?`, mensaje: 'Tus landings vuelven a la dirección de DealFlow. Los enlaces con tu dominio dejan de funcionar.', aceptar: 'Desconectar', peligro: true }))) return;
+    if (!(await confirmar({ titulo: `¿Desconectar ${d.dominio}?`, mensaje: 'Tu tienda vuelve a la dirección gratis. Los enlaces con tu dominio dejan de funcionar.', aceptar: 'Desconectar', peligro: true }))) return;
     await accion(apiQuitarDominio);
   };
   const activo = d.estado === 'activo';
@@ -698,7 +698,7 @@ function DominioCard({ d, landings, onCambio }: { d: DominioLandings; landings: 
       <button onClick={() => setAbierto(!abierto)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', padding: '12px 14px', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left', color: 'var(--df-text-strong)' }}>
         <span style={{ fontSize: 18 }}>🌐</span>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ fontWeight: 700, fontSize: 14 }}>{d.raiz ? 'Dirección de tus landings' : 'Dominio propio'}</span>
+          <span style={{ fontWeight: 700, fontSize: 14 }}>{d.raiz ? 'Dirección de tu tienda' : 'Dominio propio'}</span>
           <span style={{ display: 'block', fontSize: 12.5, color: 'var(--df-text-muted)' }}>{d.dominio ? <>{d.dominio} · {activo ? <b style={{ color: 'var(--df-success, #16a34a)' }}>Activo</b> : <b style={{ color: 'var(--df-warning)' }}>Pendiente</b>}</> : d.raiz ? <><b style={{ color: 'var(--df-text-body)' }}>{d.sub}.{d.raiz}</b> · gratis · o conecta tu propio dominio</> : 'Muestra tus landings en tutienda.com/producto'}</span>
         </span>
         <span style={{ color: 'var(--df-text-faint)', fontSize: 11, transform: abierto ? 'rotate(180deg)' : 'none' }}>▼</span>
@@ -716,7 +716,7 @@ function DominioCard({ d, landings, onCambio }: { d: DominioLandings; landings: 
                   ? <button onClick={() => void accion(() => apiSubdominio(sub))} disabled={ocupado || sub.length < 3} style={{ ...btnPri, padding: '5px 10px' }}>Guardar</button>
                   : <a href={`https://${d.sub}.${d.raiz}`} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 10px', textDecoration: 'none' }}>Abrir ↗</a>}
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Tus landings quedan en {d.sub}.{d.raiz}/nombre-del-producto. Si cambias el nombre, los enlaces anteriores dejan de funcionar.</div>
+              <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Tu tienda queda en {d.sub}.{d.raiz} y cada producto en {d.sub}.{d.raiz}/nombre-del-producto. Si cambias el nombre, los enlaces anteriores dejan de funcionar.</div>
             </div>
           )}
           {d.raiz && !d.dominio && <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>🌐 ¿Tienes tu propio dominio? (opcional)</div>}
@@ -744,7 +744,7 @@ function DominioCard({ d, landings, onCambio }: { d: DominioLandings; landings: 
               {activo && (
                 <Campo label="Página que se abre en tu dominio sin nada después (tutienda.com)">
                   <select value={d.inicio} onChange={(e) => void accion(() => apiInicioDominio(e.target.value))} style={inp}>
-                    <option value="">La última landing publicada</option>
+                    <option value="">Todos mis productos (recomendado)</option>
                     {publicadas.map((l) => <option key={l.id} value={l.id}>{l.nombre} (/{l.slug})</option>)}
                   </select>
                 </Campo>
@@ -756,6 +756,103 @@ function DominioCard({ d, landings, onCambio }: { d: DominioLandings; landings: 
               </div>
             </>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Membresía ──────────────────────────────────────────────────────────
+function MembresiaCard({ m }: { m: MembresiaTienda }) {
+  const [ocupado, setOcupado] = useState(false);
+  const pagar = async () => {
+    setOcupado(true);
+    const r = await apiPagarMembresia();
+    setOcupado(false);
+    if (r.data?.url) window.location.href = r.data.url; else notificar(r.error || 'No se pudo abrir el pago.', 'error');
+  };
+  const fecha = (f: string) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+  if (m.cortesia) return null;
+  if (m.activa) {
+    const pronto = m.diasRestantes <= 5;
+    return (
+      <div style={{ ...card, padding: '11px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', borderColor: pronto ? 'var(--df-warning)' : 'var(--df-border)' }}>
+        <span style={{ fontSize: 18 }}>{pronto ? '⏳' : '✅'}</span>
+        <div style={{ fontSize: 13.5, flex: 1, minWidth: 220 }}>Membresía activa hasta el <b>{fecha(m.vence)}</b>{pronto ? <> · vence en {m.diasRestantes} día{m.diasRestantes === 1 ? '' : 's'}</> : ''}.</div>
+        <button onClick={() => void pagar()} disabled={ocupado} style={pronto ? btnPri : btn}>{ocupado ? 'Abriendo…' : `Renovar · ${pesos(m.precio)}`}</button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ ...card, padding: '18px 18px', marginBottom: 16, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', background: 'linear-gradient(135deg, var(--df-purple-subtle, #f5f3ff), var(--df-surface))', borderColor: 'var(--df-purple-border, var(--df-border))' }}>
+      <span style={{ fontSize: 34 }}>🛍️</span>
+      <div style={{ flex: 1, minWidth: 240 }}>
+        <div style={{ fontWeight: 800, fontSize: 16 }}>{m.enGracia ? 'Tu membresía venció: renuévala para que tu tienda siga en línea' : 'Activa tu Tienda en línea'}</div>
+        <div style={{ fontSize: 13, color: 'var(--df-text-body)', marginTop: 3 }}>
+          <b>{pesos(m.precio)} al mes.</b> Productos y landings ilimitados, dirección gratis para tu tienda, tu propio dominio y pedidos directo a DealFlow.
+          {!m.enGracia && ' Puedes armar tus productos desde ya; se publican al activar.'}
+        </div>
+      </div>
+      <button onClick={() => void pagar()} disabled={ocupado} className="df-btn-primary" style={{ ...btnPri, padding: '11px 18px', fontSize: 14 }}>{ocupado ? 'Abriendo…' : 'Activar membresía'}</button>
+    </div>
+  );
+}
+
+// ── Datos de la tienda (página de inicio) ─────────────────────────────
+function TiendaCard({ t, onGuardada }: { t: TiendaConfig; onGuardada: (t: TiendaConfig) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [c, setC] = useState(t);
+  const [html, setHtml] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => { setC(t); }, [t]);
+  useEffect(() => {
+    if (!abierto) return;
+    const tv = setTimeout(() => { void apiVistaTienda(c).then((r) => { if (r.data) setHtml(r.data.html); }); }, 400);
+    return () => clearTimeout(tv);
+  }, [c, abierto]);
+  const set = (p: Partial<TiendaConfig>) => setC((x) => ({ ...x, ...p }));
+  const guardar = async () => {
+    setGuardando(true);
+    const r = await apiGuardarTienda(c);
+    setGuardando(false);
+    if (r.data) { onGuardada(r.data.tienda); notificar('✓ Tienda guardada.'); } else notificar(r.error || 'No se pudo guardar.', 'error');
+  };
+  const cambios = JSON.stringify(c) !== JSON.stringify(t);
+  return (
+    <div style={{ ...card, marginBottom: 14 }}>
+      <button onClick={() => setAbierto(!abierto)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', padding: '12px 14px', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left', color: 'var(--df-text-strong)' }}>
+        {t.logo ? <img src={t.logo} alt="" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} /> : <span style={{ fontSize: 18 }}>🏪</span>}
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ fontWeight: 700, fontSize: 14 }}>Mi tienda · página de inicio</span>
+          <span style={{ display: 'block', fontSize: 12.5, color: 'var(--df-text-muted)' }}>{t.nombre} · logo, portada, colores y textos de la página con todos tus productos</span>
+        </span>
+        <span style={{ color: 'var(--df-text-faint)', fontSize: 11, transform: abierto ? 'rotate(180deg)' : 'none' }}>▼</span>
+      </button>
+      {abierto && (
+        <div style={{ padding: '0 14px 14px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Campo label="Nombre de la tienda"><input value={c.nombre} onChange={(e) => set({ nombre: e.target.value })} style={inp} /></Campo>
+            <UnaImagen titulo="Logo" url={c.logo} onChange={(logo) => set({ logo })} png />
+            <UnaImagen titulo="Portada (banner ancho, opcional)" url={c.banner} onChange={(banner) => set({ banner })} />
+            <Campo label="Título"><input value={c.titulo} onChange={(e) => set({ titulo: e.target.value })} placeholder="Nueva colección · Envío gratis a toda Colombia" style={inp} /></Campo>
+            <Campo label="Descripción corta"><textarea value={c.descripcion} onChange={(e) => set({ descripcion: e.target.value })} rows={2} style={{ ...inp, resize: 'vertical' }} /></Campo>
+            <Campo label="Barra de anuncios (se mueve)"><ListaTextos valores={c.anuncios} onChange={(anuncios) => set({ anuncios })} max={6} placeholder="ENVÍO GRATIS" /></Campo>
+            <Dos>
+              <Campo label="Barra y pie"><Color valor={c.colorPrincipal} onChange={(colorPrincipal) => set({ colorPrincipal })} opciones={['#121212', '#6d388b', '#1e3a8a', '#0f766e', '#9f1239']} /></Campo>
+              <Campo label="Botones y descuentos"><Color valor={c.colorBoton} onChange={(colorBoton) => set({ colorBoton })} opciones={['#16a34a', '#00af19', '#f01111', '#ea580c', '#7c3aed']} /></Campo>
+            </Dos>
+            <Dos>
+              <Campo label="WhatsApp (botón flotante)"><input value={c.whatsapp} onChange={(e) => set({ whatsapp: e.target.value.replace(/\D/g, '') })} placeholder="573001234567" inputMode="numeric" style={inp} /></Campo>
+              <Campo label="ID del Píxel de Meta"><input value={c.pixelMeta} onChange={(e) => set({ pixelMeta: e.target.value.replace(/\D/g, '') })} inputMode="numeric" style={inp} /></Campo>
+            </Dos>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => void guardar()} disabled={guardando || !cambios} style={{ ...btnPri, opacity: guardando || !cambios ? 0.6 : 1 }}>{guardando ? 'Guardando…' : 'Guardar tienda'}</button>
+              {cambios && <button onClick={() => setC(t)} style={btn}>Descartar</button>}
+            </div>
+          </div>
+          <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, overflow: 'hidden', height: 520, background: '#fff' }}>
+            <iframe title="Vista previa de la tienda" srcDoc={html} sandbox="allow-scripts allow-same-origin" style={{ width: '100%', height: '100%', border: 'none' }} />
+          </div>
         </div>
       )}
     </div>

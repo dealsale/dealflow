@@ -15,8 +15,8 @@ import type { AdminSection, VendedorSection } from '../types';
 const VENDEDOR: VendedorSection[] = ['resumen', 'estadisticas', 'productos', 'asistente', 'whatsapp', 'logistica', 'pedidos', 'leads', 'crm', 'equipo', 'marketing', 'dealshop', 'biblioteca', 'integraciones', 'landings'];
 const ADMIN: AdminSection[] = ['ventas', 'planes', 'cuentas', 'cupones', 'superadmin', 'biblioteca', 'plantillas', 'trazabilidad', 'landings'];
 // Nombre en la URL distinto al interno (más claro para el usuario).
-const A_URL: Partial<Record<VendedorSection, string>> = { crm: 'inbox' };
-const DE_URL: Record<string, VendedorSection> = { inbox: 'crm' };
+const A_URL: Partial<Record<VendedorSection, string>> = { crm: 'inbox', landings: 'tienda-en-linea' };
+const DE_URL: Record<string, VendedorSection> = { inbox: 'crm', 'tienda-en-linea': 'landings' };
 
 export interface Ruta {
   mode?: 'vendedor' | 'admin';
@@ -24,6 +24,7 @@ export interface Ruta {
   adminSection?: AdminSection;
   pedido?: string;
   chat?: string;
+  producto?: string;
   desde?: string;
   hasta?: string;
   preset?: string;
@@ -41,6 +42,7 @@ export function leerRuta(loc: Location = window.location): Ruta {
   }
   const pedido = q.get('pedido'); if (pedido && /^[\w-]{1,40}$/.test(pedido)) r.pedido = pedido;
   const chat = q.get('chat'); if (chat && /^[\w-]{1,64}$/.test(chat)) r.chat = chat;
+  const producto = q.get('producto'); if (producto && /^[\w-]{1,64}$/.test(producto)) r.producto = producto;
   const re = /^\d{4}-\d{2}-\d{2}$/;
   const d = q.get('desde'); const h = q.get('hasta');
   if (d && h && re.test(d) && re.test(h)) { r.desde = d; r.hasta = h; }
@@ -54,6 +56,7 @@ export function urlDe(r: Ruta): string {
   const q = new URLSearchParams();
   if (r.pedido) q.set('pedido', r.pedido);
   if (r.chat && r.mode !== 'admin' && r.section === 'crm') q.set('chat', r.chat);
+  if (r.producto && r.mode !== 'admin' && r.section === 'productos') q.set('producto', r.producto);
   if (r.mode !== 'admin' && r.section === 'estadisticas' && r.desde && r.hasta) {
     if (r.preset && r.preset !== 'rango') q.set('p', r.preset);
     else { q.set('desde', r.desde); q.set('hasta', r.hasta); }

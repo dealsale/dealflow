@@ -965,9 +965,10 @@ export function useDealFlowState() {
     escribirRuta({
       mode, section, adminSection, pedido: selectedOrderId || undefined,
       chat: chatAbierto ? String(crmSelectedId) : undefined,
+      producto: section === 'productos' && expandedProductId != null && expandedProductId !== 7 ? String(expandedProductId) : undefined,
       desde: statsRango.desde, hasta: statsRango.hasta, preset: statsPreset,
     });
-  }, [mode, section, adminSection, selectedOrderId, crmSelectedId, mobileChatOpen, statsRango.desde, statsRango.hasta, statsPreset, sessionUser]);
+  }, [mode, section, adminSection, selectedOrderId, crmSelectedId, mobileChatOpen, expandedProductId, statsRango.desde, statsRango.hasta, statsPreset, sessionUser]);
   // Atrás / adelante del navegador.
   const aplicarRutaRef = useRef<() => void>(() => {});
   aplicarRutaRef.current = () => {
@@ -1119,7 +1120,7 @@ export function useDealFlowState() {
   // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
   const AGENTE_SECCIONES: VendedorSection[] = ['productos', 'crm', 'leads', 'pedidos', 'logistica'];
   const esAgente = apiMode && sessionUser?.role === 'vendedor' && sessionUser?.esDueno === false;
-  const puedeVerSeccion = (sec: VendedorSection) => (sec !== 'landings' || landingsHabilitadas) && (!esAgente || AGENTE_SECCIONES.includes(sec));
+  const puedeVerSeccion = (sec: VendedorSection) => !esAgente || AGENTE_SECCIONES.includes(sec);
 
   // ── Direcciones por página (F5 deja al usuario donde estaba) ──
   const rutaLista = useRef(false);
@@ -1133,7 +1134,7 @@ export function useDealFlowState() {
     // En modo soporte se trabaja en la tienda: las direcciones /admin/… no aplican.
     if (impersonando && r.mode === 'admin') return;
     if (r.mode === 'admin' && r.adminSection && esAdm) {
-      if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
+      if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'landings' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
     } else if (r.section && (!agente || AGENTE_SECCIONES.includes(r.section))) {
       setMode('vendedor'); setSection(r.section);
     }
@@ -1143,6 +1144,7 @@ export function useDealFlowState() {
       if (apiModeRef.current) cargarMensajesChat(r.chat);
       setMobileChatOpen(true);
     }
+    if (r.section === 'productos' && r.producto) setExpandedProductId(r.producto);
     if (r.section === 'estadisticas') {
       if (r.preset && PRESETS_STATS.includes(r.preset)) { setStatsPreset(r.preset as StatsPreset); setStatsRango(rangoDePreset(r.preset as StatsPreset)); }
       else if (r.desde && r.hasta) { setStatsPreset('rango'); setStatsRango({ desde: r.desde, hasta: r.hasta }); }

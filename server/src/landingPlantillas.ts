@@ -8,7 +8,7 @@
  * emergente con resumen (subtotal, descuento, envío, total), imágenes largas y
  * testimonios estilo Facebook.
  */
-import type { LandingDatos, BundleL } from './landings.js';
+import type { LandingDatos, BundleL, TiendaConfig, ProductoCatalogo } from './landings.js';
 import { BASE_TIENDA } from './tiendaPublica.js';
 import { COLOMBIA } from './colombiaGeo.js';
 
@@ -17,7 +17,7 @@ const esc = (s: unknown) => txt(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const pesos = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
 const json = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c').replace(/[\u2028\u2029]/g, '');
 
-export interface OpcionesRender { id: string; vista?: boolean; titulo?: string; urlBase?: string }
+export interface OpcionesRender { id: string; vista?: boolean; titulo?: string; urlBase?: string; /** Enlace a la página de inicio de la tienda (catálogo). */ inicio?: string }
 
 export function renderLanding(d: LandingDatos, o: OpcionesRender): string {
   return premium(d, o);
@@ -288,7 +288,7 @@ ${d.testimonios.length ? `<section class="testi">${d.tituloTestimonios ? `<h2 da
     const av = (src: string, n: string) => src ? `<img class="av" src="${esc(src)}" alt="" loading="lazy">` : `<span class="av" style="background:hsl(${(n.charCodeAt(0) || 0) * 37 % 360} 45% 52%)">${esc(n.slice(0, 1).toUpperCase())}</span>`;
     return `<article class="post" data-rev><div class="cab">${av(t.avatar, t.autor)}<div><div class="nm">${esc(t.autor)}</div><div class="tm">${esc(t.tiempo || 'Hace 1 día')}</div></div><span class="mas">···</span></div>${t.texto ? `<div class="tx">${esc(t.texto).replace(/\n/g, '<br>')}</div>` : ''}${t.imagen ? `<img class="img" src="${esc(t.imagen)}" alt="" loading="lazy">` : ''}<div class="rx"><span class="em"><i>👍</i><i>❤️</i><i>🥰</i></span><span>${esc(t.reacciones || '12')}</span>${t.comentarioTexto ? '<span class="cm">1 Comentario</span>' : ''}</div><div class="ac"><span>${I.megusta}Me gusta</span><span>${I.comentar}Comentar</span><span>${I.compartir}Compartir</span></div>${t.comentarioTexto ? `<div class="rep">${av(t.comentarioAvatar, t.comentarioAutor || 'A')}<div><div class="bur"><b>${esc(t.comentarioAutor || 'Cliente')}</b>${esc(t.comentarioTexto)}</div><div class="pie"><span>Hace 1 día</span><span>Me gusta</span><span>Responder</span></div></div></div>` : ''}</article>`;
   }).join('')}</div></section>` : ''}
-<footer>© ${new Date().getFullYear()}, <b>${esc(d.nombreTienda || d.nombre)}</b> · Pago contra entrega en toda Colombia</footer>
+<footer>${o.inicio ? `<a href="${esc(o.inicio)}" style="display:inline-block;color:#fff;font-weight:600;border:1px solid #444;border-radius:20px;padding:7px 16px;margin-bottom:12px;text-decoration:none">← Ver todos los productos</a><br>` : ''}© ${new Date().getFullYear()}, <b>${esc(d.nombreTienda || d.nombre)}</b> · Pago contra entrega en toda Colombia</footer>
 <div class="pegado" id="pegado"><button class="cta" type="button" data-abrir>${I.carrito}<span class="tx"><span class="t1">${esc(d.boton)}</span>${d.botonSub ? `<span class="t2">${esc(d.botonSub)}</span>` : ''}</span></button></div>
 <button class="subir" id="subir" type="button" aria-label="Volver arriba">${I.arriba}</button>
 ${d.whatsapp ? `<a class="wa" href="https://wa.me/${esc(d.whatsapp)}?text=${encodeURIComponent('Hola, quiero información de ' + d.nombre)}" target="_blank" rel="noopener" aria-label="WhatsApp">${I.wa}</a>` : ''}
@@ -411,5 +411,64 @@ function enviar(e){
 pintar();
 })();
 </script>
+</body></html>`;
+}
+
+/** Página de inicio de la tienda: todos sus productos publicados (cada uno lleva a su landing). */
+export function renderCatalogo(t: TiendaConfig, productos: ProductoCatalogo[], base: string): string {
+  const tira = t.anuncios.length ? Array.from({ length: Math.max(4, Math.ceil(8 / t.anuncios.length)) }, () => t.anuncios).flat() : [];
+  const titulo = esc(t.nombre || 'Tienda');
+  return `<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>${titulo}${t.titulo ? ' | ' + esc(t.titulo) : ''}</title>
+<meta name="description" content="${esc(t.descripcion || t.titulo || t.nombre)}">
+<meta property="og:title" content="${titulo}">${productos[0]?.foto ? `<meta property="og:image" content="${esc(productos[0].foto.startsWith('/') ? BASE_TIENDA + productos[0].foto : productos[0].foto)}">` : ''}
+<meta name="theme-color" content="${esc(t.colorPrincipal)}">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+${t.pixelMeta ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${t.pixelMeta}');fbq('track','PageView');</script>` : ''}
+<style>
+:root{--p:${t.colorPrincipal};--b:${t.colorBoton};--a:${t.colorAcento};--t:#121212;--m:#6b7280;--g:#f3f3f3}
+*{box-sizing:border-box}body{margin:0;background:#fff;color:var(--t);font:14px/1.5 Poppins,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}a{color:inherit}
+.ticker{background:var(--p);color:#fff;overflow:hidden;white-space:nowrap}
+.ticker .pista{display:inline-flex;animation:correr ${Math.max(18, tira.length * 3)}s linear infinite}
+.ticker span{font:600 13.5px/1 Poppins,sans-serif;letter-spacing:.6px;text-transform:uppercase;padding:13px 0;margin:0 34px}
+@keyframes correr{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+header{display:flex;justify-content:center;align-items:center;padding:16px;border-bottom:1px solid #eee}
+header img{max-height:54px;width:auto}header b{font:800 22px Poppins,sans-serif;text-transform:uppercase;letter-spacing:2px}
+.banner img{width:100%}
+.hero{text-align:center;padding:30px 16px 6px;max-width:760px;margin:0 auto}
+.hero h1{font:800 26px/1.2 Poppins,sans-serif;margin:0 0 8px}@media(min-width:900px){.hero h1{font-size:34px}}
+.hero p{color:#444;margin:0}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;max-width:1200px;margin:0 auto;padding:22px 14px 40px}
+@media(min-width:900px){.grid{grid-template-columns:repeat(4,1fr);gap:22px}}
+.card{text-decoration:none;display:flex;flex-direction:column;opacity:0;transform:translateY(16px);animation:sube .6s ease forwards}
+@keyframes sube{to{opacity:1;transform:none}}
+.foto{position:relative;border-radius:12px;overflow:hidden;background:var(--g);aspect-ratio:4/5}
+.foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .4s,transform .6s}
+.foto img.dos{opacity:0}.card:hover .foto img.uno{transform:scale(1.04)}.card:hover .foto img.dos{opacity:1}
+.desc{position:absolute;top:10px;left:10px;background:var(--b);color:#fff;font:700 11.5px Poppins,sans-serif;padding:4px 8px;border-radius:5px}
+.st{color:#ffb400;font-size:12.5px;letter-spacing:1px;margin-top:9px}.st span{color:var(--m);letter-spacing:0;margin-left:4px}
+.nm{font:600 14.5px/1.3 Poppins,sans-serif;margin:3px 0 4px}
+.pr{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.pr b{font:800 16px Poppins,sans-serif}.pr s{color:#888;font-size:13px}
+.ver{margin-top:9px;text-align:center;background:var(--b);color:#fff;border-radius:7px;padding:9px;font:700 13px Poppins,sans-serif;text-transform:uppercase;transition:transform .2s}
+.card:hover .ver{transform:translateY(-2px)}
+.vacio{text-align:center;color:var(--m);padding:60px 16px}
+footer{background:#121212;color:#d4d4d4;text-align:center;font-size:12px;padding:26px 16px}footer b{color:#fff}
+.wa{position:fixed;right:16px;bottom:20px;width:54px;height:54px;border-radius:50%;background:#25d366;display:grid;place-items:center;box-shadow:0 6px 18px rgba(0,0,0,.25);animation:flota 2.6s ease-in-out infinite}
+@keyframes flota{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+</style></head><body>
+${tira.length ? `<div class="ticker"><div class="pista">${[...tira, ...tira].map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>` : ''}
+<header>${t.logo ? `<img src="${esc(t.logo)}" alt="${titulo}">` : `<b>${titulo}</b>`}</header>
+${t.banner ? `<div class="banner"><img src="${esc(t.banner)}" alt=""></div>` : ''}
+${t.titulo || t.descripcion ? `<section class="hero">${t.titulo ? `<h1>${esc(t.titulo)}</h1>` : ''}${t.descripcion ? `<p>${esc(t.descripcion)}</p>` : ''}</section>` : ''}
+${productos.length ? `<main class="grid">${productos.map((p, i) => {
+    const off = p.precioAntes > p.precio ? Math.round((1 - p.precio / p.precioAntes) * 100) : 0;
+    return `<a class="card" href="${esc(base + p.slug)}" style="animation-delay:${Math.min(i, 12) * 0.06}s"><div class="foto">${p.foto ? `<img class="uno" src="${esc(p.foto)}" alt="${esc(p.nombre)}" loading="${i < 4 ? 'eager' : 'lazy'}">` : ''}${p.foto2 ? `<img class="dos" src="${esc(p.foto2)}" alt="" loading="lazy">` : ''}${off ? `<span class="desc">-${off}%</span>` : ''}</div>${p.calificacion > 0 ? `<div class="st">${'★'.repeat(Math.round(p.calificacion))}<span>${esc(p.calificacion.toFixed(1))}</span></div>` : ''}<div class="nm">${esc(p.nombre)}</div><div class="pr"><b>${pesos(p.precio)}</b>${p.precioAntes > p.precio ? `<s>${pesos(p.precioAntes)}</s>` : ''}</div><div class="ver">Ver producto</div></a>`;
+  }).join('')}</main>` : '<div class="vacio">Pronto tendremos productos disponibles.</div>'}
+<footer>© ${new Date().getFullYear()}, <b>${titulo}</b> · Pago contra entrega en toda Colombia</footer>
+${t.whatsapp ? `<a class="wa" href="https://wa.me/${esc(t.whatsapp)}" target="_blank" rel="noopener" aria-label="WhatsApp">${I.wa}</a>` : ''}
 </body></html>`;
 }

@@ -271,6 +271,25 @@ export function crearCheckoutLanding(storeId: string, correo: string, redirectBa
   return { url: `${CHECKOUT}?${params.toString()}` };
 }
 
+/** Mensualidad de la Tienda en línea (landings): al aprobarse suma 30 días. */
+export function crearCheckoutTiendaOnline(storeId: string, correo: string, redirectBase: string, monto: number): { url?: string; error?: string } {
+  const pub = process.env.WOMPI_PUBLIC_KEY;
+  const integrity = process.env.WOMPI_INTEGRITY;
+  if (monto <= 0) return { error: 'La Tienda en línea no tiene costo por ahora.' };
+  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
+  const referencia = `DF-TOL-${storeId.slice(0, 8)}-${Date.now()}`;
+  db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo) VALUES (?,?,?,?,?,?,?,?)')
+    .run(uid(), storeId, 'tienda_online', Math.round(monto), referencia, 'pendiente', 'wompi', 'tienda_online');
+  const montoCents = Math.round(monto) * 100;
+  const params = new URLSearchParams({
+    'public-key': pub, currency: 'COP', 'amount-in-cents': String(montoCents), reference: referencia,
+    'redirect-url': `${redirectBase}/tienda-en-linea?pago=ok`,
+    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+  });
+  if (correo) params.set('customer-data:email', correo);
+  return { url: `${CHECKOUT}?${params.toString()}` };
+}
+
 /** Marca un pago como aprobado: activa la cuenta / extiende la renta / suma créditos. */
 export function aplicarPagoAprobado(referencia: string, transaccion?: string): boolean {
   const pago = db.prepare('SELECT id, store_id, estado, tipo, plan, cupon, creditos FROM pagos WHERE referencia = ?').get(referencia) as
@@ -285,6 +304,12 @@ export function aplicarPagoAprobado(referencia: string, transaccion?: string): b
   if (pago.tipo === 'creditos') {
     abonar(pago.store_id, pago.creditos, 'Recarga de créditos', referencia);
     console.log(`[creditos] recarga aprobada ${referencia} → tienda ${pago.store_id} +${pago.creditos} créditos`);
+    return true;
+  }
+
+  // Mensualidad de la Tienda en línea: 30 días más (desde el vencimiento si aún no vence).
+  if (pago.tipo === 'tienda_online') {
+    void import('./landings.js').then((L) => { const v = L.extenderMembresia(pago.store_id, 30); console.log(`[tienda-online] pago aprobado ${referencia} → tienda ${pago.store_id} hasta ${v}`); });
     return true;
   }
 

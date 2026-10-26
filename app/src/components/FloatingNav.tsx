@@ -20,6 +20,8 @@ import {
   IconWhatsApp,
 } from './icons';
 import type { AdminSection, VendedorSection } from '../types';
+import { EnlaceApp } from './EnlaceApp';
+import { urlDe } from '../lib/rutas';
 
 /**
  * Botón flotante de menú (opcional, se activa/desactiva desde el header).
@@ -31,10 +33,11 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
   const vSection = df.isVendedor ? df.section : null;
   const aSection = df.isAdmin ? df.adminSection : null;
 
-  const fila = (active: boolean, onClick: () => void, icon: React.ReactNode, label: string, extra?: React.ReactNode) => (
-    <div
+  const fila = (active: boolean, onClick: () => void, icon: React.ReactNode, label: string, extra?: React.ReactNode, href = '#') => (
+    <EnlaceApp
       key={label}
-      onClick={onClick}
+      href={href}
+      onAbrir={onClick}
       className="df-floatnav-item"
       style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 8, cursor: 'pointer',
@@ -45,13 +48,13 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
       {icon}
       <span style={{ flex: 1 }}>{label}</span>
       {extra}
-    </div>
+    </EnlaceApp>
   );
 
   const goV = (id: VendedorSection) => { df.go(id); setOpen(false); };
   const goA = (id: AdminSection) => { df.goAdmin(id); setOpen(false); };
   const item = (id: VendedorSection, icon: React.ReactNode, label: string, extra?: React.ReactNode) =>
-    df.puedeVerSeccion(id) ? fila(vSection === id, () => goV(id), icon, label, extra) : null;
+    df.puedeVerSeccion(id) ? fila(vSection === id, () => goV(id), icon, label, extra, urlDe({ mode: 'vendedor', section: id })) : null;
 
   return (
     <div style={{ position: 'absolute', left: 20, bottom: 20, zIndex: 45 }}>
@@ -69,7 +72,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
               <>
                 {item('resumen', <IconResumen />, 'Resumen')}
                 {item('productos', <IconProductos />, 'Productos')}
-                {df.landingsHabilitadas && item('landings', <IconLandings />, 'Landings')}
+                {item('landings', <IconLandings />, 'Tienda en línea')}
                 {item('asistente', <IconAsistente />, 'Asistente')}
                 {item('whatsapp', <IconWhatsApp />, 'WhatsApp', df.waConnected && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)' }} />)}
                 {df.effiApi?.conectado && item('logistica', <IconLogistica />, 'Logística Effi')}
@@ -91,18 +94,18 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                 </div>
                 {df.isSuperadmin ? (
                   <>
-                    {fila(aSection === 'superadmin', () => goA('superadmin'), <IconCuentas />, 'Todas las tiendas')}
-                    {fila(aSection === 'plantillas', () => goA('plantillas'), <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA')}
-                    {fila(aSection === 'landings', () => goA('landings'), <span style={{ fontSize: 16 }}>🛍️</span>, 'Landings')}
+                    {fila(aSection === 'superadmin', () => goA('superadmin'), <IconCuentas />, 'Todas las tiendas', undefined, urlDe({ mode: 'admin', adminSection: 'superadmin' }))}
+                    {fila(aSection === 'plantillas', () => goA('plantillas'), <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA', undefined, urlDe({ mode: 'admin', adminSection: 'plantillas' }))}
+                    {fila(aSection === 'landings', () => goA('landings'), <span style={{ fontSize: 16 }}>🛍️</span>, 'Tienda en línea', undefined, urlDe({ mode: 'admin', adminSection: 'landings' }))}
                   </>
                 ) : (
                   <>
-                    {fila(aSection === 'trazabilidad', () => goA('trazabilidad'), <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad')}
-                    {fila(aSection === 'ventas', () => goA('ventas'), <IconVentas />, 'Ventas')}
-                    {fila(aSection === 'planes', () => goA('planes'), <IconPlanes />, 'Planes')}
-                    {fila(aSection === 'cuentas', () => goA('cuentas'), <IconCuentas />, 'Cuentas')}
-                    {fila(aSection === 'cupones', () => goA('cupones'), <span style={{ fontSize: 16 }}>🎁</span>, 'Cupones')}
-                    {fila(aSection === 'biblioteca', () => goA('biblioteca'), <IconBiblioteca />, 'Biblioteca')}
+                    {fila(aSection === 'trazabilidad', () => goA('trazabilidad'), <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad', undefined, urlDe({ mode: 'admin', adminSection: 'trazabilidad' }))}
+                    {fila(aSection === 'ventas', () => goA('ventas'), <IconVentas />, 'Ventas', undefined, urlDe({ mode: 'admin', adminSection: 'ventas' }))}
+                    {fila(aSection === 'planes', () => goA('planes'), <IconPlanes />, 'Planes', undefined, urlDe({ mode: 'admin', adminSection: 'planes' }))}
+                    {fila(aSection === 'cuentas', () => goA('cuentas'), <IconCuentas />, 'Cuentas', undefined, urlDe({ mode: 'admin', adminSection: 'cuentas' }))}
+                    {fila(aSection === 'cupones', () => goA('cupones'), <span style={{ fontSize: 16 }}>🎁</span>, 'Cupones', undefined, urlDe({ mode: 'admin', adminSection: 'cupones' }))}
+                    {fila(aSection === 'biblioteca', () => goA('biblioteca'), <IconBiblioteca />, 'Biblioteca', undefined, urlDe({ mode: 'admin', adminSection: 'biblioteca' }))}
                   </>
                 )}
               </>
