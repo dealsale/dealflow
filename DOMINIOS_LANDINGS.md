@@ -3,7 +3,7 @@
 Con esto cada tienda tiene gratis `sutienda.dflw.store/<landing>` y, si quiere, conecta su
 propio dominio (CNAME a `landings.dflw.store`). `dealflow.sbs` no se toca.
 
-El código ya está listo: se activa poniendo `LANDINGS_RAIZ=dflw.store` en Railway (paso 7).
+El código ya está listo: se activa poniendo `LANDINGS_RAIZ=dflw.store` en Railway (paso 5).
 Mientras esa variable no exista, las landings siguen en `app.dealflow.sbs/l/…`.
 
 ## 1. Registros DNS de dflw.store (todos con la nube NARANJA, proxy)
@@ -16,20 +16,15 @@ Mientras esa variable no exista, las landings siguen en `app.dealflow.sbs/l/…`
 
 (`sjd7oora.up.railway.app` es el destino que hoy usa `app.dealflow.sbs` en Railway.)
 
-## 2. SSL/TLS → Descripción general
-Modo de cifrado: **Completo (Full)**.
+## 2. Worker (en vez de reglas de origen: el Host header es solo para Enterprise)
+Workers & Pages → Create → Worker → nombre `dflw-landings` → Deploy → Edit code →
+pega `infra/cloudflare-worker-landings.js` → Deploy.
+Luego en el Worker → Settings → Domains & Routes → Add → **Route**:
+`*dflw.store/*` en la zona `dflw.store`.
 
-## 3. Reglas → Reglas de origen (Origin Rules) → Crear regla
-- Nombre: `DealFlow`
-- Si: **Todas las solicitudes entrantes**
-- Encabezado de host (Host Header) → **Reescribir a** `app.dealflow.sbs`
+Gratis hasta 100.000 visitas al día (plan Workers Paid: USD 5/mes por 10 millones).
 
-## 4. Reglas → Reglas de transformación → Modificar encabezado de la solicitud → Crear regla
-- Nombre: `Host original`
-- Si: **Todas las solicitudes entrantes**
-- **Establecer dinámico**: nombre `X-DF-Host`, valor `http.host`
-
-## 5. SSL/TLS → Nombres de host personalizados (Custom Hostnames)
+## 3. SSL/TLS → Nombres de host personalizados (Custom Hostnames)
 - Habilitar Cloudflare for SaaS (pide un método de pago; los primeros 100 dominios son gratis,
   después ~USD 0,10 por dominio al mes).
 - Origen de respaldo (Fallback Origin): `landings.dflw.store`.
@@ -37,7 +32,7 @@ Modo de cifrado: **Completo (Full)**.
 Este paso solo hace falta para los dominios propios de las tiendas. Los subdominios
 `sutienda.dflw.store` funcionan sin él.
 
-## 6. Token de API
+## 4. Token de API
 Mi perfil → Tokens de API → Crear token → *Plantilla personalizada*:
 - Permiso: **Zona → SSL y certificados → Editar**
 - Recursos de zona: **dflw.store**
@@ -45,9 +40,9 @@ Mi perfil → Tokens de API → Crear token → *Plantilla personalizada*:
 Copia también el **ID de zona** (Zone ID), que está en la página de Descripción general de
 dflw.store, columna derecha.
 
-## 7. Variables nuevas en Railway (servicio de la app; no se cambia ninguna existente)
+## 5. Variables nuevas en Railway (servicio de la app; no se cambia ninguna existente)
 - `LANDINGS_RAIZ` = `dflw.store`
-- `CF_API_TOKEN` = el token del paso 6
+- `CF_API_TOKEN` = el token del paso 4
 - `CF_ZONE_ID` = el ID de zona
 
 ## Prueba
