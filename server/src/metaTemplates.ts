@@ -88,6 +88,17 @@ async function publicarEnTienda(wabaId: string, token: string, t: PlantillaMaest
       // Si ya existe con ese nombre, no es un fallo: la damos por enviada.
       if (/already exists|existe/i.test(msg)) {
         const real = await estadoEnMeta(wabaId, token, t.nombre, t.idioma);
+        // Rechazada en Meta: se edita con el texto actual y vuelve a revisión.
+        if (real?.estado === 'rechazada' && real.metaId) {
+          const ed = await fetch(`${GRAPH}/${encodeURIComponent(real.metaId)}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category: t.categoria, components: construirComponentes(t) }),
+          }).catch(() => null);
+          const eb = ed ? ((await ed.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string; error_user_msg?: string } }) : {};
+          if (ed?.ok && eb.success !== false) return { estado: 'pendiente', metaId: real.metaId, motivo: 'Corregida y enviada de nuevo a revisión.' };
+          return { estado: 'rechazada', metaId: real.metaId, motivo: eb.error?.error_user_msg || eb.error?.message || real.motivo };
+        }
         return real || { estado: 'pendiente', metaId: '', motivo: 'Ya existía en esta cuenta.' };
       }
       return { estado: 'error', metaId: '', motivo: msg };
