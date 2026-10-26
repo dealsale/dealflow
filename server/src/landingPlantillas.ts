@@ -23,6 +23,12 @@ export function renderLanding(d: LandingDatos, o: OpcionesRender): string {
   return premium(d, o);
 }
 
+/**
+ * En la vista previa del editor ningún enlace navega (si no, el recuadro terminaría
+ * cargando DealFlow): se muestra un aviso corto en su lugar.
+ */
+const GUARDA_VISTA = `<script>(function(){var t;document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a');if(!a)return;e.preventDefault();e.stopPropagation();var d=document.getElementById('df-aviso');if(!d){d=document.createElement('div');d.id='df-aviso';d.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111;color:#fff;font:600 12.5px Poppins,system-ui,sans-serif;padding:9px 14px;border-radius:20px;z-index:99;box-shadow:0 6px 18px rgba(0,0,0,.3);max-width:90%;text-align:center';document.body.appendChild(d)}d.textContent='Vista previa: en tu tienda publicada este enlace sí abre.';d.style.display='block';clearTimeout(t);t=setTimeout(function(){d.style.display='none'},2200)},true)})();</script>`;
+
 /** Descripción con formato sencillo: párrafos, listas (- o ✓) y **negrita**. */
 function formatoTexto(t: string): string {
   const neg = (s: string) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -411,11 +417,12 @@ function enviar(e){
 pintar();
 })();
 </script>
+${o.vista ? GUARDA_VISTA : ''}
 </body></html>`;
 }
 
 /** Página de inicio de la tienda: todos sus productos publicados (cada uno lleva a su landing). */
-export function renderCatalogo(t: TiendaConfig, productos: ProductoCatalogo[], base: string): string {
+export function renderCatalogo(t: TiendaConfig, productos: ProductoCatalogo[], base: string, vista = false): string {
   const tira = t.anuncios.length ? Array.from({ length: Math.max(4, Math.ceil(8 / t.anuncios.length)) }, () => t.anuncios).flat() : [];
   const titulo = esc(t.nombre || 'Tienda');
   return `<!doctype html>
@@ -470,5 +477,6 @@ ${productos.length ? `<main class="grid">${productos.map((p, i) => {
   }).join('')}</main>` : '<div class="vacio">Pronto tendremos productos disponibles.</div>'}
 <footer>© ${new Date().getFullYear()}, <b>${titulo}</b> · Pago contra entrega en toda Colombia</footer>
 ${t.whatsapp ? `<a class="wa" href="https://wa.me/${esc(t.whatsapp)}" target="_blank" rel="noopener" aria-label="WhatsApp">${I.wa}</a>` : ''}
+${vista ? GUARDA_VISTA : ''}
 </body></html>`;
 }

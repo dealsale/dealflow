@@ -391,7 +391,7 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
         <button onClick={() => setDisp('pc')} style={{ ...btn, ...(disp === 'pc' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>🖥️ Computador</button>
       </div>
       <div style={{ flex: 1, minHeight: 0, background: 'var(--df-surface-2, #f4f4f5)', borderRadius: 10, display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
-        <iframe title="Vista previa de la landing" srcDoc={html} sandbox="allow-scripts allow-same-origin"
+        <iframe title="Vista previa de la landing" srcDoc={html} sandbox="allow-scripts"
           style={{ width: disp === 'cel' ? 390 : '100%', maxWidth: '100%', height: '100%', border: 'none', background: '#fff', boxShadow: disp === 'cel' ? '0 0 0 1px var(--df-border)' : 'none' }} />
       </div>
     </div>
@@ -851,7 +851,7 @@ function TiendaCard({ t, onGuardada }: { t: TiendaConfig; onGuardada: (t: Tienda
             </div>
           </div>
           <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, overflow: 'hidden', height: 520, background: '#fff' }}>
-            <iframe title="Vista previa de la tienda" srcDoc={html} sandbox="allow-scripts allow-same-origin" style={{ width: '100%', height: '100%', border: 'none' }} />
+            <iframe title="Vista previa de la tienda" srcDoc={html} sandbox="allow-scripts" style={{ width: '100%', height: '100%', border: 'none' }} />
           </div>
         </div>
       )}

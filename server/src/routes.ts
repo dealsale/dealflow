@@ -3603,7 +3603,7 @@ api.post('/landings/tienda/vista', requireAuth, requireStore, async (req, res) =
   const L = await import('./landings.js');
   const sid = req.user!.storeId!;
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ html: L.renderCatalogo({ ...L.configTienda(sid), ...(req.body?.tienda || {}) }, L.catalogoTienda(sid), '#') });
+  res.json({ html: L.renderCatalogo({ ...L.configTienda(sid), ...(req.body?.tienda || {}) }, L.catalogoTienda(sid), '#', true) });
 });
 // Membresía mensual de la Tienda en línea (Wompi): suma 30 días.
 api.post('/landings/membresia/pagar', requireAuth, requireStore, async (req, res) => {
