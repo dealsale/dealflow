@@ -4,16 +4,16 @@ import logo from '../assets/logo.png';
 import { Donut, HBars, LineChart } from '../components/Charts';
 
 /*
- * Portal de proveedores (proveedores.<dominio> o /proveedores). El proveedor entra con
- * el acceso que le creó la tienda y ve solo los pedidos hechos con sus convenios de
+ * Portal de proveedores (app.<dominio>/proveedores). El proveedor entra con la cuenta
+ * que le creó DealFlow y ve los pedidos de todas las tiendas hechos con sus convenios de
  * Effi: estadísticas, el detalle de cada pedido, la guía y su recorrido. Usa su propia
  * sesión (/api/proveedor/*), separada de la del panel.
  */
 
 type Etapa = 'por_despachar' | 'por_recoger' | 'transito' | 'reparto' | 'novedad' | 'entregado' | 'devuelto' | 'cancelado';
-interface Yo { nombre: string; email: string; tienda: string; convenios: { id: string; nombre: string }[] }
+interface Yo { nombre: string; email: string; convenios: string[]; comoAdmin?: boolean }
 interface Pedido {
-  id: string; codigo: string; numero: number; fecha: string; dia: string; cliente: string; tel: string; ciudad: string; departamento: string; direccion: string;
+  id: string; codigo: string; numero: number; fecha: string; dia: string; tienda: string; cliente: string; tel: string; ciudad: string; departamento: string; direccion: string;
   estado: string; estadoTransportadora: string; etapa: Etapa; convenio: string; guia: string; guiaUrl: string; transportadora: string; remision: string;
   total: number; items: { qty: number; nombre: string }[]; unidades: number; ultimoMovimiento: { fecha: string; estado: string; observacion: string } | null;
 }
@@ -25,11 +25,12 @@ interface Detalle extends Pedido {
 }
 interface Tablero {
   desde: string; hasta: string; hoy: string;
-  resumen: { pedidos: number; unidades: number; valor: number; porDespachar: number; enCamino: number; novedades: number; entregados: number; devueltos: number; valorEntregado: number; efectividad: number | null };
+  resumen: { pedidos: number; unidades: number; valor: number; porDespachar: number; enCamino: number; novedades: number; entregados: number; devueltos: number; valorEntregado: number; efectividad: number | null; tiendas: number };
   serie: { fecha: string; valor: number }[];
   porEtapa: { id: Etapa; label: string; color: string; valor: number }[];
   topProductos: { label: string; valor: number }[];
   topCiudades: { label: string; valor: number }[];
+  topTiendas: { label: string; valor: number }[];
   pedidos: Pedido[];
 }
 
@@ -140,13 +141,11 @@ function Login({ onEntrar }: { onEntrar: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [elegir, setElegir] = useState<{ id: string; tienda: string }[] | null>(null);
-  const entrar = async (cuenta = '') => {
+  const entrar = async () => {
     setEnviando(true); setError('');
-    const r = await api<{ ok?: boolean; elegir?: { id: string; tienda: string }[] }>('/login', { method: 'POST', body: { email, password, cuenta } });
+    const r = await api<{ ok: boolean }>('/login', { method: 'POST', body: { email, password } });
     setEnviando(false);
     if (r.error) return setError(r.error);
-    if (r.data?.elegir) return setElegir(r.data.elegir);
     onEntrar();
   };
   return (
@@ -171,17 +170,8 @@ function Login({ onEntrar }: { onEntrar: () => void }) {
         <form onSubmit={(e) => { e.preventDefault(); void entrar(); }} style={{ width: 'min(400px, 100%)', display: 'grid', gap: 16 }}>
           <div>
             <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 6px' }}>Inicia sesión</h2>
-            <p style={{ margin: 0, color: '#64748B', fontSize: 14.5 }}>Usa el correo y la contraseña que te dio la tienda.</p>
+            <p style={{ margin: 0, color: '#64748B', fontSize: 14.5 }}>Usa el correo y la contraseña que te dio DealFlow.</p>
           </div>
-          {elegir ? (
-            <div style={{ display: 'grid', gap: 8 }}>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>Eres proveedor de varias tiendas. ¿A cuál quieres entrar?</div>
-              {elegir.map((c) => (
-                <button key={c.id} type="button" disabled={enviando} onClick={() => void entrar(c.id)} style={{ font: 'inherit', textAlign: 'left', padding: '12px 14px', borderRadius: 11, border: '1px solid #CBD5E1', background: '#fff', cursor: 'pointer', fontWeight: 700, color: '#0F172A' }}>{c.tienda} →</button>
-              ))}
-              <button type="button" onClick={() => setElegir(null)} style={{ font: 'inherit', background: 'none', border: 0, color: '#64748B', cursor: 'pointer', fontSize: 13.5 }}>← Volver</button>
-            </div>
-          ) : (
             <>
               <label style={{ display: 'grid', gap: 6, fontSize: 13.5, fontWeight: 700 }}>Correo
                 <input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tucorreo@empresa.com" />
@@ -193,9 +183,8 @@ function Login({ onEntrar }: { onEntrar: () => void }) {
               <button type="submit" disabled={enviando} style={{ font: 'inherit', fontWeight: 800, fontSize: 15, padding: '13px 16px', borderRadius: 11, border: 0, background: '#059669', color: '#fff', cursor: 'pointer', boxShadow: '0 10px 24px -12px #059669', opacity: enviando ? 0.7 : 1 }}>
                 {enviando ? 'Entrando…' : 'Entrar al portal'}
               </button>
-              <p style={{ margin: 0, fontSize: 12.5, color: '#94A3B8', textAlign: 'center' }}>¿No tienes acceso o lo olvidaste? Pídeselo a la tienda con la que trabajas.</p>
+              <p style={{ margin: 0, fontSize: 12.5, color: '#94A3B8', textAlign: 'center' }}>¿No tienes acceso o olvidaste tu contraseña? Escríbele a DealFlow.</p>
             </>
-          )}
         </form>
       </div>
     </div>
@@ -241,12 +230,12 @@ function Panel({ yo, onSalir }: { yo: Yo; onSalir: () => void }) {
 
   const filtrados = useMemo(() => {
     const nq = q.trim().toLowerCase();
-    return (t?.pedidos || []).filter((p) => (!etapa || p.etapa === etapa) && (!nq || `${p.codigo} ${p.cliente} ${p.tel} ${p.ciudad} ${p.guia} ${p.items.map((i) => i.nombre).join(' ')}`.toLowerCase().includes(nq)));
+    return (t?.pedidos || []).filter((p) => (!etapa || p.etapa === etapa) && (!nq || `${p.codigo} ${p.tienda} ${p.cliente} ${p.tel} ${p.ciudad} ${p.guia} ${p.items.map((i) => i.nombre).join(' ')}`.toLowerCase().includes(nq)));
   }, [t, q, etapa]);
 
   const descargar = () => {
-    const filas = [['Pedido', 'Fecha', 'Cliente', 'Teléfono', 'Ciudad', 'Departamento', 'Dirección', 'Productos', 'Unidades', 'Valor', 'Estado', 'Transportadora', 'Guía', 'Convenio']];
-    for (const p of filtrados) filas.push([p.codigo, fechaHora(p.fecha), p.cliente, p.tel, p.ciudad, p.departamento, p.direccion, p.items.map((i) => `${i.qty} x ${i.nombre}`).join(' | '), String(p.unidades), String(p.total), ETAPA[p.etapa].label, p.transportadora, p.guia, p.convenio]);
+    const filas = [['Pedido', 'Tienda', 'Fecha', 'Cliente', 'Teléfono', 'Ciudad', 'Departamento', 'Dirección', 'Productos', 'Unidades', 'Valor', 'Estado', 'Transportadora', 'Guía', 'Convenio']];
+    for (const p of filtrados) filas.push([p.codigo, p.tienda, fechaHora(p.fecha), p.cliente, p.tel, p.ciudad, p.departamento, p.direccion, p.items.map((i) => `${i.qty} x ${i.nombre}`).join(' | '), String(p.unidades), String(p.total), ETAPA[p.etapa].label, p.transportadora, p.guia, p.convenio]);
     const csv = '﻿' + filas.map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -263,22 +252,27 @@ function Panel({ yo, onSalir }: { yo: Yo; onSalir: () => void }) {
           <img src={logo} alt="" width={30} height={30} style={{ borderRadius: 8 }} />
           <div style={{ lineHeight: 1.2, minWidth: 0 }}>
             <div style={{ fontWeight: 800, fontSize: 15 }}>Portal Proveedores</div>
-            <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Pedidos de {yo.tienda}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Pedidos de tus convenios</div>
           </div>
           <div style={{ flex: 1 }} />
           <div className="pp-quien" style={{ textAlign: 'right', lineHeight: 1.2, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{yo.nombre}</div>
-            <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{yo.convenios.map((c) => c.nombre).join(' · ')}</div>
+            <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Convenio{yo.convenios.length === 1 ? '' : 's'} {yo.convenios.join(' · ')}</div>
           </div>
           <button className="pp-btn" onClick={onSalir}>Salir</button>
         </div>
       </header>
 
+      {yo.comoAdmin && (
+        <div style={{ background: '#1E1B4B', color: '#E0E7FF', fontSize: 13, textAlign: 'center', padding: '7px 16px' }}>
+          👁 Estás viendo el portal como <b>{yo.nombre}</b> (vista de administrador, se cierra sola en 2 horas).
+        </div>
+      )}
       <main style={{ maxWidth: 1280, margin: '0 auto', padding: '22px 20px 60px', display: 'grid', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 260px' }}>
             <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Hola, {yo.nombre.split(' ')[0]} 👋</h1>
-            <p style={{ margin: 0, color: 'var(--df-text-muted)', fontSize: 14.5 }}>Estos son los pedidos hechos con tu convenio{t ? ` del ${new Date(t.desde + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })} al ${new Date(t.hasta + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}.</p>
+            <p style={{ margin: 0, color: 'var(--df-text-muted)', fontSize: 14.5 }}>Estos son los pedidos hechos con tu{yo.convenios.length === 1 ? '' : 's'} convenio{yo.convenios.length === 1 ? '' : 's'}{t && t.resumen.tiendas > 1 ? ` en ${t.resumen.tiendas} tiendas` : ''}{t ? ` del ${new Date(t.desde + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })} al ${new Date(t.hasta + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}.</p>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             {PERIODOS.map((p) => <button key={p.id} className="pp-chip" aria-pressed={periodo === p.id} onClick={() => { setPeriodo(p.id); if (p.id === 'rango' && !rango.desde && t) setRango({ desde: t.desde, hasta: t.hasta }); }}>{p.label}</button>)}
@@ -315,6 +309,7 @@ function Panel({ yo, onSalir }: { yo: Yo; onSalir: () => void }) {
             <div className="pp-dos">
               <Caja titulo="Productos más pedidos (unidades)"><HBars data={t.topProductos} /></Caja>
               <Caja titulo="Ciudades con más pedidos"><HBars data={t.topCiudades} /></Caja>
+              {t.topTiendas.length > 1 && <Caja titulo="Tiendas que más venden tus productos"><HBars data={t.topTiendas} /></Caja>}
             </div>
 
             <section className="pp-card" style={{ overflow: 'hidden' }}>
@@ -331,12 +326,13 @@ function Panel({ yo, onSalir }: { yo: Yo; onSalir: () => void }) {
                   </button>
                 ))}
               </div>
-              <div className="pp-fila pp-cab"><span>Pedido</span><span>Cliente</span><span>Productos</span><span>Envío</span><span style={{ textAlign: 'right' }}>Valor</span><span>Estado</span></div>
+              <div className="pp-fila pp-cab"><span>Pedido · tienda</span><span>Cliente</span><span>Productos</span><span>Envío</span><span style={{ textAlign: 'right' }}>Valor</span><span>Estado</span></div>
               {!filtrados.length && <div style={{ padding: 30, textAlign: 'center', color: 'var(--df-text-muted)', borderTop: '1px solid var(--df-border)', fontSize: 14 }}>{t.pedidos.length ? 'Ningún pedido coincide con la búsqueda.' : 'Todavía no hay pedidos con tu convenio en este periodo.'}</div>}
               {filtrados.slice(0, 400).map((p) => (
                 <button key={p.id} className="pp-fila" onClick={() => setAbierto(p.id)}>
                   <span>
                     <b style={{ fontSize: 14 }}>{p.codigo}</b>
+                    <div style={{ fontSize: 12, color: 'var(--df-text-body)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.tienda}</div>
                     <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{fechaHora(p.fecha)}</div>
                   </span>
                   <span style={{ minWidth: 0 }}>
@@ -423,6 +419,7 @@ function DetallePedido({ id, onCerrar }: { id: string; onCerrar: () => void }) {
           {d && (
             <>
               <Caja titulo="Cliente y entrega">
+                <Dato k="Tienda" v={d.tienda} />
                 <Dato k="Cliente" v={d.cliente} />
                 <Dato k="Teléfono" v={d.tel} />
                 <Dato k="Dirección" v={d.direccion} />

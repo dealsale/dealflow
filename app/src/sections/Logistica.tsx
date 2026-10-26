@@ -3,7 +3,6 @@ import { useRecordado } from '../lib/rutas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { NovedadesBandeja } from '../components/Novedades';
-import { ProveedoresPortal } from '../components/ProveedoresPortal';
 import { apiLogistica, apiLogisticaActualizar, type GuiaLogistica, type TableroLogistica } from '../lib/api';
 
 /**
@@ -187,9 +186,6 @@ export function Logistica({ df }: { df: DealFlowState }) {
 
       {/* Novedades de entrega: se gestionan aquí (ya no en Pedidos). */}
       <NovedadesBandeja df={df} />
-
-      {/* Accesos para que los proveedores vean los pedidos de su convenio (solo el dueño). */}
-      {!df.esAgente && <ProveedoresPortal />}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '12px 0' }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Buscar por pedido, cliente, guía o ciudad…"

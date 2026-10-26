@@ -96,10 +96,12 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                   <>
                     {fila(aSection === 'superadmin', () => goA('superadmin'), <IconCuentas />, 'Todas las tiendas', undefined, urlDe({ mode: 'admin', adminSection: 'superadmin' }))}
                     {fila(aSection === 'plantillas', () => goA('plantillas'), <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA', undefined, urlDe({ mode: 'admin', adminSection: 'plantillas' }))}
+                    {fila(aSection === 'proveedores', () => goA('proveedores'), <span style={{ fontSize: 16 }}>🤝</span>, 'Proveedores', undefined, urlDe({ mode: 'admin', adminSection: 'proveedores' }))}
                   </>
                 ) : (
                   <>
                     {fila(aSection === 'trazabilidad', () => goA('trazabilidad'), <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad', undefined, urlDe({ mode: 'admin', adminSection: 'trazabilidad' }))}
+                    {fila(aSection === 'proveedores', () => goA('proveedores'), <span style={{ fontSize: 16 }}>🤝</span>, 'Proveedores', undefined, urlDe({ mode: 'admin', adminSection: 'proveedores' }))}
                     {fila(aSection === 'ventas', () => goA('ventas'), <IconVentas />, 'Ventas', undefined, urlDe({ mode: 'admin', adminSection: 'ventas' }))}
                     {fila(aSection === 'planes', () => goA('planes'), <IconPlanes />, 'Planes', undefined, urlDe({ mode: 'admin', adminSection: 'planes' }))}
                     {fila(aSection === 'cuentas', () => goA('cuentas'), <IconCuentas />, 'Cuentas', undefined, urlDe({ mode: 'admin', adminSection: 'cuentas' }))}
