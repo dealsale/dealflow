@@ -933,11 +933,12 @@ export interface LandingDatos {
   boton: string; botonSub: string; tituloForm: string; botonForm: string; beneficios: string[]; descripcion: string; envioMin: number; envioMax: number; imagenes: string[];
   tituloTestimonios: string; testimonios: LandingTestimonio[]; colorPrincipal: string; colorBoton: string; colorAcento: string; logo: string; nombreTienda: string;
   whatsapp: string; pixelMeta: string; confirmarWhatsapp: boolean; autoDespacho: boolean; pedirCorreo: boolean; gracias: string;
+  seoTitulo: string; seoDescripcion: string; seoImagen: string;
 }
 export interface LandingResumen { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string }
 export interface Landing extends LandingResumen { datos: LandingDatos }
 export interface MembresiaTienda { activa: boolean; cortesia: boolean; vence: string; diasRestantes: number; enGracia: boolean; precio: number }
-export interface TiendaConfig { nombre: string; logo: string; banner: string; titulo: string; descripcion: string; anuncios: string[]; colorPrincipal: string; colorBoton: string; colorAcento: string; whatsapp: string; pixelMeta: string }
+export interface TiendaConfig { nombre: string; logo: string; favicon: string; banner: string; titulo: string; descripcion: string; anuncios: string[]; colorPrincipal: string; colorBoton: string; colorAcento: string; whatsapp: string; pixelMeta: string; seoTitulo: string; seoDescripcion: string; seoImagen: string }
 export interface DominioLandings { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string }
 export const apiLandings = () => req<{ landings: LandingResumen[]; membresia: MembresiaTienda; dominio: DominioLandings; tienda: TiendaConfig }>('/api/landings', 'GET');
 export const apiGuardarTienda = (tienda: TiendaConfig) => req<{ tienda: TiendaConfig }>('/api/landings/tienda', 'PUT', { tienda });
