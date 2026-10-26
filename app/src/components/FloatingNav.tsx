@@ -96,7 +96,6 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                   <>
                     {fila(aSection === 'superadmin', () => goA('superadmin'), <IconCuentas />, 'Todas las tiendas', undefined, urlDe({ mode: 'admin', adminSection: 'superadmin' }))}
                     {fila(aSection === 'plantillas', () => goA('plantillas'), <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA', undefined, urlDe({ mode: 'admin', adminSection: 'plantillas' }))}
-                    {fila(aSection === 'landings', () => goA('landings'), <span style={{ fontSize: 16 }}>🛍️</span>, 'Tienda en línea', undefined, urlDe({ mode: 'admin', adminSection: 'landings' }))}
                   </>
                 ) : (
                   <>

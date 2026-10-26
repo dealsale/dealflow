@@ -18,6 +18,7 @@ import { slugTienda, BASE_TIENDA } from './tiendaPublica.js';
 import { trazar } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
 import { mediaPath } from './media.js';
+import { precioDe } from './preciosServicios.js';
 import { renderLanding, renderCatalogo } from './landingPlantillas.js';
 
 db.exec(`CREATE TABLE IF NOT EXISTS landings (
@@ -47,7 +48,7 @@ for (const col of ["landing_dominio TEXT NOT NULL DEFAULT ''", "landing_dominio_
   try { db.exec(`ALTER TABLE stores ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 
-// Tienda en línea: membresía mensual. landings_habilitado = cortesía del superadmin (sin pago).
+// Tienda en línea: membresía mensual para todas las tiendas (el precio está en Admin → Planes).
 for (const col of ["tienda_vence TEXT NOT NULL DEFAULT ''", "tienda_config TEXT NOT NULL DEFAULT '{}'"]) {
   try { db.exec(`ALTER TABLE stores ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
@@ -56,13 +57,20 @@ const masDias = (fecha: string, n: number) => { const d = new Date(fecha + 'T12:
 /** Días de gracia después de vencer: las páginas siguen en línea mientras renueva. */
 export const GRACIA_DIAS = 3;
 export interface Membresia { activa: boolean; cortesia: boolean; vence: string; diasRestantes: number; enGracia: boolean; precio: number }
+// Las cortesías de antes (interruptor del superadmin) pasan a 30 días de membresía, una sola vez,
+// para que nadie pierda lo publicado de golpe. Desde ahora todas funcionan con membresía.
+if (!db.prepare("SELECT 1 FROM app_flags WHERE clave = 'tienda_cortesias_a_membresia'").get()) {
+  db.prepare("UPDATE stores SET tienda_vence = date('now','-5 hours','+30 days') WHERE landings_habilitado = 1 AND (tienda_vence = '' OR tienda_vence < date('now','-5 hours','+30 days'))").run();
+  db.prepare('UPDATE stores SET landings_habilitado = 0').run();
+  db.prepare("INSERT INTO app_flags (clave) VALUES ('tienda_cortesias_a_membresia')").run();
+}
 export function membresiaTienda(storeId: string): Membresia {
-  const r = db.prepare('SELECT landings_habilitado, tienda_vence FROM stores WHERE id = ?').get(storeId) as { landings_habilitado: number; tienda_vence: string } | undefined;
-  const cortesia = !!r?.landings_habilitado;
+  const r = db.prepare('SELECT tienda_vence FROM stores WHERE id = ?').get(storeId) as { tienda_vence: string } | undefined;
+  const cortesia = false;
   const vence = txt(r?.tienda_vence);
   const hoy = hoyCo();
   const dias = vence ? Math.round((Date.parse(vence + 'T12:00:00Z') - Date.parse(hoy + 'T12:00:00Z')) / 864e5) : -1;
-  return { activa: cortesia || dias >= 0, cortesia, vence, diasRestantes: dias, enGracia: !cortesia && !!vence && dias < 0 && dias >= -GRACIA_DIAS, precio: ajustesLandings().mensualidad };
+  return { activa: cortesia || dias >= 0, cortesia, vence, diasRestantes: dias, enGracia: !cortesia && !!vence && dias < 0 && dias >= -GRACIA_DIAS, precio: precioDe('tienda_online') };
 }
 /** ¿Puede crear y publicar? (membresía al día o cortesía) */
 export const landingsHabilitadas = (storeId: string) => membresiaTienda(storeId).activa;
@@ -76,19 +84,6 @@ export function extenderMembresia(storeId: string, dias = 30): string {
   db.prepare('UPDATE stores SET tienda_vence = ? WHERE id = ?').run(nueva, storeId);
   return nueva;
 }
-export function habilitarLandings(storeId: string, si: boolean): boolean {
-  return db.prepare('UPDATE stores SET landings_habilitado = ? WHERE id = ?').run(si ? 1 : 0, storeId).changes > 0;
-}
-/** Tiendas con su permiso y cuántas landings tienen (para el menú del superadmin). */
-export function tiendasLandings(): { id: string; tienda: string; correo: string; plan: string; activa: boolean; habilitado: boolean; vence: string; landings: number; publicadas: number; pedidos: number; dominio: string; dominioEstado: string }[] {
-  return (db.prepare(`SELECT s.id, s.nombre, s.correo, s.plan, s.activa, s.landings_habilitado, s.tienda_vence, s.landing_dominio, s.landing_dominio_estado,
-      (SELECT COUNT(*) FROM landings l WHERE l.store_id = s.id) n,
-      (SELECT COUNT(*) FROM landings l WHERE l.store_id = s.id AND l.estado = 'publicada') pub,
-      (SELECT COALESCE(SUM(pedidos),0) FROM landings l WHERE l.store_id = s.id) ped
-    FROM stores s WHERE COALESCE(s.oculta,0) = 0 ORDER BY (s.landings_habilitado = 1 OR s.tienda_vence >= date('now','-5 hours')) DESC, s.nombre COLLATE NOCASE`).all() as Fila[])
-    .map((r) => ({ id: txt(r.id), tienda: txt(r.nombre), correo: txt(r.correo), plan: txt(r.plan), activa: !!r.activa, habilitado: !!r.landings_habilitado, vence: txt(r.tienda_vence), landings: num(r.n), publicadas: num(r.pub), pedidos: num(r.ped), dominio: txt(r.landing_dominio), dominioEstado: txt(r.landing_dominio_estado) }));
-}
-
 type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));
 const num = (v: unknown, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -96,18 +91,6 @@ const esc = (s: unknown) => txt(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const pesos = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
 const slugify = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'producto';
-
-// ── Ajustes del equipo DealFlow ─────────────────────────────────────────
-export interface AjustesLandings { mensualidad: number }
-export function ajustesLandings(): AjustesLandings {
-  const g = (k: string, d: number) => num((db.prepare('SELECT valor FROM landings_ajustes WHERE clave = ?').get(k) as { valor: string } | undefined)?.valor, d);
-  return { mensualidad: Math.max(0, Math.round(g('mensualidad', 25000))) };
-}
-export function guardarAjustesLandings(p: Partial<AjustesLandings>): AjustesLandings {
-  const up = db.prepare('INSERT INTO landings_ajustes (clave, valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor');
-  if (p.mensualidad !== undefined) up.run('mensualidad', String(Math.max(0, Math.round(num(p.mensualidad)))));
-  return ajustesLandings();
-}
 
 // ── Datos de una landing ───────────────────────────────────────────────
 export interface OpcionL { nombre: string; valores: { valor: string; foto: string }[] }

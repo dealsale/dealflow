@@ -93,9 +93,6 @@ async function req<T>(url: string, method: string, body?: unknown): Promise<{ da
   return texto ? conEspera(texto, reqBase<T>(url, method, body), ambitoDeUrl(url)) : reqBase<T>(url, method, body);
 }
 
-/** Igual que req, sin la ventana de "procesando" (para interruptores instantáneos). */
-const reqSilencioso = <T,>(url: string, method: string, body?: unknown) => reqBase<T>(url, method, body);
-
 async function reqBase<T>(url: string, method: string, body?: unknown): Promise<{ data?: T; error?: string }> {
   try {
     const r = await fetch(url, {
@@ -960,9 +957,6 @@ export const apiVistaLanding = (id: string, datos: LandingDatos) => req<{ html: 
 export const apiImagenLanding = (dataUrl: string) => req<{ url: string }>('/api/landings/imagen', 'POST', { dataUrl });
 export const apiPublicarLanding = (id: string) => req<{ ok?: true; landing?: LandingResumen; requierePago?: true; precio?: number }>(`/api/landings/${encodeURIComponent(id)}/publicar`, 'POST');
 export const apiDespublicarLanding = (id: string) => req<{ ok: true }>(`/api/landings/${encodeURIComponent(id)}/despublicar`, 'POST');
-export const apiAdminLandings = () => req<{ ajustes: { mensualidad: number }; stats: { total: number; publicadas: number | null; pedidos: number | null; miembros: number } }>('/api/admin/landings', 'GET');
-export const apiAdminGuardarLandings = (b: { mensualidad: number }) => req<{ ajustes: { mensualidad: number } }>('/api/admin/landings', 'PUT', b);
-export const apiAdminExtenderTienda = (id: string, dias: number) => req<{ ok: true; vence: string }>(`/api/admin/landings/tiendas/${encodeURIComponent(id)}/extender`, 'POST', { dias });
-export interface TiendaLandings { id: string; tienda: string; correo: string; plan: string; activa: boolean; habilitado: boolean; vence: string; landings: number; publicadas: number; pedidos: number; dominio: string; dominioEstado: string }
-export const apiAdminTiendasLandings = () => req<{ tiendas: TiendaLandings[] }>('/api/admin/landings/tiendas', 'GET');
-export const apiAdminHabilitarLandings = (id: string, habilitado: boolean) => reqSilencioso<{ ok: true }>(`/api/admin/landings/tiendas/${encodeURIComponent(id)}`, 'PUT', { habilitado });
+export interface PrecioServicio { clave: string; nombre: string; descripcion: string; precio: number; unidad: 'mes' | 'unico' | 'uso' }
+export const apiPreciosServicios = () => req<{ precios: PrecioServicio[] }>('/api/admin/precios', 'GET');
+export const apiCambiarPrecioServicio = (clave: string, precio: number) => req<{ precio: PrecioServicio }>(`/api/admin/precios/${encodeURIComponent(clave)}`, 'PUT', { precio });
