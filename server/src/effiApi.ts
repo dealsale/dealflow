@@ -1263,7 +1263,9 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
   // al cliente contra entrega). El precio de venta del bot casi nunca es el del
   // catálogo de Effi (hay utilidad y a veces el envío va incluido), así que el total
   // se REPARTE entre los productos: en proporción a sus precios si los tienen, o
-  // por unidades si no. Si sobra algún peso por redondeo, va como descuento mínimo.
+  // por unidades si no. Sin descuentos (hay artículos de proveedor en Effi que no los
+  // permiten): si el valor no se divide exacto entre las unidades, la línea se parte en
+  // dos con precios que difieren en $1 (ej. 12 a $12.491,67 → 8 a $12.492 + 4 a $12.491).
   const envio = Math.max(0, Math.round(Number(o.envio) || 0));
   const sumaItems = conceptos.reduce((a, k) => a + k.cantidad * k.precio, 0);
   const totalPedido = Math.round(Number(o.total) || 0) || sumaItems + envio;
@@ -1273,12 +1275,16 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     const pesos = conceptos.map((k) => (sumaItems > 0 ? k.cantidad * k.precio : k.cantidad));
     const totalPesos = pesos.reduce((a, x) => a + x, 0) || 1;
     let resto = objetivoItems;
-    conceptos.forEach((k, i) => {
+    const repartidos = conceptos.flatMap((k, i) => {
       const meta = i === conceptos.length - 1 ? resto : Math.round((pesos[i] / totalPesos) * objetivoItems);
       resto -= meta;
-      k.precio = Math.ceil(meta / k.cantidad);
-      descuentos[i] = k.precio * k.cantidad - meta; // < cantidad pesos: solo cuadra el redondeo
+      const base = Math.floor(meta / k.cantidad);
+      const sobran = meta - base * k.cantidad; // unidades que llevan $1 más (0 … cantidad-1)
+      if (!sobran) return [{ ...k, precio: base }];
+      return [{ ...k, cantidad: k.cantidad - sobran, precio: base }, { ...k, cantidad: sobran, precio: base + 1 }];
     });
+    conceptos.splice(0, conceptos.length, ...repartidos);
+    descuentos.splice(0, descuentos.length, ...conceptos.map(() => 0));
     avisos.push(`El total del pedido ($${objetivoItems.toLocaleString('es-CO')}) se repartió entre los productos para que la remisión cobre exactamente eso.`);
   }
   if (envio && c.articuloFlete) conceptos.push({ articulo: Number(c.articuloFlete), descripcion: 'Flete de envío', cantidad: 1, precio: envio });
