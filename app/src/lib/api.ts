@@ -972,3 +972,4 @@ export const apiBorrarProveedor = (id: string) => req<{ ok: true }>(`/api/admin/
 export const apiVerComoProveedor = (id: string) => reqBase<{ ok: true }>(`/api/admin/proveedores/${encodeURIComponent(id)}/ver`, 'POST');
 
 export const apiDireccionPedido = (rowId: string, direccion: string) => req<{ ok: true; direccion: string }>(`/api/orders/${rowId}/direccion`, 'PUT', { direccion });
+export const apiSugerirDireccion = (rowId: string) => reqBase<{ sugerida?: string; error?: string }>(`/api/orders/${rowId}/direccion/sugerir`, 'POST');

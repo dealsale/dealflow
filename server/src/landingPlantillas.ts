@@ -110,7 +110,8 @@ function premium(d: LandingDatos, o: OpcionesRender): string {
   const inicial = Math.min(d.bundleInicial, bundles.length - 1);
   const conOfertas = d.bundles.length > 0;
   const sel = bundles[inicial];
-  const pixel = o.vista ? '' : d.pixelMeta;
+  // El píxel del producto; si no tiene, el de Mi tienda (así ningún producto queda sin medir).
+  const pixel = o.vista ? '' : d.pixelMeta || o.tienda?.pixelMeta || '';
   const cfg = {
     id: o.id, vista: !!o.vista, nombre: d.nombre, opciones: d.opciones, bundles, inicial, foto: d.galeria[0] || '',
     pedirCorreo: d.pedirCorreo, tituloForm: d.tituloForm, botonForm: d.botonForm,

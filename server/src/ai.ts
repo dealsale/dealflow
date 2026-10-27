@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
 import { idsDeItem, separarVariantes, variantesBase, emparejarItem, verificarVariante } from './emparejar.js';
 import { revisarTotal, preciosDeProducto, tablaPrecios } from './precios.js';
-import { resolverNombreCliente, nombreValido } from './nombres.js';
+import { resolverNombreCliente, nombreValido, limpiarNombre } from './nombres.js';
 import { directivaIdioma, idiomaDe, confirmacionPedido, pedidoActualizado, preguntaUnProducto, preguntaVariosProductos } from './idioma.js';
 import { db, pj, uid, registrarLog } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
@@ -1024,7 +1024,13 @@ function celularVerificado(leadId: string, valor: string, telLead: string): stri
 }
 async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<ResultadoPedido> {
   // El nombre que el cliente ESCRIBIÓ manda sobre el de perfil (apodos, correos, emojis…).
-  const cliente = resolverNombreCliente(lead.id, campoPedido(inner, 'cliente'), lead.nombre);
+  let cliente = resolverNombreCliente(lead.id, campoPedido(inner, 'cliente'), lead.nombre);
+  // BLINDAJE DEL NOMBRE: nunca un número, correo ni apodo. Si no hay uno válido, se toma
+  // el del último "Resumen de tu pedido" que vio el cliente.
+  if (!nombreValido(cliente)) {
+    const resumenes = (db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'bot' AND texto != '' ORDER BY created_at DESC LIMIT 12").all(lead.id) as { texto: string }[]).map((r) => r.texto);
+    for (const t of resumenes) { const n = campoResumen(t, '(?:Nombre|Name|Cliente)'); if (nombreValido(n)) { cliente = limpiarNombre(n); break; } }
+  }
   if (!nombreValido(lead.nombre) && cliente !== 'Cliente') db.prepare('UPDATE leads SET nombre = ? WHERE id = ?').run(cliente, lead.id);
   const ciudad = campoPedido(inner, 'ciudad');
   const direccion = campoPedido(inner, 'direccion');
@@ -1062,6 +1068,17 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     return { qty, nombre: completo, precio: prod ? Number(prod.precio) : 0 };
   }).filter((i) => i.nombre).flatMap((i) => separarVariantes(i.qty, i.nombre).map((x) => ({ ...x, precio: i.precio })))); // agrupa idénticos; y "4x Falda (L · Negro, Blanco…)" → un ítem por variante
   if (!items.length || (!direccion && !ciudad)) return false; // datos insuficientes, esperamos
+
+  // CANDADO DEL NOMBRE: sin nombre y apellido de verdad, se le pide y no se crea.
+  if (!nombreValido(cliente)) {
+    const en = idiomaDe(storeId, lead.id) === 'en';
+    const msg = en ? 'Almost done! 😊 What full name (first and last name) should we ship the order to?' : '¡Ya casi! 😊 ¿A nombre de quién enviamos el pedido? (nombre y apellido)';
+    registrarLog(storeId, 'warn', 'pedido', `No se creó el pedido: el nombre «${campoPedido(inner, 'cliente') || '(vacío)'}» no es un nombre válido. Se le pidió al cliente.`, lead.id);
+    const mid = uid();
+    db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
+    marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
+    return 'invalido';
+  }
 
   // CANDADO DEL CELULAR: sin un celular que el cliente haya escrito, se le pide y no se crea.
   if (!tel) {
@@ -1165,7 +1182,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     }
     db.transaction(() => {
       db.prepare('UPDATE orders SET cliente = ?, ciudad = ?, tel = ?, direccion = ?, departamento = ?, total = ?, lead_id = ? WHERE id = ?')
-        .run(cliente || previo.cliente, ciudad || previo.ciudad, tel || previo.tel, direccion || previo.direccion, departamento || previo.departamento, total, lead.id, previo.id);
+        .run(nombreValido(cliente) ? cliente : previo.cliente, ciudad || previo.ciudad, tel || previo.tel, direccion || previo.direccion, departamento || previo.departamento, total, lead.id, previo.id);
       db.prepare('DELETE FROM order_items WHERE order_id = ?').run(previo.id);
       for (const it of items) {
         const ids = idsDeItem(storeId, it.nombre);
