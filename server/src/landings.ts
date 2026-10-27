@@ -114,6 +114,9 @@ export interface LandingDatos {
   tituloOfertas: string;
   bundles: BundleL[];
   bundleInicial: number;
+  /** Precio normal de UNA unidad (antes de la promo). Con antesAuto, el tachado de cada oferta = unidades × este precio. */
+  precioUnidadAntes: number;
+  antesAuto: boolean;
   boton: string;
   botonSub: string;
   tituloForm: string;
@@ -155,6 +158,9 @@ export function limpiarDatos(raw: unknown): LandingDatos {
     cantidad: Math.max(1, Math.min(20, Math.round(num(b.cantidad, 1)))), titulo: corto(b.titulo, 60), subtitulo: corto(b.subtitulo, 90),
     precio: Math.max(0, Math.round(num(b.precio))), precioAntes: Math.max(0, Math.round(num(b.precioAntes))), insignia: corto(b.insignia, 30), imagen: url(b.imagen),
   })).filter((b) => b.precio > 0);
+  const precioUnidadAntes = Math.max(0, Math.round(num(r.precioUnidadAntes)));
+  const antesAuto = r.antesAuto === true && precioUnidadAntes > 0;
+  if (antesAuto) for (const b of bundles) b.precioAntes = b.cantidad * precioUnidadAntes;
   // Landings creadas antes: el anuncio era una sola frase.
   const anuncios = Array.isArray(r.anuncios) ? r.anuncios : txt(r.anuncio).trim() ? txt(r.anuncio).split(/\s+[+·|]\s+/) : [];
   return {
@@ -174,6 +180,7 @@ export function limpiarDatos(raw: unknown): LandingDatos {
     tituloOfertas: corto(r.tituloOfertas, 60),
     bundles,
     bundleInicial: Math.max(0, Math.min(bundles.length - 1, Math.round(num(r.bundleInicial)))),
+    precioUnidadAntes, antesAuto,
     boton: corto(r.boton, 60) || 'ENVÍO GRATIS · PAGO CONTRA ENTREGA',
     botonSub: corto(r.botonSub, 60),
     tituloForm: corto(r.tituloForm, 80) || 'Ingresa tus datos para realizar el pedido',

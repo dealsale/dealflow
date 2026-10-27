@@ -930,6 +930,8 @@ export interface LandingTestimonio { autor: string; avatar: string; tiempo: stri
 export interface LandingDatos {
   plantilla: string; nombre: string; mostrarTitulo: boolean; precio: number; precioAntes: number; calificacion: number; resenas: string; destacado: string; anuncios: string[];
   bannerSuperior: string; galeria: string[]; opciones: LandingOpcion[]; tituloOfertas: string; bundles: LandingBundle[]; bundleInicial: number;
+  /** Precio normal de una unidad antes de la promo; con antesAuto, el tachado de cada oferta = unidades × este precio. */
+  precioUnidadAntes: number; antesAuto: boolean;
   boton: string; botonSub: string; tituloForm: string; botonForm: string; beneficios: string[]; descripcion: string; envioMin: number; envioMax: number; imagenes: string[];
   tituloTestimonios: string; testimonios: LandingTestimonio[]; colorPrincipal: string; colorBoton: string; colorAcento: string; logo: string; nombreTienda: string;
   whatsapp: string; pixelMeta: string; confirmarWhatsapp: boolean; autoDespacho: boolean; pedirCorreo: boolean; gracias: string;
