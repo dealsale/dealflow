@@ -3,6 +3,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
 import { confirmar } from '../../components/dialogs';
+import { apiAdminTiendaOnline, apiAdminAjustarTiendaOnline, type MembresiaTienda } from '../../lib/api';
 import { apiSeguridad, type PuntoSeguridad, type AccesoEquipo, apiAdminCorreo, apiAdminCorreoPrueba, type EstadoCorreo } from '../../lib/api';
 import { apiCifrado, apiPapelera, apiPapeleraRestaurar, apiRespaldoEliminar, apiPapeleraEliminar, type EspacioDisco, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
 
@@ -292,7 +293,40 @@ function EditarTiendaInline({ df, a, creditosDelta, setCreditosDelta, diasDelta,
         </div>
         {ajusteMsg && <div style={{ gridColumn: '1 / -1', fontSize: 12.5, color: 'var(--df-brand-dark)', fontWeight: 600 }}>{ajusteMsg}</div>}
       </div>
+      <TiendaOnlineAdmin storeId={id} />
     </>
+  );
+}
+
+/** Membresía de Tienda en línea de la tienda: ver hasta cuándo va y activarla/extenderla a mano. */
+function TiendaOnlineAdmin({ storeId }: { storeId: string }) {
+  const [m, setM] = useState<MembresiaTienda | null>(null);
+  const [dias, setDias] = useState('30');
+  const [msg, setMsg] = useState('');
+  useEffect(() => { void apiAdminTiendaOnline(storeId).then((r) => r.data && setM(r.data)); }, [storeId]);
+  const ajustar = async (d: number, apagar = false) => {
+    setMsg('Guardando…');
+    const r = await apiAdminAjustarTiendaOnline(storeId, d, apagar);
+    if (r.data) { setM(r.data); setMsg(apagar ? '✓ Tienda en línea desactivada' : '✓ Tienda en línea ajustada'); } else setMsg(r.error || 'No se pudo guardar.');
+  };
+  const fecha = (f: string) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+  const estado = !m ? 'Cargando…' : m.cortesia ? 'Gratis para todas (el precio está en $0 en Planes)' : m.activa ? `Activa hasta el ${fecha(m.vence)} (${m.diasRestantes} días)` : m.enGracia ? `Vencida el ${fecha(m.vence)} · en días de gracia` : m.vence ? `Vencida el ${fecha(m.vence)}` : 'Sin membresía';
+  return (
+    <div style={{ borderTop: '1px solid var(--df-border)', paddingTop: 16, marginTop: 16 }}>
+      <div style={labelStyle}>🛍️ Tienda en línea · {estado}</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input type="number" value={dias} onChange={(e) => setDias(e.target.value)} placeholder="Ej: 30 o -15" style={{ ...inputStyle, width: 110 }} />
+        <button onClick={() => { const d = Number(dias); if (d) void ajustar(d); }} disabled={!Number(dias)}
+          style={{ background: 'var(--df-surface)', border: '1px solid var(--df-brand-border)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: Number(dias) ? 'pointer' : 'default', opacity: Number(dias) ? 1 : 0.5, whiteSpace: 'nowrap' }}>
+          {Number(dias) < 0 ? `Quitar ${Math.abs(Number(dias))} días` : `Activar / sumar ${Number(dias) || 0} días`}
+        </button>
+        {m && (m.activa || m.enGracia) && !m.cortesia && (
+          <button onClick={() => void ajustar(0, true)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-danger)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Desactivar</button>
+        )}
+        {msg && <span style={{ fontSize: 12.5, color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-text-muted)', fontWeight: 600 }}>{msg}</span>}
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Suma días desde hoy (o desde el vencimiento si aún está activa). Sirve para regalar meses o activarla sin pago.</div>
+    </div>
   );
 }
 

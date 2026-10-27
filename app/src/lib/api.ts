@@ -945,7 +945,7 @@ export interface DominioLandings { dominio: string; estado: string; detalle: str
 export const apiLandings = () => req<{ landings: LandingResumen[]; membresia: MembresiaTienda; dominio: DominioLandings; tienda: TiendaConfig }>('/api/landings', 'GET');
 export const apiGuardarTienda = (tienda: TiendaConfig) => req<{ tienda: TiendaConfig }>('/api/landings/tienda', 'PUT', { tienda });
 export const apiVistaTienda = (tienda: TiendaConfig) => req<{ html: string }>('/api/landings/tienda/vista', 'POST', { tienda });
-export const apiPagarMembresia = () => req<{ url: string }>('/api/landings/membresia/pagar', 'POST');
+export const apiPagarMembresia = () => req<{ url?: string; gratis?: boolean }>('/api/landings/membresia/pagar', 'POST');
 export const apiConectarDominio = (dominio: string) => req<DominioLandings>('/api/landings/dominio', 'POST', { dominio });
 export const apiVerificarDominio = () => req<DominioLandings>('/api/landings/dominio/verificar', 'POST');
 export const apiQuitarDominio = () => req<DominioLandings>('/api/landings/dominio', 'DELETE');
@@ -975,3 +975,5 @@ export const apiVerComoProveedor = (id: string) => reqBase<{ ok: true }>(`/api/a
 
 export const apiDireccionPedido = (rowId: string, direccion: string) => req<{ ok: true; direccion: string }>(`/api/orders/${rowId}/direccion`, 'PUT', { direccion });
 export const apiSugerirDireccion = (rowId: string) => reqBase<{ sugerida?: string; error?: string }>(`/api/orders/${rowId}/direccion/sugerir`, 'POST');
+export const apiAdminTiendaOnline = (storeId: string) => req<MembresiaTienda>(`/api/admin/stores/${storeId}/tienda-online`, 'GET');
+export const apiAdminAjustarTiendaOnline = (storeId: string, dias: number, apagar = false) => req<MembresiaTienda>(`/api/admin/stores/${storeId}/tienda-online`, 'POST', { dias, apagar });
