@@ -535,3 +535,20 @@ ${t.whatsapp ? `<a class="wa" href="https://wa.me/${esc(t.whatsapp)}" target="_b
 ${vista ? GUARDA_VISTA : ''}
 </body></html>`;
 }
+
+/**
+ * Página amable para cuando la tienda está pausada (sin membresía) o el producto ya no
+ * existe: con el nombre y el logo de la tienda, en vez de una línea suelta en blanco.
+ */
+export function paginaNoDisponible(t: TiendaConfig | null, titulo: string, texto: string, enlace?: { href: string; texto: string }): string {
+  const nombre = t?.nombre || 'Tienda';
+  const color = t?.colorBoton || '#16a34a';
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>${esc(titulo)} · ${esc(nombre)}</title>${t?.favicon ? `<link rel="icon" href="${esc(t.favicon)}">` : ''}
+<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f9;color:#111827;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;padding:24px}
+.c{max-width:420px;width:100%;background:#fff;border-radius:20px;padding:34px 26px;text-align:center;box-shadow:0 20px 50px -30px rgba(0,0,0,.35)}
+.l{max-height:56px;max-width:180px;object-fit:contain;margin:0 auto 14px;display:block}.n{font-weight:800;font-size:20px;letter-spacing:.04em;margin-bottom:14px}
+h1{font-size:21px;margin:0 0 8px}p{margin:0;color:#6b7280;line-height:1.55}a{display:inline-block;margin-top:20px;background:${esc(color)};color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:12px}</style></head>
+<body><div class="c">${t?.logo ? `<img class="l" src="${esc(t.logo)}" alt="${esc(nombre)}">` : `<div class="n">${esc(nombre.toUpperCase())}</div>`}
+<h1>${esc(titulo)}</h1><p>${esc(texto)}</p>${enlace ? `<a href="${esc(enlace.href)}">${esc(enlace.texto)}</a>` : ''}</div></body></html>`;
+}

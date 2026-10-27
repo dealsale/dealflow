@@ -109,7 +109,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
 
       {tienda && <TiendaCard t={tienda} onGuardada={setTienda} />}
 
-      {dominio && <DominioCard d={dominio} landings={lista || []} onCambio={(x) => { setDominio(x); void cargar(); }} />}
+      {dominio && <DominioCard d={dominio} landings={lista || []} enLinea={!!membresia && (membresia.activa || membresia.enGracia)} onCambio={(x) => { setDominio(x); void cargar(); }} />}
 
       {lista === null ? <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Cargando…</div>
         : !lista.length ? (
@@ -693,7 +693,7 @@ function Testimonios({ d, set }: { d: LandingDatos; set: (p: Partial<LandingDato
 }
 
 // ── Dominio propio ─────────────────────────────────────────────────────
-function DominioCard({ d, landings, onCambio }: { d: DominioLandings; landings: LandingResumen[]; onCambio: (d: DominioLandings) => void }) {
+function DominioCard({ d, landings, enLinea, onCambio }: { d: DominioLandings; landings: LandingResumen[]; enLinea: boolean; onCambio: (d: DominioLandings) => void }) {
   const [abierto, setAbierto] = useState(!!d.dominio && d.estado !== 'activo');
   const [valor, setValor] = useState('');
   const [ocupado, setOcupado] = useState(false);
@@ -733,12 +733,14 @@ function DominioCard({ d, landings, onCambio }: { d: DominioLandings; landings: 
           {d.raiz && (
             <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 700 }}>🎁 Tu dirección gratis</div>
+              {!enLinea && <div style={{ fontSize: 12.5, background: 'var(--df-warning-subtle-2, #FFFBEB)', border: '1px solid var(--df-warning-border, #FDE68A)', borderRadius: 8, padding: '7px 10px', color: 'var(--df-text-body)' }}>⏸️ Tu tienda está en pausa: quien abra la dirección ve «Tienda en pausa». Se enciende sola cuando actives la membresía (arriba). Para cambiar el nombre de la dirección también necesitas la membresía activa.</div>}
+              {enLinea && !publicadas.length && <div style={{ fontSize: 12.5, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 10px', color: 'var(--df-text-body)' }}>Aún no tienes productos publicados: tu dirección muestra «Pronto tendremos productos disponibles». Publica al menos uno.</div>}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 13 }}>
                 <span style={{ color: 'var(--df-text-muted)' }}>https://</span>
                 <input value={sub} onChange={(e) => setSub(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} aria-label="Nombre de tu tienda en la dirección" style={{ ...inp, width: 170, padding: '5px 8px' }} />
                 <b>.{d.raiz}</b>
                 {sub !== d.sub
-                  ? <button onClick={() => void accion(() => apiSubdominio(sub))} disabled={ocupado || sub.length < 3} style={{ ...btnPri, padding: '5px 10px' }}>Guardar</button>
+                  ? <button onClick={() => void accion(() => apiSubdominio(sub))} disabled={ocupado || sub.length < 3 || !enLinea} title={enLinea ? undefined : 'Activa la membresía para cambiar la dirección'} style={{ ...btnPri, padding: '5px 10px', opacity: ocupado || sub.length < 3 || !enLinea ? 0.6 : 1 }}>Guardar</button>
                   : <a href={`https://${d.sub}.${d.raiz}`} target="_blank" rel="noreferrer" style={{ ...btn, padding: '5px 10px', textDecoration: 'none' }}>Abrir ↗</a>}
               </div>
               <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Tu tienda queda en {d.sub}.{d.raiz} y cada producto en {d.sub}.{d.raiz}/nombre-del-producto. Si cambias el nombre, los enlaces anteriores dejan de funcionar.</div>
