@@ -11,6 +11,17 @@ import { db } from './db.js';
 
 const NO_NOMBRES = new Set(['cliente', 'whatsapp', 'usuario', 'user', 'hola', 'buenas', 'buenos', 'messenger', 'instagram', 'facebook', 'si', 'sí', 'no', 'ok', 'gracias', 'yo', 'contraentrega', 'efectivo']);
 
+// Palabras que NUNCA van en un nombre de persona: si aparece alguna, no es un nombre sino
+// una frase del chat ("Claro, cuántos días hábiles…", "Sí, listo", "Para mañana").
+const NO_EN_NOMBRE = new Set(('claro cuantos cuantas cuanto cuanta dias dia habiles habil que como cuando donde cual cuales quien porque pues '
+  + 'quiero quisiera necesito tengo tiene tienen tienes es son esta estan estoy estas era fue hay ser sera puede puedo pueden podria quiere quieren '
+  + 'para por con sin mi mis me te se lo le les su sus tu tus un una unos unas al en ese esa eso este esto aqui alli ahi ya tambien pero entonces '
+  + 'si no ok okay listo dale vale buena perfecto genial gracias hola buenas buenos tardes noches porfa favor confirmo confirmado confirmar '
+  + 'envio envios enviar envian pedido pedidos precio precios talla tallas color colores producto productos pago pagar contraentrega contra entrega domicilio '
+  + 'direccion cra cl barrio numero celular telefono whatsapp correo llega llegan demora tarda valor total oferta promo '
+  + 'manana hoy ayer semana mes horas hora senor senora cliente usuario').split(' '));
+const sinTilde = (w: string) => w.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 /** Quita emojis/símbolos y deja "Nombre Apellido" con mayúscula inicial. */
 export function limpiarNombre(n: string): string {
   return String(n || '')
@@ -27,12 +38,16 @@ export function limpiarNombre(n: string): string {
 export function nombreValido(n: string): boolean {
   const s = String(n || '').trim();
   if (!s || s.length > 60) return false;
-  if (/[@_#/\\]|https?:|www\.|\d/.test(s)) return false;
+  if (/[@_#?¿!/\\]|https?:|www\.|\d/.test(s)) return false;
   const letras = s.replace(/[^\p{L}]/gu, '');
   if (letras.length < 2) return false;
   const palabras = limpiarNombre(s).toLowerCase().split(' ').filter(Boolean);
   if (!palabras.length || palabras.length > 5) return false;
   if (palabras.every((p) => NO_NOMBRES.has(p))) return false;
+  // Una frase del chat no es un nombre: ninguna palabra común ("claro", "cuántos", "sí"…).
+  if (palabras.some((p) => NO_EN_NOMBRE.has(sinTilde(p)))) return false;
+  // Al menos una palabra de 3+ letras ("Si L" no es un nombre).
+  if (!palabras.some((p) => p.replace(/[^\p{L}]/gu, '').length >= 3)) return false;
   return true;
 }
 
