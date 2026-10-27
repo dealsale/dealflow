@@ -18,6 +18,10 @@
 import { db, pj, uid, registrarLog } from './db.js';
 import { trazar } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
+import { desempacar, corregirPacksAntiguos } from './packs.js';
+
+// Pedidos que ya entraron con packs contados como 1 unidad: se corrigen una vez al arrancar.
+setTimeout(corregirPacksAntiguos, 15_000);
 
 for (const col of ["shopify_id TEXT NOT NULL DEFAULT ''", "shopify_shop TEXT NOT NULL DEFAULT ''", "shopify_gid TEXT NOT NULL DEFAULT ''", "confirmacion TEXT NOT NULL DEFAULT ''", "shopify_fulfilled INTEGER NOT NULL DEFAULT 0", "confirmacion_error TEXT NOT NULL DEFAULT ''"]) {
   try { db.exec(`ALTER TABLE orders ADD COLUMN ${col}`); } catch { /* ya existe */ }
@@ -86,13 +90,19 @@ export async function importarPedido(storeId: string, shop: string, o: Fila, con
       VALUES (?,?,?,?,?,?,?,?,'Nuevo','',?,?,?,'shopify',?,?,?)`)
       .run(oid, storeId, numero, cliente, txt(env.city), txt(env.province), tel, direccion, total, Math.round(envio),
         [`Shopify ${txt(o.name)}`, pagado ? 'Pagado' : 'Contra entrega', txt(o.note)].filter(Boolean).join(' · '), sid, shop, txt(o.admin_graphql_api_id) || `gid://shopify/Order/${sid}`);
+    const packs: string[] = [];
     for (const li of lineas) {
       const nombre = txt(li.title) + (txt(li.variant_title) ? ` (${txt(li.variant_title).replace(/\s*\/\s*/g, ' · ')})` : '');
       const ids = varianteDeLinea(storeId, li);
+      // "Pack x6" con cantidad 1 → 6 unidades del producto (precio por unidad).
+      const props = (Array.isArray(li.properties) ? li.properties as Fila[] : []).map((p) => `${txt(p.name)} ${txt(p.value)}`).join(' · ');
+      const l = desempacar(storeId, { qty: Math.max(1, Number(li.quantity) || 1), precio: Math.round(Number(li.price) || 0), nombre, ...ids }, [txt(li.variant_title), props].filter(Boolean).join(' · '));
+      if (l.unidadesPorPack > 1) packs.push(`${txt(li.quantity) || 1}× ${nombre} → ${l.qty} unidades`);
       db.prepare('INSERT INTO order_items (id, order_id, qty, nombre, precio, product_id, variant_id) VALUES (?,?,?,?,?,?,?)')
-        .run(uid(), oid, Math.max(1, Number(li.quantity) || 1), nombre, Math.round(Number(li.price) || 0), ids.productId, ids.variantId);
+        .run(uid(), oid, l.qty, l.nombre, l.precio, l.productId, l.variantId);
     }
     trazar(storeId, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado desde Shopify ${txt(o.name)}`, detalle: `Origen: shopify (${shop})`, datos: { cliente, tel, ciudad: txt(env.city), total, envio, productos: lineas.map((l) => `${txt(l.quantity)}× ${txt(l.title)} ${txt(l.variant_title)} [${txt(l.sku)}]`) } });
+    if (packs.length) trazar(storeId, oid, { etapa: 'pedido', nivel: 'info', titulo: 'Packs convertidos a unidades', detalle: packs.join(' · ') });
     registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} llegó de Shopify ${txt(o.name)} (${cliente}).`);
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido de Shopify DF-${numero} 🛍️`, `${cliente} · ${pesos(total)}`, { url: '/' })).catch(() => {});
     void import('./correo.js').then((c) => c.correoPedidoNuevo(storeId, oid, 'Shopify')).catch(() => {});
