@@ -796,6 +796,7 @@ function MembresiaCard({ m }: { m: MembresiaTienda }) {
     setOcupado(true);
     const r = await apiPagarMembresia();
     setOcupado(false);
+    if (r.data?.gratis) { notificar('✓ La Tienda en línea está activa.'); window.location.reload(); return; }
     if (r.data?.url) window.location.href = r.data.url; else notificar(r.error || 'No se pudo abrir el pago.', 'error');
   };
   const fecha = (f: string) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });

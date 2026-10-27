@@ -66,16 +66,29 @@ if (!db.prepare("SELECT 1 FROM app_flags WHERE clave = 'tienda_cortesias_a_membr
 }
 export function membresiaTienda(storeId: string): Membresia {
   const r = db.prepare('SELECT tienda_vence FROM stores WHERE id = ?').get(storeId) as { tienda_vence: string } | undefined;
-  const cortesia = false;
+  // Con el precio en $0 (Planes → Servicios adicionales) la Tienda en línea es gratis para todas.
+  const precio = precioDe('tienda_online');
+  const cortesia = precio <= 0;
   const vence = txt(r?.tienda_vence);
   const hoy = hoyCo();
   const dias = vence ? Math.round((Date.parse(vence + 'T12:00:00Z') - Date.parse(hoy + 'T12:00:00Z')) / 864e5) : -1;
-  return { activa: cortesia || dias >= 0, cortesia, vence, diasRestantes: dias, enGracia: !cortesia && !!vence && dias < 0 && dias >= -GRACIA_DIAS, precio: precioDe('tienda_online') };
+  return { activa: cortesia || dias >= 0, cortesia, vence, diasRestantes: dias, enGracia: !cortesia && !!vence && dias < 0 && dias >= -GRACIA_DIAS, precio };
 }
 /** ¿Puede crear y publicar? (membresía al día o cortesía) */
 export const landingsHabilitadas = (storeId: string) => membresiaTienda(storeId).activa;
 /** ¿Sus páginas siguen en línea? (incluye los días de gracia) */
 export const tiendaEnLinea = (storeId: string) => { const m = membresiaTienda(storeId); return m.activa || m.enGracia; };
+/** Ajuste manual desde la administración: suma (o resta) días; 0 o "apagar" la deja sin membresía. */
+export function ajustarMembresia(storeId: string, dias: number, apagar = false): Membresia {
+  if (apagar) db.prepare("UPDATE stores SET tienda_vence = '' WHERE id = ?").run(storeId);
+  else if (dias > 0) extenderMembresia(storeId, dias);
+  else if (dias < 0) {
+    const m = membresiaTienda(storeId);
+    const base = m.vence && m.vence >= hoyCo() ? m.vence : hoyCo();
+    db.prepare('UPDATE stores SET tienda_vence = ? WHERE id = ?').run(masDias(base, dias), storeId);
+  }
+  return membresiaTienda(storeId);
+}
 /** Suma un mes (30 días) desde hoy o desde el vencimiento, si aún no vence. */
 export function extenderMembresia(storeId: string, dias = 30): string {
   const m = membresiaTienda(storeId);

@@ -3652,11 +3652,26 @@ api.post('/landings/tienda/vista', requireAuth, requireStore, async (req, res) =
   res.json({ html: L.renderCatalogo({ ...L.configTienda(sid), ...(req.body?.tienda || {}) }, L.catalogoTienda(sid), '#', true) });
 });
 // Membresía mensual de la Tienda en línea (Wompi): suma 30 días.
+// Administración: ver y ajustar a mano la membresía de Tienda en línea de una tienda.
+api.get('/admin/stores/:id/tienda-online', requireAuth, requireAdmin, async (req, res) => {
+  res.json((await import('./landings.js')).membresiaTienda(String(req.params.id)));
+});
+api.post('/admin/stores/:id/tienda-online', requireAuth, requireAdmin, async (req, res) => {
+  const id = String(req.params.id);
+  if (!db.prepare('SELECT 1 FROM stores WHERE id = ?').get(id)) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const dias = Math.max(-3650, Math.min(3650, Math.round(Number(req.body?.dias) || 0)));
+  const m = (await import('./landings.js')).ajustarMembresia(id, dias, req.body?.apagar === true);
+  registrarLog(id, 'info', 'tienda', req.body?.apagar === true ? `El equipo DealFlow desactivó la Tienda en línea.` : `El equipo DealFlow ajustó la Tienda en línea ${dias > 0 ? '+' : ''}${dias} días (vence ${m.vence || '—'}).`);
+  res.json(m);
+});
 api.post('/landings/membresia/pagar', requireAuth, requireStore, async (req, res) => {
   const L = await import('./landings.js');
   const { crearCheckoutTiendaOnline } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
-  const r = crearCheckoutTiendaOnline(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, L.membresiaTienda(req.user!.storeId!).precio);
+  const m = L.membresiaTienda(req.user!.storeId!);
+  // Gratis (precio $0): no hay nada que cobrar, ya está activa.
+  if (m.precio <= 0) return res.json({ gratis: true });
+  const r = crearCheckoutTiendaOnline(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, m.precio);
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ url: r.url });
 });
