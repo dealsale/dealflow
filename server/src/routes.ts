@@ -2307,6 +2307,18 @@ api.post('/leads/:id/extraer-pedido', requireAuth, requireStore, async (req, res
 
 // Actualiza un pedido existente (datos de envío + ítems). Se usa desde "completar
 // pedido desde el chat" tras la revisión del dueño.
+// Solo la dirección (botón 🌐 "Ordenar dirección" del pedido).
+api.put('/orders/:rowId/direccion', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT id, numero, direccion FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; numero: number; direccion: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const nueva = String(req.body?.direccion || '').trim().slice(0, 400);
+  if (!nueva) return res.status(400).json({ error: 'La dirección no puede quedar vacía.' });
+  db.prepare('UPDATE orders SET direccion = ? WHERE id = ?').run(nueva, o.id);
+  trazar(sid, o.id, { etapa: 'pedido', nivel: 'info', titulo: 'Dirección ordenada', detalle: `${o.direccion} → ${nueva}` });
+  res.json({ ok: true, direccion: nueva });
+});
+
 api.put('/orders/:rowId', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT id FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string } | undefined;

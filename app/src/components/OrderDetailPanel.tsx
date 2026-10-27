@@ -4,6 +4,7 @@ import { DevolucionEffi, RastreoGuia } from './EnvioEffi';
 import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
+import { OrdenarDireccion } from './DireccionPedido';
 import { confirmar } from './dialogs';
 import { enProceso, ProcesoPedido } from './Proceso';
 import { apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
@@ -628,10 +629,11 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
               { icono: '🏡', k: 'Dirección', v: sel.direccion },
               { icono: '💳', k: 'Método de pago', v: 'Contraentrega' },
             ].filter((f) => f.v).map((f) => (
-              <div key={f.k} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13.5, lineHeight: 1.5 }}>
+              <div key={f.k} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13.5, lineHeight: 1.5, flexWrap: f.k === 'Dirección' ? 'wrap' : undefined }}>
                 <span style={{ flexShrink: 0 }}>{f.icono}</span>
                 <span style={{ color: 'var(--df-text-muted)', fontWeight: 600, minWidth: 118, flexShrink: 0 }}>{f.k}:</span>
-                <span style={{ fontWeight: f.k === 'Nombre' ? 700 : 500, fontFamily: f.mono ? "'JetBrains Mono',monospace" : undefined, fontSize: f.mono ? 12.5 : undefined }}>{f.v}</span>
+                <span style={{ fontWeight: f.k === 'Nombre' ? 700 : 500, fontFamily: f.mono ? "'JetBrains Mono',monospace" : undefined, fontSize: f.mono ? 12.5 : undefined, flex: f.k === 'Dirección' ? '1 1 0' : undefined, minWidth: 0 }}>{f.v}</span>
+                {f.k === 'Dirección' && <OrdenarDireccion rowId={sel.rowId} direccion={sel.direccion} ciudad={sel.ciudad} departamento={sel.departamento || ''} onCambio={() => void df.recargarPedidos()} />}
               </div>
             ))}
           </div>

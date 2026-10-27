@@ -50,7 +50,7 @@ async function pedidoDesdeTexto(storeId: string, orderId: string, texto: string)
   if (!ia) return { error: 'Conecta una IA (DeepSeek u OpenAI) en Integraciones para leer el pedido.' };
   const system = `Te doy el TEXTO de la página de un pedido del panel de Shopify (Colombia). Devuelve SOLO un JSON válido, sin explicaciones, con esta forma:
 {"name":"#1234","cliente":"Nombre Apellido","telefono":"3001234567","direccion":"Calle…","ciudad":"…","departamento":"…","total":129900,"envio":0,"pagado":false,"nota":"","items":[{"titulo":"Nombre del producto","variante":"M / Negro","cantidad":1,"precio":64950,"sku":""}]}
-Reglas: usa SOLO lo que está en el texto; teléfono con 10 dígitos si aparece; "variante" tal cual la muestra Shopify (talla / color); precios en números sin puntos; "pagado" true solo si dice Pagado/Paid. Si un dato no está, déjalo vacío.`;
+Reglas: usa SOLO lo que está en el texto; teléfono con 10 dígitos si aparece; "variante" tal cual la muestra Shopify (talla / color); precios en números sin puntos; "cantidad" y "precio" tal como los muestra Shopify en esa línea; si es un pack o combo ("Pack x6", "Combo 4 unidades"), deja esa frase en "variante" (DealFlow lo convierte en unidades); "pagado" true solo si dice Pagado/Paid. Si un dato no está, déjalo vacío.`;
   try {
     const r = await fetch(ia.url, {
       method: 'POST', headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },

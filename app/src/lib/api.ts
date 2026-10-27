@@ -970,3 +970,5 @@ export const apiCrearProveedor = (b: { nombre: string; email: string; password: 
 export const apiEditarProveedor = (id: string, b: Partial<{ nombre: string; email: string; password: string; convenios: string[]; activo: boolean }>) => req<{ proveedor: ProveedorAcceso }>(`/api/admin/proveedores/${encodeURIComponent(id)}`, 'PUT', b);
 export const apiBorrarProveedor = (id: string) => req<{ ok: true }>(`/api/admin/proveedores/${encodeURIComponent(id)}`, 'DELETE');
 export const apiVerComoProveedor = (id: string) => reqBase<{ ok: true }>(`/api/admin/proveedores/${encodeURIComponent(id)}/ver`, 'POST');
+
+export const apiDireccionPedido = (rowId: string, direccion: string) => req<{ ok: true; direccion: string }>(`/api/orders/${rowId}/direccion`, 'PUT', { direccion });
