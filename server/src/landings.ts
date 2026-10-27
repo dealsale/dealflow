@@ -583,7 +583,7 @@ export function elegirInicio(storeId: string, landingId: string): boolean {
 export function contarVista(id: string) { try { db.prepare('UPDATE landings SET vistas = vistas + 1 WHERE id = ?').run(id); } catch { /* opcional */ } }
 
 /** HTML de la landing con su plantilla. */
-export { renderLanding, renderCatalogo } from './landingPlantillas.js';
+export { renderLanding, renderCatalogo, paginaNoDisponible } from './landingPlantillas.js';
 
 // ── Pedido desde la landing ────────────────────────────────────────────
 const intentos = new Map<string, number[]>();
