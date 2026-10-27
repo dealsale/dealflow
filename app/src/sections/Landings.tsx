@@ -607,15 +607,28 @@ function FotoValor({ url, onChange }: { url: string; onChange: (u: string) => vo
 
 function Bundles({ d, set }: { d: LandingDatos; set: (p: Partial<LandingDatos>) => void }) {
   const bs = d.bundles;
-  const cambiar = (i: number, p: Partial<LandingBundle>) => set({ bundles: bs.map((x, k) => (k === i ? { ...x, ...p } : x)) });
+  const unidad = d.precioUnidadAntes || 0;
+  const auto = !!d.antesAuto && unidad > 0;
+  // Con el cálculo automático, el tachado de cada oferta = unidades × precio normal por unidad.
+  const conAntes = (lista: LandingBundle[], u = unidad, a = auto) => (a ? lista.map((x) => ({ ...x, precioAntes: x.cantidad * u })) : lista);
+  const cambiar = (i: number, p: Partial<LandingBundle>) => set({ bundles: conAntes(bs.map((x, k) => (k === i ? { ...x, ...p } : x))) });
   const nuevo = (): LandingBundle => {
     const n = (bs[bs.length - 1]?.cantidad || 0) + 1;
-    return { cantidad: n, titulo: `Lleva ${n}`, subtitulo: '', precio: Math.round((d.precio * n * (n > 1 ? 0.8 : 1)) / 100) * 100, precioAntes: d.precioAntes * n || 0, insignia: '', imagen: '' };
+    return { cantidad: n, titulo: `Lleva ${n}`, subtitulo: '', precio: Math.round((d.precio * n * (n > 1 ? 0.8 : 1)) / 100) * 100, precioAntes: auto ? unidad * n : d.precioAntes * n || 0, insignia: '', imagen: '' };
   };
   const sumario = useMemo(() => bs.map((b) => (b.cantidad > 0 ? Math.round(b.precio / b.cantidad) : 0)), [bs]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Campo label="Título de las ofertas"><input value={d.tituloOfertas} onChange={(e) => set({ tituloOfertas: e.target.value })} placeholder="¡Aprovecha nuestras ofertas!" style={inp} /></Campo>
+      <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Campo label="Precio normal por unidad (antes de la promo)" ayuda="El precio de UNA unidad sin descuento. Sirve para calcular el precio tachado de cada oferta.">
+          <Dinero valor={unidad} onChange={(v) => { const a = v > 0 && (unidad === 0 || !!d.antesAuto); set({ precioUnidadAntes: v, antesAuto: a, bundles: conAntes(bs, v, a) }); }} />
+        </Campo>
+        <label style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12.5, fontWeight: 600, cursor: unidad ? 'pointer' : 'default', opacity: unidad ? 1 : 0.55 }}>
+          <input type="checkbox" disabled={!unidad} checked={auto} onChange={(e) => set({ antesAuto: e.target.checked, bundles: conAntes(bs, unidad, e.target.checked && unidad > 0) })} style={{ accentColor: 'var(--df-purple)' }} />
+          Calcular solo el precio tachado de cada oferta (unidades × {unidad ? pesos(unidad) : 'precio por unidad'})
+        </label>
+      </div>
       {!bs.length && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Sin ofertas se vende 1 unidad al precio del producto. Agrega ofertas tipo «Lleva 2 por…».</div>}
       {bs.map((b, i) => (
         <div key={i} style={{ border: `1px ${d.bundleInicial === i ? 'solid var(--df-purple)' : 'dashed var(--df-border)'}`, borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -633,8 +646,11 @@ function Bundles({ d, set }: { d: LandingDatos; set: (p: Partial<LandingDatos>) 
           <Campo label="Etiqueta verde (al lado del título)"><input value={b.subtitulo} onChange={(e) => cambiar(i, { subtitulo: e.target.value })} placeholder="$99.950 cada uno · Envío gratis" style={inp} /></Campo>
           <Dos>
             <Campo label="Precio total"><Dinero valor={b.precio} onChange={(precio) => cambiar(i, { precio })} /></Campo>
-            <Campo label="Precio antes (tachado)"><Dinero valor={b.precioAntes} onChange={(precioAntes) => cambiar(i, { precioAntes })} /></Campo>
+            <Campo label={auto ? `Precio antes (auto: ${b.cantidad} × ${pesos(unidad)})` : 'Precio antes (tachado)'}>
+              {auto ? <div style={{ ...inp, background: 'var(--df-surface-2)', color: 'var(--df-text-muted)', textDecoration: 'line-through' }}>{pesos(b.precioAntes)}</div> : <Dinero valor={b.precioAntes} onChange={(precioAntes) => cambiar(i, { precioAntes })} />}
+            </Campo>
           </Dos>
+          {b.precioAntes > b.precio && <div style={{ fontSize: 11.5, color: 'var(--df-brand-dark)', fontWeight: 600, marginTop: -2 }}>Ahorra {pesos(b.precioAntes - b.precio)} ({Math.round((1 - b.precio / b.precioAntes) * 100)}% menos)</div>}
           <Campo label="Cinta de arriba (opcional, el emoji se anima)"><input value={b.insignia} onChange={(e) => cambiar(i, { insignia: e.target.value })} placeholder="Más vendida 🔥" style={inp} /></Campo>
           <UnaImagen titulo="" url={b.imagen} onChange={(imagen) => cambiar(i, { imagen })} />
         </div>
