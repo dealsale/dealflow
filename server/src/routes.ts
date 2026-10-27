@@ -2307,6 +2307,16 @@ api.post('/leads/:id/extraer-pedido', requireAuth, requireStore, async (req, res
 
 // Actualiza un pedido existente (datos de envío + ítems). Se usa desde "completar
 // pedido desde el chat" tras la revisión del dueño.
+// Dirección organizada por la IA de la tienda (reglas de guía: mayúsculas, CRA/CL…, BRR, LOC).
+api.post('/orders/:rowId/direccion/sugerir', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare('SELECT direccion, ciudad, departamento FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { direccion: string; ciudad: string; departamento: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (!String(o.direccion || '').trim()) return res.status(400).json({ error: 'El pedido no tiene dirección.' });
+  const { ordenarDireccionIA } = await import('./direcciones.js');
+  res.json(await ordenarDireccionIA(sid, o.direccion, o.ciudad, o.departamento));
+});
+
 // Solo la dirección (botón 🌐 "Ordenar dirección" del pedido).
 api.put('/orders/:rowId/direccion', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
