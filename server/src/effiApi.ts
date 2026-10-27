@@ -1425,7 +1425,12 @@ async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, 
   };
   const r = await effi<{ guias?: Fila[] }>(c.apiKey, 'POST', '/api/guia_transporte', { body });
   if (!r.ok) {
-    const e = `La remisión quedó creada, pero Effi no creó la guía: ${mensajeError(r)}`;
+    const m = mensajeError(r);
+    // Errores de configuración de la cuenta de Effi: se dice qué hacer.
+    const pista = /no tiene configurado el c[oó]digo de sucursal/i.test(m)
+      ? ' → En Effi, entra a Remitentes (o Transportadoras), abre ese remitente y ponle el código de sucursal de esa transportadora (te lo da la transportadora o el soporte de Effi). Mientras tanto puedes generar la guía con otra transportadora u otro remitente desde el pedido.'
+      : '';
+    const e = `La remisión quedó creada, pero Effi no creó la guía: ${m}${pista}`;
     registrarLog(storeId, 'warn', 'despacho', `DF-${numero}: ${e}`);
     return { error: e };
   }
