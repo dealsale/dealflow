@@ -1043,14 +1043,24 @@ async function clienteEffi(c: EffiCfg, o: Fila, ubic: { provincia: string; ciuda
     }
     return { tercero: txt(busca.body.data[0].tercero) };
   }
-  const r = await effi<Fila>(c.apiKey, 'POST', '/api/cliente', {
+  // Correo del cliente si lo dio (las landings lo guardan en la nota del pedido).
+  const correo = (txt(o.nota).match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/) || [''])[0].toLowerCase();
+  const crear = (email: string) => effi<Fila>(c.apiKey, 'POST', '/api/cliente', {
     body: {
       t_dni: T_DNI_CEDULA, numero, nombre, celular: numero, whatsapp: numero,
+      ...(email ? { email } : {}),
       direcciones: [{ id_pais: PAIS_COLOMBIA, id_provincia: Number(ubic.provincia), id_ciudad: Number(ubic.ciudad), direccion: txt(o.direccion).slice(0, 200) }],
       observacion: 'Cliente creado por DealFlow',
       ...(c.sucursal ? { sucursal: Number(c.sucursal) } : {}),
     },
   });
+  let r = await crear(correo);
+  // Algunas cuentas de Effi (p. ej. de proveedor) exigen el correo del cliente. Si el cliente no
+  // dio uno, se usa un correo técnico de DealFlow que no recibe nada (el pedido no se frena por eso).
+  if (!r.ok && !correo && /e-?mail|correo/i.test(mensajeError(r))) {
+    r = await crear(`cliente.${numero}@sincorreo.dealflow.sbs`);
+    if (r.ok) trazar(txt(o.store_id), txt(o.id), { etapa: 'despacho', nivel: 'info', titulo: 'Effi exige correo del cliente: se usó uno técnico', detalle: `El cliente no dio correo; se creó en Effi con cliente.${numero}@sincorreo.dealflow.sbs.` });
+  }
   if (r.ok && r.body.data) return { tercero: txt(r.body.data.tercero) };
   // Carrera: ya existía como cliente → volvemos a buscar.
   const otra = await effi<Fila[]>(c.apiKey, 'GET', '/api/cliente', { query: { t_dni: T_DNI_CEDULA, numero, por_pagina: 5 } });
