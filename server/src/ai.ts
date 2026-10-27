@@ -447,14 +447,14 @@ PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma ge
 
 FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
 
-CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
-##PEDIDO cliente="Nombre Apellido"; telefono="3001234567"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="1x Nombre exacto del producto (Talla M · Negro), 1x Nombre exacto del producto (Talla M · Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
+CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CELULAR, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
+##PEDIDO cliente="Nombre Apellido"; telefono="CELULAR QUE EL CLIENTE ESCRIBIÓ"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="1x Nombre exacto del producto (Talla M · Negro), 1x Nombre exacto del producto (Talla M · Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
 El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
 En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar. Si el cliente lleva varias unidades del mismo producto en tallas o colores DISTINTOS, escribe UNA LÍNEA POR CADA VARIANTE con su cantidad (ej.: 1x Camisilla (Negro · M), 2x Camisilla (Blanco · L)); nunca "3x Camisilla" sin la variante.
-El campo telefono es el CELULAR DE CONTACTO para la entrega (10 dígitos, sin +57). Si el cliente ya escribió un celular en la conversación, USA ese y no lo vuelvas a pedir. Si no ha dado ninguno, pídelo JUNTO con los demás datos que falten ("¿A qué número te llama la transportadora?"). Si dice que es el mismo de WhatsApp, ponlo en el marcador.
+El campo telefono es el CELULAR DE CONTACTO para la entrega (10 dígitos, sin +57). REGLA OBLIGATORIA, SIN EXCEPCIONES: el celular SOLO puede ser uno que el cliente ESCRIBIÓ en esta conversación. NUNCA lo inventes, NUNCA lo completes, NUNCA lo supongas y NUNCA uses números de ejemplo o de relleno (como 3001234567, 3012345678 o 301-234-567). Si el cliente ya escribió un celular, USA ese y no lo vuelvas a pedir. Si no ha dado ninguno, PÍDELO junto con los demás datos que falten ("¿A qué número celular te llama la transportadora?") y NO muestres el resumen ni pongas el marcador hasta tenerlo. Si el cliente dice que es el mismo de WhatsApp, pon telefono="WHATSAPP". El celular SIEMPRE va en el "Resumen de tu pedido".
 El campo departamento es OBLIGATORIO. Si la ciudad es inconfundible (capitales y ciudades grandes: Medellín → Antioquia, Cali → Valle del Cauca, Barranquilla → Atlántico, Bogotá → Cundinamarca/Bogotá D.C., Bucaramanga → Santander, etc.), dedúcelo tú y NO lo preguntes. Pregúntalo solo si la ciudad existe en varios departamentos o no la reconoces, y hazlo junto con los otros datos que falten.
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
-FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
+FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" (con nombre, celular, ciudad, dirección, productos y total) y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
 
 DATOS EN PEDAZOS (muy importante): el cliente suele dar sus datos regados en varios mensajes (el nombre en uno, la ciudad en otro, la dirección más tarde, el teléfono suelto). ANTES de pedir cualquier dato, revisa TODA la conversación y la sección "LO QUE EL CLIENTE YA ESCRIBIÓ": si el dato ya está ahí, ÚSALO y no lo vuelvas a pedir. Pide SOLO lo que de verdad falta, y TODO lo que falte en UN SOLO mensaje (ej: "Para enviarlo solo me falta tu dirección y el barrio 😊"), nunca de a un dato por mensaje. NO reconfirmes datos uno por uno ("¿tu nombre es X?", "¿confirmas que es Medellín?"): la ÚNICA confirmación es el "Resumen de tu pedido", UNA sola vez, al final. Si el cliente corrige algo del resumen, aplica la corrección y cierra el pedido sin volver a pedir confirmación de todo.
 
@@ -464,7 +464,7 @@ FORMATO DE TU RESPUESTA: responde SIEMPRE en texto plano, exactamente lo que ver
 
 FOTOS DEL CLIENTE: cuando el cliente manda una foto verás "[el cliente envió una foto · pista interna aproximada: …]". Esa pista la generó un sistema automático y puede equivocarse: es SOLO para orientarte. NUNCA la cites ni la repitas al cliente, y NUNCA digas que algo "no está disponible", "no lo manejamos" o "no tenemos esa tela/material/referencia" por lo que diga esa pista. Si la foto parece de un producto, relaciónala con el producto del CATÁLOGO que más se parezca (por tipo y color) y sigue la venta con ese; si no estás seguro, pregúntale amablemente cuál de nuestros productos le interesa o muéstrale las opciones del catálogo.
 
-OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó registrado", "ya está creado", "confirmado" o similar si en ESE MISMO mensaje no incluiste el marcador ##PEDIDO ...##. Si todavía te falta el nombre, la ciudad o la dirección exacta, pídelos primero y NO afirmes que el pedido quedó registrado. El mensaje de confirmación al cliente lo envía el sistema automáticamente, no lo escribas tú.`;
+OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó registrado", "ya está creado", "confirmado" o similar si en ESE MISMO mensaje no incluiste el marcador ##PEDIDO ...##. Si todavía te falta el nombre, el celular, la ciudad o la dirección exacta, pídelos primero y NO afirmes que el pedido quedó registrado. El mensaje de confirmación al cliente lo envía el sistema automáticamente, no lo escribas tú.`;
 
   const nombreMedia = (tipo: string) =>
     tipo === 'audio' ? 'una nota de voz' : tipo === 'image' ? 'una imagen' : tipo === 'video' ? 'un video' : 'un archivo';
@@ -983,8 +983,8 @@ export async function extraerPedidoDelChat(storeId: string, leadId: string): Pro
     .join('\n');
   if (!historia.trim()) return '';
   const system = `Eres un extractor de pedidos de una tienda por WhatsApp en Colombia. Te doy una conversación y el catálogo. Devuelve EXCLUSIVAMENTE una línea con el marcador, sin explicaciones ni texto extra:
-##PEDIDO cliente="Nombre y apellido"; telefono="3001234567"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre EXACTO del catálogo (Talla M · Negro), 1x Otro producto (Talla L · Rojo)"; total="139900"##
-Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefono pon el celular de contacto para la entrega (10 dígitos) si el cliente lo dio. Si un dato no está, déjalo vacío ("" ). En items pon la cantidad, el nombre EXACTO del catálogo y entre paréntesis la variante EXACTA de la lista del catálogo. Si el cliente pidió varias tallas o colores, pon UNA LÍNEA POR CADA VARIANTE (ej.: "1x Camisilla (Negro · M), 1x Camisilla (Blanco · L), 1x Camisilla (Mostaza · M)"), nunca "3x Camisilla" sin variantes. En total pon el valor final acordado (solo números). Si no hay un pedido real en la conversación, responde exactamente: SIN_PEDIDO`;
+##PEDIDO cliente="Nombre y apellido"; telefono="CELULAR QUE EL CLIENTE ESCRIBIÓ"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre EXACTO del catálogo (Talla M · Negro), 1x Otro producto (Talla L · Rojo)"; total="139900"##
+Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefono pon el celular de contacto para la entrega (10 dígitos) SOLO si el cliente lo escribió; nunca lo inventes ni uses un número de ejemplo (si no lo dio, déjalo vacío). Si un dato no está, déjalo vacío ("" ). En items pon la cantidad, el nombre EXACTO del catálogo y entre paréntesis la variante EXACTA de la lista del catálogo. Si el cliente pidió varias tallas o colores, pon UNA LÍNEA POR CADA VARIANTE (ej.: "1x Camisilla (Negro · M), 1x Camisilla (Blanco · L), 1x Camisilla (Mostaza · M)"), nunca "3x Camisilla" sin variantes. En total pon el valor final acordado (solo números). Si no hay un pedido real en la conversación, responde exactamente: SIN_PEDIDO`;
   try {
     const res = await fetch(ia.url, {
       method: 'POST',
@@ -1002,6 +1002,26 @@ Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefo
 }
 
 type ResultadoPedido = 'creado' | 'actualizado' | 'igual' | 'invalido' | false;
+
+/**
+ * El celular del pedido, SOLO si el cliente lo escribió en la conversación (o dijo que es
+ * el mismo de WhatsApp). Devuelve 10 dígitos o '' si la IA lo inventó o no hay ninguno.
+ */
+function celularVerificado(leadId: string, valor: string, telLead: string): string {
+  const escritos = (db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'cliente' AND TRIM(COALESCE(texto,'')) != ''").all(leadId) as { texto: string }[]).map((m) => m.texto);
+  const deLead = String(telLead || '').replace(/\D/g, '').slice(-10);
+  // "el mismo", "este número", "el de WhatsApp": vale el número del chat (si es un celular).
+  const dijoMismo = () => escritos.some((t) => /\b(el mismo|este mismo|mismo n[uú]mero|este n[uú]mero|este cel|el de (whats\w*|wpp|wsp|wasap|aqu[ií]|este)|al que (te )?(escribo|estoy escribiendo)|por (el )?que (te )?escribo)/i.test(t));
+  if (/whats|mismo/i.test(valor)) return /^3\d{9}$/.test(deLead) && dijoMismo() ? deLead : '';
+  let d = String(valor || '').replace(/\D/g, '');
+  if (d.length === 12 && d.startsWith('57')) d = d.slice(2);
+  if (!/^(3\d{9}|60\d{8})$/.test(d)) return '';
+  // Tiene que aparecer en algún mensaje del cliente (con o sin espacios, guiones o +57).
+  if (escritos.some((t) => t.replace(/\D/g, '').includes(d))) return d;
+  // El de WhatsApp solo si el cliente dijo que es el mismo.
+  if (d === deLead && dijoMismo()) return d;
+  return '';
+}
 async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<ResultadoPedido> {
   // El nombre que el cliente ESCRIBIÓ manda sobre el de perfil (apodos, correos, emojis…).
   const cliente = resolverNombreCliente(lead.id, campoPedido(inner, 'cliente'), lead.nombre);
@@ -1009,10 +1029,9 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   const ciudad = campoPedido(inner, 'ciudad');
   const direccion = campoPedido(inner, 'direccion');
   const itemsRaw = campoPedido(inner, 'items');
-  // Teléfono de CONTACTO para la entrega: el que el cliente dé en la conversación.
-  // Si no lo da, caemos al número de WhatsApp del chat. Se limpia a solo dígitos.
-  const telContacto = (campoPedido(inner, 'telefono') || '').replace(/\D/g, '');
-  const tel = telContacto || (lead.tel || '');
+  // Teléfono de CONTACTO para la entrega: SOLO el que el cliente escribió (o el de WhatsApp si
+  // dijo que es el mismo). Si la IA puso uno que el cliente nunca escribió, no se crea el pedido.
+  const tel = celularVerificado(lead.id, campoPedido(inner, 'telefono') || '', lead.tel || '');
   // Departamento: si la IA no lo puso en el marcador, lo rescatamos del último
   // "Resumen de tu pedido" del chat (hay ciudades repetidas entre departamentos).
   let departamento = campoPedido(inner, 'departamento');
@@ -1043,6 +1062,21 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     return { qty, nombre: completo, precio: prod ? Number(prod.precio) : 0 };
   }).filter((i) => i.nombre).flatMap((i) => separarVariantes(i.qty, i.nombre).map((x) => ({ ...x, precio: i.precio })))); // agrupa idénticos; y "4x Falda (L · Negro, Blanco…)" → un ítem por variante
   if (!items.length || (!direccion && !ciudad)) return false; // datos insuficientes, esperamos
+
+  // CANDADO DEL CELULAR: sin un celular que el cliente haya escrito, se le pide y no se crea.
+  if (!tel) {
+    const en = idiomaDe(storeId, lead.id) === 'en';
+    const nombre1 = (cliente || '').split(' ')[0] || '';
+    const deWa = /^3\d{9}$/.test(String(lead.tel || '').replace(/\D/g, '').slice(-10));
+    const msg = en
+      ? `Almost done${nombre1 ? `, ${nombre1}` : ''}! 📞 What mobile number can the courier call you at for the delivery?${deWa ? ' (If it\'s this same WhatsApp number, just tell me "the same").' : ''}`
+      : `¡Ya casi${nombre1 ? `, ${nombre1}` : ''}! 📞 ¿A qué número celular te puede llamar la transportadora para la entrega?${deWa ? ' (Si es este mismo de WhatsApp, dime «el mismo»).' : ''}`;
+    registrarLog(storeId, 'warn', 'pedido', `No se creó el pedido: el celular «${campoPedido(inner, 'telefono') || '(vacío)'}» no lo escribió el cliente en la conversación. Se le pidió.`, lead.id);
+    const mid = uid();
+    db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
+    marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
+    return 'invalido';
+  }
 
   // BLINDAJE DE VARIANTES: solo se vende lo que EXISTE en el catálogo. Si el cliente pidió
   // un color/talla que el producto no tiene ("Naranjado" en uno que solo tiene Mostaza),
