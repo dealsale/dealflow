@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { apiSoporteChat, apiSoporteConfig } from '../lib/api';
 
 /*
- * Asistente de soporte flotante (web chat): botón abajo a la derecha que abre un chat con
+ * Asistente de soporte flotante SKY (web chat): botón abajo a la derecha que abre un chat con
  * el agente de DealFlow (dudas de la plataforma, Meta, anuncios, marketing). Se oculta con
  * el botón del propio chat y se vuelve a mostrar desde el menú del perfil. La conversación
  * se recuerda en este navegador.
@@ -101,20 +101,23 @@ export function AsistenteSoporte({ usuario, seccion, mobile }: { usuario: string
       <style>{`
         @keyframes dfSopEntra { from { opacity: 0; transform: translateY(12px) scale(.97) } }
         @keyframes dfSopPunto { 0%, 80%, 100% { opacity: .25 } 40% { opacity: 1 } }
+        @keyframes dfSopFlota { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
+        .df-sop-boton { animation: dfSopFlota 3.2s ease-in-out infinite; transition: scale .15s }
+        .df-sop-boton:hover { scale: 1.06 }
         .df-sop-punto { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; animation: dfSopPunto 1.2s infinite }
-        @media (prefers-reduced-motion: reduce) { .df-sop-panel, .df-sop-punto { animation: none !important } }
+        @media (prefers-reduced-motion: reduce) { .df-sop-panel, .df-sop-punto, .df-sop-boton { animation: none !important } }
       `}</style>
       {!abierto && (
         <button type="button" onClick={() => setAbierto(true)} aria-label={`Abrir ${cfg.nombre}`} title={cfg.nombre}
-          style={{ position: 'fixed', right: mobile ? 14 : 22, bottom: abajo, zIndex: 46, width: 56, height: 56, borderRadius: '50%', border: 0, cursor: 'pointer', background: 'linear-gradient(135deg, #10B981, #2563EB)', color: '#fff', boxShadow: '0 14px 30px -10px rgba(37,99,235,.65)', display: 'grid', placeItems: 'center', fontSize: 24 }}>
-          💬
+          className="df-sop-boton" style={{ position: 'fixed', right: mobile ? 12 : 20, bottom: abajo, zIndex: 46, width: mobile ? 62 : 70, height: mobile ? 62 : 70, padding: 0, borderRadius: '50%', border: 0, cursor: 'pointer', background: 'transparent', filter: 'drop-shadow(0 12px 18px rgba(37,99,235,.45))' }}>
+          <img src="/sky.webp" alt="" width={70} height={70} style={{ width: '100%', height: '100%', display: 'block' }} />
         </button>
       )}
       {abierto && (
         <div className="df-sop-panel" role="dialog" aria-label={cfg.nombre}
           style={{ position: 'fixed', right: mobile ? 8 : 22, left: mobile ? 8 : 'auto', bottom: abajo, zIndex: 46, width: mobile ? 'auto' : 390, height: mobile ? 'min(72vh, 560px)' : 'min(620px, calc(100vh - 110px))', display: 'flex', flexDirection: 'column', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 18, boxShadow: '0 30px 70px -24px rgba(2,6,23,.55)', overflow: 'hidden', animation: 'dfSopEntra .22s cubic-bezier(.2,.8,.2,1) both' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', color: '#fff', background: 'linear-gradient(135deg, #047857, #1D4ED8)' }}>
-            <span style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,.16)', display: 'grid', placeItems: 'center', fontSize: 17 }}>✨</span>
+            <img src="/sky.webp" alt="" width={40} height={40} style={{ flexShrink: 0, margin: '-4px 0' }} />
             <div style={{ flex: 1, minWidth: 0, lineHeight: 1.2 }}>
               <div style={{ fontWeight: 800, fontSize: 14.5 }}>{cfg.nombre}</div>
               <div style={{ fontSize: 11.5, opacity: 0.8 }}>Soporte, Meta y marketing</div>
