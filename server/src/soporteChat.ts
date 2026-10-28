@@ -11,7 +11,7 @@
 import { db } from './db.js';
 import { randomUUID } from 'node:crypto';
 import { cifrarTexto, descifrarTexto } from './cifrado.js';
-import { CONOCIMIENTO_SKY } from './skyConocimiento.js';
+import { contextoSky } from './skyBuscador.js';
 
 db.exec("CREATE TABLE IF NOT EXISTS config_global (clave TEXT PRIMARY KEY, valor TEXT NOT NULL DEFAULT '')");
 // Historial de las conversaciones con DeepSeek (Dify guarda el suyo).
@@ -45,8 +45,9 @@ En el menú del perfil (arriba a la derecha) se puede mostrar u ocultar a SKY.
 También ayudas con Meta (Business Manager, Events Manager, Píxel/conjunto de datos, campañas de ventas y mensajes a WhatsApp, públicos, presupuestos), anuncios, creativos, textos de venta y marketing para ecommerce contra entrega en Colombia.
 
 Cómo respondes las dudas de "cómo se hace":
-- Usa primero la BASE DE CONOCIMIENTO de abajo: da los pasos en orden, con los nombres exactos de las secciones y botones como aparecen ahí. No inventes botones, menús ni pasos que no estén.
+- Usa primero la BASE DE CONOCIMIENTO de abajo (son los artículos de soporte elegidos para esta pregunta): da los pasos en orden, con los nombres exactos de las secciones y botones como aparecen ahí. No inventes botones, menús ni pasos que no estén.
 - Si la persona está en una sección del panel, asume que la duda es de esa sección.
+- Si la persona pega un error, búscalo en la base y explica qué significa y cómo resolverlo paso a paso.
 - Si la base no cubre lo que preguntan, dilo con honestidad, da la orientación general que sí sepas y sugiere ver **Tutoriales** o escribir al equipo de soporte de DealFlow.
 - Termina, si ayuda, con una pregunta corta para saber si quedó resuelto.
 
@@ -147,12 +148,14 @@ async function preguntarDeepseek(c: CfgSoporte, texto: string, conversacion: str
   try { previos = fila ? JSON.parse(fila.mensajes) : []; } catch { previos = []; }
   const id = fila ? conversacion : randomUUID();
   const quien = [`Usuario: ${ctx.nombre || 'sin nombre'} (${ctx.rol})`, ctx.tienda && `Tienda: ${ctx.tienda}${ctx.plan ? ` · plan ${ctx.plan}` : ''}`, ctx.seccion && `Está en la sección: ${ctx.seccion}`].filter(Boolean).join('\n');
+  const anterior = [...previos].reverse().find((m) => m.role === 'user')?.content || '';
+  const conocimiento = contextoSky(texto, anterior, ctx.seccion);
   const base = (c.url || 'https://api.deepseek.com').replace(/\/chat\/completions$/, '');
   try {
     const r = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${claveSkyTienda(ctx.storeId) || claveDeepseek(c)}` },
-      body: JSON.stringify({ model: 'deepseek-chat', temperature: 0.4, max_tokens: 1200, messages: [{ role: 'system', content: `${c.instrucciones || INSTRUCCIONES_SKY}\n\n# BASE DE CONOCIMIENTO\n${CONOCIMIENTO_SKY}\n\nTu nombre es ${c.nombre}.\n${quien}` }, ...previos, { role: 'user', content: texto }] }),
+      body: JSON.stringify({ model: 'deepseek-chat', temperature: 0.4, max_tokens: 1200, messages: [{ role: 'system', content: `${c.instrucciones || INSTRUCCIONES_SKY}\n\n# BASE DE CONOCIMIENTO\n${conocimiento}\n\nTu nombre es ${c.nombre}.\n${quien}` }, ...previos, { role: 'user', content: texto }] }),
       signal: AbortSignal.timeout(90_000),
     });
     const b = (await r.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[] };
