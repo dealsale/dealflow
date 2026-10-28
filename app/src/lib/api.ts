@@ -981,6 +981,8 @@ export const apiEffiAnular = (rowId: string, motivo: string) => reqBase<{ ok: tr
 export interface HistorialCliente {
   celular: string;
   red: { pedidos: number; entregados: number; devueltos: number; cancelados: number; enCurso: number };
+  /** Lo de ESTA tienda (con su nombre). */
+  propia: { pedidos: number; entregados: number; devueltos: number; cancelados: number; enCurso: number; tienda: string };
   effi: { guias: number; entregadas: number; devoluciones: number; conNovedad: number } | null;
   efectividad: number | null; riesgo: 'nuevo' | 'bajo' | 'medio' | 'alto'; resumen: string;
 }

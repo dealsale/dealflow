@@ -17,13 +17,13 @@ export const celular10 = (t: string) => String(t || '').replace(/\D/g, '').slice
 
 export interface HistorialRed { pedidos: number; entregados: number; devueltos: number; cancelados: number; enCurso: number }
 export interface HistorialEffi { guias: number; entregadas: number; devoluciones: number; conNovedad: number }
-export interface Historial { celular: string; red: HistorialRed; effi: HistorialEffi | null; efectividad: number | null; riesgo: 'nuevo' | 'bajo' | 'medio' | 'alto'; resumen: string }
+export interface Historial { celular: string; red: HistorialRed; propia: HistorialRed & { tienda: string }; effi: HistorialEffi | null; efectividad: number | null; riesgo: 'nuevo' | 'bajo' | 'medio' | 'alto'; resumen: string }
 
-/** Conteos de la red DealFlow para ese celular (sin el pedido actual). */
-export function historialRed(celular: string, excluirOrderId = ''): HistorialRed {
+/** Conteos de la red DealFlow para ese celular (sin el pedido actual); con storeId, solo esa tienda. */
+export function historialRed(celular: string, excluirOrderId = '', storeId = ''): HistorialRed {
   const vacio = { pedidos: 0, entregados: 0, devueltos: 0, cancelados: 0, enCurso: 0 };
   if (celular.length !== 10) return vacio;
-  const filas = db.prepare(`SELECT estado, COUNT(*) n FROM orders WHERE ${TEL10} = ? AND id != ? GROUP BY estado`).all(celular, excluirOrderId) as { estado: string; n: number }[];
+  const filas = db.prepare(`SELECT estado, COUNT(*) n FROM orders WHERE ${TEL10} = ? AND id != ?${storeId ? ' AND store_id = ?' : ''} GROUP BY estado`).all(celular, excluirOrderId, ...(storeId ? [storeId] : [])) as { estado: string; n: number }[];
   const r = { ...vacio };
   for (const f of filas) {
     r.pedidos += f.n;
@@ -87,13 +87,20 @@ export async function historialCliente(storeId: string, orderId: string): Promis
   if (!o) return null;
   const celular = celular10(o.tel);
   const red = historialRed(celular, orderId);
+  // Lo de ESTA tienda (sus propios pedidos: aquí sí se puede decir que fue con ella).
+  const tienda = (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined)?.nombre || 'tu tienda';
+  const propia = { ...historialRed(celular, orderId, storeId), tienda };
   const effi = await historialEffi(storeId, celular);
-  return { celular, red, effi, ...evaluar(red, effi) };
+  return { celular, red, propia, effi, ...evaluar(red, effi) };
 }
 
 /** Al crear un pedido: si el cliente ya ha devuelto pedidos en la red, queda marcado para revisar. */
 export function avisarSiRiesgo(storeId: string, orderId: string, tel: string, numero: number | string): void {
   try {
+    const propia = historialRed(celular10(tel), orderId, storeId);
+    if (propia.devueltos) {
+      trazar(storeId, orderId, { etapa: 'pedido', nivel: 'warn', titulo: `⛔ Este cliente ya tuvo ${propia.devueltos} ${propia.devueltos === 1 ? 'devolución' : 'devoluciones'} con tu tienda`, detalle: 'Antes de despacharlo de nuevo, confirma por llamada o pide el pago anticipado.' });
+    }
     const red = historialRed(celular10(tel), orderId);
     if (!red.devueltos) return;
     const ev = evaluar(red, null);
