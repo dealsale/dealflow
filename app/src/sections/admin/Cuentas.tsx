@@ -3,7 +3,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
 import { confirmar } from '../../components/dialogs';
-import { apiAdminTiendaOnline, apiAdminAjustarTiendaOnline, type MembresiaTienda, apiAdminSoporte, apiAdminGuardarSoporte, apiAdminProbarSoporte, type CfgSoporteAdmin, apiAdminPagos, apiAdminGuardarPagos, type CfgPagosAdmin } from '../../lib/api';
+import { apiAdminTiendaOnline, apiAdminAjustarTiendaOnline, type MembresiaTienda, apiAdminSoporte, apiAdminGuardarSoporte, apiAdminProbarSoporte, type CfgSoporteAdmin, apiAdminPagos, apiAdminGuardarPagos, type CfgPagosAdmin, apiAdminAuditoriaRemitentes, type AuditoriaRemitentes } from '../../lib/api';
 import { apiSeguridad, type PuntoSeguridad, type AccesoEquipo, apiAdminCorreo, apiAdminCorreoPrueba, type EstadoCorreo } from '../../lib/api';
 import { apiCifrado, apiPapelera, apiPapeleraRestaurar, apiRespaldoEliminar, apiPapeleraEliminar, type EspacioDisco, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
 
@@ -140,6 +140,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
       )}
       {df.isSuperadmin && <SeguridadEquipo />}
       {df.isSuperadmin && <CorreosServidor />}
+      {df.isSuperadmin && <AuditoriaRemitentesEffi />}
       {df.isSuperadmin && <PagosAdmin />}
       {df.isSuperadmin && <AsistenteSoporteAdmin />}
       {df.isSuperadmin && <PapeleraYCopias df={df} />}
@@ -597,6 +598,63 @@ function CorreosServidor() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Auditoría: desde qué remitente (bodega) salieron las guías de Effi de cada tienda. */
+function AuditoriaRemitentesEffi() {
+  const [datos, setDatos] = useState<AuditoriaRemitentes[] | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState('');
+  const auditar = async () => {
+    setCargando(true); setError('');
+    const r = await apiAdminAuditoriaRemitentes();
+    setCargando(false);
+    if (r.data) setDatos(r.data.tiendas); else setError(r.error || 'No se pudo auditar.');
+  };
+  const csv = () => {
+    const filas = [['Tienda', 'Código remitente', 'Remitente', 'Ciudad', 'Dirección', 'Configurado en DealFlow', 'Guías en Effi', 'Entregadas', 'Devoluciones', 'Con novedad', 'Guías creadas por DealFlow', 'Por recoger (pedidos)']];
+    for (const t of datos || []) for (const r of t.remitentes) filas.push([t.tienda, r.codigo, r.nombre, r.ciudad, r.direccion, r.configurado ? 'Sí' : '', String(r.effi?.guias ?? ''), String(r.effi?.entregadas ?? ''), String(r.effi?.devoluciones ?? ''), String(r.effi?.conNovedad ?? ''), String(r.dealflow), r.porRecoger.map((p) => `${p.numero}${p.guia ? ` (${p.guia})` : ''}`).join(' ')]);
+    const texto = filas.map((f) => f.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + texto], { type: 'text/csv;charset=utf-8' }));
+    a.download = `auditoria-remitentes-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+  };
+  const celda: React.CSSProperties = { padding: '6px 8px', borderTop: '1px solid var(--df-border)', fontSize: 12.5, verticalAlign: 'top' };
+  return (
+    <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 20 }}>
+      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>🏭 Auditoría de remitentes (Effi)</div>
+      <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 12, lineHeight: 1.5 }}>
+        Desde qué remitente (bodega de origen) salieron las guías de cada tienda: el total en Effi y las que creó DealFlow (últimos 120 días), con las que siguen por recoger. Tarda un poco: consulta a Effi tienda por tienda.
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={() => void auditar()} disabled={cargando} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: cargando ? 0.6 : 1 }}>{cargando ? 'Consultando a Effi…' : 'Auditar todas las tiendas'}</button>
+        {datos && <button onClick={csv} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>⬇ Descargar Excel (CSV)</button>}
+      </div>
+      {error && <div style={{ color: 'var(--df-danger)', fontSize: 12.5, marginTop: 8 }}>{error}</div>}
+      {datos?.map((t) => (
+        <div key={t.storeId} style={{ marginTop: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 14 }}>{t.tienda} <span style={{ fontWeight: 500, fontSize: 12, color: 'var(--df-text-muted)' }}>· guía automática {t.guiaAutomatica ? 'encendida' : 'apagada'} · remitente configurado {t.configurado ? `#${t.configurado}` : 'ninguno'}</span></div>
+          {t.error ? <div style={{ color: 'var(--df-danger)', fontSize: 12.5 }}>{t.error}</div> : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', marginTop: 6 }}>
+                <thead><tr style={{ textAlign: 'left', fontSize: 11.5, color: 'var(--df-text-muted)' }}><th style={celda}>Remitente</th><th style={celda}>Ciudad · dirección</th><th style={celda}>Guías en Effi</th><th style={celda}>Creadas por DealFlow</th><th style={celda}>Por recoger</th></tr></thead>
+                <tbody>{t.remitentes.map((r) => (
+                  <tr key={r.codigo} style={{ background: r.configurado ? 'var(--df-brand-subtle, #ECFDF5)' : undefined }}>
+                    <td style={celda}><b>#{r.codigo}</b> {r.nombre}{r.configurado && ' ✓ configurado'}{!r.vigente && ' (anulado)'}</td>
+                    <td style={celda}>{[r.ciudad, r.direccion].filter(Boolean).join(' · ') || '—'}</td>
+                    <td style={celda}>{r.effi ? `${r.effi.guias} (${r.effi.entregadas} entregadas · ${r.effi.devoluciones} devueltas)` : '—'}</td>
+                    <td style={celda}>{r.dealflow}</td>
+                    <td style={celda}>{r.porRecoger.length ? r.porRecoger.slice(0, 30).map((p) => p.numero).join(', ') + (r.porRecoger.length > 30 ? ` y ${r.porRecoger.length - 30} más` : '') : '—'}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

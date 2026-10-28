@@ -213,7 +213,7 @@ export async function listasEffi(apiKey: string): Promise<Record<string, unknown
       servicios: Array.isArray(f.t_servicio) ? (f.t_servicio as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
       formasPago: Array.isArray(f.t_forma_pago) ? (f.t_forma_pago as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
     })),
-    remitentes: L(8).map((f) => ({ id: txt(f.codigo), nombre: txt(f.nombre) })),
+    remitentes: L(8).map(opcionRemitente),
     ecommerce: L(9).map((f) => ({ id: txt(f.id), nombre: txt(f.nombre), plataforma: txt(f.nombre_api) })),
   };
 }
@@ -290,8 +290,30 @@ export async function opcionesGuiaEffi(apiKey: string): Promise<{ transportadora
       servicios: Array.isArray(f.t_servicio) ? (f.t_servicio as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
       formasPago: Array.isArray(f.t_forma_pago) ? (f.t_forma_pago as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
     })),
-    remitentes: Array.isArray(r) ? r.map((f) => ({ id: txt(f.codigo), nombre: txt(f.nombre) })) : [],
+    remitentes: Array.isArray(r) ? r.map(opcionRemitente) : [],
   };
+}
+
+/**
+ * Remitente para los selectores. Muchas cuentas tienen varios con el MISMO nombre (la tienda)
+ * en bodegas distintas (principal, garantías, devoluciones, la del proveedor…): por eso se
+ * muestran con su ciudad, dirección y código, para elegir el punto de origen correcto.
+ */
+function opcionRemitente(f: Fila): { id: string; nombre: string; corto: string; ciudad: string; direccion: string } {
+  const ciudad = txt(f.nombre_ciudad); const direccion = txt(f.direccion);
+  return { id: txt(f.codigo), corto: txt(f.nombre), ciudad, direccion, nombre: [txt(f.nombre), ciudad, direccion].filter(Boolean).join(' · ') + ` (#${txt(f.codigo)})` };
+}
+
+// Remitentes vigentes de cada tienda (10 min): para no crear guías con uno que ya no existe.
+const cacheRemitentes = new Map<string, { t: number; v: Map<string, string> }>();
+async function remitentesVigentes(storeId: string, apiKey: string): Promise<Map<string, string> | null> {
+  const c = cacheRemitentes.get(storeId);
+  if (c && Date.now() - c.t < 10 * 60e3) return c.v;
+  const r = await todo<Fila>(apiKey, '/api/remitente', {}, 5);
+  if (!Array.isArray(r)) return null;
+  const v = new Map(r.map((f) => [txt(f.codigo), opcionRemitente(f).nombre]));
+  cacheRemitentes.set(storeId, { t: Date.now(), v });
+  return v;
 }
 
 // ── Ubicación (departamento / ciudad) ────────────────────────────────────────
@@ -1425,6 +1447,13 @@ export function urlDocumentoGuia(obj: unknown): string {
 
 async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, docRef: { sucursal: string; id: string }, tercero: string, ubic: { provincia: string; ciudad: string }, reintento: boolean): Promise<{ guia: string; transportadora: string; idTransaccion: string; url: string } | { error: string }> {
   const numero = txt(o.numero);
+  const vigentes = await remitentesVigentes(storeId, c.apiKey);
+  if (vigentes && !vigentes.has(txt(g.remitente))) {
+    const e = `La remisión quedó creada, pero no se generó la guía: el remitente #${txt(g.remitente)} no existe o está anulado en tu Effi. Elige el remitente correcto en Integraciones → Effi → Guía de transporte (o al generar la guía).`;
+    registrarLog(storeId, 'warn', 'despacho', `DF-${numero}: ${e}`);
+    return { error: e };
+  }
+  const nombreRem = vigentes?.get(txt(g.remitente)) || `#${txt(g.remitente)}`;
   const body: Record<string, unknown> = {
     idempotency_key: `dfg-${storeId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}-${numero}${reintento ? `-r${Date.now().toString(36).slice(-5)}` : ''}`.slice(0, 36),
     sucursal: Number(c.sucursal), transportadora: Number(g.transportadora), t_servicio: Number(g.servicio), t_forma_pago: Number(g.formaPagoFlete),
@@ -1457,7 +1486,7 @@ async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, 
   if (url) db.prepare('UPDATE orders SET guia_url = ? WHERE id = ?').run(url, txt(o.id));
   db.prepare('UPDATE orders SET effi_guia = ?, guia = CASE WHEN ? != \'\' THEN ? ELSE guia END, transportadora = CASE WHEN ? != \'\' THEN ? ELSE transportadora END WHERE id = ?')
     .run(JSON.stringify({ sucursal: txt(gg.sucursal), id: txt(gg.id), id_transaccion: txt(gg.id_transaccion) }), guia, guia, transportadora, transportadora, txt(o.id));
-  registrarLog(storeId, 'info', 'despacho', `DF-${numero}: guía ${txt(gg.id_transaccion)}${guia ? ` (${transportadora} ${guia})` : ''} creada en Effi.`);
+  registrarLog(storeId, 'info', 'despacho', `DF-${numero}: guía ${txt(gg.id_transaccion)}${guia ? ` (${transportadora} ${guia})` : ''} creada en Effi desde el remitente ${nombreRem}.`);
   return { guia, transportadora, idTransaccion: txt(gg.id_transaccion), url };
 }
 
@@ -1484,11 +1513,13 @@ async function generarGuiaInterna(storeId: string, orderId: string, g: OpcionesG
   if ('error' in ubic) return ubic;
   let tercero = txt(d.tercero);
   if (!tercero) { const cli = await clienteEffi(c, o, ubic); if ('error' in cli) return cli; tercero = cli.tercero; }
-  // Recordamos la última elección como valores por defecto del formulario.
-  guardarCfgEffi(storeId, { guia: { ...c.guia, transportadora: g.transportadora, servicio: g.servicio, formaPagoFlete: g.formaPagoFlete, remitente: g.remitente, peso: g.peso, volumen: g.volumen, alto: g.alto, ancho: g.ancho, largo: g.largo } });
+  // La última elección queda como valor por defecto del formulario, pero SOLO si la guía
+  // automática está apagada: si está encendida, esos valores son los de todas las guías
+  // automáticas y no deben cambiar sin que el dueño lo haga en Integraciones → Effi.
+  if (!c.guia.activa) guardarCfgEffi(storeId, { guia: { ...c.guia, transportadora: g.transportadora, servicio: g.servicio, formaPagoFlete: g.formaPagoFlete, remitente: g.remitente, peso: g.peso, volumen: g.volumen, alto: g.alto, ancho: g.ancho, largo: g.largo } });
   const yaTenia = !!pj<Fila>(txt(o.effi_guia), {}).id;
   const r = await crearGuia(storeId, c, g, o, { sucursal: txt(d.sucursal), id: txt(d.id) }, tercero, ubic, reintento || yaTenia);
-  if ('error' in r) return { error: r.error.replace('La remisión quedó creada, pero Effi no creó la guía: ', 'Effi no creó la guía: ') };
+  if ('error' in r) return { error: r.error.replace('La remisión quedó creada, pero Effi no creó la guía: ', 'Effi no creó la guía: ').replace('La remisión quedó creada, pero no se generó la guía: ', 'No se generó la guía: ') };
   if (r.guia) {
     const fresca = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as Fila;
     if (fresca?.tel && !Number(fresca.guia_avisada)) {

@@ -1001,6 +1001,9 @@ export const apiAdminSoporte = () => req<CfgSoporteAdmin>('/api/admin/soporte-ch
 export const apiAdminGuardarSoporte = (b: Partial<{ activo: boolean; modo: string; url: string; token: string; nombre: string; bienvenida: string; instrucciones: string }>) => req<CfgSoporteAdmin>('/api/admin/soporte-chat', 'PUT', b);
 export const apiSkyClavePropia = () => req<{ activo: boolean }>('/api/integraciones-ia/sky', 'GET');
 export const apiGuardarSkyClavePropia = (activo: boolean) => req<{ activo: boolean }>('/api/integraciones-ia/sky', 'PUT', { activo });
+export interface RemitenteAuditado { codigo: string; nombre: string; ciudad: string; direccion: string; vigente: boolean; configurado: boolean; effi: { guias: number; entregadas: number; devoluciones: number; conNovedad: number } | null; dealflow: number; porRecoger: { numero: string; guia: string; estado: string; fecha: string; transportadora: string }[] }
+export interface AuditoriaRemitentes { storeId: string; tienda: string; configurado: string; guiaAutomatica: boolean; remitentes: RemitenteAuditado[]; error?: string }
+export const apiAdminAuditoriaRemitentes = () => reqBase<{ tiendas: AuditoriaRemitentes[] }>('/api/admin/auditoria-remitentes', 'GET');
 export interface CfgPagosAdmin { offline: boolean; whatsapp: string; numeroLanding: string; wompiListo: boolean }
 export const apiAdminPagos = () => req<CfgPagosAdmin>('/api/admin/pagos', 'GET');
 export const apiAdminGuardarPagos = (b: Partial<{ offline: boolean; whatsapp: string }>) => req<CfgPagosAdmin>('/api/admin/pagos', 'PUT', b);

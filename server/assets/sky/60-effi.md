@@ -40,6 +40,7 @@ Sección: integraciones, effi
 Claves: guia automatica, transportadora, servicio, pago del flete, remitente, peso, dimensiones, crear guia sola
 - **Crear la guía automáticamente**: apenas se crea la remisión, DealFlow también crea la guía con la transportadora que elijas y le avisa la guía al cliente por WhatsApp. Si la apagas, la generas al despachar (o dentro de Effi).
 - Eliges **Transportadora**, **Servicio**, **Pago del flete**, **Remitente**, **Peso (kg)**, **Peso volumétrico (kg)** y **Alto × ancho × largo (cm)**.
+- **Remitente = bodega de origen.** Muchas cuentas tienen varios remitentes con el mismo nombre (la tienda) en bodegas distintas: principal, garantías, devoluciones o la del proveedor. Por eso el selector los muestra con ciudad, dirección y código (#), y DealFlow ya no elige uno solo: debes escogerlo. Todas las guías automáticas salen del remitente que esté guardado aquí; generar una guía a mano con otro remitente no cambia el de las automáticas. Si el remitente guardado se anuló en Effi, la guía no se crea y te avisa.
 - Problema de sucursal del remitente: si Effi responde un error con la sucursal o el remitente, prueba con otro **Remitente** de la lista (cada remitente tiene su sucursal configurada en Effi) y guarda.
 
 ## Configuración de Effi: novedades y devoluciones automáticas

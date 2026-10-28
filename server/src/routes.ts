@@ -3090,6 +3090,12 @@ async function pagoOffline(req: ExRequest, res: ExResponse, concepto: string): P
   res.status(402).json(P.respuestaOffline(concepto, st?.nombre || ''));
   return true;
 }
+// Auditoría de remitentes de Effi: desde qué bodega salieron las guías de cada tienda.
+api.get('/admin/auditoria-remitentes', requireAuth, requireSuperAdmin, async (req, res) => {
+  const A = await import('./auditoriaRemitentes.js');
+  const id = String(req.query.tienda || '');
+  res.json({ tiendas: id ? [await A.auditarRemitentesTienda(id)] : await A.auditarRemitentes() });
+});
 api.get('/admin/pagos', requireAuth, requireSuperAdmin, async (_req, res) => {
   const P = await import('./pagosOffline.js');
   res.json({ ...P.cfgPagos(), numeroLanding: (process.env.LANDING_WA || '').replace(/\D/g, ''), wompiListo: !!(process.env.WOMPI_PUBLIC_KEY && process.env.WOMPI_INTEGRITY) });

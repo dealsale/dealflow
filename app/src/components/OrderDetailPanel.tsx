@@ -336,7 +336,7 @@ function useGuiaEffi() {
     setCargaMsg('');
     setOps(r.data);
     const g = r.data.defaults;
-    setD((x) => ({ ...x, transportadora: g.transportadora || '', servicio: g.servicio || '', formaPagoFlete: g.formaPagoFlete || '', remitente: g.remitente || (r.data!.remitentes[0]?.id ?? ''), peso: g.peso || 1, volumen: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10 }));
+    setD((x) => ({ ...x, transportadora: g.transportadora || '', servicio: g.servicio || '', formaPagoFlete: g.formaPagoFlete || '', remitente: r.data!.remitentes.some((x) => x.id === g.remitente) ? g.remitente : '', peso: g.peso || 1, volumen: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10 }));
   };
   const listo = !!(d.transportadora && d.servicio && d.formaPagoFlete && d.remitente);
   return { ops, d, setD, cargar, cargaMsg, listo };
@@ -377,7 +377,8 @@ function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; item
         <div><label style={lb}>Pago del flete</label>
           <Dropdown ariaLabel="Pago del flete" placeholder="Elige…" value={d.formaPagoFlete} onChange={(v) => set({ formaPagoFlete: v })} options={(t?.formasPago || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
         <div><label style={lb}>Remitente</label>
-          <Dropdown ariaLabel="Remitente" placeholder="Elige…" value={d.remitente} onChange={(v) => set({ remitente: v })} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} /></div>
+          <Dropdown ariaLabel="Remitente" placeholder="Elige desde qué bodega sale…" value={d.remitente} onChange={(v) => set({ remitente: v })} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} />
+          {!d.remitente && <div style={{ fontSize: 11.5, color: 'var(--df-danger-dark)', marginTop: 4 }}>Elige el remitente: es la bodega desde donde sale el paquete (ciudad y dirección).</div>}</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
         <div><label style={lb}>Paquetes</label><input type="number" min={1} value={d.cantPaquetes} onChange={(e) => set({ cantPaquetes: Number(e.target.value) })} style={sel_} /></div>
