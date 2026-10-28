@@ -46,6 +46,7 @@ Claves: registrarme, crear cuenta, login, iniciar sesion, olvide contraseña, re
 ## Activar la cuenta, planes, pagos y renovación
 Sección: general, cuenta, plan
 Claves: pagar, plan, mensualidad, renta, instalacion, activar cuenta, cupon, wompi, vencio, renovar, pago pendiente, suscripcion, factura
+- **Ahora mismo los pagos son offline**: al tocar cualquier botón de pago (plan, renta, Tienda en línea, Biblioteca o créditos) sale el aviso "Pago offline" con el botón **Escribir por WhatsApp**: ahí el equipo de DealFlow te da los datos para pagar (transferencia o consignación) y te activa la cuenta o el servicio. Lo gratis (cupón al 100 %, membresías en $0) se activa solo.
 - Para usar DealFlow la tienda activa un plan: se paga una **instalación única** (incluye 30 días de servicio) y luego una **renta mensual**. El pago es por **Wompi** (tarjeta, PSE, Nequi, etc.).
 - En la pantalla "Activa tu cuenta DealFlow" eliges el plan y das **Activar por $…**. Si tienes **cupón**, escríbelo y dale **Aplicar** (si el cupón deja el precio en 0 aparece **Activar gratis con el cupón**). "Cupón inválido" = no existe, venció o ya se usó.
 - Si la renta vence, sale "Tu renta mensual venció" y el botón **Pagar renta $…**: al pagar se suman 30 días desde la fecha de vencimiento (no se pierde tiempo).
