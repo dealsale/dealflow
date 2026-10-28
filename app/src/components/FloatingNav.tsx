@@ -102,7 +102,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                   <>
                     {fila(aSection === 'trazabilidad', () => goA('trazabilidad'), <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad', undefined, urlDe({ mode: 'admin', adminSection: 'trazabilidad' }))}
                     {fila(aSection === 'proveedores', () => goA('proveedores'), <span style={{ fontSize: 16 }}>🤝</span>, 'Proveedores', undefined, urlDe({ mode: 'admin', adminSection: 'proveedores' }))}
-                    {fila(aSection === 'ventas', () => goA('ventas'), <IconVentas />, 'Ventas', undefined, urlDe({ mode: 'admin', adminSection: 'ventas' }))}
+                    {fila(aSection === 'contabilidad', () => goA('contabilidad'), <IconVentas />, 'Contabilidad', undefined, urlDe({ mode: 'admin', adminSection: 'contabilidad' }))}
                     {fila(aSection === 'planes', () => goA('planes'), <IconPlanes />, 'Planes', undefined, urlDe({ mode: 'admin', adminSection: 'planes' }))}
                     {fila(aSection === 'cuentas', () => goA('cuentas'), <IconCuentas />, 'Cuentas', undefined, urlDe({ mode: 'admin', adminSection: 'cuentas' }))}
                     {fila(aSection === 'cupones', () => goA('cupones'), <span style={{ fontSize: 16 }}>🎁</span>, 'Cupones', undefined, urlDe({ mode: 'admin', adminSection: 'cupones' }))}

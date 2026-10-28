@@ -3090,6 +3090,67 @@ async function pagoOffline(req: ExRequest, res: ExResponse, concepto: string): P
   res.status(402).json(P.respuestaOffline(concepto, st?.nombre || ''));
   return true;
 }
+// ── Contabilidad de DealFlow (equipo administrativo) ────────────────
+const filtrosConta = (q: Record<string, unknown>) => ({ desde: String(q.desde || ''), hasta: String(q.hasta || ''), tipo: String(q.tipo || ''), categoria: String(q.categoria || ''), q: String(q.q || '').slice(0, 80), anulados: q.anulados === '1' });
+api.get('/admin/contabilidad', requireAuth, requireAdmin, async (req, res) => {
+  const C = await import('./contabilidad.js');
+  const tiendas = db.prepare('SELECT id, nombre FROM stores ORDER BY nombre').all();
+  res.json({ ...C.listarMovimientos(filtrosConta(req.query)), categorias: C.CATEGORIAS, medios: C.MEDIOS, tiendas });
+});
+api.get('/admin/contabilidad/exportar', requireAuth, requireAdmin, async (req, res) => {
+  const C = await import('./contabilidad.js');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="contabilidad-dealflow-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send(C.exportarCsv(filtrosConta(req.query)));
+});
+api.post('/admin/contabilidad', requireAuth, requireAdmin, async (req, res) => {
+  const C = await import('./contabilidad.js');
+  const r = C.crearMovimiento(req.body || {}, req.user!.nombre || req.user!.email);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.get('/admin/contabilidad/movimiento/:id', requireAuth, requireAdmin, async (req, res) => {
+  const m = (await import('./contabilidad.js')).obtenerMovimiento(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Movimiento no encontrado.' });
+  res.json({ movimiento: m });
+});
+api.put('/admin/contabilidad/:id', requireAuth, requireAdmin, async (req, res) => {
+  const C = await import('./contabilidad.js');
+  const r = C.editarMovimiento(req.params.id, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/admin/contabilidad/:id/anular', requireAuth, requireAdmin, async (req, res) => {
+  const C = await import('./contabilidad.js');
+  const r = C.anularMovimiento(req.params.id, String(req.body?.motivo || ''), req.body?.restaurar !== true);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.delete('/admin/contabilidad/:id', requireAuth, requireAdmin, async (req, res) => {
+  const C = await import('./contabilidad.js');
+  const r = C.eliminarMovimiento(req.params.id);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/admin/contabilidad/:id/adjuntos', requireAuth, requireAdmin, async (req, res) => {
+  const C = await import('./contabilidad.js');
+  const r = C.adjuntar(req.params.id, String(req.body?.dataUrl || ''), String(req.body?.nombre || ''), req.user!.nombre || req.user!.email);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.get('/admin/contabilidad/adjuntos/:id', requireAuth, requireAdmin, async (req, res) => {
+  const C = await import('./contabilidad.js');
+  const a = C.leerAdjunto(req.params.id);
+  if (!a) return res.status(404).json({ error: 'Comprobante no encontrado.' });
+  res.setHeader('Content-Type', a.mime || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `${req.query.descargar ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(a.nombre)}`);
+  res.send(a.datos);
+});
+api.delete('/admin/contabilidad/adjuntos/:id', requireAuth, requireAdmin, async (req, res) => {
+  (await import('./contabilidad.js')).quitarAdjunto(req.params.id);
+  res.json({ ok: true });
+});
+
 // Auditoría de remitentes de Effi: desde qué bodega salieron las guías de cada tienda.
 api.get('/admin/auditoria-remitentes', requireAuth, requireSuperAdmin, async (req, res) => {
   const A = await import('./auditoriaRemitentes.js');

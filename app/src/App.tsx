@@ -42,7 +42,7 @@ import { Cuentas } from './sections/admin/Cuentas';
 import { PlantillasWA } from './sections/admin/PlantillasWA';
 import { Planes } from './sections/admin/Planes';
 import { Cupones } from './sections/admin/Cupones';
-import { Ventas } from './sections/admin/Ventas';
+import { Contabilidad } from './sections/admin/Contabilidad';
 import { Superadmin, BibliotecaAdmin } from './sections/admin/Superadmin';
 import { MCRM } from './sections/mobile/MCRM';
 import { MLeads } from './sections/mobile/MLeads';
@@ -330,7 +330,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
       {df.adminSection === 'plantillas' && df.isSuperadmin && <PlantillasWA df={df} />}
       {df.adminSection === 'trazabilidad' && <Trazabilidad df={df} />}
       {df.adminSection === 'proveedores' && <Proveedores />}
-      {df.adminSection === 'ventas' && <Ventas df={df} />}
+      {df.adminSection === 'contabilidad' && <Contabilidad />}
       {df.adminSection === 'planes' && <Planes df={df} />}
       {df.adminSection === 'cuentas' && <Cuentas df={df} />}
       {df.adminSection === 'cupones' && <Cupones df={df} />}

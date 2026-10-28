@@ -707,7 +707,7 @@ export function useDealFlowState() {
   const [section, setSection] = useState<VendedorSection>('resumen');
   const sectionRef = useRef<string>('resumen');
   sectionRef.current = section;
-  const [adminSection, setAdminSection] = useState<AdminSection>('ventas');
+  const [adminSection, setAdminSection] = useState<AdminSection>('contabilidad');
   // ── Estadísticas / Rendimiento ──
   type StatsPreset = 'hoy' | 'ayer' | '7d' | '30d' | 'mes' | 'mesPasado' | 'rango';
   const [statsPreset, setStatsPreset] = useState<StatsPreset>('7d');
@@ -1172,7 +1172,7 @@ export function useDealFlowState() {
       setSection('resumen');
     } else {
       setMode('admin');
-      setAdminSection('ventas');
+      setAdminSection('contabilidad');
     }
     setSelectedOrderId(null);
   }
@@ -1724,7 +1724,7 @@ export function useDealFlowState() {
     setSessionUser(user);
     setMode(user.role === 'vendedor' ? 'vendedor' : 'admin');
     setSection(user.role === 'vendedor' && user.esDueno === false ? 'crm' : 'resumen');
-    setAdminSection(user.role === 'superadmin' ? 'superadmin' : 'ventas');
+    setAdminSection(user.role === 'superadmin' ? 'superadmin' : 'contabilidad');
     setLoginError('');
     aplicarRuta(leerRuta(), user.role, user.role === 'vendedor' && user.esDueno === false);
     rutaLista.current = true;
