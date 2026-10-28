@@ -1,4 +1,4 @@
-import { apiShopifyPedidosCfg, apiShopifyPedidosGuardar, apiShopifyTraerPedidos, type CfgPedidosShopify } from '../lib/api';
+import { apiGuardarSkyClavePropia, apiSkyClavePropia, apiShopifyPedidosCfg, apiShopifyPedidosGuardar, apiShopifyTraerPedidos, type CfgPedidosShopify } from '../lib/api';
 import { useEffect, useRef, useState } from 'react';
 import { EffiApiCard } from '../components/EffiApiCard';
 import type { DealFlowState } from '../hooks/useDealFlowState';
@@ -309,6 +309,35 @@ const btnFacebook: React.CSSProperties = { background: '#1877F2', color: '#fff',
 const btnGhost: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', alignSelf: 'flex-start' };
 const btnGhostRed: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-danger-dark)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', alignSelf: 'flex-start' };
 
+/** Interruptor: SKY (el asistente de soporte del panel) también usa la clave DeepSeek de la tienda. */
+function SkyClavePropia() {
+  const [activo, setActivo] = useState<boolean | null>(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => { void apiSkyClavePropia().then((r) => setActivo(r.data?.activo ?? false)); }, []);
+  if (activo === null) return null;
+  const cambiar = async (v: boolean) => {
+    setActivo(v); setMsg('');
+    const r = await apiGuardarSkyClavePropia(v);
+    if (r.data) setMsg(v ? '✓ SKY ahora usa tu clave de DeepSeek.' : '✓ SKY vuelve a usar la clave de DealFlow.');
+    else { setActivo(!v); setMsg(r.error || 'No se pudo guardar.'); }
+  };
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 4, padding: '11px 12px', borderRadius: 10, border: '1px solid var(--df-border)', background: 'var(--df-bg)' }}>
+      <img src="/sky.webp" alt="" width={34} height={34} style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'var(--df-text)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={activo} onChange={(e) => void cambiar(e.target.checked)} />
+          Usar mi clave de DeepSeek también para SKY
+        </label>
+        <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 3, lineHeight: 1.5 }}>
+          SKY es el asistente de soporte del panel. Si lo activas, las preguntas que tu equipo le haga se cobran a tu cuenta de DeepSeek. Apagado, las paga DealFlow.
+        </div>
+        {msg && <div style={{ fontSize: 12, marginTop: 5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)' }}>{msg}</div>}
+      </div>
+    </div>
+  );
+}
+
 export function Integraciones({ df }: { df: DealFlowState }) {
   const [abierta, setAbierta] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
@@ -410,6 +439,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
                             <button onClick={() => { df.eliminarIntegracion(i.id); setAbierta(null); }} style={btnGhostRed}>Desconectar</button>
                           )}
                         </div>
+                        {i.id === 'deepseek' && configurada && <SkyClavePropia />}
                       </div>
                     ) : undefined}
                   </IntegracionFila>

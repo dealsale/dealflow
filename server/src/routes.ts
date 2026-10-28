@@ -1583,10 +1583,10 @@ const contextoSoporte = (req: ExRequest, seccion: string) => {
   const st = req.user!.storeId ? db.prepare('SELECT nombre, plan FROM stores WHERE id = ?').get(req.user!.storeId) as { nombre: string; plan: string } | undefined : undefined;
   return { userId: req.user!.id, nombre: req.user!.nombre, email: req.user!.email, rol: req.user!.role, storeId: req.user!.storeId || '', tienda: st?.nombre || '', plan: st?.plan || '', seccion: String(seccion || '').slice(0, 40) };
 };
-api.get('/soporte/config', requireAuth, async (_req, res) => {
-  const { cfgSoportePublica } = await import('./soporteChat.js');
-  const c = cfgSoportePublica();
-  res.json({ listo: c.listo, nombre: c.nombre, bienvenida: c.bienvenida });
+api.get('/soporte/config', requireAuth, async (req, res) => {
+  const { cfgSoporte, conectado } = await import('./soporteChat.js');
+  const c = cfgSoporte();
+  res.json({ listo: c.activo && conectado(c, req.user!.storeId || ''), nombre: c.nombre, bienvenida: c.bienvenida });
 });
 api.post('/soporte/chat', requireAuth, async (req, res) => {
   // Máximo 20 mensajes por minuto por usuario.
@@ -3045,6 +3045,17 @@ api.delete('/integraciones/:tipo', requireAuth, requireStore, requireOwner, (req
   const asst = db.prepare('SELECT ia_proveedor FROM assistants WHERE store_id = ?').get(sid) as { ia_proveedor: string } | undefined;
   if (asst?.ia_proveedor === tipo) db.prepare("UPDATE assistants SET ia_proveedor = '' WHERE store_id = ?").run(sid);
   res.json({ ok: true });
+});
+
+// SKY (asistente de soporte) con la clave DeepSeek de la tienda: solo si la tienda lo activa.
+api.get('/integraciones-ia/sky', requireAuth, requireStore, (req, res) => {
+  const a = db.prepare('SELECT sky_clave_propia FROM assistants WHERE store_id = ?').get(req.user!.storeId!) as { sky_clave_propia: number } | undefined;
+  res.json({ activo: !!a?.sky_clave_propia });
+});
+api.put('/integraciones-ia/sky', requireAuth, requireStore, requireOwner, (req, res) => {
+  const activo = req.body?.activo ? 1 : 0;
+  db.prepare('INSERT INTO assistants (store_id, sky_clave_propia) VALUES (?,?) ON CONFLICT(store_id) DO UPDATE SET sky_clave_propia = excluded.sky_clave_propia').run(req.user!.storeId!, activo);
+  res.json({ activo: !!activo });
 });
 
 // Elegir el agente (proveedor de IA) predeterminado de la tienda.
