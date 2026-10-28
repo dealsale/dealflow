@@ -102,6 +102,7 @@ export async function importarPedido(storeId: string, shop: string, o: Fila, con
         .run(uid(), oid, l.qty, l.nombre, l.precio, l.productId, l.variantId);
     }
     trazar(storeId, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado desde Shopify ${txt(o.name)}`, detalle: `Origen: shopify (${shop})`, datos: { cliente, tel, ciudad: txt(env.city), total, envio, productos: lineas.map((l) => `${txt(l.quantity)}× ${txt(l.title)} ${txt(l.variant_title)} [${txt(l.sku)}]`) } });
+    void import('./historialCliente.js').then((h) => h.avisarSiRiesgo(storeId, oid, tel, numero)).catch(() => {});
     if (packs.length) trazar(storeId, oid, { etapa: 'pedido', nivel: 'info', titulo: 'Packs convertidos a unidades', detalle: packs.join(' · ') });
     registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} llegó de Shopify ${txt(o.name)} (${cliente}).`);
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido de Shopify DF-${numero} 🛍️`, `${cliente} · ${pesos(total)}`, { url: '/' })).catch(() => {});

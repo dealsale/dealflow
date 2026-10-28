@@ -1213,6 +1213,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
   db.prepare("UPDATE leads SET etapa = 'Listo para comprar', etiqueta = 'Venta' WHERE id = ?").run(lead.id);
   if (rev?.ajuste) trazar(storeId, oid, { etapa: 'pedido', nivel: 'warn', titulo: `Precio corregido: el asistente puso $${totalIA.toLocaleString('es-CO')} y según el catálogo es $${total.toLocaleString('es-CO')}`, detalle: `${rev.ajuste === 'sobrecobro' ? 'Cobró de más' : 'Cobró de menos'} · ${rev.detalle}` });
   else if (rev?.promosEnTexto.length && totalIA >= rev.esperado) trazar(storeId, oid, { etapa: 'pedido', nivel: 'warn', titulo: 'Revisa el precio: hay una posible promo escrita en el producto', detalle: `${rev.promosEnTexto.join('; ')}. Ponla en «Precio de promoción» para que se cobre sola.` });
+  void import('./historialCliente.js').then((h) => h.avisarSiRiesgo(storeId, oid, tel, numero)).catch(() => {});
   trazar(storeId, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado por el asistente`, detalle: `Origen: ${origen}`, datos: { cliente, tel, ciudad, departamento, direccion, total, items, marcador: inner } });
   console.log(`[ia] pedido DF-${numero} creado para ${cliente} · ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}`);
   registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} creado para ${cliente} (${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}).`, lead.id);
