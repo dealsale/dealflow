@@ -1,8 +1,9 @@
 /**
  * Asistente de soporte flotante del panel (SKY, para las tiendas): dudas de DealFlow, Meta,
  * marketing… Lo configura el equipo de DealFlow en Administración → Cuentas → "Asistente de soporte":
- *   - modo "deepseek" (por defecto): DeepSeek con las instrucciones de SKY; usa la clave guardada
- *     o, si no hay, la DEEPSEEK_API_KEY del servidor. El historial se guarda aquí;
+ *   - modo "deepseek" (por defecto): DeepSeek con las instrucciones de SKY. Si la tienda activó
+ *     en Integraciones "usar mi clave también para SKY", paga ella con su clave; si no, se usa la
+ *     clave guardada aquí o la DEEPSEEK_API_KEY del servidor. El historial se guarda aquí;
  *   - modo "dify": API de chat de Dify (POST {url}/chat-messages, response_mode blocking);
  *   - modo "webhook": cualquier endpoint propio que reciba el mensaje y devuelva la respuesta.
  * El navegador nunca ve la URL ni la clave: todo pasa por este servidor.
@@ -10,6 +11,7 @@
 import { db } from './db.js';
 import { randomUUID } from 'node:crypto';
 import { cifrarTexto, descifrarTexto } from './cifrado.js';
+import { CONOCIMIENTO_SKY } from './skyConocimiento.js';
 
 db.exec("CREATE TABLE IF NOT EXISTS config_global (clave TEXT PRIMARY KEY, valor TEXT NOT NULL DEFAULT '')");
 // Historial de las conversaciones con DeepSeek (Dify guarda el suyo).
@@ -42,6 +44,12 @@ En el menú del perfil (arriba a la derecha) se puede mostrar u ocultar a SKY.
 
 También ayudas con Meta (Business Manager, Events Manager, Píxel/conjunto de datos, campañas de ventas y mensajes a WhatsApp, públicos, presupuestos), anuncios, creativos, textos de venta y marketing para ecommerce contra entrega en Colombia.
 
+Cómo respondes las dudas de "cómo se hace":
+- Usa primero la BASE DE CONOCIMIENTO de abajo: da los pasos en orden, con los nombres exactos de las secciones y botones como aparecen ahí. No inventes botones, menús ni pasos que no estén.
+- Si la persona está en una sección del panel, asume que la duda es de esa sección.
+- Si la base no cubre lo que preguntan, dilo con honestidad, da la orientación general que sí sepas y sugiere ver **Tutoriales** o escribir al equipo de soporte de DealFlow.
+- Termina, si ayuda, con una pregunta corta para saber si quedó resuelto.
+
 Reglas:
 - Si no sabes algo concreto de DealFlow (un precio, un plan, un error puntual o algo de la cuenta del usuario), no lo inventes: dilo y sugiere escribir al equipo de soporte de DealFlow.
 - No tienes acceso a los datos de la tienda ni puedes hacer cambios en ella; explica cómo hacerlo.
@@ -49,6 +57,15 @@ Reglas:
 
 const POR_DEFECTO: CfgSoporte = { activo: false, modo: 'deepseek', url: '', token: '', nombre: 'SKY', bienvenida: '¡Hola! 👋 Soy **SKY**, tu asistente de DealFlow. Pregúntame lo que quieras: cómo usar la plataforma, Meta, anuncios, marketing o ventas por WhatsApp.', instrucciones: INSTRUCCIONES_SKY };
 const claveDeepseek = (c: CfgSoporte) => c.token || process.env.DEEPSEEK_API_KEY || '';
+
+/** Clave DeepSeek de la tienda, solo si la tienda aceptó usarla también para SKY. */
+export function claveSkyTienda(storeId: string): string {
+  if (!storeId) return '';
+  const a = db.prepare('SELECT sky_clave_propia FROM assistants WHERE store_id = ?').get(storeId) as { sky_clave_propia: number } | undefined;
+  if (!a?.sky_clave_propia) return '';
+  const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'deepseek'").get(storeId) as { config: string } | undefined;
+  try { return String((row ? JSON.parse(row.config) : {}).apiKey || '').trim(); } catch { return ''; }
+}
 
 export function cfgSoporte(): CfgSoporte {
   const r = db.prepare("SELECT valor FROM config_global WHERE clave = 'soporte_chat'").get() as { valor: string } | undefined;
@@ -59,6 +76,8 @@ export function cfgSoporte(): CfgSoporte {
   if (cfg.modo === 'dify' && !cfg.url) cfg.modo = 'deepseek';
   if (cfg.nombre === 'Asistente DealFlow') cfg.nombre = POR_DEFECTO.nombre;
   if (cfg.bienvenida.startsWith('¡Hola! 👋 Soy el asistente de DealFlow.')) cfg.bienvenida = POR_DEFECTO.bienvenida;
+  // Instrucciones vacías o las por defecto de una versión anterior = las por defecto de ahora.
+  if (!cfg.instrucciones || (cfg.instrucciones.startsWith('Eres SKY, el asistente de soporte de DealFlow.') && !cfg.instrucciones.includes('BASE DE CONOCIMIENTO'))) cfg.instrucciones = INSTRUCCIONES_SKY;
   try { cfg.token = cfg.token ? descifrarTexto(cfg.token) : ''; } catch { cfg.token = ''; }
   return cfg;
 }
@@ -78,12 +97,12 @@ export function guardarCfgSoporte(b: Partial<CfgSoporte>): CfgSoporte {
     instrucciones: 'instrucciones' in b ? String(b.instrucciones || '').trim().slice(0, 12000) || INSTRUCCIONES_SKY : actual.instrucciones,
   };
   db.prepare("INSERT INTO config_global (clave, valor) VALUES ('soporte_chat', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor")
-    .run(JSON.stringify({ ...nuevo, token: nuevo.token ? cifrarTexto(nuevo.token) : '' }));
+    .run(JSON.stringify({ ...nuevo, token: nuevo.token ? cifrarTexto(nuevo.token) : '', instrucciones: nuevo.instrucciones === INSTRUCCIONES_SKY ? '' : nuevo.instrucciones }));
   return nuevo;
 }
 
 /** Lo que ve la administración (la clave solo como "puesta / no puesta"). */
-export const conectado = (c: CfgSoporte) => (c.modo === 'deepseek' ? !!claveDeepseek(c) : !!c.url);
+export const conectado = (c: CfgSoporte, storeId = '') => (c.modo === 'deepseek' ? !!(claveSkyTienda(storeId) || claveDeepseek(c)) : !!c.url);
 export const cfgSoportePublica = (c = cfgSoporte()) => ({ activo: c.activo, modo: c.modo, url: c.url, tokenPuesto: !!c.token, claveServidor: !!process.env.DEEPSEEK_API_KEY, nombre: c.nombre, bienvenida: c.bienvenida, instrucciones: c.instrucciones, conectado: conectado(c), listo: c.activo && conectado(c) });
 
 export interface ContextoSoporte { userId: string; nombre: string; email: string; rol: string; storeId: string; tienda: string; plan: string; seccion: string }
@@ -91,7 +110,7 @@ export interface ContextoSoporte { userId: string; nombre: string; email: string
 /** Envía el mensaje al agente y devuelve su respuesta (y el id de conversación para seguirla). */
 export async function preguntarSoporte(mensaje: string, conversacion: string, ctx: ContextoSoporte, prueba = false): Promise<{ respuesta: string; conversacion: string } | { error: string }> {
   const c = cfgSoporte();
-  if ((!c.activo && !prueba) || !conectado(c)) return { error: 'El asistente todavía no está disponible.' };
+  if ((!c.activo && !prueba) || !conectado(c, ctx.storeId)) return { error: 'El asistente todavía no está disponible.' };
   const texto = String(mensaje || '').trim().slice(0, 4000);
   if (!texto) return { error: 'Escribe tu pregunta.' };
   if (c.modo === 'deepseek') return preguntarDeepseek(c, texto, conversacion, ctx);
@@ -132,8 +151,8 @@ async function preguntarDeepseek(c: CfgSoporte, texto: string, conversacion: str
   try {
     const r = await fetch(`${base}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${claveDeepseek(c)}` },
-      body: JSON.stringify({ model: 'deepseek-chat', temperature: 0.4, max_tokens: 1200, messages: [{ role: 'system', content: `${c.instrucciones || INSTRUCCIONES_SKY}\n\nTu nombre es ${c.nombre}.\n${quien}` }, ...previos, { role: 'user', content: texto }] }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${claveSkyTienda(ctx.storeId) || claveDeepseek(c)}` },
+      body: JSON.stringify({ model: 'deepseek-chat', temperature: 0.4, max_tokens: 1200, messages: [{ role: 'system', content: `${c.instrucciones || INSTRUCCIONES_SKY}\n\n# BASE DE CONOCIMIENTO\n${CONOCIMIENTO_SKY}\n\nTu nombre es ${c.nombre}.\n${quien}` }, ...previos, { role: 'user', content: texto }] }),
       signal: AbortSignal.timeout(90_000),
     });
     const b = (await r.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[] };

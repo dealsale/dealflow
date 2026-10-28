@@ -226,6 +226,7 @@ addColumn('assistants', 'seguimiento_off INTEGER NOT NULL DEFAULT 0');
 addColumn('assistants', 'seguimiento_on INTEGER NOT NULL DEFAULT 0');
 // Estilo/tono del asistente (JSON): { trato:'tu'|'usted', emojis:bool, largo:'corto'|'detallado' }.
 addColumn('assistants', "estilo TEXT NOT NULL DEFAULT ''");
+addColumn('assistants', 'sky_clave_propia INTEGER NOT NULL DEFAULT 0'); // SKY (soporte) usa la clave DeepSeek de la tienda
 db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (
   store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
   tipo TEXT NOT NULL,

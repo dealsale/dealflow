@@ -994,4 +994,6 @@ export const apiSoporteChat = (mensaje: string, conversacion: string, seccion: s
 export interface CfgSoporteAdmin { activo: boolean; modo: 'deepseek' | 'dify' | 'webhook'; url: string; tokenPuesto: boolean; claveServidor: boolean; nombre: string; bienvenida: string; instrucciones: string; conectado: boolean; listo: boolean }
 export const apiAdminSoporte = () => req<CfgSoporteAdmin>('/api/admin/soporte-chat', 'GET');
 export const apiAdminGuardarSoporte = (b: Partial<{ activo: boolean; modo: string; url: string; token: string; nombre: string; bienvenida: string; instrucciones: string }>) => req<CfgSoporteAdmin>('/api/admin/soporte-chat', 'PUT', b);
+export const apiSkyClavePropia = () => req<{ activo: boolean }>('/api/integraciones-ia/sky', 'GET');
+export const apiGuardarSkyClavePropia = (activo: boolean) => req<{ activo: boolean }>('/api/integraciones-ia/sky', 'PUT', { activo });
 export const apiAdminProbarSoporte = () => req<{ respuesta: string }>('/api/admin/soporte-chat/probar', 'POST');
