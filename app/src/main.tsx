@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { PagoOffline } from './components/PagoOffline.tsx'
 import { Academy } from './academy/Academy.tsx'
 import { PortalProveedores } from './proveedores/Portal.tsx'
 import { iniciarAutoActualizacion } from './lib/autoUpdate'
@@ -18,7 +19,7 @@ const esProveedores = /^proveedores\./i.test(window.location.hostname) || /^\/pr
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {esProveedores ? <PortalProveedores /> : esAcademy ? <Academy /> : <App />}
+    {esProveedores ? <PortalProveedores /> : esAcademy ? <Academy /> : <><App /><PagoOffline /></>}
   </StrictMode>,
 )
 

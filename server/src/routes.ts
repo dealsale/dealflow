@@ -2189,6 +2189,7 @@ api.post('/creditos/recargar', requireAuth, requireStore, requireOwner, async (r
   const { crearRecargaCheckout } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const base = `${proto}://${req.get('host')}`;
+  if (await pagoOffline(req, res, 'una recarga de créditos')) return;
   const r = crearRecargaCheckout(req.user!.storeId!, req.user!.email, base, String(req.body?.paquete || ''));
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ url: r.url });
@@ -3081,12 +3082,31 @@ api.get('/suscripcion', requireAuth, requireStore, async (req, res) => {
   res.json({ suscripcion: estadoSuscripcion(req.user!.storeId!) });
 });
 
+// Pagos en línea apagados: responde "pago offline" con el WhatsApp de DealFlow (true = ya respondió).
+async function pagoOffline(req: ExRequest, res: ExResponse, concepto: string): Promise<boolean> {
+  const P = await import('./pagosOffline.js');
+  if (!P.cfgPagos().offline) return false;
+  const st = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(req.user!.storeId) as { nombre: string } | undefined;
+  res.status(402).json(P.respuestaOffline(concepto, st?.nombre || ''));
+  return true;
+}
+api.get('/admin/pagos', requireAuth, requireSuperAdmin, async (_req, res) => {
+  const P = await import('./pagosOffline.js');
+  res.json({ ...P.cfgPagos(), numeroLanding: (process.env.LANDING_WA || '').replace(/\D/g, ''), wompiListo: !!(process.env.WOMPI_PUBLIC_KEY && process.env.WOMPI_INTEGRITY) });
+});
+api.put('/admin/pagos', requireAuth, requireSuperAdmin, async (req, res) => {
+  const P = await import('./pagosOffline.js');
+  res.json({ ...P.guardarCfgPagos(req.body || {}), numeroLanding: (process.env.LANDING_WA || '').replace(/\D/g, ''), wompiListo: !!(process.env.WOMPI_PUBLIC_KEY && process.env.WOMPI_INTEGRITY) });
+});
+
 api.post('/suscripcion/checkout', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { crearCheckout } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const base = `${proto}://${req.get('host')}`;
   const r = crearCheckout(req.user!.storeId!, req.user!.email, base, req.body?.plan, req.body?.cupon);
   if (r.error) return res.status(400).json({ error: r.error });
+  // Con cupón al 100 % se activa sin Wompi; si hay que cobrar y los pagos están apagados, es offline.
+  if (r.url && (await pagoOffline(req, res, `mi plan de DealFlow${req.body?.plan ? ` (${String(req.body.plan)})` : ''}`))) return;
   res.json({ url: r.url, gratis: r.gratis });
 });
 
@@ -3655,6 +3675,7 @@ api.post('/biblioteca/:id/checkout', requireAuth, requireStore, requireOwner, as
   const base = `${proto}://${req.get('host')}`;
   const r = crearCheckoutBiblioteca(req.user!.storeId!, req.user!.email, base, req.params.id);
   if (r.error) return res.status(400).json({ error: r.error });
+  if (await pagoOffline(req, res, 'un producto de la Biblioteca')) return;
   res.json({ url: r.url });
 });
 
@@ -3733,6 +3754,7 @@ api.post('/landings/membresia/pagar', requireAuth, requireStore, async (req, res
   const m = L.membresiaTienda(req.user!.storeId!);
   // Gratis (precio $0): no hay nada que cobrar, ya está activa.
   if (m.precio <= 0) return res.json({ gratis: true });
+  if (await pagoOffline(req, res, 'la membresía de Tienda en línea')) return;
   const r = crearCheckoutTiendaOnline(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, m.precio);
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ url: r.url });

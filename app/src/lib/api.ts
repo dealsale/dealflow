@@ -103,7 +103,12 @@ async function reqBase<T>(url: string, method: string, body?: unknown): Promise<
     });
     const ct = r.headers.get('content-type') || '';
     const b = ct.includes('application/json') ? await r.json() : {};
-    if (!r.ok) return { error: (b as { error?: string }).error || 'Algo salió mal. Intenta de nuevo.' };
+    if (!r.ok) {
+      const e = b as { error?: string; offline?: boolean; whatsapp?: string };
+      // Pagos en línea apagados: se abre el aviso de pago offline con el WhatsApp de DealFlow.
+      if (e.offline) void import('../components/PagoOffline').then((m) => m.avisarPagoOffline({ mensaje: e.error || '', whatsapp: e.whatsapp || '' }));
+      return { error: e.error || 'Algo salió mal. Intenta de nuevo.' };
+    }
     return { data: b as T };
   } catch {
     return { error: 'No pudimos hablar con el servidor. Revisa tu conexión.' };
@@ -996,4 +1001,7 @@ export const apiAdminSoporte = () => req<CfgSoporteAdmin>('/api/admin/soporte-ch
 export const apiAdminGuardarSoporte = (b: Partial<{ activo: boolean; modo: string; url: string; token: string; nombre: string; bienvenida: string; instrucciones: string }>) => req<CfgSoporteAdmin>('/api/admin/soporte-chat', 'PUT', b);
 export const apiSkyClavePropia = () => req<{ activo: boolean }>('/api/integraciones-ia/sky', 'GET');
 export const apiGuardarSkyClavePropia = (activo: boolean) => req<{ activo: boolean }>('/api/integraciones-ia/sky', 'PUT', { activo });
+export interface CfgPagosAdmin { offline: boolean; whatsapp: string; numeroLanding: string; wompiListo: boolean }
+export const apiAdminPagos = () => req<CfgPagosAdmin>('/api/admin/pagos', 'GET');
+export const apiAdminGuardarPagos = (b: Partial<{ offline: boolean; whatsapp: string }>) => req<CfgPagosAdmin>('/api/admin/pagos', 'PUT', b);
 export const apiAdminProbarSoporte = () => req<{ respuesta: string }>('/api/admin/soporte-chat/probar', 'POST');

@@ -3,7 +3,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
 import { confirmar } from '../../components/dialogs';
-import { apiAdminTiendaOnline, apiAdminAjustarTiendaOnline, type MembresiaTienda, apiAdminSoporte, apiAdminGuardarSoporte, apiAdminProbarSoporte, type CfgSoporteAdmin } from '../../lib/api';
+import { apiAdminTiendaOnline, apiAdminAjustarTiendaOnline, type MembresiaTienda, apiAdminSoporte, apiAdminGuardarSoporte, apiAdminProbarSoporte, type CfgSoporteAdmin, apiAdminPagos, apiAdminGuardarPagos, type CfgPagosAdmin } from '../../lib/api';
 import { apiSeguridad, type PuntoSeguridad, type AccesoEquipo, apiAdminCorreo, apiAdminCorreoPrueba, type EstadoCorreo } from '../../lib/api';
 import { apiCifrado, apiPapelera, apiPapeleraRestaurar, apiRespaldoEliminar, apiPapeleraEliminar, type EspacioDisco, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
 
@@ -140,6 +140,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
       )}
       {df.isSuperadmin && <SeguridadEquipo />}
       {df.isSuperadmin && <CorreosServidor />}
+      {df.isSuperadmin && <PagosAdmin />}
       {df.isSuperadmin && <AsistenteSoporteAdmin />}
       {df.isSuperadmin && <PapeleraYCopias df={df} />}
     </section>
@@ -596,6 +597,43 @@ function CorreosServidor() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Pagos en línea (Wompi) encendidos o apagados; apagados, las tiendas ven "pago offline" con el WhatsApp. */
+function PagosAdmin() {
+  const [c, setC] = useState<CfgPagosAdmin | null>(null);
+  const [wa, setWa] = useState('');
+  const [msg, setMsg] = useState('');
+  useEffect(() => { void apiAdminPagos().then((r) => { if (r.data) { setC(r.data); setWa(r.data.whatsapp); } }); }, []);
+  const guardar = async (b: Partial<{ offline: boolean; whatsapp: string }>) => {
+    setMsg('Guardando…');
+    const r = await apiAdminGuardarPagos(b);
+    if (r.data) { setC(r.data); setWa(r.data.whatsapp); setMsg('✓ Guardado.'); } else setMsg(r.error || 'No se pudo guardar.');
+  };
+  if (!c) return null;
+  const numero = c.whatsapp || c.numeroLanding;
+  return (
+    <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 20 }}>
+      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>💳 Pagos en línea (Wompi)</div>
+      <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
+        {c.offline
+          ? <>Apagados: cuando una tienda va a pagar (plan, renta, Tienda en línea, Biblioteca o créditos) ve que el pago es <b>offline</b> y un botón para escribir por WhatsApp. Lo gratis (cupones al 100 %, membresías en $0) sigue funcionando.</>
+          : <>Encendidos: los pagos abren Wompi.{!c.wompiListo && <b style={{ color: 'var(--df-danger)' }}> Faltan las llaves de Wompi en el servidor.</b>}</>}
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
+        <input type="checkbox" checked={!c.offline} onChange={(e) => void guardar({ offline: !e.target.checked })} /> Cobrar con Wompi
+      </label>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 14 }}>
+        <div style={{ flex: '1 1 240px' }}>
+          <div style={labelStyle}>WhatsApp para pagos offline</div>
+          <input className="df-input" value={wa} onChange={(e) => setWa(e.target.value)} placeholder={c.numeroLanding ? `El de la landing: ${c.numeroLanding}` : '573001234567'} style={inputStyle} />
+          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 4 }}>{numero ? `Se usa el ${numero}${c.whatsapp ? '' : ' (el mismo de la landing)'}.` : 'No hay número: pon uno con indicativo (57…).'} Vacío = el de la landing.</div>
+        </div>
+        <button onClick={() => void guardar({ whatsapp: wa })} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Guardar</button>
+      </div>
+      {msg && <div style={{ fontSize: 12.5, marginTop: 8, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : msg.endsWith('…') ? 'var(--df-text-muted)' : 'var(--df-danger)' }}>{msg}</div>}
     </div>
   );
 }
