@@ -287,7 +287,12 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                     <Select label="Transportadora" value={guia.transportadora} onChange={(v) => setGuia({ transportadora: v, servicio: '', formaPagoFlete: '' })} opciones={listas.transportadoras.map((t) => ({ id: t.id, nombre: t.effi ? `${t.nombre} (Effi: ${t.effi})` : t.nombre }))} />
                     <Select label="Servicio" value={guia.servicio} onChange={(v) => setGuia({ servicio: v })} opciones={transp?.servicios || []} />
                     <Select label="Pago del flete" value={guia.formaPagoFlete} onChange={(v) => setGuia({ formaPagoFlete: v })} opciones={transp?.formasPago || []} />
-                    <Select label="Remitente" value={guia.remitente} onChange={(v) => setGuia({ remitente: v })} opciones={listas.remitentes} />
+                    <div>
+                      <Select label="Remitente (bodega de origen)" value={listas.remitentes.some((r) => r.id === guia.remitente) ? guia.remitente : ''} onChange={(v) => setGuia({ remitente: v })} opciones={listas.remitentes} />
+                      {guia.remitente && !listas.remitentes.some((r) => r.id === guia.remitente)
+                        ? <div style={{ fontSize: 11.5, color: 'var(--df-danger-dark)', marginTop: 4 }}>El remitente guardado (#{guia.remitente}) ya no existe en tu Effi: elige otro y guarda.</div>
+                        : <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 4 }}>Todas las guías automáticas salen de aquí: revisa la ciudad y la dirección.</div>}
+                    </div>
                     <div><label style={lbl}>Peso (kg)</label><input type="number" min={0.1} step={0.1} value={guia.peso} onChange={(e) => setGuia({ peso: Number(e.target.value) })} style={inp} /></div>
                     <div><label style={lbl}>Peso volumétrico (kg)</label><input type="number" min={0.1} step={0.1} value={guia.volumen} onChange={(e) => setGuia({ volumen: Number(e.target.value) })} style={inp} /></div>
                     <div><label style={lbl}>Alto × ancho × largo (cm)</label>
