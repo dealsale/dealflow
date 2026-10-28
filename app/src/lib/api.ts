@@ -977,3 +977,4 @@ export const apiDireccionPedido = (rowId: string, direccion: string) => req<{ ok
 export const apiSugerirDireccion = (rowId: string) => reqBase<{ sugerida?: string; error?: string }>(`/api/orders/${rowId}/direccion/sugerir`, 'POST');
 export const apiAdminTiendaOnline = (storeId: string) => req<MembresiaTienda>(`/api/admin/stores/${storeId}/tienda-online`, 'GET');
 export const apiAdminAjustarTiendaOnline = (storeId: string, dias: number, apagar = false) => req<MembresiaTienda>(`/api/admin/stores/${storeId}/tienda-online`, 'POST', { dias, apagar });
+export const apiEffiAnular = (rowId: string, motivo: string) => reqBase<{ ok: true; remision: string; guias: string[] }>(`/api/orders/${rowId}/effi/anular`, 'POST', { motivo });
