@@ -114,3 +114,14 @@ export function descifrarArchivoSync(origen: string, destino: string): void {
   d.setAuthTag(b.subarray(b.length - 16));
   writeFileSync(destino, Buffer.concat([d.update(b.subarray(MAGIA.length + 12, b.length - 16)), d.final()]));
 }
+
+/** Contenido descifrado (en memoria) de un archivo; si no está cifrado, lo devuelve tal cual. */
+export function leerArchivoDescifrado(ruta: string): Buffer {
+  const b = readFileSync(ruta);
+  if (!b.subarray(0, MAGIA.length).equals(MAGIA)) return b;
+  const k = llave();
+  if (!k) throw new Error('Este archivo está cifrado y falta DATA_ENCRYPTION_KEY en el servidor.');
+  const d = createDecipheriv('aes-256-gcm', k, b.subarray(MAGIA.length, MAGIA.length + 12));
+  d.setAuthTag(b.subarray(b.length - 16));
+  return Buffer.concat([d.update(b.subarray(MAGIA.length + 12, b.length - 16)), d.final()]);
+}

@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import type { AdminSection, VendedorSection } from '../types';
 
 const VENDEDOR: VendedorSection[] = ['resumen', 'estadisticas', 'productos', 'asistente', 'whatsapp', 'logistica', 'pedidos', 'leads', 'crm', 'equipo', 'marketing', 'dealshop', 'biblioteca', 'integraciones', 'landings'];
-const ADMIN: AdminSection[] = ['ventas', 'planes', 'cuentas', 'cupones', 'superadmin', 'biblioteca', 'plantillas', 'trazabilidad', 'proveedores'];
+const ADMIN: AdminSection[] = ['contabilidad', 'planes', 'cuentas', 'cupones', 'superadmin', 'biblioteca', 'plantillas', 'trazabilidad', 'proveedores'];
 // Nombre en la URL distinto al interno (más claro para el usuario).
 const A_URL: Partial<Record<VendedorSection, string>> = { crm: 'inbox', landings: 'tienda-en-linea' };
 const DE_URL: Record<string, VendedorSection> = { inbox: 'crm', 'tienda-en-linea': 'landings' };
@@ -35,7 +35,9 @@ export function leerRuta(loc: Location = window.location): Ruta {
   const partes = loc.pathname.split('/').filter(Boolean).map((p) => decodeURIComponent(p).toLowerCase());
   const q = new URLSearchParams(loc.search);
   const r: Ruta = {};
-  if (partes[0] === 'admin' && ADMIN.includes(partes[1] as AdminSection)) { r.mode = 'admin'; r.adminSection = partes[1] as AdminSection; }
+  // /admin/ventas era la sección anterior: ahora es Contabilidad.
+  if (partes[0] === 'admin' && partes[1] === 'ventas') { r.mode = 'admin'; r.adminSection = 'contabilidad'; }
+  else if (partes[0] === 'admin' && ADMIN.includes(partes[1] as AdminSection)) { r.mode = 'admin'; r.adminSection = partes[1] as AdminSection; }
   else if (partes[0]) {
     const s = (DE_URL[partes[0]] || partes[0]) as VendedorSection;
     if (VENDEDOR.includes(s)) { r.mode = 'vendedor'; r.section = s; }
@@ -52,7 +54,7 @@ export function leerRuta(loc: Location = window.location): Ruta {
 
 /** Construye la URL de un estado de la app. */
 export function urlDe(r: Ruta): string {
-  const path = r.mode === 'admin' ? `/admin/${r.adminSection || 'ventas'}` : `/${A_URL[r.section || 'resumen'] || r.section || 'resumen'}`;
+  const path = r.mode === 'admin' ? `/admin/${r.adminSection || 'contabilidad'}` : `/${A_URL[r.section || 'resumen'] || r.section || 'resumen'}`;
   const q = new URLSearchParams();
   if (r.pedido) q.set('pedido', r.pedido);
   if (r.chat && r.mode !== 'admin' && r.section === 'crm') q.set('chat', r.chat);

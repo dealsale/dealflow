@@ -1001,6 +1001,28 @@ export const apiAdminSoporte = () => req<CfgSoporteAdmin>('/api/admin/soporte-ch
 export const apiAdminGuardarSoporte = (b: Partial<{ activo: boolean; modo: string; url: string; token: string; nombre: string; bienvenida: string; instrucciones: string }>) => req<CfgSoporteAdmin>('/api/admin/soporte-chat', 'PUT', b);
 export const apiSkyClavePropia = () => req<{ activo: boolean }>('/api/integraciones-ia/sky', 'GET');
 export const apiGuardarSkyClavePropia = (activo: boolean) => req<{ activo: boolean }>('/api/integraciones-ia/sky', 'PUT', { activo });
+// ── Contabilidad (administración) ──
+export interface ArchivoConta { id: string; nombre: string; mime: string; tamano: number; created_at: string }
+export interface MovimientoConta {
+  id: string; tipo: 'ingreso' | 'egreso'; categoria: string; fecha: string; concepto: string; tercero: string; tercero_doc: string; store_id: string;
+  valor: number; base: number; iva: number; retencion: number; medio: string; documento: string; origen: 'manual' | 'wompi'; referencia: string; notas: string;
+  estado: 'vigente' | 'anulado'; motivo_anulacion: string; creado_por: string; created_at: string; archivos: ArchivoConta[];
+}
+export interface Contabilidad {
+  movimientos: MovimientoConta[];
+  resumen: { ingresos: number; egresos: number; utilidad: number; ivaGenerado: number; ivaDescontable: number; retencionesPracticadas: number; retencionesQueTeHicieron: number; sinComprobante: number };
+  porCategoria: { categoria: string; tipo: string; valor: number; n: number }[];
+  porMes: { mes: string; ingresos: number; egresos: number }[];
+  categorias: { ingreso: string[]; egreso: string[] }; medios: string[]; tiendas: { id: string; nombre: string }[];
+}
+export const apiContabilidad = (q: Record<string, string>) => reqBase<Contabilidad>(`/api/admin/contabilidad?${new URLSearchParams(q)}`, 'GET');
+export const apiContaMovimiento = (id: string) => reqBase<{ movimiento: MovimientoConta }>(`/api/admin/contabilidad/movimiento/${id}`, 'GET');
+export const apiContaCrear = (b: Partial<MovimientoConta>) => req<{ id: string }>('/api/admin/contabilidad', 'POST', b);
+export const apiContaEditar = (id: string, b: Partial<MovimientoConta>) => req<{ ok: true }>(`/api/admin/contabilidad/${id}`, 'PUT', b);
+export const apiContaAnular = (id: string, motivo: string, restaurar = false) => req<{ ok: true }>(`/api/admin/contabilidad/${id}/anular`, 'POST', { motivo, restaurar });
+export const apiContaEliminar = (id: string) => req<{ ok: true }>(`/api/admin/contabilidad/${id}`, 'DELETE');
+export const apiContaAdjuntar = (id: string, dataUrl: string, nombre: string) => req<{ id: string }>(`/api/admin/contabilidad/${id}/adjuntos`, 'POST', { dataUrl, nombre });
+export const apiContaQuitarAdjunto = (id: string) => req<{ ok: true }>(`/api/admin/contabilidad/adjuntos/${id}`, 'DELETE');
 export interface RemitenteAuditado { codigo: string; nombre: string; ciudad: string; direccion: string; vigente: boolean; configurado: boolean; effi: { guias: number; entregadas: number; devoluciones: number; conNovedad: number } | null; dealflow: number; porRecoger: { numero: string; guia: string; estado: string; fecha: string; transportadora: string }[] }
 export interface AuditoriaRemitentes { storeId: string; tienda: string; configurado: string; guiaAutomatica: boolean; remitentes: RemitenteAuditado[]; error?: string }
 export const apiAdminAuditoriaRemitentes = () => reqBase<{ tiendas: AuditoriaRemitentes[] }>('/api/admin/auditoria-remitentes', 'GET');

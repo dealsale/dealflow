@@ -22,7 +22,7 @@ const VENDOR_ITEMS: { id: VendedorSection; label: string }[] = [
 ];
 
 const ADMIN_ITEMS: { id: AdminSection; label: string }[] = [
-  { id: 'ventas', label: 'Ventas' },
+  { id: 'contabilidad', label: 'Contabilidad' },
   { id: 'planes', label: 'Planes' },
   { id: 'cuentas', label: 'Cuentas' },
   { id: 'cupones', label: 'Cupones' },
