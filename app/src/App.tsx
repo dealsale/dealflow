@@ -11,6 +11,7 @@ import { ManualOrderModal } from './components/ManualOrderModal';
 import { CompletarPedidoModal } from './components/CompletarPedidoModal';
 import { EditarPedidoModal } from './components/EditarPedidoModal';
 import { Trazabilidad } from './sections/admin/Trazabilidad';
+import { AsistenteSoporte } from './components/AsistenteSoporte';
 import { Proveedores } from './sections/admin/Proveedores';
 import { Dropdown } from './components/Dropdown';
 import { apiSoporteTiendas, apiSoporteCambiar } from './lib/api';
@@ -409,6 +410,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
       </div>
 
       {df.floatingNav && <FloatingNav df={df} />}
+      <AsistenteSoporte usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} />
       <OrderDetailPanel df={df} />
       <OrderToast df={df} />
       <ManualOrderModal df={df} open={df.crearPedidoAbierto} onClose={df.cerrarCrearPedido} prefill={df.crearPedidoPrefill} />
@@ -456,6 +458,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
       </main>
 
       {df.floatingNav && <FloatingNav df={df} />}
+      <AsistenteSoporte mobile usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} />
       <MobileDrawer df={df} />
       <MobileChat df={df} />
       <MobileOrderSheet df={df} />

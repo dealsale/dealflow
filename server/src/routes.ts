@@ -1577,6 +1577,43 @@ api.post('/logistica/effi/actualizar', requireAuth, requireStore, async (req, re
   res.json({ ...tableroLogistica(req.user!.storeId!, Number(req.body?.dias) || 45), revisadas: r.revisadas });
 });
 // Convenios ya conocidos (rápido, sin consultar Effi): para elegir uno al despachar.
+// Asistente de soporte flotante (agente externo: Dify o webhook propio, lo configura DealFlow).
+const frenoSoporte = new Map<string, number[]>();
+const contextoSoporte = (req: ExRequest, seccion: string) => {
+  const st = req.user!.storeId ? db.prepare('SELECT nombre, plan FROM stores WHERE id = ?').get(req.user!.storeId) as { nombre: string; plan: string } | undefined : undefined;
+  return { userId: req.user!.id, nombre: req.user!.nombre, email: req.user!.email, rol: req.user!.role, storeId: req.user!.storeId || '', tienda: st?.nombre || '', plan: st?.plan || '', seccion: String(seccion || '').slice(0, 40) };
+};
+api.get('/soporte/config', requireAuth, async (_req, res) => {
+  const { cfgSoportePublica } = await import('./soporteChat.js');
+  const c = cfgSoportePublica();
+  res.json({ listo: c.listo, nombre: c.nombre, bienvenida: c.bienvenida });
+});
+api.post('/soporte/chat', requireAuth, async (req, res) => {
+  // Máximo 20 mensajes por minuto por usuario.
+  const ahora = Date.now();
+  const marcas = (frenoSoporte.get(req.user!.id) || []).filter((t) => ahora - t < 60e3);
+  if (marcas.length >= 20) return res.status(429).json({ error: 'Vas muy rápido. Espera un momento y vuelve a preguntar.' });
+  marcas.push(ahora); frenoSoporte.set(req.user!.id, marcas);
+  const { preguntarSoporte } = await import('./soporteChat.js');
+  const r = await preguntarSoporte(String(req.body?.mensaje || ''), String(req.body?.conversacion || '').slice(0, 200), contextoSoporte(req, String(req.body?.seccion || '')));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.get('/admin/soporte-chat', requireAuth, requireAdmin, async (_req, res) => {
+  res.json((await import('./soporteChat.js')).cfgSoportePublica());
+});
+api.put('/admin/soporte-chat', requireAuth, requireAdmin, async (req, res) => {
+  const S = await import('./soporteChat.js');
+  try { res.json(S.cfgSoportePublica(S.guardarCfgSoporte(req.body || {}))); } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+});
+api.post('/admin/soporte-chat/probar', requireAuth, requireAdmin, async (req, res) => {
+  const { preguntarSoporte, cfgSoporte } = await import('./soporteChat.js');
+  if (!cfgSoporte().url) return res.status(400).json({ error: 'Pon primero la URL del agente.' });
+  const r = await preguntarSoporte('Hola, esto es una prueba de conexión desde DealFlow. Responde con un saludo corto.', '', contextoSoporte(req, 'admin'), true);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+
 // Portal de proveedores: el equipo de DealFlow crea las cuentas y les vincula convenios de Effi.
 api.get('/admin/proveedores', requireAuth, requireAdmin, (_req, res) => res.json(listarProveedores()));
 api.post('/admin/proveedores', requireAuth, requireAdmin, (req, res) => {

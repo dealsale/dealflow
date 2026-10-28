@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { setAsistenteVisible, useAsistenteVisible, useSoporteConfig } from './AsistenteSoporte';
 import { cambiarIdiomaUI, idiomaUI, type IdiomaUI } from '../i18n/traductor';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
@@ -133,6 +134,8 @@ function PasswordForm({ df }: { df: DealFlowState }) {
  * desplegable siempre usa los colores del tema (es una tarjeta flotante normal).
  */
 export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: boolean }) {
+  const soporte = useSoporteConfig();
+  const soporteVisible = useAsistenteVisible();
   const [open, setOpen] = useState(false);
   const [editandoNombre, setEditandoNombre] = useState(false);
   const [nombreDraft, setNombreDraft] = useState(df.sessionUser?.nombre || '');
@@ -290,6 +293,18 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
             <span style={{ flex: 1 }}>Menú flotante</span>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: df.floatingNav ? 'var(--df-brand-dark)' : 'var(--df-text-faint)' }}>{df.floatingNav ? 'Activado' : 'Desactivado'}</span>
           </div>
+
+          {soporte?.listo && (
+            <div
+              onClick={() => setAsistenteVisible(!soporteVisible)}
+              className="df-row-hover"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 16px', fontSize: 13, fontWeight: 700, color: soporteVisible ? 'var(--df-brand-dark)' : 'var(--df-text)', cursor: 'pointer', borderBottom: '1px solid var(--df-border)' }}
+            >
+              <span>💬</span>
+              <span style={{ flex: 1 }}>{soporte.nombre}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: soporteVisible ? 'var(--df-brand-dark)' : 'var(--df-text-faint)' }}>{soporteVisible ? 'Visible' : 'Oculto'}</span>
+            </div>
+          )}
 
           {df.pwaDisponible && (
             <div
