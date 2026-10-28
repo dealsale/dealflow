@@ -1918,6 +1918,12 @@ api.get('/orders/:rowId/effi/preview', requireAuth, requireStore, requireOwner, 
   if ('error' in r) return res.status(400).json({ error: r.error, convenios });
   res.json({ lineas: r.lineas, ubicacion: r.ubic.nombre, avisos: r.avisos, total: (r.body.valor_forma_pago as number[])[0], remision: r.body, convenio: String(r.body.convenio_dropshipping ?? ''), convenios });
 });
+// Historial de entregas del cliente (red DealFlow: solo conteos; y Effi de la tienda).
+api.get('/orders/:rowId/historial-cliente', requireAuth, requireStore, async (req, res) => {
+  const h = await (await import('./historialCliente.js')).historialCliente(req.user!.storeId!, String(req.params.rowId));
+  if (!h) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  res.json(h);
+});
 // Anular en Effi la guía y la remisión del pedido (para corregirlo y volver a despacharlo).
 api.post('/orders/:rowId/effi/anular', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');

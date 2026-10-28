@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { OrdenarDireccion } from './DireccionPedido';
+import { HistorialClienteCard } from './HistorialCliente';
 import { confirmar, pedirTexto, notificar } from './dialogs';
 import { enProceso, ProcesoPedido } from './Proceso';
 import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
@@ -652,6 +653,8 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
               </div>
             ))}
           </div>
+
+          <HistorialClienteCard rowId={sel.rowId} tel={sel.tel} />
 
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Qué pidió</div>
           <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, overflow: 'hidden', marginBottom: 18 }}>

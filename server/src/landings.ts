@@ -649,6 +649,7 @@ export async function pedidoLanding(landingId: string, b: Fila, ip: string): Pro
   db.prepare('UPDATE landings SET pedidos = pedidos + 1 WHERE id = ?').run(landingId);
   trazar(storeId, oid, { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numero} creado desde la landing «${d.nombre}»`, detalle: txt(b.url).slice(0, 200), datos: { cliente: nombre, tel, ciudad, departamento, total: bundle.precio, oferta: bundle.titulo, productos: [...grupos].map(([v, q]) => `${q}× ${d.nombre}${v ? ` (${v})` : ''}`) } });
   registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numero} llegó de la landing «${d.nombre}» (${nombre}).`);
+  void import('./historialCliente.js').then((h) => h.avisarSiRiesgo(storeId, oid, tel, numero)).catch(() => {});
   void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido de tu landing DF-${numero} 🛒`, `${nombre} · ${pesos(bundle.precio)}`, { url: '/pedidos' })).catch(() => {});
   void import('./correo.js').then((c) => c.correoPedidoNuevo(storeId, oid, 'Landing')).catch(() => {});
   if (d.confirmarWhatsapp) void import('./shopifyPedidos.js').then((m) => m.enviarConfirmacion(storeId, oid)).catch(() => {});

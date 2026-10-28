@@ -978,3 +978,10 @@ export const apiSugerirDireccion = (rowId: string) => reqBase<{ sugerida?: strin
 export const apiAdminTiendaOnline = (storeId: string) => req<MembresiaTienda>(`/api/admin/stores/${storeId}/tienda-online`, 'GET');
 export const apiAdminAjustarTiendaOnline = (storeId: string, dias: number, apagar = false) => req<MembresiaTienda>(`/api/admin/stores/${storeId}/tienda-online`, 'POST', { dias, apagar });
 export const apiEffiAnular = (rowId: string, motivo: string) => reqBase<{ ok: true; remision: string; guias: string[] }>(`/api/orders/${rowId}/effi/anular`, 'POST', { motivo });
+export interface HistorialCliente {
+  celular: string;
+  red: { pedidos: number; entregados: number; devueltos: number; cancelados: number; enCurso: number };
+  effi: { guias: number; entregadas: number; devoluciones: number; conNovedad: number } | null;
+  efectividad: number | null; riesgo: 'nuevo' | 'bajo' | 'medio' | 'alto'; resumen: string;
+}
+export const apiHistorialCliente = (rowId: string) => reqBase<HistorialCliente>(`/api/orders/${rowId}/historial-cliente`, 'GET');
