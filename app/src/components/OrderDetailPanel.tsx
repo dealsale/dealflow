@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { OrdenarDireccion } from './DireccionPedido';
-import { HistorialClienteCard } from './HistorialCliente';
+import { HistorialClienteCard, useHistorialCliente, confirmarSiDevolvio, AvisoDevolucionPropia } from './HistorialCliente';
 import { confirmar, pedirTexto, notificar } from './dialogs';
 import { enProceso, ProcesoPedido } from './Proceso';
 import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
@@ -19,6 +19,7 @@ const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
  * la orden en Dropi con la elegida.
  */
 export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: DecoratedOrder; onHecho?: () => void }) {
+  const hist = useHistorialCliente(sel.rowId, sel.tel);
   const [paso, setPaso] = useState<'idle' | 'cargando' | 'elegir' | 'creando'>('idle');
   const [ciudad, setCiudad] = useState('');
   const [disponibles, setDisponibles] = useState<DropiTransportadora[]>([]);
@@ -38,8 +39,9 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
       setPaso('elegir'); setMsg('');
     });
   };
-  const crear = () => {
+  const crear = async () => {
     if (!sel.rowId) return;
+    if (!(await confirmarSiDevolvio(hist))) return;
     setPaso('creando'); setMsg('');
     void enProceso('Creando la orden en Dropi…', () => apiDropiCrear(sel.rowId!, auto ? undefined : (elegida || undefined), false, recaudo), 'pedido').then((r) => {
       if (r.error || !r.data) { setPaso('elegir'); setMsg(r.error || 'No pudimos crear la orden.'); return; }
@@ -119,6 +121,7 @@ const btnS: React.CSSProperties = { background: 'var(--df-surface)', border: '1p
 
 /** Effi por API: revisar lo que se va a enviar y crear la remisión (+ guía). */
 function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; sel: DecoratedOrder; reintentar: boolean; onHecho: () => void }) {
+  const hist = useHistorialCliente(sel.rowId, sel.tel);
   const [paso, setPaso] = useState<'idle' | 'revisando' | 'listo' | 'enviando'>('idle');
   const [prev, setPrev] = useState<EffiPreview | null>(null);
   const [msg, setMsg] = useState('');
@@ -143,6 +146,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
   const hacerGuia = !guiaAuto && conGuia;
   const enviar = async () => {
     if (!sel.rowId) return;
+    if (!(await confirmarSiDevolvio(hist))) return;
     if (hacerGuia && !g.listo) { setMsg('Elige transportadora, servicio, pago del flete y remitente (o desmarca "Crear también la guía").'); return; }
     setPaso('enviando'); setMsg('');
     // Todo el despacho en la ventana de "procesando": nadie puede tocar nada a mitad.
@@ -496,6 +500,7 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
 /** Bloque de despacho del pedido: elegir proveedor (Effi / Dropi) o ver el envío ya hecho. */
 export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   const [redespachar, setRedespachar] = useState(false);
+  const histDespacho = useHistorialCliente(sel.despachado ? undefined : sel.rowId, sel.tel);
   const effiApiListo = !!df.effiApi.listo;
   const effiOk = effiApiListo;
   const dropiOk = !!df.dropiConectado;
@@ -573,6 +578,7 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
 
   return (
     <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: 14, marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <AvisoDevolucionPropia h={histDespacho} />
       {redespachar && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-warning-subtle-2)', border: '1px solid var(--df-warning-border)', borderRadius: 9, padding: '8px 10px' }}>
           <span style={{ fontSize: 12.5, color: 'var(--df-warning)', fontWeight: 600, flex: 1 }}>Vas a despachar otra vez este pedido.</span>
