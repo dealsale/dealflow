@@ -600,12 +600,12 @@ function CorreosServidor() {
   );
 }
 
-/** Asistente de soporte flotante: a qué agente (Dify o webhook propio) le pregunta el chat del panel. */
+/** Asistente de soporte flotante SKY: con qué IA responde (DeepSeek, Dify o webhook propio) y sus instrucciones. */
 function AsistenteSoporteAdmin() {
   const [c, setC] = useState<CfgSoporteAdmin | null>(null);
-  const [f, setF] = useState({ activo: false, modo: 'dify', url: '', token: '', nombre: '', bienvenida: '' });
+  const [f, setF] = useState({ activo: false, modo: 'deepseek', url: '', token: '', nombre: '', bienvenida: '', instrucciones: '' });
   const [msg, setMsg] = useState('');
-  useEffect(() => { void apiAdminSoporte().then((r) => { if (r.data) { setC(r.data); setF({ activo: r.data.activo, modo: r.data.modo, url: r.data.url, token: '', nombre: r.data.nombre, bienvenida: r.data.bienvenida }); } }); }, []);
+  useEffect(() => { void apiAdminSoporte().then((r) => { if (r.data) { setC(r.data); setF({ activo: r.data.activo, modo: r.data.modo, url: r.data.url, token: '', nombre: r.data.nombre, bienvenida: r.data.bienvenida, instrucciones: r.data.instrucciones }); } }); }, []);
   const guardar = async () => {
     setMsg('Guardando…');
     const r = await apiAdminGuardarSoporte(f);
@@ -621,22 +621,24 @@ function AsistenteSoporteAdmin() {
   );
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 20 }}>
-      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>💬 Asistente de soporte (web chat flotante)</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 16, marginBottom: 4 }}><img src="/sky.webp" alt="" width={30} height={30} /> Asistente de soporte (web chat flotante)</div>
       <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 14 }}>Botón flotante en el panel de todas las tiendas para dudas de DealFlow, Meta y marketing. Cada usuario lo puede ocultar y volver a mostrar desde su perfil. {c?.listo ? <b style={{ color: 'var(--df-brand-dark)' }}>Activo.</b> : <b>Inactivo.</b>}</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-        {campo('Tipo de conexión', <Dropdown value={f.modo} onChange={(v) => setF({ ...f, modo: v })} options={[{ value: 'dify', label: 'Dify (API de chat)' }, { value: 'webhook', label: 'Webhook propio' }]} />,
-          f.modo === 'dify' ? 'URL base de la API, ej. https://api.dify.ai/v1 (se llama a /chat-messages).' : 'Se le envía {mensaje, conversacion, usuario, tienda, seccion} y debe responder {respuesta, conversacion}.')}
-        {campo(f.modo === 'dify' ? 'URL de la API' : 'URL del webhook', <input className="df-input" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder={f.modo === 'dify' ? 'https://api.dify.ai/v1' : 'https://…'} style={inputStyle} />)}
-        {campo('Clave de la API (Bearer)', <input className="df-input" type="password" value={f.token} onChange={(e) => setF({ ...f, token: e.target.value })} placeholder={c?.tokenPuesto ? '•••••• guardada (vacío = no cambiarla)' : 'app-…'} style={inputStyle} />, 'Se guarda cifrada; el navegador de las tiendas nunca la ve.')}
+        {campo('IA que responde', <Dropdown value={f.modo} onChange={(v) => setF({ ...f, modo: v })} options={[{ value: 'deepseek', label: 'DeepSeek' }, { value: 'dify', label: 'Dify (API de chat)' }, { value: 'webhook', label: 'Webhook propio' }]} />,
+          f.modo === 'deepseek' ? 'Responde con las instrucciones de abajo y recuerda la conversación.' : f.modo === 'dify' ? 'URL base de la API, ej. https://api.dify.ai/v1 (se llama a /chat-messages).' : 'Se le envía {mensaje, conversacion, usuario, tienda, seccion} y debe responder {respuesta, conversacion}.')}
+        {f.modo !== 'deepseek' && campo(f.modo === 'dify' ? 'URL de la API' : 'URL del webhook', <input className="df-input" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder={f.modo === 'dify' ? 'https://api.dify.ai/v1' : 'https://…'} style={inputStyle} />)}
+        {campo(f.modo === 'deepseek' ? 'API key de DeepSeek' : 'Clave de la API (Bearer)', <input className="df-input" type="password" value={f.token} onChange={(e) => setF({ ...f, token: e.target.value })} placeholder={c?.tokenPuesto ? '•••••• guardada (vacío = no cambiarla)' : f.modo === 'deepseek' ? (c?.claveServidor ? 'Opcional: usa la del servidor' : 'sk-…') : 'app-…'} style={inputStyle} />,
+          f.modo === 'deepseek' && c?.claveServidor && !c.tokenPuesto ? 'Vacía = usa la clave DeepSeek que ya tiene el servidor. Se guarda cifrada.' : 'Se guarda cifrada; el navegador de las tiendas nunca la ve.')}
         {campo('Nombre del asistente', <input className="df-input" value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} style={inputStyle} />)}
       </div>
       <div style={{ marginTop: 12 }}>{campo('Mensaje de bienvenida', <textarea className="df-input" value={f.bienvenida} onChange={(e) => setF({ ...f, bienvenida: e.target.value })} rows={2} style={{ ...inputStyle, resize: 'vertical' }} />)}</div>
+      {f.modo === 'deepseek' && <div style={{ marginTop: 12 }}>{campo('Instrucciones de SKY (prompt)', <textarea className="df-input" value={f.instrucciones} onChange={(e) => setF({ ...f, instrucciones: e.target.value })} rows={10} style={{ ...inputStyle, resize: 'vertical', fontSize: 12.5, lineHeight: 1.5 }} />, 'Qué sabe SKY y cómo responde. Vacío = vuelve a las instrucciones por defecto. Cada mensaje lleva además el nombre del usuario, la tienda y la sección donde está.')}</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
           <input type="checkbox" checked={f.activo} onChange={(e) => setF({ ...f, activo: e.target.checked })} /> Activo para las tiendas
         </label>
         <button onClick={() => void guardar()} className="df-btn-primary" style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Guardar</button>
-        <button onClick={() => void probar()} disabled={!c?.url} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: c?.url ? 'pointer' : 'default', opacity: c?.url ? 1 : 0.5 }}>Probar conexión</button>
+        <button onClick={() => void probar()} disabled={!c?.conectado} title="Guarda primero los cambios" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: c?.conectado ? 'pointer' : 'default', opacity: c?.conectado ? 1 : 0.5 }}>Probar conexión</button>
         {msg && <span style={{ fontSize: 12.5, color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : msg.endsWith('…') ? 'var(--df-text-muted)' : 'var(--df-danger)', fontWeight: 600 }}>{msg}</span>}
       </div>
     </div>

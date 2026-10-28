@@ -991,7 +991,7 @@ export const apiHistorialCliente = (rowId: string) => reqBase<HistorialCliente>(
 // Asistente de soporte flotante (agente externo que configura DealFlow).
 export const apiSoporteConfig = () => reqBase<{ listo: boolean; nombre: string; bienvenida: string }>('/api/soporte/config', 'GET');
 export const apiSoporteChat = (mensaje: string, conversacion: string, seccion: string) => reqBase<{ respuesta: string; conversacion: string }>('/api/soporte/chat', 'POST', { mensaje, conversacion, seccion });
-export interface CfgSoporteAdmin { activo: boolean; modo: 'dify' | 'webhook'; url: string; tokenPuesto: boolean; nombre: string; bienvenida: string; listo: boolean }
+export interface CfgSoporteAdmin { activo: boolean; modo: 'deepseek' | 'dify' | 'webhook'; url: string; tokenPuesto: boolean; claveServidor: boolean; nombre: string; bienvenida: string; instrucciones: string; conectado: boolean; listo: boolean }
 export const apiAdminSoporte = () => req<CfgSoporteAdmin>('/api/admin/soporte-chat', 'GET');
-export const apiAdminGuardarSoporte = (b: Partial<{ activo: boolean; modo: string; url: string; token: string; nombre: string; bienvenida: string }>) => req<CfgSoporteAdmin>('/api/admin/soporte-chat', 'PUT', b);
+export const apiAdminGuardarSoporte = (b: Partial<{ activo: boolean; modo: string; url: string; token: string; nombre: string; bienvenida: string; instrucciones: string }>) => req<CfgSoporteAdmin>('/api/admin/soporte-chat', 'PUT', b);
 export const apiAdminProbarSoporte = () => req<{ respuesta: string }>('/api/admin/soporte-chat/probar', 'POST');

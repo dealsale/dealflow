@@ -1577,7 +1577,7 @@ api.post('/logistica/effi/actualizar', requireAuth, requireStore, async (req, re
   res.json({ ...tableroLogistica(req.user!.storeId!, Number(req.body?.dias) || 45), revisadas: r.revisadas });
 });
 // Convenios ya conocidos (rápido, sin consultar Effi): para elegir uno al despachar.
-// Asistente de soporte flotante (agente externo: Dify o webhook propio, lo configura DealFlow).
+// Asistente de soporte flotante SKY (DeepSeek, Dify o webhook propio; lo configura DealFlow).
 const frenoSoporte = new Map<string, number[]>();
 const contextoSoporte = (req: ExRequest, seccion: string) => {
   const st = req.user!.storeId ? db.prepare('SELECT nombre, plan FROM stores WHERE id = ?').get(req.user!.storeId) as { nombre: string; plan: string } | undefined : undefined;
@@ -1607,8 +1607,8 @@ api.put('/admin/soporte-chat', requireAuth, requireAdmin, async (req, res) => {
   try { res.json(S.cfgSoportePublica(S.guardarCfgSoporte(req.body || {}))); } catch (e) { res.status(400).json({ error: (e as Error).message }); }
 });
 api.post('/admin/soporte-chat/probar', requireAuth, requireAdmin, async (req, res) => {
-  const { preguntarSoporte, cfgSoporte } = await import('./soporteChat.js');
-  if (!cfgSoporte().url) return res.status(400).json({ error: 'Pon primero la URL del agente.' });
+  const { preguntarSoporte, cfgSoporte, conectado } = await import('./soporteChat.js');
+  if (!conectado(cfgSoporte())) return res.status(400).json({ error: cfgSoporte().modo === 'deepseek' ? 'Pon la clave de DeepSeek (el servidor no tiene una).' : 'Pon primero la URL del agente.' });
   const r = await preguntarSoporte('Hola, esto es una prueba de conexión desde DealFlow. Responde con un saludo corto.', '', contextoSoporte(req, 'admin'), true);
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
