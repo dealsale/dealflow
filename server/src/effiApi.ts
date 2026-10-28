@@ -608,6 +608,9 @@ try { db.exec("ALTER TABLE products ADD COLUMN effi_convenio TEXT NOT NULL DEFAU
 try { db.exec("ALTER TABLE orders ADD COLUMN effi_guia_info TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 // Convenio con el que salió el pedido a Effi ('-' = mercancía propia). Lo usa el portal de proveedores.
 try { db.exec("ALTER TABLE orders ADD COLUMN effi_convenio TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+// Remisiones/guías que DealFlow anuló en Effi para rehacer el pedido (historial; si hay, el
+// siguiente envío usa una clave de idempotencia nueva para que Effi cree otra remisión).
+try { db.exec("ALTER TABLE orders ADD COLUMN effi_anuladas TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 const convenioDeProducto = (productId: string) => String((db.prepare('SELECT effi_convenio FROM products WHERE id = ?').get(productId) as { effi_convenio: string } | undefined)?.effi_convenio || '');
 
 db.exec(`CREATE TABLE IF NOT EXISTS effi_convenio_articulo (
@@ -1038,10 +1041,17 @@ async function clienteEffi(c: EffiCfg, o: Fila, ubic: { provincia: string; ciuda
   if (busca.ok && busca.body.data?.length) {
     const yaEnEffi = txt(busca.body.data[0].nombre);
     // El cliente ya existía en Effi (mismo celular) con un nombre que no es de persona: se avisa.
-    if (yaEnEffi && !nombreValido(yaEnEffi) && nombre !== 'Cliente') {
-      trazar(txt(o.store_id), txt(o.id), { etapa: 'despacho', nivel: 'warn', titulo: `En Effi este cliente se llama «${yaEnEffi}»`, detalle: `Effi reutiliza el cliente por su celular. Cámbiale el nombre en Effi → Clientes a «${nombre}» para que la guía salga bien.` });
+    const tercero = txt(busca.body.data[0].tercero);
+    // El cliente ya existía en Effi (mismo celular) con otro nombre: se corrige al del pedido
+    // (PUT api/cliente solo cambia lo que se envía), para que la remisión y la guía salgan bien.
+    const norm = (x: string) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+    if (yaEnEffi && nombreValido(nombre) && norm(yaEnEffi) !== norm(nombre)) {
+      const up = await effi<Fila>(c.apiKey, 'PUT', '/api/cliente', { body: { codigo: Number(tercero), nombre } });
+      trazar(txt(o.store_id), txt(o.id), up.ok
+        ? { etapa: 'despacho', nivel: 'info', titulo: `Nombre del cliente corregido en Effi: «${yaEnEffi}» → «${nombre}»` }
+        : { etapa: 'despacho', nivel: 'warn', titulo: `En Effi este cliente se llama «${yaEnEffi}»`, detalle: `No se pudo corregir (${mensajeError(up)}). Cámbiale el nombre en Effi → Clientes a «${nombre}».` });
     }
-    return { tercero: txt(busca.body.data[0].tercero) };
+    return { tercero };
   }
   // Correo del cliente si lo dio (las landings lo guardan en la nota del pedido).
   const correo = (txt(o.nota).match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/) || [''])[0].toLowerCase();
@@ -1646,6 +1656,62 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
 
 export function eventosEffi(storeId: string, limite = 80): Fila[] {
   return db.prepare('SELECT id, evento, entrega, resumen, payload, created_at FROM effi_eventos WHERE store_id = ? ORDER BY id DESC LIMIT ?').all(storeId, limite) as Fila[];
+}
+
+/**
+ * Anula en Effi la guía (o guías) vigente(s) y la remisión del pedido, para corregirlo y
+ * volver a despacharlo. Effi no deja anular una remisión con guía vigente, por eso va primero
+ * la guía. Si la transportadora ya recogió el paquete, Effi lo rechaza y se devuelve su mensaje.
+ */
+export function anularEnEffi(storeId: string, orderId: string, motivo = ''): Promise<{ ok: true; remision: string; guias: string[] } | { error: string }> {
+  return conPedido(storeId, orderId, async () => {
+    const c = cfgEffi(storeId);
+    if (!c?.apiKey) return { error: 'Effi no está conectado.' };
+    const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+    if (!o) return { error: 'Pedido no encontrado.' };
+    const d = pj<Fila>(txt(o.effi_doc), {});
+    if (!d.id) return { error: 'Este pedido no tiene remisión en Effi.' };
+    const obs = (txt(motivo) || 'Anulada desde DealFlow para corregir el pedido').slice(0, 255);
+    const numDF = `DF-${txt(o.numero)}`;
+    const anulada = (x: Fila) => txt(x.vigente) === '0' || /anulad/i.test(`${txt(x.estado)} ${txt(x.estado_efficommerce)} ${txt(x.nombre_est_guia)}`);
+    // 1) Guías vigentes de esta remisión (y la que DealFlow guardó, por si no aparece por la remisión).
+    const r = await effi<Fila[]>(c.apiKey, 'GET', '/api/guia_transporte', { query: { id_ref: txt(d.id), por_pagina: 20 } });
+    const guias = (r.ok ? r.body.data || [] : []).filter((x) => txt(x.t_trans_ref) === String(T_TRANS_REMISION_V) && (!txt(x.sucursal_ref) || txt(x.sucursal_ref) === txt(d.sucursal)) && !anulada(x));
+    const gd = pj<Fila>(txt(o.effi_guia), {});
+    if (txt(gd.id) && !guias.some((x) => txt(x.id) === txt(gd.id))) {
+      const r2 = await effi<Fila[]>(c.apiKey, 'GET', '/api/guia_transporte', { query: { id: txt(gd.id), por_pagina: 5 } });
+      const g = r2.ok ? (r2.body.data || []).find((x) => txt(x.id) === txt(gd.id)) : undefined;
+      if (g && !anulada(g)) guias.push(g);
+    }
+    const anuladas: string[] = [];
+    for (const g of guias) {
+      const del = await effi<Fila>(c.apiKey, 'DELETE', '/api/guia_transporte', { body: { sucursal: Number(g.sucursal), id: Number(g.id), observacion_anular: obs } });
+      const tx = txt(g.id_transaccion) || txt(g.guia) || `#${txt(g.id)}`;
+      if (!del.ok && !/ya se encuentra anulad/i.test(mensajeError(del))) {
+        const e = `No se pudo anular la guía ${tx} en Effi: ${mensajeError(del)}${anuladas.length ? ` (sí se anularon: ${anuladas.join(', ')})` : ''}. Si la transportadora ya recogió el paquete, no se puede anular: gestiona la devolución.`;
+        trazar(storeId, orderId, { etapa: 'guia', nivel: 'error', titulo: 'No se pudo anular la guía', detalle: e });
+        return { error: e };
+      }
+      anuladas.push(tx);
+      trazar(storeId, orderId, { etapa: 'guia', nivel: 'ok', titulo: `Guía ${tx} anulada en Effi`, detalle: obs });
+    }
+    // 2) La remisión.
+    const remision = txt(o.effi_remision) || `${txt(d.prefijo)}-${txt(d.id)}`;
+    const rem = await effi<Fila>(c.apiKey, 'DELETE', '/api/remision_v', { body: { sucursal: Number(d.sucursal), id: Number(d.id), observacion_anular: obs } });
+    if (!rem.ok && !/ya se encuentra anulad/i.test(mensajeError(rem))) {
+      const e = `No se pudo anular la remisión ${remision} en Effi: ${mensajeError(rem)}${anuladas.length ? ` (la guía ${anuladas.join(', ')} sí quedó anulada)` : ''}.`;
+      trazar(storeId, orderId, { etapa: 'despacho', nivel: 'error', titulo: 'No se pudo anular la remisión', detalle: e });
+      return { error: e };
+    }
+    // 3) El pedido queda listo para volver a despacharse (vuelve a Confirmado si ya iba en logística).
+    const hist = [txt(o.effi_anuladas), [remision, ...anuladas].join(' + ')].filter(Boolean).join(' · ').slice(-500);
+    db.prepare(`UPDATE orders SET effi_remision = '', effi_doc = '', effi_guia = '', effi_convenio = '', woo_id = CASE WHEN despacho_proveedor = 'effi' THEN '' ELSE woo_id END,
+        despacho_proveedor = CASE WHEN despacho_proveedor = 'effi' THEN '' ELSE despacho_proveedor END, guia = '', guia_url = '', guia_img = '', estado_woo = '', effi_anuladas = ?,
+        estado = CASE WHEN estado IN ('Guía generada','En tránsito','En reparto','Novedad') THEN 'Confirmado' ELSE estado END WHERE id = ?`).run(hist, orderId);
+    trazar(storeId, orderId, { etapa: 'despacho', nivel: 'ok', titulo: `Remisión ${remision} anulada en Effi`, detalle: `${obs}. El pedido quedó listo para volver a despacharse.` });
+    registrarLog(storeId, 'info', 'despacho', `${numDF}: remisión ${remision}${anuladas.length ? ` y guía ${anuladas.join(', ')}` : ''} anuladas en Effi desde DealFlow.`);
+    return { ok: true as const, remision, guias: anuladas };
+  }).catch(errorInterno);
 }
 
 /** Consulta en Effi la guía de la remisión del pedido (botón "Actualizar ahora"). */

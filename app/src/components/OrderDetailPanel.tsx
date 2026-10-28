@@ -5,9 +5,9 @@ import { useState, useEffect } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { OrdenarDireccion } from './DireccionPedido';
-import { confirmar } from './dialogs';
+import { confirmar, pedirTexto, notificar } from './dialogs';
 import { enProceso, ProcesoPedido } from './Proceso';
-import { apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
+import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
 
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
@@ -502,6 +502,17 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
   const elegido = prov || (effiOk ? 'effi' : dropiOk ? 'dropi' : '');
   const dropiCreado = sel.despachoProveedor === 'dropi';
 
+  // Anula en Effi la guía y la remisión; el pedido queda listo para corregirlo y volver a enviarlo.
+  const anularEffi = async () => {
+    if (!sel.rowId) return;
+    const motivo = await pedirTexto({ titulo: `¿Anular en Effi la remisión${sel.hasGuia || sel.effiGuiaCreada ? ' y la guía' : ''} de ${sel.id}?`, mensaje: 'Se anulan en Effi y el pedido queda listo para corregirlo (cliente, dirección, productos) y volver a despacharlo con una remisión nueva. Si la transportadora ya recogió el paquete, Effi no deja anular.', placeholder: 'Motivo (ej. corregir nombre del cliente)', valor: 'Corregir datos del pedido', aceptar: 'Anular en Effi' });
+    if (motivo === null) return;
+    const r = await enProceso('Anulando en Effi…', () => apiEffiAnular(sel.rowId!, motivo), 'pedido');
+    if (r.error) return notificar(r.error, 'error', 9000);
+    notificar(`✓ Anulada en Effi: ${[r.data!.remision, ...r.data!.guias].join(' + ')}. Corrige el pedido y vuelve a despacharlo.`, 'ok', 7000);
+    await df.recargarPedidos();
+  };
+
   if (sel.despachado && !redespachar) {
     const remision = sel.effiRemision || (sel.despachoProveedor === 'effi' ? sel.wooId : '');
     return (
@@ -540,6 +551,10 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
         {!sel.hasGuia && (dropiCreado || sel.effiGuiaCreada || !!sel.effiRemision) && <GuiaManual df={df} sel={sel} proveedor={dropiCreado ? 'Dropi' : 'Effi'} destacar={/guia|generad/i.test(sel.estadoWoo || '')} />}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--df-border)' }}>
           <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', flex: 1 }}>Se actualiza solo. Cuando salga la guía, se la avisamos al cliente por WhatsApp.</span>
+          {!dropiCreado && !!sel.effiRemision && df.effiApi.conectado && (
+            <button onClick={() => void anularEffi()} title="Anula en Effi la guía y la remisión para corregir el pedido y volver a despacharlo"
+              style={{ background: 'transparent', border: 'none', color: 'var(--df-danger)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Anular en Effi</button>
+          )}
           <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Volver a despachar</button>
         </div>
         {df.effiMsg && <div style={{ marginTop: 8, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}

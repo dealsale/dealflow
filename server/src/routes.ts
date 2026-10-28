@@ -1918,12 +1918,20 @@ api.get('/orders/:rowId/effi/preview', requireAuth, requireStore, requireOwner, 
   if ('error' in r) return res.status(400).json({ error: r.error, convenios });
   res.json({ lineas: r.lineas, ubicacion: r.ubic.nombre, avisos: r.avisos, total: (r.body.valor_forma_pago as number[])[0], remision: r.body, convenio: String(r.body.convenio_dropshipping ?? ''), convenios });
 });
+// Anular en Effi la guía y la remisión del pedido (para corregirlo y volver a despacharlo).
+api.post('/orders/:rowId/effi/anular', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const r = await ef.anularEnEffi(req.user!.storeId!, String(req.params.rowId), String(req.body?.motivo || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
 api.post('/orders/:rowId/effi/despachar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
-  const o = db.prepare('SELECT effi_remision FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { effi_remision: string } | undefined;
+  const o = db.prepare('SELECT effi_remision, effi_anuladas FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { effi_remision: string; effi_anuladas: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  const reintentar = req.body?.reintentar === true;
+  // Si DealFlow ya anuló una remisión de este pedido, va con clave nueva (si no, Effi devolvería la anulada).
+  const reintentar = req.body?.reintentar === true || !!o.effi_anuladas;
   if (o.effi_remision && !o.effi_remision.includes('anulada') && !reintentar) return res.json({ ok: true, remision: o.effi_remision, aviso: 'Este pedido ya tiene remisión en Effi.' });
   const raw = String(req.body?.convenio || '').trim();
   const forzado = raw === 'propio' ? 'propio' : raw.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
