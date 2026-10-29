@@ -21,7 +21,7 @@ const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
  */
 export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: DecoratedOrder; onHecho?: () => void }) {
   const hist = useHistorialCliente(sel.rowId, sel.tel);
-  const [paso, setPaso] = useState<'idle' | 'cargando' | 'elegir' | 'creando'>('idle');
+  const [paso, setPaso] = useState<'idle' | 'cargando' | 'elegir' | 'creando' | 'solo'>('idle');
   const [ciudad, setCiudad] = useState('');
   const [disponibles, setDisponibles] = useState<DropiTransportadora[]>([]);
   const [noDisp, setNoDisp] = useState<{ nombre: string; motivo: string }[]>([]);
@@ -51,9 +51,23 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
     });
   };
 
+  // Solo el pedido (sin guía): queda "Pendiente confirmación" en Dropi para revisar la huella allá.
+  const soloPedido = async () => {
+    if (!sel.rowId) return;
+    if (!(await confirmarSiDevolvio(hist))) return;
+    if (!(await confirmar({ titulo: 'Enviar solo el pedido a Dropi', mensaje: 'Se crea en Dropi como "Pendiente confirmación", sin transportadora ni guía. Allá revisas la huella del cliente, confirmas y generas la guía; cuando la generes, llega aquí sola y se le avisa al cliente.', aceptar: 'Enviar pedido' }))) return;
+    setPaso('solo'); setMsg('');
+    void enProceso('Enviando el pedido a Dropi…', () => apiDropiCrear(sel.rowId!, undefined, false, recaudo, true), 'pedido').then((r) => {
+      if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos enviar el pedido.'); return; }
+      df.marcarDropiCreado(sel.id, r.data.dropiId, '');
+      notificar(r.data.aviso || '✓ Pedido enviado a Dropi.');
+      setMsg(''); onHecho?.();
+    });
+  };
+
   const btnP: React.CSSProperties = { background: 'var(--df-warning)', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' };
 
-  if (paso === 'idle' || paso === 'cargando') {
+  if (paso === 'idle' || paso === 'cargando' || paso === 'solo') {
     return (
       <div>
         {/* Recaudo: contra entrega (Dropi cobra al entregar) vs prepagado (ya pagó). */}
@@ -65,9 +79,15 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
             }}>{r === 'con' ? 'Con recaudo (contra entrega)' : 'Sin recaudo (pagado)'}</button>
           ))}
         </div>
-        <button onClick={cotizar} disabled={paso === 'cargando'} style={{ ...btnP, opacity: paso === 'cargando' ? 0.7 : 1 }}>
-          {paso === 'cargando' ? 'Cotizando…' : '📦 Generar en Dropi'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={cotizar} disabled={paso !== 'idle'} style={{ ...btnP, opacity: paso !== 'idle' ? 0.7 : 1 }}>
+            {paso === 'cargando' ? 'Cotizando…' : '📦 Generar en Dropi (con guía)'}
+          </button>
+          <button onClick={() => void soloPedido()} disabled={paso !== 'idle'} title="Crea el pedido en Dropi sin transportadora ni guía, para revisar la huella del cliente y generar la guía allá"
+            style={{ ...btnP, background: 'var(--df-surface)', color: 'var(--df-warning)', border: '1px solid var(--df-warning)', opacity: paso !== 'idle' ? 0.7 : 1 }}>
+            {paso === 'solo' ? 'Enviando…' : '📝 Solo enviar el pedido (la guía la hago en Dropi)'}
+          </button>
+        </div>
         {msg && <div style={{ marginTop: 8, fontSize: 12.5, color: msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
         {/talla\/color|no tiene la variante|No pudimos emparejar/.test(msg) && <div style={{ marginTop: 8 }}><CorregirVariantes key={msg} df={df} sel={sel} onListo={cotizar} /></div>}
       </div>

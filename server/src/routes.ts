@@ -1545,7 +1545,10 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, 
   const prods = await resolverProductosDropi(sid, o, c, dropi);
   if ('error' in prods) return res.status(400).json({ error: prods.error });
 
-  const t = req.body?.transportadora as { id: number; nombre: string; service: string; precio: number } | undefined;
+  // Solo el pedido: queda en Dropi como "Pendiente confirmación", sin transportadora ni
+  // guía, para que la tienda revise la huella del cliente y genere la guía en Dropi.
+  const soloPedido = req.body?.soloPedido === true;
+  const t = soloPedido ? undefined : req.body?.transportadora as { id: number; nombre: string; service: string; precio: number } | undefined;
   // Nombre real del cliente (el que escribió en el chat), no el de perfil ni un correo.
   const nombreReal = (await import('./nombres.js')).resolverNombreCliente(String(o.lead_id || ''), String(o.cliente || ''), '');
   const [nombre, ...resto] = nombreReal.split(' ');
@@ -1554,7 +1557,7 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, 
     nombre: nombre || nombreReal, apellido: resto.join(' '),
     direccion: String(o.direccion || ''), departamento: destino.depto.name, ciudad: destino.ciudad.name,
     telefono: String(o.tel || ''), conRecaudo, shopOrderId: `df-${o.id}`,
-    productos: prods.ordenProductos, transportadora: t, ciudadDropi: destino.ciudad,
+    productos: prods.ordenProductos, transportadora: t, ciudadDropi: destino.ciudad, borrador: soloPedido,
   });
   if ('error' in crear) return res.status(400).json({ error: crear.error });
   const nombreTransp = t?.nombre || '';
@@ -1562,8 +1565,8 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, 
   // pedido había quedado enviado por Effi por error, esto lo "cambia" a Dropi).
   db.prepare("UPDATE orders SET dropi_order_id = ?, despacho_proveedor = 'dropi', transportadora = ?, woo_id = '', estado_woo = '', guia = ? WHERE id = ?")
     .run(crear.id, nombreTransp, req.body?.reintentar === true ? '' : String(o.guia || ''), o.id);
-  registrarLog(sid, 'info', 'despacho', `DF-${o.numero} creado en Dropi (orden ${crear.id})${nombreTransp ? ' por ' + nombreTransp : ''}.`);
-  res.json({ ok: true, dropiId: crear.id, transportadora: nombreTransp });
+  registrarLog(sid, 'info', 'despacho', `DF-${o.numero} creado en Dropi (orden ${crear.id})${soloPedido ? ' sin guía: pendiente de confirmar en Dropi' : nombreTransp ? ' por ' + nombreTransp : ''}.`);
+  res.json({ ok: true, dropiId: crear.id, transportadora: nombreTransp, ...(soloPedido ? { aviso: `Pedido enviado a Dropi (orden ${crear.id}) como "Pendiente confirmación", sin guía. Revisa la huella del cliente en Dropi y genera allá la guía: llega aquí sola.` } : {}) });
   });
 });
 
