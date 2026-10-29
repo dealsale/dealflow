@@ -953,7 +953,7 @@ export interface LandingDatos {
   whatsapp: string; pixelMeta: string; confirmarWhatsapp: boolean; autoDespacho: boolean; pedirCorreo: boolean; gracias: string;
   seoTitulo: string; seoDescripcion: string; seoImagen: string;
 }
-export interface LandingResumen { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string }
+export interface LandingResumen { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string; modoCodigo?: boolean }
 export interface Landing extends LandingResumen { datos: LandingDatos }
 export interface MembresiaTienda { activa: boolean; cortesia: boolean; vence: string; diasRestantes: number; enGracia: boolean; precio: number }
 export interface TiendaConfig { nombre: string; logo: string; favicon: string; banner: string; titulo: string; descripcion: string; anuncios: string[]; colorPrincipal: string; colorBoton: string; colorAcento: string; whatsapp: string; pixelMeta: string; seoTitulo: string; seoDescripcion: string; seoImagen: string }
@@ -1061,3 +1061,10 @@ export const apiSuperBibliotecaLandingEnviar = (id: string, storeId: string) =>
 // Registro (línea de tiempo) de un pedido.
 export interface EventoPedido { id: number; etapa: string; nivel: string; titulo: string; detalle: string; datos: unknown; created_at: string }
 export const apiRegistroPedido = (rowId: string) => req<{ eventos: EventoPedido[] }>(`/api/orders/${encodeURIComponent(rowId)}/registro`, 'GET');
+
+// ── Modo código de las landings ──
+export interface CodigoLanding { modo: boolean; codigo: string; gracias: string; avisos: string[]; instrucciones?: string }
+export const apiCodigoLanding = (id: string) => req<CodigoLanding>(`/api/landings/${encodeURIComponent(id)}/codigo`, 'GET');
+export const apiExportarCodigoLanding = (id: string, tipo: 'landing' | 'gracias') => req<{ html: string; nombre: string }>(`/api/landings/${encodeURIComponent(id)}/codigo/exportar?tipo=${tipo}`, 'GET');
+export const apiGuardarCodigoLanding = (id: string, b: { modo?: boolean; codigo?: string; gracias?: string }) => req<CodigoLanding>(`/api/landings/${encodeURIComponent(id)}/codigo`, 'PUT', b);
+export const apiVistaCodigoLanding = (id: string, codigo: string, tipo: 'landing' | 'gracias') => req<{ html: string; avisos: string[] }>(`/api/landings/${encodeURIComponent(id)}/codigo/vista`, 'POST', { codigo, tipo });

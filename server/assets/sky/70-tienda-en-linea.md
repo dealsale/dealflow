@@ -85,3 +85,18 @@ En **Tienda en línea** toca **📚 Biblioteca de landings**: son páginas de ve
 3. Elige el producto de tu catálogo, ajusta precios, fotos y textos, y dale **Publicar** (aplican las reglas normales de publicación y membresía).
 - "✓ Ya adquirida · Importar de nuevo": ya la tienes (o ya la pagaste); puedes importar otra copia sin pagar otra vez.
 - Las de pago mientras los pagos estén en modo offline: sale la ventana para pagar por WhatsApp; cuando el equipo confirme el pago, te la activan.
+
+## Modo código: editar la landing con tu propio HTML (o con IA)
+Sección: landings
+Claves: modo codigo, codigo html, editar codigo landing, claude, astra, ia, html propio, subir html, descargar codigo, embudo, pagina de gracias, upsell, data-dealflow
+En el editor de la landing abre **💻 Modo código**:
+1. **⬇ Descargar el diseño actual** (o tu código) y edítalo a mano o con una IA (Claude, Astra…). Toca **🤖 Instrucciones para la IA** → **📋 Copiar** y pégaselas a la IA junto con el archivo: le dicen qué debe respetar para que los pedidos sigan llegando.
+2. **⬆ Subir .html** o pega el código en el cuadro. La vista previa muestra cómo queda (en la vista previa no se crean pedidos).
+3. **Guardar código** y **Usar mi código**: la página publicada usa tu HTML. **Volver al editor** regresa al diseño del editor sin borrar tu código.
+4. **🎉 Página de gracias** (opcional): después de comprar, el cliente pasa a esa página (para un upsell, un video o tu mensaje). `<b data-dealflow="numero">` y `<span data-dealflow="total">` muestran el número y el total del pedido.
+Reglas para que el pedido entre a DealFlow (con confirmación por WhatsApp, despacho y píxel):
+- El formulario: `<form data-dealflow="pedido">` con campos `name="nombre"`, `apellido`, `telefono`, `departamento`, `ciudad`, `direccion`, `barrio` (opcional), `correo` (opcional).
+- La oferta en `name="oferta"` y las variantes en campos con el nombre del grupo (ej. `name="Talla"`). Un `<select>` vacío lo llena DealFlow solo.
+- `<div data-dealflow="error">` muestra los errores. No agregues el script de DealFlow ni el píxel: se ponen solos.
+- Avisos: "Ningún formulario tiene data-dealflow="pedido"" = así la página no crea pedidos. Máximo 1,5 MB por página (las imágenes van por URL).
+- Seguridad: en app.dealflow.sbs el código corre aislado (no puede usar tu cuenta); en tu dominio o en el de dflw.store funciona completo, con píxeles y scripts externos.
