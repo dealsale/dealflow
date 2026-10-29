@@ -75,3 +75,13 @@ Claves: pedido landing, formulario, pedido de la tienda, confirmacion tienda, no
 - El cliente elige la oferta y las variantes, llena el formulario contra entrega (nombre, celular de 10 dígitos, departamento, ciudad y dirección) y el pedido entra a **Pedidos** con el ícono de Tienda en línea, una línea por variante y la oferta elegida. Se despacha como cualquier otro.
 - Si **Pedir confirmación por WhatsApp** está activo, al cliente le llega la plantilla **confirmacion_pedido_tienda** (Sí/No). "No se pudo enviar la confirmación": revisa WhatsApp conectado y la plantilla aprobada → **Reenviar confirmación**.
 - Mensajes que ve el cliente: "Escribe tu nombre y apellido", "Escribe un celular válido de 10 dígitos", "Completa la ciudad, el departamento y la dirección", "Este producto no tiene precio todavía", "Esta página ya no está recibiendo pedidos" (tienda en pausa o producto despublicado), "Recibimos varios pedidos seguidos desde tu conexión. Espera unos minutos" (protección antispam).
+
+## Biblioteca de landings: importar una landing ya armada
+Sección: landings
+Claves: biblioteca de landings, importar landing, plantilla de landing, landing lista, copiar landing de otra tienda, landings listas
+En **Tienda en línea** toca **📚 Biblioteca de landings**: son páginas de venta ya armadas por DealFlow (fotos, ofertas, testimonios y textos).
+1. Elige una y toca **Importar gratis** (o **Comprar e importar** si es de pago).
+2. Se crea como **Borrador** en tu tienda con tu nombre, tu logo, tu WhatsApp y tu píxel; se abre el editor.
+3. Elige el producto de tu catálogo, ajusta precios, fotos y textos, y dale **Publicar** (aplican las reglas normales de publicación y membresía).
+- "✓ Ya adquirida · Importar de nuevo": ya la tienes (o ya la pagaste); puedes importar otra copia sin pagar otra vez.
+- Las de pago mientras los pagos estén en modo offline: sale la ventana para pagar por WhatsApp; cuando el equipo confirme el pago, te la activan.

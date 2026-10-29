@@ -7,6 +7,7 @@ import {
 } from '../lib/api';
 import type { MembresiaTienda, TiendaConfig, DominioLandings, Landing, LandingBundle, LandingDatos, LandingResumen } from '../lib/api';
 import { confirmar, notificar } from '../components/dialogs';
+import { BibliotecaLandingsModal } from '../components/BibliotecaLandings';
 
 /**
  * Tienda en línea: una página de inicio con todos los productos publicados y una
@@ -81,6 +82,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
   const [membresia, setMembresia] = useState<MembresiaTienda | null>(null);
   const [tienda, setTienda] = useState<TiendaConfig | null>(null);
   const [creando, setCreando] = useState(false);
+  const [biblioteca, setBiblioteca] = useState(false);
   const [dominio, setDominio] = useState<DominioLandings | null>(null);
   const cargar = async () => { const r = await apiLandings(); if (r.data) { setLista(r.data.landings); setMembresia(r.data.membresia); setDominio(r.data.dominio); setTienda(r.data.tienda); } else notificar(r.error || 'No se pudo cargar tu tienda.', 'error'); };
   useEffect(() => { void cargar(); }, []);
@@ -102,6 +104,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
         </div>
         <a href="/tutorial-tienda-en-linea" target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>📘 Ver tutorial</a>
         {dominio && membresia?.activa && (dominio.estado === 'activo' || dominio.raiz) && <a href={`https://${dominio.estado === 'activo' ? dominio.dominio : `${dominio.sub}.${dominio.raiz}`}`} target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>Ver mi tienda ↗</a>}
+        <button onClick={() => setBiblioteca(true)} style={{ ...btn, padding: '10px 14px', fontSize: 13.5 }}>📚 Biblioteca de landings</button>
         <button onClick={() => setCreando(true)} className="df-btn-primary" style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Agregar producto</button>
       </div>
 
@@ -153,6 +156,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
           </div>
         )}
       {creando && <CrearModal df={df} onCerrar={() => setCreando(false)} onCreada={(id) => { setCreando(false); onAbrir(id); }} />}
+      {biblioteca && <BibliotecaLandingsModal onCerrar={() => setBiblioteca(false)} onImportada={(id) => { setBiblioteca(false); onAbrir(id); }} />}
     </section>
   );
 }

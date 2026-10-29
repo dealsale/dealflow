@@ -3,20 +3,22 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 import type { LibraryAdminItem } from '../../lib/api';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
+import { BibliotecaLandingsAdmin } from '../../components/BibliotecaLandings';
 
 /** Panel del superadmin: todas las tiendas + la Biblioteca de productos. */
 export function Superadmin({ df }: { df: DealFlowState }) {
-  const [tab, setTab] = useState<'tiendas' | 'biblioteca' | 'onboarding'>('tiendas');
+  const [tab, setTab] = useState<'tiendas' | 'biblioteca' | 'biblioteca-landings' | 'onboarding'>('tiendas');
   const TABS: { id: typeof tab; label: string }[] = [
     { id: 'tiendas', label: 'Todas las tiendas' },
     { id: 'biblioteca', label: 'Biblioteca de productos' },
+    { id: 'biblioteca-landings', label: 'Biblioteca de landings' },
     { id: 'onboarding', label: 'Onboarding de asistente' },
   ];
   return (
     <section data-screen-label="Superadmin">
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Superadmin</h1>
-        <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Gestiona todas las tiendas, la biblioteca de productos y el alta de asistentes.</p>
+        <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Gestiona todas las tiendas, las bibliotecas de productos y de landings, y el alta de asistentes.</p>
       </div>
       <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden', marginBottom: 18, flexWrap: 'wrap' }}>
         {TABS.map((t) => (
@@ -28,6 +30,7 @@ export function Superadmin({ df }: { df: DealFlowState }) {
       </div>
       {tab === 'tiendas' && <Tiendas df={df} />}
       {tab === 'biblioteca' && <BibliotecaAdmin df={df} />}
+      {tab === 'biblioteca-landings' && <BibliotecaLandingsAdmin df={df} />}
       {tab === 'onboarding' && <OnboardingAsistente df={df} />}
     </section>
   );

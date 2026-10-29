@@ -1032,3 +1032,19 @@ export interface CfgPagosAdmin { offline: boolean; whatsapp: string; numeroLandi
 export const apiAdminPagos = () => req<CfgPagosAdmin>('/api/admin/pagos', 'GET');
 export const apiAdminGuardarPagos = (b: Partial<{ offline: boolean; whatsapp: string }>) => req<CfgPagosAdmin>('/api/admin/pagos', 'PUT', b);
 export const apiAdminProbarSoporte = () => req<{ respuesta: string }>('/api/admin/soporte-chat/probar', 'POST');
+
+// ── Biblioteca de landings ──
+export interface LibraryLanding { id: string; nombre: string; precio: number; gratis: boolean; precioImportacion: number; portada: string | null; adquirida: boolean }
+export interface LibraryLandingAdmin { id: string; nombre: string; origen: string; precio: number; gratis: boolean; precioImportacion: number; activo: boolean; portada: string | null; importos: number }
+export const apiBibliotecaLandings = () => req<{ landings: LibraryLanding[] }>('/api/biblioteca-landings', 'GET');
+export const apiImportarBibliotecaLanding = (id: string) => req<{ ok?: true; landingId?: string; requierePago?: boolean; precio?: number }>(`/api/biblioteca-landings/${encodeURIComponent(id)}/importar`, 'POST');
+export const apiCheckoutBibliotecaLanding = (id: string) => req<{ url: string }>(`/api/biblioteca-landings/${encodeURIComponent(id)}/checkout`, 'POST');
+export const apiSuperBibliotecaLandings = () => req<{ landings: LibraryLandingAdmin[] }>('/api/superadmin/biblioteca-landings', 'GET');
+export const apiSuperLandingsDeTienda = (storeId: string) => req<{ landings: { id: string; nombre: string; estado: string }[] }>(`/api/superadmin/stores/${encodeURIComponent(storeId)}/landings`, 'GET');
+export const apiSuperAgregarLandingBiblioteca = (storeId: string, landingId: string, gratis: boolean, precioImportacion: number) =>
+  req<{ id: string }>('/api/superadmin/biblioteca-landings', 'POST', { storeId, landingId, gratis, precioImportacion });
+export const apiSuperBibliotecaLandingPatch = (id: string, patch: { nombre?: string; gratis?: boolean; precioImportacion?: number; activo?: boolean }) =>
+  req<{ ok: true }>(`/api/superadmin/biblioteca-landings/${encodeURIComponent(id)}`, 'PATCH', patch);
+export const apiSuperBibliotecaLandingDelete = (id: string) => req<{ ok: true }>(`/api/superadmin/biblioteca-landings/${encodeURIComponent(id)}`, 'DELETE');
+export const apiSuperBibliotecaLandingEnviar = (id: string, storeId: string) =>
+  req<{ ok: true; landingId: string }>(`/api/superadmin/biblioteca-landings/${encodeURIComponent(id)}/enviar-a-tienda`, 'POST', { storeId });
