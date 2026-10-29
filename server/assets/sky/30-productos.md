@@ -55,3 +55,16 @@ Si el producto no existe en tu Shopify, en el editor usa la opción de crearlo a
 Sección: productos
 Claves: duplicado, repetido, dos productos iguales, envia version vieja
 Si arriba en Productos sale **Hay productos duplicados** (mismo disparador o nombre), el bot puede enviar la versión vieja o importada en vez de la que editaste. Deja solo uno de cada grupo y elimina el repetido. **Vista agrupada** ayuda a ver los productos por grupo.
+
+## Importar productos desde LucidSales (Lucid Bot)
+Sección: productos
+Claves: importar, lucid, lucidsales, lucid bot, migrar productos, pasar productos, extension importar, traer productos de otro bot, copiar producto
+Con la extensión **DealFlow · Importar productos** (Chrome, Chromium, Edge, Brave y Firefox) traes un producto de LucidSales con su estructura completa:
+1. En **Integraciones → Envíos y tiendas → Importar productos (LucidSales)** toca **⬇ Descargar extensión** y descomprime el archivo.
+2. **Chrome/Chromium/Edge/Brave**: `chrome://extensions` → enciende **Modo de desarrollador** → **Cargar descomprimida** → elige la carpeta `dealflow-importar-productos`. **Firefox**: `about:debugging#/runtime/this-firefox` → **Cargar complemento temporal…** → elige el `manifest.json` (Firefox lo quita al cerrarse; vuelve a cargarlo cuando lo necesites).
+3. En la misma tarjeta toca **🔑 Generar código de conexión**, abre el ícono de la extensión, pega el código y dale **Guardar y probar**.
+4. En LucidSales abre **Editar producto** y toca **Importar a DealFlow** (abajo a la derecha). La extensión abre cada sección, lee nombre, precio, descripción, modo de uso, características, contenido del paquete, bundles, variantes, reglas, preguntas frecuentes, multimedia y mensaje inicial; sube las fotos y videos y crea el producto en tu tienda.
+5. Al final sale el resumen y **Abrir en DealFlow ↗**. Revisa el producto antes de vender (sobre todo combos, variantes y stock, que queda en 0).
+- Con IA conectada (DeepSeek u OpenAI) los combos, variantes, reglas y preguntas quedan ordenados; sin IA se copian los datos básicos y lo demás lo completas tú.
+- No cambia nada en LucidSales: solo abre y cierra secciones para leerlas.
+Errores: "Código no válido" → genera un código nuevo y pégalo otra vez en la extensión. "No encontramos el nombre del producto" → abre el producto en modo **Editar producto** y vuelve a intentar. "N archivo(s) no se pudieron traer" → esas fotos o videos súbelos a mano en el producto.

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  body{width:310px;margin:0;font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;color:#111827}
+  header{display:flex;align-items:center;gap:10px;padding:14px 16px;background:linear-gradient(135deg,#7c3aed,#10b981);color:#fff}
+  header img{width:28px;height:28px;border-radius:7px;background:#fff}
+  header b{font-size:15px}
+  main{padding:14px 16px 16px}
+  label{display:block;font-size:12px;font-weight:700;color:#4b5563;margin:0 0 5px}
+  input{width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font:13px ui-monospace,Menlo,monospace;margin-bottom:10px}
+  button{width:100%;border:none;border-radius:8px;padding:10px;font-weight:700;color:#fff;background:#7c3aed;cursor:pointer}
+  p{font-size:12px;color:#6b7280;margin:10px 0 0}
+  #estado{font-size:13px;margin-top:10px;font-weight:600}
+  .ok{color:#047857}.err{color:#b91c1c}
+  details{margin-top:10px;font-size:12px;color:#6b7280}
+</style>
+</head>
+<body>
+<header><img src="icons/icon-48.png" alt=""><b>DealFlow · Importar productos</b></header>
+<main>
+  <label for="codigo">Código de conexión</label>
+  <input id="codigo" placeholder="dfx_…" autocomplete="off" spellcheck="false">
+  <button id="guardar">Guardar y probar</button>
+  <div id="estado"></div>
+  <p>Genera el código en DealFlow → Integraciones → <b>Importar productos</b>. Después abre un producto en LucidSales y usa el botón <b>Importar a DealFlow</b>.</p>
+  <details><summary>Avanzado</summary>
+    <label for="servidor" style="margin-top:8px">Dirección de DealFlow</label>
+    <input id="servidor" placeholder="https://app.dealflow.sbs">
+  </details>
+</main>
+<script src="popup.js"></script>
+</body>
+</html>
