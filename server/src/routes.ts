@@ -1212,8 +1212,9 @@ const dropiHelpers = {
     sid: string, o: Record<string, unknown>, _cred: DropiApi.DropiCred, _dropi: typeof DropiApi,
   ): Promise<{ cotProductos: DropiApi.CotProducto[]; ordenProductos: CrearOrdenInputProducto[] } | { error: string }> {
     { const { separarItemsPedido } = await import('./emparejar.js'); separarItemsPedido(sid, String(o.id)); }
-    const items = db.prepare("SELECT qty, nombre, precio, COALESCE(product_id,'') product_id, COALESCE(variant_id,'') variant_id FROM order_items WHERE order_id = ?").all(o.id) as { qty: number; nombre: string; precio: number; product_id: string; variant_id: string }[];
+    const items = db.prepare("SELECT id, qty, nombre, precio, COALESCE(product_id,'') product_id, COALESCE(variant_id,'') variant_id FROM order_items WHERE order_id = ?").all(o.id) as { id: string; qty: number; nombre: string; precio: number; product_id: string; variant_id: string }[];
     if (!items.length) return { error: 'El pedido no tiene productos.' };
+    const sincronizados = new Set<string>();
     // Producto: SKU = ID del producto en Dropi. Variante: SKU = ID de la VARIACIÓN
     // en Dropi (se vincula a mano en Productos → Variantes). Emparejamos el ítem
     // contra NUESTRAS propias etiquetas de variante (fiable: el nombre del ítem se
@@ -1234,30 +1235,41 @@ const dropiHelpers = {
       const pid = Number(String(prod.sku).replace(/[^0-9]/g, ''));
       if (!pid) return { error: `El ID de Dropi de "${base}" no es válido: "${prod.sku}".` };
 
-      // Variantes reales de ESTE producto en DealFlow (con su id de variación de Dropi en `sku`).
-      // El código de Dropi va en refs.dropi (panel de conexiones) o, si es viejo, en sku.
-      const variantes = (db.prepare("SELECT id, label, sku, COALESCE(refs,'{}') refs FROM variants WHERE product_id = ? AND COALESCE(label,'') != '' AND lower(label) != 'única'").all(prod.id) as { id: string; label: string; sku: string; refs: string }[])
+      // Variantes reales de ESTE producto en DealFlow (con su id de variación de Dropi).
+      // El código de Dropi va en refs.dropi (panel de Dropi del producto) o, si es viejo, en sku.
+      const leerVariantes = () => (db.prepare("SELECT id, label, sku, COALESCE(refs,'{}') refs FROM variants WHERE product_id = ? AND COALESCE(label,'') != '' AND lower(label) != 'única'").all(prod.id) as { id: string; label: string; sku: string; refs: string }[])
         .map((v) => ({ ...v, sku: String(pj<Record<string, string>>(v.refs, {}).dropi || v.sku || '') }));
+      let variantes = leerVariantes();
       let variationId: number | undefined;
-      const exacta = it.variant_id ? variantes.find((v) => v.id === it.variant_id) : undefined;
-      if (exacta) {
-        const vid = Number(String(exacta.sku).replace(/[^0-9]/g, ''));
-        if (!vid) return { error: `La variante "${exacta.label}" de "${base}" no está vinculada con Dropi. En Productos → Variantes, toca "Traer variantes de Dropi".` };
-        variationId = vid;
-      } else if (variantes.length) {
-        // Emparejamos el ítem con la etiqueta de variante (todos sus tokens presentes; gana la más larga).
-        let mejor: { sku: string; len: number } | null = null;
-        for (const v of variantes) {
-          const tks = norm(v.label).split(/[^a-z0-9]+/).filter((t) => t.length > 1);
-          if (tks.length && tks.every((t) => nItem.includes(t))) {
-            const len = norm(v.label).length;
-            if (!mejor || len > mejor.len) mejor = { sku: (v.sku || '').trim(), len };
+      if (variantes.length) {
+        // 1) La variante que ya trae el pedido; 2) la que mejor case con el nombre del ítem
+        //    (mismo emparejador del resto de DealFlow: tolera orden, tallas de una letra, "Blanca"/"Blanco").
+        let v = it.variant_id ? variantes.find((x) => x.id === it.variant_id) : undefined;
+        if (!v) {
+          const { emparejarItem } = await import('./emparejar.js');
+          // El producto ya está identificado: solo falta la talla/color. Se compara con el
+          // nombre tal cual viene en el ítem (p. ej. el de Shopify) para no descartarlo por nombre.
+          const baseItem = it.nombre.split('(')[0].split(' - ')[0].trim() || prod.nombre;
+          const r = emparejarItem(it.nombre, variantes.map((x) => ({ productId: prod.id, variantId: x.id, producto: baseItem, label: x.label })));
+          v = r.v ? variantes.find((x) => x.id === r.v!.variantId) : undefined;
+          if (!v) {
+            const motivo = /variante ""/.test(r.motivo) ? ' (el pedido no dice la talla o el color)' : r.motivo ? ` (${r.motivo.replace(baseItem, prod.nombre)})` : '';
+            return { error: `No supimos cuál talla/color es "${it.nombre}"${motivo}. Corrígelo en el pedido con "🧩 Corrige la talla o el color" o con ✏️ Editar. Variantes de ${prod.nombre}: ${variantes.slice(0, 12).map((x) => x.label).join(', ')}${variantes.length > 12 ? '…' : ''}.` };
           }
+          // Queda guardada en el pedido: la próxima vez ya no se adivina.
+          if (it.id) db.prepare('UPDATE order_items SET product_id = ?, variant_id = ? WHERE id = ?').run(prod.id, v.id, it.id);
         }
-        if (!mejor) return { error: `No supimos cuál variante es "${it.nombre}". Revisa las variantes del producto.` };
-        const vid = Number(String(mejor.sku).replace(/[^0-9]/g, ''));
-        if (!vid) return { error: `La variante de "${it.nombre}" no está vinculada con Dropi. En Productos → Variantes, toca "Traer variantes de Dropi".` };
-        variationId = vid;
+        let vid = Number(String(v.sku).replace(/[^0-9]/g, ''));
+        if (!vid && !sincronizados.has(prod.id)) {
+          // Sin vínculo: traemos las variaciones de Dropi una vez y volvemos a mirar.
+          sincronizados.add(prod.id);
+          const { sincronizarProductoDropi } = await import('./dropiSync.js');
+          const s2 = await sincronizarProductoDropi(sid, prod.id, undefined, true);
+          if (!('error' in s2) && s2.tipo === 'SIMPLE') vid = -1; // en Dropi es producto simple
+          else { variantes = leerVariantes(); const v2 = variantes.find((x) => x.id === v!.id); vid = Number(String(v2?.sku || '').replace(/[^0-9]/g, '')); }
+        }
+        if (!vid) return { error: `La variante "${v.label}" de "${prod.nombre}" no tiene su variación de Dropi. Abre el producto → Dropi → "Traer variantes", o ponle el código a mano.` };
+        variationId = vid > 0 ? vid : undefined;
       }
       const tipo: 'SIMPLE' | 'VARIABLE' = variationId ? 'VARIABLE' : 'SIMPLE';
       const precioUnit = it.precio > 0 ? it.precio : Math.round(total / Math.max(1, totalQty));
@@ -1474,6 +1486,15 @@ api.get('/dropi/producto/:id', requireAuth, requireStore, async (req, res) => {
 // Cotiza un pedido en Dropi: resuelve destino, arma los productos y devuelve las
 // transportadoras con su precio para que el operador elija.
 api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sidT = req.user!.storeId!;
+  // Lo que pase al cotizar (incluidas las llamadas a Dropi) queda en el registro del pedido.
+  const jsonOrig = res.json.bind(res);
+  res.json = (b: { error?: string; ciudad?: string; transportadoras?: unknown[] }) => {
+    if (res.statusCode >= 400) trazar(sidT, req.params.rowId, { etapa: 'despacho', nivel: 'error', titulo: 'Cotización en Dropi falló', detalle: String(b?.error || '') });
+    else trazar(sidT, req.params.rowId, { etapa: 'despacho', nivel: 'info', titulo: `Cotizado en Dropi${b?.ciudad ? ` para ${b.ciudad}` : ''}`, detalle: Array.isArray(b?.transportadoras) ? `${b.transportadoras.length} transportadoras disponibles` : '' });
+    return jsonOrig(b);
+  };
+  await conPedido(sidT, req.params.rowId, async () => {
   try {
   const { resolverProductosDropi, credOrDie } = dropiHelpers;
   const sid = req.user!.storeId!;
@@ -1495,6 +1516,7 @@ api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requireOwner
     console.error('[dropi] cotizar', e);
     res.status(500).json({ error: `No pudimos cotizar en Dropi: ${e instanceof Error ? e.message : e}` });
   }
+  });
 });
 
 // Crea el pedido en Dropi con la transportadora elegida (o sin ella si auto).
@@ -1932,6 +1954,14 @@ api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, re
   const ok = r.chat === 'enviado' || r.chat === 'plantilla' || r.contacto === 'plantilla';
   if (!ok) return res.status(400).json({ error: r.detalle.join(' ') || 'No se encontró el chat del cliente ni un número de contacto.' });
   res.json({ ok: true, ...r });
+});
+// Registro (línea de tiempo) de un pedido para la tienda: qué pasó al crearlo, confirmarlo y despacharlo.
+api.get('/orders/:rowId/registro', requireAuth, requireStore, (req, res) => {
+  const sid = req.user!.storeId!;
+  if (!db.prepare('SELECT 1 FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid)) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const eventos = (db.prepare("SELECT id, etapa, nivel, titulo, detalle, datos, created_at FROM order_eventos WHERE order_id = ? AND store_id = ? ORDER BY id DESC LIMIT 200").all(req.params.rowId, sid) as Record<string, unknown>[])
+    .map((e) => ({ ...e, datos: e.datos && e.nivel === 'error' ? pj(String(e.datos), String(e.datos)) : null }));
+  res.json({ eventos });
 });
 // Ítems del pedido cuya talla/color no existe en el producto, con las variantes que sí hay
 // (para corregirlos desde el mismo pedido con un selector).

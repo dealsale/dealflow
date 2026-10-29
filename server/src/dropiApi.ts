@@ -170,7 +170,7 @@ export async function resolverDestino(
   return { ciudad: { id: Number(found.id), name: nombreDe(found), cod_dane: cod, department_id: depto.id, recaudo: recaudoOk }, depto };
 }
 
-export interface DropiVariacion { id: number; atributos: string; sku: string; attrs: { nombre: string; valor: string }[]; stock: number | null }
+export interface DropiVariacion { id: number; atributos: string; nombre: string; sku: string; attrs: { nombre: string; valor: string }[]; stock: number | null }
 export interface DropiProducto { id: number; name: string; tipo: 'SIMPLE' | 'VARIABLE'; userId: number; variaciones: DropiVariacion[] }
 
 /** Trae un producto de Dropi por su id, con sus variaciones y el proveedor (user_id). */
@@ -216,6 +216,7 @@ export async function productoDropi(cred: DropiCred, id: number | string): Promi
     const variaciones: DropiVariacion[] = varsRaw.map((v) => ({
       id: Number(v.id),
       atributos: attrTexto(v) || String(v.id),
+      nombre: String(v.name ?? v.nombre ?? '').trim(),
       sku: String(v.sku || ''),
       attrs: attrsDe(v),
       stock: stockDe(v),

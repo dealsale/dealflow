@@ -66,3 +66,13 @@ Pone un botón **Enviar a DealFlow** en cada pedido de tu panel de Shopify (func
 3. En DealFlow genera un **código de conexión** (🔑, cópialo: no se vuelve a mostrar), haz clic en el ícono de DealFlow en Chrome, pégalo y dale **Guardar y probar**.
 4. Abre un pedido en Shopify y toca **Enviar a DealFlow**: se crea con sus productos y variantes (si es de las últimas 24 h se le envía la confirmación).
 Errores: "Código no válido. Genera uno en DealFlow → Integraciones → Shopify → Extensión"; "No encontramos el número del pedido en la página de Shopify" (abre el pedido, no la lista); "Conecta una IA en Integraciones para leer el pedido"; "La IA no pudo leer el pedido. Intenta de nuevo".
+
+## Dropi: vincular las variantes (talla y color) y el error "No supimos cuál talla/color es"
+Sección: productos
+Claves: dropi variantes, vincular variantes dropi, verifica las variantes, revisa las variantes, no supimos cual talla, codigo dropi variante, variantes repetidas, s/m, l/xl, traer variantes de dropi
+- Todo lo de Dropi está en el producto → bloque **Dropi**: pon el **ID del producto en Dropi** y toca **⬇ Traer variantes** (o **↻ Actualizar desde Dropi**). Trae cada variación con su talla **y** su color, la vincula y toma el stock.
+- **Ver vínculos de cada variante** muestra una tabla con la talla, el color y el **código en Dropi** de cada variante (✓ vinculada). Puedes corregir un código a mano; se guarda al salir del campo.
+- Si las variantes salen solo con la talla ("S/M" repetido sin color), toca **↻ Actualizar desde Dropi**: los nombres se completan ("S/M · Negro") sin perder los vínculos.
+- Al despachar, DealFlow encuentra la variante aunque el pedido venga de Shopify con otro formato ("Enterizo - S/M / Beige") y la deja guardada en el pedido. Si la variante no tiene código, intenta traerlo de Dropi solo.
+- "No supimos cuál talla/color es…": el pedido no dice la talla o el color, o pide una que el producto no tiene. Corrígelo ahí mismo con **🧩 Corrige la talla o el color** (o ✏️ Editar) y vuelve a tocar **Generar en Dropi**.
+- Abajo en el pedido, **🧾 Registro del pedido** muestra todo lo que pasó: cotización, creación en Dropi, respuestas de Dropi y errores.
