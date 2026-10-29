@@ -8,6 +8,7 @@ import { OrdenarDireccion } from './DireccionPedido';
 import { HistorialClienteCard, useHistorialCliente, confirmarSiDevolvio, AvisoDevolucionPropia } from './HistorialCliente';
 import { confirmar, pedirTexto, notificar } from './dialogs';
 import { enProceso, ProcesoPedido } from './Proceso';
+import { apiRegistroPedido, type EventoPedido } from '../lib/api';
 import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
 
@@ -68,6 +69,7 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
           {paso === 'cargando' ? 'Cotizando…' : '📦 Generar en Dropi'}
         </button>
         {msg && <div style={{ marginTop: 8, fontSize: 12.5, color: msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
+        {/talla\/color|no tiene la variante|No pudimos emparejar/.test(msg) && <div style={{ marginTop: 8 }}><CorregirVariantes key={msg} df={df} sel={sel} onListo={cotizar} /></div>}
       </div>
     );
   }
@@ -751,7 +753,54 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
             >🗑 Eliminar</button>
           </div>
         </div>
+        {sel.rowId && <RegistroPedido key={String(sel.rowId)} rowId={String(sel.rowId)} />}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Registro del pedido: todo lo que pasó con él (creación, confirmación, cotización y
+ * creación en Dropi/Effi, guía, errores de las integraciones) en orden, para saber
+ * por qué algo no salió sin pedirle a soporte.
+ */
+function RegistroPedido({ rowId }: { rowId: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const [eventos, setEventos] = useState<EventoPedido[] | null>(null);
+  const [verDatos, setVerDatos] = useState<number | null>(null);
+  const cargar = () => void apiRegistroPedido(rowId).then((r) => setEventos(r.data?.eventos || []));
+  useEffect(() => { if (abierto) cargar(); }, [abierto]);
+  const color = (n: string) => (n === 'error' ? 'var(--df-danger)' : n === 'warn' ? 'var(--df-warning)' : n === 'ok' ? 'var(--df-brand)' : 'var(--df-border-strong)');
+  const hora = (s: string) => new Date(s.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  const errores = (eventos || []).filter((e) => e.nivel === 'error').length;
+  return (
+    <div style={{ padding: '12px 20px 16px', borderTop: '1px solid var(--df-border)' }}>
+      <button onClick={() => setAbierto((a) => !a)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+        <span style={{ fontSize: 11, color: 'var(--df-text-faint)', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', flex: 1 }}>🧾 Registro del pedido</span>
+        {abierto && eventos && <span style={{ fontSize: 11, color: errores ? 'var(--df-danger)' : 'var(--df-text-faint)' }}>{eventos.length} eventos{errores ? ` · ${errores} con error` : ''}</span>}
+      </button>
+      {abierto && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {eventos === null ? <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Cargando…</div>
+            : !eventos.length ? <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Este pedido todavía no tiene eventos registrados (los pedidos antiguos no tienen registro).</div>
+            : eventos.map((e) => (
+              <div key={e.id} style={{ display: 'flex', gap: 10, paddingBottom: 10 }}>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: color(e.nivel), marginTop: 5, flexShrink: 0 }} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: e.nivel === 'error' ? 'var(--df-danger-dark)' : 'var(--df-text-strong)', wordBreak: 'break-word' }}>{e.titulo}</div>
+                  {e.detalle && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', wordBreak: 'break-word' }}>{e.detalle}</div>}
+                  <div style={{ fontSize: 10.5, color: 'var(--df-text-faint)', marginTop: 1 }}>
+                    {hora(e.created_at)} · {e.etapa}
+                    {e.datos != null && <> · <button onClick={() => setVerDatos(verDatos === e.id ? null : e.id)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--df-text-muted)', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 10.5 }}>{verDatos === e.id ? 'ocultar respuesta' : 'ver respuesta'}</button></>}
+                  </div>
+                  {verDatos === e.id && <pre style={{ fontSize: 10.5, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 7, padding: 8, marginTop: 4, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{typeof e.datos === 'string' ? e.datos : JSON.stringify(e.datos, null, 1)}</pre>}
+                </div>
+              </div>
+            ))}
+          {eventos && <button onClick={cargar} style={{ ...btnS, alignSelf: 'flex-start', padding: '5px 10px', fontSize: 11.5 }}>↻ Actualizar</button>}
+        </div>
+      )}
     </div>
   );
 }

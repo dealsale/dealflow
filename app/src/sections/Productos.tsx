@@ -173,7 +173,7 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
       : df.shopifyConectado;
   // Effi tiene su propio panel (abajo): artículo por variante y convenio del producto.
   // Sin definir: nada de Effi ni de Dropi en el producto. Shopify va aparte.
-  const activas = INTEGRACIONES.filter((i) => i.id !== 'effi' && conectada(i.id) && (i.id !== 'dropi' || p.despachoProveedor === 'dropi'));
+  const activas = INTEGRACIONES.filter((i) => i.id !== 'effi' && i.id !== 'dropi' && conectada(i.id));
   const todasVars = (p.variantes || []).filter((v) => v.id);
   const effiVinc = todasVars.length ? todasVars.filter((v) => (v.refs?.effi_id || '').trim()).length : null;
   const hayEffi = conectada('effi') && p.despachoProveedor === 'effi';
@@ -189,7 +189,7 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
       )}
       {hayDropi && (
         <BloquePlegable logo="/logos/dropi.jpg" titulo="Dropi" color="var(--df-warning)" abiertoInicial={false}
-          resumen={p.variantesFuente === 'dropi' ? 'Variantes sincronizadas con Dropi (se actualizan cada 6 h).' : 'Trae las variantes y el stock con el ID del producto en Dropi.'}>
+          resumen={`${p.variantesFuente === 'dropi' ? 'Sincronizado con Dropi (cada 6 h)' : 'Trae las variantes y el stock con el ID del producto en Dropi'}${variantes.length ? ` · ${variantes.filter((v) => (v.refs?.dropi || '').trim()).length}/${variantes.length} variantes vinculadas` : ''}.`}>
           <SyncDropi p={p} df={df} />
         </BloquePlegable>
       )}
@@ -249,7 +249,8 @@ function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
         <div style={{ fontSize: 12.5, marginTop: 8, lineHeight: 1.55, color: 'var(--df-text-body)' }}>
           {res.tipo === 'SIMPLE'
             ? <>✓ <b>{res.nombreDropi}</b> en Dropi no tiene variantes: quedó vinculado como producto simple.</>
-            : <>✓ <b>{res.nombreDropi}</b>: {res.total} variaciones en Dropi · <b>{res.vinculadas}</b> vinculadas · <b>{res.creadas}</b> nuevas{res.conStock ? ` · stock tomado de Dropi en ${res.conStock}` : ''}.</>}
+            : <>✓ <b>{res.nombreDropi}</b>: {res.total} variaciones en Dropi · <b>{res.vinculadas}</b> vinculadas · <b>{res.creadas}</b> nuevas{res.renombradas ? ` · ${res.renombradas} con su nombre completado (talla y color)` : ''}{res.conStock ? ` · stock tomado de Dropi en ${res.conStock}` : ''}.</>}
+          {!!res.repetidas?.length && <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>⚠️ En Dropi hay variaciones que no se distinguen ({res.repetidas.slice(0, 4).join(', ')}). Revisa en Dropi que cada una tenga su talla y su color.</div>}
           {res.sinDropi.length > 0 && (
             <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>
               ⚠️ {res.sinDropi.length} variante{res.sinDropi.length === 1 ? '' : 's'} de DealFlow no existe{res.sinDropi.length === 1 ? '' : 'n'} en Dropi: <b>{res.sinDropi.slice(0, 8).join(', ')}{res.sinDropi.length > 8 ? '…' : ''}</b>. No se borraron; elimínalas si ya no las vendes, o el asistente podría ofrecerlas.
@@ -257,12 +258,69 @@ function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
           )}
         </div>
       )}
+      <VinculosDropi p={p} df={df} />
       {deDropi && (
         <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 8 }}>
           Las variantes de este producto las define Dropi (no se arman combinando opciones).{' '}
           <button onClick={() => void soltar()} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--df-text-muted)', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5 }}>Volver a armarlas con las opciones</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Vínculo de cada variante con su variación de Dropi, en una tabla clara: la talla y
+ * el color de la variante (por columnas) y el código de Dropi, editable a mano.
+ */
+function VinculosDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
+  const [abierto, setAbierto] = useState(false);
+  const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
+  if (!variantes.length) return null;
+  const grupos = (p.opciones || []).map((o) => o.nombre).filter(Boolean);
+  const partes = (label: string) => label.split(/\s*·\s*/);
+  const columnas = Math.max(1, ...variantes.map((v) => partes(v.label || '').length));
+  const titulos = Array.from({ length: columnas }, (_, i) => grupos[i] || (i === 0 ? 'Variante' : `Opción ${i + 1}`));
+  const vinc = variantes.filter((v) => (v.refs?.dropi || '').trim()).length;
+  const sinColor = columnas === 1 && grupos.length > 1;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-body)' }}>
+        {abierto ? '▾' : '▸'} Ver vínculos de cada variante · <span style={{ color: vinc === variantes.length ? 'var(--df-brand-dark)' : 'var(--df-warning)' }}>{vinc}/{variantes.length} vinculadas</span>
+      </button>
+      {sinColor && <div style={{ fontSize: 12, color: 'var(--df-warning)', marginTop: 6 }}>⚠️ Las variantes solo tienen un dato ({titulos[0]}) aunque el producto tiene {grupos.join(' y ')}. Toca <b>↻ Actualizar desde Dropi</b> para completar sus nombres.</div>}
+      {abierto && (
+        <div style={{ marginTop: 8, border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <thead><tr style={{ background: 'var(--df-surface-2, var(--df-bg))' }}>
+              {titulos.map((t) => <th key={t} style={{ textAlign: 'left', padding: '7px 10px', fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 700 }}>{t}</th>)}
+              <th style={{ textAlign: 'left', padding: '7px 10px', fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 700 }}>Código en Dropi</th>
+            </tr></thead>
+            <tbody>
+              {variantes.map((v) => {
+                const ps = partes(v.label || '');
+                return (
+                  <tr key={v.id} style={{ borderTop: '1px solid var(--df-border)' }}>
+                    {titulos.map((_, i) => <td key={i} style={{ padding: '6px 10px', fontWeight: 600, whiteSpace: 'nowrap' }}>{ps[i] || '—'}</td>)}
+                    <td style={{ padding: '4px 8px', minWidth: 150 }}><CodigoDropi valor={v.refs?.dropi || ''} onSave={(x) => df.setVariantRef(p.id, v.id!, 'dropi', x)} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+function CodigoDropi({ valor, onSave }: { valor: string; onSave: (v: string) => void }) {
+  const [v, setV] = useState(valor);
+  useEffect(() => setV(valor), [valor]);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ color: v.trim() ? 'var(--df-brand)' : 'var(--df-warning)', fontSize: 12 }}>{v.trim() ? '✓' : '•'}</span>
+      <input value={v} onChange={(e) => setV(e.target.value)} onBlur={() => { if (v.trim() !== valor) onSave(v.trim()); }} placeholder="Sin vincular" inputMode="numeric"
+        style={{ width: '100%', border: '1px solid var(--df-border)', borderRadius: 7, padding: '5px 8px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
     </div>
   );
 }

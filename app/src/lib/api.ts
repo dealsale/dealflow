@@ -839,7 +839,7 @@ export const apiLeadDesbloquear = (id: string) => req<{ ok: true }>(`/api/leads/
 export interface AppConectada { id: string; nombre: string; enlace: string; esDealFlow: boolean }
 export const apiAppsConectadas = () => req<{ apps: AppConectada[]; waba: string }>('/api/whatsapp/apps-conectadas', 'GET');
 
-export interface ResultadoSyncDropi { tipo: 'SIMPLE' | 'VARIABLE'; nombreDropi: string; vinculadas: number; creadas: number; conStock: number; sinDropi: string[]; total: number }
+export interface ResultadoSyncDropi { tipo: 'SIMPLE' | 'VARIABLE'; nombreDropi: string; vinculadas: number; creadas: number; conStock: number; sinDropi: string[]; total: number; renombradas?: number; repetidas?: string[] }
 export const apiSincronizarDropi = (productId: string, dropiId: string) => req<ResultadoSyncDropi>(`/api/products/${encodeURIComponent(productId)}/dropi/sincronizar`, 'POST', { dropiId });
 export const apiSoltarVariantesDropi = (productId: string) => req<{ ok: true }>(`/api/products/${encodeURIComponent(productId)}/dropi/soltar-variantes`, 'POST');
 
@@ -1048,3 +1048,7 @@ export const apiSuperBibliotecaLandingPatch = (id: string, patch: { nombre?: str
 export const apiSuperBibliotecaLandingDelete = (id: string) => req<{ ok: true }>(`/api/superadmin/biblioteca-landings/${encodeURIComponent(id)}`, 'DELETE');
 export const apiSuperBibliotecaLandingEnviar = (id: string, storeId: string) =>
   req<{ ok: true; landingId: string }>(`/api/superadmin/biblioteca-landings/${encodeURIComponent(id)}/enviar-a-tienda`, 'POST', { storeId });
+
+// Registro (línea de tiempo) de un pedido.
+export interface EventoPedido { id: number; etapa: string; nivel: string; titulo: string; detalle: string; datos: unknown; created_at: string }
+export const apiRegistroPedido = (rowId: string) => req<{ eventos: EventoPedido[] }>(`/api/orders/${encodeURIComponent(rowId)}/registro`, 'GET');
