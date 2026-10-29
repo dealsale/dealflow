@@ -1554,7 +1554,7 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requirePermiso
   const nombreReal = (await import('./nombres.js')).resolverNombreCliente(String(o.lead_id || ''), String(o.cliente || ''), '');
   const [nombre, ...resto] = nombreReal.split(' ');
   const crear = await dropi.crearOrden(c, {
-    total: Number(o.total || 0), notas: `DealFlow DF-${o.numero || ''}${o.nota ? ' · ' + o.nota : ''}`,
+    total: Number(o.total || 0), notas: '', // sin notas: la tienda no quiere el rótulo de DealFlow/Shopify en la orden de Dropi
     nombre: nombre || nombreReal, apellido: resto.join(' '),
     direccion: String(o.direccion || ''), departamento: destino.depto.name, ciudad: destino.ciudad.name,
     telefono: String(o.tel || ''), conRecaudo, shopOrderId: `df-${o.id}`,
