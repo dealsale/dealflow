@@ -53,3 +53,13 @@ Claves: leads, etapas, embudo, prospectos, conversion, mover lead, perdido, no c
 - **Ventas**: ya tiene un pedido creado.
 - **No compró**: lo marcaste como perdido (no cuenta en el embudo).
 Arriba ves la **Conversión**. Busca por nombre, teléfono o mensaje y filtra por **Actividad** (Todo, Hoy, 7 o 30 días). Con **⇄ Mover** lo pasas a otra etapa (queda "✋ manual"); **↺ Automático** lo devuelve a moverse solo. Toca una tarjeta para ir al chat.
+
+## Iniciar conversaciones con plantilla (clientes de otro bot o de una base propia)
+Sección: inbox, crm
+Claves: iniciar conversacion, escribir primero, nuevo chat, contactos migrados, otro bot, base de clientes, enviar plantilla masiva, mensaje saliente, crear contacto
+WhatsApp solo deja escribirle primero a un cliente con una **plantilla aprobada**. En **Inbox** toca **＋ Iniciar conversación**:
+1. Elige la plantilla aprobada y llena sus variables (escribe **{nombre}** para poner el nombre de cada cliente). Abajo ves cómo queda el mensaje.
+2. Pega los clientes, uno por línea: celular y nombre (ej. "3001234567, Ana Ruiz"). También sirve pegar dos columnas copiadas de Excel; los repetidos se quitan solos. Celulares de 10 dígitos se toman como de Colombia (+57).
+3. Deja marcado **Que el asistente atienda cuando respondan** si quieres que el bot siga la conversación.
+4. **Enviar**: va por tandas, con pausas, para cuidar tu número. Al final ves cuáles salieron y cuáles no (con el motivo) y puedes **Abrir chat**.
+No se envía a clientes bloqueados ni a quien pidió que no le escribieran. Escríbele solo a clientes que ya compraron o aceptaron que los contactes: si muchos bloquean o reportan, Meta baja la calidad del número. Meta cobra cada plantilla. Solo el dueño de la tienda puede usarlo. Si no tienes plantillas aprobadas, pide al equipo de DealFlow que publique una.

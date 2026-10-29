@@ -15,7 +15,7 @@
  * Modo prueba (para la revisión de Shopify): no crea remisiones ni guías reales,
  * simula el despacho con una guía de prueba.
  */
-import { db, pj, uid, registrarLog } from './db.js';
+import { db, pj, uid, registrarLog, siguienteNumeroPedido } from './db.js';
 import { trazar } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
 import { desempacar, corregirPacksAntiguos } from './packs.js';
@@ -84,7 +84,7 @@ export async function importarPedido(storeId: string, shop: string, o: Fila, con
     const envio = (Array.isArray(o.shipping_lines) ? o.shipping_lines as Fila[] : []).reduce((a, s) => a + (Number(s.price) || 0), 0);
     const total = Math.round(Number(o.total_price) || 0);
     const pagado = txt(o.financial_status) === 'paid';
-    const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 1048) + 1;
+    const numero = siguienteNumeroPedido(storeId);
     const oid = uid();
     db.prepare(`INSERT INTO orders (id, store_id, numero, cliente, ciudad, departamento, tel, direccion, estado, transportadora, total, envio, nota, origen, shopify_id, shopify_shop, shopify_gid)
       VALUES (?,?,?,?,?,?,?,?,'Nuevo','',?,?,?,'shopify',?,?,?)`)

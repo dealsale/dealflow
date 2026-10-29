@@ -152,7 +152,7 @@
   --df-st-devuelto: #F9A8D4; --df-st-devuelto-bg: rgba(244, 114, 182, 0.16);
 
   color-scheme: dark;
-  --df-surface: rgba(24, 29, 58, 0.72);
+  --df-surface: rgba(24, 29, 58, 0.86);
   --df-bg: #060814;
   --df-surface-2: rgba(255, 255, 255, 0.06);
   --df-border: rgba(148, 163, 253, 0.18);
@@ -704,6 +704,21 @@ button[style*="background: var(--df-brand)"]:active,
    translúcida y se alcanzaba a leer lo de abajo a través de la lista. */
 :root[data-theme='dark'] .df-pop { background: #0b1026 !important; }
 :root[data-theme='premium'] .df-pop { background: #141938 !important; }
+/* Premium: todo lo que queda ENCIMA de la página (detalle del pedido, modales, paneles de
+   edición, menús) lleva fondo casi sólido, para que no se lea lo de atrás. Sin backdrop-filter:
+   el fondo animado lo recalcularía en cada cuadro (ver la nota del lienzo premium). */
+:root[data-theme='premium'] [role='dialog'],
+:root[data-theme='premium'] [style*='position: fixed'][style*='background: var(--df-surface)'],
+:root[data-theme='premium'] [style*='position: fixed'] [style*='background: var(--df-surface)'],
+:root[data-theme='premium'] [style*='position: absolute'][style*='background: var(--df-surface)'],
+:root[data-theme='premium'] [style*='position: absolute'][style*='inset: 0'] > [style*='background: var(--df-surface)'],
+:root[data-theme='premium'] .df-expand {
+  background-color: #151A3B !important;
+}
+/* El velo detrás de los modales: más oscuro, para que la página de atrás no distraiga. */
+:root[data-theme='premium'] [style*='position: fixed'][style*='inset: 0'][style*='rgba(2'] {
+  background-color: rgba(3, 5, 16, .82) !important;
+}
 
 /* ── Punteros de DealFlow ──────────────────────────────────────────────
    Uno para cada cosa, para que siempre se note qué hace el mouse:

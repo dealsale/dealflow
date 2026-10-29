@@ -1394,12 +1394,33 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   }
   let doc = r.body.data;
   if (!r.ok && r.http === 409) {
-    // Reintento: Effi ya tiene la remisión de esta llave. Buscamos la que quedó.
+    // Effi ya usó esta llave. Si el pedido ya tiene su remisión guardada, es un reintento.
     const prev = db.prepare('SELECT effi_doc FROM orders WHERE id = ?').get(orderId) as { effi_doc: string } | undefined;
     const d = pj<Fila>(prev?.effi_doc || '', {});
     if (d.id) doc = d;
-    else { const e = 'Effi ya tiene una remisión para este pedido. Usa "Reenviar" si necesitas crear otra.'; registrarLog(storeId, 'warn', 'despacho', `${numDF}: ${e}`); return { error: e }; }
-  } else if (!r.ok || !doc) {
+    else {
+      // Si no, se revisa la remisión que dice Effi: puede ser de ESTE pedido (se creó y no
+      // alcanzamos a guardarla) o de OTRO que tuvo el mismo número (pedido eliminado).
+      const m = /sucursal\s*(\d+)\s*,\s*id\s*(\d+)/i.exec(mensajeError(r));
+      const ya = m ? await effi<Fila[]>(c.apiKey, 'GET', '/api/remision_v', { query: { sucursal: m[1], id: m[2], vigente: 1, por_pagina: 1 } }) : null;
+      const f = ya?.ok ? ya.body.data?.[0] : undefined;
+      const esDeEste = !!f && txt(f.cliente) === txt(cli.tercero) && txt(f.observacion).includes(numDF);
+      if (f && esDeEste) {
+        doc = f;
+        trazar(storeId, orderId, { etapa: 'despacho', nivel: 'info', titulo: `Effi ya tenía la remisión ${txt(f.id_transaccion) || m![2]} de este pedido: quedó vinculada`, datos: { remision: f } });
+      } else {
+        const motivo = !m ? 'Effi no dijo cuál remisión' : f ? `es de otro pedido (cliente ${txt(f.nombre_cliente) || txt(f.cliente)}${txt(f.observacion) ? `, «${txt(f.observacion)}»` : ''})` : 'está anulada o ya no existe';
+        trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `La llave de Effi ya la usó la remisión ${m ? m[2] : ''} y ${motivo}: se crea una remisión nueva` });
+        body.idempotency_key = `${String(body.idempotency_key).slice(0, 28)}-r${Date.now().toString(36).slice(-5)}`;
+        r = await effi<Fila>(c.apiKey, 'POST', '/api/remision_v', { body });
+        doc = r.body.data;
+      }
+    }
+  }
+  if (!doc && !r.ok && r.http === 409) {
+    const e = 'Effi dice que esta remisión ya existe, pero no pudimos confirmarla. Revisa en Effi las remisiones con la observación de este pedido.';
+    registrarLog(storeId, 'warn', 'despacho', `${numDF}: ${e}`); return { error: e };
+  } else if (!doc || (!r.ok && doc === r.body.data)) {
     const sinStock = /supera las existencias/i.test(mensajeError(r)) && !body.convenio_dropshipping;
     // "El convenio Dropshipping no es válido": Effi no reconoce ESE código (mal copiado, de
     // otro proveedor o inactivo). No es un problema de los artículos.
@@ -1468,7 +1489,14 @@ async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, 
     direccion_destinatario: [txt(o.direccion).slice(0, 200)],
     observacion: `DealFlow DF-${numero}`,
   };
-  const r = await effi<{ guias?: Fila[] }>(c.apiKey, 'POST', '/api/guia_transporte', { body });
+  let r = await effi<{ guias?: Fila[] }>(c.apiKey, 'POST', '/api/guia_transporte', { body });
+  // La llave ya la usó la guía de otro pedido que tuvo este mismo número (pedido eliminado):
+  // se reintenta una vez con una llave nueva (este pedido no tiene guía guardada).
+  if (!r.ok && r.http === 409 && !pj<Fila>(txt(o.effi_guia), {}).id) {
+    trazar(storeId, txt(o.id), { etapa: 'guia', nivel: 'warn', titulo: 'La llave de la guía ya la usó otro pedido con el mismo número: se crea con una llave nueva', detalle: mensajeError(r) });
+    body.idempotency_key = `${String(body.idempotency_key).slice(0, 28)}-r${Date.now().toString(36).slice(-5)}`;
+    r = await effi<{ guias?: Fila[] }>(c.apiKey, 'POST', '/api/guia_transporte', { body });
+  }
   if (!r.ok) {
     const m = mensajeError(r);
     // Errores de configuración de la cuenta de Effi: se dice qué hacer.

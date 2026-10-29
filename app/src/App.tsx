@@ -410,7 +410,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
       </div>
 
       {df.floatingNav && <FloatingNav df={df} />}
-      <AsistenteSoporte usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} />
+      <AsistenteSoporte usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} oculto={df.hasSelectedOrder} />
       <OrderDetailPanel df={df} />
       <OrderToast df={df} />
       <ManualOrderModal df={df} open={df.crearPedidoAbierto} onClose={df.cerrarCrearPedido} prefill={df.crearPedidoPrefill} />
@@ -458,7 +458,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
       </main>
 
       {df.floatingNav && <FloatingNav df={df} />}
-      <AsistenteSoporte mobile usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} />
+      <AsistenteSoporte mobile usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} oculto={df.hasSelectedOrder || df.mobileChatOpen} />
       <MobileDrawer df={df} />
       <MobileChat df={df} />
       <MobileOrderSheet df={df} />

@@ -13,7 +13,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { db, pj, uid, registrarLog, DATA_DIR } from './db.js';
+import { db, pj, uid, registrarLog, DATA_DIR, siguienteNumeroPedido } from './db.js';
 import { slugTienda, BASE_TIENDA } from './tiendaPublica.js';
 import { trazar } from './trazabilidad.js';
 import { idsDeItem } from './emparejar.js';
@@ -634,7 +634,7 @@ export async function pedidoLanding(landingId: string, b: Fila, ip: string): Pro
   } else grupos.set('', bundle.cantidad);
   const precioUnidad = Math.round(bundle.precio / bundle.cantidad);
 
-  const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 1048) + 1;
+  const numero = siguienteNumeroPedido(storeId);
   const oid = uid();
   const nota = [`Landing: ${d.nombre}`, bundle.titulo ? `Oferta: ${bundle.titulo}` : '', 'Contra entrega', txt(b.correo) ? `Correo: ${corto(b.correo, 80)}` : ''].filter(Boolean).join(' · ');
   db.prepare(`INSERT INTO orders (id, store_id, numero, cliente, ciudad, departamento, tel, direccion, estado, transportadora, total, envio, nota, origen, landing_id)

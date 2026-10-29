@@ -464,6 +464,8 @@ export const apiAntibaneoEstado = () => req<AntibaneoEstado>('/api/antibaneo/est
 
 export interface PlantillaAprobada { id: string; nombre: string; idioma: string; categoria: string; encabezado: string; cuerpo: string; pie: string; variables: number; ejemplos: string[] }
 export const apiPlantillasAprobadas = () => req<{ plantillas: PlantillaAprobada[] }>('/api/plantillas-aprobadas', 'GET');
+export const apiIniciarConPlantilla = (b: { plantillaId: string; params: string[]; asistente: boolean; contactos: { tel: string; nombre: string }[] }) =>
+  reqBase<{ resultados: { tel: string; nombre: string; ok: boolean; error?: string; leadId?: string }[] }>('/api/leads/iniciar-plantilla', 'POST', b);
 export const apiEnviarPlantilla = (leadId: string, plantillaId: string, params?: string[]) => req<{ ok: true }>(`/api/leads/${leadId}/enviar-plantilla`, 'POST', { plantillaId, params });
 
 // ── Completar pedido desde el chat ──

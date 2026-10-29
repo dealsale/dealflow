@@ -793,6 +793,18 @@ db.exec("CREATE TABLE IF NOT EXISTS app_flags (clave TEXT PRIMARY KEY, ts TEXT N
 }
 
 export const uid = () => crypto.randomUUID();
+
+// Número de pedido (DF-…): nunca se repite, aunque se eliminen pedidos. Antes era el mayor
+// número + 1, así que al borrar el último el siguiente pedido reusaba su número, y con él la
+// llave de Effi (df-tienda-número): Effi respondía "ya existe" con la remisión del pedido viejo.
+addColumn('stores', 'ultimo_numero INTEGER NOT NULL DEFAULT 0');
+export function siguienteNumeroPedido(storeId: string): number {
+  const max = (db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 0;
+  const ult = (db.prepare('SELECT ultimo_numero u FROM stores WHERE id = ?').get(storeId) as { u: number } | undefined)?.u || 0;
+  const n = Math.max(max, ult, 1048) + 1;
+  db.prepare('UPDATE stores SET ultimo_numero = ? WHERE id = ?').run(n, storeId);
+  return n;
+}
 export const j = (v: unknown) => JSON.stringify(v);
 export const pj = <T,>(s: string, fallback: T): T => {
   try {

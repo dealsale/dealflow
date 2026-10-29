@@ -59,7 +59,8 @@ function Texto({ t }: { t: string }) {
   return <>{partes}</>;
 }
 
-export function AsistenteSoporte({ usuario, seccion, mobile }: { usuario: string; seccion: string; mobile?: boolean }) {
+/** `oculto`: hay un panel abierto encima (detalle del pedido, chat en el celular): el botón no lo tapa. */
+export function AsistenteSoporte({ usuario, seccion, mobile, oculto }: { usuario: string; seccion: string; mobile?: boolean; oculto?: boolean }) {
   const cfg = useSoporteConfig();
   const mostrar = useAsistenteVisible();
   const clave = `df:soporte:chat:${usuario}`;
@@ -107,7 +108,7 @@ export function AsistenteSoporte({ usuario, seccion, mobile }: { usuario: string
         .df-sop-punto { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; animation: dfSopPunto 1.2s infinite }
         @media (prefers-reduced-motion: reduce) { .df-sop-panel, .df-sop-punto, .df-sop-boton { animation: none !important } }
       `}</style>
-      {!abierto && (
+      {!abierto && !oculto && (
         <button type="button" onClick={() => setAbierto(true)} aria-label={`Abrir ${cfg.nombre}`} title={cfg.nombre}
           className="df-sop-boton" style={{ position: 'fixed', right: mobile ? 12 : 20, bottom: abajo, zIndex: 46, width: mobile ? 62 : 70, height: mobile ? 62 : 70, padding: 0, borderRadius: '50%', border: 0, cursor: 'pointer', background: 'transparent', filter: 'drop-shadow(0 12px 18px rgba(37,99,235,.45))' }}>
           <img src="/sky.webp" alt="" width={70} height={70} style={{ width: '100%', height: '100%', display: 'block' }} />
