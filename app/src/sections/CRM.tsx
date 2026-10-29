@@ -1,4 +1,5 @@
 import { clicAparte } from '../components/EnlaceApp';
+import { IniciarConversacion } from '../components/IniciarConversacion';
 import { apiAnuncioProducto, apiVincularAnuncio } from '../lib/api';
 import { CargandoChat } from '../components/CargandoChat';
 import { urlDe, useRecordado } from '../lib/rutas';
@@ -257,6 +258,7 @@ export function CRM({ df }: { df: DealFlowState }) {
           </div>
         )}
         <div style={{ flex: 1 }} />
+        {df.sessionUser?.esDueno !== false && <IniciarConversacion onAbrirChat={(id) => df.abrirChat(id)} />}
         {/* Registro GENERAL de la tienda (todos los chats). El de un chat puntual está dentro del chat. */}
         <button
           onClick={() => df.abrirLogs()}

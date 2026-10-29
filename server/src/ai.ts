@@ -6,7 +6,7 @@ import { idsDeItem, separarVariantes, variantesBase, emparejarItem, verificarVar
 import { revisarTotal, preciosDeProducto, tablaPrecios } from './precios.js';
 import { resolverNombreCliente, nombreValido, limpiarNombre } from './nombres.js';
 import { directivaIdioma, idiomaDe, confirmacionPedido, pedidoActualizado, preguntaUnProducto, preguntaVariosProductos } from './idioma.js';
-import { db, pj, uid, registrarLog } from './db.js';
+import { db, pj, uid, registrarLog, siguienteNumeroPedido } from './db.js';
 import { sendWhatsappText, sendWhatsappMedia, marcarEnviado } from './wa.js';
 import { saveOutgoingMedia, mediaPath, tipoDeMime } from './media.js';
 
@@ -1199,7 +1199,7 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
     return 'actualizado';
   }
-  const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(storeId) as { n: number | null }).n || 1048) + 1;
+  const numero = siguienteNumeroPedido(storeId);
   const oid = uid();
   // Atribución exacta: copiamos el anuncio del que vino este chat al pedido.
   const adLead = db.prepare('SELECT ad_id, ad_ref, canal FROM leads WHERE id = ?').get(lead.id) as { ad_id: string; ad_ref: string; canal: string } | undefined;

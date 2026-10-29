@@ -7,7 +7,7 @@ import { idiomaDe, MSG_ESTADO } from './idioma.js';
 import { ESTADOS_PEDIDO } from './estadosPedido.js';
 import { novedadesPorPedido } from './novedades.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { db, j, pj, uid, registrarLog, PLAN_UNICO } from './db.js';
+import { db, j, pj, uid, registrarLog, PLAN_UNICO, siguienteNumeroPedido } from './db.js';
 import { urlTienda } from './tiendaPublica.js';
 import * as sa from './shopifyApp.js';
 import { registrarAccesosEquipo, registrarAccionEquipo, listarAccesos, claveInvalida, estadoSeguridad } from './seguridad.js';
@@ -1128,7 +1128,7 @@ api.post('/orders', requireAuth, requireStore, (req, res) => {
   const envio = Math.max(0, Math.round(Number(b.envio) || 0));
   const totalItems = limpios.reduce((a, it) => a + it.qty * it.precio, 0);
   const total = b.total != null && Number(b.total) > 0 ? Math.round(Number(b.total)) : totalItems + envio;
-  const numero = ((db.prepare('SELECT MAX(numero) n FROM orders WHERE store_id = ?').get(sid) as { n: number | null }).n || 1048) + 1;
+  const numero = siguienteNumeroPedido(sid);
   const oid = uid();
   // Atribución: si hay un chat con ese teléfono que vino de un anuncio, lo copiamos.
   const telNorm = String(b.tel || '').replace(/\D/g, '').slice(-10);
@@ -2325,6 +2325,52 @@ api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, async (req, r
   db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
   registrarLog(sid, 'info', 'envio', `Plantilla "${t.nombre}" enviada al chat.`);
   res.json({ ok: true });
+});
+
+// Iniciar conversaciones con plantilla (clientes que vienen de otro bot o de una base propia):
+// crea el contacto si no existe y le envía una plantilla aprobada. Meta solo deja escribirle
+// primero a alguien con plantilla. Va de a pocos (máx. 25 por llamada, con pausa entre envíos)
+// para no disparar los controles anti-spam; el panel manda la lista por tandas.
+api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const t = db.prepare(
+    `SELECT t.nombre, t.idioma, t.encabezado, t.cuerpo, t.ejemplos FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id
+      WHERE p.store_id = ? AND p.template_id = ? AND p.estado = 'aprobada'`,
+  ).get(sid, String(req.body?.plantillaId || '')) as { nombre: string; idioma: string; encabezado: string; cuerpo: string; ejemplos: string } | undefined;
+  if (!t) return res.status(400).json({ error: 'Elige una plantilla aprobada para tu tienda.' });
+  const lista = (Array.isArray(req.body?.contactos) ? req.body.contactos : []).slice(0, 25) as { tel?: unknown; nombre?: unknown }[];
+  if (!lista.length) return res.status(400).json({ error: 'Agrega al menos un celular.' });
+  const nVars = [...new Set([...String(t.cuerpo || '').matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1])))].length;
+  const base = (Array.isArray(req.body?.params) ? req.body.params : []).map((x: unknown) => String(x ?? ''));
+  const conAsistente = req.body?.asistente !== false;
+  const resultados: { tel: string; nombre: string; ok: boolean; error?: string; leadId?: string }[] = [];
+  for (let i = 0; i < lista.length; i++) {
+    const nombre = String(lista[i].nombre ?? '').trim().slice(0, 80);
+    let dig = String(lista[i].tel ?? '').replace(/\D/g, '');
+    if (dig.length === 10 && dig.startsWith('3')) dig = '57' + dig; // celular de Colombia sin indicativo
+    if (dig.length < 11 || dig.length > 15) { resultados.push({ tel: String(lista[i].tel ?? ''), nombre, ok: false, error: 'Celular no válido (usa 10 dígitos o el número con indicativo).' }); continue; }
+    const tel = '+' + dig;
+    let lead = db.prepare("SELECT id, no_contactar FROM leads WHERE store_id = ? AND (wa_id = ? OR tel = ? OR substr(replace(replace(tel,' ',''),'+',''), -10) = ?)").get(sid, dig, tel, dig.slice(-10)) as { id: string; no_contactar: number } | undefined;
+    if (lead && Number(lead.no_contactar)) { resultados.push({ tel, nombre, ok: false, error: 'Este cliente pidió que no le escribieran.', leadId: lead.id }); continue; }
+    if (!lead) {
+      const id = uid();
+      db.prepare('INSERT INTO leads (id, store_id, nombre, tel, etapa, asignado, wa_id) VALUES (?,?,?,?,?,?,?)').run(id, sid, nombre || tel, tel, 'Explorando', conAsistente ? 'Asistente (bot)' : req.user!.nombre, dig);
+      lead = { id, no_contactar: 0 };
+    } else if (nombre) db.prepare('UPDATE leads SET nombre = ? WHERE id = ? AND (nombre = tel OR nombre = ?)').run(nombre, lead.id, tel);
+    // {nombre} en las variables = el nombre de cada contacto (o "cliente" si no tiene).
+    const params = Array.from({ length: nVars }, (_, k) => (base[k] || '').replace(/\{nombre\}/gi, nombre.split(' ')[0] || 'cliente') || pj<string[]>(t.ejemplos, [])[k] || '');
+    const r = await sendWhatsappTemplate(sid, dig, { nombre: t.nombre, idioma: t.idioma, encabezado: t.encabezado, cuerpo: t.cuerpo }, params, tel);
+    if (!r.ok) { resultados.push({ tel, nombre, ok: false, error: r.error, leadId: lead.id }); continue; }
+    const mid = uid();
+    db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'vendedor', r.textoRender || `[Plantilla: ${t.nombre}]`);
+    marcarEnviado(mid, { ok: true, wamid: r.wamid });
+    db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(conAsistente ? 'Asistente (bot)' : req.user!.nombre, lead.id);
+    resultados.push({ tel, nombre, ok: true, leadId: lead.id });
+    if (i < lista.length - 1) await new Promise((ok) => setTimeout(ok, 1200));
+  }
+  const ok = resultados.filter((x) => x.ok).length;
+  registrarLog(sid, 'info', 'envio', `Plantilla "${t.nombre}" enviada para iniciar ${ok} conversación(es)${resultados.length - ok ? ` (${resultados.length - ok} no salieron)` : ''}.`);
+  res.json({ resultados });
 });
 
 // Marca (o desmarca) el consentimiento del cliente para recibir promociones.
