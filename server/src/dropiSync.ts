@@ -33,7 +33,24 @@ function nombreGrupo(n: string): string {
 }
 // Tallas en mayúscula (S, M, XL, 2XL, S/M, L-XL); lo demás con inicial mayúscula ("VERDE" → "Verde").
 const esTalla = (t: string) => /^(\d*x{0,4}[sml]|\d+[a-z]?|unica)$/i.test(t);
-const esTallaCompuesta = (t: string) => t.split(/\s*[/-]\s*/).every((x) => x && esTalla(x));
+const esTallaCompuesta = (t: string) => t.split(/\s*[/-]\s*/).every((x) => x && esTalla(x)) || /^(\d?x{0,4}[sml]){2,3}$/i.test(t.trim());
+/**
+ * Forma canónica de una etiqueta para comparar: cada parte ("S/M", "Negro") por separado;
+ * las tallas compuestas se juntan ("S/M" = "SM" = "S-M" → "sm", "L/XL" = "LXL" → "lxl")
+ * y el resto se compara por palabras. Así "S/M · Rojo" y "Rojo · Sm" son la misma variante.
+ */
+function canon(label: string): string[] {
+  const out: string[] = [];
+  for (const parte0 of String(label || '').split(/\s*·\s*/)) {
+    const parte = parte0.replace(/^\s*(tallas?|size|colou?r(?:es)?)\s*[:\-]?\s+/i, '').trim();
+    if (!parte) continue;
+    const compacta = norm(parte).replace(/\s+/g, '');
+    if (esTallaCompuesta(parte) || /^(\d?x{0,4}[sml])+$/.test(compacta)) out.push(compacta.replace(/^xxl$/, '2xl').replace(/^xxxl$/, '3xl'));
+    else out.push(...tokens(parte));
+  }
+  return [...new Set(out)].filter((t) => !VACIAS.has(t));
+}
+const mismaVariante = (a: string, b: string) => { const x = canon(a); const y = canon(b); return x.length > 0 && iguales(x, y); };
 const bonito = (v: string) => { const t = String(v || '').trim(); return esTallaCompuesta(t) ? t.toUpperCase() : t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(); };
 
 /**
@@ -45,9 +62,16 @@ const bonito = (v: string) => { const t = String(v || '').trim(); return esTalla
  * También limpia etiquetas con un valor repetido ("M · Negro · M" → "M · Negro").
  */
 function repararDuplicados(productId: string, opciones: { nombre: string; valores: { valor: string; foto?: string }[] }[]): { opciones: typeof opciones; borradas: number; grupos: string[] } {
-  const kv = (x: string) => [...new Set(tokensVariante(x))].sort().join(' ');
+  const kv = (x: string) => canon(x).sort().join(' ');
   const igualValor = (x: string, y: string) => norm(x) === norm(y) || (!!kv(x) && kv(x) === kv(y));
   const gruposQuitados: string[] = [];
+  // Valores repetidos dentro de un grupo ("S/M" y "Sm"): se deja el primero (con su foto si la tiene).
+  let valoresQuitados = 0;
+  opciones = opciones.map((g) => {
+    const vistos: string[] = [];
+    const valores = (g.valores || []).filter((v) => { const k = kv(v.valor) || norm(v.valor); if (vistos.includes(k)) { valoresQuitados++; return false; } vistos.push(k); return true; });
+    return { ...g, valores };
+  });
   const quedan = opciones.filter((g, i) => {
     const vals = (g.valores || []).map((v) => v.valor);
     const otro = opciones.find((h, j) => j !== i && !gruposQuitados.includes(h.nombre) && vals.length > 0 && vals.every((v) => (h.valores || []).some((y) => igualValor(y.valor, v))));
@@ -63,7 +87,7 @@ function repararDuplicados(productId: string, opciones: { nombre: string; valore
     for (const v of vs) {
       const lab = limpiarLabel(v.label);
       if (lab !== v.label) db.prepare('UPDATE variants SET label = ? WHERE id = ?').run(lab, v.id);
-      const k = [...new Set(tokensVariante(lab))].sort().join(' ');
+      const k = canon(lab).sort().join(' ');
       const base = porClave.get(k);
       if (!k || !base) { porClave.set(k, v); continue; }
       const refsBase = pj<Record<string, string>>(base.refs, {}); const refsDup = pj<Record<string, string>>(v.refs, {});
@@ -74,7 +98,7 @@ function repararDuplicados(productId: string, opciones: { nombre: string; valore
       db.prepare('DELETE FROM variants WHERE id = ?').run(v.id);
       borradas++;
     }
-    if (gruposQuitados.length) db.prepare('UPDATE products SET opciones = ? WHERE id = ?').run(JSON.stringify(quedan), productId);
+    if (gruposQuitados.length || valoresQuitados) db.prepare('UPDATE products SET opciones = ? WHERE id = ?').run(JSON.stringify(quedan), productId);
   })();
   return { opciones: quedan, borradas, grupos: gruposQuitados };
 }
@@ -99,7 +123,7 @@ export async function sincronizarProductoDropi(storeId: string, productId: strin
 
   type Grupo = { nombre: string; valores: { valor: string; foto?: string }[] };
   let opciones = pj<Grupo[]>(p.opciones, []);
-  const igualValor = (x: string, y: string) => norm(x) === norm(y) || iguales([...new Set(tokens(x))], [...new Set(tokens(y))]);
+  const igualValor = (x: string, y: string) => norm(x) === norm(y) || mismaVariante(x, y);
 
   // 0) Reparación: una sincronización anterior pudo crear un grupo repetido ("Opción 2" con
   //    las mismas tallas) y variantes duplicadas. Se quitan sin perder vínculos ni pedidos.
@@ -156,12 +180,12 @@ export async function sincronizarProductoDropi(storeId: string, productId: strin
   db.transaction(() => {
     for (const v of dp.variaciones) {
       const etiqueta = etiquetas.get(v.id)!;
-      const tv = [...new Set(tokens(etiqueta))];
+      const tv = canon(etiqueta);
       // 1) Por vínculo ya guardado; 2) mismas palabras (cualquier orden); 3) la variante está contenida en lo de Dropi (única).
       let fila = existentes.find((e) => !usadas.has(e.id) && String(pj<Record<string, string>>(e.refs, {}).dropi || '') === String(v.id));
-      if (!fila && tv.length) fila = existentes.find((e) => !usadas.has(e.id) && iguales([...new Set(tokens(e.label))], tv));
+      if (!fila && tv.length) fila = existentes.find((e) => !usadas.has(e.id) && iguales(canon(e.label), tv));
       if (!fila && tv.length) {
-        const cands = reales.filter((e) => !usadas.has(e.id) && tokens(e.label).length && tokens(e.label).every((t) => tv.some((x) => igualValor(x, t))));
+        const cands = reales.filter((e) => !usadas.has(e.id) && canon(e.label).length && canon(e.label).every((t) => tv.some((x) => iguales([x], [t]))));
         if (cands.length === 1) fila = cands[0];
       }
       if (fila) {
@@ -169,7 +193,7 @@ export async function sincronizarProductoDropi(storeId: string, productId: strin
         ponerRef.run(String(v.id), String(v.id), fila.id);
         vinculadas++;
         // Variante con nombre incompleto ("S/M" cuando en Dropi es "S/M · Negro"): se completa.
-        const te = [...new Set(tokens(fila.label))];
+        const te = canon(fila.label);
         if (tv.length > te.length && te.every((t) => tv.includes(t)) && !repetidas(etiqueta)) { ponerLabel.run(etiqueta, fila.id); renombradas++; }
         if (v.stock != null) { ponerStock.run(Math.max(0, Math.round(v.stock)), fila.id); conStock++; }
       } else if (soloVincular) {
