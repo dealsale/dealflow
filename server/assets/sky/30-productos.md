@@ -43,7 +43,7 @@ En **Variantes → 🔗 Conexiones por variante** pones el código de cada varia
 ## Traer las variantes de Dropi
 Sección: productos, dropi
 Claves: dropi variantes, traer variantes, id del producto en dropi, sincronizar dropi, stock dropi
-En el producto (con **Se despacha por: Dropi**) escribe el **ID del producto en Dropi** (el número del detalle del producto en Dropi, ej. 48213) y toca **Traer variantes de Dropi**: DealFlow trae todas sus tallas y colores, vincula las que ya tienes, crea las que falten y toma el stock de Dropi. Después se actualiza solo cada 6 horas. Si en Dropi no tiene variantes, queda vinculado como producto simple.
+En el producto (con **Se despacha por: Dropi**) escribe el **ID del producto en Dropi** (el número del detalle del producto en Dropi, ej. 48213) y toca **🔗 Vincular variantes**: DealFlow vincula cada variante que ya tienes con su variación de Dropi (por talla y color) y toma el stock. Si el producto ya tiene variantes, **no crea grupos ni variantes nuevas**: solo vincula (y te avisa qué variaciones de Dropi no tienen variante). Solo en un producto sin variantes las crea desde Dropi. Si una sincronización anterior dejó un grupo repetido ("Opción 2") o variantes duplicadas, al volver a vincular se quitan solas sin perder códigos ni pedidos. Después se actualiza solo cada 6 horas. Si en Dropi no tiene variantes, queda vinculado como producto simple.
 Errores: "Conecta Dropi en Integraciones primero"; "Escribe el ID del producto en Dropi"; "No pudimos consultar el producto en Dropi" (ID errado o Dropi caído).
 
 ## Crear el producto en Shopify desde DealFlow

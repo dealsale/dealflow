@@ -1269,7 +1269,7 @@ const dropiHelpers = {
           if (!('error' in s2) && s2.tipo === 'SIMPLE') vid = -1; // en Dropi es producto simple
           else { variantes = leerVariantes(); const v2 = variantes.find((x) => x.id === v!.id); vid = Number(String(v2?.sku || '').replace(/[^0-9]/g, '')); }
         }
-        if (!vid) return { error: `La variante "${v.label}" de "${prod.nombre}" no tiene su variación de Dropi. Abre el producto → Dropi → "Traer variantes", o ponle el código a mano.` };
+        if (!vid) return { error: `La variante "${v.label}" de "${prod.nombre}" no tiene su variación de Dropi. Abre el producto → Dropi → "Vincular variantes", o ponle el código a mano.` };
         variationId = vid > 0 ? vid : undefined;
       }
       const tipo: 'SIMPLE' | 'VARIABLE' = variationId ? 'VARIABLE' : 'SIMPLE';
