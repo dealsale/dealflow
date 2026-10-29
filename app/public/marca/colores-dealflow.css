@@ -1,0 +1,22 @@
+/* DealFlow · paleta oficial (manual de marca: https://dealflow.sbs/marca) */
+:root {
+  /* Fondos */
+  --df-noche: #050713;      /* fondo principal de la marca */
+  --df-noche-2: #0D1730;    /* tarjetas sobre noche */
+  --df-tinta: #EEF3FF;      /* texto sobre noche */
+  --df-niebla: #9AA8C9;     /* texto secundario sobre noche */
+  /* Color de marca */
+  --df-cian: #46D8FF;
+  --df-azul: #2E8BFF;
+  --df-violeta: #7658FF;
+  --df-magenta: #B75DFF;
+  /* Acento de producto (ventas, confirmaciones, botones de acción en la app) */
+  --df-esmeralda: #10B981;
+  --df-esmeralda-oscuro: #059669;
+  /* Apoyo */
+  --df-ambar: #FFC65C;
+  --df-coral: #FF6B8A;
+  /* Degradados */
+  --df-degradado: linear-gradient(120deg, #10B981 0%, #2E8BFF 45%, #7658FF 100%);   /* botones principales y destacados */
+  --df-degradado-ia: linear-gradient(120deg, #2E8BFF 0%, #6C59FF 52%, #B05AFF 100%); /* lo que hace la IA, fondos suaves */
+}

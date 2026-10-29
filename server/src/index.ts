@@ -135,7 +135,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '20261029-0450-biblanding',
+    build: '20261029-1322-marca',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -204,6 +204,8 @@ const enviarHtml = (res: express.Response, archivo: string) => { res.setHeader('
 if (existsSync(APP_DIST)) {
   // Guía de Tienda en línea (antes del estático: es una carpeta con sus capturas y no debe redirigir a «/»).
   app.get(/^\/tutorial-tienda-en-linea\/?$/i, (_req, res) => enviarHtml(res, path.join(APP_DIST, 'tutorial-tienda-en-linea', 'index.html')));
+  // Manual de marca para diseñadores (dealflow.sbs/marca y en cualquier host).
+  app.get(/^\/marca\/?$/i, (_req, res) => enviarHtml(res, path.join(APP_DIST, 'marca', 'index.html')));
   app.use(express.static(APP_DIST, {
     index: false, // sirve /logo.png y /assets/* en cualquier host
     setHeaders: (res, ruta) => {
