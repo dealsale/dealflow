@@ -202,7 +202,7 @@ export async function listasEffi(apiKey: string): Promise<Record<string, unknown
   const L = (i: number) => (Array.isArray(res[i]) ? (res[i] as Fila[]) : []);
   return {
     sucursales: L(0).map((f) => ({ id: txt(f.id), nombre: txt(f.nombre), prefijo: txt(f.prefijo_trans) })),
-    bodegas: L(1).map((f) => ({ id: txt(f.id), sucursal: txt(f.sucursal), nombre: txt(f.nombre) })),
+    bodegas: L(1).map((f) => ({ id: txt(f.id), sucursal: txt(f.sucursal), nombre: [nombreDeFila(f) || `Bodega ${txt(f.id)}`, txt(f.nombre_sucursal), txt(f.direccion)].filter(Boolean).join(' · ') })),
     centrosCostos: L(2).map((f) => ({ id: txt(f.id), nombre: [txt(f.codigo), txt(f.nombre)].filter(Boolean).join(' · ') })),
     formasPago: L(3).map((f) => ({ id: txt(f.id), nombre: txt(f.nombre), contado: txt(f.contado_credito) === '1' })),
     mediosPago: L(4).map((f) => ({ id: txt(f.id), nombre: txt(f.tipo), efectivo: txt(f.efectivo) === '1', banco: txt(f.banco) === '1', dinero: txt(f.dinero) === '1' })),
@@ -299,13 +299,38 @@ export async function opcionesGuiaEffi(apiKey: string): Promise<{ transportadora
  * en bodegas distintas (principal, garantías, devoluciones, la del proveedor…): por eso se
  * muestran con su ciudad, dirección y código, para elegir el punto de origen correcto.
  */
-function opcionRemitente(f: Fila): { id: string; nombre: string; corto: string; ciudad: string; direccion: string } {
+function opcionRemitente(f: Fila): { id: string; nombre: string; corto: string; ciudad: string; direccion: string; proveedor: string } {
   const ciudad = txt(f.nombre_ciudad); const direccion = txt(f.direccion);
-  return { id: txt(f.codigo), corto: txt(f.nombre), ciudad, direccion, nombre: [txt(f.nombre), ciudad, direccion].filter(Boolean).join(' · ') + ` (#${txt(f.codigo)})` };
+  const corto = nombreDeFila(f);
+  // El remitente puede ser la bodega de un proveedor: su nombre va aparte para no confundirlos.
+  const proveedor = PROVEEDOR.map((k) => valorTexto(f[k])).find((x) => x && x.toLowerCase() !== corto.toLowerCase()) || '';
+  const titulo = [corto || 'Sin nombre en Effi', proveedor && `proveedor ${proveedor}`].filter(Boolean).join(' — ');
+  return { id: txt(f.codigo), corto, ciudad, direccion, proveedor, nombre: [titulo, ciudad, direccion].filter(Boolean).join(' · ') + ` (#${txt(f.codigo)})` };
+}
+
+/**
+ * Nombre de un remitente o bodega de Effi. Según la cuenta, Effi lo manda en `nombre` o en
+ * otros campos (razón social, tercero, empresa, contacto, bodega…); si `nombre` viene vacío
+ * buscamos en esos, para no dejar al usuario eligiendo solo por la dirección.
+ */
+const NOMBRE = ['nombre', 'nombre_remitente', 'razon_social', 'nombre_tercero', 'nombre_empresa', 'empresa', 'nombre_comercial', 'nombre_contacto', 'contacto', 'nombre_bodega', 'alias', 'descripcion', 'nombre_sucursal'];
+const PROVEEDOR = ['nombre_proveedor', 'proveedor', 'nombre_empresa_proveedor', 'empresa_proveedor', 'nombre_propietario', 'propietario', 'nombre_tercero', 'razon_social', 'nombre_empresa', 'empresa'];
+const NO_NOMBRE = /ciudad|departamento|provincia|pais|barrio|transportadora|forma|medio|tipo|estado|vigente|usuario|creacion|correo|email|telefono|celular/i;
+const valorTexto = (v: unknown): string => {
+  if (v == null) return '';
+  if (typeof v === 'object') { const o = v as Fila; return txt(o.nombre ?? o.razon_social ?? o.name ?? '').trim(); }
+  const t = String(v).trim();
+  return /^\d*$/.test(t) ? '' : t; // un id numérico no es un nombre
+};
+function nombreDeFila(f: Fila): string {
+  for (const k of NOMBRE) { const v = valorTexto(f[k]); if (v) return v; }
+  for (const [k, v] of Object.entries(f)) if (/nombre|razon|empresa|tercero|proveedor|contacto|alias|descrip/i.test(k) && !NO_NOMBRE.test(k)) { const t = valorTexto(v); if (t) return t; }
+  return '';
 }
 
 // Remitentes vigentes de cada tienda (10 min): para no crear guías con uno que ya no existe.
 const cacheRemitentes = new Map<string, { t: number; v: Map<string, string> }>();
+const camposLogueados = new Set<string>();
 async function remitentesVigentes(storeId: string, apiKey: string): Promise<Map<string, string> | null> {
   const c = cacheRemitentes.get(storeId);
   if (c && Date.now() - c.t < 10 * 60e3) return c.v;
@@ -313,6 +338,12 @@ async function remitentesVigentes(storeId: string, apiKey: string): Promise<Map<
   if (!Array.isArray(r)) return null;
   const v = new Map(r.map((f) => [txt(f.codigo), opcionRemitente(f).nombre]));
   cacheRemitentes.set(storeId, { t: Date.now(), v });
+  // Una vez por arranque: qué campos trae Effi en los remitentes de esta tienda (para soporte).
+  if (!camposLogueados.has(storeId) && r.length) {
+    camposLogueados.add(storeId);
+    const sinNombre = r.filter((f) => !nombreDeFila(f)).length;
+    registrarLog(storeId, sinNombre ? 'warn' : 'info', 'effi', `Remitentes de Effi: ${r.length}${sinNombre ? `, ${sinNombre} sin nombre` : ''}. Campos que manda Effi: ${Object.keys(r[0]).join(', ')}.`);
+  }
   return v;
 }
 
@@ -480,7 +511,7 @@ async function bodegasEffi(storeId: string, apiKey: string): Promise<{ id: strin
   const c = cacheBodegas.get(storeId);
   if (c && Date.now() - c.ts < 3600e3) return c.lista;
   const r = await todo<Fila>(apiKey, '/api/bodega', {}, 5);
-  const lista = Array.isArray(r) ? r.map((f) => ({ id: txt(f.id), nombre: txt(f.nombre), sucursal: txt(f.sucursal) })) : [];
+  const lista = Array.isArray(r) ? r.map((f) => ({ id: txt(f.id), nombre: nombreDeFila(f) || `Bodega ${txt(f.id)}`, sucursal: txt(f.sucursal) })) : [];
   cacheBodegas.set(storeId, { ts: Date.now(), lista });
   return lista;
 }
