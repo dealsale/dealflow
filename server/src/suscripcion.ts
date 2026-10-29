@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { db, uid } from './db.js';
 import { PAQUETES, abonar } from './creditos.js';
 import { getLibraryProduct, importarLibraryEnTienda } from './biblioteca.js';
+import { getLibraryLanding, importarLandingEnTienda } from './bibliotecaLandings.js';
 
 /**
  * Suscripción de las tiendas a DealFlow. Modelo de dos fases:
@@ -246,6 +247,28 @@ export function crearCheckoutBiblioteca(storeId: string, correo: string, redirec
   return { url: `${CHECKOUT}?${params.toString()}` };
 }
 
+/** Pago único de una landing de la Biblioteca de landings (el id viaja en `plan`, tipo 'biblioteca_landing'). */
+export function crearCheckoutBibliotecaLanding(storeId: string, correo: string, redirectBase: string, libId: string): { url?: string; error?: string } {
+  const pub = process.env.WOMPI_PUBLIC_KEY;
+  const integrity = process.env.WOMPI_INTEGRITY;
+  const lib = getLibraryLanding(libId);
+  if (!lib || !lib.activo) return { error: 'Landing de biblioteca no disponible.' };
+  if (lib.gratis) return { error: 'Esta landing es gratis: puedes importarla sin pagar.' };
+  const monto = Math.max(0, Math.round(lib.precio_importacion || 0));
+  if (monto <= 0) return { error: 'Esta landing no tiene precio de importación configurado.' };
+  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
+  const referencia = `DF-BIBL-${storeId.slice(0, 8)}-${Date.now()}`;
+  db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo) VALUES (?,?,?,?,?,?,?,?)')
+    .run(uid(), storeId, libId, monto, referencia, 'pendiente', 'wompi', 'biblioteca_landing');
+  const montoCents = monto * 100;
+  const params = new URLSearchParams({
+    'public-key': pub, currency: 'COP', 'amount-in-cents': String(montoCents), reference: referencia,
+    'redirect-url': `${redirectBase}/?pago=ok`, 'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+  });
+  if (correo) params.set('customer-data:email', correo);
+  return { url: `${CHECKOUT}?${params.toString()}` };
+}
+
 /**
  * Pago único para desbloquear una landing del Creador de landings. El id de la landing
  * viaja en `plan`; al aprobarse, la landing queda desbloqueada para siempre y publicada.
@@ -326,6 +349,14 @@ export function aplicarPagoAprobado(referencia: string, transaccion?: string): b
     const r = importarLibraryEnTienda(pago.plan, pago.store_id, true);
     if ('error' in r) console.error(`[biblioteca] pago aprobado ${referencia} pero no se pudo importar:`, r.error);
     else console.log(`[biblioteca] compra aprobada ${referencia} → tienda ${pago.store_id} importó ${pago.plan}`);
+    return true;
+  }
+
+  // Compra de una landing de la Biblioteca de landings: queda como borrador en la tienda.
+  if (pago.tipo === 'biblioteca_landing') {
+    const r = importarLandingEnTienda(pago.plan, pago.store_id, true);
+    if ('error' in r) console.error(`[biblioteca-landings] pago aprobado ${referencia} pero no se pudo importar:`, r.error);
+    else console.log(`[biblioteca-landings] compra aprobada ${referencia} → tienda ${pago.store_id} importó ${pago.plan}`);
     return true;
   }
 

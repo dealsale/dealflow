@@ -3811,6 +3811,65 @@ api.post('/biblioteca/:id/checkout', requireAuth, requireStore, requireOwner, as
   res.json({ url: r.url });
 });
 
+// ── Biblioteca de landings ───────────────────────────────────────────
+api.get('/superadmin/biblioteca-landings', requireAuth, requireAdmin, async (_req, res) => {
+  res.json({ landings: (await import('./bibliotecaLandings.js')).listarBibliotecaLandingsAdmin() });
+});
+// Landings de una tienda (para elegir cuál clonar a la biblioteca).
+api.get('/superadmin/stores/:storeId/landings', requireAuth, requireAdmin, (req, res) => {
+  if (tiendaVedada(req, req.params.storeId)) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  res.json({ landings: db.prepare('SELECT id, nombre, estado FROM landings WHERE store_id = ? ORDER BY updated_at DESC').all(req.params.storeId) });
+});
+api.post('/superadmin/biblioteca-landings', requireAuth, requireAdmin, async (req, res) => {
+  const { storeId, landingId, gratis, precioImportacion } = req.body || {};
+  if (tiendaVedada(req, String(storeId || ''))) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const r = (await import('./bibliotecaLandings.js')).agregarLandingABiblioteca(String(storeId || ''), String(landingId || ''), { gratis: gratis !== false, precioImportacion: Number(precioImportacion) || 0 });
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.patch('/superadmin/biblioteca-landings/:id', requireAuth, requireAdmin, async (req, res) => {
+  const { nombre, gratis, precioImportacion, activo } = req.body || {};
+  const ok = (await import('./bibliotecaLandings.js')).actualizarLibraryLanding(req.params.id, {
+    nombre: typeof nombre === 'string' ? nombre : undefined, gratis: typeof gratis === 'boolean' ? gratis : undefined,
+    precioImportacion: typeof precioImportacion === 'number' ? precioImportacion : undefined, activo: typeof activo === 'boolean' ? activo : undefined,
+  });
+  if (!ok) return res.status(404).json({ error: 'Landing de biblioteca no encontrada.' });
+  res.json({ ok: true });
+});
+api.delete('/superadmin/biblioteca-landings/:id', requireAuth, requireAdmin, async (req, res) => {
+  (await import('./bibliotecaLandings.js')).eliminarLibraryLanding(req.params.id);
+  res.json({ ok: true });
+});
+api.post('/superadmin/biblioteca-landings/:id/enviar-a-tienda', requireAuth, requireAdmin, async (req, res) => {
+  const storeId = String(req.body?.storeId || '');
+  if (!storeId || !db.prepare('SELECT id FROM stores WHERE id = ?').get(storeId) || tiendaVedada(req, storeId)) return res.status(404).json({ error: 'La tienda destino no existe.' });
+  const r = (await import('./bibliotecaLandings.js')).importarLandingEnTienda(req.params.id, storeId, true);
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ok: true, landingId: r.landingId });
+});
+api.get('/biblioteca-landings', requireAuth, requireStore, async (req, res) => {
+  res.json({ landings: (await import('./bibliotecaLandings.js')).listarBibliotecaLandings(req.user!.storeId!) });
+});
+// Importa una landing: gratis o ya comprada → queda como borrador; de pago sin comprar → pide pago.
+api.post('/biblioteca-landings/:id/importar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const B = await import('./bibliotecaLandings.js');
+  const lib = B.getLibraryLanding(req.params.id);
+  if (!lib || !lib.activo) return res.status(404).json({ error: 'Landing de biblioteca no disponible.' });
+  const sid = req.user!.storeId!;
+  if (!lib.gratis && !B.yaAdquiridaLanding(sid, lib.id)) return res.json({ requierePago: true, precio: lib.precio_importacion });
+  const r = B.importarLandingEnTienda(lib.id, sid, !lib.gratis);
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ok: true, landingId: r.landingId });
+});
+api.post('/biblioteca-landings/:id/checkout', requireAuth, requireStore, requireOwner, async (req, res) => {
+  if (await pagoOffline(req, res, 'una landing de la Biblioteca')) return;
+  const { crearCheckoutBibliotecaLanding } = await import('./suscripcion.js');
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+  const r = crearCheckoutBibliotecaLanding(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, req.params.id);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ url: r.url });
+});
+
 // ── Tienda en línea (landings por producto) ──────────────────────────
 // Armar y previsualizar es libre; publicar y conectar dominios exige la membresía al día.
 const conLandings = async (req: ExRequest, res: ExResponse, next: () => void) => {

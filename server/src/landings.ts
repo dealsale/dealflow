@@ -247,6 +247,17 @@ export function subirImagen(storeId: string, dataUrl: string): { url: string } |
   if (buf.length > 10 * 1024 * 1024) return { error: 'La imagen pesa más de 10 MB.' };
   return { url: guardarPublico(storeId, buf, m[1]) };
 }
+/** Copia una imagen pública de landing (/l/media/<tienda>/<archivo>) al espacio de otra tienda. */
+export function copiarMediaPublica(src: string, dstStore: string): string {
+  const m = /^\/l\/media\/([^/]+)\/([^/?#]+)$/.exec(src);
+  if (!m) return src;
+  const origen = archivoPublico(m[1], m[2]);
+  if (!origen) return '';
+  if (m[1] === dstStore) return src;
+  const ext = path.extname(origen).slice(1).toLowerCase();
+  return guardarPublico(dstStore, readFileSync(origen), ext === 'jpg' ? 'image/jpeg' : `image/${ext}`);
+}
+
 /** Foto del producto (privada, /api/media/… o data URL) → copia pública para la landing. */
 function hacerPublica(storeId: string, src: string): string {
   try {
