@@ -8,6 +8,7 @@ import {
 import type { MembresiaTienda, TiendaConfig, DominioLandings, Landing, LandingBundle, LandingDatos, LandingResumen } from '../lib/api';
 import { confirmar, notificar } from '../components/dialogs';
 import { BibliotecaLandingsModal } from '../components/BibliotecaLandings';
+import { LandingCodigo } from '../components/LandingCodigo';
 
 /**
  * Tienda en línea: una página de inicio con todos los productos publicados y una
@@ -132,6 +133,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
                 <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <div style={{ fontWeight: 700, fontSize: 14.5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nombre}</div>
+                    {l.modoCodigo && <span title="Usa su propio código" style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-indigo)', background: 'var(--df-indigo-subtle)', borderRadius: 6, padding: '2px 7px' }}>💻 Código</span>}
                     <Estado l={l} />
                   </div>
                   {l.estado === 'publicada' && (
@@ -232,6 +234,8 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
   const [disp, setDisp] = useState<'cel' | 'pc'>('cel');
   const [pestana, setPestana] = useState<'editar' | 'ver'>('editar');
   const [slug, setSlug] = useState('');
+  // Vista previa del modo código (null = la del diseño del editor).
+  const [htmlCodigo, setHtmlCodigo] = useState<string | null>(null);
   const ultimo = useRef('');
   const angosto = typeof window !== 'undefined' && window.innerWidth < 980;
 
@@ -299,6 +303,9 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
 
   const formularios = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Bloque titulo={l.modoCodigo ? 'Modo código (activo)' : 'Modo código (HTML propio)'} icono="💻">
+        <LandingCodigo id={id} onVista={(h) => { setHtmlCodigo(h); }} onModo={(modoCodigo) => setL((x) => (x ? { ...x, modoCodigo } : x))} />
+      </Bloque>
       <Bloque titulo="Producto y precio" icono="🏷️" abierto>
         <Campo label="Nombre del producto"><input value={d.nombre} onChange={(e) => set({ nombre: e.target.value })} style={inp} /></Campo>
         <Dos>
@@ -399,12 +406,12 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
   const vista = (
     <div style={{ ...card, padding: 10, position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', height: angosto ? '78vh' : 'calc(100vh - 170px)' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', flex: 1 }}>Vista previa</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', flex: 1 }}>Vista previa{htmlCodigo !== null ? ' · tu código' : ''}</span>
         <button onClick={() => setDisp('cel')} style={{ ...btn, ...(disp === 'cel' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>📱 Celular</button>
         <button onClick={() => setDisp('pc')} style={{ ...btn, ...(disp === 'pc' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>🖥️ Computador</button>
       </div>
       <div style={{ flex: 1, minHeight: 0, background: 'var(--df-surface-2, #f4f4f5)', borderRadius: 10, display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
-        <iframe title="Vista previa de la landing" srcDoc={html} sandbox="allow-scripts"
+        <iframe title="Vista previa de la landing" srcDoc={htmlCodigo ?? html} sandbox="allow-scripts"
           style={{ width: disp === 'cel' ? 390 : '100%', maxWidth: '100%', height: '100%', border: 'none', background: '#fff', boxShadow: disp === 'cel' ? '0 0 0 1px var(--df-border)' : 'none' }} />
       </div>
     </div>

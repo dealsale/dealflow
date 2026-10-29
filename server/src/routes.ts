@@ -4062,6 +4062,45 @@ api.post('/landings/:id/vista', requireAuth, requireStore, sinMembresia, async (
   res.setHeader('Cache-Control', 'no-store');
   res.json({ html: L.renderLanding(L.limpiarDatos(req.body?.datos), { id: req.params.id, vista: true }) });
 });
+// ── Modo código de la landing (HTML propio, hecho a mano o con IA) ──
+api.get('/landings/:id/codigo', requireAuth, requireStore, sinMembresia, async (req, res) => {
+  const LC = await import('./landingCodigo.js');
+  const sid = req.user!.storeId!;
+  const c = LC.verCodigo(sid, req.params.id);
+  if (!c) return res.status(404).json({ error: 'Landing no encontrada.' });
+  const fila = db.prepare('SELECT * FROM landings WHERE id = ?').get(req.params.id) as Record<string, unknown>;
+  res.json({ ...c, instrucciones: LC.instruccionesIA(fila) });
+});
+// El código para descargar: el que ya tiene o, si no, el diseño actual del editor como punto de partida.
+api.get('/landings/:id/codigo/exportar', requireAuth, requireStore, sinMembresia, async (req, res) => {
+  const L = await import('./landings.js');
+  const LC = await import('./landingCodigo.js');
+  const sid = req.user!.storeId!;
+  const l = L.verLanding(sid, req.params.id);
+  const c = LC.verCodigo(sid, req.params.id);
+  if (!l || !c) return res.status(404).json({ error: 'Landing no encontrada.' });
+  const tipo = req.query.tipo === 'gracias' ? 'gracias' : 'landing';
+  const fila = db.prepare('SELECT * FROM landings WHERE id = ?').get(req.params.id) as Record<string, unknown>;
+  const html = tipo === 'gracias'
+    ? c.gracias || LC.graciasPorDefecto(fila)
+    : c.codigo || `<!--\n  Landing de DealFlow: ${l.datos.nombre}\n  Este es el diseño actual del editor. Puedes cambiarlo todo; para que los pedidos sigan entrando\n  revisa las instrucciones en DealFlow → la landing → 💻 Modo código.\n-->\n` + L.renderLanding(l.datos, { id: l.id, inicio: '/', tienda: L.configTienda(sid), url: l.url });
+  res.json({ html, nombre: `${l.slug}${tipo === 'gracias' ? '-gracias' : ''}.html` });
+});
+api.put('/landings/:id/codigo', requireAuth, requireStore, sinMembresia, async (req, res) => {
+  const r = (await import('./landingCodigo.js')).guardarCodigo(req.user!.storeId!, req.params.id, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+// Vista previa del código (con el script de DealFlow en modo vista: no crea pedidos).
+api.post('/landings/:id/codigo/vista', requireAuth, requireStore, sinMembresia, async (req, res) => {
+  const LC = await import('./landingCodigo.js');
+  const fila = db.prepare('SELECT * FROM landings WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId!) as Record<string, unknown> | undefined;
+  if (!fila) return res.status(404).json({ error: 'Landing no encontrada.' });
+  const tipo = req.body?.tipo === 'gracias' ? 'gracias' : 'landing';
+  const codigo = String(req.body?.codigo ?? '');
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ html: LC.paginaCodigo(fila, tipo, '/', true, codigo || (tipo === 'gracias' ? LC.graciasPorDefecto(fila) : '')), avisos: LC.revisarCodigo(codigo, tipo) });
+});
 api.post('/landings/imagen', requireAuth, requireStore, sinMembresia, async (req, res) => {
   const r = (await import('./landings.js')).subirImagen(req.user!.storeId!, String(req.body?.dataUrl || ''));
   if ('error' in r) return res.status(400).json(r);
