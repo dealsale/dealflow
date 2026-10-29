@@ -53,7 +53,8 @@
   function encabezado(nombre) {
     const n = norm(nombre);
     // Las secciones plegables de Lucid: .slide-section-header > .slide-section-title
-    const t = [...document.querySelectorAll('.slide-section-title')].find((x) => norm(x.innerText) === n);
+    const t = [...document.querySelectorAll('.slide-section-title')].find((x) => visible(x) && norm(x.innerText) === n)
+      || [...document.querySelectorAll('.slide-section-header')].find((x) => visible(x) && norm((x.innerText || '').split('\n')[0]).startsWith(n));
     if (t) return t.closest('.slide-section-header') || t;
     let mejor = null;
     for (const el of document.querySelectorAll('button,[role="button"],summary,h1,h2,h3,h4,h5,div,span,p')) {
@@ -66,6 +67,32 @@
     return mejor;
   }
   const clicable = (el) => el.closest('button,[role="button"],summary,[aria-expanded]') || el;
+
+  // El formulario completo del producto está en un panel lateral que abre "Editar Producto";
+  // la página del producto solo muestra el resumen (landings, bundles, contenido generado).
+  const panelLateral = () => [...document.querySelectorAll('[data-tour="slide-panel"],.slidePanelShow,[class*="slidePanel" i]')]
+    .find((el) => !/hide|hidden/i.test(el.className) && !el.closest('[class*="Hidden"]') && visible(el) && el.querySelector('input,textarea,.slide-section-title')) || null;
+  const botonTexto = (re, raiz = document) => [...raiz.querySelectorAll('button,[role="button"],a')].find((b) => visible(b) && !b.closest('#dfi-panel,#dfi-btn,nav,aside') && re.test((b.textContent || '').replace(/\s+/g, ' ').trim()));
+  async function abrirEditor() {
+    if (document.querySelector('.slide-section-title') && [...document.querySelectorAll('.slide-section-title')].some(visible)) return true;
+    const b = botonTexto(/^editar producto$/i);
+    if (!b) return false;
+    b.click();
+    for (let i = 0; i < 30; i++) { await espera(250); if ([...document.querySelectorAll('.slide-section-title')].some(visible)) { await espera(600); return true; } }
+    return false;
+  }
+  /** Cierra el panel lateral o la ventana abierta (Escape, botón de cerrar o el fondo oscuro). */
+  async function cerrarPanel(caja) {
+    const abierto = () => (caja ? visible(caja) && !/hide|hidden/i.test(caja.className) && !caja.closest('[class*="Hidden"]') : !!panelLateral());
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await espera(350);
+    if (!abierto()) return;
+    const raiz = caja || panelLateral() || document;
+    const x = [...raiz.querySelectorAll('button,[role="button"]')].find((b) => visible(b) && (/btn-close|close/i.test(b.className) || /^(cancelar|cerrar|close|×|x)$/i.test((b.textContent || b.getAttribute('aria-label') || '').trim()) || /cerrar|close/i.test(b.getAttribute('aria-label') || '')));
+    if (x) { x.click(); await espera(500); if (!abierto()) return; }
+    const fondo = [...document.querySelectorAll('.slidePanelOverlay,.modal-backdrop,[class*="overlay" i]')].find(visible);
+    if (fondo) { fondo.click(); await espera(500); }
+  }
 
   // Lucid pliega cada sección en un .slide-section-card; al abrir una puede cerrarse otra (acordeón),
   // por eso cada sección se lee justo después de abrirla.
@@ -196,18 +223,19 @@
     for (const f of unicas.slice(0, 12)) {
       const titulo = textoFila(f).replace(/editar|borrar/gi, '').replace(/\s+/g, ' ').trim();
       const btn = [...f.querySelectorAll('button,[role="button"],a')].find((b) => /editar/i.test(b.textContent || ''));
-      const antes = new Set(document.querySelectorAll('[role="dialog"],[class*="modal" i],[class*="dialog" i]'));
+      const antes = new Set([...document.querySelectorAll('[role="dialog"],[class*="modal" i],[class*="dialog" i]')].filter(visible));
       btn.click();
-      await espera(900);
-      const dialogo = [...document.querySelectorAll('[role="dialog"],[class*="modal" i],[class*="dialog" i]')].reverse().find((d) => visible(d) && !antes.has(d) && d.querySelector('input,textarea'))
-        || [...document.querySelectorAll('[role="dialog"]')].reverse().find(visible);
+      let dialogo = null;
+      for (let i = 0; i < 16 && !dialogo; i++) {
+        await espera(250);
+        dialogo = [...document.querySelectorAll('[role="dialog"],[class*="modal" i],[class*="dialog" i]')].reverse().find((d) => visible(d) && !antes.has(d) && d.querySelector('input,textarea'))
+          || panelLateral();
+      }
       if (dialogo) {
-        out.push({ titulo, campos: leerCampos(dialogo, null), texto: (dialogo.innerText || '').slice(0, 3000) });
-        const cerrar = [...dialogo.querySelectorAll('button,[role="button"]')].find((b) => /cancelar|cerrar|close|^×$|^x$/i.test((b.innerText || b.getAttribute('aria-label') || '').trim()));
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        await espera(300);
-        if (visible(dialogo) && cerrar) cerrar.click();
         await espera(500);
+        out.push({ titulo, campos: leerCampos(dialogo, null), texto: (dialogo.innerText || '').slice(0, 3000) });
+        await cerrarPanel(dialogo);
+        await espera(400);
       } else out.push({ titulo, campos: [], texto: titulo });
     }
     return out;
@@ -256,6 +284,13 @@
         if (el.closest('.slide-section-card,#dfi-panel,nav,aside,header')) continue;
         const v = String(valorDe(el) || '').trim(); if (v && el.type !== 'hidden' && el.type !== 'password' && el.type !== 'file') sumarCampos([{ etiqueta: etiquetaDe(el).slice(0, 120), valor: v.slice(0, 8000) }], '');
       }
+      // Los bundles están en la página del producto: se leen antes de abrir el editor.
+      await cerrarPanel();
+      paso('Leyendo los bundles…');
+      bundles = await leerBundles().catch(() => []);
+      await cerrarPanel();
+      paso('Abriendo «Editar Producto»…');
+      const editor = await abrirEditor();
       for (const nombre of SECCIONES) {
         paso(`Leyendo «${esc(nombre)}»…`);
         let h = null;
@@ -267,10 +302,9 @@
         if (nombre === 'Mensaje Inicial') mensaje = leerMensajeEn(caja);
         const texto = (caja.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
         secciones.push({ titulo: nombre, texto: texto.slice(0, 12000) });
-        if (!bundles.length && encabezado('Bundles')) { paso('Leyendo los bundles…'); bundles = await leerBundles().catch(() => []); }
         diag.push(`<section data-seccion="${esc(nombre)}"><h2>${esc(nombre)}</h2>${copiaSeccion(caja)}</section>`);
       }
-      if (!bundles.length) bundles = await leerBundles().catch(() => []);
+      if (!editor || !campos.some((c) => /nombre/i.test(c.etiqueta))) diag.push(`<section data-seccion="pagina"><h2>Página completa</h2>${copiaSeccion(document.body)}</section>`);
       ultimoDiagnostico = `<!doctype html><meta charset="utf-8"><title>Diagnóstico ${esc(titulo)}</title><p>${esc(location.href)} · ${new Date().toISOString()}</p>`
         + `<pre>${esc(JSON.stringify({ campos: campos.length, media: media.map((m) => [m.seccion, m.tipo, m.url.slice(0, 120)]), mensaje: mensaje.map((b) => [b.tipo, String(b.valor).slice(0, 120)]), bundles }, null, 1))}</pre>` + diag.join('\n');
       const leido = `Leí ${campos.length} campos, ${media.length} fotos/videos, ${mensaje.length} bloques del mensaje inicial y ${bundles.length} bundles.`;
