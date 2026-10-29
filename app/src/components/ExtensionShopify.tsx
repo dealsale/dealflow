@@ -9,6 +9,23 @@ const fecha = (s: string) => (s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleSt
  * del panel de Shopify. No necesita la app aprobada por Shopify.
  */
 export function ExtensionShopify() {
+  return (
+    <ExtensionDescarga
+      titulo="Extensión DealFlow x Shopify"
+      desc={<>Un botón <b>Enviar a DealFlow</b> en cada pedido de tu panel de Shopify. Funciona sin la app aprobada por Shopify.</>}
+      zip="/descargas/dealflow-x-shopify.zip"
+      pasos={[
+        <>Descarga el archivo y <b>descomprímelo</b> (te queda la carpeta <code>dealflow-x-shopify</code>).</>,
+        <>En Chrome abre <code>chrome://extensions</code>, enciende <b>Modo de desarrollador</b> (arriba a la derecha) y dale <b>Cargar descomprimida</b> → elige esa carpeta.</>,
+        <>Genera abajo un <b>código de conexión</b>, haz clic en el ícono de DealFlow en Chrome, pégalo y dale <b>Guardar y probar</b>.</>,
+        <>Abre cualquier pedido en Shopify: abajo a la derecha sale <b>Enviar a DealFlow</b>. El pedido se crea con sus productos y variantes, y si es de las últimas 24 h se le envía la confirmación por WhatsApp como a los demás.</>,
+      ]}
+    />
+  );
+}
+
+/** Tarjeta común de las extensiones: descarga, pasos de instalación y códigos de conexión. */
+export function ExtensionDescarga({ titulo, desc, zip, pasos }: { titulo: string; desc: React.ReactNode; zip: string; pasos: React.ReactNode[] }) {
   const [codigos, setCodigos] = useState<CodigoExt[] | null>(null);
   const [nuevo, setNuevo] = useState('');
   const [copiado, setCopiado] = useState(false);
@@ -27,16 +44,13 @@ export function ExtensionShopify() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <img src="/icon-192.png" alt="" style={{ width: 30, height: 30, borderRadius: 8 }} />
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontWeight: 800, fontSize: 14 }}>Extensión DealFlow x Shopify</div>
-          <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Un botón <b>Enviar a DealFlow</b> en cada pedido de tu panel de Shopify. Funciona sin la app aprobada por Shopify.</div>
+          <div style={{ fontWeight: 800, fontSize: 14 }}>{titulo}</div>
+          <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{desc}</div>
         </div>
-        <a href="/descargas/dealflow-x-shopify.zip" download style={{ ...btn, background: 'var(--df-purple)', color: '#fff', border: 'none', fontWeight: 700 }}>⬇ Descargar extensión</a>
+        <a href={zip} download style={{ ...btn, background: 'var(--df-purple)', color: '#fff', border: 'none', fontWeight: 700 }}>⬇ Descargar extensión</a>
       </div>
       <ol style={{ fontSize: 12.5, lineHeight: 1.65, margin: '12px 0 10px', paddingLeft: 20 }}>
-        <li>Descarga el archivo y <b>descomprímelo</b> (te queda la carpeta <code>dealflow-x-shopify</code>).</li>
-        <li>En Chrome abre <code>chrome://extensions</code>, enciende <b>Modo de desarrollador</b> (arriba a la derecha) y dale <b>Cargar descomprimida</b> → elige esa carpeta.</li>
-        <li>Genera abajo un <b>código de conexión</b>, haz clic en el ícono de DealFlow en Chrome, pégalo y dale <b>Guardar y probar</b>.</li>
-        <li>Abre cualquier pedido en Shopify: abajo a la derecha sale <b>Enviar a DealFlow</b>. El pedido se crea con sus productos y variantes, y si es de las últimas 24 h se le envía la confirmación por WhatsApp como a los demás.</li>
+        {pasos.map((x, i) => <li key={i}>{x}</li>)}
       </ol>
       {nuevo ? (
         <div style={{ border: '1px solid var(--df-purple-border, var(--df-border))', background: 'var(--df-surface)', borderRadius: 10, padding: 10, marginBottom: 10 }}>

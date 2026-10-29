@@ -5,7 +5,7 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { IntegracionFila, LogoInteg } from '../components/IntegracionFila';
 import { DiagnosticoMessenger, CapiCard, AnunciosProductos } from '../components/MetaExtras';
-import { ExtensionShopify } from '../components/ExtensionShopify';
+import { ExtensionDescarga, ExtensionShopify } from '../components/ExtensionShopify';
 
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13 };
 
@@ -278,6 +278,37 @@ function MetaAdsCard({ df }: { df: DealFlowState }) {
   );
 }
 
+/** Extensión para traer productos de LucidSales (Lucid Bot) a la tienda con fotos, combos y mensajes. */
+function ImportarLucidCard() {
+  const [abierta, setAbierta] = useState(false);
+  return (
+    <IntegracionFila
+      logo={<LogoInteg fondo="linear-gradient(135deg,#7C3AED,#2563EB)">⇪</LogoInteg>}
+      nombre="Importar productos (LucidSales)"
+      desc="Extensión para Chrome, Chromium y Firefox: trae un producto de Lucid Bot con fotos, videos, combos, variantes y mensaje inicial a tu tienda."
+      estado="off"
+      estadoTexto="Extensión"
+      boton="Ver cómo"
+      botonPrimario={false}
+      abierta={abierta}
+      onToggle={() => setAbierta((v) => !v)}
+    >
+      <ExtensionDescarga
+        titulo="Extensión DealFlow · Importar productos"
+        desc={<>Un botón <b>Importar a DealFlow</b> dentro de la edición de cada producto en <code>panel.lucidsales.co</code>.</>}
+        zip="/descargas/dealflow-importar-productos.zip"
+        pasos={[
+          <>Descarga el archivo y <b>descomprímelo</b> (te queda la carpeta <code>dealflow-importar-productos</code>).</>,
+          <><b>Chrome / Chromium / Edge / Brave:</b> abre <code>chrome://extensions</code>, enciende <b>Modo de desarrollador</b> y dale <b>Cargar descomprimida</b> → elige esa carpeta.</>,
+          <><b>Firefox:</b> abre <code>about:debugging#/runtime/this-firefox</code> → <b>Cargar complemento temporal…</b> → elige el archivo <code>manifest.json</code> de la carpeta (Firefox lo quita al cerrarse; repítelo cuando lo necesites).</>,
+          <>Genera abajo un <b>código de conexión</b>, haz clic en el ícono de la extensión, pégalo y dale <b>Guardar y probar</b>.</>,
+          <>En LucidSales abre <b>Editar producto</b> y toca <b>Importar a DealFlow</b> (abajo a la derecha). La extensión abre cada sección, lee los combos, sube fotos y videos y crea el producto en tu tienda. Al final te da el enlace para revisarlo.</>,
+        ]}
+      />
+    </IntegracionFila>
+  );
+}
+
 /** Tarjeta de canales de Meta: Messenger + Instagram DM (conexión en un clic). */
 function MetaCanalesCard({ df }: { df: DealFlowState }) {
   const e = df.metaEstado;
@@ -371,7 +402,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
 
       {GRUPOS.map((g) => {
         const items = df.integrations.filter((i) => (i.grupo || 'canales') === g.id);
-        const extras = g.id === 'envios' ? 3 : g.id === 'canales' || g.id === 'publicidad' ? 1 : 0;
+        const extras = g.id === 'envios' ? 4 : g.id === 'canales' || g.id === 'publicidad' ? 1 : 0;
         if (!items.length && !extras) return null;
         return (
           <div key={g.id} style={{ marginBottom: 26 }}>
@@ -383,6 +414,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
               {g.id === 'envios' && <EffiApiCard df={df} />}
               {g.id === 'envios' && <DropiApiCard df={df} />}
               {g.id === 'envios' && <ShopifyCard df={df} />}
+              {g.id === 'envios' && <ImportarLucidCard />}
               {g.id === 'canales' && <MetaCanalesCard df={df} />}
               {g.id === 'publicidad' && <MetaAdsCard df={df} />}
               {g.id === 'publicidad' && <CapiCard />}

@@ -707,6 +707,23 @@ api.post('/ext/shopify/pedido', async (req, res) => {
   res.json({ ...r, id: `DF-${r.numero}`, tienda: t.nombre });
 });
 
+// Extensión "DealFlow · Importar productos" (LucidSales y otros bots): mismo código de conexión.
+api.post('/ext/importar/subir', async (req, res) => {
+  const t = await tiendaExt(req);
+  if (!t) return res.status(401).json({ error: 'Código no válido. Genera uno en DealFlow → Integraciones → Importar productos.' });
+  const saved = saveOutgoingMedia(t.storeId, String(req.body?.dataUrl || ''), String(req.body?.nombre || ''));
+  if (!saved) return res.status(400).json({ error: 'El archivo no es válido.' });
+  res.json({ url: saved.url, tipo: saved.tipo });
+});
+api.post('/ext/importar/producto', async (req, res) => {
+  const t = await tiendaExt(req);
+  if (!t) return res.status(401).json({ error: 'Código no válido. Genera uno en DealFlow → Integraciones → Importar productos.' });
+  const X = await import('./extImportar.js');
+  const r = await X.importarProducto(t.storeId, X.datosImportacion(req.body || {}));
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ...r, tienda: t.nombre });
+});
+
 // Anuncios de Meta con su producto vinculado (para vincular a mano desde Integraciones).
 api.get('/ads/anuncios', requireAuth, requireStore, async (req, res) => {
   const { anunciosConProducto } = await import('./metaInsights.js');
