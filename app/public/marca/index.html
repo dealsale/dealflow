@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual de marca · DealFlow</title>
+<meta name="description" content="Manual de marca de DealFlow para diseñadores: logo, colores, tipografía, voz, elementos gráficos y descargas.">
+<meta property="og:title" content="Manual de marca · DealFlow">
+<meta property="og:description" content="Logo, colores, tipografía, voz y piezas de DealFlow. Para diseñadores.">
+<meta property="og:image" content="/marca/dealflow-logo-color.png">
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --noche:#050713; --noche2:#0D1730; --panel:rgba(255,255,255,.035); --linea:rgba(134,154,255,.15); --linea2:rgba(134,154,255,.32);
+  --tinta:#EEF3FF; --niebla:#9AA8C9; --niebla2:#8A97BA;
+  --cian:#46D8FF; --azul:#2E8BFF; --violeta:#7658FF; --magenta:#B75DFF; --esmeralda:#10B981; --esmeralda2:#059669; --ambar:#FFC65C; --coral:#FF6B8A;
+  --grad:linear-gradient(120deg,#10b981 0%,#2e8bff 45%,#7658ff 100%);
+  --grad2:linear-gradient(120deg,#2e8bff 0%,#6c59ff 52%,#b05aff 100%);
+  --display:'Space Grotesk',system-ui,sans-serif; --body:'Inter',system-ui,sans-serif; --mono:'Space Mono',ui-monospace,monospace;
+  --max:1120px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+@supports(overflow:clip){html,body{overflow-x:clip}}
+body{font-family:var(--body);background:var(--noche);color:var(--tinta);line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--cian)}
+img{max-width:100%;height:auto;display:block}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 16px}
+@media(min-width:720px){.wrap{padding:0 28px}}
+
+/* barra */
+.top{position:sticky;top:0;z-index:10;background:rgba(5,7,19,.86);backdrop-filter:blur(12px);border-bottom:1px solid var(--linea)}
+.top .wrap{display:flex;align-items:center;gap:14px;height:60px}
+.marca{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--tinta);font-family:var(--display);font-weight:700;font-size:1.15rem;letter-spacing:-.03em}
+.marca img{width:34px;filter:drop-shadow(0 4px 12px rgba(70,140,255,.35))}
+.marca small{font-family:var(--mono);font-size:.68rem;letter-spacing:.12em;color:var(--niebla);text-transform:uppercase;font-weight:400;margin-left:4px}
+.indice{margin-left:auto;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.indice::-webkit-scrollbar{display:none}
+.indice a{color:var(--niebla);text-decoration:none;font-size:.82rem;font-weight:600;padding:6px 10px;border-radius:999px;white-space:nowrap}
+.indice a:hover{color:var(--tinta);background:var(--panel)}
+@media(max-width:860px){.indice{display:none}}
+
+/* portada */
+.portada{padding:72px 0 56px;border-bottom:1px solid var(--linea);position:relative;overflow:hidden}
+.portada:before{content:"";position:absolute;inset:-40% -10% auto auto;width:620px;height:620px;background:radial-gradient(circle,rgba(46,139,255,.22),transparent 62%);pointer-events:none}
+.portada .wrap{position:relative;display:grid;gap:40px;align-items:center}
+@media(min-width:860px){.portada .wrap{grid-template-columns:1.2fr .8fr}}
+.eti{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--cian)}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(2.3rem,6vw,4rem);line-height:1.02;letter-spacing:-.04em;margin:14px 0 18px}
+.grad-txt{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.portada p{color:var(--niebla);font-size:1.08rem;max-width:560px}
+.portada .logo-grande{justify-self:center;width:min(320px,70vw);filter:drop-shadow(0 24px 60px rgba(46,139,255,.35))}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}
+.chip{border:1px solid var(--linea2);border-radius:999px;padding:6px 12px;font-size:.8rem;color:var(--niebla)}
+
+/* secciones */
+section{padding:72px 0;border-bottom:1px solid var(--linea)}
+.num{font-family:var(--mono);color:var(--niebla2);font-size:.78rem;letter-spacing:.14em}
+h2{font-family:var(--display);font-size:clamp(1.7rem,4vw,2.4rem);letter-spacing:-.03em;line-height:1.1;margin:8px 0 12px}
+.lead{color:var(--niebla);max-width:700px;margin-bottom:32px;font-size:1.02rem}
+h3{font-family:var(--display);font-size:1.15rem;letter-spacing:-.02em;margin-bottom:10px}
+.rejilla{display:grid;gap:16px}
+@media(min-width:720px){.r2{grid-template-columns:repeat(2,1fr)}.r3{grid-template-columns:repeat(3,1fr)}.r4{grid-template-columns:repeat(4,1fr)}}
+@media(min-width:520px) and (max-width:719px){.r4{grid-template-columns:repeat(2,1fr)}}
+.caja{background:var(--panel);border:1px solid var(--linea);border-radius:18px;padding:22px}
+.caja p,.caja li{color:var(--niebla);font-size:.94rem}
+.caja ul{padding-left:18px;display:grid;gap:6px}
+.si,.no{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;font-weight:700;display:inline-block;margin-bottom:8px}
+.si{color:var(--esmeralda)} .no{color:var(--coral)}
+
+/* logo */
+.lienzo{border-radius:18px;border:1px solid var(--linea);display:grid;place-items:center;padding:36px;min-height:220px;position:relative}
+.lienzo img{max-height:150px;width:auto}
+.lienzo .pie{position:absolute;left:14px;bottom:10px;font-family:var(--mono);font-size:.7rem;color:var(--niebla)}
+.lienzo.claro .pie{color:#5b6788}
+.claro{background:#F5F7FC}
+.oscuro{background:var(--noche2)}
+.degradado{background:var(--grad2)}
+.firma{display:flex;align-items:center;gap:14px}
+.firma img{height:64px;width:auto}
+.firma span{font-family:var(--display);font-weight:700;font-size:2.3rem;letter-spacing:-.04em}
+.claro .firma span{color:#050713}
+.respeto{position:relative;padding:28px;border:1px dashed var(--linea2);border-radius:12px;display:inline-block}
+.respeto .x{position:absolute;font-family:var(--mono);font-size:.68rem;color:var(--cian)}
+.mal{position:relative}
+.mal .lienzo{min-height:160px;padding:24px}
+.mal .lienzo img{max-height:90px}
+.mal:after{content:"✕";position:absolute;top:10px;right:14px;color:var(--coral);font-weight:800}
+
+/* color */
+.color{border-radius:16px;overflow:hidden;border:1px solid var(--linea);background:var(--noche2)}
+.color .m{height:120px;display:flex;align-items:flex-end;padding:12px;font-family:var(--mono);font-size:.72rem;font-weight:700}
+.color .d{padding:12px 14px}
+.color b{display:block;font-family:var(--display);font-size:1rem}
+.color code{font-family:var(--mono);font-size:.78rem;color:var(--niebla)}
+.color p{font-size:.82rem;color:var(--niebla);margin-top:6px;line-height:1.45}
+.barra{height:16px;border-radius:999px;display:flex;overflow:hidden;margin-top:24px}
+.grads{display:grid;gap:16px}
+@media(min-width:720px){.grads{grid-template-columns:repeat(2,1fr)}}
+.grad{height:130px;border-radius:16px;padding:14px;display:flex;align-items:flex-end;font-family:var(--mono);font-size:.74rem;color:#fff;font-weight:700}
+
+/* tipo */
+.tipo{display:grid;gap:16px}
+.esp{background:var(--panel);border:1px solid var(--linea);border-radius:18px;padding:24px;display:grid;gap:10px}
+@media(min-width:720px){.esp{grid-template-columns:220px 1fr;align-items:center}}
+.esp .meta{font-family:var(--mono);font-size:.74rem;color:var(--niebla);line-height:1.7}
+.escala{display:grid;gap:14px;margin-top:16px}
+.escala div{display:grid;gap:4px;border-bottom:1px solid var(--linea);padding-bottom:14px}
+@media(min-width:720px){.escala div{grid-template-columns:150px 1fr;align-items:baseline}}
+.escala small{font-family:var(--mono);font-size:.72rem;color:var(--niebla)}
+
+/* componentes */
+.btns{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:13px 22px;font-weight:700;font-size:.93rem;text-decoration:none;color:#fff;border:1px solid transparent;font-family:var(--body)}
+.btn-pri{background:var(--grad);box-shadow:0 10px 30px -10px rgba(46,139,255,.6)}
+.btn-sec{background:transparent;border-color:var(--linea2);color:var(--tinta)}
+.btn-wa{background:#25D366;color:#06301A}
+.chat{background:var(--noche2);border:1px solid var(--linea);border-radius:18px;padding:16px;display:grid;gap:8px;max-width:360px}
+.burbuja{padding:9px 13px;border-radius:14px;font-size:.88rem;max-width:85%;line-height:1.45}
+.cli{background:#1a2540;justify-self:start;border-bottom-left-radius:4px}
+.bot{background:linear-gradient(120deg,rgba(46,139,255,.28),rgba(118,88,255,.28));border:1px solid var(--linea2);justify-self:end;border-bottom-right-radius:4px}
+.tarjeta-demo{background:var(--panel);border:1px solid var(--linea);border-radius:18px;padding:20px}
+.tarjeta-demo .ico{width:40px;height:40px;border-radius:12px;background:var(--grad2);display:grid;place-items:center;margin-bottom:12px;font-family:var(--display);font-weight:700}
+.pill{display:inline-block;font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;border-radius:999px;padding:4px 10px;background:rgba(16,185,129,.14);color:#6EE7B7;border:1px solid rgba(16,185,129,.35)}
+
+/* voz */
+.frase{font-family:var(--display);font-size:1.25rem;letter-spacing:-.02em;line-height:1.3;margin:4px 0 6px;color:var(--tinta)}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--linea);vertical-align:top}
+th{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;color:var(--niebla);text-transform:uppercase;font-weight:400}
+td{color:var(--niebla)}
+td:first-child{color:var(--tinta);font-weight:600}
+.tabla{overflow-x:auto;border:1px solid var(--linea);border-radius:16px;background:var(--panel)}
+
+/* sky */
+.sky{display:grid;gap:24px;align-items:center}
+@media(min-width:720px){.sky{grid-template-columns:240px 1fr}}
+.sky img{width:220px;justify-self:center;filter:drop-shadow(0 18px 40px rgba(70,216,255,.3))}
+
+/* descargas */
+.desc{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--linea);border-radius:16px;padding:14px;text-decoration:none;color:var(--tinta)}
+.desc:hover{border-color:var(--linea2)}
+.desc .min{width:58px;height:58px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;overflow:hidden}
+.desc .min img{max-width:46px;max-height:46px}
+.desc b{display:block;font-size:.95rem}
+.desc span{font-size:.8rem;color:var(--niebla)}
+.desc .flecha{margin-left:auto;color:var(--cian);font-weight:700}
+
+footer{padding:40px 0 60px;color:var(--niebla);font-size:.85rem}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.copiar{cursor:pointer}
+.toast{opacity:0;position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(80px);background:#fff;color:#050713;font-weight:700;font-size:.85rem;padding:10px 16px;border-radius:999px;transition:transform .25s;z-index:20}
+.toast.ver{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="marca" href="#inicio"><img src="/logo.png" alt=""> DealFlow <small>Marca</small></a>
+    <nav class="indice" aria-label="Secciones">
+      <a href="#esencia">Esencia</a><a href="#logo">Logo</a><a href="#color">Color</a><a href="#tipografia">Tipografía</a><a href="#voz">Voz</a><a href="#elementos">Elementos</a><a href="#sky">SKY</a><a href="#descargas">Descargas</a>
+    </nav>
+  </div>
+</header>
+
+<div class="portada" id="inicio">
+  <div class="wrap">
+    <div>
+      <div class="eti">Manual de marca · v1 · 2026</div>
+      <h1>Ventas con IA por WhatsApp, <span class="grad-txt">con una sola cara.</span></h1>
+      <p>Esta página reúne todo lo que necesitas para diseñar para DealFlow: logo, colores, tipografía, voz y piezas de interfaz. Si algo no está aquí, pregunta antes de inventarlo.</p>
+      <div class="chips"><span class="chip">dealflow.sbs</span><span class="chip">app.dealflow.sbs</span><span class="chip">Colombia · español</span></div>
+    </div>
+    <img class="logo-grande" src="/marca/dealflow-logo-color.png" alt="Logo de DealFlow">
+  </div>
+</div>
+
+<section id="esencia">
+  <div class="wrap">
+    <div class="num">01</div>
+    <h2>Esencia</h2>
+    <p class="lead">DealFlow es la plataforma que atiende el WhatsApp de una tienda con inteligencia artificial: responde con el catálogo, manda fotos y videos, arma combos, cierra la venta y deja el pedido listo para despachar con Effi, Dropi o Shopify.</p>
+    <div class="rejilla r3">
+      <div class="caja"><h3>Para quién</h3><p>Dueños de tiendas en línea y dropshippers en Colombia que venden por WhatsApp e Instagram, con pago contra entrega, y que no dan abasto respondiendo.</p></div>
+      <div class="caja"><h3>Qué prometemos</h3><p>«La IA atiende, vende y despacha por ti. 24/7, con tus reglas y tu catálogo.» Menos chats perdidos, más pedidos confirmados y despachados.</p></div>
+      <div class="caja"><h3>Cómo nos sentimos</h3><p>Tecnología seria que se siente cercana. Rápida, nocturna, luminosa; nunca fría ni corporativa. Un vendedor estrella que no duerme.</p></div>
+    </div>
+    <div class="rejilla r4" style="margin-top:16px">
+      <div class="caja"><span class="si">ATRIBUTO</span><h3>Veloz</h3><p>Responde al instante. Lo transmiten las líneas de movimiento del logo.</p></div>
+      <div class="caja"><span class="si">ATRIBUTO</span><h3>Confiable</h3><p>El pedido llega completo y con guía. Datos claros, sin promesas infladas.</p></div>
+      <div class="caja"><span class="si">ATRIBUTO</span><h3>Cercano</h3><p>Habla como una persona de la tienda, en español colombiano y de tú.</p></div>
+      <div class="caja"><span class="si">ATRIBUTO</span><h3>Inteligente</h3><p>La IA es la protagonista, pero siempre al servicio de vender más.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="logo">
+  <div class="wrap">
+    <div class="num">02</div>
+    <h2>Logo</h2>
+    <p class="lead">El símbolo es una «D» con líneas de velocidad que abraza a un robot dentro de una burbuja de chat: ventas (D de DealFlow), rapidez e IA conversacional en una sola pieza. Se usa siempre a partir de los archivos oficiales; nunca se redibuja.</p>
+
+    <div class="rejilla r3">
+      <div class="lienzo oscuro"><img src="/marca/dealflow-logo-color.png" alt="Logo a color sobre fondo oscuro"><span class="pie">Color · fondo noche (preferido)</span></div>
+      <div class="lienzo claro"><img src="/marca/dealflow-logo-color.png" alt="Logo a color sobre fondo claro"><span class="pie">Color · fondo claro</span></div>
+      <div class="lienzo degradado"><img src="/marca/dealflow-logo-blanco.png" alt="Logo blanco sobre degradado"><span class="pie" style="color:#fff">Blanco · sobre degradado o foto</span></div>
+    </div>
+
+    <h3 style="margin-top:36px">Firma: símbolo + nombre</h3>
+    <div class="rejilla r2">
+      <div class="lienzo oscuro"><div class="firma"><img src="/marca/dealflow-logo-color.png" alt=""><span>DealFlow</span></div><span class="pie">Space Grotesk Bold · −0,04em</span></div>
+      <div class="lienzo claro"><div class="firma"><img src="/marca/dealflow-logo-color.png" alt=""><span>DealFlow</span></div><span class="pie">Mismo orden sobre claro</span></div>
+    </div>
+    <div class="rejilla r3" style="margin-top:16px">
+      <div class="caja"><h3>Nombre</h3><p>Siempre <b style="color:var(--tinta)">DealFlow</b>: una palabra, D y F mayúsculas. Nunca «Deal Flow», «Dealflow» ni «DEALFLOW» en textos corridos.</p></div>
+      <div class="caja"><h3>Área de respeto</h3><p>Deja alrededor del símbolo un espacio libre igual al <b style="color:var(--tinta)">ancho de un ojo del robot × 2</b> (≈ 15 % del alto del símbolo). En la firma, el nombre va a esa misma distancia.</p></div>
+      <div class="caja"><h3>Tamaño mínimo</h3><p>Símbolo: <b style="color:var(--tinta)">24 px</b> en pantalla / 8 mm impreso. Firma completa: 96 px de ancho. Por debajo de 24 px usa el ícono de la app.</p></div>
+    </div>
+
+    <h3 style="margin-top:36px">Usos incorrectos</h3>
+    <div class="rejilla r4">
+      <div class="mal"><div class="lienzo oscuro"><img src="/marca/dealflow-logo-color.png" alt="" style="transform:scaleX(1.45)"><span class="pie">No lo estires</span></div></div>
+      <div class="mal"><div class="lienzo oscuro"><img src="/marca/dealflow-logo-color.png" alt="" style="filter:hue-rotate(140deg)"><span class="pie">No cambies sus colores</span></div></div>
+      <div class="mal"><div class="lienzo oscuro"><img src="/marca/dealflow-logo-color.png" alt="" style="transform:rotate(-18deg)"><span class="pie">No lo gires</span></div></div>
+      <div class="mal"><div class="lienzo" style="background:linear-gradient(120deg,#2e8bff,#46d8ff)"><img src="/marca/dealflow-logo-color.png" alt=""><span class="pie" style="color:#050713">Color sobre azul: se pierde</span></div></div>
+    </div>
+    <p style="color:var(--niebla);font-size:.9rem;margin-top:14px">Tampoco: sombras duras, contornos, efectos 3D extra, recortar el robot, separar la burbuja de la «D» ni ponerlo sobre fotos recargadas sin una capa oscura debajo.</p>
+  </div>
+</section>
+
+<section id="color">
+  <div class="wrap">
+    <div class="num">03</div>
+    <h2>Color</h2>
+    <p class="lead">DealFlow vive de noche: fondos azul tinta casi negros y luz de neón que va del cian al violeta, igual que el símbolo. El esmeralda es el color de la venta: botones de acción, confirmaciones y lo que «salió bien». Toca un código para copiarlo.</p>
+
+    <h3>Base</h3>
+    <div class="rejilla r4">
+      <div class="color"><div class="m" style="background:#050713;color:#9AA8C9;border-bottom:1px solid var(--linea)">Aa</div><div class="d"><b>Noche</b><code class="copiar">#050713</code><p>Fondo principal de la marca: landing, piezas, video.</p></div></div>
+      <div class="color"><div class="m" style="background:#0D1730;color:#9AA8C9">Aa</div><div class="d"><b>Noche 2</b><code class="copiar">#0D1730</code><p>Tarjetas, paneles y burbujas sobre Noche.</p></div></div>
+      <div class="color"><div class="m" style="background:#EEF3FF;color:#050713">Aa</div><div class="d"><b>Tinta</b><code class="copiar">#EEF3FF</code><p>Texto principal sobre fondos oscuros.</p></div></div>
+      <div class="color"><div class="m" style="background:#9AA8C9;color:#050713">Aa</div><div class="d"><b>Niebla</b><code class="copiar">#9AA8C9</code><p>Texto secundario y bordes suaves sobre oscuro.</p></div></div>
+    </div>
+
+    <h3 style="margin-top:28px">Luz de marca</h3>
+    <div class="rejilla r4">
+      <div class="color"><div class="m" style="background:#46D8FF;color:#050713">Cian</div><div class="d"><b>Cian</b><code class="copiar">#46D8FF</code><p>Brillos, ojos del robot, enlaces y detalles.</p></div></div>
+      <div class="color"><div class="m" style="background:#2E8BFF;color:#050713">Azul</div><div class="d"><b>Azul</b><code class="copiar">#2E8BFF</code><p>Color de marca principal. El centro del degradado.</p></div></div>
+      <div class="color"><div class="m" style="background:#7658FF;color:#fff">Violeta</div><div class="d"><b>Violeta</b><code class="copiar">#7658FF</code><p>La IA. Base del símbolo y final del degradado.</p></div></div>
+      <div class="color"><div class="m" style="background:#B75DFF;color:#050713">Magenta</div><div class="d"><b>Magenta</b><code class="copiar">#B75DFF</code><p>Acento puntual. Nunca como fondo grande.</p></div></div>
+    </div>
+
+    <h3 style="margin-top:28px">Acción y apoyo</h3>
+    <div class="rejilla r4">
+      <div class="color"><div class="m" style="background:#10B981;color:#050713">Venta</div><div class="d"><b>Esmeralda</b><code class="copiar">#10B981</code><p>Vender, confirmar, «listo». Botones de acción de la app.</p></div></div>
+      <div class="color"><div class="m" style="background:#059669;color:#fff">Venta</div><div class="d"><b>Esmeralda oscuro</b><code class="copiar">#059669</code><p>El mismo acento sobre fondos claros (texto blanco encima).</p></div></div>
+      <div class="color"><div class="m" style="background:#FFC65C;color:#050713">Aviso</div><div class="d"><b>Ámbar</b><code class="copiar">#FFC65C</code><p>Avisos, estrellas, «pendiente».</p></div></div>
+      <div class="color"><div class="m" style="background:#FF6B8A;color:#050713">Alerta</div><div class="d"><b>Coral</b><code class="copiar">#FF6B8A</code><p>Errores y alertas. Solo para eso.</p></div></div>
+    </div>
+
+    <p style="color:var(--niebla);font-size:.9rem;margin-top:24px">Proporción de uso en una pieza:</p>
+    <div class="barra" aria-label="Proporción de colores"><span style="flex:60;background:#050713;border:1px solid var(--linea2)"></span><span style="flex:14;background:#0D1730"></span><span style="flex:10;background:#EEF3FF"></span><span style="flex:7;background:#2E8BFF"></span><span style="flex:5;background:#7658FF"></span><span style="flex:3;background:#10B981"></span><span style="flex:1;background:#46D8FF"></span></div>
+    <p style="color:var(--niebla2);font-family:var(--mono);font-size:.72rem;margin-top:8px">60 noche · 14 noche 2 · 10 tinta · 7 azul · 5 violeta · 3 esmeralda · 1 cian</p>
+
+    <h3 style="margin-top:36px">Degradados</h3>
+    <div class="grads">
+      <div class="grad" style="background:var(--grad)">Principal · #10B981 → #2E8BFF → #7658FF · 120°</div>
+      <div class="grad" style="background:var(--grad2)">IA · #2E8BFF → #6C59FF → #B05AFF · 120°</div>
+    </div>
+    <div class="rejilla r2" style="margin-top:16px">
+      <div class="caja"><span class="si">SÍ</span><p>El degradado principal va en botones de acción, palabras clave de un titular y barras de progreso. El de IA, en fondos suaves (al 15 %), íconos y lo que hace el asistente.</p></div>
+      <div class="caja"><span class="no">NO</span><p>No llenes pantallas enteras de degradado ni lo pongas detrás de texto largo. No mezcles el coral o el ámbar dentro de un degradado.</p></div>
+    </div>
+
+    <h3 style="margin-top:36px">La app (panel)</h3>
+    <p style="color:var(--niebla);font-size:.94rem;max-width:760px">Dentro del panel (app.dealflow.sbs) la interfaz usa un tema claro por defecto: fondo <code class="copiar">#F8FAFC</code>, superficies <code class="copiar">#FFFFFF</code>, texto <code class="copiar">#0F172A</code>, bordes <code class="copiar">#E2E8F0</code> y el esmeralda <code class="copiar">#059669</code> como color de acción. El tema oscuro de la app usa <code class="copiar">#0A0F1C</code> de fondo. Las piezas de marketing siguen la paleta de noche de arriba.</p>
+  </div>
+</section>
+
+<section id="tipografia">
+  <div class="wrap">
+    <div class="num">04</div>
+    <h2>Tipografía</h2>
+    <p class="lead">Tres familias de Google Fonts, gratuitas y libres para uso comercial. Titulares con carácter técnico, textos muy legibles y un toque de código para etiquetas.</p>
+    <div class="tipo">
+      <div class="esp"><div class="meta">TITULARES<br>Space Grotesk<br>Medium 500 · SemiBold 600 · Bold 700<br>Interletra −0,03 a −0,04em</div><div style="font-family:var(--display);font-weight:700;font-size:clamp(1.8rem,4.6vw,3rem);letter-spacing:-.04em;line-height:1.05">Tu vendedor estrella atiende WhatsApp solo.</div></div>
+      <div class="esp"><div class="meta">TEXTO<br>Inter<br>Regular 400 · Medium 500 · SemiBold 600 · Bold 700 · ExtraBold 800</div><div style="font-size:1.05rem;color:var(--niebla)">DealFlow responde con tu catálogo, manda fotos y videos, arma combos, cierra la venta y deja el pedido listo para despachar con Dropi, Effi o Shopify.</div></div>
+      <div class="esp"><div class="meta">ETIQUETAS · DATOS<br>Space Mono<br>Regular 400 · Bold 700<br>MAYÚSCULAS · +0,12em</div><div style="font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--cian)">24/7 · pago contra entrega · 1.284 pedidos</div></div>
+    </div>
+    <div class="caja" style="margin-top:16px">
+      <h3>Escala sugerida (web)</h3>
+      <div class="escala">
+        <div><small>Display · 64/66</small><span style="font-family:var(--display);font-weight:700;font-size:clamp(2rem,5vw,4rem);letter-spacing:-.04em;line-height:1.03">Vende más</span></div>
+        <div><small>H2 · 38/42</small><span style="font-family:var(--display);font-weight:700;font-size:clamp(1.6rem,3.6vw,2.4rem);letter-spacing:-.03em">Cómo funciona</span></div>
+        <div><small>H3 · 20/26</small><span style="font-family:var(--display);font-weight:700;font-size:1.25rem;letter-spacing:-.02em">Responde con tu catálogo</span></div>
+        <div><small>Cuerpo · 16/26</small><span style="color:var(--niebla)">La IA lee lo que pregunta el cliente y le contesta con tus precios.</span></div>
+        <div><small>Etiqueta · 12/16</small><span style="font-family:var(--mono);font-size:.75rem;letter-spacing:.14em;color:var(--cian)">NUEVO · INTEGRACIONES</span></div>
+      </div>
+    </div>
+    <p style="color:var(--niebla);font-size:.88rem;margin-top:14px">En el panel de la app se usan Plus Jakarta Sans (interfaz), Sora (cifras grandes) y JetBrains Mono (precios y códigos). Para piezas de marketing usa siempre las tres de arriba.</p>
+  </div>
+</section>
+
+<section id="voz">
+  <div class="wrap">
+    <div class="num">05</div>
+    <h2>Voz y tono</h2>
+    <p class="lead">Hablamos como un buen vendedor colombiano que además sabe de tecnología: claro, cálido y al grano. Tuteamos, usamos frases cortas y hablamos de resultados (pedidos, ventas, tiempo), no de algoritmos.</p>
+    <div class="rejilla r3">
+      <div class="caja"><span class="si">ASÍ</span><p class="frase">«Tu WhatsApp vende mientras duermes.»</p><p>Concreto, en segunda persona, con un beneficio que se entiende en un segundo.</p></div>
+      <div class="caja"><span class="si">ASÍ</span><p class="frase">«El pedido queda listo con guía de Effi.»</p><p>Nombramos las herramientas reales que usa el cliente.</p></div>
+      <div class="caja"><span class="no">ASÍ NO</span><p class="frase">«Soluciones disruptivas de IA omnicanal.»</p><p>Jerga vacía. Nadie sabe qué hace ni qué gana.</p></div>
+    </div>
+    <div class="tabla" style="margin-top:16px">
+      <table>
+        <tr><th>Tema</th><th>Regla</th></tr>
+        <tr><td>Trato</td><td>De tú, siempre. Al cliente final (el que compra) también.</td></tr>
+        <tr><td>Español</td><td>Colombiano neutro: «celular», «pedido», «envío», «contraentrega», «guía». Sin voseo ni españolismos («móvil», «vale»).</td></tr>
+        <tr><td>Números</td><td>Pesos con punto de miles y sin decimales: $139.900. Horas en 12 h: 10:03 p. m.</td></tr>
+        <tr><td>Emojis</td><td>Pocos y con función: ✅ hecho, ⚠️ aviso, 📦 pedido, 💬 chat. Nunca más de uno por frase.</td></tr>
+        <tr><td>Mayúsculas</td><td>Solo la primera letra en titulares y botones («Empezar», «Ver demo»). Mayúsculas completas solo en etiquetas cortas en Space Mono.</td></tr>
+        <tr><td>Botones</td><td>Verbo + resultado, 1 a 3 palabras: «Empezar», «Ver cómo funciona», «Hablar por WhatsApp».</td></tr>
+        <tr><td>La IA</td><td>Se presenta como asistente o vendedor, no como «bot». El asistente de soporte se llama SKY.</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="elementos">
+  <div class="wrap">
+    <div class="num">06</div>
+    <h2>Elementos gráficos</h2>
+    <p class="lead">Formas redondeadas, bordes finos de luz azul, mucho espacio negro y conversaciones de WhatsApp como imagen principal. Así se arma una pieza de DealFlow.</p>
+    <div class="rejilla r2">
+      <div class="caja">
+        <h3>Botones</h3>
+        <div class="btns" style="margin-top:12px"><a class="btn btn-pri">Empezar</a><a class="btn btn-sec">Ver demo</a><a class="btn btn-wa">Hablar por WhatsApp</a></div>
+        <p style="margin-top:14px">Forma de píldora (radio total), 14 × 24 px de relleno, texto Inter Bold. Principal con el degradado; secundario con borde de luz; WhatsApp en su verde oficial.</p>
+      </div>
+      <div class="caja">
+        <h3>Conversación</h3>
+        <div class="chat" style="margin-top:12px">
+          <div class="burbuja cli">Hola, ¿la blusa la tienen en talla M?</div>
+          <div class="burbuja bot">¡Hola! Sí, en M la tenemos en marfil, beige y rosa 😊 Llevando 2 te sale en $139.900 con envío gratis.</div>
+          <div class="burbuja cli">Dame 2 en beige</div>
+        </div>
+        <p style="margin-top:14px">El chat es el héroe visual. Burbuja del cliente en <code class="copiar">#1A2540</code>; la del asistente con el degradado de IA al 28 % y borde de luz.</p>
+      </div>
+      <div class="caja">
+        <h3>Tarjetas</h3>
+        <div class="tarjeta-demo" style="margin-top:12px"><div class="ico">⚡</div><h3>Responde en segundos</h3><p>Con tu catálogo, tus precios y tus reglas.</p></div>
+        <p style="margin-top:14px">Fondo blanco al 3,5 % sobre noche, borde <code>rgba(134,154,255,.15)</code>, radio 18 px. Ícono en un cuadro de 40 px con el degradado de IA.</p>
+      </div>
+      <div class="caja">
+        <h3>Etiquetas y radios</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span class="pill">✓ PEDIDO CONFIRMADO</span><span class="pill" style="background:rgba(46,139,255,.14);color:#93C5FD;border-color:rgba(46,139,255,.35)">EN TRÁNSITO</span><span class="pill" style="background:rgba(255,198,92,.14);color:#FFC65C;border-color:rgba(255,198,92,.35)">PENDIENTE</span></div>
+        <ul style="margin-top:14px"><li>Radios: 8 px (campos), 12 px (botones cuadrados, íconos), 18 px (tarjetas), total (píldoras).</li><li>Sombras: suaves y de color, nunca grises: <code>0 10px 30px -10px rgba(46,139,255,.6)</code>.</li><li>Brillo radial azul detrás de los elementos clave, al 20 % máximo.</li></ul>
+      </div>
+    </div>
+    <div class="rejilla r2" style="margin-top:16px">
+      <div class="caja"><span class="si">FOTOGRAFÍA</span><p>Personas reales de tiendas colombianas usando el celular, productos de emprendimiento (ropa, belleza, hogar), luz cálida. Celulares mostrando chats de WhatsApp o el panel de DealFlow.</p></div>
+      <div class="caja"><span class="no">EVITA</span><p>Robots metálicos genéricos, cerebros brillantes, código Matrix, manos de robot tocando pantallas, oficinas corporativas de banco de imágenes.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="sky">
+  <div class="wrap">
+    <div class="num">07</div>
+    <h2>SKY, la mascota</h2>
+    <div class="sky">
+      <img src="/marca/sky-mascota.png" alt="SKY, el robot asistente de DealFlow">
+      <div>
+        <p class="lead" style="margin-bottom:16px">SKY es el asistente de soporte dentro de la app: resuelve dudas de cómo usar DealFlow. Es el mismo robot del logo, ahora con cuerpo. Aparece en el botón flotante de ayuda, en tutoriales y en piezas educativas.</p>
+        <ul style="color:var(--niebla);padding-left:18px;display:grid;gap:6px;font-size:.94rem">
+          <li>Usa siempre la ilustración oficial; para poses nuevas, mantén la cabeza ovalada blanca, la antena, los ojos cian y la burbuja de chat.</li>
+          <li>SKY explica y acompaña; no vende. En anuncios de venta, el protagonista es el chat y el resultado.</li>
+          <li>Nombre en mayúsculas: SKY.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="descargas">
+  <div class="wrap">
+    <div class="num">08</div>
+    <h2>Descargas</h2>
+    <p class="lead">Archivos oficiales en PNG con fondo transparente. Si necesitas el logo en vector (SVG/AI) para gran formato, pídelo al equipo de DealFlow: no lo vectorices por tu cuenta.</p>
+    <div class="rejilla r2">
+      <a class="desc" href="/marca/kit-marca-dealflow.zip" download><span class="min" style="background:var(--grad2);font-size:1.4rem">⬇</span><span><b>Kit de marca completo (.zip)</b><span>Todos los logos, el ícono, SKY y la paleta en CSS</span></span><span class="flecha">↓</span></a>
+      <a class="desc" href="/marca/dealflow-logo-color.png" download><span class="min oscuro"><img src="/marca/dealflow-logo-color.png" alt=""></span><span><b>Logo a color</b><span>PNG transparente · 583 × 470</span></span><span class="flecha">↓</span></a>
+      <a class="desc" href="/marca/dealflow-logo-blanco.png" download><span class="min degradado"><img src="/marca/dealflow-logo-blanco.png" alt=""></span><span><b>Logo blanco</b><span>Para fondos oscuros, degradados y fotos</span></span><span class="flecha">↓</span></a>
+      <a class="desc" href="/marca/dealflow-logo-negro.png" download><span class="min claro"><img src="/marca/dealflow-logo-negro.png" alt=""></span><span><b>Logo noche (una tinta)</b><span>Para impresión a una tinta y fondos claros</span></span><span class="flecha">↓</span></a>
+      <a class="desc" href="/marca/dealflow-icono-app-512.png" download><span class="min oscuro"><img src="/marca/dealflow-icono-app-512.png" alt=""></span><span><b>Ícono de la app</b><span>PNG · 512 × 512 · perfiles y favicon</span></span><span class="flecha">↓</span></a>
+      <a class="desc" href="/marca/sky-mascota.png" download><span class="min oscuro"><img src="/marca/sky-mascota.png" alt=""></span><span><b>SKY</b><span>PNG transparente · 256 × 256</span></span><span class="flecha">↓</span></a>
+      <a class="desc" href="/marca/colores-dealflow.css" download><span class="min oscuro" style="font-family:var(--mono);font-size:.8rem;color:var(--cian)">CSS</span><span><b>Paleta en código</b><span>Variables CSS con todos los colores y degradados</span></span><span class="flecha">↓</span></a>
+      <a class="desc" href="https://fonts.google.com/share?selection.family=Inter:wght@400;500;600;700;800%7CSpace+Grotesk:wght@500;600;700%7CSpace+Mono:wght@400;700" target="_blank" rel="noopener"><span class="min oscuro" style="font-family:var(--display);font-weight:700;font-size:1.1rem">Aa</span><span><b>Tipografías</b><span>Space Grotesk, Inter y Space Mono en Google Fonts</span></span><span class="flecha">↗</span></a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 DealFlow · Manual de marca v1</span>
+    <span><a href="https://dealflow.sbs">dealflow.sbs</a> · ¿Dudas? Escríbele al equipo de DealFlow antes de publicar.</span>
+  </div>
+</footer>
+
+<div class="toast" id="toast">Copiado</div>
+<script>
+document.querySelectorAll('.copiar').forEach(function (el) {
+  el.title = 'Copiar';
+  el.addEventListener('click', function () {
+    var t = el.textContent.trim();
+    var ok = function () { var x = document.getElementById('toast'); x.textContent = 'Copiado ' + t; x.classList.add('ver'); setTimeout(function () { x.classList.remove('ver'); }, 1400); };
+    try { navigator.clipboard.writeText(t).then(ok, ok); } catch (e) { ok(); }
+  });
+});
+</script>
+</body>
+</html>
