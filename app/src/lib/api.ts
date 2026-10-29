@@ -848,7 +848,7 @@ export const apiLeadDesbloquear = (id: string) => req<{ ok: true }>(`/api/leads/
 export interface AppConectada { id: string; nombre: string; enlace: string; esDealFlow: boolean }
 export const apiAppsConectadas = () => req<{ apps: AppConectada[]; waba: string }>('/api/whatsapp/apps-conectadas', 'GET');
 
-export interface ResultadoSyncDropi { tipo: 'SIMPLE' | 'VARIABLE'; nombreDropi: string; vinculadas: number; creadas: number; conStock: number; sinDropi: string[]; total: number; renombradas?: number; repetidas?: string[] }
+export interface ResultadoSyncDropi { tipo: 'SIMPLE' | 'VARIABLE'; nombreDropi: string; vinculadas: number; creadas: number; conStock: number; sinDropi: string[]; total: number; renombradas?: number; repetidas?: string[]; sinVariante?: string[]; duplicadasQuitadas?: number; gruposQuitados?: string[] }
 export const apiSincronizarDropi = (productId: string, dropiId: string) => req<ResultadoSyncDropi>(`/api/products/${encodeURIComponent(productId)}/dropi/sincronizar`, 'POST', { dropiId });
 export const apiSoltarVariantesDropi = (productId: string) => req<{ ok: true }>(`/api/products/${encodeURIComponent(productId)}/dropi/soltar-variantes`, 'POST');
 

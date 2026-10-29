@@ -230,18 +230,18 @@ function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
     <div style={{ border: '1px solid var(--df-warning-border, var(--df-border))', background: 'var(--df-bg)', borderRadius: 10, padding: '11px 12px', marginBottom: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <img src="/logos/dropi.jpg" alt="Dropi" style={{ height: 18, width: 18, borderRadius: 5, objectFit: 'cover' }} />
-        <b style={{ fontSize: 13 }}>Traer variantes de Dropi</b>
+        <b style={{ fontSize: 13 }}>Vincular variantes con Dropi</b>
         {deDropi && <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '2px 8px', background: 'var(--df-warning-subtle)', color: 'var(--df-warning)' }}>Variantes sincronizadas con Dropi</span>}
       </div>
       <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5, marginBottom: 8 }}>
-        Pon el <b>ID del producto en Dropi</b> y DealFlow trae todas sus tallas y colores: vincula las que ya tienes, crea las que falten y toma el stock de Dropi. Después se actualiza solo cada 6 horas.
+        Pon el <b>ID del producto en Dropi</b> y DealFlow vincula cada variante que ya tienes con su variación de Dropi (por su talla y color) y toma el stock. Si el producto ya tiene variantes, <b>no crea grupos ni variantes nuevas</b>: solo vincula. Solo en un producto sin variantes las crea desde Dropi. Se actualiza solo cada 6 horas.
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input value={id} onChange={(e) => setId(e.target.value)} placeholder="ID del producto en Dropi (ej: 48213)" inputMode="numeric"
           style={{ flex: 1, minWidth: 180, border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
         <button onClick={() => void traer()} disabled={cargando || !id.trim()}
           style={{ background: 'var(--df-warning)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', opacity: cargando || !id.trim() ? 0.6 : 1 }}>
-          {cargando ? 'Trayendo de Dropi…' : deDropi ? '↻ Actualizar desde Dropi' : '⬇ Traer variantes'}
+          {cargando ? 'Vinculando con Dropi…' : deDropi ? '↻ Volver a vincular con Dropi' : '🔗 Vincular variantes'}
         </button>
       </div>
       {error && <div style={{ fontSize: 12.5, color: 'var(--df-danger)', marginTop: 8 }}>{error}</div>}
@@ -250,6 +250,8 @@ function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
           {res.tipo === 'SIMPLE'
             ? <>✓ <b>{res.nombreDropi}</b> en Dropi no tiene variantes: quedó vinculado como producto simple.</>
             : <>✓ <b>{res.nombreDropi}</b>: {res.total} variaciones en Dropi · <b>{res.vinculadas}</b> vinculadas · <b>{res.creadas}</b> nuevas{res.renombradas ? ` · ${res.renombradas} con su nombre completado (talla y color)` : ''}{res.conStock ? ` · stock tomado de Dropi en ${res.conStock}` : ''}.</>}
+          {!!(res.duplicadasQuitadas || res.gruposQuitados?.length) && <div style={{ marginTop: 4, color: 'var(--df-brand-dark)' }}>🧹 Se repararon duplicados de una sincronización anterior: {res.duplicadasQuitadas ? `${res.duplicadasQuitadas} variante${res.duplicadasQuitadas === 1 ? '' : 's'} repetida${res.duplicadasQuitadas === 1 ? '' : 's'} quitada${res.duplicadasQuitadas === 1 ? '' : 's'} (sus pedidos y códigos pasaron a la original)` : ''}{res.duplicadasQuitadas && res.gruposQuitados?.length ? ' y ' : ''}{res.gruposQuitados?.length ? `grupo repetido quitado: ${res.gruposQuitados.join(', ')}` : ''}.</div>}
+          {!!res.sinVariante?.length && <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>⚠️ {res.sinVariante.length} variación{res.sinVariante.length === 1 ? '' : 'es'} de Dropi no tiene{res.sinVariante.length === 1 ? '' : 'n'} variante en DealFlow: <b>{res.sinVariante.slice(0, 8).join(', ')}{res.sinVariante.length > 8 ? '…' : ''}</b>. Si las vendes, agrégalas en Opciones y vuelve a vincular.</div>}
           {!!res.repetidas?.length && <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>⚠️ En Dropi hay variaciones que no se distinguen ({res.repetidas.slice(0, 4).join(', ')}). Revisa en Dropi que cada una tenga su talla y su color.</div>}
           {res.sinDropi.length > 0 && (
             <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>
@@ -288,7 +290,7 @@ function VinculosDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
       <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-body)' }}>
         {abierto ? '▾' : '▸'} Ver vínculos de cada variante · <span style={{ color: vinc === variantes.length ? 'var(--df-brand-dark)' : 'var(--df-warning)' }}>{vinc}/{variantes.length} vinculadas</span>
       </button>
-      {sinColor && <div style={{ fontSize: 12, color: 'var(--df-warning)', marginTop: 6 }}>⚠️ Las variantes solo tienen un dato ({titulos[0]}) aunque el producto tiene {grupos.join(' y ')}. Toca <b>↻ Actualizar desde Dropi</b> para completar sus nombres.</div>}
+      {sinColor && <div style={{ fontSize: 12, color: 'var(--df-warning)', marginTop: 6 }}>⚠️ Las variantes solo tienen un dato ({titulos[0]}) aunque el producto tiene {grupos.join(' y ')}. Toca <b>↻ Volver a vincular con Dropi</b> para completar sus nombres.</div>}
       {abierto && (
         <div style={{ marginTop: 8, border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>

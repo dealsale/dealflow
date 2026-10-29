@@ -19,13 +19,13 @@ Claves: despachar dropi, generar en dropi, cotizar dropi, transportadoras dropi,
 2. Elige **Con recaudo (contra entrega)** o **Sin recaudo (pagado)** y toca **📦 Generar en Dropi**.
 3. DealFlow cotiza: "Transportadoras para [ciudad] — elige una" o **Que Dropi elija (automático)**.
 4. **Crear en Dropi**. La guía llega sola y se le envía al cliente por WhatsApp (en PDF/imagen).
-Los productos deben estar vinculados con Dropi (ID del producto y variantes: Productos → el producto → **Traer variantes de Dropi**).
+Los productos deben estar vinculados con Dropi (ID del producto y variantes: Productos → el producto → **🔗 Vincular variantes**).
 
 ## Errores de Dropi
 Sección: pedidos, dropi
 Claves: error dropi, dropi no reconoce, ciudad dropi, departamento dropi, no acepta contra entrega, ninguna transportadora, no tiene vinculado su id de dropi, variante no vinculada dropi
 - "El producto … no tiene vinculado su ID de Dropi. Vincúlalo en Productos" → pon el ID del producto en Dropi en el producto.
-- "La variante … no está vinculada con Dropi. En Productos → Variantes, toca «Traer variantes de Dropi»".
+- "La variante … no está vinculada con Dropi. En Productos → Variantes, toca «Vincular variantes»".
 - "No supimos cuál variante es …" → revisa que la variante del pedido exista en el producto (usa 🧩 Corrige la talla o el color o ✏️ Editar).
 - "Dropi no reconoce el departamento/la ciudad …. Escríbela como en Dropi" → edita el pedido con el nombre oficial (ej. "Bogotá D.C." / "Cundinamarca").
 - "La ciudad … no trae código DANE en Dropi; no se puede cotizar" → prueba con la ciudad principal más cercana o pregunta a Dropi.
@@ -70,9 +70,9 @@ Errores: "Código no válido. Genera uno en DealFlow → Integraciones → Shopi
 ## Dropi: vincular las variantes (talla y color) y el error "No supimos cuál talla/color es"
 Sección: productos
 Claves: dropi variantes, vincular variantes dropi, verifica las variantes, revisa las variantes, no supimos cual talla, codigo dropi variante, variantes repetidas, s/m, l/xl, traer variantes de dropi
-- Todo lo de Dropi está en el producto → bloque **Dropi**: pon el **ID del producto en Dropi** y toca **⬇ Traer variantes** (o **↻ Actualizar desde Dropi**). Trae cada variación con su talla **y** su color, la vincula y toma el stock.
+- Todo lo de Dropi está en el producto → bloque **Dropi**: pon el **ID del producto en Dropi** y toca **🔗 Vincular variantes** (o **↻ Volver a vincular con Dropi**). Trae cada variación con su talla **y** su color, la vincula y toma el stock.
 - **Ver vínculos de cada variante** muestra una tabla con la talla, el color y el **código en Dropi** de cada variante (✓ vinculada). Puedes corregir un código a mano; se guarda al salir del campo.
-- Si las variantes salen solo con la talla ("S/M" repetido sin color), toca **↻ Actualizar desde Dropi**: los nombres se completan ("S/M · Negro") sin perder los vínculos.
+- Si las variantes salen solo con la talla ("S/M" repetido sin color), toca **↻ Volver a vincular con Dropi**: los nombres se completan ("S/M · Negro") sin perder los vínculos.
 - Al despachar, DealFlow encuentra la variante aunque el pedido venga de Shopify con otro formato ("Enterizo - S/M / Beige") y la deja guardada en el pedido. Si la variante no tiene código, intenta traerlo de Dropi solo.
 - "No supimos cuál talla/color es…": el pedido no dice la talla o el color, o pide una que el producto no tiene. Corrígelo ahí mismo con **🧩 Corrige la talla o el color** (o ✏️ Editar) y vuelve a tocar **Generar en Dropi**.
 - Abajo en el pedido, **🧾 Registro del pedido** muestra todo lo que pasó: cotización, creación en Dropi, respuestas de Dropi y errores.
