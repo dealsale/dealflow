@@ -280,9 +280,20 @@ function VinculosDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
   const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
   if (!variantes.length) return null;
   const grupos = (p.opciones || []).map((o) => o.nombre).filter(Boolean);
-  const partes = (label: string) => label.split(/\s*·\s*/);
-  const columnas = Math.max(1, ...variantes.map((v) => partes(v.label || '').length));
-  const titulos = Array.from({ length: columnas }, (_, i) => grupos[i] || (i === 0 ? 'Variante' : `Opción ${i + 1}`));
+  // Cada parte de la etiqueta va a la columna del grupo que tiene ese valor ("S/M" → Talla), sin importar el orden.
+  const compacto = (x: string) => x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+  const grupoDe = (valor: string) => (p.opciones || []).findIndex((o) => (o.valores || []).some((x) => compacto(String((x as { valor?: string }).valor ?? x)) === compacto(valor)));
+  const partesBrutas = (label: string) => label.split(/\s*·\s*/);
+  const porGrupo = grupos.length > 1 && variantes.every((v) => partesBrutas(v.label || '').every((x) => grupoDe(x) >= 0));
+  const partes = (label: string) => {
+    const ps = partesBrutas(label);
+    if (!porGrupo) return ps;
+    const out: string[] = Array(grupos.length).fill('');
+    for (const x of ps) { const i = grupoDe(x); out[i] = out[i] ? `${out[i]} ${x}` : x; }
+    return out;
+  };
+  const columnas = porGrupo ? grupos.length : Math.max(1, ...variantes.map((v) => partesBrutas(v.label || '').length));
+  const titulos = Array.from({ length: columnas }, (_, i) => (porGrupo || i < grupos.length ? grupos[i] : '') || (i === 0 ? 'Variante' : `Opción ${i + 1}`));
   const vinc = variantes.filter((v) => (v.refs?.dropi || '').trim()).length;
   const sinColor = columnas === 1 && grupos.length > 1;
   return (
