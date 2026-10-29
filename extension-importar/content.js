@@ -67,19 +67,31 @@
   }
   const clicable = (el) => el.closest('button,[role="button"],summary,[aria-expanded]') || el;
 
-  /** Abre una sección cerrada. Si al tocarla se encogió la página, estaba abierta: se vuelve a abrir. */
+  // Lucid pliega cada sección en un .slide-section-card; al abrir una puede cerrarse otra (acordeón),
+  // por eso cada sección se lee justo después de abrirla.
+  const tarjeta = (h) => h.closest('.slide-section-card') || h.parentElement || document.body;
+  const abierta = (h) => { const c = tarjeta(h); return !!c.querySelector('input,textarea,select,img,video,audio,[contenteditable="true"]') || (c.innerText || '').trim().length > (h.innerText || '').trim().length + 3; };
+
+  /** Abre una sección (si está cerrada) y espera a que cargue su contenido y sus imágenes. */
   async function abrir(nombre) {
     const h = encabezado(nombre);
-    if (!h) return false;
-    const c = clicable(h);
-    const exp = c.getAttribute('aria-expanded');
-    if (exp === 'true') return true;
-    const antes = (document.body.innerText || '').length;
-    c.scrollIntoView({ block: 'center' });
-    c.click();
-    await espera(900);
-    if ((document.body.innerText || '').length < antes - 20) { c.click(); await espera(900); }
-    return true;
+    if (!h) return null;
+    if (h.getAttribute('aria-expanded') !== 'true' && !abierta(h)) {
+      const c = clicable(h);
+      c.scrollIntoView({ block: 'center' });
+      c.click();
+      for (let i = 0; i < 16 && !abierta(h); i++) await espera(250);
+    }
+    await cargarMedia(tarjeta(h));
+    return h;
+  }
+
+  /** Recorre la sección para que carguen las imágenes perezosas y espera (máx. 5 s). */
+  async function cargarMedia(caja) {
+    for (const el of caja.querySelectorAll('img,video')) { try { el.scrollIntoView({ block: 'center' }); } catch { /* nada */ } await espera(40); }
+    const t0 = Date.now();
+    while (Date.now() - t0 < 5000 && [...caja.querySelectorAll('img')].some((i) => !i.complete)) await espera(200);
+    await espera(400);
   }
 
   /** Texto de la etiqueta de un campo (label, aria-label, placeholder o el texto de al lado). */
@@ -118,58 +130,53 @@
 
   const esMediaUtil = (src) => /^(https?:|blob:|data:)/.test(src || '') && !/\.svg(\?|$)/i.test(src) && !/(logo|favicon|flag|avatar|lucidsales-v2|\/co\.png)/i.test(src);
 
-  /** Fotos, videos y audios de la página (con su sección y el texto que los rodea). */
-  function leerMedia(heads) {
-    const out = []; const vistos = new Set(); let orden = 0;
-    const add = (url, tipo, el) => {
-      if (!esMediaUtil(url) || vistos.has(url)) return;
-      vistos.add(url);
-      const caja = el.closest('div');
-      out.push({ url, tipo, seccion: seccionDe(el, heads), orden: orden++, contexto: ((el.getAttribute('alt') || '') + ' ' + ((caja && caja.innerText) || '')).trim().slice(0, 160) });
-    };
-    for (const el of document.querySelectorAll('img,video,audio,source,a[href]')) {
-      if (el.closest('header,nav,aside,#dfi-panel,#dfi-btn')) continue;
-      if (el.tagName === 'IMG') { if ((el.naturalWidth || el.width) >= 50) add(el.currentSrc || el.src, 'imagen', el); }
-      else if (el.tagName === 'VIDEO') add(el.currentSrc || el.src || el.querySelector('source')?.src, 'video', el);
-      else if (el.tagName === 'AUDIO') add(el.currentSrc || el.src || el.querySelector('source')?.src, 'audio', el);
-      else if (el.tagName === 'SOURCE') add(el.src, /audio/i.test(el.type) || el.parentElement?.tagName === 'AUDIO' ? 'audio' : 'video', el);
-      else if (/\.(jpe?g|png|webp|gif|mp4|mov|webm|mp3|ogg|m4a|opus)(\?|$)/i.test(el.href)) add(el.href, /\.(mp4|mov|webm)/i.test(el.href) ? 'video' : /\.(mp3|ogg|m4a|opus)/i.test(el.href) ? 'audio' : 'imagen', el);
-    }
-    return out;
-  }
+  const chica = (el) => Math.max(el.naturalWidth || 0, el.width || 0, el.offsetWidth || 0) < 50 && el.complete && el.naturalWidth > 0;
+  const urlFondo = (el) => { const m = /url\(["']?([^"')]+)["']?\)/.exec(el.style?.backgroundImage || ''); return m ? new URL(m[1], location.href).href : ''; };
+  const srcDe = (el) => el.currentSrc || el.src || el.getAttribute('data-src') || el.querySelector?.('source')?.src || '';
+  const tipoDe = (el, url) => (el.tagName === 'IMG' ? 'imagen' : el.tagName === 'AUDIO' || (el.tagName === 'SOURCE' && el.parentElement?.tagName === 'AUDIO') || /\.(mp3|ogg|m4a|opus|wav)(\?|$)/i.test(url) ? 'audio'
+    : el.tagName === 'VIDEO' || el.tagName === 'SOURCE' || /\.(mp4|mov|webm)(\?|$)/i.test(url) ? 'video' : 'imagen');
 
-  /** Texto de cada sección (lo que hay entre su encabezado y el siguiente). */
-  function textosSecciones(heads) {
-    const out = [];
-    const lista = heads.filter(([, h]) => h);
-    for (let i = 0; i < lista.length; i++) {
-      const [nombre, h] = lista[i];
-      const r = document.createRange();
-      r.setStartBefore(h);
-      if (lista[i + 1]) r.setEndBefore(lista[i + 1][1]); else r.setEndAfter(document.body.lastChild);
-      const t = (r.toString() || '').replace(/\n{3,}/g, '\n\n').trim();
-      out.push({ titulo: nombre, texto: t.slice(0, 12000) });
+  /** Fotos, videos y audios dentro de una sección, en orden (con el texto que los rodea). */
+  function leerMediaEn(raiz, seccion, out, vistos) {
+    for (const el of raiz.querySelectorAll('img,video,audio,source,a[href],[style*="background-image"]')) {
+      if (el.closest('header,nav,aside,#dfi-panel,#dfi-btn')) continue;
+      let url = '';
+      if (el.tagName === 'IMG') { if (chica(el)) continue; url = srcDe(el); }
+      else if (el.tagName === 'VIDEO' || el.tagName === 'AUDIO' || el.tagName === 'SOURCE') url = srcDe(el);
+      else if (el.tagName === 'A') { if (!/\.(jpe?g|png|webp|gif|mp4|mov|webm|mp3|ogg|m4a|opus)(\?|$)/i.test(el.href)) continue; url = el.href; }
+      else { if ((el.offsetWidth || 0) < 50) continue; url = urlFondo(el); }
+      if (!esMediaUtil(url) || vistos.has(url)) continue;
+      vistos.add(url);
+      // Contexto: el alt y el texto corto más cercano (p. ej. "Testimonios"), sin tomar toda la sección.
+      let caja = el.parentElement; let cerca = '';
+      for (let i = 0; i < 3 && caja && caja !== raiz; i++, caja = caja.parentElement) { const t = (caja.innerText || '').trim(); if (t) { if (t.length < 80) cerca = t; break; } }
+      out.push({ url, tipo: tipoDe(el, url), seccion, orden: out.length, contexto: `${el.getAttribute('alt') || ''} ${cerca}`.trim().slice(0, 160) });
     }
-    return out;
   }
 
   /** Mensaje inicial en orden: textos y piezas (imagen/video/audio) como aparecen en la sección. */
-  function leerMensaje(heads) {
-    const i = heads.findIndex(([n]) => n === 'Mensaje Inicial');
-    if (i < 0 || !heads[i][1]) return [];
-    const ini = heads[i][1]; const fin = heads.slice(i + 1).find(([, h]) => h)?.[1];
-    const dentro = (el) => (ini.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) && (!fin || (fin.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING));
+  function leerMensajeEn(raiz) {
     const out = []; const vistos = new Set();
-    for (const el of document.querySelectorAll('textarea,[contenteditable="true"],img,video,audio,source')) {
-      if (!dentro(el)) continue;
+    for (const el of raiz.querySelectorAll('textarea,[contenteditable="true"],img,video,audio,source,[style*="background-image"]')) {
       if (el.tagName === 'TEXTAREA' || el.isContentEditable) { const t = String(valorDe(el) || '').trim(); if (t && !vistos.has(t)) { vistos.add(t); out.push({ tipo: 'texto', valor: t }); } continue; }
-      const src = el.currentSrc || el.src || el.querySelector?.('source')?.src;
+      if (el.tagName === 'IMG' && chica(el)) continue;
+      const src = el.tagName === 'IMG' || el.tagName === 'VIDEO' || el.tagName === 'AUDIO' || el.tagName === 'SOURCE' ? srcDe(el) : urlFondo(el);
       if (!esMediaUtil(src) || vistos.has(src)) continue;
-      if (el.tagName === 'IMG' && (el.naturalWidth || el.width) < 50) continue;
       vistos.add(src);
-      out.push({ tipo: el.tagName === 'IMG' ? 'imagen' : el.tagName === 'AUDIO' || (el.tagName === 'SOURCE' && el.parentElement?.tagName === 'AUDIO') ? 'audio' : 'video', valor: src });
+      const tipo = tipoDe(el, src);
+      if (tipo !== 'audio' || out.every((b) => b.valor !== src)) out.push({ tipo, valor: src });
     }
     return out;
+  }
+
+  /** Copia de la sección con los valores escritos (para el archivo de diagnóstico). */
+  function copiaSeccion(caja) {
+    const c = caja.cloneNode(true);
+    const orig = caja.querySelectorAll('input,textarea,select'); const dup = c.querySelectorAll('input,textarea,select');
+    orig.forEach((el, i) => { const d = dup[i]; if (!d) return; if (el.tagName === 'TEXTAREA') d.textContent = el.value; else if (el.tagName === 'SELECT') d.setAttribute('data-valor', el.selectedOptions[0]?.text || el.value); else d.setAttribute('value', el.type === 'checkbox' ? String(el.checked) : el.value); });
+    c.querySelectorAll('svg').forEach((x) => x.replaceWith(document.createTextNode('[icono]')));
+    c.querySelectorAll('img,video,audio,source').forEach((x) => { const u = srcDe(x); if (u) x.setAttribute('data-url', u.startsWith('data:') ? u.slice(0, 60) + '…' : u); if ((x.getAttribute('src') || '').startsWith('data:')) x.removeAttribute('src'); });
+    return c.outerHTML;
   }
 
   /** Bundles: abre "Editar" de cada uno, lee el formulario y lo cierra sin guardar. */
@@ -219,24 +226,54 @@
   // Mientras se importa, ningún clic puede navegar fuera del producto.
   const frenarEnlaces = (e) => { const a = e.target && e.target.closest && e.target.closest('a[href]'); if (a && !a.closest('#dfi-panel')) { e.preventDefault(); e.stopPropagation(); } };
 
+  let ultimoDiagnostico = '';
+  /** Descarga lo que se leyó de cada sección, para revisar qué no se pudo leer. */
+  function guardarDiagnostico() {
+    const html = ultimoDiagnostico || `<!doctype html><meta charset="utf-8"><p>${esc(location.href)}</p>${copiaSeccion(document.body)}`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    a.download = `diagnostico-dealflow-${Date.now()}.html`;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  function botonesFinal() {
+    document.getElementById('dfi-cerrar').onclick = () => document.getElementById('dfi-panel')?.remove();
+    const d = document.getElementById('dfi-diag'); if (d) d.onclick = guardarDiagnostico;
+  }
+
   async function importar(btn) {
     if (btn.disabled) return;
     btn.disabled = true;
     document.addEventListener('click', frenarEnlaces, true);
     const paso = (t) => panel(`<b>Importando a DealFlow…</b><div style="margin-top:6px">${t}</div>`);
     try {
-      paso('Abriendo las secciones del producto…');
-      for (const s of A_ABRIR) { try { await abrir(s); } catch { /* sigue */ } }
-      await espera(600);
-      paso('Leyendo los bundles…');
-      const bundles = await leerBundles().catch(() => []);
-      paso('Leyendo los datos del producto…');
-      const heads = SECCIONES.map((n) => [n, encabezado(n)]);
       const titulo = ((document.body.innerText || '').match(/#\d+\s+[^\n]+/) || [''])[0].trim();
-      const campos = leerCampos(document.body, heads);
-      const media = leerMedia(heads);
-      const mensaje = leerMensaje(heads);
-      const secciones = textosSecciones(heads);
+      const campos = []; const media = []; const vistosMedia = new Set(); const secciones = []; const diag = [];
+      let mensaje = []; let bundles = [];
+      const clave = new Set();
+      const sumarCampos = (lista, seccion) => { for (const c of lista) { const k = `${c.etiqueta}|${c.valor}`; if (!clave.has(k)) { clave.add(k); campos.push({ ...c, seccion }); } } };
+      // Lo que está fuera de las secciones (p. ej. "Activo").
+      for (const el of document.querySelectorAll('input,textarea,select')) {
+        if (el.closest('.slide-section-card,#dfi-panel,nav,aside,header')) continue;
+        const v = String(valorDe(el) || '').trim(); if (v && el.type !== 'hidden' && el.type !== 'password' && el.type !== 'file') sumarCampos([{ etiqueta: etiquetaDe(el).slice(0, 120), valor: v.slice(0, 8000) }], '');
+      }
+      for (const nombre of SECCIONES) {
+        paso(`Leyendo «${esc(nombre)}»…`);
+        let h = null;
+        try { h = await abrir(nombre); } catch { /* sigue */ }
+        if (!h) continue;
+        const caja = tarjeta(h);
+        sumarCampos(leerCampos(caja, null), nombre);
+        leerMediaEn(caja, nombre, media, vistosMedia);
+        if (nombre === 'Mensaje Inicial') mensaje = leerMensajeEn(caja);
+        const texto = (caja.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
+        secciones.push({ titulo: nombre, texto: texto.slice(0, 12000) });
+        if (!bundles.length && encabezado('Bundles')) { paso('Leyendo los bundles…'); bundles = await leerBundles().catch(() => []); }
+        diag.push(`<section data-seccion="${esc(nombre)}"><h2>${esc(nombre)}</h2>${copiaSeccion(caja)}</section>`);
+      }
+      if (!bundles.length) bundles = await leerBundles().catch(() => []);
+      ultimoDiagnostico = `<!doctype html><meta charset="utf-8"><title>Diagnóstico ${esc(titulo)}</title><p>${esc(location.href)} · ${new Date().toISOString()}</p>`
+        + `<pre>${esc(JSON.stringify({ campos: campos.length, media: media.map((m) => [m.seccion, m.tipo, m.url.slice(0, 120)]), mensaje: mensaje.map((b) => [b.tipo, String(b.valor).slice(0, 120)]), bundles }, null, 1))}</pre>` + diag.join('\n');
+      const leido = `Leí ${campos.length} campos, ${media.length} fotos/videos, ${mensaje.length} bloques del mensaje inicial y ${bundles.length} bundles.`;
 
       // Archivos: cada uno se sube una sola vez y se reemplaza por su enlace de DealFlow.
       const piezas = [...new Set([...media.map((m) => m.url), ...mensaje.filter((b) => b.tipo !== 'texto').map((b) => b.valor)])];
@@ -254,14 +291,15 @@
       if (!r || r.error) throw new Error((r && r.error) || 'DealFlow no respondió.');
       const link = `${r.servidor}/productos?producto=${encodeURIComponent(r.id)}`;
       panel(`<b>✅ «${esc(r.nombre)}» quedó en ${esc(r.tienda || 'DealFlow')}</b>
+        <div style="margin-top:4px;opacity:.8">${esc(leido)}</div>
         <ul style="margin:8px 0 0;padding-left:18px">${(r.resumen || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
         ${fallos.length ? `<div class="err" style="margin-top:6px">${fallos.length} archivo(s) no se pudieron traer (${esc(fallos[0])}). Súbelos a mano en DealFlow.</div>` : ''}
         <div style="margin-top:8px">Revísalo antes de vender: <a href="${link}" target="_blank" rel="noopener">Abrir en DealFlow ↗</a></div>
-        <button id="dfi-cerrar">Cerrar</button>`);
-      document.getElementById('dfi-cerrar').onclick = () => document.getElementById('dfi-panel')?.remove();
+        <button id="dfi-cerrar">Cerrar</button> <button id="dfi-diag">⬇ Guardar diagnóstico</button>`);
+      botonesFinal();
     } catch (e) {
-      panel(`<b class="err">⚠️ No se pudo importar</b><div style="margin-top:6px">${esc(e && e.message ? e.message : e)}</div><button id="dfi-cerrar">Cerrar</button>`);
-      document.getElementById('dfi-cerrar').onclick = () => document.getElementById('dfi-panel')?.remove();
+      panel(`<b class="err">⚠️ No se pudo importar</b><div style="margin-top:6px">${esc(e && e.message ? e.message : e)}</div><button id="dfi-cerrar">Cerrar</button> <button id="dfi-diag">⬇ Guardar diagnóstico</button>`);
+      botonesFinal();
     } finally {
       document.removeEventListener('click', frenarEnlaces, true);
       btn.disabled = false;
