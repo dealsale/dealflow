@@ -64,6 +64,17 @@ const PLANTILLAS: Semilla[] = [
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Sí, confirmo' }, { tipo: 'QUICK_REPLY', texto: 'No' }],
   },
   {
+    // Igual que la anterior, pero con TODOS los datos del pedido, como el resumen que muestra el
+    // bot (Shopify, extensión de Chrome y Tienda en línea). Variables: nombre, tienda, número de
+    // pedido, productos, total, nombre completo, celular, dirección, ciudad y departamento.
+    // Mientras Meta no la apruebe, se sigue usando "confirmacion_pedido_tienda".
+    nombre: 'confirmacion_pedido_completa', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Recibimos tu pedido {{3}} en {{2}}.\n\n🛍️ Pediste: {{4}}\n💰 Total: {{5}}\n\n📦 Datos de envío\n👤 Nombre: {{6}}\n📞 Celular: {{7}}\n🏠 Dirección: {{8}}\n🏙️ Ciudad: {{9}}\n📍 Departamento: {{10}}\n\nRevisa con cuidado que todos los datos estén bien, así la transportadora te lo entrega sin problema. ¿Confirmas que los datos están correctos y que te lo enviemos?',
+    pie: 'Responde con uno de los botones',
+    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', '2× Jean mom fit (Talla 8 · Azul)', '$129.900 · pago contra entrega', 'Camila Torres', '3001234567', 'CRA 7 # 45 - 20 APTO 301', 'Medellín', 'Antioquia'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Sí, confirmo' }, { tipo: 'QUICK_REPLY', texto: 'No' }],
+  },
+  {
     nombre: 'recordatorio_abono', categoria: 'UTILITY', idioma: 'es',
     cuerpo: 'Hola {{1}}, te recordamos que tu pedido {{2}} está apartado.\nPara despacharlo necesitamos confirmar el pago de {{3}}.\nCuando quieras, respóndenos por aquí y te ayudamos a completarlo. 🙌',
     ejemplos: ['Camila', '#1098', '$60.000'],

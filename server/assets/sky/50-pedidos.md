@@ -53,7 +53,7 @@ En el detalle del pedido sale uno de estos estados:
 - "El cliente confirmó el pedido por WhatsApp".
 - "El cliente respondió que NO: escríbele desde el Inbox".
 - "No se pudo enviar la confirmación por WhatsApp" → **Reenviar confirmación**.
-Se usa con pedidos de Shopify, Tienda en línea y creados a mano (los del bot ya quedan confirmados en el chat). Si no se pudo enviar: revisa que WhatsApp esté conectado (oficial) y que la plantilla **confirmacion_pedido** (o **confirmacion_pedido_tienda** para la Tienda en línea) esté aprobada; luego **Reenviar confirmación**. Los pedidos antiguos no reciben confirmación automática.
+El mensaje lleva todos los datos del pedido, como el resumen del bot: número, productos, total, nombre, celular, dirección, ciudad y departamento (con la plantilla **confirmacion_pedido_completa**; mientras Meta no la apruebe sale la versión corta **confirmacion_pedido_tienda**). Se usa con pedidos de Shopify, de la extensión de Chrome, de la Tienda en línea y creados a mano (los del bot ya quedan confirmados en el chat). Si no se pudo enviar: revisa que WhatsApp esté conectado (oficial) y que la plantilla **confirmacion_pedido** (o **confirmacion_pedido_tienda** para la Tienda en línea) esté aprobada; luego **Reenviar confirmación**. Los pedidos antiguos no reciben confirmación automática.
 Con "Despachar solo cuando el cliente confirma" activo, la remisión/guía se crea sola al recibir el "Sí".
 
 ## Botón 🌐: dirección lista para la guía

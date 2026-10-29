@@ -1444,6 +1444,7 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   registrarLog(storeId, 'info', 'despacho', `${numDF} enviado a Effi: remisión ${remision} (cliente ${cli.tercero}).${avisos.length ? ' ' + avisos.join(' ') : ''}`);
 
   let guia = ''; let transportadora = '';
+  if (c.guia.activa && !c.guia.remitente) avisos.push('No se creó la guía: falta elegir el remitente en Integraciones → Effi → Guía de transporte. Genérala desde el pedido eligiendo el remitente.');
   if (c.guia.activa && c.guia.transportadora && c.guia.servicio && c.guia.formaPagoFlete && c.guia.remitente) {
     const g = await crearGuia(storeId, c, c.guia, o, { sucursal: txt(doc!.sucursal), id: txt(doc!.id) }, cli.tercero, ubic, reintento);
     if ('error' in g) avisos.push(g.error);
@@ -1532,7 +1533,8 @@ export function generarGuiaPedido(storeId: string, orderId: string, g: OpcionesG
 async function generarGuiaInterna(storeId: string, orderId: string, g: OpcionesGuia, reintento = false): Promise<{ guia: string; transportadora: string; idTransaccion: string } | { error: string }> {
   const c = cfgEffi(storeId);
   if (!c?.apiKey) return { error: 'Effi no está conectado.' };
-  if (!g.transportadora || !g.servicio || !g.formaPagoFlete || !g.remitente) return { error: 'Elige transportadora, servicio, pago del flete y remitente.' };
+  if (!g.remitente) return { error: '⚠️ Tienes que seleccionar el remitente: la bodega desde donde sale el paquete.' };
+  if (!g.transportadora || !g.servicio || !g.formaPagoFlete) return { error: 'Elige transportadora, servicio y pago del flete.' };
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
   if (!o) return { error: 'Pedido no encontrado.' };
   const d = pj<Fila>(txt(o.effi_doc), {});

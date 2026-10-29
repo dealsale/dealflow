@@ -147,7 +147,8 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
   const enviar = async () => {
     if (!sel.rowId) return;
     if (!(await confirmarSiDevolvio(hist))) return;
-    if (hacerGuia && !g.listo) { setMsg('Elige transportadora, servicio, pago del flete y remitente (o desmarca "Crear también la guía").'); return; }
+    if (hacerGuia && !g.exigirRemitente()) return;
+    if (hacerGuia && !g.listo) { setMsg('Elige transportadora, servicio y pago del flete (o desmarca "Crear también la guía").'); return; }
     setPaso('enviando'); setMsg('');
     // Todo el despacho en la ventana de "procesando": nadie puede tocar nada a mitad.
     const ok = await enProceso('Creando la remisión en Effi…', async (paso) => {
@@ -214,7 +215,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
           )}
           <div style={{ padding: 12, borderTop: '1px solid var(--df-border)', display: 'flex', gap: 8 }}>
             <button onClick={() => { setPaso('idle'); setPrev(null); }} style={btnS}>Atrás</button>
-            <button onClick={enviar} disabled={paso === 'enviando' || (hacerGuia && !g.listo)} style={{ ...btnP, flex: 1, opacity: paso === 'enviando' || (hacerGuia && !g.listo) ? 0.6 : 1 }}>
+            <button onClick={enviar} disabled={paso === 'enviando' || (hacerGuia && !g.casiListo)} style={{ ...btnP, flex: 1, opacity: paso === 'enviando' || (hacerGuia && !g.casiListo) ? 0.6 : 1 }}>
               {paso === 'enviando' ? 'Enviando…' : guiaAuto || hacerGuia ? 'Crear remisión y guía' : 'Crear solo la remisión'}
             </button>
           </div>
@@ -328,6 +329,8 @@ function useGuiaEffi() {
   const [ops, setOps] = useState<OpcionesGuia | null>(null);
   const [d, setD] = useState<DatosGuia>({ transportadora: '', servicio: '', formaPagoFlete: '', remitente: '', cantPaquetes: 1, peso: 1, volumen: 1, alto: 10, ancho: 10, largo: 10, contenido: '', valorDeclarado: 0, nota: '', recibeSabado: true });
   const [cargaMsg, setCargaMsg] = useState('');
+  // El remitente (bodega de origen) SIEMPRE lo elige la persona: nunca se preselecciona.
+  const [avisoRemitente, setAvisoRemitente] = useState(false);
   const cargar = async () => {
     if (ops) return;
     setCargaMsg('Cargando transportadoras de Effi…');
@@ -336,10 +339,18 @@ function useGuiaEffi() {
     setCargaMsg('');
     setOps(r.data);
     const g = r.data.defaults;
-    setD((x) => ({ ...x, transportadora: g.transportadora || '', servicio: g.servicio || '', formaPagoFlete: g.formaPagoFlete || '', remitente: r.data!.remitentes.some((x) => x.id === g.remitente) ? g.remitente : '', peso: g.peso || 1, volumen: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10 }));
+    setD((x) => ({ ...x, transportadora: g.transportadora || '', servicio: g.servicio || '', formaPagoFlete: g.formaPagoFlete || '', remitente: '', peso: g.peso || 1, volumen: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10 }));
   };
   const listo = !!(d.transportadora && d.servicio && d.formaPagoFlete && d.remitente);
-  return { ops, d, setD, cargar, cargaMsg, listo };
+  const casiListo = !!(d.transportadora && d.servicio && d.formaPagoFlete);
+  /** Antes de crear la guía: sin remitente, aviso grande y no sigue. */
+  const exigirRemitente = () => {
+    if (d.remitente) return true;
+    setAvisoRemitente(true);
+    setTimeout(() => document.getElementById('df-campo-remitente')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    return false;
+  };
+  return { ops, d, setD, cargar, cargaMsg, listo, casiListo, exigirRemitente, avisoRemitente, setAvisoRemitente };
 }
 
 /**
@@ -376,9 +387,16 @@ function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; item
           <Dropdown ariaLabel="Servicio" placeholder="Elige…" value={d.servicio} onChange={(v) => set({ servicio: v })} options={(t?.servicios || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
         <div><label style={lb}>Pago del flete</label>
           <Dropdown ariaLabel="Pago del flete" placeholder="Elige…" value={d.formaPagoFlete} onChange={(v) => set({ formaPagoFlete: v })} options={(t?.formasPago || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
-        <div><label style={lb}>Remitente</label>
-          <Dropdown ariaLabel="Remitente" placeholder="Elige desde qué bodega sale…" value={d.remitente} onChange={(v) => set({ remitente: v })} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} />
-          {!d.remitente && <div style={{ fontSize: 11.5, color: 'var(--df-danger-dark)', marginTop: 4 }}>Elige el remitente: es la bodega desde donde sale el paquete (ciudad y dirección).</div>}</div>
+      </div>
+      <div id="df-campo-remitente" style={{ border: `2px solid ${g.avisoRemitente && !d.remitente ? '#DC2626' : d.remitente ? 'var(--df-brand-border, #A7F3D0)' : 'var(--df-warning, #F59E0B)'}`, borderRadius: 10, padding: 10, background: g.avisoRemitente && !d.remitente ? 'rgba(220, 38, 38, .08)' : 'transparent' }}>
+        <label style={{ ...lb, fontSize: 12, color: 'var(--df-text)' }}>Remitente (bodega de origen) · obligatorio</label>
+        <Dropdown ariaLabel="Remitente" placeholder="Elige desde qué bodega sale el paquete…" value={d.remitente} onChange={(v) => { set({ remitente: v }); g.setAvisoRemitente(false); }} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} />
+        {g.avisoRemitente && !d.remitente ? (
+          <div role="alert" style={{ marginTop: 8, background: '#DC2626', color: '#fff', borderRadius: 8, padding: '12px 14px', fontSize: 15, fontWeight: 800, lineHeight: 1.35 }}>
+            ⚠️ Tienes que seleccionar el remitente
+            <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 3, opacity: 0.95 }}>Elige la bodega desde donde sale el paquete (revisa la ciudad y la dirección) y vuelve a crear la guía.</div>
+          </div>
+        ) : !d.remitente && <div style={{ fontSize: 11.5, color: 'var(--df-warning, #B45309)', marginTop: 5, fontWeight: 600 }}>Revisa la ciudad y la dirección: varios remitentes pueden tener el mismo nombre.</div>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
         <div><label style={lb}>Paquetes</label><input type="number" min={1} value={d.cantPaquetes} onChange={(e) => set({ cantPaquetes: Number(e.target.value) })} style={sel_} /></div>
@@ -412,7 +430,7 @@ function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   const [enviando, setEnviando] = useState(false);
   const abrir = () => { setAbierto(true); void g.cargar(); };
   const crear = async () => {
-    if (!sel.rowId || !g.listo) return;
+    if (!sel.rowId || !g.exigirRemitente() || !g.listo) return;
     setEnviando(true); setMsg('');
     const r = await enProceso('Generando la guía de transporte…', () => apiEffiGuia(sel.rowId!, g.d), 'pedido');
     setEnviando(false);
@@ -428,7 +446,7 @@ function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
         <button onClick={() => setAbierto(false)} style={{ ...btnS, padding: '5px 10px' }}>Cerrar</button>
       </div>
       <CamposGuia g={g} items={sel.items} />
-      {g.ops && <button onClick={crear} disabled={!g.listo || enviando} style={{ ...btnP, opacity: !g.listo || enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Crear guía en Effi'}</button>}
+      {g.ops && <button onClick={crear} disabled={!g.casiListo || enviando} style={{ ...btnP, opacity: !g.casiListo || enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Crear guía en Effi'}</button>}
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
     </div>
   );

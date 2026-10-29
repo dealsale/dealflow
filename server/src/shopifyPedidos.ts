@@ -32,6 +32,8 @@ type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));
 const pesos = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
 export const PLANTILLA_CONFIRMACION = 'confirmacion_pedido_tienda';
+/** Con todos los datos del pedido (como el resumen del bot); se usa apenas Meta la apruebe. */
+export const PLANTILLA_CONFIRMACION_COMPLETA = 'confirmacion_pedido_completa';
 
 export interface CfgPedidosShopify { confirmar: boolean; autoDespacho: boolean; modoPrueba: boolean }
 export function cfgPedidosShopify(storeId: string): CfgPedidosShopify {
@@ -142,18 +144,25 @@ export async function enviarConfirmacion(storeId: string, orderId: string): Prom
   if (!permiso.ok) { fallo(permiso.motivo || 'WhatsApp no permite escribirle a este número ahora.'); trazar(storeId, orderId, { etapa: 'pedido', nivel: 'warn', titulo: 'No se envió la confirmación por WhatsApp', detalle: permiso.motivo }); return { ok: false, detalle: permiso.motivo }; }
 
   const { plantillaAprobada } = await import('./avisoGuia.js');
-  const pl = plantillaAprobada(storeId, PLANTILLA_CONFIRMACION);
+  const completa = plantillaAprobada(storeId, PLANTILLA_CONFIRMACION_COMPLETA);
+  const pl = completa || plantillaAprobada(storeId, PLANTILLA_CONFIRMACION);
   const mid = uid();
   let r: { ok: boolean; error?: string; wamid?: string };
   let texto: string;
+  // Datos de envío (WhatsApp no acepta saltos de línea dentro de una variable: van en una línea).
+  const unaLinea = (v: unknown, max = 160) => txt(v).replace(/\s+/g, ' ').trim().slice(0, max) || '—';
+  const numDF = `DF-${txt(o.numero)}`;
+  const celular = txt(o.tel).replace(/\D/g, '').slice(-10);
   if (pl) {
-    const params = [nombre, tienda, productos, total];
+    const params = completa
+      ? [nombre, tienda, numDF, unaLinea(productos, 300), total, unaLinea(o.cliente, 80), celular || '—', unaLinea(o.direccion, 200), unaLinea(o.ciudad, 60), unaLinea(o.departamento, 60)]
+      : [nombre, tienda, productos, total];
     const rr = await sendWhatsappTemplate(storeId, wa, pl, params, wa);
     texto = rr.textoRender || `Confirmación del pedido DF-${txt(o.numero)}`;
     r = rr;
   } else {
     // Sin plantilla aprobada solo se puede escribir si el cliente habló en las últimas 24 h.
-    texto = `Hola ${nombre} 👋 Recibimos tu pedido en ${tienda}:\n${productos}\nTotal: ${total}\n\n¿Confirmas que lo enviemos? Responde *Sí* o *No*.`;
+    texto = `Hola ${nombre} 👋 Recibimos tu pedido ${numDF} en ${tienda}.\n\n🛍️ Pediste: ${productos}\n💰 Total: ${total}\n\n📦 Datos de envío\n👤 Nombre: ${unaLinea(o.cliente, 80)}\n📞 Celular: ${celular || '—'}\n🏠 Dirección: ${unaLinea(o.direccion, 200)}\n🏙️ Ciudad: ${unaLinea(o.ciudad, 60)}\n📍 Departamento: ${unaLinea(o.departamento, 60)}\n\n¿Confirmas que los datos están correctos y que te lo enviemos? Responde *Sí* o *No*.`;
     r = await sendWhatsappText(storeId, wa, texto, wa);
   }
   db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, leadId, texto);
@@ -163,9 +172,9 @@ export async function enviarConfirmacion(storeId: string, orderId: string): Prom
     db.prepare("UPDATE orders SET confirmacion = 'esperando', confirmacion_error = '' WHERE id = ?").run(orderId);
   } else {
     fallo(pl ? `WhatsApp rechazó la plantilla: ${r.error || 'error desconocido'}`
-      : `La plantilla "${PLANTILLA_CONFIRMACION}" no está aprobada en Meta y el cliente no te ha escrito en las últimas 24 h, así que WhatsApp no deja escribirle. Apruébala en Plantillas o llámalo/escríbele primero.`);
+      : `Ninguna plantilla de confirmación ("${PLANTILLA_CONFIRMACION_COMPLETA}" o "${PLANTILLA_CONFIRMACION}") está aprobada en Meta y el cliente no te ha escrito en las últimas 24 h, así que WhatsApp no deja escribirle. Apruébala en Plantillas o llámalo/escríbele primero.`);
   }
-  trazar(storeId, orderId, { etapa: 'pedido', nivel: r.ok ? 'ok' : 'warn', titulo: r.ok ? 'Confirmación enviada por WhatsApp (Sí / No)' : 'No se pudo enviar la confirmación', detalle: r.ok ? (pl ? 'Plantilla aprobada' : 'Texto (ventana de 24 h abierta)') : `${r.error || ''}${pl ? '' : ` · La plantilla "${PLANTILLA_CONFIRMACION}" aún no está aprobada en Meta para esta tienda.`}` });
+  trazar(storeId, orderId, { etapa: 'pedido', nivel: r.ok ? 'ok' : 'warn', titulo: r.ok ? 'Confirmación enviada por WhatsApp (Sí / No)' : 'No se pudo enviar la confirmación', detalle: r.ok ? (pl ? `Plantilla ${completa ? PLANTILLA_CONFIRMACION_COMPLETA : PLANTILLA_CONFIRMACION}${completa ? ' (con todos los datos)' : ' (corta: la completa aún no está aprobada)'}` : 'Texto (ventana de 24 h abierta)') : `${r.error || ''}${pl ? '' : ` · Ninguna plantilla de confirmación ("${PLANTILLA_CONFIRMACION_COMPLETA}" o "${PLANTILLA_CONFIRMACION}") está aprobada en Meta para esta tienda.`}` });
   return { ok: r.ok, detalle: r.error || '' };
 }
 
