@@ -89,7 +89,7 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
           </button>
         </div>
         {msg && <div style={{ marginTop: 8, fontSize: 12.5, color: msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
-        {/talla\/color|no tiene la variante|No pudimos emparejar/.test(msg) && <div style={{ marginTop: 8 }}><CorregirVariantes key={msg} df={df} sel={sel} onListo={cotizar} /></div>}
+        {/talla\/color|no tiene la variante|No pudimos emparejar/.test(msg) && <div style={{ marginTop: 8 }}><CorregirVariantes key={msg} df={df} sel={sel} onListo={() => { setMsg(''); notificar('✓ Variantes corregidas. Ahora elige: generar con guía o solo enviar el pedido.'); }} /></div>}
       </div>
     );
   }
