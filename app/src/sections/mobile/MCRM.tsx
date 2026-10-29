@@ -1,3 +1,4 @@
+import { PresenciaEnLista } from '../../components/PresenciaChat';
 import { useLazyList } from '../../hooks/useLazyList';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { IniciarConversacion } from '../../components/IniciarConversacion';
@@ -10,7 +11,7 @@ export function MCRM({ df }: { df: DealFlowState }) {
     <section data-screen-label="Móvil CRM">
       <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Inbox · Chats en vivo</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 13, margin: '0 0 12px' }}>Toca un chat para verlo y tomar el control si quieres.</p>
-      {df.sessionUser?.esDueno !== false && <div style={{ marginBottom: 12 }}><IniciarConversacion onAbrirChat={(id) => df.openMobileChat(id)} /></div>}
+      {df.puede('iniciar_conversacion') && <div style={{ marginBottom: 12 }}><IniciarConversacion onAbrirChat={(id) => df.openMobileChat(id)} /></div>}
       <div ref={rootRef} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, overflow: 'hidden' }}>
         {chatsVisibles.map((c) => (
           <div key={c.id} onClick={() => df.openMobileChat(c.id)} style={{ display: 'flex', gap: 11, padding: '13px 14px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}>
@@ -30,6 +31,7 @@ export function MCRM({ df }: { df: DealFlowState }) {
                 <span style={c.liveDot} />
                 <span>{c.liveLabel}</span>
                 <span style={{ color: 'var(--df-text-faint)', fontWeight: 500 }}>· atiende {c.asignado}</span>
+                <span style={{ marginLeft: 'auto' }}><PresenciaEnLista chatId={String(c.id)} /></span>
               </div>
             </div>
           </div>

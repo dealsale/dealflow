@@ -13,6 +13,8 @@ export interface ApiUser {
   tiendaNombre?: string;
   /** Foto de perfil (URL), opcional. */
   foto?: string;
+  /** Permisos del rol en la tienda (el dueño los tiene todos). */
+  permisos?: string[];
 }
 
 /**
@@ -512,7 +514,11 @@ export interface TeamMember {
   email: string;
   esDueno: boolean;
   esTu: boolean;
+  roleId?: string;
+  rol?: string;
 }
+export interface RolEquipo { id: string; nombre: string; permisos: string[]; miembros: number }
+export interface PermisoDef { id: string; nombre: string; desc: string }
 export interface Plantilla {
   id: string;
   nombre: string;
@@ -658,8 +664,11 @@ export const apiCreditos = () => req<{ saldo: number; movimientos: MovimientoCre
 export const apiRecargarCreditos = (paquete: string) => req<{ url: string }>('/api/creditos/recargar', 'POST', { paquete });
 export const apiDarCreditos = (storeId: string, cantidad: number) => req<{ ok: true }>(`/api/admin/stores/${storeId}/creditos`, 'POST', { cantidad });
 
-export const apiTeamList = () => req<{ team: TeamMember[] }>('/api/team', 'GET');
-export const apiTeamCreate = (b: { nombre: string; email: string; password: string }) => req<{ id: string }>('/api/team', 'POST', b);
+export const apiTeamList = () => req<{ team: TeamMember[]; roles: RolEquipo[]; permisos: PermisoDef[] }>('/api/team', 'GET');
+export const apiTeamCreate = (b: { nombre: string; email: string; password: string; roleId?: string }) => req<{ id: string }>('/api/team', 'POST', b);
+export const apiTeamEditar = (id: string, b: { nombre?: string; roleId?: string; password?: string }) => req<{ ok: true }>(`/api/team/${encodeURIComponent(id)}`, 'PATCH', b);
+export const apiRolGuardar = (id: string | null, nombre: string, permisos: string[]) => req<{ rol: RolEquipo }>(id ? `/api/team/roles/${encodeURIComponent(id)}` : '/api/team/roles', id ? 'PUT' : 'POST', { nombre, permisos });
+export const apiRolBorrar = (id: string) => req<{ ok: true }>(`/api/team/roles/${encodeURIComponent(id)}`, 'DELETE');
 export const apiTeamDelete = (id: string) => req<{ ok: true }>(`/api/team/${id}`, 'DELETE');
 
 export const apiAdminOverview = () => req<{ stores: AdminStore[]; plans: AdminPlan[] }>('/api/admin/overview', 'GET');

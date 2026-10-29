@@ -7,6 +7,7 @@ import { VoiceRecorder } from '../VoiceRecorder';
 import { ActivityLog } from '../ActivityLog';
 import { FlujosButton, AnuncioCard } from '../../sections/CRM';
 import { CajaMensaje } from '../CajaMensaje';
+import { PresenciaChat } from '../PresenciaChat';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function MobileChat({ df }: { df: DealFlowState }) {
@@ -145,6 +146,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
             Intervenir yo en este chat
           </button>
         )}
+        {chat && <PresenciaChat chatId={String(chat.id)} />}
         {df.crmIntervening && ventana.cerrada && (
           <>
             <BarraVentanaCerrada plantillas={<FlujosButton df={df} size={44} />} />

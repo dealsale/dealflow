@@ -598,13 +598,21 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
         {!sel.hasGuia && (dropiCreado || sel.effiGuiaCreada || !!sel.effiRemision) && <GuiaManual df={df} sel={sel} proveedor={dropiCreado ? 'Dropi' : 'Effi'} destacar={/guia|generad/i.test(sel.estadoWoo || '')} />}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--df-border)' }}>
           <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', flex: 1 }}>Se actualiza solo. Cuando salga la guía, se la avisamos al cliente por WhatsApp.</span>
-          {!dropiCreado && !!sel.effiRemision && df.effiApi.conectado && (
+          {df.puede('despachar') && !dropiCreado && !!sel.effiRemision && df.effiApi.conectado && (
             <button onClick={() => void anularEffi()} title="Anula en Effi la guía y la remisión para corregir el pedido y volver a despacharlo"
               style={{ background: 'transparent', border: 'none', color: 'var(--df-danger)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Anular en Effi</button>
           )}
-          <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Volver a despachar</button>
+          {df.puede('despachar') && <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Volver a despachar</button>}
         </div>
         {df.effiMsg && <div style={{ marginTop: 8, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
+      </div>
+    );
+  }
+
+  if (!df.puede('despachar')) {
+    return (
+      <div style={{ border: '1px dashed var(--df-border-strong)', borderRadius: 12, padding: 14, marginBottom: 18, textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 12.5 }}>
+        🔒 Tu rol no tiene permiso para despachar. Lo despacha alguien del equipo con ese permiso.
       </div>
     );
   }
@@ -752,7 +760,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
             <div style={{ flex: 1 }} />
             {sel.despachado && <span style={{ color: 'var(--df-text-faint)', fontSize: 11 }}>se actualiza solo desde {dropiCreado ? 'Dropi' : 'Effi'}</span>}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {df.puede('pedidos_editar') ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ flex: 1 }}>
               <Dropdown
                 ariaLabel="Cambiar estado del pedido"
@@ -771,7 +779,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
               title="Eliminar pedido"
               style={{ background: 'var(--df-surface)', border: '1px solid var(--df-danger-border, var(--df-border))', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-danger-dark)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             >🗑 Eliminar</button>
-          </div>
+          </div> : <div style={{ fontSize: 13, fontWeight: 700 }}>{sel.estado} <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--df-text-faint)' }}>· 🔒 tu rol no puede editar pedidos</span></div>}
         </div>
         {sel.rowId && <RegistroPedido key={String(sel.rowId)} rowId={String(sel.rowId)} />}
       </div>

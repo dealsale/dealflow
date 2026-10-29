@@ -84,14 +84,24 @@ Claves: app, instalar, celular, iphone, android, notificaciones, sonido, timbre,
 - En iPhone las notificaciones solo funcionan con la app instalada en la pantalla de inicio (iOS 16.4 o superior).
 - **Por correo**: en la misma campana puedes pedir correos de pedidos nuevos, novedades de envío y alertas importantes, y **Enviarme un correo de prueba** (revisa spam).
 
-## Equipo: agregar agentes y qué puede hacer cada rol
+## Equipo: agregar personas, roles y permisos
 Sección: equipo
-Claves: equipo, agente, vendedor, usuario, empleado, permisos, roles, agregar persona, quitar usuario, asesor
-- En **Equipo** ves al **Dueño** (acceso total) y a los **Agentes**.
-- **Agregar agente al equipo**: nombre, correo y contraseña (mínimo 8 caracteres) → **Agregar al equipo**. Cada agente entra con su propio correo y contraseña.
-- Un agente ve solo **Productos, CRM/Inbox, Leads y Pedidos**. No accede a la conexión de WhatsApp, al Asistente ni al Equipo. Cuando responde un chat, queda a su nombre.
-- Para quitar a alguien toca quitar → **¿Seguro? Sí, quitar**. No puedes eliminar tu propio usuario ni al dueño.
-- Muchas acciones (Integraciones, conectar servicios) son "Solo el dueño de la tienda puede hacer esto".
+Claves: equipo, agente, agregar agente, roles, permisos, rol, despachador, supervisor, vendedor, quitar agente, cambiar contraseña agente, no tiene permiso, tu rol no tiene permiso
+Solo el dueño entra a **Equipo**.
+1. **Agregar persona al equipo**: nombre, correo, contraseña (mínimo 8 caracteres) y **Rol** → **Agregar al equipo**. Entra con su propio correo.
+2. En la lista, cambia el **rol** de cada persona con el selector; **✏️ Editar** cambia su nombre o le pone una contraseña nueva; **Quitar** le quita el acceso.
+3. **Roles y permisos**: vienen 4 listos (**Agente de chat**, **Vendedor**, **Despachador**, **Supervisor**). **✏️ Editar permisos** o **＋ Nuevo rol** para armar el tuyo marcando qué puede hacer: Responder chats, Iniciar conversaciones, Ver leads, Ver pedidos, Crear y editar pedidos, **Despachar** (Effi/Dropi y Logística), Ver productos, Editar productos y Ver estadísticas.
+- Cada persona solo ve las secciones de sus permisos. Lo de WhatsApp, el Asistente, las Integraciones, los pagos y el Equipo es solo del dueño.
+- Los cambios de rol se ven cuando la persona recarga la página.
+- "Tu rol no tiene permiso para esto…": esa persona necesita ese permiso en su rol; el dueño lo activa en Equipo.
+- Un rol solo se puede borrar si nadie lo tiene.
+
+## Inbox: ver quién está en el chat y quién está escribiendo
+Sección: inbox
+Claves: escribiendo, quien esta en el chat, dos agentes mismo chat, intervenir, colaborador escribiendo, presencia, typing
+- Arriba de la caja de texto sale **👀 Andrés también tiene abierto este chat** o **✍️ Andrés está escribiendo…** (con su nombre). Si alguien está escribiendo, espera para no repetirle al cliente.
+- En la lista de chats, al lado de "atiende…", aparece quién está dentro de cada chat (👀) o escribiendo (✍️).
+- Se actualiza cada pocos segundos; si la otra persona cierra el chat, el aviso desaparece solo.
 
 ## Resumen: qué significa cada número
 Sección: resumen
