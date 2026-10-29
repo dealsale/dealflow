@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { archivosDePortapapeles } from '../lib/clipboard';
+import { marcarEscribiendo } from '../lib/presencia';
 
 // Borradores por chat: si cambias de chat y vuelves, el texto sigue ahí.
 const borradores = new Map<string, string>();
@@ -16,7 +17,7 @@ export function CajaMensaje({ chatId, onSend, onFile, placeholder, inputStyle, b
 }) {
   const [texto, setTexto] = useState(() => borradores.get(chatId) || '');
   useEffect(() => { setTexto(borradores.get(chatId) || ''); }, [chatId]);
-  const cambiar = (v: string) => { setTexto(v); borradores.set(chatId, v); };
+  const cambiar = (v: string) => { setTexto(v); borradores.set(chatId, v); if (v) marcarEscribiendo(chatId); };
   const enviar = () => {
     const t = texto.trim();
     if (!t) return;

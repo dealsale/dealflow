@@ -254,6 +254,8 @@ export interface SessionUser {
   tiendaNombre?: string;
   /** Foto de perfil (URL), opcional. */
   foto?: string;
+  /** Permisos del rol del colaborador (el dueño los tiene todos). */
+  permisos?: string[];
 }
 
 export interface DecoratedLead extends Lead {
@@ -857,6 +859,7 @@ export function useDealFlowState() {
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
   const [soundOn, setSoundOn] = useState<boolean>(snap?.soundOn ?? true);
   const [orderQuery, setOrderQuery] = useState<string>('');
+  const permisosRef = useRef<string[] | null>(null);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(() => {
     try {
       const raw = localStorage.getItem('dealflow:session');
@@ -1118,9 +1121,18 @@ export function useDealFlowState() {
   const isSuperadmin = sessionUser?.role === 'superadmin';
 
   // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
-  const AGENTE_SECCIONES: VendedorSection[] = ['productos', 'crm', 'leads', 'pedidos', 'logistica'];
+  // Cada sección se abre con un permiso del rol del colaborador (Equipo → Roles).
+  const SECCION_PERMISO: Partial<Record<VendedorSection, string>> = { crm: 'chats', pedidos: 'pedidos', leads: 'leads', productos: 'productos', logistica: 'despachar', resumen: 'estadisticas', estadisticas: 'estadisticas' };
+  const seccionesAgente = (): VendedorSection[] => {
+    const p = permisosRef.current;
+    if (!p) return ['productos', 'crm', 'leads', 'pedidos', 'logistica'];
+    return (Object.entries(SECCION_PERMISO) as [VendedorSection, string][]).filter(([, x]) => p.includes(x)).map(([sec]) => sec);
+  };
   const esAgente = apiMode && sessionUser?.role === 'vendedor' && sessionUser?.esDueno === false;
-  const puedeVerSeccion = (sec: VendedorSection) => !esAgente || AGENTE_SECCIONES.includes(sec);
+  const puedeVerSeccion = (sec: VendedorSection) => !esAgente || seccionesAgente().includes(sec);
+  /** ¿El usuario puede hacer esto? (el dueño, todo). */
+  const puede = (permiso: string) => !esAgente || (sessionUser?.permisos || permisosRef.current || ['chats', 'leads', 'pedidos', 'pedidos_editar', 'productos', 'productos_editar']).includes(permiso);
+  const inicioAgente = (): VendedorSection => seccionesAgente()[0] || 'crm';
 
   // ── Direcciones por página (F5 deja al usuario donde estaba) ──
   const rutaLista = useRef(false);
@@ -1135,7 +1147,7 @@ export function useDealFlowState() {
     if (impersonando && r.mode === 'admin') return;
     if (r.mode === 'admin' && r.adminSection && esAdm) {
       if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
-    } else if (r.section && (!agente || AGENTE_SECCIONES.includes(r.section))) {
+    } else if (r.section && (!agente || seccionesAgente().includes(r.section))) {
       setMode('vendedor'); setSection(r.section);
     }
     setSelectedOrderId(r.pedido || null);
@@ -1215,6 +1227,7 @@ export function useDealFlowState() {
   // conversación con la IA (lo mismo que "Completar pedido") y autocompleta
   // ciudad, dirección y productos con lo que el cliente ya dio.
   function abrirCrearPedido(prefill?: { cliente?: string; tel?: string }, leadId?: number | string) {
+    if (!puede('pedidos_editar')) { toast('🔒 Tu rol no puede crear pedidos. Pídeselo al dueño de la tienda en Equipo.', 'error'); return; }
     const base: PrefillPedido = { ...(prefill || {}), leyendo: !!(leadId && apiMode) };
     setCrearPedidoPrefill(base);
     setCrearPedidoLeadId(leadId ? String(leadId) : null);
@@ -1704,10 +1717,11 @@ export function useDealFlowState() {
       } catch { /* modo privado */ }
       if (available) {
         const rol = user ? (user.role === 'ADMIN' ? 'admin' : user.role === 'SUPERADMIN' ? 'superadmin' : 'vendedor') : 'vendedor';
-        setSessionUser(user ? { nombre: user.nombre, email: user.email, role: rol, esDueno: user.esDueno, impersonando: user.impersonando, tiendaNombre: user.tiendaNombre, foto: user.foto } : null);
+        permisosRef.current = user?.permisos || null;
+        setSessionUser(user ? { nombre: user.nombre, email: user.email, role: rol, esDueno: user.esDueno, impersonando: user.impersonando, tiendaNombre: user.tiendaNombre, foto: user.foto, permisos: user.permisos } : null);
         if (user) setMode(rol === 'vendedor' ? 'vendedor' : 'admin');
         if (rol === 'superadmin') setAdminSection('superadmin');
-        if (user && user.role === 'VENDEDOR' && user.esDueno === false) setSection('crm'); // el agente arranca en su CRM
+        if (user && user.role === 'VENDEDOR' && user.esDueno === false) setSection(inicioAgente()); // el colaborador arranca en su primera sección
         // Si la URL dice dónde estaba (F5, enlace compartido), se abre ahí mismo.
         if (user) aplicarRuta(leerRuta(), rol, user.role === 'VENDEDOR' && user.esDueno === false, !!user.impersonando);
       }
@@ -1721,9 +1735,10 @@ export function useDealFlowState() {
   };
 
   function completeLogin(user: SessionUser) {
+    permisosRef.current = user.permisos || null;
     setSessionUser(user);
     setMode(user.role === 'vendedor' ? 'vendedor' : 'admin');
-    setSection(user.role === 'vendedor' && user.esDueno === false ? 'crm' : 'resumen');
+    setSection(user.role === 'vendedor' && user.esDueno === false ? inicioAgente() : 'resumen');
     setAdminSection(user.role === 'superadmin' ? 'superadmin' : 'contabilidad');
     setLoginError('');
     aplicarRuta(leerRuta(), user.role, user.role === 'vendedor' && user.esDueno === false);
@@ -1747,7 +1762,7 @@ export function useDealFlowState() {
         setLoginError(r.error || 'No pudimos iniciar sesión.');
         return;
       }
-      completeLogin({ nombre: r.user.nombre, email: r.user.email, role: r.user.role === 'ADMIN' ? 'admin' : r.user.role === 'SUPERADMIN' ? 'superadmin' : 'vendedor', esDueno: r.user.esDueno, foto: r.user.foto });
+      completeLogin({ nombre: r.user.nombre, email: r.user.email, role: r.user.role === 'ADMIN' ? 'admin' : r.user.role === 'SUPERADMIN' ? 'superadmin' : 'vendedor', esDueno: r.user.esDueno, foto: r.user.foto, permisos: r.user.permisos });
       return;
     }
     const e = email.trim().toLowerCase();
@@ -4208,6 +4223,7 @@ export function useDealFlowState() {
     esAgente,
     esDueno: !esAgente && sessionUser?.role === 'vendedor',
     puedeVerSeccion,
+    puede,
     apiMode,
     login: (email: string, password: string) => login(email, password),
     registrar: (nombre: string, negocio: string, email: string, password: string) => registrar(nombre, negocio, email, password),

@@ -1,3 +1,4 @@
+import { PresenciaChat, PresenciaEnLista } from '../components/PresenciaChat';
 import { clicAparte } from '../components/EnlaceApp';
 import { IniciarConversacion } from '../components/IniciarConversacion';
 import { apiAnuncioProducto, apiVincularAnuncio } from '../lib/api';
@@ -258,7 +259,7 @@ export function CRM({ df }: { df: DealFlowState }) {
           </div>
         )}
         <div style={{ flex: 1 }} />
-        {df.sessionUser?.esDueno !== false && <IniciarConversacion onAbrirChat={(id) => df.abrirChat(id)} />}
+        {df.puede('iniciar_conversacion') && <IniciarConversacion onAbrirChat={(id) => df.abrirChat(id)} />}
         {/* Registro GENERAL de la tienda (todos los chats). El de un chat puntual está dentro del chat. */}
         <button
           onClick={() => df.abrirLogs()}
@@ -301,6 +302,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                   <span style={c.liveDot} />
                   <span>{c.liveLabel}</span>
                   <span style={{ color: 'var(--df-text-faint)', fontWeight: 500 }}>· atiende {c.asignado}</span>
+                  <span style={{ marginLeft: 'auto' }}><PresenciaEnLista chatId={String(c.id)} /></span>
                 </div>
               </div>
             </div>
@@ -425,6 +427,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                   </button>
                 </div>
               )}
+              <PresenciaChat chatId={String(chat.id)} />
               {df.crmIntervening && ventana.cerrada && (
                 <BarraVentanaCerrada
                   plantillas={<FlujosButton df={df} size={40} />}

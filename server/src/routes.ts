@@ -2,6 +2,7 @@ import { mensajesDe as mensajesInicialesDe, normalizarMensajes, principal } from
 import { Router } from 'express';
 import type { Request as ExRequest, Response as ExResponse } from 'express';
 import { trazar, conPedido } from './trazabilidad.js';
+import { requirePermiso, permisosDe, PERMISOS, rolesTienda, guardarRol, borrarRol, nombreRol } from './roles.js';
 import { idsDeItem } from './emparejar.js';
 import { idiomaDe, MSG_ESTADO } from './idioma.js';
 import { ESTADOS_PEDIDO } from './estadosPedido.js';
@@ -64,7 +65,7 @@ api.post('/auth/login', (req, res) => {
   const user: AuthUser = { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id, foto: row.foto || undefined };
   if ((row.role as string) === 'ADMIN' || (row.role as string) === 'SUPERADMIN') registrarAccionEquipo(row.email, `Inicio de sesión (${String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim()})`);
   setAuthCookie(res, user, req.hostname);
-  res.json({ user: { ...user, esDueno: esDuenoDeTienda(user) } });
+  res.json({ user: { ...user, esDueno: esDuenoDeTienda(user), permisos: permisosDe(user) } });
 });
 
 // Auto-registro público: cualquiera crea su cuenta. Queda SIN plan (bloqueada)
@@ -174,7 +175,7 @@ api.get('/auth/me', requireAuth, (req, res) => {
   const tiendaNombre = impersonando && req.user!.storeId
     ? (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(req.user!.storeId) as { nombre: string } | undefined)?.nombre || ''
     : '';
-  res.json({ user: { ...req.user, esDueno: esDuenoDeTienda(req.user), impersonando, tiendaNombre } });
+  res.json({ user: { ...req.user, esDueno: esDuenoDeTienda(req.user), permisos: permisosDe(req.user), impersonando, tiendaNombre } });
 });
 
 // ── Perfil de la cuenta (cualquier rol: vendedor, admin o superadmin) ──
@@ -186,7 +187,7 @@ api.patch('/me', requireAuth, (req, res) => {
   db.prepare('UPDATE users SET nombre = ? WHERE id = ?').run(nombre, req.user!.id);
   const user: AuthUser = { ...req.user!, nombre };
   setAuthCookie(res, user, req.hostname);
-  res.json({ user: { ...user, esDueno: esDuenoDeTienda(user) } });
+  res.json({ user: { ...user, esDueno: esDuenoDeTienda(user), permisos: permisosDe(user) } });
 });
 
 // Foto de perfil: se guarda en un espacio propio de "cuentas" (no depende de la
@@ -200,7 +201,7 @@ api.post('/me/foto', requireAuth, (req, res) => {
   db.prepare('UPDATE users SET foto = ? WHERE id = ?').run(url, req.user!.id);
   const user: AuthUser = { ...req.user!, foto: url };
   setAuthCookie(res, user, req.hostname);
-  res.json({ ok: true, foto: url, user: { ...user, esDueno: esDuenoDeTienda(user) } });
+  res.json({ ok: true, foto: url, user: { ...user, esDueno: esDuenoDeTienda(user), permisos: permisosDe(user) } });
 });
 
 // Sirve las fotos de perfil (cualquier usuario autenticado puede verlas, como en
@@ -542,7 +543,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
 // ── Estadísticas / Rendimiento ────────────────────────────────────────
 // Agregaciones de chats, campañas (anuncios) y ventas en un rango de fechas.
 // Fechas en zona horaria de Colombia (created_at se guarda en UTC → -5h).
-api.get('/stats', requireAuth, requireStore, (req, res) => {
+api.get('/stats', requireAuth, requireStore, requirePermiso('estadisticas'), (req, res) => {
   const sid = req.user!.storeId!;
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }); // YYYY-MM-DD
   const reFecha = /^\d{4}-\d{2}-\d{2}$/;
@@ -655,7 +656,7 @@ api.get('/stats', requireAuth, requireStore, (req, res) => {
 });
 
 // Conversión por anuncio: chats → respondieron → pedidos → despachados → entregados, ventas y productos.
-api.get('/stats/anuncios', requireAuth, requireStore, async (req, res) => {
+api.get('/stats/anuncios', requireAuth, requireStore, requirePermiso('estadisticas'), async (req, res) => {
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const re = /^\d{4}-\d{2}-\d{2}$/;
   let desde = String(req.query.desde || ''); let hasta = String(req.query.hasta || '');
@@ -668,7 +669,7 @@ api.get('/stats/anuncios', requireAuth, requireStore, async (req, res) => {
 });
 // Trae ya el gasto/impresiones/clics de Meta (hasta 90 días atrás).
 // Análisis con filtros cruzados (canal, origen, producto, campaña, anuncio, ciudad, estado).
-api.get('/stats/analisis', requireAuth, requireStore, async (req, res) => {
+api.get('/stats/analisis', requireAuth, requireStore, requirePermiso('estadisticas'), async (req, res) => {
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const re = /^\d{4}-\d{2}-\d{2}$/;
   let desde = String(req.query.desde || ''); let hasta = String(req.query.hasta || '');
@@ -746,7 +747,7 @@ api.post('/upload', requireAuth, requireStore, (req, res) => {
 });
 
 // ── Productos ─────────────────────────────────────────────────────────
-api.post('/products', requireAuth, requireStore, (req, res) => {
+api.post('/products', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
   const { nombre, precio, stock = 0, color = '#E0E7FF', txt = '#4338CA', tipo = 'producto', duracion = '' } = req.body || {};
   // Un servicio puede ser gratis ($0); un producto exige precio.
   const esServicio = tipo === 'servicio';
@@ -763,7 +764,7 @@ function ownProduct(req: { user?: AuthUser }, id: string) {
   return db.prepare('SELECT id FROM products WHERE id = ? AND store_id = ?').get(id, req.user!.storeId) as { id: string } | undefined;
 }
 
-api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
+api.patch('/products/:id', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
   // Producto de biblioteca gratuito: la ESTRUCTURA está bloqueada (para que el
   // cliente no la dañe). Solo dejamos cambiar el precio y el SKU de su tienda.
@@ -822,14 +823,14 @@ api.patch('/products/:id', requireAuth, requireStore, (req, res) => {
   res.json({ ok: true });
 });
 
-api.delete('/products/:id', requireAuth, requireStore, (req, res) => {
+api.delete('/products/:id', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
   if (req.user!.storeId === MASTER_STORE_ID) eliminarLibraryDeMaster(req.params.id); // quita su entrada de biblioteca
   db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 
-api.post('/products/:id/variants', requireAuth, requireStore, (req, res) => {
+api.post('/products/:id/variants', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
   const { label, stock = 0 } = req.body || {};
   if (!label?.trim()) return res.status(400).json({ error: 'Falta la talla o el color de la variante.' });
@@ -912,7 +913,7 @@ function sincronizarVariantes(productId: string): { creadas: number; eliminadas:
 
 // Sincroniza las variantes con las opciones (crea las que falten, quita repetidas
 // y sobrantes). Es lo mismo que corre solo al guardar las opciones.
-api.post('/products/:id/variants/generar', requireAuth, requireStore, (req, res) => {
+api.post('/products/:id/variants/generar', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
   const prod = db.prepare('SELECT opciones FROM products WHERE id = ?').get(req.params.id) as { opciones: string } | undefined;
   if (!prod) return res.status(404).json({ error: 'Producto no encontrado.' });
@@ -981,7 +982,7 @@ api.delete('/promos/:id', requireAuth, requireStore, (req, res) => {
 // cualquiera a cualquiera; no es un flujo forzado sin retroceso.
 const ESTADOS_VALIDOS = ESTADOS_PEDIDO;
 
-api.post('/orders/:rowId/advance', requireAuth, requireStore, async (req, res) => {
+api.post('/orders/:rowId/advance', requireAuth, requireStore, requirePermiso('pedidos_editar'), async (req, res) => {
   const o = db.prepare('SELECT id, estado, numero, tel FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, req.user!.storeId) as
     | { id: string; estado: string; numero: number; tel: string }
     | undefined;
@@ -1006,7 +1007,7 @@ api.post('/orders/:rowId/advance', requireAuth, requireStore, async (req, res) =
 
 // Cambia el estado del pedido a CUALQUIER estado (seleccionable, se puede
 // retroceder e incluye Cancelado). Avisa al cliente si el estado tiene mensaje.
-api.post('/orders/:rowId/estado', requireAuth, requireStore, async (req, res) => {
+api.post('/orders/:rowId/estado', requireAuth, requireStore, requirePermiso('pedidos_editar'), async (req, res) => {
   const sid = req.user!.storeId!;
   const nuevo = String(req.body?.estado || '').trim();
   if (!ESTADOS_VALIDOS.includes(nuevo as (typeof ESTADOS_VALIDOS)[number])) return res.status(400).json({ error: 'Estado no válido.' });
@@ -1054,13 +1055,13 @@ api.get('/orders/:rowId/cobertura', requireAuth, requireStore, async (req, res) 
   if (!cb) return res.json({ cobertura: null });
   res.json({ cobertura: cb, texto: textoCobertura(cb) });
 });
-api.post('/orders/:rowId/devolucion-effi', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/orders/:rowId/devolucion-effi', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const { registrarDevolucion } = await import('./effiExtras.js');
   const r = await registrarDevolucion(req.user!.storeId!, String(req.params.rowId));
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
 });
-api.get('/effi-api/recaudos', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.get('/effi-api/recaudos', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const { recaudosMes } = await import('./effiExtras.js');
   const r = await recaudosMes(req.user!.storeId!, String(req.query.mes || ''));
   if ('error' in r) return res.status(400).json({ error: r.error });
@@ -1115,7 +1116,7 @@ api.post('/novedades/:id/avisar', requireAuth, requireStore, async (req, res) =>
 
 // Elimina un pedido por completo (y sus ítems). No toca el pedido en Dropi/Woo:
 // solo lo quita del panel de DealFlow.
-api.delete('/orders/:rowId', requireAuth, requireStore, requireOwner, (req, res) => {
+api.delete('/orders/:rowId', requireAuth, requireStore, requirePermiso('pedidos_editar'), (req, res) => {
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT id FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -1127,7 +1128,7 @@ api.delete('/orders/:rowId', requireAuth, requireStore, requireOwner, (req, res)
 // Crea un pedido MANUALMENTE (logística manual): el dueño mete los datos del
 // cliente y elige productos/variantes. No se autoenvía a WooCommerce; se despacha
 // a mano desde el detalle. Queda en estado "Nuevo".
-api.post('/orders', requireAuth, requireStore, (req, res) => {
+api.post('/orders', requireAuth, requireStore, requirePermiso('pedidos_editar'), (req, res) => {
   const sid = req.user!.storeId!;
   const b = req.body || {};
   const cliente = String(b.cliente || '').trim();
@@ -1171,7 +1172,7 @@ api.post('/orders', requireAuth, requireStore, (req, res) => {
   res.json({ ok: true, id: 'DF-' + numero, rowId: oid });
 });
 
-api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/orders/:rowId/despachar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   // Despacho a Effi por API (Dropi tiene las suyas: /orders/:rowId/dropi/cotizar y /crear).
   const sid = req.user!.storeId!;
   const reintentar = req.body?.reintentar === true;
@@ -1185,7 +1186,7 @@ api.post('/orders/:rowId/despachar', requireAuth, requireStore, requireOwner, as
 });
 
 // Actualiza estado y guía del pedido: Effi por API o Dropi por API.
-api.post('/orders/:rowId/despachar/sync', requireAuth, requireStore, async (req, res) => {
+api.post('/orders/:rowId/despachar/sync', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const sid = req.user!.storeId!;
   const eo = db.prepare('SELECT effi_doc FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { effi_doc: string } | undefined;
   if (eo?.effi_doc) {
@@ -1461,7 +1462,7 @@ api.post('/shopify/publicar-producto', requireAuth, requireStore, requireOwner, 
 
 // Valida un ID de producto de Dropi (para vincularlo): trae nombre y variaciones.
 // Trae de Dropi todas las variaciones del producto y las crea/vincula en DealFlow.
-api.post('/products/:id/dropi/sincronizar', requireAuth, requireStore, async (req, res) => {
+api.post('/products/:id/dropi/sincronizar', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
   const { sincronizarProductoDropi } = await import('./dropiSync.js');
   const r = await sincronizarProductoDropi(req.user!.storeId!, req.params.id, String(req.body?.dropiId || ''));
@@ -1469,7 +1470,7 @@ api.post('/products/:id/dropi/sincronizar', requireAuth, requireStore, async (re
   res.json(r);
 });
 // Volver a armar las variantes con las opciones (deja de usar las de Dropi).
-api.post('/products/:id/dropi/soltar-variantes', requireAuth, requireStore, (req, res) => {
+api.post('/products/:id/dropi/soltar-variantes', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
   db.prepare("UPDATE products SET variantes_fuente = '' WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
@@ -1485,7 +1486,7 @@ api.get('/dropi/producto/:id', requireAuth, requireStore, async (req, res) => {
 
 // Cotiza un pedido en Dropi: resuelve destino, arma los productos y devuelve las
 // transportadoras con su precio para que el operador elija.
-api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const sidT = req.user!.storeId!;
   // Lo que pase al cotizar (incluidas las llamadas a Dropi) queda en el registro del pedido.
   const jsonOrig = res.json.bind(res);
@@ -1520,7 +1521,7 @@ api.post('/orders/:rowId/dropi/cotizar', requireAuth, requireStore, requireOwner
 });
 
 // Crea el pedido en Dropi con la transportadora elegida (o sin ella si auto).
-api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const sidT = req.user!.storeId!;
   trazar(sidT, req.params.rowId, { etapa: 'despacho', titulo: 'Creación en Dropi iniciada', datos: { opciones: req.body } });
   // El resultado (éxito o error) queda en la línea de tiempo del pedido.
@@ -1576,7 +1577,7 @@ function urlWebhookEffi(req: import('express').Request, token: string): string {
   const base = (process.env.PUBLIC_APP_URL || `https://${req.get('host') || 'app.dealflow.sbs'}`).replace(/\/+$/, '');
   return `${base}/webhooks/effi/${token}`;
 }
-api.get('/effi-api/estado', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.get('/effi-api/estado', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
   const c = ef.cfgEffi(sid);
@@ -1679,11 +1680,11 @@ api.post('/admin/proveedores/:id/ver', requireAuth, requireAdmin, (req, res) => 
   res.json({ ok: true });
 });
 
-api.get('/effi-api/convenios-conocidos', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.get('/effi-api/convenios-conocidos', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   res.json({ convenios: ef.conveniosConocidos(req.user!.storeId!), porDefecto: ef.cfgEffi(req.user!.storeId!)?.convenioDropshipping || '' });
 });
-api.get('/effi-api/convenios', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.get('/effi-api/convenios', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const c = ef.cfgEffi(req.user!.storeId!);
   if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
@@ -1694,7 +1695,7 @@ api.get('/effi-api/convenios', requireAuth, requireStore, requireOwner, async (r
   res.json({ convenios: lista, actual: c.convenioDropshipping });
 });
 
-api.get('/effi-api/listas', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.get('/effi-api/listas', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const c = ef.cfgEffi(req.user!.storeId!);
   if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
@@ -1762,7 +1763,7 @@ api.post('/effi-api/articulos/sync', requireAuth, requireStore, requireOwner, as
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
 });
-api.get('/effi-api/articulos', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.get('/effi-api/articulos', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
   const arts = ef.articulosCache(sid);
@@ -1779,14 +1780,14 @@ api.get('/effi-api/articulos/todos', requireAuth, requireStore, async (req, res)
   const ef = await import('./effiApi.js');
   res.json({ articulos: await ef.todosLosArticulos(req.user!.storeId!, req.query.refrescar === '1') });
 });
-api.get('/effi-api/articulos/buscar', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.get('/effi-api/articulos/buscar', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const r = await ef.buscarArticulosEffi(req.user!.storeId!, String(req.query.q || ''));
   if (!Array.isArray(r)) return res.status(400).json({ error: r.error });
   res.json({ articulos: r });
 });
 // Marca por quién se despacha un producto (effi | dropi | '').
-api.post('/effi-api/producto-proveedor', requireAuth, requireStore, requireOwner, (req, res) => {
+api.post('/effi-api/producto-proveedor', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
   const dp = req.body?.proveedor === 'dropi' || req.body?.proveedor === 'effi' ? req.body.proveedor : '';
   const ids: string[] = Array.isArray(req.body?.productIds) ? req.body.productIds.map(String) : [String(req.body?.productId || '')];
   const upd = db.prepare('UPDATE products SET despacho_proveedor = ? WHERE id = ? AND store_id = ?');
@@ -1795,7 +1796,7 @@ api.post('/effi-api/producto-proveedor', requireAuth, requireStore, requireOwner
   res.json({ ok: true, actualizados: n });
 });
 // Convenio de un producto: '' = automático, 'propio' = mercancía propia, o el código del convenio.
-api.post('/effi-api/producto-convenio', requireAuth, requireStore, requireOwner, (req, res) => {
+api.post('/effi-api/producto-convenio', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
   const raw = String(req.body?.convenio ?? '').trim();
   const conv = raw === 'propio' ? 'propio' : raw.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
   const ids: string[] = Array.isArray(req.body?.productIds) ? req.body.productIds.map(String) : [String(req.body?.productId || '')];
@@ -1805,13 +1806,13 @@ api.post('/effi-api/producto-convenio', requireAuth, requireStore, requireOwner,
   res.json({ ok: true, actualizados: n });
 });
 // Revisión rápida de vínculos de un producto: actual vs. sugerido, y aplicar varios de una vez.
-api.get('/effi-api/producto/:id/vinculos', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.get('/effi-api/producto/:id/vinculos', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const r = await ef.revisarVinculosProducto(req.user!.storeId!, String(req.params.id));
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
 });
-api.post('/effi-api/producto/:id/vinculos', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/effi-api/producto/:id/vinculos', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
   const cambios = (Array.isArray(req.body?.cambios) ? req.body.cambios : []) as { variantId?: string; effiId?: string }[];
@@ -1839,7 +1840,7 @@ api.get('/effi-api/proveedor-sugerido/:id', requireAuth, requireStore, async (re
   const a = await ef.proveedorSugerido(req.user!.storeId!, String(req.params.id).replace(/\D/g, ''));
   res.json({ articulo: a ? { id: a.id, descripcion: a.descripcion, referencia: a.referencia, stock: a.stock, drop: 1 } : null });
 });
-api.post('/effi-api/articulos/vincular', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/effi-api/articulos/vincular', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const id = String(req.body?.effiId || '').replace(/\D/g, '');
   // Vínculo a mano por ID: se verifica en Effi que el artículo exista antes de guardarlo.
@@ -1861,7 +1862,7 @@ api.get('/effi-api/eventos', requireAuth, requireStore, requireOwner, async (req
 });
 // Lo necesario para el formulario de guía: transportadoras (con servicios y pago del flete),
 // remitentes y los valores por defecto (la última elección).
-api.get('/effi-api/opciones-guia', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.get('/effi-api/opciones-guia', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const c = ef.cfgEffi(req.user!.storeId!);
   if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
@@ -1869,7 +1870,7 @@ api.get('/effi-api/opciones-guia', requireAuth, requireStore, requireOwner, asyn
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ ...r, defaults: c.guia });
 });
-api.post('/orders/:rowId/effi/guia', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/orders/:rowId/effi/guia', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const b = req.body || {};
   const s = (v: unknown) => String(v ?? '').trim().slice(0, 40);
@@ -1886,7 +1887,7 @@ api.post('/orders/:rowId/effi/guia', requireAuth, requireStore, requireOwner, as
 // Transportadoras cuya guía en PDF viene "acostada" en la hoja (hay que enderezarla).
 // Documento de la guía (PDF o imagen) que el dueño sube al pedido. Si es PDF,
 // guardamos también la primera página como PNG para mandarla por WhatsApp.
-api.post('/orders/:rowId/guia-documento', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/orders/:rowId/guia-documento', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT id, numero, transportadora FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; numero: number; transportadora: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -1912,7 +1913,7 @@ api.post('/orders/:rowId/guia-documento', requireAuth, requireStore, requireOwne
 });
 // Guía puesta a mano (p.ej. Dropi la generó pero no llegó por la API): se guarda, el
 // pedido pasa a "Guía generada" y se le avisa al cliente por WhatsApp.
-api.post('/orders/:rowId/guia-manual', requireAuth, requireStore, async (req, res) => {
+api.post('/orders/:rowId/guia-manual', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT id, estado, guia_avisada, transportadora FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; estado: string; guia_avisada: number; transportadora: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -1933,7 +1934,7 @@ api.post('/orders/:rowId/guia-manual', requireAuth, requireStore, async (req, re
 });
 // Envía la guía al cliente: al chat (imagen/PDF/texto) y, si dejó otro celular de
 // contacto, a ese número con la plantilla aprobada (ver avisoGuia.ts).
-api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, async (req, res) => {
+api.post('/orders/:rowId/guia-enviar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as Record<string, unknown> | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -1987,7 +1988,7 @@ api.get('/orders/:rowId/variantes-faltantes', requireAuth, requireStore, async (
   res.json({ faltan });
 });
 // Corrige la variante de un ítem del pedido (el nombre queda "Producto (Variante)").
-api.post('/orders/:rowId/items/:itemId/variante', requireAuth, requireStore, (req, res) => {
+api.post('/orders/:rowId/items/:itemId/variante', requireAuth, requireStore, requirePermiso('pedidos_editar'), (req, res) => {
   const sid = req.user!.storeId!;
   const it = db.prepare('SELECT i.id, i.nombre FROM order_items i JOIN orders o ON o.id = i.order_id WHERE i.id = ? AND o.id = ? AND o.store_id = ?').get(req.params.itemId, req.params.rowId, sid) as { id: string; nombre: string } | undefined;
   if (!it) return res.status(404).json({ error: 'Producto del pedido no encontrado.' });
@@ -1999,7 +2000,7 @@ api.post('/orders/:rowId/items/:itemId/variante', requireAuth, requireStore, (re
   res.json({ ok: true, nombre });
 });
 // Vista previa: lo que se le mandaría a Effi para este pedido (no crea nada).
-api.get('/orders/:rowId/effi/preview', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.get('/orders/:rowId/effi/preview', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const forzado = String(req.query.convenio || '').trim() === 'propio' ? 'propio' : String(req.query.convenio || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
   const convenios = ef.conveniosConocidos(req.user!.storeId!);
@@ -2014,13 +2015,13 @@ api.get('/orders/:rowId/historial-cliente', requireAuth, requireStore, async (re
   res.json(h);
 });
 // Anular en Effi la guía y la remisión del pedido (para corregirlo y volver a despacharlo).
-api.post('/orders/:rowId/effi/anular', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/orders/:rowId/effi/anular', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const r = await ef.anularEnEffi(req.user!.storeId!, String(req.params.rowId), String(req.body?.motivo || ''));
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
 });
-api.post('/orders/:rowId/effi/despachar', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/orders/:rowId/effi/despachar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT effi_remision, effi_anuladas FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { effi_remision: string; effi_anuladas: string } | undefined;
@@ -2261,20 +2262,66 @@ api.post('/admin/stores/:id/creditos', requireAuth, requireAdmin, async (req, re
 // ── Equipo (usuarios de la tienda que pueden entrar y responder) ──────
 api.get('/team', requireAuth, requireStore, requireOwner, (req, res) => {
   const sid = req.user!.storeId!;
-  const store = db.prepare('SELECT correo FROM stores WHERE id = ?').get(sid) as { correo: string } | undefined;
-  const users = db.prepare('SELECT id, nombre, email FROM users WHERE store_id = ? ORDER BY rowid').all(sid) as { id: string; nombre: string; email: string }[];
-  res.json({ team: users.map((u) => ({ id: u.id, nombre: u.nombre, email: u.email, esDueno: u.email === store?.correo, esTu: u.id === req.user!.id })) });
+  const store = db.prepare('SELECT correo, owner_user_id FROM stores WHERE id = ?').get(sid) as { correo: string; owner_user_id: string | null } | undefined;
+  const roles = rolesTienda(sid);
+  const users = db.prepare("SELECT id, nombre, email, COALESCE(role_id,'') role_id FROM users WHERE store_id = ? ORDER BY rowid").all(sid) as { id: string; nombre: string; email: string; role_id: string }[];
+  res.json({
+    team: users.map((u) => {
+      const esDueno = u.id === store?.owner_user_id || u.email === store?.correo;
+      return { id: u.id, nombre: u.nombre, email: u.email, esDueno, esTu: u.id === req.user!.id, roleId: esDueno ? '' : u.role_id, rol: esDueno ? 'Dueño' : nombreRol(sid, u.role_id) || 'Agente (acceso básico)' };
+    }),
+    roles, permisos: PERMISOS,
+  });
 });
 
 api.post('/team', requireAuth, requireStore, requireOwner, (req, res) => {
-  const { nombre, email, password } = req.body || {};
+  const { nombre, email, password, roleId } = req.body || {};
   if (!nombre?.trim() || !email?.trim() || !password) return res.status(400).json({ error: 'Faltan el nombre, el correo o la contraseña.' });
   { const e = claveInvalida(String(password), false); if (e) return res.status(400).json({ error: e }); }
   const correo = String(email).toLowerCase().trim();
   if (db.prepare('SELECT id FROM users WHERE email = ?').get(correo)) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
+  const sid = req.user!.storeId!;
+  const rol = roleId && rolesTienda(sid).some((r) => r.id === roleId) ? String(roleId) : '';
   const id = uid();
-  db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)').run(id, correo, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', req.user!.storeId);
+  db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id, role_id) VALUES (?,?,?,?,?,?,?)').run(id, correo, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', sid, rol);
   res.json({ id });
+});
+
+// Editar un colaborador: nombre, rol y (opcional) una contraseña nueva.
+api.patch('/team/:id', requireAuth, requireStore, requireOwner, (req, res) => {
+  const sid = req.user!.storeId!;
+  const u = db.prepare('SELECT id, email FROM users WHERE id = ? AND store_id = ?').get(req.params.id, sid) as { id: string; email: string } | undefined;
+  if (!u) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  const store = db.prepare('SELECT correo, owner_user_id FROM stores WHERE id = ?').get(sid) as { correo: string; owner_user_id: string | null } | undefined;
+  const esDueno = u.id === store?.owner_user_id || u.email === store?.correo;
+  const { nombre, roleId, password } = req.body || {};
+  if (typeof nombre === 'string' && nombre.trim()) db.prepare('UPDATE users SET nombre = ? WHERE id = ?').run(nombre.trim().slice(0, 60), u.id);
+  if (roleId !== undefined && !esDueno) {
+    const rol = roleId && rolesTienda(sid).some((r) => r.id === roleId) ? String(roleId) : '';
+    db.prepare('UPDATE users SET role_id = ? WHERE id = ?').run(rol, u.id);
+  }
+  if (password) {
+    const e = claveInvalida(String(password), false); if (e) return res.status(400).json({ error: e });
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), u.id);
+  }
+  res.json({ ok: true });
+});
+
+// Roles de la tienda (con sus permisos).
+api.post('/team/roles', requireAuth, requireStore, requireOwner, (req, res) => {
+  const r = guardarRol(req.user!.storeId!, null, String(req.body?.nombre || ''), req.body?.permisos);
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ rol: r });
+});
+api.put('/team/roles/:id', requireAuth, requireStore, requireOwner, (req, res) => {
+  const r = guardarRol(req.user!.storeId!, req.params.id, String(req.body?.nombre || ''), req.body?.permisos);
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ rol: r });
+});
+api.delete('/team/roles/:id', requireAuth, requireStore, requireOwner, (req, res) => {
+  const r = borrarRol(req.user!.storeId!, req.params.id);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
 });
 
 api.delete('/team/:id', requireAuth, requireStore, requireOwner, (req, res) => {
@@ -2288,7 +2335,14 @@ api.delete('/team/:id', requireAuth, requireStore, requireOwner, (req, res) => {
   res.json({ ok: true });
 });
 
-api.post('/leads/:id/messages', requireAuth, requireStore, async (req, res) => {
+// Presencia en el Inbox: cada pantalla avisa en qué chat está y si está escribiendo.
+api.post('/presencia', requireAuth, requireStore, async (req, res) => {
+  const { marcarPresencia } = await import('./presencia.js');
+  const nombre = req.user!.imp ? `${req.user!.nombre || 'Soporte'} (soporte DealFlow)` : req.user!.nombre;
+  res.json(marcarPresencia(req.user!.storeId!, req.user!.id, nombre, String(req.body?.leadId || '').slice(0, 64), req.body?.escribiendo === true));
+});
+
+api.post('/leads/:id/messages', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
   const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as
     | { id: string; tel: string; wa_id: string | null }
     | undefined;
@@ -2321,7 +2375,7 @@ api.post('/anuncios/:adId/producto', requireAuth, requireStore, async (req, res)
 
 // Disparar MANUALMENTE el mensaje inicial de un producto en este chat (flujo).
 // Envía la presentación y deja el chat esperando al cliente (a cargo del asistente).
-api.post('/leads/:id/flujo-inicial', requireAuth, requireStore, async (req, res) => {
+api.post('/leads/:id/flujo-inicial', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);
   if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
   const { enviarMensajeInicialManual } = await import('./ai.js');
@@ -2351,7 +2405,7 @@ api.get('/plantillas-aprobadas', requireAuth, requireStore, (req, res) => {
 });
 
 // Enviar una plantilla APROBADA a un chat. Funciona aunque hayan pasado 24 h.
-api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, async (req, res) => {
+api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
   const sid = req.user!.storeId!;
   const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, sid) as
     | { id: string; tel: string; wa_id: string | null } | undefined;
@@ -2383,7 +2437,7 @@ api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, async (req, r
 // crea el contacto si no existe y le envía una plantilla aprobada. Meta solo deja escribirle
 // primero a alguien con plantilla. Va de a pocos (máx. 25 por llamada, con pausa entre envíos)
 // para no disparar los controles anti-spam; el panel manda la lista por tandas.
-api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requirePermiso('iniciar_conversacion'), async (req, res) => {
   const sid = req.user!.storeId!;
   const t = db.prepare(
     `SELECT t.nombre, t.idioma, t.encabezado, t.cuerpo, t.ejemplos FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id
@@ -2458,7 +2512,7 @@ api.post('/leads/:id/extraer-pedido', requireAuth, requireStore, async (req, res
 // Actualiza un pedido existente (datos de envío + ítems). Se usa desde "completar
 // pedido desde el chat" tras la revisión del dueño.
 // Dirección organizada por la IA de la tienda (reglas de guía: mayúsculas, CRA/CL…, BRR, LOC).
-api.post('/orders/:rowId/direccion/sugerir', requireAuth, requireStore, async (req, res) => {
+api.post('/orders/:rowId/direccion/sugerir', requireAuth, requireStore, requirePermiso('pedidos_editar'), async (req, res) => {
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT direccion, ciudad, departamento FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { direccion: string; ciudad: string; departamento: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -2468,7 +2522,7 @@ api.post('/orders/:rowId/direccion/sugerir', requireAuth, requireStore, async (r
 });
 
 // Solo la dirección (botón 🌐 "Ordenar dirección" del pedido).
-api.put('/orders/:rowId/direccion', requireAuth, requireStore, (req, res) => {
+api.put('/orders/:rowId/direccion', requireAuth, requireStore, requirePermiso('pedidos_editar'), (req, res) => {
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT id, numero, direccion FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string; numero: number; direccion: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -2479,7 +2533,7 @@ api.put('/orders/:rowId/direccion', requireAuth, requireStore, (req, res) => {
   res.json({ ok: true, direccion: nueva });
 });
 
-api.put('/orders/:rowId', requireAuth, requireStore, (req, res) => {
+api.put('/orders/:rowId', requireAuth, requireStore, requirePermiso('pedidos_editar'), (req, res) => {
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT id FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -2504,7 +2558,7 @@ api.put('/orders/:rowId', requireAuth, requireStore, (req, res) => {
 });
 
 // Enviar un adjunto (imagen, video, audio o archivo) al lead.
-api.post('/leads/:id/media', requireAuth, requireStore, async (req, res) => {
+api.post('/leads/:id/media', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
   const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId) as
     | { id: string; tel: string; wa_id: string | null }
     | undefined;
