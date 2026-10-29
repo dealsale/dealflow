@@ -128,6 +128,9 @@ export function emparejarItem<T extends VarBase>(nombreItem: string, todas: T[])
 const ROTULOS = new Set(['talla', 'tallas', 'color', 'colores', 'size', 'tamano', 'referencia', 'ref', 'unicolor', 'liso', 'lisa', 'solido', 'solida', 'entero', 'entera']);
 export function tokensVariante(s: string): string[] {
   const alias: Record<string, string> = { xxl: '2xl', xxxl: '3xl', xxs: '2xs' };
+  // Tallas compuestas: "S/M" = "S-M" = "SM" → "sm"; "L/XL" = "LXL" → "lxl".
+  const T = '(?:\\d?x{0,4}[sml])';
+  s = String(s || '').replace(new RegExp(`\\b(${T})\\s*[/-]\\s*(${T})(?:\\s*[/-]\\s*(${T}))?\\b`, 'gi'), (_m, a, b, c) => `${a}${b}${c || ''}`);
   // "T8" / "T-8" = talla 8.
   return norm(s).split(' ').filter((t) => t && !ROTULOS.has(t)).map((t) => alias[t] || t.replace(/^t(\d{1,2})$/, '$1'));
 }
@@ -203,7 +206,9 @@ export function separarVariantes(qty: number, nombre: string): { qty: number; no
   if (!m) return [{ qty, nombre }];
   const [, base, detalle] = m;
   const partes = detalle.split(/\s*·\s*/);
-  const conLista = partes.map((p, i) => ({ i, vals: p.split(/\s*(?:,|\by\b|\/)\s*/i).map((x) => x.trim()).filter(Boolean) })).filter((x) => x.vals.length > 1);
+  // "S/M" o "L/XL" es UNA talla (compuesta), no una lista de tallas: no se separa.
+  const tallaCompuesta = (p: string) => /^\s*(?:talla\s*:?\s*)?\d?x{0,4}[sml](\s*\/\s*\d?x{0,4}[sml]){1,2}\s*$/i.test(p);
+  const conLista = partes.map((p, i) => ({ i, vals: tallaCompuesta(p) ? [p] : p.split(/\s*(?:,|\by\b|\/)\s*/i).map((x) => x.trim()).filter(Boolean) })).filter((x) => x.vals.length > 1);
   if (conLista.length !== 1) return [{ qty, nombre }];
   const { i, vals } = conLista[0];
   if (qty < vals.length || qty % vals.length !== 0) return [{ qty, nombre }];
