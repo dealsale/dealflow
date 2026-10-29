@@ -1684,6 +1684,8 @@ api.post('/effi-api/config', requireAuth, requireStore, requireOwner, async (req
       activa: g.activa === true, transportadora: s(g.transportadora), servicio: s(g.servicio), formaPagoFlete: s(g.formaPagoFlete), remitente: s(g.remitente),
       peso: num(g.peso, 1), volumen: num(g.volumen, 1), alto: num(g.alto, 10), ancho: num(g.ancho, 10), largo: num(g.largo, 10),
     };
+    // Guía automática: el remitente (bodega de origen) es obligatorio y lo elige el dueño.
+    if (g.activa === true && !s(g.remitente)) return res.status(400).json({ error: '⚠️ Tienes que seleccionar el remitente (la bodega desde donde salen los paquetes) para activar la guía automática.' });
   }
   if (b.novedades && typeof b.novedades === 'object') {
     const n = b.novedades as Record<string, unknown>;
