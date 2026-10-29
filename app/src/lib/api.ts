@@ -407,7 +407,7 @@ export interface DropiProducto { id: number; name: string; tipo: string; userId:
 export const apiDropiProducto = (id: string) => req<DropiProducto>(`/api/dropi/producto/${encodeURIComponent(id)}`, 'GET');
 export interface DropiTransportadora { id: number; nombre: string; service: string; precio: number }
 export const apiDropiCotizar = (rowId: string, recaudo: 'con' | 'sin' = 'con') => req<{ ciudad: string; disponibles: DropiTransportadora[]; noDisponibles: { nombre: string; motivo: string }[] }>(`/api/orders/${rowId}/dropi/cotizar`, 'POST', { recaudo });
-export const apiDropiCrear = (rowId: string, transportadora?: DropiTransportadora, reintentar = false, recaudo: 'con' | 'sin' = 'con') => req<{ ok: true; dropiId: string; transportadora: string; aviso?: string }>(`/api/orders/${rowId}/dropi/crear`, 'POST', { transportadora, reintentar, recaudo });
+export const apiDropiCrear = (rowId: string, transportadora?: DropiTransportadora, reintentar = false, recaudo: 'con' | 'sin' = 'con', soloPedido = false) => req<{ ok: true; dropiId: string; transportadora: string; aviso?: string }>(`/api/orders/${rowId}/dropi/crear`, 'POST', { transportadora, reintentar, recaudo, soloPedido });
 
 // ── Shopify (Admin API) ──
 export const apiShopifyEstado = () => req<{ conectado: boolean; shop: string; nombre: string; via?: string; appDisponible?: boolean }>('/api/shopify/estado', 'GET');

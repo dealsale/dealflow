@@ -76,3 +76,11 @@ Claves: dropi variantes, vincular variantes dropi, verifica las variantes, revis
 - Al despachar, DealFlow encuentra la variante aunque el pedido venga de Shopify con otro formato ("Enterizo - S/M / Beige") y la deja guardada en el pedido. Si la variante no tiene código, intenta traerlo de Dropi solo.
 - "No supimos cuál talla/color es…": el pedido no dice la talla o el color, o pide una que el producto no tiene. Corrígelo ahí mismo con **🧩 Corrige la talla o el color** (o ✏️ Editar) y vuelve a tocar **Generar en Dropi**.
 - Abajo en el pedido, **🧾 Registro del pedido** muestra todo lo que pasó: cotización, creación en Dropi, respuestas de Dropi y errores.
+
+## Dropi: enviar solo el pedido (sin guía) para revisar la huella
+Sección: pedidos
+Claves: huella, huella dropi, solo pedido, sin guia, pendiente confirmacion, generar guia en dropi, revisar cliente dropi, historial transportadora
+En el pedido → **Despacho con Dropi** hay dos botones:
+- **📦 Generar en Dropi (con guía)**: cotizas, eliges transportadora y Dropi genera la guía.
+- **📝 Solo enviar el pedido (la guía la hago en Dropi)**: el pedido se crea en Dropi como **Pendiente confirmación**, sin transportadora ni guía. En Dropi revisas la **huella** del cliente (su historial con las transportadoras), confirmas y generas la guía. Cuando la generes, la guía llega sola a DealFlow (se revisa cada pocos minutos) y se le avisa al cliente por WhatsApp.
+La huella de Dropi no se puede consultar desde DealFlow (Dropi no la entrega por la integración). Como apoyo, el **Historial del cliente** del pedido muestra sus devoluciones en tu tienda, en la Red DealFlow y en tu Effi.
