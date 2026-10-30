@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Dropdown } from './Dropdown';
 import {
   apiEffiTodos,
-  apiEffiApiArticulos, apiEffiApiBuscar, apiRevisarVinculos, apiAplicarVinculos, type SugerenciaVinculo, type ArtVinculo, apiEffiApiProveedor, apiEffiApiConvenioProducto, apiEffiApiSyncArticulos, apiEffiApiVincular,
+  apiEffiApiArticulos, apiEffiApiBuscar, apiRevisarVinculos, apiAplicarVinculos, type SugerenciaVinculo, type ArtVinculo, apiEffiApiProveedor, apiEffiApiConvenioProducto, apiEffiApiSyncArticulos, apiEffiApiVincular, apiBodegaProducto, apiFijarBodegaProducto, type BodegaProducto,
   type EffiArticulo, type EffiVarianteDF,
 } from '../lib/api';
 
@@ -432,11 +432,13 @@ const opcionesConvenio = (actual: string, convenios: { id: string; nombre: strin
 /** Convenio dropshipping del producto (arriba del producto, junto a "Se despacha por"). */
 export function ConvenioProductoEffi({ productId }: { productId: string }) {
   const [convenio, setConvenio] = useState<string | null>(null);
+  const [aprendido, setAprendido] = useState('');
   const [convenios, setConvenios] = useState<{ id: string; nombre: string }[]>([]);
   const [msg, setMsg] = useState('');
   useEffect(() => {
-    void apiEffiApiArticulos(productId).then((r) => { if (r.data) { setConvenio(r.data.conveniosProducto?.[productId] || ''); setConvenios(r.data.convenios || []); } });
+    void apiEffiApiArticulos(productId).then((r) => { if (r.data) { setConvenio(r.data.conveniosProducto?.[productId] || ''); setAprendido(r.data.conveniosAprendidos?.[productId] || ''); setConvenios(r.data.convenios || []); } });
   }, [productId]);
+  const nombreAprendido = aprendido ? `${convenios.find((c) => c.id === aprendido)?.nombre || 'Convenio'} · ${aprendido}` : '';
   if (convenio === null) return null;
   const cambiar = async (c: string) => {
     setConvenio(c); setMsg('');
@@ -447,10 +449,43 @@ export function ConvenioProductoEffi({ productId }: { productId: string }) {
   return (
     <div style={{ marginTop: 10, maxWidth: 420 }}>
       <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>🤝 Convenio en Effi {msg && <span style={{ fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>· {msg}</span>}</div>
-      <Dropdown ariaLabel="Convenio del producto en Effi" value={convenio} onChange={(v) => void cambiar(v)} options={opcionesConvenio(convenio, convenios)} />
+      <Dropdown ariaLabel="Convenio del producto en Effi" value={convenio} onChange={(v) => void cambiar(v)}
+        options={opcionesConvenio(convenio, convenios).map((o) => (o.value === '' && nombreAprendido ? { ...o, label: `Automático: ${nombreAprendido} (el de su última venta)` } : o))} />
       <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>
-        {convenio === 'propio' ? 'Se envía como mercancía tuya: Effi exige stock en tu bodega.' : convenio ? 'Cada pedido de este producto sale a Effi con este convenio, sin preguntar.' : 'Automático: usa el convenio con el que ya se ha vendido en Effi. Si es de un proveedor, elígelo aquí para que salga bien desde la primera venta.'}
+        {convenio === 'propio' ? 'Se envía como mercancía tuya: Effi exige stock en tu bodega.' : convenio ? 'Cada pedido de este producto sale a Effi con este convenio, sin preguntar.' : nombreAprendido ? 'Se recuerda el convenio con el que salió su última remisión; si cambia en Effi, se actualiza solo.' : 'Automático: usa el convenio con el que ya se ha vendido en Effi. Si es de un proveedor, elígelo aquí para que salga bien desde la primera venta.'}
         {!convenios.length && ' Agrega tus convenios en Integraciones → Effi.'}
+      </div>
+      <BodegaProductoEffi productId={productId} />
+    </div>
+  );
+}
+
+/** Bodega (remitente de la guía) del producto: automática (de sus envíos recogidos) o fija. */
+function BodegaProductoEffi({ productId }: { productId: string }) {
+  const [d, setD] = useState<BodegaProducto | null>(null);
+  const [msg, setMsg] = useState('');
+  const cargar = () => void apiBodegaProducto(productId).then((r) => r.data && setD(r.data));
+  useEffect(cargar, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!d) return null;
+  const nombre = (id: string) => d.remitentes.find((x) => x.id === id)?.nombre || `#${id}`;
+  const auto = d.aprendida
+    ? `Automático: ${nombre(d.aprendida.remitente)} — de ahí se recogieron ${d.aprendida.usos} de ${d.aprendida.total} envío${d.aprendida.total === 1 ? '' : 's'}`
+    : `Automático: ${d.defecto ? `tu remitente por defecto hasta su primer envío recogido` : 'se aprende con su primer envío recogido'}`;
+  const cambiar = async (v: string) => {
+    setD({ ...d, fija: v }); setMsg('');
+    const r = await apiFijarBodegaProducto(productId, v);
+    setMsg(r.error || '✓ Guardado');
+    if (!r.error) { setTimeout(() => setMsg(''), 1500); cargar(); }
+  };
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>🏭 Bodega (remitente de la guía) {msg && <span style={{ fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>· {msg}</span>}</div>
+      <Dropdown ariaLabel="Bodega del producto en Effi" value={d.fija} onChange={(v) => void cambiar(v)} options={[{ value: '', label: auto }, ...d.remitentes.map((x) => ({ value: x.id, label: x.nombre }))]} />
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>
+        {d.fija ? 'Todas las guías de este producto salen de esta bodega.' : d.aprendida
+          ? <>Sale de <b>{nombre(d.aprendida.remitente)}</b>: de ahí la transportadora recogió {d.aprendida.usos} de sus {d.aprendida.total} envío{d.aprendida.total === 1 ? '' : 's'}. Se pone sola en la guía; fíjala solo si quieres cambiarla.</>
+          : 'DealFlow recuerda desde qué bodega la transportadora recoge este producto y la pone sola en la guía. Fíjala solo si quieres cambiarla.'}
+        {d.error && ` (${d.error})`}
       </div>
     </div>
   );

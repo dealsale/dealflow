@@ -1,3 +1,4 @@
+import { VerificacionEffi } from './VerificacionEffi';
 import { Dropdown } from './Dropdown';
 import { useEffect, useMemo, useState } from 'react';
 import { IntegracionFila, LogoInteg } from './IntegracionFila';
@@ -78,9 +79,9 @@ function RemitentesConvenio({ remitentes, alCambiar }: { remitentes: { id: strin
 }
 
 /** Nombre de bodega y proveedor de cada remitente: Effi les pone a todos el nombre de la tienda y solo se distinguen por la dirección. */
-function NombresBodegas({ remitentes, alCambiar }: { remitentes: { id: string; nombre: string; alias?: string; ciudad?: string; direccion?: string; proveedores?: string[] }[]; alCambiar: () => void }) {
-  const sinNombre = remitentes.filter((r) => !r.alias && !r.proveedores?.length).length;
-  const [abierto, setAbierto] = useState(sinNombre > 0);
+function NombresBodegas({ remitentes, alCambiar }: { remitentes: { id: string; nombre: string; alias?: string; ciudad?: string; direccion?: string; proveedores?: string[]; productos?: string[] }[]; alCambiar: () => void }) {
+  const sinNombre = remitentes.filter((r) => !r.alias && !r.proveedores?.length && !r.productos?.length).length;
+  const [abierto, setAbierto] = useState(false);
   const [datos, setDatos] = useState<Record<string, { alias: string; proveedor: string }>>({});
   const [provs, setProvs] = useState<string[]>([]);
   useEffect(() => { setDatos(Object.fromEntries(remitentes.map((r) => [r.id, { alias: r.alias || '', proveedor: r.proveedores?.[0] || '' }]))); }, [remitentes]);
@@ -94,14 +95,16 @@ function NombresBodegas({ remitentes, alCambiar }: { remitentes: { id: string; n
   const campo = (id: string, k: 'alias' | 'proveedor', v: string) => setDatos((x) => ({ ...x, [id]: { ...(x[id] || { alias: '', proveedor: '' }), [k]: v } }));
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
-      <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: 'var(--df-text)' }}>{abierto ? '▾' : '▸'} Tus remitentes: bodega y proveedor {sinNombre ? `(${sinNombre} sin nombre)` : ''}</button>
-      <p style={ayuda}>Effi les pone a todos los remitentes el nombre de la tienda. Escribe a cada uno el <b>nombre de la bodega</b> y el <b>proveedor</b>: así sale en la lista al crear la guía (📌 bodega · 🏭 proveedor · ciudad · dirección).</p>
+      <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: 'var(--df-text)' }}>{abierto ? '▾' : '▸'} Tus remitentes: bodega y proveedor {sinNombre ? `(${sinNombre} sin identificar)` : ''}</button>
+      <p style={ayuda}>No hace falta llenarlo: cada remitente se identifica solo con los productos que la transportadora ha recogido ahí (📦). Si quieres, ponle nombre y proveedor (📌 bodega · 🏭 proveedor).</p>
       {abierto && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <datalist id="df-proveedores-effi">{provs.map((p) => <option key={p} value={p} />)}</datalist>
           {remitentes.map((r) => (
             <div key={r.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 8, alignItems: 'center', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px' }}>
-              <div style={{ fontSize: 12, minWidth: 0 }}><b>#{r.id}</b> · {[r.ciudad, r.direccion].filter(Boolean).join(' · ') || 'Sin dirección en Effi'}</div>
+              <div style={{ fontSize: 12, minWidth: 0 }}><b>#{r.id}</b> · {[r.ciudad, r.direccion].filter(Boolean).join(' · ') || 'Sin dirección en Effi'}
+                {!!r.productos?.length && <div style={{ fontSize: 11.5, color: 'var(--df-brand-dark)' }}>📦 {r.productos.slice(0, 3).join(', ')}{r.productos.length > 3 ? ` y ${r.productos.length - 3} más` : ''}</div>}
+              </div>
               <input value={datos[r.id]?.alias || ''} onChange={(e) => campo(r.id, 'alias', e.target.value)} onBlur={() => guardar(r)} placeholder="Bodega (ej. Bodega Medellín)" style={{ ...inp, padding: '7px 9px' }} />
               <input list="df-proveedores-effi" value={datos[r.id]?.proveedor || ''} onChange={(e) => campo(r.id, 'proveedor', e.target.value)} onBlur={() => guardar(r)} placeholder="Proveedor (ej. Fares)" style={{ ...inp, padding: '7px 9px' }} />
             </div>
@@ -278,6 +281,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
             <button onClick={() => void autoconfigurar()} disabled={!!auto && Object.values(auto).some((x) => x.estado === 'corriendo')} style={{ ...btn, background: 'linear-gradient(90deg, var(--df-purple), #6366F1)' }}>⚡ Configurar todo automático</button>
             <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Elige la configuración, detecta tus convenios y conecta tus productos con su stock. No cambia lo que ya elegiste.</span>
           </div>
+          <VerificacionEffi />
           {!listas ? <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Leyendo tu configuración de Effi…</div> : (
             <>
               {/* 1. Remisión */}
@@ -384,7 +388,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                     ? <div style={{ fontSize: 11.5, color: 'var(--df-danger-dark)', marginTop: 4 }}>El remitente guardado (#{cfg.remitenteDefecto}) ya no existe en tu Effi: elige otro.</div>
                     : <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 4 }}>Se pone solo en cada guía (manual y automática). Si un convenio tiene su bodega fijada abajo, sale esa. En el pedido lo puedes cambiar.</div>}
                 </div>
-                <NombresBodegas alCambiar={recargarListas} remitentes={listas.remitentes as (typeof listas.remitentes[number] & { alias?: string; ciudad?: string; direccion?: string; proveedores?: string[] })[]} />
+                <NombresBodegas alCambiar={recargarListas} remitentes={listas.remitentes as (typeof listas.remitentes[number] & { alias?: string; ciudad?: string; direccion?: string; proveedores?: string[]; productos?: string[] })[]} />
                 <RemitentesConvenio alCambiar={recargarListas} remitentes={listas.remitentes} />
               </div>
 
