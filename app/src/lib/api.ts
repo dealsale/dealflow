@@ -552,6 +552,7 @@ export interface EffiApiEstado {
   sucursal?: string; bodega?: string; centroCostos?: string; formaPago?: string; formaPagoContado?: boolean; medioPago?: string; caja?: string; cuenta?: string;
   vendedor?: string; articuloFlete?: string; diasEntrega?: number; autoDespacho?: boolean; guia?: EffiGuiaCfg;
   convenioDropshipping?: string;
+  remitenteDefecto?: string;
   convenios?: { id: string; nombre: string }[];
   novedades?: { avisarCliente: boolean; botGestiona: boolean; autoEnviar: boolean };
   devolucionAuto?: boolean;
@@ -1078,4 +1079,6 @@ export const apiGuardarPlantillaTienda = (id: string | null, b: { nombre?: strin
 export const apiBorrarPlantillaTienda = (id: string) => req<{ ok: true }>(`/api/landings/plantillas/${encodeURIComponent(id)}`, 'DELETE');
 export const apiVistaPlantillaTienda = (html: string, tipo: 'landing' | 'gracias', landingId?: string) => req<{ html: string; avisos: string[]; landing: string }>('/api/landings/plantillas/vista', 'POST', { html, tipo, landingId });
 export const apiUsarPlantilla = (landingId: string, plantillaId: string) => req<{ ok: true }>(`/api/landings/${encodeURIComponent(landingId)}/plantilla`, 'PUT', { plantillaId });
+export const apiDatosRemitente = (codigo: string, d: { alias: string; proveedor: string }) => req<{ ok: true }>(`/api/effi-api/remitentes/${encodeURIComponent(codigo)}/datos`, 'PUT', d);
+export const apiNombrarConvenio = (id: string, nombre: string) => req<{ ok: true; convenios: { id: string; nombre: string }[] }>(`/api/effi-api/convenios/${encodeURIComponent(id)}/nombre`, 'PUT', { nombre });
 export const apiAliasRemitente = (codigo: string, alias: string) => req<{ ok: true }>(`/api/effi-api/remitentes/${encodeURIComponent(codigo)}/alias`, 'PUT', { alias });

@@ -8,7 +8,7 @@ import { OrdenarDireccion } from './DireccionPedido';
 import { HistorialClienteCard, useHistorialCliente, confirmarSiDevolvio, AvisoDevolucionPropia } from './HistorialCliente';
 import { confirmar, pedirTexto, notificar } from './dialogs';
 import { enProceso, ProcesoPedido } from './Proceso';
-import { apiRegistroPedido, apiAliasRemitente, type EventoPedido } from '../lib/api';
+import { apiRegistroPedido, apiDatosRemitente, type EventoPedido } from '../lib/api';
 import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
 
@@ -380,10 +380,12 @@ function useGuiaEffi(orderId?: string) {
   const elegirRemitente = (v: string) => { manual.current = true; setD((x) => ({ ...x, remitente: v })); setAvisoRemitente(false); };
   /** Apodo para reconocer la bodega (Effi les pone a todas el nombre de la tienda). */
   const nombrarRemitente = async (codigo: string) => {
-    const actual = ops?.remitentes.find((x) => x.id === codigo) as { alias?: string } | undefined;
-    const alias = await pedirTexto({ titulo: 'Nombre para esta bodega', mensaje: 'Así la vas a reconocer en la lista (ej. "Bodega Ana – proveedor jeans"). Solo se ve en DealFlow.', placeholder: 'Ej. Bodega principal Medellín', valor: actual?.alias || '', aceptar: 'Guardar' });
+    const actual = ops?.remitentes.find((x) => x.id === codigo) as { alias?: string; proveedores?: string[] } | undefined;
+    const alias = await pedirTexto({ titulo: 'Nombre de esta bodega', mensaje: 'Así la vas a reconocer en la lista. Solo se ve en DealFlow.', placeholder: 'Ej. Bodega Medellín', valor: actual?.alias || '', aceptar: 'Siguiente' });
     if (alias === null) return;
-    const r = await apiAliasRemitente(codigo, alias);
+    const proveedor = await pedirTexto({ titulo: 'Proveedor de esta bodega', mensaje: 'De quién es esta bodega (déjalo vacío si es tuya).', placeholder: 'Ej. Fares', valor: actual?.proveedores?.[0] || '', aceptar: 'Guardar' });
+    if (proveedor === null) return;
+    const r = await apiDatosRemitente(codigo, { alias, proveedor });
     if (r.error) return notificar(r.error, 'error');
     const n = await apiEffiOpcionesGuia(orderId);
     if (n.data) setOps((o) => (o ? { ...o, remitentes: n.data!.remitentes } : o));
@@ -439,7 +441,7 @@ function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; item
       <div id="df-campo-remitente" style={{ border: `2px solid ${g.avisoRemitente && !d.remitente ? '#DC2626' : d.remitente ? 'var(--df-brand-border, #A7F3D0)' : 'var(--df-warning, #F59E0B)'}`, borderRadius: 10, padding: 10, background: g.avisoRemitente && !d.remitente ? 'rgba(220, 38, 38, .08)' : 'transparent' }}>
         <label style={{ ...lb, fontSize: 12, color: 'var(--df-text)' }}>Remitente (bodega de origen) · obligatorio</label>
         <Dropdown ariaLabel="Remitente" placeholder="Elige desde qué bodega sale el paquete…" value={d.remitente} onChange={(v) => g.elegirRemitente(v)} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} />
-        {d.remitente && <button type="button" onClick={() => void g.nombrarRemitente(d.remitente)} style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, color: 'var(--df-purple)', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>✏️ Ponerle un nombre a esta bodega</button>}
+        {d.remitente && <button type="button" onClick={() => void g.nombrarRemitente(d.remitente)} style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, color: 'var(--df-purple)', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>✏️ Nombre de la bodega y proveedor</button>}
         {g.sugerido && d.remitente === g.sugerido.remitente && <div style={{ fontSize: 11.5, color: 'var(--df-brand-dark)', marginTop: 5, fontWeight: 600 }}>✓ Se puso solo: {g.sugerido.motivo}. Revísalo antes de crear la guía.</div>}
         {g.avisoRemitente && !d.remitente ? (
           <div role="alert" style={{ marginTop: 8, background: '#DC2626', color: '#fff', borderRadius: 8, padding: '12px 14px', fontSize: 15, fontWeight: 800, lineHeight: 1.35 }}>

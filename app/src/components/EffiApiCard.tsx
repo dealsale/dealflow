@@ -4,7 +4,7 @@ import { IntegracionFila, LogoInteg } from './IntegracionFila';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
   apiEffiApiConectar, apiEffiAutoconfigurar, apiEffiApiConfig, apiEffiApiDesconectar, apiEffiApiEventos, apiEffiApiListas,
-  apiEffiApiSecreto, apiEffiConvenios, apiRemitentesConvenio, apiFijarRemitenteConvenio, apiAliasRemitente,
+  apiEffiApiSecreto, apiEffiConvenios, apiRemitentesConvenio, apiFijarRemitenteConvenio, apiDatosRemitente, apiNombrarConvenio,
   type EffiApiEstado, type EffiEvento, type EffiGuiaCfg, type EffiListas,
 } from '../lib/api';
 
@@ -37,28 +37,38 @@ const ayuda: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12
  * bodega. Se aprende solo de la última guía (y de otras tiendas con el mismo convenio);
  * aquí se puede fijar a mano.
  */
-function RemitentesConvenio({ remitentes }: { remitentes: { id: string; nombre: string }[] }) {
+function RemitentesConvenio({ remitentes, alCambiar }: { remitentes: { id: string; nombre: string }[]; alCambiar: () => void }) {
   const [convenios, setConvenios] = useState<{ id: string; nombre: string }[]>([]);
+  const [nombres, setNombres] = useState<Record<string, string>>({});
   const [asignados, setAsignados] = useState<Record<string, { remitente: string; origen: string }>>({});
   const cargar = () => void apiRemitentesConvenio().then((r) => {
     if (!r.data) return;
     setConvenios(r.data.convenios);
+    setNombres(Object.fromEntries(r.data.convenios.map((c) => [c.id, /^Convenio /.test(c.nombre) ? '' : c.nombre])));
     setAsignados(Object.fromEntries(r.data.asignados.map((a) => [a.convenio, { remitente: a.remitente, origen: a.origen }])));
   });
   useEffect(cargar, []);
   if (!convenios.length) return null;
+  const guardarNombre = (cv: { id: string; nombre: string }) => {
+    const n = (nombres[cv.id] || '').trim();
+    if (n === cv.nombre || (!n && /^Convenio /.test(cv.nombre))) return;
+    void apiNombrarConvenio(cv.id, n).then(() => { cargar(); alCambiar(); });
+  };
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
-      <div style={{ fontWeight: 700, fontSize: 13 }}>Remitente de cada proveedor (convenio)</div>
-      <p style={ayuda}>Opcional. Si fijas aquí la bodega de un proveedor, los pedidos que salen con su convenio la traen puesta en la guía (manual y automática). Si no la fijas, la eliges en cada pedido.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 10 }}>
+      <div style={{ fontWeight: 700, fontSize: 13 }}>Cada convenio: nombre del proveedor y su bodega</div>
+      <p style={ayuda}>Ponle a cada convenio el nombre del proveedor. Si además le fijas su bodega, los pedidos de ese convenio la traen puesta en la guía. Si no, sale tu remitente por defecto y lo cambias en el pedido.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {convenios.map((cv) => {
           const a = asignados[cv.id];
           return (
-            <div key={cv.id}>
-              <Select label={cv.nombre || `Convenio ${cv.id}`} value={a && remitentes.some((r) => r.id === a.remitente) ? a.remitente : ''} vacio="Sin fijar (la eliges en cada pedido)"
-                onChange={(v) => void apiFijarRemitenteConvenio(cv.id, v).then(cargar)} opciones={remitentes} />
-              <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 3 }}>{a ? 'Fijado por ti' : 'Sin fijar'}</div>
+            <div key={cv.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, alignItems: 'end', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px' }}>
+              <div>
+                <label style={lbl}>Proveedor del convenio <b>{cv.id}</b></label>
+                <input value={nombres[cv.id] || ''} onChange={(e) => setNombres((x) => ({ ...x, [cv.id]: e.target.value }))} onBlur={() => guardarNombre(cv)} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} placeholder="Nombre del proveedor (ej. Fares)" style={inp} />
+              </div>
+              <Select label="Su bodega (remitente)" value={a && remitentes.some((r) => r.id === a.remitente) ? a.remitente : ''} vacio="Sin fijar (sale el de por defecto)"
+                onChange={(v) => void apiFijarRemitenteConvenio(cv.id, v).then(() => { cargar(); alCambiar(); })} opciones={remitentes} />
             </div>
           );
         })}
@@ -67,26 +77,33 @@ function RemitentesConvenio({ remitentes }: { remitentes: { id: string; nombre: 
   );
 }
 
-/** Apodo de cada remitente: Effi les pone a todos el nombre de la tienda y solo se distinguen por la dirección. */
-function NombresBodegas({ remitentes }: { remitentes: { id: string; nombre: string; alias?: string; ciudad?: string; direccion?: string; proveedores?: string[] }[] }) {
-  const [abierto, setAbierto] = useState(false);
-  const [alias, setAlias] = useState<Record<string, string>>({});
-  useEffect(() => { setAlias(Object.fromEntries(remitentes.map((r) => [r.id, r.alias || '']))); }, [remitentes]);
+/** Nombre de bodega y proveedor de cada remitente: Effi les pone a todos el nombre de la tienda y solo se distinguen por la dirección. */
+function NombresBodegas({ remitentes, alCambiar }: { remitentes: { id: string; nombre: string; alias?: string; ciudad?: string; direccion?: string; proveedores?: string[] }[]; alCambiar: () => void }) {
+  const sinNombre = remitentes.filter((r) => !r.alias && !r.proveedores?.length).length;
+  const [abierto, setAbierto] = useState(sinNombre > 0);
+  const [datos, setDatos] = useState<Record<string, { alias: string; proveedor: string }>>({});
+  const [provs, setProvs] = useState<string[]>([]);
+  useEffect(() => { setDatos(Object.fromEntries(remitentes.map((r) => [r.id, { alias: r.alias || '', proveedor: r.proveedores?.[0] || '' }]))); }, [remitentes]);
+  useEffect(() => { void apiRemitentesConvenio().then((r) => r.data && setProvs(r.data.convenios.map((c) => c.nombre).filter((n) => !/^Convenio /.test(n)))); }, []);
   if (!remitentes.length) return null;
-  const guardar = (id: string) => void apiAliasRemitente(id, alias[id] || '');
+  const guardar = (r: { id: string; alias?: string; proveedores?: string[] }) => {
+    const d = datos[r.id] || { alias: '', proveedor: '' };
+    if (d.alias === (r.alias || '') && d.proveedor === (r.proveedores?.[0] || '')) return;
+    void apiDatosRemitente(r.id, d).then(alCambiar);
+  };
+  const campo = (id: string, k: 'alias' | 'proveedor', v: string) => setDatos((x) => ({ ...x, [id]: { ...(x[id] || { alias: '', proveedor: '' }), [k]: v } }));
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
-      <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: 'var(--df-text)' }}>{abierto ? '▾' : '▸'} Nombres de tus bodegas (remitentes)</button>
-      <p style={ayuda}>Effi les pone a todos los remitentes el nombre de la tienda. Ponle a cada uno un nombre que reconozcas (ej. "Bodega principal" o "Proveedor jeans"): así sale en la lista al crear la guía. Si fijas la bodega de un proveedor abajo, sale con 🏭 y su nombre.</p>
+      <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: 'var(--df-text)' }}>{abierto ? '▾' : '▸'} Tus remitentes: bodega y proveedor {sinNombre ? `(${sinNombre} sin nombre)` : ''}</button>
+      <p style={ayuda}>Effi les pone a todos los remitentes el nombre de la tienda. Escribe a cada uno el <b>nombre de la bodega</b> y el <b>proveedor</b>: así sale en la lista al crear la guía (📌 bodega · 🏭 proveedor · ciudad · dirección).</p>
       {abierto && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <datalist id="df-proveedores-effi">{provs.map((p) => <option key={p} value={p} />)}</datalist>
           {remitentes.map((r) => (
-            <div key={r.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(160px, 240px)', gap: 8, alignItems: 'center', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px' }}>
-              <div style={{ fontSize: 12, minWidth: 0 }}>
-                <b>#{r.id}</b> · {[r.ciudad, r.direccion].filter(Boolean).join(' · ')}
-                {!!r.proveedores?.length && <div style={{ color: 'var(--df-brand-dark)', fontSize: 11.5 }}>🏭 Bodega de {r.proveedores.join(' / ')}</div>}
-              </div>
-              <input value={alias[r.id] || ''} onChange={(e) => setAlias((x) => ({ ...x, [r.id]: e.target.value }))} onBlur={() => guardar(r.id)} placeholder="Nombre (ej. Bodega Medellín)" style={{ ...inp, padding: '7px 9px' }} />
+            <div key={r.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 8, alignItems: 'center', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px' }}>
+              <div style={{ fontSize: 12, minWidth: 0 }}><b>#{r.id}</b> · {[r.ciudad, r.direccion].filter(Boolean).join(' · ') || 'Sin dirección en Effi'}</div>
+              <input value={datos[r.id]?.alias || ''} onChange={(e) => campo(r.id, 'alias', e.target.value)} onBlur={() => guardar(r)} placeholder="Bodega (ej. Bodega Medellín)" style={{ ...inp, padding: '7px 9px' }} />
+              <input list="df-proveedores-effi" value={datos[r.id]?.proveedor || ''} onChange={(e) => campo(r.id, 'proveedor', e.target.value)} onBlur={() => guardar(r)} placeholder="Proveedor (ej. Fares)" style={{ ...inp, padding: '7px 9px' }} />
             </div>
           ))}
         </div>
@@ -126,6 +143,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
     if (!est.conectado || !abierta || listas) return;
     void apiEffiApiListas().then((r) => { if (r.data) setListas(r.data); else setMsg(r.error || 'No pudimos leer tu configuración de Effi.'); });
   }, [est.conectado, abierta]); // eslint-disable-line react-hooks/exhaustive-deps
+  const recargarListas = () => void apiEffiApiListas().then((r) => { if (r.data) setListas(r.data); });
 
   const set = (patch: Partial<EffiApiEstado>) => setCfg((c) => ({ ...c, ...patch }));
   const guia: EffiGuiaCfg = { activa: false, transportadora: '', servicio: '', formaPagoFlete: '', remitente: '', peso: 1, volumen: 1, alto: 10, ancho: 10, largo: 10, ...(cfg.guia || {}) };
@@ -350,12 +368,6 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                     <Select label="Transportadora" value={guia.transportadora} onChange={(v) => setGuia({ transportadora: v, servicio: '', formaPagoFlete: '' })} opciones={listas.transportadoras.map((t) => ({ id: t.id, nombre: t.effi ? `${t.nombre} (Effi: ${t.effi})` : t.nombre }))} />
                     <Select label="Servicio" value={guia.servicio} onChange={(v) => setGuia({ servicio: v })} opciones={transp?.servicios || []} />
                     <Select label="Pago del flete" value={guia.formaPagoFlete} onChange={(v) => setGuia({ formaPagoFlete: v })} opciones={transp?.formasPago || []} />
-                    <div>
-                      <Select label="Remitente (bodega de origen)" value={listas.remitentes.some((r) => r.id === guia.remitente) ? guia.remitente : ''} onChange={(v) => setGuia({ remitente: v })} opciones={listas.remitentes} />
-                      {guia.remitente && !listas.remitentes.some((r) => r.id === guia.remitente)
-                        ? <div style={{ fontSize: 11.5, color: 'var(--df-danger-dark)', marginTop: 4 }}>El remitente guardado (#{guia.remitente}) ya no existe en tu Effi: elige otro y guarda.</div>
-                        : <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 4 }}>Las guías automáticas salen de aquí, salvo los pedidos de un proveedor (abajo): revisa la ciudad y la dirección.</div>}
-                    </div>
                     <div><label style={lbl}>Peso (kg)</label><input type="number" min={0.1} step={0.1} value={guia.peso} onChange={(e) => setGuia({ peso: Number(e.target.value) })} style={inp} /></div>
                     <div><label style={lbl}>Peso volumétrico (kg)</label><input type="number" min={0.1} step={0.1} value={guia.volumen} onChange={(e) => setGuia({ volumen: Number(e.target.value) })} style={inp} /></div>
                     <div><label style={lbl}>Alto × ancho × largo (cm)</label>
@@ -365,8 +377,15 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                     </div>
                   </div>
                 )}
-                <NombresBodegas remitentes={listas.remitentes as (typeof listas.remitentes[number] & { alias?: string; ciudad?: string; direccion?: string; proveedores?: string[] })[]} />
-                <RemitentesConvenio remitentes={listas.remitentes} />
+                <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12, maxWidth: 560 }}>
+                  <Select label="Remitente por defecto" vacio="Ninguno (lo eliges en cada pedido)" value={listas.remitentes.some((r) => r.id === cfg.remitenteDefecto) ? cfg.remitenteDefecto! : ''} opciones={listas.remitentes}
+                    onChange={(v) => { set({ remitenteDefecto: v }); setGuia({ remitente: v }); void apiEffiApiConfig({ remitenteDefecto: v }).then((r) => setMsg(r.error ? r.error : '✓ Remitente por defecto guardado.')); }} />
+                  {cfg.remitenteDefecto && !listas.remitentes.some((r) => r.id === cfg.remitenteDefecto)
+                    ? <div style={{ fontSize: 11.5, color: 'var(--df-danger-dark)', marginTop: 4 }}>El remitente guardado (#{cfg.remitenteDefecto}) ya no existe en tu Effi: elige otro.</div>
+                    : <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 4 }}>Se pone solo en cada guía (manual y automática). Si un convenio tiene su bodega fijada abajo, sale esa. En el pedido lo puedes cambiar.</div>}
+                </div>
+                <NombresBodegas alCambiar={recargarListas} remitentes={listas.remitentes as (typeof listas.remitentes[number] & { alias?: string; ciudad?: string; direccion?: string; proveedores?: string[] })[]} />
+                <RemitentesConvenio alCambiar={recargarListas} remitentes={listas.remitentes} />
               </div>
 
               <div style={{ display: 'flex', gap: 10 }}>
