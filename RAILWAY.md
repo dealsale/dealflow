@@ -78,3 +78,31 @@ No tienes que hacer nada.
 El plan Hobby de Railway es ~$5 USD/mes de uso incluido; una app pequeña como
 esta suele caber ahí. El volumen de la base de datos cuenta aparte pero es
 mínimo (centavos por unos MB).
+
+## 9. Entorno de prueba: `test.dealflow.sbs` (rama `test`)
+
+Un segundo servicio en Railway, con el **mismo repo** pero la rama **`test`**, donde
+se trabaja el diseño nuevo (tema "Noche", la identidad de la landing) sin tocar a
+nadie. Tiene **su propia base de datos** (su propio volumen): lo que pase ahí no
+afecta a las tiendas reales.
+
+1. En el proyecto de Railway: **New → GitHub Repo → dealsale/dealflow**.
+2. En ese servicio nuevo: **Settings → Source → Branch: `test`**.
+3. **New → Volume**, mount path `/srv/data` (igual que el principal).
+4. **Variables**: copia las del servicio principal (`JWT_SECRET`, `ADMIN_*`,
+   `SUPERADMIN_PASSWORD`, claves de IA, etc.). Cambia:
+   - `PUBLIC_APP_URL` → `https://test.dealflow.sbs`
+   - `SEED_DEMO` → `1` si quieres arrancar con la tienda de prueba
+     (karla@lunaaccesorios.co / demo123) para ver el diseño con datos.
+   - NO pongas el token de WhatsApp de producción si no quieres que el entorno
+     de prueba responda chats reales (Meta solo manda los mensajes al webhook
+     configurado en Meta, así que por defecto el de prueba no recibe nada).
+5. **Settings → Networking → Custom Domain**: `test.dealflow.sbs`. Railway te
+   da un CNAME; agrégalo en el DNS del dominio.
+6. Abre `https://test.dealflow.sbs/salud`: debe responder `{"ok":true,...}`.
+
+El servidor reconoce `test.<dominio>` y sirve la app; la app arranca con el tema
+"Noche" en ese host (en el principal sigue el tema de siempre, y "Noche" aparece
+como opción en el menú de perfil cuando se fusione la rama).
+
+Para pasar el diseño al principal: `git checkout dealflow-app && git merge test`.

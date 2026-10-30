@@ -52,7 +52,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
       <div
         style={{
           width: 260,
-          background: '#0F172A',
+          background: df.theme === 'noche' ? '#040611' : '#0F172A',
           height: '100%',
           padding: '18px 12px',
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)',

@@ -76,7 +76,7 @@ function ImpersonationBanner({ df }: { df: DealFlowState }) {
       style={{
         display: 'flex', alignItems: 'center', gap: 8, height: 30, boxSizing: 'border-box',
         background: 'var(--df-alert-brown)', color: '#FEF3C7', padding: '0 10px',
-        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden',
+        fontFamily: df.theme === 'noche' ? "'Inter',system-ui,sans-serif" : "'Plus Jakarta Sans',system-ui,sans-serif", fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden',
       }}
     >
       <button
@@ -109,7 +109,7 @@ function SuscripcionBanner({ df }: { df: DealFlowState }) {
         background: 'var(--df-alert-brown)',
         color: '#FEF3C7',
         padding: '9px 16px',
-        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif",
+        fontFamily: df.theme === 'noche' ? "'Inter',system-ui,sans-serif" : "'Plus Jakarta Sans',system-ui,sans-serif",
         fontSize: 13.5,
         fontWeight: 600,
       }}
@@ -378,7 +378,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
         width: '100%',
         height: '100%',
         minHeight: 600,
-        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif",
+        fontFamily: df.theme === 'noche' ? "'Inter',system-ui,sans-serif" : "'Plus Jakarta Sans',system-ui,sans-serif",
         background: df.theme === 'premium' ? undefined : 'var(--df-bg)',
         color: 'var(--df-text-strong)',
         overflow: 'hidden',
@@ -430,7 +430,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
         flexDirection: 'column',
         width: '100%',
         height: '100%',
-        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif",
+        fontFamily: df.theme === 'noche' ? "'Inter',system-ui,sans-serif" : "'Plus Jakarta Sans',system-ui,sans-serif",
         background: df.theme === 'premium' ? undefined : 'var(--df-bg)',
         color: 'var(--df-text-strong)',
         overflow: 'hidden',

@@ -239,6 +239,7 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
               value={df.theme}
               onChange={df.setTheme}
               options={[
+                { v: 'noche' as const, label: 'Noche', icon: '✦', gradient: 'linear-gradient(120deg,#10B981,#2E8BFF 45%,#7658FF)' },
                 { v: 'light', label: 'Claro', icon: '☀️' },
                 { v: 'dark', label: 'Dark System', icon: '🌙' },
                 ...(df.premiumHabilitado ? [{ v: 'premium' as const, label: 'Premium', icon: '💎', gradient: 'linear-gradient(135deg,#6D28D9,#2563EB)' }] : []),

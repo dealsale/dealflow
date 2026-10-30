@@ -68,6 +68,13 @@ function StoreSwitcher({ df }: { df: DealFlowState }) {
 
 export function Header({ df }: { df: DealFlowState }) {
   return (
+    <>
+    {df.esTest && (
+      <div className="df-barra-test" role="status">
+        <b>Versión de prueba</b>
+        <span>test.dealflow.sbs · aquí se trabaja el diseño nuevo. Los datos de este entorno son de prueba y no afectan a las tiendas reales.</span>
+      </div>
+    )}
     <header style={{ background: 'var(--df-surface)', borderBottom: '1px solid var(--df-border)', padding: '0 28px', height: 58, display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
       <span
         onClick={df.toggleSidebar}
@@ -105,5 +112,6 @@ export function Header({ df }: { df: DealFlowState }) {
         <ProfileMenu df={df} />
       </div>
     </header>
+    </>
   );
 }

@@ -7,7 +7,7 @@ export function MobileHeader({ df }: { df: DealFlowState }) {
   return (
     <header
       style={{
-        background: '#0F172A',
+        background: df.theme === 'noche' ? '#040611' : '#0F172A',
         color: '#fff',
         display: 'flex',
         alignItems: 'center',

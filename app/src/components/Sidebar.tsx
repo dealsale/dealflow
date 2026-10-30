@@ -23,16 +23,27 @@ import {
 import type { AdminSection, VendedorSection } from '../types';
 import { EnlaceApp } from './EnlaceApp';
 import { urlDe } from '../lib/rutas';
+import iconoApp from '../assets/icono-app.png';
+import skyMascota from '../assets/sky-mascota.png';
 
 export function Sidebar({ df }: { df: DealFlowState }) {
   const vSection = df.isVendedor ? df.section : null;
   const aSection = df.isAdmin ? df.adminSection : null;
   const premium = df.theme === 'premium';
+  const noche = df.theme === 'noche';
 
   // En Premium, el ítem activo se resalta con un pill de vidrio + resplandor
-  // azul/púrpura en vez del verde plano de los otros temas.
+  // azul/púrpura en vez del verde plano de los otros temas. En Noche (el diseño
+  // nuevo), con el degradado de marca y una línea esmeralda al borde.
   const navStylePremium = (active: boolean): React.CSSProperties => {
     const base = df.navStyle(active);
+    if (noche) {
+      return {
+        ...base, borderRadius: 10, padding: '9px 11px', minHeight: 40, color: active ? '#EEF3FF' : '#9AA8C9', fontWeight: active ? 600 : 500,
+        background: active ? 'linear-gradient(90deg, rgba(16,185,129,.18), rgba(46,139,255,.12))' : 'transparent',
+        boxShadow: active ? 'inset 2px 0 0 #10B981' : undefined,
+      };
+    }
     if (!premium || !active) return base;
     return {
       ...base,
@@ -40,6 +51,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       boxShadow: '0 0 0 1px rgba(148,163,253,.4), 0 0 18px rgba(99,102,241,.45)',
     };
   };
+  const grupo = (texto: string) => noche ? <div style={{ fontFamily: "'Space Mono', ui-monospace, monospace", fontSize: 10, letterSpacing: '.16em', textTransform: 'uppercase', color: '#7D8DB5', padding: '12px 11px 4px' }}>{texto}</div> : null;
 
   const item = (
     id: VendedorSection,
@@ -63,11 +75,18 @@ export function Sidebar({ df }: { df: DealFlowState }) {
   );
 
   return (
-    <aside style={{ width: 224, flexShrink: 0, background: premium ? 'linear-gradient(180deg, rgba(10,12,34,.78), rgba(14,12,40,.62))' : '#0F172A', borderRight: premium ? '1px solid rgba(148,163,253,.14)' : undefined, display: 'flex', flexDirection: 'column', padding: '18px 12px 14px', overflowY: 'auto' }}>
+    <aside style={{ width: noche ? 236 : 224, flexShrink: 0, background: noche ? '#040611' : premium ? 'linear-gradient(180deg, rgba(10,12,34,.78), rgba(14,12,40,.62))' : '#0F172A', borderRight: noche ? '1px solid rgba(154,168,201,.16)' : premium ? '1px solid rgba(148,163,253,.14)' : undefined, display: 'flex', flexDirection: 'column', padding: '18px 12px 14px', overflowY: 'auto' }}>
+      {noche ? (
+        <a href="/inicio" title="Ir a la página de inicio de DealFlow" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 8px 16px', textDecoration: 'none' }}>
+          <img src={iconoApp} alt="" style={{ width: 32, height: 32, borderRadius: 9, filter: 'drop-shadow(0 4px 12px rgba(70,140,255,.35))' }} />
+          <span style={{ color: '#EEF3FF', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, letterSpacing: '-0.03em', lineHeight: 1 }}>DealFlow<small style={{ display: 'block', fontFamily: "'Space Mono', ui-monospace, monospace", fontSize: 9, letterSpacing: '.14em', color: '#7D8DB5', textTransform: 'uppercase', fontWeight: 400, marginTop: 4 }}>Panel de ventas</small></span>
+        </a>
+      ) : (
       <a href="/inicio" title="Ir a la página de inicio de DealFlow" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 18px', textDecoration: 'none' }}>
         <img src={logo} alt="DealFlow" style={{ width: 34, height: 30, objectFit: 'contain' }} />
         <span style={{ color: '#fff', fontWeight: 800, fontSize: 17, letterSpacing: '-0.02em' }}>DealFlow</span>
       </a>
+      )}
 
       {df.isVendedor && (
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -100,8 +119,10 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             'Inbox',
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)', marginLeft: 'auto', animation: 'dfpulse 1.8s infinite' }} />,
           )}
+          {grupo('Crecer')}
           {item('biblioteca', <IconBiblioteca />, 'Biblioteca')}
           {item('dealshop', <IconDealShop />, 'DealShop')}
+          {grupo('Configurar')}
           {item('equipo', <IconEquipo />, 'Equipo')}
           {item('integraciones', <IconIntegraciones />, 'Integraciones')}
         </nav>
@@ -137,6 +158,17 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       </a>
 
       <div style={{ flex: 1 }} />
+      {noche && (
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('df:abrir-sky'))}
+          title="Abrir a SKY, el asistente de soporte"
+          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, marginBottom: 8, borderRadius: 12, border: '1px solid rgba(154,168,201,.16)', background: 'linear-gradient(120deg, rgba(46,139,255,.12), rgba(176,90,255,.12))', color: '#EEF3FF', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+        >
+          <img src={skyMascota} alt="" style={{ width: 38, height: 38 }} />
+          <span><b style={{ display: 'block', fontFamily: "'Space Grotesk', sans-serif", fontSize: 13 }}>SKY · soporte</b><span style={{ fontSize: 11.5, color: '#9AA8C9' }}>Pregúntale cómo se hace</span></span>
+        </button>
+      )}
       {premium && (
         <div
           style={{

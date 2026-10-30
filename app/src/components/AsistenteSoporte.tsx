@@ -80,6 +80,12 @@ export function AsistenteSoporte({ usuario, seccion, mobile, oculto }: { usuario
     window.addEventListener('keydown', esc);
     return () => window.removeEventListener('keydown', esc);
   }, [abierto]);
+  // La tarjeta de SKY del menú lateral (tema Noche) lo abre desde afuera.
+  useEffect(() => {
+    const abrir = () => { setAsistenteVisible(true); setAbierto(true); };
+    window.addEventListener('df:abrir-sky', abrir);
+    return () => window.removeEventListener('df:abrir-sky', abrir);
+  }, []);
 
   if (!cfg?.listo || !mostrar) return null;
 

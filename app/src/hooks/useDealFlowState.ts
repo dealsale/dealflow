@@ -788,17 +788,20 @@ export function useDealFlowState() {
   // Tema visual: 'light' (por defecto), 'dark' ("Dark System") o 'premium'
   // (look neón/glass, solo si el Admin lo habilitó para esta tienda). Se
   // recuerda por dispositivo y se aplica como atributo data-theme en <html>.
-  const [theme, setThemeState] = useState<'light' | 'dark' | 'premium'>(() => {
+  // 'noche' es el diseño nuevo (la identidad de la landing): en test.<dominio> es el tema
+  // por defecto; en los demás hosts se elige en el menú de perfil.
+  const porDefecto = (): 'light' | 'noche' => (/^test\./.test(window.location.hostname) ? 'noche' : 'light');
+  const [theme, setThemeState] = useState<'light' | 'dark' | 'premium' | 'noche'>(() => {
     try {
       const v = localStorage.getItem('dealflow:theme');
       // El estreno del tema oscuro por defecto se deshizo: quien quedó en oscuro
       // por ese cambio vuelve al claro UNA vez (como estaba antes).
       if (localStorage.getItem('dealflow:theme-v2') && !localStorage.getItem('dealflow:theme-v3')) {
         localStorage.setItem('dealflow:theme-v3', '1');
-        if (v === 'dark') return 'light';
+        if (v === 'dark') return porDefecto();
       }
-      return v === 'dark' || v === 'premium' ? v : 'light';
-    } catch { return 'light'; }
+      return v === 'dark' || v === 'premium' || v === 'noche' || v === 'light' ? v : porDefecto();
+    } catch { return porDefecto(); }
   });
   useEffect(() => {
     // Cambio de tema INSTANTÁNEO (nada de fundido): repintar toda la app con
@@ -807,7 +810,9 @@ export function useDealFlowState() {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem('dealflow:theme', theme); } catch { /* modo privado */ }
   }, [theme]);
-  function setTheme(t: 'light' | 'dark' | 'premium') { setThemeState(t); }
+  function setTheme(t: 'light' | 'dark' | 'premium' | 'noche') { setThemeState(t); }
+  /** Entorno de prueba (test.<dominio>): el diseño nuevo, con su propia base de datos. */
+  const esTest = /^test\./.test(window.location.hostname);
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? DEF_ASSISTANT);
   const [assistantNombre, setAssistantNombre] = useState<string>('');
   const [seguimientoActivo, setSeguimientoActivo] = useState<boolean>(false); // anti-baneo: el seguimiento automático viene APAGADO; el dueño lo enciende
@@ -4308,6 +4313,7 @@ export function useDealFlowState() {
     theme,
     setTheme,
     premiumHabilitado: premiumPermitido,
+    esTest,
     landingsHabilitadas,
 
     // Perfil de la cuenta: nombre, foto, contraseña.

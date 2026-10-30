@@ -742,3 +742,103 @@ button:not(:disabled):active, [role="button"]:active, .df-row-hover:active { tra
 
 /* Títulos con Sora: más carácter que el texto corrido. */
 h1, h2, h3 { font-family: 'Sora', 'Plus Jakarta Sans', system-ui, sans-serif; letter-spacing: -0.02em; }
+
+/* ════════════════════════════════════════════════════════════════════
+   TEMA "NOCHE": el diseño nuevo, con la identidad de la landing
+   (dealflow.sbs/marca): fondo noche, degradado esmeralda → azul → violeta,
+   Space Grotesk para títulos, Inter para texto y Space Mono para números.
+   En test.<dominio> es el tema por defecto; en los demás, se elige en el perfil.
+   ════════════════════════════════════════════════════════════════════ */
+:root[data-theme='noche'] {
+  --df-st-transito: #46D8FF; --df-st-transito-bg: rgba(70, 216, 255, 0.14);
+  --df-st-reparto: #8AB4FF; --df-st-reparto-bg: rgba(46, 139, 255, 0.16);
+  --df-st-novedad: #FFC65C; --df-st-novedad-bg: rgba(255, 198, 92, 0.16);
+  --df-st-devuelto: #FF6B8A; --df-st-devuelto-bg: rgba(255, 107, 138, 0.16);
+
+  color-scheme: dark;
+  --df-surface: #0D1730;
+  --df-bg: #050713;
+  --df-surface-2: #101C3A;
+  --df-border: rgba(154, 168, 201, 0.16);
+  --df-border-strong: rgba(154, 168, 201, 0.34);
+  --df-text: #EEF3FF;
+  --df-text-strong: #FFFFFF;
+  --df-text-body: #D6DEF2;
+  --df-text-secondary: #B8C3DF;
+  --df-text-muted: #9AA8C9;
+  --df-text-faint: #7D8DB5;
+  --df-brand: #10B981;
+  --df-brand-dark: #34D399;
+  --df-brand-mid: #34D399;
+  --df-brand-light: #6EE7B7;
+  --df-brand-border: rgba(16, 185, 129, 0.35);
+  --df-brand-subtle: rgba(16, 185, 129, 0.16);
+  --df-brand-subtle-2: rgba(16, 185, 129, 0.1);
+  --df-brand-subtle-3: rgba(16, 185, 129, 0.08);
+  --df-brand-deep: #A7F3D0;
+  --df-green-subtle: rgba(16, 185, 129, 0.14);
+  --df-green-700: #4ADE80;
+  --df-hero-grad: linear-gradient(120deg, #10B981 0%, #2E8BFF 45%, #7658FF 100%);
+  --df-hero-fg: #ffffff;
+  --df-hero-chip: rgba(255, 255, 255, 0.16);
+  --df-purple: #B75DFF;
+  --df-indigo: #7658FF;
+  --df-purple-subtle: rgba(118, 88, 255, 0.18);
+  --df-purple-border: rgba(183, 93, 255, 0.4);
+  --df-indigo-subtle: rgba(118, 88, 255, 0.14);
+  --df-info: #46D8FF;
+  --df-info-subtle: rgba(70, 216, 255, 0.14);
+  --df-danger: #FF6B8A;
+  --df-danger-dark: #FF8FA6;
+  --df-danger-border: rgba(255, 107, 138, 0.4);
+  --df-danger-subtle: rgba(255, 107, 138, 0.1);
+  --df-danger-subtle-2: rgba(255, 107, 138, 0.16);
+  --df-danger-mid: #FF6B8A;
+  --df-danger-light: #FFA3B6;
+  --df-warning: #FFC65C;
+  --df-warning-border: rgba(255, 198, 92, 0.4);
+  --df-warning-mid: #FFC65C;
+  --df-warning-subtle-2: rgba(255, 198, 92, 0.08);
+  --df-warning-light: #FFD88A;
+  --df-warning-subtle: rgba(255, 198, 92, 0.14);
+  --df-glow: 0 10px 28px -14px rgba(46, 139, 255, 0.55);
+  --df-page-bg: radial-gradient(900px circle at 85% -10%, rgba(46, 139, 255, 0.12), transparent 55%), radial-gradient(700px circle at 0% 100%, rgba(118, 88, 255, 0.1), transparent 55%), #050713;
+  --df-noise-opacity: 0;
+}
+:root[data-theme='noche'] body, :root[data-theme='noche'] .df-app-raiz { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+:root[data-theme='noche'] h1, :root[data-theme='noche'] h2, :root[data-theme='noche'] h3 { font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif; letter-spacing: -0.03em; }
+:root[data-theme='noche'] header { background: rgba(5, 7, 19, 0.85) !important; }
+/* Botones principales: el degradado de marca, redondos. */
+:root[data-theme='noche'] button[style*="background: var(--df-brand)"],
+:root[data-theme='noche'] .df-btn-primary {
+  background-image: linear-gradient(120deg, #10B981 0%, #2E8BFF 45%, #7658FF 100%) !important;
+  color: #fff !important;
+  border-radius: 999px !important;
+  box-shadow: 0 10px 28px -12px rgba(46, 139, 255, 0.7);
+  transition: filter .2s ease, box-shadow .2s ease, transform .15s ease;
+}
+:root[data-theme='noche'] button[style*="background: var(--df-brand)"]:hover,
+:root[data-theme='noche'] .df-btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); background-image: linear-gradient(120deg, #10B981 0%, #2E8BFF 45%, #7658FF 100%) !important; }
+:root[data-theme='noche'] .df-btn-outline-green { border-radius: 999px !important; }
+/* Tarjetas: borde fino y sombra profunda; filas con el rastro azul al pasar. */
+:root[data-theme='noche'] main [style*="background: var(--df-surface)"][style*="border-radius"] {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04), 0 14px 36px -22px rgba(0, 0, 0, .8);
+}
+:root[data-theme='noche'] main .df-row-hover:hover { background: rgba(46, 139, 255, .08) !important; box-shadow: inset 3px 0 0 #2E8BFF; }
+:root[data-theme='noche'] .df-estado-pill { border-radius: 999px; }
+/* Campos: fondo noche con borde fino; foco azul. */
+:root[data-theme='noche'] :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']), select, textarea) {
+  background-color: #050713;
+  color: var(--df-text);
+  border-color: var(--df-border-strong);
+}
+:root[data-theme='noche'] option { background-color: #0D1730; color: #EEF3FF; }
+:root[data-theme='noche'] ::placeholder { color: #7D8DB5; }
+:root[data-theme='noche'] .df-input:focus { box-shadow: 0 0 0 3px rgba(46, 139, 255, 0.22); border-color: #2E8BFF !important; }
+:root[data-theme='noche'] ::-webkit-scrollbar-thumb { background: #2A3A66; }
+:root[data-theme='noche'] ::selection { background: #2E8BFF; color: #fff; }
+/* Burbujas del asistente en el chat: el toque violeta de la IA. */
+:root[data-theme='noche'] .df-burbuja-bot { background: linear-gradient(120deg, rgba(16,185,129,.22), rgba(46,139,255,.18)) !important; border: 1px solid rgba(52,211,153,.3); }
+/* Barra de prueba (test.<dominio>). */
+.df-barra-test { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding: 6px 14px; font-size: 12px; font-weight: 600; color: #050713; background: linear-gradient(90deg, #FFC65C, #FF6B8A); }
+.df-barra-test b { font-family: 'Space Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }

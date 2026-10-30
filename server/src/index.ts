@@ -176,7 +176,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'confirmacion-plantillas-10301654',
+    build: 'test-noche-10302010',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -234,9 +234,11 @@ const LANDING_HOSTS = (process.env.LANDING_HOSTS || 'dealflow.sbs,www.dealflow.s
 // app.<dominio>. Se navega entre ambos en la MISMA pestaña. El comodín
 // *.dealflow.sbs ya no se usa para tiendas: cualquier otro subdominio vuelve a
 // la landing (salvo academy.<dominio>, el portal educativo).
-const raizDe = (host: string) => host.replace(/^(www|app|academy)\./, '');
+const raizDe = (host: string) => host.replace(/^(www|app|academy|test)\./, '');
 const esHostLanding = (host: string) => LANDING_HOSTS.includes(host);
-const esHostApp = (host: string) => LANDING_HOSTS.some((h) => host === 'app.' + raizDe(h));
+// test.<dominio>: el entorno de prueba (otro servicio en Railway, con su propia base de
+// datos) donde se trabaja el diseño nuevo antes de pasarlo al principal. Sirve la app igual.
+const esHostApp = (host: string) => LANDING_HOSTS.some((h) => host === 'app.' + raizDe(h) || host === 'test.' + raizDe(h));
 const raizDeSub = (host: string) => LANDING_HOSTS.map(raizDe).find((r) => host.endsWith('.' + r)) || '';
 // Caché: el HTML NUNCA se guarda (así nadie tiene que hundir Ctrl+Shift+R tras un
 // despliegue); los archivos con huella de versión (/assets/*) sí, por un año.
@@ -323,7 +325,7 @@ if (existsSync(APP_DIST)) {
     if (esLanding && !ENTRADAS_APP.test(req.path) && !tieneSesion) return enviarHtml(res, LANDING);
     enviarHtml(res, path.join(APP_DIST, 'index.html'));
   });
-  console.log('[web] landing en', LANDING_HOSTS.join(', '), '· app en app.<dominio>');
+  console.log('[web] landing en', LANDING_HOSTS.join(', '), '· app en app.<dominio> y test.<dominio>');
 }
 
 // Red de seguridad: cualquier error no capturado en una ruta se registra con su
