@@ -1779,7 +1779,9 @@ api.get('/effi-api/articulos', requireAuth, requireStore, requirePermiso('produc
   for (const a of arts) nombres[a.id] = a.descripcion + (a.referencia ? ` [${a.referencia}]` : '');
   // Convenio de cada producto (a mano) y los convenios que la tienda conoce.
   const conveniosProducto = Object.fromEntries((db.prepare("SELECT id, effi_convenio FROM products WHERE store_id = ? AND effi_convenio != ''").all(sid) as { id: string; effi_convenio: string }[]).map((r) => [r.id, r.effi_convenio]));
-  res.json({ articulos: arts, variantes, nombres, conveniosProducto, convenios: ef.conveniosConocidos(sid) });
+  // El convenio con el que se ha vendido cada producto (se recuerda de su última remisión).
+  const conveniosAprendidos = Object.fromEntries((db.prepare('SELECT product_id, convenio FROM effi_convenio_producto WHERE store_id = ?').all(sid) as { product_id: string; convenio: string }[]).map((r) => [r.product_id, r.convenio]));
+  res.json({ articulos: arts, variantes, nombres, conveniosProducto, conveniosAprendidos, convenios: ef.conveniosConocidos(sid) });
 });
 api.get('/effi-api/articulos/todos', requireAuth, requireStore, async (req, res) => {
   const ef = await import('./effiApi.js');
@@ -1897,6 +1899,35 @@ api.put('/effi-api/convenios/:id/nombre', requireAuth, requireStore, requireOwne
   ef.nombrarConvenio(req.user!.storeId!, String(req.params.id), String(req.body?.nombre || ''));
   res.json({ ok: true, convenios: ef.conveniosConocidos(req.user!.storeId!) });
 });
+// Bodega (remitente) de cada producto: fija o aprendida de sus envíos recogidos.
+api.get('/effi-api/producto/:id/bodega', requireAuth, requireStore, requirePermiso('productos'), async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const sid = req.user!.storeId!;
+  const c = ef.cfgEffi(sid);
+  if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
+  const rems = await ef.remitentesRotulados(sid, c.apiKey);
+  const b = ef.bodegaDeProducto(sid, String(req.params.id));
+  res.json({
+    fija: b?.origen === 'manual' ? b.remitente : '', aprendida: b && b.origen !== 'manual' ? { remitente: b.remitente, usos: b.usos, total: b.total } : null,
+    defecto: c.remitenteDefecto, remitentes: Array.isArray(rems) ? rems.map((x) => ({ id: x.id, nombre: x.nombre })) : [], error: Array.isArray(rems) ? undefined : rems.error,
+  });
+});
+api.put('/effi-api/producto/:id/bodega', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const sid = req.user!.storeId!;
+  const p = db.prepare('SELECT id FROM products WHERE id = ? AND store_id = ?').get(String(req.params.id), sid);
+  if (!p) return res.status(404).json({ error: 'Producto no encontrado.' });
+  ef.fijarBodegaProducto(sid, String(req.params.id), String(req.body?.remitente || '').replace(/\D/g, '').slice(0, 20));
+  res.json({ ok: true });
+});
+// Verificación de toda la integración (conexión, configuración, remitentes y cada producto).
+api.get('/effi-api/verificacion', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const sid = req.user!.storeId!;
+  const aprendido = ef.aprenderBodegasTienda(sid);
+  res.json({ ...(await ef.verificarIntegracion(sid)), aprendido });
+});
+
 // Remitente de cada convenio (bodega del proveedor), para la guía de los pedidos de ese convenio.
 api.get('/effi-api/remitentes-convenio', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');

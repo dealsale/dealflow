@@ -578,7 +578,7 @@ export const apiEffiApiSecreto = (secreto: string) => req<{ ok: true; secretos: 
 export const apiEffiApiDesconectar = () => req<{ ok: true }>('/api/effi-api/desconectar', 'POST');
 export const apiEffiApiSyncArticulos = () => req<{ total: number; soloVinculados: boolean; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[]; productosEffi: number; sinProveedor: number; marcados?: number; stockActualizado?: number }>('/api/effi-api/articulos/sync', 'POST');
 export interface EffiVarianteDF { variantId: string; productId: string; producto: string; proveedor: string; nombre: string; effiId: string; auto?: boolean; provId?: string }
-export const apiEffiApiArticulos = (productId = '') => req<{ articulos: EffiArticulo[]; variantes: EffiVarianteDF[]; nombres: Record<string, string>; conveniosProducto?: Record<string, string>; convenios?: { id: string; nombre: string }[] }>(`/api/effi-api/articulos${productId ? `?productId=${encodeURIComponent(productId)}` : ''}`, 'GET');
+export const apiEffiApiArticulos = (productId = '') => req<{ articulos: EffiArticulo[]; variantes: EffiVarianteDF[]; nombres: Record<string, string>; conveniosProducto?: Record<string, string>; conveniosAprendidos?: Record<string, string>; convenios?: { id: string; nombre: string }[] }>(`/api/effi-api/articulos${productId ? `?productId=${encodeURIComponent(productId)}` : ''}`, 'GET');
 export const apiEffiApiBuscar = (q: string) => req<{ articulos: EffiArticulo[] }>(`/api/effi-api/articulos/buscar?q=${encodeURIComponent(q)}`, 'GET');
 export const apiEffiApiProveedor = (productIds: string[], proveedor: 'effi' | 'dropi' | '') => req<{ ok: true; actualizados: number }>('/api/effi-api/producto-proveedor', 'POST', { productIds, proveedor });
 export const apiEffiApiConvenioProducto = (productIds: string[], convenio: string) => req<{ ok: true; actualizados: number }>('/api/effi-api/producto-convenio', 'POST', { productIds, convenio });
@@ -1098,3 +1098,15 @@ export const apiGuardarRespuestaRapida = (r: { id?: string; atajo: string; texto
   req<{ ok: true; respuesta: RespuestaRapida }>(r.id ? `/api/respuestas-rapidas/${encodeURIComponent(r.id)}` : '/api/respuestas-rapidas', r.id ? 'PUT' : 'POST', { atajo: r.atajo, texto: r.texto });
 export const apiBorrarRespuestaRapida = (id: string) => req<{ ok: true }>(`/api/respuestas-rapidas/${encodeURIComponent(id)}`, 'DELETE');
 export const apiUsoRespuestaRapida = (id: string) => req<{ ok: true }>(`/api/respuestas-rapidas/${encodeURIComponent(id)}/uso`, 'POST');
+
+// ── Effi: bodega de cada producto y verificación de la integración ──
+export interface BodegaProducto { fija: string; aprendida: { remitente: string; usos: number; total: number } | null; defecto: string; remitentes: { id: string; nombre: string }[]; error?: string }
+export const apiBodegaProducto = (productId: string) => req<BodegaProducto>(`/api/effi-api/producto/${encodeURIComponent(productId)}/bodega`, 'GET');
+export const apiFijarBodegaProducto = (productId: string, remitente: string) => req<{ ok: true }>(`/api/effi-api/producto/${encodeURIComponent(productId)}/bodega`, 'PUT', { remitente });
+export interface ChequeoEffi { estado: 'ok' | 'aviso' | 'error'; titulo: string; detalle: string }
+export interface ProductoVerificado {
+  id: string; nombre: string; variantes: number; vinculadas: number;
+  convenio: { id: string; nombre: string; origen: 'fijo' | 'aprendido' | 'propio' | '' };
+  bodega: { remitente: string; nombre: string; origen: 'fija' | 'aprendida' | 'defecto' | ''; usos: number; total: number };
+}
+export const apiEffiVerificacion = () => req<{ chequeos: ChequeoEffi[]; productos: ProductoVerificado[]; aprendido: { productos: number; convenios: number; envios: number } }>('/api/effi-api/verificacion', 'GET');
