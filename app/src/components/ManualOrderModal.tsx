@@ -39,6 +39,8 @@ export function ManualOrderModal({ df, open, onClose, prefill }: { df: DealFlowS
   const [ciudad, setCiudad] = useState('');
   const [direccion, setDireccion] = useState('');
   const [nota, setNota] = useState('');
+  // Resumen al cliente para que confirme por WhatsApp (obligatorio salvo que lo desmarques).
+  const [confirmar, setConfirmar] = useState(true);
   const [envio, setEnvio] = useState('');
   const [filas, setFilas] = useState<Fila[]>([{ productId: '', opciones: {}, qty: 1, precio: 0 }]);
   const [error, setError] = useState('');
@@ -126,7 +128,7 @@ export function ManualOrderModal({ df, open, onClose, prefill }: { df: DealFlowS
       if (faltan.length) { setError(`Elige ${faltan.map((g) => g.nombre.toLowerCase()).join(', ')} de "${p?.nombre}".`); return; }
     }
     const items = conProd.map((f) => ({ qty: Math.max(1, f.qty), nombre: nombreItem(f), precio: Math.max(0, f.precio) }));
-    const id = await df.crearPedidoManual({ cliente: cliente.trim(), tel, ciudad, departamento, direccion, nota, envio: envioNum, total, items });
+    const id = await df.crearPedidoManual({ cliente: cliente.trim(), tel, ciudad, departamento, direccion, nota, envio: envioNum, total, items, confirmar: confirmar && tel.replace(/\D/g, '').length >= 10 });
     if (id) {
       // Reinicia y cierra.
       setCliente(''); setTel(''); setDepartamento(''); setCiudad(''); setDireccion(''); setNota(''); setEnvio('');
@@ -161,6 +163,10 @@ export function ManualOrderModal({ df, open, onClose, prefill }: { df: DealFlowS
             <div><label style={lbl}>Teléfono</label><input value={tel} onChange={(e) => setTel(e.target.value)} placeholder="300 000 0000" style={inp} /></div>
             <div><label style={lbl}>Departamento</label><Combobox value={departamento} onChange={(v) => { setDepartamento(v); const cds = ciudadesDeDepto(v); if (ciudad && cds.length && !cds.includes(ciudad)) setCiudad(''); }} options={DEPARTAMENTOS_CO} placeholder="Cundinamarca" inputStyle={inp} /></div>
             <div><label style={lbl}>Ciudad</label><Combobox value={ciudad} onChange={setCiudad} options={ciudadesDeDepto(departamento)} placeholder="Bogotá" inputStyle={inp} /></div>
+            <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', color: 'var(--df-text)' }}>
+              <input type="checkbox" checked={confirmar} onChange={(e) => setConfirmar(e.target.checked)} />
+              📲 Enviarle al cliente el resumen del pedido para que confirme por WhatsApp (Sí / No)
+            </label>
             <div style={{ gridColumn: '1 / -1' }}><label style={lbl}>Dirección</label><input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Calle 1 #2-3, apto…" style={inp} /></div>
           </div>
 

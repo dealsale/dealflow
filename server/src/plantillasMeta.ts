@@ -149,18 +149,24 @@ export interface ExtraPlantilla { encabezado?: string; media?: string; boton?: s
  */
 export function componentesEnvio(p: PlantillaPropia, params: string[], extra: ExtraPlantilla = {}): { components: Record<string, unknown>[] } | { error: string } {
   const components: Record<string, unknown>[] = [];
+  // Los ejemplos de Meta son de prueba: nunca se le mandan al cliente. Lo que falte se pide.
   if (p.encabezadoTipo === 'TEXT' && p.varsEncabezado > 0) {
-    components.push({ type: 'header', parameters: [{ type: 'text', text: extra.encabezado || p.ejemploEncabezado || '-' }] });
+    if (!String(extra.encabezado || '').trim()) return { error: `Falta el dato del encabezado de "${p.nombre}".` };
+    components.push({ type: 'header', parameters: [{ type: 'text', text: String(extra.encabezado) }] });
   } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(p.encabezadoTipo)) {
     const link = String(extra.media || p.mediaEjemplo || '').trim();
     if (!/^https?:\/\//i.test(link)) return { error: `La plantilla "${p.nombre}" lleva ${p.encabezadoTipo === 'IMAGE' ? 'una foto' : p.encabezadoTipo === 'VIDEO' ? 'un video' : 'un documento'} arriba: pega el enlace del archivo.` };
     const k = p.encabezadoTipo.toLowerCase();
     components.push({ type: 'header', parameters: [{ type: k, [k]: { link } }] });
   }
-  if (p.variables > 0) components.push({ type: 'body', parameters: Array.from({ length: p.variables }, (_, i) => ({ type: 'text', text: String(params[i] || p.ejemplos[i] || '-') })) });
-  p.botones.forEach((b, i) => {
-    if (b.variable) components.push({ type: 'button', sub_type: 'url', index: String(i), parameters: [{ type: 'text', text: extra.boton || b.ejemplo || '-' }] });
-  });
+  const falta = Array.from({ length: p.variables }, (_, i) => i).filter((i) => !String(params[i] || '').trim());
+  if (falta.length) return { error: `Falta llenar ${falta.map((i) => `{{${i + 1}}}`).join(', ')} de "${p.nombre}".` };
+  if (p.variables > 0) components.push({ type: 'body', parameters: Array.from({ length: p.variables }, (_, i) => ({ type: 'text', text: String(params[i]) })) });
+  for (const [i, b] of p.botones.entries()) {
+    if (!b.variable) continue;
+    if (!String(extra.boton || '').trim()) return { error: `Falta el final del enlace del botón "${b.texto}".` };
+    components.push({ type: 'button', sub_type: 'url', index: String(i), parameters: [{ type: 'text', text: String(extra.boton) }] });
+  }
   return { components };
 }
 

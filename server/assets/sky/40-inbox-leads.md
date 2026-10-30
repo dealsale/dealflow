@@ -41,7 +41,9 @@ En el chat toca **⚡ / Enviar mensaje inicial o plantilla**:
 - **Mensaje inicial**: envía la presentación de un producto (elige el producto).
 - **Plantillas aprobadas**: mensajes que llegan aun pasadas las 24 h. Salen las de DealFlow y también las que **creaste tú directo en Meta** (marcadas "· Meta").
 - ¿Te aprobaron una plantilla en Meta y no aparece? Toca **↻ Actualizar desde Meta** (también se actualizan solas cada hora). Dice cuántas están aprobadas, en revisión o rechazadas.
-- Si la plantilla tiene datos (variables {{1}}, foto/video/documento arriba o un botón con enlace), se abre un formulario para llenarlos antes de enviarla, con la vista previa.
+- Si la plantilla tiene datos (variables {{1}}, foto/video/documento arriba o un botón con enlace), se abre un formulario **ya lleno con los datos reales del cliente y de su último pedido** (nombre, número de pedido, productos, total, dirección, ciudad, guía, transportadora…), con la vista previa, para revisarlo. Lo que no se sepa queda vacío para que lo escribas.
+- Los datos de ejemplo de Meta (los que pusiste para la aprobación, tipo "Juan") **nunca** se le envían a un cliente: si falta un dato, la plantilla no sale y te dice cuál falta.
+- En **＋ Iniciar conversación**, los campos que dicen "Automático" se llenan con los datos de cada cliente al enviar.
 Con el chat bloqueado por la ventana de 24 h solo funcionan las plantillas.
 
 ## Mensajes rápidos (/) y emojis en el chat

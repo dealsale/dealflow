@@ -23,7 +23,7 @@ import { desempacar, corregirPacksAntiguos } from './packs.js';
 // Pedidos que ya entraron con packs contados como 1 unidad: se corrigen una vez al arrancar.
 setTimeout(corregirPacksAntiguos, 15_000);
 
-for (const col of ["shopify_id TEXT NOT NULL DEFAULT ''", "shopify_shop TEXT NOT NULL DEFAULT ''", "shopify_gid TEXT NOT NULL DEFAULT ''", "confirmacion TEXT NOT NULL DEFAULT ''", "shopify_fulfilled INTEGER NOT NULL DEFAULT 0", "confirmacion_error TEXT NOT NULL DEFAULT ''"]) {
+for (const col of ["shopify_id TEXT NOT NULL DEFAULT ''", "shopify_shop TEXT NOT NULL DEFAULT ''", "shopify_gid TEXT NOT NULL DEFAULT ''", "confirmacion TEXT NOT NULL DEFAULT ''", "shopify_fulfilled INTEGER NOT NULL DEFAULT 0", "confirmacion_error TEXT NOT NULL DEFAULT ''", "confirmacion_intentos INTEGER NOT NULL DEFAULT 0"]) {
   try { db.exec(`ALTER TABLE orders ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_orders_shopify ON orders(store_id, shopify_id)");
@@ -120,6 +120,59 @@ export async function importarPedido(storeId: string, shop: string, o: Fila, con
   }
 }
 
+/**
+ * Resumen completo del pedido (productos, total y datos de envío) para el cliente. Es el
+ * MISMO para todos los pedidos (bot, landing, Shopify, a mano): con pregunta de Sí/No o
+ * como "quedó registrado" cuando el cliente ya lo confirmó en la conversación.
+ */
+export function textoResumenPedido(storeId: string, orderId: string, modo: 'preguntar' | 'registrado', idioma: 'es' | 'en' = 'es'): string {
+  const o = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as Fila | undefined;
+  if (!o) return '';
+  const items = db.prepare('SELECT qty, nombre FROM order_items WHERE order_id = ?').all(orderId) as { qty: number; nombre: string }[];
+  const tienda = (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined)?.nombre || '';
+  const linea = (v: unknown, max = 200) => txt(v).replace(/\s+/g, ' ').trim().slice(0, max) || '—';
+  const nombre = txt(o.cliente).trim().split(/\s+/)[0] || '';
+  const num = `DF-${txt(o.numero)}`;
+  const celular = txt(o.tel).replace(/\D/g, '').slice(-10) || '—';
+  const pagado = /\bPagado\b/.test(txt(o.nota));
+  const prods = items.map((i) => `• ${i.qty}× ${i.nombre}`).join('\n') || '• —';
+  if (idioma === 'en') {
+    const cab = modo === 'registrado' ? `✅ Done${nombre ? ', ' + nombre : ''}! Your order ${num} is registered${tienda ? ` at ${tienda}` : ''}:` : `Hi${nombre ? ' ' + nombre : ''} 👋 This is your order ${num}${tienda ? ` at ${tienda}` : ''}:`;
+    const pie = modo === 'registrado' ? 'We will send you the tracking number here as soon as it ships 🚚. If anything is wrong, just tell us.' : 'Are all the details correct and should we ship it? Reply *Yes* or *No*.';
+    return `${cab}\n\n🛍️ ${prods.replace(/^• /gm, '')}\n💰 Total: ${pesos(Number(o.total) || 0)}${pagado ? ' (paid)' : ' · cash on delivery'}\n\n📦 Shipping details\n👤 Name: ${linea(o.cliente, 80)}\n📞 Phone: ${celular}\n🏠 Address: ${linea(o.direccion)}\n🏙️ City: ${linea(o.ciudad, 60)}\n📍 State: ${linea(o.departamento, 60)}\n\n${pie}`;
+  }
+  const cab = modo === 'registrado' ? `✅ ¡Listo${nombre ? ', ' + nombre : ''}! Tu pedido ${num} quedó registrado${tienda ? ` en ${tienda}` : ''}:` : `Hola${nombre ? ' ' + nombre : ''} 👋 Este es el resumen de tu pedido ${num}${tienda ? ` en ${tienda}` : ''}:`;
+  const pie = modo === 'registrado' ? 'Apenas salga te enviamos por aquí el número de guía 🚚. Si algún dato está mal, escríbenos y lo corregimos.' : 'Revisa con cuidado: ¿los datos están correctos y te lo enviamos? Responde *Sí* o *No*.';
+  return `${cab}\n\n🛍️ Pediste:\n${prods}\n💰 Total: ${pesos(Number(o.total) || 0)}${pagado ? ' (ya pagado)' : ' · pago contra entrega'}\n\n📦 Datos de envío\n👤 Nombre: ${linea(o.cliente, 80)}\n📞 Celular: ${celular}\n🏠 Dirección: ${linea(o.direccion)}\n🏙️ Ciudad: ${linea(o.ciudad, 60)}\n📍 Departamento: ${linea(o.departamento, 60)}\n\n${pie}`;
+}
+
+/**
+ * Pedido que el asistente acaba de crear en la conversación: SIEMPRE le llega al cliente el
+ * resumen completo. Si en el chat ya vio el resumen y dijo que sí, va como "quedó
+ * registrado"; si no (la IA se saltó el resumen), va con la pregunta Sí/No y el pedido NO
+ * se despacha hasta que confirme. Devuelve si ya estaba confirmado.
+ */
+export async function resumenPedidoDelBot(storeId: string, orderId: string, leadId: string, destino: string, pn: string | undefined, idioma: 'es' | 'en'): Promise<{ confirmado: boolean }> {
+  // ¿El bot mostró un resumen y el cliente respondió después? (en las últimas 6 h)
+  const ult = db.prepare("SELECT de, texto FROM messages WHERE lead_id = ? AND created_at > datetime('now','-6 hours') ORDER BY created_at DESC, rowid DESC LIMIT 40").all(leadId) as { de: string; texto: string }[];
+  const iRes = ult.findIndex((m) => m.de === 'bot' && /(resumen|summary)/i.test(m.texto) && /(direcci|address|ciudad|city)/i.test(m.texto));
+  const confirmado = iRes > 0 && ult.slice(0, iRes).some((m) => m.de === 'cliente');
+  const texto = textoResumenPedido(storeId, orderId, confirmado ? 'registrado' : 'preguntar', idioma);
+  const { sendWhatsappText, marcarEnviado } = await import('./wa.js');
+  const mid = uid();
+  db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, leadId, texto);
+  const r = await sendWhatsappText(storeId, destino, texto, pn);
+  marcarEnviado(mid, r);
+  db.prepare('UPDATE orders SET confirmacion = ?, confirmacion_error = ?, lead_id = COALESCE(NULLIF(lead_id, \'\'), ?) WHERE id = ?')
+    .run(r.ok ? (confirmado ? 'si' : 'esperando') : 'fallo', r.ok ? '' : `No salió el resumen por WhatsApp: ${r.error || 'error desconocido'}`, leadId, orderId);
+  trazar(storeId, orderId, {
+    etapa: 'pedido', nivel: r.ok ? 'ok' : 'warn',
+    titulo: !r.ok ? 'No se pudo enviar el resumen del pedido' : confirmado ? 'Resumen enviado: el cliente ya lo había confirmado en el chat' : 'Resumen enviado con la pregunta Sí / No (el asistente no lo había mostrado)',
+    detalle: r.ok ? (confirmado ? '' : 'El pedido se despacha cuando el cliente responda Sí.') : r.error,
+  });
+  return { confirmado };
+}
+
 /** Envía la plantilla de confirmación (Sí / No) al comprador. */
 export async function enviarConfirmacion(storeId: string, orderId: string): Promise<{ ok: boolean; detalle: string }> {
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
@@ -162,15 +215,17 @@ export async function enviarConfirmacion(storeId: string, orderId: string): Prom
     r = rr;
   } else {
     // Sin plantilla aprobada solo se puede escribir si el cliente habló en las últimas 24 h.
-    texto = `Hola ${nombre} 👋 Recibimos tu pedido ${numDF} en ${tienda}.\n\n🛍️ Pediste: ${productos}\n💰 Total: ${total}\n\n📦 Datos de envío\n👤 Nombre: ${unaLinea(o.cliente, 80)}\n📞 Celular: ${celular || '—'}\n🏠 Dirección: ${unaLinea(o.direccion, 200)}\n🏙️ Ciudad: ${unaLinea(o.ciudad, 60)}\n📍 Departamento: ${unaLinea(o.departamento, 60)}\n\n¿Confirmas que los datos están correctos y que te lo enviemos? Responde *Sí* o *No*.`;
+    texto = textoResumenPedido(storeId, orderId, 'preguntar');
     r = await sendWhatsappText(storeId, wa, texto, wa);
   }
   db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, leadId, texto);
   marcarEnviado(mid, r);
+  db.prepare('UPDATE orders SET confirmacion_intentos = confirmacion_intentos + 1 WHERE id = ?').run(orderId);
   if (r.ok) {
     contarProactivo(storeId, wa);
     db.prepare("UPDATE orders SET confirmacion = 'esperando', confirmacion_error = '' WHERE id = ?").run(orderId);
   } else {
+    registrarLog(storeId, 'warn', 'pedido', `${numDF}: no le llegó al cliente el resumen para confirmar (${(r.error || 'sin plantilla aprobada y fuera de las 24 h').slice(0, 160)}). Se reintenta solo; también puedes reenviarlo desde el pedido.`, leadId);
     fallo(pl ? `WhatsApp rechazó la plantilla: ${r.error || 'error desconocido'}`
       : `Ninguna plantilla de confirmación ("${PLANTILLA_CONFIRMACION_COMPLETA}" o "${PLANTILLA_CONFIRMACION}") está aprobada en Meta y el cliente no te ha escrito en las últimas 24 h, así que WhatsApp no deja escribirle. Apruébala en Plantillas o llámalo/escríbele primero.`);
   }
@@ -191,7 +246,7 @@ const reintentos = new Map<string, number>();
  * no debe contestar por su cuenta).
  */
 export async function respuestaConfirmacion(storeId: string, leadId: string, texto: string): Promise<boolean> {
-  const o = db.prepare(`SELECT * FROM orders WHERE store_id = ? AND lead_id = ? AND origen IN ('shopify','landing') AND confirmacion = 'esperando'
+  const o = db.prepare(`SELECT * FROM orders WHERE store_id = ? AND lead_id = ? AND confirmacion = 'esperando' AND estado IN ('Nuevo','Confirmado')
     AND created_at > datetime('now','-7 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as Fila | undefined;
   if (!o) return false;
   const t = txt(texto).trim();
@@ -212,9 +267,11 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     await decir(`¡Gracias${nombre ? ', ' + nombre : ''}! 🎉 Tu pedido quedó confirmado. Apenas salga te enviamos por aquí el número de guía. 🚚`);
     void etiquetar(storeId, orderId, ['confirmado-whatsapp']);
     // Landing: despacha solo si esa landing lo tiene activo. Shopify: según su configuración.
+    // Los demás (asistente, a mano): si la tienda tiene "Enviar solo a Effi" encendido.
     const auto = txt(o.origen) === 'landing'
       ? (await import('./landings.js')).autoDespachoDeLanding(txt(o.landing_id))
-      : cfgPedidosShopify(storeId).autoDespacho;
+      : txt(o.origen) === 'shopify' ? cfgPedidosShopify(storeId).autoDespacho
+      : !!(await import('./effiApi.js')).cfgEffi(storeId)?.autoDespacho;
     if (auto) void despacharConfirmado(storeId, orderId);
     return true;
   }
@@ -223,7 +280,7 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     // El chat queda para el equipo: el bot no contesta, una persona le pregunta qué pasó.
     db.prepare("UPDATE leads SET asignado = 'Vendedor', etiqueta = 'Seguimiento' WHERE id = ?").run(leadId);
     trazar(storeId, orderId, { etapa: 'pedido', nivel: 'warn', titulo: 'El cliente respondió que NO confirma el pedido', detalle: `${texto} · El chat quedó asignado al equipo.` });
-    registrarLog(storeId, 'warn', 'pedido', `${num}: el cliente no confirmó el pedido${txt(o.origen) === 'landing' ? ' de la landing' : ' de Shopify'}. Escríbele desde el Inbox.`, leadId);
+    registrarLog(storeId, 'warn', 'pedido', `${num}: el cliente no confirmó el pedido${txt(o.origen) === 'landing' ? ' de la landing' : txt(o.origen) === 'shopify' ? ' de Shopify' : ''}. Escríbele desde el Inbox.`, leadId);
     void etiquetar(storeId, orderId, ['no-confirmado']);
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `${num} no confirmado ❌`, `${txt(o.cliente)} respondió que no. Escríbele desde el Inbox.`, { url: '/' })).catch(() => {});
     void import('./correo.js').then((c) => c.correoATienda(storeId, 'pedidos', `${num} no confirmado`, `❌ ${num}: el cliente no confirmó`, [`${c.escHtml(txt(o.cliente))} respondió que <b>no</b> confirma el pedido de Shopify.`, 'El chat quedó asignado a tu equipo: escríbele desde el Inbox.'])).catch(() => {});
@@ -434,3 +491,19 @@ export function datosCliente(shop: string, body: Fila): Fila[] {
   const q = db.prepare('SELECT numero, cliente, tel, ciudad, departamento, direccion, total, estado, created_at FROM orders WHERE shopify_shop = ? AND shopify_id = ?');
   return ids.map((id) => q.get(shop, id) as Fila | undefined).filter(Boolean) as Fila[];
 }
+
+/**
+ * La confirmación es obligatoria: las que no salieron (WhatsApp desconectado, límite de
+ * mensajes, plantilla aún sin aprobar…) se reintentan solas cada 15 min, hasta 6 veces,
+ * mientras el pedido siga sin despachar.
+ */
+async function reintentarConfirmaciones() {
+  const filas = db.prepare(`SELECT id, store_id FROM orders WHERE confirmacion = 'fallo' AND confirmacion_intentos < 6 AND estado = 'Nuevo'
+    AND COALESCE(effi_remision,'') = '' AND COALESCE(dropi_order_id,'') = '' AND COALESCE(guia,'') = '' AND COALESCE(tel,'') != ''
+    AND created_at > datetime('now','-2 days') ORDER BY created_at LIMIT 40`).all() as { id: string; store_id: string }[];
+  for (const f of filas) {
+    try { await enviarConfirmacion(f.store_id, f.id); } catch (e) { console.error('[confirmacion] reintento', e); }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
+if (process.env.NODE_ENV === 'production') setInterval(() => void reintentarConfirmaciones(), 15 * 60_000).unref();

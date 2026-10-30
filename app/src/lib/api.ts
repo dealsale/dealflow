@@ -397,7 +397,7 @@ export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/
 export const apiOrderEstado = (rowId: string, estado: string) => req<{ estado: string }>(`/api/orders/${rowId}/estado`, 'POST', { estado });
 export const apiDeleteOrder = (rowId: string) => req<{ ok: true }>(`/api/orders/${rowId}`, 'DELETE');
 export interface CrearPedidoItem { qty: number; nombre: string; precio: number }
-export const apiCrearPedido = (body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: CrearPedidoItem[]; leadId?: string }) =>
+export const apiCrearPedido = (body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: CrearPedidoItem[]; leadId?: string; confirmar?: boolean }) =>
   req<{ ok: true; id: string; rowId: string }>('/api/orders', 'POST', body);
 export const apiOrderDespacharSync = (rowId: string) => req<{ estado: string; guia: string }>(`/api/orders/${rowId}/despachar/sync`, 'POST');
 // Dropi (API directa): cotizar transportadoras y crear la orden con la elegida.
@@ -468,7 +468,16 @@ export interface PlantillaAprobada {
   id: string; nombre: string; idioma: string; categoria: string; encabezado: string; cuerpo: string; pie: string; variables: number; ejemplos: string[];
   /** 'dealflow' = publicada por DealFlow; 'meta' = creada por la tienda directo en Meta. */
   origen?: 'dealflow' | 'meta'; encabezadoTipo?: string; varsEncabezado?: number; mediaEjemplo?: string; botonVariable?: boolean;
+  /** Qué es cada variable ({{1}} = campos[0]): 'nombre', 'pedido', 'total'… ('' = no se sabe). */
+  campos?: string[]; campoEncabezado?: string; campoBoton?: string;
 }
+export const NOMBRE_CAMPO_PLANTILLA: Record<string, string> = {
+  nombre: 'nombre del cliente', nombre_completo: 'nombre completo', tienda: 'nombre de tu tienda', pedido: 'número del pedido',
+  productos: 'productos del pedido', total: 'total del pedido', celular: 'celular', direccion: 'dirección', ciudad: 'ciudad',
+  departamento: 'departamento', transportadora: 'transportadora', guia: 'número de guía', novedad: 'novedad del envío',
+};
+export const apiDatosPlantilla = (leadId: string, plantillaId: string) =>
+  req<{ params: string[]; encabezado: string; boton: string; pedido: string }>(`/api/leads/${encodeURIComponent(leadId)}/plantilla-datos?plantillaId=${encodeURIComponent(plantillaId)}`, 'GET');
 export interface ExtraPlantilla { encabezado?: string; media?: string; boton?: string }
 /** ¿Hay que llenar algo antes de enviarla? (variables, foto/video/documento, enlace del botón) */
 export const plantillaPideDatos = (p: PlantillaAprobada) => p.variables > 0 || !!p.varsEncabezado || ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(p.encabezadoTipo || '') || !!p.botonVariable;
