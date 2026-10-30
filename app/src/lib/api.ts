@@ -1067,7 +1067,16 @@ export const apiAdminProbarSoporte = () => req<{ respuesta: string }>('/api/admi
 
 // ── Biblioteca de landings ──
 export interface LibraryLanding { id: string; nombre: string; precio: number; gratis: boolean; precioImportacion: number; portada: string | null; adquirida: boolean }
-export interface LibraryLandingAdmin { id: string; nombre: string; origen: string; precio: number; gratis: boolean; precioImportacion: number; activo: boolean; portada: string | null; importos: number }
+export interface LibraryLandingAdmin { id: string; nombre: string; origen: string; precio: number; gratis: boolean; precioImportacion: number; activo: boolean; portada: string | null; importos: number; modoCodigo?: boolean; conPlantilla?: boolean }
+/** Una landing de cualquier tienda, en el catálogo del superadmin. */
+export interface SuperLandingTienda {
+  id: string; storeId: string; tienda: string; nombre: string; estado: string; precio: number; portada: string | null; vistas: number; pedidos: number;
+  updatedAt: string; publicadaAt: string | null; modoCodigo: boolean; conPlantilla: boolean; url: string; enBiblioteca: string;
+}
+export const apiSuperTodasLasLandings = () => req<{ landings: SuperLandingTienda[] }>('/api/superadmin/landings', 'GET');
+export const apiSuperEnviarLandingATienda = (storeId: string, landingId: string, destino: string) =>
+  req<{ ok: true; landingId: string }>(`/api/superadmin/landings/${encodeURIComponent(storeId)}/${encodeURIComponent(landingId)}/enviar-a-tienda`, 'POST', { storeId: destino });
+export const urlVistaSuperLanding = (storeId: string, landingId: string) => `/api/superadmin/landings/${encodeURIComponent(storeId)}/${encodeURIComponent(landingId)}/vista`;
 export const apiBibliotecaLandings = () => req<{ landings: LibraryLanding[] }>('/api/biblioteca-landings', 'GET');
 export const apiImportarBibliotecaLanding = (id: string) => req<{ ok?: true; landingId?: string; requierePago?: boolean; precio?: number }>(`/api/biblioteca-landings/${encodeURIComponent(id)}/importar`, 'POST');
 export const apiCheckoutBibliotecaLanding = (id: string) => req<{ url: string }>(`/api/biblioteca-landings/${encodeURIComponent(id)}/checkout`, 'POST');

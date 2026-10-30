@@ -93,16 +93,16 @@ function tieneGracias(l: Fila): boolean {
  * código) o la plantilla de la tienda que tenga elegida, ya con el script de DealFlow.
  * null = se muestra con el diseño del editor.
  */
-export function htmlPublico(l: Fila, tipo: 'landing' | 'gracias', base: string): string | null {
+export function htmlPublico(l: Fila, tipo: 'landing' | 'gracias', base: string, vista = false): string | null {
   if (l.modo_codigo && txt(l.codigo).trim()) {
-    return paginaCodigo(l, tipo, base, false, tipo === 'gracias' && !txt(l.codigo_gracias).trim() ? graciasPorDefecto(l) : undefined);
+    return paginaCodigo(l, tipo, base, vista, tipo === 'gracias' && !txt(l.codigo_gracias).trim() ? graciasPorDefecto(l) : undefined);
   }
   const p = plantillaDe(txt(l.store_id), txt(l.plantilla_id));
   if (p && txt(p.html).trim()) {
     const fuente = tipo === 'gracias' ? (txt(p.gracias).trim() ? renderPlantilla(txt(p.gracias), l) : graciasPorDefecto(l)) : renderPlantilla(txt(p.html), l);
-    return paginaCodigo(l, tipo, base, false, fuente);
+    return paginaCodigo(l, tipo, base, vista, fuente);
   }
-  return tipo === 'gracias' ? paginaCodigo(l, 'gracias', base, false, graciasPorDefecto(l)) : null;
+  return tipo === 'gracias' ? paginaCodigo(l, 'gracias', base, vista, graciasPorDefecto(l)) : null;
 }
 
 const json = (x: unknown) => JSON.stringify(x).replace(/</g, '\\u003c');
