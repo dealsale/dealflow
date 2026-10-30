@@ -43,6 +43,8 @@ export interface EffiCfg {
   convenioDropshipping: string;
   /** Convenios que la tienda agregó a mano (Effi no tiene listado de convenios en la API). */
   convenios: { id: string; nombre: string }[];
+  /** Remitente que se pone solo en cada guía (se cambia en el pedido si sale de otra bodega). */
+  remitenteDefecto: string;
   guia: EffiGuiaCfg;
   webhookToken: string; webhookSecret: string;
   /** Novedades de guías: avisar al cliente, que el bot recoja los datos y si envía la solución a Effi él solo. */
@@ -73,7 +75,7 @@ export function cfgEffi(storeId: string): EffiCfg | null {
     medioPago: s('medioPago'), caja: s('caja'), cuenta: s('cuenta'),
     vendedor: s('vendedor'), articuloFlete: s('articuloFlete'), diasEntrega: Number(c.diasEntrega) > 0 ? Number(c.diasEntrega) : 3,
     autoDespacho: c.autoDespacho === true,
-    convenioDropshipping: s('convenioDropshipping'),
+    convenioDropshipping: s('convenioDropshipping'), remitenteDefecto: s('remitenteDefecto'),
     convenios: (Array.isArray(c.convenios) ? c.convenios as Record<string, unknown>[] : [])
       .map((x) => ({ id: String(x?.id ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40), nombre: String(x?.nombre ?? '').trim().slice(0, 80) }))
       .filter((x) => x.id),
@@ -299,13 +301,14 @@ export async function opcionesGuiaEffi(apiKey: string): Promise<{ transportadora
  * en bodegas distintas (principal, garantías, devoluciones, la del proveedor…): por eso se
  * muestran con su ciudad, dirección y código, para elegir el punto de origen correcto.
  */
-function opcionRemitente(f: Fila): { id: string; nombre: string; corto: string; ciudad: string; direccion: string; proveedor: string } {
+function opcionRemitente(f: Fila): { id: string; nombre: string; corto: string; ciudad: string; direccion: string; proveedor: string; contacto: string } {
   const ciudad = txt(f.nombre_ciudad); const direccion = txt(f.direccion);
+  const contacto = ['nombre_contacto', 'contacto', 'responsable', 'persona_contacto'].map((k) => valorTexto(f[k])).find(Boolean) || '';
   const corto = nombreDeFila(f);
   // El remitente puede ser la bodega de un proveedor: su nombre va aparte para no confundirlos.
   const proveedor = PROVEEDOR.map((k) => valorTexto(f[k])).find((x) => x && x.toLowerCase() !== corto.toLowerCase()) || '';
   const titulo = [corto || 'Sin nombre en Effi', proveedor && `proveedor ${proveedor}`].filter(Boolean).join(' — ');
-  return { id: txt(f.codigo), corto, ciudad, direccion, proveedor, nombre: [titulo, ciudad, direccion].filter(Boolean).join(' · ') + ` (#${txt(f.codigo)})` };
+  return { id: txt(f.codigo), corto, ciudad, direccion, proveedor, contacto, nombre: [titulo, ciudad, direccion].filter(Boolean).join(' · ') + ` (#${txt(f.codigo)})` };
 }
 
 /**
@@ -378,6 +381,14 @@ export function remitentesPorConvenio(storeId: string): { convenio: string; remi
  * null si no se puede saber: entonces lo elige la persona.
  */
 export async function remitenteSugerido(storeId: string, apiKey: string, o: { orderId?: string; convenio?: string }): Promise<{ remitente: string; nombre: string; motivo: string } | null> {
+  const porDefecto = async (): Promise<{ remitente: string; nombre: string; motivo: string } | null> => {
+    const c = cfgEffi(storeId);
+    const r = c?.remitenteDefecto || '';
+    if (!r) return null;
+    const v = await remitentesVigentes(storeId, apiKey);
+    if (v && !v.has(r)) return null;
+    return { remitente: r, nombre: v?.get(r) || `#${r}`, motivo: 'tu remitente por defecto (cámbialo si este pedido sale de otra bodega)' };
+  };
   let convenio = convenioValido(o.convenio);
   if (!convenio && o.orderId) {
     const ord = db.prepare('SELECT effi_convenio FROM orders WHERE id = ? AND store_id = ?').get(o.orderId, storeId) as Fila | undefined;
@@ -389,13 +400,13 @@ export async function remitenteSugerido(storeId: string, apiKey: string, o: { or
       if (cvs.length === 1) convenio = cvs[0];
     }
   }
-  if (!convenio) return null;
+  if (!convenio) return porDefecto();
   const vigentes = await remitentesVigentes(storeId, apiKey);
   const ok = (r: string) => !!r && (!vigentes || vigentes.has(r));
   const nombreConv = conveniosConocidos(storeId).find((x) => x.id === convenio)?.nombre || `convenio ${convenio}`;
   const propio = db.prepare('SELECT remitente, origen FROM effi_remitente_convenio WHERE store_id = ? AND convenio = ?').get(storeId, convenio) as { remitente: string; origen: string } | undefined;
-  if (propio && propio.origen === 'manual' && ok(propio.remitente)) return { remitente: propio.remitente, nombre: vigentes?.get(propio.remitente) || `#${propio.remitente}`, motivo: propio.origen === 'manual' ? `el remitente que fijaste para ${nombreConv}` : `el que usaste la última vez con ${nombreConv}` };
-  return null;
+  if (propio && propio.origen === 'manual' && ok(propio.remitente)) return { remitente: propio.remitente, nombre: vigentes?.get(propio.remitente) || `#${propio.remitente}`, motivo: `la bodega que fijaste para ${nombreConv}` };
+  return porDefecto();
 }
 
 // ── Nombres claros para los remitentes ───────────────────────────────────────
@@ -406,13 +417,29 @@ db.exec(`CREATE TABLE IF NOT EXISTS effi_remitente_alias (
   store_id TEXT NOT NULL, remitente TEXT NOT NULL, alias TEXT NOT NULL,
   PRIMARY KEY (store_id, remitente)
 )`);
-export function ponerAliasRemitente(storeId: string, remitente: string, alias: string) {
-  const a = alias.trim().slice(0, 60);
+try { db.exec("ALTER TABLE effi_remitente_alias ADD COLUMN proveedor TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+/** Nombre de la bodega y de su proveedor (lo que la tienda escribe; Effi no lo da). */
+export function ponerDatosRemitente(storeId: string, remitente: string, d: { alias?: string; proveedor?: string }) {
   if (!remitente) return;
-  if (!a) db.prepare('DELETE FROM effi_remitente_alias WHERE store_id = ? AND remitente = ?').run(storeId, remitente);
-  else db.prepare('INSERT INTO effi_remitente_alias (store_id, remitente, alias) VALUES (?,?,?) ON CONFLICT(store_id, remitente) DO UPDATE SET alias = excluded.alias').run(storeId, remitente, a);
+  const actual = db.prepare('SELECT alias, proveedor FROM effi_remitente_alias WHERE store_id = ? AND remitente = ?').get(storeId, remitente) as { alias: string; proveedor: string } | undefined;
+  const alias = (d.alias ?? actual?.alias ?? '').trim().slice(0, 60);
+  const proveedor = (d.proveedor ?? actual?.proveedor ?? '').trim().slice(0, 60);
+  if (!alias && !proveedor) db.prepare('DELETE FROM effi_remitente_alias WHERE store_id = ? AND remitente = ?').run(storeId, remitente);
+  else db.prepare('INSERT INTO effi_remitente_alias (store_id, remitente, alias, proveedor) VALUES (?,?,?,?) ON CONFLICT(store_id, remitente) DO UPDATE SET alias = excluded.alias, proveedor = excluded.proveedor').run(storeId, remitente, alias, proveedor);
   cacheRemitentes.delete(storeId);
 }
+/** Cambia (o agrega) el nombre de un convenio, p. ej. el nombre del proveedor. */
+export function nombrarConvenio(storeId: string, convenio: string, nombre: string) {
+  const c = cfgEffi(storeId);
+  if (!c || !convenio) return;
+  const lista = [...c.convenios];
+  const i = lista.findIndex((x) => x.id === convenio);
+  const n = nombre.trim().slice(0, 60) || `Convenio ${convenio}`;
+  if (i >= 0) lista[i] = { ...lista[i], nombre: n }; else lista.push({ id: convenio, nombre: n });
+  guardarCfgEffi(storeId, { convenios: lista });
+  cacheRemitentes.delete(storeId);
+}
+export function ponerAliasRemitente(storeId: string, remitente: string, alias: string) { ponerDatosRemitente(storeId, remitente, { alias }); }
 
 /** El código del remitente dentro de los datos de una guía de Effi (venga como venga). */
 function remitenteDeGuia(g: Fila): string {
@@ -513,18 +540,16 @@ export function rotularRemitentes(storeId: string, lista: OpcionRem[]): (OpcionR
   const provDe = new Map<string, Set<string>>();
   const agregar = (rem: string, cv: string) => { const n = nombresConv.get(cv); if (!n) return; if (!provDe.has(rem)) provDe.set(rem, new Set()); provDe.get(rem)!.add(n); };
   for (const r of db.prepare("SELECT convenio, remitente FROM effi_remitente_convenio WHERE store_id = ? AND origen = 'manual'").all(storeId) as { convenio: string; remitente: string }[]) agregar(r.remitente, r.convenio);
-  const alias = new Map((db.prepare('SELECT remitente, alias FROM effi_remitente_alias WHERE store_id = ?').all(storeId) as { remitente: string; alias: string }[]).map((r) => [r.remitente, r.alias]));
-  // Si todos se llaman igual (el nombre de la tienda), ese nombre no ayuda: se omite.
-  const repetido = lista.length > 1 && lista.every((x) => x.corto && x.corto === lista[0].corto);
+  const datos = new Map((db.prepare('SELECT remitente, alias, proveedor FROM effi_remitente_alias WHERE store_id = ?').all(storeId) as { remitente: string; alias: string; proveedor: string }[]).map((r) => [r.remitente, r]));
   const out = lista.map((x) => {
-    const provs = [...(provDe.get(x.id) || [])];
-    if (x.proveedor && !provs.includes(x.proveedor)) provs.push(x.proveedor);
-    const ap = alias.get(x.id) || '';
-    const titulo = ap ? `📌 ${ap}${provs.length ? ` — proveedor ${provs.join(' / ')}` : ''}`
-      : provs.length ? `🏭 Bodega de ${provs.join(' / ')}` : repetido ? '' : (x.corto || 'Sin nombre en Effi');
-    return { ...x, alias: ap, proveedores: provs, nombre: [titulo, x.ciudad, x.direccion].filter(Boolean).join(' · ') + ` (#${x.id})` };
+    const dd = datos.get(x.id);
+    const provs = [...new Set([dd?.proveedor || '', ...(provDe.get(x.id) || []), x.proveedor].filter(Boolean))];
+    const ap = dd?.alias || '';
+    // Bodega (nombre que le puso la tienda) · Proveedor · Ciudad · Dirección · contacto (#código)
+    const partes = [ap ? `📌 ${ap}` : !provs.length && '❔ Bodega sin nombre', provs.length && `🏭 ${provs.join(' / ')}`, x.ciudad, x.direccion, x.contacto && `contacto ${x.contacto}`].filter(Boolean);
+    return { ...x, alias: ap, proveedores: provs, nombre: `${partes.join(' · ') || x.corto || 'Sin datos en Effi'} (#${x.id})` };
   });
-  const peso = (x: typeof out[number]) => (x.alias ? 0 : x.proveedores.length ? 1 : 2);
+  const peso = (x: typeof out[number]) => (x.alias || x.proveedores.length ? 0 : 1);
   return out.map((x, i) => ({ x, i })).sort((a, b) => peso(a.x) - peso(b.x) || a.i - b.i).map(({ x }) => x);
 }
 
@@ -1780,7 +1805,7 @@ async function generarGuiaInterna(storeId: string, orderId: string, g: OpcionesG
   // La última elección queda como valor por defecto del formulario, pero SOLO si la guía
   // automática está apagada: si está encendida, esos valores son los de todas las guías
   // automáticas y no deben cambiar sin que el dueño lo haga en Integraciones → Effi.
-  if (!c.guia.activa) guardarCfgEffi(storeId, { guia: { ...c.guia, transportadora: g.transportadora, servicio: g.servicio, formaPagoFlete: g.formaPagoFlete, remitente: g.remitente, peso: g.peso, volumen: g.volumen, alto: g.alto, ancho: g.ancho, largo: g.largo } });
+  if (!c.guia.activa) guardarCfgEffi(storeId, { guia: { ...c.guia, transportadora: g.transportadora, servicio: g.servicio, formaPagoFlete: g.formaPagoFlete, peso: g.peso, volumen: g.volumen, alto: g.alto, ancho: g.ancho, largo: g.largo } });
   const yaTenia = !!pj<Fila>(txt(o.effi_guia), {}).id;
   const r = await crearGuia(storeId, c, g, o, { sucursal: txt(d.sucursal), id: txt(d.id) }, tercero, ubic, reintento || yaTenia);
   if ('error' in r) return { error: r.error.replace('La remisión quedó creada, pero Effi no creó la guía: ', 'Effi no creó la guía: ').replace('La remisión quedó creada, pero no se generó la guía: ', 'No se generó la guía: ') };
