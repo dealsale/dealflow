@@ -980,13 +980,16 @@ export interface LandingResumen { id: string; slug: string; nombre: string; prod
 export interface Landing extends LandingResumen { datos: LandingDatos }
 export interface MembresiaTienda { activa: boolean; cortesia: boolean; vence: string; diasRestantes: number; enGracia: boolean; precio: number }
 export interface TiendaConfig { nombre: string; logo: string; favicon: string; banner: string; titulo: string; descripcion: string; anuncios: string[]; colorPrincipal: string; colorBoton: string; colorAcento: string; whatsapp: string; pixelMeta: string; seoTitulo: string; seoDescripcion: string; seoImagen: string }
-export interface DominioLandings { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string }
+export interface RegistroDns { tipo: string; nombre: string; valor: string; para: string }
+export interface DiagDominio { dns: 'ok' | 'pendiente' | 'error'; dnsDetalle: string; ssl: 'ok' | 'pendiente' | 'desconocido'; sslDetalle: string; extra: RegistroDns[]; revisado: string }
+export interface DominioLandings { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string; conectadoAt?: string; diag?: DiagDominio | null; apex?: boolean }
 export const apiLandings = () => req<{ landings: LandingResumen[]; membresia: MembresiaTienda; dominio: DominioLandings; tienda: TiendaConfig }>('/api/landings', 'GET');
 export const apiGuardarTienda = (tienda: TiendaConfig) => req<{ tienda: TiendaConfig }>('/api/landings/tienda', 'PUT', { tienda });
 export const apiVistaTienda = (tienda: TiendaConfig) => req<{ html: string }>('/api/landings/tienda/vista', 'POST', { tienda });
 export const apiPagarMembresia = () => req<{ url?: string; gratis?: boolean }>('/api/landings/membresia/pagar', 'POST');
 export const apiConectarDominio = (dominio: string) => req<DominioLandings>('/api/landings/dominio', 'POST', { dominio });
 export const apiVerificarDominio = () => req<DominioLandings>('/api/landings/dominio/verificar', 'POST');
+export const apiEstadoDominio = () => req<DominioLandings>('/api/landings/dominio', 'GET');
 export const apiQuitarDominio = () => req<DominioLandings>('/api/landings/dominio', 'DELETE');
 export const apiSubdominio = (sub: string) => req<DominioLandings>('/api/landings/dominio/sub', 'PUT', { sub });
 export const apiInicioDominio = (landingId: string) => req<DominioLandings>('/api/landings/dominio/inicio', 'PUT', { landingId });
