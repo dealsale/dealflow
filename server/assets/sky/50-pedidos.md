@@ -46,15 +46,19 @@ Al tocar un pedido se abre el detalle:
 
 ## Confirmación del pedido por WhatsApp (Sí / No)
 Sección: pedidos
-Claves: confirmacion, confirmar pedido, si no, pedir confirmacion, reenviar confirmacion, no se pudo enviar la confirmacion, cliente no confirmo
-En el detalle del pedido sale uno de estos estados:
-- "Aún no se ha pedido confirmación por WhatsApp" → **Pedir confirmación**.
+Claves: confirmacion, confirmar pedido, resumen del pedido, el bot no mando el resumen, no confirmo, confirmacion obligatoria, si no, pedir confirmacion, reenviar confirmacion, no se pudo enviar la confirmacion, cliente no confirmo
+**El resumen y la confirmación son obligatorios en TODOS los pedidos** (asistente, Tienda en línea, landings, Shopify y a mano):
+- **Pedidos del asistente**: apenas se crea el pedido, al cliente le llega el resumen completo. Si en el chat ya vio el resumen y dijo que sí, llega como "✅ ¡Listo! Tu pedido DF-… quedó registrado". Si el asistente se saltó el resumen, llega con la pregunta **Sí / No** y el pedido **no se despacha hasta que responda Sí**.
+- **Pedidos a mano**: la casilla "📲 Enviarle al cliente el resumen del pedido para que confirme" viene marcada.
+- Si el cliente cambia algo mientras se espera su Sí, le llega el resumen nuevo con la pregunta otra vez.
+Estados en el pedido:
+- "Al cliente no le ha llegado el resumen para confirmar" → **Pedir confirmación**.
 - "Esperando que el cliente confirme por WhatsApp".
-- "El cliente confirmó el pedido por WhatsApp".
-- "El cliente respondió que NO: escríbele desde el Inbox".
-- "No se pudo enviar la confirmación por WhatsApp" → **Reenviar confirmación**.
-El mensaje lleva todos los datos del pedido, como el resumen del bot: número, productos, total, nombre, celular, dirección, ciudad y departamento (con la plantilla **confirmacion_pedido_completa**; mientras Meta no la apruebe sale la versión corta **confirmacion_pedido_tienda**). Se usa con pedidos de Shopify, de la extensión de Chrome, de la Tienda en línea y creados a mano (los del bot ya quedan confirmados en el chat). Si no se pudo enviar: revisa que WhatsApp esté conectado (oficial) y que la plantilla **confirmacion_pedido** (o **confirmacion_pedido_tienda** para la Tienda en línea) esté aprobada; luego **Reenviar confirmación**. Los pedidos antiguos no reciben confirmación automática.
-Con "Despachar solo cuando el cliente confirma" activo, la remisión/guía se crea sola al recibir el "Sí".
+- "El cliente confirmó el pedido por WhatsApp" (el pedido pasa a Confirmado).
+- "El cliente respondió que NO: escríbele desde el Inbox" (el chat pasa al equipo).
+- "No le llegó el resumen al cliente (se reintenta solo)": DealFlow lo reintenta cada 15 min (hasta 6 veces) mientras el pedido no se haya despachado; también **Reenviar confirmación**.
+El mensaje lleva todos los datos: número, productos, total, nombre, celular, dirección, ciudad y departamento. Fuera de las 24 h sale con la plantilla **confirmacion_pedido_completa** (o la corta **confirmacion_pedido_tienda** mientras Meta aprueba la completa). Si no sale: revisa que WhatsApp esté conectado (oficial) y que esa plantilla esté aprobada.
+Con el despacho automático activo, la remisión/guía se crea sola al recibir el "Sí".
 
 ## Botón 🌐: dirección lista para la guía
 Sección: pedidos

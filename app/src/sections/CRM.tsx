@@ -109,7 +109,7 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
               ))}
             </>
           ) : llenar ? (
-            <LlenarPlantilla p={llenar} nombreCliente={(df.crmChat?.nombre || '').split(' ')[0]} onVolver={() => setLlenar(null)}
+            <LlenarPlantilla p={llenar} leadId={String(df.crmChat?.id ?? '')} nombreCliente={(df.crmChat?.nombre || '').split(' ')[0]} onVolver={() => setLlenar(null)}
               onEnviar={(params, extra) => { df.enviarPlantillaAChat(llenar.id, params, extra); cerrar(); }} />
           ) : verPlantillas ? (
             <>

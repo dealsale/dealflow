@@ -1193,7 +1193,12 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     trazar(storeId, String(previo.id), { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numPrev} actualizado por el asistente (el cliente cambió algo)`, detalle: `Antes: ${itemsPrev.map((i) => `${i.qty}x ${i.nombre}`).join(', ')} · ${String(previo.direccion)}, ${String(previo.ciudad)}`, datos: { cliente, tel, ciudad, departamento, direccion, total, items, marcador: inner } });
     registrarLog(storeId, 'info', 'pedido', `Pedido DF-${numPrev} actualizado: ${items.map((i) => i.qty + 'x ' + i.nombre).join(', ')}.`, lead.id);
     const detalle = `${items.map((i) => `• ${i.qty}x ${i.nombre}`).join('\n')}\n📍 ${[direccion || previo.direccion, ciudad || previo.ciudad].filter(Boolean).join(', ')}\n💰 $${total.toLocaleString('es-CO')}`;
-    const msg = pedidoActualizado(idiomaDe(storeId, lead.id), (cliente || 'hola').split(' ')[0], numPrev, detalle);
+    // Si el pedido aún espera el Sí del cliente, va el resumen nuevo con la pregunta Sí/No
+    // (un "no" a "¿quieres cambiar algo más?" no debe tomarse como que no lo quiere).
+    const sp = await import('./shopifyPedidos.js');
+    const msg = String(previo.confirmacion || '') === 'esperando'
+      ? sp.textoResumenPedido(storeId, String(previo.id), 'preguntar', idiomaDe(storeId, lead.id) === 'en' ? 'en' : 'es')
+      : pedidoActualizado(idiomaDe(storeId, lead.id), (cliente || 'hola').split(' ')[0], numPrev, detalle);
     const mid = uid();
     db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
     marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
@@ -1225,10 +1230,26 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     void import('./metaCapi.js').then((c) => c.avisarCapi(storeId)).catch(() => {});
   }
 
-  // Auto-despacho a Effi por API (si la tienda lo activó): crea la remisión sola.
-  // No bloquea la respuesta del bot; si falla, el pedido queda en DealFlow para
-  // despacharlo a mano desde el detalle.
-  void (async () => {
+  // Resumen OBLIGATORIO al cliente: con todos los datos del pedido. Si el asistente no lo
+  // mostró antes (o el cliente no lo confirmó), va con la pregunta Sí/No y el pedido no se
+  // despacha hasta que responda Sí.
+  let confirmado = false;
+  try {
+    const sp = await import('./shopifyPedidos.js');
+    confirmado = (await sp.resumenPedidoDelBot(storeId, oid, lead.id, destino, pn, idiomaDe(storeId, lead.id) === 'en' ? 'en' : 'es')).confirmado;
+  } catch (e) {
+    console.error('[ia] resumen del pedido', e);
+    const primerNombre = cliente.split(' ')[0];
+    const producto = (items[0]?.nombre || 'tu pedido').split('(')[0].split('—')[0].trim();
+    const confirmacion = confirmacionPedido(idiomaDe(storeId, lead.id), primerNombre, producto);
+    const midConf = uid();
+    db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(midConf, lead.id, 'bot', confirmacion);
+    marcarEnviado(midConf, await sendWhatsappText(storeId, destino, confirmacion, pn));
+  }
+
+  // Auto-despacho a Effi por API (si la tienda lo activó) SOLO si el cliente ya confirmó;
+  // si no, sale cuando responda Sí. Si falla, el pedido queda para despacharlo a mano.
+  if (confirmado) void (async () => {
     try {
       const ef = await import('./effiApi.js');
       if (ef.effiApiListo(storeId) && ef.cfgEffi(storeId)?.autoDespacho) {
@@ -1238,13 +1259,6 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     } catch (e) { console.error('[effi] error auto-enviando pedido', e); }
   })();
 
-  // Mensaje de confirmación al cliente.
-  const primerNombre = cliente.split(' ')[0];
-  const producto = (items[0]?.nombre || 'tu pedido').split('(')[0].split('—')[0].trim();
-  const confirmacion = confirmacionPedido(idiomaDe(storeId, lead.id), primerNombre, producto);
-  const midConf = uid();
-  db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(midConf, lead.id, 'bot', confirmacion);
-  marcarEnviado(midConf, await sendWhatsappText(storeId, destino, confirmacion, pn));
   await avisarPrecio();
   return 'creado';
 }

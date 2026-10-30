@@ -24,6 +24,7 @@ import { problemaVariables } from './seedPlantillas.js';
 import { listarProveedores, crearProveedor, editarProveedor, borrarProveedor, abrirSesionProveedor } from './proveedores.js';
 import * as pm from './plantillasMeta.js';
 import * as rr from './respuestasRapidas.js';
+import * as lp from './llenarPlantilla.js';
 import type { ExtraPlantilla } from './plantillasMeta.js';
 
 export const api = Router();
@@ -1171,6 +1172,10 @@ api.post('/orders', requireAuth, requireStore, requirePermiso('pedidos_editar'),
     void import('./push.js').then((p) => p.enviarPush(sid, 'pedidos', `Nuevo pedido DF-${numero} 🛒`, `${cliente} · $${total.toLocaleString('es-CO')} · ${nprod} producto${nprod === 1 ? '' : 's'}`, { url: '/' })).catch(() => {});
     void import('./correo.js').then((c) => c.correoPedidoNuevo(sid, oid, `creado a mano (${origen})`)).catch(() => {});
     void import('./metaCapi.js').then((c) => c.avisarCapi(sid)).catch(() => {});
+  }
+  // Resumen al cliente para que confirme (Sí / No), salvo que lo hayan desmarcado.
+  if (b.confirmar !== false && String(b.tel || '').replace(/\D/g, '').length >= 10) {
+    void import('./shopifyPedidos.js').then((m) => m.enviarConfirmacion(sid, oid)).catch(() => {});
   }
   res.json({ ok: true, id: 'DF-' + numero, rowId: oid });
 });
@@ -2494,6 +2499,7 @@ function plantillasAprobadasDe(sid: string) {
       encabezado: String(t.encabezado || ''), cuerpo: String(t.cuerpo || ''), pie: String(t.pie || ''),
       variables: vars.length, ejemplos: pj<string[]>(t.ejemplos as string, []),
       encabezadoTipo: '', varsEncabezado: 0, mediaEjemplo: '', botonVariable: false,
+      campos: lp.inferirCampos(String(t.cuerpo || ''), pj<string[]>(t.ejemplos as string, [])), campoEncabezado: '' as lp.Campo, campoBoton: '' as lp.Campo,
     };
   });
   const nombres = new Set(deDealflow.map((x) => `${x.nombre}|${x.idioma}`));
@@ -2503,6 +2509,8 @@ function plantillasAprobadasDe(sid: string) {
       id: x.id, nombre: x.nombre, idioma: x.idioma, categoria: x.categoria, origen: 'meta' as const,
       encabezado: x.encabezado, cuerpo: x.cuerpo, pie: x.pie, variables: x.variables, ejemplos: x.ejemplos,
       encabezadoTipo: x.encabezadoTipo, varsEncabezado: x.varsEncabezado, mediaEjemplo: x.mediaEjemplo, botonVariable: x.botones.some((b) => b.variable),
+      campos: lp.inferirCampos(x.cuerpo, x.ejemplos), campoEncabezado: (x.varsEncabezado ? lp.inferirCampos(x.encabezado, [x.ejemploEncabezado])[0] || '' : '') as lp.Campo,
+      campoBoton: lp.campoDeBoton(x.botones.find((b) => b.variable)?.url || '') as lp.Campo,
     }));
   return [...deDealflow, ...propias];
 }
@@ -2522,15 +2530,28 @@ api.post('/plantillas-aprobadas/sincronizar', requireAuth, requireStore, async (
 
 /**
  * La plantilla a enviar (de DealFlow o propia de la tienda en Meta) con sus parámetros.
- * Las variables que no se llenen salen con el ejemplo de la plantilla.
+ * Lo que no se escriba se llena con los datos REALES del cliente y su último pedido; si
+ * aun así falta algo, no se envía (los ejemplos de Meta son de prueba y nunca salen).
  */
-function plantillaParaEnviar(sid: string, id: string, dados: string[], extra: ExtraPlantilla = {}):
+function plantillaParaEnviar(sid: string, id: string, dados: string[], extra: ExtraPlantilla = {}, leadId = ''):
   { nombre: string; idioma: string; encabezado: string; cuerpo: string; componentes?: Record<string, unknown>[]; params: string[] } | { error: string } {
+  const datos = leadId ? lp.datosDelCliente(sid, leadId) : { valores: {}, pedido: '' };
+  const completar = (campos: lp.Campo[], n: number) => {
+    const auto = lp.llenar(campos, datos);
+    return Array.from({ length: n }, (_, i) => String(dados[i] ?? '').trim() || auto[i] || '');
+  };
+  const faltan = (params: string[], campos: lp.Campo[]) => params.map((v, i) => (v ? '' : `{{${i + 1}}}${campos[i] ? ` (${lp.NOMBRE_CAMPO[campos[i] as Exclude<lp.Campo, ''>]})` : ''}`)).filter(Boolean);
   if (id.startsWith('meta:')) {
     const p = pm.plantillaPropia(sid, id);
     if (!p) return { error: 'Esa plantilla no está aprobada en tu cuenta de WhatsApp. Toca "↻ Actualizar desde Meta".' };
-    const params = Array.from({ length: p.variables }, (_, i) => dados[i] || p.ejemplos[i] || '');
-    const c = pm.componentesEnvio(p, params, extra);
+    const campos = lp.inferirCampos(p.cuerpo, p.ejemplos);
+    const params = completar(campos, p.variables);
+    const f = faltan(params, campos);
+    if (f.length) return { error: `Falta llenar ${f.join(', ')} de "${p.nombre}": no hay ese dato en el chat ni en su pedido.` };
+    const ce = p.varsEncabezado ? lp.inferirCampos(p.encabezado, [p.ejemploEncabezado])[0] || '' : '';
+    const cb = lp.campoDeBoton(p.botones.find((b) => b.variable)?.url || '');
+    const ext: ExtraPlantilla = { ...extra, encabezado: extra.encabezado || (ce ? lp.llenar([ce], datos)[0] : ''), boton: extra.boton || (cb ? lp.llenar([cb], datos)[0] : '') };
+    const c = pm.componentesEnvio(p, params, ext);
     if ('error' in c) return c;
     return { nombre: p.nombre, idioma: p.idioma, encabezado: p.encabezado, cuerpo: p.cuerpo, componentes: c.components, params };
   }
@@ -2540,14 +2561,31 @@ function plantillaParaEnviar(sid: string, id: string, dados: string[], extra: Ex
       WHERE p.store_id = ? AND p.template_id = ? AND p.estado = 'aprobada'`,
   ).get(sid, id) as { nombre: string; idioma: string; encabezado: string; cuerpo: string; ejemplos: string } | undefined;
   if (!t) return { error: 'Esa plantilla no está aprobada para tu tienda todavía.' };
-  const nVars = [...new Set([...String(t.cuerpo || '').matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1])))].length;
-  const ejemplos = pj<string[]>(t.ejemplos, []);
-  return { nombre: t.nombre, idioma: t.idioma, encabezado: t.encabezado, cuerpo: t.cuerpo, params: Array.from({ length: nVars }, (_, i) => dados[i] || ejemplos[i] || '') };
+  const nVars = Math.max(0, ...[...String(t.cuerpo || '').matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1])));
+  const campos = lp.inferirCampos(t.cuerpo, pj<string[]>(t.ejemplos, []));
+  const params = completar(campos, nVars);
+  const f = faltan(params, campos);
+  if (f.length) return { error: `Falta llenar ${f.join(', ')} de "${t.nombre}": no hay ese dato en el chat ni en su pedido.` };
+  return { nombre: t.nombre, idioma: t.idioma, encabezado: t.encabezado, cuerpo: t.cuerpo, params };
 }
 const extraDe = (b: Record<string, unknown> | undefined): ExtraPlantilla => {
   const e = (b?.extra && typeof b.extra === 'object' ? b.extra : {}) as Record<string, unknown>;
   return { encabezado: String(e.encabezado ?? '').slice(0, 200), media: String(e.media ?? '').slice(0, 1000), boton: String(e.boton ?? '').slice(0, 300) };
 };
+
+// Los datos reales de este chat para llenar una plantilla (el formulario los muestra para revisar).
+api.get('/leads/:id/plantilla-datos', requireAuth, requireStore, requirePermiso('chats'), (req, res) => {
+  const sid = req.user!.storeId!;
+  const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, sid);
+  if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
+  const p = plantillasAprobadasDe(sid).find((x) => x.id === String(req.query.plantillaId || ''));
+  if (!p) return res.status(404).json({ error: 'Plantilla no encontrada.' });
+  const datos = lp.datosDelCliente(sid, String(req.params.id));
+  res.json({
+    params: lp.llenar(p.campos, datos), encabezado: p.campoEncabezado ? lp.llenar([p.campoEncabezado], datos)[0] : '',
+    boton: p.campoBoton ? lp.llenar([p.campoBoton], datos)[0] : '', pedido: datos.pedido,
+  });
+});
 
 // Enviar una plantilla APROBADA a un chat. Funciona aunque hayan pasado 24 h.
 api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
@@ -2557,7 +2595,7 @@ api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, requirePermis
   if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
   // Parámetros: los que manden, o los ejemplos de la plantilla como respaldo.
   const dados = Array.isArray(req.body?.params) ? (req.body.params as unknown[]).map((x) => String(x)) : [];
-  const t = plantillaParaEnviar(sid, String(req.body?.plantillaId || ''), dados, extraDe(req.body));
+  const t = plantillaParaEnviar(sid, String(req.body?.plantillaId || ''), dados, extraDe(req.body), l.id);
   if ('error' in t) return res.status(400).json({ error: t.error });
   const r = await sendWhatsappTemplate(sid, l.wa_id || l.tel, t, t.params, l.tel);
   if (!r.ok) return res.status(400).json({ error: r.error });
@@ -2576,8 +2614,9 @@ api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, requirePermis
 // para no disparar los controles anti-spam; el panel manda la lista por tandas.
 api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requirePermiso('iniciar_conversacion'), async (req, res) => {
   const sid = req.user!.storeId!;
-  const t0 = plantillaParaEnviar(sid, String(req.body?.plantillaId || ''), [], extraDe(req.body));
-  if ('error' in t0) return res.status(400).json({ error: t0.error });
+  const pid0 = String(req.body?.plantillaId || '');
+  const t0 = pid0.startsWith('meta:') ? pm.plantillaPropia(sid, pid0) : db.prepare("SELECT t.nombre FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id WHERE p.store_id = ? AND p.template_id = ? AND p.estado = 'aprobada'").get(sid, pid0) as { nombre: string } | undefined;
+  if (!t0) return res.status(400).json({ error: 'Elige una plantilla aprobada para tu tienda.' });
   const lista = (Array.isArray(req.body?.contactos) ? req.body.contactos : []).slice(0, 25) as { tel?: unknown; nombre?: unknown }[];
   if (!lista.length) return res.status(400).json({ error: 'Agrega al menos un celular.' });
   const base = (Array.isArray(req.body?.params) ? req.body.params : []).map((x: unknown) => String(x ?? ''));
@@ -2597,7 +2636,7 @@ api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requirePermiso('
       lead = { id, no_contactar: 0 };
     } else if (nombre) db.prepare('UPDATE leads SET nombre = ? WHERE id = ? AND (nombre = tel OR nombre = ?)').run(nombre, lead.id, tel);
     // {nombre} en las variables = el nombre de cada contacto (o "cliente" si no tiene).
-    const t = plantillaParaEnviar(sid, String(req.body?.plantillaId || ''), base.map((v: string) => v.replace(/\{nombre\}/gi, nombre.split(' ')[0] || 'cliente')), extraDe(req.body));
+    const t = plantillaParaEnviar(sid, pid0, base.map((v: string) => v.replace(/\{nombre\}/gi, nombre.split(' ')[0] || 'cliente')), extraDe(req.body), lead.id);
     if ('error' in t) { resultados.push({ tel, nombre, ok: false, error: t.error, leadId: lead.id }); continue; }
     const r = await sendWhatsappTemplate(sid, dig, t, t.params, tel);
     if (!r.ok) { resultados.push({ tel, nombre, ok: false, error: r.error, leadId: lead.id }); continue; }

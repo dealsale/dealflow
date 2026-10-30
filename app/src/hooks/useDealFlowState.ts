@@ -1259,7 +1259,7 @@ export function useDealFlowState() {
 
   // Crea un pedido MANUALMENTE (logística manual). Devuelve el id creado o ''.
   const [crearPedidoMsg, setCrearPedidoMsg] = useState('');
-  async function crearPedidoManual(body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: { qty: number; nombre: string; precio: number }[] }): Promise<string> {
+  async function crearPedidoManual(body: { cliente: string; tel?: string; ciudad?: string; departamento?: string; direccion?: string; nota?: string; envio?: number; total?: number; items: { qty: number; nombre: string; precio: number }[]; confirmar?: boolean }): Promise<string> {
     setCrearPedidoMsg('Creando el pedido…');
     const r = await apiCrearPedido({ ...body, leadId: crearPedidoLeadId || undefined });
     if (r.error || !r.data) { setCrearPedidoMsg(r.error || 'No se pudo crear el pedido.'); return ''; }

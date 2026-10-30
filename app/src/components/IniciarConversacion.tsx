@@ -56,7 +56,9 @@ export function IniciarConversacion({ onAbrirChat }: { onAbrirChat: (id: string)
 
   useEffect(() => { if (abierto && !plantillas) void apiPlantillasAprobadas().then((r) => setPlantillas(r.data?.plantillas || [])); }, [abierto, plantillas]);
   const pl = plantillas?.find((p) => p.id === pid);
-  useEffect(() => { if (pl) { setParams(Array.from({ length: pl.variables }, (_, i) => (i === 0 ? '{nombre}' : pl.ejemplos[i] || ''))); setExtra({}); } }, [pl]);
+  // Lo que se sabe de cada cliente (nombre, su pedido…) se llena solo al enviar; lo demás se escribe.
+  useEffect(() => { if (pl) { setParams(Array.from({ length: pl.variables }, () => '')); setExtra({}); } }, [pl]);
+  const falta = !!pl && (params.some((v, i) => !v.trim() && !pl.campos?.[i]) || (!!pl.varsEncabezado && !extra.encabezado?.trim() && !pl.campoEncabezado) || (!!pl.botonVariable && !extra.boton?.trim() && !pl.campoBoton));
   const contactos = leerContactos(texto);
 
   const enviar = async () => {
@@ -101,8 +103,8 @@ export function IniciarConversacion({ onAbrirChat }: { onAbrirChat: (id: string)
             <Dropdown value={pid} onChange={setPid} ariaLabel="Plantilla" placeholder={plantillas ? 'Elige una plantilla aprobada…' : 'Cargando…'} options={(plantillas || []).map((p) => ({ value: p.id, label: `${p.nombre} · ${/marketing/i.test(p.categoria) ? 'Marketing' : 'Utilidad'}${p.origen === 'meta' ? ' · creada en Meta' : ''}` }))} />
             {pl && (
               <>
-                <CamposPlantilla p={pl} params={params} setParams={setParams} extra={extra} setExtra={setExtra} nombreCliente={contactos[0]?.nombre.split(' ')[0] || ''} />
-                <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 4 }}>Escribe <b>{'{nombre}'}</b> para poner el nombre de cada cliente.</div>
+                <CamposPlantilla p={pl} params={params} setParams={setParams} extra={extra} setExtra={setExtra} nombreCliente={contactos[0]?.nombre.split(' ')[0] || ''} variosClientes />
+                <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 4 }}>Lo que dice <b>Automático</b> se llena con los datos reales de cada cliente (su nombre y su último pedido); si escribes algo, sale lo que escribas. Escribe <b>{'{nombre}'}</b> para poner el nombre de cada cliente en un texto.</div>
               </>
             )}
 
@@ -135,8 +137,8 @@ export function IniciarConversacion({ onAbrirChat }: { onAbrirChat: (id: string)
             )}
 
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-              <button onClick={() => void enviar()} disabled={!pl || !contactos.length || enviando}
-                style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: !pl || !contactos.length || enviando ? 0.5 : 1 }}>
+              <button onClick={() => void enviar()} disabled={!pl || !contactos.length || enviando || falta} title={falta ? 'Llena los datos que no se llenan solos' : ''}
+                style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: !pl || !contactos.length || enviando || falta ? 0.5 : 1 }}>
                 {enviando ? 'Enviando…' : `Enviar a ${contactos.length || ''} cliente${contactos.length === 1 ? '' : 's'}`}
               </button>
               <button onClick={cerrar} disabled={enviando} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', color: 'var(--df-text)' }}>Cerrar</button>

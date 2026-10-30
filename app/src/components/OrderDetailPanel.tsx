@@ -735,7 +735,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
             </span>
           </div>
 
-          {(sel.origen === 'shopify' || sel.origen === 'landing') && <ConfirmacionShopify sel={sel} />}
+          {!!sel.tel && (!!sel.confirmacion || sel.estado === 'Nuevo') && <ConfirmacionShopify sel={sel} />}
 
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Datos de envío</div>
           <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 14, marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -880,7 +880,7 @@ function RegistroPedido({ rowId }: { rowId: string }) {
   );
 }
 
-/** Pedido de Shopify: estado de la confirmación por WhatsApp (Sí / No) y reenvío. */
+/** Estado de la confirmación del pedido por WhatsApp (resumen + Sí / No) y reenvío. */
 function ConfirmacionShopify({ sel }: { sel: DecoratedOrder }) {
   const [msg, setMsg] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -890,8 +890,8 @@ function ConfirmacionShopify({ sel }: { sel: DecoratedOrder }) {
     esperando: ['⏳', 'Esperando que el cliente confirme por WhatsApp', 'var(--df-warning)'],
     si: ['✅', 'El cliente confirmó el pedido por WhatsApp', 'var(--df-success)'],
     no: ['❌', 'El cliente respondió que NO: escríbele desde el Inbox', 'var(--df-danger)'],
-    fallo: ['⚠️', 'No se pudo enviar la confirmación por WhatsApp', 'var(--df-danger)'],
-    '': ['💬', 'Aún no se ha pedido confirmación por WhatsApp', 'var(--df-text-muted)'],
+    fallo: ['⚠️', 'No le llegó el resumen al cliente (se reintenta solo)', 'var(--df-danger)'],
+    '': ['💬', 'Al cliente no le ha llegado el resumen para confirmar', 'var(--df-warning)'],
   };
   const [ico, texto, color] = info[c] || info[''];
   const reenviar = async () => {
