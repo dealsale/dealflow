@@ -818,7 +818,7 @@ function DominioCard({ d, landings, enLinea, onCambio }: { d: DominioLandings; l
                   {fila('Apunta a', d.cname)}
                   <div style={{ fontSize: 12, color: 'var(--df-text-faint)', marginTop: 6 }}>Si usas Cloudflare, pon ese registro con la nube <b>gris</b> («Solo DNS»). Si usaste www, en tu proveedor redirige también tutienda.com (sin www) hacia www.tutienda.com.</div>
                   {d.apex && <div style={{ fontSize: 12, marginTop: 6, background: 'var(--df-warning-subtle-2, #FFFBEB)', border: '1px solid var(--df-warning-border, #FDE68A)', borderRadius: 8, padding: '7px 10px' }}>⚠️ Conectaste el dominio sin <b>www</b>. Muchos proveedores (GoDaddy, Hostinger…) no dejan crear un CNAME ahí y por eso nunca se activa. Si en 15 minutos sigue pendiente, desconéctalo y conecta <b>www.{d.dominio}</b>.</div>}
-                  <div style={{ fontWeight: 700, margin: '10px 0 0' }}>2. Listo: lo revisamos solos cada par de minutos y te avisamos. También puedes tocar «Verificar».</div>
+                  <div style={{ fontWeight: 700, margin: '10px 0 0' }}>2. Listo: lo revisamos solos cada par de minutos (preguntando directo a tu proveedor, así vemos los cambios al instante) y te avisamos. También puedes tocar «Verificar».</div>
                   {d.diag && (
                     <div style={{ marginTop: 10, border: '1px solid var(--df-border)', borderRadius: 10, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {([
@@ -835,10 +835,11 @@ function DominioCard({ d, landings, enLinea, onCambio }: { d: DominioLandings; l
                   )}
                   {!!d.diag?.extra?.length && (
                     <div style={{ marginTop: 10 }}>
-                      <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 2 }}>Opcional, para que quede más rápido: crea también estos registros</div>
+                      <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 2 }}>{d.diag.extra.some((x) => x.obligatorio) ? '3. Crea también este registro (obligatorio)' : 'Opcional, para que quede más rápido: crea también estos registros'}</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>En «Nombre» escribe exactamente lo que sale aquí: tu proveedor (Hostinger, GoDaddy…) le agrega el dominio solo.</div>
                       {d.diag.extra.map((x) => (
-                        <div key={x.nombre + x.valor} style={{ marginTop: 6 }}>
-                          <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{x.para}</div>
+                        <div key={x.nombre + x.valor} style={{ marginTop: 6, ...(x.obligatorio ? { border: '1px solid var(--df-warning-border, #FDE68A)', background: 'var(--df-warning-subtle-2, #FFFBEB)', borderRadius: 8, padding: '6px 8px' } : {}) }}>
+                          <div style={{ fontSize: 11.5, color: x.obligatorio ? 'var(--df-warning, #b45309)' : 'var(--df-text-muted)', fontWeight: x.obligatorio ? 700 : 400 }}>{x.para}</div>
                           {fila('Tipo', x.tipo)}
                           {fila('Nombre', x.nombre)}
                           {fila('Valor', x.valor)}

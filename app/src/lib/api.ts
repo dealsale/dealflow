@@ -980,7 +980,7 @@ export interface LandingResumen { id: string; slug: string; nombre: string; prod
 export interface Landing extends LandingResumen { datos: LandingDatos }
 export interface MembresiaTienda { activa: boolean; cortesia: boolean; vence: string; diasRestantes: number; enGracia: boolean; precio: number }
 export interface TiendaConfig { nombre: string; logo: string; favicon: string; banner: string; titulo: string; descripcion: string; anuncios: string[]; colorPrincipal: string; colorBoton: string; colorAcento: string; whatsapp: string; pixelMeta: string; seoTitulo: string; seoDescripcion: string; seoImagen: string }
-export interface RegistroDns { tipo: string; nombre: string; valor: string; para: string }
+export interface RegistroDns { tipo: string; nombre: string; valor: string; para: string; obligatorio?: boolean }
 export interface DiagDominio { dns: 'ok' | 'pendiente' | 'error'; dnsDetalle: string; ssl: 'ok' | 'pendiente' | 'desconocido'; sslDetalle: string; extra: RegistroDns[]; revisado: string }
 export interface DominioLandings { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string; conectadoAt?: string; diag?: DiagDominio | null; apex?: boolean }
 export const apiLandings = () => req<{ landings: LandingResumen[]; membresia: MembresiaTienda; dominio: DominioLandings; tienda: TiendaConfig }>('/api/landings', 'GET');
