@@ -150,19 +150,10 @@ Sección: estadisticas, effi
 Claves: recaudo, wallet, consignacion, plata, dinero, pagos effi, retirado, pendiente de pago, fletes y comisiones
 En **Estadísticas → 💵 Recaudos contraentrega · Effi** ves por mes lo que Effi ya consignó en tu Wallet por cada guía y lo que falta: **Fletes y comisiones** (descontado por Effi), **Retirado a tu banco**, **Pendiente de pago** y **Entregados sin pagar todavía**. "Effi no registra movimientos en tu Wallet este mes" si no hay.
 
-## Remitente automático para los pedidos de un proveedor (convenio dropshipping)
+## Remitente de los pedidos de un proveedor (convenio) y nombres de las bodegas
 Sección: effi
-Claves: remitente proveedor, remitente automatico, bodega del proveedor, convenio, dropshipping, emprendedor, no carga el remitente, remitente por convenio
-- Si el pedido sale con el **convenio de un proveedor**, la guía (manual o automática) toma sola la **bodega de ese proveedor** como remitente. En el pedido sale "✓ Se puso solo: …" con el motivo; revísalo antes de crear la guía.
-- De dónde lo saca: 1) el que fijaste para ese convenio en **Integraciones → Effi → Guía de transporte → Remitente de cada proveedor**; 2) el que usaste la última vez con ese convenio; 3) el que usan otras tiendas de DealFlow con ese mismo proveedor, si ese remitente también existe en tu Effi.
-- Si el remitente ya no existe en tu Effi, no se usa.
-- Los pedidos con **inventario propio** (sin convenio) no se preseleccionan: eliges tú la bodega, como siempre.
-- Para fijarlo: Integraciones → Effi → Guía de transporte → **Remitente de cada proveedor (convenio)** → elige la bodega. "Automático (aprendido)" lo deja en manos de DealFlow.
-
-## Ponerle nombre a las bodegas (remitentes) para reconocerlas
-Sección: effi
-Claves: nombre remitente, nombre bodega, apodo remitente, todos los remitentes se llaman igual, remitentes solo direccion, reconocer bodega
-Effi les pone a todos los remitentes el nombre de la tienda, así que solo se distinguen por la dirección. En DealFlow:
-- Los remitentes de un proveedor salen como **🏭 Bodega de [proveedor]** (según los convenios con que se han usado).
-- Puedes ponerle un nombre a cada uno: al crear la guía, elige el remitente y toca **✏️ Ponerle un nombre a esta bodega**, o en **Integraciones → Effi → Guía de transporte → Nombres de tus bodegas**. Sale como **📌 [tu nombre]**.
-- En la lista salen primero los que tienen nombre, después los de proveedores y al final el resto (con ciudad y dirección). El nombre repetido de la tienda ya no se muestra.
+Claves: remitente proveedor, remitente automatico, bodega del proveedor, convenio, dropshipping, nombre remitente, nombre bodega, apodo remitente, todos los remitentes se llaman igual, por que es obligatorio el remitente
+- Effi les pone a todos los remitentes el nombre de la tienda. Ponle a cada uno un nombre que reconozcas: al crear la guía toca **✏️ Ponerle un nombre a esta bodega**, o en **Integraciones → Effi → Guía de transporte → Nombres de tus bodegas**. Sale como **📌 tu nombre**.
+- Opcional: en **Remitente de cada proveedor (convenio)** fija la bodega de cada proveedor. Los pedidos con ese convenio la traen puesta en la guía (sale "✓ Se puso solo…"). Si no la fijas, la eliges en cada pedido.
+- DealFlow NO adivina de quién es una bodega: los códigos de remitente son de cada cuenta de Effi.
+- ¿Por qué es obligatorio? Effi exige el remitente para crear la guía: es la dirección donde la transportadora recoge el paquete. Si no quieres elegirlo, crea solo la remisión y genera la guía dentro de Effi.

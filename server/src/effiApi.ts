@@ -347,6 +347,7 @@ const convenioDelPedido = (o: Fila) => convenioValido(o.effi_convenio);
 
 /** Recuerda con qué remitente salió una guía de ese convenio (sin pisar lo que se fijó a mano). */
 function aprenderRemitente(storeId: string, convenio: string, remitente: string) {
+  return; // desactivado: solo cuenta lo que la tienda fija a mano
   if (!convenioValido(convenio) || !remitente) return;
   try {
     db.prepare(`INSERT INTO effi_remitente_convenio (store_id, convenio, remitente, origen) VALUES (?,?,?,'aprendido')
@@ -393,10 +394,7 @@ export async function remitenteSugerido(storeId: string, apiKey: string, o: { or
   const ok = (r: string) => !!r && (!vigentes || vigentes.has(r));
   const nombreConv = conveniosConocidos(storeId).find((x) => x.id === convenio)?.nombre || `convenio ${convenio}`;
   const propio = db.prepare('SELECT remitente, origen FROM effi_remitente_convenio WHERE store_id = ? AND convenio = ?').get(storeId, convenio) as { remitente: string; origen: string } | undefined;
-  if (propio && ok(propio.remitente)) return { remitente: propio.remitente, nombre: vigentes?.get(propio.remitente) || `#${propio.remitente}`, motivo: propio.origen === 'manual' ? `el remitente que fijaste para ${nombreConv}` : `el que usaste la última vez con ${nombreConv}` };
-  const otros = db.prepare('SELECT remitente FROM effi_remitente_global WHERE convenio = ? ORDER BY usos DESC, actualizado DESC LIMIT 10').all(convenio) as { remitente: string }[];
-  const g = otros.find((x) => ok(x.remitente) && vigentes);
-  if (g) return { remitente: g.remitente, nombre: vigentes!.get(g.remitente) || `#${g.remitente}`, motivo: `la bodega del proveedor de ${nombreConv} (la usan otras tiendas con ese convenio)` };
+  if (propio && propio.origen === 'manual' && ok(propio.remitente)) return { remitente: propio.remitente, nombre: vigentes?.get(propio.remitente) || `#${propio.remitente}`, motivo: propio.origen === 'manual' ? `el remitente que fijaste para ${nombreConv}` : `el que usaste la última vez con ${nombreConv}` };
   return null;
 }
 
@@ -456,8 +454,13 @@ export function aprenderRemitentesDelHistorial(): number {
   } catch (e) { console.error('[effi] aprender remitentes del historial:', e); }
   return n;
 }
-setTimeout(() => { const n = aprenderRemitentesDelHistorial(); if (n) console.log(`[effi] ${n} pares convenio/remitente aprendidos del historial`); }, 20_000).unref?.();
-setInterval(() => aprenderRemitentesDelHistorial(), 6 * 3600e3).unref?.();
+// Los códigos de remitente son de CADA cuenta de Effi (el #19 de una tienda no es el #19 de
+// otra) y el historial trae guías con remitentes equivocados: nada se adivina. Se borra lo
+// que se había aprendido solo; queda únicamente lo que la tienda fijó a mano.
+try {
+  db.exec("DELETE FROM effi_remitente_convenio WHERE origen != 'manual'");
+  db.exec('DELETE FROM effi_remitente_global');
+} catch { /* tablas nuevas */ }
 
 /**
  * Para los remitentes de la tienda que aún no se sabe de quién son: le pregunta a Effi por
@@ -466,6 +469,7 @@ setInterval(() => aprenderRemitentesDelHistorial(), 6 * 3600e3).unref?.();
  */
 const descubiertos = new Map<string, number>();
 export async function descubrirProveedoresRemitentes(storeId: string, apiKey: string, remitentes: string[]): Promise<void> {
+  return; // desactivado: adivinaba mal el dueño de las bodegas (ver arriba)
   if (Date.now() - (descubiertos.get(storeId) || 0) < 3600e3) return;
   descubiertos.set(storeId, Date.now());
   const conocidos = new Set((db.prepare('SELECT remitente FROM effi_remitente_global').all() as { remitente: string }[]).map((r) => r.remitente));
@@ -508,8 +512,7 @@ export function rotularRemitentes(storeId: string, lista: OpcionRem[]): (OpcionR
   } catch { /* sin portal de proveedores */ }
   const provDe = new Map<string, Set<string>>();
   const agregar = (rem: string, cv: string) => { const n = nombresConv.get(cv); if (!n) return; if (!provDe.has(rem)) provDe.set(rem, new Set()); provDe.get(rem)!.add(n); };
-  for (const r of db.prepare('SELECT convenio, remitente FROM effi_remitente_convenio WHERE store_id = ?').all(storeId) as { convenio: string; remitente: string }[]) agregar(r.remitente, r.convenio);
-  for (const r of db.prepare('SELECT convenio, remitente FROM effi_remitente_global').all() as { convenio: string; remitente: string }[]) agregar(r.remitente, r.convenio);
+  for (const r of db.prepare("SELECT convenio, remitente FROM effi_remitente_convenio WHERE store_id = ? AND origen = 'manual'").all(storeId) as { convenio: string; remitente: string }[]) agregar(r.remitente, r.convenio);
   const alias = new Map((db.prepare('SELECT remitente, alias FROM effi_remitente_alias WHERE store_id = ?').all(storeId) as { remitente: string; alias: string }[]).map((r) => [r.remitente, r.alias]));
   // Si todos se llaman igual (el nombre de la tienda), ese nombre no ayuda: se omite.
   const repetido = lista.length > 1 && lista.every((x) => x.corto && x.corto === lista[0].corto);

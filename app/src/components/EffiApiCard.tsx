@@ -50,15 +50,15 @@ function RemitentesConvenio({ remitentes }: { remitentes: { id: string; nombre: 
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
       <div style={{ fontWeight: 700, fontSize: 13 }}>Remitente de cada proveedor (convenio)</div>
-      <p style={ayuda}>Los pedidos que salen con el convenio de un proveedor se despachan desde la bodega de ese proveedor, en la guía automática y en la manual. DealFlow lo aprende solo de la última guía (y de otras tiendas que trabajan con el mismo proveedor). Aquí lo puedes fijar.</p>
+      <p style={ayuda}>Opcional. Si fijas aquí la bodega de un proveedor, los pedidos que salen con su convenio la traen puesta en la guía (manual y automática). Si no la fijas, la eliges en cada pedido.</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 10 }}>
         {convenios.map((cv) => {
           const a = asignados[cv.id];
           return (
             <div key={cv.id}>
-              <Select label={cv.nombre || `Convenio ${cv.id}`} value={a && remitentes.some((r) => r.id === a.remitente) ? a.remitente : ''} vacio="Automático (aprendido)"
+              <Select label={cv.nombre || `Convenio ${cv.id}`} value={a && remitentes.some((r) => r.id === a.remitente) ? a.remitente : ''} vacio="Sin fijar (la eliges en cada pedido)"
                 onChange={(v) => void apiFijarRemitenteConvenio(cv.id, v).then(cargar)} opciones={remitentes} />
-              <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 3 }}>{a ? (a.origen === 'manual' ? 'Fijado por ti' : 'Aprendido de la última guía') : 'Se aprende con la primera guía de este proveedor'}</div>
+              <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 3 }}>{a ? 'Fijado por ti' : 'Sin fijar'}</div>
             </div>
           );
         })}
@@ -77,7 +77,7 @@ function NombresBodegas({ remitentes }: { remitentes: { id: string; nombre: stri
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
       <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: 'var(--df-text)' }}>{abierto ? '▾' : '▸'} Nombres de tus bodegas (remitentes)</button>
-      <p style={ayuda}>Effi les pone a todos los remitentes el nombre de la tienda. Ponle a cada uno un nombre que reconozcas (ej. "Bodega principal" o "Proveedor jeans"): así sale en la lista al crear la guía. Los de un proveedor ya salen con 🏭 y su nombre.</p>
+      <p style={ayuda}>Effi les pone a todos los remitentes el nombre de la tienda. Ponle a cada uno un nombre que reconozcas (ej. "Bodega principal" o "Proveedor jeans"): así sale en la lista al crear la guía. Si fijas la bodega de un proveedor abajo, sale con 🏭 y su nombre.</p>
       {abierto && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {remitentes.map((r) => (
