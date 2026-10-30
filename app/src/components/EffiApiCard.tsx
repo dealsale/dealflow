@@ -4,7 +4,7 @@ import { IntegracionFila, LogoInteg } from './IntegracionFila';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
   apiEffiApiConectar, apiEffiAutoconfigurar, apiEffiApiConfig, apiEffiApiDesconectar, apiEffiApiEventos, apiEffiApiListas,
-  apiEffiApiSecreto, apiEffiConvenios, apiRemitentesConvenio, apiFijarRemitenteConvenio,
+  apiEffiApiSecreto, apiEffiConvenios, apiRemitentesConvenio, apiFijarRemitenteConvenio, apiAliasRemitente,
   type EffiApiEstado, type EffiEvento, type EffiGuiaCfg, type EffiListas,
 } from '../lib/api';
 
@@ -63,6 +63,34 @@ function RemitentesConvenio({ remitentes }: { remitentes: { id: string; nombre: 
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Apodo de cada remitente: Effi les pone a todos el nombre de la tienda y solo se distinguen por la dirección. */
+function NombresBodegas({ remitentes }: { remitentes: { id: string; nombre: string; alias?: string; ciudad?: string; direccion?: string; proveedores?: string[] }[] }) {
+  const [abierto, setAbierto] = useState(false);
+  const [alias, setAlias] = useState<Record<string, string>>({});
+  useEffect(() => { setAlias(Object.fromEntries(remitentes.map((r) => [r.id, r.alias || '']))); }, [remitentes]);
+  if (!remitentes.length) return null;
+  const guardar = (id: string) => void apiAliasRemitente(id, alias[id] || '');
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
+      <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: 'var(--df-text)' }}>{abierto ? '▾' : '▸'} Nombres de tus bodegas (remitentes)</button>
+      <p style={ayuda}>Effi les pone a todos los remitentes el nombre de la tienda. Ponle a cada uno un nombre que reconozcas (ej. "Bodega principal" o "Proveedor jeans"): así sale en la lista al crear la guía. Los de un proveedor ya salen con 🏭 y su nombre.</p>
+      {abierto && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {remitentes.map((r) => (
+            <div key={r.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(160px, 240px)', gap: 8, alignItems: 'center', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px' }}>
+              <div style={{ fontSize: 12, minWidth: 0 }}>
+                <b>#{r.id}</b> · {[r.ciudad, r.direccion].filter(Boolean).join(' · ')}
+                {!!r.proveedores?.length && <div style={{ color: 'var(--df-brand-dark)', fontSize: 11.5 }}>🏭 Bodega de {r.proveedores.join(' / ')}</div>}
+              </div>
+              <input value={alias[r.id] || ''} onChange={(e) => setAlias((x) => ({ ...x, [r.id]: e.target.value }))} onBlur={() => guardar(r.id)} placeholder="Nombre (ej. Bodega Medellín)" style={{ ...inp, padding: '7px 9px' }} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -337,6 +365,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                     </div>
                   </div>
                 )}
+                <NombresBodegas remitentes={listas.remitentes as (typeof listas.remitentes[number] & { alias?: string; ciudad?: string; direccion?: string; proveedores?: string[] })[]} />
                 <RemitentesConvenio remitentes={listas.remitentes} />
               </div>
 

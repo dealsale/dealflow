@@ -158,3 +158,11 @@ Claves: remitente proveedor, remitente automatico, bodega del proveedor, conveni
 - Si el remitente ya no existe en tu Effi, no se usa.
 - Los pedidos con **inventario propio** (sin convenio) no se preseleccionan: eliges tú la bodega, como siempre.
 - Para fijarlo: Integraciones → Effi → Guía de transporte → **Remitente de cada proveedor (convenio)** → elige la bodega. "Automático (aprendido)" lo deja en manos de DealFlow.
+
+## Ponerle nombre a las bodegas (remitentes) para reconocerlas
+Sección: effi
+Claves: nombre remitente, nombre bodega, apodo remitente, todos los remitentes se llaman igual, remitentes solo direccion, reconocer bodega
+Effi les pone a todos los remitentes el nombre de la tienda, así que solo se distinguen por la dirección. En DealFlow:
+- Los remitentes de un proveedor salen como **🏭 Bodega de [proveedor]** (según los convenios con que se han usado).
+- Puedes ponerle un nombre a cada uno: al crear la guía, elige el remitente y toca **✏️ Ponerle un nombre a esta bodega**, o en **Integraciones → Effi → Guía de transporte → Nombres de tus bodegas**. Sale como **📌 [tu nombre]**.
+- En la lista salen primero los que tienen nombre, después los de proveedores y al final el resto (con ciudad y dirección). El nombre repetido de la tienda ya no se muestra.
