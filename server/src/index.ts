@@ -16,6 +16,7 @@ import { seedAcademy, seedAcademyCursoVisual, limpiarAcademyRemarketing } from '
 import { restoreQrSessions } from './waqr.js';
 import { congelarSiFalta } from './plantillas.js';
 import { iniciarSincronizacionDespachos } from './despachos.js';
+import './avisosEstado.js'; // cola de avisos de estado al cliente (crea su trigger al arrancar)
 import { iniciarSeguimiento } from './seguimiento.js';
 
 seed();
@@ -32,7 +33,9 @@ import('./papelera.js').then((m) => m.iniciarRespaldos()).catch((e) => console.e
 import('./dropiSync.js').then((m) => m.iniciarSyncDropi()).catch((e) => console.error('[dropi-sync]', e));
 import('./shopifyPedidos.js').then((m) => m.iniciarEnviosShopify()).catch((e) => console.error('[shopify]', e));
 import('./logistica.js').then((m) => m.iniciarGuiasEffi()).catch((e) => console.error('[logistica]', e));
+import('./landings.js').then((m) => m.iniciarRevisionDominios()).catch((e) => console.error('[dominios]', e));
 import('./correo.js').then((m) => m.iniciarCorreos()).catch((e) => console.error('[correo]', e));
+import('./avisosEstado.js').then((m) => m.iniciarAvisosEstado()).catch((e) => console.error('[avisos]', e));
 import('./metaInsights.js').then((m) => m.iniciarInsights()).catch((e) => console.error('[ads]', e));
 import('./metaCapi.js').then((m) => m.iniciarCapi()).catch((e) => console.error('[capi]', e));
 setTimeout(() => { void import('./media.js').then((m) => m.reconvertirGuias()).catch(() => {}); }, 30_000);
@@ -180,7 +183,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'biblioteca-landings-10302128',
+    build: 'avisos-estado-10302159',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

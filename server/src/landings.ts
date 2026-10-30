@@ -13,6 +13,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { promises as dnsP } from 'node:dns';
 import { db, pj, uid, registrarLog, DATA_DIR, siguienteNumeroPedido } from './db.js';
 import { slugTienda, BASE_TIENDA } from './tiendaPublica.js';
 import { trazar } from './trazabilidad.js';
@@ -48,7 +49,7 @@ try { db.exec("ALTER TABLE orders ADD COLUMN landing_id TEXT NOT NULL DEFAULT ''
 try { db.exec('ALTER TABLE stores ADD COLUMN landings_habilitado INTEGER NOT NULL DEFAULT 0'); } catch { /* ya existe */ }
 
 // Dominio propio de la tienda para sus landings (tutienda.com/producto).
-for (const col of ["landing_dominio TEXT NOT NULL DEFAULT ''", "landing_dominio_estado TEXT NOT NULL DEFAULT ''", "landing_dominio_detalle TEXT NOT NULL DEFAULT ''", "landing_dominio_cf TEXT NOT NULL DEFAULT ''", "landing_inicio TEXT NOT NULL DEFAULT ''"]) {
+for (const col of ["landing_dominio TEXT NOT NULL DEFAULT ''", "landing_dominio_estado TEXT NOT NULL DEFAULT ''", "landing_dominio_detalle TEXT NOT NULL DEFAULT ''", "landing_dominio_cf TEXT NOT NULL DEFAULT ''", "landing_inicio TEXT NOT NULL DEFAULT ''", "landing_dominio_at TEXT NOT NULL DEFAULT ''", "landing_dominio_diag TEXT NOT NULL DEFAULT ''"]) {
   try { db.exec(`ALTER TABLE stores ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 
@@ -541,12 +542,50 @@ export function normalizarDominio(v: string): string | null {
   if ((RAIZ_LANDINGS && (d === RAIZ_LANDINGS || d.endsWith('.' + RAIZ_LANDINGS))) || /(^|\.)dealflow\.(sbs|co)$/.test(d) || /(^|\.)(railway\.app|up\.railway\.app|myshopify\.com)$/.test(d)) return null;
   return d;
 }
-export interface EstadoDominio { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string }
+/** Registro DNS que el cliente puede crear (el CNAME obligatorio o los TXT que aceleran el certificado). */
+export interface RegistroDns { tipo: string; nombre: string; valor: string; para: string }
+/** Cómo va cada paso de la conexión (para mostrarlo en el panel). */
+export interface DiagDominio { dns: 'ok' | 'pendiente' | 'error'; dnsDetalle: string; ssl: 'ok' | 'pendiente' | 'desconocido'; sslDetalle: string; extra: RegistroDns[]; revisado: string }
+export interface EstadoDominio { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string; conectadoAt: string; diag: DiagDominio | null; apex: boolean }
+/** Parte "raíz" registrable (tutienda.com, tutienda.com.co). */
+function raizRegistrable(dom: string): string {
+  const p = dom.split('.');
+  const dosNiveles = /^(com|net|org|gov|edu|co|mil|nom|web|info)\.[a-z]{2}$/.test(p.slice(-2).join('.'));
+  return p.slice(-(dosNiveles ? 3 : 2)).join('.');
+}
 export function estadoDominio(storeId: string): EstadoDominio {
-  const r = db.prepare('SELECT landing_dominio, landing_dominio_estado, landing_dominio_detalle, landing_inicio FROM stores WHERE id = ?').get(storeId) as Fila | undefined;
+  const r = db.prepare('SELECT landing_dominio, landing_dominio_estado, landing_dominio_detalle, landing_inicio, landing_dominio_at, landing_dominio_diag FROM stores WHERE id = ?').get(storeId) as Fila | undefined;
   const dom = txt(r?.landing_dominio);
-  const partes = dom.split('.');
-  return { dominio: dom, estado: txt(r?.landing_dominio_estado), detalle: txt(r?.landing_dominio_detalle), cname: CNAME_LANDINGS, nombreRegistro: partes.length > 2 ? partes.slice(0, partes.length - 2).join('.') : '@', inicio: txt(r?.landing_inicio), raiz: RAIZ_LANDINGS, sub: RAIZ_LANDINGS ? subdominioTienda(storeId) : '' };
+  const raiz = dom ? raizRegistrable(dom) : '';
+  const nombreRegistro = dom && dom !== raiz ? dom.slice(0, -raiz.length - 1) : '@';
+  return {
+    dominio: dom, estado: txt(r?.landing_dominio_estado), detalle: txt(r?.landing_dominio_detalle), cname: CNAME_LANDINGS, nombreRegistro, inicio: txt(r?.landing_inicio),
+    raiz: RAIZ_LANDINGS, sub: RAIZ_LANDINGS ? subdominioTienda(storeId) : '', conectadoAt: txt(r?.landing_dominio_at),
+    diag: pj<DiagDominio | null>(txt(r?.landing_dominio_diag), null), apex: !!dom && dom === raiz,
+  };
+}
+
+// Rangos de IP de Cloudflare: si el dominio resuelve a ellos SIN el CNAME, casi siempre es que
+// el cliente tiene su DNS en Cloudflare con la nube NARANJA (proxy), y así no llega a DealFlow.
+const RANGOS_CF = ['104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '188.114.96.0/20', '162.158.0.0/15', '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '197.234.240.0/22', '198.41.128.0/17', '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '131.0.72.0/22'];
+const ipNum = (ip: string) => ip.split('.').reduce((a, b) => a * 256 + Number(b), 0);
+const enRango = (ip: string, r: string) => { const [base, bits] = r.split('/'); const m = 2 ** (32 - Number(bits)); return Math.floor(ipNum(ip) / m) === Math.floor(ipNum(base) / m); };
+const esIpCloudflare = (ip: string) => RANGOS_CF.some((r) => enRango(ip, r));
+
+/** Revisa el DNS del dominio y dice exactamente qué falta. */
+async function diagnosticoDns(dom: string): Promise<{ dns: DiagDominio['dns']; detalle: string }> {
+  const destino = CNAME_LANDINGS.toLowerCase();
+  const cnames = await dnsP.resolveCname(dom).catch(() => [] as string[]);
+  const c = cnames.map((x) => x.toLowerCase().replace(/\.$/, ''));
+  if (c.includes(destino)) return { dns: 'ok', detalle: `El registro CNAME ya apunta a ${destino}.` };
+  if (c.length) return { dns: 'error', detalle: `Tu dominio tiene un CNAME que apunta a "${c[0]}". Cámbialo para que apunte a ${destino}.` };
+  const ips = await dnsP.resolve4(dom).catch(() => [] as string[]);
+  // El destino resuelve a estas IPs: si coinciden, el DNS está bien aunque no se vea el CNAME (aplanado).
+  const ipsDestino = await dnsP.resolve4(destino).catch(() => [] as string[]);
+  if (ips.length && ipsDestino.length && ips.every((ip) => ipsDestino.includes(ip))) return { dns: 'ok', detalle: `Tu dominio ya llega a ${destino}.` };
+  if (ips.length && ips.every(esIpCloudflare)) return { dns: 'error', detalle: `Tu dominio está en Cloudflare con la nube NARANJA (proxy). En Cloudflare → DNS, crea el CNAME hacia ${destino} y ponle la nube GRIS («Solo DNS»).` };
+  if (ips.length) return { dns: 'error', detalle: `Tu dominio todavía apunta a otro servidor (${ips.slice(0, 2).join(', ')}). Borra ese registro A y crea el CNAME hacia ${destino}.` };
+  return { dns: 'pendiente', detalle: `Todavía no vemos el registro CNAME hacia ${destino}. Si ya lo creaste, espera unos minutos: tu proveedor lo está publicando.` };
 }
 async function cfApi(metodo: string, ruta: string, cuerpo?: unknown): Promise<Fila | null> {
   const c = cf();
@@ -568,7 +607,7 @@ export async function conectarDominio(storeId: string, valor: string): Promise<E
     if (r.success) cfId = txt((r.result as Fila)?.id);
     else detalle = `No se pudo registrar el dominio en el proxy: ${((r.errors as Fila[]) || []).map((e) => txt(e.message)).join(' · ') || 'error desconocido'}`;
   }
-  db.prepare("UPDATE stores SET landing_dominio = ?, landing_dominio_estado = 'pendiente', landing_dominio_detalle = ?, landing_dominio_cf = ? WHERE id = ?").run(dom, detalle, cfId, storeId);
+  db.prepare("UPDATE stores SET landing_dominio = ?, landing_dominio_estado = 'pendiente', landing_dominio_detalle = ?, landing_dominio_cf = ?, landing_dominio_at = datetime('now'), landing_dominio_diag = '' WHERE id = ?").run(dom, detalle, cfId, storeId);
   refrescarHosts();
   registrarLog(storeId, 'info', 'landing', `Dominio propio conectado: ${dom} (pendiente de verificar).`);
   return estadoDominio(storeId);
@@ -576,36 +615,93 @@ export async function conectarDominio(storeId: string, valor: string): Promise<E
 export async function quitarDominio(storeId: string): Promise<void> {
   const r = db.prepare('SELECT landing_dominio_cf FROM stores WHERE id = ?').get(storeId) as { landing_dominio_cf: string } | undefined;
   if (r?.landing_dominio_cf) await cfApi('DELETE', `/custom_hostnames/${r.landing_dominio_cf}`);
-  db.prepare("UPDATE stores SET landing_dominio = '', landing_dominio_estado = '', landing_dominio_detalle = '', landing_dominio_cf = '' WHERE id = ?").run(storeId);
+  db.prepare("UPDATE stores SET landing_dominio = '', landing_dominio_estado = '', landing_dominio_detalle = '', landing_dominio_cf = '', landing_dominio_at = '', landing_dominio_diag = '' WHERE id = ?").run(storeId);
   refrescarHosts();
 }
-/** Comprueba que el dominio ya llega a DealFlow con HTTPS (pide /l/ping por el dominio). */
-export async function verificarDominio(storeId: string): Promise<EstadoDominio> {
+const revalidado = new Map<string, number>();
+/**
+ * Comprueba la conexión del dominio paso a paso: DNS → certificado (Cloudflare) → la página
+ * responde por HTTPS (/l/ping). Lo hace el panel al tocar «Verificar» y, además, un ciclo
+ * automático cada pocos minutos mientras esté pendiente (el cliente no tiene que volver).
+ */
+export async function verificarDominio(storeId: string, auto = false): Promise<EstadoDominio> {
   const e = estadoDominio(storeId);
   if (!e.dominio) return e;
   let estado = 'pendiente'; let detalle = '';
+  const dns = await diagnosticoDns(e.dominio).catch(() => ({ dns: 'pendiente' as const, detalle: 'No pudimos consultar el DNS ahora.' }));
+  let ssl: DiagDominio['ssl'] = 'desconocido'; let sslDetalle = ''; const extra: RegistroDns[] = [];
+  const c = db.prepare('SELECT landing_dominio_cf FROM stores WHERE id = ?').get(storeId) as { landing_dominio_cf: string };
+  if (c.landing_dominio_cf) {
+    const r = await cfApi('GET', `/custom_hostnames/${c.landing_dominio_cf}`);
+    const res = (r?.result || {}) as Fila;
+    const sslR = (res.ssl || {}) as Fila;
+    if (r?.success) {
+      ssl = txt(sslR.status) === 'active' ? 'ok' : 'pendiente';
+      sslDetalle = ssl === 'ok' ? 'El certificado de seguridad (HTTPS) está listo.' : `Certificado de seguridad: ${txt(sslR.status).replace(/_/g, ' ') || 'en proceso'}.`;
+      // Registros TXT que aceleran el certificado y la verificación (opcionales con el CNAME).
+      for (const v of (Array.isArray(sslR.validation_records) ? sslR.validation_records : []) as Fila[]) {
+        if (txt(v.txt_name) && txt(v.txt_value)) extra.push({ tipo: 'TXT', nombre: txt(v.txt_name), valor: txt(v.txt_value), para: 'Acelera el certificado HTTPS' });
+      }
+      const ov = (res.ownership_verification || {}) as Fila;
+      if (txt(res.status) !== 'active' && txt(ov.name) && txt(ov.value)) extra.push({ tipo: txt(ov.type).toUpperCase() || 'TXT', nombre: txt(ov.name), valor: txt(ov.value), para: 'Confirma que el dominio es tuyo' });
+      // DNS bien pero el certificado no avanza: se le pide a Cloudflare que lo vuelva a intentar (máx. cada 20 min).
+      if (dns.dns === 'ok' && ssl !== 'ok' && Date.now() - (revalidado.get(storeId) || 0) > 20 * 60_000) {
+        revalidado.set(storeId, Date.now());
+        await cfApi('PATCH', `/custom_hostnames/${c.landing_dominio_cf}`, { ssl: { method: 'http', type: 'dv' } });
+      }
+    } else if (r) {
+      const msg = ((r.errors as Fila[]) || []).map((x) => txt(x.message)).join(' · ');
+      // El hostname se perdió en Cloudflare (p. ej. se borró): se vuelve a registrar.
+      if (/not found|does not exist|1436/i.test(msg)) {
+        const n = await cfApi('POST', '/custom_hostnames', { hostname: e.dominio, ssl: { method: 'http', type: 'dv' } });
+        if (n?.success) db.prepare('UPDATE stores SET landing_dominio_cf = ? WHERE id = ?').run(txt((n.result as Fila)?.id), storeId);
+      }
+      sslDetalle = msg ? `Proxy: ${msg}` : '';
+    }
+  }
   try {
     const r = await fetch(`https://${e.dominio}/l/ping`, { signal: AbortSignal.timeout(9000), redirect: 'follow' });
     const j = await r.json().catch(() => ({})) as Fila;
-    if (j.df === 'landings') { estado = 'activo'; detalle = '¡Listo! Tus landings ya cargan en tu dominio.'; }
-    else detalle = `Tu dominio responde, pero todavía no apunta a DealFlow (respondió ${r.status}). Revisa que el CNAME apunte a ${CNAME_LANDINGS}.`;
+    if (j.df === 'landings') { estado = 'activo'; detalle = '¡Listo! Tus landings ya cargan en tu dominio.'; ssl = 'ok'; }
+    else detalle = dns.dns === 'ok' ? `Tu dominio ya apunta a DealFlow; estamos terminando de activarlo (respondió ${r.status}).` : dns.detalle;
   } catch (x) {
     const m = (x as Error).message || '';
-    detalle = /certificate|SSL|TLS|ERR_TLS|self.signed/i.test(m + String((x as { cause?: unknown }).cause || ''))
-      ? 'El dominio ya apunta, pero el certificado de seguridad (HTTPS) aún se está generando. Vuelve a verificar en unos minutos.'
-      : `Todavía no encontramos tu dominio apuntando a DealFlow. Crea el CNAME hacia ${CNAME_LANDINGS} (los cambios de DNS pueden tardar hasta unas horas).`;
+    const certificado = /certificate|SSL|TLS|ERR_TLS|self.signed/i.test(m + String((x as { cause?: unknown }).cause || ''));
+    detalle = dns.dns !== 'ok' ? dns.detalle
+      : certificado || ssl === 'pendiente' ? 'Tu dominio ya apunta a DealFlow ✓. Falta que se genere el certificado de seguridad (HTTPS): suele tardar entre 2 y 15 minutos. Lo revisamos solos y te avisamos.'
+      : 'Tu dominio ya apunta a DealFlow ✓. Estamos terminando de activarlo; lo revisamos solos cada par de minutos.';
   }
-  if (estado !== 'activo') {
-    const c = db.prepare('SELECT landing_dominio_cf FROM stores WHERE id = ?').get(storeId) as { landing_dominio_cf: string };
-    if (c.landing_dominio_cf) {
-      const r = await cfApi('GET', `/custom_hostnames/${c.landing_dominio_cf}`);
-      const res = (r?.result || {}) as Fila;
-      if (r?.success && txt(res.status) === 'active' && txt((res.ssl as Fila)?.status) === 'active') detalle += ' (El proxy ya tiene el certificado listo.)';
-      else if (r?.success) detalle += ` (Proxy: ${txt(res.status) || 'pendiente'}, certificado: ${txt((res.ssl as Fila)?.status) || 'pendiente'}.)`;
-    }
+  if (dns.dns === 'ok' && dns.detalle && estado !== 'activo' && !detalle.includes('✓')) detalle = `${dns.detalle} ${detalle}`.trim();
+  const diag: DiagDominio = { dns: estado === 'activo' ? 'ok' : dns.dns, dnsDetalle: estado === 'activo' ? 'Tu dominio apunta a DealFlow.' : dns.detalle, ssl, sslDetalle: estado === 'activo' ? 'El certificado de seguridad (HTTPS) está listo.' : sslDetalle, extra: estado === 'activo' ? [] : extra, revisado: new Date().toISOString() };
+  const antes = e.estado;
+  db.prepare('UPDATE stores SET landing_dominio_estado = ?, landing_dominio_detalle = ?, landing_dominio_diag = ? WHERE id = ?').run(estado, detalle, JSON.stringify(diag), storeId);
+  if (estado === 'activo' && antes !== 'activo') {
+    refrescarHosts();
+    registrarLog(storeId, 'info', 'landing', `Tu dominio ${e.dominio} quedó activo: tus landings ya cargan ahí${auto ? ' (lo detectamos solos)' : ''}.`);
   }
-  db.prepare('UPDATE stores SET landing_dominio_estado = ?, landing_dominio_detalle = ? WHERE id = ?').run(estado, detalle, storeId);
   return estadoDominio(storeId);
+}
+
+/**
+ * Ciclo automático: los dominios pendientes se revisan solos (cada 2 min las primeras 2 horas,
+ * luego cada 15 min hasta 7 días). Así el dominio queda activo apenas el DNS y el certificado
+ * estén listos, sin que el cliente tenga que entrar a tocar «Verificar».
+ */
+const ultimaRevision = new Map<string, number>();
+export function iniciarRevisionDominios(): void {
+  const ciclo = async () => {
+    const filas = db.prepare("SELECT id, landing_dominio_at FROM stores WHERE landing_dominio != '' AND landing_dominio_estado != 'activo'").all() as { id: string; landing_dominio_at: string }[];
+    for (const f of filas) {
+      const desde = f.landing_dominio_at ? Date.now() - new Date(f.landing_dominio_at.replace(' ', 'T') + 'Z').getTime() : 0;
+      if (desde > 7 * 86400_000) continue;
+      const cada = desde < 2 * 3600_000 ? 2 * 60_000 : 15 * 60_000;
+      if (Date.now() - (ultimaRevision.get(f.id) || 0) < cada) continue;
+      ultimaRevision.set(f.id, Date.now());
+      await verificarDominio(f.id, true).catch(() => null);
+    }
+  };
+  setTimeout(() => void ciclo().catch(() => {}), 45_000).unref?.();
+  setInterval(() => void ciclo().catch(() => {}), 60_000).unref?.();
 }
 export function elegirInicio(storeId: string, landingId: string): boolean {
   if (landingId && !db.prepare('SELECT 1 FROM landings WHERE id = ? AND store_id = ?').get(landingId, storeId)) return false;

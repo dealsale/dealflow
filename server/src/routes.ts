@@ -1019,16 +1019,9 @@ api.post('/orders/:rowId/advance', requireAuth, requireStore, requirePermiso('pe
   db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, o.id);
   trazar(req.user!.storeId!, o.id, { etapa: 'estado', titulo: `Estado: ${o.estado} → ${nuevo}`, detalle: `Por ${req.user!.nombre}` });
   res.json({ estado: nuevo });
-
-  // Avísale al cliente por WhatsApp del nuevo estado (y déjalo en el chat).
-  const leadA = o.tel ? db.prepare("SELECT id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(req.user!.storeId, o.tel) as { id: string } | undefined : undefined;
-  const msg = MSG_ESTADO[idiomaDe(req.user!.storeId!, leadA?.id)][nuevo]?.(o.numero);
-  const { puedeEscribirle, contarProactivo } = await import('./calidad.js');
-  if (msg && o.tel && puedeEscribirle(req.user!.storeId!, o.tel, leadA?.id).ok) {
-    const lead = db.prepare("SELECT id, wa_id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(req.user!.storeId, o.tel) as { id: string; wa_id: string | null } | undefined;
-    if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
-    void sendWhatsappText(req.user!.storeId!, lead?.wa_id || o.tel, msg, o.tel).then((r) => { if (r.ok) contarProactivo(req.user!.storeId!, o.tel); }).catch(() => {});
-  }
+  // Aviso al cliente: los estados del envío los encola el trigger (avisosEstado.ts); "Confirmado"
+  // a mano se encola aquí. La cola reintenta y usa plantilla si pasaron 24 h.
+  if (nuevo === 'Confirmado') (await import('./avisosEstado.js')).encolarAviso(req.user!.storeId!, o.id, nuevo);
 });
 
 // Cambia el estado del pedido a CUALQUIER estado (seleccionable, se puede
@@ -1044,15 +1037,9 @@ api.post('/orders/:rowId/estado', requireAuth, requireStore, requirePermiso('ped
   db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, o.id);
   trazar(sid, o.id, { etapa: 'estado', nivel: nuevo === 'Cancelado' ? 'warn' : 'info', titulo: `Estado: ${o.estado} → ${nuevo}`, detalle: `Por ${req.user!.nombre}` });
   res.json({ estado: nuevo });
-  // Solo notificamos cuando el estado tiene un mensaje pensado para el cliente.
-  const leadB = o.tel ? db.prepare("SELECT id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(sid, o.tel) as { id: string } | undefined : undefined;
-  const msg = MSG_ESTADO[idiomaDe(sid, leadB?.id)][nuevo]?.(o.numero);
-  const cal = await import('./calidad.js');
-  if (msg && o.tel && cal.puedeEscribirle(sid, o.tel, leadB?.id).ok) {
-    const lead = db.prepare("SELECT id, wa_id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(sid, o.tel) as { id: string; wa_id: string | null } | undefined;
-    if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
-    void sendWhatsappText(sid, lead?.wa_id || o.tel, msg, o.tel).then((r) => { if (r.ok) cal.contarProactivo(sid, o.tel); }).catch(() => {});
-  }
+  // Aviso al cliente: los estados del envío los encola el trigger (avisosEstado.ts); "Confirmado"
+  // y "Cancelado" a mano se encolan aquí. La cola reintenta y usa plantilla si pasaron 24 h.
+  if (nuevo === 'Confirmado' || nuevo === 'Cancelado') (await import('./avisosEstado.js')).encolarAviso(sid, o.id, nuevo);
 });
 
 // ── Calidad del número de WhatsApp ──
@@ -2558,21 +2545,42 @@ api.post('/plantillas-aprobadas/sincronizar', requireAuth, requireStore, async (
 function plantillaParaEnviar(sid: string, id: string, dados: string[], extra: ExtraPlantilla = {}, leadId = ''):
   { nombre: string; idioma: string; encabezado: string; cuerpo: string; componentes?: Record<string, unknown>[]; params: string[] } | { error: string } {
   const datos = leadId ? lp.datosDelCliente(sid, leadId) : { valores: {}, pedido: '' };
+  const nombrePlantilla = id.startsWith('meta:') ? pm.plantillaPropia(sid, id)?.nombre || '' : '';
+  // Los EJEMPLOS de la plantilla (los que se pusieron al crearla en Meta: "Camila", "DF-1049"…)
+  // nunca le llegan a un cliente. Si llega uno (p. ej. desde una versión vieja de la app que
+  // los ponía de relleno), se cambia por el dato real del chat; si no hay dato real, no se envía.
+  const normE = (v: unknown) => String(v ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+  let ejemplos = new Set<string>();
+  const esEjemplo = (v: string, real: string) => !!v && ejemplos.has(normE(v)) && normE(v) !== normE(real);
+  let errorEjemplo = '';
   const completar = (campos: lp.Campo[], n: number) => {
     const auto = lp.llenar(campos, datos);
-    return Array.from({ length: n }, (_, i) => String(dados[i] ?? '').trim() || auto[i] || '');
+    return Array.from({ length: n }, (_, i) => {
+      const v = String(dados[i] ?? '').trim();
+      if (esEjemplo(v, auto[i] || '')) {
+        if (auto[i] && !esEjemplo(auto[i], '')) return auto[i];
+        errorEjemplo ||= `{{${i + 1}}} tiene "${v}", que es el dato de EJEMPLO de la plantilla${nombrePlantilla ? ` "${nombrePlantilla}"` : ''}, no el del cliente. Escribe el dato real.`;
+        return '';
+      }
+      return v || auto[i] || '';
+    });
   };
   const faltan = (params: string[], campos: lp.Campo[]) => params.map((v, i) => (v ? '' : `{{${i + 1}}}${campos[i] ? ` (${lp.NOMBRE_CAMPO[campos[i] as Exclude<lp.Campo, ''>]})` : ''}`)).filter(Boolean);
   if (id.startsWith('meta:')) {
     const p = pm.plantillaPropia(sid, id);
     if (!p) return { error: 'Esa plantilla no está aprobada en tu cuenta de WhatsApp. Toca "↻ Actualizar desde Meta".' };
+    ejemplos = new Set([...p.ejemplos, p.ejemploEncabezado].map(normE).filter((x) => x.length >= 2));
     const campos = lp.inferirCampos(p.cuerpo, p.ejemplos);
     const params = completar(campos, p.variables);
+    if (errorEjemplo) return { error: errorEjemplo };
     const f = faltan(params, campos);
     if (f.length) return { error: `Falta llenar ${f.join(', ')} de "${p.nombre}": no hay ese dato en el chat ni en su pedido.` };
     const ce = p.varsEncabezado ? lp.inferirCampos(p.encabezado, [p.ejemploEncabezado])[0] || '' : '';
     const cb = lp.campoDeBoton(p.botones.find((b) => b.variable)?.url || '');
-    const ext: ExtraPlantilla = { ...extra, encabezado: extra.encabezado || (ce ? lp.llenar([ce], datos)[0] : ''), boton: extra.boton || (cb ? lp.llenar([cb], datos)[0] : '') };
+    const encReal = ce ? lp.llenar([ce], datos)[0] : '';
+    const encDado = String(extra.encabezado || '').trim();
+    if (esEjemplo(encDado, encReal) && !encReal) return { error: `El encabezado tiene "${encDado}", que es el dato de EJEMPLO de la plantilla. Escribe el dato real.` };
+    const ext: ExtraPlantilla = { ...extra, encabezado: (esEjemplo(encDado, encReal) ? encReal : encDado) || encReal, boton: extra.boton || (cb ? lp.llenar([cb], datos)[0] : '') };
     const c = pm.componentesEnvio(p, params, ext);
     if ('error' in c) return c;
     return { nombre: p.nombre, idioma: p.idioma, encabezado: p.encabezado, cuerpo: p.cuerpo, componentes: c.components, params };
@@ -2584,8 +2592,10 @@ function plantillaParaEnviar(sid: string, id: string, dados: string[], extra: Ex
   ).get(sid, id) as { nombre: string; idioma: string; encabezado: string; cuerpo: string; ejemplos: string } | undefined;
   if (!t) return { error: 'Esa plantilla no está aprobada para tu tienda todavía.' };
   const nVars = Math.max(0, ...[...String(t.cuerpo || '').matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1])));
+  ejemplos = new Set(pj<string[]>(t.ejemplos, []).map(normE).filter((x) => x.length >= 2));
   const campos = lp.inferirCampos(t.cuerpo, pj<string[]>(t.ejemplos, []));
   const params = completar(campos, nVars);
+  if (errorEjemplo) return { error: errorEjemplo.replace('la plantilla', `la plantilla "${t.nombre}"`) };
   const f = faltan(params, campos);
   if (f.length) return { error: `Falta llenar ${f.join(', ')} de "${t.nombre}": no hay ese dato en el chat ni en su pedido.` };
   return { nombre: t.nombre, idioma: t.idioma, encabezado: t.encabezado, cuerpo: t.cuerpo, params };
@@ -2615,7 +2625,7 @@ api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, requirePermis
   const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, sid) as
     | { id: string; tel: string; wa_id: string | null } | undefined;
   if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
-  // Parámetros: los que manden, o los ejemplos de la plantilla como respaldo.
+  // Parámetros: los que manden; lo que falte se llena con los datos reales del chat (nunca con ejemplos).
   const dados = Array.isArray(req.body?.params) ? (req.body.params as unknown[]).map((x) => String(x)) : [];
   const t = plantillaParaEnviar(sid, String(req.body?.plantillaId || ''), dados, extraDe(req.body), l.id);
   if ('error' in t) return res.status(400).json({ error: t.error });

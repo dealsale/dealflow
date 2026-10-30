@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
   apiBorrarLanding, apiCrearLanding, apiDespublicarLanding, apiDuplicarLanding, apiGuardarLanding, apiImagenLanding, apiLanding, apiLandings,
-  apiPagarMembresia, apiGuardarTienda, apiVistaTienda, apiPublicarLanding, apiVistaLanding, apiConectarDominio, apiVerificarDominio, apiQuitarDominio, apiInicioDominio, apiSubdominio,
+  apiPagarMembresia, apiGuardarTienda, apiVistaTienda, apiPublicarLanding, apiVistaLanding, apiConectarDominio, apiVerificarDominio, apiEstadoDominio, apiQuitarDominio, apiInicioDominio, apiSubdominio,
 } from '../lib/api';
 import type { MembresiaTienda, TiendaConfig, DominioLandings, Landing, LandingBundle, LandingDatos, LandingResumen } from '../lib/api';
 import { confirmar, notificar } from '../components/dialogs';
@@ -743,6 +743,24 @@ function DominioCard({ d, landings, enLinea, onCambio }: { d: DominioLandings; l
     await accion(apiQuitarDominio);
   };
   const activo = d.estado === 'activo';
+  // Mientras esté pendiente: el servidor lo revisa solo cada 2 min; aquí se refresca lo que
+  // va encontrando (cada 20 s) y, con la tarjeta abierta, se pide una revisión cada minuto.
+  const onCambioRef = useRef(onCambio);
+  onCambioRef.current = onCambio;
+  useEffect(() => {
+    if (!d.dominio || activo) return;
+    let n = 0;
+    const t = setInterval(() => {
+      if (document.hidden) return;
+      n++;
+      void (abierto && n % 3 === 0 ? apiVerificarDominio() : apiEstadoDominio()).then((r) => {
+        if (!r.data) return;
+        if (r.data.estado === 'activo') notificar(`✓ ¡Tu dominio ${r.data.dominio} ya está activo!`);
+        if (r.data.estado !== d.estado || r.data.detalle !== d.detalle || r.data.diag?.revisado !== d.diag?.revisado) onCambioRef.current(r.data);
+      });
+    }, 20_000);
+    return () => clearInterval(t);
+  }, [d.dominio, d.estado, d.detalle, d.diag?.revisado, activo, abierto]);
   const [sub, setSub] = useState(d.sub);
   useEffect(() => { setSub(d.sub); }, [d.sub]);
   const publicadas = landings.filter((l) => l.estado === 'publicada');
@@ -798,11 +816,39 @@ function DominioCard({ d, landings, enLinea, onCambio }: { d: DominioLandings; l
                   {fila('Tipo', 'CNAME')}
                   {fila('Nombre', d.nombreRegistro)}
                   {fila('Apunta a', d.cname)}
-                  <div style={{ fontSize: 12, color: 'var(--df-text-faint)', marginTop: 6 }}>Si usaste www, en tu proveedor redirige también tutienda.com (sin www) hacia www.tutienda.com. Los cambios de DNS pueden tardar desde minutos hasta unas horas.</div>
-                  <div style={{ fontWeight: 700, margin: '10px 0 0' }}>2. Vuelve aquí y dale a «Verificar».</div>
+                  <div style={{ fontSize: 12, color: 'var(--df-text-faint)', marginTop: 6 }}>Si usas Cloudflare, pon ese registro con la nube <b>gris</b> («Solo DNS»). Si usaste www, en tu proveedor redirige también tutienda.com (sin www) hacia www.tutienda.com.</div>
+                  {d.apex && <div style={{ fontSize: 12, marginTop: 6, background: 'var(--df-warning-subtle-2, #FFFBEB)', border: '1px solid var(--df-warning-border, #FDE68A)', borderRadius: 8, padding: '7px 10px' }}>⚠️ Conectaste el dominio sin <b>www</b>. Muchos proveedores (GoDaddy, Hostinger…) no dejan crear un CNAME ahí y por eso nunca se activa. Si en 15 minutos sigue pendiente, desconéctalo y conecta <b>www.{d.dominio}</b>.</div>}
+                  <div style={{ fontWeight: 700, margin: '10px 0 0' }}>2. Listo: lo revisamos solos cada par de minutos y te avisamos. También puedes tocar «Verificar».</div>
+                  {d.diag && (
+                    <div style={{ marginTop: 10, border: '1px solid var(--df-border)', borderRadius: 10, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {([
+                        ['Tu dominio apunta a DealFlow (DNS)', d.diag.dns, d.diag.dnsDetalle],
+                        ['Certificado de seguridad (HTTPS)', d.diag.dns !== 'ok' ? 'espera' : d.diag.ssl, d.diag.dns !== 'ok' ? 'Se genera solo apenas el DNS apunte bien.' : d.diag.sslDetalle],
+                      ] as const).map(([t, est, det]) => (
+                        <div key={t} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5 }}>
+                          <span style={{ fontSize: 14, lineHeight: 1.2 }}>{est === 'ok' ? '✅' : est === 'error' ? '❌' : '⏳'}</span>
+                          <span><b>{t}</b>{det ? <span style={{ display: 'block', color: 'var(--df-text-muted)' }}>{det}</span> : null}</span>
+                        </div>
+                      ))}
+                      <div style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>Última revisión: {new Date(d.diag.revisado).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })}</div>
+                    </div>
+                  )}
+                  {!!d.diag?.extra?.length && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 2 }}>Opcional, para que quede más rápido: crea también estos registros</div>
+                      {d.diag.extra.map((x) => (
+                        <div key={x.nombre + x.valor} style={{ marginTop: 6 }}>
+                          <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{x.para}</div>
+                          {fila('Tipo', x.tipo)}
+                          {fila('Nombre', x.nombre)}
+                          {fila('Valor', x.valor)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-              {d.detalle && <div style={{ fontSize: 12.5, borderRadius: 8, padding: '8px 10px', background: activo ? 'var(--df-success-subtle, #dcfce7)' : 'var(--df-warning-subtle, #fef3c7)', color: activo ? 'var(--df-success, #166534)' : 'var(--df-text-body)' }}>{d.detalle}</div>}
+              {d.detalle && (activo || !d.diag || d.detalle !== d.diag.dnsDetalle) && <div style={{ fontSize: 12.5, borderRadius: 8, padding: '8px 10px', background: activo ? 'var(--df-success-subtle, #dcfce7)' : 'var(--df-warning-subtle, #fef3c7)', color: activo ? 'var(--df-success, #166534)' : 'var(--df-text-body)' }}>{d.detalle}</div>}
               {activo && (
                 <Campo label="Página que se abre en tu dominio sin nada después (tutienda.com)">
                   <select value={d.inicio} onChange={(e) => void accion(() => apiInicioDominio(e.target.value))} style={inp}>
