@@ -416,6 +416,87 @@ export function ponerAliasRemitente(storeId: string, remitente: string, alias: s
   cacheRemitentes.delete(storeId);
 }
 
+/** El código del remitente dentro de los datos de una guía de Effi (venga como venga). */
+function remitenteDeGuia(g: Fila): string {
+  for (const k of ['remitente', 'id_remitente', 'codigo_remitente', 'remitente_id', 'cod_remitente']) {
+    const v = g[k];
+    if (v && typeof v === 'object') { const c = txt((v as Fila).codigo ?? (v as Fila).id); if (/^\d+$/.test(c)) return c; }
+    else if (/^\d+$/.test(txt(v))) return txt(v);
+  }
+  return '';
+}
+
+/**
+ * Aprende de qué proveedor es cada remitente con el historial de DealFlow: pedidos de
+ * TODAS las tiendas que salieron con el convenio de un proveedor y cuya guía (datos de
+ * Effi guardados) dice desde qué remitente salió. Corre al arrancar y cada 6 horas.
+ */
+export function aprenderRemitentesDelHistorial(): number {
+  let n = 0;
+  try {
+    const filas = db.prepare(`SELECT store_id, effi_convenio, effi_guia_info FROM orders
+      WHERE effi_convenio NOT IN ('', '-', 'propio') AND effi_guia_info != '' AND created_at > datetime('now','-180 days')`).all() as { store_id: string; effi_convenio: string; effi_guia_info: string }[];
+    const cuenta = new Map<string, { usos: number; tiendas: Set<string> }>();
+    for (const f of filas) {
+      const rem = remitenteDeGuia(pj<Fila>(f.effi_guia_info, {}));
+      if (!rem) continue;
+      const k = `${f.effi_convenio}|${rem}`;
+      if (!cuenta.has(k)) cuenta.set(k, { usos: 0, tiendas: new Set() });
+      const c = cuenta.get(k)!; c.usos++; c.tiendas.add(f.store_id);
+      db.prepare(`INSERT INTO effi_remitente_convenio (store_id, convenio, remitente, origen) VALUES (?,?,?,'aprendido')
+        ON CONFLICT(store_id, convenio) DO NOTHING`).run(f.store_id, f.effi_convenio, rem);
+    }
+    if (filas.length && !cuenta.size) console.warn(`[effi] historial: ${filas.length} guías de proveedores pero ninguna trae el remitente. Campos de una guía: ${Object.keys(pj<Fila>(filas[0].effi_guia_info, {})).join(', ')}`);
+    for (const [k, c] of cuenta) {
+      const [convenio, remitente] = k.split('|');
+      db.prepare(`INSERT INTO effi_remitente_global (convenio, remitente, usos, tiendas) VALUES (?,?,?,?)
+        ON CONFLICT(convenio, remitente) DO UPDATE SET usos = MAX(usos, excluded.usos), tiendas = excluded.tiendas`).run(convenio, remitente, c.usos, JSON.stringify([...c.tiendas].slice(-200)));
+      n++;
+    }
+  } catch (e) { console.error('[effi] aprender remitentes del historial:', e); }
+  return n;
+}
+setTimeout(() => { const n = aprenderRemitentesDelHistorial(); if (n) console.log(`[effi] ${n} pares convenio/remitente aprendidos del historial`); }, 20_000).unref?.();
+setInterval(() => aprenderRemitentesDelHistorial(), 6 * 3600e3).unref?.();
+
+/**
+ * Para los remitentes de la tienda que aún no se sabe de quién son: le pregunta a Effi por
+ * sus últimas guías y, por el convenio de esas guías (o el pedido de DealFlow de su
+ * remisión), aprende de qué proveedor es la bodega. Una vez por hora por tienda.
+ */
+const descubiertos = new Map<string, number>();
+export async function descubrirProveedoresRemitentes(storeId: string, apiKey: string, remitentes: string[]): Promise<void> {
+  if (Date.now() - (descubiertos.get(storeId) || 0) < 3600e3) return;
+  descubiertos.set(storeId, Date.now());
+  const conocidos = new Set((db.prepare('SELECT remitente FROM effi_remitente_global').all() as { remitente: string }[]).map((r) => r.remitente));
+  const pendientes = remitentes.filter((r) => !conocidos.has(r)).slice(0, 25);
+  for (const rem of pendientes) {
+    try {
+      const r = await effi<Fila[]>(apiKey, 'GET', '/api/guia_transporte', { query: { remitente: rem, por_pagina: 30, pagina: 1 } });
+      if (!r.ok || !Array.isArray(r.body.data)) continue;
+      const votos = new Map<string, number>();
+      for (const g of r.body.data as Fila[]) {
+        let cv = '';
+        for (const [k, v] of Object.entries(g)) if (/convenio/i.test(k) && convenioValido(v) && /^\w+$/.test(txt(v))) { cv = txt(v); break; }
+        if (!cv) {
+          // Por la remisión: el pedido de DealFlow que la creó dice su convenio.
+          const doc = txt(g.id_documento ?? g.documento ?? g.id_remision ?? g.remision ?? '');
+          if (doc) { const o = db.prepare("SELECT effi_convenio FROM orders WHERE store_id = ? AND (effi_remision LIKE ? OR json_extract(effi_doc,'$.id') = ?) LIMIT 1").get(storeId, `%${doc}`, doc) as Fila | undefined; cv = convenioValido(o?.effi_convenio); }
+        }
+        if (cv) votos.set(cv, (votos.get(cv) || 0) + 1);
+      }
+      const [mejor] = [...votos].sort((a, b) => b[1] - a[1]);
+      if (mejor) {
+        db.prepare(`INSERT INTO effi_remitente_global (convenio, remitente, usos, tiendas) VALUES (?,?,?,?)
+          ON CONFLICT(convenio, remitente) DO UPDATE SET usos = MAX(usos, excluded.usos)`).run(mejor[0], rem, mejor[1], JSON.stringify([storeId]));
+        db.prepare(`INSERT INTO effi_remitente_convenio (store_id, convenio, remitente, origen) VALUES (?,?,?,'aprendido') ON CONFLICT(store_id, convenio) DO NOTHING`).run(storeId, mejor[0], rem);
+      }
+    } catch { /* Effi no respondió: se intenta en la próxima hora */ }
+    await new Promise((ok) => setTimeout(ok, 300));
+  }
+  if (pendientes.length) cacheRemitentes.delete(storeId);
+}
+
 type OpcionRem = ReturnType<typeof opcionRemitente>;
 /** Le pone a cada remitente su apodo y su proveedor, y deja primero los que se reconocen. */
 export function rotularRemitentes(storeId: string, lista: OpcionRem[]): (OpcionRem & { alias: string; proveedores: string[] })[] {
