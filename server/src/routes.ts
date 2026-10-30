@@ -1868,7 +1868,21 @@ api.get('/effi-api/opciones-guia', requireAuth, requireStore, requirePermiso('de
   if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
   const r = await ef.opcionesGuiaEffi(c.apiKey);
   if ('error' in r) return res.status(400).json({ error: r.error });
-  res.json({ ...r, defaults: c.guia });
+  // Remitente que le toca a este pedido (la bodega del proveedor de su convenio), si se sabe.
+  const sugerido = req.query.orderId || req.query.convenio
+    ? await ef.remitenteSugerido(req.user!.storeId!, c.apiKey, { orderId: String(req.query.orderId || ''), convenio: String(req.query.convenio || '') }) : null;
+  res.json({ ...r, defaults: c.guia, sugerido });
+});
+// Remitente de cada convenio (bodega del proveedor), para la guía de los pedidos de ese convenio.
+api.get('/effi-api/remitentes-convenio', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  const sid = req.user!.storeId!;
+  res.json({ convenios: ef.conveniosConocidos(sid), asignados: ef.remitentesPorConvenio(sid) });
+});
+api.put('/effi-api/remitentes-convenio', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const ef = await import('./effiApi.js');
+  ef.fijarRemitenteConvenio(req.user!.storeId!, String(req.body?.convenio || ''), String(req.body?.remitente || ''));
+  res.json({ ok: true, asignados: ef.remitentesPorConvenio(req.user!.storeId!) });
 });
 api.post('/orders/:rowId/effi/guia', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');

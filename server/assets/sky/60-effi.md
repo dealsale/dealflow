@@ -149,3 +149,12 @@ Claves: logistica, tablero, guias, envios, por recoger, en transito, llega hoy, 
 Sección: estadisticas, effi
 Claves: recaudo, wallet, consignacion, plata, dinero, pagos effi, retirado, pendiente de pago, fletes y comisiones
 En **Estadísticas → 💵 Recaudos contraentrega · Effi** ves por mes lo que Effi ya consignó en tu Wallet por cada guía y lo que falta: **Fletes y comisiones** (descontado por Effi), **Retirado a tu banco**, **Pendiente de pago** y **Entregados sin pagar todavía**. "Effi no registra movimientos en tu Wallet este mes" si no hay.
+
+## Remitente automático para los pedidos de un proveedor (convenio dropshipping)
+Sección: effi
+Claves: remitente proveedor, remitente automatico, bodega del proveedor, convenio, dropshipping, emprendedor, no carga el remitente, remitente por convenio
+- Si el pedido sale con el **convenio de un proveedor**, la guía (manual o automática) toma sola la **bodega de ese proveedor** como remitente. En el pedido sale "✓ Se puso solo: …" con el motivo; revísalo antes de crear la guía.
+- De dónde lo saca: 1) el que fijaste para ese convenio en **Integraciones → Effi → Guía de transporte → Remitente de cada proveedor**; 2) el que usaste la última vez con ese convenio; 3) el que usan otras tiendas de DealFlow con ese mismo proveedor, si ese remitente también existe en tu Effi.
+- Si el remitente ya no existe en tu Effi, no se usa.
+- Los pedidos con **inventario propio** (sin convenio) no se preseleccionan: eliges tú la bodega, como siempre.
+- Para fijarlo: Integraciones → Effi → Guía de transporte → **Remitente de cada proveedor (convenio)** → elige la bodega. "Automático (aprendido)" lo deja en manos de DealFlow.

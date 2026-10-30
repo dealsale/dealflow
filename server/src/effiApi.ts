@@ -328,6 +328,78 @@ function nombreDeFila(f: Fila): string {
   return '';
 }
 
+// ── Remitente por convenio (la bodega del proveedor) ─────────────────────────
+// Un pedido que sale con el convenio dropshipping de un proveedor se despacha desde la
+// bodega de ese proveedor. DealFlow lo recuerda por tienda (fijado a mano o aprendido de
+// la última guía) y entre tiendas: si otro dropshipper ya despachó con ese convenio desde
+// un remitente que también existe en tu Effi, se te sugiere solo.
+db.exec(`CREATE TABLE IF NOT EXISTS effi_remitente_convenio (
+  store_id TEXT NOT NULL, convenio TEXT NOT NULL, remitente TEXT NOT NULL,
+  origen TEXT NOT NULL DEFAULT 'aprendido', actualizado TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (store_id, convenio)
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS effi_remitente_global (
+  convenio TEXT NOT NULL, remitente TEXT NOT NULL, usos INTEGER NOT NULL DEFAULT 0, tiendas TEXT NOT NULL DEFAULT '[]',
+  actualizado TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (convenio, remitente)
+)`);
+const convenioValido = (c: unknown) => { const v = txt(c).trim(); return v && v !== '-' && v !== 'propio' ? v : ''; };
+const convenioDelPedido = (o: Fila) => convenioValido(o.effi_convenio);
+
+/** Recuerda con qué remitente salió una guía de ese convenio (sin pisar lo que se fijó a mano). */
+function aprenderRemitente(storeId: string, convenio: string, remitente: string) {
+  if (!convenioValido(convenio) || !remitente) return;
+  try {
+    db.prepare(`INSERT INTO effi_remitente_convenio (store_id, convenio, remitente, origen) VALUES (?,?,?,'aprendido')
+      ON CONFLICT(store_id, convenio) DO UPDATE SET remitente = excluded.remitente, actualizado = datetime('now') WHERE effi_remitente_convenio.origen != 'manual'`).run(storeId, convenio, remitente);
+    const g = db.prepare('SELECT tiendas FROM effi_remitente_global WHERE convenio = ? AND remitente = ?').get(convenio, remitente) as { tiendas: string } | undefined;
+    const tiendas = [...new Set([...pj<string[]>(g?.tiendas || '[]', []), storeId])].slice(-200);
+    db.prepare(`INSERT INTO effi_remitente_global (convenio, remitente, usos, tiendas) VALUES (?,?,1,?)
+      ON CONFLICT(convenio, remitente) DO UPDATE SET usos = usos + 1, tiendas = excluded.tiendas, actualizado = datetime('now')`).run(convenio, remitente, JSON.stringify(tiendas));
+  } catch { /* opcional */ }
+}
+
+/** Fija (o quita, con '') el remitente de un convenio para la tienda. */
+export function fijarRemitenteConvenio(storeId: string, convenio: string, remitente: string) {
+  const cv = convenioValido(convenio);
+  if (!cv) return;
+  if (!remitente) db.prepare('DELETE FROM effi_remitente_convenio WHERE store_id = ? AND convenio = ?').run(storeId, cv);
+  else db.prepare(`INSERT INTO effi_remitente_convenio (store_id, convenio, remitente, origen) VALUES (?,?,?,'manual')
+    ON CONFLICT(store_id, convenio) DO UPDATE SET remitente = excluded.remitente, origen = 'manual', actualizado = datetime('now')`).run(storeId, cv, remitente);
+}
+
+export function remitentesPorConvenio(storeId: string): { convenio: string; remitente: string; origen: string }[] {
+  return db.prepare('SELECT convenio, remitente, origen FROM effi_remitente_convenio WHERE store_id = ?').all(storeId) as { convenio: string; remitente: string; origen: string }[];
+}
+
+/**
+ * El remitente que le corresponde a un pedido: el de su convenio (fijado o aprendido en la
+ * tienda; si no, el que usan otras tiendas con ese convenio y también existe en esta Effi).
+ * null si no se puede saber: entonces lo elige la persona.
+ */
+export async function remitenteSugerido(storeId: string, apiKey: string, o: { orderId?: string; convenio?: string }): Promise<{ remitente: string; nombre: string; motivo: string } | null> {
+  let convenio = convenioValido(o.convenio);
+  if (!convenio && o.orderId) {
+    const ord = db.prepare('SELECT effi_convenio FROM orders WHERE id = ? AND store_id = ?').get(o.orderId, storeId) as Fila | undefined;
+    convenio = convenioDelPedido(ord || {});
+    if (!convenio) {
+      // Aún sin remisión: el convenio de sus productos.
+      const pids = (db.prepare("SELECT DISTINCT COALESCE(product_id,'') p FROM order_items WHERE order_id = ?").all(o.orderId) as { p: string }[]).map((x) => x.p).filter(Boolean);
+      const cvs = [...new Set(pids.map((p) => convenioValido(convenioDeProducto(p)) || convenioValido(convenioAprendidoProducto(storeId, p))).filter(Boolean))];
+      if (cvs.length === 1) convenio = cvs[0];
+    }
+  }
+  if (!convenio) return null;
+  const vigentes = await remitentesVigentes(storeId, apiKey);
+  const ok = (r: string) => !!r && (!vigentes || vigentes.has(r));
+  const nombreConv = conveniosConocidos(storeId).find((x) => x.id === convenio)?.nombre || `convenio ${convenio}`;
+  const propio = db.prepare('SELECT remitente, origen FROM effi_remitente_convenio WHERE store_id = ? AND convenio = ?').get(storeId, convenio) as { remitente: string; origen: string } | undefined;
+  if (propio && ok(propio.remitente)) return { remitente: propio.remitente, nombre: vigentes?.get(propio.remitente) || `#${propio.remitente}`, motivo: propio.origen === 'manual' ? `el remitente que fijaste para ${nombreConv}` : `el que usaste la última vez con ${nombreConv}` };
+  const otros = db.prepare('SELECT remitente FROM effi_remitente_global WHERE convenio = ? ORDER BY usos DESC, actualizado DESC LIMIT 10').all(convenio) as { remitente: string }[];
+  const g = otros.find((x) => ok(x.remitente) && vigentes);
+  if (g) return { remitente: g.remitente, nombre: vigentes!.get(g.remitente) || `#${g.remitente}`, motivo: `la bodega del proveedor de ${nombreConv} (la usan otras tiendas con ese convenio)` };
+  return null;
+}
+
 // Remitentes vigentes de cada tienda (10 min): para no crear guías con uno que ya no existe.
 const cacheRemitentes = new Map<string, { t: number; v: Map<string, string> }>();
 const camposLogueados = new Set<string>();
@@ -1475,9 +1547,11 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   registrarLog(storeId, 'info', 'despacho', `${numDF} enviado a Effi: remisión ${remision} (cliente ${cli.tercero}).${avisos.length ? ' ' + avisos.join(' ') : ''}`);
 
   let guia = ''; let transportadora = '';
-  if (c.guia.activa && !c.guia.remitente) avisos.push('No se creó la guía: falta elegir el remitente en Integraciones → Effi → Guía de transporte. Genérala desde el pedido eligiendo el remitente.');
-  if (c.guia.activa && c.guia.transportadora && c.guia.servicio && c.guia.formaPagoFlete && c.guia.remitente) {
-    const g = await crearGuia(storeId, c, c.guia, o, { sucursal: txt(doc!.sucursal), id: txt(doc!.id) }, cli.tercero, ubic, reintento);
+  // El remitente del proveedor (según el convenio del pedido) manda sobre el general.
+  const remAuto = c.guia.activa ? (await remitenteSugerido(storeId, c.apiKey, { orderId, convenio: String(body.convenio_dropshipping ?? '') }))?.remitente || c.guia.remitente : '';
+  if (c.guia.activa && !remAuto) avisos.push('No se creó la guía: falta elegir el remitente en Integraciones → Effi → Guía de transporte. Genérala desde el pedido eligiendo el remitente.');
+  if (c.guia.activa && c.guia.transportadora && c.guia.servicio && c.guia.formaPagoFlete && remAuto) {
+    const g = await crearGuia(storeId, c, { ...c.guia, remitente: remAuto }, o, { sucursal: txt(doc!.sucursal), id: txt(doc!.id) }, cli.tercero, ubic, reintento);
     if ('error' in g) avisos.push(g.error);
     else { guia = g.guia; transportadora = g.transportadora; }
   }
@@ -1547,6 +1621,7 @@ async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, 
   db.prepare('UPDATE orders SET effi_guia = ?, guia = CASE WHEN ? != \'\' THEN ? ELSE guia END, transportadora = CASE WHEN ? != \'\' THEN ? ELSE transportadora END WHERE id = ?')
     .run(JSON.stringify({ sucursal: txt(gg.sucursal), id: txt(gg.id), id_transaccion: txt(gg.id_transaccion) }), guia, guia, transportadora, transportadora, txt(o.id));
   registrarLog(storeId, 'info', 'despacho', `DF-${numero}: guía ${txt(gg.id_transaccion)}${guia ? ` (${transportadora} ${guia})` : ''} creada en Effi desde el remitente ${nombreRem}.`);
+  aprenderRemitente(storeId, convenioDelPedido(o), txt(g.remitente));
   return { guia, transportadora, idTransaccion: txt(gg.id_transaccion), url };
 }
 

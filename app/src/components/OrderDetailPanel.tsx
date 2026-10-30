@@ -1,7 +1,7 @@
 import { OrigenBadge } from './OrigenPedido';
 import { NovedadCard } from './Novedades';
 import { DevolucionEffi, RastreoGuia } from './EnvioEffi';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { OrdenarDireccion } from './DireccionPedido';
@@ -150,7 +150,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
   const guiaAuto = !!df.effiApi.guia?.activa;
   // Guía en el MISMO paso: se elige la transportadora aquí y, al confirmar, se crea
   // la remisión y enseguida la guía (si la guía automática está apagada).
-  const g = useGuiaEffi();
+  const g = useGuiaEffi(sel.rowId ? String(sel.rowId) : undefined);
   const [conGuia, setConGuia] = useState(true);
   // Convenio para ESTE envío: '' = automático, 'propio' = sin convenio, o un código.
   const [convenio, setConvenio] = useState('');
@@ -164,6 +164,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
     const r = await enProceso('Preparando el envío a Effi…', () => apiEffiPreview(sel.rowId!, conv), 'pedido');
     if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos preparar el envío.'); return; }
     setPrev(r.data); setPaso('listo');
+    if (!guiaAuto) void g.sugerir(r.data.convenio || ''); // remitente del proveedor del convenio con que sale
   };
   const hacerGuia = !guiaAuto && conGuia;
   const enviar = async () => {
@@ -347,22 +348,36 @@ function PasosEnvio({ sel }: { sel: DecoratedOrder }) {
 }
 
 /** Carga las transportadoras/remitentes de Effi y los valores por defecto de la tienda. */
-function useGuiaEffi() {
+function useGuiaEffi(orderId?: string) {
   const [ops, setOps] = useState<OpcionesGuia | null>(null);
   const [d, setD] = useState<DatosGuia>({ transportadora: '', servicio: '', formaPagoFlete: '', remitente: '', cantPaquetes: 1, peso: 1, volumen: 1, alto: 10, ancho: 10, largo: 10, contenido: '', valorDeclarado: 0, nota: '', recibeSabado: true });
   const [cargaMsg, setCargaMsg] = useState('');
-  // El remitente (bodega de origen) SIEMPRE lo elige la persona: nunca se preselecciona.
+  // El remitente nunca se preselecciona "porque sí": solo se pone solo cuando se sabe cuál es
+  // (la bodega del proveedor del convenio del pedido). Si no, lo elige la persona.
   const [avisoRemitente, setAvisoRemitente] = useState(false);
-  const cargar = async () => {
+  const [sugerido, setSugerido] = useState<{ remitente: string; nombre: string; motivo: string } | null>(null);
+  const manual = useRef(false);
+  const aplicarSugerido = (s?: { remitente: string; nombre: string; motivo: string } | null) => {
+    setSugerido(s || null);
+    if (!manual.current) setD((x) => ({ ...x, remitente: s?.remitente || '' }));
+  };
+  const cargar = async (convenio?: string) => {
     if (ops) return;
     setCargaMsg('Cargando transportadoras de Effi…');
-    const r = await apiEffiOpcionesGuia();
+    const r = await apiEffiOpcionesGuia(orderId, convenio);
     if (r.error || !r.data) { setCargaMsg(r.error || 'No se pudieron cargar las transportadoras.'); return; }
     setCargaMsg('');
     setOps(r.data);
     const g = r.data.defaults;
     setD((x) => ({ ...x, transportadora: g.transportadora || '', servicio: g.servicio || '', formaPagoFlete: g.formaPagoFlete || '', remitente: '', peso: g.peso || 1, volumen: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10 }));
+    aplicarSugerido(r.data.sugerido);
   };
+  /** Vuelve a buscar el remitente cuando ya se sabe el convenio del envío (p. ej. tras revisar la remisión). */
+  const sugerir = async (convenio: string) => {
+    const r = await apiEffiOpcionesGuia(orderId, convenio);
+    if (r.data) aplicarSugerido(r.data.sugerido);
+  };
+  const elegirRemitente = (v: string) => { manual.current = true; setD((x) => ({ ...x, remitente: v })); setAvisoRemitente(false); };
   const listo = !!(d.transportadora && d.servicio && d.formaPagoFlete && d.remitente);
   const casiListo = !!(d.transportadora && d.servicio && d.formaPagoFlete);
   /** Antes de crear la guía: sin remitente, aviso grande y no sigue. */
@@ -372,7 +387,7 @@ function useGuiaEffi() {
     setTimeout(() => document.getElementById('df-campo-remitente')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     return false;
   };
-  return { ops, d, setD, cargar, cargaMsg, listo, casiListo, exigirRemitente, avisoRemitente, setAvisoRemitente };
+  return { ops, d, setD, cargar, sugerir, sugerido, elegirRemitente, cargaMsg, listo, casiListo, exigirRemitente, avisoRemitente, setAvisoRemitente };
 }
 
 /**
@@ -412,7 +427,8 @@ function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; item
       </div>
       <div id="df-campo-remitente" style={{ border: `2px solid ${g.avisoRemitente && !d.remitente ? '#DC2626' : d.remitente ? 'var(--df-brand-border, #A7F3D0)' : 'var(--df-warning, #F59E0B)'}`, borderRadius: 10, padding: 10, background: g.avisoRemitente && !d.remitente ? 'rgba(220, 38, 38, .08)' : 'transparent' }}>
         <label style={{ ...lb, fontSize: 12, color: 'var(--df-text)' }}>Remitente (bodega de origen) · obligatorio</label>
-        <Dropdown ariaLabel="Remitente" placeholder="Elige desde qué bodega sale el paquete…" value={d.remitente} onChange={(v) => { set({ remitente: v }); g.setAvisoRemitente(false); }} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} />
+        <Dropdown ariaLabel="Remitente" placeholder="Elige desde qué bodega sale el paquete…" value={d.remitente} onChange={(v) => g.elegirRemitente(v)} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} />
+        {g.sugerido && d.remitente === g.sugerido.remitente && <div style={{ fontSize: 11.5, color: 'var(--df-brand-dark)', marginTop: 5, fontWeight: 600 }}>✓ Se puso solo: {g.sugerido.motivo}. Revísalo antes de crear la guía.</div>}
         {g.avisoRemitente && !d.remitente ? (
           <div role="alert" style={{ marginTop: 8, background: '#DC2626', color: '#fff', borderRadius: 8, padding: '12px 14px', fontSize: 15, fontWeight: 800, lineHeight: 1.35 }}>
             ⚠️ Tienes que seleccionar el remitente
@@ -447,7 +463,7 @@ function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; item
 /** Formulario para generar la guía en Effi desde DealFlow (sobre la remisión del pedido ya creada). */
 function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   const [abierto, setAbierto] = useState(false);
-  const g = useGuiaEffi();
+  const g = useGuiaEffi(sel.rowId ? String(sel.rowId) : undefined);
   const [msg, setMsg] = useState('');
   const [enviando, setEnviando] = useState(false);
   const abrir = () => { setAbierto(true); void g.cargar(); };

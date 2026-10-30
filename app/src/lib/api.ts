@@ -582,9 +582,11 @@ export const apiEffiApiVincular = (variantId: string, effiId: string, tipo: 'pro
 export const apiEffiTodos = (refrescar = false) => req<{ articulos: { id: string; descripcion: string; referencia: string; drop: number; stock: number | null }[] }>(`/api/effi-api/articulos/todos${refrescar ? '?refrescar=1' : ''}`, 'GET');
 export const apiProveedorSugerido = (effiId: string) => req<{ articulo: ArticuloVerificado | null }>(`/api/effi-api/proveedor-sugerido/${encodeURIComponent(effiId)}`, 'GET');
 export const apiEffiApiEventos = () => req<{ eventos: EffiEvento[] }>('/api/effi-api/eventos', 'GET');
-export interface OpcionesGuia { transportadoras: EffiTransportadora[]; remitentes: EffiOpcion[]; defaults: EffiGuiaCfg }
+export interface OpcionesGuia { transportadoras: EffiTransportadora[]; remitentes: EffiOpcion[]; defaults: EffiGuiaCfg; sugerido?: { remitente: string; nombre: string; motivo: string } | null }
 export interface DatosGuia { transportadora: string; servicio: string; formaPagoFlete: string; remitente: string; cantPaquetes: number; peso: number; volumen: number; alto: number; ancho: number; largo: number; contenido: string; valorDeclarado: number; nota: string; recibeSabado: boolean }
-export const apiEffiOpcionesGuia = () => req<OpcionesGuia>('/api/effi-api/opciones-guia', 'GET');
+export const apiEffiOpcionesGuia = (orderId?: string, convenio?: string) => req<OpcionesGuia>(`/api/effi-api/opciones-guia${orderId || convenio ? `?orderId=${encodeURIComponent(orderId || '')}&convenio=${encodeURIComponent(convenio || '')}` : ''}`, 'GET');
+export const apiRemitentesConvenio = () => req<{ convenios: { id: string; nombre: string }[]; asignados: { convenio: string; remitente: string; origen: string }[] }>('/api/effi-api/remitentes-convenio', 'GET');
+export const apiFijarRemitenteConvenio = (convenio: string, remitente: string) => req<{ ok: true }>('/api/effi-api/remitentes-convenio', 'PUT', { convenio, remitente });
 export const apiEffiGuia = (rowId: string, d: DatosGuia) => req<{ ok: true; guia: string; transportadora: string; idTransaccion: string }>(`/api/orders/${rowId}/effi/guia`, 'POST', d);
 export const apiGuiaDocumento = (rowId: string, dataUrl: string) => req<{ ok: true; guiaUrl: string; guiaImg: string; convertida: boolean }>(`/api/orders/${rowId}/guia-documento`, 'POST', { dataUrl });
 export interface ResultadoAvisoGuia { chat: 'enviado' | 'plantilla' | 'bloqueado' | 'error' | 'sin_chat'; contacto: 'plantilla' | 'mismo' | 'sin_plantilla' | 'error' | 'no_aplica'; con: 'image' | 'document' | 'texto'; detalle: string[] }
