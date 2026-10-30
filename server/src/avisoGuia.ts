@@ -123,14 +123,14 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
     if (envio.ok) {
       contarProactivo(storeId, chat.tel);
       res.chat = 'enviado'; res.con = tipo;
-      db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, estado) VALUES (?,?,?,?,?,?,?,?,?)')
-        .run(uid(), chat.id, 'bot', texto, tipo, tipo === 'texto' ? null : archivo, mime, tipo === 'texto' ? null : `Guia-${numDF}`, 'enviado');
+      db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, estado, wa_msg_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
+        .run(uid(), chat.id, 'bot', texto, tipo, tipo === 'texto' ? null : archivo, mime, tipo === 'texto' ? null : `Guia-${numDF}`, 'enviado', envio.wamid || null);
     } else if (envio.bloqueadoVentana && tpl) {
       // Ventana cerrada: le llega la plantilla al chat.
       const r = await sendWhatsappTemplate(storeId, destino, tpl, params, chat.tel);
       if (r.ok) {
         res.chat = 'plantilla';
-        db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado) VALUES (?,?,'bot',?,'enviado')").run(uid(), chat.id, r.textoRender || `[Plantilla: ${PLANTILLA_GUIA}]`);
+        db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, r.textoRender || `[Plantilla: ${PLANTILLA_GUIA}]`, r.wamid || null);
       } else { res.chat = 'error'; res.detalle.push(`Chat: ${r.error || 'Meta rechazó la plantilla'}`); }
     } else {
       res.chat = envio.bloqueadoVentana ? 'bloqueado' : 'error';
