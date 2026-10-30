@@ -87,7 +87,7 @@ app.use(async (req, res, next) => {
     if (!fila) return res.status(404).type('html').send(L.paginaNoDisponible(L.configTienda(storeId), 'Página no disponible', 'Esta página no existe.', { href: '/', texto: 'Ver la tienda' }));
     const LC = await import('./landingCodigo.js');
     res.set(LC.cabecerasCodigo(false));
-    return res.type('html').send(LC.paginaCodigo(fila, 'gracias', '/', false, String(fila.codigo_gracias || '').trim() ? undefined : LC.graciasPorDefecto(fila)));
+    return res.type('html').send(LC.htmlPublico(fila, 'gracias', '/')!);
   }
   res.setHeader('Cache-Control', 'no-cache');
   const humano = !/bot|crawl|spider|facebookexternalhit/i.test(String(req.headers['user-agent'] || ''));
@@ -105,11 +105,9 @@ app.use(async (req, res, next) => {
   if (humano) L.contarVista(l.id);
   {
     const fila = db.prepare('SELECT * FROM landings WHERE id = ?').get(l.id) as Record<string, unknown>;
-    if (fila.modo_codigo && String(fila.codigo || '').trim()) {
-      const LC = await import('./landingCodigo.js');
-      res.set(LC.cabecerasCodigo(false)); // en el dominio de la tienda no hay sesión de DealFlow
-      return res.type('html').send(LC.paginaCodigo(fila, 'landing', '/'));
-    }
+    const LC = await import('./landingCodigo.js');
+    const propio = LC.htmlPublico(fila, 'landing', '/'); // código propio o plantilla de la tienda
+    if (propio) { res.set(LC.cabecerasCodigo(false)); return res.type('html').send(propio); } // en el dominio de la tienda no hay sesión de DealFlow
   }
   res.type('html').send(L.renderLanding(l.datos, { id: l.id, inicio: '/', tienda: L.configTienda(storeId), url: `${origen}/${m![1]}` }));
 });
@@ -147,7 +145,7 @@ app.get('/l/:tienda/:slug/gracias', async (req, res) => {
   if (!fila) return res.status(404).type('html').send(L.paginaNoDisponible(null, 'Página no disponible', 'Esta página no existe.'));
   const LC = await import('./landingCodigo.js');
   res.set(LC.cabecerasCodigo(true));
-  res.type('html').send(LC.paginaCodigo(fila, 'gracias', `/l/${String(req.params.tienda).toLowerCase()}/`, false, String(fila.codigo_gracias || '').trim() ? undefined : LC.graciasPorDefecto(fila)));
+  res.type('html').send(LC.htmlPublico(fila, 'gracias', `/l/${String(req.params.tienda).toLowerCase()}/`)!);
 });
 app.get('/l/:tienda/:slug', async (req, res) => {
   const L = await import('./landings.js');
@@ -158,11 +156,9 @@ app.get('/l/:tienda/:slug', async (req, res) => {
   const t = String(req.params.tienda).toLowerCase();
   {
     const fila = db.prepare('SELECT * FROM landings WHERE id = ?').get(l.id) as Record<string, unknown>;
-    if (fila.modo_codigo && String(fila.codigo || '').trim()) {
-      const LC = await import('./landingCodigo.js');
-      res.set(LC.cabecerasCodigo(true)); // en app.dealflow.sbs el código propio corre aislado de la sesión
-      return res.type('html').send(LC.paginaCodigo(fila, 'landing', `/l/${t}/`));
-    }
+    const LC = await import('./landingCodigo.js');
+    const propio = LC.htmlPublico(fila, 'landing', `/l/${t}/`);
+    if (propio) { res.set(LC.cabecerasCodigo(true)); return res.type('html').send(propio); } // en app.dealflow.sbs corre aislado de la sesión
   }
   res.type('html').send(L.renderLanding(l.datos, { id: l.id, inicio: `/l/${t}/`, tienda: L.configTienda(l.storeId), url: `${BASE_PUBLICA}/l/${t}/${String(req.params.slug).toLowerCase()}` }));
 });
@@ -180,7 +176,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: '20261029-1955-landingcodigo',
+    build: '20261030-0043-plantillas',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

@@ -40,7 +40,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS landings (
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_landings_slug ON landings(store_id, slug)');
 db.exec('CREATE TABLE IF NOT EXISTS landings_ajustes (clave TEXT PRIMARY KEY, valor TEXT NOT NULL)');
 // Modo código (HTML propio de la tienda): ver landingCodigo.ts.
-for (const col of ["codigo TEXT NOT NULL DEFAULT ''", "codigo_gracias TEXT NOT NULL DEFAULT ''", 'modo_codigo INTEGER NOT NULL DEFAULT 0']) {
+for (const col of ["codigo TEXT NOT NULL DEFAULT ''", "codigo_gracias TEXT NOT NULL DEFAULT ''", 'modo_codigo INTEGER NOT NULL DEFAULT 0', "plantilla_id TEXT NOT NULL DEFAULT ''"]) {
   try { db.exec(`ALTER TABLE landings ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 try { db.exec("ALTER TABLE orders ADD COLUMN landing_id TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
@@ -318,13 +318,13 @@ function plantillaInicial(storeId: string, productId: string): LandingDatos {
 }
 
 // ── CRUD ───────────────────────────────────────────────────────────────
-export interface LandingFila { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string; modoCodigo: boolean }
+export interface LandingFila { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string; modoCodigo: boolean; plantillaId: string }
 function aFila(r: Fila): LandingFila {
   const t = slugTienda(txt(r.store_id));
   const dom = dominioActivo(txt(r.store_id));
   return {
     id: txt(r.id), slug: txt(r.slug), nombre: txt(r.nombre), productId: txt(r.product_id), estado: txt(r.estado), desbloqueada: !!r.desbloqueada, modo: txt(r.modo),
-    vistas: num(r.vistas), pedidos: num(r.pedidos), url: dom ? `https://${dom}/${txt(r.slug)}` : `${BASE_TIENDA}/l/${t}/${txt(r.slug)}`, publicadaAt: (r.publicada_at as string) || null, updatedAt: txt(r.updated_at), modoCodigo: !!r.modo_codigo,
+    vistas: num(r.vistas), pedidos: num(r.pedidos), url: dom ? `https://${dom}/${txt(r.slug)}` : `${BASE_TIENDA}/l/${t}/${txt(r.slug)}`, publicadaAt: (r.publicada_at as string) || null, updatedAt: txt(r.updated_at), modoCodigo: !!r.modo_codigo, plantillaId: txt(r.plantilla_id),
   };
 }
 export function listarLandings(storeId: string): LandingFila[] {
@@ -376,7 +376,7 @@ export function duplicarLanding(storeId: string, id: string): (LandingFila & { d
   db.prepare('INSERT INTO landings (id, store_id, slug, nombre, product_id, datos) VALUES (?,?,?,?,?,?)')
     .run(nid, storeId, slugLibre(storeId, l.datos.nombre + ' copia'), l.datos.nombre, l.productId, JSON.stringify(l.datos));
   // La copia también lleva el código propio (modo código), si lo tiene.
-  try { db.prepare('UPDATE landings SET codigo = (SELECT codigo FROM landings WHERE id = ?), codigo_gracias = (SELECT codigo_gracias FROM landings WHERE id = ?), modo_codigo = (SELECT modo_codigo FROM landings WHERE id = ?) WHERE id = ?').run(id, id, id, nid); } catch { /* sin modo código */ }
+  try { db.prepare('UPDATE landings SET codigo = (SELECT codigo FROM landings WHERE id = ?), codigo_gracias = (SELECT codigo_gracias FROM landings WHERE id = ?), modo_codigo = (SELECT modo_codigo FROM landings WHERE id = ?), plantilla_id = (SELECT plantilla_id FROM landings WHERE id = ?) WHERE id = ?').run(id, id, id, id, nid); } catch { /* sin modo código */ }
   return verLanding(storeId, nid);
 }
 

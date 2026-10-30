@@ -73,7 +73,7 @@ export function renderLanding(d: LandingDatos, o: OpcionesRender): string {
 const GUARDA_VISTA = `<script>(function(){var t;document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a');if(!a)return;e.preventDefault();e.stopPropagation();var d=document.getElementById('df-aviso');if(!d){d=document.createElement('div');d.id='df-aviso';d.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111;color:#fff;font:600 12.5px Poppins,system-ui,sans-serif;padding:9px 14px;border-radius:20px;z-index:99;box-shadow:0 6px 18px rgba(0,0,0,.3);max-width:90%;text-align:center';document.body.appendChild(d)}d.textContent='Vista previa: en tu tienda publicada este enlace sí abre.';d.style.display='block';clearTimeout(t);t=setTimeout(function(){d.style.display='none'},2200)},true)})();</script>`;
 
 /** Descripción con formato sencillo: párrafos, listas (- o ✓) y **negrita**. */
-function formatoTexto(t: string): string {
+export function formatoTexto(t: string): string {
   const neg = (s: string) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   return t.split(/\n{2,}/).map((bloque) => {
     const lineas = bloque.split('\n').filter((l) => l.trim());
