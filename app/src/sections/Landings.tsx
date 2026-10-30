@@ -9,6 +9,8 @@ import type { MembresiaTienda, TiendaConfig, DominioLandings, Landing, LandingBu
 import { confirmar, notificar } from '../components/dialogs';
 import { BibliotecaLandingsModal } from '../components/BibliotecaLandings';
 import { LandingCodigo } from '../components/LandingCodigo';
+import { PlantillasModal, DisenoLanding } from '../components/PlantillasTienda';
+import { apiVistaPlantillaTienda, apiPlantillasTienda } from '../lib/api';
 
 /**
  * Tienda en línea: una página de inicio con todos los productos publicados y una
@@ -84,6 +86,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
   const [tienda, setTienda] = useState<TiendaConfig | null>(null);
   const [creando, setCreando] = useState(false);
   const [biblioteca, setBiblioteca] = useState(false);
+  const [plantillas, setPlantillas] = useState(false);
   const [dominio, setDominio] = useState<DominioLandings | null>(null);
   const cargar = async () => { const r = await apiLandings(); if (r.data) { setLista(r.data.landings); setMembresia(r.data.membresia); setDominio(r.data.dominio); setTienda(r.data.tienda); } else notificar(r.error || 'No se pudo cargar tu tienda.', 'error'); };
   useEffect(() => { void cargar(); }, []);
@@ -105,6 +108,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
         </div>
         <a href="/tutorial-tienda-en-linea" target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>📘 Ver tutorial</a>
         {dominio && membresia?.activa && (dominio.estado === 'activo' || dominio.raiz) && <a href={`https://${dominio.estado === 'activo' ? dominio.dominio : `${dominio.sub}.${dominio.raiz}`}`} target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>Ver mi tienda ↗</a>}
+        <button onClick={() => setPlantillas(true)} style={{ ...btn, padding: '10px 14px', fontSize: 13.5 }}>🎨 Mis plantillas</button>
         <button onClick={() => setBiblioteca(true)} style={{ ...btn, padding: '10px 14px', fontSize: 13.5 }}>📚 Biblioteca de landings</button>
         <button onClick={() => setCreando(true)} className="df-btn-primary" style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Agregar producto</button>
       </div>
@@ -158,6 +162,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
           </div>
         )}
       {creando && <CrearModal df={df} onCerrar={() => setCreando(false)} onCreada={(id) => { setCreando(false); onAbrir(id); }} />}
+      {plantillas && <PlantillasModal landings={lista || []} onCerrar={() => { setPlantillas(false); void cargar(); }} />}
       {biblioteca && <BibliotecaLandingsModal onCerrar={() => setBiblioteca(false)} onImportada={(id) => { setBiblioteca(false); onAbrir(id); }} />}
     </section>
   );
@@ -236,6 +241,8 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
   const [slug, setSlug] = useState('');
   // Vista previa del modo código (null = la del diseño del editor).
   const [htmlCodigo, setHtmlCodigo] = useState<string | null>(null);
+  const [htmlPlantilla, setHtmlPlantilla] = useState<string | null>(null);
+  const [verPlantillas, setVerPlantillas] = useState(false);
   const ultimo = useRef('');
   const angosto = typeof window !== 'undefined' && window.innerWidth < 980;
 
@@ -260,6 +267,19 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
     }, 1200);
     return () => { clearTimeout(tv); clearTimeout(tg); };
   }, [d, id]);
+
+  // Con plantilla propia, la vista previa es la plantilla llena con estos datos (se refresca al guardar).
+  const plantillaUsada = l?.plantillaId || '';
+  useEffect(() => {
+    if (!plantillaUsada || l?.modoCodigo) { setHtmlPlantilla(null); return; }
+    let vivo = true;
+    void apiPlantillasTienda().then((r) => {
+      const p = r.data?.plantillas.find((x) => x.id === plantillaUsada);
+      if (!p || !vivo) return;
+      void apiVistaPlantillaTienda(p.html, 'landing', id).then((v) => { if (vivo && v.data) setHtmlPlantilla(v.data.html); });
+    });
+    return () => { vivo = false; };
+  }, [plantillaUsada, l?.updatedAt, l?.modoCodigo, id, verPlantillas]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!l || !d) return <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Cargando la landing…</div>;
   const set = (p: Partial<LandingDatos>) => setD((x) => (x ? { ...x, ...p } : x));
@@ -303,6 +323,9 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
 
   const formularios = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Bloque titulo={l.plantillaId ? 'Diseño: mi plantilla' : 'Diseño de la página'} icono="🎨">
+        <DisenoLanding landingId={id} plantillaId={l.plantillaId || ''} modoCodigo={!!l.modoCodigo} onCambio={(plantillaId) => setL((x) => (x ? { ...x, plantillaId } : x))} onAdministrar={() => setVerPlantillas(true)} />
+      </Bloque>
       <Bloque titulo={l.modoCodigo ? 'Modo código (activo)' : 'Modo código (HTML propio)'} icono="💻">
         <LandingCodigo id={id} onVista={(h) => { setHtmlCodigo(h); }} onModo={(modoCodigo) => setL((x) => (x ? { ...x, modoCodigo } : x))} />
       </Bloque>
@@ -406,12 +429,12 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
   const vista = (
     <div style={{ ...card, padding: 10, position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', height: angosto ? '78vh' : 'calc(100vh - 170px)' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', flex: 1 }}>Vista previa{htmlCodigo !== null ? ' · tu código' : ''}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', flex: 1 }}>Vista previa{htmlCodigo !== null ? ' · tu código' : htmlPlantilla !== null ? ' · tu plantilla' : ''}</span>
         <button onClick={() => setDisp('cel')} style={{ ...btn, ...(disp === 'cel' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>📱 Celular</button>
         <button onClick={() => setDisp('pc')} style={{ ...btn, ...(disp === 'pc' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>🖥️ Computador</button>
       </div>
       <div style={{ flex: 1, minHeight: 0, background: 'var(--df-surface-2, #f4f4f5)', borderRadius: 10, display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
-        <iframe title="Vista previa de la landing" srcDoc={htmlCodigo ?? html} sandbox="allow-scripts"
+        <iframe title="Vista previa de la landing" srcDoc={htmlCodigo ?? htmlPlantilla ?? html} sandbox="allow-scripts"
           style={{ width: disp === 'cel' ? 390 : '100%', maxWidth: '100%', height: '100%', border: 'none', background: '#fff', boxShadow: disp === 'cel' ? '0 0 0 1px var(--df-border)' : 'none' }} />
       </div>
     </div>
@@ -454,6 +477,7 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
           {vista}
         </div>
       )}
+      {verPlantillas && <PlantillasModal landings={[l]} onCerrar={() => setVerPlantillas(false)} />}
     </section>
   );
 }

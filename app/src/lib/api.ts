@@ -953,7 +953,7 @@ export interface LandingDatos {
   whatsapp: string; pixelMeta: string; confirmarWhatsapp: boolean; autoDespacho: boolean; pedirCorreo: boolean; gracias: string;
   seoTitulo: string; seoDescripcion: string; seoImagen: string;
 }
-export interface LandingResumen { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string; modoCodigo?: boolean }
+export interface LandingResumen { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string; modoCodigo?: boolean; plantillaId?: string }
 export interface Landing extends LandingResumen { datos: LandingDatos }
 export interface MembresiaTienda { activa: boolean; cortesia: boolean; vence: string; diasRestantes: number; enGracia: boolean; precio: number }
 export interface TiendaConfig { nombre: string; logo: string; favicon: string; banner: string; titulo: string; descripcion: string; anuncios: string[]; colorPrincipal: string; colorBoton: string; colorAcento: string; whatsapp: string; pixelMeta: string; seoTitulo: string; seoDescripcion: string; seoImagen: string }
@@ -1068,3 +1068,11 @@ export const apiCodigoLanding = (id: string) => req<CodigoLanding>(`/api/landing
 export const apiExportarCodigoLanding = (id: string, tipo: 'landing' | 'gracias') => req<{ html: string; nombre: string }>(`/api/landings/${encodeURIComponent(id)}/codigo/exportar?tipo=${tipo}`, 'GET');
 export const apiGuardarCodigoLanding = (id: string, b: { modo?: boolean; codigo?: string; gracias?: string }) => req<CodigoLanding>(`/api/landings/${encodeURIComponent(id)}/codigo`, 'PUT', b);
 export const apiVistaCodigoLanding = (id: string, codigo: string, tipo: 'landing' | 'gracias') => req<{ html: string; avisos: string[] }>(`/api/landings/${encodeURIComponent(id)}/codigo/vista`, 'POST', { codigo, tipo });
+
+// ── Plantillas de landing de la tienda ──
+export interface PlantillaTienda { id: string; nombre: string; html: string; gracias: string; usos: number; updatedAt: string }
+export const apiPlantillasTienda = () => req<{ plantillas: PlantillaTienda[]; ejemplo: string; guia: string }>('/api/landings/plantillas', 'GET');
+export const apiGuardarPlantillaTienda = (id: string | null, b: { nombre?: string; html?: string; gracias?: string }) => req<{ plantilla: PlantillaTienda }>(id ? `/api/landings/plantillas/${encodeURIComponent(id)}` : '/api/landings/plantillas', id ? 'PUT' : 'POST', b);
+export const apiBorrarPlantillaTienda = (id: string) => req<{ ok: true }>(`/api/landings/plantillas/${encodeURIComponent(id)}`, 'DELETE');
+export const apiVistaPlantillaTienda = (html: string, tipo: 'landing' | 'gracias', landingId?: string) => req<{ html: string; avisos: string[]; landing: string }>('/api/landings/plantillas/vista', 'POST', { html, tipo, landingId });
+export const apiUsarPlantilla = (landingId: string, plantillaId: string) => req<{ ok: true }>(`/api/landings/${encodeURIComponent(landingId)}/plantilla`, 'PUT', { plantillaId });

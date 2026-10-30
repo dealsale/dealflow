@@ -100,3 +100,15 @@ Reglas para que el pedido entre a DealFlow (con confirmación por WhatsApp, desp
 - `<div data-dealflow="error">` muestra los errores. No agregues el script de DealFlow ni el píxel: se ponen solos.
 - Avisos: "Ningún formulario tiene data-dealflow="pedido"" = así la página no crea pedidos. Máximo 1,5 MB por página (las imágenes van por URL).
 - Seguridad: en app.dealflow.sbs el código corre aislado (no puede usar tu cuenta); en tu dominio o en el de dflw.store funciona completo, con píxeles y scripts externos.
+
+## Mis plantillas: diseños propios para todas las landings (tipo temas de Shopify)
+Sección: landings
+Claves: plantillas, mis plantillas, tema, theme, plantilla propia, subir plantilla, diseño propio, shopify, easysell, marcas, {{producto.nombre}}, formulario
+- En **Tienda en línea** toca **🎨 Mis plantillas** → **＋ Nueva plantilla**. Arranca con un ejemplo que trae todas las marcas; puedes **⬆ Subir .html** o pegar tu diseño.
+- Las marcas se llenan solas con cada landing: `{{producto.nombre}}`, `{{precio}}`, `{{precio_antes}}`, `{{descuento}}`, `{{{descripcion_html}}}`, `{{foto_principal}}`, `{{#fotos}}<img src="{{url}}">{{/fotos}}`, `{{#ofertas}}{{titulo}} {{precio}}{{/ofertas}}`, `{{#opciones}}{{nombre}}{{/opciones}}`, `{{#testimonios}}{{autor}} {{texto}}{{/testimonios}}`, `{{#beneficios}}{{texto}}{{/beneficios}}`, `{{tienda.nombre}}`, `{{colores.boton}}`…
+- **`{{formulario}}`** pone el formulario contra entrega de DealFlow completo (ofertas, variantes y datos de envío). Si haces el tuyo, usa `<form data-dealflow="pedido">` como en el Modo código.
+- **🤖 Guía para la IA** → copia y pégasela a Claude o Astra con el diseño que quieres: te devuelve la plantilla lista.
+- La vista previa muestra la plantilla con los datos de la landing que elijas. Puedes tener página de gracias propia en la plantilla.
+- Para usarla: abre la landing → **🎨 Diseño de la página** → elige la plantilla. Lo que edites en la landing (nombre, precio, fotos, variantes, ofertas) llena la plantilla. Si cambias la plantilla, todas las landings que la usan cambian.
+- Si la landing tiene el **Modo código** activo, su código propio manda sobre la plantilla.
+- Una plantilla solo se puede borrar si ninguna landing la usa.

@@ -12,6 +12,7 @@
  */
 import { db, pj } from './db.js';
 import { limpiarDatos, configTienda, type LandingDatos } from './landings.js';
+import { plantillaDe, renderPlantilla } from './plantillasTienda.js';
 
 for (const col of ["codigo TEXT NOT NULL DEFAULT ''", "codigo_gracias TEXT NOT NULL DEFAULT ''", 'modo_codigo INTEGER NOT NULL DEFAULT 0']) {
   try { db.exec(`ALTER TABLE landings ADD COLUMN ${col}`); } catch { /* ya existe */ }
@@ -75,9 +76,33 @@ function configPublica(l: Fila, d: LandingDatos, base: string, vista: boolean): 
     ofertas: bundles.map((b, i) => ({ indice: i, cantidad: b.cantidad, titulo: b.titulo, precio: b.precio, precioAntes: b.precioAntes })),
     opciones: d.opciones.map((o) => ({ nombre: o.nombre, valores: o.valores.map((v) => v.valor) })),
     pixel: vista ? '' : d.pixelMeta || tienda.pixelMeta || '', gracias: d.gracias,
-    urlGracias: txt(l.codigo_gracias).trim() ? `${base}${txt(l.slug)}/gracias` : '',
+    urlGracias: tieneGracias(l) ? `${base}${txt(l.slug)}/gracias` : '',
     tienda: d.nombreTienda || tienda.nombre, whatsapp: d.whatsapp || tienda.whatsapp, vista,
   };
+}
+
+/** ¿La landing tiene página de gracias propia (en su código o en su plantilla)? */
+function tieneGracias(l: Fila): boolean {
+  if (l.modo_codigo && txt(l.codigo).trim()) return !!txt(l.codigo_gracias).trim();
+  const p = plantillaDe(txt(l.store_id), txt(l.plantilla_id));
+  return !!(p && txt(p.gracias).trim());
+}
+
+/**
+ * HTML público de una landing que NO usa el diseño del editor: su código propio (modo
+ * código) o la plantilla de la tienda que tenga elegida, ya con el script de DealFlow.
+ * null = se muestra con el diseño del editor.
+ */
+export function htmlPublico(l: Fila, tipo: 'landing' | 'gracias', base: string): string | null {
+  if (l.modo_codigo && txt(l.codigo).trim()) {
+    return paginaCodigo(l, tipo, base, false, tipo === 'gracias' && !txt(l.codigo_gracias).trim() ? graciasPorDefecto(l) : undefined);
+  }
+  const p = plantillaDe(txt(l.store_id), txt(l.plantilla_id));
+  if (p && txt(p.html).trim()) {
+    const fuente = tipo === 'gracias' ? (txt(p.gracias).trim() ? renderPlantilla(txt(p.gracias), l) : graciasPorDefecto(l)) : renderPlantilla(txt(p.html), l);
+    return paginaCodigo(l, tipo, base, false, fuente);
+  }
+  return tipo === 'gracias' ? paginaCodigo(l, 'gracias', base, false, graciasPorDefecto(l)) : null;
 }
 
 const json = (x: unknown) => JSON.stringify(x).replace(/</g, '\\u003c');

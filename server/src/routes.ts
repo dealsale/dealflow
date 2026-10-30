@@ -4037,6 +4037,44 @@ api.post('/landings/membresia/pagar', requireAuth, requireStore, async (req, res
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ url: r.url });
 });
+// ── Plantillas de landing de la tienda (como los temas de Shopify) ──
+api.get('/landings/plantillas', requireAuth, requireStore, sinMembresia, async (req, res) => {
+  const P = await import('./plantillasTienda.js');
+  res.json({ plantillas: P.listarPlantillas(req.user!.storeId!), ejemplo: P.EJEMPLO, guia: P.GUIA_IA });
+});
+api.post('/landings/plantillas', requireAuth, requireStore, sinMembresia, async (req, res) => {
+  const r = (await import('./plantillasTienda.js')).guardarPlantilla(req.user!.storeId!, null, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ plantilla: r });
+});
+api.put('/landings/plantillas/:pid', requireAuth, requireStore, sinMembresia, async (req, res) => {
+  const r = (await import('./plantillasTienda.js')).guardarPlantilla(req.user!.storeId!, req.params.pid, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ plantilla: r });
+});
+api.delete('/landings/plantillas/:pid', requireAuth, requireStore, sinMembresia, async (req, res) => {
+  const r = (await import('./plantillasTienda.js')).borrarPlantilla(req.user!.storeId!, req.params.pid);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+// Vista previa de una plantilla llena con los datos de una landing (la elegida o la más reciente).
+api.post('/landings/plantillas/vista', requireAuth, requireStore, sinMembresia, async (req, res) => {
+  const P = await import('./plantillasTienda.js');
+  const LC = await import('./landingCodigo.js');
+  const sid = req.user!.storeId!;
+  const fila = (req.body?.landingId ? db.prepare('SELECT * FROM landings WHERE id = ? AND store_id = ?').get(String(req.body.landingId), sid) : db.prepare('SELECT * FROM landings WHERE store_id = ? ORDER BY updated_at DESC LIMIT 1').get(sid)) as Record<string, unknown> | undefined;
+  if (!fila) return res.status(400).json({ error: 'Crea primero una landing (un producto en Tienda en línea) para ver la plantilla con sus datos.' });
+  const tipo = req.body?.tipo === 'gracias' ? 'gracias' : 'landing';
+  const html = P.renderPlantilla(String(req.body?.html || ''), fila);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ html: LC.paginaCodigo(fila, tipo, '/', true, html || (tipo === 'gracias' ? LC.graciasPorDefecto(fila) : '')), avisos: LC.revisarCodigo(/\{\{\s*formulario\s*\}\}/.test(String(req.body?.html || '')) ? html : String(req.body?.html || ''), tipo), landing: String(fila.nombre || '') });
+});
+// Elegir el diseño de una landing: '' = diseño del editor, o el id de una plantilla.
+api.put('/landings/:id/plantilla', requireAuth, requireStore, sinMembresia, async (req, res) => {
+  const r = (await import('./plantillasTienda.js')).usarPlantilla(req.user!.storeId!, req.params.id, String(req.body?.plantillaId || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
 api.get('/landings/:id', requireAuth, requireStore, sinMembresia, async (req, res) => {
   const l = (await import('./landings.js')).verLanding(req.user!.storeId!, req.params.id);
   if (!l) return res.status(404).json({ error: 'Landing no encontrada.' });
