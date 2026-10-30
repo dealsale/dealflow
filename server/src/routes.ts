@@ -4102,6 +4102,35 @@ api.get('/superadmin/stores/:storeId/landings', requireAuth, requireAdmin, (req,
   if (tiendaVedada(req, req.params.storeId)) return res.status(404).json({ error: 'Tienda no encontrada.' });
   res.json({ landings: db.prepare('SELECT id, nombre, estado FROM landings WHERE store_id = ? ORDER BY updated_at DESC').all(req.params.storeId) });
 });
+// Catálogo del admin: TODAS las landings de todas las tiendas (para verlas y mandarlas a la
+// biblioteca o directo a una tienda, igual que con los productos).
+api.get('/superadmin/landings', requireAuth, requireAdmin, async (req, res) => {
+  res.json({ landings: (await import('./bibliotecaLandings.js')).listarTodasLasLandings(req.user!.role === 'SUPERADMIN') });
+});
+// Vista previa de cualquier landing (borrador o publicada) tal como la vería el cliente,
+// sin píxel ni pedidos reales. Con código propio se sirve aislada (CSP sandbox).
+api.get('/superadmin/landings/:storeId/:id/vista', requireAuth, requireAdmin, async (req, res) => {
+  const { storeId, id } = req.params;
+  const fila = tiendaVedada(req, storeId) ? undefined : db.prepare('SELECT * FROM landings WHERE id = ? AND store_id = ?').get(id, storeId) as Record<string, unknown> | undefined;
+  if (!fila) return res.status(404).type('html').send('<p style="font-family:sans-serif;padding:30px">Landing no encontrada.</p>');
+  const L = await import('./landings.js');
+  const LC = await import('./landingCodigo.js');
+  const { slugTienda } = await import('./tiendaPublica.js');
+  const base = `/l/${slugTienda(storeId)}/`;
+  res.setHeader('Cache-Control', 'no-store');
+  const propio = LC.htmlPublico(fila, 'landing', base, true);
+  if (propio) { res.set(LC.cabecerasCodigo(true)); return res.type('html').send(propio); }
+  res.type('html').send(L.renderLanding(L.limpiarDatos(pj(String(fila.datos || ''), {})), { id, vista: true, inicio: base, tienda: L.configTienda(storeId) }));
+});
+// Mandar una landing de una tienda DIRECTO a otra tienda (como borrador), sin pasar por la biblioteca.
+api.post('/superadmin/landings/:storeId/:id/enviar-a-tienda', requireAuth, requireAdmin, async (req, res) => {
+  const destino = String(req.body?.storeId || '');
+  if (tiendaVedada(req, req.params.storeId)) return res.status(404).json({ error: 'Landing no encontrada.' });
+  if (!destino || !db.prepare('SELECT id FROM stores WHERE id = ?').get(destino) || tiendaVedada(req, destino)) return res.status(404).json({ error: 'La tienda destino no existe.' });
+  const r = (await import('./bibliotecaLandings.js')).enviarLandingATienda(req.params.storeId, req.params.id, destino);
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ok: true, landingId: r.landingId });
+});
 api.post('/superadmin/biblioteca-landings', requireAuth, requireAdmin, async (req, res) => {
   const { storeId, landingId, gratis, precioImportacion } = req.body || {};
   if (tiendaVedada(req, String(storeId || ''))) return res.status(404).json({ error: 'Tienda no encontrada.' });

@@ -319,12 +319,15 @@ function plantillaInicial(storeId: string, productId: string): LandingDatos {
 
 // ── CRUD ───────────────────────────────────────────────────────────────
 export interface LandingFila { id: string; slug: string; nombre: string; productId: string; estado: string; desbloqueada: boolean; modo: string; vistas: number; pedidos: number; url: string; publicadaAt: string | null; updatedAt: string; modoCodigo: boolean; plantillaId: string }
+/** Dirección pública de una landing (dominio propio, <tienda>.dflw.store o app/l/…). */
+export function urlPublicaLanding(storeId: string, slug: string): string {
+  const dom = dominioActivo(storeId);
+  return dom ? `https://${dom}/${slug}` : `${BASE_TIENDA}/l/${slugTienda(storeId)}/${slug}`;
+}
 function aFila(r: Fila): LandingFila {
-  const t = slugTienda(txt(r.store_id));
-  const dom = dominioActivo(txt(r.store_id));
   return {
     id: txt(r.id), slug: txt(r.slug), nombre: txt(r.nombre), productId: txt(r.product_id), estado: txt(r.estado), desbloqueada: !!r.desbloqueada, modo: txt(r.modo),
-    vistas: num(r.vistas), pedidos: num(r.pedidos), url: dom ? `https://${dom}/${txt(r.slug)}` : `${BASE_TIENDA}/l/${t}/${txt(r.slug)}`, publicadaAt: (r.publicada_at as string) || null, updatedAt: txt(r.updated_at), modoCodigo: !!r.modo_codigo, plantillaId: txt(r.plantilla_id),
+    vistas: num(r.vistas), pedidos: num(r.pedidos), url: urlPublicaLanding(txt(r.store_id), txt(r.slug)), publicadaAt: (r.publicada_at as string) || null, updatedAt: txt(r.updated_at), modoCodigo: !!r.modo_codigo, plantillaId: txt(r.plantilla_id),
   };
 }
 export function listarLandings(storeId: string): LandingFila[] {
