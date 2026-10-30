@@ -543,7 +543,7 @@ export function normalizarDominio(v: string): string | null {
   return d;
 }
 /** Registro DNS que el cliente puede crear (el CNAME obligatorio o los TXT que aceleran el certificado). */
-export interface RegistroDns { tipo: string; nombre: string; valor: string; para: string }
+export interface RegistroDns { tipo: string; nombre: string; valor: string; para: string; obligatorio?: boolean }
 /** Cómo va cada paso de la conexión (para mostrarlo en el panel). */
 export interface DiagDominio { dns: 'ok' | 'pendiente' | 'error'; dnsDetalle: string; ssl: 'ok' | 'pendiente' | 'desconocido'; sslDetalle: string; extra: RegistroDns[]; revisado: string }
 export interface EstadoDominio { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string; conectadoAt: string; diag: DiagDominio | null; apex: boolean }
@@ -572,17 +572,41 @@ const ipNum = (ip: string) => ip.split('.').reduce((a, b) => a * 256 + Number(b)
 const enRango = (ip: string, r: string) => { const [base, bits] = r.split('/'); const m = 2 ** (32 - Number(bits)); return Math.floor(ipNum(ip) / m) === Math.floor(ipNum(base) / m); };
 const esIpCloudflare = (ip: string) => RANGOS_CF.some((r) => enRango(ip, r));
 
-/** Revisa el DNS del dominio y dice exactamente qué falta. */
+/**
+ * Resolutor que pregunta DIRECTO a los servidores DNS del dominio (los de Hostinger, GoDaddy…).
+ * Los resolutores normales guardan la respuesta vieja hasta que vence su TTL (Hostinger trae
+ * 4 horas por defecto): el cliente cambiaba el registro y el panel seguía viendo el anterior.
+ * Los servidores del propio dominio siempre responden lo que hay AHORA.
+ */
+const PUBLICOS = ['1.1.1.1', '8.8.8.8', '1.0.0.1'];
+function resolutor(servidores: string[]) { const r = new dnsP.Resolver({ timeout: 3500, tries: 2 }); r.setServers(servidores); return r; }
+async function resolutorAutoritativo(dom: string): Promise<InstanceType<typeof dnsP.Resolver> | null> {
+  const pub = resolutor(PUBLICOS);
+  const ns = await pub.resolveNs(raizRegistrable(dom)).catch(() => [] as string[]);
+  const ips = (await Promise.all(ns.slice(0, 4).map((n) => pub.resolve4(n).catch(() => [] as string[])))).flat();
+  return ips.length ? resolutor(ips.slice(0, 4)) : null;
+}
+type Consulta = { cname: (h: string) => Promise<string[]>; a: (h: string) => Promise<string[]> };
+async function consultaFresca(dom: string): Promise<{ q: Consulta; fuente: string }> {
+  const aut = await resolutorAutoritativo(dom).catch(() => null);
+  if (aut) return { q: { cname: (h) => aut.resolveCname(h), a: (h) => aut.resolve4(h) }, fuente: 'autoritativo' };
+  // Sin acceso a los servidores del dominio: resolutores públicos y, al final, el del sistema.
+  const pub = resolutor(PUBLICOS);
+  return { q: { cname: (h) => pub.resolveCname(h).catch(() => dnsP.resolveCname(h)), a: (h) => pub.resolve4(h).catch(() => dnsP.resolve4(h)) }, fuente: 'publico' };
+}
+
+/** Revisa el DNS del dominio (sin respuestas guardadas) y dice exactamente qué falta. */
 async function diagnosticoDns(dom: string): Promise<{ dns: DiagDominio['dns']; detalle: string }> {
   const destino = CNAME_LANDINGS.toLowerCase();
-  const cnames = await dnsP.resolveCname(dom).catch(() => [] as string[]);
+  const { q } = await consultaFresca(dom);
+  const cnames = await q.cname(dom).catch(() => [] as string[]);
   const c = cnames.map((x) => x.toLowerCase().replace(/\.$/, ''));
   if (c.includes(destino)) return { dns: 'ok', detalle: `El registro CNAME ya apunta a ${destino}.` };
   if (c.length) return { dns: 'error', detalle: `Tu dominio tiene un CNAME que apunta a "${c[0]}". Cámbialo para que apunte a ${destino}.` };
-  const ips = await dnsP.resolve4(dom).catch(() => [] as string[]);
-  // El destino resuelve a estas IPs: si coinciden, el DNS está bien aunque no se vea el CNAME (aplanado).
-  const ipsDestino = await dnsP.resolve4(destino).catch(() => [] as string[]);
-  if (ips.length && ipsDestino.length && ips.every((ip) => ipsDestino.includes(ip))) return { dns: 'ok', detalle: `Tu dominio ya llega a ${destino}.` };
+  const ips = await q.a(dom).catch(() => [] as string[]);
+  // El destino resuelve a estas IPs: si coinciden, el DNS está bien aunque no se vea el CNAME (ALIAS / aplanado).
+  const ipsDestino = await resolutor(PUBLICOS).resolve4(destino).catch(() => dnsP.resolve4(destino).catch(() => [] as string[]));
+  if (ips.length && ipsDestino.length && ips.every((ip) => ipsDestino.includes(ip))) return { dns: 'ok', detalle: `Tu dominio ya llega a ${destino} (por ALIAS).` };
   if (ips.length && ips.every(esIpCloudflare)) return { dns: 'error', detalle: `Tu dominio está en Cloudflare con la nube NARANJA (proxy). En Cloudflare → DNS, crea el CNAME hacia ${destino} y ponle la nube GRIS («Solo DNS»).` };
   if (ips.length) return { dns: 'error', detalle: `Tu dominio todavía apunta a otro servidor (${ips.slice(0, 2).join(', ')}). Borra ese registro A y crea el CNAME hacia ${destino}.` };
   return { dns: 'pendiente', detalle: `Todavía no vemos el registro CNAME hacia ${destino}. Si ya lo creaste, espera unos minutos: tu proveedor lo está publicando.` };
@@ -629,7 +653,7 @@ export async function verificarDominio(storeId: string, auto = false): Promise<E
   if (!e.dominio) return e;
   let estado = 'pendiente'; let detalle = '';
   const dns = await diagnosticoDns(e.dominio).catch(() => ({ dns: 'pendiente' as const, detalle: 'No pudimos consultar el DNS ahora.' }));
-  let ssl: DiagDominio['ssl'] = 'desconocido'; let sslDetalle = ''; const extra: RegistroDns[] = [];
+  let ssl: DiagDominio['ssl'] = 'desconocido'; let sslDetalle = ''; const extra: RegistroDns[] = []; let cfActivo = false;
   const c = db.prepare('SELECT landing_dominio_cf FROM stores WHERE id = ?').get(storeId) as { landing_dominio_cf: string };
   if (c.landing_dominio_cf) {
     const r = await cfApi('GET', `/custom_hostnames/${c.landing_dominio_cf}`);
@@ -639,13 +663,19 @@ export async function verificarDominio(storeId: string, auto = false): Promise<E
       ssl = txt(sslR.status) === 'active' ? 'ok' : 'pendiente';
       sslDetalle = ssl === 'ok' ? 'El certificado de seguridad (HTTPS) está listo.' : `Certificado de seguridad: ${txt(sslR.status).replace(/_/g, ' ') || 'en proceso'}.`;
       // Registros TXT que aceleran el certificado y la verificación (opcionales con el CNAME).
+      // Nombre corto: Hostinger, GoDaddy y casi todos le agregan el dominio solos ("_x.tutienda.com.tutienda.com").
+      const raiz = raizRegistrable(e.dominio);
+      const corto = (n: string) => { const x = n.toLowerCase().replace(/\.$/, ''); return x === raiz ? '@' : x.endsWith('.' + raiz) ? x.slice(0, -raiz.length - 1) : x; };
       for (const v of (Array.isArray(sslR.validation_records) ? sslR.validation_records : []) as Fila[]) {
-        if (txt(v.txt_name) && txt(v.txt_value)) extra.push({ tipo: 'TXT', nombre: txt(v.txt_name), valor: txt(v.txt_value), para: 'Acelera el certificado HTTPS' });
+        if (txt(v.txt_name) && txt(v.txt_value)) extra.push({ tipo: 'TXT', nombre: corto(txt(v.txt_name)), valor: txt(v.txt_value), para: 'Acelera el certificado HTTPS' });
       }
       const ov = (res.ownership_verification || {}) as Fila;
-      if (txt(res.status) !== 'active' && txt(ov.name) && txt(ov.value)) extra.push({ tipo: txt(ov.type).toUpperCase() || 'TXT', nombre: txt(ov.name), valor: txt(ov.value), para: 'Confirma que el dominio es tuyo' });
-      // DNS bien pero el certificado no avanza: se le pide a Cloudflare que lo vuelva a intentar (máx. cada 20 min).
-      if (dns.dns === 'ok' && ssl !== 'ok' && Date.now() - (revalidado.get(storeId) || 0) > 20 * 60_000) {
+      // Sin CNAME visible (dominio sin www con ALIAS, como lo pone Hostinger), Cloudflare SOLO puede
+      // confirmar el dominio con este TXT: ahí es obligatorio.
+      if (txt(res.status) !== 'active' && txt(ov.name) && txt(ov.value)) extra.unshift({ tipo: txt(ov.type).toUpperCase() || 'TXT', nombre: corto(txt(ov.name)), valor: txt(ov.value), para: e.apex || !/CNAME/.test(dns.detalle) ? 'Obligatorio: confirma que el dominio es tuyo (tu dominio usa ALIAS, no CNAME)' : 'Confirma que el dominio es tuyo', obligatorio: e.apex || !/CNAME/.test(dns.detalle) });
+      cfActivo = txt(res.status) === 'active' && ssl === 'ok';
+      // DNS bien pero el certificado no avanza: se le pide a Cloudflare que lo vuelva a intentar (máx. cada 10 min).
+      if (dns.dns === 'ok' && ssl !== 'ok' && Date.now() - (revalidado.get(storeId) || 0) > 10 * 60_000) {
         revalidado.set(storeId, Date.now());
         await cfApi('PATCH', `/custom_hostnames/${c.landing_dominio_cf}`, { ssl: { method: 'http', type: 'dv' } });
       }
@@ -671,6 +701,8 @@ export async function verificarDominio(storeId: string, auto = false): Promise<E
       : certificado || ssl === 'pendiente' ? 'Tu dominio ya apunta a DealFlow ✓. Falta que se genere el certificado de seguridad (HTTPS): suele tardar entre 2 y 15 minutos. Lo revisamos solos y te avisamos.'
       : 'Tu dominio ya apunta a DealFlow ✓. Estamos terminando de activarlo; lo revisamos solos cada par de minutos.';
   }
+  if (estado !== 'activo' && cfActivo && dns.dns === 'ok') { estado = 'activo'; detalle = '¡Listo! Tu dominio y su certificado ya están activos. Si en tu celular aún no carga, espera unos minutos: tu internet guarda el DNS anterior un rato.'; }
+  if (estado !== 'activo' && dns.dns === 'ok' && extra.some((x) => x.obligatorio)) detalle = 'Tu dominio ya apunta a DealFlow ✓, pero usa ALIAS (no CNAME): para el certificado falta crear el registro TXT obligatorio de abajo. Apenas lo crees, lo detectamos solos.';
   if (dns.dns === 'ok' && dns.detalle && estado !== 'activo' && !detalle.includes('✓')) detalle = `${dns.detalle} ${detalle}`.trim();
   const diag: DiagDominio = { dns: estado === 'activo' ? 'ok' : dns.dns, dnsDetalle: estado === 'activo' ? 'Tu dominio apunta a DealFlow.' : dns.detalle, ssl, sslDetalle: estado === 'activo' ? 'El certificado de seguridad (HTTPS) está listo.' : sslDetalle, extra: estado === 'activo' ? [] : extra, revisado: new Date().toISOString() };
   const antes = e.estado;
