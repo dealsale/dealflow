@@ -1701,7 +1701,9 @@ api.get('/effi-api/listas', requireAuth, requireStore, requirePermiso('despachar
   if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
   const l = await ef.listasEffi(c.apiKey);
   if ('error' in l) return res.status(400).json({ error: l.error });
-  res.json({ ...l, remitentes: ef.rotularRemitentes(req.user!.storeId!, (l.remitentes || []) as Parameters<typeof ef.rotularRemitentes>[1]) });
+  const remitentes = ef.rotularRemitentes(req.user!.storeId!, (l.remitentes || []) as Parameters<typeof ef.rotularRemitentes>[1]);
+  void ef.descubrirProveedoresRemitentes(req.user!.storeId!, c.apiKey, remitentes.filter((x) => !x.proveedores.length && !x.alias).map((x) => x.id));
+  res.json({ ...l, remitentes });
 });
 api.post('/effi-api/config', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
@@ -1869,6 +1871,8 @@ api.get('/effi-api/opciones-guia', requireAuth, requireStore, requirePermiso('de
   const r0 = await ef.opcionesGuiaEffi(c.apiKey);
   if ('error' in r0) return res.status(400).json({ error: r0.error });
   const r = { ...r0, remitentes: ef.rotularRemitentes(req.user!.storeId!, r0.remitentes as Parameters<typeof ef.rotularRemitentes>[1]) };
+  // En segundo plano: averigua de qué proveedor son los remitentes que aún no se reconocen.
+  void ef.descubrirProveedoresRemitentes(req.user!.storeId!, c.apiKey, r.remitentes.filter((x) => !x.proveedores.length && !x.alias).map((x) => x.id));
   // Remitente que le toca a este pedido (la bodega del proveedor de su convenio), si se sabe.
   const sugerido = req.query.orderId || req.query.convenio
     ? await ef.remitenteSugerido(req.user!.storeId!, c.apiKey, { orderId: String(req.query.orderId || ''), convenio: String(req.query.convenio || '') }) : null;
