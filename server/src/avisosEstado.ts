@@ -32,6 +32,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS avisos_estado (
   creado TEXT NOT NULL DEFAULT (datetime('now')),
   enviado_at TEXT
 )`);
+try { db.exec("ALTER TABLE avisos_estado ADD COLUMN wamid TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 db.exec("CREATE INDEX IF NOT EXISTS idx_avisos_estado_pend ON avisos_estado(resultado, proximo)");
 db.exec('CREATE INDEX IF NOT EXISTS idx_avisos_estado_orden ON avisos_estado(order_id, estado)');
 db.exec(`CREATE TRIGGER IF NOT EXISTS trg_orders_aviso_estado AFTER UPDATE OF estado ON orders
@@ -157,9 +158,10 @@ async function enviarAviso(a: Fila): Promise<void> {
   const envio = await sendWhatsappText(storeId, destino, texto, chat.tel);
   if (envio.ok) {
     if (!envio.repetido) {
-      db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado) VALUES (?,?,'bot',?,'enviado')").run(uid(), chat.id, texto);
+      db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, texto, envio.wamid || null);
       contarProactivo(storeId, chat.tel);
     }
+    if (envio.wamid) db.prepare('UPDATE avisos_estado SET wamid = ? WHERE id = ?').run(envio.wamid, a.id as number);
     return cerrar(a, 'enviado', 'Mensaje del bot al chat.');
   }
   if (!envio.bloqueadoVentana) return reintentar(a, envio.error || 'WhatsApp no envió el mensaje.');
@@ -176,9 +178,10 @@ async function enviarAviso(a: Fila): Promise<void> {
   const r = await sendWhatsappTemplate(storeId, destino, tpl, params, chat.tel);
   if (!r.ok) return reintentar(a, r.error || 'Meta rechazó la plantilla.');
   if (!r.repetido) {
-    db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado) VALUES (?,?,'bot',?,'enviado')").run(uid(), chat.id, r.textoRender || `[Plantilla: ${tpl.nombre}]`);
+    db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, r.textoRender || `[Plantilla: ${tpl.nombre}]`, r.wamid || null);
     contarProactivo(storeId, chat.tel);
   }
+  if (r.wamid) db.prepare('UPDATE avisos_estado SET wamid = ? WHERE id = ?').run(r.wamid, a.id as number);
   return cerrar(a, 'plantilla', `Plantilla "${tpl.nombre}" (el cliente no escribía hace más de 24 h).`);
 }
 

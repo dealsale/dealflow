@@ -17,7 +17,7 @@ import { moverAPapelera, listarPapelera, restaurarDePapelera, listarRespaldos, p
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
-import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, sendWhatsappTemplate, verifyWhatsappCredentials } from './wa.js';
+import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, sendWhatsappTemplate, verifyWhatsappCredentials, reenviarPlantillaGuardada, ventanaDeLead } from './wa.js';
 import { mediaPath, saveOutgoingMedia, saveOutgoingMessage, tipoDeMime } from './media.js';
 import { existsSync, readFileSync } from 'node:fs';
 import type * as DropiApi from './dropiApi.js';
@@ -2785,14 +2785,21 @@ api.post('/leads/:id/media', requireAuth, requireStore, requirePermiso('chats'),
 api.post('/messages/:id/reenviar', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const m = db.prepare(
-    'SELECT m.id, m.de, m.texto, m.tipo, m.media_url, m.media_mime, l.wa_id, l.tel FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.id = ? AND l.store_id = ?',
-  ).get(req.params.id, sid) as { id: string; de: string; texto: string; tipo: string; media_url: string | null; media_mime: string | null; wa_id: string | null; tel: string } | undefined;
+    'SELECT m.id, m.de, m.texto, m.tipo, m.media_url, m.media_mime, m.wa_msg_id, l.id AS lead_id, l.wa_id, l.tel FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.id = ? AND l.store_id = ?',
+  ).get(req.params.id, sid) as { id: string; de: string; texto: string; tipo: string; media_url: string | null; media_mime: string | null; wa_msg_id: string | null; lead_id: string; wa_id: string | null; tel: string } | undefined;
   if (!m) return res.status(404).json({ error: 'Mensaje no encontrado.' });
   if (m.de === 'cliente') return res.status(400).json({ error: 'Solo se pueden reenviar los mensajes que envías tú.' });
   const destino = m.wa_id || m.tel;
 
   let r: { ok: boolean; error?: string; wamid?: string };
-  if (m.tipo && m.tipo !== 'texto' && m.media_url) {
+  // Si el mensaje era una PLANTILLA, se reenvía como plantilla (funciona aunque pasaran 24 h).
+  const comoPlantilla = await reenviarPlantillaGuardada(sid, String(m.wa_msg_id || ''), destino, m.tel);
+  if (comoPlantilla) {
+    r = comoPlantilla;
+  } else if (!ventanaDeLead(sid, m.lead_id).abierta) {
+    // Texto libre con la ventana cerrada: WhatsApp lo rechazaría. Se explica en vez de "reenviar".
+    return res.status(400).json({ error: 'Pasaron más de 24 h desde el último mensaje del cliente: este mensaje no se puede reenviar como texto. Envíale una plantilla con el botón ⚡ «Enviar plantilla».' });
+  } else if (m.tipo && m.tipo !== 'texto' && m.media_url) {
     const archivo = mediaPath(sid, String(m.media_url).split('/').pop() || '');
     if (!existsSync(archivo)) return res.status(400).json({ error: 'No encontramos el archivo del mensaje para reenviarlo.' });
     const mime = m.media_mime || 'application/octet-stream';
