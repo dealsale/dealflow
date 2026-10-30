@@ -58,7 +58,8 @@ Regla de WhatsApp (no de DealFlow): pasadas **24 horas desde el último mensaje 
 - En el Inbox sale **🔒 No puedes escribir en este chat** y el botón **⚡ Enviar plantilla**. Cuando el cliente responda, se desbloquea.
 - Las plantillas solo funcionan con la **conexión oficial** (no con QR): "Las plantillas de Meta solo se envían por la conexión oficial de WhatsApp (no por QR)".
 - DealFlow crea y manda a verificación las plantillas que usa sola: **confirmacion_pedido** y **confirmacion_pedido_tienda** (confirmar pedido Sí/No), **guia_envio_pedido** (enviar la guía), **novedad_envio_pedido** (avisar una novedad) y **confirmar_contacto_pedido** (avisar al celular de contacto cuando es otro número). Meta tarda de minutos a 24 h en aprobarlas.
-- "Esa plantilla no está aprobada para tu tienda todavía": espera la aprobación de Meta. Si fue rechazada, escribe a soporte para revisarla.
+- Las plantillas que crees tú directo en Meta (Administrador de WhatsApp) también aparecen en DealFlow cuando Meta las aprueba: toca **⚡ → Plantillas aprobadas → ↻ Actualizar desde Meta** (o espera, se actualizan solas cada hora).
+- "Esa plantilla no está aprobada para tu tienda todavía": toca **↻ Actualizar desde Meta**; si sigue, espera la aprobación de Meta. Si fue rechazada, escribe a soporte para revisarla.
 - Las plantillas cuestan (Meta las cobra a tu cuenta). Si el método de pago falla, no salen (error 131042).
 
 ## Bloquear y desbloquear un contacto

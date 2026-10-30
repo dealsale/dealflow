@@ -153,7 +153,10 @@ En **Estadísticas → 💵 Recaudos contraentrega · Effi** ves por mes lo que 
 ## Remitente por defecto, bodegas, proveedores y convenios
 Sección: effi
 Claves: remitente proveedor, remitente por defecto, remitente fijo, remitente automatico, bodega del proveedor, convenio, nombre del convenio, dropshipping, nombre remitente, nombre bodega, todos los remitentes se llaman igual, solo sale la direccion, por que es obligatorio el remitente
-- **Remitente por defecto**: en **Integraciones → Effi → Guía de transporte** elige uno. Se pone solo en cada guía (manual y automática); en el pedido lo puedes cambiar.
+- **Remitente por defecto**: en **Integraciones → Effi → Guía de transporte** elige uno. Es el MISMO de las guías automáticas: se pone solo en cada guía (manual y automática) y nada lo cambia por debajo (hacer una guía a mano desde otra bodega ya no lo cambia).
+- Al enviar un pedido a Effi siempre ves desde qué bodega sale la guía, aunque la guía sea automática, y la puedes cambiar ahí mismo. Si el pedido es de un proveedor sin bodega fijada, sale un ⚠️ para que lo revises.
+- En **🧾 Registro del pedido** queda desde qué remitente salió cada guía y por qué (elegido en el pedido, la bodega del convenio o el de por defecto).
+- ¿Guías desde remitentes distintos? Antes del 28 de octubre el formulario ponía solo el primer remitente de Effi y cada guía hecha a mano cambiaba el remitente de las automáticas. Ya no pasa: revisa que tu remitente por defecto sea el correcto.
 - Effi les pone a todos los remitentes el nombre de la tienda, por eso al principio solo se ve la dirección (salen como "❔ Bodega sin nombre"). En **Tus remitentes: bodega y proveedor** escribe a cada uno el nombre de la bodega y el proveedor. También desde el pedido: **✏️ Nombre de la bodega y proveedor**. En la lista sale así: **📌 bodega · 🏭 proveedor · ciudad · dirección (#código)**.
 - **Cada convenio**: en la misma sección le pones el nombre del proveedor y, si quieres, su bodega. Los pedidos con ese convenio traen esa bodega en la guía; si no la fijas, sale el remitente por defecto.
 - DealFlow NO adivina de quién es una bodega: los códigos de remitente son de cada cuenta de Effi.

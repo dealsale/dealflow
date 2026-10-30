@@ -301,7 +301,7 @@ async function enviarTextoReal(storeId: string, to: string, texto: string, pn?: 
  * (el canal QR no maneja plantillas de Meta). Pasa por el tope de velocidad.
  */
 export async function sendWhatsappTemplate(
-  storeId: string, to: string, plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string },
+  storeId: string, to: string, plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string; componentes?: Record<string, unknown>[] },
   params: string[] = [], pn?: string,
 ): Promise<{ ok: boolean; error?: string; wamid?: string; textoRender?: string; repetido?: boolean }> {
   if (estaBloqueado(storeId, to, pn)) return { ok: false, error: CONTACTO_BLOQUEADO };
@@ -317,7 +317,7 @@ export async function sendWhatsappTemplate(
 }
 
 async function enviarPlantillaReal(
-  storeId: string, to: string, plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string },
+  storeId: string, to: string, plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string; componentes?: Record<string, unknown>[] },
   params: string[] = [], pn?: string,
 ): Promise<{ ok: boolean; error?: string; wamid?: string; textoRender?: string }> {
   await esperarTurno(storeId, to);
@@ -327,8 +327,9 @@ async function enviarPlantillaReal(
   if (cfg.modo === 'qr') return { ok: false, error: 'Las plantillas de Meta solo se envían por la conexión oficial de WhatsApp (no por QR).' };
   // Texto renderizado (para guardarlo en el chat): reemplaza {{n}} por el parámetro.
   const textoRender = String(plantilla.cuerpo || '').replace(/\{\{(\d+)\}\}/g, (_m, n) => params[Number(n) - 1] ?? `{{${n}}}`);
-  const components: Record<string, unknown>[] = [];
-  if (params.length) components.push({ type: 'body', parameters: params.map((t) => ({ type: 'text', text: String(t) })) });
+  // Plantillas propias de la tienda: traen sus componentes armados (encabezado, botones…).
+  const components: Record<string, unknown>[] = plantilla.componentes ? [...plantilla.componentes] : [];
+  if (!plantilla.componentes && params.length) components.push({ type: 'body', parameters: params.map((t) => ({ type: 'text', text: String(t) })) });
   try {
     const numero = (pn || to).replace(/[^0-9]/g, '');
     const res = await fetch(`${GRAPH}/${cfg.phone_number_id}/messages`, {

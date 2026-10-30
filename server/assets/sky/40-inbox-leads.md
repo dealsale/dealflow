@@ -39,8 +39,18 @@ Sección: inbox
 Claves: enviar plantilla, plantilla aprobada, reactivar cliente, mensaje inicial manual, flujos, rayo
 En el chat toca **⚡ / Enviar mensaje inicial o plantilla**:
 - **Mensaje inicial**: envía la presentación de un producto (elige el producto).
-- **Plantillas aprobadas**: mensajes que llegan aun pasadas las 24 h. "No tienes plantillas aprobadas todavía": espera que Meta las apruebe.
+- **Plantillas aprobadas**: mensajes que llegan aun pasadas las 24 h. Salen las de DealFlow y también las que **creaste tú directo en Meta** (marcadas "· Meta").
+- ¿Te aprobaron una plantilla en Meta y no aparece? Toca **↻ Actualizar desde Meta** (también se actualizan solas cada hora). Dice cuántas están aprobadas, en revisión o rechazadas.
+- Si la plantilla tiene datos (variables {{1}}, foto/video/documento arriba o un botón con enlace), se abre un formulario para llenarlos antes de enviarla, con la vista previa.
 Con el chat bloqueado por la ventana de 24 h solo funcionan las plantillas.
+
+## Mensajes rápidos (/) y emojis en el chat
+Sección: inbox
+Claves: mensajes rapidos, respuestas rapidas, atajos, barra, slash, /, plantillas internas, textos guardados, emojis, emoticones, caritas
+- En la caja del chat escribe **/** y salen tus mensajes rápidos; sigue escribiendo para buscar (ej. **/envio**) y toca uno o presiona **Enter** / **Tab** para pegarlo. **Esc** cierra la lista.
+- Para crearlos: escribe **/** → **＋ Crear mensaje rápido** (o **⚙ Crear y editar mensajes rápidos**). Ponle un atajo y el texto; **{nombre}** se cambia por el nombre del cliente. Los usa todo el equipo.
+- **😊** abre los emojis (en el celular usa los del teclado). **Shift+Enter** hace una nueva línea; **Enter** envía.
+- Los mensajes rápidos son texto libre: solo se pueden enviar dentro de las 24 h. Fuera de la ventana usa una plantilla aprobada.
 
 ## Leads: en qué va cada cliente
 Sección: leads
