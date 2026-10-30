@@ -464,11 +464,19 @@ export const apiSetOptin = (leadId: string, optin: boolean) => req<{ ok: true; o
 export interface AntibaneoEstado { nivel: 'ok' | 'aviso' | 'alerta'; porMinuto: number; tope: number; cerca: boolean; calidad: string; limite: string; avisos: string[] }
 export const apiAntibaneoEstado = () => req<AntibaneoEstado>('/api/antibaneo/estado', 'GET');
 
-export interface PlantillaAprobada { id: string; nombre: string; idioma: string; categoria: string; encabezado: string; cuerpo: string; pie: string; variables: number; ejemplos: string[] }
+export interface PlantillaAprobada {
+  id: string; nombre: string; idioma: string; categoria: string; encabezado: string; cuerpo: string; pie: string; variables: number; ejemplos: string[];
+  /** 'dealflow' = publicada por DealFlow; 'meta' = creada por la tienda directo en Meta. */
+  origen?: 'dealflow' | 'meta'; encabezadoTipo?: string; varsEncabezado?: number; mediaEjemplo?: string; botonVariable?: boolean;
+}
+export interface ExtraPlantilla { encabezado?: string; media?: string; boton?: string }
+/** ¿Hay que llenar algo antes de enviarla? (variables, foto/video/documento, enlace del botón) */
+export const plantillaPideDatos = (p: PlantillaAprobada) => p.variables > 0 || !!p.varsEncabezado || ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(p.encabezadoTipo || '') || !!p.botonVariable;
 export const apiPlantillasAprobadas = () => req<{ plantillas: PlantillaAprobada[] }>('/api/plantillas-aprobadas', 'GET');
-export const apiIniciarConPlantilla = (b: { plantillaId: string; params: string[]; asistente: boolean; contactos: { tel: string; nombre: string }[] }) =>
+export const apiSincronizarPlantillas = () => req<{ ok: true; total: number; aprobadas: number; pendientes: number; rechazadas: number; plantillas: PlantillaAprobada[]; otras: { nombre: string; estado: string; motivo: string }[] }>('/api/plantillas-aprobadas/sincronizar', 'POST');
+export const apiIniciarConPlantilla = (b: { plantillaId: string; params: string[]; extra?: ExtraPlantilla; asistente: boolean; contactos: { tel: string; nombre: string }[] }) =>
   reqBase<{ resultados: { tel: string; nombre: string; ok: boolean; error?: string; leadId?: string }[] }>('/api/leads/iniciar-plantilla', 'POST', b);
-export const apiEnviarPlantilla = (leadId: string, plantillaId: string, params?: string[]) => req<{ ok: true }>(`/api/leads/${leadId}/enviar-plantilla`, 'POST', { plantillaId, params });
+export const apiEnviarPlantilla = (leadId: string, plantillaId: string, params?: string[], extra?: ExtraPlantilla) => req<{ ok: true }>(`/api/leads/${leadId}/enviar-plantilla`, 'POST', { plantillaId, params, extra });
 
 // ── Completar pedido desde el chat ──
 export interface PropuestaPedido {
@@ -612,7 +620,7 @@ export interface TableroLogistica {
 export const apiLogistica = (dias = 45) => req<TableroLogistica>(`/api/logistica/effi?dias=${dias}`, 'GET');
 export const apiLogisticaActualizar = (dias = 45) => req<TableroLogistica>('/api/logistica/effi/actualizar', 'POST', { dias });
 export const apiEffiConveniosConocidos = () => req<{ convenios: { id: string; nombre: string }[]; porDefecto: string }>('/api/effi-api/convenios-conocidos', 'GET');
-export const apiEffiDespachar = (rowId: string, reintentar = false, convenio = '') => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar, convenio });
+export const apiEffiDespachar = (rowId: string, reintentar = false, convenio = '', remitente = '') => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar, convenio, remitente });
 
 // ── Campañas del Marketing IA ──
 export interface Brief {
@@ -1082,3 +1090,11 @@ export const apiUsarPlantilla = (landingId: string, plantillaId: string) => req<
 export const apiDatosRemitente = (codigo: string, d: { alias: string; proveedor: string }) => req<{ ok: true }>(`/api/effi-api/remitentes/${encodeURIComponent(codigo)}/datos`, 'PUT', d);
 export const apiNombrarConvenio = (id: string, nombre: string) => req<{ ok: true; convenios: { id: string; nombre: string }[] }>(`/api/effi-api/convenios/${encodeURIComponent(id)}/nombre`, 'PUT', { nombre });
 export const apiAliasRemitente = (codigo: string, alias: string) => req<{ ok: true }>(`/api/effi-api/remitentes/${encodeURIComponent(codigo)}/alias`, 'PUT', { alias });
+
+// ── Mensajes rápidos del Inbox ("/" en el chat) ──
+export interface RespuestaRapida { id: string; atajo: string; texto: string; usos: number }
+export const apiRespuestasRapidas = () => req<{ respuestas: RespuestaRapida[] }>('/api/respuestas-rapidas', 'GET');
+export const apiGuardarRespuestaRapida = (r: { id?: string; atajo: string; texto: string }) =>
+  req<{ ok: true; respuesta: RespuestaRapida }>(r.id ? `/api/respuestas-rapidas/${encodeURIComponent(r.id)}` : '/api/respuestas-rapidas', r.id ? 'PUT' : 'POST', { atajo: r.atajo, texto: r.texto });
+export const apiBorrarRespuestaRapida = (id: string) => req<{ ok: true }>(`/api/respuestas-rapidas/${encodeURIComponent(id)}`, 'DELETE');
+export const apiUsoRespuestaRapida = (id: string) => req<{ ok: true }>(`/api/respuestas-rapidas/${encodeURIComponent(id)}/uso`, 'POST');

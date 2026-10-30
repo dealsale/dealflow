@@ -75,7 +75,8 @@ export function cfgEffi(storeId: string): EffiCfg | null {
     medioPago: s('medioPago'), caja: s('caja'), cuenta: s('cuenta'),
     vendedor: s('vendedor'), articuloFlete: s('articuloFlete'), diasEntrega: Number(c.diasEntrega) > 0 ? Number(c.diasEntrega) : 3,
     autoDespacho: c.autoDespacho === true,
-    convenioDropshipping: s('convenioDropshipping'), remitenteDefecto: s('remitenteDefecto'),
+    convenioDropshipping: s('convenioDropshipping'),
+    remitenteDefecto: s('remitenteDefecto'),
     convenios: (Array.isArray(c.convenios) ? c.convenios as Record<string, unknown>[] : [])
       .map((x) => ({ id: String(x?.id ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40), nombre: String(x?.nombre ?? '').trim().slice(0, 80) }))
       .filter((x) => x.id),
@@ -99,6 +100,9 @@ export function guardarCfgEffi(storeId: string, parcial: Partial<EffiCfg>): Effi
   const base: Record<string, unknown> = actual ? { ...actual } : { guia: GUIA_VACIA };
   const nuevo: Record<string, unknown> = { ...base, ...parcial };
   if (parcial.guia) nuevo.guia = { ...(base.guia as EffiGuiaCfg), ...parcial.guia };
+  // Un solo remitente por defecto: el de las guías automáticas es SIEMPRE el mismo (nada lo
+  // cambia por debajo: ni una guía hecha a mano ni el formulario de la guía).
+  nuevo.guia = { ...(nuevo.guia as EffiGuiaCfg), remitente: String(nuevo.remitenteDefecto ?? '') };
   if (parcial.novedades) nuevo.novedades = { ...(base.novedades as NovedadesCfg), ...parcial.novedades };
   if (!nuevo.webhookToken) nuevo.webhookToken = randomBytes(18).toString('base64url');
   const json = JSON.stringify(nuevo);
@@ -381,13 +385,18 @@ export function remitentesPorConvenio(storeId: string): { convenio: string; remi
  * null si no se puede saber: entonces lo elige la persona.
  */
 export async function remitenteSugerido(storeId: string, apiKey: string, o: { orderId?: string; convenio?: string }): Promise<{ remitente: string; nombre: string; motivo: string } | null> {
-  const porDefecto = async (): Promise<{ remitente: string; nombre: string; motivo: string } | null> => {
+  const porDefecto = async (deProveedor = ''): Promise<{ remitente: string; nombre: string; motivo: string } | null> => {
     const c = cfgEffi(storeId);
     const r = c?.remitenteDefecto || '';
     if (!r) return null;
     const v = await remitentesVigentes(storeId, apiKey);
     if (v && !v.has(r)) return null;
-    return { remitente: r, nombre: v?.get(r) || `#${r}`, motivo: 'tu remitente por defecto (cámbialo si este pedido sale de otra bodega)' };
+    return {
+      remitente: r, nombre: v?.get(r) || `#${r}`,
+      motivo: deProveedor
+        ? `tu remitente por defecto. OJO: este pedido es de ${deProveedor} y no le has fijado su bodega (Integraciones → Effi → Cada convenio)`
+        : 'tu remitente por defecto (cámbialo si este pedido sale de otra bodega)',
+    };
   };
   let convenio = convenioValido(o.convenio);
   if (!convenio && o.orderId) {
@@ -406,7 +415,7 @@ export async function remitenteSugerido(storeId: string, apiKey: string, o: { or
   const nombreConv = conveniosConocidos(storeId).find((x) => x.id === convenio)?.nombre || `convenio ${convenio}`;
   const propio = db.prepare('SELECT remitente, origen FROM effi_remitente_convenio WHERE store_id = ? AND convenio = ?').get(storeId, convenio) as { remitente: string; origen: string } | undefined;
   if (propio && propio.origen === 'manual' && ok(propio.remitente)) return { remitente: propio.remitente, nombre: vigentes?.get(propio.remitente) || `#${propio.remitente}`, motivo: `la bodega que fijaste para ${nombreConv}` };
-  return porDefecto();
+  return porDefecto(nombreConv);
 }
 
 // ── Nombres claros para los remitentes ───────────────────────────────────────
@@ -486,6 +495,20 @@ export function aprenderRemitentesDelHistorial(): number {
 // que se había aprendido solo; queda únicamente lo que la tienda fijó a mano.
 try {
   db.exec("DELETE FROM effi_remitente_convenio WHERE origen != 'manual'");
+// Un solo remitente por defecto. Antes había dos: guia.remitente (el de las guías automáticas,
+// que hasta el 28-oct cambiaba cada vez que alguien hacía una guía a mano desde otra bodega) y
+// remitenteDefecto. Con la guía automática encendida, el que venía usando pasa a ser el por
+// defecto (visible y editable en Integraciones → Effi); apagada, era solo "el último usado" y se olvida.
+try {
+  for (const f of db.prepare("SELECT store_id, config FROM store_integrations WHERE tipo = 'effi_api'").all() as { store_id: string; config: string }[]) {
+    const c = pj<Record<string, unknown>>(f.config, {});
+    const g = (c.guia && typeof c.guia === 'object' ? c.guia : {}) as Record<string, unknown>;
+    const rd = String(c.remitenteDefecto ?? '').trim() || (g.activa === true ? String(g.remitente ?? '').trim() : '');
+    if (String(c.remitenteDefecto ?? '') === rd && String(g.remitente ?? '') === rd) continue;
+    c.remitenteDefecto = rd; c.guia = { ...g, remitente: rd };
+    db.prepare("UPDATE store_integrations SET config = ? WHERE store_id = ? AND tipo = 'effi_api'").run(JSON.stringify(c), f.store_id);
+  }
+} catch (e) { console.error('[effi] unificar remitente por defecto:', e); }
   db.exec('DELETE FROM effi_remitente_global');
 } catch { /* tablas nuevas */ }
 
@@ -1609,17 +1632,17 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
 }
 
 /** Despacha el pedido a Effi: cliente + remisión (+ guía si está activa). */
-export function despacharEffi(storeId: string, orderId: string, reintento = false, convenioForzado = ''): Promise<ResultadoEffi | { error: string }> {
+export function despacharEffi(storeId: string, orderId: string, reintento = false, convenioForzado = '', remitenteElegido = ''): Promise<ResultadoEffi | { error: string }> {
   return conPedido(storeId, orderId, async () => {
     trazar(storeId, orderId, { etapa: 'despacho', titulo: reintento ? 'Reenvío a Effi iniciado' : 'Envío a Effi iniciado' });
-    const r = await despacharEffiInterno(storeId, orderId, reintento, convenioForzado).catch(errorInterno);
+    const r = await despacharEffiInterno(storeId, orderId, reintento, convenioForzado, remitenteElegido).catch(errorInterno);
     if ('error' in r) trazar(storeId, orderId, { etapa: 'despacho', nivel: 'error', titulo: 'Envío a Effi falló', detalle: r.error });
     else trazar(storeId, orderId, { etapa: 'despacho', nivel: 'ok', titulo: `Remisión ${r.remision} creada en Effi${r.guia ? ` · guía ${r.guia}` : ''}`, detalle: r.avisos.join(' '), datos: r });
     return r;
   });
 }
 
-async function despacharEffiInterno(storeId: string, orderId: string, reintento = false, convenioForzado = ''): Promise<ResultadoEffi | { error: string }> {
+async function despacharEffiInterno(storeId: string, orderId: string, reintento = false, convenioForzado = '', remitenteElegido = ''): Promise<ResultadoEffi | { error: string }> {
   const c = cfgEffi(storeId)!;
   const prep = await prepararRemision(storeId, orderId, reintento, 'despacho', convenioForzado);
   if ('error' in prep) return prep;
@@ -1700,9 +1723,16 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   registrarLog(storeId, 'info', 'despacho', `${numDF} enviado a Effi: remisión ${remision} (cliente ${cli.tercero}).${avisos.length ? ' ' + avisos.join(' ') : ''}`);
 
   let guia = ''; let transportadora = '';
-  // El remitente del proveedor (según el convenio del pedido) manda sobre el general.
-  const remAuto = c.guia.activa ? (await remitenteSugerido(storeId, c.apiKey, { orderId, convenio: String(body.convenio_dropshipping ?? '') }))?.remitente || c.guia.remitente : '';
-  if (c.guia.activa && !remAuto) avisos.push('No se creó la guía: falta elegir el remitente en Integraciones → Effi → Guía de transporte. Genérala desde el pedido eligiendo el remitente.');
+  // Remitente: el que eligió la persona en el pedido; si no, la bodega fijada para el convenio
+  // del proveedor; si no, el remitente por defecto. Nada más (ni el último usado ni adivinado).
+  let remAuto = '';
+  if (c.guia.activa) {
+    const sug = remitenteElegido ? null : await remitenteSugerido(storeId, c.apiKey, { orderId, convenio: String(body.convenio_dropshipping ?? '') });
+    remAuto = remitenteElegido || sug?.remitente || '';
+    if (remAuto) trazar(storeId, orderId, { etapa: 'guia', titulo: `Remitente de la guía: #${remAuto}`, detalle: remitenteElegido ? 'Elegido en el pedido.' : `Se puso solo: ${sug!.motivo}.` });
+    if (sug && /OJO/.test(sug.motivo)) avisos.push(`Guía desde tu remitente por defecto: ${sug.motivo.replace(/^tu remitente por defecto\. OJO: /, '')}.`);
+  }
+  if (c.guia.activa && !remAuto) avisos.push('No se creó la guía: falta elegir el remitente por defecto en Integraciones → Effi → Guía de transporte. Genérala desde el pedido eligiendo el remitente.');
   if (c.guia.activa && c.guia.transportadora && c.guia.servicio && c.guia.formaPagoFlete && remAuto) {
     const g = await crearGuia(storeId, c, { ...c.guia, remitente: remAuto }, o, { sucursal: txt(doc!.sucursal), id: txt(doc!.id) }, cli.tercero, ubic, reintento);
     if ('error' in g) avisos.push(g.error);

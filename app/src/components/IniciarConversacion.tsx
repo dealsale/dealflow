@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { apiPlantillasAprobadas, apiIniciarConPlantilla, type PlantillaAprobada } from '../lib/api';
+import { apiPlantillasAprobadas, apiIniciarConPlantilla, apiSincronizarPlantillas, type PlantillaAprobada, type ExtraPlantilla } from '../lib/api';
+import { CamposPlantilla } from './LlenarPlantilla';
 import { Dropdown } from './Dropdown';
 
 /*
@@ -39,6 +40,14 @@ export function IniciarConversacion({ onAbrirChat }: { onAbrirChat: (id: string)
   const [pid, setPid] = useState('');
   const [texto, setTexto] = useState('');
   const [params, setParams] = useState<string[]>([]);
+  const [extra, setExtra] = useState<ExtraPlantilla>({});
+  const [syncMsg, setSyncMsg] = useState('');
+  const actualizar = async () => {
+    setSyncMsg('Consultando Meta…');
+    const r = await apiSincronizarPlantillas();
+    if (r.data?.plantillas) setPlantillas(r.data.plantillas);
+    setSyncMsg(r.error || !r.data ? `⚠ ${r.error || 'No pudimos leer tus plantillas de Meta.'}` : `✓ ${r.data.aprobadas} aprobada${r.data.aprobadas === 1 ? '' : 's'} en Meta${r.data.pendientes ? ` · ${r.data.pendientes} en revisión` : ''}${r.data.rechazadas ? ` · ${r.data.rechazadas} rechazada${r.data.rechazadas === 1 ? '' : 's'}` : ''}.`);
+  };
   const [asistente, setAsistente] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [hechos, setHechos] = useState(0);
@@ -47,16 +56,15 @@ export function IniciarConversacion({ onAbrirChat }: { onAbrirChat: (id: string)
 
   useEffect(() => { if (abierto && !plantillas) void apiPlantillasAprobadas().then((r) => setPlantillas(r.data?.plantillas || [])); }, [abierto, plantillas]);
   const pl = plantillas?.find((p) => p.id === pid);
-  useEffect(() => { if (pl) setParams(Array.from({ length: pl.variables }, (_, i) => (i === 0 ? '{nombre}' : pl.ejemplos[i] || ''))); }, [pl]);
+  useEffect(() => { if (pl) { setParams(Array.from({ length: pl.variables }, (_, i) => (i === 0 ? '{nombre}' : pl.ejemplos[i] || ''))); setExtra({}); } }, [pl]);
   const contactos = leerContactos(texto);
-  const vista = pl ? pl.cuerpo.replace(/\{\{(\d+)\}\}/g, (_, n) => (params[Number(n) - 1] || `{{${n}}}`).replace(/\{nombre\}/gi, contactos[0]?.nombre.split(' ')[0] || 'Ana')) : '';
 
   const enviar = async () => {
     if (!pl || !contactos.length) return;
     setEnviando(true); setError(''); setResultados([]); setHechos(0);
     const todos: Resultado[] = [];
     for (let i = 0; i < contactos.length; i += 20) {
-      const r = await apiIniciarConPlantilla({ plantillaId: pl.id, params, asistente, contactos: contactos.slice(i, i + 20) });
+      const r = await apiIniciarConPlantilla({ plantillaId: pl.id, params, extra, asistente, contactos: contactos.slice(i, i + 20) });
       if (r.error || !r.data) { setError(r.error || 'No se pudo enviar.'); break; }
       todos.push(...r.data.resultados);
       setResultados([...todos]); setHechos(todos.length);
@@ -84,20 +92,17 @@ export function IniciarConversacion({ onAbrirChat }: { onAbrirChat: (id: string)
               Para clientes que no tienen chat abierto (por ejemplo, los que vienen de otro bot). WhatsApp solo deja escribirle primero a alguien con una <b>plantilla aprobada</b>. Cuando el cliente responda, el chat queda abierto como cualquier otro.
             </p>
 
-            {plantillas && !plantillas.length && <div style={{ fontSize: 13, color: 'var(--df-danger-dark)', marginBottom: 12 }}>No tienes plantillas aprobadas todavía. Pídele al equipo de DealFlow que publique una (por ejemplo, de seguimiento) y espera la aprobación de Meta.</div>}
-            <div style={lbl}>Plantilla</div>
-            <Dropdown value={pid} onChange={setPid} ariaLabel="Plantilla" placeholder={plantillas ? 'Elige una plantilla aprobada…' : 'Cargando…'} options={(plantillas || []).map((p) => ({ value: p.id, label: `${p.nombre} · ${/marketing/i.test(p.categoria) ? 'Marketing' : 'Utilidad'}` }))} />
+            {plantillas && !plantillas.length && <div style={{ fontSize: 13, color: 'var(--df-danger-dark)', marginBottom: 12 }}>No tienes plantillas aprobadas todavía. Si ya te las aprobaron en Meta, toca <b>↻ Actualizar desde Meta</b>.</div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ ...lbl, flex: 1 }}>Plantilla</div>
+              <button onClick={() => void actualizar()} style={{ background: 'none', border: '1px solid var(--df-border)', borderRadius: 7, padding: '4px 9px', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: 'var(--df-brand-dark)', cursor: 'pointer' }}>↻ Actualizar desde Meta</button>
+            </div>
+            {syncMsg && <div style={{ fontSize: 12, fontWeight: 600, margin: '4px 0', color: syncMsg.startsWith('⚠') ? 'var(--df-danger-dark)' : 'var(--df-brand-dark)' }}>{syncMsg}</div>}
+            <Dropdown value={pid} onChange={setPid} ariaLabel="Plantilla" placeholder={plantillas ? 'Elige una plantilla aprobada…' : 'Cargando…'} options={(plantillas || []).map((p) => ({ value: p.id, label: `${p.nombre} · ${/marketing/i.test(p.categoria) ? 'Marketing' : 'Utilidad'}${p.origen === 'meta' ? ' · creada en Meta' : ''}` }))} />
             {pl && (
               <>
-                {pl.variables > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginTop: 10 }}>
-                    {params.map((v, i) => (
-                      <div key={i}><div style={lbl}>{`{{${i + 1}}}`}</div><input value={v} onChange={(e) => setParams(params.map((x, k) => (k === i ? e.target.value : x)))} placeholder={pl.ejemplos[i] || ''} style={inp} /></div>
-                    ))}
-                  </div>
-                )}
+                <CamposPlantilla p={pl} params={params} setParams={setParams} extra={extra} setExtra={setExtra} nombreCliente={contactos[0]?.nombre.split(' ')[0] || ''} />
                 <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 4 }}>Escribe <b>{'{nombre}'}</b> para poner el nombre de cada cliente.</div>
-                <div style={{ marginTop: 10, background: 'var(--df-brand-subtle-2, #ECFDF5)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', fontSize: 13, whiteSpace: 'pre-wrap' }}>{vista}</div>
               </>
             )}
 

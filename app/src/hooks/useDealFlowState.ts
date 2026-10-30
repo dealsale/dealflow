@@ -39,9 +39,11 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiResetLead,
   apiEnviarFlujoInicial,
   apiPlantillasAprobadas,
+  apiSincronizarPlantillas,
   apiEnviarPlantilla,
   apiAntibaneoEstado,
   type PlantillaAprobada,
+  type ExtraPlantilla,
   type AntibaneoEstado,
   type EstiloAsistente,
   apiExtraerPedido,
@@ -2639,12 +2641,20 @@ export function useDealFlowState() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, sessionUser, section]);
   const enviandoPlantillaRef = useRef(false);
-  function enviarPlantillaAChat(plantillaId: string) {
+  /** "↻ Actualizar desde Meta": trae las plantillas de la cuenta de WhatsApp de la tienda. */
+  async function actualizarPlantillasMeta(): Promise<string> {
+    const r = await apiSincronizarPlantillas();
+    if (r.data?.plantillas) setPlantillasAprobadas(r.data.plantillas);
+    if (r.error || !r.data) return `⚠ ${r.error || 'No pudimos leer tus plantillas de Meta.'}`;
+    const d = r.data;
+    return `✓ ${d.aprobadas} aprobada${d.aprobadas === 1 ? '' : 's'} en Meta${d.pendientes ? ` · ${d.pendientes} en revisión` : ''}${d.rechazadas ? ` · ${d.rechazadas} rechazada${d.rechazadas === 1 ? '' : 's'}` : ''}.`;
+  }
+  function enviarPlantillaAChat(plantillaId: string, params?: string[], extra?: ExtraPlantilla) {
     if (enviandoPlantillaRef.current) return; // evita doble envío por doble clic
     enviandoPlantillaRef.current = true;
     const leadId = crmSelectedId;
     setFlujoMsg('Enviando la plantilla…');
-    void apiEnviarPlantilla(String(leadId), plantillaId).then((r) => {
+    void apiEnviarPlantilla(String(leadId), plantillaId, params, extra).then((r) => {
       enviandoPlantillaRef.current = false;
       if (r.error || !r.data) { setFlujoMsg(r.error || 'No se pudo enviar la plantilla.'); return; }
       setFlujoMsg('✓ Plantilla enviada.'); setTimeout(() => setFlujoMsg(''), 4000);
@@ -3913,6 +3923,7 @@ export function useDealFlowState() {
     antibaneo,
     plantillasAprobadas,
     enviarPlantillaAChat,
+    actualizarPlantillasMeta,
     crmOptin,
     setLeadOptin,
     go,

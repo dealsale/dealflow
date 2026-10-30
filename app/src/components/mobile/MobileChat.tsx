@@ -165,7 +165,9 @@ export function MobileChat({ df }: { df: DealFlowState }) {
                 onSend={df.sendCrm}
                 onFile={df.sendCrmMedia}
                 enviarConEnter={false}
-                placeholder="Escribe tu mensaje…"
+                conEmojis={false}
+                nombreCliente={chat?.nombre || ''}
+                placeholder="Mensaje… ( / rápidos)"
                 inputStyle={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, fontFamily: 'inherit', fontSize: 14, minHeight: 44, boxSizing: 'border-box' }}
                 botonStyle={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', minHeight: 44 }}
               />

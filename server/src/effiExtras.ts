@@ -120,7 +120,7 @@ export async function coberturaCiudad(storeId: string, departamento: string, ciu
   if (cache) return pj<Cobertura | null>(cache.datos, null);
   const ubic = await resolverUbicacion(c.apiKey, departamento, ciudad);
   if ('error' in ubic) return { destino: ciudad, transportadoras: [], conRecaudo: false, dias: null, error: ubic.error };
-  const origen = await ciudadOrigen(storeId, c.apiKey, c.guia.remitente);
+  const origen = await ciudadOrigen(storeId, c.apiKey, c.remitenteDefecto || c.guia.remitente);
   if (!origen) return null;
   const r = await effi<Fila[]>(c.apiKey, 'GET', '/api/cobertura_transportadora_efficommerce', { query: { ciudad_origen: origen, ciudad_destino: ubic.ciudad, por_pagina: 100 } });
   if (!r.ok) return null;

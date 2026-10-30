@@ -160,22 +160,22 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
     if (!sel.rowId) return;
     void apiEffiConveniosConocidos().then((r) => r.data && setConvenios(r.data.convenios)); // por si agregaste uno nuevo
     setPaso('revisando'); setMsg('');
-    if (!guiaAuto) void g.cargar();
+    void g.cargar();
     const r = await enProceso('Preparando el envío a Effi…', () => apiEffiPreview(sel.rowId!, conv), 'pedido');
     if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos preparar el envío.'); return; }
     setPrev(r.data); setPaso('listo');
-    if (!guiaAuto) void g.sugerir(r.data.convenio || ''); // remitente del proveedor del convenio con que sale
+    void g.sugerir(r.data.convenio || ''); // remitente del proveedor del convenio con que sale
   };
   const hacerGuia = !guiaAuto && conGuia;
   const enviar = async () => {
     if (!sel.rowId) return;
     if (!(await confirmarSiDevolvio(hist))) return;
-    if (hacerGuia && !g.exigirRemitente()) return;
+    if ((hacerGuia || guiaAuto) && !g.exigirRemitente()) return;
     if (hacerGuia && !g.listo) { setMsg('Elige transportadora, servicio y pago del flete (o desmarca "Crear también la guía").'); return; }
     setPaso('enviando'); setMsg('');
     // Todo el despacho en la ventana de "procesando": nadie puede tocar nada a mitad.
     const ok = await enProceso('Creando la remisión en Effi…', async (paso) => {
-      const r = await apiEffiDespachar(sel.rowId!, reintentar, convenio);
+      const r = await apiEffiDespachar(sel.rowId!, reintentar, convenio, guiaAuto ? g.d.remitente : '');
       if (r.error || !r.data) { setPaso('listo'); setMsg(r.error || 'Effi no creó la remisión.'); return false; }
       let texto = `✓ Remisión ${r.data.remision} creada en Effi${r.data.guia ? ` · guía ${r.data.guia}` : ''}.${r.data.avisos?.length ? ' ' + r.data.avisos.join(' ') : ''}`;
       if (hacerGuia && !r.data.guia) {
@@ -228,6 +228,12 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
             </div>
           ))}
           {prev.avisos.map((a, i) => <div key={i} style={{ padding: '8px 12px', borderTop: '1px solid var(--df-border)', fontSize: 12, color: 'var(--df-warning)', background: 'var(--df-warning-subtle-2)' }}>⚠ {a}</div>)}
+          {guiaAuto && (
+            <div style={{ padding: 12, borderTop: '1px solid var(--df-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700 }}>🚚 La guía se crea sola con la transportadora configurada. Revisa desde qué bodega sale:</div>
+              <CampoRemitente g={g} />
+            </div>
+          )}
           {!guiaAuto && (
             <div style={{ padding: 12, borderTop: '1px solid var(--df-border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
@@ -419,6 +425,28 @@ function contenidoDeItems(items: { qty: number; nombre: string }[]): string {
   return t.slice(0, 80);
 }
 
+/** Remitente (bodega de origen) de la guía: se ve SIEMPRE antes de crearla, aunque se ponga solo. */
+function CampoRemitente({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
+  const { ops, d } = g;
+  if (!ops) return g.cargaMsg ? <div style={{ fontSize: 12.5, color: g.cargaMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{g.cargaMsg}</div> : null;
+  const lb: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 4 };
+  const ojo = !!g.sugerido && d.remitente === g.sugerido.remitente && g.sugerido.motivo.includes('OJO');
+  return (
+      <div id="df-campo-remitente" style={{ border: `2px solid ${g.avisoRemitente && !d.remitente ? '#DC2626' : d.remitente ? 'var(--df-brand-border, #A7F3D0)' : 'var(--df-warning, #F59E0B)'}`, borderRadius: 10, padding: 10, background: g.avisoRemitente && !d.remitente ? 'rgba(220, 38, 38, .08)' : 'transparent' }}>
+        <label style={{ ...lb, fontSize: 12, color: 'var(--df-text)' }}>Remitente (bodega de origen) · obligatorio</label>
+        <Dropdown ariaLabel="Remitente" placeholder="Elige desde qué bodega sale el paquete…" value={d.remitente} onChange={(v) => g.elegirRemitente(v)} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} />
+        {d.remitente && <button type="button" onClick={() => void g.nombrarRemitente(d.remitente)} style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, color: 'var(--df-purple)', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>✏️ Nombre de la bodega y proveedor</button>}
+        {g.sugerido && d.remitente === g.sugerido.remitente && <div style={{ fontSize: 11.5, color: ojo ? 'var(--df-warning, #B45309)' : 'var(--df-brand-dark)', marginTop: 5, fontWeight: 600 }}>{ojo ? '⚠️' : '✓'} Se puso solo: {g.sugerido.motivo}. Revísalo antes de crear la guía.</div>}
+        {g.avisoRemitente && !d.remitente ? (
+          <div role="alert" style={{ marginTop: 8, background: '#DC2626', color: '#fff', borderRadius: 8, padding: '12px 14px', fontSize: 15, fontWeight: 800, lineHeight: 1.35 }}>
+            ⚠️ Tienes que seleccionar el remitente
+            <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 3, opacity: 0.95 }}>Elige la bodega desde donde sale el paquete (revisa la ciudad y la dirección) y vuelve a crear la guía.</div>
+          </div>
+        ) : !d.remitente && <div style={{ fontSize: 11.5, color: 'var(--df-warning, #B45309)', marginTop: 5, fontWeight: 600 }}>Revisa la ciudad y la dirección: varios remitentes pueden tener el mismo nombre.</div>}
+      </div>
+  );
+}
+
 /** Campos de la guía (transportadora, servicio, paquete…). */
 function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; items?: { qty: number; nombre: string }[] }) {
   const { ops, d, setD } = g;
@@ -438,18 +466,7 @@ function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; item
         <div><label style={lb}>Pago del flete</label>
           <Dropdown ariaLabel="Pago del flete" placeholder="Elige…" value={d.formaPagoFlete} onChange={(v) => set({ formaPagoFlete: v })} options={(t?.formasPago || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
       </div>
-      <div id="df-campo-remitente" style={{ border: `2px solid ${g.avisoRemitente && !d.remitente ? '#DC2626' : d.remitente ? 'var(--df-brand-border, #A7F3D0)' : 'var(--df-warning, #F59E0B)'}`, borderRadius: 10, padding: 10, background: g.avisoRemitente && !d.remitente ? 'rgba(220, 38, 38, .08)' : 'transparent' }}>
-        <label style={{ ...lb, fontSize: 12, color: 'var(--df-text)' }}>Remitente (bodega de origen) · obligatorio</label>
-        <Dropdown ariaLabel="Remitente" placeholder="Elige desde qué bodega sale el paquete…" value={d.remitente} onChange={(v) => g.elegirRemitente(v)} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} />
-        {d.remitente && <button type="button" onClick={() => void g.nombrarRemitente(d.remitente)} style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, color: 'var(--df-purple)', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>✏️ Nombre de la bodega y proveedor</button>}
-        {g.sugerido && d.remitente === g.sugerido.remitente && <div style={{ fontSize: 11.5, color: 'var(--df-brand-dark)', marginTop: 5, fontWeight: 600 }}>✓ Se puso solo: {g.sugerido.motivo}. Revísalo antes de crear la guía.</div>}
-        {g.avisoRemitente && !d.remitente ? (
-          <div role="alert" style={{ marginTop: 8, background: '#DC2626', color: '#fff', borderRadius: 8, padding: '12px 14px', fontSize: 15, fontWeight: 800, lineHeight: 1.35 }}>
-            ⚠️ Tienes que seleccionar el remitente
-            <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 3, opacity: 0.95 }}>Elige la bodega desde donde sale el paquete (revisa la ciudad y la dirección) y vuelve a crear la guía.</div>
-          </div>
-        ) : !d.remitente && <div style={{ fontSize: 11.5, color: 'var(--df-warning, #B45309)', marginTop: 5, fontWeight: 600 }}>Revisa la ciudad y la dirección: varios remitentes pueden tener el mismo nombre.</div>}
-      </div>
+      <CampoRemitente g={g} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
         <div><label style={lb}>Paquetes</label><input type="number" min={1} value={d.cantPaquetes} onChange={(e) => set({ cantPaquetes: Number(e.target.value) })} style={sel_} /></div>
         <div><label style={lb}>Peso (kg)</label><input type="number" min={0.1} step={0.1} value={d.peso} onChange={(e) => set({ peso: Number(e.target.value) })} style={sel_} /></div>

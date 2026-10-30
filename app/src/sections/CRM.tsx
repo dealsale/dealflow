@@ -1,7 +1,8 @@
 import { PresenciaChat, PresenciaEnLista } from '../components/PresenciaChat';
 import { clicAparte } from '../components/EnlaceApp';
 import { IniciarConversacion } from '../components/IniciarConversacion';
-import { apiAnuncioProducto, apiVincularAnuncio } from '../lib/api';
+import { apiAnuncioProducto, apiVincularAnuncio, plantillaPideDatos, type PlantillaAprobada } from '../lib/api';
+import { LlenarPlantilla } from '../components/LlenarPlantilla';
 import { CargandoChat } from '../components/CargandoChat';
 import { urlDe, useRecordado } from '../lib/rutas';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../components/Ventana24h';
@@ -75,10 +76,14 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
   const [open, setOpen] = useState(false);
   const [verProductos, setVerProductos] = useState(false);
   const [verPlantillas, setVerPlantillas] = useState(false);
+  const [llenar, setLlenar] = useState<PlantillaAprobada | null>(null);
+  const [syncMsg, setSyncMsg] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const actualizar = () => { setSyncMsg('Consultando Meta…'); void df.actualizarPlantillasMeta().then(setSyncMsg); };
+  const cerrar = () => { setOpen(false); setVerProductos(false); setVerPlantillas(false); setLlenar(null); };
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setVerProductos(false); setVerPlantillas(false); } };
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) cerrar(); };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
@@ -91,7 +96,7 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
         style={{ width: size, height: size, borderRadius: 10, border: '1px solid var(--df-border)', background: open ? 'var(--df-surface-2)' : 'var(--df-surface)', color: 'var(--df-brand)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}
       >⚡</button>
       {open && (
-        <div style={{ position: 'absolute', bottom: size + 8, left: 0, width: 268, maxHeight: 320, overflowY: 'auto', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 10px 34px rgba(15,23,42,.28)', zIndex: 60, padding: 6 }}>
+        <div style={{ position: 'absolute', bottom: size + 8, left: 0, width: llenar ? 300 : 268, maxHeight: llenar ? 460 : 340, overflowY: 'auto', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 10px 34px rgba(15,23,42,.28)', zIndex: 60, padding: 6 }}>
           {verProductos ? (
             <>
               <button onClick={() => setVerProductos(false)} style={{ ...item, fontWeight: 700, fontSize: 12.5, color: 'var(--df-text-muted)' }}>‹ Elige el producto</button>
@@ -103,16 +108,23 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
                 </button>
               ))}
             </>
+          ) : llenar ? (
+            <LlenarPlantilla p={llenar} nombreCliente={(df.crmChat?.nombre || '').split(' ')[0]} onVolver={() => setLlenar(null)}
+              onEnviar={(params, extra) => { df.enviarPlantillaAChat(llenar.id, params, extra); cerrar(); }} />
           ) : verPlantillas ? (
             <>
-              <button onClick={() => setVerPlantillas(false)} style={{ ...item, fontWeight: 700, fontSize: 12.5, color: 'var(--df-text-muted)' }}>‹ Elige la plantilla</button>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <button onClick={() => setVerPlantillas(false)} style={{ ...item, width: 'auto', flex: 1, fontWeight: 700, fontSize: 12.5, color: 'var(--df-text-muted)' }}>‹ Elige la plantilla</button>
+                <button onClick={actualizar} title="Trae las plantillas que aprobaste en Meta" style={{ background: 'none', border: '1px solid var(--df-border)', borderRadius: 7, padding: '4px 7px', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, color: 'var(--df-brand-dark)', cursor: 'pointer', whiteSpace: 'nowrap' }}>↻ Actualizar desde Meta</button>
+              </div>
+              {syncMsg && <div style={{ padding: '2px 10px 6px', fontSize: 11.5, fontWeight: 600, color: syncMsg.startsWith('⚠') ? 'var(--df-danger-dark)' : 'var(--df-brand-dark)' }}>{syncMsg}</div>}
               <div style={{ padding: '2px 10px 8px', fontSize: 11.5, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>Las plantillas aprobadas SÍ se pueden enviar aunque hayan pasado las 24 h.</div>
-              {df.plantillasAprobadas.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes plantillas aprobadas todavía. Créalas y publícalas desde el panel de plantillas.</div>}
+              {df.plantillasAprobadas.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes plantillas aprobadas todavía. Si ya te las aprobaron en Meta, toca <b>↻ Actualizar desde Meta</b>.</div>}
               {df.plantillasAprobadas.map((t) => (
-                <button key={t.id} onClick={() => { df.enviarPlantillaAChat(t.id); setOpen(false); setVerPlantillas(false); }} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                  <span style={{ fontSize: 15 }}>📋</span>
+                <button key={t.id} onClick={() => { if (plantillaPideDatos(t)) { setLlenar(t); return; } df.enviarPlantillaAChat(t.id); cerrar(); }} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <span style={{ fontSize: 15 }}>{t.encabezadoTipo === 'IMAGE' ? '🖼️' : t.encabezadoTipo === 'VIDEO' ? '🎬' : t.encabezadoTipo === 'DOCUMENT' ? '📄' : '📋'}</span>
                   <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nombre}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nombre}{t.origen === 'meta' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--df-text-faint)', marginLeft: 5 }}>· Meta</span>}</div>
                     <div style={{ fontSize: 11, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.cuerpo}</div>
                   </div>
                 </button>
@@ -443,7 +455,8 @@ export function CRM({ df }: { df: DealFlowState }) {
                     chatId={String(chat.id)}
                     onSend={df.sendCrm}
                     onFile={df.sendCrmMedia}
-                    placeholder="Escribe tu mensaje… (o pega una imagen/audio/video)"
+                    nombreCliente={chat.nombre}
+                    placeholder="Escribe tu mensaje… ( / mensajes rápidos · Shift+Enter nueva línea)"
                     inputStyle={{ flex: 1, border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 12px', fontFamily: 'inherit', fontSize: 13 }}
                     botonStyle={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
                   />
