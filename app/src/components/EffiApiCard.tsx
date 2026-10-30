@@ -4,7 +4,7 @@ import { IntegracionFila, LogoInteg } from './IntegracionFila';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
   apiEffiApiConectar, apiEffiAutoconfigurar, apiEffiApiConfig, apiEffiApiDesconectar, apiEffiApiEventos, apiEffiApiListas,
-  apiEffiApiSecreto, apiEffiConvenios,
+  apiEffiApiSecreto, apiEffiConvenios, apiRemitentesConvenio, apiFijarRemitenteConvenio,
   type EffiApiEstado, type EffiEvento, type EffiGuiaCfg, type EffiListas,
 } from '../lib/api';
 
@@ -31,6 +31,41 @@ const btnSec: React.CSSProperties = { background: 'var(--df-surface)', color: 'v
 const seccion: React.CSSProperties = { borderTop: '1px solid var(--df-border)', paddingTop: 16, marginTop: 4 };
 const titulo: React.CSSProperties = { fontWeight: 800, fontSize: 13.5, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 };
 const ayuda: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5, margin: '0 0 12px' };
+
+/**
+ * Remitente de cada convenio dropshipping: los pedidos de ese proveedor salen desde su
+ * bodega. Se aprende solo de la última guía (y de otras tiendas con el mismo convenio);
+ * aquí se puede fijar a mano.
+ */
+function RemitentesConvenio({ remitentes }: { remitentes: { id: string; nombre: string }[] }) {
+  const [convenios, setConvenios] = useState<{ id: string; nombre: string }[]>([]);
+  const [asignados, setAsignados] = useState<Record<string, { remitente: string; origen: string }>>({});
+  const cargar = () => void apiRemitentesConvenio().then((r) => {
+    if (!r.data) return;
+    setConvenios(r.data.convenios);
+    setAsignados(Object.fromEntries(r.data.asignados.map((a) => [a.convenio, { remitente: a.remitente, origen: a.origen }])));
+  });
+  useEffect(cargar, []);
+  if (!convenios.length) return null;
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
+      <div style={{ fontWeight: 700, fontSize: 13 }}>Remitente de cada proveedor (convenio)</div>
+      <p style={ayuda}>Los pedidos que salen con el convenio de un proveedor se despachan desde la bodega de ese proveedor, en la guía automática y en la manual. DealFlow lo aprende solo de la última guía (y de otras tiendas que trabajan con el mismo proveedor). Aquí lo puedes fijar.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 10 }}>
+        {convenios.map((cv) => {
+          const a = asignados[cv.id];
+          return (
+            <div key={cv.id}>
+              <Select label={cv.nombre || `Convenio ${cv.id}`} value={a && remitentes.some((r) => r.id === a.remitente) ? a.remitente : ''} vacio="Automático (aprendido)"
+                onChange={(v) => void apiFijarRemitenteConvenio(cv.id, v).then(cargar)} opciones={remitentes} />
+              <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 3 }}>{a ? (a.origen === 'manual' ? 'Fijado por ti' : 'Aprendido de la última guía') : 'Se aprende con la primera guía de este proveedor'}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function Select({ label, value, onChange, opciones, vacio = 'Selecciona…' }: { label: string; value: string; onChange: (v: string) => void; opciones: { id: string; nombre: string }[]; vacio?: string }) {
   return (
@@ -291,7 +326,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                       <Select label="Remitente (bodega de origen)" value={listas.remitentes.some((r) => r.id === guia.remitente) ? guia.remitente : ''} onChange={(v) => setGuia({ remitente: v })} opciones={listas.remitentes} />
                       {guia.remitente && !listas.remitentes.some((r) => r.id === guia.remitente)
                         ? <div style={{ fontSize: 11.5, color: 'var(--df-danger-dark)', marginTop: 4 }}>El remitente guardado (#{guia.remitente}) ya no existe en tu Effi: elige otro y guarda.</div>
-                        : <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 4 }}>Todas las guías automáticas salen de aquí: revisa la ciudad y la dirección.</div>}
+                        : <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 4 }}>Las guías automáticas salen de aquí, salvo los pedidos de un proveedor (abajo): revisa la ciudad y la dirección.</div>}
                     </div>
                     <div><label style={lbl}>Peso (kg)</label><input type="number" min={0.1} step={0.1} value={guia.peso} onChange={(e) => setGuia({ peso: Number(e.target.value) })} style={inp} /></div>
                     <div><label style={lbl}>Peso volumétrico (kg)</label><input type="number" min={0.1} step={0.1} value={guia.volumen} onChange={(e) => setGuia({ volumen: Number(e.target.value) })} style={inp} /></div>
@@ -302,6 +337,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                     </div>
                   </div>
                 )}
+                <RemitentesConvenio remitentes={listas.remitentes} />
               </div>
 
               <div style={{ display: 'flex', gap: 10 }}>
