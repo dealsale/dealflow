@@ -1078,3 +1078,4 @@ export const apiGuardarPlantillaTienda = (id: string | null, b: { nombre?: strin
 export const apiBorrarPlantillaTienda = (id: string) => req<{ ok: true }>(`/api/landings/plantillas/${encodeURIComponent(id)}`, 'DELETE');
 export const apiVistaPlantillaTienda = (html: string, tipo: 'landing' | 'gracias', landingId?: string) => req<{ html: string; avisos: string[]; landing: string }>('/api/landings/plantillas/vista', 'POST', { html, tipo, landingId });
 export const apiUsarPlantilla = (landingId: string, plantillaId: string) => req<{ ok: true }>(`/api/landings/${encodeURIComponent(landingId)}/plantilla`, 'PUT', { plantillaId });
+export const apiAliasRemitente = (codigo: string, alias: string) => req<{ ok: true }>(`/api/effi-api/remitentes/${encodeURIComponent(codigo)}/alias`, 'PUT', { alias });

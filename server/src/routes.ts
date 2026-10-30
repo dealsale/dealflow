@@ -1701,7 +1701,7 @@ api.get('/effi-api/listas', requireAuth, requireStore, requirePermiso('despachar
   if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
   const l = await ef.listasEffi(c.apiKey);
   if ('error' in l) return res.status(400).json({ error: l.error });
-  res.json(l);
+  res.json({ ...l, remitentes: ef.rotularRemitentes(req.user!.storeId!, (l.remitentes || []) as Parameters<typeof ef.rotularRemitentes>[1]) });
 });
 api.post('/effi-api/config', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
@@ -1866,12 +1866,19 @@ api.get('/effi-api/opciones-guia', requireAuth, requireStore, requirePermiso('de
   const ef = await import('./effiApi.js');
   const c = ef.cfgEffi(req.user!.storeId!);
   if (!c?.apiKey) return res.status(400).json({ error: 'Conecta Effi primero.' });
-  const r = await ef.opcionesGuiaEffi(c.apiKey);
-  if ('error' in r) return res.status(400).json({ error: r.error });
+  const r0 = await ef.opcionesGuiaEffi(c.apiKey);
+  if ('error' in r0) return res.status(400).json({ error: r0.error });
+  const r = { ...r0, remitentes: ef.rotularRemitentes(req.user!.storeId!, r0.remitentes as Parameters<typeof ef.rotularRemitentes>[1]) };
   // Remitente que le toca a este pedido (la bodega del proveedor de su convenio), si se sabe.
   const sugerido = req.query.orderId || req.query.convenio
     ? await ef.remitenteSugerido(req.user!.storeId!, c.apiKey, { orderId: String(req.query.orderId || ''), convenio: String(req.query.convenio || '') }) : null;
   res.json({ ...r, defaults: c.guia, sugerido });
+});
+// Apodo de un remitente (Effi les pone a todos el nombre de la tienda).
+api.put('/effi-api/remitentes/:codigo/alias', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
+  const ef = await import('./effiApi.js');
+  ef.ponerAliasRemitente(req.user!.storeId!, String(req.params.codigo), String(req.body?.alias || ''));
+  res.json({ ok: true });
 });
 // Remitente de cada convenio (bodega del proveedor), para la guía de los pedidos de ese convenio.
 api.get('/effi-api/remitentes-convenio', requireAuth, requireStore, requireOwner, async (req, res) => {

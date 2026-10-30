@@ -400,6 +400,50 @@ export async function remitenteSugerido(storeId: string, apiKey: string, o: { or
   return null;
 }
 
+// ── Nombres claros para los remitentes ───────────────────────────────────────
+// Effi suele poner a TODOS los remitentes de una cuenta el mismo nombre (el de la tienda),
+// así que solo se distinguen por la dirección. Para que se reconozcan: el apodo que les
+// ponga la tienda y el proveedor cuya bodega es (por los convenios con que se han usado).
+db.exec(`CREATE TABLE IF NOT EXISTS effi_remitente_alias (
+  store_id TEXT NOT NULL, remitente TEXT NOT NULL, alias TEXT NOT NULL,
+  PRIMARY KEY (store_id, remitente)
+)`);
+export function ponerAliasRemitente(storeId: string, remitente: string, alias: string) {
+  const a = alias.trim().slice(0, 60);
+  if (!remitente) return;
+  if (!a) db.prepare('DELETE FROM effi_remitente_alias WHERE store_id = ? AND remitente = ?').run(storeId, remitente);
+  else db.prepare('INSERT INTO effi_remitente_alias (store_id, remitente, alias) VALUES (?,?,?) ON CONFLICT(store_id, remitente) DO UPDATE SET alias = excluded.alias').run(storeId, remitente, a);
+  cacheRemitentes.delete(storeId);
+}
+
+type OpcionRem = ReturnType<typeof opcionRemitente>;
+/** Le pone a cada remitente su apodo y su proveedor, y deja primero los que se reconocen. */
+export function rotularRemitentes(storeId: string, lista: OpcionRem[]): (OpcionRem & { alias: string; proveedores: string[] })[] {
+  const nombresConv = new Map(conveniosConocidos(storeId).map((c) => [c.id, c.nombre]));
+  try {
+    for (const p of db.prepare('SELECT nombre, convenios FROM proveedor_cuentas WHERE activo = 1').all() as { nombre: string; convenios: string }[]) {
+      for (const cv of pj<string[]>(p.convenios, [])) if (p.nombre && (!nombresConv.get(cv) || /^Convenio /.test(nombresConv.get(cv)!))) nombresConv.set(String(cv), p.nombre);
+    }
+  } catch { /* sin portal de proveedores */ }
+  const provDe = new Map<string, Set<string>>();
+  const agregar = (rem: string, cv: string) => { const n = nombresConv.get(cv); if (!n) return; if (!provDe.has(rem)) provDe.set(rem, new Set()); provDe.get(rem)!.add(n); };
+  for (const r of db.prepare('SELECT convenio, remitente FROM effi_remitente_convenio WHERE store_id = ?').all(storeId) as { convenio: string; remitente: string }[]) agregar(r.remitente, r.convenio);
+  for (const r of db.prepare('SELECT convenio, remitente FROM effi_remitente_global').all() as { convenio: string; remitente: string }[]) agregar(r.remitente, r.convenio);
+  const alias = new Map((db.prepare('SELECT remitente, alias FROM effi_remitente_alias WHERE store_id = ?').all(storeId) as { remitente: string; alias: string }[]).map((r) => [r.remitente, r.alias]));
+  // Si todos se llaman igual (el nombre de la tienda), ese nombre no ayuda: se omite.
+  const repetido = lista.length > 1 && lista.every((x) => x.corto && x.corto === lista[0].corto);
+  const out = lista.map((x) => {
+    const provs = [...(provDe.get(x.id) || [])];
+    if (x.proveedor && !provs.includes(x.proveedor)) provs.push(x.proveedor);
+    const ap = alias.get(x.id) || '';
+    const titulo = ap ? `📌 ${ap}${provs.length ? ` — proveedor ${provs.join(' / ')}` : ''}`
+      : provs.length ? `🏭 Bodega de ${provs.join(' / ')}` : repetido ? '' : (x.corto || 'Sin nombre en Effi');
+    return { ...x, alias: ap, proveedores: provs, nombre: [titulo, x.ciudad, x.direccion].filter(Boolean).join(' · ') + ` (#${x.id})` };
+  });
+  const peso = (x: typeof out[number]) => (x.alias ? 0 : x.proveedores.length ? 1 : 2);
+  return out.map((x, i) => ({ x, i })).sort((a, b) => peso(a.x) - peso(b.x) || a.i - b.i).map(({ x }) => x);
+}
+
 // Remitentes vigentes de cada tienda (10 min): para no crear guías con uno que ya no existe.
 const cacheRemitentes = new Map<string, { t: number; v: Map<string, string> }>();
 const camposLogueados = new Set<string>();
@@ -408,7 +452,7 @@ async function remitentesVigentes(storeId: string, apiKey: string): Promise<Map<
   if (c && Date.now() - c.t < 10 * 60e3) return c.v;
   const r = await todo<Fila>(apiKey, '/api/remitente', {}, 5);
   if (!Array.isArray(r)) return null;
-  const v = new Map(r.map((f) => [txt(f.codigo), opcionRemitente(f).nombre]));
+  const v = new Map(rotularRemitentes(storeId, r.map(opcionRemitente)).map((x) => [x.id, x.nombre]));
   cacheRemitentes.set(storeId, { t: Date.now(), v });
   // Una vez por arranque: qué campos trae Effi en los remitentes de esta tienda (para soporte).
   if (!camposLogueados.has(storeId) && r.length) {
