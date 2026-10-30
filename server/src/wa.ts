@@ -45,12 +45,32 @@ export function explicarErrorMeta(code: number | string | undefined, titulo = ''
   return c ? `${txt} (código ${c})` : txt;
 }
 
+// Cada plantilla que acepta Meta queda guardada por su wamid: así «Reenviar» la manda otra vez
+// COMO PLANTILLA (antes reenviaba su texto como mensaje libre, y después de 24 h WhatsApp lo rechaza).
+db.exec(`CREATE TABLE IF NOT EXISTS plantillas_enviadas (
+  wamid TEXT PRIMARY KEY, store_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+type PayloadPlantilla = { plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string; componentes?: Record<string, unknown>[] }; params: string[] };
+/** Reenvía una plantilla ya enviada antes (botón «Reenviar» del chat). null = ese mensaje no era una plantilla. */
+export async function reenviarPlantillaGuardada(storeId: string, wamid: string, to: string, pn?: string): Promise<{ ok: boolean; error?: string; wamid?: string } | null> {
+  const r = wamid ? db.prepare('SELECT payload FROM plantillas_enviadas WHERE wamid = ? AND store_id = ?').get(wamid, storeId) as { payload: string } | undefined : undefined;
+  if (!r) return null;
+  const p = JSON.parse(r.payload) as PayloadPlantilla;
+  if (estaBloqueado(storeId, to, pn)) return { ok: false, error: CONTACTO_BLOQUEADO };
+  return enviarPlantillaReal(storeId, to, p.plantilla, p.params, pn);
+}
+
 const alertaPago = new Map<string, number>(); // storeId → último aviso de problema de pago en Meta
 /** Guarda el motivo del fallo en el mensaje, lo deja en el registro del chat y, si era del bot, pasa el chat al equipo. */
 function registrarFallo(rowId: string, error: string): void {
   try {
     const m = db.prepare('SELECT m.de, m.lead_id, l.store_id FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.id = ?').get(rowId) as { de: string; lead_id: string; store_id: string } | undefined;
     db.prepare('UPDATE messages SET error = ? WHERE id = ?').run(error.slice(0, 500), rowId);
+    // Si era un aviso automático de estado del envío, vuelve a la cola para reintentarse.
+    try {
+      db.prepare(`UPDATE avisos_estado SET resultado = '', intentos = intentos + 1, proximo = datetime('now','+30 minutes'), detalle = ?
+        WHERE wamid != '' AND wamid = (SELECT wa_msg_id FROM messages WHERE id = ?) AND resultado IN ('enviado','plantilla')`).run(`Meta no lo entregó: ${error}`.slice(0, 400), rowId);
+    } catch { /* la cola aún no existe */ }
     if (!m) return;
     registrarLog(m.store_id, 'error', 'envio', `No se entregó el mensaje: ${error}`, m.lead_id);
     // Problema de pago en Meta (131042): afecta a toda la tienda → alerta general y al celular (1 vez cada 6 h).
@@ -346,7 +366,14 @@ async function enviarPlantillaReal(
       registrarLog(storeId, 'error', 'envio', `Meta rechazó la plantilla "${plantilla.nombre}" a ${to}: ${msg}`);
       return { ok: false, error: msg };
     }
-    return { ok: true, wamid: body.messages?.[0]?.id, textoRender };
+    const wamid = body.messages?.[0]?.id;
+    if (wamid) {
+      try {
+        db.prepare('INSERT OR REPLACE INTO plantillas_enviadas (wamid, store_id, payload) VALUES (?,?,?)').run(wamid, storeId, JSON.stringify({ plantilla, params } satisfies PayloadPlantilla));
+        db.prepare("DELETE FROM plantillas_enviadas WHERE created_at < datetime('now','-45 days')").run();
+      } catch { /* opcional */ }
+    }
+    return { ok: true, wamid, textoRender };
   } catch {
     registrarLog(storeId, 'error', 'envio', `No pudimos conectar con Meta para enviar la plantilla a ${to}.`);
     return { ok: false, error: 'No pudimos hablar con Meta.' };

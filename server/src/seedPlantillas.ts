@@ -55,6 +55,15 @@ const PLANTILLAS: Semilla[] = [
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Misma dirección' }, { tipo: 'QUICK_REPLY', texto: 'Otra dirección' }],
   },
   {
+    // Cambio de estado del envío (en camino, en reparto, novedad, entregado) cuando el
+    // cliente no escribe hace más de 24 h. Variables: nombre, tienda, pedido, frase del
+    // estado (una línea) y número de guía.
+    nombre: 'estado_envio_pedido', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nTu pedido {{3}} {{4}}.\n\n🧾 Guía: {{5}}\n\n¿Alguna duda? Responde este mensaje y te ayudamos.',
+    pie: 'Mensaje sobre tu compra',
+    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'salió a reparto 🛵: hoy te lo entregan, ten el celular a mano', '240012345678'],
+  },
+  {
     // Pedido que entró por la tienda online (Shopify): el comprador confirma con un
     // botón y, si dice que sí, se despacha solo. Variables: nombre, tienda, productos, total.
     nombre: 'confirmacion_pedido_tienda', categoria: 'UTILITY', idioma: 'es',

@@ -7,6 +7,7 @@ import { idsDeItem } from './emparejar.js';
 import { idiomaDe, MSG_ESTADO } from './idioma.js';
 import { ESTADOS_PEDIDO } from './estadosPedido.js';
 import { novedadesPorPedido } from './novedades.js';
+import { versionesDe, versionPedida } from './versiones.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO, siguienteNumeroPedido } from './db.js';
 import { urlTienda } from './tiendaPublica.js';
@@ -16,7 +17,7 @@ import { moverAPapelera, listarPapelera, restaurarDePapelera, listarRespaldos, p
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
 import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
-import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, sendWhatsappTemplate, verifyWhatsappCredentials } from './wa.js';
+import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, sendWhatsappTemplate, verifyWhatsappCredentials, reenviarPlantillaGuardada, ventanaDeLead } from './wa.js';
 import { mediaPath, saveOutgoingMedia, saveOutgoingMessage, tipoDeMime } from './media.js';
 import { existsSync, readFileSync } from 'node:fs';
 import type * as DropiApi from './dropiApi.js';
@@ -334,6 +335,9 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const promos = (db.prepare('SELECT * FROM promos WHERE store_id = ?').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, tipo: p.tipo, titulo: p.titulo, desc: p.descripcion, vigencia: p.vigencia, activa: !!p.activa,
   }));
+  // La versión se lee ANTES de armar pedidos y chats: si algo cambia mientras se arma la
+  // respuesta, el siguiente sondeo incremental lo trae igual.
+  const versiones = versionesDe(sid);
   const itemsTienda = itemsPorPedido(sid);
   const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
@@ -357,6 +361,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     promos,
     orders,
     leads,
+    versiones,
     suscripcion: estadoSuscripcion(sid),
     assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []), nombre: assistant?.nombre || '', seguimientoActivo: !!assistant?.seguimiento_on, estilo: pj(assistant?.estilo || '', {}) },
     whatsapp: {
@@ -378,9 +383,9 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
 // Ítems de TODOS los pedidos de la tienda en una sola consulta (antes era una
 // consulta por pedido en cada sondeo de 5 s, y con miles de pedidos frenaba el
 // servidor, que es el mismo que procesa los mensajes de WhatsApp).
-function itemsPorPedido(sid: string): Map<string, { qty: number; nombre: string; precio: number }[]> {
+function itemsPorPedido(sid: string, desde?: number): Map<string, { qty: number; nombre: string; precio: number }[]> {
   const m = new Map<string, { qty: number; nombre: string; precio: number }[]>();
-  const rows = db.prepare('SELECT i.order_id, i.qty, i.nombre, i.precio FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.store_id = ?').all(sid) as { order_id: string; qty: number; nombre: string; precio: number }[];
+  const rows = db.prepare(`SELECT i.order_id, i.qty, i.nombre, i.precio FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.store_id = ? ${desde ? 'AND o.v > ?' : ''}`).all(...(desde ? [sid, desde] : [sid])) as { order_id: string; qty: number; nombre: string; precio: number }[];
   for (const r of rows) { const l = m.get(r.order_id); const it = { qty: r.qty, nombre: r.nombre, precio: r.precio }; if (l) l.push(it); else m.set(r.order_id, [it]); }
   return m;
 }
@@ -407,10 +412,10 @@ try {
   db.exec("ALTER TABLE leads ADD COLUMN visto_equipo_at TEXT");
   db.exec("UPDATE leads SET visto_equipo_at = datetime('now')"); // arranque: lo viejo cuenta como leído
 } catch { /* ya existe */ }
-const marcarVisto = (sid: string, leadId: string) => db.prepare("UPDATE leads SET visto_equipo_at = datetime('now') WHERE id = ? AND store_id = ?").run(leadId, sid);
+const marcarVisto = (sid: string, leadId: string) => db.prepare(`UPDATE leads SET visto_equipo_at = datetime('now') WHERE id = ? AND store_id = ?
+  AND EXISTS (SELECT 1 FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente' AND m.created_at > COALESCE(leads.visto_equipo_at, ''))`).run(leadId, sid);
 
-function listarLeads(sid: string, resumen: boolean, abierto?: string) {
-  if (abierto) marcarVisto(sid, abierto); // el chat abierto en pantalla se va leyendo
+function listarLeads(sid: string, resumen: boolean, abierto?: string, desde?: number) {
   // Una sola consulta: datos del chat + su último mensaje + cuántos mensajes del
   // cliente no ha leído el equipo (antes eran 2 consultas por chat en cada sondeo).
   const rows = db.prepare(resumen
@@ -421,8 +426,8 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
          (SELECT created_at FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' ORDER BY m.created_at DESC LIMIT 1) AS ult_cliente_at,
          (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente'
             AND m.created_at > COALESCE(l.visto_equipo_at, '')) AS sin_responder
-       FROM leads l WHERE l.store_id = ? ORDER BY l.created_at DESC`
-    : 'SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[];
+       FROM leads l WHERE l.store_id = ? ${desde ? 'AND l.v > ?' : ''} ORDER BY l.created_at DESC`
+    : 'SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(...(desde ? [sid, desde] : [sid])) as Record<string, unknown>[];
   const etiquetaMedia: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento' };
   return rows.map((l) => {
     const base = {
@@ -432,7 +437,7 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
       promosOptin: Number(l.promos_optin) === 1,
       // Ventana de 24 h (solo WhatsApp): el Inbox bloquea la caja de escribir cuando vence.
       ventana24h: process.env.WA_BLOQUEO_24H !== 'off' && (!l.canal || l.canal === 'whatsapp') && !String(l.wa_id || l.tel || '').startsWith('web:'),
-      ultClienteIso: l.ult_cliente_at ?? (db.prepare("SELECT created_at FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(l.id as string) as { created_at: string } | undefined)?.created_at ?? null,
+      ultClienteIso: resumen ? (l.ult_cliente_at ?? null) : ((db.prepare("SELECT created_at FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(l.id as string) as { created_at: string } | undefined)?.created_at ?? null),
     };
     if (!resumen) return { ...base, mensajes: mensajesDe(l.id as string) };
     const esAbierto = !!abierto && String(l.id) === String(abierto);
@@ -440,7 +445,8 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
     return {
       ...base,
       mensajes: esAbierto ? mensajesDe(l.id as string) : [],
-      ultimo: hay ? (String(l.ult_texto || '').trim() || etiquetaMedia[String(l.ult_tipo)] || '') : '', ultimoIso: hay ? l.ult_at : null,
+      // Solo la vista previa (la lista no necesita el mensaje completo: con 2.000 chats pesaba 1 MB).
+      ultimo: hay ? (String(l.ult_texto || '').replace(/\s+/g, ' ').trim().slice(0, 140) || etiquetaMedia[String(l.ult_tipo)] || '') : '', ultimoIso: hay ? l.ult_at : null,
       hora: hay ? horaBogota(l.ult_at) : '', sinResponder: Math.min(40, Number(l.sin_responder) || 0),
     };
   });
@@ -520,7 +526,17 @@ api.get('/leads', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const resumen = req.query.resumen === '1';
   const abierto = typeof req.query.abierto === 'string' ? req.query.abierto : undefined;
-  res.json({ leads: listarLeads(sid, resumen, abierto) });
+  if (abierto) marcarVisto(sid, abierto); // el chat abierto en pantalla se va leyendo
+  if (!resumen) return res.json({ leads: listarLeads(sid, false, abierto) });
+  // Sondeo incremental: la app manda la última versión que vio (`desde`) y recibe solo
+  // los chats que cambiaron después (mensaje nuevo, etapa, asignado, visto…). Sin cambios,
+  // la respuesta pesa unos bytes. `total` deja detectar chats eliminados.
+  const desde = versionPedida(req.query.desde);
+  const v = versionesDe(sid).leads;
+  const total = (db.prepare('SELECT COUNT(*) n FROM leads WHERE store_id = ?').get(sid) as { n: number }).n;
+  if (desde && desde === v) return res.json({ leads: [], v, total, parcial: true });
+  const parcial = !!desde && desde < v; // una versión "futura" (p. ej. tras restaurar la base) → lista completa
+  res.json({ leads: listarLeads(sid, true, abierto, parcial ? desde : undefined), v, total, parcial });
 });
 
 // Conversación completa de UN chat (al abrirlo, para no depender del sondeo).
@@ -534,14 +550,20 @@ api.get('/leads/:id/mensajes', requireAuth, requireStore, (req, res) => {
 // Pedidos en vivo (para refrescar sin recargar toda la tienda).
 api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
-  const items = itemsPorPedido(sid);
+  // Incremental igual que los chats: con `desde`, solo los pedidos que cambiaron después.
+  const desde = versionPedida(req.query.desde);
+  const v = versionesDe(sid).orders;
+  const total = (db.prepare('SELECT COUNT(*) n FROM orders WHERE store_id = ?').get(sid) as { n: number }).n;
+  if (desde && desde === v) return res.json({ orders: [], v, total, parcial: true });
+  const parcial = !!desde && desde < v;
+  const items = itemsPorPedido(sid, parcial ? desde : undefined);
   const novs = novedadesPorPedido(sid);
-  const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
+  const orders = (db.prepare(`SELECT * FROM orders WHERE store_id = ? ${parcial ? 'AND v > ?' : ''} ORDER BY numero DESC`).all(...(parcial ? [sid, desde] : [sid])) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', confirmacionError: o.confirmacion_error || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));
-  res.json({ orders });
+  res.json({ orders, v, total, parcial });
 });
 
 // ── Estadísticas / Rendimiento ────────────────────────────────────────
@@ -997,16 +1019,9 @@ api.post('/orders/:rowId/advance', requireAuth, requireStore, requirePermiso('pe
   db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, o.id);
   trazar(req.user!.storeId!, o.id, { etapa: 'estado', titulo: `Estado: ${o.estado} → ${nuevo}`, detalle: `Por ${req.user!.nombre}` });
   res.json({ estado: nuevo });
-
-  // Avísale al cliente por WhatsApp del nuevo estado (y déjalo en el chat).
-  const leadA = o.tel ? db.prepare("SELECT id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(req.user!.storeId, o.tel) as { id: string } | undefined : undefined;
-  const msg = MSG_ESTADO[idiomaDe(req.user!.storeId!, leadA?.id)][nuevo]?.(o.numero);
-  const { puedeEscribirle, contarProactivo } = await import('./calidad.js');
-  if (msg && o.tel && puedeEscribirle(req.user!.storeId!, o.tel, leadA?.id).ok) {
-    const lead = db.prepare("SELECT id, wa_id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(req.user!.storeId, o.tel) as { id: string; wa_id: string | null } | undefined;
-    if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
-    void sendWhatsappText(req.user!.storeId!, lead?.wa_id || o.tel, msg, o.tel).then((r) => { if (r.ok) contarProactivo(req.user!.storeId!, o.tel); }).catch(() => {});
-  }
+  // Aviso al cliente: los estados del envío los encola el trigger (avisosEstado.ts); "Confirmado"
+  // a mano se encola aquí. La cola reintenta y usa plantilla si pasaron 24 h.
+  if (nuevo === 'Confirmado') (await import('./avisosEstado.js')).encolarAviso(req.user!.storeId!, o.id, nuevo);
 });
 
 // Cambia el estado del pedido a CUALQUIER estado (seleccionable, se puede
@@ -1022,15 +1037,9 @@ api.post('/orders/:rowId/estado', requireAuth, requireStore, requirePermiso('ped
   db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(nuevo, o.id);
   trazar(sid, o.id, { etapa: 'estado', nivel: nuevo === 'Cancelado' ? 'warn' : 'info', titulo: `Estado: ${o.estado} → ${nuevo}`, detalle: `Por ${req.user!.nombre}` });
   res.json({ estado: nuevo });
-  // Solo notificamos cuando el estado tiene un mensaje pensado para el cliente.
-  const leadB = o.tel ? db.prepare("SELECT id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(sid, o.tel) as { id: string } | undefined : undefined;
-  const msg = MSG_ESTADO[idiomaDe(sid, leadB?.id)][nuevo]?.(o.numero);
-  const cal = await import('./calidad.js');
-  if (msg && o.tel && cal.puedeEscribirle(sid, o.tel, leadB?.id).ok) {
-    const lead = db.prepare("SELECT id, wa_id FROM leads WHERE store_id = ? AND tel = ? ORDER BY created_at DESC LIMIT 1").get(sid, o.tel) as { id: string; wa_id: string | null } | undefined;
-    if (lead) db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'bot', msg);
-    void sendWhatsappText(sid, lead?.wa_id || o.tel, msg, o.tel).then((r) => { if (r.ok) cal.contarProactivo(sid, o.tel); }).catch(() => {});
-  }
+  // Aviso al cliente: los estados del envío los encola el trigger (avisosEstado.ts); "Confirmado"
+  // y "Cancelado" a mano se encolan aquí. La cola reintenta y usa plantilla si pasaron 24 h.
+  if (nuevo === 'Confirmado' || nuevo === 'Cancelado') (await import('./avisosEstado.js')).encolarAviso(sid, o.id, nuevo);
 });
 
 // ── Calidad del número de WhatsApp ──
@@ -2536,21 +2545,42 @@ api.post('/plantillas-aprobadas/sincronizar', requireAuth, requireStore, async (
 function plantillaParaEnviar(sid: string, id: string, dados: string[], extra: ExtraPlantilla = {}, leadId = ''):
   { nombre: string; idioma: string; encabezado: string; cuerpo: string; componentes?: Record<string, unknown>[]; params: string[] } | { error: string } {
   const datos = leadId ? lp.datosDelCliente(sid, leadId) : { valores: {}, pedido: '' };
+  const nombrePlantilla = id.startsWith('meta:') ? pm.plantillaPropia(sid, id)?.nombre || '' : '';
+  // Los EJEMPLOS de la plantilla (los que se pusieron al crearla en Meta: "Camila", "DF-1049"…)
+  // nunca le llegan a un cliente. Si llega uno (p. ej. desde una versión vieja de la app que
+  // los ponía de relleno), se cambia por el dato real del chat; si no hay dato real, no se envía.
+  const normE = (v: unknown) => String(v ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+  let ejemplos = new Set<string>();
+  const esEjemplo = (v: string, real: string) => !!v && ejemplos.has(normE(v)) && normE(v) !== normE(real);
+  let errorEjemplo = '';
   const completar = (campos: lp.Campo[], n: number) => {
     const auto = lp.llenar(campos, datos);
-    return Array.from({ length: n }, (_, i) => String(dados[i] ?? '').trim() || auto[i] || '');
+    return Array.from({ length: n }, (_, i) => {
+      const v = String(dados[i] ?? '').trim();
+      if (esEjemplo(v, auto[i] || '')) {
+        if (auto[i] && !esEjemplo(auto[i], '')) return auto[i];
+        errorEjemplo ||= `{{${i + 1}}} tiene "${v}", que es el dato de EJEMPLO de la plantilla${nombrePlantilla ? ` "${nombrePlantilla}"` : ''}, no el del cliente. Escribe el dato real.`;
+        return '';
+      }
+      return v || auto[i] || '';
+    });
   };
   const faltan = (params: string[], campos: lp.Campo[]) => params.map((v, i) => (v ? '' : `{{${i + 1}}}${campos[i] ? ` (${lp.NOMBRE_CAMPO[campos[i] as Exclude<lp.Campo, ''>]})` : ''}`)).filter(Boolean);
   if (id.startsWith('meta:')) {
     const p = pm.plantillaPropia(sid, id);
     if (!p) return { error: 'Esa plantilla no está aprobada en tu cuenta de WhatsApp. Toca "↻ Actualizar desde Meta".' };
+    ejemplos = new Set([...p.ejemplos, p.ejemploEncabezado].map(normE).filter((x) => x.length >= 2));
     const campos = lp.inferirCampos(p.cuerpo, p.ejemplos);
     const params = completar(campos, p.variables);
+    if (errorEjemplo) return { error: errorEjemplo };
     const f = faltan(params, campos);
     if (f.length) return { error: `Falta llenar ${f.join(', ')} de "${p.nombre}": no hay ese dato en el chat ni en su pedido.` };
     const ce = p.varsEncabezado ? lp.inferirCampos(p.encabezado, [p.ejemploEncabezado])[0] || '' : '';
     const cb = lp.campoDeBoton(p.botones.find((b) => b.variable)?.url || '');
-    const ext: ExtraPlantilla = { ...extra, encabezado: extra.encabezado || (ce ? lp.llenar([ce], datos)[0] : ''), boton: extra.boton || (cb ? lp.llenar([cb], datos)[0] : '') };
+    const encReal = ce ? lp.llenar([ce], datos)[0] : '';
+    const encDado = String(extra.encabezado || '').trim();
+    if (esEjemplo(encDado, encReal) && !encReal) return { error: `El encabezado tiene "${encDado}", que es el dato de EJEMPLO de la plantilla. Escribe el dato real.` };
+    const ext: ExtraPlantilla = { ...extra, encabezado: (esEjemplo(encDado, encReal) ? encReal : encDado) || encReal, boton: extra.boton || (cb ? lp.llenar([cb], datos)[0] : '') };
     const c = pm.componentesEnvio(p, params, ext);
     if ('error' in c) return c;
     return { nombre: p.nombre, idioma: p.idioma, encabezado: p.encabezado, cuerpo: p.cuerpo, componentes: c.components, params };
@@ -2562,8 +2592,10 @@ function plantillaParaEnviar(sid: string, id: string, dados: string[], extra: Ex
   ).get(sid, id) as { nombre: string; idioma: string; encabezado: string; cuerpo: string; ejemplos: string } | undefined;
   if (!t) return { error: 'Esa plantilla no está aprobada para tu tienda todavía.' };
   const nVars = Math.max(0, ...[...String(t.cuerpo || '').matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1])));
+  ejemplos = new Set(pj<string[]>(t.ejemplos, []).map(normE).filter((x) => x.length >= 2));
   const campos = lp.inferirCampos(t.cuerpo, pj<string[]>(t.ejemplos, []));
   const params = completar(campos, nVars);
+  if (errorEjemplo) return { error: errorEjemplo.replace('la plantilla', `la plantilla "${t.nombre}"`) };
   const f = faltan(params, campos);
   if (f.length) return { error: `Falta llenar ${f.join(', ')} de "${t.nombre}": no hay ese dato en el chat ni en su pedido.` };
   return { nombre: t.nombre, idioma: t.idioma, encabezado: t.encabezado, cuerpo: t.cuerpo, params };
@@ -2593,7 +2625,7 @@ api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, requirePermis
   const l = db.prepare('SELECT id, tel, wa_id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, sid) as
     | { id: string; tel: string; wa_id: string | null } | undefined;
   if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
-  // Parámetros: los que manden, o los ejemplos de la plantilla como respaldo.
+  // Parámetros: los que manden; lo que falte se llena con los datos reales del chat (nunca con ejemplos).
   const dados = Array.isArray(req.body?.params) ? (req.body.params as unknown[]).map((x) => String(x)) : [];
   const t = plantillaParaEnviar(sid, String(req.body?.plantillaId || ''), dados, extraDe(req.body), l.id);
   if ('error' in t) return res.status(400).json({ error: t.error });
@@ -2753,14 +2785,21 @@ api.post('/leads/:id/media', requireAuth, requireStore, requirePermiso('chats'),
 api.post('/messages/:id/reenviar', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const m = db.prepare(
-    'SELECT m.id, m.de, m.texto, m.tipo, m.media_url, m.media_mime, l.wa_id, l.tel FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.id = ? AND l.store_id = ?',
-  ).get(req.params.id, sid) as { id: string; de: string; texto: string; tipo: string; media_url: string | null; media_mime: string | null; wa_id: string | null; tel: string } | undefined;
+    'SELECT m.id, m.de, m.texto, m.tipo, m.media_url, m.media_mime, m.wa_msg_id, l.id AS lead_id, l.wa_id, l.tel FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.id = ? AND l.store_id = ?',
+  ).get(req.params.id, sid) as { id: string; de: string; texto: string; tipo: string; media_url: string | null; media_mime: string | null; wa_msg_id: string | null; lead_id: string; wa_id: string | null; tel: string } | undefined;
   if (!m) return res.status(404).json({ error: 'Mensaje no encontrado.' });
   if (m.de === 'cliente') return res.status(400).json({ error: 'Solo se pueden reenviar los mensajes que envías tú.' });
   const destino = m.wa_id || m.tel;
 
   let r: { ok: boolean; error?: string; wamid?: string };
-  if (m.tipo && m.tipo !== 'texto' && m.media_url) {
+  // Si el mensaje era una PLANTILLA, se reenvía como plantilla (funciona aunque pasaran 24 h).
+  const comoPlantilla = await reenviarPlantillaGuardada(sid, String(m.wa_msg_id || ''), destino, m.tel);
+  if (comoPlantilla) {
+    r = comoPlantilla;
+  } else if (!ventanaDeLead(sid, m.lead_id).abierta) {
+    // Texto libre con la ventana cerrada: WhatsApp lo rechazaría. Se explica en vez de "reenviar".
+    return res.status(400).json({ error: 'Pasaron más de 24 h desde el último mensaje del cliente: este mensaje no se puede reenviar como texto. Envíale una plantilla con el botón ⚡ «Enviar plantilla».' });
+  } else if (m.tipo && m.tipo !== 'texto' && m.media_url) {
     const archivo = mediaPath(sid, String(m.media_url).split('/').pop() || '');
     if (!existsSync(archivo)) return res.status(400).json({ error: 'No encontramos el archivo del mensaje para reenviarlo.' });
     const mime = m.media_mime || 'application/octet-stream';
@@ -4079,6 +4118,35 @@ api.get('/superadmin/biblioteca-landings', requireAuth, requireAdmin, async (_re
 api.get('/superadmin/stores/:storeId/landings', requireAuth, requireAdmin, (req, res) => {
   if (tiendaVedada(req, req.params.storeId)) return res.status(404).json({ error: 'Tienda no encontrada.' });
   res.json({ landings: db.prepare('SELECT id, nombre, estado FROM landings WHERE store_id = ? ORDER BY updated_at DESC').all(req.params.storeId) });
+});
+// Catálogo del admin: TODAS las landings de todas las tiendas (para verlas y mandarlas a la
+// biblioteca o directo a una tienda, igual que con los productos).
+api.get('/superadmin/landings', requireAuth, requireAdmin, async (req, res) => {
+  res.json({ landings: (await import('./bibliotecaLandings.js')).listarTodasLasLandings(req.user!.role === 'SUPERADMIN') });
+});
+// Vista previa de cualquier landing (borrador o publicada) tal como la vería el cliente,
+// sin píxel ni pedidos reales. Con código propio se sirve aislada (CSP sandbox).
+api.get('/superadmin/landings/:storeId/:id/vista', requireAuth, requireAdmin, async (req, res) => {
+  const { storeId, id } = req.params;
+  const fila = tiendaVedada(req, storeId) ? undefined : db.prepare('SELECT * FROM landings WHERE id = ? AND store_id = ?').get(id, storeId) as Record<string, unknown> | undefined;
+  if (!fila) return res.status(404).type('html').send('<p style="font-family:sans-serif;padding:30px">Landing no encontrada.</p>');
+  const L = await import('./landings.js');
+  const LC = await import('./landingCodigo.js');
+  const { slugTienda } = await import('./tiendaPublica.js');
+  const base = `/l/${slugTienda(storeId)}/`;
+  res.setHeader('Cache-Control', 'no-store');
+  const propio = LC.htmlPublico(fila, 'landing', base, true);
+  if (propio) { res.set(LC.cabecerasCodigo(true)); return res.type('html').send(propio); }
+  res.type('html').send(L.renderLanding(L.limpiarDatos(pj(String(fila.datos || ''), {})), { id, vista: true, inicio: base, tienda: L.configTienda(storeId) }));
+});
+// Mandar una landing de una tienda DIRECTO a otra tienda (como borrador), sin pasar por la biblioteca.
+api.post('/superadmin/landings/:storeId/:id/enviar-a-tienda', requireAuth, requireAdmin, async (req, res) => {
+  const destino = String(req.body?.storeId || '');
+  if (tiendaVedada(req, req.params.storeId)) return res.status(404).json({ error: 'Landing no encontrada.' });
+  if (!destino || !db.prepare('SELECT id FROM stores WHERE id = ?').get(destino) || tiendaVedada(req, destino)) return res.status(404).json({ error: 'La tienda destino no existe.' });
+  const r = (await import('./bibliotecaLandings.js')).enviarLandingATienda(req.params.storeId, req.params.id, destino);
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ok: true, landingId: r.landingId });
 });
 api.post('/superadmin/biblioteca-landings', requireAuth, requireAdmin, async (req, res) => {
   const { storeId, landingId, gratis, precioImportacion } = req.body || {};

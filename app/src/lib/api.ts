@@ -391,8 +391,10 @@ export const apiNovedadesEstado = () => req<EstadoNovedades>('/api/novedades/est
 export const apiNovedadesSync = () => req<{ ok: true; abiertas: number; nuevas: number }>('/api/novedades/sync', 'POST');
 export const apiNovedadSolucion = (id: string, p: PropuestaNovedad) => req<{ ok: true; estado: string }>(`/api/novedades/${encodeURIComponent(id)}/solucion`, 'POST', p);
 export const apiNovedadAvisar = (id: string) => req<{ ok: true; via: string }>(`/api/novedades/${encodeURIComponent(id)}/avisar`, 'POST');
-export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean; landings?: boolean }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
-export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET');
+export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean; landings?: boolean }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; versiones?: { leads: number; orders: number }; suscripcion: Suscripcion | null }>('/api/state', 'GET');
+// Pedidos. Con `desde` (versión que la app ya vio) el servidor manda SOLO los que cambiaron
+// después (`parcial: true`); `total` permite detectar pedidos borrados.
+export const apiOrders = (desde?: number) => req<{ orders: ApiOrder[]; v?: number; total?: number; parcial?: boolean }>(`/api/orders${desde ? `?desde=${desde}` : ''}`, 'GET');
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
 export const apiOrderEstado = (rowId: string, estado: string) => req<{ estado: string }>(`/api/orders/${rowId}/estado`, 'POST', { estado });
 export const apiDeleteOrder = (rowId: string) => req<{ ok: true }>(`/api/orders/${rowId}`, 'DELETE');
@@ -441,8 +443,9 @@ export const apiReenviarMensaje = (id: string) => req<{ ok: boolean; estado: str
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
 // Sondeo liviano del Inbox: resumen de todos los chats (sin todos sus mensajes),
 // y la conversación completa solo del chat abierto (`abierto`).
-export const apiLeadsResumen = (abierto?: string) =>
-  req<{ leads: ApiLead[] }>(`/api/leads?resumen=1${abierto ? `&abierto=${encodeURIComponent(abierto)}` : ''}`, 'GET');
+// Con `desde` (versión ya vista) llegan SOLO los chats que cambiaron después (`parcial: true`).
+export const apiLeadsResumen = (abierto?: string, desde?: number) =>
+  req<{ leads: ApiLead[]; v?: number; total?: number; parcial?: boolean }>(`/api/leads?resumen=1${abierto ? `&abierto=${encodeURIComponent(abierto)}` : ''}${desde ? `&desde=${desde}` : ''}`, 'GET');
 // Conversación completa de un chat (al abrirlo).
 export const apiLeadMensajes = (id: string) => req<{ mensajes: ApiMensaje[] }>(`/api/leads/${id}/mensajes`, 'GET');
 export const apiAnuncioProducto = (adId: string) => req<{ productId: string; auto: boolean }>(`/api/anuncios/${encodeURIComponent(adId)}/producto`, 'GET');
@@ -977,13 +980,16 @@ export interface LandingResumen { id: string; slug: string; nombre: string; prod
 export interface Landing extends LandingResumen { datos: LandingDatos }
 export interface MembresiaTienda { activa: boolean; cortesia: boolean; vence: string; diasRestantes: number; enGracia: boolean; precio: number }
 export interface TiendaConfig { nombre: string; logo: string; favicon: string; banner: string; titulo: string; descripcion: string; anuncios: string[]; colorPrincipal: string; colorBoton: string; colorAcento: string; whatsapp: string; pixelMeta: string; seoTitulo: string; seoDescripcion: string; seoImagen: string }
-export interface DominioLandings { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string }
+export interface RegistroDns { tipo: string; nombre: string; valor: string; para: string; obligatorio?: boolean }
+export interface DiagDominio { dns: 'ok' | 'pendiente' | 'error'; dnsDetalle: string; ssl: 'ok' | 'pendiente' | 'desconocido'; sslDetalle: string; extra: RegistroDns[]; revisado: string }
+export interface DominioLandings { dominio: string; estado: string; detalle: string; cname: string; nombreRegistro: string; inicio: string; raiz: string; sub: string; conectadoAt?: string; diag?: DiagDominio | null; apex?: boolean }
 export const apiLandings = () => req<{ landings: LandingResumen[]; membresia: MembresiaTienda; dominio: DominioLandings; tienda: TiendaConfig }>('/api/landings', 'GET');
 export const apiGuardarTienda = (tienda: TiendaConfig) => req<{ tienda: TiendaConfig }>('/api/landings/tienda', 'PUT', { tienda });
 export const apiVistaTienda = (tienda: TiendaConfig) => req<{ html: string }>('/api/landings/tienda/vista', 'POST', { tienda });
 export const apiPagarMembresia = () => req<{ url?: string; gratis?: boolean }>('/api/landings/membresia/pagar', 'POST');
 export const apiConectarDominio = (dominio: string) => req<DominioLandings>('/api/landings/dominio', 'POST', { dominio });
 export const apiVerificarDominio = () => req<DominioLandings>('/api/landings/dominio/verificar', 'POST');
+export const apiEstadoDominio = () => req<DominioLandings>('/api/landings/dominio', 'GET');
 export const apiQuitarDominio = () => req<DominioLandings>('/api/landings/dominio', 'DELETE');
 export const apiSubdominio = (sub: string) => req<DominioLandings>('/api/landings/dominio/sub', 'PUT', { sub });
 export const apiInicioDominio = (landingId: string) => req<DominioLandings>('/api/landings/dominio/inicio', 'PUT', { landingId });
@@ -1064,7 +1070,16 @@ export const apiAdminProbarSoporte = () => req<{ respuesta: string }>('/api/admi
 
 // ── Biblioteca de landings ──
 export interface LibraryLanding { id: string; nombre: string; precio: number; gratis: boolean; precioImportacion: number; portada: string | null; adquirida: boolean }
-export interface LibraryLandingAdmin { id: string; nombre: string; origen: string; precio: number; gratis: boolean; precioImportacion: number; activo: boolean; portada: string | null; importos: number }
+export interface LibraryLandingAdmin { id: string; nombre: string; origen: string; precio: number; gratis: boolean; precioImportacion: number; activo: boolean; portada: string | null; importos: number; modoCodigo?: boolean; conPlantilla?: boolean }
+/** Una landing de cualquier tienda, en el catálogo del superadmin. */
+export interface SuperLandingTienda {
+  id: string; storeId: string; tienda: string; nombre: string; estado: string; precio: number; portada: string | null; vistas: number; pedidos: number;
+  updatedAt: string; publicadaAt: string | null; modoCodigo: boolean; conPlantilla: boolean; url: string; enBiblioteca: string;
+}
+export const apiSuperTodasLasLandings = () => req<{ landings: SuperLandingTienda[] }>('/api/superadmin/landings', 'GET');
+export const apiSuperEnviarLandingATienda = (storeId: string, landingId: string, destino: string) =>
+  req<{ ok: true; landingId: string }>(`/api/superadmin/landings/${encodeURIComponent(storeId)}/${encodeURIComponent(landingId)}/enviar-a-tienda`, 'POST', { storeId: destino });
+export const urlVistaSuperLanding = (storeId: string, landingId: string) => `/api/superadmin/landings/${encodeURIComponent(storeId)}/${encodeURIComponent(landingId)}/vista`;
 export const apiBibliotecaLandings = () => req<{ landings: LibraryLanding[] }>('/api/biblioteca-landings', 'GET');
 export const apiImportarBibliotecaLanding = (id: string) => req<{ ok?: true; landingId?: string; requierePago?: boolean; precio?: number }>(`/api/biblioteca-landings/${encodeURIComponent(id)}/importar`, 'POST');
 export const apiCheckoutBibliotecaLanding = (id: string) => req<{ url: string }>(`/api/biblioteca-landings/${encodeURIComponent(id)}/checkout`, 'POST');

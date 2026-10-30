@@ -653,7 +653,11 @@ html.quieto .reveal{opacity:1;transform:none}
 
   /* ---------- Enlaces a la app (mismo origen o app.<dominio>) ---------- */
   var host = location.hostname.replace(/^www\./,'');
-  var mismoOrigen = (host==='localhost'||host.indexOf('app.')===0||/^\d+\.\d+\.\d+\.\d+$/.test(host)||location.protocol==='file:');
+  // Solo los dominios raíz propios tienen app.<dominio>. En cualquier otra dirección (la de
+  // Railway, test.<dominio>, localhost…) la app vive en la MISMA dirección: agregarle «app.»
+  // a xxx.up.railway.app da un subdominio sin certificado (ERR_CERT_COMMON_NAME_INVALID).
+  var RAICES = ['dealflow.sbs', 'zennku.sbs'];
+  var mismoOrigen = RAICES.indexOf(host) < 0 || location.protocol==='file:';
   var base = mismoOrigen ? '' : (location.protocol+'//app.'+host);
   var appUrl = base + '/entrar';
   $$('.to-app').forEach(function(a){ a.href = appUrl; });

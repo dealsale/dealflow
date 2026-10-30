@@ -1017,11 +1017,17 @@ export function useDealFlowState() {
   soundOnRef.current = soundOn;
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
   const knownLeadIdsRef = useRef<Set<string>>(new Set());
-  // "Firma" de la última tanda de leads/pedidos que sí se puso en pantalla:
-  // evita rehacer todo el Inbox/Pedidos cada 5s cuando el sondeo trae
-  // exactamente lo mismo de antes (rendimiento — ver el setInterval de abajo).
-  const lastLeadsSigRef = useRef<string>('');
-  const lastOrdersSigRef = useRef<string>('');
+  // Sondeo INCREMENTAL: versión de chats/pedidos que la app ya vio. El servidor manda
+  // solo lo que cambió después (con 2.000 chats, antes bajaba ~1 MB cada 5 s aunque no
+  // hubiera cambiado nada). 0 = todavía no cargó la lista completa.
+  const leadsVersionRef = useRef(0);
+  const ordersVersionRef = useRef(0);
+  const leadsSembradosRef = useRef(false); // contactos conocidos ya sembrados (no avisar de los viejos)
+  const ordersSembradosRef = useRef(false);
+  const leadsEnCursoRef = useRef(false); // hay un sondeo en vuelo (no apilar otro)
+  const ordersEnCursoRef = useRef(false);
+  const apiLeadsRef = useRef(apiLeadsState);
+  apiLeadsRef.current = apiLeadsState;
   const notifPrefsRef = useRef(notifPrefs);
   notifPrefsRef.current = notifPrefs;
 
@@ -1202,7 +1208,7 @@ export function useDealFlowState() {
     const next = ESTADOS[o.estado].nextEstado;
     if (!next) return;
     setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, estado: next } : x)));
-    if (apiMode && o.rowId) void apiOrderAdvance(o.rowId).then((r) => { if (r.error) void apiOrders().then(({ data }) => { if (data) setOrders(mapApiOrders(data.orders)); }); });
+    if (apiMode && o.rowId) void apiOrderAdvance(o.rowId).then((r) => { if (r.error) void sincronizarPedidos(); });
   }
 
   // Cambia el estado del pedido a CUALQUIER estado (seleccionable, con retroceso
@@ -1211,7 +1217,7 @@ export function useDealFlowState() {
     const o = ordersRef.current.find((x) => x.id === id);
     if (!o || o.estado === estado) return;
     setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, estado } : x)));
-    if (apiMode && o.rowId) void apiOrderEstado(o.rowId, estado).then((r) => { if (r.error) void apiOrders().then(({ data }) => { if (data) setOrders(mapApiOrders(data.orders)); }); });
+    if (apiMode && o.rowId) void apiOrderEstado(o.rowId, estado).then((r) => { if (r.error) void sincronizarPedidos(); });
   }
 
   // Elimina el pedido del panel (no toca Dropi/Woo). Optimista + confirma servidor.
@@ -1220,7 +1226,7 @@ export function useDealFlowState() {
     if (!o) return;
     if (selectedOrderId === id) setSelectedOrderId(null); // cierra el detalle si estaba abierto
     setOrders((prev) => prev.filter((x) => x.id !== id));
-    if (apiMode && o.rowId) void apiDeleteOrder(o.rowId).then((r) => { if (r.error) void apiOrders().then(({ data }) => { if (data) setOrders(mapApiOrders(data.orders)); }); });
+    if (apiMode && o.rowId) void apiDeleteOrder(o.rowId).then((r) => { if (r.error) void sincronizarPedidos(); });
   }
 
   // Crear pedido manual: un solo modal global (antes vivía duplicado dentro de
@@ -1269,8 +1275,7 @@ export function useDealFlowState() {
     const r = await apiCrearPedido({ ...body, leadId: crearPedidoLeadId || undefined });
     if (r.error || !r.data) { setCrearPedidoMsg(r.error || 'No se pudo crear el pedido.'); return ''; }
     setCrearPedidoMsg('');
-    const { data } = await apiOrders();
-    if (data) setOrders(mapApiOrders(data.orders));
+    await sincronizarPedidos();
     return r.data.id;
   }
 
@@ -1296,8 +1301,7 @@ export function useDealFlowState() {
     setCompletarMsg('Guardando…');
     const r = await apiActualizarPedido(rowId, body);
     if (r.error || !r.data) { setCompletarMsg(r.error || 'No se pudo guardar el pedido.'); return false; }
-    const { data } = await apiOrders();
-    if (data) setOrders(mapApiOrders(data.orders));
+    await sincronizarPedidos();
     cerrarCompletarPedido();
     return true;
   }
@@ -1313,8 +1317,7 @@ export function useDealFlowState() {
     setEditarMsg('Guardando…');
     const r = await apiActualizarPedido(rowId, body);
     if (r.error || !r.data) { setEditarMsg(r.error || 'No se pudo guardar el pedido.'); return false; }
-    const { data } = await apiOrders();
-    if (data) setOrders(mapApiOrders(data.orders));
+    await sincronizarPedidos();
     cerrarEditarPedido();
     toast('✓ Pedido actualizado.');
     return true;
@@ -1998,19 +2001,116 @@ export function useDealFlowState() {
   }, [apiMode, qrEstado]);
 
   // Aplica un resumen de leads CONSERVANDO los mensajes que ya teníamos de cada
-  // chat (el resumen solo trae los del chat abierto, para ahorrar datos).
-  function aplicarResumenLeads(leads: Lead[]) {
+  // chat (el resumen solo trae los del chat abierto, para ahorrar datos). Si es
+  // `parcial` (sondeo incremental) solo vienen los chats que cambiaron: se reemplazan
+  // esos y se agregan los nuevos; el resto de la lista no se toca ni se repinta.
+  function aplicarResumenLeads(leads: Lead[], parcial = false) {
+    if (parcial && !leads.length) return; // nada cambió: el Inbox no se rehace
     setApiLeadsState((prev) => {
       const antes = new Map((prev || []).map((l) => [String(l.id), l]));
-      return leads.map((l) => (l.mensajes.length ? l : { ...l, mensajes: antes.get(String(l.id))?.mensajes || [] }));
+      const conMensajes = (l: Lead) => (l.mensajes.length ? l : { ...l, mensajes: antes.get(String(l.id))?.mensajes || [] });
+      if (!parcial) return leads.map(conMensajes);
+      const cambiados = new Map(leads.map((l) => [String(l.id), conMensajes(l)]));
+      const res = (prev || []).map((l) => cambiados.get(String(l.id)) || l);
+      for (const l of leads) if (!antes.has(String(l.id))) res.push(cambiados.get(String(l.id))!);
+      return res;
     });
+  }
+  // Avisa de los contactos nuevos. La primera lista COMPLETA solo siembra lo conocido
+  // (no son nuevos); de ahí en adelante, cada chat que no conocíamos dispara el aviso.
+  function avisarContactosNuevos(leads: Lead[], parcial: boolean) {
+    if (!leadsSembradosRef.current) {
+      if (!parcial) { leads.forEach((l) => knownLeadIdsRef.current.add(String(l.id))); leadsSembradosRef.current = true; }
+      return;
+    }
+    for (const l of leads) {
+      if (knownLeadIdsRef.current.has(String(l.id))) continue;
+      knownLeadIdsRef.current.add(String(l.id));
+      const nombre = (l.nombre || 'Un cliente').split(' ')[0];
+      notificar('contactos', 'Nuevo contacto 👋', `${nombre} le escribió a tu tienda.`, `lead-${l.id}`);
+    }
+  }
+  // Trae del servidor SOLO los chats que cambiaron desde la última versión vista (y la
+  // conversación completa del chat abierto) y los fusiona con la lista. Si el total no
+  // cuadra (alguien borró un chat desde otra pestaña), recarga la lista completa.
+  async function sincronizarLeads(soloSiLibre = false): Promise<void> {
+    if (soloSiLibre && leadsEnCursoRef.current) return;
+    leadsEnCursoRef.current = true;
+    try {
+      const desde = leadsVersionRef.current || undefined;
+      const abierto = crmSelectedIdRef.current != null ? String(crmSelectedIdRef.current) : undefined;
+      const { data } = await apiLeadsResumen(abierto, desde);
+      if (!data) return;
+      if (typeof data.v === 'number') leadsVersionRef.current = data.v;
+      const parcial = !!data.parcial && !!desde;
+      const leads = mapApiLeads(data.leads);
+      aplicarResumenLeads(leads, parcial);
+      avisarContactosNuevos(leads, parcial);
+      if (parcial && typeof data.total === 'number') {
+        const ids = new Set((apiLeadsRef.current || []).map((l) => String(l.id)));
+        leads.forEach((l) => ids.add(String(l.id)));
+        if (ids.size !== data.total) { leadsVersionRef.current = 0; leadsEnCursoRef.current = false; await sincronizarLeads(); }
+      }
+    } finally { leadsEnCursoRef.current = false; }
   }
   // Refresca la lista del Inbox de forma liviana (usado tras una acción).
   function refrescarLeadsLiviano() {
     if (!apiMode) return;
-    void apiLeadsResumen(crmSelectedIdRef.current != null ? String(crmSelectedIdRef.current) : undefined).then(({ data }) => {
-      if (data) aplicarResumenLeads(mapApiLeads(data.leads));
+    void sincronizarLeads();
+  }
+  // Pedidos: misma idea. Con `parcial`, solo llegan los que cambiaron; se reemplazan por
+  // rowId y los nuevos entran arriba (el servidor ordena por número descendente).
+  function aplicarPedidos(nuevos: Order[], parcial: boolean) {
+    if (!parcial) { setOrders(nuevos); return; }
+    if (!nuevos.length) return;
+    setOrders((prev) => {
+      const clave = (o: Order) => String(o.rowId ?? o.id);
+      const cambiados = new Map(nuevos.map((o) => [clave(o), o]));
+      const antes = new Set(prev.map(clave));
+      const res = prev.map((o) => cambiados.get(clave(o)) || o);
+      const agregados = nuevos.filter((o) => !antes.has(clave(o)));
+      if (!agregados.length) return res;
+      const num = (o: Order) => Number(String(o.id).replace(/\D/g, '')) || 0;
+      return [...agregados, ...res].sort((a, b) => num(b) - num(a));
     });
+  }
+  // Pop-up, sonido y notificación del pedido nuevo (estado "Nuevo" que no conocíamos).
+  // La primera lista completa solo siembra lo conocido, sin avisar de pedidos viejos.
+  function avisarPedidosNuevos(nuevos: Order[], parcial: boolean) {
+    const clave = (o: Order) => String(o.rowId ?? o.id);
+    if (!ordersSembradosRef.current) {
+      if (!parcial) { nuevos.forEach((o) => knownOrderIdsRef.current.add(clave(o))); ordersSembradosRef.current = true; }
+      return;
+    }
+    const recienLlegado = nuevos.find((o) => o.estado === 'Nuevo' && !knownOrderIdsRef.current.has(clave(o)));
+    nuevos.forEach((o) => knownOrderIdsRef.current.add(clave(o)));
+    if (!recienLlegado) return;
+    setIncomingOrder(recienLlegado);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setIncomingOrder(null), 8000);
+    if (soundOnRef.current) playOrderChime();
+    const d = decorateOrder(recienLlegado);
+    const nprod = recienLlegado.items.reduce((a, it) => a + it.qty, 0);
+    notificar('pedidos', `Nuevo pedido ${recienLlegado.id} 🛒`, `${recienLlegado.cliente} · ${d.totalFmt} · ${nprod} producto${nprod === 1 ? '' : 's'}`, recienLlegado.id);
+  }
+  async function sincronizarPedidos(soloSiLibre = false): Promise<void> {
+    if (soloSiLibre && ordersEnCursoRef.current) return;
+    ordersEnCursoRef.current = true;
+    try {
+      const desde = ordersVersionRef.current || undefined;
+      const { data } = await apiOrders(desde);
+      if (!data) return;
+      if (typeof data.v === 'number') ordersVersionRef.current = data.v;
+      const parcial = !!data.parcial && !!desde;
+      const nuevos = mapApiOrders(data.orders);
+      aplicarPedidos(nuevos, parcial);
+      avisarPedidosNuevos(nuevos, parcial);
+      if (parcial && typeof data.total === 'number') {
+        const ids = new Set(ordersRef.current.map((o) => String(o.rowId ?? o.id)));
+        nuevos.forEach((o) => ids.add(String(o.rowId ?? o.id)));
+        if (ids.size !== data.total) { ordersVersionRef.current = 0; ordersEnCursoRef.current = false; await sincronizarPedidos(); }
+      }
+    } finally { ordersEnCursoRef.current = false; }
   }
   // Al abrir un chat, trae su conversación completa al instante (sin esperar el sondeo).
   function cargarMensajesChat(id: number | string) {
@@ -2054,78 +2154,40 @@ export function useDealFlowState() {
           largo: data.assistant?.estilo?.largo === 'detallado' || data.assistant?.estilo?.largo === 'medio' ? data.assistant.estilo.largo : 'corto',
         });
         setRules(data.assistant?.reglas || []);
-        setApiLeadsState(mapApiLeads(data.leads));
-        if (data.orders) setOrders(mapApiOrders(data.orders));
+        const leads = mapApiLeads(data.leads);
+        aplicarResumenLeads(leads);
+        const pedidos = data.orders ? mapApiOrders(data.orders) : null;
+        if (pedidos) setOrders(pedidos);
         if (data.products) setProducts((prev) => conSeleccion(mapApiProducts(data.products), prev));
+        // Siembra lo ya conocido SIN avisar (no son contactos/pedidos nuevos) y la versión
+        // vista: desde aquí el sondeo pide al servidor solo lo que cambie.
+        avisarContactosNuevos(leads, false);
+        if (pedidos) avisarPedidosNuevos(pedidos, false);
+        leadsVersionRef.current = data.versiones?.leads || 0;
+        ordersVersionRef.current = data.versiones?.orders || 0;
       });
     };
     if (!sessionUser) return;
+    // Sesión nueva (otra tienda u otro usuario): se vuelve a sembrar desde cero, para no
+    // avisar como "nuevos" los chats y pedidos que ya existían.
+    leadsSembradosRef.current = false;
+    ordersSembradosRef.current = false;
+    leadsVersionRef.current = 0;
+    ordersVersionRef.current = 0;
     load();
-    // La primera carga siembra los pedidos conocidos SIN notificar (evita avisar
-    // de pedidos viejos al entrar). Luego, cada pedido nuevo dispara el pop-up.
-    let sembrado = false;
-    let sembradoLeads = false;
     let tick = 0;
     const t = setInterval(() => {
       // Con la pestaña oculta no se sondea (ahorra red y CPU; al volver sigue solo).
       if (typeof document !== 'undefined' && document.hidden) return;
       tick++;
-      // Sondeo LIVIANO: solo el resumen de cada chat (último mensaje + sin
-      // responder), y la conversación completa SOLO del chat abierto. Antes esto
-      // descargaba TODOS los mensajes de TODOS los chats cada 5s (varios MB),
-      // que era lo que ponía lento todo el Inbox.
-      void apiLeadsResumen(crmSelectedIdRef.current != null ? String(crmSelectedIdRef.current) : undefined).then(({ data }) => {
-        if (!data) return;
-        const leads = mapApiLeads(data.leads);
-        if (!sembradoLeads) {
-          leads.forEach((l) => knownLeadIdsRef.current.add(String(l.id)));
-          sembradoLeads = true;
-        } else {
-          for (const l of leads) {
-            if (!knownLeadIdsRef.current.has(String(l.id))) {
-              knownLeadIdsRef.current.add(String(l.id));
-              const nombre = (l.nombre || 'Un cliente').split(' ')[0];
-              notificar('contactos', 'Nuevo contacto 👋', `${nombre} le escribió a tu tienda.`, `lead-${l.id}`);
-            }
-          }
-        }
-        // La firma es barata: en resumen los mensajes vienen vacíos (salvo el chat
-        // abierto), así que casi no hay texto que serializar.
-        const sig = JSON.stringify(leads);
-        if (sig !== lastLeadsSigRef.current) {
-          lastLeadsSigRef.current = sig;
-          aplicarResumenLeads(leads);
-        }
-      });
+      // Sondeo INCREMENTAL: el servidor manda solo los chats que cambiaron desde la
+      // última versión vista (y la conversación completa SOLO del chat abierto). Sin
+      // cambios, la respuesta pesa unos bytes. Antes bajaba el resumen de TODOS los
+      // chats cada 5 s (~1 MB con 2.000 chats) y rehacía el Inbox entero.
+      void sincronizarLeads(true);
       // Pedidos: cada 5 s si estás en Pedidos/Resumen; si no, cada 15 s (basta para el aviso de pedido nuevo).
       if (!['pedidos', 'resumen'].includes(sectionRef.current) && tick % 3 !== 0) return;
-      void apiOrders().then(({ data }) => {
-        if (!data) return;
-        const nuevos = mapApiOrders(data.orders);
-        if (!sembrado) {
-          nuevos.forEach((o) => knownOrderIdsRef.current.add(String(o.rowId ?? o.id)));
-          sembrado = true;
-        } else {
-          const recienLlegado = nuevos.find((o) => o.estado === 'Nuevo' && !knownOrderIdsRef.current.has(String(o.rowId ?? o.id)));
-          nuevos.forEach((o) => knownOrderIdsRef.current.add(String(o.rowId ?? o.id)));
-          if (recienLlegado) {
-            setIncomingOrder(recienLlegado);
-            clearTimeout(toastTimer.current);
-            toastTimer.current = setTimeout(() => setIncomingOrder(null), 8000);
-            if (soundOnRef.current) playOrderChime();
-            // Notificación de pedido con resumen corto.
-            const d = decorateOrder(recienLlegado);
-            const nprod = recienLlegado.items.reduce((a, it) => a + it.qty, 0);
-            notificar('pedidos', `Nuevo pedido ${recienLlegado.id} 🛒`, `${recienLlegado.cliente} · ${d.totalFmt} · ${nprod} producto${nprod === 1 ? '' : 's'}`, recienLlegado.id);
-          }
-        }
-        // Mismo criterio que arriba: sin cambios reales, no repintamos Pedidos.
-        const sig = JSON.stringify(nuevos);
-        if (sig !== lastOrdersSigRef.current) {
-          lastOrdersSigRef.current = sig;
-          setOrders(nuevos);
-        }
-      });
+      void sincronizarPedidos(true);
     }, 5000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2878,7 +2940,7 @@ export function useDealFlowState() {
     if (d.nuevos) await recargarPedidos();
     toast((d.nuevos ? `✓ ${d.nuevos} pedido(s) de Shopify traído(s).` : 'No hay pedidos nuevos en Shopify.') + (d.aviso ? ` ⚠️ ${d.aviso}` : ''), d.aviso ? 'info' : 'ok', d.aviso ? 10000 : 4000);
   }
-  async function recargarPedidos() { const { data } = await apiOrders(); if (data) setOrders(mapApiOrders(data.orders)); }
+  async function recargarPedidos() { await sincronizarPedidos(); }
   async function cargarShopify() { const { data } = await apiShopifyEstado(); if (data) setShopify(data); }
   /** App de Shopify: abre la instalación en Shopify (al volver queda vinculada sola). */
   function instalarShopifyApp(shop: string, cb?: (ok: boolean) => void) {
@@ -2934,7 +2996,7 @@ export function useDealFlowState() {
   async function cargarEffiApi() { const { data } = await apiEffiApiEstado(); if (data) setEffiApi(data); return data; }
   // Al entrar: saber si la tienda tiene Effi (muestra "Logística Effi" en el menú).
   useEffect(() => { if (apiMode && sessionUser && !isAdmin) void cargarEffiApi(); }, [apiMode, sessionUser, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
-  async function refrescarPedidos() { const { data } = await apiOrders(); if (data) setOrders(mapApiOrders(data.orders)); }
+  async function refrescarPedidos() { await sincronizarPedidos(); }
   // ── Cupones (gestión del admin de DealFlow) ──
   async function reloadCupones() { const { data } = await apiCupones(); if (data) setCupones(data.cupones); }
   function crearCupon(nuevo: NuevoCupon) {
