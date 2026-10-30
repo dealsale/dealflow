@@ -1,5 +1,6 @@
 import './landings.js'; // tablas del Creador de landings (los pagos aprobados las usan)
 import express from 'express';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import { existsSync, readFileSync } from 'node:fs';
@@ -39,6 +40,9 @@ iniciarSeguimiento();
 
 const app = express();
 app.disable('x-powered-by');
+// Compresión de las respuestas (JSON del panel, HTML, JS): el panel de una tienda grande
+// bajaba 3 MB sin comprimir en cada carga; comprimido es 5 a 8 veces menos.
+app.use(compression({ threshold: 1024 }) as unknown as express.RequestHandler);
 // Guardamos el cuerpo crudo de los webhooks para poder validar su firma HMAC
 // (Meta y Wompi firman el JSON tal cual llegó; reserializarlo cambiaría la firma).
 app.use(
@@ -176,7 +180,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'confirmacion-plantillas-10301654',
+    build: 'rendimiento-inbox-10302107',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

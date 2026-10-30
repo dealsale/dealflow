@@ -7,6 +7,7 @@ import { idsDeItem } from './emparejar.js';
 import { idiomaDe, MSG_ESTADO } from './idioma.js';
 import { ESTADOS_PEDIDO } from './estadosPedido.js';
 import { novedadesPorPedido } from './novedades.js';
+import { versionesDe, versionPedida } from './versiones.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO, siguienteNumeroPedido } from './db.js';
 import { urlTienda } from './tiendaPublica.js';
@@ -334,6 +335,9 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const promos = (db.prepare('SELECT * FROM promos WHERE store_id = ?').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, tipo: p.tipo, titulo: p.titulo, desc: p.descripcion, vigencia: p.vigencia, activa: !!p.activa,
   }));
+  // La versión se lee ANTES de armar pedidos y chats: si algo cambia mientras se arma la
+  // respuesta, el siguiente sondeo incremental lo trae igual.
+  const versiones = versionesDe(sid);
   const itemsTienda = itemsPorPedido(sid);
   const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
@@ -357,6 +361,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     promos,
     orders,
     leads,
+    versiones,
     suscripcion: estadoSuscripcion(sid),
     assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []), nombre: assistant?.nombre || '', seguimientoActivo: !!assistant?.seguimiento_on, estilo: pj(assistant?.estilo || '', {}) },
     whatsapp: {
@@ -378,9 +383,9 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
 // Ítems de TODOS los pedidos de la tienda en una sola consulta (antes era una
 // consulta por pedido en cada sondeo de 5 s, y con miles de pedidos frenaba el
 // servidor, que es el mismo que procesa los mensajes de WhatsApp).
-function itemsPorPedido(sid: string): Map<string, { qty: number; nombre: string; precio: number }[]> {
+function itemsPorPedido(sid: string, desde?: number): Map<string, { qty: number; nombre: string; precio: number }[]> {
   const m = new Map<string, { qty: number; nombre: string; precio: number }[]>();
-  const rows = db.prepare('SELECT i.order_id, i.qty, i.nombre, i.precio FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.store_id = ?').all(sid) as { order_id: string; qty: number; nombre: string; precio: number }[];
+  const rows = db.prepare(`SELECT i.order_id, i.qty, i.nombre, i.precio FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.store_id = ? ${desde ? 'AND o.v > ?' : ''}`).all(...(desde ? [sid, desde] : [sid])) as { order_id: string; qty: number; nombre: string; precio: number }[];
   for (const r of rows) { const l = m.get(r.order_id); const it = { qty: r.qty, nombre: r.nombre, precio: r.precio }; if (l) l.push(it); else m.set(r.order_id, [it]); }
   return m;
 }
@@ -407,10 +412,10 @@ try {
   db.exec("ALTER TABLE leads ADD COLUMN visto_equipo_at TEXT");
   db.exec("UPDATE leads SET visto_equipo_at = datetime('now')"); // arranque: lo viejo cuenta como leído
 } catch { /* ya existe */ }
-const marcarVisto = (sid: string, leadId: string) => db.prepare("UPDATE leads SET visto_equipo_at = datetime('now') WHERE id = ? AND store_id = ?").run(leadId, sid);
+const marcarVisto = (sid: string, leadId: string) => db.prepare(`UPDATE leads SET visto_equipo_at = datetime('now') WHERE id = ? AND store_id = ?
+  AND EXISTS (SELECT 1 FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente' AND m.created_at > COALESCE(leads.visto_equipo_at, ''))`).run(leadId, sid);
 
-function listarLeads(sid: string, resumen: boolean, abierto?: string) {
-  if (abierto) marcarVisto(sid, abierto); // el chat abierto en pantalla se va leyendo
+function listarLeads(sid: string, resumen: boolean, abierto?: string, desde?: number) {
   // Una sola consulta: datos del chat + su último mensaje + cuántos mensajes del
   // cliente no ha leído el equipo (antes eran 2 consultas por chat en cada sondeo).
   const rows = db.prepare(resumen
@@ -421,8 +426,8 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
          (SELECT created_at FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' ORDER BY m.created_at DESC LIMIT 1) AS ult_cliente_at,
          (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente'
             AND m.created_at > COALESCE(l.visto_equipo_at, '')) AS sin_responder
-       FROM leads l WHERE l.store_id = ? ORDER BY l.created_at DESC`
-    : 'SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[];
+       FROM leads l WHERE l.store_id = ? ${desde ? 'AND l.v > ?' : ''} ORDER BY l.created_at DESC`
+    : 'SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(...(desde ? [sid, desde] : [sid])) as Record<string, unknown>[];
   const etiquetaMedia: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento' };
   return rows.map((l) => {
     const base = {
@@ -432,7 +437,7 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
       promosOptin: Number(l.promos_optin) === 1,
       // Ventana de 24 h (solo WhatsApp): el Inbox bloquea la caja de escribir cuando vence.
       ventana24h: process.env.WA_BLOQUEO_24H !== 'off' && (!l.canal || l.canal === 'whatsapp') && !String(l.wa_id || l.tel || '').startsWith('web:'),
-      ultClienteIso: l.ult_cliente_at ?? (db.prepare("SELECT created_at FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(l.id as string) as { created_at: string } | undefined)?.created_at ?? null,
+      ultClienteIso: resumen ? (l.ult_cliente_at ?? null) : ((db.prepare("SELECT created_at FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(l.id as string) as { created_at: string } | undefined)?.created_at ?? null),
     };
     if (!resumen) return { ...base, mensajes: mensajesDe(l.id as string) };
     const esAbierto = !!abierto && String(l.id) === String(abierto);
@@ -440,7 +445,8 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string) {
     return {
       ...base,
       mensajes: esAbierto ? mensajesDe(l.id as string) : [],
-      ultimo: hay ? (String(l.ult_texto || '').trim() || etiquetaMedia[String(l.ult_tipo)] || '') : '', ultimoIso: hay ? l.ult_at : null,
+      // Solo la vista previa (la lista no necesita el mensaje completo: con 2.000 chats pesaba 1 MB).
+      ultimo: hay ? (String(l.ult_texto || '').replace(/\s+/g, ' ').trim().slice(0, 140) || etiquetaMedia[String(l.ult_tipo)] || '') : '', ultimoIso: hay ? l.ult_at : null,
       hora: hay ? horaBogota(l.ult_at) : '', sinResponder: Math.min(40, Number(l.sin_responder) || 0),
     };
   });
@@ -520,7 +526,17 @@ api.get('/leads', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const resumen = req.query.resumen === '1';
   const abierto = typeof req.query.abierto === 'string' ? req.query.abierto : undefined;
-  res.json({ leads: listarLeads(sid, resumen, abierto) });
+  if (abierto) marcarVisto(sid, abierto); // el chat abierto en pantalla se va leyendo
+  if (!resumen) return res.json({ leads: listarLeads(sid, false, abierto) });
+  // Sondeo incremental: la app manda la última versión que vio (`desde`) y recibe solo
+  // los chats que cambiaron después (mensaje nuevo, etapa, asignado, visto…). Sin cambios,
+  // la respuesta pesa unos bytes. `total` deja detectar chats eliminados.
+  const desde = versionPedida(req.query.desde);
+  const v = versionesDe(sid).leads;
+  const total = (db.prepare('SELECT COUNT(*) n FROM leads WHERE store_id = ?').get(sid) as { n: number }).n;
+  if (desde && desde === v) return res.json({ leads: [], v, total, parcial: true });
+  const parcial = !!desde && desde < v; // una versión "futura" (p. ej. tras restaurar la base) → lista completa
+  res.json({ leads: listarLeads(sid, true, abierto, parcial ? desde : undefined), v, total, parcial });
 });
 
 // Conversación completa de UN chat (al abrirlo, para no depender del sondeo).
@@ -534,14 +550,20 @@ api.get('/leads/:id/mensajes', requireAuth, requireStore, (req, res) => {
 // Pedidos en vivo (para refrescar sin recargar toda la tienda).
 api.get('/orders', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
-  const items = itemsPorPedido(sid);
+  // Incremental igual que los chats: con `desde`, solo los pedidos que cambiaron después.
+  const desde = versionPedida(req.query.desde);
+  const v = versionesDe(sid).orders;
+  const total = (db.prepare('SELECT COUNT(*) n FROM orders WHERE store_id = ?').get(sid) as { n: number }).n;
+  if (desde && desde === v) return res.json({ orders: [], v, total, parcial: true });
+  const parcial = !!desde && desde < v;
+  const items = itemsPorPedido(sid, parcial ? desde : undefined);
   const novs = novedadesPorPedido(sid);
-  const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
+  const orders = (db.prepare(`SELECT * FROM orders WHERE store_id = ? ${parcial ? 'AND v > ?' : ''} ORDER BY numero DESC`).all(...(parcial ? [sid, desde] : [sid])) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', confirmacionError: o.confirmacion_error || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));
-  res.json({ orders });
+  res.json({ orders, v, total, parcial });
 });
 
 // ── Estadísticas / Rendimiento ────────────────────────────────────────

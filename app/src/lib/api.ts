@@ -391,8 +391,10 @@ export const apiNovedadesEstado = () => req<EstadoNovedades>('/api/novedades/est
 export const apiNovedadesSync = () => req<{ ok: true; abiertas: number; nuevas: number }>('/api/novedades/sync', 'POST');
 export const apiNovedadSolucion = (id: string, p: PropuestaNovedad) => req<{ ok: true; estado: string }>(`/api/novedades/${encodeURIComponent(id)}/solucion`, 'POST', p);
 export const apiNovedadAvisar = (id: string) => req<{ ok: true; via: string }>(`/api/novedades/${encodeURIComponent(id)}/avisar`, 'POST');
-export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean; landings?: boolean }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; suscripcion: Suscripcion | null }>('/api/state', 'GET');
-export const apiOrders = () => req<{ orders: ApiOrder[] }>('/api/orders', 'GET');
+export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean; landings?: boolean }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; versiones?: { leads: number; orders: number }; suscripcion: Suscripcion | null }>('/api/state', 'GET');
+// Pedidos. Con `desde` (versión que la app ya vio) el servidor manda SOLO los que cambiaron
+// después (`parcial: true`); `total` permite detectar pedidos borrados.
+export const apiOrders = (desde?: number) => req<{ orders: ApiOrder[]; v?: number; total?: number; parcial?: boolean }>(`/api/orders${desde ? `?desde=${desde}` : ''}`, 'GET');
 export const apiOrderAdvance = (rowId: string) => req<{ estado: string }>(`/api/orders/${rowId}/advance`, 'POST');
 export const apiOrderEstado = (rowId: string, estado: string) => req<{ estado: string }>(`/api/orders/${rowId}/estado`, 'POST', { estado });
 export const apiDeleteOrder = (rowId: string) => req<{ ok: true }>(`/api/orders/${rowId}`, 'DELETE');
@@ -441,8 +443,9 @@ export const apiReenviarMensaje = (id: string) => req<{ ok: boolean; estado: str
 export const apiLeads = () => req<{ leads: ApiLead[] }>('/api/leads', 'GET');
 // Sondeo liviano del Inbox: resumen de todos los chats (sin todos sus mensajes),
 // y la conversación completa solo del chat abierto (`abierto`).
-export const apiLeadsResumen = (abierto?: string) =>
-  req<{ leads: ApiLead[] }>(`/api/leads?resumen=1${abierto ? `&abierto=${encodeURIComponent(abierto)}` : ''}`, 'GET');
+// Con `desde` (versión ya vista) llegan SOLO los chats que cambiaron después (`parcial: true`).
+export const apiLeadsResumen = (abierto?: string, desde?: number) =>
+  req<{ leads: ApiLead[]; v?: number; total?: number; parcial?: boolean }>(`/api/leads?resumen=1${abierto ? `&abierto=${encodeURIComponent(abierto)}` : ''}${desde ? `&desde=${desde}` : ''}`, 'GET');
 // Conversación completa de un chat (al abrirlo).
 export const apiLeadMensajes = (id: string) => req<{ mensajes: ApiMensaje[] }>(`/api/leads/${id}/mensajes`, 'GET');
 export const apiAnuncioProducto = (adId: string) => req<{ productId: string; auto: boolean }>(`/api/anuncios/${encodeURIComponent(adId)}/producto`, 'GET');
