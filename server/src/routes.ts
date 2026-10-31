@@ -2694,6 +2694,43 @@ api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requirePermiso('
   res.json({ resultados });
 });
 
+// ── Remarketing saliente (remarketing.ts) ──
+api.get('/remarketing', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const rm = await import('./remarketing.js');
+  res.json(rm.panelRemarketing(req.user!.storeId!, Math.min(365, Math.max(7, Number(req.query.dias) || 60))));
+});
+api.put('/remarketing/config', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const rm = await import('./remarketing.js');
+  const b = req.body || {};
+  const p: Record<string, unknown> = {};
+  if (typeof b.rescate24h === 'boolean') p.rescate24h = b.rescate24h;
+  if (typeof b.recuperar === 'boolean') p.recuperar = b.recuperar;
+  if (b.toques === 1 || b.toques === 2) p.toques = b.toques;
+  if (Number(b.topeDiario) > 0) p.topeDiario = Number(b.topeDiario);
+  res.json({ cfg: rm.guardarCfgRemarketing(req.user!.storeId!, p) });
+});
+api.get('/remarketing/segmento/:id', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const rm = await import('./remarketing.js');
+  if (!rm.SEGMENTOS.some((s) => s.id === req.params.id)) return res.status(400).json({ error: 'Grupo no válido.' });
+  res.json({ leads: rm.vistaSegmento(req.user!.storeId!, req.params.id as never, Math.min(365, Math.max(7, Number(req.query.dias) || 60))) });
+});
+api.post('/remarketing/campanas', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const rm = await import('./remarketing.js');
+  const b = req.body || {};
+  const campos: Record<string, string> = {};
+  for (const [k, v] of Object.entries((b.campos || {}) as Record<string, unknown>)) campos[k] = String(v ?? '').slice(0, 200);
+  const r = rm.crearCampana(req.user!.storeId!, { segmento: String(b.segmento) as never, mensaje: String(b.mensaje || ''), campos, dias: Math.min(365, Math.max(7, Number(b.dias) || 60)), limite: Number(b.limite) || 200, nombre: b.nombre ? String(b.nombre) : undefined });
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ok: true, ...r });
+});
+api.post('/remarketing/campanas/:id/:accion', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const rm = await import('./remarketing.js');
+  const a = req.params.accion;
+  if (a !== 'pausar' && a !== 'reanudar' && a !== 'cancelar') return res.status(400).json({ error: 'Acción no válida.' });
+  if (!rm.cambiarCampana(req.user!.storeId!, req.params.id, a)) return res.status(404).json({ error: 'Envío no encontrado.' });
+  res.json({ ok: true });
+});
+
 // Marca (o desmarca) el consentimiento del cliente para recibir promociones.
 api.post('/leads/:id/optin', requireAuth, requireStore, (req, res) => {
   const l = db.prepare('SELECT id FROM leads WHERE id = ? AND store_id = ?').get(req.params.id, req.user!.storeId);

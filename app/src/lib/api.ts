@@ -1145,3 +1145,21 @@ export interface ProductoVerificado {
   bodega: { remitente: string; nombre: string; origen: 'fija' | 'aprendida' | 'defecto' | 'proveedor' | ''; usos: number; total: number };
 }
 export const apiEffiVerificacion = () => req<{ chequeos: ChequeoEffi[]; productos: ProductoVerificado[]; aprendido: { productos: number; convenios: number; envios: number } }>('/api/effi-api/verificacion', 'GET');
+
+// ── Remarketing saliente ──
+export type SegmentoRmk = 'datos_completos' | 'faltan_datos' | 'interesados' | 'compradores' | 'cancelados';
+export interface ResultadoRmk { total: number; enviados: number; pendientes: number; esperandoPlantilla: number; omitidos: number; fallidos: number; respondieron: number; compraron: number; ventas: number }
+export interface CfgRemarketing { rescate24h: boolean; recuperar: boolean; toques: 1 | 2; topeDiario: number }
+export interface PanelRemarketing {
+  cfg: CfgRemarketing; whatsapp: 'oficial' | 'qr' | 'desconectado'; enviadosHoy: number;
+  segmentos: { id: SegmentoRmk; titulo: string; ayuda: string; total: number; aptos: number; ventanaAbierta: number }[];
+  mensajes: { id: string; titulo: string; plantilla: string; segmentos: SegmentoRmk[]; campos: { id: string; titulo: string; ejemplo: string }[]; ejemplo: string; aprobacion: { estado: string; motivo: string } }[];
+  automaticos: { rescate: ResultadoRmk; recuperacion: ResultadoRmk };
+  campanas: (ResultadoRmk & { id: string; nombre: string; segmento: SegmentoRmk; mensaje: string; estado: string; motivo: string; creado: string })[];
+}
+export interface LeadRmk { id: string; nombre: string; tel: string; ultimo: string; ultCliente: string; excluido: string; ventanaAbierta: boolean }
+export const apiRemarketing = (dias = 60) => req<PanelRemarketing>(`/api/remarketing?dias=${dias}`, 'GET');
+export const apiRemarketingConfig = (p: Partial<CfgRemarketing>) => req<{ cfg: CfgRemarketing }>('/api/remarketing/config', 'PUT', p);
+export const apiRemarketingSegmento = (id: SegmentoRmk, dias = 60) => req<{ leads: LeadRmk[] }>(`/api/remarketing/segmento/${id}?dias=${dias}`, 'GET');
+export const apiRemarketingCampana = (d: { segmento: SegmentoRmk; mensaje: string; campos: Record<string, string>; dias: number; limite: number }) => req<{ ok: true; id: string; encolados: number; excluidos: number }>('/api/remarketing/campanas', 'POST', d);
+export const apiRemarketingAccion = (id: string, accion: 'pausar' | 'reanudar' | 'cancelar') => req<{ ok: true }>(`/api/remarketing/campanas/${id}/${accion}`, 'POST');
