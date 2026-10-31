@@ -48,6 +48,11 @@ export async function sincronizarDespachos(): Promise<void> {
     try { const { consultarGuiasSueltas } = await import('./effiExtras.js'); await consultarGuiasSueltas(); } catch (e) { console.warn('[despachos] guías sueltas', e); }
     // Novedades de entrega que reporta la transportadora (Effi).
     try { const { sincronizarNovedadesTodas } = await import('./novedades.js'); await sincronizarNovedadesTodas(); } catch (e) { console.warn('[despachos] novedades', e); }
+    // Dropi: órdenes creadas directo en Dropi (no desde DealFlow) → se unen a su pedido por el celular.
+    try { const { unirOrdenesDropiTodas } = await import('./dropiApi.js'); await unirOrdenesDropiTodas(); } catch (e) { console.warn('[despachos] unir Dropi', e); }
+    // Red de seguridad: toda guía reciente que todavía no le llegó al cliente se le envía
+    // (Effi de cualquier transportadora, Dropi, guía puesta a mano…). Un intento cada 2 h por pedido.
+    await avisarGuiasPendientes();
   } finally {
     corriendo = false;
   }
@@ -55,13 +60,13 @@ export async function sincronizarDespachos(): Promise<void> {
 
 /** Lee una orden de Dropi (API oficial): guía, PDF y estado; avisa la guía si es nueva. */
 async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: string } | { error: string }> {
-  let r: { estado: string; guia: string; guiaUrl?: string } | { error: string };
+  let r: { estado: string; guia: string; guiaUrl?: string; transportadora?: string } | { error: string };
   try {
     const { credDropi, estadoOrden } = await import('./dropiApi.js');
     const c = credDropi(o.store_id);
     if (!c) return { error: 'Dropi API sin conectar.' };
     const rr = await estadoOrden(c, o.dropi_order_id);
-    r = 'error' in rr ? rr : { estado: rr.estado, guia: rr.guia, guiaUrl: rr.guiaUrl };
+    r = 'error' in rr ? rr : { estado: rr.estado, guia: rr.guia, guiaUrl: rr.guiaUrl, transportadora: rr.transportadora };
     // Rastro para el dueño (una vez por motivo): por qué no avanza este pedido.
     const motivo = 'error' in rr ? `error:${rr.error}` : (!rr.guia ? `sin-guia:${rr.estado}` : '');
     if (motivo && avisado.get(o.id) !== motivo) {
@@ -79,6 +84,8 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
   if (guiaNueva && guiaNueva !== (o.guia || '')) { cambios.push('guia = ?'); params.push(guiaNueva); }
   if (r.guiaUrl && r.guiaUrl !== (o.guia_url || '')) { cambios.push('guia_url = ?'); params.push(r.guiaUrl); }
   if (r.estado) { cambios.push('estado_woo = ?'); params.push(r.estado); }
+  // La transportadora real (Interrapidísimo, Envía…) para el mensaje al cliente.
+  if (r.transportadora && r.transportadora.trim()) { cambios.push('transportadora = ?'); params.push(r.transportadora.trim().slice(0, 60)); }
   const destino = siguienteEstado(o.estado, estadoLogistico(r.estado, !!(guiaNueva || o.guia)));
   if (destino) { cambios.push('estado = ?'); params.push(destino); }
   if (destino === 'Devuelto') void import('./effiExtras.js').then((m) => m.alQuedarDevuelto(o.store_id, o.id)).catch(() => {});
@@ -92,6 +99,18 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
     await avisarGuiaAlCliente(o.store_id, o.id);
   }
   return { estado: r.estado, guia: guiaNueva };
+}
+
+/** Guías de los últimos días que aún no se le han avisado al cliente (o cuyo aviso falló). */
+async function avisarGuiasPendientes(): Promise<void> {
+  const filas = db.prepare(`SELECT id, store_id FROM orders WHERE COALESCE(guia,'') != '' AND guia_avisada = 0 AND COALESCE(tel,'') != ''
+      AND estado NOT IN ('Entregado','Devuelto','Cancelado') AND created_at > datetime('now','-6 days')
+    ORDER BY created_at DESC LIMIT 60`).all() as { id: string; store_id: string }[];
+  for (const o of filas) {
+    if (Date.now() - (intentoAviso.get(o.id) || 0) < 2 * 3600_000) continue;
+    intentoAviso.set(o.id, Date.now());
+    try { await avisarGuiaAlCliente(o.store_id, o.id); } catch { /* el próximo ciclo */ }
+  }
 }
 
 /** Sincroniza un pedido de Dropi puntual (botón "Actualizar" del detalle). */

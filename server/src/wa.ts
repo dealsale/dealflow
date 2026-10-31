@@ -544,6 +544,12 @@ function actualizarEstadoMensaje(wamid?: string, metaStatus?: string, errores?: 
   if (!wamid || !metaStatus) return;
   const nuevo = metaStatus === 'read' ? 'visto' : metaStatus === 'delivered' ? 'entregado' : metaStatus === 'sent' ? 'enviado' : metaStatus === 'failed' ? 'fallido' : '';
   if (!nuevo) return;
+  // ¿Era el aviso de una guía? El pedido sabe si de verdad le llegó (y reintenta si falló).
+  if (nuevo !== 'enviado') {
+    const e0 = errores?.[0];
+    const motivo = nuevo === 'fallido' ? explicarErrorMeta(e0?.code, e0?.title || e0?.message, e0?.error_data?.details) : '';
+    void import('./avisoGuia.js').then((m) => m.estadoAvisoGuia(wamid, nuevo as 'entregado' | 'visto' | 'fallido', motivo)).catch(() => {});
+  }
   const row = db.prepare('SELECT id, estado FROM messages WHERE wa_msg_id = ?').get(wamid) as { id: string; estado: string } | undefined;
   if (!row) return;
   if (nuevo === 'fallido') {

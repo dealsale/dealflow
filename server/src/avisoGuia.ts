@@ -60,7 +60,7 @@ async function bajarGuiaRemota(storeId: string, o: Fila, url: string): Promise<s
   } catch { return ''; }
 }
 
-export interface ResultadoAviso { chat: 'enviado' | 'plantilla' | 'bloqueado' | 'error' | 'sin_chat'; contacto: 'plantilla' | 'mismo' | 'sin_plantilla' | 'error' | 'no_aplica'; con: 'image' | 'document' | 'texto'; detalle: string[] }
+export interface ResultadoAviso { chat: 'enviado' | 'plantilla' | 'bloqueado' | 'error' | 'sin_chat'; contacto: 'plantilla' | 'mismo' | 'sin_plantilla' | 'error' | 'no_aplica'; con: 'image' | 'document' | 'texto'; detalle: string[]; wamid?: string; wamidC?: string; modo?: string }
 
 export async function avisarGuia(storeId: string, orderId: string, opts: { conArchivo?: boolean } = {}): Promise<ResultadoAviso> {
   const r = await avisarGuiaInterno(storeId, orderId, opts);
@@ -68,7 +68,9 @@ export async function avisarGuia(storeId: string, orderId: string, opts: { conAr
   // Resultado visible en el pedido ("¿le llegó la guía al cliente?").
   try {
     const ok = r.chat === 'enviado' || r.chat === 'plantilla' || r.contacto === 'plantilla';
-    db.prepare('UPDATE orders SET guia_aviso = ? WHERE id = ?').run(JSON.stringify({ ok, chat: r.chat, contacto: r.contacto, con: r.con, detalle: r.detalle.join(' ').slice(0, 400), at: new Date().toISOString() }), orderId);
+    // wamid: con él, WhatsApp nos dice después si de verdad se ENTREGÓ o si falló (ver estadoAvisoGuia).
+    db.prepare('UPDATE orders SET guia_aviso = ? WHERE id = ?').run(JSON.stringify({ ok, chat: r.chat, contacto: r.contacto, con: r.con, detalle: r.detalle.join(' ').slice(0, 400), at: new Date().toISOString(),
+      wamid: r.wamid || '', wamidC: r.wamidC || '', entrega: ok ? 'enviado' : '', entregaC: r.contacto === 'plantilla' ? 'enviado' : '', modo: r.modo || '' }), orderId);
   } catch { /* opcional */ }
   trazar(storeId, orderId, { etapa: 'aviso', nivel: fallo ? 'warn' : 'ok', titulo: `Aviso de guía al cliente: chat ${r.chat}${r.contacto !== 'no_aplica' ? ` · contacto ${r.contacto}` : ''}`, detalle: r.detalle.join(' ') });
   return r;
@@ -122,14 +124,14 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
     }
     if (envio.ok) {
       contarProactivo(storeId, chat.tel);
-      res.chat = 'enviado'; res.con = tipo;
+      res.chat = 'enviado'; res.con = tipo; res.wamid = envio.wamid || '';
       db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, estado, wa_msg_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
         .run(uid(), chat.id, 'bot', texto, tipo, tipo === 'texto' ? null : archivo, mime, tipo === 'texto' ? null : `Guia-${numDF}`, 'enviado', envio.wamid || null);
     } else if (envio.bloqueadoVentana && tpl) {
       // Ventana cerrada: le llega la plantilla al chat.
       const r = await sendWhatsappTemplate(storeId, destino, tpl, params, chat.tel);
       if (r.ok) {
-        res.chat = 'plantilla';
+        res.chat = 'plantilla'; res.wamid = r.wamid || '';
         db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, r.textoRender || `[Plantilla: ${PLANTILLA_GUIA}]`, r.wamid || null);
       } else { res.chat = 'error'; res.detalle.push(`Chat: ${r.error || 'Meta rechazó la plantilla'}`); }
     } else {
@@ -153,11 +155,12 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
       res.detalle.push(`El celular de contacto (${contacto}) es distinto al del chat, pero la plantilla "${PLANTILLA_GUIA}" aún no está aprobada para la tienda.`);
     } else {
       const r = await sendWhatsappTemplate(storeId, '57' + contacto, tpl, params, '57' + contacto);
-      if (r.ok) res.contacto = 'plantilla';
+      if (r.ok) { res.contacto = 'plantilla'; res.wamidC = r.wamid || ''; }
       else { res.contacto = 'error'; res.detalle.push(`Contacto ${contacto}: ${r.error || 'Meta rechazó la plantilla'}`); }
     }
   } else if (chat) res.contacto = 'mismo';
 
+  res.modo = (db.prepare('SELECT modo FROM whatsapp WHERE store_id = ?').get(storeId) as { modo: string } | undefined)?.modo || '';
   const ok = res.chat === 'enviado' || res.chat === 'plantilla' || res.contacto === 'plantilla';
   if (ok) db.prepare('UPDATE orders SET guia_avisada = 1 WHERE id = ?').run(orderId);
   const partes = [
@@ -168,4 +171,62 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
     ? `Guía de ${numDF} (${guia}) avisada ${partes.join(' y ')}.${res.detalle.length ? ' ' + res.detalle.join(' ') : ''}`
     : `No se pudo avisar la guía de ${numDF}: ${res.detalle.join(' ') || 'sin chat ni contacto'}`);
   return res;
+}
+
+/**
+ * WhatsApp avisa después si el mensaje de la guía se entregó, se leyó o FALLÓ (Meta acepta
+ * el envío y luego puede no entregarlo: ventana de 24 h vencida, número sin WhatsApp, imagen
+ * que no pudo bajar…). Se actualiza el pedido y, si falló, se reintenta UNA vez: con la
+ * plantilla aprobada (o en texto, sin imagen, si la ventana sigue abierta).
+ */
+export async function estadoAvisoGuia(wamid: string, estado: 'entregado' | 'visto' | 'enviado' | 'fallido', motivo = ''): Promise<void> {
+  if (!wamid || estado === 'enviado') return;
+  const o = db.prepare(`SELECT id, store_id, numero, guia_aviso FROM orders WHERE guia_aviso LIKE ? AND created_at > datetime('now','-60 days') LIMIT 1`).get(`%${wamid}%`) as { id: string; store_id: string; numero: number; guia_aviso: string } | undefined;
+  if (!o) return;
+  let av: Record<string, unknown> = {};
+  try { av = JSON.parse(o.guia_aviso || '{}'); } catch { return; }
+  const campo = av.wamid === wamid ? 'entrega' : av.wamidC === wamid ? 'entregaC' : '';
+  if (!campo) return;
+  const rank: Record<string, number> = { '': 0, enviado: 1, entregado: 2, visto: 3 };
+  if (estado !== 'fallido' && (av[campo] === 'fallido' || (rank[estado] || 0) <= (rank[String(av[campo] || '')] || 0))) return;
+  av[campo] = estado;
+  const guardar = () => db.prepare('UPDATE orders SET guia_aviso = ? WHERE id = ?').run(JSON.stringify(av), o.id);
+  if (estado !== 'fallido') { guardar(); return; }
+
+  const via = campo === 'entrega' ? 'al chat' : 'al celular de contacto';
+  av[campo === 'entrega' ? 'falloChat' : 'falloContacto'] = motivo.slice(0, 300);
+  const otraOk = campo === 'entrega' ? av.entregaC && av.entregaC !== 'fallido' : av.entrega && av.entrega !== 'fallido';
+  av.ok = !!otraOk;
+  guardar();
+  trazar(o.store_id, o.id, { etapa: 'aviso', nivel: 'warn', titulo: `WhatsApp NO entregó la guía ${via}`, detalle: motivo || 'Meta no dio el motivo.' });
+  registrarLog(o.store_id, 'warn', 'despacho', `DF-${o.numero}: WhatsApp no entregó la guía ${via}. ${motivo}`);
+  if (av.reintento || campo !== 'entrega') { if (!av.ok) db.prepare('UPDATE orders SET guia_avisada = 0 WHERE id = ?').run(o.id); return; }
+
+  // Un reintento al chat: si se mandó suelto (imagen/texto), ahora con la plantilla aprobada.
+  av.reintento = true; guardar();
+  const ord = db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id) as Fila;
+  const chat = chatDelPedido(o.store_id, ord);
+  const tpl = plantillaAprobada(o.store_id, PLANTILLA_GUIA);
+  if (!chat || /número no tiene whatsapp|no tiene whatsapp|131026/i.test(motivo)) { if (!av.ok) db.prepare('UPDATE orders SET guia_avisada = 0 WHERE id = ?').run(o.id); return; }
+  const tienda = (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(o.store_id) as { nombre: string } | undefined)?.nombre || 'nuestra tienda';
+  const nombre = txt(ord.cliente).trim().split(' ')[0] || 'cliente';
+  const guia = txt(ord.guia).trim();
+  const transp = nombreTransportadora(txt(ord.transportadora)) || 'por confirmar';
+  let r: { ok: boolean; error?: string; wamid?: string; textoRender?: string } = { ok: false, error: `no hay otra forma de reenviarla (la plantilla "${PLANTILLA_GUIA}" no está aprobada)` };
+  if (av.chat !== 'plantilla' && tpl) r = await sendWhatsappTemplate(o.store_id, chat.wa_id || chat.tel, tpl, [nombre, tienda, `DF-${o.numero}`, transp, guia], chat.tel);
+  else if (av.con !== 'texto') {
+    const idi = idiomaDe(o.store_id, txt(ord.lead_id) || undefined);
+    r = await sendWhatsappText(o.store_id, chat.wa_id || chat.tel, avisoGuiaTexto(idi, { nombre, numDF: `DF-${o.numero}`, guia, transp: transp !== 'por confirmar' ? transp : '', tienda, con: 'texto' }), chat.tel);
+  }
+  if (r.ok) {
+    av.wamid = r.wamid || ''; av.entrega = 'enviado'; av.ok = true; av.chat = av.chat !== 'plantilla' && tpl ? 'plantilla' : 'enviado'; av.con = 'texto';
+    av.detalle = `Reenviada ${av.chat === 'plantilla' ? 'con la plantilla aprobada' : 'en texto'} porque WhatsApp no entregó el primer mensaje (${motivo || 'sin motivo'}).`.slice(0, 400);
+    db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, r.textoRender || `Guía ${guia} (DF-${o.numero})`, r.wamid || null);
+    db.prepare('UPDATE orders SET guia_avisada = 1 WHERE id = ?').run(o.id);
+    trazar(o.store_id, o.id, { etapa: 'aviso', nivel: 'ok', titulo: 'Guía reenviada al cliente', detalle: String(av.detalle) });
+  } else {
+    av.detalle = `WhatsApp no entregó la guía (${motivo || 'sin motivo'}) y el reintento falló: ${r.error || 'error'}.`.slice(0, 400);
+    if (!av.ok) db.prepare('UPDATE orders SET guia_avisada = 0 WHERE id = ?').run(o.id);
+  }
+  guardar();
 }
