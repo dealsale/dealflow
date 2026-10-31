@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../../components/Dropdown';
-import { apiTrazabilidad, apiTrazaPedido } from '../../lib/api';
-import type { EventoTraza, PedidoTraza, ResumenTraza } from '../../lib/api';
+import { apiTrazabilidad, apiTrazaPedido, apiResumenAvisos } from '../../lib/api';
+import type { EventoTraza, PedidoTraza, ResumenTraza, ResumenAvisos } from '../../lib/api';
 
 const ETAPAS: { value: string; label: string; icono: string }[] = [
   { value: '', label: 'Todas las etapas', icono: '' },
@@ -113,6 +113,72 @@ function Tile({ titulo, valor, color }: { titulo: string; valor: number | null; 
   );
 }
 
+const ESTADO_PLANTILLA: Record<string, { t: string; c: string }> = {
+  aprobada: { t: 'Aprobada', c: 'var(--df-brand)' }, pendiente: { t: 'En revisión', c: 'var(--df-warning, #d97706)' },
+  rechazada: { t: 'Rechazada', c: 'var(--df-danger, #dc2626)' }, error: { t: 'Error al publicar', c: 'var(--df-danger, #dc2626)' },
+};
+
+/** Avisos al cliente (estado del envío + seguimiento D+1/D+2): cuántos salieron por tienda y por qué no salieron los demás. */
+function AvisosCliente({ store, onTienda }: { store: string; onTienda: (id: string) => void }) {
+  const [dias, setDias] = useState(7);
+  const [r, setR] = useState<ResumenAvisos | null>(null);
+  const [abierto, setAbierto] = useState(true);
+  useEffect(() => { setR(null); void apiResumenAvisos(dias, store).then((x) => { if (x.data) setR(x.data); }); }, [dias, store]);
+  const tot = (r?.tiendas || []).reduce((a, t) => ({ total: a.total + t.total, enviados: a.enviados + t.enviados, seguimientos: a.seguimientos + t.seguimientos, no: a.no + t.omitidos + t.fallidos, pend: a.pend + t.pendientes, normales: a.normales + t.normales }), { total: 0, enviados: 0, seguimientos: 0, no: 0, pend: 0, normales: 0 });
+  const th: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em', padding: '6px 8px', borderBottom: '1px solid var(--df-border)' };
+  const td: React.CSSProperties = { padding: '7px 8px', borderBottom: '1px solid var(--df-border)', fontSize: 13 };
+  return (
+    <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 15, color: 'var(--df-text-strong)' }}>{abierto ? '▾' : '▸'} 💬 Avisos al cliente</button>
+        <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>
+          {r ? <>{tot.enviados} enviados ({tot.seguimientos} de seguimiento) · <b style={{ color: tot.no ? COLOR.warn : undefined }}>{tot.no} no salieron</b> · {tot.pend} en cola{tot.normales ? ` · ${tot.normales} no hacían falta (ya se había avisado algo más nuevo)` : ''}</> : 'Cargando…'}
+        </span>
+        <div style={{ flex: 1 }} />
+        <Dropdown variant="pill" label="Periodo" value={String(dias)} onChange={(v) => setDias(Number(v))} options={[{ value: '1', label: '24 h' }, { value: '7', label: '7 días' }, { value: '30', label: '30 días' }]} />
+      </div>
+      {abierto && r && (
+        <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 14, marginTop: 10, alignItems: 'start' }}>
+          <div style={{ overflowX: 'auto' }}>
+            {!r.tiendas.length ? <div style={{ fontSize: 13, color: 'var(--df-text-muted)', padding: 8 }}>No hubo avisos en este periodo.</div> : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr><th style={th}>Tienda</th><th style={th}>Enviados</th><th style={th}>No salieron</th><th style={th}>En cola</th><th style={th}>Plantilla de estado</th></tr></thead>
+                <tbody>
+                  {r.tiendas.map((t) => {
+                    const pl = ESTADO_PLANTILLA[t.plantilla] || { t: 'Sin publicar', c: 'var(--df-danger, #dc2626)' };
+                    const no = t.omitidos + t.fallidos;
+                    return (
+                      <tr key={t.storeId} onClick={() => onTienda(t.storeId)} style={{ cursor: 'pointer' }} title="Ver los avisos de esta tienda en la lista">
+                        <td style={{ ...td, fontWeight: 700 }}>{t.tienda}</td>
+                        <td style={td}>{t.enviados}{t.seguimientos ? <span style={{ color: 'var(--df-text-faint)', fontSize: 11.5 }}> · {t.seguimientos} seg.</span> : null}</td>
+                        <td style={{ ...td, color: no ? COLOR.warn : undefined, fontWeight: no ? 700 : 400 }}>{no}{t.fallidos ? <span style={{ color: COLOR.error, fontSize: 11.5 }}> · {t.fallidos} fallidos</span> : null}</td>
+                        <td style={td}>{t.pendientes}</td>
+                        <td style={{ ...td, color: pl.c, fontWeight: 700 }}>{pl.t}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Por qué no salieron</div>
+            {!r.motivos.length ? <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>Todo salió ✅</div> : r.motivos.map((m) => (
+              <div key={m.motivo} style={{ display: 'flex', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--df-border)', fontSize: 12.5 }}>
+                <b style={{ minWidth: 34, textAlign: 'right', color: COLOR.warn }}>{m.n}</b>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: 'var(--df-text-body)', lineHeight: 1.4 }}>{m.motivo}</div>
+                  <div style={{ color: 'var(--df-text-faint)', fontSize: 11.5 }}>{m.tiendas.join(', ')}{m.totalTiendas > m.tiendas.length ? ` y ${m.totalTiendas - m.tiendas.length} más` : ''}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Trazabilidad({ df }: { df: DealFlowState }) {
   const [eventos, setEventos] = useState<EventoTraza[]>([]);
   const [resumen, setResumen] = useState<ResumenTraza | null>(null);
@@ -156,6 +222,8 @@ export function Trazabilidad({ df }: { df: DealFlowState }) {
         <Tile titulo="Despachos con error (24 h)" valor={resumen?.fallos ?? 0} color={resumen?.fallos ? COLOR.error : undefined} />
         <Tile titulo="Llamadas a API fallidas (24 h)" valor={resumen?.apiFallos ?? 0} color={resumen?.apiFallos ? COLOR.warn : undefined} />
       </div>
+
+      <AvisosCliente store={store} onTienda={(id) => { setStore(id); setEtapa('aviso'); }} />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 12 }}>
         <input

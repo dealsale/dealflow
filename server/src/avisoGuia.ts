@@ -141,7 +141,9 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
   // ── 2. Al celular de contacto, si es distinto al del chat ──
   const contacto = diez(txt(o.tel));
   const delChat = chat ? diez(chat.tel) : '';
-  if (contacto.length === 10 && contacto !== delChat && !calidadCfg(storeId).avisarContacto) {
+  // Sin chat (pedido de la landing, Shopify…) el celular del pedido ES el cliente: se le escribe con plantilla.
+  // Con chat, un celular distinto es "otro número" y solo se le escribe si la tienda lo activó.
+  if (contacto.length === 10 && chat && contacto !== delChat && !calidadCfg(storeId).avisarContacto) {
     // Mensaje en frío a un número que nunca escribió: es lo que más reportes de spam genera.
     res.contacto = 'no_aplica';
     res.detalle.push(`El celular de contacto (${contacto}) es otro número: no se le escribe para cuidar la calidad del WhatsApp (actívalo en WhatsApp → Calidad si lo necesitas).`);
