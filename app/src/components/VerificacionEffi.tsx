@@ -68,9 +68,9 @@ export function VerificacionEffi() {
                         <td style={td}>{p.vinculadas < p.variantes ? '⚠️' : '✅'} {p.vinculadas}/{p.variantes}</td>
                         <td style={td}>{p.convenio.nombre || <span style={{ color: 'var(--df-text-faint)' }}>Sin convenio aún</span>}{p.convenio.origen && p.convenio.origen !== 'propio' && <div style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>{p.convenio.origen === 'fijo' ? 'fijado por ti' : 'de su última venta'}</div>}</td>
                         <td style={td}>
-                          {p.bodega.nombre || <span style={{ color: 'var(--df-danger-dark)' }}>Sin bodega: se elige en cada pedido</span>}
+                          {p.bodega.nombre || <span style={{ color: 'var(--df-danger-dark)' }}>{p.convenio.id ? `Falta la bodega de ${p.convenio.nombre}: fíjala en "Bodega de cada proveedor"` : 'Sin bodega: se elige en cada pedido'}</span>}
                           <div style={{ fontSize: 11, color: p.bodega.origen === 'defecto' ? 'var(--df-warning, #B45309)' : 'var(--df-text-faint)' }}>
-                            {p.bodega.origen === 'fija' ? 'fijada por ti' : p.bodega.origen === 'aprendida' ? `aprendida: ${p.bodega.usos} de ${p.bodega.total} envíos recogidos salieron de aquí` : p.bodega.origen === 'defecto' ? 'por defecto (aún sin envíos recogidos)' : ''}
+                            {p.bodega.origen === 'fija' ? 'fijada por ti' : p.bodega.origen === 'proveedor' ? `la bodega de ${p.convenio.nombre}` : p.bodega.origen === 'defecto' && p.convenio.id ? 'por defecto (es tu único proveedor)' : p.bodega.origen === 'aprendida' ? `aprendida: ${p.bodega.usos} de ${p.bodega.total} envíos recogidos salieron de aquí` : p.bodega.origen === 'defecto' ? 'por defecto (aún sin envíos recogidos)' : ''}
                           </div>
                         </td>
                       </tr>

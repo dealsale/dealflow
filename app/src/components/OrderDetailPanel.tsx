@@ -10,7 +10,7 @@ import { confirmar, pedirTexto, notificar } from './dialogs';
 import { enProceso, ProcesoPedido } from './Proceso';
 import { apiRegistroPedido, apiDatosRemitente, type EventoPedido } from '../lib/api';
 import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
-import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia } from '../lib/api';
+import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia, type RemitenteSugerido } from '../lib/api';
 
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
 
@@ -164,7 +164,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
     const r = await enProceso('Preparando el envío a Effi…', () => apiEffiPreview(sel.rowId!, conv), 'pedido');
     if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos preparar el envío.'); return; }
     setPrev(r.data); setPaso('listo');
-    void g.sugerir(r.data.convenio || ''); // remitente del proveedor del convenio con que sale
+    void g.sugerir(r.data.convenio || 'propio'); // remitente del proveedor del convenio con que sale (sin convenio = mercancía propia)
   };
   const hacerGuia = !guiaAuto && conGuia;
   const enviar = async () => {
@@ -175,7 +175,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
     setPaso('enviando'); setMsg('');
     // Todo el despacho en la ventana de "procesando": nadie puede tocar nada a mitad.
     const ok = await enProceso('Creando la remisión en Effi…', async (paso) => {
-      const r = await apiEffiDespachar(sel.rowId!, reintentar, convenio, guiaAuto ? g.d.remitente : '');
+      const r = await apiEffiDespachar(sel.rowId!, reintentar, convenio, guiaAuto ? g.d.remitente : '', guiaAuto && !!g.d.recordar);
       if (r.error || !r.data) { setPaso('listo'); setMsg(r.error || 'Effi no creó la remisión.'); return false; }
       let texto = `✓ Remisión ${r.data.remision} creada en Effi${r.data.guia ? ` · guía ${r.data.guia}` : ''}.${r.data.avisos?.length ? ' ' + r.data.avisos.join(' ') : ''}`;
       if (hacerGuia && !r.data.guia) {
@@ -361,11 +361,12 @@ function useGuiaEffi(orderId?: string) {
   // El remitente nunca se preselecciona "porque sí": solo se pone solo cuando se sabe cuál es
   // (la bodega del proveedor del convenio del pedido). Si no, lo elige la persona.
   const [avisoRemitente, setAvisoRemitente] = useState(false);
-  const [sugerido, setSugerido] = useState<{ remitente: string; nombre: string; motivo: string } | null>(null);
+  const [sugerido, setSugerido] = useState<RemitenteSugerido | null>(null);
   const manual = useRef(false);
-  const aplicarSugerido = (s?: { remitente: string; nombre: string; motivo: string } | null) => {
+  const aplicarSugerido = (s?: RemitenteSugerido | null) => {
     setSugerido(s || null);
-    if (!manual.current) setD((x) => ({ ...x, remitente: s?.remitente || '' }));
+    // Proveedor sin bodega conocida: lo que se elija queda como su bodega (se puede desmarcar).
+    if (!manual.current) setD((x) => ({ ...x, remitente: s?.remitente || '', recordar: !!s?.pendiente }));
   };
   const cargar = async (convenio?: string) => {
     if (ops) return;
@@ -383,7 +384,7 @@ function useGuiaEffi(orderId?: string) {
     const r = await apiEffiOpcionesGuia(orderId, convenio);
     if (r.data) aplicarSugerido(r.data.sugerido);
   };
-  const elegirRemitente = (v: string) => { manual.current = true; setD((x) => ({ ...x, remitente: v })); setAvisoRemitente(false); };
+  const elegirRemitente = (v: string) => { manual.current = true; setD((x) => ({ ...x, remitente: v, recordar: !!sugerido?.pendiente || (!!x.recordar && v !== sugerido?.remitente) })); setAvisoRemitente(false); };
   /** Apodo para reconocer la bodega (Effi les pone a todas el nombre de la tienda). */
   const nombrarRemitente = async (codigo: string) => {
     const actual = ops?.remitentes.find((x) => x.id === codigo) as { alias?: string; proveedores?: string[] } | undefined;
@@ -436,7 +437,18 @@ function CampoRemitente({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
         <label style={{ ...lb, fontSize: 12, color: 'var(--df-text)' }}>Remitente (bodega de origen) · obligatorio</label>
         <Dropdown ariaLabel="Remitente" placeholder="Elige desde qué bodega sale el paquete…" value={d.remitente} onChange={(v) => g.elegirRemitente(v)} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} />
         {d.remitente && <button type="button" onClick={() => void g.nombrarRemitente(d.remitente)} style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, color: 'var(--df-purple)', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>✏️ Nombre de la bodega y proveedor</button>}
-        {g.sugerido && d.remitente === g.sugerido.remitente && <div style={{ fontSize: 11.5, color: ojo ? 'var(--df-warning, #B45309)' : 'var(--df-brand-dark)', marginTop: 5, fontWeight: 600 }}>{ojo ? '⚠️' : '✓'} Se puso solo: {g.sugerido.motivo}. Revísalo antes de crear la guía.</div>}
+        {g.sugerido && d.remitente && d.remitente === g.sugerido.remitente && <div style={{ fontSize: 11.5, color: ojo ? 'var(--df-warning, #B45309)' : 'var(--df-brand-dark)', marginTop: 5, fontWeight: 600 }}>{ojo ? '⚠️' : '✓'} Se puso solo: {g.sugerido.motivo}. Revísalo antes de crear la guía.</div>}
+        {g.sugerido?.pendiente && (
+          <div style={{ marginTop: 6, background: 'rgba(245, 158, 11, .12)', border: '1px solid var(--df-warning, #F59E0B)', borderRadius: 8, padding: '8px 10px', fontSize: 12, lineHeight: 1.45, color: 'var(--df-text)' }}>
+            <b>📦 Este pedido es de {g.sugerido.proveedor}.</b> Elige SU bodega: el remitente es a donde la transportadora devuelve el paquete. Si eliges la bodega de otro proveedor, la devolución le llega a él.
+          </div>
+        )}
+        {g.sugerido?.convenio && d.remitente && (g.sugerido.pendiente || d.remitente !== g.sugerido.remitente) && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', lineHeight: 1.4 }}>
+            <input type="checkbox" checked={!!d.recordar} onChange={(e) => g.setD((x) => ({ ...x, recordar: e.target.checked }))} style={{ marginTop: 2 }} />
+            <span>Recordar esta bodega para {g.sugerido.proveedor}: sus próximos pedidos saldrán solos desde aquí.</span>
+          </label>
+        )}
         {g.avisoRemitente && !d.remitente ? (
           <div role="alert" style={{ marginTop: 8, background: '#DC2626', color: '#fff', borderRadius: 8, padding: '12px 14px', fontSize: 15, fontWeight: 800, lineHeight: 1.35 }}>
             ⚠️ Tienes que seleccionar el remitente
