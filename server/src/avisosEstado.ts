@@ -11,6 +11,9 @@
  *    hasta 48 h; si de verdad no se puede, queda en el registro del pedido con el motivo.
  *  - De noche (9 p. m. a 7 a. m. hora Colombia) no se escribe: el aviso sale a las 7 a. m.
  *  - Los datos van SIEMPRE del pedido real; nunca se usan los ejemplos de la plantilla.
+ *  - Seguimiento: al día siguiente y a los dos días del pedido se le cuenta al cliente cómo va
+ *    (aunque el estado no haya cambiado), con las mismas reglas de cuidado del número.
+ *  - Pedidos sin chat (landing, Shopify…): se le escribe con la plantilla al celular del pedido.
  */
 import { db, registrarLog, uid } from './db.js';
 import { trazar } from './trazabilidad.js';
@@ -63,6 +66,32 @@ function fraseEstado(estado: string, transp: string): string {
   }
 }
 
+/** Seguimiento (D+1 / D+2): cómo va el pedido HOY, en una línea para la plantilla. */
+function fraseSeguimiento(estado: string, transp: string): string {
+  switch (estado) {
+    case 'Confirmado': return 'está confirmado ✅ y lo estamos alistando para enviártelo';
+    case 'Guía generada': return `ya tiene guía 🧾 y está listo para que ${transp || 'la transportadora'} lo recoja`;
+    case 'En tránsito': return `va en camino 🚚${transp ? ` con ${transp}` : ''}`;
+    case 'En reparto': return 'salió a reparto 🛵: hoy te lo entregan, ten el celular a mano';
+    case 'Novedad': return `tiene una novedad en la entrega ⚠️${transp ? ` reportada por ${transp}` : ''}: respóndenos para ayudarte a recibirlo`;
+    default: return fraseEstado(estado, transp);
+  }
+}
+const SEG_EN: Record<string, string> = {
+  Confirmado: 'is confirmed ✅ and we are getting it ready to ship',
+  'Guía generada': 'already has a tracking number 🧾 and is ready for pickup',
+  'En tránsito': 'is on its way 🚚',
+  'En reparto': 'is out for delivery 🛵: keep your phone handy',
+  Novedad: 'has a delivery issue ⚠️: reply to this message and we will help you',
+};
+/** Mensaje del bot para el seguimiento (ventana abierta). */
+function textoSeguimiento(idi: 'es' | 'en', estado: string, d: { nombre: string; numDF: string; guia: string; transp: string }): string {
+  const saludo = idi === 'en' ? `Hi${d.nombre ? ' ' + d.nombre : ''} 👋 Quick update on your order #${d.numDF}: it ` : `Hola${d.nombre ? ' ' + d.nombre : ''} 👋 Te contamos cómo va tu pedido #${d.numDF}: `;
+  const frase = idi === 'en' ? (SEG_EN[estado] || `status: ${estado}`) : fraseSeguimiento(estado, d.transp);
+  const cola = idi === 'en' ? '\n\nAny questions? Just reply here.' : '\n\n¿Alguna duda? Respóndenos por aquí.';
+  return textoEstado(idi, estado, d, `${saludo}${frase}.`) + cola;
+}
+
 /** Mensaje del bot (ventana de 24 h abierta): más completo que la plantilla. */
 function textoEstado(idi: 'es' | 'en', estado: string, d: { nombre: string; numDF: string; guia: string; transp: string }, base: string): string {
   const extra = d.guia && !['Confirmado', 'Cancelado'].includes(estado)
@@ -91,7 +120,9 @@ function cerrar(a: Fila, resultado: 'enviado' | 'plantilla' | 'omitido' | 'falli
   if (resultado !== 'omitido' || /pidió que no|sin chat/.test(detalle)) {
     trazar(txt(a.store_id), txt(a.order_id), {
       etapa: 'aviso', nivel: ok ? 'ok' : resultado === 'fallido' ? 'warn' : 'info',
-      titulo: ok ? `Aviso "${txt(a.estado)}" enviado al cliente (${resultado === 'plantilla' ? 'con plantilla' : 'por el chat'})` : resultado === 'fallido' ? `No se pudo avisar "${txt(a.estado)}" al cliente` : `Aviso "${txt(a.estado)}" no enviado`,
+      titulo: txt(a.origen).startsWith('seguimiento')
+        ? (ok ? `Seguimiento ${txt(a.origen) === 'seguimiento-2' ? 'de los 2 días' : 'del día siguiente'} enviado al cliente (${resultado === 'plantilla' ? 'con plantilla' : 'por el chat'})` : resultado === 'fallido' ? 'No se pudo enviar el seguimiento al cliente' : 'Seguimiento no enviado')
+        : ok ? `Aviso "${txt(a.estado)}" enviado al cliente (${resultado === 'plantilla' ? 'con plantilla' : 'por el chat'})` : resultado === 'fallido' ? `No se pudo avisar "${txt(a.estado)}" al cliente` : `Aviso "${txt(a.estado)}" no enviado`,
       detalle,
     });
   }
@@ -105,18 +136,33 @@ function reintentar(a: Fila, motivo: string): void {
 
 /** Envía UN aviso de la cola. */
 async function enviarAviso(a: Fila): Promise<void> {
-  const storeId = txt(a.store_id); const estado = txt(a.estado);
+  const storeId = txt(a.store_id);
+  const seguimiento = txt(a.origen).startsWith('seguimiento');
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(txt(a.order_id), storeId) as Fila | undefined;
   if (!o) return cerrar(a, 'omitido', 'El pedido ya no existe.');
-  // El estado cambió antes de enviar (p. ej. pasó de "En reparto" a "Entregado"): se avisa el último.
-  if (txt(o.estado) !== estado) return cerrar(a, 'omitido', `El pedido ya está en "${txt(o.estado)}"; se avisa ese estado.`);
+  // El seguimiento cuenta el estado de HOY; los avisos de cambio, el estado que cambió.
+  const estado = seguimiento ? txt(o.estado) : txt(a.estado);
+  if (seguimiento) {
+    if (!ESTADOS_SEGUIMIENTO.includes(estado)) return cerrar(a, 'omitido', `El pedido ya está en "${estado}": no necesita seguimiento.`);
+    if (txt(o.confirmacion) === 'no') return cerrar(a, 'omitido', 'El cliente dijo que No al resumen del pedido.');
+    // Si ya se le escribió del pedido hace poco (otro aviso, la guía…), no se repite.
+    const reciente = db.prepare("SELECT 1 FROM avisos_estado WHERE order_id = ? AND id != ? AND resultado IN ('enviado','plantilla') AND enviado_at > datetime('now','-12 hours')").get(txt(o.id), a.id as number);
+    if (reciente) return cerrar(a, 'omitido', 'Ya se le escribió de este pedido en las últimas 12 horas.');
+    const av = (() => { try { return JSON.parse(txt(o.guia_aviso) || '{}') as { ok?: boolean; at?: string }; } catch { return {}; } })();
+    if (av.ok && av.at && Date.now() - new Date(av.at).getTime() < 12 * 3600_000) return cerrar(a, 'omitido', 'Hace menos de 12 horas le llegó el mensaje con la guía.');
+    db.prepare('UPDATE avisos_estado SET estado = ? WHERE id = ?').run(estado, a.id as number);
+    a.estado = estado;
+  } else if (txt(o.estado) !== estado) {
+    // El estado cambió antes de enviar (p. ej. pasó de "En reparto" a "Entregado"): se avisa el último.
+    return cerrar(a, 'omitido', `El pedido ya está en "${txt(o.estado)}"; se avisa ese estado.`);
+  }
   const creado = new Date(txt(o.created_at).replace(' ', 'T') + 'Z').getTime();
   if (creado && Date.now() - creado > 60 * 86400_000) return cerrar(a, 'omitido', 'Pedido de hace más de 60 días.');
   // El mismo estado ya se avisó hace poco (la transportadora a veces lo repite).
-  const ya = db.prepare("SELECT 1 FROM avisos_estado WHERE order_id = ? AND estado = ? AND id != ? AND resultado IN ('enviado','plantilla') AND enviado_at > datetime('now','-12 hours')").get(txt(o.id), estado, a.id as number);
+  const ya = !seguimiento && db.prepare("SELECT 1 FROM avisos_estado WHERE order_id = ? AND estado = ? AND id != ? AND resultado IN ('enviado','plantilla') AND enviado_at > datetime('now','-12 hours')").get(txt(o.id), estado, a.id as number);
   if (ya) return cerrar(a, 'omitido', 'Este estado ya se le avisó en las últimas 12 horas.');
   // "En tránsito" justo después del mensaje con la guía sobra: ese mensaje ya dice que va en camino.
-  if (estado === 'En tránsito') {
+  if (estado === 'En tránsito' && !seguimiento) {
     const av = (() => { try { return JSON.parse(txt(o.guia_aviso) || '{}') as { ok?: boolean; at?: string }; } catch { return {}; } })();
     if (av.ok && av.at && Date.now() - new Date(av.at).getTime() < 6 * 3600_000) return cerrar(a, 'omitido', 'Hace menos de 6 horas le llegó el mensaje con la guía (ya dice que va en camino).');
   }
@@ -139,8 +185,10 @@ async function enviarAviso(a: Fila): Promise<void> {
   const { nombreTransportadora } = await import('./transportadoras.js');
 
   const chat = chatDelPedido(storeId, o);
-  if (!chat) return cerrar(a, 'omitido', 'No hay chat de WhatsApp de este cliente (sin chat no se le escribe en frío).');
-  const permiso = puedeEscribirle(storeId, chat.tel, chat.id);
+  // Sin chat (pedido de la landing, Shopify…): se le escribe con plantilla al celular del pedido.
+  const celular = diez(txt(o.tel));
+  if (!chat && celular.length !== 10) return cerrar(a, 'omitido', 'El pedido no tiene chat ni un celular válido de 10 dígitos.');
+  const permiso = puedeEscribirle(storeId, chat ? chat.tel : celular, chat ? chat.id : null);
   if (!permiso.ok) return cerrar(a, 'omitido', `No se le escribe: ${permiso.motivo}.`);
 
   const numDF = `DF-${txt(o.numero)}`;
@@ -149,40 +197,119 @@ async function enviarAviso(a: Fila): Promise<void> {
   const transp = nombreTransportadora(crudoT) || '';
   const nombre = txt(o.cliente).trim().split(/\s+/)[0] || '';
   const tienda = (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined)?.nombre || '';
-  const idi = idiomaDe(storeId, chat.id);
+  const idi = idiomaDe(storeId, chat?.id);
   const base = MSG_ESTADO[idi][estado]?.(Number(o.numero)) || `Tu pedido #${numDF}: ${estado}.`;
-  const texto = textoEstado(idi, estado, { nombre, numDF, guia, transp }, base);
-  const destino = chat.wa_id || chat.tel;
+  const texto = seguimiento ? textoSeguimiento(idi, estado, { nombre, numDF, guia, transp }) : textoEstado(idi, estado, { nombre, numDF, guia, transp }, base);
+  const telDestino = chat ? chat.tel : '57' + celular;
+  const destino = chat ? (chat.wa_id || chat.tel) : telDestino;
 
-  // 1) Ventana abierta → mensaje del bot.
-  const envio = await sendWhatsappText(storeId, destino, texto, chat.tel);
-  if (envio.ok) {
-    if (!envio.repetido) {
-      db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, texto, envio.wamid || null);
-      contarProactivo(storeId, chat.tel);
+  // 1) Ventana abierta → mensaje del bot (solo si hay chat: sin chat no hay ventana).
+  if (chat) {
+    const envio = await sendWhatsappText(storeId, destino, texto, chat.tel);
+    if (envio.ok) {
+      if (!envio.repetido) {
+        db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, texto, envio.wamid || null);
+        contarProactivo(storeId, chat.tel);
+      }
+      if (envio.wamid) db.prepare('UPDATE avisos_estado SET wamid = ? WHERE id = ?').run(envio.wamid, a.id as number);
+      return cerrar(a, 'enviado', seguimiento ? `Seguimiento por el chat (pedido en "${estado}").` : 'Mensaje del bot al chat.');
     }
-    if (envio.wamid) db.prepare('UPDATE avisos_estado SET wamid = ? WHERE id = ?').run(envio.wamid, a.id as number);
-    return cerrar(a, 'enviado', 'Mensaje del bot al chat.');
+    if (!envio.bloqueadoVentana) return reintentar(a, envio.error || 'WhatsApp no envió el mensaje.');
   }
-  if (!envio.bloqueadoVentana) return reintentar(a, envio.error || 'WhatsApp no envió el mensaje.');
 
-  // 2) Ventana cerrada → plantilla aprobada, con datos reales (si falta uno, no se inventa).
+  // 2) Ventana cerrada (o sin chat) → plantilla aprobada, con datos reales (si falta uno, no se inventa).
   let tpl = plantillaAprobada(storeId, PLANTILLA_ESTADO);
   let params: string[] = [];
-  if (tpl) params = [nombre, tienda, numDF, fraseEstado(estado, transp), guia || numDF];
+  if (tpl) params = [nombre, tienda, numDF, seguimiento ? fraseSeguimiento(estado, transp) : fraseEstado(estado, transp), guia || (estado === 'Confirmado' ? 'te la enviamos apenas salga tu pedido' : numDF)];
   else if (estado === 'En tránsito' && guia && (tpl = plantillaAprobada(storeId, PLANTILLA_GUIA))) params = [nombre, tienda, numDF, transp || 'la transportadora', guia];
   else if (estado === 'Novedad' && (tpl = plantillaAprobada(storeId, 'novedad_envio_pedido'))) params = [nombre, tienda, numDF, transp || 'la transportadora', (txt(o.estado_woo).replace(/^novedad:?\s*/i, '') || 'novedad en la entrega').toLowerCase()];
-  if (!tpl) return reintentar(a, `El cliente no escribe hace más de 24 h y la plantilla "${PLANTILLA_ESTADO}" aún no está aprobada por Meta para tu WhatsApp. Apenas se apruebe, sale sola.`);
+  if (!tpl) return reintentar(a, `${chat ? 'El cliente no escribe hace más de 24 h' : 'El pedido no tiene chat'} y la plantilla "${PLANTILLA_ESTADO}" aún no está aprobada por Meta para tu WhatsApp. Apenas se apruebe, sale sola.`);
   const falta = params.findIndex((p) => !p.trim());
   if (falta >= 0) return cerrar(a, 'fallido', `Falta el ${['nombre del cliente', 'nombre de la tienda', 'número del pedido', 'estado', 'número de guía'][falta] || 'dato'} en el pedido: no se envía la plantilla con datos inventados.`);
-  const r = await sendWhatsappTemplate(storeId, destino, tpl, params, chat.tel);
+  const r = await sendWhatsappTemplate(storeId, destino, tpl, params, telDestino);
   if (!r.ok) return reintentar(a, r.error || 'Meta rechazó la plantilla.');
   if (!r.repetido) {
-    db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, r.textoRender || `[Plantilla: ${tpl.nombre}]`, r.wamid || null);
-    contarProactivo(storeId, chat.tel);
+    if (chat) db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, r.textoRender || `[Plantilla: ${tpl.nombre}]`, r.wamid || null);
+    contarProactivo(storeId, telDestino);
   }
   if (r.wamid) db.prepare('UPDATE avisos_estado SET wamid = ? WHERE id = ?').run(r.wamid, a.id as number);
-  return cerrar(a, 'plantilla', `Plantilla "${tpl.nombre}" (el cliente no escribía hace más de 24 h).`);
+  const porque = chat ? 'el cliente no escribía hace más de 24 h' : `al celular del pedido ${celular}: no tiene chat`;
+  return cerrar(a, 'plantilla', `${seguimiento ? `Seguimiento (pedido en "${estado}") con plantilla` : `Plantilla "${tpl.nombre}"`} (${porque}).`);
+}
+
+const diez = (t: string) => { const d = String(t || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : d; };
+
+/** Estados en los que vale la pena contarle al cliente cómo va su pedido. */
+export const ESTADOS_SEGUIMIENTO = ['Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Novedad'];
+
+/**
+ * Seguimiento del pedido: a las 24 h (D+1) y a las 48 h (D+2) de creado, se encola un aviso
+ * con el estado del día. Solo pedidos confirmados y en camino (no Nuevo, Entregado,
+ * Devuelto ni Cancelado) de tiendas con WhatsApp conectado. Si el pedido ya pasó las 48 h
+ * sin el primero (p. ej. tras un despliegue), solo sale el de D+2: nunca dos el mismo día.
+ */
+export function programarSeguimientos(): number {
+  const filas = db.prepare(
+    `SELECT o.id, o.store_id, o.estado, (julianday('now') - julianday(o.created_at)) * 24 horas FROM orders o
+      JOIN whatsapp w ON w.store_id = o.store_id AND w.conectado = 1
+     WHERE o.created_at <= datetime('now','-24 hours') AND o.created_at >= datetime('now','-72 hours')
+       AND o.estado IN (${ESTADOS_SEGUIMIENTO.map(() => '?').join(',')}) AND COALESCE(o.confirmacion,'') != 'no'`,
+  ).all(...ESTADOS_SEGUIMIENTO) as { id: string; store_id: string; estado: string; horas: number }[];
+  const yaTiene = db.prepare('SELECT 1 FROM avisos_estado WHERE order_id = ? AND origen = ?');
+  const insertar = db.prepare('INSERT INTO avisos_estado (store_id, order_id, estado, origen) VALUES (?,?,?,?)');
+  let n = 0;
+  for (const f of filas) {
+    const origen = f.horas >= 48 ? 'seguimiento-2' : 'seguimiento-1';
+    if (yaTiene.get(f.id, origen)) continue;
+    insertar.run(f.store_id, f.id, f.estado, origen); n++;
+  }
+  return n;
+}
+
+/** Motivo legible y agrupable (sin "Reintento N:" ni números de pedido o celular). */
+function motivoCorto(detalle: string): string {
+  return detalle.replace(/^Reintento \d+:\s*/i, '').replace(/DF-\d+/g, 'DF-…').replace(/\b\d{7,}\b/g, '…').replace(/"(En tránsito|En reparto|Entregado|Novedad|Confirmado|Guía generada|Cancelado|Devuelto)"/g, '"…"').slice(0, 160);
+}
+
+/** Omisiones que son la regla funcionando (no un problema): ya se avisó algo más nuevo o reciente. */
+const OMISION_NORMAL = /ya está en|ya se le avisó|ya se le escribió|le llegó el mensaje con la guía|módulo de Novedades|no necesita seguimiento|dijo que No|más de 60 días|ya no existe/i;
+
+/** Resumen de los avisos al cliente para el admin: por tienda y motivos de lo que no salió. */
+export function resumenAvisos(dias: number, storeId: string, verOcultas: boolean) {
+  const filas = db.prepare(
+    `SELECT a.store_id, s.nombre tienda, a.resultado, a.detalle, a.origen FROM avisos_estado a JOIN stores s ON s.id = a.store_id
+      WHERE a.creado >= datetime('now', ?)${storeId ? ' AND a.store_id = ?' : ''}${verOcultas ? '' : ' AND COALESCE(s.oculta,0) = 0'}`,
+  ).all(`-${dias} days`, ...(storeId ? [storeId] : [])) as { store_id: string; tienda: string; resultado: string; detalle: string; origen: string }[];
+  const plantilla = db.prepare(
+    `SELECT p.estado FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id WHERE p.store_id = ? AND t.nombre = ?`,
+  );
+  const tiendas = new Map<string, { storeId: string; tienda: string; total: number; enviados: number; seguimientos: number; omitidos: number; normales: number; fallidos: number; pendientes: number; plantilla: string }>();
+  const motivos = new Map<string, { motivo: string; n: number; tiendas: Set<string> }>();
+  for (const f of filas) {
+    let t = tiendas.get(f.store_id);
+    if (!t) {
+      const pl = plantilla.get(f.store_id, PLANTILLA_ESTADO) as { estado: string } | undefined;
+      t = { storeId: f.store_id, tienda: f.tienda, total: 0, enviados: 0, seguimientos: 0, omitidos: 0, normales: 0, fallidos: 0, pendientes: 0, plantilla: pl?.estado || 'sin publicar' };
+      tiendas.set(f.store_id, t);
+    }
+    t.total++;
+    const ok = f.resultado === 'enviado' || f.resultado === 'plantilla';
+    if (ok) { t.enviados++; if (f.origen.startsWith('seguimiento')) t.seguimientos++; }
+    else if (f.resultado === 'omitido' && OMISION_NORMAL.test(f.detalle)) { t.normales++; continue; }
+    else if (f.resultado === 'omitido') t.omitidos++;
+    else if (f.resultado === 'fallido') t.fallidos++;
+    else t.pendientes++;
+    if (!ok && f.detalle) {
+      const m = motivoCorto(f.detalle);
+      const x = motivos.get(m) || { motivo: m, n: 0, tiendas: new Set<string>() };
+      x.n++; x.tiendas.add(f.tienda); motivos.set(m, x);
+    }
+  }
+  return {
+    dias,
+    tiendas: [...tiendas.values()].sort((a, b) => (b.omitidos + b.fallidos + b.pendientes) - (a.omitidos + a.fallidos + a.pendientes) || b.total - a.total),
+    motivos: [...motivos.values()].sort((a, b) => b.n - a.n).slice(0, 12).map((m) => ({ motivo: m.motivo, n: m.n, tiendas: [...m.tiendas].slice(0, 6), totalTiendas: m.tiendas.size })),
+  };
 }
 
 let corriendo = false;
@@ -209,6 +336,10 @@ export function avisosDePedido(storeId: string, orderId: string) {
 export function iniciarAvisosEstado(): void {
   setTimeout(() => void procesarAvisos().catch(() => {}), 30_000).unref?.();
   setInterval(() => void procesarAvisos().catch(() => {}), 60_000).unref?.();
+  // Seguimiento D+1 / D+2: se revisa cada 10 minutos (la cola lo envía en el siguiente ciclo).
+  const seguir = () => { try { const n = programarSeguimientos(); if (n) console.log(`[avisos] seguimiento de pedidos encolado: ${n}`); } catch (e) { console.warn('[avisos] seguimiento', e); } };
+  setTimeout(seguir, 45_000).unref?.();
+  setInterval(seguir, 10 * 60_000).unref?.();
   // La plantilla de avisos de estado se manda a Meta en todas las tiendas con WhatsApp oficial
   // (una sola vez; las tiendas que conecten después la reciben al conectar).
   if (process.env.NODE_ENV === 'production') {
@@ -220,5 +351,5 @@ export function iniciarAvisosEstado(): void {
       void import('./metaTemplates.js').then((m) => m.publicarEnTodas(t.id)).then((r) => console.log(`[avisos] plantilla ${PLANTILLA_ESTADO} enviada a Meta: ${r.exitosas}/${r.total}`)).catch((e) => console.warn('[avisos] no se pudo publicar la plantilla', e));
     }, 3 * 60_000).unref?.();
   }
-  console.log('[avisos] avisos de estado del envío al cliente: activos (cola persistente, cada minuto)');
+  console.log('[avisos] avisos de estado del envío al cliente: activos (cola persistente, cada minuto) · seguimiento D+1 y D+2');
 }

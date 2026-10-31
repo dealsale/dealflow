@@ -850,6 +850,9 @@ export const apiDeletePlan = (id: string) => req<{ ok: true }>(`/api/admin/plans
 
 // ── Trazabilidad de pedidos (admin) ──
 export interface EventoTraza { id: number; store_id: string; tienda: string | null; order_id: string; numero: number | null; cliente: string | null; estado: string | null; etapa: string; nivel: 'info' | 'ok' | 'warn' | 'error'; titulo: string; detalle: string; created_at: string; tieneDatos: number }
+export interface AvisosTienda { storeId: string; tienda: string; total: number; enviados: number; seguimientos: number; omitidos: number; normales: number; fallidos: number; pendientes: number; plantilla: string }
+export interface ResumenAvisos { dias: number; tiendas: AvisosTienda[]; motivos: { motivo: string; n: number; tiendas: string[]; totalTiendas: number }[] }
+export const apiResumenAvisos = (dias = 7, store = '') => req<ResumenAvisos>(`/api/admin/avisos/resumen?dias=${dias}${store ? `&store=${encodeURIComponent(store)}` : ''}`, 'GET');
 export interface ResumenTraza { pedidos: number | null; despachos: number | null; fallos: number | null; apiFallos: number | null }
 export const apiTrazabilidad = (f: { store?: string; q?: string; nivel?: string; etapa?: string; antes?: number }) => {
   const qs = Object.entries(f).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&');

@@ -3220,6 +3220,13 @@ api.get('/admin/trazabilidad', requireAuth, requireAdmin, (req, res) => {
   res.json({ eventos: rows, resumen });
 });
 
+// Avisos al cliente (estado del envío + seguimiento D+1/D+2): por tienda y por qué no salieron.
+api.get('/admin/avisos/resumen', requireAuth, requireAdmin, async (req, res) => {
+  const dias = Math.min(30, Math.max(1, Number((req.query as Record<string, string>).dias) || 7));
+  const { resumenAvisos } = await import('./avisosEstado.js');
+  res.json(resumenAvisos(dias, String((req.query as Record<string, string>).store || ''), req.user!.role === 'SUPERADMIN'));
+});
+
 api.get('/admin/trazabilidad/pedido/:orderId', requireAuth, requireAdmin, (req, res) => {
   const o = db.prepare(`SELECT o.id, o.store_id, s.nombre tienda, o.numero, o.cliente, o.tel, o.ciudad, o.departamento, o.direccion, o.estado, o.total, o.envio,
       o.origen, o.despacho_proveedor, o.effi_remision, o.dropi_order_id, o.guia, o.transportadora, o.estado_woo, o.created_at
