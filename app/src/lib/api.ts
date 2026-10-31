@@ -350,7 +350,7 @@ export interface ApiOrder {
   origen?: string;
   leadId?: string;
   effiGuiaTx?: string;
-  guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string } | null;
+  guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string; entrega?: string; entregaC?: string; falloChat?: string; falloContacto?: string; modo?: string; reintento?: boolean } | null;
   envio: number;
   nota: string;
   total: number;

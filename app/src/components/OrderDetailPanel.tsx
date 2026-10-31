@@ -567,6 +567,12 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   };
   const av = sel.guiaAviso;
   const fallo = !!av && !av.ok;
+  // ¿WhatsApp confirmó la entrega? (Meta acepta el envío y después dice si llegó o falló.)
+  const entregada = !!av && [av.entrega, av.entregaC].some((x) => x === 'entregado' || x === 'visto');
+  const vista = !!av && [av.entrega, av.entregaC].includes('visto');
+  const conEstado = !!av && av.modo !== 'qr' && !!(av.entrega || av.entregaC);
+  const horas = av?.at ? (Date.now() - new Date(av.at).getTime()) / 3600e3 : 0;
+  const sinConfirmar = !!av && av.ok && conEstado && !entregada && horas > 0.5;
   const archivo = sel.guiaUrl || sel.guiaImg;
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -577,18 +583,20 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
       </div>
       {sel.guiaImg && <a href={sel.guiaImg} target="_blank" rel="noreferrer"><img src={sel.guiaImg} alt={`Guía ${sel.guia}`} style={{ width: '100%', maxHeight: 380, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--df-border)', background: '#fff' }} /></a>}
       {/* La guía se le envía sola al cliente: subir/enviar a mano solo aparece si ese envío falló. */}
-      {fallo && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {(fallo || !entregada) && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <label style={{ ...btnS, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: ocupado ? 'progress' : 'pointer' }}>
           📎 {archivo ? 'Cambiar documento' : 'Subir guía (PDF o imagen)'}
           <input type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden onChange={(e) => { subir(e.target.files?.[0]); e.target.value = ''; }} />
         </label>
-        <button onClick={enviar} disabled={ocupado} style={{ ...btnS, background: '#25D366', borderColor: '#25D366', color: '#05301a', fontWeight: 700 }}>💬 Volver a enviar la guía al cliente</button>
+        <button onClick={enviar} disabled={ocupado} style={{ ...btnS, background: '#25D366', borderColor: '#25D366', color: '#05301a', fontWeight: 700 }}>💬 {fallo ? 'Volver a enviar la guía al cliente' : 'Reenviar la guía'}</button>
       </div>}
       {av && (
         <div style={{ fontSize: 12, lineHeight: 1.45, borderRadius: 8, padding: '8px 10px', background: av.ok ? 'rgba(37,211,102,.1)' : 'var(--df-warning-subtle)', color: av.ok ? '#047857' : 'var(--df-text-body)' }}>
-          {av.ok
-            ? <>✅ <b>La guía le llegó al cliente</b>{av.chat === 'plantilla' ? ' (con plantilla, la ventana de 24 h estaba cerrada)' : av.con === 'image' ? ' (con la imagen de la guía)' : av.con === 'document' ? ' (con el PDF)' : ''}.</>
-            : <>⚠️ <b>No se le pudo enviar la guía al cliente.</b> {av.detalle || 'Revisa el registro del pedido.'} {/plantilla/i.test(av.detalle) && 'Publica y espera la aprobación de la plantilla «guia_envio_pedido» en WhatsApp → Plantillas.'}</>}
+          {av.ok && (entregada || !conEstado)
+            ? <>✅ <b>{entregada ? (vista ? 'El cliente ya vio la guía' : 'La guía le llegó al cliente') : 'Guía enviada al cliente'}</b>{av.chat === 'plantilla' ? ' (con plantilla, la ventana de 24 h estaba cerrada)' : av.con === 'image' ? ' (con la imagen de la guía)' : av.con === 'document' ? ' (con el PDF)' : ''}.{av.reintento ? ' Se reenvió porque el primer mensaje no llegó.' : ''}</>
+            : av.ok
+            ? <>📤 <b>Guía enviada, WhatsApp todavía no confirma que le llegó.</b> {sinConfirmar ? 'Puede tener el celular apagado o sin datos. Si el cliente no la tiene, reenvíala.' : 'Se actualiza sola.'}</>
+            : <>⚠️ <b>{av.falloChat || av.falloContacto ? 'WhatsApp no le entregó la guía al cliente.' : 'No se le pudo enviar la guía al cliente.'}</b> {av.detalle || av.falloChat || av.falloContacto || 'Revisa el registro del pedido.'} {/plantilla/i.test(av.detalle) && 'Publica y espera la aprobación de la plantilla «guia_envio_pedido» en WhatsApp → Plantillas.'} DealFlow lo vuelve a intentar solo cada 2 horas.</>}
         </div>
       )}
       {!av && sel.hasGuia && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>📨 La guía se le está enviando sola al cliente por WhatsApp.</div>}

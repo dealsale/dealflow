@@ -53,7 +53,7 @@ export interface Order {
   /** Id de la guía en Effi (p. ej. GT-12), aunque la transportadora aún no dé el número. */
   effiGuiaTx?: string;
   /** Resultado del último aviso de la guía al cliente. */
-  guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string } | null;
+  guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string; entrega?: string; entregaC?: string; falloChat?: string; falloContacto?: string; modo?: string; reintento?: boolean } | null;
   envio: number;
   nota: string;
   /** Total del pedido acordado por el asistente (si no hay precios por ítem) */

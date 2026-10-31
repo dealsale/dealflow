@@ -386,3 +386,77 @@ export async function estadoOrden(cred: DropiCred, id: string): Promise<{ estado
     return { error: 'No pudimos consultar la orden en Dropi.' };
   }
 }
+
+// ── Órdenes hechas directo en Dropi ──────────────────────────────────────────
+// Si la tienda crea la orden en la web de Dropi (no desde DealFlow), DealFlow no sabe de ella.
+// Cada 20 min se leen las últimas órdenes de Dropi y la que tenga GUÍA se une a su pedido de
+// DealFlow por el celular del cliente (pedido sin guía, de hasta 20 días antes). Desde ahí la
+// sincronización normal trae estado y PDF y le envía la guía al cliente.
+const ultimaUnionDropi = new Map<string, number>();
+const diez = (t: unknown) => { const d = String(t ?? '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
+function celularesDe(o: unknown, nivel = 0, out: Set<string> = new Set()): Set<string> {
+  if (!o || typeof o !== 'object' || nivel > 2) return out;
+  for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+    if (v != null && typeof v !== 'object' && /phone|telefono|celular|movil|mobile/i.test(k)) { const d = diez(v); if (d) out.add(d); }
+    else if (v && typeof v === 'object' && !Array.isArray(v)) celularesDe(v, nivel + 1, out);
+  }
+  return out;
+}
+export async function unirOrdenesDropi(storeId: string, forzar = false): Promise<{ unidas: number; revisadas: number } | { error: string }> {
+  const cred = credDropi(storeId);
+  if (!cred) return { error: 'Dropi API sin conectar.' };
+  if (!forzar && Date.now() - (ultimaUnionDropi.get(storeId) || 0) < 20 * 60_000) return { unidas: 0, revisadas: 0 };
+  ultimaUnionDropi.set(storeId, Date.now());
+  const ordenes: Record<string, unknown>[] = [];
+  for (let start = 0; start < 300; start += 100) {
+    const r = await dropiHttp<unknown>(cred, 'GET', `/orders/myorders?result_number=100&start=${start}`);
+    if (!r.ok) { if (!start) return { error: `Dropi respondió ${r.http}: ${r.body.message || 'sin detalle'}` }; break; }
+    const b = r.body as Record<string, unknown>;
+    const lista = (Array.isArray(b.objects) ? b.objects : Array.isArray(b.data) ? b.data : []) as Record<string, unknown>[];
+    ordenes.push(...lista);
+    if (lista.length < 100) break;
+  }
+  const yaUnidas = new Set((db.prepare("SELECT dropi_order_id FROM orders WHERE store_id = ? AND COALESCE(dropi_order_id,'') != ''").all(storeId) as { dropi_order_id: string }[]).map((x) => String(x.dropi_order_id)));
+  const guiasYa = new Set((db.prepare("SELECT guia FROM orders WHERE store_id = ? AND COALESCE(guia,'') != ''").all(storeId) as { guia: string }[]).map((x) => x.guia.replace(/^0+/, '')));
+  const libres = db.prepare(`SELECT id, numero, tel, created_at FROM orders WHERE store_id = ? AND COALESCE(guia,'') = '' AND COALESCE(dropi_order_id,'') = ''
+    AND COALESCE(effi_doc,'') = '' AND estado NOT IN ('Cancelado','Entregado','Devuelto') AND created_at > datetime('now','-40 days')`).all(storeId) as { id: string; numero: number; tel: string; created_at: string }[];
+  const usados = new Set<string>();
+  let unidas = 0;
+  for (const d of ordenes) {
+    const id = String(d.id ?? d.order_id ?? '');
+    if (!id || yaUnidas.has(id)) continue;
+    const guia = buscar(d, ['shipping_guide', 'tracking_number', 'guide_number', 'numero_guia', 'guia']) || guiaPorPatron(d);
+    if (!guia || guiasYa.has(guia.replace(/^0+/, ''))) continue;
+    const cels = celularesDe(d);
+    if (!cels.size) continue;
+    const fecha = new Date(String(d.created_at ?? d.createdAt ?? '').replace(' ', 'T')).getTime() || Date.now();
+    const cands = libres.filter((o) => !usados.has(o.id) && cels.has(diez(o.tel)) && (() => { const t = new Date(o.created_at.replace(' ', 'T') + 'Z').getTime(); return t <= fecha + 86400_000 && t >= fecha - 20 * 86400_000; })())
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const o = cands[0];
+    // Dos pedidos del mismo cliente el mismo día: no se adivina.
+    if (!o || (cands.length > 1 && cands[1].created_at.slice(0, 10) === o.created_at.slice(0, 10))) continue;
+    usados.add(o.id);
+    const dc = (d.distributionCompany || d.distribution_company || d.transportadora) as unknown;
+    const transp = (typeof dc === 'object' && dc ? buscar(dc, ['name', 'nombre']) : String(dc || '')) || buscar(d, ['distribution_company_name', 'carrier']);
+    const guiaS3 = buscar(d, ['guia_urls3', 'guia_url', 'guide_url', 'url_guia', 'shipping_guide_url', 'sticker', 'sticker_url', 'label_url']);
+    const url = guiaS3 ? (guiaS3.startsWith('http') ? guiaS3 : PDF_BASE + guiaS3.replace(/^\/+/, '')) : '';
+    const estado = buscar(d, ['status', 'estado', 'order_status', 'status_name']);
+    const final = /entregad|devoluci|devuelt|cancelad|anulad/i.test(estado);
+    const reciente = !final && Date.now() - fecha < 4 * 86400_000;
+    db.prepare(`UPDATE orders SET dropi_order_id = ?, despacho_proveedor = CASE WHEN COALESCE(despacho_proveedor,'') = '' THEN 'dropi' ELSE despacho_proveedor END,
+      guia = ?, guia_url = CASE WHEN ? != '' THEN ? ELSE guia_url END, transportadora = CASE WHEN ? != '' THEN ? ELSE transportadora END,
+      estado_woo = CASE WHEN ? != '' THEN ? ELSE estado_woo END, estado = CASE WHEN estado IN ('Nuevo','Confirmado','Despachado','') THEN 'Guía generada' ELSE estado END, guia_avisada = ? WHERE id = ?`)
+      .run(id, guia, url, url, transp, transp, estado.slice(0, 60), estado.slice(0, 60), reciente ? 0 : 1, o.id);
+    const { trazar } = await import('./trazabilidad.js');
+    trazar(storeId, o.id, { etapa: 'vinculo', nivel: 'info', titulo: `Orden ${id} de Dropi (guía ${guia}${transp ? `, ${transp}` : ''}) unida a este pedido`, detalle: 'Se creó directo en Dropi; se unió por el celular del cliente.' });
+    if (reciente) { try { const { avisarGuia } = await import('./avisoGuia.js'); await avisarGuia(storeId, o.id); } catch { /* el próximo ciclo */ } }
+    unidas++;
+  }
+  if (unidas) { const { registrarLog } = await import('./db.js'); registrarLog(storeId, 'info', 'despacho', `${unidas} orden(es) creadas directo en Dropi se unieron a su pedido en DealFlow (por el celular del cliente).`); }
+  return { unidas, revisadas: ordenes.length };
+}
+export async function unirOrdenesDropiTodas(): Promise<void> {
+  for (const t of db.prepare("SELECT store_id FROM store_integrations WHERE tipo = 'dropi_api'").all() as { store_id: string }[]) {
+    try { await unirOrdenesDropi(t.store_id); } catch (e) { console.warn('[dropi] unir órdenes', e); }
+  }
+}

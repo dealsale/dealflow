@@ -319,10 +319,14 @@ export async function unirGuiasDeEffi(storeId: string, forzar = false): Promise<
     const estadoTxt = txt(g.estado_efficommerce) || txt(g.estado);
     const { estadoLogistico, siguienteEstado } = await import('./estadosPedido.js');
     const nuevo = siguienteEstado(txt(o.estado), estadoLogistico(estadoTxt, true));
+    const final = /entregad|devuel|anulad/i.test(estadoTxt) || ['Entregado', 'Devuelto', 'Cancelado'].includes(nuevo || txt(o.estado));
+    const reciente = !final && Date.now() - fechaGuia < 4 * 86400_000;
     db.prepare(`UPDATE orders SET guia = ?, transportadora = CASE WHEN ? != '' THEN ? ELSE transportadora END,
         despacho_proveedor = CASE WHEN COALESCE(despacho_proveedor,'') = '' THEN 'effi' ELSE despacho_proveedor END,
-        effi_guia = ?, estado_woo = CASE WHEN ? != '' THEN ? ELSE estado_woo END, estado = COALESCE(?, estado), guia_avisada = 1 WHERE id = ?`)
-      .run(num, transp, transp, JSON.stringify({ sucursal: txt(g.sucursal), id: txt(g.id), id_transaccion: txt(g.id_transaccion), manual: true }), estadoTxt.slice(0, 60), estadoTxt.slice(0, 60), nuevo, txt(o.id));
+        effi_guia = ?, estado_woo = CASE WHEN ? != '' THEN ? ELSE estado_woo END, estado = COALESCE(?, estado), guia_avisada = ? WHERE id = ?`)
+      .run(num, transp, transp, JSON.stringify({ sucursal: txt(g.sucursal), id: txt(g.id), id_transaccion: txt(g.id_transaccion), manual: true }), estadoTxt.slice(0, 60), estadoTxt.slice(0, 60), nuevo, reciente ? 0 : 1, txt(o.id));
+    // Guía hecha a mano en Effi hace poco (y el pedido aún no se entrega): también se le envía al cliente.
+    if (reciente && txt(o.tel)) void import('./despachos.js').then((m) => m.avisarGuiaAlCliente(storeId, txt(o.id))).catch(() => {});
     trazar(storeId, txt(o.id), { etapa: 'vinculo', nivel: 'info', titulo: `Guía ${num} (${transp || 'Effi'}) unida a este pedido`, detalle: `Creada en Effi para ${txt(g.nombre_destinatario)}; se unió por ${cel.includes(String(o.tel || '').replace(/\D/g, '').slice(-10)) ? 'el celular' : 'el nombre'} del cliente.` });
     unidas++;
   }
