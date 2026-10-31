@@ -25,8 +25,8 @@ const Portada = ({ src }: { src: string | null }) => (
   </div>
 );
 
-/** Ventana para la tienda: elegir una landing de la biblioteca e importarla. */
-export function BibliotecaLandingsModal({ onCerrar, onImportada }: { onCerrar: () => void; onImportada: (landingId: string) => void }) {
+/** Lista de la biblioteca de landings (diseño "Noche"): la usa la sección Biblioteca y la ventana de Tienda en línea. */
+export function BibliotecaLandingsLista({ onImportada, filtro = '' }: { onImportada: (landingId: string) => void; filtro?: string }) {
   const [items, setItems] = useState<LibraryLanding[] | null>(null);
   const [ocupado, setOcupado] = useState('');
   useEffect(() => { void apiBibliotecaLandings().then((r) => setItems(r.data?.landings || [])); }, []);
@@ -44,41 +44,43 @@ export function BibliotecaLandingsModal({ onCerrar, onImportada }: { onCerrar: (
     if (r.data?.landingId) { notificar('✓ Landing importada como borrador. Elige su producto y publícala.'); onImportada(r.data.landingId); }
     else notificar(r.error || 'No se pudo importar.', 'error');
   };
+  const nq = filtro.trim().toLowerCase();
+  const lista = (items || []).filter((l) => !nq || l.nombre.toLowerCase().includes(nq));
+  if (items === null) return <div className="vacio">Cargando…</div>;
+  if (!items.length) return <div className="vacio">Todavía no hay landings en la biblioteca. Vuelve pronto.</div>;
+  if (!lista.length) return <div className="vacio">Ninguna landing coincide con la búsqueda.</div>;
   return (
-    <div onClick={onCerrar} style={{ position: 'fixed', inset: 0, background: 'rgba(3,5,16,.55)', zIndex: 1000, display: 'grid', placeItems: 'center', padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--df-surface)', borderRadius: 14, width: 'min(920px, 100%)', maxHeight: '88vh', overflow: 'auto', padding: 18, boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 17 }}>📚 Biblioteca de landings</div>
-            <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginTop: 2 }}>Páginas de venta ya armadas (fotos, ofertas, testimonios y textos). Se importan como borrador con el nombre, logo y WhatsApp de tu tienda; tú eliges el producto y la publicas.</div>
+    <div className="rej">
+      {lista.map((l) => (
+        <article key={l.id} className="item-b">
+          <div className="foto" style={{ position: 'relative', background: 'var(--panel2)' }}>
+            {l.portada && <img src={l.portada} alt="" loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+            <span className={`pill ${l.gratis ? 'ok' : 'ia'} sin`} style={{ position: 'relative', background: 'rgba(5,7,19,.7)', fontSize: 10.5 }}>{l.gratis ? 'Gratis' : fmt(l.precioImportacion)}</span>
+            {l.adquirida && <span className="pill sin" style={{ position: 'relative', background: 'rgba(5,7,19,.7)', color: 'var(--esm2)', fontSize: 10.5 }}>✓ Adquirida</span>}
           </div>
-          <button onClick={onCerrar} style={btn}>Cerrar</button>
+          <div style={{ padding: '12px 14px 14px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+            <div><b style={{ fontSize: 14, lineHeight: 1.3 }}>{l.nombre}</b><p className="tenue" style={{ fontSize: 11.5 }}>Landing lista: fotos, ofertas, testimonios y textos</p></div>
+            {l.precio > 0 && <div style={{ fontSize: 12.5 }}><span className="suave-t">Precio en la página</span> <b className="mono">{fmt(l.precio)}</b></div>}
+            <button type="button" className={`btn btn-chico ${l.adquirida ? 'btn-sec' : 'btn-pri'}`} onClick={() => void importar(l)} disabled={!!ocupado} style={{ marginTop: 'auto', opacity: ocupado && ocupado !== l.id ? 0.6 : 1 }}>
+              {ocupado === l.id ? 'Importando…' : l.adquirida ? '✓ Ya adquirida · Importar de nuevo' : l.gratis ? 'Importar gratis' : `Comprar e importar · ${fmt(l.precioImportacion)}`}
+            </button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+/** Ventana para la tienda: elegir una landing de la biblioteca e importarla. */
+export function BibliotecaLandingsModal({ onCerrar, onImportada }: { onCerrar: () => void; onImportada: (landingId: string) => void }) {
+  return (
+    <div onClick={onCerrar} style={{ position: 'fixed', inset: 0, background: 'rgba(3,5,16,.65)', zIndex: 1000, display: 'grid', placeItems: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="tarjeta" style={{ width: 'min(1040px, 100%)', maxHeight: '88vh', overflow: 'auto', boxSizing: 'border-box' }}>
+        <div className="tarjeta-cab">
+          <div><h2>📚 Biblioteca de landings</h2><p className="suave-t" style={{ fontSize: 13, marginTop: 2 }}>Páginas de venta ya armadas (fotos, ofertas, testimonios y textos). Se importan como borrador con el nombre, logo y WhatsApp de tu tienda; tú eliges el producto y la publicas.</p></div>
+          <button type="button" className="btn btn-sec btn-chico" onClick={onCerrar}>Cerrar</button>
         </div>
-        {items === null ? <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Cargando…</div>
-          : !items.length ? <div style={{ padding: '30px 10px', textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 14 }}>Todavía no hay landings en la biblioteca. Vuelve pronto.</div>
-          : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-              {items.map((l) => (
-                <div key={l.id} style={card}>
-                  <Portada src={l.portada} />
-                  <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 7, flex: 1 }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, fontSize: 13.5, flex: 1, lineHeight: 1.3 }}>{l.nombre}</span>
-                      {l.gratis
-                        ? <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)', borderRadius: 6, padding: '2px 8px' }}>GRATIS</span>
-                        : <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 6, padding: '2px 8px' }}>{fmt(l.precioImportacion)}</span>}
-                    </div>
-                    {l.precio > 0 && <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>Precio en la página: <b style={{ color: 'var(--df-text-body)' }}>{fmt(l.precio)}</b></div>}
-                    <div style={{ flex: 1 }} />
-                    <button onClick={() => void importar(l)} disabled={!!ocupado} className="df-btn-primary"
-                      style={{ ...btn, background: l.adquirida ? 'var(--df-surface)' : l.gratis ? 'var(--df-brand)' : 'var(--df-purple)', color: l.adquirida ? 'var(--df-brand-dark)' : '#fff', border: l.adquirida ? '1px solid var(--df-brand-border)' : 'none', fontWeight: 700, opacity: ocupado && ocupado !== l.id ? 0.6 : 1 }}>
-                      {ocupado === l.id ? 'Importando…' : l.adquirida ? '✓ Ya adquirida · Importar de nuevo' : l.gratis ? 'Importar gratis' : `Comprar e importar · ${fmt(l.precioImportacion)}`}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        <BibliotecaLandingsLista onImportada={onImportada} />
       </div>
     </div>
   );

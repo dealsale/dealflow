@@ -369,6 +369,10 @@ function SkyClavePropia() {
   );
 }
 
+/**
+ * Integraciones (diseño "Noche"): por grupo (IA, canales, envíos y tiendas, publicidad),
+ * cada herramienta en su tarjeta con estado y lo que configura desplegado debajo.
+ */
 export function Integraciones({ df }: { df: DealFlowState }) {
   const [abierta, setAbierta] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
@@ -384,33 +388,30 @@ export function Integraciones({ df }: { df: DealFlowState }) {
     setForm({});
     setPredeterminada(false);
   }
+  const conectadas = df.integrations.filter((i) => (i.id === 'wa' ? df.waConnected : !!df.integracionesCfg[i.id])).length;
 
   return (
-    <section data-screen-label="Integraciones">
-      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Integraciones</h1>
-      <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 8px' }}>
-        Conecta DealFlow con las herramientas que ya usas. Cada tienda pone sus propias claves y paga solo lo que consume.
-      </p>
-      <div style={{ background: 'var(--df-brand-subtle-3)', border: '1px solid #BBF7D0', borderRadius: 10, padding: '11px 14px', fontSize: 13, color: '#166534', margin: '0 0 18px', lineHeight: 1.6 }}>
-        🧠 <b>Tu asistente usa dos IA para ahorrar:</b> conecta <b>DeepSeek</b> (escribe los textos, más económico) y <b>OpenAI</b> (transcribe las notas de voz y entiende las imágenes de tus clientes). Con las dos, tu asistente lee, oye y ve.
-      </div>
-      {df.integracionMsg && (
-        <div style={{ background: df.integracionMsg.startsWith('✓') ? 'var(--df-brand-subtle-2)' : 'var(--df-danger-subtle)', border: '1px solid ' + (df.integracionMsg.startsWith('✓') ? 'var(--df-brand-border)' : 'var(--df-danger-border)'), color: df.integracionMsg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)', borderRadius: 10, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
-          {df.integracionMsg}
+    <section data-screen-label="Integraciones" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="encabezado">
+        <div className="encabezado-txt">
+          <span className="eti">Conecta tus herramientas · {conectadas} conectada{conectadas === 1 ? '' : 's'}</span>
+          <h1>Integraciones</h1>
+          <p className="sub">Cada tienda pone sus propias claves y paga solo lo que consume. Las claves se guardan cifradas y nunca se muestran completas.</p>
         </div>
-      )}
+      </div>
+      <div className="aviso-caja ia">
+        <p>🧠 <b>Tu asistente usa dos IA para ahorrar:</b> conecta <b>DeepSeek</b> (escribe los textos, más económico) y <b>OpenAI</b> (transcribe las notas de voz y entiende las imágenes de tus clientes). Con las dos, tu asistente lee, oye y ve.</p>
+      </div>
+      {df.integracionMsg && <div className={`aviso-caja ${df.integracionMsg.startsWith('✓') ? 'ok' : 'mal'}`}>{df.integracionMsg}</div>}
 
       {GRUPOS.map((g) => {
         const items = df.integrations.filter((i) => (i.grupo || 'canales') === g.id);
         const extras = g.id === 'envios' ? 4 : g.id === 'canales' || g.id === 'publicidad' ? 1 : 0;
         if (!items.length && !extras) return null;
         return (
-          <div key={g.id} style={{ marginBottom: 26 }}>
-            <div style={{ marginBottom: 10 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>{g.titulo}</h2>
-              <p style={{ color: 'var(--df-text-faint)', fontSize: 12.5, margin: '2px 0 0' }}>{g.sub}</p>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div key={g.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="secc">{g.titulo}<span>{g.sub}</span></div>
+            <div className={g.id === 'ia' || g.id === 'canales' ? 'g2' : ''} style={{ display: g.id === 'ia' || g.id === 'canales' ? undefined : 'flex', flexDirection: 'column', gap: 10 }}>
               {g.id === 'envios' && <EffiApiCard df={df} />}
               {g.id === 'envios' && <DropiApiCard df={df} />}
               {g.id === 'envios' && <ShopifyCard df={df} />}
@@ -427,10 +428,10 @@ export function Integraciones({ df }: { df: DealFlowState }) {
                 return (
                   <IntegracionFila
                     key={i.id}
-                    logo={<div style={{ ...i.logoStyle, width: 44, height: 44, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i.logoText}</div>}
+                    logo={<span className="logo-i" style={{ ...i.logoStyle }}>{i.logoText}</span>}
                     nombre={i.nombre}
                     desc={i.desc}
-                    extra={esAgente ? <span title="Este es el agente que responde tus chats" style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)', borderRadius: 6, padding: '2px 7px' }}>🤖 Agente</span> : undefined}
+                    extra={esAgente ? <span className="pill ia sin" title="Este es el agente que responde tus chats" style={{ fontSize: 10.5 }}>Agente</span> : undefined}
                     estado={conectado ? 'on' : 'off'}
                     abierta={abiertaEsta}
                     onToggle={() => abrir(i.id)}
@@ -438,38 +439,20 @@ export function Integraciones({ df }: { df: DealFlowState }) {
                   >
                     {i.campos ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 560 }}>
-                        {configurada && (
-                          <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>
-                            Guardado: {Object.entries(df.integracionesCfg[i.id]).map(([k, v]) => `${k} ${v}`).join(' · ')}
-                          </div>
-                        )}
+                        {configurada && <div className="tenue" style={{ fontSize: 12 }}>Guardado: {Object.entries(df.integracionesCfg[i.id]).map(([k, v]) => `${k} ${v}`).join(' · ')}</div>}
                         {i.campos.map((c) => (
-                          <div key={c.key}>
-                            <div style={lbl}>{c.label}</div>
-                            <input
-                              className="df-input"
-                              type={c.secreto ? 'password' : 'text'}
-                              value={form[c.key] || ''}
-                              onChange={(e) => setForm((f) => ({ ...f, [c.key]: e.target.value }))}
-                              placeholder={c.placeholder || ''}
-                              style={inputStyle}
-                            />
+                          <div key={c.key} className="campo">
+                            <label>{c.label}</label>
+                            <input type={c.secreto ? 'password' : 'text'} value={form[c.key] || ''} onChange={(e) => setForm((f) => ({ ...f, [c.key]: e.target.value }))} placeholder={c.placeholder || ''} className={c.secreto ? 'mono' : undefined} />
                           </div>
                         ))}
                         {i.esIA && (
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--df-text-body)', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={predeterminada} onChange={(e) => setPredeterminada(e.target.checked)} />
-                            Usar como agente predeterminado (responde los chats)
-                          </label>
+                          <button type="button" className={`toggle${predeterminada ? ' on' : ''}`} onClick={() => setPredeterminada((v) => !v)} aria-pressed={predeterminada}><i /><span>Usar como agente predeterminado (responde los chats)</span></button>
                         )}
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button onClick={() => { df.guardarIntegracion(i.id, form, predeterminada); setAbierta(null); }} style={btnPrimary}>Guardar</button>
-                          {i.esIA && configurada && !esAgente && (
-                            <button onClick={() => df.elegirIaPredeterminada(i.id)} style={{ background: 'var(--df-surface)', color: 'var(--df-brand-dark)', border: '1px solid var(--df-brand-border)', borderRadius: 8, padding: '8px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Hacer agente</button>
-                          )}
-                          {configurada && (
-                            <button onClick={() => { df.eliminarIntegracion(i.id); setAbierta(null); }} style={btnGhostRed}>Desconectar</button>
-                          )}
+                        <div className="fila" style={{ gap: 8 }}>
+                          <button type="button" className="btn btn-pri btn-chico" onClick={() => { df.guardarIntegracion(i.id, form, predeterminada); setAbierta(null); }}>Guardar</button>
+                          {i.esIA && configurada && !esAgente && <button type="button" className="btn btn-sec btn-chico" onClick={() => df.elegirIaPredeterminada(i.id)}>Hacer agente</button>}
+                          {configurada && <button type="button" className="btn btn-fant btn-chico" onClick={() => { df.eliminarIntegracion(i.id); setAbierta(null); }} style={{ color: 'var(--coral)' }}>Desconectar</button>}
                         </div>
                         {i.id === 'deepseek' && configurada && <SkyClavePropia />}
                       </div>

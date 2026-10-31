@@ -1,6 +1,8 @@
 import { clicAparte } from '../components/EnlaceApp';
 import { urlDe } from '../lib/rutas';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { IcoBuscar } from '../components/iconosNoche';
+import { degradadoDe, pesos } from '../lib/noche';
 import type { CSSProperties, ReactNode } from 'react';
 import { PhotoAddChip, PhotoDropTile, UploadedThumb } from '../components/PhotoUpload';
 import { AutoTextarea } from '../components/AutoTextarea';
@@ -794,6 +796,15 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
   );
 }
 
+type FiltroProd = 'todos' | 'productos' | 'servicios' | 'sindespacho' | 'biblioteca';
+const CHIPS_PROD: { id: FiltroProd; t: string }[] = [
+  { id: 'todos', t: 'Todos' }, { id: 'productos', t: 'Productos' }, { id: 'servicios', t: 'Servicios' }, { id: 'sindespacho', t: 'Sin despacho definido' }, { id: 'biblioteca', t: 'De la biblioteca' },
+];
+
+/**
+ * Productos (diseño "Noche"): rejilla de tarjetas con foto, precio y despacho,
+ * y el editor completo del producto elegido fijo a la derecha.
+ */
 export function Productos({ df }: { df: DealFlowState }) {
   const [vista, setVista] = useState<'normal' | 'agrupada'>(() => {
     try { return localStorage.getItem('df_prod_vista') === 'agrupada' ? 'agrupada' : 'normal'; } catch { return 'normal'; }
@@ -801,6 +812,9 @@ export function Productos({ df }: { df: DealFlowState }) {
   const cambiarVista = (v: 'normal' | 'agrupada') => { setVista(v); try { localStorage.setItem('df_prod_vista', v); } catch { /* modo privado */ } };
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const toggleGroup = (k: string) => setOpenGroups((o) => ({ ...o, [k]: !o[k] }));
+  const [q, setQ] = useState('');
+  const [filtro, setFiltro] = useState<FiltroProd>('todos');
+  const asideRef = useRef<HTMLElement>(null);
 
   // Detecta productos que comparten el MISMO disparador (o el mismo nombre): el bot
   // se confunde y puede enviar la versión equivocada. Suele pasar al importar un
@@ -814,163 +828,144 @@ export function Productos({ df }: { df: DealFlowState }) {
   }
   const duplicados = [...claves.values()].filter((v) => v.length > 1);
 
+  const pasaFiltro = (p: DecoratedProduct) =>
+    filtro === 'todos' ? true
+      : filtro === 'productos' ? p.tipo !== 'servicio'
+        : filtro === 'servicios' ? p.tipo === 'servicio'
+          : filtro === 'sindespacho' ? p.tipo !== 'servicio' && !p.despachoProveedor
+            : !!p.bloqueado;
+  const nq = norm(q);
+  const lista = df.products.filter((p) => pasaFiltro(p) && (!nq || norm(p.nombre).includes(nq) || norm(p.disparador).includes(nq)));
+  const cuenta = (f: FiltroProd) => df.products.filter((p) => (f === 'todos' ? true : f === 'productos' ? p.tipo !== 'servicio' : f === 'servicios' ? p.tipo === 'servicio' : f === 'sindespacho' ? p.tipo !== 'servicio' && !p.despachoProveedor : !!p.bloqueado)).length;
+  const chips = CHIPS_PROD.filter((c) => c.id === 'todos' || cuenta(c.id) > 0);
+  const sel = df.products.find((p) => p.expanded) || null;
+  useEffect(() => { asideRef.current?.scrollTo({ top: 0 }); }, [sel?.id, df.newProductOpen]);
+
+  const pillProv = (p: DecoratedProduct) =>
+    p.tipo === 'servicio' ? <span className="pill ia sin chica">🧩 Servicio</span>
+      : p.despachoProveedor === 'effi' ? <span className="pill ok sin chica">Effi</span>
+        : p.despachoProveedor === 'dropi' ? <span className="pill aviso sin chica">Dropi</span>
+          : <span className="pill neutro sin chica">Sin despacho</span>;
+
   return (
-    <section data-screen-label="Productos">
+    <section data-screen-label="Productos" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {duplicados.length > 0 && (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-          <span style={{ fontSize: 18 }}>⚠️</span>
-          <div style={{ fontSize: 13, color: 'var(--df-warning)', lineHeight: 1.5 }}>
-            <b>Hay productos duplicados</b> (mismo disparador o nombre). El bot puede enviar la versión vieja/importada en vez de la que editaste. Deja <b>solo uno</b> de cada grupo y elimina el repetido:
-            <div style={{ marginTop: 4 }}>{duplicados.map((g, i) => <div key={i}>• {g.join('  ·  ')}</div>)}</div>
-          </div>
+        <div className="aviso-caja aviso">
+          <b>⚠️ Hay productos duplicados</b> (mismo disparador o nombre). El bot puede enviar la versión vieja/importada en vez de la que editaste. Deja <b>solo uno</b> de cada grupo y elimina el repetido:
+          <div>{duplicados.map((g, i) => <div key={i}>• {g.join('  ·  ')}</div>)}</div>
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Productos</h1>
-          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>{df.productCount} productos en tu catálogo. Toca uno para editarlo.</p>
+      <div className="encabezado">
+        <div className="encabezado-txt">
+          <span className="eti">Catálogo · {df.productCount} {df.productCount === 1 ? 'producto' : 'productos'}</span>
+          <h1>Productos</h1>
+          <p className="sub">Lo que el asistente vende. Cada producto trae sus fotos, variantes, precio de promoción y el artículo de Effi o Dropi con el que se despacha.</p>
         </div>
-        <div style={{ flex: 1 }} />
-        {/* Switch de vista: normal (todo abierto) o agrupada (secciones acordeón) */}
-        <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }} title="Cómo se ve el editor del producto">
-          {(['normal', 'agrupada'] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => cambiarVista(v)}
-              style={{ background: vista === v ? '#0F172A' : 'var(--df-surface)', color: vista === v ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
-            >
-              {v === 'normal' ? 'Vista normal' : 'Vista agrupada'}
-            </button>
-          ))}
+        <div className="fila">
+          <button type="button" className="btn btn-sec" onClick={() => df.go('biblioteca')}>📚 Importar de la biblioteca</button>
+          <span className="fila" style={{ gap: 4 }} title="Cómo se ve el editor del producto">
+            {(['normal', 'agrupada'] as const).map((v) => (
+              <button key={v} type="button" className={`chip chica${vista === v ? ' activa' : ''}`} onClick={() => cambiarVista(v)}>{v === 'normal' ? 'Vista normal' : 'Vista agrupada'}</button>
+            ))}
+          </span>
+          <button type="button" className="btn btn-pri" onClick={df.toggleNewProduct}>＋ Nuevo producto</button>
         </div>
-        <button
-          onClick={df.toggleNewProduct}
-          className="df-btn-primary"
-          style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
-        >
-          + Nuevo producto
-        </button>
       </div>
 
-      {df.newProductOpen && (
-        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>Nuevo {df.newProdTipo === 'servicio' ? 'servicio' : 'producto'}</div>
+      <div className="fila">
+        {chips.map((c) => <button key={c.id} type="button" className={`chip${filtro === c.id ? ' activa' : ''}`} onClick={() => setFiltro(c.id)}>{c.t} <span className="n">{cuenta(c.id)}</span></button>)}
+        <div className="buscar" style={{ flex: '1 1 240px', maxWidth: 340, marginLeft: 'auto' }}>
+          <IcoBuscar />
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto…" aria-label="Buscar producto" />
+        </div>
+      </div>
 
-          {/* Producto físico o servicio */}
-          <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden', marginBottom: 14 }}>
-            {(['producto', 'servicio'] as const).map((t) => (
+      <div className="lateral ancho">
+        <div style={{ minWidth: 0 }}>
+          {df.products.length === 0 && !df.newProductOpen && (
+            <div className="vacio" style={{ padding: '40px 24px' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--tinta)' }}>Aún no tienes productos.</div>
+              <div style={{ margin: '6px 0 14px' }}>Crea el primero y el asistente empieza a ofrecerlo en WhatsApp.</div>
+              <button type="button" className="btn btn-pri" onClick={df.toggleNewProduct}>＋ Crear mi primer producto</button>
+            </div>
+          )}
+          {df.products.length > 0 && lista.length === 0 && <div className="vacio">Ningún producto coincide con la búsqueda o el filtro.</div>}
+          <div className="rejilla">
+            {lista.map((p) => (
               <button
-                key={t}
-                onClick={() => df.setNewProdTipo(t)}
-                style={{ background: df.newProdTipo === t ? 'var(--df-brand)' : 'var(--df-surface)', color: df.newProdTipo === t ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                key={p.id} type="button"
+                {...clicAparte(urlDe({ mode: 'vendedor', section: 'productos', producto: String(p.id) }), p.toggle)}
+                title="Ctrl + clic para abrir este producto en otra pestaña"
+                className={`card${p.expanded ? ' sel' : ''}`}
               >
-                {t === 'producto' ? '📦 Producto' : '🧩 Servicio'}
+                <div className="foto" style={{ position: 'relative', ...(p.previewImg ? { background: 'var(--panel)' } : { background: degradadoDe(p.nombre) }) }}>
+                  {p.previewImg ? <img src={p.previewImg} alt="" loading="lazy" /> : p.iniciales}
+                </div>
+                <div style={{ padding: '12px 14px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                    <b style={{ fontSize: 14, lineHeight: 1.3, minWidth: 0 }}>{p.nombre}</b>
+                    {pillProv(p)}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <b className="mono" style={{ fontSize: 16 }}>{p.precioPromo ? pesos(p.precioPromo) : p.precioFmt}</b>
+                    {!!p.precioPromo && <span className="tenue mono" style={{ fontSize: 11.5, textDecoration: 'line-through' }}>{p.precioFmt}</span>}
+                  </div>
+                  <div className="fila" style={{ gap: 6, fontSize: 11.5, color: 'var(--niebla)' }}>
+                    <span>{p.tipo === 'servicio' ? (p.duracion || 'Servicio') : p.variantesLabel}</span>
+                    {p.tipo !== 'servicio' && <><span>·</span><span className={p.stock > 0 ? '' : 'mal'}>{p.stockLabel}</span></>}
+                    {p.bloqueado && <span style={{ marginLeft: 'auto' }} title="Producto de la biblioteca: estructura bloqueada">🔒 Biblioteca</span>}
+                  </div>
+                </div>
               </button>
             ))}
           </div>
-
-          <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 12, marginBottom: 14 }}>
-            <div>
-              <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Nombre</div>
-              <input
-                className="df-input"
-                value={df.newProdNombre}
-                onChange={(e) => df.setNewProdNombre(e.target.value)}
-                placeholder={df.newProdTipo === 'servicio' ? 'Ej: Corte de cabello' : 'Ej: Chaqueta bomber'}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
-              />
-            </div>
-            <div>
-              <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Precio (COP){df.newProdTipo === 'servicio' ? ' · 0 = gratis' : ''}</div>
-              <input
-                className="df-input"
-                value={df.newProdPrecio}
-                onChange={(e) => df.setNewProdPrecio(e.target.value)}
-                placeholder={df.newProdTipo === 'servicio' ? 'Ej: 25000' : 'Ej: 79900'}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}
-              />
-            </div>
-          </div>
-
-          {df.newProdTipo === 'servicio' && (
-            <div style={{ marginBottom: 14, maxWidth: 240 }}>
-              <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Duración (opcional)</div>
-              <input
-                className="df-input"
-                value={df.newProdDuracion}
-                onChange={(e) => df.setNewProdDuracion(e.target.value)}
-                placeholder="Ej: 30 min, 1 h, mensual"
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 }}
-              />
-            </div>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button
-              onClick={df.crearProducto}
-              className="df-btn-primary"
-              style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
-            >
-              Crear {df.newProdTipo === 'servicio' ? 'servicio' : 'producto'}
-            </button>
-            <button
-              onClick={df.toggleNewProduct}
-              style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
-            >
-              Cancelar
-            </button>
-            {df.newProdError && <span style={{ color: 'var(--df-danger)', fontSize: 13 }}>Falta el nombre o el precio. Complétalos y vuelve a intentar.</span>}
-          </div>
-          <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginTop: 10 }}>Al abrirlo agregas fotos, videos, opciones (Color, Talla…), combos y reglas.</div>
         </div>
-      )}
 
-      {df.products.length === 0 && !df.newProductOpen && (
-        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: '40px 24px', boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>Aún no tienes productos.</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 13.5 }}>Crea el primero y el asistente empieza a ofrecerlo en WhatsApp.</div>
-          <button
-            onClick={df.toggleNewProduct}
-            className="df-btn-primary"
-            style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
-          >
-            + Crear mi primer producto
-          </button>
-        </div>
-      )}
-
-      <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: df.products.length === 0 ? 'none' : 'block' }}>
-        {df.products.map((p) => (
-          <div key={p.id}>
-            <div
-              {...clicAparte(urlDe({ mode: 'vendedor', section: 'productos', producto: String(p.id) }), p.toggle)}
-              title="Ctrl + clic para abrir este producto en otra pestaña"
-              className="df-row-hover df-prow"
-              style={{ display: 'grid', gridTemplateColumns: '52px 1fr 120px 130px 24px', alignItems: 'center', gap: 14, padding: '12px 18px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}
-            >
-              {p.previewImg
-                ? <img src={p.previewImg} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover', border: '1px solid rgba(15,23,42,.08)' }} />
-                : <div style={p.fotoStyle}>{p.iniciales}</div>}
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
-                  {p.nombre}
-                  {p.tipo === 'servicio' && <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--df-indigo)', background: 'var(--df-indigo-subtle)', borderRadius: 5, padding: '1px 6px' }}>🧩 SERVICIO</span>}
-                  {p.bloqueado && <span title="Producto de la biblioteca: estructura bloqueada" style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 5, padding: '1px 6px' }}>🔒 BIBLIOTECA</span>}
-                </div>
-                <div style={{ color: 'var(--df-text-muted)', fontSize: 12, marginTop: 1 }}>{p.precioFmt}{p.tipo === 'servicio' ? (p.duracion ? ' · ' + p.duracion : '') : ' · ' + p.variantesLabel}</div>
+        <aside ref={asideRef} className="tarjeta" aria-label="Editor del producto" style={{ gap: 14, position: 'sticky', top: 0, maxHeight: 'calc(100vh - 92px)', overflowY: 'auto' }}>
+          {df.newProductOpen ? <NuevoProducto df={df} /> : sel ? (
+            <>
+              <div className="tarjeta-cab" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
+                <div style={{ minWidth: 0 }}><span className="eti">Editar {sel.tipo === 'servicio' ? 'servicio' : 'producto'}</span><h2 style={{ fontSize: 20, overflowWrap: 'anywhere' }}>{sel.nombre}</h2></div>
+                <button type="button" className="icono-btn" onClick={sel.toggle} aria-label="Cerrar editor" style={{ width: 30, height: 30, flexShrink: 0 }}>✕</button>
               </div>
-              <div className="df-prow-price" style={{ fontWeight: 700, fontSize: 14 }}>{p.precioFmt}</div>
-              <span style={p.stockPill}>{p.stockLabel}</span>
-              <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>{p.chevron}</span>
-            </div>
-
-            {p.expanded && <ProductoEditor p={p} df={df} vista={vista} openGroups={openGroups} toggleGroup={toggleGroup} />}
-          </div>
-        ))}
+              <ProductoEditor key={String(sel.id)} p={sel} df={df} vista={vista} openGroups={openGroups} toggleGroup={toggleGroup} />
+            </>
+          ) : (
+            <div className="vacio">Toca un producto de la rejilla para editar sus fotos, precio, variantes, mensaje inicial y despacho.</div>
+          )}
+        </aside>
       </div>
     </section>
   );
 }
+
+/** Formulario de producto/servicio nuevo (en el panel lateral). */
+function NuevoProducto({ df }: { df: DealFlowState }) {
+  const servicio = df.newProdTipo === 'servicio';
+  return (
+    <>
+      <div className="tarjeta-cab">
+        <div><span className="eti">Nuevo</span><h2 style={{ fontSize: 20 }}>Nuevo {servicio ? 'servicio' : 'producto'}</h2></div>
+        <button type="button" className="icono-btn" onClick={df.toggleNewProduct} aria-label="Cancelar" style={{ width: 30, height: 30 }}>✕</button>
+      </div>
+      <div className="fila" style={{ gap: 6 }}>
+        {(['producto', 'servicio'] as const).map((t) => (
+          <button key={t} type="button" className={`chip${df.newProdTipo === t ? ' activa' : ''}`} onClick={() => df.setNewProdTipo(t)}>{t === 'producto' ? '📦 Producto' : '🧩 Servicio'}</button>
+        ))}
+      </div>
+      <div className="campo"><label htmlFor="np-nombre">Nombre</label><input id="np-nombre" value={df.newProdNombre} onChange={(e) => df.setNewProdNombre(e.target.value)} placeholder={servicio ? 'Ej: Corte de cabello' : 'Ej: Chaqueta bomber'} /></div>
+      <div className="campo"><label htmlFor="np-precio">Precio (COP){servicio ? ' · 0 = gratis' : ''}</label><input id="np-precio" className="mono" value={df.newProdPrecio} onChange={(e) => df.setNewProdPrecio(e.target.value)} placeholder={servicio ? 'Ej: 25000' : 'Ej: 79900'} /></div>
+      {servicio && <div className="campo"><label htmlFor="np-dur">Duración (opcional)</label><input id="np-dur" value={df.newProdDuracion} onChange={(e) => df.setNewProdDuracion(e.target.value)} placeholder="Ej: 30 min, 1 h, mensual" /></div>}
+      {df.newProdError && <p className="mal" style={{ fontSize: 13 }}>Falta el nombre o el precio. Complétalos y vuelve a intentar.</p>}
+      <div className="fila" style={{ gap: 8 }}>
+        <button type="button" className="btn btn-pri" onClick={df.crearProducto} style={{ flex: 1 }}>Crear {servicio ? 'servicio' : 'producto'}</button>
+        <button type="button" className="btn btn-fant" onClick={df.toggleNewProduct}>Cancelar</button>
+      </div>
+      <p className="tenue" style={{ fontSize: 12 }}>Al abrirlo agregas fotos, videos, opciones (Color, Talla…), combos y reglas.</p>
+    </>
+  );
+}
+
 
 /**
  * Varios mensajes iniciales por producto: pestañas para elegir cuál editar, crear

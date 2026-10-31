@@ -1,147 +1,61 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { CalidadCard } from '../components/CalidadCard';
 import { AppsConectadas } from '../components/AppsConectadas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { WA_NUMBER } from '../data';
 
-const label: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
-const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 };
-const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 };
-
-function MethodTab({ active, onClick, titulo, sub }: { active: boolean; onClick: () => void; titulo: string; sub: string }) {
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        flex: 1,
-        cursor: 'pointer',
-        border: '1px solid ' + (active ? 'var(--df-brand)' : 'var(--df-border)'),
-        background: active ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)',
-        borderRadius: 10,
-        padding: '12px 14px',
-      }}
-    >
-      <div style={{ fontWeight: 700, fontSize: 14, color: active ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}>{titulo}</div>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, marginTop: 2 }}>{sub}</div>
-    </div>
-  );
-}
-
-const SEMAFORO = {
-  ok: { punto: 'var(--df-brand-mid)', fondo: 'var(--df-brand-subtle-2)', borde: 'var(--df-brand-border)', texto: 'var(--df-brand-dark)' },
-  aviso: { punto: 'var(--df-warning-mid)', fondo: 'var(--df-warning-subtle-2)', borde: 'var(--df-warning-border)', texto: 'var(--df-warning)' },
-  problema: { punto: 'var(--df-danger-mid)', fondo: 'var(--df-danger-subtle)', borde: 'var(--df-danger-border)', texto: 'var(--df-danger-dark)' },
-  desconocido: { punto: 'var(--df-text-faint)', fondo: 'var(--df-bg)', borde: 'var(--df-border)', texto: 'var(--df-text-secondary)' },
-} as const;
-
 const CALIDAD: Record<string, string> = { GREEN: 'Alta', YELLOW: 'Media', RED: 'Baja' };
+const CLASE_CALIDAD: Record<string, string> = { GREEN: 'ok', YELLOW: 'aviso', RED: 'mal' };
 const LIMITE: Record<string, string> = {
-  TIER_50: '50 clientes nuevos al día',
-  TIER_250: '250 clientes nuevos al día',
-  TIER_1K: '1.000 clientes nuevos al día',
-  TIER_10K: '10.000 clientes nuevos al día',
-  TIER_100K: '100.000 clientes nuevos al día',
-  TIER_UNLIMITED: 'Sin límite',
+  TIER_50: '50', TIER_250: '250', TIER_1K: '1.000', TIER_10K: '10.000', TIER_100K: '100.000', TIER_UNLIMITED: 'Sin límite',
 };
+const CLASE_SEMAFORO: Record<string, string> = { ok: 'ok', aviso: 'aviso', problema: 'mal', desconocido: '' };
 
-function Dato({ titulo, valor }: { titulo: string; valor: string }) {
+type Metodo = 'auto' | 'qr' | 'cloud';
+
+/** Estado del número según Meta + enlaces al panel de Meta (ahí ponen su método de pago). */
+function EstadoNumero({ df }: { df: DealFlowState }) {
+  const est = df.waEstado;
+  const clase = CLASE_SEMAFORO[est?.semaforo ?? 'desconocido'];
   return (
-    <div>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>{titulo}</div>
-      <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--df-text-strong)', marginTop: 3 }}>{valor}</div>
+    <div className={`aviso-caja ${clase}`} style={{ gap: 10 }}>
+      <div className="tarjeta-cab">
+        <div style={{ minWidth: 0 }}>
+          <b style={{ fontSize: 15 }}>{df.waEstadoCargando && !est ? 'Consultando a Meta…' : est?.disponible ? est.titulo : 'Estado del número'}</b>
+          <div className="suave-t" style={{ fontSize: 13, marginTop: 3, lineHeight: 1.6 }}>
+            {est?.disponible
+              ? est.semaforo === 'ok'
+                ? 'Tu número está verificado, con buena calidad y sin restricciones de Meta.'
+                : 'Revisa los puntos de abajo para que tu número siga vendiendo sin problemas.'
+              : est?.motivo || 'Aquí te decimos si Meta tiene tu número limitado o con algo pendiente.'}
+          </div>
+        </div>
+        <button type="button" className="btn btn-sec btn-chico" onClick={df.revisarNumero} disabled={df.waEstadoCargando}>{df.waEstadoCargando ? 'Revisando…' : 'Revisar ahora'}</button>
+      </div>
+      {est?.disponible && est.avisos.length > 0 && (
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.75 }}>
+          {est.avisos.map((a, i) => <li key={i}>{a}</li>)}
+        </ul>
+      )}
     </div>
   );
 }
 
-/** Semáforo del número + enlaces al panel de Meta (ahí ponen su método de pago). */
-function EstadoNumeroCard({ df }: { df: DealFlowState }) {
-  const est = df.waEstado;
-  const c = SEMAFORO[est?.semaforo ?? 'desconocido'];
-  const enlaces = est?.enlaces ?? [];
-
-  return (
-    <>
-      <div style={{ ...card, background: c.fondo, borderColor: c.borde }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ width: 12, height: 12, borderRadius: '50%', background: c.punto, marginTop: 4, flexShrink: 0, boxShadow: `0 0 0 4px ${c.punto}22` }} />
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: c.texto }}>
-              {df.waEstadoCargando && !est ? 'Consultando a Meta…' : est?.disponible ? est.titulo : 'Estado del número'}
-            </div>
-            <div style={{ color: c.texto, fontSize: 13, marginTop: 3, lineHeight: 1.6, opacity: 0.9 }}>
-              {est?.disponible
-                ? est.semaforo === 'ok'
-                  ? 'Tu número está verificado, con buena calidad y sin restricciones de Meta.'
-                  : 'Revisa los puntos de abajo para que tu número siga vendiendo sin problemas.'
-                : est?.motivo || 'Aquí te decimos si Meta tiene tu número limitado o con algo pendiente.'}
-            </div>
-          </div>
-          <button
-            onClick={df.revisarNumero}
-            disabled={df.waEstadoCargando}
-            style={{ background: 'var(--df-surface)', border: `1px solid ${c.borde}`, color: c.texto, borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: df.waEstadoCargando ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
-          >
-            {df.waEstadoCargando ? 'Revisando…' : 'Revisar ahora'}
-          </button>
-        </div>
-
-        {est?.disponible && (
-          <>
-            <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginTop: 16, paddingTop: 16, borderTop: `1px solid ${c.borde}` }}>
-              <Dato titulo="Verificación" valor={est.verificado ? 'Verificado' : 'Pendiente'} />
-              <Dato titulo="Calidad" valor={CALIDAD[est.calidad] || 'Sin datos aún'} />
-              <Dato titulo="Puedes escribirle a" valor={LIMITE[est.limite] || 'Sin datos aún'} />
-              {est.nombreVerificado && <Dato titulo="Nombre que ven" valor={est.nombreVerificado} />}
-            </div>
-            {est.avisos.length > 0 && (
-              <ul style={{ margin: '14px 0 0', paddingLeft: 18, color: c.texto, fontSize: 13, lineHeight: 1.75 }}>
-                {est.avisos.map((a, i) => <li key={i}>{a}</li>)}
-              </ul>
-            )}
-          </>
-        )}
-      </div>
-
-      {est?.disponible && <CalidadCard calidad={est.calidad} />}
-      {est?.disponible && <AppsConectadas />}
-
-      {enlaces.length > 0 && (
-        <div style={card}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Enlaces rápidos a Meta</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
-            Meta te cobra a ti directamente la mensajería, así que el <b>método de pago va en tu propia cuenta</b>. Aquí llegas de un clic.
-          </div>
-          <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 10 }}>
-            {enlaces.map((e) => (
-              <a
-                key={e.id}
-                href={e.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'block', textDecoration: 'none', borderRadius: 10, padding: '12px 14px',
-                  border: '1px solid ' + (e.id === 'pago' ? '#BFDBFE' : 'var(--df-border)'),
-                  background: e.id === 'pago' ? '#EFF6FF' : 'var(--df-surface)',
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 13.5, color: e.id === 'pago' ? 'var(--df-info)' : 'var(--df-text-strong)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {e.titulo}
-                  <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>↗</span>
-                </div>
-                <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, marginTop: 3, lineHeight: 1.5 }}>{e.sub}</div>
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
-  );
+function Kpi({ eti, valor, delta, claseValor }: { eti: string; valor: ReactNode; delta: ReactNode; claseValor?: string }) {
+  return <div className="kpi"><span className="eti">{eti}</span><span className={`valor ${claseValor || ''}`} style={{ fontSize: 22 }}>{valor}</span><span className="delta">{delta}</span></div>;
 }
 
+/**
+ * WhatsApp (diseño "Noche"): KPIs del número, formas de conectar (API oficial,
+ * Facebook, QR), webhook, estado/calidad del número y enlaces rápidos a Meta.
+ */
 export function WhatsAppSection({ df }: { df: DealFlowState }) {
   // El chequeo trae el número tal como lo tiene Meta; ese manda sobre el guardado.
   const numero = df.waEstado?.numero || df.waCfg?.numero || WA_NUMBER;
   const { waConnected, waModo } = df;
+  const est = df.waEstado;
+  const [copiadoWh, setCopiadoWh] = useState(false);
 
   // Al abrir la pantalla con el número conectado, preguntamos por su estado.
   // Por ref: la función se recrea en cada render y dispararía el efecto en bucle.
@@ -151,201 +65,145 @@ export function WhatsAppSection({ df }: { df: DealFlowState }) {
     if (waConnected && waModo === 'cloud') revisar.current();
   }, [waConnected, waModo]);
 
-  return (
-    <section data-screen-label="WhatsApp" style={{ maxWidth: 720 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>WhatsApp</h1>
-      <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 18px' }}>Conecta el WhatsApp de tu negocio para atender y vender desde aquí.</p>
+  const metodos: { id: Metodo; t: string }[] = [
+    { id: 'cloud', t: 'Vincular por API oficial' },
+    ...(df.waSignup?.disponible ? [{ id: 'auto' as Metodo, t: 'Conectar con Facebook' }] : []),
+    { id: 'qr', t: 'Vincular por QR' },
+  ];
+  const enlaces = est?.enlaces ?? [];
+  const plantillas = df.plantillasAprobadas.length;
 
-      <div style={df.waCardStyleResolved}>
-        <span style={df.waBigDot} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>{df.waStatusTitle}</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginTop: 2 }}>
-            {df.waConnected ? (
-              <>
-                {df.waModo === 'qr' ? 'Vinculado por QR' : 'API oficial de Meta'} · Número:{' '}
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 }}>{numero}</span>
-              </>
-            ) : (
-              'Elige cómo conectar tu número.'
-            )}
-          </div>
+  return (
+    <section data-screen-label="WhatsApp" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="encabezado">
+        <div className="encabezado-txt">
+          <span className="eti">Canal principal</span>
+          <h1>WhatsApp</h1>
+          <p className="sub">Conecta el WhatsApp de tu negocio para atender y vender desde aquí. También puedes sumar Messenger e Instagram en Integraciones.</p>
         </div>
-        {df.waConnected && (
-          <button onClick={df.desvincularWa} style={{ background: 'var(--df-surface)', color: 'var(--df-danger-dark)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-            Desvincular
-          </button>
-        )}
+        <div className="fila">
+          {waConnected && <button type="button" className="btn btn-fant" onClick={df.desvincularWa} style={{ color: 'var(--coral)' }}>Desvincular</button>}
+          <button type="button" className="btn btn-sec" onClick={() => df.go('crm')}>Ir al Inbox →</button>
+        </div>
       </div>
 
-      {!df.waConnected && (
-        <>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-            {df.waSignup?.disponible && (
-              <MethodTab active={df.waMethod === 'auto'} onClick={() => df.setWaMethod('auto')} titulo="Conexión automática" sub="Un clic con Facebook · recomendado" />
+      <div className="kpis">
+        <Kpi eti="Número conectado" valor={waConnected ? <span className="mono">{numero}</span> : 'Sin conectar'}
+          delta={waConnected ? <span className={`pill ${waModo === 'qr' ? 'aviso' : 'ok'} chica`}>{waModo === 'qr' ? 'Vinculado por QR' : 'Conexión oficial (Cloud API)'}</span> : 'Elige abajo cómo conectar tu número'} />
+        <Kpi eti="Calidad del número" valor={est?.disponible ? CALIDAD[est.calidad] || 'Sin datos' : '—'} claseValor={est?.disponible ? CLASE_CALIDAD[est.calidad] : ''}
+          delta={est?.disponible ? (est.calidad === 'GREEN' ? 'Meta no reporta bloqueos ni reportes' : est.calidad ? 'Revisa los avisos de Meta abajo' : 'Meta aún no la ha medido') : 'Se consulta a Meta con la conexión oficial'} />
+        <Kpi eti="Clientes nuevos al día" valor={est?.disponible ? LIMITE[est.limite] || '—' : '—'}
+          delta={est?.disponible ? (est.verificado ? 'Número verificado por Meta' : 'Verificación pendiente en Meta') : 'Límite que Meta da a tu número'} />
+        <Kpi eti="Plantillas aprobadas" valor={plantillas} delta={<span>para escribir fuera de las 24 h · <a href="#" onClick={(ev) => { ev.preventDefault(); void df.actualizarPlantillasMeta(); }}>actualizar desde Meta</a></span>} />
+      </div>
+
+      <div className="dos">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          {!waConnected && (
+            <section className="tarjeta" style={{ gap: 0 }}>
+              <div className="tabs">
+                {metodos.map((m) => <button key={m.id} type="button" className={`tab${df.waMethod === m.id ? ' sel' : ''}`} onClick={() => df.setWaMethod(m.id)}>{m.t}</button>)}
+              </div>
+
+              {df.waMethod === 'cloud' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 16 }}>
+                  <p className="suave-t" style={{ fontSize: 13 }}>La forma recomendada: estable, con plantillas aprobadas y sin depender de un celular prendido. Los tres datos salen de tu app en developers.facebook.com → WhatsApp. Los validamos con Meta antes de guardar.</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+                    <div className="campo"><label htmlFor="wa-pnid">Phone Number ID</label><input id="wa-pnid" className="mono" value={df.waForm.phoneNumberId} onChange={(e) => df.setWaForm({ phoneNumberId: e.target.value })} placeholder="Ej: 106540352242922" /></div>
+                    <div className="campo"><label htmlFor="wa-waba">WABA ID</label><input id="wa-waba" className="mono" value={df.waForm.wabaId} onChange={(e) => df.setWaForm({ wabaId: e.target.value })} placeholder="Ej: 102290129340398" /></div>
+                    <div className="campo" style={{ gridColumn: 'span 2' }}><label htmlFor="wa-token">Access Token (permanente)</label><input id="wa-token" className="mono" type="password" value={df.waForm.accessToken} onChange={(e) => df.setWaForm({ accessToken: e.target.value })} placeholder="EAAG…" /></div>
+                  </div>
+                  <div className="fila">
+                    <button type="button" className="btn btn-pri" onClick={df.vincularWa} disabled={df.waLinking}>{df.waLinking ? 'Validando con Meta…' : 'Verificar y guardar'}</button>
+                    {df.waError && <span className="mal" style={{ fontSize: 13 }}>{df.waError}</span>}
+                  </div>
+                </div>
+              )}
+
+              {df.waMethod === 'auto' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 16 }}>
+                  <p className="suave-t" style={{ fontSize: 13 }}>Sin copiar nada: inicias sesión con el Facebook del negocio y Meta crea todo por ti. Sin crear apps, sin tokens y sin configurar nada en Meta.</p>
+                  <div className="paso-n"><i>1</i><span>Inicia sesión con el Facebook del negocio.</span></div>
+                  <div className="paso-n"><i>2</i><span>Elige (o crea) tu cuenta de WhatsApp Business.</span></div>
+                  <div className="paso-n"><i>3</i><span>Registra el número y confirma el código que te llega.</span></div>
+                  <div className="fila">
+                    <button type="button" className="btn btn-pri" onClick={df.conectarConFacebook} disabled={df.waLinking} style={{ background: '#1877F2' }}>{df.waLinking ? 'Conectando con Meta…' : 'Conectar con Facebook'}</button>
+                    {df.waError && <span className="mal" style={{ fontSize: 13 }}>{df.waError}</span>}
+                  </div>
+                  <p className="tenue" style={{ fontSize: 12 }}>Necesitas un número que <b>no</b> tenga WhatsApp activo hoy (o dalo de baja antes). Si tu bloqueador de anuncios está encendido, la ventana de Facebook no abrirá.</p>
+                </div>
+              )}
+
+              {df.waMethod === 'qr' && (
+                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', paddingTop: 16, alignItems: 'center' }}>
+                  <div style={{ width: 200, height: 200, borderRadius: 14, background: '#fff', border: '8px solid #EEF3FF', flex: '0 0 200px', display: 'grid', placeItems: 'center', color: '#050713', fontSize: 12, textAlign: 'center', padding: 8, boxSizing: 'border-box' }}>
+                    {df.qrEstado === 'qr' ? (df.qrImg === 'demo' ? '(Demo) Aquí aparece tu código QR real cuando el panel corre en el servidor.' : <img src={df.qrImg} alt="Código QR de WhatsApp" style={{ width: 184, height: 184 }} />)
+                      : df.qrEstado === 'iniciando' ? 'Preparando la conexión… en segundos aparece el código.'
+                        : df.qrEstado === 'error' ? (df.qrError || 'No pudimos generar el código.')
+                          : 'Toca «Generar código QR»'}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 220, flex: 1 }}>
+                    <b>Escanéalo desde tu teléfono</b>
+                    <p className="suave-t" style={{ fontSize: 13 }}>WhatsApp → Dispositivos vinculados → Vincular un dispositivo. En cuanto lo escanees, esta pantalla pasa a «Conectado» y empiezan a entrar los chats. Sirve para probar; para vender todos los días usa la conexión oficial.</p>
+                    <span className="pill aviso" style={{ alignSelf: 'flex-start' }}>Sin plantillas ni mensajes fuera de 24 h</span>
+                    {(df.qrEstado === 'inactivo' || df.qrEstado === 'error') && <button type="button" className="btn btn-pri" onClick={df.iniciarQr} style={{ alignSelf: 'flex-start' }}>{df.qrEstado === 'error' ? 'Reintentar' : 'Generar código QR'}</button>}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {waConnected && waModo === 'cloud' && <EstadoNumero df={df} />}
+          {waConnected && waModo === 'cloud' && est?.disponible && <CalidadCard calidad={est.calidad} />}
+
+          {waConnected && waModo === 'cloud' && !df.waSignupAuto && (
+            <section className="tarjeta">
+              <div className="tarjeta-cab"><h2>Webhook en Meta</h2><span className="pill ok">Se configura una sola vez</span></div>
+              <p className="suave-t" style={{ fontSize: 13 }}>En tu app de Meta → WhatsApp → Configuration, pega estos dos datos y suscríbete al campo «messages».</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+                <div className="campo"><label htmlFor="wa-wh">URL del webhook</label><div className="fila" style={{ gap: 6, flexWrap: 'nowrap' }}><input id="wa-wh" className="mono" readOnly value={df.webhookUrl} style={{ flex: 1, minWidth: 0 }} /><button type="button" className="btn btn-sec btn-chico" onClick={() => { df.copyWebhook(); setCopiadoWh(true); setTimeout(() => setCopiadoWh(false), 1500); }}>{copiadoWh ? 'Copiado ✓' : df.webhookBtnLabel}</button></div></div>
+                <div className="campo"><label htmlFor="wa-tv">Token de verificación</label><div className="fila" style={{ gap: 6, flexWrap: 'nowrap' }}><input id="wa-tv" className="mono" readOnly value={df.waCode} style={{ flex: 1, minWidth: 0, letterSpacing: '.08em' }} /><button type="button" className="btn btn-sec btn-chico" onClick={df.copyCode}>{df.codeBtnLabel}</button></div></div>
+              </div>
+            </section>
+          )}
+
+          {waConnected && waModo === 'qr' && (
+            <div className="aviso-caja ok">
+              <b>Listo para probar</b>
+              Escríbele un mensaje a tu número desde otro teléfono y aparecerá en <b>Inbox · Chats en vivo</b>. Desde ahí puedes responder tú mismo.
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          <section className="tarjeta">
+            <div className="tarjeta-cab"><h2>Estado de la conexión</h2><span className={`pill ${waConnected ? 'ok' : 'mal'}`}>{df.waStatusTitle}</span></div>
+            <p className="suave-t" style={{ fontSize: 13 }}>
+              {waConnected
+                ? <>{waModo === 'qr' ? 'Vinculado por QR' : 'API oficial de Meta'} · Número <span className="mono">{numero}</span>{est?.nombreVerificado ? <> · los clientes ven «{est.nombreVerificado}»</> : null}.</>
+                : 'Elige cómo conectar tu número. Con la conexión oficial el asistente responde 24/7 sin depender de un celular.'}
+            </p>
+            {waConnected && waModo === 'cloud' && est?.disponible && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, fontSize: 13 }}>
+                <div><span className="eti">Verificación</span><div><b>{est.verificado ? 'Verificado' : 'Pendiente'}</b></div></div>
+                <div><span className="eti">Calidad</span><div><b className={CLASE_CALIDAD[est.calidad] || ''}>{CALIDAD[est.calidad] || 'Sin datos aún'}</b></div></div>
+              </div>
             )}
-            <MethodTab active={df.waMethod === 'qr'} onClick={() => df.setWaMethod('qr')} titulo="Por código QR" sub="Rápido, escaneas como WhatsApp Web" />
-            <MethodTab active={df.waMethod === 'cloud'} onClick={() => df.setWaMethod('cloud')} titulo="Por API oficial" sub="WABA ID + Access Token de Meta" />
-          </div>
+          </section>
 
-          {df.waMethod === 'auto' && (
-            <div style={card}>
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Conectar con Facebook</div>
-              <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
-                Se abre una ventana de Facebook donde eliges tu cuenta de WhatsApp Business y tu número. Nosotros hacemos el resto:
-                sin crear apps, sin tokens y sin configurar nada en Meta.
+          {enlaces.length > 0 && (
+            <section className="tarjeta">
+              <h2>Enlaces rápidos a Meta</h2>
+              <p className="suave-t" style={{ fontSize: 13 }}>Meta te cobra a ti directamente la mensajería, así que el <b>método de pago va en tu propia cuenta</b>. Aquí llegas de un clic.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {enlaces.map((e) => <a key={e.id} className="enlace" href={e.url} target="_blank" rel="noopener noreferrer" title={e.sub}>{e.titulo}<span>↗</span></a>)}
               </div>
-              <ol style={{ color: 'var(--df-text-secondary)', fontSize: 13, lineHeight: 1.9, margin: '0 0 16px', paddingLeft: 18 }}>
-                <li>Inicia sesión con el Facebook del negocio.</li>
-                <li>Elige (o crea) tu cuenta de WhatsApp Business.</li>
-                <li>Registra el número y confirma el código que te llega.</li>
-              </ol>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <button
-                  onClick={df.conectarConFacebook}
-                  disabled={df.waLinking}
-                  className="df-btn-primary"
-                  style={{ background: '#1877F2', color: '#fff', border: 'none', borderRadius: 8, padding: '12px 20px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: df.waLinking ? 'default' : 'pointer', opacity: df.waLinking ? 0.7 : 1, display: 'inline-flex', alignItems: 'center', gap: 9 }}
-                >
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
-                    <path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.96h-1.51c-1.49 0-1.96.93-1.96 1.89v2.26h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z" />
-                  </svg>
-                  {df.waLinking ? 'Conectando con Meta…' : 'Conectar con Facebook'}
-                </button>
-                {df.waError && <span style={{ color: 'var(--df-danger)', fontSize: 13, flex: 1, minWidth: 200 }}>{df.waError}</span>}
-              </div>
-              <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginTop: 14, lineHeight: 1.6 }}>
-                Necesitas un número que <b>no</b> tenga WhatsApp activo hoy (o dalo de baja antes). Si tu bloqueador de anuncios está encendido, la ventana de Facebook no abrirá.
-              </div>
-            </div>
+            </section>
           )}
 
-          {df.waMethod === 'qr' && (
-            <div style={card}>
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Vincular por QR</div>
-              <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14 }}>
-                En tu teléfono: WhatsApp → Dispositivos vinculados → Vincular un dispositivo, y escanea el código.
-              </div>
-
-              {df.qrEstado === 'inactivo' && (
-                <button
-                  onClick={df.iniciarQr}
-                  className="df-btn-primary"
-                  style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 20px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
-                >
-                  Generar código QR
-                </button>
-              )}
-
-              {df.qrEstado === 'iniciando' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--df-text-muted)', fontSize: 14 }}>
-                  <span style={{ width: 16, height: 16, border: '2px solid var(--df-border)', borderTopColor: 'var(--df-brand)', borderRadius: '50%', display: 'inline-block', animation: 'dfspin .8s linear infinite' }} />
-                  Preparando la conexión… en segundos aparece el código.
-                </div>
-              )}
-
-              {df.qrEstado === 'error' && (
-                <div>
-                  <div style={{ color: 'var(--df-danger)', fontSize: 13.5, marginBottom: 12 }}>{df.qrError || 'No pudimos generar el código. Intenta de nuevo.'}</div>
-                  <button
-                    onClick={df.iniciarQr}
-                    className="df-btn-primary"
-                    style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 20px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
-                  >
-                    Reintentar
-                  </button>
-                </div>
-              )}
-
-              {df.qrEstado === 'qr' && (
-                <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div style={{ width: 220, height: 220, border: '1px solid var(--df-border)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--df-surface)' }}>
-                    {df.qrImg === 'demo' ? (
-                      <span style={{ color: 'var(--df-text-faint)', fontSize: 13, textAlign: 'center', padding: 16 }}>
-                        (Demo) Aquí aparece tu código QR real cuando el panel corre en el servidor.
-                      </span>
-                    ) : (
-                      <img src={df.qrImg} alt="Código QR de WhatsApp" style={{ width: 200, height: 200 }} />
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>Escanéalo desde tu teléfono</div>
-                    <div style={{ color: 'var(--df-text-muted)', fontSize: 13, lineHeight: 1.6 }}>
-                      El código se actualiza solo. En cuanto lo escanees, esta pantalla pasa a «Conectado» y empiezan a entrar los chats en el CRM.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {df.waMethod === 'cloud' && (
-            <div style={card}>
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Vincular por API oficial</div>
-              <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14 }}>
-                Los tres datos salen de tu app en developers.facebook.com → WhatsApp. Los validamos con Meta antes de guardar.
-              </div>
-              <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div>
-                  <div style={label}>WABA ID</div>
-                  <input className="df-input" value={df.waForm.wabaId} onChange={(e) => df.setWaForm({ wabaId: e.target.value })} placeholder="Ej: 102290129340398" style={input} />
-                </div>
-                <div>
-                  <div style={label}>Phone Number ID</div>
-                  <input className="df-input" value={df.waForm.phoneNumberId} onChange={(e) => df.setWaForm({ phoneNumberId: e.target.value })} placeholder="Ej: 106540352242922" style={input} />
-                </div>
-              </div>
-              <div style={{ marginBottom: 14 }}>
-                <div style={label}>Access Token (permanente)</div>
-                <input className="df-input" type="password" value={df.waForm.accessToken} onChange={(e) => df.setWaForm({ accessToken: e.target.value })} placeholder="EAAG…" style={input} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <button
-                  onClick={df.vincularWa}
-                  disabled={df.waLinking}
-                  className="df-btn-primary"
-                  style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: df.waLinking ? 0.7 : 1 }}
-                >
-                  {df.waLinking ? 'Validando con Meta…' : 'Vincular número'}
-                </button>
-                {df.waError && <span style={{ color: 'var(--df-danger)', fontSize: 13 }}>{df.waError}</span>}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {df.waConnected && df.waModo === 'cloud' && <EstadoNumeroCard df={df} />}
-
-      {df.waConnected && df.waModo === 'cloud' && !df.waSignupAuto && (
-        <div style={{ ...card, marginBottom: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Webhook en Meta · se configura una sola vez</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14 }}>En tu app de Meta → WhatsApp → Configuration, pega estos dos datos y suscríbete al campo «messages».</div>
-          <div style={label}>URL del webhook</div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <div style={{ ...input, width: 'auto', flex: 1, background: 'var(--df-bg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{df.webhookUrl}</div>
-            <button onClick={df.copyWebhook} className="df-copy-btn" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-strong)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {df.webhookBtnLabel}
-            </button>
-          </div>
-          <div style={label}>Token de verificación</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ ...input, width: 'auto', flex: 1, background: 'var(--df-bg)', letterSpacing: '0.1em' }}>{df.waCode}</div>
-            <button onClick={df.copyCode} className="df-copy-btn" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-strong)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {df.codeBtnLabel}
-            </button>
-          </div>
+          {waConnected && waModo === 'cloud' && est?.disponible && <AppsConectadas />}
         </div>
-      )}
-
-      {df.waConnected && df.waModo === 'qr' && (
-        <div style={{ ...card, marginBottom: 0, background: 'var(--df-brand-subtle-2)', borderColor: 'var(--df-brand-border)' }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--df-brand-dark)' }}>Listo para probar</div>
-          <div style={{ color: 'var(--df-brand-dark)', fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>
-            Escríbele un mensaje a tu número desde otro teléfono y aparecerá en <b>Inbox · Chats en vivo</b>. Desde ahí puedes responder tú mismo.
-          </div>
-        </div>
-      )}
+      </div>
     </section>
   );
 }

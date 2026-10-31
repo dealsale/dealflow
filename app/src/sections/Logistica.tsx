@@ -1,100 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRecordado } from '../lib/rutas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
-import { NovedadesBandeja } from '../components/Novedades';
+import { NovedadesBandeja, NovedadCard } from '../components/Novedades';
+import { IcoBuscar } from '../components/iconosNoche';
+import { pesos } from '../lib/noche';
 import { apiLogistica, apiLogisticaActualizar, type GuiaLogistica, type TableroLogistica } from '../lib/api';
 
 /**
- * Logística Effi: todas las guías en un tablero (como Leads), por etapa del
- * envío. Cada tarjeta muestra por dónde va, la transportadora, el flete, el
- * recaudo y el último movimiento; las que llegan hoy laten. Arriba, las
- * novedades de entrega para gestionarlas desde aquí.
+ * Logística Effi (diseño "Noche"): KPIs, chips por etapa, tabla de guías con su
+ * estado real y, a la derecha, el detalle de la guía elegida y su novedad.
  */
 type Etapa = GuiaLogistica['etapa'];
-const ETAPAS: { id: Etapa; titulo: string; icono: string; color: string; ayuda: string }[] = [
-  { id: 'sin_guia', titulo: 'Sin guía', icono: '🧾', color: '#94A3B8', ayuda: 'Remisión creada en Effi; falta la guía.' },
-  { id: 'por_recoger', titulo: 'Por recoger', icono: '📦', color: '#8B5CF6', ayuda: 'Guía generada: la transportadora aún no la recoge.' },
-  { id: 'transito', titulo: 'En tránsito', icono: '🚚', color: '#0EA5E9', ayuda: 'Va en camino hacia la ciudad del cliente.' },
-  { id: 'reparto', titulo: 'Llega hoy', icono: '🛵', color: '#F59E0B', ayuda: 'En reparto: el mensajero la lleva hoy.' },
-  { id: 'novedad', titulo: 'Novedad', icono: '⚠️', color: '#EF4444', ayuda: 'La transportadora reportó un problema.' },
-  { id: 'entregado', titulo: 'Entregado', icono: '✅', color: '#10B981', ayuda: 'El cliente ya lo recibió.' },
-  { id: 'devuelto', titulo: 'Devuelto', icono: '↩️', color: '#64748B', ayuda: 'Volvió a la bodega.' },
+const ETAPAS: { id: Etapa; titulo: string; clase: string; ayuda: string }[] = [
+  { id: 'sin_guia', titulo: 'Sin guía', clase: 'neutro', ayuda: 'Remisión creada en Effi; falta la guía.' },
+  { id: 'por_recoger', titulo: 'Por recoger', clase: 'info', ayuda: 'Guía generada: la transportadora aún no la recoge.' },
+  { id: 'transito', titulo: 'En tránsito', clase: 'info', ayuda: 'Va en camino hacia la ciudad del cliente.' },
+  { id: 'reparto', titulo: 'Llega hoy', clase: 'aviso', ayuda: 'En reparto: el mensajero la lleva hoy.' },
+  { id: 'novedad', titulo: 'Novedad', clase: 'mal', ayuda: 'La transportadora reportó un problema.' },
+  { id: 'entregado', titulo: 'Entregado', clase: 'ok', ayuda: 'El cliente ya lo recibió.' },
+  { id: 'devuelto', titulo: 'Devuelto', clase: 'neutro', ayuda: 'Volvió a la bodega.' },
 ];
-const PASOS: Etapa[] = ['sin_guia', 'por_recoger', 'transito', 'reparto', 'entregado'];
-const pesos = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CO');
+const etapaDe = (id: Etapa) => ETAPAS.find((x) => x.id === id) || ETAPAS[0];
 const fecha = (s: string) => { if (!s) return ''; const d = new Date(s.replace(' ', 'T') + (s.includes('Z') || s.length <= 10 ? '' : 'Z')); return isNaN(+d) ? s : d.toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }); };
-
-/** Número que sube animado hasta su valor. */
-function Contador({ valor, formato }: { valor: number; formato?: (n: number) => string }) {
-  const [v, setV] = useState(0);
-  const prev = useRef(0);
-  useEffect(() => {
-    const desde = prev.current; const t0 = performance.now(); let raf = 0;
-    const paso = (t: number) => {
-      const k = Math.min(1, (t - t0) / 700); const e = 1 - Math.pow(1 - k, 3);
-      setV(desde + (valor - desde) * e);
-      if (k < 1) raf = requestAnimationFrame(paso); else prev.current = valor;
-    };
-    raf = requestAnimationFrame(paso);
-    return () => cancelAnimationFrame(raf);
-  }, [valor]);
-  return <>{formato ? formato(v) : Math.round(v)}</>;
-}
-
-function Progreso({ etapa, color }: { etapa: Etapa; color: string }) {
-  const i = etapa === 'novedad' ? 2.5 : etapa === 'devuelto' ? 2 : PASOS.indexOf(etapa);
-  const pct = Math.max(0, (i / (PASOS.length - 1)) * 100);
-  return (
-    <div style={{ position: 'relative', height: 6, borderRadius: 999, background: 'var(--df-border)', overflow: 'hidden' }}>
-      <div className="df-log-barra" style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: `linear-gradient(90deg, ${color}99, ${color})` }} />
-    </div>
-  );
-}
-
-function Tarjeta({ g, df, i }: { g: GuiaLogistica; df: DealFlowState; i: number }) {
-  const e = ETAPAS.find((x) => x.id === g.etapa)!;
-  const [copiado, setCopiado] = useState(false);
-  return (
-    <div className={`df-log-card${g.llegaHoy ? ' df-log-hoy' : ''}`} style={{ animationDelay: `${Math.min(i, 12) * 35}ms`, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderLeft: `3px solid ${e.color}`, borderRadius: 11, padding: '10px 11px', display: 'flex', flexDirection: 'column', gap: 6, cursor: 'pointer' }}
-      onClick={() => { if (!g.externa) df.verPedido(g.id); }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <b style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{g.externa ? (g.guia ? 'Sin pedido' : g.id) : g.id}</b>
-        {g.externa && <span title="Esta guía se hizo en Effi, por fuera de DealFlow" style={{ fontSize: 10, fontWeight: 800, color: 'var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 999, padding: '1px 7px' }}>SOLO EFFI</span>}
-        {g.llegaHoy && <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: '#F59E0B', borderRadius: 999, padding: '1px 7px' }}>HOY</span>}
-        <span style={{ flex: 1 }} />
-        {g.transportadora && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-text-muted)', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 6, padding: '1px 6px', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🚚 {g.transportadora}</span>}
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.cliente}</div>
-      <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>📍 {[g.ciudad, g.departamento].filter(Boolean).join(', ') || 'Sin ciudad'}</div>
-      <Progreso etapa={g.etapa} color={e.color} />
-      {g.ultimoMovimiento ? (
-        <div style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--df-text-body)' }}>
-          <span style={{ fontWeight: 700 }}>{g.ultimoMovimiento.estado}</span>
-          {g.ultimoMovimiento.observacion && <span style={{ color: 'var(--df-text-muted)' }}> · {g.ultimoMovimiento.observacion}</span>}
-          <div style={{ fontSize: 10.5, color: 'var(--df-text-faint)' }}>{fecha(g.ultimoMovimiento.fecha)}</div>
-        </div>
-      ) : g.estadoEffi ? <div style={{ fontSize: 11.5, color: 'var(--df-text-body)', fontWeight: 600 }}>{g.estadoEffi}</div> : null}
-      {g.entregaEstimada && g.etapa !== 'entregado' && <div style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>🗓️ Entrega estimada: <b>{g.entregaEstimada}</b></div>}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
-        {g.recaudo > 0 && <span style={{ fontWeight: 700, color: '#047857', background: 'rgba(16,185,129,.12)', borderRadius: 6, padding: '2px 7px' }}>💵 Recaudo {pesos(g.recaudo)}</span>}
-        {g.flete > 0 && <span style={{ fontWeight: 700, color: '#B45309', background: 'rgba(245,158,11,.14)', borderRadius: 6, padding: '2px 7px' }}>Flete {pesos(g.flete)}</span>}
-        {g.envioCobrado > 0 && <span style={{ fontWeight: 600, color: 'var(--df-text-muted)', background: 'var(--df-bg)', borderRadius: 6, padding: '2px 7px' }}>Envío cobrado {pesos(g.envioCobrado)}</span>}
-      </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }} onClick={(ev) => ev.stopPropagation()}>
-        {g.guia ? (
-          <button onClick={() => { void navigator.clipboard?.writeText(g.guia).then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 1500); }); }} title="Copiar número de guía"
-            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', color: 'var(--df-text-body)' }}>
-            {copiado ? '✓ copiada' : `# ${g.guia}`}
-          </button>
-        ) : <span style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>{g.remision || 'Sin remisión'}</span>}
-        <span style={{ flex: 1 }} />
-        {g.guiaUrl && <a href={g.guiaUrl} target="_blank" rel="noreferrer" title="Ver la guía" style={{ fontSize: 13, textDecoration: 'none' }}>📄</a>}
-        {(g.leadId || g.tel) && <button onClick={() => df.abrirChatDePedido({ leadId: g.leadId, tel: g.tel })} title="Abrir el chat del cliente" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: 0 }}>💬</button>}
-      </div>
-    </div>
-  );
-}
+const POR_PAGINA = 60;
 
 export function Logistica({ df }: { df: DealFlowState }) {
   const [t, setT] = useState<TableroLogistica | null>(null);
@@ -103,8 +32,11 @@ export function Logistica({ df }: { df: DealFlowState }) {
   const [q, setQ] = useState('');
   const [transp, setTransp] = useRecordado('logistica:transp', '');
   const [dias, setDias] = useRecordado('logistica:dias', '45');
-  const [verCerradas, setVerCerradas] = useRecordado('logistica:cerradas', true);
   const [origen, setOrigen] = useRecordado<'' | 'df' | 'effi'>('logistica:origen', '');
+  const [etapa, setEtapa] = useState<Etapa | ''>('');
+  const [selId, setSelId] = useState('');
+  const [max, setMax] = useState(POR_PAGINA);
+  const [copiado, setCopiado] = useState(false);
 
   const cargar = (d = dias) => { void apiLogistica(Number(d)).then((r) => { if (r.data) { setT(r.data); setError(''); } else setError(r.error || 'No se pudo cargar.'); }); };
   useEffect(() => {
@@ -120,118 +52,133 @@ export function Logistica({ df }: { df: DealFlowState }) {
   };
 
   const transportadoras = useMemo(() => [...new Set((t?.guias || []).map((g) => g.transportadora).filter(Boolean))].sort(), [t]);
-  const filtradas = useMemo(() => {
+  const base = useMemo(() => {
     const nq = q.trim().toLowerCase();
     return (t?.guias || []).filter((g) => (!origen || (origen === 'effi' ? !!g.externa : !g.externa)) && (!transp || g.transportadora === transp) && (!nq || `${g.id} ${g.cliente} ${g.tel} ${g.guia} ${g.ciudad}`.toLowerCase().includes(nq)));
   }, [t, q, transp, origen]);
-  const columnas = ETAPAS.filter((e) => verCerradas || (e.id !== 'entregado' && e.id !== 'devuelto'));
+  const filtradas = etapa ? base.filter((g) => g.etapa === etapa) : base;
+  const cuenta = (e: Etapa) => base.filter((g) => g.etapa === e).length;
+  useEffect(() => { setMax(POR_PAGINA); }, [q, transp, origen, etapa]);
+  const sel = filtradas.find((g) => g.rowId === selId) || null;
+  const pedidoSel = sel && !sel.externa ? df.allOrders.find((o) => String(o.rowId) === String(sel.rowId)) || null : null;
   const r = t?.resumen;
-
-  const kpi = (titulo: string, valor: number, color: string, icono: string, formato?: (n: number) => string, pulso = false) => (
-    <div className="df-log-kpi" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderTop: `3px solid ${color}`, borderRadius: 12, padding: '10px 12px', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-        {pulso && valor > 0 && <span className="df-log-punto" style={{ background: color }} />}{icono} {titulo}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}><Contador valor={valor} formato={formato} /></div>
-    </div>
-  );
+  const efect = r?.efectividad != null ? `${Math.round(r.efectividad)} % de efectividad` : 'lo que ya recibió el cliente';
 
   return (
-    <section data-screen-label="Logística Effi">
-      <style>{`
-        @keyframes dfLogEntra { from { opacity: 0; transform: translateY(8px) scale(.98) } to { opacity: 1; transform: none } }
-        @keyframes dfLogBarra { from { width: 0 } }
-        @keyframes dfLogPulso { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,.45) } 50% { box-shadow: 0 0 0 6px rgba(245,158,11,0) } }
-        @keyframes dfLogPunto { 0%,100% { transform: scale(1); opacity: 1 } 50% { transform: scale(1.6); opacity: .5 } }
-        @keyframes dfLogCamion { 0% { left: -40px } 100% { left: calc(100% + 10px) } }
-        @keyframes dfLogVia { to { background-position: -40px 0 } }
-        @keyframes dfLogGira { to { transform: rotate(360deg) } }
-        .df-log-card { animation: dfLogEntra .45s cubic-bezier(.2,.8,.2,1) both; transition: transform .18s, box-shadow .18s }
-        .df-log-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -14px rgba(15,23,42,.45) }
-        .df-log-hoy { animation: dfLogEntra .45s cubic-bezier(.2,.8,.2,1) both, dfLogPulso 1.8s ease-in-out infinite }
-        .df-log-barra { animation: dfLogBarra 1s cubic-bezier(.2,.8,.2,1) both }
-        .df-log-kpi { animation: dfLogEntra .5s both }
-        .df-log-punto { width: 7px; height: 7px; border-radius: 50%; display: inline-block; animation: dfLogPunto 1.4s infinite }
-        .df-log-via { position: relative; height: 26px; margin: 4px 0 14px; border-radius: 999px; overflow: hidden;
-          background: repeating-linear-gradient(90deg, var(--df-border) 0 22px, transparent 22px 40px); background-size: 40px 2px; background-repeat: repeat-x; background-position: 0 50%; animation: dfLogVia .8s linear infinite }
-        .df-log-via span { position: absolute; top: 0; font-size: 20px; animation: dfLogCamion 9s linear infinite }
-        .df-log-gira { display: inline-block; animation: dfLogGira 1s linear infinite }
-        @media (prefers-reduced-motion: reduce) { .df-log-card, .df-log-hoy, .df-log-barra, .df-log-kpi, .df-log-punto, .df-log-via, .df-log-via span { animation: none !important } }
-      `}</style>
-
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Logística Effi</h1>
-          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Todas las guías de tu Effi (también las que hiciste por fuera de DealFlow), por dónde va cada una y cuáles llegan hoy.</p>
+    <section data-screen-label="Logística Effi" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="encabezado">
+        <div className="encabezado-txt">
+          <span className="eti">Solo Effi · últimos {dias} días</span>
+          <h1>Logística Effi</h1>
+          <p className="sub">Todas tus guías con su estado real (también las que hiciste por fuera de DealFlow), desde qué bodega salieron y las novedades que el asistente ya está gestionando con el cliente.</p>
         </div>
-        <button onClick={() => void actualizar()} disabled={actualizando} style={{ background: 'var(--df-purple)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: actualizando ? 0.75 : 1 }}>
-          {actualizando ? <><span className="df-log-gira">↻</span> Consultando Effi…</> : '↻ Actualizar desde Effi'}
-        </button>
+        <div className="fila">
+          <button type="button" className="btn btn-sec" onClick={() => void actualizar()} disabled={actualizando}>{actualizando ? '↻ Consultando Effi…' : '↻ Actualizar desde Effi'}</button>
+          <button type="button" className="btn btn-pri" onClick={() => df.go('integraciones')}>🔎 Revisar la integración</button>
+        </div>
       </div>
-      <div className="df-log-via" aria-hidden="true"><span>🚚</span></div>
 
-      {error && <div style={{ color: 'var(--df-danger)', fontSize: 13, marginBottom: 10 }}>{error}</div>}
+      {error && <div className="aviso-caja mal">{error}</div>}
 
-      {r && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginBottom: 14 }}>
-          {kpi('Guías activas', r.activas, '#0EA5E9', '🚚')}
-          {kpi('Llegan hoy', r.llegaHoy, '#F59E0B', '🛵', undefined, true)}
-          {kpi('Novedades', r.novedades, '#EF4444', '⚠️', undefined, true)}
-          {kpi('Entregadas', r.entregadas, '#10B981', '✅')}
-          {kpi('Por recaudar', r.porRecaudar, '#047857', '💵', pesos)}
-          {kpi('Fletes', r.fleteTotal, '#B45309', '🧾', pesos)}
-          {r.efectividad != null && kpi('Efectividad', r.efectividad, '#8B5CF6', '🎯', (n) => `${Math.round(n)}%`)}
-        </div>
-      )}
+      <div className="kpis">
+        <div className="kpi"><span className="eti">Guías activas</span><span className="valor">{r ? r.activas : '…'}</span><span className="delta">{r?.llegaHoy ? <><b>{r.llegaHoy}</b> llegan hoy</> : 'ninguna llega hoy'}</span></div>
+        <div className="kpi"><span className="eti">Entregadas</span><span className="valor">{r ? r.entregadas : '…'}</span><span className="delta">{efect}</span></div>
+        <div className="kpi"><span className="eti">Con novedad</span><span className={`valor${r?.novedades ? ' aviso' : ''}`}>{r ? r.novedades : '…'}</span><span className="delta">{r?.devueltas ? <><b className="baja">{r.devueltas}</b> devueltas</> : 'sin devoluciones en el periodo'}</span></div>
+        <div className="kpi"><span className="eti">Por recaudar</span><span className="valor" style={{ fontSize: 24 }}>{r ? pesos(r.porRecaudar) : '…'}</span><span className="delta">fletes {r ? pesos(r.fleteTotal) : '…'}</span></div>
+      </div>
 
       {/* Novedades de entrega: se gestionan aquí (ya no en Pedidos). */}
       <NovedadesBandeja df={df} />
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '12px 0' }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Buscar por pedido, cliente, guía o ciudad…"
-          style={{ flex: '1 1 240px', minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 999, padding: '8px 14px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text-body)' }} />
+      <div className="fila">
+        <button type="button" className={`chip${etapa === '' ? ' activa' : ''}`} onClick={() => setEtapa('')}>Todas <span className="n">{base.length}</span></button>
+        {ETAPAS.filter((e) => cuenta(e.id) > 0).map((e) => <button key={e.id} type="button" className={`chip${etapa === e.id ? ' activa' : ''}`} onClick={() => setEtapa(e.id)} title={e.ayuda}>{e.titulo} <span className="n">{cuenta(e.id)}</span></button>)}
         {!!r?.soloEffi && (
-          <Dropdown variant="pill" label="Origen" value={origen} onChange={(v) => setOrigen(v as '' | 'df' | 'effi')}
-            options={[{ value: '', label: 'Todas' }, { value: 'df', label: 'Pedidos de DealFlow' }, { value: 'effi', label: `Solo en Effi (${r.soloEffi})` }]} />
+          <Dropdown ariaLabel="Origen" value={origen} onChange={(v) => setOrigen(v as '' | 'df' | 'effi')} width={170}
+            options={[{ value: '', label: 'Todas las guías' }, { value: 'df', label: 'Pedidos de DealFlow' }, { value: 'effi', label: `Solo en Effi (${r.soloEffi})` }]} />
         )}
-        {transportadoras.length > 1 && (
-          <Dropdown variant="pill" label="Transportadora" value={transp} onChange={setTransp} options={[{ value: '', label: 'Todas' }, ...transportadoras.map((x) => ({ value: x, label: x }))]} />
-        )}
-        <Dropdown variant="pill" label="Periodo" value={dias} onChange={(v) => { setDias(v); cargar(v); }}
+        {transportadoras.length > 1 && <Dropdown ariaLabel="Transportadora" value={transp} onChange={setTransp} width={170} options={[{ value: '', label: 'Todas las transportadoras' }, ...transportadoras.map((x) => ({ value: x, label: x }))]} />}
+        <Dropdown ariaLabel="Periodo" value={dias} onChange={(v) => { setDias(v); cargar(v); }} width={150}
           options={[{ value: '7', label: 'Últimos 7 días' }, { value: '15', label: 'Últimos 15 días' }, { value: '45', label: 'Últimos 45 días' }, { value: '90', label: 'Últimos 90 días' }]} />
-        <button onClick={() => setVerCerradas((v) => !v)} style={{ height: 34, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 999, padding: '0 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', color: 'var(--df-text-body)' }}>
-          {verCerradas ? 'Ocultar entregadas y devueltas' : 'Ver entregadas y devueltas'}
-        </button>
+        <div className="buscar" style={{ flex: '1 1 240px', maxWidth: 380, marginLeft: 'auto' }}>
+          <IcoBuscar />
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por pedido, cliente, guía o ciudad…" aria-label="Buscar guía" />
+        </div>
       </div>
 
-      {!t && !error && <div style={{ color: 'var(--df-text-faint)', fontSize: 13, padding: 20 }}>Cargando guías…</div>}
-      {t && !t.guias.length && (
-        <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--df-text-muted)', border: '1px dashed var(--df-border)', borderRadius: 12 }}>
-          Todavía no hay pedidos enviados por Effi en este periodo. Cuando despaches uno, aparece aquí con su guía.
-        </div>
-      )}
-      {t && t.guias.length > 0 && (
-        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8, alignItems: 'flex-start', scrollSnapType: 'x proximity' }}>
-          {columnas.map((e) => {
-            const lista = filtradas.filter((g) => g.etapa === e.id);
-            return (
-              <div key={e.id} style={{ flex: '1 0 220px', maxWidth: 320, minWidth: 220, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 12, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 260px)', minHeight: 180, scrollSnapAlign: 'start' }}>
-                <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--df-border)', display: 'flex', alignItems: 'center', gap: 7 }} title={e.ayuda}>
-                  <span className={e.id === 'reparto' || e.id === 'novedad' ? 'df-log-punto' : undefined} style={{ width: 8, height: 8, borderRadius: '50%', background: e.color, display: 'inline-block' }} />
-                  <b style={{ fontSize: 13, flex: 1 }}>{e.icono} {e.titulo}</b>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 999, padding: '1px 8px' }}>{lista.length}</span>
-                </div>
-                <div style={{ overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 7 }}>
-                  {!lista.length && <div style={{ fontSize: 12, color: 'var(--df-text-faint)', textAlign: 'center', padding: '14px 6px' }}>{e.ayuda}</div>}
-                  {lista.slice(0, 80).map((g, i) => <Tarjeta key={g.rowId} g={g} df={df} i={i} />)}
-                  {lista.length > 80 && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', textAlign: 'center' }}>…y {lista.length - 80} más (usa la búsqueda)</div>}
-                </div>
+      <div className="lateral angosto">
+        <section className="tarjeta scroll-x" style={{ padding: '4px 6px' }}>
+          {!t && !error && <div className="vacio" style={{ margin: 8 }}>Cargando guías…</div>}
+          {t && !t.guias.length && <div className="vacio" style={{ margin: 8 }}>Todavía no hay pedidos enviados por Effi en este periodo. Cuando despaches uno, aparece aquí con su guía.</div>}
+          {t && t.guias.length > 0 && (
+            <table className="tabla" style={{ minWidth: 720 }}>
+              <thead><tr><th>Guía</th><th>Pedido</th><th>Cliente</th><th>Transportadora</th><th>Estado</th><th>Flete</th><th>Recaudo</th></tr></thead>
+              <tbody>
+                {filtradas.slice(0, max).map((g) => {
+                  const e = etapaDe(g.etapa);
+                  return (
+                    <tr key={g.rowId} className={`clic${sel?.rowId === g.rowId ? ' fila-sel' : ''}`} onClick={() => setSelId(g.rowId)} style={{ cursor: 'pointer' }}>
+                      <td className="mono" style={{ whiteSpace: 'nowrap' }}><b>{g.guia || (g.remision ? `Rem. ${g.remision}` : '—')}</b><div className="tenue" style={{ fontSize: 10.5 }}>{fecha(g.creado)}</div></td>
+                      <td className="mono" style={{ whiteSpace: 'nowrap' }}>{g.externa ? <span className="pill neutro sin chica" title="Esta guía se hizo en Effi, por fuera de DealFlow">Solo Effi</span> : g.id}</td>
+                      <td style={{ maxWidth: 170 }}><b style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.cliente}</b><div className="tenue" style={{ fontSize: 12 }}>{[g.ciudad, g.departamento].filter(Boolean).join(' · ') || 'Sin ciudad'}</div></td>
+                      <td>{g.transportadora || '—'}</td>
+                      <td><span className={`pill ${e.clase} chica`}>{g.llegaHoy && g.etapa !== 'entregado' ? 'Llega hoy' : e.titulo}</span>{g.ultimoMovimiento?.estado && <div className="tenue" style={{ fontSize: 11, marginTop: 3, maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.ultimoMovimiento.estado}</div>}</td>
+                      <td className="mono" style={{ whiteSpace: 'nowrap' }}>{g.flete > 0 ? pesos(g.flete) : '—'}</td>
+                      <td className="mono" style={{ whiteSpace: 'nowrap' }}>{g.recaudo > 0 ? pesos(g.recaudo) : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          {t && t.guias.length > 0 && (
+            <div className="fila" style={{ padding: '10px 8px', justifyContent: 'space-between' }}>
+              <span className="tenue" style={{ fontSize: 12 }}>Mostrando {Math.min(max, filtradas.length)} de {filtradas.length} guías · se actualiza solo cada minuto{t.guiasEffiAt ? ` · todas las de Effi cada 20 min (última: ${fecha(t.guiasEffiAt)})` : ''}</span>
+              {filtradas.length > max && <button type="button" className="btn btn-sec btn-chico" onClick={() => setMax(max + POR_PAGINA)}>Ver más</button>}
+            </div>
+          )}
+        </section>
+
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, position: 'sticky', top: 0 }}>
+          {!sel && <section className="tarjeta" aria-label="Detalle de la guía"><div className="vacio">Toca una guía de la tabla para ver su detalle, su último movimiento y gestionar su novedad.</div></section>}
+          {sel && (
+            <section className="tarjeta" aria-label="Detalle de la guía">
+              <div className="tarjeta-cab">
+                <div><span className="eti">{sel.guia ? `Guía ${sel.guia}` : sel.remision ? `Remisión ${sel.remision}` : 'Sin guía'}</span><h2 style={{ fontSize: 18 }}>{sel.cliente}</h2></div>
+                <span className={`pill ${etapaDe(sel.etapa).clase}`}>{etapaDe(sel.etapa).titulo}</span>
               </div>
-            );
-          })}
-        </div>
-      )}
-      {t && <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 6 }}>Se actualiza solo cada minuto con lo que avisa Effi · todas las guías de Effi se traen cada 20 min{t.guiasEffiAt ? ` (última: ${fecha(t.guiasEffiAt)})` : ''}.</div>}
+              <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="suave-t">Pedido</span>{sel.externa ? <b>Solo en Effi</b> : <button type="button" className="mono enlace" onClick={() => df.verPedido(sel.id)} style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>{sel.id} →</button>}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="suave-t">Transportadora</span><b>{sel.transportadora || '—'}</b></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><span className="suave-t">Llega a</span><b style={{ textAlign: 'right' }}>{[sel.ciudad, sel.departamento].filter(Boolean).join(', ') || '—'}</b></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="suave-t">Celular</span><b className="mono">{sel.tel || '—'}</b></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="suave-t">Recaudo</span><b className="mono">{sel.recaudo > 0 ? pesos(sel.recaudo) : '—'}</b></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="suave-t">Flete</span><b className="mono">{sel.flete > 0 ? pesos(sel.flete) : '—'}{sel.envioCobrado > 0 ? <span className="tenue"> · cobrado {pesos(sel.envioCobrado)}</span> : null}</b></div>
+                {sel.entregaEstimada && sel.etapa !== 'entregado' && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="suave-t">Entrega estimada</span><b>{sel.entregaEstimada}</b></div>}
+              </div>
+              <div className="fila" style={{ gap: 6 }}>
+                {sel.guiaUrl && <a className="btn btn-sec btn-chico" href={sel.guiaUrl} target="_blank" rel="noreferrer">Ver la guía</a>}
+                {sel.guia && <button type="button" className="btn btn-sec btn-chico" onClick={() => { void navigator.clipboard?.writeText(sel.guia).then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 1500); }); }}>{copiado ? '✓ Copiada' : 'Copiar guía'}</button>}
+                {(sel.leadId || sel.tel) && <button type="button" className="btn btn-fant btn-chico" onClick={() => df.abrirChatDePedido({ leadId: sel.leadId, tel: sel.tel })}>Abrir el chat</button>}
+              </div>
+              {(sel.ultimoMovimiento || sel.estadoEffi) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12.5, borderTop: '1px solid var(--linea)', paddingTop: 10 }}>
+                  <span className="eti" style={{ fontSize: 10 }}>Último movimiento</span>
+                  {sel.ultimoMovimiento ? (
+                    <div style={{ display: 'flex', gap: 10 }}><span className="mono tenue" style={{ flex: '0 0 86px', fontSize: 10.5 }}>{fecha(sel.ultimoMovimiento.fecha)}</span><span><b>{sel.ultimoMovimiento.estado}</b>{sel.ultimoMovimiento.observacion ? <span className="suave-t"> · {sel.ultimoMovimiento.observacion}</span> : null}</span></div>
+                  ) : <span>{sel.estadoEffi}</span>}
+                </div>
+              )}
+            </section>
+          )}
+          {pedidoSel?.novedad?.abierta && (
+            <section className="nov" aria-label="Novedad">
+              <div className="tarjeta-cab"><h3 style={{ color: 'var(--coral)' }}>⚠ Novedad de entrega</h3><span className="pill ia sin">✦ el asistente la gestiona</span></div>
+              <NovedadCard df={df} sel={pedidoSel} />
+            </section>
+          )}
+        </aside>
+      </div>
     </section>
   );
 }

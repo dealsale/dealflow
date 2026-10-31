@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './noche.css'
 import App from './App.tsx'
 import { PagoOffline } from './components/PagoOffline.tsx'
 import { Academy } from './academy/Academy.tsx'

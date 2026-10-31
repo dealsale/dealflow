@@ -790,19 +790,8 @@ export function useDealFlowState() {
   // recuerda por dispositivo y se aplica como atributo data-theme en <html>.
   // 'noche' es el diseño nuevo (la identidad de la landing): en test.<dominio> es el tema
   // por defecto; en los demás hosts se elige en el menú de perfil.
-  const porDefecto = (): 'light' | 'noche' => (/^test\./.test(window.location.hostname) ? 'noche' : 'light');
-  const [theme, setThemeState] = useState<'light' | 'dark' | 'premium' | 'noche'>(() => {
-    try {
-      const v = localStorage.getItem('dealflow:theme');
-      // El estreno del tema oscuro por defecto se deshizo: quien quedó en oscuro
-      // por ese cambio vuelve al claro UNA vez (como estaba antes).
-      if (localStorage.getItem('dealflow:theme-v2') && !localStorage.getItem('dealflow:theme-v3')) {
-        localStorage.setItem('dealflow:theme-v3', '1');
-        if (v === 'dark') return porDefecto();
-      }
-      return v === 'dark' || v === 'premium' || v === 'noche' || v === 'light' ? v : porDefecto();
-    } catch { return porDefecto(); }
-  });
+  // En esta versión el rediseño "Noche" es el único diseño: no hay otros temas.
+  const [theme, setThemeState] = useState<'light' | 'dark' | 'premium' | 'noche'>('noche');
   useEffect(() => {
     // Cambio de tema INSTANTÁNEO (nada de fundido): repintar toda la app con
     // una transición de color de por medio es justo lo que se sentía lento
@@ -810,7 +799,7 @@ export function useDealFlowState() {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem('dealflow:theme', theme); } catch { /* modo privado */ }
   }, [theme]);
-  function setTheme(t: 'light' | 'dark' | 'premium' | 'noche') { setThemeState(t); }
+  function setTheme(t: 'light' | 'dark' | 'premium' | 'noche') { void t; setThemeState('noche'); }
   /** Entorno de prueba (test.<dominio>): el diseño nuevo, con su propia base de datos. */
   const esTest = /^test\./.test(window.location.hostname);
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? DEF_ASSISTANT);

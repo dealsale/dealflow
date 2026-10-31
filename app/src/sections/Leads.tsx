@@ -3,6 +3,8 @@ import { useRecordado } from '../lib/rutas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { OrigenBadge } from '../components/OrigenPedido';
+import { IcoBuscar } from '../components/iconosNoche';
+import { iniciales, pesos } from '../lib/noche';
 import { apiLeadsEstados, apiSetLeadEstado } from '../lib/api';
 import type { EstadoLead, LeadEstado } from '../lib/api';
 
@@ -13,51 +15,52 @@ import type { EstadoLead, LeadEstado } from '../lib/api';
  * directo a ese chat en el Inbox. No es otro chat: es el resumen de todos.
  */
 export const ESTADOS: { id: EstadoLead; titulo: string; icono: string; color: string; ayuda: string }[] = [
-  { id: 'preguntando', titulo: 'Preguntando', icono: '💬', color: '#64748B', ayuda: 'Escribió, pero aún no muestra intención de compra.' },
-  { id: 'interesado', titulo: 'Con intención de compra', icono: '🔥', color: '#F59E0B', ayuda: 'Preguntó precio, talla, envío o dijo que lo quiere.' },
-  { id: 'faltan_datos', titulo: 'Faltan datos', icono: '📝', color: '#8B5CF6', ayuda: 'Ya está dando sus datos de envío, pero faltan algunos.' },
-  { id: 'datos_completos', titulo: 'Datos completos', icono: '✅', color: '#0EA5E9', ayuda: 'Ya tiene el resumen del pedido: falta que confirme.' },
-  { id: 'venta', titulo: 'Ventas', icono: '🛒', color: '#10B981', ayuda: 'Ya tiene un pedido creado.' },
-  { id: 'perdido', titulo: 'No compró', icono: '🚫', color: '#EF4444', ayuda: 'Lo marcaste como perdido (no cuenta en el embudo).' },
+  { id: 'preguntando', titulo: 'Preguntando', icono: '💬', color: '#9AA8C9', ayuda: 'Escribió, pero aún no muestra intención de compra.' },
+  { id: 'interesado', titulo: 'Con intención', icono: '🔥', color: '#FFC65C', ayuda: 'Preguntó precio, talla, envío o dijo que lo quiere.' },
+  { id: 'faltan_datos', titulo: 'Faltan datos', icono: '📝', color: '#B75DFF', ayuda: 'Ya está dando sus datos de envío, pero faltan algunos.' },
+  { id: 'datos_completos', titulo: 'Datos completos', icono: '✅', color: '#46D8FF', ayuda: 'Ya tiene el resumen del pedido: falta que confirme.' },
+  { id: 'venta', titulo: 'Ventas', icono: '🛒', color: '#34D399', ayuda: 'Ya tiene un pedido creado.' },
+  { id: 'perdido', titulo: 'No compró', icono: '🚫', color: '#FF6B8A', ayuda: 'Lo marcaste como perdido (no cuenta en el embudo).' },
 ];
 const est = (id: string) => ESTADOS.find((e) => e.id === id) || ESTADOS[0];
+const siguiente = (id: EstadoLead): EstadoLead | null => {
+  const orden: EstadoLead[] = ['preguntando', 'interesado', 'faltan_datos', 'datos_completos'];
+  const i = orden.indexOf(id);
+  return i >= 0 && i < orden.length - 1 ? orden[i + 1] : null;
+};
 type Rango = 'todo' | 'hoy' | '7' | '30';
 const POR_COLUMNA = 40;
 
 function Tarjeta({ l, onAbrir, onMover }: { l: LeadEstado; onAbrir: () => void; onMover: (e: EstadoLead | '') => void }) {
-  const e = est(l.estado);
+  const sig = l.estado === 'venta' || l.estado === 'perdido' ? null : siguiente(l.estado);
   return (
-    <div
-      onClick={onAbrir}
-      className="df-lead-card"
-      style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderLeft: `3px solid ${e.color}`, borderRadius: 10, padding: '10px 11px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 5 }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-        <OrigenBadge origen={l.canal} size={16} />
-        <b style={{ fontSize: 13, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.nombre || l.tel || 'Sin nombre'}</b>
-        <span style={{ fontSize: 11, color: 'var(--df-text-faint)', whiteSpace: 'nowrap' }}>{l.hora}</span>
+    <article className="lead">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="avatar ne" style={{ width: 28, height: 28, fontSize: 11, flex: '0 0 28px' }}>{iniciales(l.nombre || l.tel)}</span>
+        <a href="#" onClick={(ev) => { ev.preventDefault(); onAbrir(); }} title="Abrir el chat" style={{ fontWeight: 700, fontSize: 13, textDecoration: 'none', color: 'var(--tinta)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{l.nombre || l.tel || 'Sin nombre'}</a>
+        <span className="mono tenue" style={{ marginLeft: 'auto', fontSize: 10.5, whiteSpace: 'nowrap' }}>{l.hora}</span>
       </div>
-      {l.ultimo && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} translate="no">{l.ultimo}</div>}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }} onClick={(ev) => ev.stopPropagation()}>
-        {l.pedido && <span style={{ fontSize: 11, fontWeight: 700, color: '#047857', background: 'rgba(16,185,129,.12)', borderRadius: 6, padding: '2px 7px' }}>DF-{l.pedido.numero} · ${l.pedido.total.toLocaleString('es-CO')}</span>}
-        {l.manual && <span title="Lo moviste tú a este estado" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-text-muted)', background: 'var(--df-surface-2)', borderRadius: 6, padding: '2px 6px' }}>✋ manual</span>}
-        <span style={{ flex: 1 }} />
+      {l.ultimo && <p className="suave-t" style={{ fontSize: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} translate="no">“{l.ultimo}”</p>}
+      <div className="fila" style={{ gap: 6, fontSize: 11 }}>
+        <OrigenBadge origen={l.canal} size={16} />
+        {l.pedido && <span className="pill ok sin chica" style={{ padding: '1px 7px', fontSize: 10.5 }}>DF-{l.pedido.numero} · {pesos(l.pedido.total)}</span>}
+        {l.manual && <span className="tenue" title="Lo moviste tú a este estado">✋ manual</span>}
         {l.estado !== 'venta' && (
-          <Dropdown
-            variant="pill"
-            ariaLabel="Mover a otro estado"
-            value=""
-            onChange={(v) => onMover(v === '__auto' ? '' : (v as EstadoLead))}
-            active={false}
-            options={[
-              { value: '', label: '⇄ Mover' },
-              ...(l.manual ? [{ value: '__auto', label: `↺ Automático (${est(l.auto).titulo})` }] : []),
-              ...ESTADOS.filter((x) => x.id !== 'venta' && x.id !== l.estado).map((x) => ({ value: x.id, label: `${x.icono} ${x.titulo}` })),
-            ]}
-          />
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+            <Dropdown
+              variant="pill" ariaLabel="Mover a otro estado" value="" active={false}
+              onChange={(v) => onMover(v === '__auto' ? '' : (v as EstadoLead))}
+              options={[
+                { value: '', label: '⇄' },
+                ...(l.manual ? [{ value: '__auto', label: `↺ Automático (${est(l.auto).titulo})` }] : []),
+                ...ESTADOS.filter((x) => x.id !== 'venta' && x.id !== l.estado).map((x) => ({ value: x.id, label: `${x.icono} ${x.titulo}` })),
+              ]}
+            />
+            {sig && <button type="button" className="mover" onClick={() => onMover(sig)} aria-label={`Mover a ${est(sig).titulo}`} title={`Mover a ${est(sig).titulo}`}>→</button>}
+          </span>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -92,67 +95,56 @@ export function Leads({ df }: { df: DealFlowState }) {
   const columnas = ESTADOS.filter((e) => e.id !== 'perdido' || verPerdidos);
   const embudo = filtrados.filter((l) => l.estado !== 'perdido').length;
   const ventas = porEstado('venta').length;
+  const tasa = embudo > 0 ? Math.round((ventas / embudo) * 100) : 0;
+  const frios = filtrados.filter((l) => l.estado !== 'venta' && l.estado !== 'perdido' && Date.now() - new Date(String(l.ultimoIso).replace(' ', 'T') + 'Z').getTime() > 2 * 3600e3).length;
+  const RANGOS: { id: Rango; t: string }[] = [{ id: 'todo', t: 'Todo' }, { id: 'hoy', t: 'Hoy' }, { id: '7', t: '7 días' }, { id: '30', t: '30 días' }];
 
   return (
-    <section data-screen-label="Leads">
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Leads</h1>
-          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>En qué va cada cliente. Toca una tarjeta para ir directo a su chat.</p>
+    <section data-screen-label="Leads" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="encabezado">
+        <div className="encabezado-txt">
+          <span className="eti">Embudo · {RANGOS.find((r) => r.id === rango)?.t.toLowerCase()}</span>
+          <h1>Leads</h1>
+          <p className="sub">En qué va cada cliente. El asistente los mueve solo según la conversación; tú puedes moverlos con la flecha. Toca el nombre para ir a su chat.</p>
         </div>
-        {embudo > 0 && (
-          <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>
-            Conversión: <b style={{ color: 'var(--df-text-strong)', fontSize: 15 }}>{Math.round((ventas / embudo) * 100)}%</b> ({ventas} de {embudo})
+        <div className="fila">
+          <div className="buscar" style={{ flex: '1 1 240px', maxWidth: 340 }}>
+            <IcoBuscar />
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre, teléfono o mensaje…" aria-label="Buscar lead" />
           </div>
-        )}
+          {RANGOS.map((r) => <button key={r.id} type="button" className={`chip${rango === r.id ? ' activa' : ''}`} onClick={() => setRango(r.id)}>{r.t}</button>)}
+          <button type="button" className={`chip${verPerdidos ? ' activa' : ''}`} onClick={() => setVerPerdidos((v) => !v)}>🚫 No compró <span className="n">{porEstado('perdido').length}</span></button>
+        </div>
       </div>
 
-      {/* Resumen por estado: también filtra (lleva a la columna). */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 12 }}>
-        {ESTADOS.filter((e) => e.id !== 'perdido').map((e) => (
-          <a key={e.id} href={`#col-${e.id}`} onClick={(ev) => { ev.preventDefault(); document.getElementById(`col-${e.id}`)?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' }); }}
-            style={{ textDecoration: 'none', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderTop: `3px solid ${e.color}`, borderRadius: 10, padding: '9px 11px', color: 'inherit' }} title={e.ayuda}>
-            <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.icono} {e.titulo}</div>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{leads ? porEstado(e.id).length : '…'}</div>
-          </a>
-        ))}
+      <div className="kpis">
+        <div className="kpi"><span className="eti">Leads en el embudo</span><span className="valor">{leads ? embudo : '…'}</span><span className="delta">{porEstado('preguntando').length} preguntando · {porEstado('interesado').length} con intención</span></div>
+        <div className="kpi"><span className="eti">Llegaron a comprar</span><span className="valor">{leads ? ventas : '…'}</span><span className="delta"><b>{tasa} %</b> de conversión</span></div>
+        <div className="kpi"><span className="eti">Por cerrar</span><span className="valor">{leads ? porEstado('faltan_datos').length + porEstado('datos_completos').length : '…'}</span><span className="delta">{porEstado('datos_completos').length} con el resumen listo, falta que confirmen</span></div>
+        <div className="kpi"><span className="eti">Sin respuesta hace +2 h</span><span className="valor">{leads ? frios : '…'}</span><span className="delta">{df.seguimientoActivo ? 'el asistente les vuelve a escribir solo' : 'enciende el seguimiento en Asistente'}</span></div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Buscar por nombre, teléfono o mensaje…"
-          style={{ flex: '1 1 240px', minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 999, padding: '8px 14px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text-body)' }} />
-        <Dropdown variant="pill" label="Actividad" value={rango} onChange={(v) => setRango(v as Rango)}
-          options={[{ value: 'todo', label: 'Todo' }, { value: 'hoy', label: 'Hoy' }, { value: '7', label: 'Últimos 7 días' }, { value: '30', label: 'Últimos 30 días' }]} />
-        <button onClick={() => setVerPerdidos((v) => !v)} style={{ height: 34, background: verPerdidos ? 'var(--df-surface-2)' : 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 999, padding: '0 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', color: 'var(--df-text-body)' }}>
-          🚫 {verPerdidos ? 'Ocultar' : 'Ver'} "No compró" ({porEstado('perdido').length})
-        </button>
-      </div>
-
-      {!leads && <div style={{ color: 'var(--df-text-faint)', fontSize: 13, padding: 20 }}>Cargando leads…</div>}
+      {!leads && <div className="vacio">Cargando leads…</div>}
       {leads && (
-        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8, alignItems: 'flex-start', scrollSnapType: 'x proximity' }}>
+        <div className="kanban" style={columnas.length !== 5 ? { gridTemplateColumns: `repeat(${columnas.length}, minmax(0, 1fr))` } : undefined}>
           {columnas.map((e) => {
             const lista = porEstado(e.id);
             const max = limite[e.id] || POR_COLUMNA;
             return (
-              <div key={e.id} id={`col-${e.id}`} style={{ flex: '1 0 215px', maxWidth: 340, minWidth: 215, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 12, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 300px)', minHeight: 200, scrollSnapAlign: 'start' }}>
-                <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--df-border)', display: 'flex', alignItems: 'center', gap: 7 }} title={e.ayuda}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: e.color }} />
-                  <b style={{ fontSize: 13, flex: 1 }}>{e.icono} {e.titulo}</b>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 999, padding: '1px 8px' }}>{lista.length}</span>
-                </div>
-                <div style={{ overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 7 }}>
-                  {!lista.length && <div style={{ fontSize: 12, color: 'var(--df-text-faint)', textAlign: 'center', padding: '14px 6px' }}>{e.ayuda}</div>}
+              <section key={e.id} id={`col-${e.id}`} className="col" aria-label={e.titulo} title={e.ayuda}>
+                <div className="col-cab"><i style={{ background: e.color }} />{e.titulo}<span className="mono tenue" style={{ marginLeft: 'auto', fontSize: 11 }}>{lista.length}</span></div>
+                <div className="col-cuerpo">
+                  {!lista.length && <div className="tenue" style={{ fontSize: 12, textAlign: 'center', padding: '14px 6px' }}>{e.ayuda}</div>}
                   {lista.slice(0, max).map((l) => (
                     <Tarjeta key={l.id} l={l} onAbrir={() => df.abrirChat(l.id)} onMover={(nuevo) => mover(l, nuevo)} />
                   ))}
                   {lista.length > max && (
-                    <button onClick={() => setLimite((m) => ({ ...m, [e.id]: max + POR_COLUMNA }))} style={{ background: 'var(--df-surface)', border: '1px dashed var(--df-border)', borderRadius: 9, padding: 8, fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', color: 'var(--df-text-body)' }}>
+                    <button type="button" className="btn btn-sec btn-chico" onClick={() => setLimite((m) => ({ ...m, [e.id]: max + POR_COLUMNA }))}>
                       Ver {Math.min(POR_COLUMNA, lista.length - max)} más ({lista.length - max} restantes)
                     </button>
                   )}
                 </div>
-              </div>
+              </section>
             );
           })}
         </div>

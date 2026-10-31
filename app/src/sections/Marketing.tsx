@@ -33,28 +33,15 @@ function Chips({ titulo, items }: { titulo: string; items: string[] }) {
   );
 }
 
-/** Barra de pasos del asistente. */
+/** Barra de pasos del asistente (diseño "Noche"). */
 function Pasos({ paso, onIr }: { paso: number; onIr: (n: number) => void }) {
   return (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 0 }}>
       {PASOS.map((p, i) => {
         const n = i + 1;
-        const activo = n === paso;
-        const hecho = n < paso;
         return (
-          <button
-            key={p}
-            onClick={() => onIr(n)}
-            style={{
-              flex: '1 1 130px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
-              border: '1px solid ' + (activo ? 'var(--df-brand)' : 'var(--df-border)'),
-              background: activo ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', borderRadius: 10, padding: '10px 12px',
-            }}
-          >
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: hecho ? 'var(--df-brand)' : activo ? 'var(--df-brand-dark)' : 'var(--df-text-faint)' }}>
-              {hecho ? '✓ LISTO' : `PASO ${n}`}
-            </div>
-            <div style={{ fontWeight: 700, fontSize: 13.5, color: activo ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}>{p}</div>
+          <button key={p} type="button" className={`paso${n < paso ? ' hecho' : ''}`} onClick={() => onIr(n)} style={{ background: 'none', border: 0, cursor: 'pointer', fontFamily: 'inherit', color: n === paso ? 'var(--tinta)' : undefined }}>
+            <i style={n === paso ? { borderColor: 'var(--magenta)', color: 'var(--tinta)' } : undefined}>{n < paso ? '✓' : n}</i>{p}
           </button>
         );
       })}
@@ -426,137 +413,137 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
 }
 
 // ── Lista de campañas ─────────────────────────────────────────────────
-function ListaCampanas({ df }: { df: DealFlowState }) {
+const ESTADO_CAMP: Record<string, { t: string; c: string }> = { publicada: { t: 'Publicada', c: 'ok' }, lista: { t: 'Lista', c: 'info' } };
+const estadoCamp = (e: string) => ESTADO_CAMP[e] || { t: 'Borrador', c: 'neutro' };
+const objetivoDe = (id: string) => OBJETIVOS.find((o) => o.id === id)?.nombre || id || '—';
+
+/** Formulario de campaña nueva (en el panel lateral). */
+function NuevaCampana({ df, onCreada }: { df: DealFlowState; onCreada: () => void }) {
   const [nombre, setNombre] = useState('');
   const [objetivo, setObjetivo] = useState('mensajes');
-
   return (
     <>
-      <div style={card}>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>Nueva campaña</div>
-        <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginBottom: 14 }}>
-          La IA te guía en 3 pasos: primero estudia tu producto, luego crea las imágenes y al final escribe los textos.
+      <div className="tarjeta-cab"><div><span className="eti" style={{ color: '#D9C6FF' }}>✦ Editor con IA</span><h2 style={{ fontSize: 17 }}>Nueva campaña</h2></div></div>
+      <p className="suave-t" style={{ fontSize: 13 }}>La IA te guía en 4 pasos: estudia tu producto, crea las imágenes, escribe los textos y publica en Meta.</p>
+      <div className="campo"><label htmlFor="mk-nombre">Nombre de la campaña</label><input id="mk-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Fajas — septiembre" /></div>
+      <div>
+        <span className="suave-t" style={{ fontSize: 12.5, fontWeight: 600, display: 'block', marginBottom: 8 }}>¿Qué quieres lograr?</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+          {OBJETIVOS.map((o) => <button key={o.id} type="button" className={`tono${objetivo === o.id ? ' sel' : ''}`} onClick={() => setObjetivo(o.id)}><b>{o.nombre}</b><span>{o.sub}</span></button>)}
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <div style={label}>Nombre de la campaña</div>
-          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Fajas — septiembre" style={{ ...input, maxWidth: 380 }} />
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <div style={label}>¿Qué quieres lograr?</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {OBJETIVOS.map((o) => (
-              <button
-                key={o.id} onClick={() => setObjetivo(o.id)}
-                style={{
-                  cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', borderRadius: 10, padding: '9px 13px',
-                  border: '1px solid ' + (objetivo === o.id ? 'var(--df-brand)' : 'var(--df-border)'),
-                  background: objetivo === o.id ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)',
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 13, color: objetivo === o.id ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}>{o.nombre}</div>
-                <div style={{ color: 'var(--df-text-muted)', fontSize: 12 }}>{o.sub}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-        <button onClick={() => { void df.crearCampana(nombre, objetivo); setNombre(''); }} style={btn}>Crear campaña →</button>
       </div>
-
-      {df.campanas.length > 0 && (
-        <div style={card}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>Tus campañas</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {df.campanas.map((c) => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12, border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
-                {c.creativos[0] && <img src={c.creativos[0]} alt="" style={{ width: 42, height: 42, objectFit: 'cover', borderRadius: 7 }} />}
-                <div style={{ flex: 1, minWidth: 160 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{c.nombre}</div>
-                  <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5 }}>
-                    Paso {Math.min(c.paso, 4)} de 4 · {c.creativos.length} creativo{c.creativos.length === 1 ? '' : 's'}
-                  </div>
-                </div>
-                <span style={{
-                  fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '4px 10px',
-                  background: c.estado === 'publicada' ? 'var(--df-green-subtle)' : c.estado === 'lista' ? 'var(--df-info-subtle)' : 'var(--df-surface-2)',
-                  color: c.estado === 'publicada' ? 'var(--df-brand-dark)' : c.estado === 'lista' ? 'var(--df-info)' : 'var(--df-text-muted)',
-                }}>
-                  {c.estado === 'publicada' ? 'Publicada' : c.estado === 'lista' ? 'Lista' : 'Borrador'}
-                </span>
-                <button onClick={() => void df.abrirCampana(c.id)} style={btnGris}>Abrir</button>
-                <button onClick={() => df.borrarCampana(c.id)} style={{ ...btnGris, color: 'var(--df-danger-dark)', borderColor: 'var(--df-danger-border)' }}>Eliminar</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <button type="button" className="btn btn-pri" disabled={!nombre.trim()} onClick={() => { void df.crearCampana(nombre, objetivo); setNombre(''); onCreada(); }}>Crear campaña →</button>
     </>
   );
 }
 
 // ── Sección ───────────────────────────────────────────────────────────
+/**
+ * Marketing IA (diseño "Noche"): a la izquierda las campañas y los creativos de la
+ * abierta; a la derecha el editor con IA (nueva campaña o el paso en que va).
+ */
 export function Marketing({ df }: { df: DealFlowState }) {
   const c = df.campana;
   const [paso, setPaso] = useState(1);
+  const [nueva, setNueva] = useState(false);
+  const [creativoSel, setCreativoSel] = useState(0);
   // Al entrar refrescamos campañas y saldo (por ref: las funciones se recrean en cada render).
   const recargar = useRef({ campanas: df.reloadCampanas, creditos: df.reloadCreditos });
   recargar.current = { campanas: df.reloadCampanas, creditos: df.reloadCreditos };
   useEffect(() => { void recargar.current.campanas(); void recargar.current.creditos(); }, []);
   // Al abrir una campaña, saltamos al paso donde se quedó.
-  useEffect(() => { if (c) setPaso(Math.min(Math.max(c.paso, 1), 4)); }, [c?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (c) { setPaso(Math.min(Math.max(c.paso, 1), 4)); setNueva(false); setCreativoSel(0); } }, [c?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const publicadas = df.campanas.filter((x) => x.estado === 'publicada').length;
+  const creativos = df.campanas.reduce((a, x) => a + x.creativos.length, 0);
 
   return (
-    <section data-screen-label="Marketing IA" style={{ maxWidth: 860 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Marketing IA</h1>
-          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>
-            {c ? 'Arma tu campaña paso a paso y publícala en Meta.' : 'Crea campañas completas: la IA estudia tu producto, crea los creativos y escribe los anuncios.'}
-          </p>
+    <section data-screen-label="Marketing IA" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="encabezado">
+        <div className="encabezado-txt">
+          <span className="eti">Anuncios que llevan al chat</span>
+          <h1>Marketing IA</h1>
+          <p className="sub">Crea campañas de Meta con creativos hechos por IA a partir de tus fotos. Cada chat que llega se cruza con su anuncio para que sepas cuál vende.</p>
         </div>
-        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '9px 14px', textAlign: 'center' }}>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600 }}>CRÉDITOS</div>
-          <div style={{ fontWeight: 800, fontSize: 17, color: df.creditos > 20 ? 'var(--df-brand-dark)' : 'var(--df-warning)' }}>{df.creditos}</div>
+        <div className="fila">
+          <span className={`pill ${df.creditos > 20 ? 'ok' : 'aviso'}`} title="Créditos para generar con IA">✦ {df.creditos} créditos</span>
+          <button type="button" className="btn btn-pri" onClick={() => { df.cerrarCampana(); setNueva(true); }}>✦ Nueva campaña</button>
         </div>
       </div>
 
-      {df.mkSinCreditos && (
-        <div style={{ ...card, background: 'var(--df-warning-subtle-2)', borderColor: 'var(--df-warning-border)' }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--df-warning)' }}>Te quedaste sin créditos</div>
-          <div style={{ color: 'var(--df-warning)', fontSize: 13, marginTop: 4 }}>Recarga desde la sección de créditos para seguir generando.</div>
+      {df.mkSinCreditos && <div className="aviso-caja aviso"><b>Te quedaste sin créditos</b><span>Recarga desde la sección de créditos para seguir generando.</span></div>}
+
+      <div className="kpis">
+        <div className="kpi"><span className="eti">Campañas</span><span className="valor">{df.campanas.length}</span><span className="delta">{publicadas} publicada{publicadas === 1 ? '' : 's'} en Meta</span></div>
+        <div className="kpi"><span className="eti">Creativos con IA</span><span className="valor">{creativos}</span><span className="delta">imágenes listas para pautar</span></div>
+        <div className="kpi"><span className="eti">Cuenta publicitaria</span><span className="valor" style={{ fontSize: 20 }}>{df.adsCuenta?.conectada ? df.adsCuenta.adAccountNombre || 'Conectada' : 'Sin conectar'}</span><span className="delta">{df.adsCuenta?.conectada ? df.adsCuenta.pageNombre || 'Meta Ads' : <a href="#" onClick={(e) => { e.preventDefault(); df.go('integraciones'); }}>conéctala en Integraciones</a>}</span></div>
+        <div className="kpi"><span className="eti">Créditos</span><span className={`valor ${df.creditos > 20 ? '' : 'aviso'}`}>{df.creditos}</span><span className="delta">cada imagen o texto con IA gasta créditos</span></div>
+      </div>
+
+      <div className="lateral ancho">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+          <div className="tarjeta-cab"><h2>Campañas</h2><span className="tenue" style={{ fontSize: 12 }}>Toca una para ver sus creativos y seguir editándola</span></div>
+          {df.campanas.length === 0 && <div className="vacio">Todavía no tienes campañas. Crea la primera con «✦ Nueva campaña».</div>}
+          {df.campanas.length > 0 && <div className="camp cab"><span>Campaña</span><span>Objetivo</span><span>Creativos</span><span>Paso</span><span>Estado</span><span /></div>}
+          {df.campanas.map((x) => {
+            const e = estadoCamp(x.estado);
+            return (
+              <div key={x.id} className={`camp${c?.id === x.id ? ' sel' : ''}`} onClick={() => void df.abrirCampana(x.id)} style={{ cursor: 'pointer' }} role="button" tabIndex={0} onKeyDown={(ev) => { if (ev.key === 'Enter') void df.abrirCampana(x.id); }}>
+                <span style={{ minWidth: 0, display: 'flex', gap: 10, alignItems: 'center' }}>
+                  {x.creativos[0] && <img src={x.creativos[0]} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />}
+                  <span style={{ minWidth: 0 }}><b style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.nombre}</b><span className="tenue" style={{ fontSize: 11.5 }}>{x.brief?.producto || 'Sin producto aún'}</span></span>
+                </span>
+                <span style={{ fontSize: 12.5 }}>{objetivoDe(x.objetivo)}</span>
+                <span className="mono">{x.creativos.length}</span>
+                <span className="mono">{Math.min(x.paso, 4)} / 4</span>
+                <span className={`pill ${e.c} chica`}>{e.t}</span>
+                <button type="button" className="btn btn-fant btn-chico" onClick={(ev) => { ev.stopPropagation(); df.borrarCampana(x.id); }} style={{ color: 'var(--coral)' }} aria-label={`Eliminar ${x.nombre}`}>✕</button>
+              </div>
+            );
+          })}
+
+          {c && (
+            <section className="tarjeta" style={{ marginTop: 6 }}>
+              <div className="tarjeta-cab"><h2>Creativos de “{c.nombre}”</h2><button type="button" className="btn btn-sec btn-chico" onClick={() => setPaso(2)}>✦ Generar más</button></div>
+              {c.creativos.length === 0 ? <div className="vacio">Aún no hay creativos. En el paso «Creativos» la IA los crea a partir de tus fotos.</div> : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+                  {c.creativos.map((url, i) => (
+                    <button key={i} type="button" className={`creativo${creativoSel === i ? ' sel' : ''}`} onClick={() => setCreativoSel(i)} style={{ padding: 0, textAlign: 'left', color: 'var(--tinta)', cursor: 'pointer' }}>
+                      <div className="arte" style={{ position: 'relative', background: 'var(--panel2)' }}><img src={url} alt="" /><small style={{ position: 'relative' }}>Creativo {i + 1}</small></div>
+                      <div style={{ padding: '10px 12px', fontSize: 12 }}><span className="suave-t" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.copys?.textos?.[i] || c.copys?.textos?.[0] || 'Texto del anuncio en el paso «Textos».'}</span></div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
         </div>
-      )}
 
-      {!c ? (
-        <ListaCampanas df={df} />
-      ) : (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-            <button onClick={df.cerrarCampana} style={btnGris}>← Mis campañas</button>
-            <input
-              value={c.nombre}
-              onChange={(e) => df.renombrarCampana(c.id, e.target.value)}
-              style={{ ...input, maxWidth: 320, fontWeight: 700 }}
-            />
-          </div>
-
-          <Pasos paso={paso} onIr={setPaso} />
-
-          {df.mkError && paso !== 4 && (
-            <div style={{ ...card, background: 'var(--df-danger-subtle)', borderColor: 'var(--df-danger-border)', color: 'var(--df-danger-dark)', fontSize: 13.5 }}>{df.mkError}</div>
+        <aside className="tarjeta borde-ia" style={{ gap: 12, position: 'sticky', top: 0, maxHeight: 'calc(100vh - 92px)', overflowY: 'auto' }} aria-label="Editor de campaña">
+          {!c && (nueva || df.campanas.length === 0) && <NuevaCampana df={df} onCreada={() => setNueva(false)} />}
+          {!c && !nueva && df.campanas.length > 0 && <div className="vacio">Toca una campaña para seguir editándola, o crea una nueva.</div>}
+          {c && (
+            <>
+              <div className="tarjeta-cab" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <span className="eti" style={{ color: '#D9C6FF' }}>✦ Editor con IA</span>
+                  <input className="entrada" value={c.nombre} onChange={(e) => df.renombrarCampana(c.id, e.target.value)} style={{ fontWeight: 700, marginTop: 4 }} aria-label="Nombre de la campaña" />
+                </div>
+                <span className={`pill ${estadoCamp(c.estado).c}`}>{estadoCamp(c.estado).t}</span>
+              </div>
+              <Pasos paso={paso} onIr={setPaso} />
+              {df.mkError && paso !== 4 && <div className="aviso-caja mal">{df.mkError}</div>}
+              {paso === 1 && <PasoProducto df={df} c={c} />}
+              {paso === 2 && <PasoCreativos df={df} c={c} />}
+              {paso === 3 && <PasoTextos df={df} c={c} />}
+              {paso === 4 && <PasoPublicar df={df} c={c} />}
+              <div className="fila" style={{ gap: 8, borderTop: '1px solid var(--linea)', paddingTop: 12 }}>
+                {paso < 4 && <button type="button" className="btn btn-pri" onClick={() => setPaso(paso + 1)} style={{ flex: 1 }}>Siguiente: {PASOS[paso]} →</button>}
+                <button type="button" className="btn btn-fant" onClick={df.cerrarCampana}>← Mis campañas</button>
+              </div>
+            </>
           )}
-
-          {paso === 1 && <PasoProducto df={df} c={c} />}
-          {paso === 2 && <PasoCreativos df={df} c={c} />}
-          {paso === 3 && <PasoTextos df={df} c={c} />}
-          {paso === 4 && <PasoPublicar df={df} c={c} />}
-
-          {paso < 4 && (
-            <button onClick={() => setPaso(paso + 1)} style={{ ...btn, background: '#0F172A' }}>
-              Siguiente paso: {PASOS[paso]} →
-            </button>
-          )}
-        </>
-      )}
+        </aside>
+      </div>
     </section>
   );
 }

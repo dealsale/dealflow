@@ -2,6 +2,8 @@ import { OrigenBadge } from './OrigenPedido';
 import { NovedadCard } from './Novedades';
 import { DevolucionEffi, RastreoGuia } from './EnvioEffi';
 import { useState, useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
+import { claseEstado, confirmacionDe } from '../lib/noche';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { OrdenarDireccion } from './DireccionPedido';
@@ -706,131 +708,122 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
   );
 }
 
-export function OrderDetailPanel({ df }: { df: DealFlowState }) {
+/**
+ * Detalle del pedido (diseño "Noche"). Dos formas de verlo:
+ *  - `inline`: tarjeta fija a la derecha de la tabla de Pedidos (siempre visible).
+ *  - overlay (por defecto): panel que se desliza desde la derecha en el resto de secciones.
+ */
+export function OrderDetailPanel({ df, inline = false }: { df: DealFlowState; inline?: boolean }) {
   useEffect(() => { void df.cargarEffiApi?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!df.hasSelectedOrder || !df.sel) return null;
+  if (!df.hasSelectedOrder || !df.sel) {
+    if (!inline) return null;
+    return (
+      <aside className="tarjeta" aria-label="Detalle del pedido" style={{ position: 'sticky', top: 0 }}>
+        <div className="vacio">Toca un pedido de la lista para ver su detalle: qué dijo el cliente, el despacho y el registro.</div>
+      </aside>
+    );
+  }
   const sel = df.sel;
-  const dropiCreado = sel.despachoProveedor === 'dropi'; // Dropi se despacha por API directa
-
+  if (inline) {
+    return (
+      <aside className="tarjeta" aria-label="Detalle del pedido" style={{ gap: 14, position: 'sticky', top: 0, maxHeight: 'calc(100vh - 92px)', overflowY: 'auto' }}>
+        <ProcesoPedido />
+        <DetallePedido df={df} sel={sel} />
+      </aside>
+    );
+  }
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={df.closeOrder} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,.45)' }} />
-      <div style={{ position: 'relative', width: 430, maxWidth: '92%', background: 'var(--df-surface)', height: '100%', boxShadow: '-12px 0 40px rgba(15,23,42,.18)', display: 'flex', flexDirection: 'column' }}>
+      <div onClick={df.closeOrder} style={{ position: 'absolute', inset: 0, background: 'rgba(5,7,19,.6)', backdropFilter: 'blur(2px)' }} />
+      <div className="tarjeta" style={{ position: 'relative', width: 440, maxWidth: '94%', height: '100%', borderRadius: 0, borderWidth: '0 0 0 1px', gap: 14, overflowY: 'auto', boxShadow: '-12px 0 40px rgba(0,0,0,.45)' }}>
         <ProcesoPedido />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px', borderBottom: '1px solid var(--df-border)' }}>
-          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, fontWeight: 600 }}>{sel.id}</span>
-          <span style={sel.pillStyle}>{sel.estado}</span>
-          <div style={{ flex: 1 }} />
-          <button onClick={() => df.abrirChatDePedido({ leadId: sel.leadId, tel: sel.tel })} title="Abrir el chat de este cliente" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'inherit' }}><OrigenBadge origen={sel.origen || (sel.leadId ? 'whatsapp' : '')} texto /><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-brand)' }}>Abrir chat ↗</span></button>
-          <span onClick={df.closeOrder} className="df-close-hover" style={{ color: 'var(--df-text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}>
-            ✕
-          </span>
-        </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--df-text-muted)', fontSize: 12.5, marginBottom: 14 }}>
-            <span>📅</span>
-            <span>
-              Pedido el <b style={{ color: 'var(--df-text-strong)' }}>{sel.fecha || 'hoy'}</b> a las <b style={{ color: 'var(--df-text-strong)' }}>{sel.hora}</b>
-            </span>
-          </div>
-
-          {!!sel.tel && (!!sel.confirmacion || sel.estado === 'Nuevo') && <ConfirmacionShopify sel={sel} />}
-
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Datos de envío</div>
-          <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 14, marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {[
-              { icono: '👤', k: 'Nombre', v: sel.cliente },
-              { icono: '📞', k: 'Contacto', v: sel.tel, mono: true },
-              { icono: '🏔️', k: 'Departamento', v: sel.departamento || '' },
-              { icono: '🏙️', k: 'Ciudad', v: sel.ciudad },
-              { icono: '🏡', k: 'Dirección', v: sel.direccion },
-              { icono: '💳', k: 'Método de pago', v: 'Contraentrega' },
-            ].filter((f) => f.v).map((f) => (
-              <div key={f.k} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13.5, lineHeight: 1.5, flexWrap: f.k === 'Dirección' ? 'wrap' : undefined }}>
-                <span style={{ flexShrink: 0 }}>{f.icono}</span>
-                <span style={{ color: 'var(--df-text-muted)', fontWeight: 600, minWidth: 118, flexShrink: 0 }}>{f.k}:</span>
-                <span style={{ fontWeight: f.k === 'Nombre' ? 700 : 500, fontFamily: f.mono ? "'JetBrains Mono',monospace" : undefined, fontSize: f.mono ? 12.5 : undefined, flex: f.k === 'Dirección' ? '1 1 0' : undefined, minWidth: 0 }}>{f.v}</span>
-                {f.k === 'Dirección' && <OrdenarDireccion rowId={sel.rowId} direccion={sel.direccion} ciudad={sel.ciudad} departamento={sel.departamento || ''} onCambio={() => void df.recargarPedidos()} />}
-              </div>
-            ))}
-          </div>
-
-          <HistorialClienteCard rowId={sel.rowId} tel={sel.tel} />
-
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Qué pidió</div>
-          <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, overflow: 'hidden', marginBottom: 18 }}>
-            {sel.itemsDecorated.map((it, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '1px solid var(--df-border)' }}>
-                <span style={{ background: 'var(--df-surface-2)', borderRadius: 6, fontSize: 12, fontWeight: 700, padding: '3px 8px', color: 'var(--df-text-secondary)' }}>{it.qty}×</span>
-                <span style={{ fontSize: 13.5, flex: 1 }}>{it.nombre}</span>
-                <span style={{ fontWeight: 600, fontSize: 13.5 }}>{it.precioFmt}</span>
-              </div>
-            ))}
-            <div style={{ display: 'flex', padding: '11px 14px', background: 'var(--df-bg)', fontSize: 13, color: 'var(--df-text-muted)' }}>
-              <span>Envío{sel.transportadora && !(sel.transportadora === 'Dropi' && sel.despachoProveedor !== 'dropi') ? ` (${sel.transportadora})` : ''}</span>
-              <div style={{ flex: 1 }} />
-              <span>{sel.envioFmt}</span>
-            </div>
-            <div style={{ display: 'flex', padding: '12px 14px', borderTop: '1px solid var(--df-border)', fontWeight: 800, fontSize: 15 }}>
-              <span>Total</span>
-              <div style={{ flex: 1 }} />
-              <span>{sel.totalFmt}</span>
-            </div>
-          </div>
-
-          {sel.hasNota && (
-            <div style={{ background: 'var(--df-warning-subtle-2)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#92400E', marginBottom: 18 }}>
-              📝 {sel.nota}
-            </div>
-          )}
-
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Despacho</div>
-          <DespachoPedido df={df} sel={sel} />
-
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 10 }}>Avance</div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {sel.timeline.map((t, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '5px 0' }}>
-                <span style={t.dotStyle} />
-                <span style={t.labelStyle}>{t.estado}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Estado del pedido: se actualiza SOLO desde Dropi/Effi, pero también lo
-            puedes cambiar a mano aquí (o eliminar el pedido del panel). */}
-        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--df-border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Estado del pedido</span>
-            <div style={{ flex: 1 }} />
-            {sel.despachado && <span style={{ color: 'var(--df-text-faint)', fontSize: 11 }}>se actualiza solo desde {dropiCreado ? 'Dropi' : 'Effi'}</span>}
-          </div>
-          {df.puede('pedidos_editar') ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ flex: 1 }}>
-              <Dropdown
-                ariaLabel="Cambiar estado del pedido"
-                value={sel.estado}
-                onChange={(v) => sel.setEstado(v as typeof sel.estado)}
-                options={sel.estadosDisponibles.map((e) => ({ value: e, label: e }))}
-              />
-            </div>
-            <button
-              onClick={() => df.abrirEditarPedido(sel)}
-              title="Editar pedido"
-              style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-strong)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >✏️ Editar</button>
-            <button
-              onClick={async () => { if (await confirmar({ titulo: `Eliminar ${sel.id}`, mensaje: 'Esto solo lo quita del panel; no cancela nada en Dropi/Effi.', aceptar: 'Eliminar', peligro: true })) sel.eliminar(); }}
-              title="Eliminar pedido"
-              style={{ background: 'var(--df-surface)', border: '1px solid var(--df-danger-border, var(--df-border))', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-danger-dark)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >🗑 Eliminar</button>
-          </div> : <div style={{ fontSize: 13, fontWeight: 700 }}>{sel.estado} <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--df-text-faint)' }}>· 🔒 tu rol no puede editar pedidos</span></div>}
-        </div>
-        {sel.rowId && <RegistroPedido key={String(sel.rowId)} rowId={String(sel.rowId)} />}
+        <DetallePedido df={df} sel={sel} cerrar={df.closeOrder} />
       </div>
     </div>
+  );
+}
+
+const ORIGEN_TEXTO: Record<string, string> = { whatsapp: 'WhatsApp · asistente', landing: 'Tienda en línea', shopify: 'Shopify', manual: 'Creado a mano', dropi: 'Dropi', woocommerce: 'WooCommerce', lucid: 'Lucid' };
+
+function DetallePedido({ df, sel, cerrar }: { df: DealFlowState; sel: DecoratedOrder; cerrar?: () => void }) {
+  const dropiCreado = sel.despachoProveedor === 'dropi'; // Dropi se despacha por API directa
+  const conf = confirmacionDe(sel);
+  const cancelado = sel.estado === 'Cancelado';
+  const enCamino = ['En tránsito', 'En reparto', 'Novedad', 'Entregado'].includes(sel.estado) && sel.hasGuia;
+  const pasos: { n: string; hecho: boolean }[] = [
+    { n: 'Confirmado', hecho: sel.confirmacion === 'si' || (sel.estado !== 'Nuevo' && !cancelado) },
+    { n: dropiCreado ? 'Orden' : 'Remisión', hecho: !!sel.despachoProveedor || sel.hasGuia },
+    { n: 'Guía', hecho: sel.hasGuia },
+    { n: 'En camino', hecho: enCamino },
+    { n: 'Entregado', hecho: sel.estado === 'Entregado' },
+  ];
+  const origen = sel.origen || (sel.leadId ? 'whatsapp' : '');
+  const fila = (k: string, v: ReactNode) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span className="suave-t" style={{ flexShrink: 0 }}>{k}</span><b style={{ textAlign: 'right', minWidth: 0, overflowWrap: 'anywhere' }}>{v}</b></div>
+  );
+  return (
+    <>
+      <div className="tarjeta-cab" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
+        <div style={{ minWidth: 0 }}>
+          <span className="eti"><span className="mono">{sel.id}</span>{origen ? ` · ${ORIGEN_TEXTO[origen] || origen}` : ''}</span>
+          <h2 style={{ fontSize: 20, marginTop: 2, overflowWrap: 'anywhere' }}>{sel.cliente}</h2>
+          <div className="tenue" style={{ fontSize: 12, marginTop: 2 }}>Pedido el {sel.fechaLabel || 'hoy'}{sel.hora ? ` a las ${sel.hora}` : ''}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <span className={`pill ${claseEstado(sel.estado)}`}>{sel.estado}</span>
+          {cerrar && <button type="button" className="icono-btn" onClick={cerrar} aria-label="Cerrar" style={{ width: 30, height: 30 }}>✕</button>}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 0 }}>
+        {pasos.map((p, i) => (
+          <div key={p.n} className={`paso${p.hecho ? ' hecho' : cancelado && i > 0 ? ' mal' : ''}`}><i>{p.hecho ? '✓' : cancelado && i > 0 ? '✕' : i + 1}</i>{p.n}</div>
+        ))}
+      </div>
+
+      <div style={{ background: 'var(--panel2)', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+        {sel.itemsDecorated.map((it, i) => fila(i === 0 ? 'Productos' : '', <>{it.qty}× {it.nombre} <span className="mono tenue" style={{ fontSize: 11.5 }}>{it.precioFmt}</span></>))}
+        {fila('Envío', <span className="mono">{sel.envioFmt}{sel.transportadora && !(sel.transportadora === 'Dropi' && !dropiCreado) ? ` · ${sel.transportadora}` : ''}</span>)}
+        {fila('Total', <span className="mono">{sel.totalFmt} · contra entrega</span>)}
+        {fila('Celular', <span className="mono">{sel.tel || '—'}</span>)}
+        {fila('Dirección', <>{sel.direccion || '—'} <OrdenarDireccion rowId={sel.rowId} direccion={sel.direccion} ciudad={sel.ciudad} departamento={sel.departamento || ''} onCambio={() => void df.recargarPedidos()} /></>)}
+        {fila('Ciudad', `${sel.ciudad || '—'}${sel.departamento ? ` · ${sel.departamento}` : ''}`)}
+        <div className="fila" style={{ gap: 6, marginTop: 4 }}>
+          {(sel.leadId || sel.tel) && <button type="button" className="btn btn-fant btn-chico" onClick={() => df.abrirChatDePedido({ leadId: sel.leadId, tel: sel.tel })} title="Abrir el chat de este cliente"><OrigenBadge origen={origen} size={16} /> Abrir el chat ↗</button>}
+          {sel.shopifyEnviado && <span className="pill neutro chica">🛍️ Enviado en Shopify</span>}
+        </div>
+      </div>
+
+      {sel.hasNota && <div className="aviso-caja aviso" style={{ fontSize: 13 }}>📝 {sel.nota}</div>}
+
+      <HistorialClienteCard rowId={sel.rowId} tel={sel.tel} />
+
+      {!!sel.tel && (!!sel.confirmacion || sel.estado === 'Nuevo') && <ConfirmacionShopify sel={sel} conf={conf} abrirChat={() => df.abrirChatDePedido({ leadId: sel.leadId, tel: sel.tel })} />}
+
+      <div style={{ border: '1px solid rgba(52,211,153,.3)', background: 'rgba(16,185,129,.06)', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="tarjeta-cab"><h3>Despacho</h3>{sel.despachado && <span className="pill neutro chica">se actualiza solo desde {dropiCreado ? 'Dropi' : 'Effi'}</span>}</div>
+        <DespachoPedido df={df} sel={sel} />
+      </div>
+
+      {/* Estado del pedido: lo actualizan Dropi/Effi, pero también se cambia a mano aquí. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span className="eti">Estado del pedido</span>
+        {df.puede('pedidos_editar') ? (
+          <div className="fila" style={{ gap: 8, flexWrap: 'nowrap' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Dropdown ariaLabel="Cambiar estado del pedido" value={sel.estado} onChange={(v) => sel.setEstado(v as typeof sel.estado)} options={sel.estadosDisponibles.map((e) => ({ value: e, label: e }))} />
+            </div>
+            <button type="button" className="btn btn-sec btn-chico" onClick={() => df.abrirEditarPedido(sel)} title="Editar pedido">✏️ Editar</button>
+            <button
+              type="button" className="btn btn-mal btn-chico" title="Eliminar pedido"
+              onClick={async () => { if (await confirmar({ titulo: `Eliminar ${sel.id}`, mensaje: 'Esto solo lo quita del panel; no cancela nada en Dropi/Effi.', aceptar: 'Eliminar', peligro: true })) sel.eliminar(); }}
+            >🗑</button>
+          </div>
+        ) : <div style={{ fontSize: 13, fontWeight: 700 }}>{sel.estado} <span className="tenue" style={{ fontSize: 11.5, fontWeight: 500 }}>· 🔒 tu rol no puede editar pedidos</span></div>}
+      </div>
+
+      {sel.rowId && <RegistroPedido key={String(sel.rowId)} rowId={String(sel.rowId)} />}
+    </>
   );
 }
 
@@ -844,74 +837,67 @@ function RegistroPedido({ rowId }: { rowId: string }) {
   const [eventos, setEventos] = useState<EventoPedido[] | null>(null);
   const [verDatos, setVerDatos] = useState<number | null>(null);
   const cargar = () => void apiRegistroPedido(rowId).then((r) => setEventos(r.data?.eventos || []));
-  useEffect(() => { if (abierto) cargar(); }, [abierto]);
-  const color = (n: string) => (n === 'error' ? 'var(--df-danger)' : n === 'warn' ? 'var(--df-warning)' : n === 'ok' ? 'var(--df-brand)' : 'var(--df-border-strong)');
+  useEffect(() => { if (abierto) cargar(); }, [abierto]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clase = (n: string) => (n === 'error' ? 'mal' : n === 'warn' ? 'aviso' : n === 'ok' ? 'ok' : '');
   const hora = (s: string) => new Date(s.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   const errores = (eventos || []).filter((e) => e.nivel === 'error').length;
   return (
-    <div style={{ padding: '12px 20px 16px', borderTop: '1px solid var(--df-border)' }}>
-      <button onClick={() => setAbierto((a) => !a)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
-        <span style={{ fontSize: 11, color: 'var(--df-text-faint)', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', flex: 1 }}>🧾 Registro del pedido</span>
-        {abierto && eventos && <span style={{ fontSize: 11, color: errores ? 'var(--df-danger)' : 'var(--df-text-faint)' }}>{eventos.length} eventos{errores ? ` · ${errores} con error` : ''}</span>}
-      </button>
+    <div>
+      <div className="tarjeta-cab" style={{ marginBottom: 4 }}>
+        <button type="button" onClick={() => setAbierto((a) => !a)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', color: 'inherit' }}>
+          <span className="tenue" style={{ fontSize: 11, transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
+          <h3>🧾 Registro del pedido</h3>
+          {abierto && eventos && <span className={`tenue ${errores ? 'mal' : ''}`} style={{ fontSize: 11 }}>{eventos.length} eventos{errores ? ` · ${errores} con error` : ''}</span>}
+        </button>
+        {abierto && eventos && <button type="button" className="btn btn-fant btn-chico" onClick={cargar} title="Actualizar">↻</button>}
+      </div>
       {abierto && (
-        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {eventos === null ? <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Cargando…</div>
-            : !eventos.length ? <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Este pedido todavía no tiene eventos registrados (los pedidos antiguos no tienen registro).</div>
-            : eventos.map((e) => (
-              <div key={e.id} style={{ display: 'flex', gap: 10, paddingBottom: 10 }}>
-                <span style={{ width: 9, height: 9, borderRadius: '50%', background: color(e.nivel), marginTop: 5, flexShrink: 0 }} />
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: e.nivel === 'error' ? 'var(--df-danger-dark)' : 'var(--df-text-strong)', wordBreak: 'break-word' }}>{e.titulo}</div>
-                  {e.detalle && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', wordBreak: 'break-word' }}>{e.detalle}</div>}
-                  <div style={{ fontSize: 10.5, color: 'var(--df-text-faint)', marginTop: 1 }}>
-                    {hora(e.created_at)} · {e.etapa}
-                    {e.datos != null && <> · <button onClick={() => setVerDatos(verDatos === e.id ? null : e.id)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--df-text-muted)', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 10.5 }}>{verDatos === e.id ? 'ocultar respuesta' : 'ver respuesta'}</button></>}
-                  </div>
-                  {verDatos === e.id && <pre style={{ fontSize: 10.5, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 7, padding: 8, marginTop: 4, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{typeof e.datos === 'string' ? e.datos : JSON.stringify(e.datos, null, 1)}</pre>}
-                </div>
-              </div>
-            ))}
-          {eventos && <button onClick={cargar} style={{ ...btnS, alignSelf: 'flex-start', padding: '5px 10px', fontSize: 11.5 }}>↻ Actualizar</button>}
-        </div>
+        eventos === null ? <div className="tenue" style={{ fontSize: 12 }}>Cargando…</div>
+          : !eventos.length ? <div className="tenue" style={{ fontSize: 12 }}>Este pedido todavía no tiene eventos registrados (los pedidos antiguos no tienen registro).</div>
+          : eventos.map((e) => (
+            <div key={e.id} className="evento">
+              <span className="mono">{hora(e.created_at)}</span>
+              <span style={{ minWidth: 0, flex: 1 }}>
+                <b className={clase(e.nivel)} style={{ overflowWrap: 'anywhere' }}>{e.titulo}</b>
+                {e.detalle && <span className="suave-t" style={{ display: 'block', fontSize: 12, overflowWrap: 'anywhere' }}>{e.detalle}</span>}
+                <span className="tenue" style={{ display: 'block', fontSize: 10.5, marginTop: 1 }}>
+                  {e.etapa}
+                  {e.datos != null && <> · <button type="button" onClick={() => setVerDatos(verDatos === e.id ? null : e.id)} className="enlace" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10.5 }}>{verDatos === e.id ? 'ocultar respuesta' : 'ver respuesta'}</button></>}
+                </span>
+                {verDatos === e.id && <pre className="mono" style={{ fontSize: 10.5, background: 'var(--noche2)', border: '1px solid var(--linea)', borderRadius: 7, padding: 8, marginTop: 4, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{typeof e.datos === 'string' ? e.datos : JSON.stringify(e.datos, null, 1)}</pre>}
+              </span>
+            </div>
+          ))
       )}
     </div>
   );
 }
 
-/** Estado de la confirmación del pedido por WhatsApp (resumen + Sí / No) y reenvío. */
-function ConfirmacionShopify({ sel }: { sel: DecoratedOrder }) {
+/** Confirmación del pedido por WhatsApp (resumen + Sí / No) y reenvío del resumen. */
+function ConfirmacionShopify({ sel, conf, abrirChat }: { sel: DecoratedOrder; conf: ReturnType<typeof confirmacionDe>; abrirChat: () => void }) {
   const [msg, setMsg] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [enviada, setEnviada] = useState(false);
   const c = enviada && sel.confirmacion !== 'si' && sel.confirmacion !== 'no' ? 'esperando' : sel.confirmacion || '';
-  const info: Record<string, [string, string, string]> = {
-    esperando: ['⏳', 'Esperando que el cliente confirme por WhatsApp', 'var(--df-warning)'],
-    si: ['✅', 'El cliente confirmó el pedido por WhatsApp', 'var(--df-success)'],
-    no: ['❌', 'El cliente respondió que NO: escríbele desde el Inbox', 'var(--df-danger)'],
-    fallo: ['⚠️', 'No le llegó el resumen al cliente (se reintenta solo)', 'var(--df-danger)'],
-    '': ['💬', 'Al cliente no le ha llegado el resumen para confirmar', 'var(--df-warning)'],
-  };
-  const [ico, texto, color] = info[c] || info[''];
+  const vista = enviada && c === 'esperando' ? confirmacionDe({ confirmacion: 'esperando', estado: sel.estado, tel: sel.tel }) : conf;
   const reenviar = async () => {
     if (!sel.rowId) return;
     setEnviando(true); setMsg('');
     const r = await apiShopifyReenviarConfirmacion(sel.rowId);
     setEnviando(false);
-    setMsg(r.error ? r.error : '✓ Confirmación enviada.');
+    setMsg(r.error ? r.error : '✓ Resumen enviado.');
     if (!r.error) setEnviada(true);
   };
   return (
-    <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: '11px 13px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span>{ico}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color, flex: 1, minWidth: 180 }}>{texto}</span>
-        {c !== 'si' && <button onClick={() => void reenviar()} disabled={enviando} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', color: 'var(--df-text-body)', opacity: enviando ? 0.6 : 1 }}>{enviando ? 'Enviando…' : c ? 'Reenviar confirmación' : 'Pedir confirmación'}</button>}
+    <div style={{ border: '1px solid var(--linea2)', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="tarjeta-cab"><h3>Confirmación por WhatsApp</h3><span className={`pill ${vista.clase}`}>{vista.texto}</span></div>
+      <p className="suave-t" style={{ fontSize: 12.5 }}>{vista.nota}</p>
+      {c === 'fallo' && sel.confirmacionError && !msg && <p className="tenue" style={{ fontSize: 12 }}>{sel.confirmacionError}</p>}
+      {msg && <p className={msg.startsWith('✓') ? 'ok' : 'mal'} style={{ fontSize: 12 }}>{msg}</p>}
+      <div className="fila" style={{ gap: 6 }}>
+        {c !== 'si' && <button type="button" className="btn btn-sec btn-chico" onClick={() => void reenviar()} disabled={enviando}>{enviando ? 'Enviando…' : c ? 'Reenviar resumen' : 'Pedir confirmación'}</button>}
+        <button type="button" className="btn btn-fant btn-chico" onClick={abrirChat}>Abrir el chat</button>
       </div>
-      {c === 'fallo' && sel.confirmacionError && !msg && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.45 }}>{sel.confirmacionError}</div>}
-      {sel.shopifyEnviado && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>🛍️ Marcado como enviado en Shopify con su guía.</div>}
-      {msg && <div style={{ fontSize: 12, color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</div>}
     </div>
   );
 }

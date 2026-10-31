@@ -3,8 +3,9 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import { NotificationsMenu } from './NotificationsMenu';
 import { ProfileMenu } from './ProfileMenu';
 import { pedirTexto, confirmar } from './dialogs';
+import { IcoChevron, IcoFoco, IcoMenu } from './iconosNoche';
 
-/** Selector de tienda: cambia entre las tiendas del dueño y permite crear otra. */
+/** Selector de tienda (.tienda del artifact): cambia entre las tiendas del dueño y crea otra. */
 function StoreSwitcher({ df }: { df: DealFlowState }) {
   const [open, setOpen] = useState(false);
   const tiendas = df.misTiendas;
@@ -20,28 +21,25 @@ function StoreSwitcher({ df }: { df: DealFlowState }) {
   };
   return (
     <div style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', fontFamily: 'inherit', fontWeight: 700, fontSize: 15, color: 'var(--df-text)', cursor: 'pointer', padding: '4px 6px', borderRadius: 8 }}
-      >
+      <button type="button" className="tienda" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open}>
         {df.headerTitle}
-        <span style={{ fontSize: 10, color: 'var(--df-text-faint)' }}>▾</span>
+        <IcoChevron />
       </button>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-          <div style={{ position: 'absolute', top: '110%', left: 0, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 20px 50px -15px rgba(0,0,0,.3)', padding: 6, minWidth: 240, zIndex: 41 }}>
-            {varias && <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-text-faint)', padding: '6px 10px' }}>MIS TIENDAS</div>}
+          <div style={{ position: 'absolute', top: '110%', left: 0, background: 'var(--noche2)', border: '1px solid var(--linea2)', borderRadius: 12, boxShadow: '0 20px 50px -15px rgba(0,0,0,.6)', padding: 6, minWidth: 250, zIndex: 41 }}>
+            {varias && <span className="eti" style={{ display: 'block', padding: '6px 10px 4px', fontSize: 10 }}>Mis tiendas</span>}
             {tiendas.map((t) => (
               <div
                 key={t.id}
                 onClick={() => { if (!t.activa) df.cambiarTienda(t.id); else setOpen(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 8, cursor: t.activa ? 'default' : 'pointer', background: t.activa ? 'var(--df-brand-subtle-3)' : 'transparent' }}
+                className="opcion"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: t.activa ? 'default' : 'pointer', background: t.activa ? 'rgba(46,139,255,.12)' : undefined }}
               >
                 <span style={{ fontWeight: 600, fontSize: 13.5, flex: 1 }}>{t.nombre}</span>
-                {t.bloqueada && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-danger-dark)', background: 'var(--df-danger-subtle-2)', borderRadius: 5, padding: '1px 6px' }}>pago pendiente</span>}
-                {t.activa && <span style={{ fontSize: 12, color: 'var(--df-brand)' }}>✓</span>}
-                {/* Eliminar una tienda de más (solo las que no son la activa, y si hay varias). */}
+                {t.bloqueada && <span className="pill mal sin chica">pago pendiente</span>}
+                {t.activa && <span className="ok" style={{ fontSize: 12 }}>✓</span>}
                 {!t.activa && varias && (
                   <span
                     onClick={async (e) => {
@@ -50,15 +48,15 @@ function StoreSwitcher({ df }: { df: DealFlowState }) {
                     }}
                     className="df-danger-hover"
                     title="Eliminar esta tienda"
-                    style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 3 }}
+                    style={{ color: 'var(--niebla2)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 3 }}
                   >🗑</span>
                 )}
               </div>
             ))}
-            <div style={{ borderTop: '1px solid var(--df-border)', margin: '4px 0' }} />
-            <div onClick={() => { setOpen(false); nuevaTienda(); }} style={{ padding: '9px 10px', borderRadius: 8, cursor: 'pointer', color: 'var(--df-brand)', fontWeight: 700, fontSize: 13.5 }}>
+            <div style={{ borderTop: '1px solid var(--linea)', margin: '4px 0' }} />
+            <button type="button" className="opcion" onClick={() => { setOpen(false); void nuevaTienda(); }} style={{ color: 'var(--cian)', fontWeight: 700, fontSize: 13.5 }}>
               + Crear otra tienda
-            </div>
+            </button>
           </div>
         </>
       )}
@@ -66,52 +64,35 @@ function StoreSwitcher({ df }: { df: DealFlowState }) {
   );
 }
 
+/**
+ * Barra superior del rediseño (.topbar): menú, tienda, píldoras de estado (WhatsApp,
+ * asistente, Effi) y, a la derecha, notificaciones y el perfil.
+ */
 export function Header({ df }: { df: DealFlowState }) {
+  const atendiendo = df.isVendedor ? df.crmChats.filter((c) => c.live).length : 0;
   return (
-    <>
-    {df.esTest && (
-      <div className="df-barra-test" role="status">
-        <b>Versión de prueba</b>
-        <span>test.dealflow.sbs · aquí se trabaja el diseño nuevo. Los datos de este entorno son de prueba y no afectan a las tiendas reales.</span>
-      </div>
-    )}
-    <header style={{ background: 'var(--df-surface)', borderBottom: '1px solid var(--df-border)', padding: '0 28px', height: 58, display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
-      <span
-        onClick={df.toggleSidebar}
-        className="df-hamburger"
-        title={df.sidebarVisible ? 'Ocultar el menú lateral' : 'Mostrar el menú lateral'}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, marginLeft: -6, borderRadius: 8, cursor: 'pointer', color: 'var(--df-text-secondary)', flexShrink: 0 }}
-      >
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="18" x2="21" y2="18" />
-        </svg>
-      </span>
-      {df.isVendedor && !df.esAgente ? <StoreSwitcher df={df} /> : <span style={{ fontWeight: 700, fontSize: 15 }}>{df.headerTitle}</span>}
-      {df.isVendedor && (
-        <span style={df.waPill}>
-          <span style={df.waDot} />
-          {df.waLabel}
-        </span>
-      )}
-      <div style={{ flex: 1 }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span
+    <header className="topbar">
+      <button type="button" className="icono-btn" onClick={df.toggleSidebar} aria-label={df.sidebarVisible ? 'Ocultar el menú' : 'Mostrar el menú'} title={df.sidebarVisible ? 'Ocultar el menú lateral' : 'Mostrar el menú lateral'}>
+        <IcoMenu />
+      </button>
+      {df.isVendedor && !df.esAgente ? <StoreSwitcher df={df} /> : <span className="tienda" style={{ cursor: 'default' }}>{df.headerTitle}</span>}
+      {df.isVendedor && <span className={`pill ${df.waConnected ? 'ok' : 'mal'}`}>{df.waLabel}</span>}
+      {df.isVendedor && atendiendo > 0 && <span className="pill ia sin">✦ Asistente atendiendo {atendiendo} chat{atendiendo === 1 ? '' : 's'}</span>}
+      {df.isVendedor && df.effiApi?.conectado && <span className="pill info">Effi listo para despachar</span>}
+      {df.esTest && <span className="pill aviso sin" title="test.dealflow.sbs: aquí se trabaja el diseño nuevo con datos de prueba">Versión de prueba</span>}
+      <div className="usuario">
+        <button
+          type="button"
           onClick={df.toggleFloatingNav}
-          className="df-close-hover"
+          className={`icono-btn${df.floatingNav ? ' on' : ''}`}
           title={df.floatingNav ? 'Botón flotante de menú: activado. Toca para desactivarlo.' : 'Botón flotante de menú: desactivado. Toca para activarlo.'}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, cursor: 'pointer', color: df.floatingNav ? 'var(--df-brand)' : 'var(--df-border-strong)' }}
+          aria-label="Botón flotante de menú"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="9" />
-            <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />
-          </svg>
-        </span>
+          <IcoFoco />
+        </button>
         <NotificationsMenu df={df} />
         <ProfileMenu df={df} />
       </div>
     </header>
-    </>
   );
 }

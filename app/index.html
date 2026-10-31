@@ -12,18 +12,14 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#0A1B2E" />
+    <meta name="theme-color" content="#050713" />
     <title>DealFlow</title>
     <!-- Anti-destello: fijamos el tema guardado y el color de fondo ANTES del
          primer pintado, para que al abrir o recargar (y al cambiar de tema) no
          se vea el flash blanco mientras carga el CSS. -->
     <script>
-      try {
-        var t = localStorage.getItem('dealflow:theme');
-        // En test.<dominio> el tema nuevo ("Noche", la identidad de la landing) es el de siempre.
-        if (!t && /^test\./.test(location.hostname)) t = 'noche';
-        if (t === 'dark' || t === 'premium' || t === 'noche') document.documentElement.dataset.theme = t;
-      } catch (e) {}
+      // El rediseño ("Noche", la identidad de la landing) es el único diseño de esta versión.
+      document.documentElement.dataset.theme = 'noche';
     </script>
     <style>
       html, body { background: #F8FAFC; }

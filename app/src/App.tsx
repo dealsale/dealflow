@@ -36,6 +36,7 @@ import { DealShop } from './sections/DealShop';
 import { Biblioteca } from './sections/Biblioteca';
 import { Landings } from './sections/Landings';
 import { Resumen } from './sections/Resumen';
+import { Marketing } from './sections/Marketing';
 import { Estadisticas } from './sections/Estadisticas';
 import { WhatsAppSection } from './sections/WhatsApp';
 import { Cuentas } from './sections/admin/Cuentas';
@@ -345,52 +346,13 @@ function AdminContent({ df }: { df: DealFlowState }) {
   );
 }
 
-/** Resplandor del tema Premium que sigue al mouse por el fondo. */
-function FocoMouse() {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    const cont = el?.parentElement;
-    if (!el || !cont) return;
-    let raf = 0, x = 0, y = 0;
-    const pintar = () => { raf = 0; el.style.transform = `translate3d(${x}px, ${y}px, 0)`; };
-    const mover = (e: MouseEvent) => {
-      const r = cont.getBoundingClientRect();
-      x = e.clientX - r.left; y = e.clientY - r.top;
-      el.style.opacity = '1';
-      if (!raf) raf = requestAnimationFrame(pintar);
-    };
-    const salir = () => { el.style.opacity = '0'; };
-    cont.addEventListener('mousemove', mover);
-    cont.addEventListener('mouseleave', salir);
-    return () => { cont.removeEventListener('mousemove', mover); cont.removeEventListener('mouseleave', salir); if (raf) cancelAnimationFrame(raf); };
-  }, []);
-  return <div ref={ref} className="df-foco-mouse" aria-hidden="true" style={{ opacity: 0 }} />;
-}
-
 function DesktopApp({ df }: { df: DealFlowState }) {
   return (
-    <div
-      className={df.theme === 'premium' ? 'df-premium-canvas' : undefined}
-      style={{
-        position: 'relative',
-        display: 'flex',
-        width: '100%',
-        height: '100%',
-        minHeight: 600,
-        fontFamily: df.theme === 'noche' ? "'Inter',system-ui,sans-serif" : "'Plus Jakarta Sans',system-ui,sans-serif",
-        background: df.theme === 'premium' ? undefined : 'var(--df-bg)',
-        color: 'var(--df-text-strong)',
-        overflow: 'hidden',
-      }}
-    >
-      {df.theme === 'premium' && <div className="df-aurora" aria-hidden="true"><i /><i /><i /><i /></div>}
-      {df.theme === 'premium' && <FocoMouse />}
+    <div className="app">
       {df.sidebarVisible && <Sidebar df={df} />}
-
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <main className="principal">
         <Header df={df} />
-        <main style={{ flex: 1, overflowY: 'auto', padding: '26px 28px 40px' }}>
+        <div className="contenido">
           {df.isVendedor && df.section === 'resumen' && <Resumen df={df} />}
           {df.isVendedor && df.section === 'estadisticas' && <Estadisticas df={df} />}
           {df.isVendedor && df.section === 'productos' && <Productos df={df} />}
@@ -404,14 +366,15 @@ function DesktopApp({ df }: { df: DealFlowState }) {
           {df.isVendedor && df.section === 'pedidos' && <Pedidos df={df} />}
           {df.isVendedor && df.section === 'leads' && <Leads df={df} />}
           {df.isVendedor && df.section === 'crm' && <CRM df={df} />}
+          {df.isVendedor && df.section === 'marketing' && <Marketing df={df} />}
           {df.isVendedor && df.section === 'integraciones' && <Integraciones df={df} />}
           {df.isAdmin && <AdminContent df={df} />}
-        </main>
-      </div>
+        </div>
+      </main>
 
       {df.floatingNav && <FloatingNav df={df} />}
       <AsistenteSoporte usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} oculto={df.hasSelectedOrder} />
-      <OrderDetailPanel df={df} />
+      {!(df.isVendedor && df.section === 'pedidos') && <OrderDetailPanel df={df} />}
       <OrderToast df={df} />
       <ManualOrderModal df={df} open={df.crearPedidoAbierto} onClose={df.cerrarCrearPedido} prefill={df.crearPedidoPrefill} />
       <CompletarPedidoModal df={df} />
@@ -430,8 +393,8 @@ function MobileApp({ df }: { df: DealFlowState }) {
         flexDirection: 'column',
         width: '100%',
         height: '100%',
-        fontFamily: df.theme === 'noche' ? "'Inter',system-ui,sans-serif" : "'Plus Jakarta Sans',system-ui,sans-serif",
-        background: df.theme === 'premium' ? undefined : 'var(--df-bg)',
+        fontFamily: "'Inter',system-ui,sans-serif",
+        background: 'var(--noche)',
         color: 'var(--df-text-strong)',
         overflow: 'hidden',
       }}

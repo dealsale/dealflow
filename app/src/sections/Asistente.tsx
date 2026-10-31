@@ -1,75 +1,59 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { apiWebchatList, apiWebchatSend } from '../lib/api';
 import type { ApiMensaje } from '../lib/api';
+import skyMascota from '../assets/sky-mascota.png';
 
-/** Grupo de opciones tipo segmento para el tono/estilo del asistente. */
+/** Grupo de opciones tipo chips para el tono/estilo del asistente. */
 function SegChips<T extends string | boolean>({ label, value, opciones, onPick }: { label: string; value: T | undefined; opciones: { v: T; t: string }[]; onPick: (v: T) => void }) {
   return (
     <div>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{label}</div>
-      <div style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }}>
-        {opciones.map((o) => {
-          const activo = value === o.v;
-          return (
-            <button key={String(o.v)} onClick={() => onPick(o.v)}
-              style={{ background: activo ? 'var(--df-brand)' : 'var(--df-surface)', color: activo ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
-              {o.t}
-            </button>
-          );
-        })}
+      <span className="suave-t" style={{ fontSize: 12.5, fontWeight: 600, display: 'block', marginBottom: 6 }}>{label}</span>
+      <div className="fila" style={{ gap: 6 }}>
+        {opciones.map((o) => <button key={String(o.v)} type="button" className={`chip chica${value === o.v ? ' activa' : ''}`} onClick={() => onPick(o.v)}>{o.t}</button>)}
       </div>
     </div>
   );
 }
 
-/** Tarjetas de opción grandes (personalidad, forma de vender). */
-function OpcionCards<T extends string>({ value, opciones, onPick, min = 150 }: { value: T | undefined; opciones: { v: T; icono: string; t: string; d: string }[]; onPick: (v: T) => void; min?: number }) {
+/** Tarjetas de opción (personalidad, idioma, forma de vender). */
+function Tonos<T extends string>({ value, opciones, onPick, columnas = 3 }: { value: T | undefined; opciones: { v: T; icono: string; t: string; d: string }[]; onPick: (v: T) => void; columnas?: number }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${min}px, 1fr))`, gap: 8 }}>
-      {opciones.map((o) => {
-        const activo = value === o.v;
-        return (
-          <button key={o.v} onClick={() => onPick(o.v)}
-            style={{ textAlign: 'left', background: activo ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', border: `1.5px solid ${activo ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--df-text-body)', transition: 'border-color .15s, background .15s' }}>
-            <div style={{ fontSize: 18, marginBottom: 2 }}>{o.icono}</div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: activo ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}>{o.t}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.4, marginTop: 2 }}>{o.d}</div>
-          </button>
-        );
-      })}
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${columnas >= 3 ? 150 : 180}px, 1fr))`, gap: 8 }}>
+      {opciones.map((o) => (
+        <button key={o.v} type="button" className={`tono${value === o.v ? ' sel' : ''}`} onClick={() => onPick(o.v)}>
+          <b>{o.icono} {o.t}</b><span>{o.d}</span>
+        </button>
+      ))}
     </div>
   );
 }
 
-function Switch({ on, onChange, title }: { on: boolean; onChange: () => void; title?: string }) {
-  return (
-    <div onClick={onChange} role="switch" aria-checked={on} title={title || (on ? 'Encendido' : 'Apagado')} className="df-switch" data-on={on}
-      style={{ width: 52, height: 30, borderRadius: 999, background: on ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .15s' }}>
-      <div style={{ position: 'absolute', top: 3, left: on ? 25 : 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />
-    </div>
-  );
+function Toggle({ on, onChange, children, title }: { on: boolean; onChange: () => void; children: ReactNode; title?: string }) {
+  return <button type="button" className={`toggle${on ? ' on' : ''}`} onClick={onChange} aria-pressed={on} title={title}><i /><span>{children}</span></button>;
 }
-
-const inputSt: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: 'var(--df-text-strong)', background: 'var(--df-surface)', resize: 'vertical' };
 
 /** Campo con título y ayuda. */
-function Campo({ titulo, ayuda, children }: { titulo: string; ayuda?: string; children: React.ReactNode }) {
+function Campo({ titulo, ayuda, children }: { titulo: string; ayuda?: string; children: ReactNode }) {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{titulo}</div>
-      {ayuda && <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, marginBottom: 8, lineHeight: 1.45 }}>{ayuda}</div>}
+    <div className="campo" style={{ gap: 6 }}>
+      <label>{titulo}</label>
+      {ayuda && <span className="tenue" style={{ fontSize: 12, lineHeight: 1.45 }}>{ayuda}</span>}
       {children}
     </div>
   );
 }
 
+/** Id de sesión de prueba (crypto.randomUUID solo existe en https). */
+const sesionNueva = () => (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')).replace(/-/g, '');
+
 /** Chat de prueba: habla con TU asistente por el canal web, sin gastar WhatsApp. */
-function PruebaAsistente({ storeId }: { storeId: string }) {
+function PruebaAsistente({ storeId, nombre }: { storeId: string; nombre: string }) {
   const key = 'df:test-session:' + storeId;
   const [session, setSession] = useState(() => {
     let s = localStorage.getItem(key);
-    if (!s) { s = crypto.randomUUID().replace(/-/g, ''); localStorage.setItem(key, s); }
+    if (!s) { s = sesionNueva(); localStorage.setItem(key, s); }
     return s;
   });
   const [mensajes, setMensajes] = useState<ApiMensaje[]>([]);
@@ -90,8 +74,8 @@ function PruebaAsistente({ storeId }: { storeId: string }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [mensajes.length]);
 
-  function enviar() {
-    const t = texto.trim();
+  function enviar(t0?: string) {
+    const t = (t0 ?? texto).trim();
     if (!t || enviando) return;
     setEnviando(true);
     setTexto('');
@@ -103,82 +87,65 @@ function PruebaAsistente({ storeId }: { storeId: string }) {
   }
 
   function reiniciar() {
-    const s = crypto.randomUUID().replace(/-/g, '');
+    const s = sesionNueva();
     localStorage.setItem(key, s);
     setSession(s);
     setMensajes([]);
   }
 
   return (
-    <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px', borderBottom: '1px solid var(--df-border)' }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>🧪 Prueba tu asistente</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Chatea aquí mismo con tu IA, como si fueras un cliente. No usa WhatsApp: funciona aunque Meta esté caído.</div>
+    <>
+      <div className="tarjeta-cab">
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <img src={skyMascota} alt="" style={{ width: 36, height: 36 }} />
+          <div><h2 style={{ fontSize: 16 }}>Probar el asistente</h2><span className="tenue" style={{ fontSize: 11.5 }}>Escribe como si fueras el cliente</span></div>
         </div>
-        <div style={{ flex: 1 }} />
-        <button
-          onClick={reiniciar}
-          title="Empieza una conversación nueva desde cero"
-          style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}
-        >
-          ↻ Empezar de nuevo
-        </button>
+        <button type="button" className="btn btn-fant btn-chico" onClick={reiniciar} title="Empieza una conversación nueva desde cero">Empezar de cero</button>
       </div>
-
-      <div ref={scrollRef} translate="no" style={{ height: 'min(56vh, 480px)', minHeight: 300, overflowY: 'auto', background: 'var(--df-bg)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div ref={scrollRef} translate="no" style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 380, maxHeight: 'min(56vh, 520px)', overflowY: 'auto', background: '#0A1022', borderRadius: 12, padding: 14 }}>
         {mensajes.length === 0 && (
-          <div translate="yes" style={{ margin: 'auto', textAlign: 'center', color: 'var(--df-text-faint)', fontSize: 13.5, lineHeight: 1.7 }}>
-            Escríbele como lo haría un cliente:<br />
-            <i>«hola», «tienes joggers?», «mándame fotos», «quiero 2»…</i>
+          <div translate="yes" className="tenue" style={{ margin: 'auto', textAlign: 'center', fontSize: 13.5, lineHeight: 1.7 }}>
+            Escríbele como lo haría un cliente:<br /><i>«hola», «tienes joggers?», «mándame fotos», «quiero 2»…</i>
           </div>
         )}
         {mensajes.map((m, i) => {
           const mio = m.de === 'cliente';
           return (
-            <div key={i} style={{ display: 'flex', justifyContent: mio ? 'flex-end' : 'flex-start' }}>
-              <div style={{ maxWidth: '72%', background: mio ? 'var(--df-green-subtle)' : 'var(--df-surface)', border: '1px solid ' + (mio ? '#BBF7D0' : 'var(--df-border)'), borderRadius: 12, padding: '9px 12px', fontSize: 13.5, lineHeight: 1.5 }}>
-                {m.tipo === 'image' && m.mediaUrl && <img src={m.mediaUrl} alt="" style={{ maxWidth: 220, borderRadius: 8, display: 'block', marginBottom: m.texto ? 6 : 0 }} />}
-                {m.tipo === 'video' && m.mediaUrl && <video src={m.mediaUrl} controls style={{ maxWidth: 220, borderRadius: 8, display: 'block', marginBottom: m.texto ? 6 : 0 }} />}
-                {m.tipo === 'audio' && m.mediaUrl && <audio src={m.mediaUrl} controls style={{ maxWidth: 220, display: 'block' }} />}
-                {m.texto && <span style={{ whiteSpace: 'pre-wrap' }}>{m.texto}</span>}
-                <span style={{ display: 'block', textAlign: 'right', color: 'var(--df-text-faint)', fontSize: 10.5, marginTop: 3 }}>{m.hora}</span>
-              </div>
+            <div key={i} className={`burbuja ${mio ? 'b-vendedor' : 'b-bot'}`} style={mio ? undefined : { alignSelf: 'flex-start', borderTopLeftRadius: 4, borderTopRightRadius: 14, maxWidth: '85%' }}>
+              {m.tipo === 'image' && m.mediaUrl && <img src={m.mediaUrl} alt="" style={{ maxWidth: 220, borderRadius: 8, display: 'block', marginBottom: m.texto ? 6 : 0 }} />}
+              {m.tipo === 'video' && m.mediaUrl && <video src={m.mediaUrl} controls style={{ maxWidth: 220, borderRadius: 8, display: 'block', marginBottom: m.texto ? 6 : 0 }} />}
+              {m.tipo === 'audio' && m.mediaUrl && <audio src={m.mediaUrl} controls style={{ maxWidth: 220, display: 'block' }} />}
+              {m.texto}
+              <span className="hora">{m.hora}</span>
             </div>
           );
         })}
-        {enviando && <div translate="yes" style={{ color: 'var(--df-text-faint)', fontSize: 12.5 }}>El asistente está escribiendo…</div>}
+        {enviando && <div translate="yes" className="burbuja b-bot tenue" style={{ fontSize: 12, alignSelf: 'flex-start' }}>{nombre} está escribiendo…</div>}
       </div>
-
-      <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--df-border)' }}>
-        <input
-          className="df-input"
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') enviar(); }}
-          placeholder="Escribe como si fueras el cliente…"
-          style={{ flex: 1, border: '1px solid var(--df-border)', borderRadius: 10, padding: '11px 13px', fontFamily: 'inherit', fontSize: 13.5, minHeight: 44, boxSizing: 'border-box' }}
-        />
-        <button
-          onClick={enviar}
-          className="df-btn-primary"
-          style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '11px 20px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
-        >
-          Enviar
-        </button>
+      <div className="fila" style={{ gap: 6 }}>
+        {['hola', '¿qué productos tienes?', 'quiero 2'].map((s) => <button key={s} type="button" className="chip chica" onClick={() => enviar(s)} style={{ fontSize: 11.5 }}>{s}</button>)}
       </div>
-    </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input className="entrada" value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') enviar(); }} placeholder="Escribe como si fueras el cliente…" style={{ flex: 1, minWidth: 0 }} aria-label="Mensaje de prueba" />
+        <button type="button" className="btn btn-pri" onClick={() => enviar()}>Enviar</button>
+      </div>
+      <p className="tenue" style={{ fontSize: 11.5 }}>Lo que escribas aquí el asistente lo responde con tu catálogo y tus reglas. No le llega a ningún cliente ni usa WhatsApp.</p>
+    </>
   );
 }
 
 type Pestana = 'personalidad' | 'negocio' | 'venta' | 'reglas';
 const PESTANAS: { id: Pestana; t: string }[] = [
-  { id: 'personalidad', t: '🎭 Personalidad' },
-  { id: 'negocio', t: '🏪 Tu negocio' },
-  { id: 'venta', t: '💰 Cómo vende' },
-  { id: 'reglas', t: '🛡️ Reglas y límites' },
+  { id: 'personalidad', t: 'Personalidad' },
+  { id: 'negocio', t: 'Tu negocio' },
+  { id: 'venta', t: 'Cómo vende' },
+  { id: 'reglas', t: 'Reglas y límites' },
 ];
 
+/**
+ * Asistente (diseño "Noche"): a la izquierda su personalidad, negocio, forma de
+ * vender y reglas; a la derecha el chat de prueba para verlo responder.
+ */
 export function Asistente({ df }: { df: DealFlowState }) {
   const [tab, setTab] = useState<Pestana>(() => { try { return (localStorage.getItem('dealflow:asist-tab') as Pestana) || 'personalidad'; } catch { return 'personalidad'; } });
   const elegirTab = (t: Pestana) => { setTab(t); try { localStorage.setItem('dealflow:asist-tab', t); } catch { /* modo privado */ } };
@@ -190,202 +157,172 @@ export function Asistente({ df }: { df: DealFlowState }) {
   const humano = e.humano || {};
   const setHumano = (patch: Partial<NonNullable<typeof e.humano>>) => set({ humano: { ...humano, ...patch } });
   const emojiNivel = e.emojiNivel || (e.emojis === false ? 'nada' : 'pocos');
-  const tarjeta: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', minWidth: 0 };
+  const nombre = df.assistantNombre.trim() || 'tu asistente';
+  const g2 = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 } as const;
 
   return (
-    <section data-screen-label="Asistente">
-      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Asistente</h1>
-      <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 16px' }}>Dale personalidad, enséñale tu negocio y dile cómo vender. Pruébalo al lado mientras lo ajustas.</p>
-
-      <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(300px, 1fr)', gap: 14, alignItems: 'start' }}>
-        <div style={tarjeta}>
-          <div style={{ display: 'flex', gap: 4, padding: '10px 10px 0', borderBottom: '1px solid var(--df-border)', overflowX: 'auto' }}>
-            {PESTANAS.map((p) => {
-              const activo = tab === p.id;
-              return (
-                <button key={p.id} onClick={() => elegirTab(p.id)}
-                  style={{ background: 'none', border: 'none', borderBottom: `2px solid ${activo ? 'var(--df-brand)' : 'transparent'}`, color: activo ? 'var(--df-text-strong)' : 'var(--df-text-muted)', fontWeight: activo ? 800 : 600, fontSize: 13, padding: '9px 12px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                  {p.t}
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={{ padding: 20 }}>
-            {tab === 'personalidad' && (
-              <>
-                <Campo titulo="Nombre del asistente" ayuda="Con este nombre se presenta al cliente (ej: Sky). Si lo dejas vacío, usa el nombre de tu tienda.">
-                  <input className="df-input" value={df.assistantNombre} onChange={(ev) => df.setAssistantNombre(ev.target.value)} placeholder="Ej: Sky" style={inputSt} />
-                </Campo>
-                <Campo titulo="Personalidad" ayuda="Cómo se siente hablar con él.">
-                  <OpcionCards value={e.personalidad} onPick={(v) => set({ personalidad: v })} opciones={[
-                    { v: 'amigable', icono: '😊', t: 'Amigable', d: 'Cálido y cercano, como un amigo que sabe.' },
-                    { v: 'profesional', icono: '👔', t: 'Profesional', d: 'Claro, respetuoso y serio.' },
-                    { v: 'divertido', icono: '🎉', t: 'Divertido', d: 'Buena energía y humor ligero.' },
-                    { v: 'experto', icono: '🧠', t: 'Asesor experto', d: 'Explica beneficios con seguridad.' },
-                    { v: 'directo', icono: '⚡', t: 'Directo', d: 'Al grano, facilita la compra.' },
-                  ]} />
-                </Campo>
-                <Campo titulo="Idioma" ayuda="En qué idioma le habla a tus clientes. Incluye los mensajes automáticos (confirmación del pedido, estados y guía).">
-                  <OpcionCards min={150} value={e.idioma || 'es'} onPick={(v) => set({ idioma: v })} opciones={[
-                    { v: 'es', icono: '🇪🇸', t: 'Español', d: 'Siempre en español.' },
-                    { v: 'en', icono: '🇺🇸', t: 'English', d: 'Always in English.' },
-                    { v: 'auto', icono: '🌐', t: 'Automático', d: 'Responde en el idioma en que le escriben.' },
-                  ]} />
-                </Campo>
-                <Campo titulo="Tono y estilo" ayuda="Se aplica a todas sus respuestas (incluido el seguimiento).">
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                    <SegChips label="Trato" value={e.trato} opciones={[{ v: 'tu', t: 'Tú (cercano)' }, { v: 'usted', t: 'Usted (formal)' }]} onPick={(v) => set({ trato: v })} />
-                    <SegChips label="Emojis" value={emojiNivel} opciones={[{ v: 'nada', t: 'Sin emojis' }, { v: 'pocos', t: 'Pocos' }, { v: 'muchos', t: 'Muchos' }]} onPick={(v) => set({ emojiNivel: v, emojis: v !== 'nada' })} />
-                    <SegChips label="Respuestas" value={e.largo || 'corto'} opciones={[{ v: 'corto', t: 'Cortas' }, { v: 'medio', t: 'Medias' }, { v: 'detallado', t: 'Detalladas' }]} onPick={(v) => set({ largo: v })} />
-                    <SegChips label="Forma de hablar" value={e.modismos || 'neutro'} opciones={[{ v: 'neutro', t: 'Neutral' }, { v: 'colombiano', t: 'Colombiana' }]} onPick={(v) => set({ modismos: v })} />
-                  </div>
-                </Campo>
-                <Campo titulo="Saludo" ayuda="Cómo saluda en el primer mensaje (si no se envía un mensaje inicial de producto). Déjalo vacío para que salude a su manera.">
-                  <textarea className="df-input" rows={2} value={e.saludo || ''} onChange={(ev) => set({ saludo: ev.target.value })} placeholder="Ej: ¡Hola! Bienvenido a Luna Accesorios 💜 Soy Sky, ¿qué estás buscando hoy?" style={inputSt} />
-                </Campo>
-                <Campo titulo="Despedida" ayuda="Cómo se despide cuando el cliente da las gracias o se va.">
-                  <textarea className="df-input" rows={2} value={e.despedida || ''} onChange={(ev) => set({ despedida: ev.target.value })} placeholder="Ej: ¡Gracias por escribirnos! Aquí estamos cuando nos necesites 🙌" style={inputSt} />
-                </Campo>
-              </>
-            )}
-
-            {tab === 'negocio' && (
-              <>
-                <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 14, lineHeight: 1.5 }}>Lo que escribas aquí el asistente lo responde <b>tal cual</b> cuando le pregunten. Lo que dejes vacío, no lo menciona ni lo inventa.</div>
-                <Campo titulo="🚚 Envíos" ayuda="Tiempos de entrega, costo del envío, a qué ciudades llegas.">
-                  <textarea className="df-input" rows={2} value={negocio.envios || ''} onChange={(ev) => setNegocio({ envios: ev.target.value })} placeholder="Ej: Enviamos a toda Colombia. Llega en 2 a 5 días hábiles. Envío gratis desde $150.000." style={inputSt} />
-                </Campo>
-                <Campo titulo="💳 Formas de pago">
-                  <textarea className="df-input" rows={2} value={negocio.pagos || ''} onChange={(ev) => setNegocio({ pagos: ev.target.value })} placeholder="Ej: Pago contra entrega en efectivo. También Nequi y Bancolombia." style={inputSt} />
-                </Campo>
-                <Campo titulo="🔄 Cambios y garantía">
-                  <textarea className="df-input" rows={2} value={negocio.cambios || ''} onChange={(ev) => setNegocio({ cambios: ev.target.value })} placeholder="Ej: Cambios por talla dentro de los 5 días siguientes a la entrega." style={inputSt} />
-                </Campo>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 12px' }}>
-                  <Campo titulo="🕘 Horario de atención">
-                    <input className="df-input" value={negocio.horario || ''} onChange={(ev) => setNegocio({ horario: ev.target.value })} placeholder="Ej: Lunes a sábado, 8 a.m. a 7 p.m." style={inputSt} />
-                  </Campo>
-                  <Campo titulo="📍 Ubicación / redes">
-                    <input className="df-input" value={negocio.ubicacion || ''} onChange={(ev) => setNegocio({ ubicacion: ev.target.value })} placeholder="Ej: Solo tienda virtual · @lunaaccesorios" style={inputSt} />
-                  </Campo>
-                </div>
-                <Campo titulo="📝 Otra información" ayuda="Cualquier otra cosa que deba saber: quiénes son, materiales, promociones fijas, etc.">
-                  <textarea className="df-input" rows={3} value={negocio.extra || ''} onChange={(ev) => setNegocio({ extra: ev.target.value })} style={inputSt} />
-                </Campo>
-                <Campo titulo="❓ Preguntas frecuentes" ayuda="Preguntas que te hacen mucho, con la respuesta exacta que quieres que dé.">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {faqs.length === 0 && <div style={{ color: 'var(--df-text-faint)', fontSize: 13 }}>Aún no hay preguntas. Agrega la primera.</div>}
-                    {faqs.map((f, i) => (
-                      <div key={i} style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 10, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <input className="df-input" value={f.pregunta} placeholder="Pregunta (ej: ¿Hacen envíos el mismo día?)" onChange={(ev) => set({ faqs: faqs.map((x, j) => (j === i ? { ...x, pregunta: ev.target.value } : x)) })} style={{ ...inputSt, fontWeight: 600 }} />
-                          <textarea className="df-input" rows={2} value={f.respuesta} placeholder="Respuesta" onChange={(ev) => set({ faqs: faqs.map((x, j) => (j === i ? { ...x, respuesta: ev.target.value } : x)) })} style={inputSt} />
-                        </div>
-                        <span onClick={() => set({ faqs: faqs.filter((_, j) => j !== i) })} className="df-danger-hover" title="Quitar" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, padding: 4 }}>✕</span>
-                      </div>
-                    ))}
-                    <button onClick={() => set({ faqs: [...faqs, { pregunta: '', respuesta: '' }] })} className="df-btn-outline-green"
-                      style={{ alignSelf: 'flex-start', background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-                      + Agregar pregunta
-                    </button>
-                  </div>
-                </Campo>
-              </>
-            )}
-
-            {tab === 'venta' && (
-              <>
-                <Campo titulo="Qué tanto insiste" ayuda="Qué tan activo es para llevar al cliente a comprar.">
-                  <OpcionCards min={170} value={e.insistencia || 'equilibrada'} onPick={(v) => set({ insistencia: v })} opciones={[
-                    { v: 'suave', icono: '🌱', t: 'Suave', d: 'Informa y deja decidir. Cero presión.' },
-                    { v: 'equilibrada', icono: '⚖️', t: 'Equilibrada', d: 'Resuelve y propone el siguiente paso.' },
-                    { v: 'persuasiva', icono: '🔥', t: 'Persuasiva', d: 'Resalta beneficios y maneja objeciones.' },
-                  ]} />
-                </Campo>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>Sugerir combos y complementos</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Cuando el cliente ya eligió, le ofrece una vez un combo o un producto que combine.</div>
-                  </div>
-                  <Switch on={!!e.sugerirCombos} onChange={() => set({ sugerirCombos: !e.sugerirCombos })} />
-                </div>
-                <Campo titulo="Instrucciones de venta" ayuda="Escríbelo como se lo dirías a un empleado nuevo: qué ofrecer, cómo responder precios, qué destacar.">
-                  <textarea className="df-input" value={df.assistantText} onChange={(ev) => df.setAssistantText(ev.target.value)} rows={9} style={{ ...inputSt, fontSize: 14, lineHeight: 1.6 }} />
-                </Campo>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>Mensaje automático de actividad 💬</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Si el cliente deja de responder, le vuelve a escribir a los <b>5 min</b>, <b>30 min</b> y <b>1 hora</b>, según lo que hablaban. Se detiene apenas responde y respeta la ventana de 24 h.</div>
-                  </div>
-                  <Switch on={df.seguimientoActivo} onChange={df.toggleSeguimientoActivo} />
-                </div>
-              </>
-            )}
-
-            {tab === 'reglas' && (
-              <>
-                <Campo titulo="Reglas" ayuda="Se cumplen siempre, pase lo que pase.">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
-                    {df.rules.length === 0 && <div style={{ color: 'var(--df-text-faint)', fontSize: 13, padding: '4px 2px' }}>Aún no hay reglas. Agrega la primera abajo.</div>}
-                    {df.rules.map((r, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px' }}>
-                        <span style={{ color: 'var(--df-text-faint)', fontWeight: 700, flexShrink: 0, fontSize: 12, minWidth: 18, marginTop: 6 }}>{i + 1}</span>
-                        <textarea value={r.texto} onChange={(ev) => r.editar(ev.target.value)} rows={1} className="df-input"
-                          style={{ flex: 1, fontSize: 13, lineHeight: 1.5, border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', resize: 'vertical', color: 'var(--df-text-strong)' }}
-                          onFocus={(ev) => { ev.currentTarget.style.background = 'var(--df-surface)'; ev.currentTarget.style.borderColor = 'var(--df-border)'; }}
-                          onBlur={(ev) => { ev.currentTarget.style.background = 'transparent'; ev.currentTarget.style.borderColor = 'transparent'; }} />
-                        <span onClick={r.remove} className="df-danger-hover" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, marginTop: 6 }}>✕</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input className="df-input" value={df.ruleDraft} onChange={(ev) => df.setRuleDraft(ev.target.value)} onKeyDown={(ev) => { if (ev.key === 'Enter') df.addRule(); }} placeholder="Escribe una regla nueva…" style={{ ...inputSt, flex: 1 }} />
-                    <button onClick={df.addRule} className="df-btn-outline-green" style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Agregar regla</button>
-                  </div>
-                </Campo>
-                <Campo titulo="🚫 Nunca debe…" ayuda="Temas, palabras o promesas que el asistente jamás debe tocar.">
-                  <textarea className="df-input" rows={3} value={e.prohibido || ''} onChange={(ev) => set({ prohibido: ev.target.value })} placeholder="Ej: Hablar de la competencia, prometer fechas exactas de entrega, dar descuentos, hablar de política." style={inputSt} />
-                </Campo>
-                <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>🙋 Pasar el chat a una persona</div>
-                      <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Cuando pase lo que indiques, el asistente avisa al cliente y deja de responder. El chat queda en el Inbox como “Equipo (pidió asesor)” para que lo atiendas.</div>
-                    </div>
-                    <Switch on={humano.activo !== false} onChange={() => setHumano({ activo: humano.activo === false })} />
-                  </div>
-                  {humano.activo !== false && (
-                    <div style={{ marginTop: 12 }}>
-                      <Campo titulo="¿Cuándo?" ayuda="Si lo dejas vacío: cuando pidan un asesor, tengan una queja o pregunten algo que no sabe.">
-                        <textarea className="df-input" rows={2} value={humano.cuando || ''} onChange={(ev) => setHumano({ cuando: ev.target.value })} placeholder="Ej: pidan hablar con alguien, quieran comprar al por mayor, o tengan un reclamo de un pedido." style={inputSt} />
-                      </Campo>
-                      <Campo titulo="Mensaje al pasar el chat">
-                        <input className="df-input" value={humano.mensaje || ''} onChange={(ev) => setHumano({ mensaje: ev.target.value })} placeholder="Ya mismo te comunico con una persona de nuestro equipo 🙌" style={inputSt} />
-                      </Campo>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderTop: '1px solid var(--df-border)', background: 'var(--df-surface-2)', borderRadius: '0 0 12px 12px', flexWrap: 'wrap' }}>
-            <button onClick={df.saveAssistant} className="df-btn-primary"
-              style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
-              Guardar cambios
-            </button>
-            {df.assistantSaved
-              ? <span style={{ color: 'var(--df-brand)', fontSize: 13, fontWeight: 600 }}>✓ Guardado. El asistente ya responde así.</span>
-              : <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>Las opciones se guardan solas; el nombre, las instrucciones y las reglas, con este botón.</span>}
-          </div>
+    <section data-screen-label="Asistente" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="encabezado">
+        <div className="encabezado-txt">
+          <span className="eti">Asistente de ventas</span>
+          <h1>Así atiende <span className="grad-txt">{nombre}</span></h1>
+          <p className="sub">Responde, muestra fotos, arma el pedido con el resumen y lo confirma con el cliente. Aquí le das su personalidad y sus reglas.</p>
         </div>
+        <div className="fila">
+          <Toggle on={df.seguimientoActivo} onChange={df.toggleSeguimientoActivo} title="Si el cliente deja de responder, le vuelve a escribir a los 5 min, 30 min y 1 hora">Volver a escribir si el cliente no responde</Toggle>
+          <button type="button" className="btn btn-pri" onClick={df.saveAssistant}>Guardar cambios</button>
+        </div>
+      </div>
+      {df.assistantSaved
+        ? <p className="ok" style={{ fontSize: 13, fontWeight: 600 }}>✓ Guardado. El asistente ya responde así.</p>
+        : <p className="tenue" style={{ fontSize: 12 }}>Las opciones se guardan solas; el nombre, las instrucciones y las reglas, con el botón «Guardar cambios».</p>}
 
-        <div style={{ position: 'sticky', top: 12, minWidth: 0 }}>
+      <div className="lateral ancho">
+        <section className="tarjeta" style={{ gap: 16, minWidth: 0 }}>
+          <div className="tabs">
+            {PESTANAS.map((p) => <button key={p.id} type="button" className={`tab${tab === p.id ? ' sel' : ''}`} onClick={() => elegirTab(p.id)}>{p.t}</button>)}
+          </div>
+
+          {tab === 'personalidad' && (
+            <>
+              <div className="tarjeta-cab"><h2>Personalidad</h2><span className="pill ia sin">✦ IA</span></div>
+              <div style={g2}>
+                <Campo titulo="Cómo se llama" ayuda="Con este nombre se presenta al cliente. Vacío = el nombre de tu tienda.">
+                  <input value={df.assistantNombre} onChange={(ev) => df.setAssistantNombre(ev.target.value)} placeholder="Ej: Sky" />
+                </Campo>
+                <Campo titulo="Idioma" ayuda="Incluye los mensajes automáticos (confirmación, estados y guía).">
+                  <div className="fila" style={{ gap: 6 }}>
+                    {([['es', '🇪🇸 Español'], ['en', '🇺🇸 English'], ['auto', '🌐 Automático']] as const).map(([v, t]) => <button key={v} type="button" className={`chip chica${(e.idioma || 'es') === v ? ' activa' : ''}`} onClick={() => set({ idioma: v })}>{t}</button>)}
+                  </div>
+                </Campo>
+              </div>
+              <div>
+                <span className="suave-t" style={{ fontSize: 12.5, fontWeight: 600, display: 'block', marginBottom: 8 }}>Personalidad · cómo se siente hablar con él</span>
+                <Tonos value={e.personalidad} onPick={(v) => set({ personalidad: v })} opciones={[
+                  { v: 'amigable', icono: '😊', t: 'Amigable', d: 'Cálido y cercano, como un amigo que sabe.' },
+                  { v: 'profesional', icono: '👔', t: 'Profesional', d: 'Claro, respetuoso y serio.' },
+                  { v: 'divertido', icono: '🎉', t: 'Divertido', d: 'Buena energía y humor ligero.' },
+                  { v: 'experto', icono: '🧠', t: 'Asesor experto', d: 'Explica beneficios con seguridad.' },
+                  { v: 'directo', icono: '⚡', t: 'Directo', d: 'Al grano, facilita la compra.' },
+                ]} />
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                <SegChips label="Trato" value={e.trato} opciones={[{ v: 'tu', t: 'Tú (cercano)' }, { v: 'usted', t: 'Usted (formal)' }]} onPick={(v) => set({ trato: v })} />
+                <SegChips label="Emojis" value={emojiNivel} opciones={[{ v: 'nada', t: 'Sin emojis' }, { v: 'pocos', t: 'Pocos' }, { v: 'muchos', t: 'Muchos' }]} onPick={(v) => set({ emojiNivel: v, emojis: v !== 'nada' })} />
+                <SegChips label="Respuestas" value={e.largo || 'corto'} opciones={[{ v: 'corto', t: 'Cortas' }, { v: 'medio', t: 'Medias' }, { v: 'detallado', t: 'Detalladas' }]} onPick={(v) => set({ largo: v })} />
+                <SegChips label="Forma de hablar" value={e.modismos || 'neutro'} opciones={[{ v: 'neutro', t: 'Neutral' }, { v: 'colombiano', t: 'Colombiana' }]} onPick={(v) => set({ modismos: v })} />
+              </div>
+              <div style={g2}>
+                <Campo titulo="Saludo" ayuda="Primer mensaje si no se envía un mensaje inicial de producto. Vacío = saluda a su manera.">
+                  <textarea rows={2} value={e.saludo || ''} onChange={(ev) => set({ saludo: ev.target.value })} placeholder="Ej: ¡Hola! Bienvenido a Luna Accesorios 💜 Soy Sky, ¿qué estás buscando hoy?" />
+                </Campo>
+                <Campo titulo="Despedida" ayuda="Cuando el cliente da las gracias o se va.">
+                  <textarea rows={2} value={e.despedida || ''} onChange={(ev) => set({ despedida: ev.target.value })} placeholder="Ej: ¡Gracias por escribirnos! Aquí estamos cuando nos necesites 🙌" />
+                </Campo>
+              </div>
+            </>
+          )}
+
+          {tab === 'negocio' && (
+            <>
+              <div className="tarjeta-cab"><h2>Tu negocio</h2><span className="tenue" style={{ fontSize: 12 }}>lo responde tal cual · lo vacío no lo inventa</span></div>
+              <Campo titulo="🚚 Envíos" ayuda="Tiempos de entrega, costo del envío, a qué ciudades llegas.">
+                <textarea rows={2} value={negocio.envios || ''} onChange={(ev) => setNegocio({ envios: ev.target.value })} placeholder="Ej: Enviamos a toda Colombia. Llega en 2 a 5 días hábiles. Envío gratis desde $150.000." />
+              </Campo>
+              <div style={g2}>
+                <Campo titulo="💳 Formas de pago"><textarea rows={2} value={negocio.pagos || ''} onChange={(ev) => setNegocio({ pagos: ev.target.value })} placeholder="Ej: Pago contra entrega en efectivo. También Nequi y Bancolombia." /></Campo>
+                <Campo titulo="🔄 Cambios y garantía"><textarea rows={2} value={negocio.cambios || ''} onChange={(ev) => setNegocio({ cambios: ev.target.value })} placeholder="Ej: Cambios por talla dentro de los 5 días siguientes a la entrega." /></Campo>
+                <Campo titulo="🕘 Horario de atención"><input value={negocio.horario || ''} onChange={(ev) => setNegocio({ horario: ev.target.value })} placeholder="Ej: Lunes a sábado, 8 a.m. a 7 p.m." /></Campo>
+                <Campo titulo="📍 Ubicación / redes"><input value={negocio.ubicacion || ''} onChange={(ev) => setNegocio({ ubicacion: ev.target.value })} placeholder="Ej: Solo tienda virtual · @lunaaccesorios" /></Campo>
+              </div>
+              <Campo titulo="📝 Otra información" ayuda="Quiénes son, materiales, promociones fijas, etc.">
+                <textarea rows={3} value={negocio.extra || ''} onChange={(ev) => setNegocio({ extra: ev.target.value })} />
+              </Campo>
+              <div className="tarjeta-cab" style={{ marginTop: 4 }}><h3>Preguntas frecuentes</h3><button type="button" className="btn btn-sec btn-chico" onClick={() => set({ faqs: [...faqs, { pregunta: '', respuesta: '' }] })}>＋ Agregar</button></div>
+              <div className="lista">
+                {faqs.length === 0 && <div className="tenue" style={{ fontSize: 13 }}>Aún no hay preguntas. Agrega la primera: la respuesta exacta que quieres que dé.</div>}
+                {faqs.map((f, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr) 28px', gap: 10, alignItems: 'start' }}>
+                    <input className="entrada" value={f.pregunta} placeholder="Pregunta (ej: ¿Hacen envíos el mismo día?)" onChange={(ev) => set({ faqs: faqs.map((x, j) => (j === i ? { ...x, pregunta: ev.target.value } : x)) })} style={{ fontWeight: 600 }} />
+                    <textarea className="entrada" rows={2} value={f.respuesta} placeholder="Respuesta" onChange={(ev) => set({ faqs: faqs.map((x, j) => (j === i ? { ...x, respuesta: ev.target.value } : x)) })} />
+                    <button type="button" className="icono-btn" onClick={() => set({ faqs: faqs.filter((_, j) => j !== i) })} title="Quitar" aria-label="Quitar pregunta" style={{ width: 28, height: 28 }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {tab === 'venta' && (
+            <>
+              <div className="tarjeta-cab"><h2>Cómo vende</h2><span className="pill ia sin">✦ IA</span></div>
+              <div>
+                <span className="suave-t" style={{ fontSize: 12.5, fontWeight: 600, display: 'block', marginBottom: 8 }}>Qué tanto insiste</span>
+                <Tonos value={e.insistencia || 'equilibrada'} onPick={(v) => set({ insistencia: v })} opciones={[
+                  { v: 'suave', icono: '🌱', t: 'Suave', d: 'Informa y deja decidir. Cero presión.' },
+                  { v: 'equilibrada', icono: '⚖️', t: 'Equilibrada', d: 'Resuelve y propone el siguiente paso.' },
+                  { v: 'persuasiva', icono: '🔥', t: 'Persuasiva', d: 'Resalta beneficios y maneja objeciones.' },
+                ]} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+                <Toggle on={!!e.sugerirCombos} onChange={() => set({ sugerirCombos: !e.sugerirCombos })} title="Cuando el cliente ya eligió, le ofrece una vez un combo o un producto que combine">Sugerir combos y complementos</Toggle>
+                <Toggle on={df.seguimientoActivo} onChange={df.toggleSeguimientoActivo} title="Si el cliente deja de responder, le vuelve a escribir a los 5 min, 30 min y 1 hora según lo que hablaban. Se detiene apenas responde y respeta la ventana de 24 h.">Mensaje automático si deja de responder</Toggle>
+              </div>
+              <Campo titulo="Instrucciones de venta" ayuda="Escríbelo como se lo dirías a un empleado nuevo: qué ofrecer, cómo responder precios, qué destacar.">
+                <textarea value={df.assistantText} onChange={(ev) => df.setAssistantText(ev.target.value)} rows={9} style={{ fontSize: 14, lineHeight: 1.6 }} />
+              </Campo>
+            </>
+          )}
+
+          {tab === 'reglas' && (
+            <>
+              <div className="tarjeta-cab"><h2>Reglas del negocio</h2><span className="tenue" style={{ fontSize: 12 }}>{df.rules.length} reglas · se cumplen siempre</span></div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 340, overflowY: 'auto' }}>
+                {df.rules.length === 0 && <div className="tenue" style={{ fontSize: 13 }}>Aún no hay reglas. Agrega la primera abajo.</div>}
+                {df.rules.map((r, i) => (
+                  <div key={i} className="regla">
+                    <span style={{ color: 'var(--cian)' }}>◆</span>
+                    <textarea value={r.texto} onChange={(ev) => r.editar(ev.target.value)} rows={1} style={{ flex: 1, background: 'transparent', border: 0, color: 'inherit', font: 'inherit', resize: 'vertical', outline: 'none', padding: 0 }} aria-label={`Regla ${i + 1}`} />
+                    <button type="button" className="q" onClick={r.remove} aria-label="Quitar regla">×</button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input className="entrada" value={df.ruleDraft} onChange={(ev) => df.setRuleDraft(ev.target.value)} onKeyDown={(ev) => { if (ev.key === 'Enter') df.addRule(); }} placeholder="Escribe una regla nueva… (ej: No prometer entrega el mismo día)" style={{ flex: '1 1 280px' }} aria-label="Nueva regla" />
+                <button type="button" className="btn btn-sec" onClick={df.addRule}>Agregar regla</button>
+              </div>
+              <Campo titulo="🚫 Nunca debe…" ayuda="Temas, palabras o promesas que el asistente jamás debe tocar.">
+                <textarea rows={3} value={e.prohibido || ''} onChange={(ev) => set({ prohibido: ev.target.value })} placeholder="Ej: Hablar de la competencia, prometer fechas exactas de entrega, dar descuentos, hablar de política." />
+              </Campo>
+              <div className="aviso-caja ia" style={{ gap: 10 }}>
+                <div className="tarjeta-cab">
+                  <div><b>🙋 Pasar el chat a una persona</b><div className="suave-t" style={{ fontSize: 12.5 }}>Cuando pase lo que indiques, avisa al cliente y deja de responder. El chat queda en el Inbox como “Equipo (pidió asesor)”.</div></div>
+                  <Toggle on={humano.activo !== false} onChange={() => setHumano({ activo: humano.activo === false })}>{humano.activo !== false ? 'Activo' : 'Apagado'}</Toggle>
+                </div>
+                {humano.activo !== false && (
+                  <div style={g2}>
+                    <Campo titulo="¿Cuándo?" ayuda="Vacío: cuando pidan un asesor, tengan una queja o pregunten algo que no sabe.">
+                      <textarea rows={2} value={humano.cuando || ''} onChange={(ev) => setHumano({ cuando: ev.target.value })} placeholder="Ej: pidan hablar con alguien, quieran comprar al por mayor, o tengan un reclamo." />
+                    </Campo>
+                    <Campo titulo="Mensaje al pasar el chat">
+                      <input value={humano.mensaje || ''} onChange={(ev) => setHumano({ mensaje: ev.target.value })} placeholder="Ya mismo te comunico con una persona de nuestro equipo 🙌" />
+                    </Campo>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          <div className="fila" style={{ gap: 12, borderTop: '1px solid var(--linea)', paddingTop: 14 }}>
+            <button type="button" className="btn btn-pri" onClick={df.saveAssistant}>Guardar cambios</button>
+            {df.assistantSaved && <span className="ok" style={{ fontSize: 13, fontWeight: 600 }}>✓ Guardado. El asistente ya responde así.</span>}
+          </div>
+        </section>
+
+        <aside className="tarjeta borde-ia" style={{ gap: 12, position: 'sticky', top: 0 }} aria-label="Probar el asistente">
           {df.apiMode && df.storeId
-            ? <PruebaAsistente storeId={df.storeId} />
-            : <div style={{ ...tarjeta, padding: 20, color: 'var(--df-text-muted)', fontSize: 13 }}>🧪 El chat de prueba está disponible cuando tu tienda está conectada.</div>}
-        </div>
+            ? <PruebaAsistente storeId={df.storeId} nombre={nombre} />
+            : <div className="vacio">🧪 El chat de prueba está disponible cuando tu tienda está conectada.</div>}
+        </aside>
       </div>
     </section>
   );

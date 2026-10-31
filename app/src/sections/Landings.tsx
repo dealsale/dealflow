@@ -79,7 +79,8 @@ export function Landings({ df }: { df: DealFlowState }) {
   return abierta ? <Editor id={abierta} df={df} onSalir={() => abrir('')} /> : <Lista df={df} onAbrir={abrir} />;
 }
 
-// ── Lista ──────────────────────────────────────────────────────────────
+// ── Lista (diseño "Noche") ───────────────────────────────────────────────
+type TabTienda = 'landings' | 'inicio' | 'dominio' | 'plantillas';
 function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => void }) {
   const [lista, setLista] = useState<LandingResumen[] | null>(null);
   const [membresia, setMembresia] = useState<MembresiaTienda | null>(null);
@@ -88,6 +89,8 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
   const [biblioteca, setBiblioteca] = useState(false);
   const [plantillas, setPlantillas] = useState(false);
   const [dominio, setDominio] = useState<DominioLandings | null>(null);
+  const [tab, setTab] = useState<TabTienda>('landings');
+  const [vista, setVista] = useState('');
   const cargar = async () => { const r = await apiLandings(); if (r.data) { setLista(r.data.landings); setMembresia(r.data.membresia); setDominio(r.data.dominio); setTienda(r.data.tienda); } else notificar(r.error || 'No se pudo cargar tu tienda.', 'error'); };
   useEffect(() => { void cargar(); }, []);
   const copiar = (u: string) => { void navigator.clipboard?.writeText(u).then(() => notificar('✓ Enlace copiado.')).catch(() => {}); };
@@ -99,68 +102,115 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
   };
   const duplicar = async (l: LandingResumen) => { const r = await apiDuplicarLanding(l.id); if (r.data) onAbrir(r.data.landing.id); else notificar(r.error || 'No se pudo duplicar.', 'error'); };
 
+  const enLinea = !!membresia && (membresia.activa || membresia.enGracia);
+  const urlTienda = dominio ? (dominio.estado === 'activo' && dominio.dominio ? `https://${dominio.dominio}` : dominio.raiz ? `https://${dominio.sub}.${dominio.raiz}` : '') : '';
+  const host = urlTienda.replace(/^https?:\/\//, '');
+  const publicadas = (lista || []).filter((l) => l.estado === 'publicada');
+  const vistas = (lista || []).reduce((a, l) => a + l.vistas, 0);
+  const pedidos = (lista || []).reduce((a, l) => a + l.pedidos, 0);
+  const conv = vistas > 0 ? `${((pedidos / vistas) * 100).toFixed(1)} % de conversión` : 'sin visitas todavía';
+  const membresiaTxt = !membresia ? '' : membresia.cortesia ? 'cortesía activa' : membresia.activa ? `membresía activa · ${membresia.diasRestantes} días` : membresia.enGracia ? 'membresía vencida · en gracia' : 'membresía vencida';
+  const vistaActual = vista || (publicadas[0]?.url || urlTienda);
+  const TABS: { id: TabTienda; t: string }[] = [{ id: 'landings', t: 'Landings' }, { id: 'inicio', t: 'Página de inicio' }, { id: 'dominio', t: 'Dominio y membresía' }, { id: 'plantillas', t: '🎨 Mis plantillas' }];
+
   return (
-    <section data-screen-label="Tienda en línea">
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Tienda en línea</h1>
-          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Tu tienda con todos tus productos y una página de venta (landing) por producto para pautar. Pago contra entrega; los pedidos llegan directo a DealFlow.</p>
+    <section data-screen-label="Tienda en línea" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="encabezado">
+        <div className="encabezado-txt">
+          <span className="eti">{host ? <span className="mono">{host}</span> : 'Tienda en línea'}{membresiaTxt ? ` · ${membresiaTxt}` : ''}</span>
+          <h1>Tienda en línea</h1>
+          <p className="sub">Tu página de inicio y una landing por producto, con el formulario de pago contra entrega. Cada pedido llega al Inbox y el cliente lo confirma por WhatsApp.</p>
         </div>
-        <a href="/tutorial-tienda-en-linea" target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>📘 Ver tutorial</a>
-        {dominio && membresia?.activa && (dominio.estado === 'activo' || dominio.raiz) && <a href={`https://${dominio.estado === 'activo' ? dominio.dominio : `${dominio.sub}.${dominio.raiz}`}`} target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>Ver mi tienda ↗</a>}
-        <button onClick={() => setPlantillas(true)} style={{ ...btn, padding: '10px 14px', fontSize: 13.5 }}>🎨 Mis plantillas</button>
-        <button onClick={() => setBiblioteca(true)} style={{ ...btn, padding: '10px 14px', fontSize: 13.5 }}>📚 Biblioteca de landings</button>
-        <button onClick={() => setCreando(true)} className="df-btn-primary" style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Agregar producto</button>
+        <div className="fila">
+          <a className="btn btn-fant" href="/tutorial-tienda-en-linea" target="_blank" rel="noreferrer">📘 Tutorial</a>
+          {urlTienda && enLinea && <a className="btn btn-sec" href={urlTienda} target="_blank" rel="noreferrer">Ver mi tienda ↗</a>}
+          <button type="button" className="btn btn-sec" onClick={() => setBiblioteca(true)}>📚 Biblioteca</button>
+          <button type="button" className="btn btn-pri" onClick={() => setCreando(true)}>＋ Nueva landing</button>
+        </div>
       </div>
 
-      {membresia && <MembresiaCard m={membresia} />}
+      <div className="kpis">
+        <div className="kpi"><span className="eti">Visitas</span><span className="valor">{lista ? vistas.toLocaleString('es-CO') : '…'}</span><span className="delta">en todas tus landings</span></div>
+        <div className="kpi"><span className="eti">Pedidos desde la tienda</span><span className="valor">{lista ? pedidos : '…'}</span><span className="delta">{conv}</span></div>
+        <div className="kpi"><span className="eti">Landings publicadas</span><span className="valor">{lista ? publicadas.length : '…'}</span><span className="delta">de {lista?.length ?? '…'} creadas</span></div>
+        <div className="kpi"><span className="eti">Membresía</span><span className={`valor ${membresia ? (enLinea ? 'ok' : 'mal') : ''}`} style={{ fontSize: 22 }}>{!membresia ? '…' : membresia.cortesia ? 'Cortesía' : membresia.activa ? 'Activa' : membresia.enGracia ? 'En gracia' : 'Vencida'}</span><span className="delta">{membresia ? (membresia.vence ? `vence ${membresia.vence}` : `${pesos(membresia.precio)} al mes`) : ''}</span></div>
+      </div>
 
-      {tienda && <TiendaCard t={tienda} onGuardada={setTienda} />}
-
-      {dominio && <DominioCard d={dominio} landings={lista || []} enLinea={!!membresia && (membresia.activa || membresia.enGracia)} onCambio={(x) => { setDominio(x); void cargar(); }} />}
-
-      {lista === null ? <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Cargando…</div>
-        : !lista.length ? (
-          <div style={{ ...card, padding: '34px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: 40 }}>🛍️</div>
-            <div style={{ fontWeight: 800, fontSize: 16, margin: '6px 0 4px' }}>Agrega tu primer producto</div>
-            <div style={{ color: 'var(--df-text-muted)', fontSize: 13.5, maxWidth: 460, margin: '0 auto 14px' }}>Tráelo de tu catálogo de DealFlow (con fotos, variantes y combos) o crea uno solo para la tienda. Cada producto tiene su propia página y su enlace para pautar.</div>
-            <button onClick={() => setCreando(true)} style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Agregar producto</button>
+      <div className="lateral">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+          <div className="tabs">
+            {TABS.map((x) => <button key={x.id} type="button" className={`tab${tab === x.id ? ' sel' : ''}`} onClick={() => setTab(x.id)}>{x.t}</button>)}
           </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-            {lista.map((l) => (
-              <div key={l.id} style={{ ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <button onClick={() => onAbrir(l.id)} style={{ border: 'none', padding: 0, background: 'var(--df-surface-2, #f4f4f5)', cursor: 'pointer', aspectRatio: '16/10', overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
-                  <Miniatura id={l.id} />
-                </button>
-                <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <div style={{ fontWeight: 700, fontSize: 14.5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nombre}</div>
-                    {l.modoCodigo && <span title="Usa su propio código" style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-indigo)', background: 'var(--df-indigo-subtle)', borderRadius: 6, padding: '2px 7px' }}>💻 Código</span>}
-                    <Estado l={l} />
-                  </div>
-                  {l.estado === 'publicada' && (
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <a href={l.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--df-purple)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.url.replace(/^https?:\/\//, '')}</a>
-                      <button onClick={() => copiar(l.url)} style={{ ...btn, padding: '3px 8px', fontSize: 11.5 }}>Copiar</button>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--df-text-muted)' }}>
-                    <span>👁 {l.vistas.toLocaleString('es-CO')} visitas</span>
-                    <span>🛒 {l.pedidos} pedidos</span>
-                    {l.vistas > 0 && <span>{((l.pedidos / l.vistas) * 100).toFixed(1)}% conv.</span>}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 'auto', flexWrap: 'wrap' }}>
-                    <button onClick={() => onAbrir(l.id)} style={btnPri}>Editar</button>
-                    <button onClick={() => void duplicar(l)} style={btn}>Duplicar</button>
-                    <button onClick={() => void borrar(l)} style={{ ...btn, color: 'var(--df-danger)' }}>Eliminar</button>
-                  </div>
+
+          {tab === 'landings' && (
+            lista === null ? <div className="vacio">Cargando…</div>
+              : !lista.length ? (
+                <div className="vacio" style={{ padding: '34px 20px' }}>
+                  <div style={{ fontSize: 40 }}>🛍️</div>
+                  <div style={{ fontWeight: 800, fontSize: 16, margin: '6px 0 4px', color: 'var(--tinta)' }}>Agrega tu primer producto</div>
+                  <div style={{ maxWidth: 460, margin: '0 auto 14px' }}>Tráelo de tu catálogo de DealFlow (con fotos, variantes y combos) o crea uno solo para la tienda. Cada producto tiene su propia página y su enlace para pautar.</div>
+                  <button type="button" className="btn btn-pri" onClick={() => setCreando(true)}>＋ Nueva landing</button>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {lista.map((l) => {
+                    const pub = l.estado === 'publicada';
+                    return (
+                      <article key={l.id} className={`landing${vistaActual === l.url ? ' sel' : ''}`} onClick={() => setVista(l.url)}>
+                        <button type="button" className="mini" onClick={() => onAbrir(l.id)} style={{ position: 'relative', border: 0, padding: 6, cursor: 'pointer', background: 'var(--panel2)', overflow: 'hidden' }} aria-label={`Editar ${l.nombre}`}>
+                          <Miniatura id={l.id} />
+                          <span style={{ position: 'relative', background: 'rgba(5,7,19,.65)', borderRadius: 6, padding: '1px 5px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/{l.slug}</span>
+                        </button>
+                        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <b style={{ fontSize: 14 }}>{l.nombre}</b>
+                            <span className={`pill ${pub ? 'ok' : 'neutro'} chica`}>{pub ? 'Publicada' : 'Borrador'}</span>
+                            {l.modoCodigo && <span className="pill info sin chica" title="Usa su propio código">💻 Código</span>}
+                            {dominio?.inicio === l.id && <span className="pill info sin chica">PRINCIPAL</span>}
+                          </div>
+                          {pub ? <a href={l.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="mono" style={{ fontSize: 12, color: 'var(--cian)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.url.replace(/^https?:\/\//, '')}</a>
+                            : <span className="suave-t" style={{ fontSize: 12.5 }}>Publícala desde el editor para que tenga enlace.</span>}
+                          <span className="tenue mono" style={{ fontSize: 11 }}>{l.vistas.toLocaleString('es-CO')} visitas · {l.pedidos} pedidos{l.vistas > 0 ? ` · ${((l.pedidos / l.vistas) * 100).toFixed(1)} %` : ''}</span>
+                        </div>
+                        <div className="fila" style={{ gap: 6, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
+                          <button type="button" className="btn btn-sec btn-chico" onClick={() => onAbrir(l.id)}>Editar</button>
+                          {pub && <button type="button" className="btn btn-fant btn-chico" onClick={() => copiar(l.url)}>Copiar enlace</button>}
+                          <button type="button" className="btn btn-fant btn-chico" onClick={() => void duplicar(l)}>Duplicar</button>
+                          <button type="button" className="btn btn-fant btn-chico" onClick={() => void borrar(l)} style={{ color: 'var(--coral)' }}>Eliminar</button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )
+          )}
+
+          {tab === 'inicio' && (tienda ? <TiendaCard t={tienda} onGuardada={setTienda} /> : <div className="vacio">Cargando…</div>)}
+
+          {tab === 'dominio' && (
+            <>
+              {membresia && <MembresiaCard m={membresia} />}
+              {dominio && <DominioCard d={dominio} landings={lista || []} enLinea={enLinea} onCambio={(x) => { setDominio(x); void cargar(); }} />}
+            </>
+          )}
+
+          {tab === 'plantillas' && (
+            <section className="tarjeta">
+              <div className="tarjeta-cab"><h2>Mis plantillas</h2><button type="button" className="btn btn-pri btn-chico" onClick={() => setPlantillas(true)}>Abrir mis plantillas</button></div>
+              <p className="suave-t" style={{ fontSize: 13 }}>Diseños propios para tus landings: crea una plantilla con tu estilo, aplícala a varias landings y cámbiala en un solo lugar.</p>
+            </section>
+          )}
+        </div>
+
+        <aside className="tarjeta" aria-label="Vista previa" style={{ gap: 12, position: 'sticky', top: 0 }}>
+          <div className="tarjeta-cab"><h3>Así se ve en el celular</h3>{vistaActual && <a className="btn btn-fant btn-chico" href={vistaActual} target="_blank" rel="noreferrer">Abrir ↗</a>}</div>
+          {vistaActual && enLinea
+            ? <div className="celu"><iframe title="Vista previa" src={vistaActual} style={{ width: '100%', height: 480, border: 0, display: 'block', background: '#fff' }} /></div>
+            : <div className="vacio">{enLinea ? 'Publica una landing para verla aquí.' : 'Activa la membresía para que tu tienda esté en línea y verla aquí.'}</div>}
+          <p className="tenue" style={{ fontSize: 11.5 }}>Toca una landing de la lista para verla aquí. El formulario de pago contra entrega crea el pedido y el asistente lo confirma por WhatsApp.</p>
+        </aside>
+      </div>
+
       {creando && <CrearModal df={df} onCerrar={() => setCreando(false)} onCreada={(id) => { setCreando(false); onAbrir(id); }} />}
       {plantillas && <PlantillasModal landings={lista || []} onCerrar={() => { setPlantillas(false); void cargar(); }} />}
       {biblioteca && <BibliotecaLandingsModal onCerrar={() => setBiblioteca(false)} onImportada={(id) => { setBiblioteca(false); onAbrir(id); }} />}
@@ -181,7 +231,7 @@ function Miniatura({ id }: { id: string }) {
     if (fotos.has(id)) return;
     void apiLanding(id).then((r) => { const f = r.data?.landing.datos.galeria[0] || ''; fotos.set(id, f); setSrc(f); });
   }, [id]);
-  return src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 34, opacity: 0.5 }}>🖼️</span>;
+  return src ? <img src={src} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 22, opacity: 0.5 }}>🖼️</span>;
 }
 
 function CrearModal({ df, onCerrar, onCreada }: { df: DealFlowState; onCerrar: () => void; onCreada: (id: string) => void }) {
