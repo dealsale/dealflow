@@ -24,6 +24,16 @@ export function Pedidos({ df }: { df: DealFlowState }) {
   // Ancho real del área de la tabla (no de la ventana): cambia con el menú lateral abierto o cerrado.
   const cajaRef = useRef<HTMLDivElement>(null);
   const [modo, setModo] = useState<Modo>('tabla');
+  const [visibles, setVisibles] = useState(POR_TANDA);
+  const finRef = useRef<HTMLDivElement>(null);
+  // Al cambiar filtros, búsqueda u orden se vuelve a la primera tanda.
+  useEffect(() => { setVisibles(POR_TANDA); }, [fp.f, df.orderQuery]);
+  useEffect(() => {
+    const el = finRef.current; if (!el) return;
+    const io = new IntersectionObserver((e) => { if (e[0]?.isIntersecting) setVisibles((v) => v + POR_TANDA); }, { rootMargin: '600px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visibles, fp.filtrados.length]);
   useEffect(() => {
     const el = cajaRef.current; if (!el) return;
     const medir = () => setModo(modoPara(el.clientWidth));
@@ -105,8 +115,16 @@ export function Pedidos({ df }: { df: DealFlowState }) {
           </div>
         )}
         <div style={modo === 'tarjetas' ? { display: 'flex', flexDirection: 'column', gap: 10 } : undefined}>
-          {fp.filtrados.map((o) => <Fila key={o.id} o={o} modo={modo} />)}
+          {fp.filtrados.slice(0, visibles).map((o) => <Fila key={o.id} o={o} modo={modo} />)}
         </div>
+        {/* Con miles de pedidos se pintan de a 60: al acercarse al final se cargan más solos. */}
+        {fp.filtrados.length > visibles && (
+          <div ref={finRef} style={{ padding: 14, textAlign: 'center' }}>
+            <button onClick={() => setVisibles((v) => v + POR_TANDA)} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', color: 'var(--df-text-body)' }}>
+              Ver más ({fp.filtrados.length - visibles} restantes)
+            </button>
+          </div>
+        )}
         {fp.filtrados.length === 0 && (
           <div style={{ padding: 36, textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 14, ...(modo === 'tarjetas' ? { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12 } : {}) }}>
             {df.orderQuery.trim() || n ? 'Ningún pedido coincide con la búsqueda o los filtros.' : 'Todavía no hay pedidos.'}
@@ -118,6 +136,7 @@ export function Pedidos({ df }: { df: DealFlowState }) {
   );
 }
 
+const POR_TANDA = 60;
 const thStyle: CSSProperties = { fontSize: 11.5, fontWeight: 800, color: 'var(--df-text-muted)', letterSpacing: '.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', display: 'block' };
 
 // Texto literal de la transportadora, solo si dice algo más que el estado.

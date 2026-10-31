@@ -1,4 +1,5 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { ymdCO } from '../lib/fechaCO';
 import { RecaudosEffi } from '../components/RecaudosEffi';
 import { ConversionAnuncios } from '../components/ConversionAnuncios';
 import { AnalisisVentas } from '../components/AnalisisVentas';
@@ -29,7 +30,7 @@ export function Estadisticas({ df }: { df: DealFlowState }) {
   });
   const dateInput: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text-body)' };
 
-  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const hoy = ymdCO();
   const unDia = df.statsRango.desde === df.statsRango.hasta;
   const moverDia = (f: string, n: number) => new Date(new Date(f + 'T12:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10);
   const flecha: React.CSSProperties = { border: '1px solid var(--df-border)', background: 'var(--df-surface)', color: 'var(--df-text-body)', borderRadius: 8, width: 30, height: 32, fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' };

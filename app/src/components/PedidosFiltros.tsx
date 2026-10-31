@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ymdCO } from '../lib/fechaCO';
 import type { CSSProperties } from 'react';
 import type { DecoratedOrder } from '../hooks/useDealFlowState';
 import { ESTADOS_TODOS } from '../lib/style';
@@ -49,7 +50,7 @@ export const ORDENES: { id: Orden; label: string }[] = [
 ];
 
 const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-const diaBogota = (offset = 0) => new Date(Date.now() - offset * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+const diaBogota = (offset = 0) => ymdCO(Date.now() - offset * 86400000);
 /** Valor del pedido (el acordado o la suma de ítems + envío). */
 export const valorPedido = (o: DecoratedOrder) => (o.total && o.total > 0 ? o.total : o.items.reduce((a, it) => a + it.qty * it.precio, 0) + (o.envio || 0));
 /** Nombre base del producto de un ítem ("Vestido Helem (M · Azul)" → "Vestido Helem"). */

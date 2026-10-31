@@ -272,6 +272,30 @@ MUY IMPORTANTE — CUÁNDO NO ESCRIBIR: si la conversación YA ESTÁ CERRADA no 
 }
 
 /**
+ * ¿El cliente ACEPTA que le enviemos el pedido? Para respuestas a una confirmación que no son
+ * un "sí" o un "no" claro ("bueno, mándenlo el lunes", "ok pero llámenme antes"…).
+ */
+export async function clasificarConfirmacion(storeId: string, resumen: string, respuesta: string): Promise<'si' | 'no' | 'otro'> {
+  const ia = resolverTexto(storeId);
+  if (!ia || !respuesta.trim()) return 'otro';
+  try {
+    const res = await fetch(ia.url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ model: ia.model, max_tokens: 4, temperature: 0, messages: [
+        { role: 'system', content: 'Clasificas la respuesta de un cliente a la pregunta "¿Confirmas que te enviemos este pedido?". Responde SOLO una palabra: SI (acepta que se envíe, aunque agregue un comentario como una hora o un saludo), NO (no lo quiere, cancela o pide no enviarlo) u OTRO (pregunta algo, pide cambiar productos/talla/dirección o no se entiende).' },
+        { role: 'user', content: `Pedido: ${resumen.slice(0, 500)}\n\nRespuesta del cliente: ${respuesta.slice(0, 400)}` },
+      ] }),
+    });
+    if (!res.ok) return 'otro';
+    const b = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const r = (b.choices?.[0]?.message?.content || '').trim().toUpperCase();
+    return /^S[IÍ]/.test(r) ? 'si' : /^NO/.test(r) ? 'no' : 'otro';
+  } catch { return 'otro'; }
+}
+
+/**
  * Si la tienda tiene IA disponible y el chat lo atiende el asistente,
  * genera la respuesta con el contexto de la tienda y la envía.
  */
@@ -501,9 +525,13 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   // lugares de entrega y la contraentrega salen solo de las reglas de la tienda y de los productos.
   const extras = await import('./effiExtras.js');
   const envioTxt = await extras.contextoEnvioLead(storeId, leadId).catch(() => '');
+  // Pedido ya creado que espera el "sí" del cliente (confirmación enviada por plantilla): la IA
+  // resuelve dudas y pide la confirmación, pero NO crea otro pedido (el "sí" lo confirma el sistema).
+  const pendConf = db.prepare(`SELECT numero, total FROM orders WHERE store_id = ? AND lead_id = ? AND confirmacion = 'esperando' AND estado IN ('Nuevo','Confirmado') AND created_at > datetime('now','-7 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as { numero: number; total: number } | undefined;
+  const pendTxt = pendConf ? `\n\nPEDIDO PENDIENTE DE CONFIRMAR: este cliente ya tiene el pedido DF-${pendConf.numero} (total $${Number(pendConf.total).toLocaleString('es-CO')}) esperando que diga que SÍ lo enviemos. Responde sus dudas con amabilidad y, al final, pregúntale si se lo enviamos. NO pongas el marcador ##PEDIDO para este pedido (ya existe): cuando el cliente diga que sí, el sistema lo confirma solo.` : '';
   const systemFinal = mediaSinTexto
-    ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
-    : system + memoriaCliente + novedadTxt + envioTxt;
+    ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}${pendTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
+    : system + memoriaCliente + novedadTxt + envioTxt + pendTxt;
 
   const destino = lead.wa_id || lead.tel;
   const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
@@ -800,9 +828,11 @@ function campoPedido(s: string, k: string): string {
 /** ¿El cliente está confirmando (sí, sisas, dale, correcto…)? Mensajes cortos. */
 function esAfirmacion(t: string): boolean {
   const s = norm(t);
-  if (!s || s.length > 45) return false;
+  if (!s || s.length > 80) return false;
+  // "Sí, pero cámbiame la talla" no es un sí al pedido tal cual.
+  if (/\b(pero|cambi\w*)\b/.test(s) || /^no\b/.test(s)) return false;
   const words = new Set(s.split(' ').filter(Boolean));
-  const yes = ['si', 'sisas', 'sisa', 'sip', 'sipi', 'claro', 'dale', 'dalee', 'listo', 'correcto', 'confirmo', 'confirmado', 'ok', 'oka', 'okay', 'okey', 'eso', 'vale', 'va', 'sale', 'perfecto', 'hagale', 'deacuerdo', 'acuerdo', 'positivo', 'afirmativo', 'yes', 'yeah', 'yep', 'sure', 'correct', 'confirmed', 'right', 'exactly'];
+  const yes = ['si', 'envienlo', 'enviamelo', 'envialo', 'mandalo', 'mandenlo', 'adelante', 'obvio', 'porsupuesto', 'sisas', 'sisa', 'sip', 'sipi', 'claro', 'dale', 'dalee', 'listo', 'correcto', 'confirmo', 'confirmado', 'ok', 'oka', 'okay', 'okey', 'eso', 'vale', 'va', 'sale', 'perfecto', 'hagale', 'deacuerdo', 'acuerdo', 'positivo', 'afirmativo', 'yes', 'yeah', 'yep', 'sure', 'correct', 'confirmed', 'right', 'exactly'];
   if (yes.some((y) => words.has(y))) return true;
   return /\b(si|sisas|dale|listo|correcto|confirm\w*|perfecto|de una|hagale|todo bien|esta bien|asi es|that s right|sounds good|all good|go ahead)\b/.test(s);
 }
@@ -866,14 +896,15 @@ function campoResumen(txt: string, etiqueta: string): string {
 function pedidoDesdeResumen(leadId: string): string {
   // Miramos bastante atrás: si el bot re-preguntó "¿confirmas?" varias veces, el
   // "Resumen de tu pedido" real pudo quedar varios mensajes atrás.
-  const rows = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'bot' AND texto != '' ORDER BY created_at DESC LIMIT 16").all(leadId) as { texto: string }[];
-  const resumen = rows.map((r) => r.texto).find((t) => /(resumen|summary)/i.test(t) && /(direcc|address|total|ciudad|city)/i.test(t));
+  // También la plantilla de confirmación que envió una persona desde el chat ("Pediste: … Dirección: …").
+  const rows = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de IN ('bot','vendedor') AND texto != '' ORDER BY created_at DESC LIMIT 16").all(leadId) as { texto: string }[];
+  const resumen = rows.map((r) => r.texto).find((t) => /(resumen|summary|pediste|datos de env[ií]o)/i.test(t) && /(direcc|address|ciudad|city)/i.test(t));
   if (!resumen) return '';
   const cliente = campoResumen(resumen, '(?:Nombre|Name)');
   const ciudad = campoResumen(resumen, '(?:Ciudad|City)');
   const direccion = campoResumen(resumen, '(?:Direcci|Address)');
   const total = (campoResumen(resumen, 'Total').match(/\d/g) || []).join('');
-  const prodField = campoResumen(resumen, '(?:Producto|Product)') || resumen;
+  const prodField = campoResumen(resumen, '(?:Producto|Product|Pediste)') || resumen;
   const items: string[] = [];
   // Conserva el detalle (talla/color) que viene tras el nombre: "3 x Bota — Talla: L — Negro, Camel"
   // se convierte en "3x Bota (Talla: L · Negro, Camel)" para que el pedido quede completo.
@@ -887,8 +918,9 @@ function pedidoDesdeResumen(leadId: string): string {
   }
   if (!items.length || (!direccion && !ciudad)) return '';
   const departamento = campoResumen(resumen, '(?:Departamento|Department)');
+  const telefono = (campoResumen(resumen, '(?:Celular|Tel[eé]fono|Phone)').match(/\d/g) || []).join('');
   console.log(`[ia] pedido tomado del resumen (la IA no puso el marcador) para lead ${leadId}`);
-  return ` cliente="${cliente}"; departamento="${departamento}"; ciudad="${ciudad}"; direccion="${direccion}"; items="${items.join(', ')}"; total="${total}"`;
+  return ` cliente="${cliente}"; telefono="${telefono}"; departamento="${departamento}"; ciudad="${ciudad}"; direccion="${direccion}"; items="${items.join(', ')}"; total="${total}"`;
 }
 
 /** Registra el pedido cuando la IA cierra la venta y le confirma al cliente. Devuelve true si lo creó. */
@@ -1018,6 +1050,9 @@ function celularVerificado(leadId: string, valor: string, telLead: string): stri
   if (!/^(3\d{9}|60\d{8})$/.test(d)) return '';
   // Tiene que aparecer en algún mensaje del cliente (con o sin espacios, guiones o +57).
   if (escritos.some((t) => t.replace(/\D/g, '').includes(d))) return d;
+  // …o en la confirmación que le mandó una PERSONA de la tienda (plantilla con sus datos) y él aceptó.
+  const deTienda = (db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'vendedor' AND texto != '' ORDER BY created_at DESC LIMIT 10").all(leadId) as { texto: string }[]).map((m) => m.texto);
+  if (deTienda.some((t) => t.replace(/\D/g, '').includes(d))) return d;
   // El de WhatsApp solo si el cliente dijo que es el mismo.
   if (d === deLead && dijoMismo()) return d;
   return '';

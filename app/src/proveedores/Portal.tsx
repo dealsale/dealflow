@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import logo from '../assets/logo.png';
 import { Donut, HBars, LineChart } from '../components/Charts';
 
+import { fmtCO } from '../lib/fechaCO';
 /*
  * Portal de proveedores (app.<dominio>/proveedores). El proveedor entra con la cuenta
  * que le creó DealFlow y ve los pedidos de todas las tiendas hechos con sus convenios de
@@ -51,7 +52,7 @@ const fechaHora = (s: string) => {
   if (!s) return '';
   const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s.replace(' ', 'T') + 'Z');
   if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' });
+  return fmtCO('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(d);
 };
 // Fechas de la transportadora: ya vienen en hora de Colombia.
 const fechaLocal = (s: string) => {

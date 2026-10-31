@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { apiBorrarCodigoExt, apiCodigosExt, apiCrearCodigoExt, type CodigoExt } from '../lib/api';
 
+import { fmtCO } from '../lib/fechaCO';
 const btn: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 };
-const fecha = (s: string) => (s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' }) : 'nunca');
+const fecha = (s: string) => (s ? fmtCO('es-CO', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(s.replace(' ', 'T') + 'Z')) : 'nunca');
 
 /**
  * Extensión de Chrome "DealFlow x Shopify": un botón "Enviar a DealFlow" en cada pedido

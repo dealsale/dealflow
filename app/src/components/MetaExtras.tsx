@@ -4,9 +4,10 @@ import { Dropdown } from './Dropdown';
 import { IntegracionFila, LogoInteg } from './IntegracionFila';
 import { fmt } from '../lib/format';
 
+import { fmtCO } from '../lib/fechaCO';
 const btn: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' };
 const btnP: React.CSSProperties = { ...btn, background: 'var(--df-brand)', color: '#fff', border: 'none', fontWeight: 700 };
-const hora = (iso: string) => (iso ? new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' }) : '');
+const hora = (iso: string) => (iso ? fmtCO('es-CO', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z')) : '');
 
 /** ¿Por qué no llegan los mensajes de Messenger? Revisa cada página y lo explica en simple. */
 export function DiagnosticoMessenger() {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { fmtCO } from '../lib/fechaCO';
 /**
  * Gráficos livianos en SVG (sin dependencias) para la pestaña de Estadísticas.
  * Todos son responsivos (viewBox + width 100%), respetan los temas con los
@@ -15,7 +16,7 @@ const miles = (n: number) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1)
 /** Etiqueta corta de fecha "12 sep" a partir de YYYY-MM-DD. */
 function diaCorto(iso: string): string {
   const d = new Date(iso + 'T12:00:00');
-  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'America/Bogota' });
+  return fmtCO('es-CO', { day: 'numeric', month: 'short' }).format(d);
 }
 
 const tooltipBox: React.CSSProperties = {

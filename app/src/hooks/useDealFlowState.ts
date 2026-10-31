@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ymdCO, msDe, hhmmCO, fmtCO } from '../lib/fechaCO';
 import type { CSSProperties } from 'react';
 import {
   ACCOUNTS,
@@ -512,40 +513,32 @@ const ESTADOS_PEDIDO: string[] = ESTADOS_TODOS;
 const ESTADO_VIEJO: Record<string, string> = { Empacado: 'Confirmado', Despachado: 'En tránsito' };
 /** Fecha (YYYY-MM-DD) en Bogotá a partir del datetime UTC del servidor. */
 function fechaBogota(iso?: string): string {
-  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-  if (!iso) return hoy;
-  const d = new Date(String(iso).replace(' ', 'T') + (String(iso).endsWith('Z') ? '' : 'Z'));
-  return isNaN(+d) ? hoy : d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const ms = msDe(iso);
+  return isNaN(ms) ? ymdCO() : ymdCO(ms);
 }
 
 /** Fecha (YYYY-MM-DD) de HOY en Bogotá. */
 function hoyBogota(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  return ymdCO();
 }
+
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
+const fechaLarga = (ymd: string) => `${Number(ymd.slice(8, 10))} ${MESES_CORTOS[Number(ymd.slice(5, 7)) - 1] || ''} ${ymd.slice(0, 4)}`;
 
 /** Etiqueta legible de una fecha: "Hoy", "Ayer" o "10 sept 2026" (Bogotá). */
 function etiquetaFecha(iso?: string): string {
   if (!iso) return '';
-  const f = fechaBogota(iso);
-  const hoy = hoyBogota();
-  const ayer = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-  if (f === hoy) return 'Hoy';
-  if (f === ayer) return 'Ayer';
-  const d = new Date(String(iso).replace(' ', 'T') + (String(iso).endsWith('Z') ? '' : 'Z'));
-  if (isNaN(+d)) return f;
-  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' });
+  const ms = msDe(iso);
+  if (isNaN(ms)) return '';
+  return etiquetaFechaYMD(ymdCO(ms));
 }
 
 /** Etiqueta legible a partir de una fecha 'YYYY-MM-DD' (Bogotá): "Hoy", "Ayer" o "17 sept 2026". */
 function etiquetaFechaYMD(ymd?: string): string {
   if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return '';
-  const hoy = hoyBogota();
-  const ayer = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-  if (ymd === hoy) return 'Hoy';
-  if (ymd === ayer) return 'Ayer';
-  // Mediodía UTC para que el formateo no corra la fecha por zona horaria.
-  const d = new Date(ymd + 'T12:00:00Z');
-  return isNaN(+d) ? ymd : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (ymd === ymdCO()) return 'Hoy';
+  if (ymd === ymdCO(Date.now() - 86400000)) return 'Ayer';
+  return fechaLarga(ymd);
 }
 
 /**
@@ -569,10 +562,8 @@ function estadoDeMensaje(m: Mensaje): { texto: string; color: string; titulo: st
 
 /** Hora local de Bogotá (HH:MM) a partir del datetime UTC del servidor. */
 function horaBogotaDe(iso: string): string {
-  const d = new Date(String(iso).replace(' ', 'T') + (String(iso).endsWith('Z') ? '' : 'Z'));
-  return isNaN(+d)
-    ? String(iso).slice(11, 16)
-    : d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' });
+  const ms = msDe(iso);
+  return isNaN(ms) ? String(iso).slice(11, 16) : hhmmCO(ms);
 }
 
 function mapApiOrders(items: ApiOrder[]): Order[] {
@@ -716,14 +707,14 @@ export function useDealFlowState() {
   type StatsPreset = 'hoy' | 'ayer' | '7d' | '30d' | 'mes' | 'mesPasado' | 'rango';
   const [statsPreset, setStatsPreset] = useState<StatsPreset>('7d');
   const [statsRango, setStatsRango] = useState<{ desde: string; hasta: string }>(() => {
-    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-    const hace6 = new Date(Date.now() - 6 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    const hoy = ymdCO();
+    const hace6 = ymdCO(Date.now() - 6 * 86400000);
     return { desde: hace6, hasta: hoy };
   });
   const [stats, setStats] = useState<Estadisticas | null>(null);
   const [statsCargando, setStatsCargando] = useState(false);
   const rangoDePreset = (preset: StatsPreset): { desde: string; hasta: string } => {
-    const bog = (t: number) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    const bog = (t: number) => ymdCO(t);
     const hoy = bog(Date.now());
     const ayer = bog(Date.now() - 86400000);
     if (preset === 'hoy') return { desde: hoy, hasta: hoy };
@@ -3430,8 +3421,8 @@ export function useDealFlowState() {
   // como cantidad × precio (eso triplicaría un combo). Solo si no hay total guardado
   // se cae a la suma de los ítems + envío. Es el mismo valor que muestra Pedidos.
   const totalPedido = (o: Order) => (o.total && o.total > 0 ? o.total : o.items.reduce((x, it) => x + it.qty * it.precio, 0) + (o.envio || 0));
-  const hoyStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-  const ayerStr = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const hoyStr = ymdCO();
+  const ayerStr = ymdCO(Date.now() - 86400000);
   const pedidosHoy = orders.filter((o) => (o.fecha || hoyStr) === hoyStr);
   const pedidosAyer = orders.filter((o) => o.fecha === ayerStr);
   const ventasHoy = pedidosHoy.reduce((a, o) => a + totalPedido(o), 0);
@@ -3441,11 +3432,11 @@ export function useDealFlowState() {
     : difAyer > 0 ? `↑ ${difAyer} pedido${difAyer === 1 ? '' : 's'} más que ayer`
     : difAyer < 0 ? `↓ ${-difAyer} pedido${difAyer === -1 ? '' : 's'} menos que ayer`
     : 'igual que ayer';
-  const resumenFecha = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Bogota' });
+  const resumenFecha = fmtCO('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
 
   // ── Métricas del MES (motivante del resumen) ──
   const mesStr = hoyStr.slice(0, 7); // 'YYYY-MM' del mes en curso (Bogotá)
-  const mesNombre = new Date(hoyStr + 'T12:00:00').toLocaleDateString('es-CO', { month: 'long', timeZone: 'America/Bogota' });
+  const mesNombre = fmtCO('es-CO', { month: 'long' }).format(new Date(hoyStr + 'T12:00:00'));
   const [anioAct, mesAct] = mesStr.split('-').map(Number);
   const dPrev = new Date(anioAct, mesAct - 2, 1); // mes anterior (mesAct es 1-based)
   const mesAntStr = `${dPrev.getFullYear()}-${String(dPrev.getMonth() + 1).padStart(2, '0')}`;
@@ -3472,7 +3463,7 @@ export function useDealFlowState() {
   const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   // Filtro por fecha del pedido (zona horaria de Bogot\u00e1).
   const [fechaFilter, setFechaFilter] = useRecordado<'Todas' | 'Hoy' | 'Ayer' | '7 d\u00edas'>('pedidos:fecha', 'Todas');
-  const hace7 = new Date(Date.now() - 6 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const hace7 = ymdCO(Date.now() - 6 * 86400000);
   const pasaFecha = (o: Order) => {
     const f = o.fecha || hoyStr;
     if (fechaFilter === 'Hoy') return f === hoyStr;
@@ -3906,7 +3897,7 @@ export function useDealFlowState() {
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pedidos-dealflow-${new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })}.csv`;
+    a.download = `pedidos-dealflow-${ymdCO()}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();

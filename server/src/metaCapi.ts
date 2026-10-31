@@ -180,7 +180,7 @@ export async function procesarCapi(storeId: string): Promise<number> {
   if (cfg.leads) {
     const leads = db.prepare(`SELECT l.id, l.wa_id, l.canal, l.ad_ref, l.created_at FROM leads l
       WHERE l.store_id = ? AND COALESCE(l.ad_ref, '') != '' AND l.created_at > datetime('now', '-7 days')
-        AND (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente') >= 2`).all(storeId) as { id: string; wa_id: string; canal: string; ad_ref: string; created_at: string }[];
+        AND l.n_cliente >= 2`).all(storeId) as { id: string; wa_id: string; canal: string; ad_ref: string; created_at: string }[];
     for (const l of leads) {
       const clave = `df-${l.id}-lead`;
       if (hecho(clave)) continue;

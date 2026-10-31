@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
+import { fmtCO } from '../lib/fechaCO';
 /** Formatea la marca de tiempo del evento en hora de Bogotá ("11 sept, 14:30"). */
 function cuando(iso: string): string {
   const d = new Date(String(iso).replace(' ', 'T') + (String(iso).endsWith('Z') ? '' : 'Z'));
   if (isNaN(+d)) return iso;
-  return d.toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' });
+  return fmtCO('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
 }
 
 const COLOR: Record<string, { dot: string; bg: string; txt: string }> = {

@@ -12,6 +12,7 @@ import { apiRegistroPedido, apiDatosRemitente, type EventoPedido } from '../lib/
 import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia, type RemitenteSugerido } from '../lib/api';
 
+import { fmtCO } from '../lib/fechaCO';
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
 
 /**
@@ -866,7 +867,7 @@ function RegistroPedido({ rowId }: { rowId: string }) {
   const cargar = () => void apiRegistroPedido(rowId).then((r) => setEventos(r.data?.eventos || []));
   useEffect(() => { if (abierto) cargar(); }, [abierto]);
   const color = (n: string) => (n === 'error' ? 'var(--df-danger)' : n === 'warn' ? 'var(--df-warning)' : n === 'ok' ? 'var(--df-brand)' : 'var(--df-border-strong)');
-  const hora = (s: string) => new Date(s.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  const hora = (s: string) => fmtCO('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(s.replace(' ', 'T') + 'Z'));
   const errores = (eventos || []).filter((e) => e.nivel === 'error').length;
   return (
     <div style={{ padding: '12px 20px 16px', borderTop: '1px solid var(--df-border)' }}>
