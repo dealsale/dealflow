@@ -4,6 +4,7 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { OrigenBadge } from '../components/OrigenPedido';
 import { apiLeadsEstados, apiSetLeadEstado } from '../lib/api';
+import { Remarketing } from '../components/Remarketing';
 import type { EstadoLead, LeadEstado } from '../lib/api';
 
 /**
@@ -67,6 +68,8 @@ export function Leads({ df }: { df: DealFlowState }) {
   const [rango, setRango] = useRecordado<Rango>('leads:rango', 'todo');
   const [verPerdidos, setVerPerdidos] = useState(false);
   const [limite, setLimite] = useState<Record<string, number>>({});
+  const [vistaLeads, setVistaLeads] = useRecordado<'embudo' | 'remarketing'>('leads:vista', 'embudo');
+  const esDueno = df.sessionUser?.esDueno !== false;
 
   const cargar = () => { void apiLeadsEstados().then((r) => { if (r.data) setLeads(r.data.leads); }); };
   useEffect(() => {
@@ -98,15 +101,24 @@ export function Leads({ df }: { df: DealFlowState }) {
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
         <div style={{ flex: 1, minWidth: 220 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Leads</h1>
-          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>En qué va cada cliente. Toca una tarjeta para ir directo a su chat.</p>
+          <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>{vistaLeads === 'remarketing' ? 'Mensajes salientes a los clientes que ya te escribieron y no compraron.' : 'En qué va cada cliente. Toca una tarjeta para ir directo a su chat.'}</p>
         </div>
-        {embudo > 0 && (
+        {esDueno && (
+          <div role="tablist" style={{ display: 'flex', background: 'var(--df-surface-2, var(--df-bg))', border: '1px solid var(--df-border)', borderRadius: 999, padding: 3 }}>
+            {([['embudo', '🧭 Embudo'], ['remarketing', '📣 Remarketing']] as const).map(([id, t]) => (
+              <button key={id} role="tab" aria-selected={vistaLeads === id} onClick={() => setVistaLeads(id)}
+                style={{ border: 'none', borderRadius: 999, padding: '6px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', background: vistaLeads === id ? 'var(--df-surface)' : 'transparent', color: vistaLeads === id ? 'var(--df-text-strong)' : 'var(--df-text-muted)', boxShadow: vistaLeads === id ? '0 1px 3px rgba(0,0,0,.12)' : 'none' }}>{t}</button>
+            ))}
+          </div>
+        )}
+        {vistaLeads === 'remarketing' && esDueno ? null : embudo > 0 && (
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>
             Conversión: <b style={{ color: 'var(--df-text-strong)', fontSize: 15 }}>{Math.round((ventas / embudo) * 100)}%</b> ({ventas} de {embudo})
           </div>
         )}
       </div>
 
+      {vistaLeads === 'remarketing' && esDueno ? <Remarketing /> : <>
       {/* Resumen por estado: también filtra (lleva a la columna). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 12 }}>
         {ESTADOS.filter((e) => e.id !== 'perdido').map((e) => (
@@ -157,6 +169,7 @@ export function Leads({ df }: { df: DealFlowState }) {
           })}
         </div>
       )}
+      </>}
     </section>
   );
 }

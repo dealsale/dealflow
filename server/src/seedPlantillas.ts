@@ -105,6 +105,29 @@ const PLANTILLAS: Semilla[] = [
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Sí, quiero terminarlo' }, { tipo: 'QUICK_REPLY', texto: 'Ahora no' }],
   },
   // ── Marketing (requieren opt-in) ──
+  // Remarketing saliente (remarketing.ts). Mismo texto que el mensaje normal que va cuando
+  // la ventana de 24 h está abierta.
+  {
+    nombre: 'recuperar_pedido', categoria: 'MARKETING', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nTu pedido quedó a un paso: {{3}} por {{4}}.\n\n¿Te lo enviamos? Responde *Sí* y lo despachamos hoy mismo 🚚',
+    pie: 'Responde BAJA si no quieres más mensajes.',
+    ejemplos: ['Camila', 'Luna Accesorios', '1× Jean mom fit (Talla 8 · Azul)', '$129.900'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Sí, envíamelo' }, { tipo: 'QUICK_REPLY', texto: 'No, gracias' }],
+  },
+  {
+    nombre: 'seguimos_disponible', categoria: 'MARKETING', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nHace unos días nos preguntaste por {{3}} y todavía lo tenemos disponible.\n\n¿Quieres que te lo apartemos? Responde por aquí y te ayudamos a terminar tu pedido 🛍️',
+    pie: 'Responde BAJA si no quieres más mensajes.',
+    ejemplos: ['Camila', 'Luna Accesorios', 'el Jean mom fit'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Sí, lo quiero' }, { tipo: 'QUICK_REPLY', texto: 'Ahora no' }],
+  },
+  {
+    nombre: 'volver_a_comprar', categoria: 'MARKETING', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nGracias por tu compra anterior 💜 {{3}}.\n\n¿Quieres que te mostremos? Responde por aquí.',
+    pie: 'Responde BAJA si no quieres más mensajes.',
+    ejemplos: ['Camila', 'Luna Accesorios', 'Llegó la colección nueva y tienes 10% de descuento esta semana'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Quiero ver' }, { tipo: 'QUICK_REPLY', texto: 'Ahora no' }],
+  },
   {
     nombre: 'nueva_coleccion', categoria: 'MARKETING', idioma: 'es',
     cuerpo: 'Hola {{1}}, ya llegó lo nuevo 🔥\nEstrenamos {{2}} y sabemos que te va a encantar.\nMíralo antes de que se agote y aparta el tuyo respondiéndonos por aquí.',
