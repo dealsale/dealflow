@@ -603,10 +603,18 @@ export const apiEffiApiVincular = (variantId: string, effiId: string, tipo: 'pro
 export const apiEffiTodos = (refrescar = false) => req<{ articulos: { id: string; descripcion: string; referencia: string; drop: number; stock: number | null }[] }>(`/api/effi-api/articulos/todos${refrescar ? '?refrescar=1' : ''}`, 'GET');
 export const apiProveedorSugerido = (effiId: string) => req<{ articulo: ArticuloVerificado | null }>(`/api/effi-api/proveedor-sugerido/${encodeURIComponent(effiId)}`, 'GET');
 export const apiEffiApiEventos = () => req<{ eventos: EffiEvento[] }>('/api/effi-api/eventos', 'GET');
-export interface OpcionesGuia { transportadoras: EffiTransportadora[]; remitentes: EffiOpcion[]; defaults: EffiGuiaCfg; sugerido?: { remitente: string; nombre: string; motivo: string } | null }
-export interface DatosGuia { transportadora: string; servicio: string; formaPagoFlete: string; remitente: string; cantPaquetes: number; peso: number; volumen: number; alto: number; ancho: number; largo: number; contenido: string; valorDeclarado: number; nota: string; recibeSabado: boolean }
+/** Remitente que le corresponde al pedido. `pendiente`: es de un proveedor cuya bodega aún no se sabe. */
+export interface RemitenteSugerido { remitente: string; nombre: string; motivo: string; convenio?: string; proveedor?: string; pendiente?: boolean }
+export interface OpcionesGuia { transportadoras: EffiTransportadora[]; remitentes: EffiOpcion[]; defaults: EffiGuiaCfg; sugerido?: RemitenteSugerido | null }
+export interface DatosGuia { transportadora: string; servicio: string; formaPagoFlete: string; remitente: string; cantPaquetes: number; peso: number; volumen: number; alto: number; ancho: number; largo: number; contenido: string; valorDeclarado: number; nota: string; recibeSabado: boolean; recordar?: boolean }
 export const apiEffiOpcionesGuia = (orderId?: string, convenio?: string) => req<OpcionesGuia>(`/api/effi-api/opciones-guia${orderId || convenio ? `?orderId=${encodeURIComponent(orderId || '')}&convenio=${encodeURIComponent(convenio || '')}` : ''}`, 'GET');
-export const apiRemitentesConvenio = () => req<{ convenios: { id: string; nombre: string }[]; asignados: { convenio: string; remitente: string; origen: string }[] }>('/api/effi-api/remitentes-convenio', 'GET');
+export interface GuiaBodegaEquivocada { orderId: string; numero: string; estado: string; guia: string; fecha: string; proveedor: string; usado: string; correcta: string[]; recogida: boolean }
+export interface RemitentesConvenioResp {
+  convenios: { id: string; nombre: string }[]; asignados: { convenio: string; remitente: string; origen: string }[];
+  bodegas?: { convenio: string; nombre: string; remitentes: string[]; historial: { remitente: string; envios: number }[] }[];
+  duenos?: Record<string, string[]>; equivocadas?: GuiaBodegaEquivocada[]; guiaAutomatica?: boolean;
+}
+export const apiRemitentesConvenio = () => req<RemitentesConvenioResp>('/api/effi-api/remitentes-convenio', 'GET');
 export const apiFijarRemitenteConvenio = (convenio: string, remitente: string) => req<{ ok: true }>('/api/effi-api/remitentes-convenio', 'PUT', { convenio, remitente });
 export const apiEffiGuia = (rowId: string, d: DatosGuia) => req<{ ok: true; guia: string; transportadora: string; idTransaccion: string }>(`/api/orders/${rowId}/effi/guia`, 'POST', d);
 export const apiGuiaDocumento = (rowId: string, dataUrl: string) => req<{ ok: true; guiaUrl: string; guiaImg: string; convertida: boolean }>(`/api/orders/${rowId}/guia-documento`, 'POST', { dataUrl });
@@ -632,7 +640,7 @@ export interface TableroLogistica {
 export const apiLogistica = (dias = 45) => req<TableroLogistica>(`/api/logistica/effi?dias=${dias}`, 'GET');
 export const apiLogisticaActualizar = (dias = 45) => req<TableroLogistica>('/api/logistica/effi/actualizar', 'POST', { dias });
 export const apiEffiConveniosConocidos = () => req<{ convenios: { id: string; nombre: string }[]; porDefecto: string }>('/api/effi-api/convenios-conocidos', 'GET');
-export const apiEffiDespachar = (rowId: string, reintentar = false, convenio = '', remitente = '') => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar, convenio, remitente });
+export const apiEffiDespachar = (rowId: string, reintentar = false, convenio = '', remitente = '', recordar = false) => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar, convenio, remitente, recordar });
 
 // ── Campañas del Marketing IA ──
 export interface Brief {
@@ -1134,6 +1142,6 @@ export interface ChequeoEffi { estado: 'ok' | 'aviso' | 'error'; titulo: string;
 export interface ProductoVerificado {
   id: string; nombre: string; variantes: number; vinculadas: number;
   convenio: { id: string; nombre: string; origen: 'fijo' | 'aprendido' | 'propio' | '' };
-  bodega: { remitente: string; nombre: string; origen: 'fija' | 'aprendida' | 'defecto' | ''; usos: number; total: number };
+  bodega: { remitente: string; nombre: string; origen: 'fija' | 'aprendida' | 'defecto' | 'proveedor' | ''; usos: number; total: number };
 }
 export const apiEffiVerificacion = () => req<{ chequeos: ChequeoEffi[]; productos: ProductoVerificado[]; aprendido: { productos: number; convenios: number; envios: number } }>('/api/effi-api/verificacion', 'GET');

@@ -1946,7 +1946,16 @@ api.get('/effi-api/verificacion', requireAuth, requireStore, requireOwner, async
 api.get('/effi-api/remitentes-convenio', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
-  res.json({ convenios: ef.conveniosConocidos(sid), asignados: ef.remitentesPorConvenio(sid) });
+  const prov = ef.bodegasDeProveedores(sid);
+  const hist = ef.historialRemitentesConvenio(sid);
+  res.json({
+    convenios: ef.conveniosConocidos(sid), asignados: ef.remitentesPorConvenio(sid),
+    // Bodegas que cuentan para cada proveedor (fijada o remitente marcado con su nombre) y desde dónde han salido sus guías.
+    bodegas: [...prov.porConvenio].map(([convenio, p]) => ({ convenio, nombre: p.nombre, remitentes: [...p.remitentes], historial: (hist.get(convenio) || []).slice(0, 4) })),
+    duenos: Object.fromEntries(prov.dueno),
+    equivocadas: ef.guiasConBodegaEquivocada(sid),
+    guiaAutomatica: !!ef.cfgEffi(sid)?.guia?.activa,
+  });
 });
 api.put('/effi-api/remitentes-convenio', requireAuth, requireStore, requireOwner, async (req, res) => {
   const ef = await import('./effiApi.js');
@@ -1963,6 +1972,7 @@ api.post('/orders/:rowId/effi/guia', requireAuth, requireStore, requirePermiso('
     peso: n(b.peso, 1), volumen: n(b.volumen, 1), alto: n(b.alto, 10), ancho: n(b.ancho, 10), largo: n(b.largo, 10),
     cantPaquetes: n(b.cantPaquetes, 1), contenido: String(b.contenido || '').trim().slice(0, 80), nota: String(b.nota || '').trim().slice(0, 255),
     recibeSabado: b.recibeSabado !== false, valorDeclarado: Number(b.valorDeclarado) > 0 ? Number(b.valorDeclarado) : undefined,
+    recordar: b.recordar === true,
   }, b.reintentar === true);
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ ok: true, ...r });
@@ -2115,7 +2125,7 @@ api.post('/orders/:rowId/effi/despachar', requireAuth, requireStore, requirePerm
   const raw = String(req.body?.convenio || '').trim();
   const forzado = raw === 'propio' ? 'propio' : raw.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
   const remitente = String(req.body?.remitente || '').replace(/\D/g, '').slice(0, 20);
-  const r = await ef.despacharEffi(sid, req.params.rowId, reintentar, forzado, remitente);
+  const r = await ef.despacharEffi(sid, req.params.rowId, reintentar, forzado, remitente, req.body?.recordar === true);
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ ok: true, ...r });
 });

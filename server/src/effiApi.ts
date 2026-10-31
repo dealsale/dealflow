@@ -373,64 +373,241 @@ export function fijarRemitenteConvenio(storeId: string, convenio: string, remite
   if (!remitente) db.prepare('DELETE FROM effi_remitente_convenio WHERE store_id = ? AND convenio = ?').run(storeId, cv);
   else db.prepare(`INSERT INTO effi_remitente_convenio (store_id, convenio, remitente, origen) VALUES (?,?,?,'manual')
     ON CONFLICT(store_id, convenio) DO UPDATE SET remitente = excluded.remitente, origen = 'manual', actualizado = datetime('now')`).run(storeId, cv, remitente);
+  cacheRemitentes.delete(storeId); cacheRotulados.delete(storeId); // los nombres (🏭 proveedor) cambian
 }
 
 export function remitentesPorConvenio(storeId: string): { convenio: string; remitente: string; origen: string }[] {
   return db.prepare('SELECT convenio, remitente, origen FROM effi_remitente_convenio WHERE store_id = ?').all(storeId) as { convenio: string; remitente: string; origen: string }[];
 }
 
-/**
- * El remitente que le corresponde a un pedido, en este orden:
- *   1. la bodega que fijaste para su producto;
- *   2. la bodega que fijaste para su convenio (proveedor);
- *   3. la bodega desde donde se han recogido los envíos de ese producto;
- *   4. la de los envíos recogidos de ese convenio;
- *   5. tu remitente por defecto.
- * Todo con remitentes de ESTA cuenta de Effi y que sigan vigentes.
- */
-export async function remitenteSugerido(storeId: string, apiKey: string, o: { orderId?: string; convenio?: string }): Promise<{ remitente: string; nombre: string; motivo: string } | null> {
-  const vigentes = await remitentesVigentes(storeId, apiKey);
-  const ok = (r: string) => !!r && (!vigentes || vigentes.has(r));
-  const res = (remitente: string, motivo: string) => ({ remitente, nombre: vigentes?.get(remitente) || `#${remitente}`, motivo });
-  const porDefecto = (ojo = ''): { remitente: string; nombre: string; motivo: string } | null => {
-    const r = cfgEffi(storeId)?.remitenteDefecto || '';
-    if (!ok(r)) return null;
-    return res(r, ojo ? `tu remitente por defecto. OJO: ${ojo}` : 'tu remitente por defecto (cámbialo si este pedido sale de otra bodega)');
+// ── Bodega de cada proveedor ─────────────────────────────────────────────────
+// El remitente de la guía es la dirección a la que la transportadora DEVUELVE el paquete.
+// Si un pedido de Milú sale con el remitente de Henry, la devolución le llega a Henry. Por
+// eso, en los pedidos de un proveedor (convenio dropshipping) solo vale lo que la tienda dijo
+// a mano: la bodega fijada para el convenio, la fijada para sus productos, o el remitente que
+// marcó con el nombre de ese proveedor. Nunca el remitente por defecto "por si acaso" ni lo
+// aprendido de guías anteriores (que pueden haber salido mal).
+const mismoNombre = (a: string, b: string) => {
+  const x = norm(a); const y = norm(b);
+  return !!x && !!y && (x === y || (x.length >= 4 && y.length >= 4 && (x.includes(y) || y.includes(x))));
+};
+/** Nombre del proveedor de cada convenio (el que puso la tienda o el del portal de proveedores). */
+function nombresConvenios(storeId: string): Map<string, string> {
+  const m = new Map(conveniosConocidos(storeId).map((c) => [c.id, c.nombre]));
+  try {
+    for (const p of db.prepare('SELECT nombre, convenios FROM proveedor_cuentas WHERE activo = 1').all() as { nombre: string; convenios: string }[]) {
+      for (const cv of pj<string[]>(p.convenios, [])) if (p.nombre && m.has(String(cv)) && /^Convenio /.test(m.get(String(cv))!)) m.set(String(cv), p.nombre);
+    }
+  } catch { /* sin portal de proveedores */ }
+  return m;
+}
+export interface BodegasProveedores {
+  /** convenio → nombre del proveedor y sus bodegas (fijadas o marcadas con su nombre). */
+  porConvenio: Map<string, { nombre: string; remitentes: Set<string> }>;
+  /** remitente → proveedor al que pertenece (por convenio fijado o por la marca de la tienda). */
+  dueno: Map<string, string[]>;
+}
+export function bodegasDeProveedores(storeId: string): BodegasProveedores {
+  const nombres = nombresConvenios(storeId);
+  const porConvenio = new Map<string, { nombre: string; remitentes: Set<string> }>();
+  const dueno = new Map<string, string[]>();
+  const sumar = (rem: string, cv: string, nombre: string) => {
+    if (!porConvenio.has(cv)) porConvenio.set(cv, { nombre, remitentes: new Set() });
+    porConvenio.get(cv)!.remitentes.add(rem);
+    const l = dueno.get(rem) || []; if (!l.includes(nombre)) l.push(nombre); dueno.set(rem, l);
   };
-  // Productos del pedido.
-  const pids = o.orderId ? (db.prepare("SELECT DISTINCT COALESCE(product_id,'') p FROM order_items WHERE order_id = ?").all(o.orderId) as { p: string }[]).map((x) => x.p).filter(Boolean) : [];
-  const nombreProd = (id: string) => (db.prepare('SELECT nombre FROM products WHERE id = ?').get(id) as { nombre: string } | undefined)?.nombre || 'este producto';
-  const bodegas = pids.map((p) => ({ p, b: bodegaDeProducto(storeId, p) })).filter((x) => x.b && ok(x.b.remitente));
-  const unica = (lista: typeof bodegas) => new Set(lista.map((x) => x.b!.remitente)).size === 1 ? lista[0] : null;
-  // 1. Bodega fijada para el producto.
-  const manuales = bodegas.filter((x) => x.b!.origen === 'manual');
-  const um = unica(manuales);
-  if (um && manuales.length === bodegas.length) return res(um.b!.remitente, `la bodega que fijaste para ${nombreProd(um.p)}`);
-  // Convenio del envío (el de la remisión o el de sus productos).
-  let convenio = convenioValido(o.convenio);
+  for (const r of db.prepare("SELECT convenio, remitente FROM effi_remitente_convenio WHERE store_id = ? AND origen = 'manual'").all(storeId) as { convenio: string; remitente: string }[]) {
+    sumar(r.remitente, r.convenio, nombres.get(r.convenio) || `convenio ${r.convenio}`);
+  }
+  for (const a of db.prepare("SELECT remitente, proveedor FROM effi_remitente_alias WHERE store_id = ? AND proveedor != ''").all(storeId) as { remitente: string; proveedor: string }[]) {
+    const cvs = [...nombres].filter(([, n]) => !/^Convenio /.test(n) && mismoNombre(n, a.proveedor));
+    if (cvs.length) for (const [cv, n] of cvs) sumar(a.remitente, cv, n);
+    else { const l = dueno.get(a.remitente) || []; if (!l.some((x) => mismoNombre(x, a.proveedor))) l.push(a.proveedor); dueno.set(a.remitente, l); }
+  }
+  for (const [cv, n] of nombres) if (!porConvenio.has(cv)) porConvenio.set(cv, { nombre: n, remitentes: new Set() });
+  return { porConvenio, dueno };
+}
+/** La tienda despacha mercancía propia por Effi (productos marcados así o remisiones sin convenio). */
+function tieneMercanciaPropia(storeId: string): boolean {
+  return !!db.prepare("SELECT 1 FROM products WHERE store_id = ? AND COALESCE(effi_convenio,'') = 'propio' LIMIT 1").get(storeId)
+    || !!db.prepare("SELECT 1 FROM orders WHERE store_id = ? AND effi_convenio IN ('-','propio') AND COALESCE(effi_doc,'') != '' AND created_at > datetime('now','-120 days') LIMIT 1").get(storeId);
+}
+const productosDelPedido = (orderId: string) => (db.prepare("SELECT DISTINCT COALESCE(product_id,'') p FROM order_items WHERE order_id = ?").all(orderId) as { p: string }[]).map((x) => x.p).filter(Boolean);
+const nombreProducto = (id: string) => (db.prepare('SELECT nombre FROM products WHERE id = ?').get(id) as { nombre: string } | undefined)?.nombre || 'este producto';
+
+export interface RemitenteSugerido { remitente: string; nombre: string; motivo: string; convenio?: string; proveedor?: string; pendiente?: boolean }
+
+/** El convenio (proveedor) de un pedido: el de su remisión o, si aún no tiene, el de sus productos. */
+function convenioDeEnvio(storeId: string, o: { orderId?: string; convenio?: string }, pids: string[]): string {
+  const dado = txt(o.convenio).trim();
+  if (dado === 'propio') return '';
+  let convenio = convenioValido(dado);
   if (!convenio && o.orderId) {
     const ord = db.prepare('SELECT effi_convenio FROM orders WHERE id = ? AND store_id = ?').get(o.orderId, storeId) as Fila | undefined;
+    if (txt(ord?.effi_convenio) === '-' || txt(ord?.effi_convenio) === 'propio') return '';
     convenio = convenioDelPedido(ord || {});
     if (!convenio) {
       const cvs = [...new Set(pids.map((p) => convenioValido(convenioDeProducto(p)) || convenioValido(convenioAprendidoProducto(storeId, p))).filter(Boolean))];
       if (cvs.length === 1) convenio = cvs[0];
     }
   }
-  const nombreConv = convenio ? conveniosConocidos(storeId).find((x) => x.id === convenio)?.nombre || `convenio ${convenio}` : '';
-  const delConvenio = convenio ? db.prepare('SELECT remitente, origen FROM effi_remitente_convenio WHERE store_id = ? AND convenio = ?').get(storeId, convenio) as { remitente: string; origen: string } | undefined : undefined;
-  // 2. Bodega fijada para el convenio.
-  if (delConvenio?.origen === 'manual' && ok(delConvenio.remitente)) return res(delConvenio.remitente, `la bodega que fijaste para ${nombreConv}`);
-  // 3. La bodega desde donde se han recogido sus envíos.
-  const u = unica(bodegas);
+  return convenio;
+}
+
+/**
+ * El remitente que le corresponde a un pedido.
+ *  Pedido de un proveedor (convenio dropshipping): la bodega fijada para sus productos, la
+ *    fijada para su convenio o el remitente marcado con el nombre del proveedor. Si la tienda
+ *    trabaja con UN solo proveedor y no despacha mercancía propia, su remitente por defecto.
+ *    Si no se sabe, NO se adivina: queda pendiente (sin remitente) para elegirlo en el pedido.
+ *  Mercancía propia: la bodega fijada del producto, la aprendida de sus envíos, o la de por defecto.
+ * Todo con remitentes de ESTA cuenta de Effi y que sigan vigentes.
+ */
+export async function remitenteSugerido(storeId: string, apiKey: string, o: { orderId?: string; convenio?: string }): Promise<RemitenteSugerido | null> {
+  const vigentes = await remitentesVigentes(storeId, apiKey);
+  const ok = (r: string) => !!r && (!vigentes || vigentes.has(r));
+  const nombreDe = (r: string) => vigentes?.get(r) || `#${r}`;
+  const pids = o.orderId ? productosDelPedido(o.orderId) : [];
+  const bodegas = pids.map((p) => ({ p, b: bodegaDeProducto(storeId, p) })).filter((x) => x.b && ok(x.b.remitente));
+  const manuales = bodegas.filter((x) => x.b!.origen === 'manual');
+  const unica = (lista: typeof bodegas) => (lista.length && new Set(lista.map((x) => x.b!.remitente)).size === 1 ? lista[0] : null);
+  const um = manuales.length === pids.length ? unica(manuales) : null;
+  const convenio = convenioDeEnvio(storeId, o, pids);
+  const prov = bodegasDeProveedores(storeId);
+  const rd = cfgEffi(storeId)?.remitenteDefecto || '';
+
+  if (convenio) {
+    const p = prov.porConvenio.get(convenio);
+    const nombreProv = p?.nombre && !/^Convenio /.test(p.nombre) ? p.nombre : `el proveedor del convenio ${convenio}`;
+    const res = (remitente: string, motivo: string): RemitenteSugerido => ({ remitente, nombre: nombreDe(remitente), motivo, convenio, proveedor: nombreProv });
+    // 1. Bodega fijada para TODOS sus productos.
+    if (um) return res(um.b!.remitente, `la bodega que fijaste para ${nombreProducto(um.p)}`);
+    // 2. Bodega fijada para el convenio, o el remitente que marcaste con el nombre del proveedor.
+    const delConv = [...(p?.remitentes || [])].filter(ok);
+    const fijada = db.prepare("SELECT remitente FROM effi_remitente_convenio WHERE store_id = ? AND convenio = ? AND origen = 'manual'").get(storeId, convenio) as { remitente: string } | undefined;
+    if (fijada && ok(fijada.remitente)) return res(fijada.remitente, `la bodega de ${nombreProv}`);
+    if (delConv.length === 1) return res(delConv[0], `la bodega que marcaste como de ${nombreProv}`);
+    // 3. Un solo proveedor y nada de mercancía propia: el remitente por defecto es su bodega.
+    const otrosConv = [...prov.porConvenio.keys()].filter((k) => k !== convenio);
+    const duenoRd = prov.dueno.get(rd) || [];
+    if (delConv.length === 0 && !otrosConv.length && ok(rd) && !duenoRd.some((n) => !mismoNombre(n, nombreProv)) && !tieneMercanciaPropia(storeId)) {
+      return res(rd, `tu remitente por defecto (${nombreProv} es tu único proveedor)`);
+    }
+    // 4. No se sabe: no se adivina.
+    const porque = delConv.length > 1 ? `marcaste varias bodegas como de ${nombreProv}` : `todavía no sé cuál es la bodega de ${nombreProv}`;
+    return { remitente: '', nombre: '', convenio, proveedor: nombreProv, pendiente: true,
+      motivo: `este pedido es de ${nombreProv} y ${porque}. No se usa tu remitente por defecto para que una devolución no llegue a otra bodega: elige la de ${nombreProv} (y marca "Recordar" para que sus próximos pedidos salgan solos) o fíjala en Integraciones → Effi` };
+  }
+
+  // Mercancía propia (o convenio desconocido).
+  const res = (remitente: string, motivo: string): RemitenteSugerido => ({ remitente, nombre: nombreDe(remitente), motivo });
+  const esDeProveedor = (r: string) => (prov.dueno.get(r) || []).length > 0;
+  if (um) return res(um.b!.remitente, `la bodega que fijaste para ${nombreProducto(um.p)}`);
+  const aprendidas = bodegas.filter((x) => !esDeProveedor(x.b!.remitente) || x.b!.origen === 'manual');
+  const u = aprendidas.length === pids.length ? unica(aprendidas) : null;
   if (u) {
     const b = u.b!;
-    return res(b.remitente, b.origen === 'manual' ? `la bodega que fijaste para ${nombreProd(u.p)}` : `la bodega desde donde la transportadora recogió ${nombreProd(u.p)} (${b.usos} de ${b.total} envío${b.total === 1 ? '' : 's'})`);
+    return res(b.remitente, b.origen === 'manual' ? `la bodega que fijaste para ${nombreProducto(u.p)}` : `la bodega desde donde la transportadora recogió ${nombreProducto(u.p)} (${b.usos} de ${b.total} envío${b.total === 1 ? '' : 's'})`);
   }
-  if (bodegas.length > 1) return porDefecto('los productos de este pedido salen de bodegas distintas: revisa desde cuál sale');
-  // 4. La de los envíos recogidos de su convenio.
-  if (delConvenio?.origen === 'historial' && ok(delConvenio.remitente)) return res(delConvenio.remitente, `la bodega desde donde se han recogido los envíos de ${nombreConv}`);
-  // 5. Por defecto.
-  return porDefecto(convenio ? `este pedido es de ${nombreConv} y todavía no sé de qué bodega sale (se aprende con el primer envío recogido, o fíjala en Integraciones → Effi)` : '');
+  if (!ok(rd)) return null;
+  if (new Set(aprendidas.map((x) => x.b!.remitente)).size > 1) return res(rd, 'tu remitente por defecto. OJO: los productos de este pedido salen de bodegas distintas: revisa desde cuál sale');
+  if (esDeProveedor(rd)) return res(rd, `tu remitente por defecto. OJO: está marcado como bodega de ${(prov.dueno.get(rd) || []).join(' / ')} y este pedido es mercancía propia`);
+  return res(rd, 'tu remitente por defecto (cámbialo si este pedido sale de otra bodega)');
+}
+
+/**
+ * Candado antes de crear cualquier guía (automática o a mano): el remitente tiene que ser la
+ * bodega del proveedor del pedido. Devuelve el motivo si NO se debe crear, o '' si está bien.
+ */
+export function revisarRemitentePedido(storeId: string, orderId: string, remitente: string, nombreDe: (r: string) => string = (r) => `#${r}`): string {
+  const o = db.prepare('SELECT effi_convenio FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+  if (!o || !remitente) return '';
+  const pids = productosDelPedido(orderId);
+  const fijasProd = new Set(pids.map((p) => bodegaDeProducto(storeId, p)).filter((b) => b?.origen === 'manual').map((b) => b!.remitente));
+  const prov = bodegasDeProveedores(storeId);
+  const dueno = prov.dueno.get(remitente) || [];
+  const convenio = convenioDelPedido(o);
+  if (convenio) {
+    const p = prov.porConvenio.get(convenio);
+    const nombreProv = p?.nombre && !/^Convenio /.test(p.nombre) ? p.nombre : `el proveedor del convenio ${convenio}`;
+    const validas = new Set([...(p?.remitentes || []), ...fijasProd]);
+    if (validas.size && !validas.has(remitente)) {
+      return `⚠️ No se creó la guía: este pedido es de ${nombreProv} y su bodega es ${[...validas].map(nombreDe).join(' o ')}. Si sale desde ${nombreDe(remitente)}${dueno.length ? ` (bodega de ${dueno.join(' / ')})` : ''}, una devolución llegaría a otra bodega. Elige la bodega de ${nombreProv}; si ${nombreProv} cambió de bodega, márcala con "Recordar esta bodega para ${nombreProv}" o cámbiala en Integraciones → Effi.`;
+    }
+    if (!validas.size && dueno.length && !dueno.some((n) => mismoNombre(n, nombreProv))) {
+      return `⚠️ No se creó la guía: ${nombreDe(remitente)} es la bodega de ${dueno.join(' / ')} y este pedido es de ${nombreProv}. Si sale con ese remitente, una devolución le llegaría a ${dueno[0]}. Elige la bodega de ${nombreProv} (y marca "Recordar" para sus próximos pedidos).`;
+    }
+    return '';
+  }
+  // Mercancía propia desde la bodega de un proveedor.
+  const rd = cfgEffi(storeId)?.remitenteDefecto || '';
+  if (dueno.length && remitente !== rd && !fijasProd.has(remitente)) {
+    return `⚠️ No se creó la guía: ${nombreDe(remitente)} es la bodega de ${dueno.join(' / ')} y este pedido salió como mercancía propia (sin convenio). Elige tu bodega o, si es de ese proveedor, vuelve a enviar el pedido con su convenio.`;
+  }
+  return '';
+}
+
+/** Recuerda la bodega elegida en el pedido como la del proveedor (convenio) del pedido. */
+export function recordarBodegaProveedor(storeId: string, orderId: string, remitente: string): string {
+  const o = db.prepare('SELECT effi_convenio FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+  const cv = convenioDelPedido(o || {});
+  if (!cv || !/^\d+$/.test(remitente)) return '';
+  fijarRemitenteConvenio(storeId, cv, remitente);
+  cacheRemitentes.delete(storeId); cacheRotulados.delete(storeId);
+  const n = nombresConvenios(storeId).get(cv) || `convenio ${cv}`;
+  trazar(storeId, orderId, { etapa: 'guia', titulo: `Bodega de ${n} guardada: #${remitente}`, detalle: 'Los próximos pedidos de este proveedor saldrán desde ahí.' });
+  return n;
+}
+
+/**
+ * Guías creadas por DealFlow (últimos 60 días) cuyo remitente no es la bodega del proveedor
+ * del pedido: la devolución llegaría a otra bodega. Si aún no la recogen, se puede anular y
+ * crear otra desde el pedido.
+ */
+export function guiasConBodegaEquivocada(storeId: string): { orderId: string; numero: string; estado: string; guia: string; fecha: string; proveedor: string; usado: string; correcta: string[]; recogida: boolean }[] {
+  const prov = bodegasDeProveedores(storeId);
+  const enviado = new Map<string, string>();
+  for (const e of db.prepare(`SELECT order_id, datos FROM order_eventos WHERE store_id = ? AND etapa = 'api' AND nivel = 'info' AND titulo LIKE 'Effi POST /api/guia_transporte%' AND created_at > datetime('now','-60 days') ORDER BY created_at`).all(storeId) as { order_id: string; datos: string }[]) {
+    const r = pj<Fila>(e.datos, {}).peticion as Fila | undefined;
+    const rem = txt(Array.isArray(r?.remitente) ? (r!.remitente as unknown[])[0] : r?.remitente);
+    if (/^\d+$/.test(rem)) enviado.set(e.order_id, rem);
+  }
+  const out: ReturnType<typeof guiasConBodegaEquivocada> = [];
+  const filas = db.prepare(`SELECT id, numero, estado, guia, effi_convenio, effi_guia_info, created_at FROM orders WHERE store_id = ? AND COALESCE(effi_guia,'') != ''
+    AND effi_convenio NOT IN ('', '-', 'propio') AND created_at > datetime('now','-60 days') ORDER BY created_at DESC`).all(storeId) as Fila[];
+  for (const f of filas) {
+    const rem = remitenteDeGuia(pj<Fila>(txt(f.effi_guia_info), {})) || enviado.get(txt(f.id)) || '';
+    if (!rem) continue;
+    const cv = txt(f.effi_convenio);
+    const p = prov.porConvenio.get(cv);
+    const nombreProv = p?.nombre || `convenio ${cv}`;
+    const fijasProd = productosDelPedido(txt(f.id)).map((x) => bodegaDeProducto(storeId, x)).filter((b) => b?.origen === 'manual').map((b) => b!.remitente);
+    const validas = new Set([...(p?.remitentes || []), ...fijasProd]);
+    const dueno = prov.dueno.get(rem) || [];
+    const mal = validas.size ? !validas.has(rem) : dueno.length > 0 && !dueno.some((n) => mismoNombre(n, nombreProv));
+    if (!mal) continue;
+    out.push({ orderId: txt(f.id), numero: `DF-${txt(f.numero)}`, estado: txt(f.estado), guia: txt(f.guia), fecha: txt(f.created_at), proveedor: nombreProv, usado: rem, correcta: [...validas], recogida: RECOGIDOS.includes(txt(f.estado)) });
+  }
+  return out;
+}
+
+/** Remitentes desde donde han salido las guías de cada convenio (solo como pista; no se usa solo). */
+export function historialRemitentesConvenio(storeId: string): Map<string, { remitente: string; envios: number }[]> {
+  const enviado = new Map<string, string>();
+  for (const e of db.prepare(`SELECT order_id, datos FROM order_eventos WHERE store_id = ? AND etapa = 'api' AND nivel = 'info' AND titulo LIKE 'Effi POST /api/guia_transporte%' AND created_at > datetime('now','-180 days')`).all(storeId) as { order_id: string; datos: string }[]) {
+    const r = pj<Fila>(e.datos, {}).peticion as Fila | undefined;
+    const rem = txt(Array.isArray(r?.remitente) ? (r!.remitente as unknown[])[0] : r?.remitente);
+    if (/^\d+$/.test(rem)) enviado.set(e.order_id, rem);
+  }
+  const m = new Map<string, Map<string, number>>();
+  for (const f of db.prepare(`SELECT id, effi_convenio, effi_guia_info FROM orders WHERE store_id = ? AND effi_convenio NOT IN ('', '-', 'propio') AND created_at > datetime('now','-180 days')`).all(storeId) as Fila[]) {
+    const rem = remitenteDeGuia(pj<Fila>(txt(f.effi_guia_info), {})) || enviado.get(txt(f.id)) || '';
+    if (!rem) continue;
+    const cv = txt(f.effi_convenio);
+    if (!m.has(cv)) m.set(cv, new Map());
+    m.get(cv)!.set(rem, (m.get(cv)!.get(rem) || 0) + 1);
+  }
+  return new Map([...m].map(([cv, x]) => [cv, [...x].map(([remitente, envios]) => ({ remitente, envios })).sort((a, b) => b.envios - a.envios)]));
 }
 
 // ── Nombres claros para los remitentes ───────────────────────────────────────
@@ -509,10 +686,11 @@ export function aprenderBodegasTienda(storeId: string): { productos: number; con
   for (const o of pedidos) {
     const rem = remitenteDeGuia(pj<Fila>(o.effi_guia_info, {})) || pedido.get(o.id) || '';
     if (!rem) continue;
+    // Solo mercancía propia: en los pedidos de proveedores la guía pudo salir con la bodega
+    // equivocada (y aun así recogerse), así que no enseñan nada. Esos usan lo fijado a mano.
+    if (convenioValido(o.effi_convenio)) continue;
     envios++;
     for (const it of items.all(o.id) as { product_id: string }[]) sumar(porProducto, it.product_id, rem);
-    const cv = convenioValido(o.effi_convenio);
-    if (cv) sumar(porConvenio, cv, rem);
   }
   // La bodega con la mayoría clara de sus envíos (si hay empate o mezcla, no se adivina).
   const ganador = (m: Map<string, number>) => {
@@ -662,7 +840,7 @@ export function rotularRemitentes(storeId: string, lista: OpcionRem[]): (OpcionR
   } catch { /* sin portal de proveedores */ }
   const provDe = new Map<string, Set<string>>();
   const agregar = (rem: string, cv: string) => { const n = nombresConv.get(cv); if (!n) return; if (!provDe.has(rem)) provDe.set(rem, new Set()); provDe.get(rem)!.add(n); };
-  for (const r of db.prepare("SELECT convenio, remitente FROM effi_remitente_convenio WHERE store_id = ? AND origen IN ('manual','historial')").all(storeId) as { convenio: string; remitente: string }[]) agregar(r.remitente, r.convenio);
+  for (const r of db.prepare("SELECT convenio, remitente FROM effi_remitente_convenio WHERE store_id = ? AND origen = 'manual'").all(storeId) as { convenio: string; remitente: string }[]) agregar(r.remitente, r.convenio);
   const datos = new Map((db.prepare('SELECT remitente, alias, proveedor FROM effi_remitente_alias WHERE store_id = ?').all(storeId) as { remitente: string; alias: string; proveedor: string }[]).map((r) => [r.remitente, r]));
   // Productos que salen de cada bodega (fijados o aprendidos de los envíos recogidos).
   const prodDe = new Map<string, { nombre: string; usos: number }[]>();
@@ -1746,17 +1924,17 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
 }
 
 /** Despacha el pedido a Effi: cliente + remisión (+ guía si está activa). */
-export function despacharEffi(storeId: string, orderId: string, reintento = false, convenioForzado = '', remitenteElegido = ''): Promise<ResultadoEffi | { error: string }> {
+export function despacharEffi(storeId: string, orderId: string, reintento = false, convenioForzado = '', remitenteElegido = '', recordar = false): Promise<ResultadoEffi | { error: string }> {
   return conPedido(storeId, orderId, async () => {
     trazar(storeId, orderId, { etapa: 'despacho', titulo: reintento ? 'Reenvío a Effi iniciado' : 'Envío a Effi iniciado' });
-    const r = await despacharEffiInterno(storeId, orderId, reintento, convenioForzado, remitenteElegido).catch(errorInterno);
+    const r = await despacharEffiInterno(storeId, orderId, reintento, convenioForzado, remitenteElegido, recordar).catch(errorInterno);
     if ('error' in r) trazar(storeId, orderId, { etapa: 'despacho', nivel: 'error', titulo: 'Envío a Effi falló', detalle: r.error });
     else trazar(storeId, orderId, { etapa: 'despacho', nivel: 'ok', titulo: `Remisión ${r.remision} creada en Effi${r.guia ? ` · guía ${r.guia}` : ''}`, detalle: r.avisos.join(' '), datos: r });
     return r;
   });
 }
 
-async function despacharEffiInterno(storeId: string, orderId: string, reintento = false, convenioForzado = '', remitenteElegido = ''): Promise<ResultadoEffi | { error: string }> {
+async function despacharEffiInterno(storeId: string, orderId: string, reintento = false, convenioForzado = '', remitenteElegido = '', recordar = false): Promise<ResultadoEffi | { error: string }> {
   const c = cfgEffi(storeId)!;
   const prep = await prepararRemision(storeId, orderId, reintento, 'despacho', convenioForzado);
   if ('error' in prep) return prep;
@@ -1837,16 +2015,22 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   registrarLog(storeId, 'info', 'despacho', `${numDF} enviado a Effi: remisión ${remision} (cliente ${cli.tercero}).${avisos.length ? ' ' + avisos.join(' ') : ''}`);
 
   let guia = ''; let transportadora = '';
-  // Remitente: el que eligió la persona en el pedido; si no, la bodega fijada para el convenio
-  // del proveedor; si no, el remitente por defecto. Nada más (ni el último usado ni adivinado).
+  // Remitente: el que eligió la persona en el pedido; si no, la bodega del proveedor del
+  // pedido (fijada a mano). En pedidos de un proveedor sin bodega conocida NO se usa el
+  // remitente por defecto: la guía queda para crearla desde el pedido.
   let remAuto = '';
   if (c.guia.activa) {
-    const sug = remitenteElegido ? null : await remitenteSugerido(storeId, c.apiKey, { orderId, convenio: String(body.convenio_dropshipping ?? '') });
+    if (remitenteElegido && recordar && body.convenio_dropshipping) recordarBodegaProveedor(storeId, orderId, remitenteElegido);
+    const sug = remitenteElegido ? null : await remitenteSugerido(storeId, c.apiKey, { orderId, convenio: body.convenio_dropshipping ? String(body.convenio_dropshipping) : 'propio' });
     remAuto = remitenteElegido || sug?.remitente || '';
     if (remAuto) trazar(storeId, orderId, { etapa: 'guia', titulo: `Remitente de la guía: #${remAuto}`, detalle: remitenteElegido ? 'Elegido en el pedido.' : `Se puso solo: ${sug!.motivo}.` });
     if (sug && /OJO/.test(sug.motivo)) avisos.push(`Guía desde tu remitente por defecto: ${sug.motivo.replace(/^tu remitente por defecto\. OJO: /, '')}.`);
+    if (sug?.pendiente) {
+      avisos.push(`No se creó la guía: ${sug.motivo}.`);
+      trazar(storeId, orderId, { etapa: 'guia', nivel: 'warn', titulo: `Sin guía automática: falta la bodega de ${sug.proveedor}`, detalle: sug.motivo });
+    }
   }
-  if (c.guia.activa && !remAuto) avisos.push('No se creó la guía: falta elegir el remitente por defecto en Integraciones → Effi → Guía de transporte. Genérala desde el pedido eligiendo el remitente.');
+  if (c.guia.activa && !remAuto && !avisos.some((a) => a.startsWith('No se creó la guía'))) avisos.push('No se creó la guía: falta elegir el remitente por defecto en Integraciones → Effi → Guía de transporte. Genérala desde el pedido eligiendo el remitente.');
   if (c.guia.activa && c.guia.transportadora && c.guia.servicio && c.guia.formaPagoFlete && remAuto) {
     const g = await crearGuia(storeId, c, { ...c.guia, remitente: remAuto }, o, { sucursal: txt(doc!.sucursal), id: txt(doc!.id) }, cli.tercero, ubic, reintento);
     if ('error' in g) avisos.push(g.error);
@@ -1855,7 +2039,7 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   return { remision, sucursal: txt(doc!.sucursal), id: txt(doc!.id), guia, transportadora, avisos };
 }
 
-export interface OpcionesGuia extends EffiGuiaCfg { cantPaquetes?: number; contenido?: string; nota?: string; recibeSabado?: boolean; valorDeclarado?: number }
+export interface OpcionesGuia extends EffiGuiaCfg { cantPaquetes?: number; contenido?: string; nota?: string; recibeSabado?: boolean; valorDeclarado?: number; recordar?: boolean }
 
 /** Busca en los datos de Effi un enlace a PDF/imagen de la guía (si Effi lo manda). */
 export function urlDocumentoGuia(obj: unknown): string {
@@ -1878,6 +2062,13 @@ async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, 
     return { error: e };
   }
   const nombreRem = vigentes?.get(txt(g.remitente)) || `#${txt(g.remitente)}`;
+  // Candado: la guía tiene que salir desde la bodega del proveedor del pedido (ahí vuelven las devoluciones).
+  const malRem = revisarRemitentePedido(storeId, txt(o.id), txt(g.remitente), (r) => vigentes?.get(r) || `#${r}`);
+  if (malRem) {
+    trazar(storeId, txt(o.id), { etapa: 'guia', nivel: 'warn', titulo: 'Guía frenada: remitente de otra bodega', detalle: malRem });
+    registrarLog(storeId, 'warn', 'despacho', `DF-${numero}: ${malRem}`);
+    return { error: malRem };
+  }
   const body: Record<string, unknown> = {
     idempotency_key: `dfg-${storeId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}-${numero}${reintento ? `-r${Date.now().toString(36).slice(-5)}` : ''}`.slice(0, 36),
     sucursal: Number(c.sucursal), transportadora: Number(g.transportadora), t_servicio: Number(g.servicio), t_forma_pago: Number(g.formaPagoFlete),
@@ -1942,6 +2133,7 @@ async function generarGuiaInterna(storeId: string, orderId: string, g: OpcionesG
   if (!o) return { error: 'Pedido no encontrado.' };
   const d = pj<Fila>(txt(o.effi_doc), {});
   if (!d.id) return { error: 'Primero crea la remisión en Effi; la guía se genera sobre esa remisión.' };
+  if (g.recordar) recordarBodegaProveedor(storeId, orderId, txt(g.remitente));
   const ubic = await resolverUbicacion(c.apiKey, txt(o.departamento), txt(o.ciudad));
   if ('error' in ubic) return ubic;
   let tercero = txt(d.tercero);
@@ -2223,7 +2415,7 @@ export interface ChequeoEffi { estado: 'ok' | 'aviso' | 'error'; titulo: string;
 export interface ProductoVerificado {
   id: string; nombre: string; variantes: number; vinculadas: number;
   convenio: { id: string; nombre: string; origen: 'fijo' | 'aprendido' | 'propio' | '' };
-  bodega: { remitente: string; nombre: string; origen: 'fija' | 'aprendida' | 'defecto' | ''; usos: number; total: number };
+  bodega: { remitente: string; nombre: string; origen: 'fija' | 'aprendida' | 'defecto' | 'proveedor' | ''; usos: number; total: number };
 }
 
 /** Revisa todo lo que necesita Effi para despachar bien: conexión, configuración, remitentes y cada producto. */
@@ -2260,6 +2452,8 @@ export async function verificarIntegracion(storeId: string): Promise<{ chequeos:
 
   // Cada producto que se despacha por Effi.
   const nombresConv = new Map(convs.map((x) => [x.id, x.nombre]));
+  const bp = bodegasDeProveedores(storeId);
+  const unicoProv = bp.porConvenio.size === 1 && !tieneMercanciaPropia(storeId) && !!rd;
   const prods = db.prepare("SELECT id, nombre, COALESCE(effi_convenio,'') effi_convenio FROM products WHERE store_id = ? AND COALESCE(despacho_proveedor,'') = 'effi' ORDER BY nombre").all(storeId) as { id: string; nombre: string; effi_convenio: string }[];
   const vars = db.prepare("SELECT COUNT(*) n, SUM(CASE WHEN COALESCE(json_extract(refs,'$.effi_id'),'') != '' THEN 1 ELSE 0 END) v FROM variants WHERE product_id = ?");
   const productos: ProductoVerificado[] = prods.map((p) => {
@@ -2271,14 +2465,25 @@ export async function verificarIntegracion(storeId: string): Promise<{ chequeos:
     return {
       id: p.id, nombre: p.nombre, variantes: cv.n, vinculadas: Number(cv.v || 0),
       convenio: { id: cid, nombre: cid ? nombresConv.get(cid) || `Convenio ${cid}` : fijo === 'propio' ? 'Mercancía propia' : '', origen: fijo === 'propio' ? 'propio' : fijo ? 'fijo' : apr ? 'aprendido' : '' },
-      bodega: b ? { remitente: b.remitente, nombre: nombreRem(b.remitente), origen: b.origen === 'manual' ? 'fija' : 'aprendida', usos: b.usos, total: b.total }
+      bodega: b?.origen === 'manual' ? { remitente: b.remitente, nombre: nombreRem(b.remitente), origen: 'fija', usos: 0, total: 0 }
+        // Producto de un proveedor: sale desde la bodega de ese proveedor (o queda por elegir en el pedido).
+        : cid ? (() => { const r = [...(bp.porConvenio.get(cid)?.remitentes || [])]; return r.length === 1 ? { remitente: r[0], nombre: nombreRem(r[0]), origen: 'proveedor' as const, usos: 0, total: 0 } : unicoProv ? { remitente: rd, nombre: nombreRem(rd), origen: 'defecto' as const, usos: 0, total: 0 } : { remitente: '', nombre: '', origen: '' as const, usos: 0, total: 0 }; })()
+        : b ? { remitente: b.remitente, nombre: nombreRem(b.remitente), origen: 'aprendida', usos: b.usos, total: b.total }
         : rd ? { remitente: rd, nombre: nombreRem(rd), origen: 'defecto', usos: 0, total: 0 } : { remitente: '', nombre: '', origen: '', usos: 0, total: 0 },
     };
   });
   const sinVinc = productos.filter((p) => p.vinculadas < p.variantes).length;
   chequeos.push(sinVinc ? { estado: 'aviso', titulo: 'Productos vinculados', detalle: `${sinVinc} de ${productos.length} producto${productos.length === 1 ? '' : 's'} tienen variantes sin artículo de Effi.` }
     : { estado: 'ok', titulo: 'Productos vinculados', detalle: `Las variantes de tus ${productos.length} producto${productos.length === 1 ? '' : 's'} de Effi están vinculadas.` });
-  const sinBodega = productos.filter((p) => p.bodega.origen === 'defecto' || !p.bodega.origen).length;
-  if (sinBodega) chequeos.push({ estado: 'aviso', titulo: 'Bodega de cada producto', detalle: `${sinBodega} producto${sinBodega === 1 ? '' : 's'} todavía sin bodega conocida: salen con el remitente por defecto hasta su primer envío recogido (o fíjala en el producto).` });
+  // Bodega de cada proveedor: sin ella, sus pedidos no tienen guía automática (y antes salían con el remitente por defecto).
+  const sinBodProv = [...bp.porConvenio].filter(([, p]) => !p.remitentes.size).map(([cv, p]) => (/^Convenio /.test(p.nombre) ? `convenio ${cv}` : p.nombre));
+  chequeos.push(!bp.porConvenio.size ? { estado: 'ok', titulo: 'Bodega de cada proveedor', detalle: 'No hay convenios de proveedores.' }
+    : !sinBodProv.length ? { estado: 'ok', titulo: 'Bodega de cada proveedor', detalle: [...bp.porConvenio.values()].map((p) => `${p.nombre} → ${[...p.remitentes].map(nombreRem).join(' o ')}`).join(' — ') }
+    : unicoProv ? { estado: 'aviso', titulo: 'Bodega de cada proveedor', detalle: `${sinBodProv[0]} es tu único proveedor y sus guías salen desde tu remitente por defecto (${nombreRem(rd)}). Si esa no es su bodega, fíjala abajo en "Cada convenio".` }
+    : { estado: g.activa ? 'error' : 'aviso', titulo: 'Bodega de cada proveedor', detalle: `Falta fijar la bodega de: ${sinBodProv.join(', ')}. Sus pedidos ${g.activa ? 'no tendrán guía automática' : 'te pedirán elegirla'} hasta que la fijes (así una devolución nunca llega a la bodega de otro proveedor).` });
+  const malas = guiasConBodegaEquivocada(storeId);
+  if (malas.length) chequeos.push({ estado: 'error', titulo: 'Guías con la bodega equivocada', detalle: `${malas.length} guía${malas.length === 1 ? '' : 's'} de los últimos 60 días salieron desde la bodega de otro proveedor (${malas.slice(0, 5).map((m) => m.numero).join(', ')}${malas.length > 5 ? '…' : ''}). Las devoluciones irían a esa bodega: revísalas en Integraciones → Effi.` });
+  const sinBodega = productos.filter((p) => !p.convenio.id && (p.bodega.origen === 'defecto' || !p.bodega.origen)).length;
+  if (sinBodega) chequeos.push({ estado: 'aviso', titulo: 'Bodega de cada producto propio', detalle: `${sinBodega} producto${sinBodega === 1 ? '' : 's'} de mercancía propia todavía sin bodega conocida: salen con el remitente por defecto hasta su primer envío recogido (o fíjala en el producto).` });
   return { chequeos, productos };
 }

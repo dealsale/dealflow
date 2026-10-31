@@ -6,7 +6,7 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
   apiEffiApiConectar, apiEffiAutoconfigurar, apiEffiApiConfig, apiEffiApiDesconectar, apiEffiApiEventos, apiEffiApiListas,
   apiEffiApiSecreto, apiEffiConvenios, apiRemitentesConvenio, apiFijarRemitenteConvenio, apiDatosRemitente, apiNombrarConvenio,
-  type EffiApiEstado, type EffiEvento, type EffiGuiaCfg, type EffiListas,
+  type EffiApiEstado, type EffiEvento, type EffiGuiaCfg, type EffiListas, type RemitentesConvenioResp,
 } from '../lib/api';
 
 /**
@@ -34,42 +34,104 @@ const titulo: React.CSSProperties = { fontWeight: 800, fontSize: 13.5, marginBot
 const ayuda: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5, margin: '0 0 12px' };
 
 /**
- * Remitente de cada convenio dropshipping: los pedidos de ese proveedor salen desde su
- * bodega. Se aprende solo de la última guía (y de otras tiendas con el mismo convenio);
- * aquí se puede fijar a mano.
+ * Bodega (remitente) de cada proveedor. El remitente es a donde la transportadora devuelve el
+ * paquete: los pedidos de un proveedor tienen que salir con SU bodega. Sin bodega fijada, sus
+ * pedidos no tienen guía automática (no se usa el remitente por defecto "por si acaso").
  */
 function RemitentesConvenio({ remitentes, alCambiar }: { remitentes: { id: string; nombre: string }[]; alCambiar: () => void }) {
-  const [convenios, setConvenios] = useState<{ id: string; nombre: string }[]>([]);
+  const [datos, setDatos] = useState<RemitentesConvenioResp | null>(null);
   const [nombres, setNombres] = useState<Record<string, string>>({});
-  const [asignados, setAsignados] = useState<Record<string, { remitente: string; origen: string }>>({});
+  const [verMalas, setVerMalas] = useState(false);
   const cargar = () => void apiRemitentesConvenio().then((r) => {
     if (!r.data) return;
-    setConvenios(r.data.convenios);
+    setDatos(r.data);
     setNombres(Object.fromEntries(r.data.convenios.map((c) => [c.id, /^Convenio /.test(c.nombre) ? '' : c.nombre])));
-    setAsignados(Object.fromEntries(r.data.asignados.map((a) => [a.convenio, { remitente: a.remitente, origen: a.origen }])));
   });
   useEffect(cargar, []);
-  if (!convenios.length) return null;
+  if (!datos?.convenios.length) return null;
+  const convenios = datos.convenios;
+  const asignados = Object.fromEntries(datos.asignados.filter((a) => a.origen === 'manual').map((a) => [a.convenio, a.remitente]));
+  const bodegas = Object.fromEntries((datos.bodegas || []).map((b) => [b.convenio, b]));
+  const duenos = datos.duenos || {};
+  const malas = datos.equivocadas || [];
+  const nombreRem = (id: string) => remitentes.find((r) => r.id === id)?.nombre || `#${id}`;
+  const fijar = (cv: string, v: string) => void apiFijarRemitenteConvenio(cv, v).then(() => { cargar(); alCambiar(); });
   const guardarNombre = (cv: { id: string; nombre: string }) => {
     const n = (nombres[cv.id] || '').trim();
     if (n === cv.nombre || (!n && /^Convenio /.test(cv.nombre))) return;
     void apiNombrarConvenio(cv.id, n).then(() => { cargar(); alCambiar(); });
   };
+  const faltan = convenios.filter((cv) => !(bodegas[cv.id]?.remitentes.length || asignados[cv.id]));
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
-      <div style={{ fontWeight: 700, fontSize: 13 }}>Cada convenio: nombre del proveedor y su bodega</div>
-      <p style={ayuda}>Ponle a cada convenio el nombre del proveedor. Si además le fijas su bodega, los pedidos de ese convenio la traen puesta en la guía. Si no, sale tu remitente por defecto y lo cambias en el pedido.</p>
+      <div style={{ fontWeight: 700, fontSize: 13 }}>Bodega de cada proveedor</div>
+      <p style={ayuda}>El remitente de la guía es a donde la transportadora <b>devuelve</b> el paquete. Por eso cada proveedor sale desde SU bodega: si un pedido de un proveedor sale con la bodega de otro, la devolución le llega al otro. Ponle nombre a cada convenio y fija su bodega.</p>
+      {faltan.length > 0 && (
+        <div style={{ background: 'rgba(245, 158, 11, .12)', border: '1px solid var(--df-warning, #F59E0B)', borderRadius: 8, padding: '8px 10px', fontSize: 12.5, lineHeight: 1.45, marginBottom: 10 }}>
+          ⚠️ Falta la bodega de <b>{faltan.map((cv) => (/^Convenio /.test(cv.nombre) ? `convenio ${cv.id}` : cv.nombre)).join(', ')}</b>.{' '}
+          {convenios.length === 1 ? 'Mientras sea tu único proveedor (y no despaches mercancía propia), sus guías salen desde tu remitente por defecto.' : datos.guiaAutomatica ? 'Sus pedidos no tendrán guía automática hasta que la fijes (la eliges en el pedido).' : 'Sus pedidos te pedirán elegirla al crear la guía.'}
+        </div>
+      )}
+      {malas.length > 0 && (
+        <div style={{ background: 'rgba(220, 38, 38, .08)', border: '1px solid #DC2626', borderRadius: 8, padding: '8px 10px', fontSize: 12.5, lineHeight: 1.45, marginBottom: 10 }}>
+          <button onClick={() => setVerMalas((v) => !v)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, color: '#B91C1C', textAlign: 'left' }}>
+            {verMalas ? '▾' : '▸'} 🚨 {malas.length} guía{malas.length === 1 ? '' : 's'} de los últimos 60 días salieron desde la bodega de otro proveedor
+          </button>
+          {verMalas && (
+            <>
+              <div style={{ margin: '6px 0', color: 'var(--df-text-body)' }}>Si todavía no la recogen: abre el pedido, anula la guía y créala otra vez con la bodega correcta. Si ya la recogieron: avisa a la bodega que aparece en la guía, porque si el cliente no recibe, la devolución le llega a ella.</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {malas.map((m) => (
+                  <div key={m.orderId} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 6, borderTop: '1px solid rgba(220,38,38,.25)', paddingTop: 4 }}>
+                    <span><b>{m.numero}</b> · {m.proveedor}{m.guia ? ` · guía ${m.guia}` : ''}</span>
+                    <span>Salió desde {nombreRem(m.usado)}{duenos[m.usado]?.length ? ` (de ${duenos[m.usado].join(' / ')})` : ''}</span>
+                    <span>{m.correcta.length ? `Debía: ${m.correcta.map(nombreRem).join(' o ')}` : ''}</span>
+                    <span style={{ fontWeight: 700, color: m.recogida ? '#B91C1C' : 'var(--df-warning, #B45309)' }}>{m.recogida ? `Ya recogida (${m.estado})` : `${m.estado || 'Por recoger'}: aún se puede anular`}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {convenios.map((cv) => {
-          const a = asignados[cv.id];
+          const b = bodegas[cv.id];
+          const fija = asignados[cv.id] || '';
+          const marcadas = (b?.remitentes || []).filter((r) => r !== fija);
+          const nombreProv = nombres[cv.id] || (/^Convenio /.test(cv.nombre) ? `convenio ${cv.id}` : cv.nombre);
+          const pistas = (b?.historial || []).filter((h) => h.remitente !== fija && remitentes.some((r) => r.id === h.remitente));
           return (
-            <div key={cv.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, alignItems: 'end', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px' }}>
-              <div>
-                <label style={lbl}>Proveedor del convenio <b>{cv.id}</b></label>
-                <input value={nombres[cv.id] || ''} onChange={(e) => setNombres((x) => ({ ...x, [cv.id]: e.target.value }))} onBlur={() => guardarNombre(cv)} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} placeholder="Nombre del proveedor (ej. Fares)" style={inp} />
+            <div key={cv.id} style={{ border: `1px solid ${fija || marcadas.length ? 'var(--df-border)' : 'var(--df-warning, #F59E0B)'}`, borderRadius: 8, padding: '8px 10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, alignItems: 'end' }}>
+                <div>
+                  <label style={lbl}>Proveedor del convenio <b>{cv.id}</b></label>
+                  <input value={nombres[cv.id] || ''} onChange={(e) => setNombres((x) => ({ ...x, [cv.id]: e.target.value }))} onBlur={() => guardarNombre(cv)} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} placeholder="Nombre del proveedor (ej. Fares)" style={inp} />
+                </div>
+                <Select label="Su bodega (remitente)" value={fija && remitentes.some((r) => r.id === fija) ? fija : ''} vacio={marcadas.length ? 'La que marcaste con su nombre' : 'Sin fijar'}
+                  onChange={(v) => fijar(cv.id, v)} opciones={remitentes} />
               </div>
-              <Select label="Su bodega (remitente)" value={a && remitentes.some((r) => r.id === a.remitente) ? a.remitente : ''} vacio="Sin fijar (sale el de por defecto)"
-                onChange={(v) => void apiFijarRemitenteConvenio(cv.id, v).then(() => { cargar(); alCambiar(); })} opciones={remitentes} />
+              <div style={{ fontSize: 11.5, marginTop: 5, lineHeight: 1.45 }}>
+                {fija ? <span style={{ color: 'var(--df-brand-dark)', fontWeight: 600 }}>✓ Los pedidos de {nombreProv} salen desde esta bodega.</span>
+                  : marcadas.length === 1 ? <span style={{ color: 'var(--df-brand-dark)', fontWeight: 600 }}>✓ Salen desde {nombreRem(marcadas[0])} (la marcaste como de {nombreProv}).</span>
+                  : marcadas.length > 1 ? <span style={{ color: 'var(--df-warning, #B45309)', fontWeight: 600 }}>⚠️ Marcaste varias bodegas como de {nombreProv}: fija cuál es.</span>
+                  : <span style={{ color: 'var(--df-warning, #B45309)', fontWeight: 600 }}>⚠️ Sin bodega: elige la de {nombreProv}.</span>}
+                {!fija && pistas.length > 0 && (
+                  <div style={{ marginTop: 4, color: 'var(--df-text-muted)' }}>
+                    Sus guías han salido desde:{' '}
+                    {pistas.map((h) => {
+                      const ajena = (duenos[h.remitente] || []).filter((n) => n.toLowerCase() !== nombreProv.toLowerCase());
+                      return (
+                        <span key={h.remitente} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginRight: 10 }}>
+                          {nombreRem(h.remitente)} ({h.envios})
+                          {ajena.length ? <b style={{ color: '#B91C1C' }}>· es de {ajena.join(' / ')}</b>
+                            : <button onClick={() => fijar(cv.id, h.remitente)} style={{ background: 'none', border: '1px solid var(--df-purple-border, var(--df-border))', borderRadius: 6, padding: '1px 7px', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: 'var(--df-purple)', cursor: 'pointer' }}>Es esta</button>}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
@@ -96,7 +158,7 @@ function NombresBodegas({ remitentes, alCambiar }: { remitentes: { id: string; n
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
       <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: 'var(--df-text)' }}>{abierto ? '▾' : '▸'} Tus remitentes: bodega y proveedor {sinNombre ? `(${sinNombre} sin identificar)` : ''}</button>
-      <p style={ayuda}>No hace falta llenarlo: cada remitente se identifica solo con los productos que la transportadora ha recogido ahí (📦). Si quieres, ponle nombre y proveedor (📌 bodega · 🏭 proveedor).</p>
+      <p style={ayuda}>Ponle nombre a cada bodega y, si es de un proveedor, escribe su nombre igual que el del convenio: así sus pedidos salen solos desde ahí (📌 bodega · 🏭 proveedor). Déjalo vacío si la bodega es tuya.</p>
       {abierto && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <datalist id="df-proveedores-effi">{provs.map((p) => <option key={p} value={p} />)}</datalist>
@@ -386,10 +448,10 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                     onChange={(v) => { set({ remitenteDefecto: v }); setGuia({ remitente: v }); void apiEffiApiConfig({ remitenteDefecto: v }).then((r) => setMsg(r.error ? r.error : '✓ Remitente por defecto guardado.')); }} />
                   {cfg.remitenteDefecto && !listas.remitentes.some((r) => r.id === cfg.remitenteDefecto)
                     ? <div style={{ fontSize: 11.5, color: 'var(--df-danger-dark)', marginTop: 4 }}>El remitente guardado (#{cfg.remitenteDefecto}) ya no existe en tu Effi: elige otro.</div>
-                    : <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 4 }}>Se pone solo en cada guía (manual y automática). Si un convenio tiene su bodega fijada abajo, sale esa. En el pedido lo puedes cambiar.</div>}
+                    : <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 4 }}>Para tu mercancía propia. Los pedidos de un proveedor salen desde la bodega de ese proveedor (abajo), no desde esta.</div>}
                 </div>
-                <NombresBodegas alCambiar={recargarListas} remitentes={listas.remitentes as (typeof listas.remitentes[number] & { alias?: string; ciudad?: string; direccion?: string; proveedores?: string[]; productos?: string[] })[]} />
                 <RemitentesConvenio alCambiar={recargarListas} remitentes={listas.remitentes} />
+                <NombresBodegas alCambiar={recargarListas} remitentes={listas.remitentes as (typeof listas.remitentes[number] & { alias?: string; ciudad?: string; direccion?: string; proveedores?: string[]; productos?: string[] })[]} />
               </div>
 
               <div style={{ display: 'flex', gap: 10 }}>
