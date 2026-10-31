@@ -380,6 +380,22 @@ async function enviarPlantillaReal(
   }
 }
 
+/** Sube un archivo a la Cloud API de la tienda y devuelve su media ID (para el encabezado de una plantilla). */
+export async function subirMediaCloud(storeId: string, buffer: Buffer, mime: string, nombre: string): Promise<{ id: string } | { error: string }> {
+  const cfg = db.prepare('SELECT phone_number_id, access_token, conectado, modo FROM whatsapp WHERE store_id = ?').get(storeId) as
+    | { phone_number_id: string; access_token: string; conectado: number; modo: string } | undefined;
+  if (!cfg?.conectado || cfg.modo === 'qr') return { error: 'Solo con la conexión oficial de WhatsApp.' };
+  try {
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', mime);
+    form.append('file', new Blob([new Uint8Array(buffer)], { type: mime }), nombre);
+    const up = await fetch(`${GRAPH}/${cfg.phone_number_id}/media`, { method: 'POST', headers: { Authorization: `Bearer ${cfg.access_token}` }, body: form });
+    const j = (await up.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
+    return up.ok && j.id ? { id: j.id } : { error: j.error?.message || 'Meta no aceptó el archivo.' };
+  } catch { return { error: 'No pudimos hablar con Meta para subir el archivo.' }; }
+}
+
 /** Sube un adjunto a Meta y lo envía por su media ID (Cloud API). */
 async function cloudSendMedia(
   phoneId: string,

@@ -37,6 +37,16 @@ const PLANTILLAS: Semilla[] = [
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Recibido, gracias' }, { tipo: 'QUICK_REPLY', texto: 'Tengo una duda' }],
   },
   {
+    // La misma guía con la FOTO de la guía arriba (encabezado de imagen). Se usa cuando el
+    // cliente no escribe hace más de 24 h (p. ej. pedidos de Shopify que solo respondieron
+    // la confirmación) o en el celular de contacto. Mismas variables que guia_envio_pedido.
+    nombre: 'guia_envio_imagen', categoria: 'UTILITY', idioma: 'es', encabezado: '{{IMAGEN}}',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nTu pedido {{3}} ya fue despachado 📦 Arriba está la imagen de tu guía.\n\n🚚 Transportadora: {{4}}\n🧾 Número de guía: {{5}}\n\nCon este número puedes hacerle seguimiento a tu envío. Si el pago es contra entrega, ten el valor listo al recibirlo. ¿Alguna duda? Responde este mensaje y te ayudamos.',
+    pie: 'Mensaje sobre tu compra',
+    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'Interrapidísimo', '240012345678'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Recibido, gracias' }, { tipo: 'QUICK_REPLY', texto: 'Tengo una duda' }],
+  },
+  {
     // Confirma el pedido en el celular de contacto cuando es distinto al del chat
     // (la transportadora llamará a ese número).
     nombre: 'confirmar_contacto_pedido', categoria: 'UTILITY', idioma: 'es',

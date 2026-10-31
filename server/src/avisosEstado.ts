@@ -343,12 +343,19 @@ export function iniciarAvisosEstado(): void {
   // La plantilla de avisos de estado se manda a Meta en todas las tiendas con WhatsApp oficial
   // (una sola vez; las tiendas que conecten después la reciben al conectar).
   if (process.env.NODE_ENV === 'production') {
-    setTimeout(() => {
-      const t = db.prepare('SELECT id FROM meta_templates WHERE nombre = ?').get(PLANTILLA_ESTADO) as { id: string } | undefined;
-      if (!t) return;
-      const n = (db.prepare('SELECT COUNT(*) n FROM meta_template_pub WHERE template_id = ?').get(t.id) as { n: number }).n;
-      if (n) return;
-      void import('./metaTemplates.js').then((m) => m.publicarEnTodas(t.id)).then((r) => console.log(`[avisos] plantilla ${PLANTILLA_ESTADO} enviada a Meta: ${r.exitosas}/${r.total}`)).catch((e) => console.warn('[avisos] no se pudo publicar la plantilla', e));
+    setTimeout(async () => {
+      // También la guía con foto (guia_envio_imagen): sin ella, a quien no escribe hace 24 h le llega solo el texto.
+      for (const nombre of [PLANTILLA_ESTADO, 'guia_envio_imagen']) {
+        const t = db.prepare('SELECT id FROM meta_templates WHERE nombre = ?').get(nombre) as { id: string } | undefined;
+        if (!t) continue;
+        const n = (db.prepare("SELECT COUNT(*) n FROM meta_template_pub WHERE template_id = ? AND estado != 'error'").get(t.id) as { n: number }).n;
+        if (n) continue;
+        try {
+          const m = await import('./metaTemplates.js');
+          const r = await m.publicarEnTodas(t.id);
+          console.log(`[avisos] plantilla ${nombre} enviada a Meta: ${r.exitosas}/${r.total}${r.errores ? ` (${r.errores} con error)` : ''}`);
+        } catch (e) { console.warn(`[avisos] no se pudo publicar la plantilla ${nombre}`, e); }
+      }
     }, 3 * 60_000).unref?.();
   }
   console.log('[avisos] avisos de estado del envío al cliente: activos (cola persistente, cada minuto) · seguimiento D+1 y D+2');

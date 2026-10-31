@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
 import { db, registrarLog, uid } from './db.js';
-import { sendWhatsappMedia, sendWhatsappTemplate, sendWhatsappText } from './wa.js';
+import { sendWhatsappMedia, sendWhatsappTemplate, sendWhatsappText, subirMediaCloud } from './wa.js';
 import { mediaPath } from './media.js';
 import { nombreTransportadora } from './transportadoras.js';
 import { idiomaDe, avisoGuia as avisoGuiaTexto } from './idioma.js';
@@ -16,6 +16,8 @@ import { idiomaDe, avisoGuia as avisoGuiaTexto } from './idioma.js';
  */
 
 export const PLANTILLA_GUIA = 'guia_envio_pedido';
+/** La misma plantilla, con la FOTO de la guía en el encabezado (para clientes fuera de la ventana de 24 h). */
+export const PLANTILLA_GUIA_IMG = 'guia_envio_imagen';
 try { db.exec("ALTER TABLE orders ADD COLUMN guia_aviso TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 
 type Fila = Record<string, unknown>;
@@ -60,6 +62,41 @@ async function bajarGuiaRemota(storeId: string, o: Fila, url: string): Promise<s
   } catch { return ''; }
 }
 
+/** Imagen de la guía (png/jpg) en disco; si solo hay el PDF remoto, se baja y se convierte. */
+async function imagenGuia(storeId: string, o: Fila): Promise<{ archivo: string; ruta: string } | null> {
+  let img = txt(o.guia_img); const url = txt(o.guia_url);
+  if (!img && /^https?:\/\//.test(url)) img = await bajarGuiaRemota(storeId, o, url);
+  const archivo = img || (url.startsWith('/api/media/') ? url : '');
+  if (!archivo) return null;
+  const ruta = mediaPath(storeId, archivo.split('/').pop()!);
+  return existsSync(ruta) ? { archivo, ruta } : null;
+}
+const esImagenJpgPng = (archivo: string) => /\.(png|jpe?g)$/i.test(archivo);
+
+/**
+ * Plantilla de la guía. Si la tienda tiene aprobada la versión CON IMAGEN y hay foto de la
+ * guía, va la foto en el encabezado; si no, la de solo texto.
+ */
+export async function enviarPlantillaGuia(storeId: string, destino: string, pn: string, params: string[], img: { archivo: string; ruta: string } | null):
+  Promise<{ ok: boolean; error?: string; wamid?: string; textoRender?: string; conImagen: boolean }> {
+  const tplImg = plantillaAprobada(storeId, PLANTILLA_GUIA_IMG);
+  if (tplImg && img && esImagenJpgPng(img.archivo)) {
+    const mime = /\.png$/i.test(img.archivo) ? 'image/png' : 'image/jpeg';
+    const up = await subirMediaCloud(storeId, readFileSync(img.ruta), mime, `guia.${mime === 'image/png' ? 'png' : 'jpg'}`);
+    if ('id' in up) {
+      const r = await sendWhatsappTemplate(storeId, destino, { ...tplImg, componentes: [
+        { type: 'header', parameters: [{ type: 'image', image: { id: up.id } }] },
+        { type: 'body', parameters: params.map((t) => ({ type: 'text', text: String(t) })) },
+      ] }, params, pn);
+      if (r.ok) return { ...r, conImagen: true };
+      registrarLog(storeId, 'warn', 'envio', `La plantilla con la foto de la guía falló (${r.error || 'error'}): se envía la de texto.`);
+    }
+  }
+  const tpl = plantillaAprobada(storeId, PLANTILLA_GUIA);
+  if (!tpl) return { ok: false, error: `la plantilla "${PLANTILLA_GUIA}" no está aprobada`, conImagen: false };
+  return { ...(await sendWhatsappTemplate(storeId, destino, tpl, params, pn)), conImagen: false };
+}
+
 export interface ResultadoAviso { chat: 'enviado' | 'plantilla' | 'bloqueado' | 'error' | 'sin_chat'; contacto: 'plantilla' | 'mismo' | 'sin_plantilla' | 'error' | 'no_aplica'; con: 'image' | 'document' | 'texto'; detalle: string[]; wamid?: string; wamidC?: string; modo?: string }
 
 export async function avisarGuia(storeId: string, orderId: string, opts: { conArchivo?: boolean } = {}): Promise<ResultadoAviso> {
@@ -93,7 +130,9 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
   const datos = { nombre, numDF, guia, transp: transp !== 'por confirmar' ? transp : '', tienda };
   let texto = avisoGuiaTexto(idi, { ...datos, con: 'texto' });
   const params = [nombre, tienda, numDF, transp, guia];
-  const tpl = plantillaAprobada(storeId, PLANTILLA_GUIA);
+  const tpl = plantillaAprobada(storeId, PLANTILLA_GUIA) || plantillaAprobada(storeId, PLANTILLA_GUIA_IMG);
+  // Foto de la guía (para el chat y para la plantilla con imagen).
+  const img = opts.conArchivo !== false ? await imagenGuia(storeId, o) : null;
 
   // ── 1. Al chat ──
   const { calidadCfg, puedeEscribirle, contarProactivo } = await import('./calidad.js');
@@ -103,13 +142,7 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
   if (bajaChat) res.detalle.push('El cliente pidió que no le escribamos: no se le envió la guía por WhatsApp.');
   if (chat && !bajaChat) {
     const destino = chat.wa_id || chat.tel;
-    let archivo = '';
-    if (opts.conArchivo !== false) {
-      let img = txt(o.guia_img); const url = txt(o.guia_url);
-      // Guía en un enlace externo (PDF de Dropi o de Effi): se baja y se convierte a imagen una vez.
-      if (!img && /^https?:\/\//.test(url)) img = await bajarGuiaRemota(storeId, o, url);
-      archivo = img || (url.startsWith('/api/media/') ? url : '');
-    }
+    const archivo = img?.archivo || '';
     let envio: { ok: boolean; error?: string; bloqueadoVentana?: boolean; wamid?: string };
     let tipo: 'image' | 'document' | 'texto' = 'texto'; let mime: string | null = null;
     const ruta = archivo ? mediaPath(storeId, archivo.split('/').pop()!) : '';
@@ -128,11 +161,12 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
       db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, estado, wa_msg_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
         .run(uid(), chat.id, 'bot', texto, tipo, tipo === 'texto' ? null : archivo, mime, tipo === 'texto' ? null : `Guia-${numDF}`, 'enviado', envio.wamid || null);
     } else if (envio.bloqueadoVentana && tpl) {
-      // Ventana cerrada: le llega la plantilla al chat.
-      const r = await sendWhatsappTemplate(storeId, destino, tpl, params, chat.tel);
+      // Ventana cerrada: le llega la plantilla al chat (con la foto de la guía si esa plantilla está aprobada).
+      const r = await enviarPlantillaGuia(storeId, destino, chat.tel, params, img);
       if (r.ok) {
-        res.chat = 'plantilla'; res.wamid = r.wamid || '';
-        db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, r.textoRender || `[Plantilla: ${PLANTILLA_GUIA}]`, r.wamid || null);
+        res.chat = 'plantilla'; res.wamid = r.wamid || ''; if (r.conImagen) res.con = 'image';
+        db.prepare("INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, estado, wa_msg_id) VALUES (?,?,'bot',?,?,?,?,?,'enviado',?)")
+          .run(uid(), chat.id, r.textoRender || `[Plantilla: ${PLANTILLA_GUIA}]`, r.conImagen ? 'image' : 'texto', r.conImagen ? img!.archivo : null, r.conImagen ? (/\.png$/i.test(img!.archivo) ? 'image/png' : 'image/jpeg') : null, r.conImagen ? `Guia-${numDF}` : null, r.wamid || null);
       } else { res.chat = 'error'; res.detalle.push(`Chat: ${r.error || 'Meta rechazó la plantilla'}`); }
     } else {
       res.chat = envio.bloqueadoVentana ? 'bloqueado' : 'error';
@@ -154,8 +188,8 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
       res.contacto = 'sin_plantilla';
       res.detalle.push(`El celular de contacto (${contacto}) es distinto al del chat, pero la plantilla "${PLANTILLA_GUIA}" aún no está aprobada para la tienda.`);
     } else {
-      const r = await sendWhatsappTemplate(storeId, '57' + contacto, tpl, params, '57' + contacto);
-      if (r.ok) { res.contacto = 'plantilla'; res.wamidC = r.wamid || ''; }
+      const r = await enviarPlantillaGuia(storeId, '57' + contacto, '57' + contacto, params, img);
+      if (r.ok) { res.contacto = 'plantilla'; res.wamidC = r.wamid || ''; if (r.conImagen && res.chat === 'sin_chat') res.con = 'image'; }
       else { res.contacto = 'error'; res.detalle.push(`Contacto ${contacto}: ${r.error || 'Meta rechazó la plantilla'}`); }
     }
   } else if (chat) res.contacto = 'mismo';
@@ -206,14 +240,14 @@ export async function estadoAvisoGuia(wamid: string, estado: 'entregado' | 'vist
   av.reintento = true; guardar();
   const ord = db.prepare('SELECT * FROM orders WHERE id = ?').get(o.id) as Fila;
   const chat = chatDelPedido(o.store_id, ord);
-  const tpl = plantillaAprobada(o.store_id, PLANTILLA_GUIA);
+  const tpl = plantillaAprobada(o.store_id, PLANTILLA_GUIA) || plantillaAprobada(o.store_id, PLANTILLA_GUIA_IMG);
   if (!chat || /número no tiene whatsapp|no tiene whatsapp|131026/i.test(motivo)) { if (!av.ok) db.prepare('UPDATE orders SET guia_avisada = 0 WHERE id = ?').run(o.id); return; }
   const tienda = (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(o.store_id) as { nombre: string } | undefined)?.nombre || 'nuestra tienda';
   const nombre = txt(ord.cliente).trim().split(' ')[0] || 'cliente';
   const guia = txt(ord.guia).trim();
   const transp = nombreTransportadora(txt(ord.transportadora)) || 'por confirmar';
   let r: { ok: boolean; error?: string; wamid?: string; textoRender?: string } = { ok: false, error: `no hay otra forma de reenviarla (la plantilla "${PLANTILLA_GUIA}" no está aprobada)` };
-  if (av.chat !== 'plantilla' && tpl) r = await sendWhatsappTemplate(o.store_id, chat.wa_id || chat.tel, tpl, [nombre, tienda, `DF-${o.numero}`, transp, guia], chat.tel);
+  if (av.chat !== 'plantilla' && tpl) r = await enviarPlantillaGuia(o.store_id, chat.wa_id || chat.tel, chat.tel, [nombre, tienda, `DF-${o.numero}`, transp, guia], /131053/.test(motivo) ? null : await imagenGuia(o.store_id, ord));
   else if (av.con !== 'texto') {
     const idi = idiomaDe(o.store_id, txt(ord.lead_id) || undefined);
     r = await sendWhatsappText(o.store_id, chat.wa_id || chat.tel, avisoGuiaTexto(idi, { nombre, numDF: `DF-${o.numero}`, guia, transp: transp !== 'por confirmar' ? transp : '', tienda, con: 'texto' }), chat.tel);
@@ -229,4 +263,34 @@ export async function estadoAvisoGuia(wamid: string, estado: 'entregado' | 'vist
     if (!av.ok) db.prepare('UPDATE orders SET guia_avisada = 0 WHERE id = ?').run(o.id);
   }
   guardar();
+}
+
+/**
+ * La guía se avisó en TEXTO porque todavía no había imagen (Dropi/Effi a veces dan el número
+ * antes que el PDF). Cuando llega la imagen, se le manda al chat del cliente (solo si la
+ * ventana de 24 h está abierta: no se le manda otra plantilla). Una sola vez.
+ */
+export async function enviarImagenGuiaLuego(storeId: string, orderId: string): Promise<boolean> {
+  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+  if (!o) return false;
+  let av: Record<string, unknown> = {};
+  try { av = JSON.parse(txt(o.guia_aviso) || '{}'); } catch { return false; }
+  if (!av.ok || av.con !== 'texto' || av.imagenLuego || Date.now() - new Date(txt(av.at)).getTime() > 48 * 3600e3) return false;
+  const img = await imagenGuia(storeId, o);
+  if (!img) return false;
+  av.imagenLuego = true;
+  db.prepare('UPDATE orders SET guia_aviso = ? WHERE id = ?').run(JSON.stringify(av), orderId);
+  const chat = chatDelPedido(storeId, o);
+  if (!chat) return false;
+  const esImg = !/\.pdf$/i.test(img.archivo);
+  const mime = esImg ? (/\.png$/i.test(img.archivo) ? 'image/png' : 'image/jpeg') : 'application/pdf';
+  const caption = `📄 Aquí está la imagen de tu guía ${txt(o.guia)} (pedido DF-${txt(o.numero)}).`;
+  const r = await sendWhatsappMedia(storeId, chat.wa_id || chat.tel, { buffer: readFileSync(img.ruta), mime, tipo: esImg ? 'image' : 'document' }, caption, `Guia-DF-${txt(o.numero)}.${esImg ? (mime === 'image/png' ? 'png' : 'jpg') : 'pdf'}`, chat.tel);
+  if (!r.ok) return false;
+  db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, estado, wa_msg_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .run(uid(), chat.id, 'bot', caption, esImg ? 'image' : 'document', img.archivo, mime, `Guia-DF-${txt(o.numero)}`, 'enviado', r.wamid || null);
+  av.con = esImg ? 'image' : 'document';
+  db.prepare('UPDATE orders SET guia_aviso = ? WHERE id = ?').run(JSON.stringify(av), orderId);
+  trazar(storeId, orderId, { etapa: 'aviso', nivel: 'ok', titulo: 'Imagen de la guía enviada al cliente', detalle: 'Llegó después del número de guía.' });
+  return true;
 }
