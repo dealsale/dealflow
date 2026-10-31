@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { db, pj } from './db.js';
 
 /**
@@ -35,11 +37,35 @@ function numVariables(texto: string): number {
   return max;
 }
 
+/** Encabezado "{{IMAGEN}}": la plantilla lleva una FOTO arriba (p. ej. la guía), que se pone al enviarla. */
+export const ENCABEZADO_IMAGEN = '{{IMAGEN}}';
+const conImagen = (t: PlantillaMaestra) => t.encabezado.trim() === ENCABEZADO_IMAGEN;
+
+/**
+ * Meta exige una imagen de ejemplo para crear una plantilla con foto: se sube con la API de
+ * carga reanudable de la app (META_APP_ID) y se usa el "handle" que devuelve.
+ */
+async function subirImagenEjemplo(token: string): Promise<{ handle: string } | { error: string }> {
+  const appId = process.env.META_APP_ID || '';
+  if (!appId) return { error: 'Falta META_APP_ID en el servidor para subir la imagen de ejemplo.' };
+  try {
+    const img = readFileSync(path.resolve(import.meta.dirname, '../assets/guia-ejemplo.png'));
+    const ini = await fetch(`${GRAPH}/${appId}/uploads?file_name=guia-ejemplo.png&file_length=${img.length}&file_type=image/png`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    const ij = (await ini.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
+    if (!ini.ok || !ij.id) return { error: ij.error?.message || 'Meta no abrió la carga de la imagen de ejemplo.' };
+    const up = await fetch(`${GRAPH}/${ij.id}`, { method: 'POST', headers: { Authorization: `OAuth ${token}`, file_offset: '0' }, body: new Uint8Array(img) });
+    const uj = (await up.json().catch(() => ({}))) as { h?: string; error?: { message?: string } };
+    return up.ok && uj.h ? { handle: uj.h } : { error: uj.error?.message || 'Meta no recibió la imagen de ejemplo.' };
+  } catch { return { error: 'No pudimos subir la imagen de ejemplo a Meta.' }; }
+}
+
 /** Arma los componentes del formato que exige la Graph API de Meta. */
-export function construirComponentes(t: PlantillaMaestra): Record<string, unknown>[] {
+export function construirComponentes(t: PlantillaMaestra, handleImagen = ''): Record<string, unknown>[] {
   const comps: Record<string, unknown>[] = [];
 
-  if (t.encabezado.trim()) {
+  if (conImagen(t)) {
+    comps.push({ type: 'HEADER', format: 'IMAGE', ...(handleImagen ? { example: { header_handle: [handleImagen] } } : {}) });
+  } else if (t.encabezado.trim()) {
     const header: Record<string, unknown> = { type: 'HEADER', format: 'TEXT', text: t.encabezado };
     const nh = numVariables(t.encabezado);
     if (nh > 0) header.example = { header_text: [t.ejemplos[0] || 'Ejemplo'] };
@@ -70,6 +96,12 @@ interface GraphResp { id?: string; status?: string; error?: { message?: string; 
 
 /** Publica (o reintenta) una plantilla en la WABA de una tienda concreta. */
 async function publicarEnTienda(wabaId: string, token: string, t: PlantillaMaestra): Promise<{ estado: string; metaId: string; motivo: string }> {
+  let handle = '';
+  if (conImagen(t)) {
+    const h = await subirImagenEjemplo(token);
+    if ('error' in h) return { estado: 'error', metaId: '', motivo: h.error };
+    handle = h.handle;
+  }
   try {
     const res = await fetch(`${GRAPH}/${encodeURIComponent(wabaId)}/message_templates`, {
       method: 'POST',
@@ -79,7 +111,7 @@ async function publicarEnTienda(wabaId: string, token: string, t: PlantillaMaest
         language: t.idioma,
         category: t.categoria,
         allow_category_change: true,
-        components: construirComponentes(t),
+        components: construirComponentes(t, handle),
       }),
     });
     const b = (await res.json().catch(() => ({}))) as GraphResp;
@@ -93,7 +125,7 @@ async function publicarEnTienda(wabaId: string, token: string, t: PlantillaMaest
           const ed = await fetch(`${GRAPH}/${encodeURIComponent(real.metaId)}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category: t.categoria, components: construirComponentes(t) }),
+            body: JSON.stringify({ category: t.categoria, components: construirComponentes(t, handle) }),
           }).catch(() => null);
           const eb = ed ? ((await ed.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string; error_user_msg?: string } }) : {};
           if (ed?.ok && eb.success !== false) return { estado: 'pendiente', metaId: real.metaId, motivo: 'Corregida y enviada de nuevo a revisión.' };

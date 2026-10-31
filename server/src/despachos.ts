@@ -21,6 +21,10 @@ const COLS = 'id, store_id, numero, tel, guia, estado, dropi_order_id, guia_url,
 let corriendo = false;
 const avisado = new Map<string, string>(); // orderId → último motivo registrado (no repetir)
 const intentoAviso = new Map<string, number>(); // orderId → último intento de avisar la guía
+// Dropi da el número de guía antes que el PDF: se espera el PDF hasta 90 min para mandar la FOTO de la guía.
+const guiaVista = new Map<string, number>(); // orderId → cuándo apareció el número de guía (Dropi)
+const ESPERA_PDF = 90 * 60_000;
+const intentoImagen = new Map<string, number>(); // orderId → último intento de mandar la imagen que llegó después
 
 /** Un ciclo de sincronización de despachos para TODAS las tiendas. */
 export async function sincronizarDespachos(): Promise<void> {
@@ -94,7 +98,11 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
     db.prepare(`UPDATE orders SET ${cambios.join(', ')} WHERE id = ?`).run(...params);
   }
   // Aviso de la guía: si falla (p. ej. plantilla sin aprobar), se reintenta cada hora, no cada 4 min.
-  if (guiaNueva && !o.guia_avisada && o.tel && Date.now() - (intentoAviso.get(o.id) || 0) > 3600_000) {
+  // Sin PDF todavía: se espera un rato para mandarla con la foto (no solo el número en texto).
+  if (guiaNueva && !guiaVista.has(o.id)) guiaVista.set(o.id, Date.now());
+  const conPdf = !!(r.guiaUrl || o.guia_url);
+  const esperandoPdf = !conPdf && Date.now() - (guiaVista.get(o.id) || 0) < ESPERA_PDF;
+  if (guiaNueva && !o.guia_avisada && o.tel && !esperandoPdf && Date.now() - (intentoAviso.get(o.id) || 0) > 3600_000) {
     intentoAviso.set(o.id, Date.now());
     await avisarGuiaAlCliente(o.store_id, o.id);
   }
@@ -103,11 +111,23 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
 
 /** Guías de los últimos días que aún no se le han avisado al cliente (o cuyo aviso falló). */
 async function avisarGuiasPendientes(): Promise<void> {
+  // Guías avisadas en texto cuyo PDF llegó después: se manda la imagen al chat.
+  const conImagenPendiente = db.prepare(`SELECT id, store_id FROM orders WHERE guia_avisada = 1 AND (COALESCE(guia_url,'') != '' OR COALESCE(guia_img,'') != '')
+      AND guia_aviso LIKE '%"con":"texto"%' AND guia_aviso NOT LIKE '%"imagenLuego":true%' AND created_at > datetime('now','-5 days') LIMIT 40`).all() as { id: string; store_id: string }[];
+  if (conImagenPendiente.length) {
+    const { enviarImagenGuiaLuego } = await import('./avisoGuia.js');
+    for (const o of conImagenPendiente) {
+      if (Date.now() - (intentoImagen.get(o.id) || 0) < 30 * 60_000) continue;
+      intentoImagen.set(o.id, Date.now());
+      try { await enviarImagenGuiaLuego(o.store_id, o.id); } catch { /* el próximo ciclo */ }
+    }
+  }
   const filas = db.prepare(`SELECT id, store_id FROM orders WHERE COALESCE(guia,'') != '' AND guia_avisada = 0 AND COALESCE(tel,'') != ''
       AND estado NOT IN ('Entregado','Devuelto','Cancelado') AND created_at > datetime('now','-6 days')
     ORDER BY created_at DESC LIMIT 60`).all() as { id: string; store_id: string }[];
   for (const o of filas) {
     if (Date.now() - (intentoAviso.get(o.id) || 0) < 2 * 3600_000) continue;
+    if (guiaVista.has(o.id) && Date.now() - guiaVista.get(o.id)! < ESPERA_PDF && !(db.prepare('SELECT guia_url FROM orders WHERE id = ?').get(o.id) as { guia_url: string } | undefined)?.guia_url) continue;
     intentoAviso.set(o.id, Date.now());
     try { await avisarGuiaAlCliente(o.store_id, o.id); } catch { /* el próximo ciclo */ }
   }

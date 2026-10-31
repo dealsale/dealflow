@@ -78,7 +78,7 @@ export function PlantillasWA({ df }: { df: DealFlowState }) {
           </div>
           <div style={{ marginBottom: 12 }}>
             <label style={label}>Encabezado (opcional)</label>
-            <input style={input} value={form.encabezado} onChange={(e) => set('encabezado', e.target.value)} placeholder="Ej. Confirmación de tu pedido" />
+            <input style={input} value={form.encabezado} onChange={(e) => set('encabezado', e.target.value)} placeholder="Ej. Confirmación de tu pedido · {{IMAGEN}} = foto arriba" />
           </div>
           <div style={{ marginBottom: 12 }}>
             <label style={label}>Cuerpo del mensaje · usa <code>{'{{1}}'}</code>, <code>{'{{2}}'}</code>… para lo que cambia</label>
@@ -132,7 +132,7 @@ export function PlantillasWA({ df }: { df: DealFlowState }) {
               )}
             </div>
             <div style={{ fontSize: 13, color: 'var(--df-text-body)', whiteSpace: 'pre-wrap', lineHeight: 1.5, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', marginBottom: 10 }}>
-              {p.encabezado && <div style={{ fontWeight: 700, marginBottom: 4 }}>{p.encabezado}</div>}
+              {p.encabezado && <div style={{ fontWeight: 700, marginBottom: 4 }}>{p.encabezado === '{{IMAGEN}}' ? '🖼️ Foto (se pone al enviar)' : p.encabezado}</div>}
               {p.cuerpo}
               {p.pie && <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginTop: 4 }}>{p.pie}</div>}
             </div>
