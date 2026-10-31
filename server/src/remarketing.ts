@@ -73,10 +73,6 @@ export const SEGMENTOS: { id: Segmento; titulo: string; ayuda: string }[] = [
   { id: 'cancelados', titulo: 'Pedido cancelado', ayuda: 'Tuvieron un pedido cancelado y no volvieron a comprar.' },
 ];
 
-const likeAny = (col: string, pats: string[]) => '(' + pats.map((p) => `lower(${col}) LIKE '%${p}%'`).join(' OR ') + ')';
-const INTENCION = ['precio', 'cuanto', 'cuánto', 'vale', 'valor', 'quiero', 'talla', 'color', 'envio', 'envío', 'comprar', 'compro', 'pedido', 'disponible', 'contraentrega', 'contra entrega', 'lo llevo', 'me lo', 'domicilio', 'pago'];
-const PIDE_DATOS = ['dirección', 'direccion', 'nombre completo', 'ciudad', 'barrio', 'punto de referencia'];
-const DIO_DATOS = ['calle', 'carrera', 'cra ', 'cll', 'barrio', 'avenida', 'apto', 'apartamento', 'conjunto', 'manzana', 'diagonal', 'transversal'];
 
 export interface LeadSegmento {
   id: string; nombre: string; tel: string; destino: string; segmento: Segmento; ultCliente: string; ultimo: string;
@@ -85,14 +81,10 @@ export interface LeadSegmento {
 
 /** Leads de la tienda con su segmento (y por qué se excluyen, si aplica). */
 export function leadsPorSegmento(storeId: string, dias = 60): LeadSegmento[] {
+  // Último mensaje y señales del embudo: guardados en el lead (versiones.ts), sin recorrer mensajes.
   const rows = db.prepare(`SELECT l.id, l.nombre, l.tel, l.wa_id, l.canal, l.no_contactar, l.estado_manual,
-      (SELECT created_at FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' ORDER BY m.created_at DESC LIMIT 1) AS ult_cliente,
-      (SELECT created_at FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_at,
-      (SELECT texto FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_texto,
-      (SELECT MAX(created_at) FROM messages m WHERE m.lead_id = l.id AND m.de != 'cliente' AND (lower(m.texto) LIKE '%resumen de tu pedido%' OR lower(m.texto) LIKE '%order summary%')) AS resumen_at,
-      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de != 'cliente' AND ${likeAny('m.texto', PIDE_DATOS)}) AS pidio_datos,
-      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' AND ${likeAny('m.texto', DIO_DATOS)}) AS dio_datos,
-      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' AND ${likeAny('m.texto', INTENCION)}) AS intencion,
+      l.ult_cliente_at AS ult_cliente, l.ult_at, l.ult_texto, l.f_resumen_at AS resumen_at,
+      l.f_pidio AS pidio_datos, l.f_dio AS dio_datos, l.f_intencion AS intencion,
       (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.lead_id = l.id AND r.estado = 'enviado') AS ult_rmk
     FROM leads l WHERE l.store_id = ? AND COALESCE(l.canal,'whatsapp') = 'whatsapp'`).all(storeId) as Fila[];
   // Pedidos por chat y por celular.
@@ -273,7 +265,8 @@ async function enviarUno(e: Fila): Promise<void> {
   }
   contarProactivo(storeId, txt(l.tel));
   db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), txt(l.id), texto, r.wamid || null);
-  db.prepare("UPDATE leads SET seguimiento_nivel = 3 WHERE id = ?").run(txt(l.id)); // que el "¿sigues ahí?" no lo persiga
+  // Que el "¿sigues ahí?" no lo persiga, y que su respuesta la atienda el asistente (y cierre el pedido).
+  db.prepare("UPDATE leads SET seguimiento_nivel = 3, asignado = CASE WHEN asignado LIKE 'Equipo (%' OR asignado = 'Vendedor' OR asignado LIKE '%asistente%' OR asignado LIKE '%bot%' THEN 'Asistente (bot)' ELSE asignado END WHERE id = ?").run(txt(l.id));
   fin('enviado', '', { via, wamid: r.wamid || '' });
 }
 
@@ -326,7 +319,7 @@ export function programarAutomaticos(): number {
       const envios = db.prepare("SELECT tipo, estado, creado, enviado_at FROM remarketing_envios WHERE lead_id = ? AND creado > ? ").all(l.id, l.ultCliente) as Fila[];
       const ya = (tipo: string) => envios.find((x) => txt(x.tipo) === tipo);
       // El último mensaje tiene que ser nuestro (esperamos al cliente).
-      const ultDe = (db.prepare('SELECT de FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1').get(l.id) as { de: string } | undefined)?.de;
+      const ultDe = (db.prepare('SELECT ult_de FROM leads WHERE id = ?').get(l.id) as { ult_de: string } | undefined)?.ult_de;
       if (ultDe === 'cliente') continue;
       if (cfg.rescate24h && horas >= 20 && horas < 23 && !ya('rescate')) {
         const nombre = primer(l.nombre);

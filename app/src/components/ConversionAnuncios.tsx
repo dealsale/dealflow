@@ -6,6 +6,7 @@ import { GroupedBars, PALETA } from './Charts';
 import { enProceso } from './Proceso';
 import { Dropdown } from './Dropdown';
 
+import { fmtCO } from '../lib/fechaCO';
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 18, boxShadow: '0 1px 2px rgba(15,23,42,.04)' };
 type Orden = 'ventas' | 'chats' | 'conversion' | 'entregados' | 'gasto' | 'roas';
 type Nivel = 'anuncio' | 'conjunto' | 'campana';
@@ -129,7 +130,7 @@ export function ConversionAnuncios({ desde, hasta, onDia }: { desde: string; has
         {meta?.conectada ? (
           <>
             <span style={{ fontWeight: 700, color: meta.error ? 'var(--df-danger)' : 'var(--df-success)' }}>● Meta Ads{meta.cuenta ? `: ${meta.cuenta}` : ''}</span>
-            <span>{meta.error ? meta.error : meta.ultima ? `actualizado ${new Date(meta.ultima.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' })} · se actualiza solo cada 30 minutos` : 'aún no se ha sincronizado'}</span>
+            <span>{meta.error ? meta.error : meta.ultima ? `actualizado ${fmtCO('es-CO', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(meta.ultima.replace(' ', 'T') + 'Z'))} · se actualiza solo cada 30 minutos` : 'aún no se ha sincronizado'}</span>
             <button onClick={() => void sincronizar()} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--df-brand-dark)', fontWeight: 700, fontFamily: 'inherit', fontSize: 12, cursor: 'pointer' }}>↻ Traer ahora</button>
           </>
         ) : (

@@ -235,11 +235,10 @@ export async function enviarConfirmacion(storeId: string, orderId: string): Prom
 
 // Sí / No del comprador (botones de la plantilla o escrito a mano).
 const limpio = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s👍✅❌]/gu, ' ').replace(/\s+/g, ' ').trim();
-const SI = new Set(['si', 'sii', 'siii', 'confirmo', 'confirmado', 'confirmar', 'dale', 'listo', 'ok', 'okay', 'correcto', 'claro', 'perfecto', 'afirmativo', 'enviamelo', 'envialo', '👍', '✅']);
+const SI = new Set(['si', 'sii', 'siii', 'sip', 'sisas', 'sisa', 'confirmo', 'confirmado', 'confirmar', 'dale', 'listo', 'ok', 'okay', 'okey', 'oki', 'correcto', 'claro', 'perfecto', 'afirmativo', 'enviamelo', 'envialo', 'envienlo', 'mandalo', 'mandenlo', 'hagale', 'adelante', 'bueno', 'vale', 'va', 'obvio', 'yes', '👍', '✅']);
 const NO = new Set(['no', 'nop', 'nel', 'cancelar', 'cancela', 'cancelalo', 'cancelado', '❌']);
-const esSi = (t: string) => { const w = limpio(t).split(' '); return SI.has(w[0]) || /\b(si confirmo|de una|si senor|si senora)\b/.test(limpio(t)); };
+const esSi = (t: string) => { const l = limpio(t); const w = l.split(' '); return (SI.has(w[0]) && !/\b(pero|cambi\w*)\b/.test(l)) || /\b(si confirmo|de una|si senor|si senora|esta bien|de acuerdo|por supuesto|todo bien|todo correcto|asi es|me lo envian|lo espero)\b/.test(l); };
 const esNo = (t: string) => { const l = limpio(t); return NO.has(l.split(' ')[0]) || /\b(ya no|no quiero|no lo quiero|no gracias|cancel)/.test(l); };
-const reintentos = new Map<string, number>();
 
 /**
  * Respuesta del comprador a la confirmación. Devuelve true si la manejó (y el bot
@@ -261,7 +260,13 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
   const num = `DF-${txt(o.numero)}`;
   const nombre = txt(o.cliente).split(' ')[0];
 
-  if (esSi(t) && !esNo(t)) {
+  // Ni sí ni no claro: la IA decide si está aceptando el envío ("bueno, mándenlo el lunes").
+  let veredicto: 'si' | 'no' | 'otro' = esSi(t) && !esNo(t) ? 'si' : esNo(t) ? 'no' : 'otro';
+  if (veredicto === 'otro') {
+    const items = (db.prepare('SELECT qty, nombre FROM order_items WHERE order_id = ?').all(txt(o.id)) as { qty: number; nombre: string }[]).map((i) => `${i.qty}× ${i.nombre}`).join(', ');
+    veredicto = await (await import('./ai.js')).clasificarConfirmacion(storeId, `${items} · total ${pesos(Number(o.total) || 0)}`, t);
+  }
+  if (veredicto === 'si') {
     db.prepare("UPDATE orders SET confirmacion = 'si', estado = CASE WHEN estado = 'Nuevo' THEN 'Confirmado' ELSE estado END WHERE id = ?").run(orderId);
     trazar(storeId, orderId, { etapa: 'pedido', nivel: 'ok', titulo: 'El cliente confirmó el pedido por WhatsApp', detalle: texto });
     await decir(`¡Gracias${nombre ? ', ' + nombre : ''}! 🎉 Tu pedido quedó confirmado. Apenas salga te enviamos por aquí el número de guía. 🚚`);
@@ -275,24 +280,19 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     if (auto) void despacharConfirmado(storeId, orderId);
     return true;
   }
-  if (esNo(t)) {
+  if (veredicto === 'no') {
     db.prepare("UPDATE orders SET confirmacion = 'no' WHERE id = ?").run(orderId);
-    // El chat queda para el equipo: el bot no contesta, una persona le pregunta qué pasó.
-    db.prepare("UPDATE leads SET asignado = 'Vendedor', etiqueta = 'Seguimiento' WHERE id = ?").run(leadId);
-    trazar(storeId, orderId, { etapa: 'pedido', nivel: 'warn', titulo: 'El cliente respondió que NO confirma el pedido', detalle: `${texto} · El chat quedó asignado al equipo.` });
+    // El asistente sigue la conversación (le pregunta qué pasó y si quiere cambiar algo);
+    // al equipo le llega el aviso por si quiere intervenir.
+    db.prepare("UPDATE leads SET etiqueta = 'Seguimiento' WHERE id = ?").run(leadId);
+    trazar(storeId, orderId, { etapa: 'pedido', nivel: 'warn', titulo: 'El cliente respondió que NO confirma el pedido', detalle: `${texto} · El asistente sigue la conversación.` });
     registrarLog(storeId, 'warn', 'pedido', `${num}: el cliente no confirmó el pedido${txt(o.origen) === 'landing' ? ' de la landing' : txt(o.origen) === 'shopify' ? ' de Shopify' : ''}. Escríbele desde el Inbox.`, leadId);
     void etiquetar(storeId, orderId, ['no-confirmado']);
-    void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `${num} no confirmado ❌`, `${txt(o.cliente)} respondió que no. Escríbele desde el Inbox.`, { url: '/' })).catch(() => {});
-    void import('./correo.js').then((c) => c.correoATienda(storeId, 'pedidos', `${num} no confirmado`, `❌ ${num}: el cliente no confirmó`, [`${c.escHtml(txt(o.cliente))} respondió que <b>no</b> confirma el pedido de Shopify.`, 'El chat quedó asignado a tu equipo: escríbele desde el Inbox.'])).catch(() => {});
-    return true;
+    void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `${num} no confirmado ❌`, `${txt(o.cliente)} respondió que no. El asistente le está preguntando qué pasó.`, { url: '/' })).catch(() => {});
+    void import('./correo.js').then((c) => c.correoATienda(storeId, 'pedidos', `${num} no confirmado`, `❌ ${num}: el cliente no confirmó`, [`${c.escHtml(txt(o.cliente))} respondió que <b>no</b> confirma el pedido.`, 'El asistente sigue la conversación para saber qué pasó; puedes intervenir desde el Inbox.'])).catch(() => {});
+    return false; // que el asistente le responda
   }
-  // Ni sí ni no: se le pide UNA vez que elija; después, el asistente conversa normal.
-  const n = reintentos.get(orderId) || 0;
-  if (n === 0) {
-    reintentos.set(orderId, 1);
-    await decir(`Para enviarte tu pedido ${num} necesito que me confirmes: ¿lo enviamos? Responde *Sí* o *No* 🙏`);
-    return true;
-  }
+  // Pregunta algo o pide un cambio: responde el asistente (sabe que el pedido espera su "sí").
   return false;
 }
 

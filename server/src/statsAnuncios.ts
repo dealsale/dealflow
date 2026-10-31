@@ -71,7 +71,7 @@ export function conversionPorAnuncio(sid: string, desde: string, hasta: string):
   // Chats que llegaron y cuántos respondieron (el cliente escribió 2 o más mensajes).
   for (const l of db.prepare(
     `SELECT COALESCE(NULLIF(l.ad_id,''), '${ORGANICO}') ad, ${F} d,
-       (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente') nc
+       l.n_cliente nc
      FROM leads l WHERE l.store_id = ? AND ${F} BETWEEN ? AND ?`,
   ).all(sid, desde, hasta) as { ad: string; d: string; nc: number }[]) {
     const f = fila(l.ad);

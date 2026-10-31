@@ -5,6 +5,7 @@ import { Dropdown } from '../components/Dropdown';
 import { NovedadesBandeja } from '../components/Novedades';
 import { apiLogistica, apiLogisticaActualizar, type GuiaLogistica, type TableroLogistica } from '../lib/api';
 
+import { fmtCO } from '../lib/fechaCO';
 /**
  * Logística Effi: todas las guías en un tablero (como Leads), por etapa del
  * envío. Cada tarjeta muestra por dónde va, la transportadora, el flete, el
@@ -23,7 +24,7 @@ const ETAPAS: { id: Etapa; titulo: string; icono: string; color: string; ayuda: 
 ];
 const PASOS: Etapa[] = ['sin_guia', 'por_recoger', 'transito', 'reparto', 'entregado'];
 const pesos = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CO');
-const fecha = (s: string) => { if (!s) return ''; const d = new Date(s.replace(' ', 'T') + (s.includes('Z') || s.length <= 10 ? '' : 'Z')); return isNaN(+d) ? s : d.toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }); };
+const fecha = (s: string) => { if (!s) return ''; const d = new Date(s.replace(' ', 'T') + (s.includes('Z') || s.length <= 10 ? '' : 'Z')); return isNaN(+d) ? s : fmtCO('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(d); };
 
 /** Número que sube animado hasta su valor. */
 function Contador({ valor, formato }: { valor: number; formato?: (n: number) => string }) {

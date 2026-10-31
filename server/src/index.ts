@@ -41,6 +41,7 @@ import('./metaInsights.js').then((m) => m.iniciarInsights()).catch((e) => consol
 import('./metaCapi.js').then((m) => m.iniciarCapi()).catch((e) => console.error('[capi]', e));
 setTimeout(() => { void import('./media.js').then((m) => m.reconvertirGuias()).catch(() => {}); }, 30_000);
 iniciarSeguimiento();
+import('./versiones.js').then((m) => m.iniciarResumenLeads()).catch((e) => console.error('[leads] resumen', e));
 
 const app = express();
 app.disable('x-powered-by');
@@ -184,7 +185,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'remarketing-10311833',
+    build: 'velocidad-10311926',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

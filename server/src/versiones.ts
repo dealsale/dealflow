@@ -102,3 +102,87 @@ export function versionPedida(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
+
+// ── Resumen de cada chat guardado EN el lead (rendimiento con miles de chats) ──────────
+// La lista de chats, el embudo de Leads, el remarketing y los seguimientos necesitaban, por
+// CADA chat, buscar su último mensaje, contar los no leídos y revisar con LIKE todos sus
+// mensajes (con 4.000 chats y 160.000 mensajes: 0,5–5 s por consulta, y better-sqlite3
+// bloquea el servidor mientras tanto). Ahora un trigger lo mantiene al insertar cada mensaje.
+export const PATRONES_LEAD = {
+  INTENCION: ['precio', 'cuanto', 'cuánto', 'vale', 'valor', 'quiero', 'talla', 'color', 'envio', 'envío', 'comprar', 'compro', 'pedido', 'disponible', 'contraentrega', 'contra entrega', 'lo llevo', 'me lo', 'domicilio', 'pago'],
+  PIDE_DATOS: ['dirección', 'direccion', 'nombre completo', 'ciudad', 'barrio', 'punto de referencia'],
+  DIO_DATOS: ['calle', 'carrera', 'cra ', 'cll', 'barrio', 'avenida', 'apto', 'apartamento', 'conjunto', 'manzana', 'diagonal', 'transversal'],
+};
+const likeCol = (col: string, pats: string[]) => '(' + pats.map((p) => `lower(${col}) LIKE '%${p}%'`).join(' OR ') + ')';
+const ES_RESUMEN = (col: string) => `(lower(${col}) LIKE '%resumen de tu pedido%' OR lower(${col}) LIKE '%order summary%')`;
+for (const col of ['visto_equipo_at TEXT', "ult_at TEXT", "ult_de TEXT NOT NULL DEFAULT ''", "ult_texto TEXT NOT NULL DEFAULT ''", "ult_tipo TEXT NOT NULL DEFAULT ''", "ult_cliente_at TEXT",
+  'sin_leer INTEGER NOT NULL DEFAULT 0', 'n_msgs INTEGER NOT NULL DEFAULT 0', 'n_cliente INTEGER NOT NULL DEFAULT 0', 'f_resumen_at TEXT',
+  'f_pidio INTEGER NOT NULL DEFAULT 0', 'f_dio INTEGER NOT NULL DEFAULT 0', 'f_intencion INTEGER NOT NULL DEFAULT 0', 'res_ok INTEGER NOT NULL DEFAULT 0']) {
+  try { db.exec(`ALTER TABLE leads ADD COLUMN ${col}`); } catch { /* ya existe */ }
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_leads_ult_at ON leads(ult_at)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_leads_store_res ON leads(store_id, res_ok)');
+db.exec(`DROP TRIGGER IF EXISTS trg_messages_resumen;
+CREATE TRIGGER trg_messages_resumen AFTER INSERT ON messages BEGIN
+  UPDATE leads SET
+    ult_at = CASE WHEN NEW.created_at >= COALESCE(ult_at,'') THEN NEW.created_at ELSE ult_at END,
+    ult_de = CASE WHEN NEW.created_at >= COALESCE(ult_at,'') THEN NEW.de ELSE ult_de END,
+    ult_texto = CASE WHEN NEW.created_at >= COALESCE(ult_at,'') THEN substr(COALESCE(NEW.texto,''), 1, 300) ELSE ult_texto END,
+    ult_tipo = CASE WHEN NEW.created_at >= COALESCE(ult_at,'') THEN COALESCE(NEW.tipo,'texto') ELSE ult_tipo END,
+    ult_cliente_at = CASE WHEN NEW.de = 'cliente' AND NEW.created_at >= COALESCE(ult_cliente_at,'') THEN NEW.created_at ELSE ult_cliente_at END,
+    sin_leer = sin_leer + CASE WHEN NEW.de = 'cliente' AND NEW.created_at > COALESCE(visto_equipo_at,'') THEN 1 ELSE 0 END,
+    n_msgs = n_msgs + 1,
+    n_cliente = n_cliente + CASE WHEN NEW.de = 'cliente' THEN 1 ELSE 0 END,
+    f_resumen_at = CASE WHEN NEW.de != 'cliente' AND ${ES_RESUMEN('NEW.texto')} AND NEW.created_at >= COALESCE(f_resumen_at,'') THEN NEW.created_at ELSE f_resumen_at END,
+    f_pidio = CASE WHEN f_pidio = 1 OR (NEW.de != 'cliente' AND ${likeCol('NEW.texto', PATRONES_LEAD.PIDE_DATOS)}) THEN 1 ELSE 0 END,
+    f_dio = CASE WHEN f_dio = 1 OR (NEW.de = 'cliente' AND ${likeCol('NEW.texto', PATRONES_LEAD.DIO_DATOS)}) THEN 1 ELSE 0 END,
+    f_intencion = CASE WHEN f_intencion = 1 OR (NEW.de = 'cliente' AND ${likeCol('NEW.texto', PATRONES_LEAD.INTENCION)}) THEN 1 ELSE 0 END
+  WHERE id = NEW.lead_id;
+END;
+DROP TRIGGER IF EXISTS trg_messages_resumen_del;
+CREATE TRIGGER trg_messages_resumen_del AFTER DELETE ON messages BEGIN
+  UPDATE leads SET
+    ult_at = (SELECT created_at FROM messages WHERE lead_id = OLD.lead_id ORDER BY created_at DESC LIMIT 1),
+    ult_de = COALESCE((SELECT de FROM messages WHERE lead_id = OLD.lead_id ORDER BY created_at DESC LIMIT 1), ''),
+    ult_texto = COALESCE((SELECT substr(texto, 1, 300) FROM messages WHERE lead_id = OLD.lead_id ORDER BY created_at DESC LIMIT 1), ''),
+    ult_tipo = COALESCE((SELECT tipo FROM messages WHERE lead_id = OLD.lead_id ORDER BY created_at DESC LIMIT 1), ''),
+    n_msgs = MAX(0, n_msgs - 1),
+    n_cliente = MAX(0, n_cliente - CASE WHEN OLD.de = 'cliente' THEN 1 ELSE 0 END)
+  WHERE id = OLD.lead_id;
+END;`);
+
+/** Calcula el resumen de los chats que aún no lo tienen (los que existían antes de este cambio). */
+export function completarResumenLeads(lote = 400): number {
+  const ids = (db.prepare('SELECT id FROM leads WHERE res_ok = 0 ORDER BY created_at DESC LIMIT ?').all(lote) as { id: string }[]).map((r) => r.id);
+  if (!ids.length) return 0;
+  const upd = db.prepare(`UPDATE leads SET
+      ult_at = (SELECT created_at FROM messages m WHERE m.lead_id = leads.id ORDER BY m.created_at DESC LIMIT 1),
+      ult_de = COALESCE((SELECT de FROM messages m WHERE m.lead_id = leads.id ORDER BY m.created_at DESC LIMIT 1), ''),
+      ult_texto = COALESCE((SELECT substr(texto, 1, 300) FROM messages m WHERE m.lead_id = leads.id ORDER BY m.created_at DESC LIMIT 1), ''),
+      ult_tipo = COALESCE((SELECT tipo FROM messages m WHERE m.lead_id = leads.id ORDER BY m.created_at DESC LIMIT 1), ''),
+      ult_cliente_at = (SELECT created_at FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente' ORDER BY m.created_at DESC LIMIT 1),
+      sin_leer = (SELECT COUNT(*) FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente' AND m.created_at > COALESCE(leads.visto_equipo_at, '')),
+      n_msgs = (SELECT COUNT(*) FROM messages m WHERE m.lead_id = leads.id),
+      n_cliente = (SELECT COUNT(*) FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente'),
+      f_resumen_at = (SELECT MAX(created_at) FROM messages m WHERE m.lead_id = leads.id AND m.de != 'cliente' AND ${ES_RESUMEN('m.texto')}),
+      f_pidio = EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = leads.id AND m.de != 'cliente' AND ${likeCol('m.texto', PATRONES_LEAD.PIDE_DATOS)}),
+      f_dio = EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente' AND ${likeCol('m.texto', PATRONES_LEAD.DIO_DATOS)}),
+      f_intencion = EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente' AND ${likeCol('m.texto', PATRONES_LEAD.INTENCION)}),
+      res_ok = 1
+    WHERE id = ?`);
+  db.transaction(() => { for (const id of ids) upd.run(id); })();
+  return ids.length;
+}
+/** En segundo plano y de a poco (sin congelar el servidor): los chats viejos quedan con su resumen. */
+export function iniciarResumenLeads(): void {
+  const pendientes = (db.prepare('SELECT COUNT(*) n FROM leads WHERE res_ok = 0').get() as { n: number }).n;
+  if (!pendientes) return;
+  console.log(`[leads] calculando el resumen de ${pendientes} chats (una sola vez, de a poco)…`);
+  const t0 = Date.now();
+  const paso = () => {
+    const n = completarResumenLeads();
+    if (n) setTimeout(paso, 25).unref?.();
+    else console.log(`[leads] resumen de chats listo en ${Math.round((Date.now() - t0) / 1000)} s`);
+  };
+  setTimeout(paso, 3000).unref?.();
+}

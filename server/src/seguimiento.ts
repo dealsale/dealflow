@@ -45,13 +45,19 @@ export async function correrSeguimiento(): Promise<void> {
   try {
     // Corre para TODAS las tiendas (es comportamiento propio del asistente, no una
     // opción). El filtro real es por chat: que lo atienda el asistente, etc.
+    // Solo chats con actividad en el último día (índice por ult_at) de tiendas con el seguimiento
+    // encendido; el último mensaje y la ventana vienen guardados en el lead (versiones.ts) y el
+    // "¿ya compró?" usa el índice del celular de los pedidos. Antes comparaba cada chat contra
+    // cada pedido con LIKE: con 4.000 chats tardaba ~5 s cada minuto y congelaba el servidor.
+    const TEL10 = (c: string) => `substr(replace(replace(replace(replace(replace(replace(${c},' ',''),'+',''),'-',''),'(',''),')',''),'.',''), -10)`;
     const leads = db.prepare(
       `SELECT l.id, l.store_id, l.nombre, l.wa_id, l.tel, l.canal, l.asignado, l.etiqueta, l.seguimiento_nivel,
-              (SELECT de FROM messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1) AS ultimo_de,
-              (julianday('now') - julianday((SELECT created_at FROM messages WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1))) * 1440 AS idle_min,
-              (julianday('now') - julianday((SELECT created_at FROM messages WHERE lead_id = l.id AND de = 'cliente' ORDER BY created_at DESC LIMIT 1))) * 1440 AS ventana_min
+              l.ult_de AS ultimo_de,
+              (julianday('now') - julianday(l.ult_at)) * 1440 AS idle_min,
+              (julianday('now') - julianday(l.ult_cliente_at)) * 1440 AS ventana_min
          FROM leads l
-        WHERE COALESCE(l.seguimiento_nivel,0) < 3
+        WHERE l.ult_at > datetime('now','-1 day')
+          AND COALESCE(l.seguimiento_nivel,0) < 3
           -- Anti-baneo: el seguimiento automático viene APAGADO. Solo corre si la
           -- tienda lo encendió a propósito (seguimiento_on = 1).
           AND EXISTS (SELECT 1 FROM assistants a WHERE a.store_id = l.store_id AND a.seguimiento_on = 1)
@@ -59,10 +65,7 @@ export async function correrSeguimiento(): Promise<void> {
           AND COALESCE(l.etiqueta,'') != 'Venta'
           -- Calidad del número: nunca al que pidió que no le escribamos.
           AND COALESCE(l.no_contactar,0) = 0
-          AND NOT EXISTS (
-            SELECT 1 FROM orders o WHERE o.store_id = l.store_id AND COALESCE(o.tel,'') != ''
-              AND replace(replace(replace(o.tel,' ',''),'+',''),'-','') LIKE '%' || substr(replace(replace(replace(l.tel,' ',''),'+',''),'-',''), -10))
-          AND EXISTS (SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.created_at > datetime('now','-1 day'))`,
+          AND NOT EXISTS (SELECT 1 FROM orders o WHERE ${TEL10('o.tel')} = ${TEL10('l.tel')} AND o.store_id = l.store_id AND length(${TEL10('l.tel')}) = 10)`,
     ).all() as LeadSeg[];
 
     for (const l of leads) {

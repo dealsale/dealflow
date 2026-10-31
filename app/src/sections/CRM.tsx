@@ -1,4 +1,5 @@
 import { PresenciaChat, PresenciaEnLista } from '../components/PresenciaChat';
+import { ymdCO } from '../lib/fechaCO';
 import { clicAparte } from '../components/EnlaceApp';
 import { IniciarConversacion } from '../components/IniciarConversacion';
 import { apiAnuncioProducto, apiVincularAnuncio, plantillaPideDatos, type PlantillaAprobada } from '../lib/api';
@@ -179,9 +180,9 @@ export function CRM({ df }: { df: DealFlowState }) {
   }, [chat?.id]);
   const q = busca.trim().toLowerCase();
 
-  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-  const ayer = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-  const hace7 = new Date(Date.now() - 6 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const hoy = ymdCO();
+  const ayer = ymdCO(Date.now() - 86400000);
+  const hace7 = ymdCO(Date.now() - 6 * 86400000);
   const custom = rangoFecha === 'Personalizado';
   const pasaFecha = (fechaISO: string) => {
     if (custom) return !!fechaISO && (!desde || fechaISO >= desde) && (!hasta || fechaISO <= hasta);

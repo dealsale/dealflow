@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { apiDevolucionEffi, apiRastreo, type PasoRastreo } from '../lib/api';
 
+import { fmtCO } from '../lib/fechaCO';
 /**
  * Datos de Effi alrededor del envío, dentro del detalle del pedido:
  * rastreo de la guía y devolución.
@@ -13,7 +14,7 @@ const btnLink: CSSProperties = { background: 'transparent', border: 'none', padd
 // Effi entrega la fecha en UTC: la mostramos en hora de Colombia.
 const fechaCO = (f: string) => {
   const d = new Date(f.replace(' ', 'T') + 'Z');
-  return Number.isNaN(d.getTime()) ? f : d.toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(d.getTime()) ? f : fmtCO('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(d);
 };
 
 /** Historial de la guía: cada cambio de estado con fecha y hora. */

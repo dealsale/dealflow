@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { apiBorrarProveedor, apiCrearProveedor, apiEditarProveedor, apiProveedores, apiVerComoProveedor, type ConvenioConocido, type ProveedorAcceso } from '../../lib/api';
 import { confirmar, notificar } from '../../components/dialogs';
 
+import { fmtCO } from '../../lib/fechaCO';
 /**
  * Administración → Proveedores: el equipo de DealFlow crea una cuenta por proveedor y le
  * vincula sus códigos de convenio de Effi. El proveedor entra a app.<dominio>/proveedores
@@ -15,7 +16,7 @@ const claveAleatoria = () => {
   const a = new Uint32Array(10); crypto.getRandomValues(a);
   return [...a].map((n) => abc[n % abc.length]).join('');
 };
-const fechaCorta = (s: string) => (s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' }) : '');
+const fechaCorta = (s: string) => (s ? fmtCO('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(s.replace(' ', 'T') + 'Z')) : '');
 
 const card: CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14 };
 const input: CSSProperties = { width: '100%', border: '1px solid var(--df-border)', borderRadius: 9, padding: '9px 11px', font: 'inherit', fontSize: 13.5, background: 'var(--df-surface)', color: 'var(--df-text-body)', boxSizing: 'border-box' };

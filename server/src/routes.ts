@@ -46,11 +46,15 @@ export const webhooks = Router();
 const ESTADOS = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Entregado'] as const;
 
 /** Hora local de Bogotá (GMT-5) a partir del datetime UTC que guarda SQLite. */
+// Hora de Colombia (UTC-5 todo el año, sin horario de verano). Con aritmética y no con
+// toLocaleTimeString({timeZone}): ese crea un formateador nuevo en cada llamada (~0,1 ms) y,
+// con 4.000 chats, solo esto sumaba ~0,4 s por consulta de la lista de chats.
 function horaBogota(dt: unknown): string {
-  const d = new Date(String(dt || '').replace(' ', 'T') + 'Z');
-  return isNaN(+d)
-    ? String(dt || '').slice(11, 16)
-    : d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' });
+  const s = String(dt || '');
+  const ms = Date.parse(s.replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? '' : 'Z'));
+  if (isNaN(ms)) return s.slice(11, 16);
+  const d = new Date(ms - 5 * 3600e3);
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────
@@ -412,21 +416,14 @@ try {
   db.exec("ALTER TABLE leads ADD COLUMN visto_equipo_at TEXT");
   db.exec("UPDATE leads SET visto_equipo_at = datetime('now')"); // arranque: lo viejo cuenta como leído
 } catch { /* ya existe */ }
-const marcarVisto = (sid: string, leadId: string) => db.prepare(`UPDATE leads SET visto_equipo_at = datetime('now') WHERE id = ? AND store_id = ?
-  AND EXISTS (SELECT 1 FROM messages m WHERE m.lead_id = leads.id AND m.de = 'cliente' AND m.created_at > COALESCE(leads.visto_equipo_at, ''))`).run(leadId, sid);
+const marcarVisto = (sid: string, leadId: string) => db.prepare(`UPDATE leads SET visto_equipo_at = datetime('now'), sin_leer = 0 WHERE id = ? AND store_id = ? AND sin_leer > 0`).run(leadId, sid);
 
 function listarLeads(sid: string, resumen: boolean, abierto?: string, desde?: number) {
   // Una sola consulta: datos del chat + su último mensaje + cuántos mensajes del
   // cliente no ha leído el equipo (antes eran 2 consultas por chat en cada sondeo).
+  // El último mensaje y los no leídos ya vienen en el lead (los mantiene un trigger: versiones.ts).
   const rows = db.prepare(resumen
-    ? `SELECT l.*,
-         (SELECT texto FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_texto,
-         (SELECT tipo FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_tipo,
-         (SELECT created_at FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_at,
-         (SELECT created_at FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' ORDER BY m.created_at DESC LIMIT 1) AS ult_cliente_at,
-         (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente'
-            AND m.created_at > COALESCE(l.visto_equipo_at, '')) AS sin_responder
-       FROM leads l WHERE l.store_id = ? ${desde ? 'AND l.v > ?' : ''} ORDER BY l.created_at DESC`
+    ? `SELECT l.*, l.sin_leer AS sin_responder FROM leads l WHERE l.store_id = ? ${desde ? 'AND l.v > ?' : ''} ORDER BY l.created_at DESC`
     : 'SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(...(desde ? [sid, desde] : [sid])) as Record<string, unknown>[];
   const etiquetaMedia: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento' };
   return rows.map((l) => {
@@ -456,10 +453,6 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string, desde?: nu
 // El estado se CALCULA de la conversación y los pedidos (venta > datos completos >
 // faltan datos > interesado > preguntando); el dueño puede fijarlo a mano.
 export const ESTADOS_LEAD = ['preguntando', 'interesado', 'faltan_datos', 'datos_completos', 'venta', 'perdido'] as const;
-const likeAny = (col: string, pats: string[]) => '(' + pats.map((p) => `lower(${col}) LIKE '%${p}%'`).join(' OR ') + ')';
-const INTENCION = ['precio', 'cuanto', 'cuánto', 'vale', 'valor', 'quiero', 'talla', 'color', 'envio', 'envío', 'comprar', 'compro', 'pedido', 'disponible', 'contraentrega', 'contra entrega', 'lo llevo', 'me lo', 'domicilio', 'pago'];
-const PIDE_DATOS = ['dirección', 'direccion', 'nombre completo', 'ciudad', 'barrio', 'punto de referencia'];
-const DIO_DATOS = ['calle', 'carrera', 'cra ', 'cll', 'barrio', 'avenida', 'apto', 'apartamento', 'conjunto', 'manzana', 'diagonal', 'transversal'];
 
 // El cálculo revisa todas las conversaciones: se guarda 15 s por tienda para que
 // varias pestañas abiertas no lo repitan (se invalida al mover un lead a mano).
@@ -468,15 +461,10 @@ api.get('/leads/estados', requireAuth, requireStore, (req, res) => {
   const sid = req.user!.storeId!;
   const c = cacheEstados.get(sid);
   if (c && Date.now() - c.t < 15_000) return res.json({ leads: c.leads });
+  // Señales del embudo guardadas en el lead (las mantiene un trigger al llegar cada mensaje).
   const rows = db.prepare(`SELECT l.id, l.nombre, l.tel, l.canal, l.asignado, l.estado_manual, l.created_at,
-      (SELECT texto FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_texto,
-      (SELECT tipo FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_tipo,
-      (SELECT created_at FROM messages m WHERE m.lead_id = l.id ORDER BY m.created_at DESC LIMIT 1) AS ult_at,
-      (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id) AS n_msgs,
-      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de != 'cliente' AND (lower(m.texto) LIKE '%resumen de tu pedido%' OR lower(m.texto) LIKE '%order summary%')) AS resumen,
-      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de != 'cliente' AND ${likeAny('m.texto', PIDE_DATOS)}) AS pidio_datos,
-      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' AND ${likeAny('m.texto', DIO_DATOS)}) AS dio_datos,
-      EXISTS(SELECT 1 FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente' AND ${likeAny('m.texto', INTENCION)}) AS intencion
+      l.ult_texto, l.ult_tipo, l.ult_at, l.n_msgs, (l.f_resumen_at IS NOT NULL) AS resumen,
+      l.f_pidio AS pidio_datos, l.f_dio AS dio_datos, l.f_intencion AS intencion
     FROM leads l WHERE l.store_id = ?`).all(sid) as Record<string, unknown>[];
   rows.sort((a, b) => String(b.ult_at || b.created_at).localeCompare(String(a.ult_at || a.created_at)));
   // Pedidos de la tienda en UNA consulta: por chat (lead_id) y por celular (últimos 10 dígitos).
@@ -2645,8 +2633,17 @@ api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, requirePermis
   const mid = uid();
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, l.id, 'vendedor', r.textoRender || `[Plantilla: ${t.nombre}]`);
   marcarEnviado(mid, { ok: true, wamid: r.wamid });
-  db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
-  registrarLog(sid, 'info', 'envio', `Plantilla "${t.nombre}" enviada al chat.`);
+  // Lo que responda el cliente lo atiende el ASISTENTE (salvo que la persona elija atenderlo ella).
+  const conAsistente = req.body?.asistente !== false;
+  db.prepare('UPDATE leads SET asignado = ?, seguimiento_nivel = 0 WHERE id = ?').run(conAsistente ? 'Asistente (bot)' : req.user!.nombre, l.id);
+  // Plantilla de confirmación y el cliente tiene un pedido nuevo sin confirmar: su "sí" lo confirma.
+  if (/confirm/i.test(t.nombre)) {
+    const o = db.prepare(`SELECT id FROM orders WHERE store_id = ? AND (lead_id = ? OR (? != '' AND substr(replace(replace(replace(tel,' ',''),'+',''),'-',''), -10) = ?))
+      AND estado = 'Nuevo' AND COALESCE(confirmacion,'') IN ('', 'fallo', 'no') AND created_at > datetime('now','-7 days') ORDER BY created_at DESC LIMIT 1`)
+      .get(sid, l.id, String(l.tel || '').replace(/\D/g, '').slice(-10), String(l.tel || '').replace(/\D/g, '').slice(-10)) as { id: string } | undefined;
+    if (o) db.prepare("UPDATE orders SET confirmacion = 'esperando', lead_id = ? WHERE id = ?").run(l.id, o.id);
+  }
+  registrarLog(sid, 'info', 'envio', `Plantilla "${t.nombre}" enviada al chat${conAsistente ? ' (el asistente atiende la respuesta)' : ''}.`);
   res.json({ ok: true });
 });
 

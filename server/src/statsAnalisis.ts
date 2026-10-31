@@ -74,7 +74,7 @@ export function analisis(sid: string, desde: string, hasta: string, f: FiltrosAn
   // ── Chats del rango ── (ciudad y estado son del pedido: no filtran chats)
   const leadsRaw = db.prepare(
     `SELECT l.id, l.ad_id ad, COALESCE(NULLIF(l.canal,''),'whatsapp') canal, date(l.created_at, '-5 hours') d, CAST(strftime('%H', l.created_at, '-5 hours') AS INTEGER) h,
-       (SELECT COUNT(*) FROM messages m WHERE m.lead_id = l.id AND m.de = 'cliente') nc
+       l.n_cliente nc
      FROM leads l WHERE l.store_id = ? AND date(l.created_at, '-5 hours') BETWEEN ? AND ?`,
   ).all(sid, desde, hasta) as { id: string; ad: string; canal: string; d: string; h: number; nc: number }[];
   const leadsConProducto = new Set(f.producto ? pedidos.map((o) => o.leadId).filter(Boolean) : []);
