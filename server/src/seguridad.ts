@@ -33,7 +33,7 @@ export function registrarAccesosEquipo(req: Request, res: Response, next: NextFu
     try {
       const u = (req as { user?: UsuarioReq }).user;
       if (!u?.email) return;
-      const equipo = u.role === 'ADMIN' || u.role === 'SUPERADMIN';
+      const equipo = u.role === 'ADMIN' || u.role === 'SUPERADMIN' || u.role === 'SOPORTE';
       if (!equipo && !u.imp) return;
       // Ruta "plantilla": los ids se reemplazan para agrupar ("/orders/:id/…").
       const ruta = req.path.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id').replace(/\/\d{2,}(?=\/|$)/g, '/:n').slice(0, 160);

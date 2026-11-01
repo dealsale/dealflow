@@ -15,7 +15,7 @@ import * as sa from './shopifyApp.js';
 import { registrarAccesosEquipo, registrarAccionEquipo, listarAccesos, claveInvalida, estadoSeguridad } from './seguridad.js';
 import { moverAPapelera, listarPapelera, restaurarDePapelera, listarRespaldos, prepararDescarga, copiaDiaria, DIAS_PAPELERA, eliminarRespaldo, eliminarDePapelera, espacioDisco } from './papelera.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
-import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
+import { clearAuthCookie, esDuenoDeTienda, hashPassword, requireAdmin, requireEquipo, requireAuth, requireOwner, requireStore, requireSuperAdmin, setAuthCookie, verifyPassword } from './auth.js';
 import type { AuthUser } from './auth.js';
 import { handleIncomingWebhook, marcarEnviado, sendWhatsappMedia, sendWhatsappText, sendWhatsappTemplate, verifyWhatsappCredentials, reenviarPlantillaGuardada, ventanaDeLead } from './wa.js';
 import { mediaPath, saveOutgoingMedia, saveOutgoingMessage, tipoDeMime } from './media.js';
@@ -72,7 +72,7 @@ api.post('/auth/login', (req, res) => {
     if (!store?.activa) return res.status(403).json({ error: 'Tu cuenta está desactivada. Escríbenos para reactivarla.' });
   }
   const user: AuthUser = { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id, foto: row.foto || undefined };
-  if ((row.role as string) === 'ADMIN' || (row.role as string) === 'SUPERADMIN') registrarAccionEquipo(row.email, `Inicio de sesión (${String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim()})`);
+  if (['ADMIN', 'SUPERADMIN', 'SOPORTE'].includes(row.role as string)) registrarAccionEquipo(row.email, `Inicio de sesión (${String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim()})`);
   setAuthCookie(res, user, req.hostname);
   res.json({ user: { ...user, esDueno: esDuenoDeTienda(user), permisos: permisosDe(user) } });
 });
@@ -146,7 +146,7 @@ api.post('/auth/restablecer', async (req, res) => {
   if ('error' in v) return res.status(400).json({ error: v.error });
   const u = db.prepare('SELECT id, email, nombre, role, store_id, foto FROM users WHERE id = ?').get(v.userId) as { id: string; email: string; nombre: string; role: string; store_id: string | null; foto: string } | undefined;
   if (!u) return res.status(400).json({ error: 'La cuenta ya no existe.' });
-  const equipo = u.role === 'ADMIN' || u.role === 'SUPERADMIN';
+  const equipo = ['ADMIN', 'SUPERADMIN', 'SOPORTE'].includes(u.role);
   { const e = claveInvalida(String(password || ''), equipo); if (e) return res.status(400).json({ error: e }); }
   u0.validarToken(String(token), true);
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), u.id);
@@ -1634,7 +1634,88 @@ const contextoSoporte = (req: ExRequest, seccion: string) => {
 api.get('/soporte/config', requireAuth, async (req, res) => {
   const { cfgSoporte, conectado } = await import('./soporteChat.js');
   const c = cfgSoporte();
-  res.json({ listo: c.activo && conectado(c, req.user!.storeId || ''), nombre: c.nombre, bienvenida: c.bienvenida });
+  const sl = await import('./soporteLlamadas.js');
+  res.json({ listo: c.activo && conectado(c, req.user!.storeId || ''), nombre: c.nombre, bienvenida: c.bienvenida, llamadas: sl.estadoServicio() });
+});
+// ── Cuentas del equipo DealFlow (solo el superadmin): administradores y soporte ──
+const ROLES_EQUIPO = ['ADMIN', 'SOPORTE'] as const;
+api.get('/admin/equipo', requireAuth, requireSuperAdmin, (_req, res) => {
+  const usuarios = db.prepare("SELECT id, email, nombre, role FROM users WHERE role IN ('ADMIN','SUPERADMIN','SOPORTE') ORDER BY CASE role WHEN 'SUPERADMIN' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END, nombre").all() as { id: string; email: string; nombre: string; role: string }[];
+  const ult = db.prepare('SELECT MAX(at) at FROM accesos_equipo WHERE usuario = ?');
+  res.json({ usuarios: usuarios.map((u) => ({ ...u, ultimoAcceso: (ult.get(u.email) as { at: string | null } | undefined)?.at || '' })) });
+});
+api.post('/admin/equipo', requireAuth, requireSuperAdmin, (req, res) => {
+  const b = req.body || {};
+  const nombre = String(b.nombre || '').trim().slice(0, 80);
+  const email = String(b.email || '').toLowerCase().trim();
+  const role = String(b.role || '');
+  const password = String(b.password || '');
+  if (!nombre) return res.status(400).json({ error: 'Escribe el nombre.' });
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Escribe un correo válido.' });
+  if (!(ROLES_EQUIPO as readonly string[]).includes(role)) return res.status(400).json({ error: 'Elige el rol: Administrador o Soporte.' });
+  { const e = claveInvalida(password, true); if (e) return res.status(400).json({ error: e }); }
+  if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) return res.status(400).json({ error: 'Ya existe una cuenta con ese correo.' });
+  const id = uid();
+  db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,NULL)').run(id, email, hashPassword(password), nombre, role);
+  registrarAccionEquipo(req.user!.email, `Creó la cuenta de ${role === 'ADMIN' ? 'administrador' : 'soporte'} ${email}`);
+  res.json({ ok: true, id });
+});
+api.patch('/admin/equipo/:id', requireAuth, requireSuperAdmin, (req, res) => {
+  const u = db.prepare("SELECT id, email, role FROM users WHERE id = ? AND role IN ('ADMIN','SOPORTE')").get(req.params.id) as { id: string; email: string; role: string } | undefined;
+  if (!u) return res.status(404).json({ error: 'Cuenta no encontrada (la del superadmin no se cambia aquí).' });
+  const b = req.body || {};
+  if (b.nombre != null && String(b.nombre).trim()) db.prepare('UPDATE users SET nombre = ? WHERE id = ?').run(String(b.nombre).trim().slice(0, 80), u.id);
+  if (b.role != null) {
+    if (!(ROLES_EQUIPO as readonly string[]).includes(String(b.role))) return res.status(400).json({ error: 'Rol no válido.' });
+    db.prepare('UPDATE users SET role = ? WHERE id = ?').run(String(b.role), u.id);
+  }
+  if (b.password != null) {
+    const e = claveInvalida(String(b.password), true); if (e) return res.status(400).json({ error: e });
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(b.password)), u.id);
+  }
+  registrarAccionEquipo(req.user!.email, `Cambió la cuenta del equipo ${u.email}${b.role ? ` (rol ${b.role})` : ''}${b.password ? ' (contraseña nueva)' : ''}`);
+  res.json({ ok: true });
+});
+api.delete('/admin/equipo/:id', requireAuth, requireSuperAdmin, (req, res) => {
+  const u = db.prepare("SELECT id, email FROM users WHERE id = ? AND role IN ('ADMIN','SOPORTE')").get(req.params.id) as { id: string; email: string } | undefined;
+  if (!u) return res.status(404).json({ error: 'Cuenta no encontrada.' });
+  db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+  registrarAccionEquipo(req.user!.email, `Eliminó la cuenta del equipo ${u.email}`);
+  res.json({ ok: true });
+});
+
+// ── Soporte en vivo por llamada (soporteLlamadas.ts) ──
+api.post('/soporte/llamadas', requireAuth, requireStore, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const r = await sl.crearLlamada({ id: req.user!.id, nombre: req.user!.nombre, email: req.user!.email, storeId: req.user!.storeId! }, String(req.body?.motivo || ''), String(req.body?.seccion || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.get('/soporte/llamadas/:id', requireAuth, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const r = sl.llamadaDeUsuario(req.params.id, req.user!.id);
+  if (!r) return res.status(404).json({ error: 'Llamada no encontrada.' });
+  res.json(r);
+});
+api.post('/soporte/llamadas/:id/cancelar', requireAuth, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  res.json({ ok: sl.cancelarLlamada(req.params.id, req.user!.id) });
+});
+api.get('/admin/soporte/llamadas', requireAuth, requireEquipo, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  res.json({ llamadas: sl.llamadasEquipo(req.user!.nombre || req.user!.email), cfg: sl.cfgLlamadas(), servicio: sl.estadoServicio() });
+});
+api.post('/admin/soporte/llamadas/:id/:accion', requireAuth, requireEquipo, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const a = req.params.accion;
+  const ok = a === 'atender' ? sl.atenderLlamada(req.params.id, req.user!.nombre || req.user!.email) : a === 'terminar' ? sl.terminarLlamada(req.params.id) : false;
+  if (!ok) return res.status(400).json({ error: 'No se pudo (la llamada ya terminó o no existe).' });
+  res.json({ ok: true });
+});
+api.put('/admin/soporte/config', requireAuth, requireAdmin, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const b = req.body || {};
+  res.json({ cfg: sl.guardarCfgLlamadas({ ...(typeof b.activo === 'boolean' ? { activo: b.activo } : {}), ...(Array.isArray(b.dias) ? { dias: b.dias } : {}), ...(b.desde != null ? { desde: Number(b.desde) } : {}), ...(b.hasta != null ? { hasta: Number(b.hasta) } : {}), ...(typeof b.aviso === 'string' ? { aviso: b.aviso } : {}) }) });
 });
 api.post('/soporte/chat', requireAuth, async (req, res) => {
   // Máximo 20 mensajes por minuto por usuario.
@@ -3232,7 +3313,7 @@ api.post('/admin/stores/:id/impersonate', requireAuth, requireAdmin, (req, res) 
 
 // ── Trazabilidad de pedidos (equipo DealFlow) ─────────────────────────
 // Lista de eventos de todas las tiendas con filtros, y la línea de tiempo de un pedido.
-api.get('/admin/trazabilidad', requireAuth, requireAdmin, (req, res) => {
+api.get('/admin/trazabilidad', requireAuth, requireEquipo, (req, res) => {
   const q = req.query as Record<string, string>;
   const where: string[] = []; const args: unknown[] = [];
   if (req.user!.role !== 'SUPERADMIN') where.push('COALESCE(s.oculta,0) = 0');
@@ -3271,7 +3352,7 @@ api.get('/admin/avisos/resumen', requireAuth, requireAdmin, async (req, res) => 
   res.json(resumenAvisos(dias, String((req.query as Record<string, string>).store || ''), req.user!.role === 'SUPERADMIN'));
 });
 
-api.get('/admin/trazabilidad/pedido/:orderId', requireAuth, requireAdmin, (req, res) => {
+api.get('/admin/trazabilidad/pedido/:orderId', requireAuth, requireEquipo, (req, res) => {
   const o = db.prepare(`SELECT o.id, o.store_id, s.nombre tienda, o.numero, o.cliente, o.tel, o.ciudad, o.departamento, o.direccion, o.estado, o.total, o.envio,
       o.origen, o.despacho_proveedor, o.effi_remision, o.dropi_order_id, o.guia, o.transportadora, o.estado_woo, o.created_at
     FROM orders o LEFT JOIN stores s ON s.id = o.store_id WHERE o.id = ?`).get(req.params.orderId) as Record<string, unknown> | undefined;
@@ -4498,7 +4579,7 @@ api.post('/push/unsubscribe', requireAuth, requireStore, async (req, res) => {
 api.get('/media/:storeId/:file', requireAuth, (req, res) => {
   // Cada tienda ve lo suyo; el equipo DealFlow (admin/superadmin, sin tienda) ve
   // cualquiera, para poder mostrar las fotos de la biblioteca y al mover productos.
-  const esAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPERADMIN';
+  const esAdmin = ['ADMIN', 'SUPERADMIN', 'SOPORTE'].includes(req.user!.role);
   if (!esAdmin && req.params.storeId !== req.user!.storeId) return res.status(403).end();
   const file = mediaPath(req.params.storeId, req.params.file);
   if (!existsSync(file)) return res.status(404).end();

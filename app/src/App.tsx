@@ -11,6 +11,8 @@ import { ManualOrderModal } from './components/ManualOrderModal';
 import { CompletarPedidoModal } from './components/CompletarPedidoModal';
 import { EditarPedidoModal } from './components/EditarPedidoModal';
 import { Trazabilidad } from './sections/admin/Trazabilidad';
+import { SoporteEnVivo, AvisoLlamadas } from './sections/admin/SoporteEnVivo';
+import { EquipoDealFlow } from './sections/admin/EquipoDealFlow';
 import { AsistenteSoporte } from './components/AsistenteSoporte';
 import { Proveedores } from './sections/admin/Proveedores';
 import { Dropdown } from './components/Dropdown';
@@ -326,9 +328,13 @@ function AdminContent({ df }: { df: DealFlowState }) {
   // biblioteca) y además su panel de "Todas las tiendas" (visibilidad).
   return (
     <>
+      <AvisoLlamadas irA={() => df.goAdmin('soporte')} />
       {df.adminSection === 'superadmin' && df.isSuperadmin && <Superadmin df={df} />}
       {df.adminSection === 'plantillas' && df.isSuperadmin && <PlantillasWA df={df} />}
+      {df.adminSection === 'soporte' && <SoporteEnVivo puedeConfigurar={!df.isSoporte} />}
+      {df.adminSection === 'equipo' && df.isSuperadmin && <EquipoDealFlow />}
       {df.adminSection === 'trazabilidad' && <Trazabilidad df={df} />}
+      {df.isSoporte ? null : <>
       {df.adminSection === 'proveedores' && <Proveedores />}
       {df.adminSection === 'contabilidad' && <Contabilidad />}
       {df.adminSection === 'planes' && <Planes df={df} />}
@@ -341,6 +347,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
           <BibliotecaAdmin df={df} />
         </section>
       )}
+      </>}
     </>
   );
 }

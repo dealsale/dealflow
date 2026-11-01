@@ -3,7 +3,7 @@ export interface ApiUser {
   id: string;
   email: string;
   nombre: string;
-  role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN';
+  role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN' | 'SOPORTE';
   storeId: string | null;
   /** true si es el dueño de la tienda; false si es un agente con permisos limitados */
   esDueno?: boolean;
@@ -1042,7 +1042,18 @@ export interface HistorialCliente {
 export const apiHistorialCliente = (rowId: string) => reqBase<HistorialCliente>(`/api/orders/${rowId}/historial-cliente`, 'GET');
 
 // Asistente de soporte flotante (agente externo que configura DealFlow).
-export const apiSoporteConfig = () => reqBase<{ listo: boolean; nombre: string; bienvenida: string }>('/api/soporte/config', 'GET');
+export interface ServicioLlamadas { activo: boolean; abierto: boolean; horario: string; aviso: string }
+export const apiSoporteConfig = () => reqBase<{ listo: boolean; nombre: string; bienvenida: string; llamadas?: ServicioLlamadas }>('/api/soporte/config', 'GET');
+// Soporte en vivo por llamada (audio + pantalla compartida).
+export interface LlamadaSoporte { id: string; estado: 'esperando' | 'en_curso' | 'terminada' | 'cancelada' | 'sin_atender'; atendidoPor: string; creado: string; atendidoAt: string; url: string }
+export const apiSoporteLlamar = (motivo: string, seccion: string) => reqBase<LlamadaSoporte>('/api/soporte/llamadas', 'POST', { motivo, seccion });
+export const apiSoporteLlamada = (id: string) => reqBase<LlamadaSoporte>(`/api/soporte/llamadas/${id}`, 'GET');
+export const apiSoporteCancelarLlamada = (id: string) => reqBase<{ ok: boolean }>(`/api/soporte/llamadas/${id}/cancelar`, 'POST');
+export interface LlamadaEquipo { id: string; storeId: string; tienda: string; usuario: string; motivo: string; seccion: string; estado: string; atendidoPor: string; creado: string; atendidoAt: string; finAt: string; url: string }
+export interface CfgLlamadas { activo: boolean; dias: number[]; desde: number; hasta: number; aviso: string }
+export const apiAdminLlamadas = () => reqBase<{ llamadas: LlamadaEquipo[]; cfg: CfgLlamadas; servicio: ServicioLlamadas }>('/api/admin/soporte/llamadas', 'GET');
+export const apiAdminLlamadaAccion = (id: string, accion: 'atender' | 'terminar') => req<{ ok: true }>(`/api/admin/soporte/llamadas/${id}/${accion}`, 'POST');
+export const apiAdminSoporteConfig = (p: Partial<CfgLlamadas>) => req<{ cfg: CfgLlamadas }>('/api/admin/soporte/config', 'PUT', p);
 export const apiSoporteChat = (mensaje: string, conversacion: string, seccion: string) => reqBase<{ respuesta: string; conversacion: string }>('/api/soporte/chat', 'POST', { mensaje, conversacion, seccion });
 export interface CfgSoporteAdmin { activo: boolean; modo: 'deepseek' | 'dify' | 'webhook'; url: string; tokenPuesto: boolean; claveServidor: boolean; nombre: string; bienvenida: string; instrucciones: string; conectado: boolean; listo: boolean }
 export const apiAdminSoporte = () => req<CfgSoporteAdmin>('/api/admin/soporte-chat', 'GET');
@@ -1163,3 +1174,10 @@ export const apiRemarketingConfig = (p: Partial<CfgRemarketing>) => req<{ cfg: C
 export const apiRemarketingSegmento = (id: SegmentoRmk, dias = 60) => req<{ leads: LeadRmk[] }>(`/api/remarketing/segmento/${id}?dias=${dias}`, 'GET');
 export const apiRemarketingCampana = (d: { segmento: SegmentoRmk; mensaje: string; campos: Record<string, string>; dias: number; limite: number }) => req<{ ok: true; id: string; encolados: number; excluidos: number }>('/api/remarketing/campanas', 'POST', d);
 export const apiRemarketingAccion = (id: string, accion: 'pausar' | 'reanudar' | 'cancelar') => req<{ ok: true }>(`/api/remarketing/campanas/${id}/${accion}`, 'POST');
+
+// ── Equipo DealFlow (solo superadmin): cuentas de administrador y de soporte ──
+export interface UsuarioEquipo { id: string; email: string; nombre: string; role: 'SUPERADMIN' | 'ADMIN' | 'SOPORTE'; ultimoAcceso: string }
+export const apiEquipoDF = () => reqBase<{ usuarios: UsuarioEquipo[] }>('/api/admin/equipo', 'GET');
+export const apiEquipoDFCrear = (d: { nombre: string; email: string; password: string; role: 'ADMIN' | 'SOPORTE' }) => req<{ ok: true; id: string }>('/api/admin/equipo', 'POST', d);
+export const apiEquipoDFCambiar = (id: string, d: { nombre?: string; role?: 'ADMIN' | 'SOPORTE'; password?: string }) => req<{ ok: true }>(`/api/admin/equipo/${id}`, 'PATCH', d);
+export const apiEquipoDFEliminar = (id: string) => req<{ ok: true }>(`/api/admin/equipo/${id}`, 'DELETE');

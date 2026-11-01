@@ -10,7 +10,7 @@ export interface AuthUser {
   id: string;
   email: string;
   nombre: string;
-  role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN';
+  role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN' | 'SOPORTE';
   storeId: string | null;
   /** Si el admin está "entrando" a una tienda (impersonando), aquí va su id para poder volver. */
   imp?: string;
@@ -87,6 +87,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   } catch {
     return res.status(401).json({ error: 'Tu sesión venció. Vuelve a iniciar sesión.' });
   }
+  // Equipo DealFlow: si al usuario lo eliminaron o le cambiaron el rol, su sesión deja de valer.
+  if (req.user.role === 'ADMIN' || req.user.role === 'SOPORTE') {
+    const u = db.prepare('SELECT role FROM users WHERE id = ?').get(req.user.id) as { role: string } | undefined;
+    if (!u || u.role !== req.user.role) return res.status(401).json({ error: 'Tu cuenta cambió o ya no existe. Vuelve a iniciar sesión.' });
+  }
   if (req.user.role === 'VENDEDOR') {
     const store = db.prepare('SELECT activa FROM stores WHERE id = ?').get(req.user.storeId) as { activa: number } | undefined;
     if (!store) return res.status(401).json({ error: 'Tu cuenta ya no existe.' });
@@ -98,6 +103,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   // El superadmin también puede usar todo lo del admin.
   if (req.user?.role !== 'ADMIN' && req.user?.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Solo el equipo DealFlow puede entrar aquí.' });
+  next();
+}
+
+/** Todo el equipo DealFlow, incluido Soporte (que solo entra a Soporte en vivo y Trazabilidad). */
+export function requireEquipo(req: Request, res: Response, next: NextFunction) {
+  if (!['ADMIN', 'SUPERADMIN', 'SOPORTE'].includes(req.user?.role || '')) return res.status(403).json({ error: 'Solo el equipo DealFlow puede entrar aquí.' });
   next();
 }
 
