@@ -182,7 +182,11 @@ const vista = (r: Fila, _quien = '') => ({
 });
 
 /** Cierra solas las que nadie atendió en 30 min y las que siguen "en curso" después de 3 h. */
+let ultVencer = 0;
 function vencer() {
+  // Se llama en cada consulta del panel (cada pocos segundos): basta con revisar cada 30 s.
+  if (Date.now() - ultVencer < 30_000) return;
+  ultVencer = Date.now();
   db.prepare("UPDATE soporte_llamadas SET estado = 'sin_atender', fin_at = datetime('now') WHERE estado = 'esperando' AND creado < datetime('now','-30 minutes')").run();
   db.prepare("UPDATE soporte_llamadas SET estado = 'terminada', fin_at = datetime('now') WHERE estado = 'en_curso' AND atendido_at < datetime('now','-3 hours')").run();
 }

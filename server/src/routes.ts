@@ -1640,6 +1640,14 @@ api.get('/soporte/config', requireAuth, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
   res.json({ listo: c.activo && conectado(c, req.user!.storeId || ''), nombre: c.nombre, bienvenida: c.bienvenida, llamadas: sl.estadoServicio() });
 });
+// ── Rendimiento del servidor (qué lo está frenando) ──
+api.get('/admin/rendimiento', requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await (await import('./rendimiento.js')).reporte());
+});
+api.post('/admin/rendimiento/reiniciar', requireAuth, requireAdmin, async (_req, res) => {
+  (await import('./rendimiento.js')).reiniciar();
+  res.json({ ok: true });
+});
 // ── Cuentas del equipo DealFlow (solo el superadmin): administradores y soporte ──
 const ROLES_EQUIPO = ['ADMIN', 'SOPORTE'] as const;
 api.get('/admin/equipo', requireAuth, requireSuperAdmin, (_req, res) => {

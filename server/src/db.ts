@@ -9,6 +9,13 @@ mkdirSync(DATA_DIR, { recursive: true });
 export const db = new Database(path.join(DATA_DIR, 'dealflow.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// Rendimiento: con WAL, synchronous=NORMAL es seguro (no corrompe) y evita un fsync por cada
+// escritura (en el disco de red de Railway cada fsync bloqueaba el hilo decenas de ms).
+db.pragma('synchronous = NORMAL');
+db.pragma('busy_timeout = 5000');
+db.pragma('cache_size = -65536'); // 64 MB de caché de páginas
+db.pragma('temp_store = MEMORY');
+db.pragma('journal_size_limit = 67108864'); // el WAL no crece sin límite (64 MB tras cada checkpoint)
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS stores (

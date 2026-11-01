@@ -20,6 +20,7 @@ import { db, uid, pj, registrarLog } from './db.js';
 import { sendWhatsappTemplate, sendWhatsappText } from './wa.js';
 import { plantillaAprobada } from './avisoGuia.js';
 import { puedeEscribirle, contarProactivo, frenoActivo } from './calidad.js';
+import { trabajo } from './rendimiento.js';
 
 type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));
@@ -310,20 +311,26 @@ export async function procesarCola(): Promise<void> {
  *  - Recuperación (plantilla): datos completos sin confirmar, 26 h a 7 días después de su último
  *    mensaje; el 2.º toque, 3 días después del primero y sin respuesta.
  */
-export function programarAutomaticos(): number {
+export async function programarAutomaticos(): Promise<number> {
   let n = 0;
   const tiendas = db.prepare("SELECT w.store_id, w.modo FROM whatsapp w WHERE w.conectado = 1").all() as { store_id: string; modo: string }[];
+  const qEnvios = db.prepare('SELECT tipo, estado, creado, enviado_at FROM remarketing_envios WHERE lead_id = ? AND creado > ?');
+  const qUltDe = db.prepare('SELECT ult_de FROM leads WHERE id = ?');
   for (const t of tiendas) {
     const cfg = cfgRemarketing(t.store_id);
     if (!cfg.rescate24h && !cfg.recuperar) continue;
     if (frenoActivo(t.store_id)) continue; // calidad en media o baja: no se programan mensajes de venta
-    const leads = leadsPorSegmento(t.store_id, 8).filter((l) => (l.segmento === 'datos_completos' || l.segmento === 'faltan_datos') && !/^(Pidió|Lo marcaste)/.test(l.excluido));
+    // Entre tienda y tienda se suelta el hilo: así el panel no se congela mientras corre.
+    await new Promise((r) => setImmediate(r));
+    // Solo el rescate (20–23 h) necesita 1 día de chats; la recuperación, 8.
+    const leads = leadsPorSegmento(t.store_id, cfg.recuperar ? 8 : 1).filter((l) => (l.segmento === 'datos_completos' || l.segmento === 'faltan_datos') && !/^(Pidió|Lo marcaste)/.test(l.excluido));
     for (const l of leads) {
       const horas = (Date.now() - new Date(l.ultCliente.replace(' ', 'T') + 'Z').getTime()) / 3600e3;
-      const envios = db.prepare("SELECT tipo, estado, creado, enviado_at FROM remarketing_envios WHERE lead_id = ? AND creado > ? ").all(l.id, l.ultCliente) as Fila[];
+      if (horas < 20 || (!cfg.recuperar && horas >= 23)) continue;
+      const envios = qEnvios.all(l.id, l.ultCliente) as Fila[];
       const ya = (tipo: string) => envios.find((x) => txt(x.tipo) === tipo);
       // El último mensaje tiene que ser nuestro (esperamos al cliente).
-      const ultDe = (db.prepare('SELECT ult_de FROM leads WHERE id = ?').get(l.id) as { ult_de: string } | undefined)?.ult_de;
+      const ultDe = (qUltDe.get(l.id) as { ult_de: string } | undefined)?.ult_de;
       if (ultDe === 'cliente') continue;
       if (cfg.rescate24h && horas >= 20 && horas < 23 && !ya('rescate')) {
         const nombre = primer(l.nombre);
@@ -395,9 +402,10 @@ export function vistaSegmento(storeId: string, segmento: Segmento, dias = 60) {
 }
 
 export function iniciarRemarketing(): void {
-  setTimeout(() => void procesarCola().catch((e) => console.warn('[remarketing] cola', e)), 60_000).unref?.();
-  setInterval(() => void procesarCola().catch((e) => console.warn('[remarketing] cola', e)), 60_000).unref?.();
-  const auto = () => { try { const n = programarAutomaticos(); if (n) console.log(`[remarketing] mensajes automáticos en cola: ${n}`); } catch (e) { console.warn('[remarketing] automáticos', e); } };
+  const cola = () => void trabajo('remarketing.cola', procesarCola);
+  setTimeout(cola, 60_000).unref?.();
+  setInterval(cola, 60_000).unref?.();
+  const auto = () => void trabajo('remarketing.automaticos', async () => { const n = await programarAutomaticos(); if (n) console.log(`[remarketing] mensajes automáticos en cola: ${n}`); });
   setTimeout(auto, 90_000).unref?.();
   setInterval(auto, 10 * 60_000).unref?.();
   // Plantillas de remarketing: se mandan a Meta una vez en las tiendas con WhatsApp oficial.

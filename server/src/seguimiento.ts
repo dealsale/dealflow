@@ -124,6 +124,6 @@ export function reiniciarSeguimiento(leadId: string): void {
 
 /** Arranca el ciclo en segundo plano (cada minuto). */
 export function iniciarSeguimiento(): void {
-  setInterval(() => { void correrSeguimiento(); }, 60_000);
+  setInterval(() => { void import('./rendimiento.js').then((m) => m.trabajo('seguimiento.chats', correrSeguimiento)); }, 60_000);
   console.log('[seguimiento] recordatorios automáticos activos (5 min / 30 min / 1 h) en todos los chats del asistente');
 }
