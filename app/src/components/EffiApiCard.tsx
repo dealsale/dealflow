@@ -38,7 +38,7 @@ const ayuda: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12
  * paquete: los pedidos de un proveedor tienen que salir con SU bodega. Sin bodega fijada, sus
  * pedidos no tienen guía automática (no se usa el remitente por defecto "por si acaso").
  */
-function RemitentesConvenio({ remitentes, alCambiar }: { remitentes: { id: string; nombre: string }[]; alCambiar: () => void }) {
+function RemitentesConvenio({ remitentes, alCambiar, version, alRenombrar }: { remitentes: { id: string; nombre: string }[]; alCambiar: () => void; version: string; alRenombrar: (id: string, nombre: string) => void }) {
   const [datos, setDatos] = useState<RemitentesConvenioResp | null>(null);
   const [nombres, setNombres] = useState<Record<string, string>>({});
   const [verMalas, setVerMalas] = useState(false);
@@ -47,7 +47,8 @@ function RemitentesConvenio({ remitentes, alCambiar }: { remitentes: { id: strin
     setDatos(r.data);
     setNombres(Object.fromEntries(r.data.convenios.map((c) => [c.id, /^Convenio /.test(c.nombre) ? '' : c.nombre])));
   });
-  useEffect(cargar, []);
+  // Se recarga cada vez que cambian los convenios de arriba (agregar, quitar o renombrar).
+  useEffect(cargar, [version]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!datos?.convenios.length) return null;
   const convenios = datos.convenios;
   const asignados = Object.fromEntries(datos.asignados.filter((a) => a.origen === 'manual').map((a) => [a.convenio, a.remitente]));
@@ -59,7 +60,7 @@ function RemitentesConvenio({ remitentes, alCambiar }: { remitentes: { id: strin
   const guardarNombre = (cv: { id: string; nombre: string }) => {
     const n = (nombres[cv.id] || '').trim();
     if (n === cv.nombre || (!n && /^Convenio /.test(cv.nombre))) return;
-    void apiNombrarConvenio(cv.id, n).then(() => { cargar(); alCambiar(); });
+    void apiNombrarConvenio(cv.id, n).then(() => { alRenombrar(cv.id, n || `Convenio ${cv.id}`); cargar(); alCambiar(); });
   };
   const faltan = convenios.filter((cv) => !(bodegas[cv.id]?.remitentes.length || asignados[cv.id]));
   return (
@@ -450,7 +451,12 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                     ? <div style={{ fontSize: 11.5, color: 'var(--df-danger-dark)', marginTop: 4 }}>El remitente guardado (#{cfg.remitenteDefecto}) ya no existe en tu Effi: elige otro.</div>
                     : <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 4 }}>Para tu mercancía propia. Los pedidos de un proveedor salen desde la bodega de ese proveedor (abajo), no desde esta.</div>}
                 </div>
-                <RemitentesConvenio alCambiar={recargarListas} remitentes={listas.remitentes} />
+                <RemitentesConvenio alCambiar={recargarListas} remitentes={listas.remitentes} version={JSON.stringify(cfg.convenios || [])}
+                  alRenombrar={(id, nombre) => {
+                    // El nombre que pones aquí también queda en "Tus convenios" (y al revés).
+                    const lista = cfg.convenios || [];
+                    set({ convenios: lista.some((c) => c.id === id) ? lista.map((c) => (c.id === id ? { ...c, nombre } : c)) : [...lista, { id, nombre }] });
+                  }} />
                 <NombresBodegas alCambiar={recargarListas} remitentes={listas.remitentes as (typeof listas.remitentes[number] & { alias?: string; ciudad?: string; direccion?: string; proveedores?: string[]; productos?: string[] })[]} />
               </div>
 
