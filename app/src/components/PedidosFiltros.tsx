@@ -24,6 +24,8 @@ export interface Filtros {
   desde: string;
   hasta: string;
   canales: string[];
+  /** Landing específica de la Tienda en línea ('' = todas). */
+  landing: string;
   despacho: Despacho;
   guia: Guia;
   ciudad: string;
@@ -33,12 +35,12 @@ export interface Filtros {
   orden: Orden;
 }
 
-const VACIOS: Filtros = { estados: [], fecha: 'todas', desde: '', hasta: '', canales: [], despacho: 'todos', guia: 'todas', ciudad: '', producto: '', min: '', max: '', orden: 'recientes' };
+const VACIOS: Filtros = { estados: [], fecha: 'todas', desde: '', hasta: '', canales: [], landing: '', despacho: 'todos', guia: 'todas', ciudad: '', producto: '', min: '', max: '', orden: 'recientes' };
 const CLAVE = 'df-pedidos-filtros-v1';
 
 export const CANALES: { id: string; label: string }[] = [
   { id: 'whatsapp', label: 'WhatsApp' }, { id: 'instagram', label: 'Instagram' }, { id: 'messenger', label: 'Messenger' },
-  { id: 'web', label: 'Chat web' }, { id: 'shopify', label: 'Shopify' }, { id: 'manual', label: 'Manual' },
+  { id: 'web', label: 'Chat web' }, { id: 'landing', label: 'Tienda en línea' }, { id: 'shopify', label: 'Shopify' }, { id: 'manual', label: 'Manual' },
 ];
 const FECHAS: { id: FechaRapida; label: string }[] = [
   { id: 'todas', label: 'Todas' }, { id: 'hoy', label: 'Hoy' }, { id: 'ayer', label: 'Ayer' }, { id: '7d', label: '7 días' },
@@ -78,6 +80,8 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
 
   // Opciones que salen de los propios pedidos.
   const ciudades = useMemo(() => [...new Set(orders.map((o) => (o.ciudad || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')), [orders]);
+  // Landings de las que han llegado pedidos (para filtrar por una en particular).
+  const landings = useMemo(() => [...new Map(orders.filter((o) => o.landingId).map((o) => [o.landingId!, o.landingNombre || 'Landing'])).entries()].map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [orders]);
   const productos = useMemo(() => [...new Set(orders.flatMap((o) => o.items.map((it) => productoBase(it.nombre))).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')), [orders]);
 
   // Todo menos el estado, para contar cuántos hay de cada estado con los demás filtros puestos.
@@ -94,6 +98,7 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
       if (desde && fecha < desde) return false;
       if (hasta && fecha > hasta) return false;
       if (f.canales.length && !f.canales.includes(o.origen || '')) return false;
+      if (f.landing && o.landingId !== f.landing) return false;
       if (f.despacho === 'sin' && o.despachado) return false;
       if (f.despacho === 'effi' && o.despachoProveedor !== 'effi') return false;
       if (f.despacho === 'dropi' && o.despachoProveedor !== 'dropi') return false;
@@ -136,6 +141,7 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
   for (const e of f.estados) activos.push({ label: e, quitar: () => alternar('estados', e) });
   if (f.fecha !== 'todas') activos.push({ label: f.fecha === 'rango' ? `Del ${f.desde || '…'} al ${f.hasta || '…'}` : FECHAS.find((x) => x.id === f.fecha)!.label, quitar: () => set({ fecha: 'todas', desde: '', hasta: '' }) });
   for (const c of f.canales) activos.push({ label: CANALES.find((x) => x.id === c)?.label || c, quitar: () => alternar('canales', c) });
+  if (f.landing) activos.push({ label: `Landing: ${landings.find((l) => l.id === f.landing)?.nombre || '—'}`, quitar: () => set({ landing: '' }) });
   if (f.despacho !== 'todos') activos.push({ label: f.despacho === 'sin' ? 'Sin despachar' : f.despacho === 'effi' ? 'Por Effi' : 'Por Dropi', quitar: () => set({ despacho: 'todos' }) });
   if (f.guia !== 'todas') activos.push({ label: f.guia === 'con' ? 'Con guía' : 'Sin guía', quitar: () => set({ guia: 'todas' }) });
   if (f.ciudad) activos.push({ label: f.ciudad, quitar: () => set({ ciudad: '' }) });
@@ -143,7 +149,7 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
   if (f.min || f.max) activos.push({ label: `Valor ${f.min ? 'desde $' + Number(f.min).toLocaleString('es-CO') : ''}${f.min && f.max ? ' ' : ''}${f.max ? 'hasta $' + Number(f.max).toLocaleString('es-CO') : ''}`, quitar: () => set({ min: '', max: '' }) });
 
   const totalValor = filtrados.reduce((a, o) => a + valorPedido(o), 0);
-  return { f, set, alternar, limpiar, filtrados, activos, conteoEstados, ciudades, productos, totalValor, totalBase: orders.length };
+  return { f, set, alternar, limpiar, filtrados, activos, conteoEstados, ciudades, productos, landings, totalValor, totalBase: orders.length };
 }
 
 export type FiltrosPedidos = ReturnType<typeof useFiltrosPedidos>;
@@ -194,6 +200,12 @@ export function PanelFiltros({ fp }: { fp: FiltrosPedidos }) {
             </button>
           ))}
         </div>
+        {fp.landings.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={etiqueta}>Landing (Tienda en línea)</div>
+            <Dropdown ariaLabel="Landing" value={f.landing} onChange={(v) => set({ landing: v })} buscar options={[{ value: '', label: 'Todas las landings' }, ...fp.landings.map((l) => ({ value: l.id, label: l.nombre }))]} />
+          </div>
+        )}
       </div>
       <div>
         <div style={etiqueta}>Despacho</div>

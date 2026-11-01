@@ -250,6 +250,18 @@ api.post('/auth/stop-impersonate', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// Nombre de la landing de la que vino un pedido (para filtrar Pedidos por landing). Caché corta por tienda.
+const cacheLandings = new Map<string, { t: number; m: Map<string, string> }>();
+function nombreLanding(sid: string, id: string): string {
+  let c = cacheLandings.get(sid);
+  if (!c || Date.now() - c.t > 60_000) {
+    let filas: { id: string; nombre: string }[] = [];
+    try { filas = db.prepare('SELECT id, nombre FROM landings WHERE store_id = ?').all(sid) as { id: string; nombre: string }[]; } catch { /* sin landings */ }
+    c = { t: Date.now(), m: new Map(filas.map((f) => [f.id, f.nombre])) };
+    cacheLandings.set(sid, c);
+  }
+  return c.m.get(id) || 'Landing eliminada';
+}
 // ── Multi-tienda por cuenta (un dueño puede tener varias tiendas) ─────
 api.get('/mis-tiendas', requireAuth, requireStore, async (req, res) => {
   if (!esDuenoDeTienda(req.user)) return res.json({ tiendas: [] });
@@ -345,7 +357,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const itemsTienda = itemsPorPedido(sid);
   const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', landingId: o.landing_id || '', landingNombre: o.landing_id ? nombreLanding(sid, String(o.landing_id)) : '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', confirmacionError: o.confirmacion_error || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: itemsTienda.get(o.id as string) || [], novedad: novTienda.get(o.id as string) || null,
   }));
@@ -547,7 +559,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const items = itemsPorPedido(sid, parcial ? desde : undefined);
   const novs = novedadesPorPedido(sid);
   const orders = (db.prepare(`SELECT * FROM orders WHERE store_id = ? ${parcial ? 'AND v > ?' : ''} ORDER BY numero DESC`).all(...(parcial ? [sid, desde] : [sid])) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', landingId: o.landing_id || '', landingNombre: o.landing_id ? nombreLanding(sid, String(o.landing_id)) : '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', confirmacionError: o.confirmacion_error || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));

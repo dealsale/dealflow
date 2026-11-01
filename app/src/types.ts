@@ -46,8 +46,11 @@ export interface Order {
   confirmacion?: string;
   confirmacionError?: string;
   shopifyEnviado?: boolean;
-  /** canal del que vino: whatsapp | instagram | messenger | shopify | web | manual */
+  /** canal del que vino: whatsapp | instagram | messenger | shopify | web | landing | manual */
   origen?: string;
+  /** Landing (Tienda en línea) de la que vino el pedido. */
+  landingId?: string;
+  landingNombre?: string;
   /** Chat del que vino el pedido (Inbox). */
   leadId?: string;
   /** Id de la guía en Effi (p. ej. GT-12), aunque la transportadora aún no dé el número. */

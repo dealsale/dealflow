@@ -6,6 +6,8 @@ import { apiAnuncioProducto, apiVincularAnuncio, plantillaPideDatos, type Planti
 import { LlenarPlantilla } from '../components/LlenarPlantilla';
 import { CargandoChat } from '../components/CargandoChat';
 import { urlDe, useRecordado } from '../lib/rutas';
+import { AvatarCanal, ChipsCanal, canalDe, nombreCanal } from '../components/CanalChat';
+import { OrigenBadge } from '../components/OrigenPedido';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../components/Ventana24h';
 import { useEffect, useRef, useState } from 'react';
 import { AttachButton, MediaContent } from '../components/MediaBubble';
@@ -168,6 +170,9 @@ export function CRM({ df }: { df: DealFlowState }) {
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   const [estadoPill, setEstadoPill] = useRecordado<EstadoPill>('inbox:estado', 'todos');
+  const [canal, setCanal] = useRecordado<string>('inbox:canal', '');
+  const [atiende, setAtiende] = useState<'' | 'asistente' | 'equipo'>('');
+  const [procedencia, setProcedencia] = useState<'' | 'anuncio' | 'organico'>('');
   const [nota, setNota] = useState('');
   const [panelCliente, setPanelCliente] = useState(false);
   useEffect(() => {
@@ -198,14 +203,19 @@ export function CRM({ df }: { df: DealFlowState }) {
     if (estadoPill === 'esperando') return !c.live;
     return true;
   };
+  const esBot = (c: (typeof df.crmChats)[number]) => /asistente|bot/i.test(String(c.asignado || ''));
+  const deAnuncio = (c: (typeof df.crmChats)[number]) => !!(c.anuncio && (c.anuncio.titular || c.anuncio.id || c.anuncio.url));
   const chatsFiltrados = df.crmChats.filter(
-    (c) => (!filtroEtiqueta || c.etiqueta === filtroEtiqueta) && (!q || c.nombre.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)) && pasaFecha(c.fechaISO) && pasaEstado(c),
+    (c) => (!canal || canalDe(c) === canal) && (!filtroEtiqueta || c.etiqueta === filtroEtiqueta) && (!q || c.nombre.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)) && pasaFecha(c.fechaISO) && pasaEstado(c)
+      && (!atiende || (atiende === 'asistente' ? esBot(c) : !esBot(c))) && (!procedencia || (procedencia === 'anuncio' ? deAnuncio(c) : !deAnuncio(c))),
   );
+  const conteoCanal: Record<string, number> = {};
+  for (const c of df.crmChats) { const k = canalDe(c); conteoCanal[k] = (conteoCanal[k] || 0) + 1; }
   // Carga por tandas: solo montamos los primeros ~15 chats y vamos agregando al
   // bajar (ver useLazyList). Con muchos chats esto es lo que evita la lentitud.
   const { count: visibles, rootRef: listaRef } = useLazyList(
     chatsFiltrados.length,
-    `${q}|${filtroEtiqueta}|${rangoFecha}|${desde}|${hasta}|${estadoPill}`,
+    `${q}|${filtroEtiqueta}|${rangoFecha}|${desde}|${hasta}|${estadoPill}|${canal}|${atiende}|${procedencia}`,
   );
   const chatsVisibles = chatsFiltrados.slice(0, visibles);
   const cuentaEtiqueta = (et: string) => df.crmChats.filter((c) => c.etiqueta === et).length;
@@ -218,7 +228,7 @@ export function CRM({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="CRM">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Inbox · Chats en vivo</h1>
-      <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 14px' }}>Lo que pasa ahora mismo en tu WhatsApp. Entra a un chat si quieres tomar el control.</p>
+      <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 14px' }}>Tus chats de WhatsApp, Instagram, Messenger y el chat web en un solo lugar. Entra a un chat si quieres tomar el control.</p>
 
       {/* Estado del chat, de un vistazo: cuántos, cuántos sin leer, cuántos esperan. */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -241,6 +251,9 @@ export function CRM({ df }: { df: DealFlowState }) {
         })}
       </div>
 
+      {/* Canal de cada chat: WhatsApp, Instagram, Messenger o chat web. */}
+      <div style={{ marginBottom: 12 }}><ChipsCanal conteo={conteoCanal} valor={canal} onChange={setCanal} /></div>
+
       {/* Todos los filtros en una sola fila compacta: búsqueda + menús desplegables. */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
         <SearchInput value={busca} onChange={setBusca} placeholder="Buscar por nombre o teléfono…" width={240} />
@@ -262,6 +275,22 @@ export function CRM({ df }: { df: DealFlowState }) {
             { value: 'Personalizado', label: 'Rango personalizado…' },
           ]}
         />
+        <FilterSelect
+          label="Atiende"
+          value={atiende}
+          onChange={(v) => setAtiende(v as typeof atiende)}
+          options={[{ value: '', label: 'Todos' }, { value: 'asistente', label: 'El asistente', count: df.crmChats.filter(esBot).length }, { value: 'equipo', label: 'Una persona', count: df.crmChats.filter((c) => !esBot(c)).length }]}
+        />
+        <FilterSelect
+          label="Llegó por"
+          value={procedencia}
+          onChange={(v) => setProcedencia(v as typeof procedencia)}
+          options={[{ value: '', label: 'Todos' }, { value: 'anuncio', label: 'Un anuncio', count: df.crmChats.filter(deAnuncio).length }, { value: 'organico', label: 'Orgánico (sin anuncio)', count: df.crmChats.filter((c) => !deAnuncio(c)).length }]}
+        />
+        {(canal || atiende || procedencia || filtroEtiqueta || rangoFecha !== 'Todas' || busca) && (
+          <button type="button" onClick={() => { setCanal(''); setAtiende(''); setProcedencia(''); setFiltroEtiqueta(''); setRangoFecha('Todas'); setDesde(''); setHasta(''); setBusca(''); }}
+            style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Limpiar filtros</button>
+        )}
         {custom && (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input type="date" value={desde} max={hasta || undefined} onChange={(e) => setDesde(e.target.value)} title="Desde"
@@ -294,13 +323,10 @@ export function CRM({ df }: { df: DealFlowState }) {
           )}
           {chatsVisibles.map((c) => (
             <div key={c.id} {...clicAparte(urlDe({ mode: 'vendedor', section: 'crm', chat: String(c.id) }), c.select)} style={c.crmRowStyle}>
-              <div style={c.avatarStyle}>{c.iniciales}</div>
+              <AvatarCanal avatarStyle={c.avatarStyle} iniciales={c.iniciales} canal={canalDe(c)} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontWeight: c.sinResponder ? 800 : 600, fontSize: 14 }}>{c.nombre}</span>
-                  {c.canal === 'web' && <span title="Llegó por el chat web" style={{ fontSize: 11 }}>🌐</span>}
-                  {c.canal === 'messenger' && <span title="Facebook Messenger" style={{ fontSize: 11 }}>💬</span>}
-                  {c.canal === 'instagram' && <span title="Instagram DM" style={{ fontSize: 11 }}>📸</span>}
                   {c.anuncio && (c.anuncio.titular || c.anuncio.id || c.anuncio.url) && <span title={`Vino del anuncio: ${c.anuncio.titular || 'campaña'}`} style={{ fontSize: 11 }}>📢</span>}
                   {c.etiquetaStyle && <span style={c.etiquetaStyle}>{c.etiqueta}</span>}
                   <span style={{ color: c.sinResponder ? '#25D366' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11.5, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
@@ -337,9 +363,9 @@ export function CRM({ df }: { df: DealFlowState }) {
                 className="df-row-hover"
                 style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', borderRadius: 8, padding: '4px 6px', margin: '-4px -6px' }}
               >
-                <div style={chat.avatarStyle}>{chat.iniciales}</div>
+                <AvatarCanal avatarStyle={chat.avatarStyle} iniciales={chat.iniciales} canal={canalDe(chat)} />
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{chat.nombre}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>{chat.nombre} <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><OrigenBadge origen={canalDe(chat)} size={14} />{nombreCanal(canalDe(chat))}</span></div>
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-muted)' }}>{chat.tel}</div>
                 </div>
                 <span style={{ fontSize: 10, color: 'var(--df-text-faint)', transform: panelCliente ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</span>
