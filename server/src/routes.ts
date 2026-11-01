@@ -1738,7 +1738,15 @@ api.post('/admin/soporte/llamadas/:id/:accion', requireAuth, requireEquipo, asyn
 api.put('/admin/soporte/config', requireAuth, requireAdmin, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
   const b = req.body || {};
-  res.json({ cfg: sl.guardarCfgLlamadas({ ...(typeof b.activo === 'boolean' ? { activo: b.activo } : {}), ...(Array.isArray(b.dias) ? { dias: b.dias } : {}), ...(b.desde != null ? { desde: Number(b.desde) } : {}), ...(b.hasta != null ? { hasta: Number(b.hasta) } : {}), ...(typeof b.aviso === 'string' ? { aviso: b.aviso } : {}) }) });
+  res.json({ cfg: sl.guardarCfgLlamadas({ ...(typeof b.activo === 'boolean' ? { activo: b.activo } : {}), ...(Array.isArray(b.semana) ? { semana: b.semana } : {}), ...(Array.isArray(b.cerrados) ? { cerrados: b.cerrados } : {}), ...(typeof b.aviso === 'string' ? { aviso: b.aviso } : {}) }), servicio: sl.estadoServicio() });
+});
+// Pausa rápida (descanso): la puede poner cualquiera del equipo de soporte.
+api.post('/admin/soporte/pausa', requireAuth, requireEquipo, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const b = req.body || {};
+  const quien = String(req.user!.nombre || req.user!.email || '').split(/[\s@]/)[0];
+  const motivo = String(b.motivo || '').trim().slice(0, 80) || (quien ? `${quien} en descanso` : '');
+  res.json({ cfg: sl.pausarSoporte(Number(b.minutos) || 0, b.restoDelDia === true, motivo), servicio: sl.estadoServicio() });
 });
 api.post('/soporte/chat', requireAuth, async (req, res) => {
   // Máximo 20 mensajes por minuto por usuario.

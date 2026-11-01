@@ -1045,7 +1045,7 @@ export interface HistorialCliente {
 export const apiHistorialCliente = (rowId: string) => reqBase<HistorialCliente>(`/api/orders/${rowId}/historial-cliente`, 'GET');
 
 // Asistente de soporte flotante (agente externo que configura DealFlow).
-export interface ServicioLlamadas { activo: boolean; abierto: boolean; horario: string; aviso: string }
+export interface ServicioLlamadas { activo: boolean; abierto: boolean; horario: string; aviso: string; siguiente?: string; hasta?: string; pausa?: string }
 export const apiSoporteConfig = () => reqBase<{ listo: boolean; nombre: string; bienvenida: string; llamadas?: ServicioLlamadas }>('/api/soporte/config', 'GET');
 // Soporte en vivo por llamada (audio + pantalla compartida).
 export interface LlamadaSoporte { id: string; estado: 'esperando' | 'en_curso' | 'terminada' | 'cancelada' | 'sin_atender'; atendidoPor: string; creado: string; atendidoAt: string }
@@ -1053,10 +1053,13 @@ export const apiSoporteLlamar = (motivo: string, seccion: string) => reqBase<Lla
 export const apiSoporteLlamada = (id: string) => reqBase<LlamadaSoporte>(`/api/soporte/llamadas/${id}`, 'GET');
 export const apiSoporteCancelarLlamada = (id: string) => reqBase<{ ok: boolean }>(`/api/soporte/llamadas/${id}/cancelar`, 'POST');
 export interface LlamadaEquipo { id: string; storeId: string; tienda: string; usuario: string; motivo: string; seccion: string; estado: string; atendidoPor: string; creado: string; atendidoAt: string; finAt: string }
-export interface CfgLlamadas { activo: boolean; dias: number[]; desde: number; hasta: number; aviso: string }
+/** Franja de atención en minutos desde la medianoche (hora Colombia): [inicio, fin). */
+export type FranjaSoporte = [number, number];
+export interface CfgLlamadas { activo: boolean; semana: FranjaSoporte[][]; cerrados: string[]; pausaHasta: string | null; pausaMotivo: string; aviso: string }
 export const apiAdminLlamadas = () => reqBase<{ llamadas: LlamadaEquipo[]; cfg: CfgLlamadas; servicio: ServicioLlamadas }>('/api/admin/soporte/llamadas', 'GET');
 export const apiAdminLlamadaAccion = (id: string, accion: 'atender' | 'terminar') => req<{ ok: true }>(`/api/admin/soporte/llamadas/${id}/${accion}`, 'POST');
-export const apiAdminSoporteConfig = (p: Partial<CfgLlamadas>) => req<{ cfg: CfgLlamadas }>('/api/admin/soporte/config', 'PUT', p);
+export const apiAdminSoporteConfig = (p: Partial<Pick<CfgLlamadas, 'activo' | 'semana' | 'cerrados' | 'aviso'>>) => req<{ cfg: CfgLlamadas; servicio: ServicioLlamadas }>('/api/admin/soporte/config', 'PUT', p);
+export const apiAdminSoportePausa = (p: { minutos?: number; restoDelDia?: boolean; motivo?: string }) => req<{ cfg: CfgLlamadas; servicio: ServicioLlamadas }>('/api/admin/soporte/pausa', 'POST', p);
 export const apiSoporteChat = (mensaje: string, conversacion: string, seccion: string) => reqBase<{ respuesta: string; conversacion: string }>('/api/soporte/chat', 'POST', { mensaje, conversacion, seccion });
 export interface CfgSoporteAdmin { activo: boolean; modo: 'deepseek' | 'dify' | 'webhook'; url: string; tokenPuesto: boolean; claveServidor: boolean; nombre: string; bienvenida: string; instrucciones: string; conectado: boolean; listo: boolean }
 export const apiAdminSoporte = () => req<CfgSoporteAdmin>('/api/admin/soporte-chat', 'GET');
