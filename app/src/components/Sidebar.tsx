@@ -110,19 +110,23 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       {df.isAdmin && (
         <>
           <div style={{ color: 'var(--df-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 8px' }}>
-            {df.isSuperadmin ? 'Superadmin' : 'Administración'}
+            {df.isSuperadmin ? 'Superadmin' : df.isSoporte ? 'Soporte' : 'Administración'}
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {/* El superadmin ve TODO lo del admin y, además, "Todas las tiendas". */}
             {df.isSuperadmin && adminItem('superadmin', <span style={{ fontSize: 16 }}>🌐</span>, 'Todas las tiendas')}
             {df.isSuperadmin && adminItem('plantillas', <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA')}
+            {df.isSuperadmin && adminItem('equipo', <span style={{ fontSize: 16 }}>👥</span>, 'Equipo DealFlow')}
+            {adminItem('soporte', <span style={{ fontSize: 16 }}>📞</span>, 'Soporte en vivo')}
             {adminItem('trazabilidad', <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad')}
+            {!df.isSoporte && <>
             {adminItem('proveedores', <span style={{ fontSize: 16 }}>🤝</span>, 'Proveedores')}
             {adminItem('contabilidad', <IconVentas />, 'Contabilidad')}
             {adminItem('planes', <IconPlanes />, 'Planes')}
             {adminItem('cuentas', <IconCuentas />, 'Cuentas')}
             {adminItem('cupones', <span style={{ fontSize: 16 }}>🎁</span>, 'Cupones')}
             {adminItem('biblioteca', <IconBiblioteca />, 'Biblioteca')}
+            </>}
           </nav>
         </>
       )}

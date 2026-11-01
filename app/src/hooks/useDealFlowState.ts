@@ -251,7 +251,7 @@ export interface DecoratedMensaje extends Mensaje {
 export interface SessionUser {
   nombre: string;
   email: string;
-  role: 'vendedor' | 'admin' | 'superadmin';
+  role: 'vendedor' | 'admin' | 'superadmin' | 'soporte';
   esDueno?: boolean;
   impersonando?: boolean;
   tiendaNombre?: string;
@@ -508,6 +508,8 @@ function mapApiMensajes(mensajes: ApiLead['mensajes']): Mensaje[] {
   }));
 }
 
+/** Secciones del panel que ve una cuenta de Soporte. */
+const SECCIONES_SOPORTE: AdminSection[] = ['soporte', 'trazabilidad'];
 const ESTADOS_PEDIDO: string[] = ESTADOS_TODOS;
 // Estados viejos (antes de seguir a la transportadora).
 const ESTADO_VIEJO: Record<string, string> = { Empacado: 'Confirmado', Despachado: 'En tránsito' };
@@ -1118,6 +1120,7 @@ export function useDealFlowState() {
 
   const isAdmin = mode === 'admin';
   const isSuperadmin = sessionUser?.role === 'superadmin';
+  const isSoporte = sessionUser?.role === 'soporte';
 
   // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
   // Cada sección se abre con un permiso del rol del colaborador (Equipo → Roles).
@@ -1138,14 +1141,16 @@ export function useDealFlowState() {
   const PRESETS_STATS = ['hoy', 'ayer', '7d', '30d', 'mes', 'mesPasado'];
   /** Lleva la app a lo que dice la URL (al entrar, con F5 o con atrás/adelante). */
   function aplicarRuta(r: Ruta, rol: string, agente: boolean, impersonando = false) {
-    const esAdm = rol === 'admin' || rol === 'superadmin';
+    const esAdm = rol === 'admin' || rol === 'superadmin' || rol === 'soporte';
     // El equipo DealFlow fuera del modo soporte siempre abre en el panel administrativo:
     // una dirección de tienda (/pedidos, /inbox…) no lo debe llevar a ninguna tienda.
     if (esAdm && !impersonando && r.mode !== 'admin') { setSelectedOrderId(null); return; }
     // En modo soporte se trabaja en la tienda: las direcciones /admin/… no aplican.
     if (impersonando && r.mode === 'admin') return;
     if (r.mode === 'admin' && r.adminSection && esAdm) {
-      if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
+      // Soporte solo entra a Soporte en vivo y Trazabilidad.
+      if (rol === 'soporte' && !SECCIONES_SOPORTE.includes(r.adminSection)) { setMode('admin'); setAdminSection('soporte'); return; }
+      if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'equipo' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
     } else if (r.section && (!agente || seccionesAgente().includes(r.section))) {
       setMode('vendedor'); setSection(r.section);
     }
@@ -1171,6 +1176,7 @@ export function useDealFlowState() {
   }
 
   function goAdmin(id: AdminSection) {
+    if (sessionUser?.role === 'soporte' && !SECCIONES_SOPORTE.includes(id)) id = 'soporte';
     setMode('admin');
     setAdminSection(id);
     setSelectedOrderId(null);
@@ -1712,11 +1718,12 @@ export function useDealFlowState() {
         else localStorage.removeItem('dealflow:apimode');
       } catch { /* modo privado */ }
       if (available) {
-        const rol = user ? (user.role === 'ADMIN' ? 'admin' : user.role === 'SUPERADMIN' ? 'superadmin' : 'vendedor') : 'vendedor';
+        const rol = user ? (user.role === 'ADMIN' ? 'admin' : user.role === 'SUPERADMIN' ? 'superadmin' : user.role === 'SOPORTE' ? 'soporte' : 'vendedor') : 'vendedor';
         permisosRef.current = user?.permisos || null;
         setSessionUser(user ? { nombre: user.nombre, email: user.email, role: rol, esDueno: user.esDueno, impersonando: user.impersonando, tiendaNombre: user.tiendaNombre, foto: user.foto, permisos: user.permisos } : null);
         if (user) setMode(rol === 'vendedor' ? 'vendedor' : 'admin');
         if (rol === 'superadmin') setAdminSection('superadmin');
+        if (rol === 'soporte') setAdminSection('soporte');
         if (user && user.role === 'VENDEDOR' && user.esDueno === false) setSection(inicioAgente()); // el colaborador arranca en su primera sección
         // Si la URL dice dónde estaba (F5, enlace compartido), se abre ahí mismo.
         if (user) aplicarRuta(leerRuta(), rol, user.role === 'VENDEDOR' && user.esDueno === false, !!user.impersonando);
@@ -1735,7 +1742,7 @@ export function useDealFlowState() {
     setSessionUser(user);
     setMode(user.role === 'vendedor' ? 'vendedor' : 'admin');
     setSection(user.role === 'vendedor' && user.esDueno === false ? inicioAgente() : 'resumen');
-    setAdminSection(user.role === 'superadmin' ? 'superadmin' : 'contabilidad');
+    setAdminSection(user.role === 'superadmin' ? 'superadmin' : user.role === 'soporte' ? 'soporte' : 'contabilidad');
     setLoginError('');
     aplicarRuta(leerRuta(), user.role, user.role === 'vendedor' && user.esDueno === false);
     rutaLista.current = true;
@@ -1758,7 +1765,7 @@ export function useDealFlowState() {
         setLoginError(r.error || 'No pudimos iniciar sesión.');
         return;
       }
-      completeLogin({ nombre: r.user.nombre, email: r.user.email, role: r.user.role === 'ADMIN' ? 'admin' : r.user.role === 'SUPERADMIN' ? 'superadmin' : 'vendedor', esDueno: r.user.esDueno, foto: r.user.foto, permisos: r.user.permisos });
+      completeLogin({ nombre: r.user.nombre, email: r.user.email, role: r.user.role === 'ADMIN' ? 'admin' : r.user.role === 'SUPERADMIN' ? 'superadmin' : r.user.role === 'SOPORTE' ? 'soporte' : 'vendedor', esDueno: r.user.esDueno, foto: r.user.foto, permisos: r.user.permisos });
       return;
     }
     const e = email.trim().toLowerCase();
@@ -2652,7 +2659,7 @@ export function useDealFlowState() {
     setPlans(data.plans.map((p) => ({ id: p.id, nombre: p.nombre, precio: p.precio, cuentas: p.cuentas, features: p.features })));
   }
   useEffect(() => {
-    if (apiMode && isAdmin && sessionUser) void reloadAdmin();
+    if (apiMode && isAdmin && sessionUser && sessionUser.role !== 'soporte') void reloadAdmin(); // Soporte no ve cuentas ni planes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiMode, isAdmin, sessionUser]);
 
@@ -3913,6 +3920,7 @@ export function useDealFlowState() {
     isAdmin,
     isVendedor: !isAdmin,
     isSuperadmin,
+    isSoporte,
     superStores,
     toggleHideStore,
     // ── Registro de actividad ──
@@ -3986,7 +3994,7 @@ export function useDealFlowState() {
     headerTitle: isAdmin ? 'DealFlow · Administración' : apiMode ? storeNombre || 'Mi tienda' : 'Luna Accesorios',
     userLabel: apiMode ? sessionUser?.nombre || (isAdmin ? 'Equipo DealFlow' : 'Vendedor') : isAdmin ? 'Equipo DealFlow' : 'Karla',
     userInitials: apiMode ? initials(sessionUser?.nombre || (isAdmin ? 'DealFlow' : 'V')).toUpperCase() : isAdmin ? 'DF' : 'K',
-    userRoleLabel: isSuperadmin ? 'Superadmin' : isAdmin ? 'Administrador' : esAgente ? 'Agente' : 'Dueño de la tienda',
+    userRoleLabel: isSuperadmin ? 'Superadmin' : isSoporte ? 'Soporte' : isAdmin ? 'Administrador' : esAgente ? 'Agente' : 'Dueño de la tienda',
     userFoto: sessionUser?.foto || '',
     saludoNombre: apiMode ? (sessionUser?.nombre?.split(' ')[0] || 'Vendedor') : 'Karla',
     storeNombre: storeNombre || 'Tu tienda',

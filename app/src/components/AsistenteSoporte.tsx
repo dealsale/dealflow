@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import { apiSoporteChat, apiSoporteConfig } from '../lib/api';
+import { apiSoporteChat, apiSoporteConfig, apiSoporteLlamar, apiSoporteLlamada, apiSoporteCancelarLlamada, type ServicioLlamadas, type LlamadaSoporte } from '../lib/api';
 
 /*
  * Asistente de soporte flotante SKY (web chat): botón abajo a la derecha que abre un chat con
@@ -24,9 +24,10 @@ export function useAsistenteVisible(): boolean {
 }
 
 // ¿Está configurado el agente? (se pregunta una vez por sesión)
-let cfgCache: Promise<{ listo: boolean; nombre: string; bienvenida: string } | null> | null = null;
+type CfgSop = { listo: boolean; nombre: string; bienvenida: string; llamadas?: ServicioLlamadas };
+let cfgCache: Promise<CfgSop | null> | null = null;
 export function useSoporteConfig() {
-  const [cfg, setCfg] = useState<{ listo: boolean; nombre: string; bienvenida: string } | null>(null);
+  const [cfg, setCfg] = useState<CfgSop | null>(null);
   useEffect(() => {
     cfgCache ||= apiSoporteConfig().then((r) => r.data || null);
     let vivo = true;
@@ -81,7 +82,8 @@ export function AsistenteSoporte({ usuario, seccion, mobile, oculto }: { usuario
     return () => window.removeEventListener('keydown', esc);
   }, [abierto]);
 
-  if (!cfg?.listo || !mostrar) return null;
+  const conLlamadas = !!cfg?.llamadas?.activo && !seccion.startsWith('admin');
+  if (!cfg || (!cfg.listo && !conLlamadas) || !mostrar) return null;
 
   const enviar = async (t = texto) => {
     const m = t.trim();
@@ -128,6 +130,8 @@ export function AsistenteSoporte({ usuario, seccion, mobile, oculto }: { usuario
             <button type="button" onClick={() => setAbierto(false)} aria-label="Cerrar" style={botonCab}>✕</button>
           </div>
 
+          {conLlamadas && <BloqueLlamada servicio={cfg.llamadas!} seccion={seccion} usuario={usuario} />}
+          {cfg.listo ? <>
           <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--df-bg)' }}>
             <Burbuja de="asistente"><Texto t={cfg.bienvenida} /></Burbuja>
             {!msgs.length && (
@@ -149,6 +153,7 @@ export function AsistenteSoporte({ usuario, seccion, mobile, oculto }: { usuario
             <button type="submit" disabled={!texto.trim() || pensando} aria-label="Enviar"
               style={{ width: 42, borderRadius: 12, border: 0, background: 'var(--df-brand)', color: '#fff', fontSize: 17, cursor: 'pointer', opacity: !texto.trim() || pensando ? 0.5 : 1 }}>➤</button>
           </form>
+          </> : <div style={{ flex: 1, background: 'var(--df-bg)' }} />}
         </div>
       )}
     </>
@@ -165,6 +170,90 @@ function Burbuja({ de, children }: { de: Msg['de']; children: ReactNode }) {
       color: yo ? '#fff' : de === 'error' ? 'var(--df-danger-dark, #B91C1C)' : 'var(--df-text-body)',
       border: yo ? 0 : '1px solid var(--df-border)', borderBottomRightRadius: yo ? 4 : 14, borderBottomLeftRadius: yo ? 14 : 4 }}>
       {children}
+    </div>
+  );
+}
+
+/**
+ * "Llamar a soporte": abre una sala de llamada (audio + pantalla compartida) en otra pestaña y
+ * avisa al equipo. Aquí se ve si ya entró alguien de soporte.
+ */
+function BloqueLlamada({ servicio, seccion, usuario }: { servicio: ServicioLlamadas; seccion: string; usuario: string }) {
+  const clave = `df:soporte:llamada:${usuario}`;
+  const [id, setId] = useState<string>(() => { try { return localStorage.getItem(clave) || ''; } catch { return ''; } });
+  const [ll, setLl] = useState<LlamadaSoporte | null>(null);
+  const [form, setForm] = useState(false);
+  const [motivo, setMotivo] = useState('');
+  const [msg, setMsg] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+  const guardarId = (v: string) => { setId(v); try { if (v) localStorage.setItem(clave, v); else localStorage.removeItem(clave); } catch { /* sin almacenamiento */ } };
+  useEffect(() => {
+    if (!id) { setLl(null); return; }
+    let vivo = true;
+    const ver = () => void apiSoporteLlamada(id).then((r) => {
+      if (!vivo) return;
+      if (!r.data) { guardarId(''); return; }
+      setLl(r.data);
+      if (r.data.estado === 'terminada' || r.data.estado === 'cancelada' || r.data.estado === 'sin_atender') {
+        setMsg(r.data.estado === 'sin_atender' ? 'Nadie alcanzó a atender tu llamada. Inténtalo de nuevo en un rato o escríbele a SKY.' : 'La llamada terminó. ¡Gracias por comunicarte!');
+        guardarId('');
+      }
+    });
+    ver();
+    const t = setInterval(ver, 5000);
+    return () => { vivo = false; clearInterval(t); };
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const llamar = async () => {
+    // La pestaña se abre YA (con el clic) para que el navegador no la bloquee; la sala se carga cuando responde el servidor.
+    const pestana = window.open('', '_blank');
+    setOcupado(true); setMsg('');
+    const r = await apiSoporteLlamar(motivo.trim(), seccion);
+    setOcupado(false);
+    if (!r.data) { pestana?.close(); setMsg(r.error || 'No se pudo iniciar la llamada.'); return; }
+    if (pestana) pestana.location.href = r.data.url; else window.open(r.data.url, '_blank');
+    setForm(false); setMotivo(''); setLl(r.data); guardarId(r.data.id);
+  };
+  const cancelar = async () => { if (id) await apiSoporteCancelarLlamada(id); guardarId(''); setMsg('Cancelaste la llamada.'); };
+
+  const caja: React.CSSProperties = { padding: '10px 14px', borderBottom: '1px solid var(--df-border)', background: 'var(--df-surface)', fontSize: 12.5, lineHeight: 1.45 };
+  const btnLlamar: React.CSSProperties = { width: '100%', border: 0, borderRadius: 10, padding: '9px 12px', background: '#047857', color: '#fff', font: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer' };
+  const btnSec: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 8, padding: '5px 10px', background: 'var(--df-surface)', color: 'var(--df-text-body)', font: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
+
+  if (ll && (ll.estado === 'esperando' || ll.estado === 'en_curso')) {
+    return (
+      <div style={{ ...caja, background: ll.estado === 'en_curso' ? 'rgba(16,185,129,.1)' : 'rgba(245,158,11,.1)' }}>
+        <b style={{ fontSize: 13 }}>{ll.estado === 'en_curso' ? `✅ ${ll.atendidoPor || 'Soporte'} entró a la llamada` : '⏳ Esperando a que entre alguien de soporte…'}</b>
+        <div style={{ color: 'var(--df-text-muted)', marginTop: 3 }}>
+          {ll.estado === 'en_curso' ? 'Para mostrarnos tu pantalla, en la llamada toca 🖥️ «Compartir pantalla».' : 'La sala ya está abierta en otra pestaña: quédate ahí con el micrófono activado. Normalmente tardamos unos minutos.'}
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+          <a href={ll.url} target="_blank" rel="noreferrer" style={{ ...btnSec, textDecoration: 'none', color: '#047857' }}>Abrir la sala</a>
+          <button type="button" onClick={() => void cancelar()} style={btnSec}>{ll.estado === 'en_curso' ? 'Ya terminamos' : 'Cancelar'}</button>
+        </div>
+      </div>
+    );
+  }
+  if (!servicio.abierto) {
+    return <div style={{ ...caja, color: 'var(--df-text-muted)' }}>📞 Soporte por llamada: {servicio.horario}.{servicio.aviso ? ` ${servicio.aviso}` : ''}{msg && <div style={{ marginTop: 4, color: 'var(--df-text-body)' }}>{msg}</div>}</div>;
+  }
+  return (
+    <div style={caja}>
+      {!form ? (
+        <button type="button" onClick={() => setForm(true)} style={btnLlamar}>📞 Llamar a soporte · audio y pantalla</button>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <b style={{ fontSize: 13 }}>📞 Te conectamos con el equipo de DealFlow</b>
+          <div style={{ color: 'var(--df-text-muted)' }}>Se abre una llamada en otra pestaña (sin instalar nada). Podrás hablar y compartir tu pantalla.</div>
+          <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={200} placeholder="¿Con qué te ayudamos? (opcional)" onKeyDown={(e) => { if (e.key === 'Enter') void llamar(); }}
+            style={{ font: 'inherit', fontSize: 13, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--df-border)', background: 'var(--df-bg)', color: 'var(--df-text)' }} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button type="button" onClick={() => void llamar()} disabled={ocupado} style={{ ...btnLlamar, flex: 1, opacity: ocupado ? 0.6 : 1 }}>{ocupado ? 'Abriendo…' : 'Llamar ahora'}</button>
+            <button type="button" onClick={() => setForm(false)} style={btnSec}>Cancelar</button>
+          </div>
+        </div>
+      )}
+      {msg && <div style={{ marginTop: 6, color: 'var(--df-text-body)' }}>{msg}</div>}
     </div>
   );
 }

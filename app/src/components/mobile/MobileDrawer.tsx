@@ -87,7 +87,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         {df.isAdmin && (
           <>
             <div style={{ color: 'var(--df-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 8px' }}>
-              {df.isSuperadmin ? 'Superadmin' : 'Administración'}
+              {df.isSuperadmin ? 'Superadmin' : df.isSoporte ? 'Soporte' : 'Administración'}
             </div>
             {/* El superadmin ve TODO lo del admin y, además, "Todas las tiendas". */}
             {df.isSuperadmin && (
@@ -100,13 +100,21 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
                 <span>📩 Plantillas WA</span>
               </div>
             )}
+            {df.isSuperadmin && (
+              <div onClick={() => df.goAdmin('equipo')} style={itemStyle(df.adminSection === 'equipo')}>
+                <span>👥 Equipo DealFlow</span>
+              </div>
+            )}
+            <div onClick={() => df.goAdmin('soporte')} style={itemStyle(df.adminSection === 'soporte')}>
+              <span>📞 Soporte en vivo</span>
+            </div>
             <div onClick={() => df.goAdmin('trazabilidad')} style={itemStyle(df.adminSection === 'trazabilidad')}>
               <span>🧭 Trazabilidad</span>
             </div>
-            <div onClick={() => df.goAdmin('proveedores')} style={itemStyle(df.adminSection === 'proveedores')}>
+            {!df.isSoporte && <div onClick={() => df.goAdmin('proveedores')} style={itemStyle(df.adminSection === 'proveedores')}>
               <span>🤝 Proveedores</span>
-            </div>
-            {ADMIN_ITEMS.map((m) => (
+            </div>}
+            {!df.isSoporte && ADMIN_ITEMS.map((m) => (
               <div key={m.id} onClick={() => df.goAdmin(m.id)} style={itemStyle(df.adminSection === m.id)}>
                 <span>{m.label}</span>
               </div>
