@@ -351,6 +351,8 @@ export interface ApiOrder {
   estadoWoo?: string;
   effiRemision?: string;
   origen?: string;
+  landingId?: string;
+  landingNombre?: string;
   leadId?: string;
   effiGuiaTx?: string;
   guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string; entrega?: string; entregaC?: string; falloChat?: string; falloContacto?: string; modo?: string; reintento?: boolean } | null;

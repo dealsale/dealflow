@@ -595,6 +595,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     confirmacion: o.confirmacion || '', confirmacionError: o.confirmacionError || '',
     shopifyEnviado: !!o.shopifyEnviado,
     origen: o.origen || '',
+    landingId: o.landingId || '', landingNombre: o.landingNombre || '',
     leadId: o.leadId || '',
     effiGuiaTx: o.effiGuiaTx || '',
     guiaAviso: o.guiaAviso || null,
