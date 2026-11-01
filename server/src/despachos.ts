@@ -153,7 +153,8 @@ export async function avisarGuiaAlCliente(storeId: string, orderId: string): Pro
 /** Arranca el ciclo en segundo plano (intervalo configurable por env). */
 export function iniciarSincronizacionDespachos(): void {
   const min = Number(process.env.SYNC_DESPACHO_MIN || process.env.WOO_SYNC_DESPACHO_MIN || 4);
-  setTimeout(() => { void sincronizarDespachos(); }, 20_000);
-  setInterval(() => { void sincronizarDespachos(); }, Math.max(1, min) * 60_000);
+  const sync = () => void import('./rendimiento.js').then((m) => m.trabajo('despachos.sync', sincronizarDespachos));
+  setTimeout(sync, 20_000);
+  setInterval(sync, Math.max(1, min) * 60_000);
   console.log(`[despachos] sincronización cada ${min}min (Dropi API + Effi API)`);
 }

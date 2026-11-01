@@ -1190,3 +1190,13 @@ export const apiEquipoDF = () => reqBase<{ usuarios: UsuarioEquipo[] }>('/api/ad
 export const apiEquipoDFCrear = (d: { nombre: string; email: string; password: string; role: 'ADMIN' | 'SOPORTE' }) => req<{ ok: true; id: string }>('/api/admin/equipo', 'POST', d);
 export const apiEquipoDFCambiar = (id: string, d: { nombre?: string; role?: 'ADMIN' | 'SOPORTE'; password?: string }) => req<{ ok: true }>(`/api/admin/equipo/${id}`, 'PATCH', d);
 export const apiEquipoDFEliminar = (id: string) => req<{ ok: true }>(`/api/admin/equipo/${id}`, 'DELETE');
+
+export interface ReporteRendimiento {
+  arriba: number; memoriaMB: { rss: number; heap: number }; hilo: { p50: number; p99: number; max: number };
+  bloqueos: { t: number; ms: number; peticiones: string[]; tareas: string[] }[];
+  rutas: { ruta: string; n: number; prom: number; max: number }[];
+  lentas: { t: number; ms: number; ruta: string; estado: number }[];
+  base: { dbMB: number; walMB: number; tablas: { tabla: string; filas: number; ms: number }[] };
+}
+export const apiRendimiento = () => req<ReporteRendimiento>('/api/admin/rendimiento', 'GET');
+export const apiRendimientoReiniciar = () => req<{ ok: boolean }>('/api/admin/rendimiento/reiniciar', 'POST');

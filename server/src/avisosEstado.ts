@@ -336,10 +336,11 @@ export function avisosDePedido(storeId: string, orderId: string) {
 }
 
 export function iniciarAvisosEstado(): void {
-  setTimeout(() => void procesarAvisos().catch(() => {}), 30_000).unref?.();
-  setInterval(() => void procesarAvisos().catch(() => {}), 60_000).unref?.();
+  const procesar = () => void import('./rendimiento.js').then((m) => m.trabajo('avisos.estado', procesarAvisos));
+  setTimeout(procesar, 30_000).unref?.();
+  setInterval(procesar, 60_000).unref?.();
   // Seguimiento D+1 / D+2: se revisa cada 10 minutos (la cola lo envía en el siguiente ciclo).
-  const seguir = () => { try { const n = programarSeguimientos(); if (n) console.log(`[avisos] seguimiento de pedidos encolado: ${n}`); } catch (e) { console.warn('[avisos] seguimiento', e); } };
+  const seguir = () => void import('./rendimiento.js').then((m) => m.trabajo('avisos.seguimiento', () => { const n = programarSeguimientos(); if (n) console.log(`[avisos] seguimiento de pedidos encolado: ${n}`); }));
   setTimeout(seguir, 45_000).unref?.();
   setInterval(seguir, 10 * 60_000).unref?.();
   // La plantilla de avisos de estado se manda a Meta en todas las tiendas con WhatsApp oficial

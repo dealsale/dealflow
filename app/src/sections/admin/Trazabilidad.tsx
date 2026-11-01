@@ -1,3 +1,4 @@
+import { RendimientoServidor } from './Rendimiento';
 import { useEffect, useRef, useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../../components/Dropdown';
@@ -213,6 +214,7 @@ export function Trazabilidad({ df }: { df: DealFlowState }) {
 
   return (
     <section data-screen-label="Admin Trazabilidad">
+      <RendimientoServidor />
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Trazabilidad de pedidos 🧭</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 16px' }}>Todo lo que le pasa a cada pedido: creación, estados, envíos a Effi y Dropi con lo que se mandó y lo que respondieron, guías, avisos y mensajes al cliente.</p>
 

@@ -216,8 +216,9 @@ export function iniciarCapi(): void {
       await procesarCapi(t.store_id).catch((e) => console.warn('[capi]', e));
     }
   };
-  setTimeout(() => void ronda(), 60_000);
-  setInterval(() => void ronda(), 60_000); // cada minuto
+  const r = () => void import('./rendimiento.js').then((m) => m.trabajo('meta.capi', ronda));
+  setTimeout(r, 60_000);
+  setInterval(r, 60_000); // cada minuto
 }
 
 /**
