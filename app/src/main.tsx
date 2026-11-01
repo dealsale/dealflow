@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { StrictMode, Suspense, lazy } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
@@ -6,6 +6,7 @@ import { PagoOffline } from './components/PagoOffline.tsx'
 import { Academy } from './academy/Academy.tsx'
 import { PortalProveedores } from './proveedores/Portal.tsx'
 import { iniciarAutoActualizacion } from './lib/autoUpdate'
+const Drive = lazy(() => import('./drive/Drive').then((m) => ({ default: m.Drive })))
 import { iniciarTraduccion } from './i18n/traductor'
 
 iniciarAutoActualizacion()
@@ -16,10 +17,12 @@ iniciarAutoActualizacion()
 const esAcademy = /^academy\./i.test(window.location.hostname) || /^\/academy(\/|$)/i.test(window.location.pathname);
 // Portal de proveedores: proveedores.<dominio> o la ruta /proveedores (sesión propia).
 const esProveedores = /^proveedores\./i.test(window.location.hostname) || /^\/proveedores(\/|$)/i.test(window.location.pathname);
+// Drive del equipo DealFlow: drive.<dominio> o la ruta /drive (misma sesión).
+const esDrive = /^drive\./i.test(window.location.hostname) || /^\/drive(\/|$)/i.test(window.location.pathname);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {esProveedores ? <PortalProveedores /> : esAcademy ? <Academy /> : <><App /><PagoOffline /></>}
+    {esDrive ? <Suspense fallback={null}><Drive /></Suspense> : esProveedores ? <PortalProveedores /> : esAcademy ? <Academy /> : <><App /><PagoOffline /></>}
   </StrictMode>,
 )
 

@@ -3,7 +3,7 @@ export interface ApiUser {
   id: string;
   email: string;
   nombre: string;
-  role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN' | 'SOPORTE';
+  role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN' | 'SOPORTE' | 'MARKETING';
   storeId: string | null;
   /** true si es el dueño de la tienda; false si es un agente con permisos limitados */
   esDueno?: boolean;
@@ -1185,10 +1185,10 @@ export const apiRemarketingCampana = (d: { segmento: SegmentoRmk; mensaje: strin
 export const apiRemarketingAccion = (id: string, accion: 'pausar' | 'reanudar' | 'cancelar') => req<{ ok: true }>(`/api/remarketing/campanas/${id}/${accion}`, 'POST');
 
 // ── Equipo DealFlow (solo superadmin): cuentas de administrador y de soporte ──
-export interface UsuarioEquipo { id: string; email: string; nombre: string; role: 'SUPERADMIN' | 'ADMIN' | 'SOPORTE'; ultimoAcceso: string }
+export interface UsuarioEquipo { id: string; email: string; nombre: string; role: 'SUPERADMIN' | 'ADMIN' | 'SOPORTE' | 'MARKETING'; ultimoAcceso: string }
 export const apiEquipoDF = () => reqBase<{ usuarios: UsuarioEquipo[] }>('/api/admin/equipo', 'GET');
-export const apiEquipoDFCrear = (d: { nombre: string; email: string; password: string; role: 'ADMIN' | 'SOPORTE' }) => req<{ ok: true; id: string }>('/api/admin/equipo', 'POST', d);
-export const apiEquipoDFCambiar = (id: string, d: { nombre?: string; role?: 'ADMIN' | 'SOPORTE'; password?: string }) => req<{ ok: true }>(`/api/admin/equipo/${id}`, 'PATCH', d);
+export const apiEquipoDFCrear = (d: { nombre: string; email: string; password: string; role: 'ADMIN' | 'SOPORTE' | 'MARKETING' }) => req<{ ok: true; id: string }>('/api/admin/equipo', 'POST', d);
+export const apiEquipoDFCambiar = (id: string, d: { nombre?: string; role?: 'ADMIN' | 'SOPORTE' | 'MARKETING'; password?: string }) => req<{ ok: true }>(`/api/admin/equipo/${id}`, 'PATCH', d);
 export const apiEquipoDFEliminar = (id: string) => req<{ ok: true }>(`/api/admin/equipo/${id}`, 'DELETE');
 
 export interface ReporteRendimiento {

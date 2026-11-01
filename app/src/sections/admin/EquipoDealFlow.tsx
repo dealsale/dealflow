@@ -15,13 +15,15 @@ const btnS: React.CSSProperties = { border: '1px solid var(--df-border)', border
 const ROL: Record<string, [string, string, string]> = {
   SUPERADMIN: ['Superadmin', '#7C3AED', 'Todo, incluido crear cuentas del equipo.'],
   ADMIN: ['Administrador', '#1D4ED8', 'Todo el panel: tiendas, planes, cuentas, contabilidad, cupones, biblioteca, soporte.'],
-  SOPORTE: ['Soporte', '#047857', 'Solo Soporte en vivo (atender llamadas) y Trazabilidad.'],
+  SOPORTE: ['Soporte', '#047857', 'Solo Soporte en vivo (atender llamadas), Trazabilidad y el Drive del equipo.'],
+  MARKETING: ['Marketing', '#DB2777', 'Solo el Drive del equipo (drive.dealflow.sbs): subir, organizar y compartir archivos. No entra al panel.'],
 };
+type RolEquipo = 'ADMIN' | 'SOPORTE' | 'MARKETING';
 const fecha = (s: string) => (s ? fmtCO('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(Date.parse(s.replace(' ', 'T') + 'Z')) : 'Nunca');
 
 export function EquipoDealFlow() {
   const [lista, setLista] = useState<UsuarioEquipo[] | null>(null);
-  const [f, setF] = useState({ nombre: '', email: '', password: '', role: 'SOPORTE' as 'ADMIN' | 'SOPORTE' });
+  const [f, setF] = useState({ nombre: '', email: '', password: '', role: 'SOPORTE' as RolEquipo });
   const [msg, setMsg] = useState('');
   const cargar = () => void apiEquipoDF().then((r) => setLista(r.data?.usuarios || []));
   useEffect(cargar, []);
@@ -40,7 +42,7 @@ export function EquipoDealFlow() {
     const r = await apiEquipoDFCambiar(u.id, { password: p });
     if (r.error) notificar(r.error, 'error', 6000); else notificar('✓ Contraseña cambiada.');
   };
-  const rol = async (u: UsuarioEquipo, role: 'ADMIN' | 'SOPORTE') => {
+  const rol = async (u: UsuarioEquipo, role: RolEquipo) => {
     if (!(await confirmar({ titulo: `¿Cambiar a ${u.nombre} a ${ROL[role][0]}?`, mensaje: `${ROL[role][2]} Tendrá que volver a iniciar sesión.`, aceptar: 'Cambiar' }))) return;
     const r = await apiEquipoDFCambiar(u.id, { role });
     if (r.error) notificar(r.error, 'error'); else cargar();
@@ -55,6 +57,7 @@ export function EquipoDealFlow() {
     <section data-screen-label="Equipo DealFlow" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Equipo DealFlow</h1>
+        <a href={/(^|\.)dealflow\.sbs$/i.test(location.hostname) ? 'https://drive.dealflow.sbs/' : '/drive'} target="_blank" rel="noopener" style={{ ...btnS, display: 'inline-block', marginTop: 8, textDecoration: 'none' }}>☁️ Abrir el Drive del equipo</a>
         <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Cuentas de las personas que administran DealFlow o atienden el soporte. Cada quien entra con su propio correo (queda registrado quién hizo qué).</p>
       </div>
 
@@ -67,7 +70,7 @@ export function EquipoDealFlow() {
           <div>
             <label style={lbl}>Rol</label>
             <div style={{ display: 'flex', gap: 6 }}>
-              {(['SOPORTE', 'ADMIN'] as const).map((r) => (
+              {(['SOPORTE', 'MARKETING', 'ADMIN'] as const).map((r) => (
                 <button key={r} type="button" onClick={() => setF({ ...f, role: r })} style={{ ...btnS, flex: 1, padding: '9px 10px', background: f.role === r ? ROL[r][1] : 'var(--df-surface)', color: f.role === r ? '#fff' : 'var(--df-text-body)', borderColor: f.role === r ? ROL[r][1] : 'var(--df-border)' }}>{ROL[r][0]}</button>
               ))}
             </div>
@@ -90,7 +93,10 @@ export function EquipoDealFlow() {
               </div>
               {u.role !== 'SUPERADMIN' && (
                 <>
-                  <button onClick={() => void rol(u, u.role === 'ADMIN' ? 'SOPORTE' : 'ADMIN')} style={btnS}>Pasar a {u.role === 'ADMIN' ? 'Soporte' : 'Administrador'}</button>
+                  <select value="" aria-label={`Cambiar el rol de ${u.nombre}`} onChange={(e) => { if (e.target.value) void rol(u, e.target.value as RolEquipo); }} style={{ ...btnS, padding: '6px 8px' }}>
+                    <option value="">Cambiar rol…</option>
+                    {(['ADMIN', 'SOPORTE', 'MARKETING'] as const).filter((r) => r !== u.role).map((r) => <option key={r} value={r}>Pasar a {ROL[r][0]}</option>)}
+                  </select>
                   <button onClick={() => void clave(u)} style={btnS}>Cambiar contraseña</button>
                   <button onClick={() => void eliminar(u)} style={{ ...btnS, color: '#B91C1C' }}>Eliminar</button>
                 </>
