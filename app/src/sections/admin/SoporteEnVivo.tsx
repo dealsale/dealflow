@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiAdminLlamadas, apiAdminLlamadaAccion, apiAdminSoporteConfig, type CfgLlamadas, type LlamadaEquipo, type ServicioLlamadas } from '../../lib/api';
 import { notificar } from '../../components/dialogs';
 import { fmtCO } from '../../lib/fechaCO';
+import { useLlamada, iniciarLlamada, colgarLlamada } from '../../lib/llamadaRTC';
 
 /**
  * Soporte en vivo (equipo DealFlow): las tiendas que tocaron "Llamar a soporte". Al atender se
@@ -74,14 +75,19 @@ export function SoporteEnVivo({ puedeConfigurar = true }: { puedeConfigurar?: bo
   const cargar = () => void apiAdminLlamadas().then((r) => { if (r.data) { setLista(r.data.llamadas); setCfg((c) => c || r.data!.cfg); setServicio(r.data.servicio); } });
   useEffect(() => { cargar(); const t = setInterval(cargar, 6000); return () => clearInterval(t); }, []);
 
+  const llamada = useLlamada();
   const atender = async (l: LlamadaEquipo) => {
-    // La pestaña se abre con el clic (el navegador no la bloquea) y se registra quién atendió.
-    window.open(l.url, '_blank');
+    // Queda registrado quién atendió y la llamada se abre aquí mismo (ventana flotante).
     const r = await apiAdminLlamadaAccion(l.id, 'atender');
-    if (r.error) notificar(r.error, 'error');
+    if (r.error) { notificar(r.error, 'error'); return; }
+    iniciarLlamada(l.id, 'soporte', `${l.tienda} · ${l.usuario}`);
     cargar();
   };
-  const terminar = async (l: LlamadaEquipo) => { await apiAdminLlamadaAccion(l.id, 'terminar'); cargar(); };
+  const terminar = async (l: LlamadaEquipo) => {
+    if (llamada?.id === l.id && llamada.fase !== 'terminada') await colgarLlamada();
+    else await apiAdminLlamadaAccion(l.id, 'terminar');
+    cargar();
+  };
   const guardar = async (p: Partial<CfgLlamadas>) => {
     const nuevo = { ...cfg!, ...p }; setCfg(nuevo);
     const r = await apiAdminSoporteConfig(p);
@@ -94,7 +100,7 @@ export function SoporteEnVivo({ puedeConfigurar = true }: { puedeConfigurar?: bo
     <section data-screen-label="Soporte en vivo" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Soporte en vivo</h1>
-        <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Las tiendas tocan «Llamar a soporte» en SKY y se abre una llamada con audio y pantalla compartida. Al atender entras a la misma sala.</p>
+        <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Las tiendas tocan «Llamar a soporte» en SKY y la llamada (audio y pantalla compartida) ocurre aquí mismo. Toca «Atender» y quedas conectado.</p>
       </div>
 
       {permiso !== 'granted' && 'Notification' in window && (
@@ -116,12 +122,14 @@ export function SoporteEnVivo({ puedeConfigurar = true }: { puedeConfigurar?: bo
                 <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', marginTop: 2 }}>{l.motivo || <i style={{ color: 'var(--df-text-faint)' }}>Sin motivo</i>}{l.seccion ? <span style={{ color: 'var(--df-text-faint)' }}> · estaba en {l.seccion}</span> : ''}</div>
                 <div style={{ fontSize: 12, fontWeight: 700, marginTop: 3, color: ESTADO[l.estado]?.[1] }}>{ESTADO[l.estado]?.[0]} · {l.estado === 'esperando' ? hace(l.creado) : `${l.atendidoPor} desde ${hace(l.atendidoAt)}`}</div>
               </div>
-              <button onClick={() => void atender(l)} style={btn}>{l.estado === 'esperando' ? 'Atender' : 'Volver a entrar'}</button>
+              {llamada?.id === l.id && llamada.fase !== 'terminada'
+                ? <span style={{ fontSize: 12.5, fontWeight: 800, color: '#047857' }}>📞 Estás en esta llamada</span>
+                : <button onClick={() => void atender(l)} style={btn}>{l.estado === 'esperando' ? 'Atender' : 'Volver a entrar'}</button>}
               <button onClick={() => void terminar(l)} style={btnS}>Terminar</button>
             </div>
           ))}
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 10, lineHeight: 1.5 }}>La sala se abre en Jitsi Meet. La primera vez te pide entrar con Google o GitHub para iniciarla como moderador; el cliente espera en la sala hasta que entras.</div>
+        <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 10, lineHeight: 1.5 }}>La llamada es aquí mismo, dentro de DealFlow (audio y pantalla compartida, sin otra plataforma). La primera vez el navegador te pide permiso para el micrófono.</div>
       </div>
 
       {!puedeConfigurar && servicio && <div style={{ ...card, padding: '10px 14px', fontSize: 13, color: 'var(--df-text-muted)' }}>🕐 Horario de atención: {servicio.horario}. {servicio.abierto ? '🟢 Ahora está disponible.' : '⚪ Ahora está fuera de horario.'}</div>}

@@ -12,6 +12,7 @@ import { CompletarPedidoModal } from './components/CompletarPedidoModal';
 import { EditarPedidoModal } from './components/EditarPedidoModal';
 import { Trazabilidad } from './sections/admin/Trazabilidad';
 import { SoporteEnVivo, AvisoLlamadas } from './sections/admin/SoporteEnVivo';
+import { VentanaLlamada } from './components/VentanaLlamada';
 import { EquipoDealFlow } from './sections/admin/EquipoDealFlow';
 import { AsistenteSoporte } from './components/AsistenteSoporte';
 import { Proveedores } from './sections/admin/Proveedores';
@@ -418,6 +419,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
 
       {df.floatingNav && <FloatingNav df={df} />}
       <AsistenteSoporte usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} oculto={df.hasSelectedOrder} />
+      <VentanaLlamada />
       <OrderDetailPanel df={df} />
       <OrderToast df={df} />
       <ManualOrderModal df={df} open={df.crearPedidoAbierto} onClose={df.cerrarCrearPedido} prefill={df.crearPedidoPrefill} />
@@ -466,6 +468,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
 
       {df.floatingNav && <FloatingNav df={df} />}
       <AsistenteSoporte mobile usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} oculto={df.hasSelectedOrder || df.mobileChatOpen} />
+      <VentanaLlamada mobile />
       <MobileDrawer df={df} />
       <MobileChat df={df} />
       <MobileOrderSheet df={df} />

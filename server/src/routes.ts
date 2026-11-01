@@ -1697,13 +1697,33 @@ api.get('/soporte/llamadas/:id', requireAuth, async (req, res) => {
   if (!r) return res.status(404).json({ error: 'Llamada no encontrada.' });
   res.json(r);
 });
+// Señales de la llamada propia (WebRTC): la tienda que llamó y el equipo DealFlow.
+api.get('/soporte/ice', requireAuth, async (_req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  res.json({ iceServers: sl.servidoresIce() });
+});
+api.get('/soporte/llamadas/:id/senal', requireAuth, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const rol = sl.rolEnLlamada(req.params.id, req.user!);
+  if (!rol) return res.status(404).json({ error: 'Llamada no encontrada.' });
+  res.json(sl.leerSenales(req.params.id, rol, Number(req.query.desde) || 0));
+});
+api.post('/soporte/llamadas/:id/senal', requireAuth, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const rol = sl.rolEnLlamada(req.params.id, req.user!);
+  if (!rol) return res.status(404).json({ error: 'Llamada no encontrada.' });
+  const tipo = String(req.body?.tipo || '');
+  if (!['hola', 'offer', 'answer', 'ice', 'colgar', 'pantalla'].includes(tipo)) return res.status(400).json({ error: 'Señal no válida.' });
+  sl.enviarSenal(req.params.id, rol, tipo, req.body?.data ?? null);
+  res.json({ ok: true });
+});
 api.post('/soporte/llamadas/:id/cancelar', requireAuth, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
   res.json({ ok: sl.cancelarLlamada(req.params.id, req.user!.id) });
 });
 api.get('/admin/soporte/llamadas', requireAuth, requireEquipo, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
-  res.json({ llamadas: sl.llamadasEquipo(req.user!.nombre || req.user!.email), cfg: sl.cfgLlamadas(), servicio: sl.estadoServicio() });
+  res.json({ llamadas: sl.llamadasEquipo(), cfg: sl.cfgLlamadas(), servicio: sl.estadoServicio() });
 });
 api.post('/admin/soporte/llamadas/:id/:accion', requireAuth, requireEquipo, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
