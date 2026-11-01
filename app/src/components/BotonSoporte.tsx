@@ -55,7 +55,7 @@ export function BotonSoporte({ seccion, compacto }: { seccion: string; compacto?
   }
   return (
     <div ref={caja} style={{ position: 'relative' }}>
-      <button type="button" onClick={() => setAbierto((v) => !v)} title={serv.abierto ? 'Habla con el equipo de DealFlow (audio y pantalla compartida)' : `Soporte por llamada: ${serv.horario}`}
+      <button type="button" onClick={() => setAbierto((v) => !v)} title={serv.abierto ? `Habla con el equipo de DealFlow (audio y pantalla compartida).${serv.hasta ? ` ${serv.hasta}` : ''}` : `Soporte por llamada: ${serv.siguiente || serv.horario}`}
         style={{ ...pill, background: 'var(--df-surface)', borderColor: 'var(--df-border)', color: serv.abierto ? 'var(--df-text-body)' : 'var(--df-text-muted)' }}>
         <span style={{ fontSize: 13 }}>🎧</span>{compacto ? 'Soporte' : 'Llamar a soporte'}
         {serv.abierto && <span title="Disponible ahora" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid, #10B981)' }} />}
@@ -65,6 +65,7 @@ export function BotonSoporte({ seccion, compacto }: { seccion: string; compacto?
           <b style={{ fontSize: 14, color: 'var(--df-text-strong)' }}>🎧 Soporte DealFlow</b>
           {serv.abierto ? (
             <>
+              {serv.hasta && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-warning, #B45309)' }}>🕐 {serv.hasta}</div>}
               <div style={{ color: 'var(--df-text-muted)' }}>Te llamamos aquí mismo, sin instalar nada: hablas con el equipo y, si quieres, nos muestras tu pantalla. Te pediremos permiso para el micrófono.</div>
               <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={200} autoFocus placeholder="¿Con qué te ayudamos? (opcional)" onKeyDown={(e) => { if (e.key === 'Enter') void llamar(); }}
                 style={{ font: 'inherit', fontSize: 13, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--df-border)', background: 'var(--df-bg)', color: 'var(--df-text)' }} />
@@ -74,7 +75,10 @@ export function BotonSoporte({ seccion, compacto }: { seccion: string; compacto?
               </button>
             </>
           ) : (
-            <div style={{ color: 'var(--df-text-muted)' }}>Ahora no hay atención por llamada. Horario: {serv.horario}.{serv.aviso ? ` ${serv.aviso}` : ''}</div>
+            <div style={{ color: 'var(--df-text-muted)' }}>
+              Ahora no hay atención por llamada.{serv.siguiente ? <> <b style={{ color: 'var(--df-text-strong)' }}>{serv.siguiente}</b></> : ''}
+              <div style={{ marginTop: 6, fontSize: 12 }}>Horario: {serv.horario}.{serv.aviso ? ` ${serv.aviso}` : ''}</div>
+            </div>
           )}
           {msg && <div style={{ color: 'var(--df-danger-dark, #B91C1C)', fontWeight: 600 }}>{msg}</div>}
         </div>

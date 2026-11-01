@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { apiAdminLlamadas, apiAdminLlamadaAccion, apiAdminSoporteConfig, type CfgLlamadas, type LlamadaEquipo, type ServicioLlamadas } from '../../lib/api';
+import { apiAdminLlamadas, apiAdminLlamadaAccion, type CfgLlamadas, type LlamadaEquipo, type ServicioLlamadas } from '../../lib/api';
 import { notificar } from '../../components/dialogs';
 import { fmtCO } from '../../lib/fechaCO';
 import { useLlamada, iniciarLlamada, colgarLlamada } from '../../lib/llamadaRTC';
+import { HorarioSoporte, PausaSoporte } from './HorarioSoporte';
 
 /**
  * Soporte en vivo (equipo DealFlow): las tiendas que tocaron "Llamar a soporte". Al atender se
@@ -14,7 +15,6 @@ const btnS: React.CSSProperties = { border: '1px solid var(--df-border)', border
 const ms = (s: string) => Date.parse(s.replace(' ', 'T') + 'Z');
 const hace = (s: string) => { const m = Math.max(0, Math.round((Date.now() - ms(s)) / 60000)); return m < 1 ? 'ahora' : m < 60 ? `hace ${m} min` : `hace ${Math.floor(m / 60)} h ${m % 60} min`; };
 const fecha = (s: string) => (s ? fmtCO('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(ms(s)) : '');
-const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const ESTADO: Record<string, [string, string]> = {
   esperando: ['⏳ Esperando', '#B45309'], en_curso: ['🟢 En llamada', '#047857'], terminada: ['✓ Terminada', 'var(--df-text-muted)'],
   cancelada: ['Cancelada por la tienda', 'var(--df-text-muted)'], sin_atender: ['✗ Nadie la atendió', '#B91C1C'],
@@ -72,7 +72,7 @@ export function SoporteEnVivo({ puedeConfigurar = true }: { puedeConfigurar?: bo
   const [cfg, setCfg] = useState<CfgLlamadas | null>(null);
   const [servicio, setServicio] = useState<ServicioLlamadas | null>(null);
   const [permiso, setPermiso] = useState(() => ('Notification' in window ? Notification.permission : 'denied'));
-  const cargar = () => void apiAdminLlamadas().then((r) => { if (r.data) { setLista(r.data.llamadas); setCfg((c) => c || r.data!.cfg); setServicio(r.data.servicio); } });
+  const cargar = () => void apiAdminLlamadas().then((r) => { if (r.data) { setLista(r.data.llamadas); setCfg(r.data.cfg); setServicio(r.data.servicio); } });
   useEffect(() => { cargar(); const t = setInterval(cargar, 6000); return () => clearInterval(t); }, []);
 
   const llamada = useLlamada();
@@ -88,11 +88,7 @@ export function SoporteEnVivo({ puedeConfigurar = true }: { puedeConfigurar?: bo
     else await apiAdminLlamadaAccion(l.id, 'terminar');
     cargar();
   };
-  const guardar = async (p: Partial<CfgLlamadas>) => {
-    const nuevo = { ...cfg!, ...p }; setCfg(nuevo);
-    const r = await apiAdminSoporteConfig(p);
-    if (r.error) notificar(r.error, 'error'); else { setCfg(r.data!.cfg); cargar(); }
-  };
+  const cambio = (c: CfgLlamadas, s: ServicioLlamadas) => { setCfg(c); setServicio(s); };
   const activas = (lista || []).filter((l) => l.estado === 'esperando' || l.estado === 'en_curso');
   const historial = (lista || []).filter((l) => l.estado !== 'esperando' && l.estado !== 'en_curso');
 
@@ -113,7 +109,7 @@ export function SoporteEnVivo({ puedeConfigurar = true }: { puedeConfigurar?: bo
       <div style={card}>
         <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>📞 Ahora {activas.length > 0 && <span style={{ color: '#047857' }}>({activas.length})</span>}</div>
         {!lista && <div style={{ fontSize: 13, color: 'var(--df-text-faint)' }}>Cargando…</div>}
-        {lista && !activas.length && <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>Nadie está esperando. {servicio && (servicio.abierto ? 'El botón está disponible para las tiendas.' : `Fuera de horario: las tiendas ven «${servicio.horario}».`)}</div>}
+        {lista && !activas.length && <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>Nadie está esperando. {servicio && (servicio.abierto ? 'El botón está disponible para las tiendas.' : `Fuera de horario.${servicio.pausa ? ` ${servicio.pausa}` : ''}${servicio.siguiente ? ` ${servicio.siguiente}` : ''}`)}</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {activas.map((l) => (
             <div key={l.id} style={{ border: `1.5px solid ${l.estado === 'esperando' ? '#F59E0B' : '#10B981'}`, borderRadius: 10, padding: '10px 12px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -132,29 +128,9 @@ export function SoporteEnVivo({ puedeConfigurar = true }: { puedeConfigurar?: bo
         <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 10, lineHeight: 1.5 }}>La llamada es aquí mismo, dentro de DealFlow (audio y pantalla compartida, sin otra plataforma). La primera vez el navegador te pide permiso para el micrófono.</div>
       </div>
 
-      {!puedeConfigurar && servicio && <div style={{ ...card, padding: '10px 14px', fontSize: 13, color: 'var(--df-text-muted)' }}>🕐 Horario de atención: {servicio.horario}. {servicio.abierto ? '🟢 Ahora está disponible.' : '⚪ Ahora está fuera de horario.'}</div>}
-      {cfg && puedeConfigurar && (
-        <div style={card}>
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>🕐 Horario de atención</div>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, fontWeight: 600, marginBottom: 10, cursor: 'pointer' }}>
-            <input type="checkbox" checked={cfg.activo} onChange={(e) => void guardar({ activo: e.target.checked })} /> Mostrar el botón «Llamar a soporte» a las tiendas
-          </label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            {DIAS.map((d, i) => {
-              const on = cfg.dias.includes(i);
-              return <button key={d} onClick={() => void guardar({ dias: on ? cfg.dias.filter((x) => x !== i) : [...cfg.dias, i] })} style={{ ...btnS, background: on ? '#047857' : 'var(--df-surface)', color: on ? '#fff' : 'var(--df-text-body)', borderColor: on ? '#047857' : 'var(--df-border)' }}>{d}</button>;
-            })}
-          </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
-            De <select value={cfg.desde} onChange={(e) => void guardar({ desde: Number(e.target.value) })} style={{ ...btnS, padding: '6px 8px' }}>{Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h}:00</option>)}</select>
-            a <select value={cfg.hasta} onChange={(e) => void guardar({ hasta: Number(e.target.value) })} style={{ ...btnS, padding: '6px 8px' }}>{Array.from({ length: 24 }, (_, h) => h + 1).map((h) => <option key={h} value={h}>{h}:00</option>)}</select>
-            <span style={{ color: 'var(--df-text-muted)' }}>(hora Colombia)</span>
-          </div>
-          <input defaultValue={cfg.aviso} onBlur={(e) => { if (e.target.value !== cfg.aviso) void guardar({ aviso: e.target.value }); }} maxLength={300} placeholder="Aviso opcional fuera de horario (ej. «Escríbenos por WhatsApp al …»)"
-            style={{ marginTop: 10, width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
-          {servicio && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 8 }}>Las tiendas ven: «Soporte por llamada: {servicio.horario}». {servicio.abierto ? '🟢 Ahora está disponible.' : '⚪ Ahora está fuera de horario.'}</div>}
-        </div>
-      )}
+      <PausaSoporte servicio={servicio} onCambio={cambio} />
+      {!puedeConfigurar && servicio && <div style={{ ...card, padding: '10px 14px', fontSize: 13, color: 'var(--df-text-muted)' }}>🕐 Horario de atención: {servicio.horario}. {servicio.abierto ? `🟢 Ahora está disponible.${servicio.hasta ? ` ${servicio.hasta}` : ''}` : `⚪ Ahora no está disponible.${servicio.siguiente ? ` ${servicio.siguiente}` : ''}`}</div>}
+      {cfg && puedeConfigurar && <HorarioSoporte cfg={cfg} servicio={servicio} onCambio={cambio} />}
 
       {historial.length > 0 && (
         <div style={card}>

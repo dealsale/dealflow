@@ -21,38 +21,159 @@ db.exec(`CREATE TABLE IF NOT EXISTS soporte_llamadas (
 db.exec('CREATE INDEX IF NOT EXISTS idx_soporte_llamadas_estado ON soporte_llamadas(estado, creado)');
 
 // ── Configuración (horario de atención) ─────────────────────────────────────
-export interface CfgLlamadas { activo: boolean; dias: number[]; desde: number; hasta: number; aviso: string }
-const CFG_DEF: CfgLlamadas = { activo: true, dias: [1, 2, 3, 4, 5, 6], desde: 8, hasta: 18, aviso: '' };
+// Horario semanal por franjas (hora Colombia): cada día tiene sus propias franjas, y los
+// huecos entre ellas son los descansos. Además: días sin atención (festivos, vacaciones) y
+// una pausa rápida ("vuelvo en 30 min") que el equipo activa cuando se levanta.
+export type Franja = [number, number]; // minutos desde la medianoche: [inicio, fin)
+export interface CfgLlamadas { activo: boolean; semana: Franja[][]; cerrados: string[]; pausaHasta: string | null; pausaMotivo: string; aviso: string }
+
+const CO = 5 * 3600e3;
+const enCO = (ms: number) => new Date(ms - CO); // leer con getUTC*
+const ymdCO = (ms: number) => enCO(ms).toISOString().slice(0, 10);
+const minutoCO = (ms: number) => { const d = enCO(ms); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
+const medianocheCO = (ms: number) => { const d = enCO(ms); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) + CO; };
+
+function normalizarSemana(s: unknown): Franja[][] {
+  const dias = Array.isArray(s) ? s : [];
+  return Array.from({ length: 7 }, (_, d) => {
+    const crudas = Array.isArray(dias[d]) ? (dias[d] as unknown[]) : [];
+    const limpias = crudas
+      .map((f) => (Array.isArray(f) ? [Math.round(Number(f[0])), Math.round(Number(f[1]))] : [NaN, NaN]))
+      .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b))
+      .map(([a, b]) => [Math.max(0, Math.min(1440, a)), Math.max(0, Math.min(1440, b))] as Franja)
+      .filter(([a, b]) => b > a)
+      .sort((x, y) => x[0] - y[0]);
+    const unidas: Franja[] = [];
+    for (const f of limpias) { const u = unidas[unidas.length - 1]; if (u && f[0] <= u[1]) u[1] = Math.max(u[1], f[1]); else unidas.push([f[0], f[1]]); }
+    return unidas.slice(0, 8);
+  });
+}
+function normalizarFechas(f: unknown): string[] {
+  const hoy = ymdCO(Date.now());
+  return [...new Set((Array.isArray(f) ? f : []).map(String).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x) && x >= hoy))].sort().slice(0, 60);
+}
+
 export function cfgLlamadas(): CfgLlamadas {
   const r = db.prepare("SELECT valor FROM config_global WHERE clave = 'soporte_llamadas'").get() as { valor: string } | undefined;
-  try { return { ...CFG_DEF, ...(r ? JSON.parse(r.valor) : {}) }; } catch { return CFG_DEF; }
+  let c: Record<string, unknown> = {};
+  try { c = r ? JSON.parse(r.valor) : {}; } catch { c = {}; }
+  // Formato anterior (mismos días y un solo rango por hora) → una franja por día.
+  let semana = c.semana;
+  if (!Array.isArray(semana)) {
+    const dias = Array.isArray(c.dias) ? (c.dias as unknown[]).map(Number) : [1, 2, 3, 4, 5, 6];
+    const desde = Number(c.desde ?? 8), hasta = Number(c.hasta ?? 18);
+    semana = Array.from({ length: 7 }, (_, d) => (dias.includes(d) ? [[desde * 60, hasta * 60]] : []));
+  }
+  const pausa = typeof c.pausaHasta === 'string' && Date.parse(c.pausaHasta) > Date.now() ? c.pausaHasta : null;
+  return { activo: c.activo !== false, semana: normalizarSemana(semana), cerrados: normalizarFechas(c.cerrados), pausaHasta: pausa, pausaMotivo: pausa ? String(c.pausaMotivo || '').slice(0, 120) : '', aviso: String(c.aviso || '').slice(0, 300) };
 }
 export function guardarCfgLlamadas(p: Partial<CfgLlamadas>): CfgLlamadas {
-  const c = { ...cfgLlamadas(), ...p };
-  c.dias = [...new Set((c.dias || []).map(Number).filter((d) => d >= 0 && d <= 6))].sort();
-  c.desde = Math.max(0, Math.min(23, Math.round(Number(c.desde) || 0)));
-  c.hasta = Math.max(c.desde + 1, Math.min(24, Math.round(Number(c.hasta) || 24)));
-  c.aviso = String(c.aviso || '').slice(0, 300);
+  const a = cfgLlamadas();
+  const c: CfgLlamadas = {
+    activo: typeof p.activo === 'boolean' ? p.activo : a.activo,
+    semana: p.semana ? normalizarSemana(p.semana) : a.semana,
+    cerrados: p.cerrados ? normalizarFechas(p.cerrados) : a.cerrados,
+    pausaHasta: p.pausaHasta !== undefined ? p.pausaHasta : a.pausaHasta,
+    pausaMotivo: p.pausaMotivo !== undefined ? String(p.pausaMotivo || '').slice(0, 120) : a.pausaMotivo,
+    aviso: p.aviso !== undefined ? String(p.aviso || '').slice(0, 300) : a.aviso,
+  };
   db.prepare("INSERT INTO config_global (clave, valor) VALUES ('soporte_llamadas', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor").run(JSON.stringify(c));
-  return c;
+  return cfgLlamadas();
 }
+/** Pausa rápida del equipo: `minutos` > 0, o hasta que termine el día; 0 la quita. */
+export function pausarSoporte(minutos: number, restoDelDia: boolean, motivo: string): CfgLlamadas {
+  if (!restoDelDia && !(minutos > 0)) return guardarCfgLlamadas({ pausaHasta: null, pausaMotivo: '' });
+  const hasta = restoDelDia ? medianocheCO(Date.now()) + 86400e3 : Date.now() + Math.min(24 * 60, Math.round(minutos)) * 60e3;
+  return guardarCfgLlamadas({ pausaHasta: new Date(hasta).toISOString(), pausaMotivo: motivo });
+}
+
 const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-const hora12 = (h: number) => (h === 0 || h === 24 ? '12 a. m.' : h === 12 ? '12 m.' : h < 12 ? `${h} a. m.` : `${h - 12} p. m.`);
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const hora = (m: number) => {
+  if (m === 720) return '12 m.';
+  if (m === 0 || m === 1440) return '12 a. m.';
+  const h = Math.floor(m / 60) % 24, mm = m % 60, h12 = h % 12 || 12;
+  return `${h12}${mm ? `:${String(mm).padStart(2, '0')}` : ''} ${h < 12 ? 'a. m.' : 'p. m.'}`;
+};
+const aLas = (m: number) => `${Math.floor(m / 60) % 12 === 1 ? 'a la' : 'a las'} ${hora(m)}`;
+const punto = (t: string) => (t.endsWith('.') ? t : `${t}.`);
+const lista = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`);
+const franjasTexto = (fr: Franja[]) => (fr.length === 1 && fr[0][0] === 0 && fr[0][1] === 1440 ? 'a toda hora' : lista(fr.map(([a, b]) => `de ${hora(a)} a ${hora(b)}`)));
+
 export function horarioTexto(c = cfgLlamadas()): string {
-  const d = c.dias;
-  const rango = d.length === 7 ? 'todos los días' : d.join(',') === '1,2,3,4,5' ? 'de lunes a viernes' : d.join(',') === '1,2,3,4,5,6' ? 'de lunes a sábado' : d.map((x) => DIAS[x]).join(', ');
-  return c.desde === 0 && c.hasta === 24 ? `${rango}, a toda hora` : `${rango}, de ${hora12(c.desde)} a ${hora12(c.hasta)} (hora Colombia)`;
+  // Agrupa días seguidos (lunes → domingo) con las mismas franjas: "lunes a viernes de 8 a. m. a 12 m. y de 2 p. m. a 6 p. m.".
+  const orden = [1, 2, 3, 4, 5, 6, 0];
+  const grupos: { dias: number[]; fr: Franja[] }[] = [];
+  for (const d of orden) {
+    const fr = c.semana[d];
+    if (!fr.length) continue;
+    const g = grupos[grupos.length - 1];
+    const prev = g ? orden.indexOf(g.dias[g.dias.length - 1]) : -9;
+    if (g && prev === orden.indexOf(d) - 1 && JSON.stringify(g.fr) === JSON.stringify(fr)) g.dias.push(d);
+    else grupos.push({ dias: [d], fr });
+  }
+  if (!grupos.length) return 'sin horario de atención por ahora';
+  const partes = grupos.map((g) => {
+    const n = g.dias.length === 7 ? 'todos los días' : g.dias.length === 1 ? DIAS[g.dias[0]] : g.dias.length === 2 ? `${DIAS[g.dias[0]]} y ${DIAS[g.dias[1]]}` : `${DIAS[g.dias[0]]} a ${DIAS[g.dias[g.dias.length - 1]]}`;
+    return `${n} ${franjasTexto(g.fr)}`;
+  });
+  return `${partes.join('; ')} (hora Colombia)`;
 }
-/** ¿Hay atención en este momento? (hora Colombia, UTC-5). */
-export function abiertoAhora(c = cfgLlamadas()): boolean {
+
+/** ¿Hay atención en ese momento? (hora Colombia, UTC-5). */
+function abiertoEn(ms: number, c: CfgLlamadas): boolean {
   if (!c.activo) return false;
-  const co = new Date(Date.now() - 5 * 3600e3);
-  const h = co.getUTCHours() + co.getUTCMinutes() / 60;
-  return c.dias.includes(co.getUTCDay()) && h >= c.desde && h < c.hasta;
+  if (c.pausaHasta && ms < Date.parse(c.pausaHasta)) return false;
+  if (c.cerrados.includes(ymdCO(ms))) return false;
+  const m = minutoCO(ms);
+  return c.semana[enCO(ms).getUTCDay()].some(([a, b]) => m >= a && m < b);
 }
+export function abiertoAhora(c = cfgLlamadas()): boolean { return abiertoEn(Date.now(), c); }
+
+/** Próximo momento con atención (o null si no hay ninguno en las próximas 2 semanas). */
+function proximaApertura(c: CfgLlamadas, ahora = Date.now()): number | null {
+  if (!c.activo) return null;
+  const t = Math.max(ahora, c.pausaHasta ? Date.parse(c.pausaHasta) : 0);
+  const base = medianocheCO(t);
+  for (let i = 0; i < 15; i++) {
+    const dia = base + i * 86400e3;
+    if (c.cerrados.includes(ymdCO(dia))) continue;
+    for (const [a, b] of c.semana[enCO(dia).getUTCDay()]) {
+      if (dia + b * 60e3 <= t) continue;
+      return Math.max(dia + a * 60e3, t);
+    }
+  }
+  return null;
+}
+/** Cuándo termina la franja actual (con la siguiente pegada, si la hay). */
+function cierreActual(c: CfgLlamadas, ahora = Date.now()): number | null {
+  if (!abiertoEn(ahora, c)) return null;
+  const dia = medianocheCO(ahora), m = minutoCO(ahora);
+  const fr = c.semana[enCO(ahora).getUTCDay()].find(([a, b]) => m >= a && m < b);
+  // Hasta la medianoche cuenta como "sin cierre cercano" (suele seguir al día siguiente).
+  return fr && fr[1] < 1440 ? dia + fr[1] * 60e3 : null;
+}
+function cuando(ms: number, ahora = Date.now()): string {
+  const dias = Math.round((medianocheCO(ms) - medianocheCO(ahora)) / 86400e3);
+  const d = enCO(ms);
+  const dia = dias === 0 ? 'hoy' : dias === 1 ? 'mañana' : dias < 7 ? `el ${DIAS[d.getUTCDay()]}` : `el ${d.getUTCDate()} de ${MESES[d.getUTCMonth()]}`;
+  return `${dia} ${aLas(minutoCO(ms))}`;
+}
+
 export function estadoServicio() {
   const c = cfgLlamadas();
-  return { activo: c.activo, abierto: abiertoAhora(c), horario: horarioTexto(c), aviso: c.aviso };
+  const ahora = Date.now();
+  const abierto = abiertoEn(ahora, c);
+  const prox = abierto ? null : proximaApertura(c, ahora);
+  const cierre = abierto ? cierreActual(c, ahora) : null;
+  const enPausa = !!c.pausaHasta && ahora < Date.parse(c.pausaHasta);
+  return {
+    activo: c.activo, abierto, horario: horarioTexto(c), aviso: c.aviso,
+    // Para la tienda: cuándo vuelve (si no hay atención) o hasta cuándo hay (si la hay).
+    siguiente: prox ? punto(`Vuelve ${cuando(prox, ahora)}`) : '',
+    hasta: cierre && cierre - ahora < 3 * 3600e3 ? punto(`Disponible hasta ${hora(minutoCO(cierre))}`) : '',
+    pausa: enPausa ? `En pausa hasta ${hora(minutoCO(Date.parse(c.pausaHasta!)))}${c.pausaMotivo ? ` (${c.pausaMotivo})` : ''}.` : '',
+  };
 }
 
 // ── Llamadas ────────────────────────────────────────────────────────────────
@@ -70,7 +191,7 @@ export async function crearLlamada(u: { id: string; nombre: string; email: strin
   Promise<ReturnType<typeof vista> | { error: string }> {
   vencer();
   const c = cfgLlamadas();
-  if (!abiertoAhora(c)) return { error: `Ahora no hay atención por llamada. Horario: ${horarioTexto(c)}. Mientras tanto, escríbele a SKY.` };
+  if (!abiertoAhora(c)) { const e = estadoServicio(); return { error: `Ahora no hay atención por llamada.${e.siguiente ? ` ${e.siguiente}` : ''} Horario: ${horarioTexto(c)}. Mientras tanto, escríbele a SKY.` }; }
   // Una llamada activa por persona: si ya tiene una, se le devuelve la misma.
   const ya = db.prepare("SELECT * FROM soporte_llamadas WHERE user_id = ? AND estado IN ('esperando','en_curso') ORDER BY creado DESC LIMIT 1").get(u.id) as Fila | undefined;
   const tienda = (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(u.storeId) as { nombre: string } | undefined)?.nombre || 'Tienda';
