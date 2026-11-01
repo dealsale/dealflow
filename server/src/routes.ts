@@ -1038,7 +1038,10 @@ api.get('/calidad', requireAuth, requireStore, async (req, res) => {
 api.post('/calidad', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { guardarCalidadCfg } = await import('./calidad.js');
   const b = req.body || {};
-  res.json(guardarCalidadCfg(req.user!.storeId!, 'avisarContacto' in b ? { avisarContacto: b.avisarContacto === true } : {}));
+  const p: { avisarContacto?: boolean; frenoAuto?: boolean } = {};
+  if ('avisarContacto' in b) p.avisarContacto = b.avisarContacto === true;
+  if ('frenoAuto' in b) p.frenoAuto = b.frenoAuto === true;
+  res.json(guardarCalidadCfg(req.user!.storeId!, p));
 });
 
 // ── Effi: rastreo, cobertura, devolución y recaudos ──

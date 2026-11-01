@@ -99,14 +99,16 @@ export async function correrSeguimiento(): Promise<void> {
       const texto = generado || seguimientoRespaldo(idiomaDe(l.store_id, l.id), objetivo, l.nombre) || mensajeSeguimiento(objetivo, l.nombre);
       const destino = l.wa_id || l.tel;
       const pn = l.tel;
-      const { puedeEscribirle, contarProactivo } = await import('./calidad.js');
+      const { puedeEscribirle, contarProactivo, frenoActivo } = await import('./calidad.js');
+      // Con la calidad en media o baja no se mandan recordatorios (se retoma solo cuando vuelva a alta).
+      if (frenoActivo(l.store_id)) continue;
       if (!puedeEscribirle(l.store_id, l.tel, l.id).ok) { db.prepare('UPDATE leads SET seguimiento_nivel = 3 WHERE id = ?').run(l.id); continue; }
       try {
         const mid = uid();
         db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, l.id, texto);
         const r = await sendWhatsappText(l.store_id, destino, texto, pn);
         marcarEnviado(mid, r);
-        if (r.ok) contarProactivo(l.store_id, l.tel);
+        if (r.ok) contarProactivo(l.store_id, l.tel, 'recordatorio');
       } catch { /* si falla el envío, igual marcamos el nivel para no reintentar en bucle */ }
       db.prepare('UPDATE leads SET seguimiento_nivel = ? WHERE id = ?').run(objetivo, l.id);
     }

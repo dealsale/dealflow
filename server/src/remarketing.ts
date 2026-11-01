@@ -19,7 +19,7 @@
 import { db, uid, pj, registrarLog } from './db.js';
 import { sendWhatsappTemplate, sendWhatsappText } from './wa.js';
 import { plantillaAprobada } from './avisoGuia.js';
-import { puedeEscribirle, contarProactivo } from './calidad.js';
+import { puedeEscribirle, contarProactivo, frenoActivo } from './calidad.js';
 
 type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));
@@ -263,7 +263,7 @@ async function enviarUno(e: Fila): Promise<void> {
     }
     return;
   }
-  contarProactivo(storeId, txt(l.tel));
+  contarProactivo(storeId, txt(l.tel), 'remarketing');
   db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), txt(l.id), texto, r.wamid || null);
   // Que el "¿sigues ahí?" no lo persiga, y que su respuesta la atienda el asistente (y cierre el pedido).
   db.prepare("UPDATE leads SET seguimiento_nivel = 3, asignado = CASE WHEN asignado LIKE 'Equipo (%' OR asignado = 'Vendedor' OR asignado LIKE '%asistente%' OR asignado LIKE '%bot%' THEN 'Asistente (bot)' ELSE asignado END WHERE id = ?").run(txt(l.id));
@@ -286,6 +286,9 @@ export async function procesarCola(): Promise<void> {
     const tiendas = db.prepare(`SELECT DISTINCT e.store_id FROM remarketing_envios e LEFT JOIN remarketing_campanas c ON c.id = e.campana_id
       WHERE e.estado = 'pendiente' AND (e.campana_id = '' OR c.estado = 'enviando')`).all() as { store_id: string }[];
     for (const t of tiendas) {
+      // Con la calidad en media o baja se espera: la cola queda quieta hasta que vuelva a alta
+      // (lo que venza en ese tiempo se marca como vencido, como siempre).
+      if (frenoActivo(t.store_id)) continue;
       const cfg = cfgRemarketing(t.store_id);
       const libres = cfg.topeDiario - enviadosHoy(t.store_id);
       if (libres <= 0) continue;
@@ -313,6 +316,7 @@ export function programarAutomaticos(): number {
   for (const t of tiendas) {
     const cfg = cfgRemarketing(t.store_id);
     if (!cfg.rescate24h && !cfg.recuperar) continue;
+    if (frenoActivo(t.store_id)) continue; // calidad en media o baja: no se programan mensajes de venta
     const leads = leadsPorSegmento(t.store_id, 8).filter((l) => (l.segmento === 'datos_completos' || l.segmento === 'faltan_datos') && !/^(Pidió|Lo marcaste)/.test(l.excluido));
     for (const l of leads) {
       const horas = (Date.now() - new Date(l.ultCliente.replace(' ', 'T') + 'Z').getTime()) / 3600e3;

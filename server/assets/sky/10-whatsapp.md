@@ -35,10 +35,12 @@ Sección: whatsapp, resumen
 Claves: baneo, ban, bloqueo de numero, spam, reportes, calidad bajo, proteger numero, mensajes no solicitados, anti baneo, rafaga
 DealFlow cuida tu número automáticamente (tarjeta **🛡️ Protección de la calidad del número** en WhatsApp):
 - Máximo de **mensajes no solicitados por cliente al día** (recordatorios, cambios de estado y avisos cuentan; las respuestas a lo que el cliente pregunta no).
+- **Cuántos mensajes envió DealFlow por su cuenta en 7 días, separados por tipo**: *Avisos de sus pedidos* (confirmación, guía, cambios de estado, novedades: el cliente compró y los espera, casi nunca se reportan) y *Mensajes opcionales* (seguimiento del pedido día 1 y 2, recordatorios del asistente, remarketing: son los que más bloqueos generan). Meta no baja la calidad por la cantidad sino por los bloqueos y reportes.
+- **Freno automático** (encendido por defecto): si Meta pone la calidad en media o baja, DealFlow pausa solo los mensajes opcionales y deja salir los avisos de pedidos. Se reanudan solos cuando la calidad vuelve a alta. DealFlow revisa la calidad con Meta cada 3 horas.
 - **Sin ráfagas en el mensaje inicial**: se envía pieza por pieza con pausas de persona y los textos seguidos van en un solo mensaje.
 - Interruptor **Escribirle al celular de contacto cuando es otro número**: si el cliente deja otro celular para la entrega, se le manda la guía con plantilla a ese número. Ese número nunca le escribió a la tienda y es lo que más reportes de spam genera: **recomendado apagado**.
 - Si un cliente pide que no le escriban más, DealFlow se despide una vez y no le vuelve a escribir por su cuenta.
-**Si tu calidad bajó, así la recuperas**: deja apagado el seguimiento automático (Asistente) hasta que vuelva a "Alta"; no mandes plantillas de promoción a quien no las pidió ni difusiones masivas por unos días; deja el mensaje inicial corto (un saludo, 2 o 3 fotos y una pregunta); responde rápido. La calidad se recalcula con los últimos 7 días: si nadie bloquea ni reporta, sube sola.
+**Si tu calidad bajó, así la recuperas**: deja encendido el freno automático (pausa recordatorios, seguimiento de pedidos y remarketing hasta que vuelva a "Alta"); no mandes plantillas de promoción a quien no las pidió ni difusiones masivas por unos días; deja el mensaje inicial corto (un saludo, 2 o 3 fotos y una pregunta); responde rápido. La calidad se recalcula con los últimos 7 días: si nadie bloquea ni reporta, sube sola.
 Buenas prácticas: no escribas primero a quien no te contactó, fuera de 24 h usa solo plantillas aprobadas y pide permiso antes de mandar promociones.
 
 ## Apps conectadas a tu número (otra plataforma sigue respondiendo)

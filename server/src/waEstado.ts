@@ -95,6 +95,7 @@ export async function estadoNumero(storeId: string): Promise<EstadoNumero> {
   const businessId = String((cuenta.owner_business_info as { id?: string } | undefined)?.id || '');
 
   const calidad = String(tel.quality_rating || '');
+  if (calidad) { try { (await import('./calidad.js')).guardarCalidadMeta(storeId, calidad); } catch { /* opcional */ } }
   const estado = String(tel.status || '');
   const verificado = String(tel.code_verification_status || '') === 'VERIFIED';
   const nombreEstado = String(tel.name_status || '');

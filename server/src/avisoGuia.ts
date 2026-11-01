@@ -156,7 +156,7 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
       envio = await sendWhatsappText(storeId, destino, texto, chat.tel);
     }
     if (envio.ok) {
-      contarProactivo(storeId, chat.tel);
+      contarProactivo(storeId, chat.tel, 'guia');
       res.chat = 'enviado'; res.con = tipo; res.wamid = envio.wamid || '';
       db.prepare('INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, estado, wa_msg_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
         .run(uid(), chat.id, 'bot', texto, tipo, tipo === 'texto' ? null : archivo, mime, tipo === 'texto' ? null : `Guia-${numDF}`, 'enviado', envio.wamid || null);
