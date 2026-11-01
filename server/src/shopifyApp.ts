@@ -38,6 +38,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS shopify_tiendas (
   instalada_at TEXT NOT NULL DEFAULT (datetime('now')),
   desinstalada_at TEXT
 )`);
+// Tokens offline QUE VENCEN (requisito 3.1.2 de la App Store): el de acceso dura ~1 h y se
+// renueva con el refresh token (que rota en cada renovación).
+for (const col of ["refresh_token TEXT NOT NULL DEFAULT ''", 'token_exp INTEGER NOT NULL DEFAULT 0', 'refresh_exp INTEGER NOT NULL DEFAULT 0']) {
+  try { db.exec(`ALTER TABLE shopify_tiendas ADD COLUMN ${col}`); } catch { /* ya existe */ }
+}
 db.exec(`CREATE TABLE IF NOT EXISTS shopify_pendientes (
   shop TEXT PRIMARY KEY,
   store_id TEXT NOT NULL,
@@ -94,25 +99,92 @@ export function verificarIdToken(jwt: string): { shop: string } | { error: strin
   return { shop };
 }
 
-/** Cambia el id token por un token OFFLINE de la tienda (token exchange). */
-async function intercambiarToken(shop: string, idToken: string): Promise<{ token: string; scope: string } | { error: string }> {
+interface TokenShopify { token: string; scope: string; expiresIn: number; refresh: string; refreshExpiresIn: number }
+
+/** Pide un token a Shopify (/admin/oauth/access_token) y lo normaliza. */
+async function pedirToken(shop: string, cuerpo: Record<string, string>): Promise<TokenShopify | { error: string }> {
   try {
     const r = await fetch(`${admin(shop)}/admin/oauth/access_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        client_id: KEY(), client_secret: SECRET(),
-        grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
-        subject_token: idToken,
-        subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
-        requested_token_type: 'urn:shopify:params:oauth:token-type:offline-access-token',
-      }),
+      body: JSON.stringify({ client_id: KEY(), client_secret: SECRET(), ...cuerpo }),
       signal: AbortSignal.timeout(20000),
     });
-    const body = (await r.json().catch(() => ({}))) as { access_token?: string; scope?: string; error?: string; error_description?: string };
-    if (!r.ok || !body.access_token) return { error: `Shopify no entregó el acceso (${r.status}): ${body.error_description || body.error || 'sin detalle'}` };
-    return { token: body.access_token, scope: String(body.scope || '') };
+    const b = (await r.json().catch(() => ({}))) as { access_token?: string; scope?: string; expires_in?: number; refresh_token?: string; refresh_token_expires_in?: number; error?: string; error_description?: string };
+    if (!r.ok || !b.access_token) return { error: `Shopify no entregó el acceso (${r.status}): ${b.error_description || b.error || 'sin detalle'}` };
+    return { token: b.access_token, scope: String(b.scope || ''), expiresIn: Number(b.expires_in || 0), refresh: String(b.refresh_token || ''), refreshExpiresIn: Number(b.refresh_token_expires_in || 0) };
   } catch { return { error: 'No pudimos conectar con Shopify para obtener el acceso.' }; }
+}
+
+/** Cambia el id token por un token OFFLINE que vence (token exchange con expiring=1). */
+async function intercambiarToken(shop: string, idToken: string): Promise<TokenShopify | { error: string }> {
+  return pedirToken(shop, {
+    grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+    subject_token: idToken,
+    subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
+    requested_token_type: 'urn:shopify:params:oauth:token-type:offline-access-token',
+    expiring: '1',
+  });
+}
+
+/** Guarda el token (cifrado) con sus vencimientos y lo copia a la integración de la tienda vinculada. */
+function guardarToken(shop: string, t: TokenShopify): void {
+  const ahora = Date.now();
+  db.prepare('UPDATE shopify_tiendas SET token = ?, scope = CASE WHEN ? != \'\' THEN ? ELSE scope END, refresh_token = ?, token_exp = ?, refresh_exp = ? WHERE shop = ?').run(
+    cifrarTexto(t.token), t.scope, t.scope, t.refresh ? cifrarTexto(t.refresh) : '', t.expiresIn ? ahora + t.expiresIn * 1000 : 0, t.refreshExpiresIn ? ahora + t.refreshExpiresIn * 1000 : 0, shop,
+  );
+  const f = db.prepare('SELECT store_id FROM shopify_tiendas WHERE shop = ?').get(shop) as { store_id: string | null } | undefined;
+  if (!f?.store_id) return;
+  const integ = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").get(f.store_id) as { config: string } | undefined;
+  const cfg = pj<Record<string, string>>(integ?.config || '', {});
+  if (cfg.shop === shop && cfg.via === 'app') db.prepare("UPDATE store_integrations SET config = ? WHERE store_id = ? AND tipo = 'shopify'").run(JSON.stringify({ ...cfg, token: cifrarTexto(t.token) }), f.store_id);
+}
+
+const renovando = new Map<string, Promise<string>>();
+const migracionFallida = new Map<string, number>();
+
+/**
+ * Token vigente para llamar a la Admin API de una tienda instalada por la app. Renueva el de
+ * acceso cuando está por vencer (una sola renovación a la vez por tienda: el refresh token
+ * rota) y convierte los tokens viejos que no vencían. '' si no hay forma (hay que abrir la app).
+ */
+export async function tokenVigente(shop: string): Promise<string> {
+  const f = db.prepare('SELECT token, refresh_token, token_exp, refresh_exp, desinstalada_at FROM shopify_tiendas WHERE shop = ?').get(shop) as
+    { token: string; refresh_token: string; token_exp: number; refresh_exp: number; desinstalada_at: string | null } | undefined;
+  if (!f?.token || f.desinstalada_at) return '';
+  let actual = '';
+  try { actual = descifrarTexto(f.token); } catch { return ''; }
+  if (f.token_exp && f.token_exp > Date.now() + 5 * 60_000) return actual;
+  const enCurso = renovando.get(shop);
+  if (enCurso) return enCurso;
+  const tarea = (async () => {
+    if (!f.token_exp) {
+      // Token viejo que no vence: se cambia por uno que vence (Shopify revoca el anterior).
+      if ((migracionFallida.get(shop) || 0) > Date.now()) return actual;
+      const t = await pedirToken(shop, {
+        grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+        subject_token: actual,
+        subject_token_type: 'urn:shopify:params:oauth:token-type:offline-access-token',
+        requested_token_type: 'urn:shopify:params:oauth:token-type:offline-access-token',
+        expiring: '1',
+      });
+      if ('error' in t) { migracionFallida.set(shop, Date.now() + 6 * 3600_000); console.warn(`[shopify-app] no se pudo convertir el token de ${shop}:`, t.error); return actual; }
+      guardarToken(shop, t);
+      return t.token;
+    }
+    if (!f.refresh_token || (f.refresh_exp && f.refresh_exp < Date.now())) {
+      console.warn(`[shopify-app] el acceso a ${shop} venció: hay que abrir la app DealFlow en Shopify para renovarlo.`);
+      return f.token_exp > Date.now() ? actual : '';
+    }
+    let refresh = '';
+    try { refresh = descifrarTexto(f.refresh_token); } catch { return ''; }
+    const t = await pedirToken(shop, { grant_type: 'refresh_token', refresh_token: refresh });
+    if ('error' in t) { console.warn(`[shopify-app] no se pudo renovar el acceso de ${shop}:`, t.error); return f.token_exp > Date.now() ? actual : ''; }
+    guardarToken(shop, t);
+    return t.token;
+  })().finally(() => renovando.delete(shop));
+  renovando.set(shop, tarea);
+  return tarea;
 }
 
 async function gql<T>(shop: string, token: string, query: string, variables?: Record<string, unknown>): Promise<{ data?: T; error?: string }> {
@@ -135,7 +207,7 @@ async function suscribirWebhooks(shop: string, token: string): Promise<string> {
   const q = `mutation($topic: WebhookSubscriptionTopic!, $url: URL!) {
     webhookSubscriptionCreate(topic: $topic, webhookSubscription: { callbackUrl: $url, format: JSON }) { userErrors { message } }
   }`;
-  for (const topic of ['APP_UNINSTALLED', 'ORDERS_CREATE']) {
+  for (const topic of ['APP_UNINSTALLED', 'APP_SUBSCRIPTIONS_UPDATE', 'ORDERS_CREATE']) {
     const r = await gql<{ webhookSubscriptionCreate: { userErrors: { message: string }[] } }>(shop, token, q, { topic, url: URL_WEBHOOK });
     const errs = r.data?.webhookSubscriptionCreate.userErrors || [];
     const repetido = errs.some((e) => /already|taken|ya /i.test(e.message));
@@ -189,20 +261,43 @@ async function guardarNombre(shop: string, token: string, storeId: string): Prom
   db.prepare("UPDATE store_integrations SET config = ? WHERE store_id = ? AND tipo = 'shopify'").run(JSON.stringify({ ...cfg, nombre }), storeId);
 }
 
-export interface EstadoSesion { shop: string; vinculada: boolean; tiendaDF?: string; codigo?: string; vincularUrl?: string }
+const nombrarLuego = (shop: string, storeId: string) => { void tokenVigente(shop).then((tk) => (tk ? guardarNombre(shop, tk, storeId) : undefined)).catch(() => {}); };
+
+export interface EstadoSesion { shop: string; vinculada: boolean; tiendaDF?: string; codigo?: string; vincularUrl?: string; plan?: { activo: boolean; nombre: string; vence: string; prueba: boolean }; planesUrl?: string }
 
 /** La app incrustada abrió: verifica, obtiene el token si falta y vincula si se puede. */
 export async function abrirSesion(idToken: string): Promise<EstadoSesion | { error: string }> {
+  const r = await abrirSesionBase(idToken);
+  if ('error' in r) return r;
+  // Plan (Shopify App Pricing): se muestra en la app incrustada, esté o no vinculada la cuenta.
+  let plan: EstadoSesion['plan'];
+  const fila = db.prepare('SELECT store_id FROM shopify_tiendas WHERE shop = ?').get(r.shop) as { store_id: string | null } | undefined;
+  if (r.vinculada && fila?.store_id) {
+    const c = await sincronizarCobro(fila.store_id).catch(() => ({ activo: false } as Awaited<ReturnType<typeof sincronizarCobro>>));
+    if (c.activo) plan = { activo: true, nombre: c.plan || '', vence: c.vence || '', prueba: !!c.prueba };
+  }
+  if (!plan) {
+    const l = await leerSuscripcion(r.shop).catch(() => ({ error: 'x' }));
+    const sub = 'sub' in l ? l.sub : null;
+    plan = sub ? { activo: true, nombre: sub.name, vence: (sub.currentPeriodEnd || '').slice(0, 10), prueba: sub.test } : { activo: false, nombre: '', vence: '', prueba: false };
+  }
+  return { ...r, plan, planesUrl: urlPlanes(r.shop) };
+}
+
+async function abrirSesionBase(idToken: string): Promise<EstadoSesion | { error: string }> {
   const v = verificarIdToken(idToken);
   if ('error' in v) return v;
   const { shop } = v;
-  let fila = db.prepare('SELECT * FROM shopify_tiendas WHERE shop = ?').get(shop) as { token: string; store_id: string | null; codigo: string; codigo_exp: number; desinstalada_at: string | null } | undefined;
-  if (!fila?.token || fila.desinstalada_at) {
+  let fila = db.prepare('SELECT * FROM shopify_tiendas WHERE shop = ?').get(shop) as { token: string; store_id: string | null; codigo: string; codigo_exp: number; desinstalada_at: string | null; token_exp: number; refresh_token: string; refresh_exp: number } | undefined;
+  const sinRenovar = !!fila?.token && (!fila.token_exp || (fila.token_exp < Date.now() + 5 * 60_000 && (!fila.refresh_token || fila.refresh_exp < Date.now())));
+  if (!fila?.token || fila.desinstalada_at || sinRenovar) {
+    const nueva = !fila?.token || !!fila.desinstalada_at;
     const x = await intercambiarToken(shop, idToken);
     if ('error' in x) return x;
     db.prepare(`INSERT INTO shopify_tiendas (shop, token, scope, instalada_at, desinstalada_at) VALUES (?,?,?,datetime('now'),NULL)
-      ON CONFLICT(shop) DO UPDATE SET token = excluded.token, scope = excluded.scope, instalada_at = datetime('now'), desinstalada_at = NULL`).run(shop, cifrarTexto(x.token), x.scope);
-    await suscribirWebhooks(shop, x.token);
+      ON CONFLICT(shop) DO UPDATE SET desinstalada_at = NULL${nueva ? ", instalada_at = datetime('now')" : ''}`).run(shop, cifrarTexto(x.token), x.scope);
+    guardarToken(shop, x);
+    if (nueva) await suscribirWebhooks(shop, x.token);
     fila = db.prepare('SELECT * FROM shopify_tiendas WHERE shop = ?').get(shop) as typeof fila;
   }
   // ¿Ya está vinculada y la integración sigue en pie?
@@ -217,7 +312,7 @@ export async function abrirSesion(idToken: string): Promise<EstadoSesion | { err
   const pend = db.prepare('SELECT store_id, exp FROM shopify_pendientes WHERE shop = ?').get(shop) as { store_id: string; exp: number } | undefined;
   if (pend && pend.exp > Date.now()) {
     const r = vincular(shop, pend.store_id);
-    void guardarNombre(shop, descifrarTexto(fila!.token), pend.store_id).catch(() => {});
+    nombrarLuego(shop, pend.store_id);
     return { shop, vinculada: true, tiendaDF: r.nombreDF };
   }
   // Si no: código de un solo uso para vincular desde DealFlow (vale 1 h).
@@ -236,7 +331,7 @@ export function iniciarInstalacion(storeId: string, shop: string): { url: string
   db.prepare('INSERT OR REPLACE INTO shopify_pendientes (shop, store_id, exp) VALUES (?,?,?)').run(shop, storeId, Date.now() + 2 * 3600_000);
   // Si ya estaba instalada (con token), se vincula de una vez.
   const t = db.prepare('SELECT token, desinstalada_at FROM shopify_tiendas WHERE shop = ?').get(shop) as { token: string; desinstalada_at: string | null } | undefined;
-  if (t?.token && !t.desinstalada_at) { vincular(shop, storeId); void guardarNombre(shop, descifrarTexto(t.token), storeId).catch(() => {}); }
+  if (t?.token && !t.desinstalada_at) { vincular(shop, storeId); nombrarLuego(shop, storeId); }
   return { url: `https://${shop}/admin/oauth/install?client_id=${encodeURIComponent(KEY())}` };
 }
 
@@ -247,8 +342,130 @@ export function vincularConCodigo(storeId: string, codigo: string): { shop: stri
   const f = db.prepare('SELECT shop, token, codigo_exp FROM shopify_tiendas WHERE codigo = ? AND desinstalada_at IS NULL').get(c) as { shop: string; token: string; codigo_exp: number } | undefined;
   if (!f || f.codigo_exp < Date.now()) return { error: 'Código no válido o vencido. Abre de nuevo la app DealFlow en Shopify para ver uno nuevo.' };
   vincular(f.shop, storeId);
-  void guardarNombre(f.shop, descifrarTexto(f.token), storeId).catch(() => {});
+  nombrarLuego(f.shop, storeId);
   return { shop: f.shop };
+}
+
+// ── Cobro con Shopify (requisito 1.2 de la App Store) ───────────────────────
+// Las tiendas que usan la app de Shopify pagan DealFlow con la facturación de Shopify:
+//  - El plan, con "Shopify App Pricing" (planes administrados): los planes y precios se crean en
+//    el Partner Dashboard y Shopify muestra la página para elegir, subir o bajar de plan. Aquí solo
+//    se lee la suscripción activa y se refleja en DealFlow (plan y vencimiento).
+//  - Los extras (créditos, biblioteca, Tienda en línea), con cargos únicos de la Billing API.
+
+const APP_HANDLE = () => String(process.env.SHOPIFY_APP_HANDLE || 'dealflow').trim();
+/** Pesos colombianos por dólar para convertir los extras (los cargos de Shopify van en USD). */
+const TASA_COP_USD = () => Math.max(1000, Number(process.env.SHOPIFY_TASA_COP_USD) || 4000);
+
+/** La tienda Shopify (instalada con la app) vinculada a esta tienda de DealFlow, o null. */
+export function shopDeTienda(storeId: string): string | null {
+  const f = db.prepare("SELECT shop FROM shopify_tiendas WHERE store_id = ? AND desinstalada_at IS NULL AND token != '' ORDER BY instalada_at DESC LIMIT 1").get(storeId) as { shop: string } | undefined;
+  return f?.shop || null;
+}
+/** Página de Shopify para elegir o cambiar el plan (Shopify App Pricing). */
+export function urlPlanes(shop: string): string {
+  return `https://admin.shopify.com/store/${shop.replace(/\.myshopify\.com$/, '')}/charges/${APP_HANDLE()}/pricing_plans`;
+}
+
+interface Suscripcion { id: string; name: string; status: string; test: boolean; currentPeriodEnd: string | null; trialDays: number; createdAt: string }
+const norm = (t: string) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** La suscripción ACTIVA de la tienda en Shopify (null si no eligió plan). */
+export async function leerSuscripcion(shop: string): Promise<{ sub: Suscripcion | null } | { error: string }> {
+  const tk = await tokenVigente(shop);
+  if (!tk) return { error: 'Abre la app DealFlow dentro de Shopify para renovar la conexión.' };
+  const r = await gql<{ currentAppInstallation: { activeSubscriptions: Suscripcion[] } }>(shop, tk,
+    '{ currentAppInstallation { activeSubscriptions { id name status test currentPeriodEnd trialDays createdAt } } }');
+  if (r.error) return { error: r.error };
+  return { sub: (r.data?.currentAppInstallation.activeSubscriptions || []).find((x) => x.status === 'ACTIVE') || null };
+}
+
+/**
+ * Lee la suscripción activa en Shopify y la refleja en DealFlow: plan con el mismo nombre (o el
+ * primero), cuenta activada y vencimiento = fin del periodo que Shopify ya cobró.
+ */
+export async function sincronizarCobro(storeId: string): Promise<{ activo: boolean; plan?: string; vence?: string; prueba?: boolean; error?: string }> {
+  const shop = shopDeTienda(storeId);
+  if (!shop) return { activo: false };
+  const l = await leerSuscripcion(shop);
+  if ('error' in l) return { activo: false, error: l.error };
+  const sub = l.sub;
+  if (!sub) return { activo: false };
+  const planes = db.prepare('SELECT nombre FROM plans ORDER BY precio').all() as { nombre: string }[];
+  const n = norm(sub.name);
+  const plan = (planes.find((p) => norm(p.nombre) === n) || planes.find((p) => n.includes(norm(p.nombre)) || norm(p.nombre).includes(n)) || planes[0])?.nombre || sub.name;
+  // Fin del periodo pagado; en la prueba gratis, la fecha de fin de la prueba.
+  const finPrueba = new Date(new Date(sub.createdAt).getTime() + (sub.trialDays || 0) * 86400_000);
+  const fin = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : sub.trialDays ? finPrueba : new Date(Date.now() + 30 * 86400_000);
+  const vence = fin.toISOString().slice(0, 10);
+  const st = db.prepare('SELECT plan_vence, inicial_pagado FROM stores WHERE id = ?').get(storeId) as { plan_vence: string | null; inicial_pagado: number } | undefined;
+  if (!st) return { activo: false };
+  const nuevoVence = st.plan_vence && st.plan_vence > vence ? st.plan_vence : vence;
+  db.prepare("UPDATE stores SET plan = ?, inicial_pagado = 1, plan_estado = 'activa', plan_vence = ?, activa = 1 WHERE id = ?").run(plan, nuevoVence, storeId);
+  // Un registro por periodo (para el historial de pagos y la contabilidad).
+  const ref = `SHOPIFY-${sub.id.split('/').pop()}-${vence}`;
+  if (!db.prepare('SELECT 1 FROM pagos WHERE referencia = ?').get(ref)) {
+    db.prepare("INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo, transaccion) VALUES (?,?,?,0,?,'aprobado','shopify',?,?)")
+      .run(randomBytes(12).toString('hex'), storeId, plan, ref, st.inicial_pagado ? 'renta' : 'inicial', sub.id);
+    registrarLog(storeId, 'info', 'plan', `Plan ${plan} activo con la facturación de Shopify${sub.test ? ' (cobro de prueba)' : ''} hasta ${vence}.`);
+  }
+  return { activo: true, plan, vence, prueba: sub.test };
+}
+
+/** ¿Es una tienda de desarrollo? (ahí los cargos deben ir en modo prueba). */
+async function esTiendaPrueba(shop: string, tk: string): Promise<boolean> {
+  if (process.env.SHOPIFY_BILLING_TEST === '1') return true;
+  const r = await gql<{ shop: { plan: { partnerDevelopment: boolean } } }>(shop, tk, '{ shop { plan { partnerDevelopment } } }');
+  return !!r.data?.shop.plan.partnerDevelopment;
+}
+
+/** Cargo único con la Billing API (extras). Devuelve la URL donde la tienda lo aprueba. */
+export async function cobroUnico(storeId: string, referencia: string, concepto: string, montoCop: number): Promise<{ url: string } | { error: string }> {
+  const shop = shopDeTienda(storeId);
+  if (!shop) return { error: 'Esta tienda no está conectada con la app de Shopify.' };
+  const tk = await tokenVigente(shop);
+  if (!tk) return { error: 'Abre la app DealFlow dentro de Shopify para renovar la conexión y vuelve a intentarlo.' };
+  const usd = Math.max(0.5, Math.round((montoCop / TASA_COP_USD()) * 100) / 100);
+  const q = `mutation($name: String!, $price: MoneyInput!, $returnUrl: URL!, $test: Boolean) {
+    appPurchaseOneTimeCreate(name: $name, price: $price, returnUrl: $returnUrl, test: $test) { appPurchaseOneTime { id } confirmationUrl userErrors { field message } }
+  }`;
+  const r = await gql<{ appPurchaseOneTimeCreate: { appPurchaseOneTime: { id: string } | null; confirmationUrl: string | null; userErrors: { message: string }[] } }>(shop, tk, q, {
+    name: `DealFlow · ${concepto}`.slice(0, 255), price: { amount: usd, currencyCode: 'USD' },
+    returnUrl: `${BASE_TIENDA}/api/shopify/cobro/vuelta?ref=${encodeURIComponent(referencia)}`, test: await esTiendaPrueba(shop, tk),
+  });
+  const d = r.data?.appPurchaseOneTimeCreate;
+  if (r.error || !d?.confirmationUrl || !d.appPurchaseOneTime) return { error: `Shopify no creó el cobro: ${r.error || d?.userErrors.map((e) => e.message).join(' · ') || 'sin detalle'}` };
+  db.prepare('UPDATE pagos SET transaccion = ? WHERE referencia = ?').run(d.appPurchaseOneTime.id, referencia);
+  return { url: d.confirmationUrl };
+}
+
+/** Al volver de Shopify: confirma con Shopify que el cargo quedó aprobado y entrega el extra. */
+export async function verificarCobroUnico(referencia: string): Promise<{ ok: boolean; tipo?: string }> {
+  const p = db.prepare("SELECT store_id, transaccion, tipo, estado FROM pagos WHERE referencia = ? AND gateway = 'shopify'").get(referencia) as { store_id: string; transaccion: string | null; tipo: string; estado: string } | undefined;
+  if (!p?.transaccion) return { ok: false };
+  if (p.estado === 'aprobado') return { ok: true, tipo: p.tipo };
+  const shop = shopDeTienda(p.store_id);
+  const tk = shop ? await tokenVigente(shop) : '';
+  if (!shop || !tk) return { ok: false, tipo: p.tipo };
+  const r = await gql<{ node: { status?: string } | null }>(shop, tk, 'query($id: ID!) { node(id: $id) { ... on AppPurchaseOneTime { status } } }', { id: p.transaccion });
+  if (r.data?.node?.status !== 'ACTIVE') {
+    if (r.data?.node?.status === 'DECLINED') db.prepare("UPDATE pagos SET estado = 'rechazado' WHERE referencia = ?").run(referencia);
+    return { ok: false, tipo: p.tipo };
+  }
+  const { aplicarPagoAprobado } = await import('./suscripcion.js');
+  aplicarPagoAprobado(referencia, p.transaccion);
+  return { ok: true, tipo: p.tipo };
+}
+
+/** Revisa cada 6 h las suscripciones de Shopify (renovaciones, cambios de plan). */
+export function iniciarCobroShopify(): void {
+  const correr = async () => {
+    if (!appDisponible()) return;
+    const tiendas = db.prepare("SELECT DISTINCT store_id FROM shopify_tiendas WHERE store_id IS NOT NULL AND desinstalada_at IS NULL AND token != ''").all() as { store_id: string }[];
+    for (const t of tiendas) { try { await sincronizarCobro(t.store_id); } catch { /* siguiente vuelta */ } }
+  };
+  setTimeout(() => { void correr(); }, 120_000);
+  setInterval(() => { void correr(); }, 6 * 3600_000);
 }
 
 // ── Webhooks ────────────────────────────────────────────────────────────────
@@ -270,7 +487,7 @@ export function procesarWebhook(topic: string, shop: string, id: string, body: R
   const storeId = (db.prepare('SELECT store_id FROM shopify_tiendas WHERE shop = ?').get(shop) as { store_id: string | null } | undefined)?.store_id || null;
   switch (topic) {
     case 'app/uninstalled': {
-      db.prepare("UPDATE shopify_tiendas SET token = '', codigo = '', desinstalada_at = datetime('now') WHERE shop = ?").run(shop);
+      db.prepare("UPDATE shopify_tiendas SET token = '', refresh_token = '', token_exp = 0, refresh_exp = 0, codigo = '', desinstalada_at = datetime('now') WHERE shop = ?").run(shop);
       if (storeId) {
         const integ = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").get(storeId) as { config: string } | undefined;
         if (integ && pj<Record<string, string>>(integ.config, {}).shop === shop) db.prepare("DELETE FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").run(storeId);
@@ -290,6 +507,9 @@ export function procesarWebhook(topic: string, shop: string, id: string, body: R
       break;
     case 'customers/data_request':
       void import('./shopifyPedidos.js').then((m) => { const d = m.datosCliente(shop, body); if (storeId) registrarLog(storeId, 'info', 'shopify', `Privacidad: un comprador pidió sus datos. DealFlow tiene ${d.length} pedido(s) suyos: ${d.map((x) => 'DF-' + x.numero).join(', ') || 'ninguno'}. Entrégaselos si te los pide.`); });
+      break;
+    case 'app_subscriptions/update':
+      if (storeId) void sincronizarCobro(storeId).catch((e) => console.warn('[shopify-app] cobro', e));
       break;
     case 'orders/create':
       if (storeId) void import('./shopifyPedidos.js').then((m) => m.importarPedido(storeId, shop, body));
@@ -322,6 +542,8 @@ h1{font-size:22px;margin:0 0 6px}p{color:var(--m);line-height:1.55;margin:8px 0}
 .codigo{font:700 30px/1 ui-monospace,Menlo,monospace;letter-spacing:.18em;background:#eef0ff;color:var(--p);border-radius:10px;padding:14px;text-align:center;margin:14px 0}
 .btn{display:inline-block;background:var(--p);color:#fff;border:0;border-radius:10px;padding:11px 18px;font-weight:700;font-size:14px;cursor:pointer;text-decoration:none}
 .ok{color:var(--ok);font-weight:700}.err{color:#c81e1e}
+.plan{margin:16px 0;padding:14px;border:1px solid var(--b);border-radius:12px;background:#fafbff;line-height:1.5}.plan span{color:var(--m);font-size:13.5px}.plan .btn{margin-top:10px}
+.btn.sec{background:#fff;color:var(--p);border:1px solid var(--b)}.tag{font-size:11px;background:#fff4d6;color:#8a5a00;border-radius:6px;padding:1px 6px}
 ul{color:var(--m);line-height:1.7;padding-left:20px}
 </style></head><body><main><div class="card" id="c"><h1>DealFlow</h1><p>Conectando con tu tienda…</p></div></main>
 <script>
@@ -334,19 +556,26 @@ async function iniciar() {
     const r = await fetch('/api/shopify/app/sesion', { method: 'POST', headers: { Authorization: 'Bearer ' + t } });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'No se pudo conectar.');
+    const p = d.plan || {};
+    const planHtml = '<div class="plan">' + (p.activo
+        ? '<b>Plan ' + esc(p.nombre) + '</b>' + (p.prueba ? ' <span class="tag">prueba</span>' : '') + '<br><span>Se cobra con tu factura de Shopify' + (p.vence ? ' · próximo cobro ' + esc(p.vence) : '') + '.</span>'
+        : '<b>Elige tu plan</b><br><span>DealFlow se paga con la facturación de Shopify: lo ves en tu factura de Shopify y puedes cambiarlo o cancelarlo cuando quieras.</span>')
+      + '<br><button class="btn ' + (p.activo ? 'sec' : '') + '" id="pl">' + (p.activo ? 'Cambiar de plan' : 'Ver planes y precios') + '</button></div>';
     if (d.vinculada) {
-      c.innerHTML = '<h1>DealFlow</h1><p class="ok">✓ Tu tienda está conectada con DealFlow' + (d.tiendaDF ? ' (' + esc(d.tiendaDF) + ')' : '') + '.</p>'
+      c.innerHTML = '<h1>DealFlow</h1><p class="ok">✓ Tu tienda está conectada con DealFlow' + (d.tiendaDF ? ' (' + esc(d.tiendaDF) + ')' : '') + '.</p>' + planHtml
         + '<p>Los pedidos de tu tienda llegan a DealFlow y tu asistente le confirma cada pedido al cliente por WhatsApp.</p>'
         + '<ul><li>Vincula tus productos por SKU en DealFlow → Productos.</li><li>Configura el despacho (Effi o Dropi) en DealFlow → Integraciones.</li></ul>'
         + '<button class="btn" id="ir">Abrir DealFlow</button>';
       document.getElementById('ir').onclick = () => abrir('${BASE_TIENDA}/');
+      document.getElementById('pl').onclick = () => window.open(d.planesUrl, '_top');
     } else {
       c.innerHTML = '<h1>Conecta tu cuenta de DealFlow</h1><p>La app ya está instalada en <b>' + esc(d.shop) + '</b>. Falta unirla con tu cuenta de DealFlow:</p>'
         + '<p>1. Toca el botón (se abre DealFlow; inicia sesión si te lo pide) <b>o</b> pega este código en DealFlow → Integraciones → Shopify:</p>'
         + '<div class="codigo">' + esc(d.codigo) + '</div>'
         + '<button class="btn" id="v">Vincular con mi cuenta de DealFlow</button>'
         + '<p style="font-size:13px">El código vale 1 hora. ¿No tienes cuenta? Créala en <b>dealflow.sbs</b>.</p>'
-        + '<p><button class="btn" id="r" style="background:#fff;color:var(--p);border:1px solid var(--b)">Ya lo vinculé, revisar</button></p>';
+        + '<p><button class="btn" id="r" style="background:#fff;color:var(--p);border:1px solid var(--b)">Ya lo vinculé, revisar</button></p>' + planHtml;
+      document.getElementById('pl').onclick = () => window.open(d.planesUrl, '_top');
       document.getElementById('v').onclick = () => abrir(d.vincularUrl);
       document.getElementById('r').onclick = iniciar;
     }

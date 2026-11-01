@@ -172,12 +172,12 @@ export function crearCheckout(
   if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
   const montoCents = monto * 100;
   const params = new URLSearchParams({
-    'public-key': pub,
+    'public-key': pub || '',
     currency: 'COP',
     'amount-in-cents': String(montoCents),
     reference: referencia,
     'redirect-url': `${redirectBase}/?pago=ok`,
-    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity || ''),
   });
   if (correo) params.set('customer-data:email', correo);
   return { url: `${CHECKOUT}?${params.toString()}` };
@@ -187,27 +187,28 @@ export function crearCheckout(
  * Crea un pago de RECARGA de créditos del Marketing IA y devuelve la URL de Wompi.
  * Al aprobarse, se suman los créditos del paquete al saldo de la tienda.
  */
-export function crearRecargaCheckout(storeId: string, correo: string, redirectBase: string, paqueteId: string): { url?: string; error?: string } {
+export function crearRecargaCheckout(storeId: string, correo: string, redirectBase: string, paqueteId: string, pasarela: Pasarela = 'wompi'): Resultado {
   const pub = process.env.WOMPI_PUBLIC_KEY;
   const integrity = process.env.WOMPI_INTEGRITY;
   const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(storeId) as { id: string } | undefined;
   if (!s) return { error: 'Tienda no encontrada.' };
   const paq = PAQUETES.find((p) => p.id === paqueteId);
   if (!paq) return { error: 'Elige un paquete de recarga válido.' };
-  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
+  if (pasarela === 'wompi' && (!pub || !integrity)) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
 
   const referencia = `DF-CRE-${storeId.slice(0, 8)}-${Date.now()}`;
   db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo, creditos) VALUES (?,?,?,?,?,?,?,?,?)')
-    .run(uid(), storeId, paq.id, paq.precio, referencia, 'pendiente', 'wompi', 'creditos', paq.creditos);
+    .run(uid(), storeId, paq.id, paq.precio, referencia, 'pendiente', pasarela, 'creditos', paq.creditos);
+  if (pasarela === 'shopify') return { referencia, monto: paq.precio };
 
   const montoCents = paq.precio * 100;
   const params = new URLSearchParams({
-    'public-key': pub,
+    'public-key': pub || '',
     currency: 'COP',
     'amount-in-cents': String(montoCents),
     reference: referencia,
     'redirect-url': `${redirectBase}/?pago=ok`,
-    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity || ''),
   });
   if (correo) params.set('customer-data:email', correo);
   return { url: `${CHECKOUT}?${params.toString()}` };
@@ -218,7 +219,7 @@ export function crearRecargaCheckout(storeId: string, correo: string, redirectBa
  * Wompi. El id del producto de biblioteca se guarda en `plan`; al aprobarse el
  * pago, `aplicarPagoAprobado` lo importa a la tienda.
  */
-export function crearCheckoutBiblioteca(storeId: string, correo: string, redirectBase: string, libId: string): { url?: string; error?: string } {
+export function crearCheckoutBiblioteca(storeId: string, correo: string, redirectBase: string, libId: string, pasarela: Pasarela = 'wompi'): Resultado {
   const pub = process.env.WOMPI_PUBLIC_KEY;
   const integrity = process.env.WOMPI_INTEGRITY;
   const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(storeId) as { id: string } | undefined;
@@ -228,27 +229,28 @@ export function crearCheckoutBiblioteca(storeId: string, correo: string, redirec
   if (lib.gratis) return { error: 'Este producto es gratis: puedes importarlo sin pagar.' };
   const monto = Math.max(0, Math.round(lib.precio_importacion || 0));
   if (monto <= 0) return { error: 'Este producto no tiene precio de importación configurado.' };
-  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
+  if (pasarela === 'wompi' && (!pub || !integrity)) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
 
   const referencia = `DF-BIB-${storeId.slice(0, 8)}-${Date.now()}`;
   db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo) VALUES (?,?,?,?,?,?,?,?)')
-    .run(uid(), storeId, libId, monto, referencia, 'pendiente', 'wompi', 'biblioteca');
+    .run(uid(), storeId, libId, monto, referencia, 'pendiente', pasarela, 'biblioteca');
+  if (pasarela === 'shopify') return { referencia, monto: monto };
 
   const montoCents = monto * 100;
   const params = new URLSearchParams({
-    'public-key': pub,
+    'public-key': pub || '',
     currency: 'COP',
     'amount-in-cents': String(montoCents),
     reference: referencia,
     'redirect-url': `${redirectBase}/?pago=ok`,
-    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity || ''),
   });
   if (correo) params.set('customer-data:email', correo);
   return { url: `${CHECKOUT}?${params.toString()}` };
 }
 
 /** Pago único de una landing de la Biblioteca de landings (el id viaja en `plan`, tipo 'biblioteca_landing'). */
-export function crearCheckoutBibliotecaLanding(storeId: string, correo: string, redirectBase: string, libId: string): { url?: string; error?: string } {
+export function crearCheckoutBibliotecaLanding(storeId: string, correo: string, redirectBase: string, libId: string, pasarela: Pasarela = 'wompi'): Resultado {
   const pub = process.env.WOMPI_PUBLIC_KEY;
   const integrity = process.env.WOMPI_INTEGRITY;
   const lib = getLibraryLanding(libId);
@@ -256,14 +258,15 @@ export function crearCheckoutBibliotecaLanding(storeId: string, correo: string, 
   if (lib.gratis) return { error: 'Esta landing es gratis: puedes importarla sin pagar.' };
   const monto = Math.max(0, Math.round(lib.precio_importacion || 0));
   if (monto <= 0) return { error: 'Esta landing no tiene precio de importación configurado.' };
-  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
+  if (pasarela === 'wompi' && (!pub || !integrity)) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
   const referencia = `DF-BIBL-${storeId.slice(0, 8)}-${Date.now()}`;
   db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo) VALUES (?,?,?,?,?,?,?,?)')
-    .run(uid(), storeId, libId, monto, referencia, 'pendiente', 'wompi', 'biblioteca_landing');
+    .run(uid(), storeId, libId, monto, referencia, 'pendiente', pasarela, 'biblioteca_landing');
+  if (pasarela === 'shopify') return { referencia, monto: monto };
   const montoCents = monto * 100;
   const params = new URLSearchParams({
-    'public-key': pub, currency: 'COP', 'amount-in-cents': String(montoCents), reference: referencia,
-    'redirect-url': `${redirectBase}/?pago=ok`, 'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+    'public-key': pub || '', currency: 'COP', 'amount-in-cents': String(montoCents), reference: referencia,
+    'redirect-url': `${redirectBase}/?pago=ok`, 'signature:integrity': firmaIntegridad(referencia, montoCents, integrity || ''),
   });
   if (correo) params.set('customer-data:email', correo);
   return { url: `${CHECKOUT}?${params.toString()}` };
@@ -283,35 +286,40 @@ export function crearCheckoutLanding(storeId: string, correo: string, redirectBa
     .run(uid(), storeId, landingId, Math.round(monto), referencia, 'pendiente', 'wompi', 'landing');
   const montoCents = Math.round(monto) * 100;
   const params = new URLSearchParams({
-    'public-key': pub,
+    'public-key': pub || '',
     currency: 'COP',
     'amount-in-cents': String(montoCents),
     reference: referencia,
     'redirect-url': `${redirectBase}/landings?landing=${encodeURIComponent(landingId)}&pago=ok`,
-    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity || ''),
   });
   if (correo) params.set('customer-data:email', correo);
   return { url: `${CHECKOUT}?${params.toString()}` };
 }
 
 /** Mensualidad de la Tienda en línea (landings): al aprobarse suma 30 días. */
-export function crearCheckoutTiendaOnline(storeId: string, correo: string, redirectBase: string, monto: number): { url?: string; error?: string } {
+export function crearCheckoutTiendaOnline(storeId: string, correo: string, redirectBase: string, monto: number, pasarela: Pasarela = 'wompi'): Resultado {
   const pub = process.env.WOMPI_PUBLIC_KEY;
   const integrity = process.env.WOMPI_INTEGRITY;
   if (monto <= 0) return { error: 'La Tienda en línea no tiene costo por ahora.' };
-  if (!pub || !integrity) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
+  if (pasarela === 'wompi' && (!pub || !integrity)) return { error: 'La pasarela de pagos no está configurada todavía. (Faltan las llaves de Wompi en el servidor.)' };
   const referencia = `DF-TOL-${storeId.slice(0, 8)}-${Date.now()}`;
   db.prepare('INSERT INTO pagos (id, store_id, plan, monto, referencia, estado, gateway, tipo) VALUES (?,?,?,?,?,?,?,?)')
-    .run(uid(), storeId, 'tienda_online', Math.round(monto), referencia, 'pendiente', 'wompi', 'tienda_online');
+    .run(uid(), storeId, 'tienda_online', Math.round(monto), referencia, 'pendiente', pasarela, 'tienda_online');
+  if (pasarela === 'shopify') return { referencia, monto: Math.round(monto) };
   const montoCents = Math.round(monto) * 100;
   const params = new URLSearchParams({
-    'public-key': pub, currency: 'COP', 'amount-in-cents': String(montoCents), reference: referencia,
+    'public-key': pub || '', currency: 'COP', 'amount-in-cents': String(montoCents), reference: referencia,
     'redirect-url': `${redirectBase}/tienda-en-linea?pago=ok`,
-    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity),
+    'signature:integrity': firmaIntegridad(referencia, montoCents, integrity || ''),
   });
   if (correo) params.set('customer-data:email', correo);
   return { url: `${CHECKOUT}?${params.toString()}` };
 }
+
+/** Wompi (pago en línea en Colombia) o Shopify (tiendas que usan la app de Shopify: cobro con su facturación). */
+export type Pasarela = 'wompi' | 'shopify';
+export interface Resultado { url?: string; error?: string; referencia?: string; monto?: number }
 
 /** Marca un pago como aprobado: activa la cuenta / extiende la renta / suma créditos. */
 export function aplicarPagoAprobado(referencia: string, transaccion?: string): boolean {

@@ -26,7 +26,7 @@ const API_VERSION = process.env.SHOPIFY_API_VERSION || '2025-10';
  *    DealFlow los cambia por un token con el flujo "client credentials" (solo
  *    tiendas de DESARROLLO) y lo renueva solo (dura 24h).
  */
-export interface ShopifyCred { shop: string; token?: string; clientId?: string; clientSecret?: string }
+export interface ShopifyCred { shop: string; token?: string; clientId?: string; clientSecret?: string; via?: string }
 
 /** Normaliza el dominio a la forma "mitienda.myshopify.com" (sin https ni barras). */
 export function normalizarShop(input: string): string {
@@ -48,7 +48,7 @@ export function credShopify(storeId: string): ShopifyCred | null {
   const clientId = String(cfg.clientId || '').trim();
   const clientSecret = String(cfg.clientSecret || '').trim();
   if (!shop || (!token && !(clientId && clientSecret))) return null;
-  return { shop, token, clientId, clientSecret };
+  return { shop, token, clientId, clientSecret, via: String(cfg.via || '') };
 }
 
 // Cache en memoria de tokens obtenidos por client credentials: "shop:clientId" → {token, exp(ms)}.
@@ -67,6 +67,13 @@ export function olvidarTokenShopify(shop: string): void {
  * que usar un Admin API access token.
  */
 async function resolverToken(cred: ShopifyCred): Promise<{ ok: true; token: string } | { ok: false; error: string; http: number }> {
+  // App pública: token offline que vence (se renueva solo con el refresh token).
+  if (cred.via === 'app') {
+    const { tokenVigente } = await import('./shopifyApp.js');
+    const tk = await tokenVigente(cred.shop);
+    if (tk) return { ok: true, token: tk };
+    return { ok: false, error: 'La conexión con Shopify venció. Abre la app DealFlow dentro de tu Shopify para renovarla.', http: 401 };
+  }
   const estatico = String(cred.token || '').trim();
   if (estatico) return { ok: true, token: estatico };
   const id = String(cred.clientId || '').trim();

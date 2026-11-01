@@ -296,7 +296,7 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
     const r = await apiPublicarLanding(id);
     if (r.error) return notificar(r.error, 'error');
     if (r.data?.requierePago) {
-      const ok = await confirmar({ titulo: 'Activa tu Tienda en línea', mensaje: `Para publicar necesitas la membresía de Tienda en línea: ${pesos(r.data.precio || 0)} al mes, con todos los productos y landings que quieras, tu dirección gratis y tu propio dominio. Te llevamos al pago seguro de Wompi.`, aceptar: 'Activar membresía' });
+      const ok = await confirmar({ titulo: 'Activa tu Tienda en línea', mensaje: `Para publicar necesitas la membresía de Tienda en línea: ${pesos(r.data.precio || 0)} al mes, con todos los productos y landings que quieras, tu dirección gratis y tu propio dominio. Te llevamos al pago seguro.`, aceptar: 'Activar membresía' });
       if (!ok) return;
       const p = await apiPagarMembresia();
       if (p.data?.url) window.location.href = p.data.url; else notificar(p.error || 'No se pudo abrir el pago.', 'error');

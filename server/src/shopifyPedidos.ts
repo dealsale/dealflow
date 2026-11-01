@@ -433,8 +433,10 @@ async function revisarWebhook(storeId: string, shop: string): Promise<void> {
   const { credShopify } = await import('./shopify.js');
   const cred = credShopify(storeId);
   if (!cred?.token) return;
-  const { asegurarWebhookPedidos } = await import('./shopifyApp.js');
-  const err = await asegurarWebhookPedidos(shop, cred.token);
+  const { asegurarWebhookPedidos, tokenVigente } = await import('./shopifyApp.js');
+  const tk = cred.via === 'app' ? await tokenVigente(shop) : cred.token;
+  if (!tk) return;
+  const err = await asegurarWebhookPedidos(shop, tk);
   if (err) avisarUnaVez(storeId, 'webhook', `Shopify no aceptó el aviso automático de pedidos nuevos (${err.slice(0, 200)}). Mientras tanto DealFlow revisa los pedidos cada 5 minutos.`);
 }
 
