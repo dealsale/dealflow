@@ -459,7 +459,7 @@ export function Login({ df }: { df: DealFlowState }) {
 
           {/* Redes sociales + legales */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 20 }}>
-            <a className="dfl-social" href="https://www.instagram.com/dealflow444" target="_blank" rel="noopener" aria-label="Instagram de DealFlow" title="Instagram">
+            <a className="dfl-social" href="https://www.instagram.com/dealflow.sbs/" target="_blank" rel="noopener" aria-label="Instagram de DealFlow" title="Instagram">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none" /></svg>
             </a>
             <a className="dfl-social" href="https://www.facebook.com/dealflowsbs/" target="_blank" rel="noopener" aria-label="Facebook de DealFlow" title="Facebook">
