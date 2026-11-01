@@ -2,6 +2,7 @@ import './landings.js'; // tablas del Creador de landings (los pagos aprobados l
 import express from 'express';
 import compression from 'compression';
 import { medirPeticiones } from './rendimiento.js';
+import { drive } from './drive.js';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import { existsSync, readFileSync } from 'node:fs';
@@ -126,6 +127,8 @@ app.use(async (req, res, next) => {
 });
 // Portal de proveedores: su propia sesión (no pasa por la API del panel).
 app.use('/api/proveedor', proveedorApi);
+// Drive del equipo (drive.dealflow.sbs): archivos en el Google Drive de DealFlow.
+app.use('/api/drive', drive);
 app.use('/api', api);
 app.use('/webhooks', webhooks);
 const BASE_PUBLICA = (process.env.PUBLIC_APP_URL || 'https://app.dealflow.sbs').replace(/\/+$/, '');
@@ -189,7 +192,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'instagram-11011725',
+    build: 'drive-11012300',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -281,7 +284,7 @@ if (existsSync(APP_DIST)) {
     const waLink = 'https://wa.me/' + waNum + '?text=' + encodeURIComponent('Hola, quiero más información sobre el dropshipping con IA de DealFlow');
     adsHtml = readFileSync(ADS_FILE, 'utf8').replace(/__WA_LINK__/g, waLink);
   }
-  const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app|academy|proveedores)(\/|$)/i;
+  const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app|academy|proveedores|drive)(\/|$)/i;
   const urlEn = (req: express.Request, host: string) => `${req.protocol === 'http' && !/^localhost/.test(host) ? 'https' : req.protocol}://${host}${req.originalUrl}`;
 
   app.get(/^\/(?!api|webhooks).*/, (req, res) => {
@@ -289,6 +292,9 @@ if (existsSync(APP_DIST)) {
     const esLanding = existsSync(LANDING);
     const esAds = /^\/(dropshipping|ads|dropshipping-ia)\/?$/i.test(req.path);
     const esInicio = /^\/(inicio|home)\/?$/i.test(req.path);
+    // Enlace público de un archivo del Drive del equipo: drive.dealflow.sbs/d/<código>.
+    const mD = req.path.match(/^\/d\/([A-Za-z0-9_-]{8,40})\/?$/);
+    if (mD) return res.redirect(302, `/api/drive/publico/${mD[1]}${req.query.descargar === '1' ? '?descargar=1' : ''}`);
     // Tutoriales en vivo (página propia, en cualquier host).
     if (/^\/tutoriales\/?$/i.test(req.path)) return enviarHtml(res, path.join(APP_DIST, 'tutoriales.html'));
     // App de Shopify incrustada en el panel de Shopify (solo se deja enmarcar por Shopify).
@@ -325,6 +331,8 @@ if (existsSync(APP_DIST)) {
       if (/^academy\./.test(host) && !esInicio) return enviarHtml(res, path.join(APP_DIST, 'index.html'));
       // proveedores.<dominio>: el portal de proveedores (lo resuelve la app).
       if (/^proveedores\./.test(host)) return enviarHtml(res, path.join(APP_DIST, 'index.html'));
+      // drive.<dominio>: el Drive del equipo DealFlow (lo resuelve la app).
+      if (/^drive\./.test(host)) return enviarHtml(res, path.join(APP_DIST, 'index.html'));
       return res.redirect(302, `https://${raiz}/`);
     }
     // 4) Otros hosts (URL de Railway, localhost): como siempre, la landing para el

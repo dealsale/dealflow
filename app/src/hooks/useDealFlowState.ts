@@ -1717,6 +1717,8 @@ export function useDealFlowState() {
         if (available) { localStorage.setItem('dealflow:apimode', '1'); clearSnapshot(); }
         else localStorage.removeItem('dealflow:apimode');
       } catch { /* modo privado */ }
+      // Las cuentas de Marketing solo usan el Drive del equipo.
+      if (available && user?.role === 'MARKETING') { location.replace(urlDrive()); return; }
       if (available) {
         const rol = user ? (user.role === 'ADMIN' ? 'admin' : user.role === 'SUPERADMIN' ? 'superadmin' : user.role === 'SOPORTE' ? 'soporte' : 'vendedor') : 'vendedor';
         permisosRef.current = user?.permisos || null;
@@ -1732,6 +1734,7 @@ export function useDealFlowState() {
   }, []);
 
   // Cuentas de la demo estática (sin backend).
+  const urlDrive = () => (/(^|\.)dealflow\.sbs$/i.test(location.hostname) ? 'https://drive.dealflow.sbs/' : '/drive');
   const DEMO_ACCOUNTS: Record<string, { password: string; nombre: string; role: 'vendedor' | 'admin' }> = {
     'karla@lunaaccesorios.co': { password: 'demo123', nombre: 'Karla', role: 'vendedor' },
     'admin@dealflow.co': { password: 'admin123', nombre: 'Equipo DealFlow', role: 'admin' },
@@ -1765,6 +1768,7 @@ export function useDealFlowState() {
         setLoginError(r.error || 'No pudimos iniciar sesión.');
         return;
       }
+      if (r.user.role === 'MARKETING') { location.replace(urlDrive()); return; }
       completeLogin({ nombre: r.user.nombre, email: r.user.email, role: r.user.role === 'ADMIN' ? 'admin' : r.user.role === 'SUPERADMIN' ? 'superadmin' : r.user.role === 'SOPORTE' ? 'soporte' : 'vendedor', esDueno: r.user.esDueno, foto: r.user.foto, permisos: r.user.permisos });
       return;
     }

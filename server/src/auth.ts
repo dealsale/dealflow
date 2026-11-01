@@ -10,7 +10,7 @@ export interface AuthUser {
   id: string;
   email: string;
   nombre: string;
-  role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN' | 'SOPORTE';
+  role: 'VENDEDOR' | 'ADMIN' | 'SUPERADMIN' | 'SOPORTE' | 'MARKETING';
   storeId: string | null;
   /** Si el admin está "entrando" a una tienda (impersonando), aquí va su id para poder volver. */
   imp?: string;
@@ -88,7 +88,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ error: 'Tu sesión venció. Vuelve a iniciar sesión.' });
   }
   // Equipo DealFlow: si al usuario lo eliminaron o le cambiaron el rol, su sesión deja de valer.
-  if (req.user.role === 'ADMIN' || req.user.role === 'SOPORTE') {
+  if (req.user.role === 'ADMIN' || req.user.role === 'SOPORTE' || req.user.role === 'MARKETING') {
     const u = db.prepare('SELECT role FROM users WHERE id = ?').get(req.user.id) as { role: string } | undefined;
     if (!u || u.role !== req.user.role) return res.status(401).json({ error: 'Tu cuenta cambió o ya no existe. Vuelve a iniciar sesión.' });
   }

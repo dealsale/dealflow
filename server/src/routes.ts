@@ -72,7 +72,7 @@ api.post('/auth/login', (req, res) => {
     if (!store?.activa) return res.status(403).json({ error: 'Tu cuenta está desactivada. Escríbenos para reactivarla.' });
   }
   const user: AuthUser = { id: row.id, email: row.email, nombre: row.nombre, role: row.role, storeId: row.store_id, foto: row.foto || undefined };
-  if (['ADMIN', 'SUPERADMIN', 'SOPORTE'].includes(row.role as string)) registrarAccionEquipo(row.email, `Inicio de sesión (${String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim()})`);
+  if (['ADMIN', 'SUPERADMIN', 'SOPORTE', 'MARKETING'].includes(row.role as string)) registrarAccionEquipo(row.email, `Inicio de sesión (${String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim()})`);
   setAuthCookie(res, user, req.hostname);
   res.json({ user: { ...user, esDueno: esDuenoDeTienda(user), permisos: permisosDe(user) } });
 });
@@ -1649,9 +1649,9 @@ api.post('/admin/rendimiento/reiniciar', requireAuth, requireAdmin, async (_req,
   res.json({ ok: true });
 });
 // ── Cuentas del equipo DealFlow (solo el superadmin): administradores y soporte ──
-const ROLES_EQUIPO = ['ADMIN', 'SOPORTE'] as const;
+const ROLES_EQUIPO = ['ADMIN', 'SOPORTE', 'MARKETING'] as const;
 api.get('/admin/equipo', requireAuth, requireSuperAdmin, (_req, res) => {
-  const usuarios = db.prepare("SELECT id, email, nombre, role FROM users WHERE role IN ('ADMIN','SUPERADMIN','SOPORTE') ORDER BY CASE role WHEN 'SUPERADMIN' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END, nombre").all() as { id: string; email: string; nombre: string; role: string }[];
+  const usuarios = db.prepare("SELECT id, email, nombre, role FROM users WHERE role IN ('ADMIN','SUPERADMIN','SOPORTE','MARKETING') ORDER BY CASE role WHEN 'SUPERADMIN' THEN 0 WHEN 'ADMIN' THEN 1 WHEN 'SOPORTE' THEN 2 ELSE 3 END, nombre").all() as { id: string; email: string; nombre: string; role: string }[];
   const ult = db.prepare('SELECT MAX(at) at FROM accesos_equipo WHERE usuario = ?');
   res.json({ usuarios: usuarios.map((u) => ({ ...u, ultimoAcceso: (ult.get(u.email) as { at: string | null } | undefined)?.at || '' })) });
 });
@@ -1663,16 +1663,16 @@ api.post('/admin/equipo', requireAuth, requireSuperAdmin, (req, res) => {
   const password = String(b.password || '');
   if (!nombre) return res.status(400).json({ error: 'Escribe el nombre.' });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Escribe un correo válido.' });
-  if (!(ROLES_EQUIPO as readonly string[]).includes(role)) return res.status(400).json({ error: 'Elige el rol: Administrador o Soporte.' });
+  if (!(ROLES_EQUIPO as readonly string[]).includes(role)) return res.status(400).json({ error: 'Elige el rol: Administrador, Soporte o Marketing.' });
   { const e = claveInvalida(password, true); if (e) return res.status(400).json({ error: e }); }
   if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) return res.status(400).json({ error: 'Ya existe una cuenta con ese correo.' });
   const id = uid();
   db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,NULL)').run(id, email, hashPassword(password), nombre, role);
-  registrarAccionEquipo(req.user!.email, `Creó la cuenta de ${role === 'ADMIN' ? 'administrador' : 'soporte'} ${email}`);
+  registrarAccionEquipo(req.user!.email, `Creó la cuenta de ${role === 'ADMIN' ? 'administrador' : role === 'MARKETING' ? 'marketing' : 'soporte'} ${email}`);
   res.json({ ok: true, id });
 });
 api.patch('/admin/equipo/:id', requireAuth, requireSuperAdmin, (req, res) => {
-  const u = db.prepare("SELECT id, email, role FROM users WHERE id = ? AND role IN ('ADMIN','SOPORTE')").get(req.params.id) as { id: string; email: string; role: string } | undefined;
+  const u = db.prepare("SELECT id, email, role FROM users WHERE id = ? AND role IN ('ADMIN','SOPORTE','MARKETING')").get(req.params.id) as { id: string; email: string; role: string } | undefined;
   if (!u) return res.status(404).json({ error: 'Cuenta no encontrada (la del superadmin no se cambia aquí).' });
   const b = req.body || {};
   if (b.nombre != null && String(b.nombre).trim()) db.prepare('UPDATE users SET nombre = ? WHERE id = ?').run(String(b.nombre).trim().slice(0, 80), u.id);
@@ -1688,7 +1688,7 @@ api.patch('/admin/equipo/:id', requireAuth, requireSuperAdmin, (req, res) => {
   res.json({ ok: true });
 });
 api.delete('/admin/equipo/:id', requireAuth, requireSuperAdmin, (req, res) => {
-  const u = db.prepare("SELECT id, email FROM users WHERE id = ? AND role IN ('ADMIN','SOPORTE')").get(req.params.id) as { id: string; email: string } | undefined;
+  const u = db.prepare("SELECT id, email FROM users WHERE id = ? AND role IN ('ADMIN','SOPORTE','MARKETING')").get(req.params.id) as { id: string; email: string } | undefined;
   if (!u) return res.status(404).json({ error: 'Cuenta no encontrada.' });
   db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
   registrarAccionEquipo(req.user!.email, `Eliminó la cuenta del equipo ${u.email}`);
