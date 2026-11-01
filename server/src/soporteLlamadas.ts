@@ -1,13 +1,10 @@
 /**
- * Soporte en vivo: la tienda toca "Llamar a soporte" y se abre una sala de llamada con audio
- * y pantalla compartida en el navegador (Jitsi Meet: sin cuenta ni instalar nada). Al equipo
- * de DealFlow le aparece al instante en Administración → Soporte en vivo (con sonido) y le
- * llega un correo; quien la atiende entra a la misma sala.
- *
- * La sala tiene un nombre largo al azar (nadie la adivina). El servicio de video se puede
- * cambiar con SOPORTE_VIDEO_BASE (p. ej. un Jitsi propio); por defecto, meet.jit.si, que pide
- * que el PRIMERO en entrar como moderador inicie sesión: eso lo hace el agente de soporte, y
- * el cliente espera en la sala hasta que entra.
+ * Soporte en vivo: la tienda toca "Llamar a soporte" y la llamada (audio y pantalla compartida)
+ * ocurre DENTRO de DealFlow, de navegador a navegador (WebRTC): sin otra plataforma, sin otra
+ * pestaña ni cuentas externas. Este servidor solo pasa las "señales" para conectarse (oferta,
+ * respuesta y candidatos de red); el audio y la pantalla van directo entre los dos navegadores.
+ * Para redes muy cerradas se puede configurar un TURN propio con TURN_URLS, TURN_USER y TURN_PASS.
+ * Al equipo le aparece al instante en Administración → Soporte en vivo (con sonido) y un correo.
  */
 import { randomBytes } from 'node:crypto';
 import { db, uid, registrarLog } from './db.js';
@@ -59,15 +56,8 @@ export function estadoServicio() {
 }
 
 // ── Llamadas ────────────────────────────────────────────────────────────────
-const BASE = () => (process.env.SOPORTE_VIDEO_BASE || 'https://meet.jit.si').replace(/\/+$/, '');
-/** Enlace a la sala con el nombre de quien entra ya puesto. */
-export function urlSala(sala: string, nombre: string): string {
-  const n = encodeURIComponent(JSON.stringify(nombre.slice(0, 60)));
-  return `${BASE()}/${sala}#userInfo.displayName=${n}&config.startWithVideoMuted=true&config.prejoinConfig.enabled=true`;
-}
-const vista = (r: Fila, nombreSala: string) => ({
+const vista = (r: Fila, _quien = '') => ({
   id: txt(r.id), estado: txt(r.estado), atendidoPor: txt(r.atendido_por), creado: txt(r.creado), atendidoAt: txt(r.atendido_at),
-  url: urlSala(txt(r.sala), nombreSala),
 });
 
 /** Cierra solas las que nadie atendió en 30 min y las que siguen "en curso" después de 3 h. */
@@ -111,23 +101,63 @@ export function llamadaDeUsuario(id: string, userId: string) {
   return vista(r, `${txt(r.usuario)} · ${txt(r.tienda)}`);
 }
 export function cancelarLlamada(id: string, userId: string): boolean {
-  return db.prepare("UPDATE soporte_llamadas SET estado = 'cancelada', fin_at = datetime('now') WHERE id = ? AND user_id = ? AND estado IN ('esperando','en_curso')").run(id, userId).changes > 0;
+  const ok = db.prepare("UPDATE soporte_llamadas SET estado = CASE WHEN estado = 'en_curso' THEN 'terminada' ELSE 'cancelada' END, fin_at = datetime('now') WHERE id = ? AND user_id = ? AND estado IN ('esperando','en_curso')").run(id, userId).changes > 0;
+  if (ok) enviarSenal(id, 'tienda', 'colgar', null);
+  return ok;
 }
 
 // ── Panel del equipo ────────────────────────────────────────────────────────
-export function llamadasEquipo(agente: string) {
+export function llamadasEquipo(_agente = '') {
   vencer();
   const filas = db.prepare(`SELECT * FROM soporte_llamadas WHERE estado IN ('esperando','en_curso') OR creado > datetime('now','-7 days')
     ORDER BY CASE estado WHEN 'esperando' THEN 0 WHEN 'en_curso' THEN 1 ELSE 2 END, creado DESC LIMIT 80`).all() as Fila[];
   return filas.map((r) => ({
     id: txt(r.id), storeId: txt(r.store_id), tienda: txt(r.tienda), usuario: txt(r.usuario), motivo: txt(r.motivo), seccion: txt(r.seccion),
     estado: txt(r.estado), atendidoPor: txt(r.atendido_por), creado: txt(r.creado), atendidoAt: txt(r.atendido_at), finAt: txt(r.fin_at),
-    url: urlSala(txt(r.sala), `${agente} · Soporte DealFlow`),
   }));
 }
 export function atenderLlamada(id: string, agente: string): boolean {
   return db.prepare("UPDATE soporte_llamadas SET estado = 'en_curso', atendido_por = ?, atendido_at = COALESCE(atendido_at, datetime('now')) WHERE id = ? AND estado IN ('esperando','en_curso','sin_atender')").run(agente.slice(0, 80), id).changes > 0;
 }
 export function terminarLlamada(id: string): boolean {
-  return db.prepare("UPDATE soporte_llamadas SET estado = 'terminada', fin_at = datetime('now') WHERE id = ? AND estado IN ('esperando','en_curso')").run(id).changes > 0;
+  const ok = db.prepare("UPDATE soporte_llamadas SET estado = 'terminada', fin_at = datetime('now') WHERE id = ? AND estado IN ('esperando','en_curso')").run(id).changes > 0;
+  if (ok) enviarSenal(id, 'soporte', 'colgar', null);
+  return ok;
+}
+
+// ── Señales de la llamada (WebRTC) ──────────────────────────────────────────
+// En memoria: solo sirven mientras dura la llamada (si el servidor se reinicia, se reconecta).
+type Rol = 'tienda' | 'soporte';
+interface Senal { n: number; de: Rol; tipo: string; data: unknown; t: number }
+const senales = new Map<string, { n: number; lista: Senal[]; t: number }>();
+setInterval(() => { const lim = Date.now() - 4 * 3600e3; for (const [k, v] of senales) if (v.t < lim) senales.delete(k); }, 30 * 60e3).unref?.();
+
+/** ¿Quién es este usuario en la llamada? (la tienda que llamó o alguien del equipo). */
+export function rolEnLlamada(id: string, u: { id: string; role: string }): Rol | null {
+  const r = db.prepare("SELECT user_id, estado FROM soporte_llamadas WHERE id = ?").get(id) as { user_id: string; estado: string } | undefined;
+  if (!r) return null;
+  if (['ADMIN', 'SUPERADMIN', 'SOPORTE'].includes(u.role)) return 'soporte';
+  return r.user_id === u.id ? 'tienda' : null;
+}
+export function enviarSenal(id: string, de: Rol, tipo: string, data: unknown): void {
+  const c = senales.get(id) || { n: 0, lista: [], t: Date.now() };
+  c.n++; c.t = Date.now();
+  c.lista.push({ n: c.n, de, tipo, data, t: Date.now() });
+  if (c.lista.length > 400) c.lista.splice(0, c.lista.length - 400);
+  senales.set(id, c);
+}
+export function leerSenales(id: string, para: Rol, desde: number) {
+  const c = senales.get(id);
+  const r = db.prepare('SELECT estado, atendido_por FROM soporte_llamadas WHERE id = ?').get(id) as { estado: string; atendido_por: string } | undefined;
+  return {
+    senales: (c?.lista || []).filter((x) => x.de !== para && x.n > desde).map((x) => ({ n: x.n, tipo: x.tipo, data: x.data })),
+    ultimo: c?.n || 0, estado: r?.estado || 'terminada', atendidoPor: r?.atendido_por || '',
+  };
+}
+/** Servidores para encontrar la ruta de red entre los dos navegadores (STUN público + TURN propio si hay). */
+export function servidoresIce(): { urls: string | string[]; username?: string; credential?: string }[] {
+  const lista: { urls: string | string[]; username?: string; credential?: string }[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  const turn = (process.env.TURN_URLS || '').split(',').map((x) => x.trim()).filter(Boolean);
+  if (turn.length) lista.push({ urls: turn, username: process.env.TURN_USER || '', credential: process.env.TURN_PASS || '' });
+  return lista;
 }
