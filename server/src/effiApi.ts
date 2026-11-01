@@ -1286,6 +1286,17 @@ export async function conveniosDropshipping(apiKey: string, guardados: { id: str
   return [...out].map(([id, v]) => ({ id, nombre: v.nombre, ...(v.manual ? { manual: true } : {}) }));
 }
 
+// Convenios que Effi reporta para la cuenta de la API key (de sus ventas y artículos de proveedor).
+// Se guardan 15 min: se consultan solo cuando Effi rechaza un convenio.
+const cacheConveniosEffi = new Map<string, { t: number; lista: { id: string; nombre: string }[] }>();
+export async function conveniosEnEffi(storeId: string, apiKey: string): Promise<{ id: string; nombre: string }[]> {
+  const h = cacheConveniosEffi.get(storeId);
+  if (h && Date.now() - h.t < 15 * 60_000) return h.lista;
+  const lista = (await conveniosDropshipping(apiKey, [], storeId).catch(() => [])).filter((x) => !x.manual).map(({ id, nombre }) => ({ id, nombre }));
+  cacheConveniosEffi.set(storeId, { t: Date.now(), lista });
+  return lista;
+}
+
 /** Convenios que la tienda ya conoce (agregados a mano, aprendidos de envíos y el de por defecto), sin llamar a Effi. */
 export function conveniosConocidos(storeId: string): { id: string; nombre: string }[] {
   const c = cfgEffi(storeId);
@@ -1963,6 +1974,29 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
       avisos.push('Los productos son de proveedores con convenios distintos: divide el pedido.');
     }
   }
+  // "El convenio Dropshipping no es válido" (#2002): Effi no reconoce ESE código en la cuenta de
+  // la API key. Se consulta qué convenios conoce Effi de verdad: si el mismo código aparece con
+  // otras mayúsculas, o estos artículos ya se vendieron antes con otro convenio, se reintenta
+  // UNA vez con ese. Si no, el error dice cuáles convenios sí conoce la cuenta.
+  let conveniosCuenta: { id: string; nombre: string }[] | null = null;
+  if (!r.ok && body.convenio_dropshipping && /convenio.*no es v[aá]lido|2002/i.test(mensajeError(r))) {
+    const intentado = String(body.convenio_dropshipping);
+    conveniosCuenta = await conveniosEnEffi(storeId, c.apiKey);
+    const arts = Array.isArray(body.articulo) ? (body.articulo as unknown[]).map(String) : [];
+    const deArts = [...new Set(arts.map((a) => (db.prepare('SELECT convenio FROM effi_convenio_articulo WHERE store_id = ? AND articulo = ?').get(storeId, a) as { convenio: string } | undefined)?.convenio || '').filter((x) => x && x !== intentado))];
+    const mismoCodigo = conveniosCuenta.find((k) => k.id !== intentado && k.id.toLowerCase() === intentado.toLowerCase())?.id || '';
+    const deEstosArts = deArts.length === 1 && conveniosCuenta.some((k) => k.id === deArts[0]) ? deArts[0] : '';
+    const alt = mismoCodigo || deEstosArts;
+    if (alt) {
+      trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Effi no reconoce el convenio «${intentado}»: se reintenta con «${alt}»`, detalle: mismoCodigo ? 'Es el mismo código con otras mayúsculas: Effi distingue mayúsculas y minúsculas.' : 'Es el convenio con el que estos artículos ya se vendieron en Effi.' });
+      body.convenio_dropshipping = /^\d+$/.test(alt) ? Number(alt) : alt;
+      r = await effi<Fila>(c.apiKey, 'POST', '/api/remision_v', { body });
+      if (r.ok) {
+        avisos.push(`Se envió con el convenio «${alt}»: Effi no reconocía «${intentado}». Corrige el convenio del producto para que salga así siempre.`);
+        registrarLog(storeId, 'warn', 'despacho', `${numDF}: Effi no reconocía el convenio «${intentado}»; salió con «${alt}». Corrige el convenio en el producto o en Integraciones → Effi.`);
+      } else body.convenio_dropshipping = /^\d+$/.test(intentado) ? Number(intentado) : intentado;
+    }
+  }
   let doc = r.body.data;
   if (!r.ok && r.http === 409) {
     // Effi ya usó esta llave. Si el pedido ya tiene su remisión guardada, es un reintento.
@@ -1997,7 +2031,11 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
     // otro proveedor o inactivo). No es un problema de los artículos.
     const convMalo = /convenio.*no es v[aá]lido|2002/i.test(mensajeError(r)) && !!body.convenio_dropshipping;
     const ambiguo = convMalo && /[Il10O]/.test(String(body.convenio_dropshipping));
-    const e = `Effi no creó la remisión: ${mensajeError(r)}${sinStock ? ' → Si estos productos los despacha un proveedor, asígnales su convenio en Integraciones → Effi → Artículos (o marca uno por defecto con ★) y vuelve a enviar.' : ''}${convMalo ? ` → Effi no reconoce el código de convenio «${String(body.convenio_dropshipping)}». Ábrelo en Effi → Dropshipping → Convenios y cópialo EXACTO${ambiguo ? ' (ojo: este código tiene letras que se confunden, como I mayúscula y l minúscula, o 0 y O)' : ''}. Revisa también que el convenio esté activo y que sea del proveedor de estos artículos. Corrígelo en el producto (Convenio) o en Integraciones → Effi.` : ''}`;
+    const lista = conveniosCuenta || [];
+    const queConoce = !convMalo ? '' : lista.length
+      ? ` En la cuenta de Effi conectada aparecen estos convenios (de ventas anteriores o artículos de proveedor): ${lista.slice(0, 8).map((k) => `${k.nombre && !k.nombre.startsWith('Convenio ') ? `${k.nombre} · ` : ''}${k.id}`).join(' — ')}. Si el de este proveedor es uno de esos, ponlo en el producto.`
+      : ' En la cuenta de Effi conectada no aparece ningún convenio usado antes. Si aceptaste el convenio en otra cuenta o empresa de Effi, la API key de Integraciones → Effi tiene que ser de esa misma cuenta (la API key se saca en Effi con el usuario de la empresa que tiene el convenio).';
+    const e = `Effi no creó la remisión: ${mensajeError(r)}${sinStock ? ' → Si estos productos los despacha un proveedor, asígnales su convenio en Integraciones → Effi → Artículos (o marca uno por defecto con ★) y vuelve a enviar.' : ''}${convMalo ? ` → Effi no reconoce el código de convenio «${String(body.convenio_dropshipping)}» en la cuenta conectada. Revisa en Effi → Dropshipping → Convenios que esté ACEPTADO y activo, y cópialo EXACTO${ambiguo ? ' (ojo: este código tiene letras que se confunden, como I mayúscula y l minúscula, o 0 y O)' : ''}.${queConoce}` : ''}`;
     registrarLog(storeId, 'error', 'despacho', `${numDF}: ${e}`);
     return { error: e };
   }
