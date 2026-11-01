@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BotonSoporte } from './BotonSoporte';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { NotificationsMenu } from './NotificationsMenu';
 import { ProfileMenu } from './ProfileMenu';
@@ -82,11 +83,15 @@ export function Header({ df }: { df: DealFlowState }) {
         </svg>
       </span>
       {df.isVendedor && !df.esAgente ? <StoreSwitcher df={df} /> : <span style={{ fontWeight: 700, fontSize: 15 }}>{df.headerTitle}</span>}
+      {/* Estado del negocio: WhatsApp y soporte, juntos (separados del nombre de la tienda). */}
       {df.isVendedor && (
-        <span style={df.waPill}>
-          <span style={df.waDot} />
-          {df.waLabel}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 14, borderLeft: '1px solid var(--df-border)', minWidth: 0 }}>
+          <span onClick={() => df.go('whatsapp')} title="Ir a WhatsApp" style={{ ...df.waPill, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <span style={df.waDot} />
+            {df.waLabel}
+          </span>
+          <BotonSoporte seccion={df.section} />
+        </div>
       )}
       <div style={{ flex: 1 }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

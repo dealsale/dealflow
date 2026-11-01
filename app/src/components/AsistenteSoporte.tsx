@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import { apiSoporteChat, apiSoporteConfig, apiSoporteLlamar, type ServicioLlamadas } from '../lib/api';
-import { useLlamada, iniciarLlamada, minimizarLlamada } from '../lib/llamadaRTC';
+import { apiSoporteChat, apiSoporteConfig, type ServicioLlamadas } from '../lib/api';
 
 /*
  * Asistente de soporte flotante SKY (web chat): botón abajo a la derecha que abre un chat con
@@ -25,6 +24,7 @@ export function useAsistenteVisible(): boolean {
 }
 
 // ¿Está configurado el agente? (se pregunta una vez por sesión)
+// `llamadas`: estado del soporte por llamada (lo usa el botón «Soporte» del encabezado).
 type CfgSop = { listo: boolean; nombre: string; bienvenida: string; llamadas?: ServicioLlamadas };
 let cfgCache: Promise<CfgSop | null> | null = null;
 export function useSoporteConfig() {
@@ -83,8 +83,7 @@ export function AsistenteSoporte({ usuario, seccion, mobile, oculto }: { usuario
     return () => window.removeEventListener('keydown', esc);
   }, [abierto]);
 
-  const conLlamadas = !!cfg?.llamadas?.activo && !seccion.startsWith('admin');
-  if (!cfg || (!cfg.listo && !conLlamadas) || !mostrar) return null;
+  if (!cfg?.listo || !mostrar) return null;
 
   const enviar = async (t = texto) => {
     const m = t.trim();
@@ -131,8 +130,6 @@ export function AsistenteSoporte({ usuario, seccion, mobile, oculto }: { usuario
             <button type="button" onClick={() => setAbierto(false)} aria-label="Cerrar" style={botonCab}>✕</button>
           </div>
 
-          {conLlamadas && <BloqueLlamada servicio={cfg.llamadas!} seccion={seccion} usuario={usuario} alLlamar={() => setAbierto(false)} />}
-          {cfg.listo ? <>
           <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--df-bg)' }}>
             <Burbuja de="asistente"><Texto t={cfg.bienvenida} /></Burbuja>
             {!msgs.length && (
@@ -154,7 +151,6 @@ export function AsistenteSoporte({ usuario, seccion, mobile, oculto }: { usuario
             <button type="submit" disabled={!texto.trim() || pensando} aria-label="Enviar"
               style={{ width: 42, borderRadius: 12, border: 0, background: 'var(--df-brand)', color: '#fff', fontSize: 17, cursor: 'pointer', opacity: !texto.trim() || pensando ? 0.5 : 1 }}>➤</button>
           </form>
-          </> : <div style={{ flex: 1, background: 'var(--df-bg)' }} />}
         </div>
       )}
     </>
@@ -171,64 +167,6 @@ function Burbuja({ de, children }: { de: Msg['de']; children: ReactNode }) {
       color: yo ? '#fff' : de === 'error' ? 'var(--df-danger-dark, #B91C1C)' : 'var(--df-text-body)',
       border: yo ? 0 : '1px solid var(--df-border)', borderBottomRightRadius: yo ? 4 : 14, borderBottomLeftRadius: yo ? 14 : 4 }}>
       {children}
-    </div>
-  );
-}
-
-/**
- * "Llamar a soporte": la llamada ocurre DENTRO de DealFlow (ventana flotante con audio y
- * pantalla compartida) y avisa al equipo.
- */
-function BloqueLlamada({ servicio, seccion, alLlamar }: { servicio: ServicioLlamadas; seccion: string; usuario: string; alLlamar?: () => void }) {
-  const ll = useLlamada();
-  const [form, setForm] = useState(false);
-  const [motivo, setMotivo] = useState('');
-  const [msg, setMsg] = useState('');
-  const [ocupado, setOcupado] = useState(false);
-
-  const llamar = async () => {
-    setOcupado(true); setMsg('');
-    const r = await apiSoporteLlamar(motivo.trim(), seccion);
-    setOcupado(false);
-    if (!r.data) { setMsg(r.error || 'No se pudo iniciar la llamada.'); return; }
-    setForm(false); setMotivo('');
-    iniciarLlamada(r.data.id, 'tienda', 'Soporte DealFlow');
-    alLlamar?.(); // SKY se cierra: queda la ventana de la llamada
-  };
-
-  const caja: React.CSSProperties = { padding: '10px 14px', borderBottom: '1px solid var(--df-border)', background: 'var(--df-surface)', fontSize: 12.5, lineHeight: 1.45 };
-  const btnLlamar: React.CSSProperties = { width: '100%', border: 0, borderRadius: 10, padding: '9px 12px', background: '#047857', color: '#fff', font: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer' };
-  const btnSec: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 8, padding: '5px 10px', background: 'var(--df-surface)', color: 'var(--df-text-body)', font: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
-
-  if (ll && ll.rol === 'tienda' && ll.fase !== 'terminada') {
-    return (
-      <div style={{ ...caja, background: 'rgba(16,185,129,.1)' }}>
-        <b style={{ fontSize: 13 }}>📞 {ll.fase === 'conectada' ? 'Estás en llamada con soporte' : ll.fase === 'pausada' ? 'Tu llamada quedó en pausa' : 'Llamada en curso'}</b>
-        <div style={{ color: 'var(--df-text-muted)', marginTop: 2 }}>La ventana de la llamada está abajo a la derecha. Puedes seguir usando DealFlow mientras hablas.</div>
-        {ll.minimizada && <button type="button" onClick={() => minimizarLlamada(false)} style={{ ...btnSec, marginTop: 6 }}>Mostrar la llamada</button>}
-      </div>
-    );
-  }
-  if (!servicio.abierto) {
-    return <div style={{ ...caja, color: 'var(--df-text-muted)' }}>📞 Soporte por llamada: {servicio.horario}.{servicio.aviso ? ` ${servicio.aviso}` : ''}</div>;
-  }
-  return (
-    <div style={caja}>
-      {!form ? (
-        <button type="button" onClick={() => setForm(true)} style={btnLlamar}>📞 Llamar a soporte · audio y pantalla</button>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          <b style={{ fontSize: 13 }}>📞 Te conectamos con el equipo de DealFlow</b>
-          <div style={{ color: 'var(--df-text-muted)' }}>La llamada es aquí mismo, sin instalar nada. Te pediremos permiso para usar el micrófono; también podrás mostrarnos tu pantalla.</div>
-          <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={200} placeholder="¿Con qué te ayudamos? (opcional)" onKeyDown={(e) => { if (e.key === 'Enter') void llamar(); }}
-            style={{ font: 'inherit', fontSize: 13, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--df-border)', background: 'var(--df-bg)', color: 'var(--df-text)' }} />
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button type="button" onClick={() => void llamar()} disabled={ocupado} style={{ ...btnLlamar, flex: 1, opacity: ocupado ? 0.6 : 1 }}>{ocupado ? 'Llamando…' : 'Llamar ahora'}</button>
-            <button type="button" onClick={() => setForm(false)} style={btnSec}>Cancelar</button>
-          </div>
-        </div>
-      )}
-      {msg && <div style={{ marginTop: 6, color: 'var(--df-text-body)' }}>{msg}</div>}
     </div>
   );
 }
