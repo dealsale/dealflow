@@ -222,7 +222,7 @@ export async function enviarConfirmacion(storeId: string, orderId: string): Prom
   marcarEnviado(mid, r);
   db.prepare('UPDATE orders SET confirmacion_intentos = confirmacion_intentos + 1 WHERE id = ?').run(orderId);
   if (r.ok) {
-    contarProactivo(storeId, wa);
+    contarProactivo(storeId, wa, 'confirmacion');
     db.prepare("UPDATE orders SET confirmacion = 'esperando', confirmacion_error = '' WHERE id = ?").run(orderId);
   } else {
     registrarLog(storeId, 'warn', 'pedido', `${numDF}: no le llegó al cliente el resumen para confirmar (${(r.error || 'sin plantilla aprobada y fuera de las 24 h').slice(0, 160)}). Se reintenta solo; también puedes reenviarlo desde el pedido.`, leadId);

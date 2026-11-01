@@ -381,9 +381,12 @@ export interface ResumenRecaudos {
   pagados: { orderId: string; numero: number; cliente: string; guia: string; total: number; recaudo: number; descuentos: number; fecha: string }[];
 }
 export const apiRecaudos = (mes: string) => req<ResumenRecaudos>(`/api/effi-api/recaudos?mes=${encodeURIComponent(mes)}`, 'GET');
-export interface ResumenCalidad { cfg: { avisarContacto: boolean }; bajas: number; proactivos7d: number; tope: number }
+export interface ResumenCalidad {
+  cfg: { avisarContacto: boolean; frenoAuto: boolean }; bajas: number; proactivos7d: number; tope: number;
+  porTipo: Record<string, number>; opcionales: number; calidadMeta: string; calidadAt: string | null; freno: boolean;
+}
 export const apiCalidad = () => req<ResumenCalidad>('/api/calidad', 'GET');
-export const apiGuardarCalidad = (c: { avisarContacto: boolean }) => req<{ avisarContacto: boolean }>('/api/calidad', 'POST', c);
+export const apiGuardarCalidad = (c: { avisarContacto?: boolean; frenoAuto?: boolean }) => req<{ avisarContacto: boolean; frenoAuto: boolean }>('/api/calidad', 'POST', c);
 export interface EstadoNovedades { ts: string; error: string; leidas: number; sinPedido: NovedadPedido[] }
 export const apiNovedadOcultar = (id: string) => req<{ ok: boolean }>(`/api/novedades/${encodeURIComponent(id)}/ocultar`, 'POST');
 export const apiNovedadVincular = (id: string, numero: string) => req<{ ok: true; orderId: string }>(`/api/novedades/${encodeURIComponent(id)}/vincular`, 'POST', { numero });

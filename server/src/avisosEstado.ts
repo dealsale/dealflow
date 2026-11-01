@@ -179,7 +179,9 @@ async function enviarAviso(a: Fila): Promise<void> {
   }
 
   const { chatDelPedido, plantillaAprobada, PLANTILLA_GUIA } = await import('./avisoGuia.js');
-  const { puedeEscribirle, contarProactivo } = await import('./calidad.js');
+  const { puedeEscribirle, contarProactivo, frenoActivo, MOTIVO_FRENO } = await import('./calidad.js');
+  // El seguimiento D+1/D+2 es opcional: si Meta bajó la calidad, no sale (los avisos de cambio de estado sí).
+  if (seguimiento && frenoActivo(storeId)) return cerrar(a, 'omitido', `Seguimiento ${MOTIVO_FRENO}.`);
   const { sendWhatsappText, sendWhatsappTemplate } = await import('./wa.js');
   const { idiomaDe, MSG_ESTADO } = await import('./idioma.js');
   const { nombreTransportadora } = await import('./transportadoras.js');
@@ -209,7 +211,7 @@ async function enviarAviso(a: Fila): Promise<void> {
     if (envio.ok) {
       if (!envio.repetido) {
         db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, texto, envio.wamid || null);
-        contarProactivo(storeId, chat.tel);
+        contarProactivo(storeId, chat.tel, seguimiento ? 'seguimiento_pedido' : 'estado');
       }
       if (envio.wamid) db.prepare('UPDATE avisos_estado SET wamid = ? WHERE id = ?').run(envio.wamid, a.id as number);
       return cerrar(a, 'enviado', seguimiento ? `Seguimiento por el chat (pedido en "${estado}").` : 'Mensaje del bot al chat.');
@@ -230,7 +232,7 @@ async function enviarAviso(a: Fila): Promise<void> {
   if (!r.ok) return reintentar(a, r.error || 'Meta rechazó la plantilla.');
   if (!r.repetido) {
     if (chat) db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), chat.id, r.textoRender || `[Plantilla: ${tpl.nombre}]`, r.wamid || null);
-    contarProactivo(storeId, telDestino);
+    contarProactivo(storeId, telDestino, seguimiento ? 'seguimiento_pedido' : 'estado');
   }
   if (r.wamid) db.prepare('UPDATE avisos_estado SET wamid = ? WHERE id = ?').run(r.wamid, a.id as number);
   const porque = chat ? 'el cliente no escribía hace más de 24 h' : `al celular del pedido ${celular}: no tiene chat`;

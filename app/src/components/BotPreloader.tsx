@@ -1,249 +1,179 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import logo from '../assets/logo.png';
 
 /**
- * Preloader de la app: pantalla de arranque con un look tecnológico —
- * un núcleo con el logo, un anillo de energía que gira, ondas concéntricas,
- * partículas flotando y una barra de progreso con brillo. Fondo oscuro fijo
- * (independiente del tema) para que se sienta premium al entrar.
+ * Preloader de la app ("Constelación IA"): cientos de partículas conectadas como una red
+ * neuronal se juntan hasta formar el logo exacto de DealFlow; luego aparece el logo y, al
+ * terminar la secuencia completa, las partículas estallan hacia afuera. Fondo oscuro fijo
+ * (independiente del tema).
  *
- * variante 'completo' → secuencia de "encendido de motores" paso a paso (primer
- * inicio en el dispositivo). variante 'simple' → carga corta para los siguientes.
+ * variante 'completo' → secuencia entera con pasos y porcentaje (tras iniciar sesión).
+ * variante 'simple'   → el logo se forma rápido y queda brillando mientras carga.
  */
 const CSS = `
 @keyframes dfplIn { from { opacity:0 } to { opacity:1 } }
-@keyframes dfplSpin { to { transform: rotate(360deg) } }
-@keyframes dfplSpinRev { to { transform: rotate(-360deg) } }
-@keyframes dfplGlow { 0%,100% { opacity:.45; transform: scale(.92) } 50% { opacity:.9; transform: scale(1.08) } }
-@keyframes dfplWave { 0% { transform: scale(.7); opacity:.55 } 100% { transform: scale(1.9); opacity:0 } }
-@keyframes dfplFloat { 0%,100% { transform: translateY(0); opacity:.35 } 50% { transform: translateY(-14px); opacity:.9 } }
-@keyframes dfplBar { 0% { left:-42% } 100% { left:104% } }
-@keyframes dfplDots { 0%,80%,100% { transform: translateY(0); opacity:.3 } 40% { transform: translateY(-6px); opacity:1 } }
-@keyframes dfplGrid { from { background-position: 0 0, 0 0 } to { background-position: 46px 0, 0 46px } }
-@keyframes dfplTilt { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
-@keyframes dfplSheen { 0% { background-position: -160% 0 } 100% { background-position: 260% 0 } }
-@keyframes dfplStepIn { from { opacity:0; transform: translateY(6px) } to { opacity:1; transform: translateY(0) } }
-@keyframes dfplMiniSpin { to { transform: rotate(360deg) } }
-@keyframes dfplScan { 0% { transform: translateY(-120%) } 100% { transform: translateY(2400%) } }
 @keyframes dfplOut { to { opacity:0; transform: scale(1.03); filter: blur(4px) } }
-@keyframes dfplPop { 0% { transform: scale(.6); opacity:0 } 60% { transform: scale(1.15); opacity:1 } 100% { transform: scale(1) } }
-@keyframes dfplRay { 0% { transform: rotate(0deg) } 100% { transform: rotate(360deg) } }
-@keyframes dfplLog { from { opacity:0; transform: translateX(-6px) } to { opacity:1; transform: none } }
-.dfpl { animation: dfplIn .3s ease both }
+@keyframes dfplBrillo { to { background-position: -300% 0 } }
+@keyframes dfplBar { 0% { left:-42% } 100% { left:104% } }
+@keyframes dfplPuntos { 0% { content:'' } 25% { content:'.' } 50% { content:'..' } 75% { content:'...' } }
+@keyframes dfplFlash { 0% { opacity:0 } 18% { opacity:1 } 100% { opacity:0 } }
+.dfpl-paso.cargando::after { content:''; display:inline-block; width:1.2em; text-align:left; animation: dfplPuntos 1.2s steps(1) infinite }
 `;
 
-// Pasos de "encendido" para la secuencia completa del primer inicio.
-const PASOS = [
-  'Encendiendo los motores de DealFlow',
-  'Conectando con WhatsApp Cloud API',
-  'Activando el asistente de IA',
-  'Sincronizando pedidos y catálogo',
-  'Preparando tu panel',
-];
+const PASOS = ['Encendiendo los motores', 'Conectando con WhatsApp', 'Despertando al asistente de IA', 'Sincronizando pedidos y catálogo', 'Preparando tu panel'];
 
-// Líneas de "consola" que acompañan cada fase (sensación de sistema real arrancando).
-const LOGS = [
-  'motor.ia ............ OK',
-  'whatsapp.cloud ...... conectado',
-  'modelo.ventas ....... cargado',
-  'pedidos.sync ........ al día',
-  'panel.ui ............ listo',
-];
+const clamp = (v: number, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+
+interface Part { tx: number; ty: number; c: string; x: number; y: number; vx: number; vy: number; d: number; ex: number; ey: number; X: number; Y: number; tw: number }
 
 export function BotPreloader({ variante = 'simple', duracion = 4400 }: { variante?: 'completo' | 'simple'; duracion?: number }) {
   const completo = variante === 'completo';
-  // Progreso 0→1 atado al TIEMPO (no a la carga real): la secuencia completa
-  // siempre se ve entera. El último ~18% es el cierre "Todo listo" + salida.
+  const raiz = useRef<HTMLDivElement>(null);
+  const lienzo = useRef<HTMLCanvasElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [prog, setProg] = useState(0);
+  const [flash, setFlash] = useState(false);
+
   useEffect(() => {
-    if (!completo) return;
-    let raf = 0;
-    const t0 = performance.now();
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - t0) / duracion);
-      setProg(p);
-      if (p < 1) raf = requestAnimationFrame(tick);
+    const el = raiz.current, cv = lienzo.current, logoEl = imgRef.current;
+    if (!el || !cv || !logoEl) return;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    const quieto = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    let W = 0, H = 0, dpr = 1, cx = 0, cy = 0, P: Part[] = [], red: Part[] = [], listo = false, raf = 0, vivo = true, ultimoPct = -1;
+    const img = new Image(); img.src = logo;
+
+    const construir = () => {
+      if (!listo || !W) return;
+      const S = Math.min(W * 0.62, H * 0.42, 320), sw = Math.round(S), sh = Math.round((S * 470) / 583);
+      cx = W / 2; cy = H * 0.38;
+      Object.assign(logoEl.style, { width: `${sw}px`, left: `${cx - sw / 2}px`, top: `${cy - sh / 2}px` });
+      const oc = document.createElement('canvas'); oc.width = sw; oc.height = sh;
+      const o = oc.getContext('2d');
+      if (!o) return;
+      o.drawImage(img, 0, 0, sw, sh);
+      const d = o.getImageData(0, 0, sw, sh).data, gap = Math.max(3, Math.round(S / 64));
+      const nuevos: Part[] = [];
+      for (let y = 0; y < sh; y += gap) for (let x = 0; x < sw; x += gap) {
+        const i = (y * sw + x) * 4;
+        if (d[i + 3] <= 150) continue;
+        const tx = cx - sw / 2 + x, ty = cy - sh / 2 + y, dx = tx - cx, dy = ty - cy, m = Math.hypot(dx, dy) || 1, sp = rnd(0.5, 1.5);
+        nuevos.push({ tx, ty, c: `rgb(${d[i]},${d[i + 1]},${d[i + 2]})`, x: rnd(0, W), y: rnd(0, H), vx: rnd(-0.035, 0.035), vy: rnd(-0.035, 0.035), d: Math.random(), ex: (dx / m) * sp + rnd(-0.2, 0.2), ey: (dy / m) * sp + rnd(-0.2, 0.2), X: 0, Y: 0, tw: rnd(0, 6.28) });
+      }
+      P = nuevos;
+      const paso = Math.max(1, Math.floor(P.length / 130));
+      red = P.filter((_, i) => i % paso === 0);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const medir = () => {
+      W = el.clientWidth; H = el.clientHeight; dpr = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = W * dpr; cv.height = H * dpr;
+      construir();
+    };
+    const ro = new ResizeObserver(medir); ro.observe(el);
+    img.decode().then(() => { listo = true; medir(); }).catch(() => { listo = false; logoEl.style.opacity = '1'; });
+
+    const t0 = performance.now();
+    let last = t0, explotando = false;
+    const frame = (now: number) => {
+      if (!vivo) return;
+      const dt = Math.min(50, now - last); last = now;
+      const t = now - t0;
+      // Fases (0..1): conv = cuánto se juntaron las partículas; show = aparición del logo;
+      // f = estallido final (solo en la secuencia completa).
+      let conv: number, show: number, f = -1;
+      if (completo) {
+        const p = clamp(t / duracion);
+        conv = clamp((p - 0.1) / 0.45);
+        show = clamp((p - 0.58) / 0.14);
+        const fin = 1 - 650 / duracion;
+        if (p >= fin) f = clamp((p - fin) / (1 - fin));
+        const pct = Math.min(100, Math.round(clamp(p / 0.86) * 100));
+        if (pct !== ultimoPct) { ultimoPct = pct; setProg(pct); }
+        if (f >= 0 && !explotando) { explotando = true; setFlash(true); }
+      } else {
+        conv = clamp(t / 950);
+        show = clamp((t - 900) / 450);
+      }
+      if (quieto) { conv = 1; show = 1; f = -1; }
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.5);
+      g.addColorStop(0, `rgba(37,99,235,${0.12 + conv * 0.16})`); g.addColorStop(1, 'rgba(37,99,235,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+      if (!quieto) {
+        ctx.globalCompositeOperation = 'lighter';
+        for (const q of P) {
+          q.x += q.vx * dt; q.y += q.vy * dt;
+          if (q.x < 0) q.x += W; else if (q.x > W) q.x -= W;
+          if (q.y < 0) q.y += H; else if (q.y > H) q.y -= H;
+          const k = ease(clamp((conv - q.d * 0.35) / 0.65));
+          let X = q.x + (q.tx - q.x) * k, Y = q.y + (q.ty - q.y) * k, al: number;
+          if (f >= 0) { const e = f * f * 700; X = q.tx + q.ex * e; Y = q.ty + q.ey * e; al = Math.max(0, 1 - f * 1.1); }
+          else al = (k > 0.97 ? 0.95 - show * 0.55 : 0.7) * (0.65 + 0.35 * Math.sin(now * 0.004 + q.tw));
+          q.X = X; q.Y = Y;
+          ctx.globalAlpha = al;
+          ctx.fillStyle = k > 0.5 ? q.c : q.d < 0.5 ? '#38BDF8' : '#A78BFA';
+          const s = k > 0.97 ? 2.2 : 1.8;
+          ctx.fillRect(X - s / 2, Y - s / 2, s, s);
+        }
+        // Red neuronal: líneas entre partículas cercanas mientras flotan sueltas.
+        if (f < 0 && conv < 1) {
+          ctx.lineWidth = 0.7; ctx.strokeStyle = '#60A5FA';
+          for (let i = 0; i < red.length; i++) for (let j = i + 1; j < red.length; j++) {
+            const a = red[i], b = red[j], dx = a.X - b.X, dy = a.Y - b.Y, d2 = dx * dx + dy * dy;
+            if (d2 < 13000) { ctx.globalAlpha = (1 - d2 / 13000) * (1 - conv) * 0.55; ctx.beginPath(); ctx.moveTo(a.X, a.Y); ctx.lineTo(b.X, b.Y); ctx.stroke(); }
+          }
+        }
+        ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+      }
+      logoEl.style.opacity = String(f >= 0 ? Math.max(0, 1 - f * 2.4) : show);
+      logoEl.style.transform = `scale(${f >= 0 ? 1 + f * 0.25 : 0.96 + show * 0.04})`;
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => { vivo = false; cancelAnimationFrame(raf); ro.disconnect(); };
   }, [completo, duracion]);
-  const FASES = 0.78; // fracción del tiempo dedicada a las fases
-  const paso = completo ? Math.min(PASOS.length, Math.floor((prog / FASES) * PASOS.length)) : 0;
-  const listo = completo && prog >= FASES;
-  const pct = Math.min(100, Math.round((prog / FASES) * 100));
-  const R = 76, CIRC = 2 * Math.PI * R;
+
+  const final = completo && prog >= 100;
+  const paso = final ? '¡Todo listo!' : completo ? PASOS[Math.min(PASOS.length - 1, Math.floor((prog / 100) * PASOS.length))] : 'Preparando tu panel';
 
   return (
     <div
-      className="dfpl"
+      ref={raiz}
+      role="status"
+      aria-label="Cargando DealFlow"
       style={{
-        animation: completo ? `dfplIn .3s ease both, dfplOut .38s ease ${Math.max(0, duracion - 380)}ms forwards` : undefined,
-        position: 'fixed', inset: 0, zIndex: 999,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        background: 'radial-gradient(circle at 50% 38%, #0d2a44 0%, #0A1B2E 42%, #060f1c 100%)',
-        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", overflow: 'hidden',
+        animation: completo ? `dfplIn .3s ease both, dfplOut .38s ease ${Math.max(0, duracion - 380)}ms forwards` : 'dfplIn .3s ease both',
+        position: 'fixed', inset: 0, zIndex: 999, overflow: 'hidden',
+        background: 'radial-gradient(ellipse at 50% 38%, #0B1430 0%, #060A17 55%, #04070F 100%)',
+        fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", color: '#E6ECF5',
       }}
     >
       <style>{CSS}</style>
+      <canvas ref={lienzo} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+      <img ref={imgRef} src={logo} alt="" style={{ position: 'absolute', opacity: 0, filter: 'drop-shadow(0 0 30px rgba(59,130,246,.6))', pointerEvents: 'none' }} />
 
-      {/* rejilla técnica de fondo, muy sutil, en movimiento lento */}
-      <div style={{
-        position: 'absolute', inset: 0, opacity: 0.5, pointerEvents: 'none',
-        backgroundImage: 'linear-gradient(rgba(16,185,129,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,.06) 1px, transparent 1px)',
-        backgroundSize: '46px 46px', animation: 'dfplGrid 6s linear infinite',
-        maskImage: 'radial-gradient(circle at 50% 40%, #000 0%, transparent 72%)',
-        WebkitMaskImage: 'radial-gradient(circle at 50% 40%, #000 0%, transparent 72%)',
-      }} />
-
-      {/* partículas flotando */}
-      {[
-        { top: '22%', left: '20%', s: 4, d: '0s', c: '#34D399' },
-        { top: '30%', right: '16%', s: 3, d: '.7s', c: '#38BDF8' },
-        { top: '66%', left: '18%', s: 3, d: '1.3s', c: '#A78BFA' },
-        { top: '72%', right: '22%', s: 5, d: '.4s', c: '#34D399' },
-        { top: '48%', left: '10%', s: 3, d: '1s', c: '#38BDF8' },
-        { top: '52%', right: '11%', s: 4, d: '.2s', c: '#34D399' },
-      ].map((p, i) => (
-        <span key={i} style={{
-          position: 'absolute', top: p.top, left: p.left, right: p.right,
-          width: p.s, height: p.s, borderRadius: '50%', background: p.c,
-          boxShadow: `0 0 8px ${p.c}`, animation: `dfplFloat 3.4s ease-in-out ${p.d} infinite`,
-        }} />
-      ))}
-
-      {/* núcleo: ondas + anillos giratorios + logo */}
-      <div style={{ position: 'relative', width: 168, height: 168, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'dfplTilt 3.2s ease-in-out infinite' }}>
-        {completo && (
-          <svg width={176} height={176} viewBox="0 0 176 176" style={{ position: 'absolute', inset: -4, transform: 'rotate(-90deg)', filter: 'drop-shadow(0 0 8px rgba(52,211,153,.55))' }}>
-            <defs>
-              <linearGradient id="dfplGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stopColor="#34D399" /><stop offset=".6" stopColor="#38BDF8" /><stop offset="1" stopColor="#A78BFA" />
-              </linearGradient>
-            </defs>
-            <circle cx={88} cy={88} r={R} fill="none" stroke="rgba(255,255,255,.07)" strokeWidth={3} />
-            <circle cx={88} cy={88} r={R} fill="none" stroke="url(#dfplGrad)" strokeWidth={3} strokeLinecap="round"
-              strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - pct / 100)} />
-          </svg>
-        )}
-        {/* ondas concéntricas */}
-        {[0, 1, 2].map((i) => (
-          <span key={i} style={{
-            position: 'absolute', width: 132, height: 132, borderRadius: 30,
-            border: '1.5px solid rgba(52,211,153,.5)', animation: `dfplWave 2.4s ease-out ${i * 0.8}s infinite`,
-          }} />
-        ))}
-
-        {/* glow suave detrás */}
-        <span style={{
-          position: 'absolute', width: 150, height: 150, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(16,185,129,.5) 0%, transparent 70%)',
-          filter: 'blur(6px)', animation: 'dfplGlow 2.2s ease-in-out infinite',
-        }} />
-
-        {/* anillo de energía exterior (conic, girando) */}
-        <span style={{
-          position: 'absolute', width: 140, height: 140, borderRadius: 32,
-          background: 'conic-gradient(from 0deg, transparent 0deg, #10B981 70deg, #34D399 130deg, transparent 210deg, transparent 360deg)',
-          animation: 'dfplSpin 2.4s linear infinite',
-          filter: 'drop-shadow(0 0 12px rgba(16,185,129,.45))',
-          WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
-          WebkitMaskComposite: 'xor', maskComposite: 'exclude', padding: 3,
-        }} />
-        {/* anillo interior fino, girando al revés (punteado tech) */}
-        <span style={{
-          position: 'absolute', width: 118, height: 118, borderRadius: 26,
-          border: '1px dashed rgba(56,189,248,.45)', animation: 'dfplSpinRev 8s linear infinite',
-        }} />
-
-        {/* tile de vidrio con el logo */}
-        <div style={{
-          position: 'relative', width: 104, height: 104, borderRadius: 24, overflow: 'hidden',
-          background: 'linear-gradient(145deg, rgba(255,255,255,.09), rgba(255,255,255,.02))',
-          border: '1px solid rgba(255,255,255,.12)',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,.15), 0 12px 34px rgba(0,0,0,.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-        }}>
-          {listo ? (
-            <span style={{ fontSize: 46, fontWeight: 900, color: '#34D399', textShadow: '0 0 18px rgba(52,211,153,.8)', animation: 'dfplPop .45s cubic-bezier(.2,.8,.2,1) both' }}>✓</span>
-          ) : (
-            <img src={logo} alt="" style={{ width: 58, height: 52, objectFit: 'contain', filter: 'drop-shadow(0 3px 10px rgba(16,185,129,.4))' }} />
-          )}
-          {/* línea de escaneo que recorre el tile (sensación de "booteando") */}
-          {completo && !listo && <span style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 14, background: 'linear-gradient(180deg, rgba(52,211,153,.55), transparent)', animation: 'dfplScan 1.6s linear infinite' }} />}
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: '9%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '0 20px calc(env(safe-area-inset-bottom, 0px))' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.16em', textTransform: 'uppercase', color: '#7DD3FC' }}>Inteligencia artificial de ventas</div>
+        <div style={{ fontWeight: 800, fontSize: 38, lineHeight: 1, letterSpacing: '-.035em', color: '#fff' }}>
+          Deal<span style={{ background: 'linear-gradient(90deg, #22D3EE, #3B82F6, #8B5CF6, #22D3EE)', backgroundSize: '300% 100%', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'dfplBrillo 4s linear infinite' }}>Flow</span>
         </div>
-      </div>
-
-      {/* wordmark con brillo que recorre */}
-      <div style={{ marginTop: 26, fontWeight: 800, fontSize: 26, letterSpacing: '-0.02em' }}>
-        <span style={{
-          background: 'linear-gradient(90deg, #E7F6EF 0%, #6EE7B7 30%, #E7F6EF 60%)',
-          backgroundSize: '220% 100%', WebkitBackgroundClip: 'text', backgroundClip: 'text',
-          WebkitTextFillColor: 'transparent', animation: 'dfplSheen 3s linear infinite',
-        }}>DealFlow</span>
-      </div>
-
-      {completo ? (
-        /* Secuencia de arranque: pasos que se van encendiendo (primer inicio). */
-        <div style={{ width: 300, maxWidth: '82vw', marginTop: 22, display: 'flex', flexDirection: 'column', gap: 9 }}>
-          {PASOS.map((txt, i) => {
-            const estado = i < paso ? 'ok' : i === paso ? 'activo' : 'pend';
-            return (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
-                color: estado === 'pend' ? '#51677A' : estado === 'activo' ? '#CFE9DD' : '#8CA6B6',
-                opacity: estado === 'pend' ? 0.5 : 1,
-                animation: i <= paso ? 'dfplStepIn .3s ease both' : undefined,
-                transition: 'color .3s, opacity .3s',
-              }}>
-                <span style={{ width: 16, height: 16, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {estado === 'ok' ? (
-                    <span style={{ color: '#34D399', fontSize: 14, fontWeight: 800 }}>✓</span>
-                  ) : estado === 'activo' ? (
-                    <span style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(52,211,153,.35)', borderTopColor: '#34D399', animation: 'dfplMiniSpin .7s linear infinite' }} />
-                  ) : (
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#3A4D5E' }} />
-                  )}
-                </span>
-                <span>{txt}{estado === 'activo' ? '…' : ''}</span>
-              </div>
-            );
-          })}
-          {/* consola: una línea por fase completada */}
-          <div style={{ marginTop: 8, padding: '9px 11px', borderRadius: 10, background: 'rgba(0,0,0,.28)', border: '1px solid rgba(52,211,153,.14)', fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 10.5, lineHeight: 1.6, color: '#5E8C7A', minHeight: 30 }}>
-            {LOGS.slice(0, paso).map((l, i) => (
-              <div key={i} style={{ animation: 'dfplLog .25s ease both', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                <span style={{ color: '#34D399' }}>›</span> {l}
-              </div>
-            ))}
-            {listo && <div style={{ animation: 'dfplLog .25s ease both', color: '#6EE7B7', fontWeight: 600 }}>› sistema en línea · bienvenido</div>}
-          </div>
-        </div>
-      ) : (
-        /* Carga sencilla (inicios siguientes). */
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#8CA6B6', fontSize: 13, marginTop: 10, letterSpacing: '.01em' }}>
-          <span>Preparando tu panel</span>
-          {[0, 1, 2].map((i) => (
-            <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: '#34D399', display: 'inline-block', animation: `dfplDots 1.2s ease-in-out ${i * 0.18}s infinite` }} />
-          ))}
-        </div>
-      )}
-
-      {/* barra de progreso con brillo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20 }}>
-        <div style={{ position: 'relative', width: 230, height: 3, borderRadius: 999, background: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
+        <div className={`dfpl-paso${final ? '' : ' cargando'}`} style={{ fontSize: 14.5, fontWeight: 500, color: '#B8C6DA', minHeight: '1.3em', textAlign: 'center' }}>{paso}</div>
+        <div style={{ position: 'relative', width: 'min(320px, 78vw)', height: 5, borderRadius: 99, background: 'rgba(148,163,184,.14)', overflow: completo ? 'visible' : 'hidden' }}>
           {completo ? (
-            <span style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pct}%`, borderRadius: 999, background: 'linear-gradient(90deg, #10B981, #38BDF8, #A78BFA)', boxShadow: '0 0 10px rgba(56,189,248,.7)' }} />
+            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${prog}%`, borderRadius: 99, background: 'linear-gradient(90deg, #22D3EE, #3B82F6 45%, #8B5CF6)', boxShadow: '0 0 14px rgba(59,130,246,.6)' }}>
+              <span style={{ position: 'absolute', right: -6, top: '50%', width: 13, height: 13, marginTop: -6.5, borderRadius: '50%', background: '#E0F7FF', boxShadow: '0 0 10px 3px rgba(34,211,238,.9), 0 0 28px 8px rgba(59,130,246,.55)' }} />
+            </div>
           ) : (
-            <span style={{
-              position: 'absolute', top: 0, width: '42%', height: '100%', borderRadius: 999,
-              background: 'linear-gradient(90deg, transparent, #10B981, #38BDF8, transparent)',
-              animation: 'dfplBar 1.25s ease-in-out infinite',
-            }} />
+            <span style={{ position: 'absolute', top: 0, width: '42%', height: '100%', borderRadius: 99, background: 'linear-gradient(90deg, transparent, #22D3EE, #3B82F6, #8B5CF6, transparent)', animation: 'dfplBar 1.25s ease-in-out infinite' }} />
           )}
         </div>
-        {completo && <span style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12, color: listo ? '#34D399' : '#8CA6B6', minWidth: 38, textAlign: 'right' }}>{pct}%</span>}
       </div>
+      {flash && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(circle at 50% 38%, rgba(224,247,255,.9), rgba(59,130,246,.3) 40%, transparent 75%)', animation: 'dfplFlash .9s ease-out forwards' }} />}
     </div>
   );
 }
