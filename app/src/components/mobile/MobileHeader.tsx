@@ -2,6 +2,7 @@ import type { DealFlowState } from '../../hooks/useDealFlowState';
 import logo from '../../assets/logo.png';
 import { NotificationsMenu } from '../NotificationsMenu';
 import { ProfileMenu } from '../ProfileMenu';
+import { BotonSoporte } from '../BotonSoporte';
 
 export function MobileHeader({ df }: { df: DealFlowState }) {
   return (
@@ -33,6 +34,7 @@ export function MobileHeader({ df }: { df: DealFlowState }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{df.headerTitle}</div>
       </div>
+      {df.isVendedor && <BotonSoporte seccion={df.section} compacto />}
       <NotificationsMenu df={df} />
       <ProfileMenu df={df} onDarkBar />
     </header>
