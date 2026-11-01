@@ -38,8 +38,8 @@ Claves: error dropi, dropi no reconoce, ciudad dropi, departamento dropi, no ace
 Sección: integraciones, shopify
 Claves: conectar shopify, app shopify, instalar en shopify, codigo shopify, vincular shopify, client id, secret, shpat, admin api token, myshopify
 En **Integraciones → Shopify**:
-- **Instalar en Shopify** (un clic): escribe tu dominio **mitienda.myshopify.com**, acepta en Shopify y queda conectada.
-- ¿Instalaste DealFlow desde Shopify? Pega el **código de 6 caracteres** que te muestra la app → **Vincular**. "Código no válido o vencido": abre de nuevo la app DealFlow en Shopify para ver uno nuevo.
+- **Instalar desde Shopify**: en tu administrador de Shopify entra a Apps, busca **DealFlow** en la Shopify App Store e instálala. Al abrirla, toca **Vincular con mi cuenta de DealFlow** o pega aquí el **código de 6 caracteres** que te muestra → **Vincular**.
+- El plan de las tiendas conectadas con la app se elige y se paga con la facturación de Shopify (botón **Ver planes y precios** dentro de la app). "Código no válido o vencido": abre de nuevo la app DealFlow en Shopify para ver uno nuevo.
 - **Conexión manual (avanzado)** mientras Shopify aprueba la app: en dev.shopify.com (Dev Dashboard) crea una app con los permisos read_products, read_orders, write_orders, read_merchant_managed_fulfillment_orders y write_merchant_managed_fulfillment_orders, instálala en tu tienda y pega el **Client ID y el Secret** (pestaña Credenciales) o el **Admin API access token** (empieza por shpat_).
 Errores: "Falta el dominio de la tienda (mitienda.myshopify.com)" (usa el dominio .myshopify.com, no el dominio propio); "Pon el Admin API token, o el Client ID + Client Secret"; "No pudimos conectar con Shopify para obtener el token" (credenciales erradas o app sin instalar); "Shopify no dejó leer los pedidos" (faltan permisos read_orders); "La sesión de Shopify venció. Recarga la app".
 Si se desinstala la app en Shopify, la conexión queda desactivada (sale en el registro).

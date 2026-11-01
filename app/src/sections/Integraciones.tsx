@@ -64,9 +64,7 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [guardando, setGuardando] = useState(false);
-  const [shopApp, setShopApp] = useState('');
   const [codigo, setCodigo] = useState('');
-  const [instalando, setInstalando] = useState(false);
   const [manual, setManual] = useState(false);
   useEffect(() => { void df.cargarShopify?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const conectada = df.shopifyConectado;
@@ -100,23 +98,24 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
             </>
           ) : (
             <>
-              <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>
-                <b style={{ color: 'var(--df-text-strong)' }}>Instala DealFlow en tu Shopify con un clic</b> (sin crear apps ni copiar tokens). Escribe tu dominio, acepta en Shopify y queda conectada.
+              <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.6 }}>
+                <b style={{ color: 'var(--df-text-strong)' }}>Instala DealFlow desde Shopify</b> (sin crear apps ni copiar tokens):
+                <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                  <li>En tu administrador de Shopify entra a <b>Apps</b>, busca <b>DealFlow</b> en la Shopify App Store e instálala.</li>
+                  <li>Al abrirla, la app te muestra un botón para vincular tu cuenta (o un código de 6 caracteres para pegar aquí abajo).</li>
+                </ol>
               </div>
+              <div style={{ fontSize: 12, color: 'var(--df-text-faint)' }}>¿Ya la instalaste? Pega el código que te muestra la app:</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <input value={shopApp} onChange={(e) => setShopApp(e.target.value)} placeholder="mitienda.myshopify.com" style={{ ...inp, marginTop: 0, flex: 1, minWidth: 200 }} />
-                <button onClick={() => { if (shopApp.trim()) { setInstalando(true); df.instalarShopifyApp(shopApp.trim(), () => setInstalando(false)); } }} disabled={instalando || !shopApp.trim()} style={{ ...btnPrimary, background: '#5E8E3E', opacity: instalando || !shopApp.trim() ? 0.6 : 1 }}>Instalar en Shopify</button>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--df-text-faint)' }}>¿Instalaste DealFlow desde Shopify? Pega el código que te muestra la app:</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <input value={codigo} onChange={(e) => setCodigo(e.target.value.toUpperCase())} placeholder="Código de 6 caracteres" maxLength={6} style={{ ...inp, marginTop: 0, width: 200, letterSpacing: '.12em', fontWeight: 700 }} />
+                <input value={codigo} onChange={(e) => setCodigo(e.target.value.toUpperCase())} placeholder="Código de 6 caracteres" maxLength={6} style={{ ...inp, marginTop: 0, width: 240, letterSpacing: '.08em', fontWeight: 700 }} />
                 <button onClick={() => { if (codigo.trim()) df.vincularShopifyCodigo(codigo.trim(), (ok) => ok && setCodigo('')); }} disabled={codigo.trim().length !== 6} style={{ ...btnPrimary, opacity: codigo.trim().length !== 6 ? 0.6 : 1 }}>Vincular</button>
               </div>
             </>
           )}
-          <button onClick={() => setManual((v) => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, color: 'var(--df-text-muted)', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
+          {/* La tienda conectada con la app (como la del revisor de Shopify) nunca ve campos de dominio. */}
+          {!(conectada && df.shopifyVia === 'app') && <button onClick={() => setManual((v) => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, color: 'var(--df-text-muted)', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
             {manual ? 'Ocultar conexión manual' : 'Conexión manual (avanzado: token o Client ID + Secret)'}
-          </button>
+          </button>}
         </div>
       )}
       {(manual || !df.shopifyAppDisponible) && (<>
@@ -146,7 +145,8 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
         </div>
         </>)}
       {conectada && df.shopifyAppDisponible && !manual && <div style={{ marginTop: 4 }}><button onClick={df.desconectarShopify} style={btnGhostRed}>Desconectar</button></div>}
-      <ExtensionShopify />
+      {/* Con la app instalada los pedidos llegan solos: la extensión no hace falta. */}
+      {!(conectada && df.shopifyVia === 'app') && <ExtensionShopify />}
     </IntegracionFila>
   );
 }
