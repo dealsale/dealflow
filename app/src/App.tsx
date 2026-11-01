@@ -17,7 +17,7 @@ import { EquipoDealFlow } from './sections/admin/EquipoDealFlow';
 import { AsistenteSoporte } from './components/AsistenteSoporte';
 import { Proveedores } from './sections/admin/Proveedores';
 import { Dropdown } from './components/Dropdown';
-import { apiSoporteTiendas, apiSoporteCambiar } from './lib/api';
+import { apiSoporteTiendas, apiSoporteCambiar, apiRevisarPlanShopify } from './lib/api';
 import { Sidebar } from './components/Sidebar';
 import { FloatingNav } from './components/FloatingNav';
 import { MobileChat } from './components/mobile/MobileChat';
@@ -101,7 +101,8 @@ function SuscripcionBanner({ df }: { df: DealFlowState }) {
   if (!s || df.esAgente) return null;
   // El vencido total ya está tapado por el muro de pago; aquí solo avisamos cuando está por vencer.
   const porVencer = s.estado === 'activa' && s.diasRestantes !== null && s.diasRestantes >= 0 && s.diasRestantes <= 5;
-  if (!porVencer) return null;
+  // Con la app de Shopify, Shopify renueva el plan solo cada mes: no hay nada que pagar aquí.
+  if (!porVencer || s.shopify) return null;
   return (
     <div
       style={{
@@ -193,6 +194,9 @@ function Paywall({ df }: { df: DealFlowState }) {
     );
   }
 
+  // Tienda conectada con la app de Shopify: el plan se elige y se paga en Shopify.
+  if (s?.shopify) return <PlanShopify df={df} shopify={s.shopify} vencida={vencida} />;
+
   if (vencida) {
     const rentaBase = s?.mensual || 0;
     const renta = conDesc(rentaBase);
@@ -268,6 +272,36 @@ function Paywall({ df }: { df: DealFlowState }) {
   );
 }
 
+/** Muro de pago para tiendas de la app de Shopify: el plan va con la facturación de Shopify. */
+function PlanShopify({ df, shopify, vencida }: { df: DealFlowState; shopify: { shop: string; planesUrl: string }; vencida: boolean }) {
+  const [msg, setMsg] = useState('');
+  const [revisando, setRevisando] = useState(false);
+  const revisar = async (silencioso = false) => {
+    if (!silencioso) { setRevisando(true); setMsg(''); }
+    const r = await apiRevisarPlanShopify();
+    if (!silencioso) setRevisando(false);
+    if (r.data?.suscripcion && !r.data.suscripcion.bloqueado) { location.reload(); return; }
+    if (!silencioso) setMsg(r.data?.error || r.error || 'Todavía no vemos un plan activo en Shopify. Elige uno y apruébalo; luego vuelve a revisar.');
+  };
+  // Mientras la página está abierta, revisa sola cada 10 s (por si eligió el plan en otra pestaña).
+  useEffect(() => { const t = setInterval(() => { if (document.visibilityState === 'visible') void revisar(true); }, 10000); return () => clearInterval(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <PaywallShell df={df} titulo={vencida ? 'Tu plan de DealFlow no está activo' : 'Activa DealFlow con tu plan de Shopify'}
+      sub={`Tu tienda ${shopify.shop} usa la app DealFlow de Shopify, así que el plan se elige y se paga con la facturación de Shopify: aparece en tu factura de Shopify y puedes cambiarlo o cancelarlo cuando quieras.`}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', textAlign: 'center' }}>
+        <a href={shopify.planesUrl} target="_blank" rel="noopener noreferrer" className="df-pw-btn" style={{ ...pwBtn, maxWidth: 360, textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
+          Elegir mi plan en Shopify →
+        </a>
+        <button onClick={() => void revisar()} disabled={revisando} style={{ background: 'transparent', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', color: 'var(--df-text-body)' }}>
+          {revisando ? 'Revisando…' : 'Ya elegí mi plan: revisar'}
+        </button>
+        {msg && <div style={{ color: 'var(--df-text-muted)', fontSize: 13, maxWidth: 420, lineHeight: 1.5 }}>{msg}</div>}
+        <div style={{ color: 'var(--df-text-faint)', fontSize: 12, maxWidth: 440, lineHeight: 1.5 }}>Se abre la página de planes de DealFlow dentro de tu administrador de Shopify. Cuando apruebes el plan, esta pantalla se desbloquea sola.</div>
+      </div>
+    </PaywallShell>
+  );
+}
+
 const pwBtn: React.CSSProperties = {
   width: '100%',
   background: 'linear-gradient(135deg,var(--df-brand-light),var(--df-brand))',
@@ -318,7 +352,7 @@ function PaywallShell({ df, titulo, sub, children }: { df: DealFlowState; titulo
         </div>
       </div>
       <div style={{ color: 'rgba(226,232,240,.5)', fontSize: 12, marginTop: 16, textAlign: 'center', maxWidth: 440, lineHeight: 1.5 }}>
-        Pago seguro con Wompi (Bancolombia). Tu cuenta se activa automáticamente al confirmarse el pago.
+        {df.suscripcion?.shopify ? 'Pago con la facturación de Shopify. Tu cuenta se activa sola cuando apruebas el plan.' : 'Pago seguro con Wompi (Bancolombia). Tu cuenta se activa automáticamente al confirmarse el pago.'}
       </div>
     </div>
   );

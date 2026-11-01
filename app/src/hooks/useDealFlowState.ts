@@ -2947,6 +2947,8 @@ export function useDealFlowState() {
     void apiShopifyAppVincular(codigo).then(async (r) => {
       if (r.error || !r.data) { toast(r.error || 'No se pudo vincular.', 'error'); cb?.(false); return; }
       await cargarShopify();
+      // Con la app de Shopify el plan se paga en Shopify: el muro de pago lo muestra al instante.
+      void apiSuscripcion().then(({ data }) => { if (data?.suscripcion) setSuscripcion(data.suscripcion); });
       toast(`Shopify conectado ✓ (${r.data.shop})`, 'ok'); cb?.(true);
     });
   }
@@ -3021,7 +3023,14 @@ export function useDealFlowState() {
   useEffect(() => {
     if (typeof location === 'undefined') return;
     const params = new URLSearchParams(location.search);
-    if (params.get('pago') !== 'ok') return;
+    // Vuelta de un cargo de Shopify (extras): el servidor ya lo verificó con Shopify.
+    const ps = params.get('pago');
+    if (ps === 'shopify-ok' || ps === 'shopify-no') {
+      history.replaceState(null, '', location.pathname);
+      setTimeout(() => toast(ps === 'shopify-ok' ? '✓ Pago aprobado en Shopify. Ya quedó activo.' : 'No se completó el pago en Shopify. Puedes intentarlo de nuevo.', ps === 'shopify-ok' ? 'ok' : 'error'), 800);
+      return;
+    }
+    if (ps !== 'ok') return;
     const txId = params.get('id') || ''; // Wompi agrega el id de la transacción a la URL de retorno
     setSuscMsg('¡Gracias! Estamos confirmando tu pago… tu plan se activa en unos segundos.');
     history.replaceState(null, '', location.pathname);

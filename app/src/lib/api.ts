@@ -201,6 +201,8 @@ export interface Suscripcion {
   diasRestantes: number | null;
   bloqueado: boolean; // true = la tienda no puede usar la plataforma todavía
   primeraVez: boolean; // true = nunca tuvo pago aprobado (tienda nueva, no "vencida" real)
+  /** Tienda conectada con la app de Shopify: el plan se elige y se paga en Shopify. */
+  shopify?: { shop: string; planesUrl: string };
 }
 export interface PlanPublico {
   nombre: string;
@@ -229,6 +231,7 @@ export interface NuevoCupon {
   nota: string;
 }
 export const apiSuscripcion = () => req<{ suscripcion: Suscripcion | null }>('/api/suscripcion', 'GET');
+export const apiRevisarPlanShopify = () => req<{ activo: boolean; plan?: string; error?: string; suscripcion: Suscripcion | null }>('/api/suscripcion/shopify/revisar', 'POST');
 export const apiPlanes = () => req<{ planes: PlanPublico[] }>('/api/planes', 'GET');
 export const apiCheckoutSuscripcion = (plan?: string, cupon?: string) =>
   req<{ url?: string; gratis?: boolean }>('/api/suscripcion/checkout', 'POST', { ...(plan ? { plan } : {}), ...(cupon ? { cupon } : {}) });

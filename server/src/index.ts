@@ -38,6 +38,7 @@ import('./correo.js').then((m) => m.iniciarCorreos()).catch((e) => console.error
 import('./avisosEstado.js').then((m) => m.iniciarAvisosEstado()).catch((e) => console.error('[avisos]', e));
 import('./remarketing.js').then((m) => m.iniciarRemarketing()).catch((e) => console.error('[remarketing]', e));
 import('./calidad.js').then((m) => m.iniciarVigilanciaCalidad()).catch((e) => console.error('[calidad]', e));
+import('./shopifyApp.js').then((m) => m.iniciarCobroShopify()).catch((e) => console.error('[shopify-cobro]', e));
 import('./metaInsights.js').then((m) => m.iniciarInsights()).catch((e) => console.error('[ads]', e));
 import('./metaCapi.js').then((m) => m.iniciarCapi()).catch((e) => console.error('[capi]', e));
 setTimeout(() => { void import('./media.js').then((m) => m.reconvertirGuias()).catch(() => {}); }, 30_000);
@@ -186,7 +187,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'horario-11010447',
+    build: 'shopify-cobro-11010516',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

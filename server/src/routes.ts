@@ -366,7 +366,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     orders,
     leads,
     versiones,
-    suscripcion: estadoSuscripcion(sid),
+    suscripcion: conShopify(sid, estadoSuscripcion(sid)),
     assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []), nombre: assistant?.nombre || '', seguimientoActivo: !!assistant?.seguimiento_on, estilo: pj(assistant?.estilo || '', {}) },
     whatsapp: {
       conectado: !!wa?.conectado,
@@ -2436,6 +2436,7 @@ api.post('/creditos/recargar', requireAuth, requireStore, requireOwner, async (r
   const { crearRecargaCheckout } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const base = `${proto}://${req.get('host')}`;
+  if (await cobroShopify(req, res, 'Recarga de créditos', (p) => crearRecargaCheckout(req.user!.storeId!, req.user!.email, base, String(req.body?.paquete || ''), p))) return;
   if (await pagoOffline(req, res, 'una recarga de créditos')) return;
   const r = crearRecargaCheckout(req.user!.storeId!, req.user!.email, base, String(req.body?.paquete || ''));
   if (r.error) return res.status(400).json({ error: r.error });
@@ -3606,7 +3607,26 @@ api.get('/planes', requireAuth, async (_req, res) => {
 
 api.get('/suscripcion', requireAuth, requireStore, async (req, res) => {
   const { estadoSuscripcion } = await import('./suscripcion.js');
-  res.json({ suscripcion: estadoSuscripcion(req.user!.storeId!) });
+  const sid = req.user!.storeId!;
+  const shop = sa.shopDeTienda(sid);
+  // Con la app de Shopify: si falta el plan o está por vencer, se consulta a Shopify antes de responder.
+  if (shop) {
+    const e = estadoSuscripcion(sid);
+    if (!e || e.bloqueado || (e.diasRestantes !== null && e.diasRestantes <= 2)) await sa.sincronizarCobro(sid).catch(() => undefined);
+  }
+  res.json({ suscripcion: conShopify(sid, estadoSuscripcion(sid)) });
+});
+api.post('/suscripcion/shopify/revisar', requireAuth, requireStore, async (req, res) => {
+  const { estadoSuscripcion } = await import('./suscripcion.js');
+  const r = await sa.sincronizarCobro(req.user!.storeId!).catch((e) => ({ activo: false, error: String(e) }));
+  res.json({ ...r, suscripcion: conShopify(req.user!.storeId!, estadoSuscripcion(req.user!.storeId!)) });
+});
+// Shopify vuelve aquí después de que la tienda aprueba (o rechaza) un cargo único.
+api.get('/shopify/cobro/vuelta', async (req, res) => {
+  const ref = String(req.query.ref || '');
+  const r = await sa.verificarCobroUnico(ref).catch(() => ({ ok: false, tipo: '' }));
+  const destino: Record<string, string> = { creditos: '/marketing', biblioteca: '/biblioteca', biblioteca_landing: '/tienda-en-linea', tienda_online: '/tienda-en-linea' };
+  res.redirect(`${destino[r.tipo || ''] || '/'}?pago=${r.ok ? 'shopify-ok' : 'shopify-no'}`);
 });
 
 // Pagos en línea apagados: responde "pago offline" con el WhatsApp de DealFlow (true = ya respondió).
@@ -3615,6 +3635,22 @@ async function pagoOffline(req: ExRequest, res: ExResponse, concepto: string): P
   if (!P.cfgPagos().offline) return false;
   const st = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(req.user!.storeId) as { nombre: string } | undefined;
   res.status(402).json(P.respuestaOffline(concepto, st?.nombre || ''));
+  return true;
+}
+/** Agrega a la suscripción los datos de Shopify cuando la tienda usa la app (el plan se paga allá). */
+function conShopify<T extends object>(sid: string, s: T | null): (T & { shopify?: { shop: string; planesUrl: string } }) | null {
+  if (!s) return s;
+  const shop = sa.shopDeTienda(sid);
+  return shop ? { ...s, shopify: { shop, planesUrl: sa.urlPlanes(shop) } } : s;
+}
+// Tiendas que usan la app de Shopify: los extras se cobran con la facturación de Shopify
+// (requisito 1.2 de la App Store), nunca por Wompi ni "offline". true = ya respondió.
+async function cobroShopify(req: ExRequest, res: ExResponse, concepto: string, crear: (pasarela: 'shopify') => { error?: string; referencia?: string; monto?: number }): Promise<boolean> {
+  if (!sa.shopDeTienda(req.user!.storeId!)) return false;
+  const r = crear('shopify');
+  if (r.error || !r.referencia) { res.status(400).json({ error: r.error || 'No se pudo preparar el cobro.' }); return true; }
+  const c = await sa.cobroUnico(req.user!.storeId!, r.referencia, concepto, r.monto || 0);
+  if ('error' in c) res.status(400).json({ error: c.error }); else res.json({ url: c.url, shopify: true });
   return true;
 }
 // ── Contabilidad de DealFlow (equipo administrativo) ────────────────
@@ -3697,6 +3733,9 @@ api.post('/suscripcion/checkout', requireAuth, requireStore, requireOwner, async
   const { crearCheckout } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const base = `${proto}://${req.get('host')}`;
+  // Con la app de Shopify el plan se elige y se paga en Shopify (Shopify App Pricing).
+  const shopPlan = sa.shopDeTienda(req.user!.storeId!);
+  if (shopPlan) return res.status(409).json({ error: 'Tu plan se paga con la facturación de Shopify.', shopify: { planesUrl: sa.urlPlanes(shopPlan) } });
   const r = crearCheckout(req.user!.storeId!, req.user!.email, base, req.body?.plan, req.body?.cupon);
   if (r.error) return res.status(400).json({ error: r.error });
   // Con cupón al 100 % se activa sin Wompi; si hay que cobrar y los pagos están apagados, es offline.
@@ -4267,6 +4306,7 @@ api.post('/biblioteca/:id/checkout', requireAuth, requireStore, requireOwner, as
   const { crearCheckoutBiblioteca } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const base = `${proto}://${req.get('host')}`;
+  if (await cobroShopify(req, res, 'Producto de la Biblioteca', (p) => crearCheckoutBiblioteca(req.user!.storeId!, req.user!.email, base, req.params.id, p))) return;
   const r = crearCheckoutBiblioteca(req.user!.storeId!, req.user!.email, base, req.params.id);
   if (r.error) return res.status(400).json({ error: r.error });
   if (await pagoOffline(req, res, 'un producto de la Biblioteca')) return;
@@ -4353,9 +4393,10 @@ api.post('/biblioteca-landings/:id/importar', requireAuth, requireStore, require
   res.json({ ok: true, landingId: r.landingId });
 });
 api.post('/biblioteca-landings/:id/checkout', requireAuth, requireStore, requireOwner, async (req, res) => {
-  if (await pagoOffline(req, res, 'una landing de la Biblioteca')) return;
   const { crearCheckoutBibliotecaLanding } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+  if (await cobroShopify(req, res, 'Landing de la Biblioteca', (p) => crearCheckoutBibliotecaLanding(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, req.params.id, p))) return;
+  if (await pagoOffline(req, res, 'una landing de la Biblioteca')) return;
   const r = crearCheckoutBibliotecaLanding(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, req.params.id);
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ url: r.url });
@@ -4436,6 +4477,7 @@ api.post('/landings/membresia/pagar', requireAuth, requireStore, async (req, res
   const m = L.membresiaTienda(req.user!.storeId!);
   // Gratis (precio $0): no hay nada que cobrar, ya está activa.
   if (m.precio <= 0) return res.json({ gratis: true });
+  if (await cobroShopify(req, res, 'Tienda en línea (30 días)', (p) => crearCheckoutTiendaOnline(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, m.precio, p))) return;
   if (await pagoOffline(req, res, 'la membresía de Tienda en línea')) return;
   const r = crearCheckoutTiendaOnline(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, m.precio);
   if (r.error) return res.status(400).json({ error: r.error });
