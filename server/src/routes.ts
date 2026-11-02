@@ -1746,11 +1746,13 @@ api.post('/soporte/llamadas/:id/cancelar', requireAuth, async (req, res) => {
 });
 api.get('/admin/soporte/llamadas', requireAuth, requireEquipo, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
-  res.json({ llamadas: sl.llamadasEquipo(), cfg: sl.cfgLlamadas(), servicio: sl.estadoServicio() });
+  // Las tiendas ocultas no dejan rastro en el historial de soporte del equipo (solo el superadmin las ve).
+  res.json({ llamadas: sl.llamadasEquipo(req.user!.role === 'SUPERADMIN'), cfg: sl.cfgLlamadas(), servicio: sl.estadoServicio() });
 });
 api.post('/admin/soporte/llamadas/:id/:accion', requireAuth, requireEquipo, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
   const a = req.params.accion;
+  if (req.user!.role !== 'SUPERADMIN' && sl.llamadaDeTiendaOculta(req.params.id)) return res.status(404).json({ error: 'Llamada no encontrada.' });
   const ok = a === 'atender' ? sl.atenderLlamada(req.params.id, req.user!.nombre || req.user!.email) : a === 'terminar' ? sl.terminarLlamada(req.params.id) : false;
   if (!ok) return res.status(400).json({ error: 'No se pudo (la llamada ya terminó o no existe).' });
   res.json({ ok: true });
