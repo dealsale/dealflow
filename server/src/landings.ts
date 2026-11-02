@@ -782,6 +782,15 @@ export async function pedidoLanding(landingId: string, b: Fila, ip: string): Pro
   } else grupos.set('', bundle.cantidad);
   const precioUnidad = Math.round(bundle.precio / bundle.cantidad);
 
+  // Doble envío del formulario (doble toque, recarga, conexión lenta): mismo celular y misma
+  // landing en los últimos 30 minutos → es el mismo pedido, no se crea otro.
+  const ya = db.prepare(`SELECT id, numero FROM orders WHERE store_id = ? AND landing_id = ? AND estado != 'Cancelado'
+    AND REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-','') LIKE ? AND total = ? AND created_at > datetime('now','-30 minutes') ORDER BY created_at DESC LIMIT 1`)
+    .get(storeId, landingId, `%${tel}`, bundle.precio) as { id: string; numero: number } | undefined;
+  if (ya) {
+    trazar(storeId, ya.id, { etapa: 'pedido', nivel: 'info', titulo: 'Se evitó un pedido duplicado', detalle: 'El cliente envió el formulario de la landing otra vez con el mismo celular y la misma oferta.' });
+    return { ok: true, numero: ya.numero, eventId: ya.id };
+  }
   const numero = siguienteNumeroPedido(storeId);
   const oid = uid();
   const nota = [`Landing: ${d.nombre}`, bundle.titulo ? `Oferta: ${bundle.titulo}` : '', 'Contra entrega', txt(b.correo) ? `Correo: ${corto(b.correo, 80)}` : ''].filter(Boolean).join(' · ');

@@ -529,9 +529,14 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   // resuelve dudas y pide la confirmación, pero NO crea otro pedido (el "sí" lo confirma el sistema).
   const pendConf = db.prepare(`SELECT numero, total FROM orders WHERE store_id = ? AND lead_id = ? AND confirmacion = 'esperando' AND estado IN ('Nuevo','Confirmado') AND created_at > datetime('now','-7 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as { numero: number; total: number } | undefined;
   const pendTxt = pendConf ? `\n\nPEDIDO PENDIENTE DE CONFIRMAR: este cliente ya tiene el pedido DF-${pendConf.numero} (total $${Number(pendConf.total).toLocaleString('es-CO')}) esperando que diga que SÍ lo enviemos. Responde sus dudas con amabilidad y, al final, pregúntale si se lo enviamos. NO pongas el marcador ##PEDIDO para este pedido (ya existe): cuando el cliente diga que sí, el sistema lo confirma solo.` : '';
+  // Pedido reciente ya confirmado o despachado: la IA lo sabe para no volver a registrarlo.
+  const yaConf = pendConf ? undefined : db.prepare(`SELECT numero, estado, COALESCE(guia,'') guia FROM orders WHERE store_id = ? AND lead_id = ? AND estado != 'Cancelado'
+      AND (confirmacion = 'si' OR estado NOT IN ('Nuevo') OR COALESCE(guia,'') != '' OR COALESCE(effi_remision,'') != '' OR COALESCE(dropi_order_id,'') != '')
+      AND created_at > datetime('now','-3 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as { numero: number; estado: string; guia: string } | undefined;
+  const confTxt = yaConf ? `\n\nPEDIDO YA REGISTRADO: este cliente ya tiene el pedido DF-${yaConf.numero} (${yaConf.estado}${yaConf.guia ? `, guía ${yaConf.guia}` : ''}). NO vuelvas a poner el marcador ##PEDIDO para ese pedido ni le pidas que lo confirme otra vez. Si pregunta por él, respóndele sobre ese pedido. Pon ##PEDIDO solo si el cliente pide claramente un pedido NUEVO y adicional (otro producto u otra entrega).` : '';
   const systemFinal = mediaSinTexto
-    ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}${pendTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
-    : system + memoriaCliente + novedadTxt + envioTxt + pendTxt;
+    ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}${pendTxt}${confTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
+    : system + memoriaCliente + novedadTxt + envioTxt + pendTxt + confTxt;
 
   const destino = lead.wa_id || lead.tel;
   const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
@@ -1057,7 +1062,7 @@ function celularVerificado(leadId: string, valor: string, telLead: string): stri
   if (d === deLead && dijoMismo()) return d;
   return '';
 }
-async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<ResultadoPedido> {
+export async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<ResultadoPedido> {
   // El nombre que el cliente ESCRIBIÓ manda sobre el de perfil (apodos, correos, emojis…).
   let cliente = resolverNombreCliente(lead.id, campoPedido(inner, 'cliente'), lead.nombre);
   // BLINDAJE DEL NOMBRE: nunca un número, correo ni apodo. Si no hay uno válido, se toma
@@ -1239,6 +1244,28 @@ async function crearPedido(storeId: string, lead: { id: string; nombre: string; 
     marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
     return 'actualizado';
   }
+  // Pedido reciente de este cliente que YA se confirmó o despachó (tiene guía/remisión, o va en
+  // camino): si el asistente repite el marcador con los MISMOS productos, es el mismo pedido
+  // (p. ej. el cliente dijo «gracias, ¿cuándo llega?» y la IA volvió a escribir el resumen).
+  // No se crea otro ni se le vuelve a pedir confirmación.
+  {
+    const firmaItems = (its: { qty: number; nombre: string }[]) => its.map((i) => `${i.qty}x${norm(i.nombre)}`).sort().join('|');
+    const recientes = db.prepare(
+      `SELECT id, numero, estado FROM orders WHERE store_id = ? AND estado NOT IN ('Cancelado','Entregado') AND COALESCE(origen,'') NOT IN ('shopify','manual')
+         AND created_at > datetime('now','-3 days')
+         AND (lead_id = ? ${tels.map(() => "OR REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-','') LIKE ?").join(' ')})
+       ORDER BY created_at DESC LIMIT 5`,
+    ).all(storeId, lead.id, ...tels.map((t) => `%${t}`)) as { id: string; numero: number; estado: string }[];
+    const nueva = firmaItems(items);
+    const igual = recientes.find((r) => firmaItems(db.prepare('SELECT qty, nombre FROM order_items WHERE order_id = ?').all(r.id) as { qty: number; nombre: string }[]) === nueva);
+    if (igual) {
+      console.log(`[ia] pedido DF-${igual.numero} ya existe (${igual.estado}): no se crea un duplicado`);
+      trazar(storeId, igual.id, { etapa: 'pedido', nivel: 'info', titulo: 'Se evitó un pedido duplicado', detalle: `El asistente volvió a escribir este mismo pedido (ya está ${igual.estado.toLowerCase()}). No se creó otro ni se pidió confirmación de nuevo.`, datos: { marcador: inner } });
+      return 'igual';
+    }
+    if (recientes.length) registrarLog(storeId, 'warn', 'pedido', `Revisa si es un pedido adicional: ${cliente} ya tenía DF-${recientes[0].numero} (${recientes[0].estado}) y el asistente registró otro con productos distintos.`, lead.id);
+  }
+
   const numero = siguienteNumeroPedido(storeId);
   const oid = uid();
   // Atribución exacta: copiamos el anuncio del que vino este chat al pedido.
