@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiSoporteLlamar } from '../lib/api';
-import { useSoporteConfig } from './AsistenteSoporte';
+import { refrescarSoporteConfig, useSoporteConfig } from './AsistenteSoporte';
 import { useLlamada, iniciarLlamada, minimizarLlamada } from '../lib/llamadaRTC';
 
 /**
@@ -55,7 +55,7 @@ export function BotonSoporte({ seccion, compacto }: { seccion: string; compacto?
   }
   return (
     <div ref={caja} style={{ position: 'relative' }}>
-      <button type="button" onClick={() => setAbierto((v) => !v)} title={serv.abierto ? `Habla con el equipo de DealFlow (audio y pantalla compartida).${serv.hasta ? ` ${serv.hasta}` : ''}` : `Soporte por llamada: ${serv.siguiente || serv.horario}`}
+      <button type="button" onClick={() => { if (!abierto) refrescarSoporteConfig(); setAbierto((v) => !v); }} title={serv.abierto ? `Habla con el equipo de DealFlow (audio y pantalla compartida).${serv.hasta ? ` ${serv.hasta}` : ''}` : `Soporte por llamada: ${serv.siguiente || serv.horario}`}
         style={{ ...pill, background: 'var(--df-surface)', borderColor: 'var(--df-border)', color: serv.abierto ? 'var(--df-text-body)' : 'var(--df-text-muted)' }}>
         <span style={{ fontSize: 13 }}>🎧</span>{compacto ? 'Soporte' : 'Llamar a soporte'}
         {serv.abierto && <span title="Disponible ahora" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid, #10B981)' }} />}

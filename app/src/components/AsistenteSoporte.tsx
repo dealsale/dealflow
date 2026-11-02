@@ -26,16 +26,37 @@ export function useAsistenteVisible(): boolean {
 // ¿Está configurado el agente? (se pregunta una vez por sesión)
 // `llamadas`: estado del soporte por llamada (lo usa el botón «Soporte» del encabezado).
 type CfgSop = { listo: boolean; nombre: string; bienvenida: string; llamadas?: ServicioLlamadas };
-let cfgCache: Promise<CfgSop | null> | null = null;
+// Config del soporte (asistente SKY y horario de llamadas), compartida por todos los componentes.
+// Se vuelve a pedir cada minuto y al volver a la pestaña: el "disponible / no disponible" del
+// horario cambia con la hora, y antes se quedaba con lo que había al abrir la página.
+let cfgActual: CfgSop | null = null;
+let cfgPedida = 0;
+let cfgEnCurso: Promise<void> | null = null;
+const cfgOyentes = new Set<() => void>();
+function refrescarCfg(forzar = false): void {
+  if (cfgEnCurso || (!forzar && Date.now() - cfgPedida < 55_000)) return;
+  cfgPedida = Date.now();
+  cfgEnCurso = apiSoporteConfig().then((r) => { if (r.data) { cfgActual = r.data; cfgOyentes.forEach((f) => f()); } }).finally(() => { cfgEnCurso = null; });
+}
+let cfgReloj: ReturnType<typeof setInterval> | null = null;
+const alVolver = () => { if (document.visibilityState === 'visible') refrescarCfg(); };
+function suscribirCfg(f: () => void) {
+  cfgOyentes.add(f);
+  if (!cfgReloj) {
+    cfgReloj = setInterval(() => refrescarCfg(), 60_000);
+    document.addEventListener('visibilitychange', alVolver);
+    window.addEventListener('focus', alVolver);
+  }
+  refrescarCfg();
+  return () => {
+    cfgOyentes.delete(f);
+    if (!cfgOyentes.size && cfgReloj) { clearInterval(cfgReloj); cfgReloj = null; document.removeEventListener('visibilitychange', alVolver); window.removeEventListener('focus', alVolver); }
+  };
+}
+/** Pide de nuevo el estado ya mismo (p. ej. al abrir el panel de llamar a soporte). */
+export function refrescarSoporteConfig(): void { refrescarCfg(true); }
 export function useSoporteConfig() {
-  const [cfg, setCfg] = useState<CfgSop | null>(null);
-  useEffect(() => {
-    cfgCache ||= apiSoporteConfig().then((r) => r.data || null);
-    let vivo = true;
-    void cfgCache.then((c) => { if (vivo) setCfg(c); });
-    return () => { vivo = false; };
-  }, []);
-  return cfg;
+  return useSyncExternalStore(suscribirCfg, () => cfgActual);
 }
 
 interface Msg { de: 'yo' | 'asistente' | 'error'; texto: string; t: number }
