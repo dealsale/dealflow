@@ -13,6 +13,7 @@ import { EditarPedidoModal } from './components/EditarPedidoModal';
 import { Trazabilidad } from './sections/admin/Trazabilidad';
 import { SoporteEnVivo, AvisoLlamadas } from './sections/admin/SoporteEnVivo';
 import { VentanaLlamada } from './components/VentanaLlamada';
+import { LlamadaEntrante } from './components/LlamadaEntrante';
 import { EquipoDealFlow } from './sections/admin/EquipoDealFlow';
 import { AsistenteSoporte } from './components/AsistenteSoporte';
 import { Proveedores } from './sections/admin/Proveedores';
@@ -366,7 +367,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
       <AvisoLlamadas irA={() => df.goAdmin('soporte')} />
       {df.adminSection === 'superadmin' && df.isSuperadmin && <Superadmin df={df} />}
       {df.adminSection === 'plantillas' && df.isSuperadmin && <PlantillasWA df={df} />}
-      {df.adminSection === 'soporte' && <SoporteEnVivo puedeConfigurar={!df.isSoporte} />}
+      {df.adminSection === 'soporte' && <SoporteEnVivo puedeConfigurar={!df.isSoporte} puedeLlamar={df.isSuperadmin} />}
       {df.adminSection === 'equipo' && df.isSuperadmin && <EquipoDealFlow />}
       {df.adminSection === 'trazabilidad' && <Trazabilidad df={df} />}
       {df.isSoporte ? null : <>
@@ -454,6 +455,7 @@ function DesktopApp({ df }: { df: DealFlowState }) {
       {df.floatingNav && <FloatingNav df={df} />}
       <AsistenteSoporte usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} oculto={df.hasSelectedOrder} />
       <VentanaLlamada />
+      {df.isVendedor && <LlamadaEntrante />}
       <OrderDetailPanel df={df} />
       <OrderToast df={df} />
       <ManualOrderModal df={df} open={df.crearPedidoAbierto} onClose={df.cerrarCrearPedido} prefill={df.crearPedidoPrefill} />
@@ -503,6 +505,7 @@ function MobileApp({ df }: { df: DealFlowState }) {
       {df.floatingNav && <FloatingNav df={df} />}
       <AsistenteSoporte mobile usuario={df.sessionUser?.email || 'anon'} seccion={df.isAdmin ? `admin/${df.adminSection}` : df.section} oculto={df.hasSelectedOrder || df.mobileChatOpen} />
       <VentanaLlamada mobile />
+      {df.isVendedor && <LlamadaEntrante mobile />}
       <MobileDrawer df={df} />
       <MobileChat df={df} />
       <MobileOrderSheet df={df} />

@@ -90,7 +90,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
             {df.isAdmin && (
               <>
                 <div style={{ color: 'var(--df-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 6px' }}>
-                  {df.isSuperadmin ? 'Superadmin' : df.isSoporte ? 'Soporte' : 'Administración'}
+                  {df.isSoporte ? 'Soporte' : 'Administración'}
                 </div>
                 {fila(false, () => { window.open('/drive', '_blank', 'noopener'); }, <span style={{ fontSize: 16 }}>☁️</span>, 'Drive del equipo', undefined, '/drive')}
                 {df.isSuperadmin ? (

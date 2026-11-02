@@ -1740,6 +1740,32 @@ api.post('/soporte/llamadas/:id/senal', requireAuth, async (req, res) => {
   sl.enviarSenal(req.params.id, rol, tipo, req.body?.data ?? null);
   res.json({ ok: true });
 });
+// Llamada SALIENTE (el superadmin llama a la tienda): la app de la tienda pregunta cada pocos segundos.
+api.get('/soporte/entrante', requireAuth, requireStore, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  res.json({ llamada: sl.llamadaEntrante(req.user!.storeId!) });
+});
+api.post('/soporte/llamadas/:id/contestar', requireAuth, requireStore, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  if (!sl.contestarLlamada(req.params.id, { id: req.user!.id, nombre: req.user!.nombre, email: req.user!.email, storeId: req.user!.storeId! })) return res.status(400).json({ error: 'La llamada ya no está disponible.' });
+  res.json({ ok: true, quien: sl.NOMBRE_ADMIN });
+});
+api.post('/soporte/llamadas/:id/rechazar', requireAuth, requireStore, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  res.json({ ok: sl.rechazarLlamada(req.params.id, req.user!.storeId!) });
+});
+// Solo el superadmin llama a las tiendas.
+api.get('/admin/soporte/tiendas', requireAuth, requireSuperAdmin, async (_req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const filas = db.prepare(`SELECT id, nombre, correo, COALESCE(oculta,0) oculta FROM stores WHERE id != ? ORDER BY nombre COLLATE NOCASE`).all(MASTER_STORE_ID) as { id: string; nombre: string; correo: string; oculta: number }[];
+  res.json({ tiendas: filas.map((t) => ({ id: t.id, nombre: t.nombre, correo: t.correo, oculta: !!t.oculta, conectada: sl.tiendaConectada(t.id) })) });
+});
+api.post('/admin/soporte/llamar', requireAuth, requireSuperAdmin, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const r = sl.llamarTienda(String(req.body?.storeId || ''), String(req.body?.motivo || '').trim());
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
 api.post('/soporte/llamadas/:id/cancelar', requireAuth, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
   res.json({ ok: sl.cancelarLlamada(req.params.id, req.user!.id) });
@@ -1752,8 +1778,10 @@ api.get('/admin/soporte/llamadas', requireAuth, requireEquipo, async (req, res) 
 api.post('/admin/soporte/llamadas/:id/:accion', requireAuth, requireEquipo, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
   const a = req.params.accion;
-  if (req.user!.role !== 'SUPERADMIN' && sl.llamadaDeTiendaOculta(req.params.id)) return res.status(404).json({ error: 'Llamada no encontrada.' });
-  const ok = a === 'atender' ? sl.atenderLlamada(req.params.id, req.user!.nombre || req.user!.email) : a === 'terminar' ? sl.terminarLlamada(req.params.id) : false;
+  if (req.user!.role !== 'SUPERADMIN' && (sl.llamadaDeTiendaOculta(req.params.id) || sl.esSaliente(req.params.id))) return res.status(404).json({ error: 'Llamada no encontrada.' });
+  // Ante la tienda, el superadmin se presenta como «Administrador de DealFlow».
+  const agente = req.user!.role === 'SUPERADMIN' ? sl.NOMBRE_ADMIN : req.user!.nombre || req.user!.email;
+  const ok = a === 'atender' ? sl.atenderLlamada(req.params.id, agente) : a === 'terminar' ? sl.terminarLlamada(req.params.id) : false;
   if (!ok) return res.status(400).json({ error: 'No se pudo (la llamada ya terminó o no existe).' });
   res.json({ ok: true });
 });

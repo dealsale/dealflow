@@ -19,6 +19,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS soporte_llamadas (
   atendido_por TEXT NOT NULL DEFAULT '', creado TEXT NOT NULL DEFAULT (datetime('now')), atendido_at TEXT, fin_at TEXT
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_soporte_llamadas_estado ON soporte_llamadas(estado, creado)');
+// Llamadas SALIENTES: el superadmin llama a una tienda (la tienda ve «El administrador de DealFlow te está llamando»).
+try { db.exec("ALTER TABLE soporte_llamadas ADD COLUMN direccion TEXT NOT NULL DEFAULT 'entrante'"); } catch { /* ya existe */ }
+db.exec('CREATE INDEX IF NOT EXISTS idx_soporte_llamadas_saliente ON soporte_llamadas(store_id, direccion, estado)');
+/** Cómo se presenta el equipo ante la tienda (nunca «superadmin»). */
+export const NOMBRE_ADMIN = 'Administrador de DealFlow';
+const TIMBRE_SEG = 60; // cuánto timbra una llamada saliente antes de darla por no contestada
+// Las llamadas viejas que atendió el superadmin quedaron con su nombre de cuenta: se muestran como «Administrador de DealFlow».
+try { db.prepare("UPDATE soporte_llamadas SET atendido_por = ? WHERE LOWER(REPLACE(REPLACE(atendido_por,' ',''),'-','')) LIKE '%superadmin%'").run(NOMBRE_ADMIN); } catch { /* nada */ }
 
 // ── Configuración (horario de atención) ─────────────────────────────────────
 // Horario semanal por franjas (hora Colombia): cada día tiene sus propias franjas, y los
@@ -189,7 +197,52 @@ function vencer() {
   ultVencer = Date.now();
   db.prepare("UPDATE soporte_llamadas SET estado = 'sin_atender', fin_at = datetime('now') WHERE estado = 'esperando' AND creado < datetime('now','-30 minutes')").run();
   db.prepare("UPDATE soporte_llamadas SET estado = 'terminada', fin_at = datetime('now') WHERE estado = 'en_curso' AND atendido_at < datetime('now','-3 hours')").run();
+  vencerTimbres();
 }
+function vencerTimbres(id?: string) {
+  db.prepare(`UPDATE soporte_llamadas SET estado = 'sin_respuesta', fin_at = datetime('now') WHERE estado = 'llamando' AND creado < datetime('now','-${TIMBRE_SEG + 5} seconds')${id ? ' AND id = ?' : ''}`).run(...(id ? [id] : []));
+}
+
+// ── Llamadas salientes (solo el superadmin) ─────────────────────────────────
+// Última vez que cada tienda preguntó por llamadas entrantes: sirve para saber si tiene DealFlow abierto.
+const ultimaConsulta = new Map<string, number>();
+export const tiendaConectada = (storeId: string) => Date.now() - (ultimaConsulta.get(storeId) || 0) < 20_000;
+
+/** El superadmin llama a una tienda. Si ya la está llamando, devuelve esa misma llamada. */
+export function llamarTienda(storeId: string, motivo: string): { id: string; tienda: string } | { error: string } {
+  vencerTimbres();
+  const st = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined;
+  if (!st) return { error: 'Esa tienda no existe.' };
+  const ya = db.prepare("SELECT id FROM soporte_llamadas WHERE store_id = ? AND direccion = 'saliente' AND estado IN ('llamando','en_curso') ORDER BY creado DESC LIMIT 1").get(storeId) as { id: string } | undefined;
+  if (ya) return { id: ya.id, tienda: st.nombre };
+  const id = uid();
+  db.prepare(`INSERT INTO soporte_llamadas (id, store_id, user_id, usuario, tienda, sala, motivo, seccion, estado, atendido_por, direccion)
+    VALUES (?,?,'','',?,?,?,'','llamando',?,'saliente')`).run(id, storeId, st.nombre.slice(0, 80), `DealFlowSoporte${randomBytes(9).toString('hex')}`, motivo.slice(0, 300), NOMBRE_ADMIN);
+  return { id, tienda: st.nombre };
+}
+
+/** ¿Alguien de DealFlow está llamando a esta tienda ahora? (lo pregunta la app de la tienda cada pocos segundos). */
+export function llamadaEntrante(storeId: string): { id: string; motivo: string; quien: string } | null {
+  ultimaConsulta.set(storeId, Date.now());
+  const r = db.prepare(`SELECT id, motivo FROM soporte_llamadas WHERE store_id = ? AND direccion = 'saliente' AND estado = 'llamando'
+    AND creado > datetime('now','-${TIMBRE_SEG} seconds') ORDER BY creado DESC LIMIT 1`).get(storeId) as { id: string; motivo: string } | undefined;
+  return r ? { id: r.id, motivo: r.motivo, quien: NOMBRE_ADMIN } : null;
+}
+
+/** La tienda contesta: queda como la persona en la llamada. */
+export function contestarLlamada(id: string, u: { id: string; nombre: string; email: string; storeId: string }): boolean {
+  vencerTimbres(id);
+  const ok = db.prepare("UPDATE soporte_llamadas SET estado = 'en_curso', user_id = ?, usuario = ?, atendido_at = datetime('now') WHERE id = ? AND store_id = ? AND direccion = 'saliente' AND estado = 'llamando'")
+    .run(u.id, (u.nombre || u.email).slice(0, 80), id, u.storeId).changes > 0;
+  if (ok) registrarLog(u.storeId, 'info', 'soporte', `Contestó la llamada del ${NOMBRE_ADMIN}.`);
+  return ok;
+}
+/** La tienda rechaza la llamada (al equipo se le corta con el aviso). */
+export function rechazarLlamada(id: string, storeId: string): boolean {
+  // Sin señal de «colgar»: el equipo lo ve por el estado y muestra «La tienda rechazó la llamada».
+  return db.prepare("UPDATE soporte_llamadas SET estado = 'rechazada', fin_at = datetime('now') WHERE id = ? AND store_id = ? AND direccion = 'saliente' AND estado = 'llamando'").run(id, storeId).changes > 0;
+}
+
 
 export async function crearLlamada(u: { id: string; nombre: string; email: string; storeId: string }, motivo: string, seccion: string):
   Promise<ReturnType<typeof vista> | { error: string }> {
@@ -234,6 +287,10 @@ export function cancelarLlamada(id: string, userId: string): boolean {
 }
 
 // ── Panel del equipo ────────────────────────────────────────────────────────
+/** ¿La hizo el superadmin hacia la tienda? (solo él la ve y la maneja). */
+export function esSaliente(id: string): boolean {
+  return !!db.prepare("SELECT 1 FROM soporte_llamadas WHERE id = ? AND direccion = 'saliente'").get(id);
+}
 /** ¿La llamada es de una tienda oculta por el superadmin? (solo él la ve). */
 export function llamadaDeTiendaOculta(id: string): boolean {
   return !!db.prepare('SELECT 1 FROM soporte_llamadas l JOIN stores s ON s.id = l.store_id WHERE l.id = ? AND COALESCE(s.oculta,0) = 1').get(id);
@@ -241,19 +298,20 @@ export function llamadaDeTiendaOculta(id: string): boolean {
 /** Llamadas para el panel del equipo. Las de tiendas ocultas solo las ve el superadmin. */
 export function llamadasEquipo(verOcultas = false) {
   vencer();
-  const filas = db.prepare(`SELECT * FROM soporte_llamadas l WHERE (l.estado IN ('esperando','en_curso') OR l.creado > datetime('now','-7 days'))
-    ${verOcultas ? '' : "AND NOT EXISTS (SELECT 1 FROM stores s WHERE s.id = l.store_id AND COALESCE(s.oculta,0) = 1)"}
+  const filas = db.prepare(`SELECT * FROM soporte_llamadas l WHERE (l.estado IN ('esperando','en_curso','llamando') OR l.creado > datetime('now','-7 days'))
+    ${verOcultas ? '' : "AND NOT EXISTS (SELECT 1 FROM stores s WHERE s.id = l.store_id AND COALESCE(s.oculta,0) = 1) AND COALESCE(l.direccion,'entrante') = 'entrante'"}
     ORDER BY CASE l.estado WHEN 'esperando' THEN 0 WHEN 'en_curso' THEN 1 ELSE 2 END, l.creado DESC LIMIT 80`).all() as Fila[];
   return filas.map((r) => ({
     id: txt(r.id), storeId: txt(r.store_id), tienda: txt(r.tienda), usuario: txt(r.usuario), motivo: txt(r.motivo), seccion: txt(r.seccion),
     estado: txt(r.estado), atendidoPor: txt(r.atendido_por), creado: txt(r.creado), atendidoAt: txt(r.atendido_at), finAt: txt(r.fin_at),
+    direccion: txt(r.direccion) || 'entrante',
   }));
 }
 export function atenderLlamada(id: string, agente: string): boolean {
   return db.prepare("UPDATE soporte_llamadas SET estado = 'en_curso', atendido_por = ?, atendido_at = COALESCE(atendido_at, datetime('now')) WHERE id = ? AND estado IN ('esperando','en_curso','sin_atender')").run(agente.slice(0, 80), id).changes > 0;
 }
 export function terminarLlamada(id: string): boolean {
-  const ok = db.prepare("UPDATE soporte_llamadas SET estado = 'terminada', fin_at = datetime('now') WHERE id = ? AND estado IN ('esperando','en_curso')").run(id).changes > 0;
+  const ok = db.prepare("UPDATE soporte_llamadas SET estado = CASE WHEN estado = 'llamando' THEN 'cancelada' ELSE 'terminada' END, fin_at = datetime('now') WHERE id = ? AND estado IN ('esperando','en_curso','llamando')").run(id).changes > 0;
   if (ok) enviarSenal(id, 'soporte', 'colgar', null);
   return ok;
 }
@@ -270,7 +328,7 @@ export function rolEnLlamada(id: string, u: { id: string; role: string }): Rol |
   const r = db.prepare("SELECT user_id, estado FROM soporte_llamadas WHERE id = ?").get(id) as { user_id: string; estado: string } | undefined;
   if (!r) return null;
   if (u.role === 'SUPERADMIN') return 'soporte';
-  if (['ADMIN', 'SOPORTE'].includes(u.role)) return llamadaDeTiendaOculta(id) ? null : 'soporte';
+  if (['ADMIN', 'SOPORTE'].includes(u.role)) return llamadaDeTiendaOculta(id) || esSaliente(id) ? null : 'soporte';
   return r.user_id === u.id ? 'tienda' : null;
 }
 export function enviarSenal(id: string, de: Rol, tipo: string, data: unknown): void {
@@ -281,6 +339,7 @@ export function enviarSenal(id: string, de: Rol, tipo: string, data: unknown): v
   senales.set(id, c);
 }
 export function leerSenales(id: string, para: Rol, desde: number) {
+  vencerTimbres(id);
   const c = senales.get(id);
   const r = db.prepare('SELECT estado, atendido_por FROM soporte_llamadas WHERE id = ?').get(id) as { estado: string; atendido_por: string } | undefined;
   return {

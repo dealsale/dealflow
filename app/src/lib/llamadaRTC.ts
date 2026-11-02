@@ -15,6 +15,8 @@ export interface EstadoLlamada {
   id: string; rol: RolLlamada; titulo: string; fase: FaseLlamada; atendidoPor: string; inicio: number;
   mic: boolean; silenciado: boolean; compartiendo: boolean; remotoVideo: boolean; remotoStream: MediaStream | null;
   aviso: string; minimizada: boolean;
+  /** Llamada saliente que todavía timbra en la tienda (nadie ha contestado). */
+  timbrando?: boolean;
 }
 
 // ── Estado global (la ventana de la llamada sigue abierta aunque cambies de sección) ──
@@ -168,8 +170,13 @@ class Motor {
           this.desde = Math.max(this.desde, d.ultimo);
           if (d.atendidoPor && d.atendidoPor !== estado?.atendidoPor) set({ atendidoPor: d.atendidoPor });
           if (this.rol === 'tienda' && d.estado === 'en_curso' && estado?.fase === 'esperando') set({ fase: 'conectando' });
+          if ((d.estado === 'llamando') !== !!estado?.timbrando) set({ timbrando: d.estado === 'llamando' });
           for (const s of d.senales) { if (!this.vivo) break; try { await this.alRecibir(s.tipo, s.data); } catch (e) { console.warn('[llamada]', e); } }
-          if (['terminada', 'cancelada', 'sin_atender'].includes(d.estado) && this.vivo) this.fin(d.estado === 'sin_atender' ? 'Nadie alcanzó a atender. Inténtalo de nuevo en un rato.' : 'La llamada terminó.');
+          if (['terminada', 'cancelada', 'sin_atender', 'rechazada', 'sin_respuesta'].includes(d.estado) && this.vivo) {
+            this.fin(d.estado === 'sin_atender' ? 'Nadie alcanzó a atender. Inténtalo de nuevo en un rato.'
+              : d.estado === 'rechazada' ? 'La tienda rechazó la llamada.'
+              : d.estado === 'sin_respuesta' ? 'La tienda no contestó.' : 'La llamada terminó.');
+          }
         }
       } catch { /* sin red: reintenta */ }
       await new Promise((ok) => setTimeout(ok, estado?.fase === 'conectada' ? 2500 : 1000));

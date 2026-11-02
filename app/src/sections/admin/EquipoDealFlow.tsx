@@ -13,7 +13,7 @@ const lbl: React.CSSProperties = { display: 'block', fontSize: 11.5, fontWeight:
 const btn: React.CSSProperties = { border: 0, borderRadius: 9, padding: '10px 16px', background: 'var(--df-purple)', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer' };
 const btnS: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 10px', background: 'var(--df-surface)', color: 'var(--df-text-body)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' };
 const ROL: Record<string, [string, string, string]> = {
-  SUPERADMIN: ['Superadmin', '#7C3AED', 'Todo, incluido crear cuentas del equipo.'],
+  SUPERADMIN: ['Administrador', '#7C3AED', 'Cuenta principal: todo, incluido crear cuentas del equipo y llamar a las tiendas.'],
   ADMIN: ['Administrador', '#1D4ED8', 'Todo el panel: tiendas, planes, cuentas, contabilidad, cupones, biblioteca, soporte.'],
   SOPORTE: ['Soporte', '#047857', 'Solo Soporte en vivo (atender llamadas), Trazabilidad y el Drive del equipo.'],
   MARKETING: ['Marketing', '#DB2777', 'Solo el Drive del equipo (app.dealflow.sbs/drive): subir, organizar y compartir archivos. No entra al panel.'],

@@ -1070,12 +1070,19 @@ export interface LlamadaSoporte { id: string; estado: 'esperando' | 'en_curso' |
 export const apiSoporteLlamar = (motivo: string, seccion: string) => reqBase<LlamadaSoporte>('/api/soporte/llamadas', 'POST', { motivo, seccion });
 export const apiSoporteLlamada = (id: string) => reqBase<LlamadaSoporte>(`/api/soporte/llamadas/${id}`, 'GET');
 export const apiSoporteCancelarLlamada = (id: string) => reqBase<{ ok: boolean }>(`/api/soporte/llamadas/${id}/cancelar`, 'POST');
-export interface LlamadaEquipo { id: string; storeId: string; tienda: string; usuario: string; motivo: string; seccion: string; estado: string; atendidoPor: string; creado: string; atendidoAt: string; finAt: string }
+export interface LlamadaEquipo { id: string; storeId: string; tienda: string; usuario: string; motivo: string; seccion: string; estado: string; atendidoPor: string; creado: string; atendidoAt: string; finAt: string; direccion?: 'entrante' | 'saliente' }
 /** Franja de atención en minutos desde la medianoche (hora Colombia): [inicio, fin). */
 export type FranjaSoporte = [number, number];
 export interface CfgLlamadas { activo: boolean; semana: FranjaSoporte[][]; cerrados: string[]; pausaHasta: string | null; pausaMotivo: string; aviso: string }
 export const apiAdminLlamadas = () => reqBase<{ llamadas: LlamadaEquipo[]; cfg: CfgLlamadas; servicio: ServicioLlamadas }>('/api/admin/soporte/llamadas', 'GET');
 export const apiAdminLlamadaAccion = (id: string, accion: 'atender' | 'terminar') => req<{ ok: true }>(`/api/admin/soporte/llamadas/${id}/${accion}`, 'POST');
+// Llamada saliente: el superadmin llama a una tienda; la tienda ve el aviso grande y contesta o rechaza.
+export interface TiendaLlamable { id: string; nombre: string; correo: string; oculta: boolean; conectada: boolean }
+export const apiAdminTiendasLlamar = () => reqBase<{ tiendas: TiendaLlamable[] }>('/api/admin/soporte/tiendas', 'GET');
+export const apiAdminLlamar = (storeId: string, motivo: string) => reqBase<{ id: string; tienda: string }>('/api/admin/soporte/llamar', 'POST', { storeId, motivo });
+export const apiSoporteEntrante = () => reqBase<{ llamada: { id: string; motivo: string; quien: string } | null }>('/api/soporte/entrante', 'GET');
+export const apiSoporteContestar = (id: string) => reqBase<{ ok: true; quien: string }>(`/api/soporte/llamadas/${id}/contestar`, 'POST');
+export const apiSoporteRechazar = (id: string) => reqBase<{ ok: boolean }>(`/api/soporte/llamadas/${id}/rechazar`, 'POST');
 export const apiAdminSoporteConfig = (p: Partial<Pick<CfgLlamadas, 'activo' | 'semana' | 'cerrados' | 'aviso'>>) => req<{ cfg: CfgLlamadas; servicio: ServicioLlamadas }>('/api/admin/soporte/config', 'PUT', p);
 export const apiAdminSoportePausa = (p: { minutos?: number; restoDelDia?: boolean; motivo?: string }) => req<{ cfg: CfgLlamadas; servicio: ServicioLlamadas }>('/api/admin/soporte/pausa', 'POST', p);
 export const apiSoporteChat = (mensaje: string, conversacion: string, seccion: string) => reqBase<{ respuesta: string; conversacion: string }>('/api/soporte/chat', 'POST', { mensaje, conversacion, seccion });
