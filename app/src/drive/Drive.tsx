@@ -453,6 +453,8 @@ function MenuItem({ pos, alCerrar, acciones }: { pos: { x: number; y: number }; 
   );
 }
 
+const medio: React.CSSProperties = { position: 'absolute', inset: 0, margin: 'auto', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', borderRadius: 8, display: 'block' };
+
 function VistaPrevia({ it, alCerrar, alCompartir }: { it: Item; alCerrar: () => void; alCompartir: () => void }) {
   useEffect(() => { const f = (e: KeyboardEvent) => { if (e.key === 'Escape') alCerrar(); }; window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f); }, [alCerrar]);
   const t = tipo(it);
@@ -466,9 +468,11 @@ function VistaPrevia({ it, alCerrar, alCompartir }: { it: Item; alCerrar: () => 
         <a href={urlArchivo(it.id, true)} style={{ ...btnS, background: '#047857', color: '#fff', borderColor: '#047857', textDecoration: 'none' }}>Descargar</a>
         <button type="button" onClick={alCerrar} aria-label="Cerrar" style={{ ...btnS, background: 'rgba(255,255,255,.12)', color: '#fff', borderColor: 'transparent' }}>✕</button>
       </div>
-      <div onClick={(e) => e.stopPropagation()} style={{ flex: 1, minHeight: 0, display: 'grid', placeItems: 'center', padding: '0 16px 16px' }}>
-        {t === 'imagen' ? <img src={url} alt={it.nombre} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
-          : t === 'video' ? <video src={url} controls autoPlay style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8, background: '#000' }} />
+      {/* El medio se ajusta al espacio libre (vertical u horizontal) sin recortarse: caja con
+          tamaño fijo y el video/imagen centrado adentro con máximo 100% de alto y ancho. */}
+      <div onClick={(e) => e.stopPropagation()} style={{ flex: 1, minHeight: 0, position: 'relative', margin: '0 max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))', display: t === 'imagen' || t === 'video' ? 'block' : 'grid', placeItems: 'center' }}>
+        {t === 'imagen' ? <img src={url} alt={it.nombre} style={medio} />
+          : t === 'video' ? <video src={url} controls autoPlay playsInline style={{ ...medio, background: '#000' }} />
           : t === 'audio' ? <audio src={url} controls autoPlay />
           : t === 'pdf' ? <iframe src={url} title={it.nombre} style={{ width: 'min(960px, 100%)', height: '100%', border: 0, borderRadius: 8, background: '#fff' }} />
           : (
