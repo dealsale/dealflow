@@ -92,6 +92,7 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                 <div style={{ color: 'var(--df-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 6px' }}>
                   {df.isSuperadmin ? 'Superadmin' : df.isSoporte ? 'Soporte' : 'Administración'}
                 </div>
+                {fila(false, () => { window.open((/(^|\.)dealflow\.sbs$/i.test(location.hostname) ? 'https://drive.dealflow.sbs/' : '/drive'), '_blank', 'noopener'); }, <span style={{ fontSize: 16 }}>☁️</span>, 'Drive del equipo', undefined, (/(^|\.)dealflow\.sbs$/i.test(location.hostname) ? 'https://drive.dealflow.sbs/' : '/drive'))}
                 {df.isSuperadmin ? (
                   <>
                     {fila(aSection === 'superadmin', () => goA('superadmin'), <IconCuentas />, 'Todas las tiendas', undefined, urlDe({ mode: 'admin', adminSection: 'superadmin' }))}

@@ -119,6 +119,11 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             {df.isSuperadmin && adminItem('equipo', <span style={{ fontSize: 16 }}>👥</span>, 'Equipo DealFlow')}
             {adminItem('soporte', <span style={{ fontSize: 16 }}>📞</span>, 'Soporte en vivo')}
             {adminItem('trazabilidad', <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad')}
+            {/* Drive del equipo: se abre aparte (drive.dealflow.sbs). */}
+            <a href={(/(^|\.)dealflow\.sbs$/i.test(location.hostname) ? 'https://drive.dealflow.sbs/' : '/drive')} target="_blank" rel="noopener" title="Abrir el Drive del equipo en otra pestaña" style={{ ...navStylePremium(false), textDecoration: 'none' }}>
+              <span style={{ fontSize: 16 }}>☁️</span>
+              <span>Drive del equipo</span>
+            </a>
             {!df.isSoporte && <>
             {adminItem('proveedores', <span style={{ fontSize: 16 }}>🤝</span>, 'Proveedores')}
             {adminItem('contabilidad', <IconVentas />, 'Contabilidad')}
