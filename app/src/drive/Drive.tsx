@@ -164,9 +164,9 @@ function SinConectar({ estado }: { estado: Estado }) {
         {estado.puedeConectar ? (
           <>
             <p style={{ margin: '0 0 12px', color: 'var(--df-text-muted)', fontSize: 14, lineHeight: 1.55 }}>
-              Los archivos del equipo se guardan en el Google Drive de DealFlow, no en el servidor. Entra con la cuenta de Gmail de DealFlow y acepta el permiso. DealFlow solo ve la carpeta «DealFlow Drive» que crea ahí.
+              Los archivos del equipo se guardan en el Google Drive de DealFlow, no en el servidor. Entra con la cuenta de Google de DealFlow (Gmail o Workspace) y acepta el permiso. DealFlow solo ve la carpeta «DealFlow Drive» que crea ahí.
             </p>
-            {!estado.configurado && <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--df-warning, #B45309)', fontWeight: 600 }}>Antes falta poner GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en Railway.</p>}
+            {!estado.configurado && <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--df-warning, #B45309)', fontWeight: 600 }}>Antes falta crear las llaves de Google (Google Cloud → cliente OAuth «Aplicación web») y ponerlas en Railway como GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET.</p>}
             <button type="button" onClick={() => void conectar()} disabled={!estado.configurado} style={{ ...btnP, width: '100%', opacity: estado.configurado ? 1 : 0.5 }}>Conectar Google Drive</button>
           </>
         ) : <p style={{ margin: 0, color: 'var(--df-text-muted)', fontSize: 14 }}>Pídele a un administrador de DealFlow que lo conecte. En cuanto lo haga, aquí verás las carpetas del equipo.</p>}
