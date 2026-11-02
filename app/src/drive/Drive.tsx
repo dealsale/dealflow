@@ -102,7 +102,7 @@ export function Drive() {
 }
 
 function Pantalla({ children }: { children: React.ReactNode }) {
-  return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--df-bg)', color: 'var(--df-text)', padding: '24px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left))', fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>{children}</div>;
+  return <div style={{ height: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', display: 'grid', placeItems: 'center', background: 'var(--df-bg)', color: 'var(--df-text)', padding: '24px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left))', fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>{children}</div>;
 }
 function Tarjeta({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
@@ -232,31 +232,31 @@ function Explorador({ estado, recargarEstado }: { estado: Estado; recargarEstado
 
   return (
     <div onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setArrastrando(true); } }} onDragLeave={(e) => { if (e.currentTarget === e.target) setArrastrando(false); }} onDrop={onDrop}
-      onClick={() => setMenu(null)}
-      style={{ minHeight: '100vh', background: 'var(--df-bg)', color: 'var(--df-text)', fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>
+      onClick={() => setMenu(null)} className="dfd"
+      style={{ height: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', background: 'var(--df-bg)', color: 'var(--df-text)', fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--df-surface)', borderBottom: '1px solid var(--df-border)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-        <div style={{ maxWidth: 1240, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '12px max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left))' }}>
-          <a href="/" onClick={(e) => { e.preventDefault(); abrirCarpeta(raiz); }} style={{ textDecoration: 'none', color: 'inherit' }}><Marca /></a>
-          <form onSubmit={(e) => { e.preventDefault(); setBuscando(busqueda.trim()); }} style={{ flex: '1 1 260px', minWidth: 0, display: 'flex' }}>
+        <div className="dfd-top">
+          <a href="/" onClick={(e) => { e.preventDefault(); abrirCarpeta(raiz); }} className="dfd-marca" style={{ textDecoration: 'none', color: 'inherit' }}><Marca /></a>
+          <form onSubmit={(e) => { e.preventDefault(); setBuscando(busqueda.trim()); }} className="dfd-buscar">
             <input id="drive-buscar" type="search" value={busqueda} onChange={(e) => { setBusqueda(e.target.value); if (!e.target.value) setBuscando(''); }} placeholder="Buscar en el Drive…" aria-label="Buscar archivos" style={{ ...inp, padding: '9px 14px', borderRadius: 999 }} />
           </form>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'var(--df-text-muted)' }}>
-            <span title={estado.usuario.email}><b style={{ color: 'var(--df-text-strong)' }}>{estado.usuario.nombre || estado.usuario.email}</b></span>
+          <div className="dfd-usuario" style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'var(--df-text-muted)', minWidth: 0 }}>
+            <span title={estado.usuario.email} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><b style={{ color: 'var(--df-text-strong)' }}>{estado.usuario.nombre || estado.usuario.email}</b></span>
             <button type="button" onClick={() => void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).then(() => location.reload())} style={{ ...btnS, padding: '6px 10px', fontSize: 12 }}>Salir</button>
           </div>
         </div>
       </header>
 
-      <div style={{ maxWidth: 1240, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(0, 1fr))', gap: 18, padding: '18px max(16px, env(safe-area-inset-right)) 120px max(16px, env(safe-area-inset-left))' }}>
-        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          {/* Lateral */}
-          <aside style={{ flex: '0 0 230px', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="dfd-cuerpo">
+        <div className="dfd-layout">
+          {/* Lateral (en el celular: dos botones arriba y el espacio en una línea) */}
+          <aside className="dfd-aside">
             <button type="button" onClick={() => entrada.current?.click()} style={{ ...btnP, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 12px 26px -14px rgba(4,120,87,.7)' }}>
               <span style={{ fontSize: 18, lineHeight: 1 }}>⬆</span> Subir archivos
             </button>
             <button type="button" onClick={() => setDialogo({ tipo: 'carpeta' })} style={{ ...btnS, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><IconoCarpeta size={18} /> Nueva carpeta</button>
             <input ref={entrada} id="drive-archivos" type="file" multiple hidden onChange={(e) => { if (e.target.files) subir(e.target.files); e.target.value = ''; }} />
-            <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 12, fontSize: 12.5 }}>
+            <div className="dfd-espacio" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 12, fontSize: 12.5 }}>
               <div style={{ fontWeight: 800, marginBottom: 6 }}>Espacio en Google Drive</div>
               <div style={{ height: 6, borderRadius: 99, background: 'var(--df-border)', overflow: 'hidden' }}><div style={{ width: `${pct}%`, height: '100%', background: pct > 90 ? '#DC2626' : pct > 75 ? '#F59E0B' : '#10B981' }} /></div>
               <div style={{ color: 'var(--df-text-muted)', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>{estado.uso ? `${fmtTam(estado.uso.usado)} de ${estado.uso.limite ? fmtTam(estado.uso.limite) : 'ilimitado'}` : '—'}</div>
@@ -265,9 +265,9 @@ function Explorador({ estado, recargarEstado }: { estado: Estado; recargarEstado
           </aside>
 
           {/* Contenido */}
-          <main style={{ flex: '1 1 480px', minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-              <nav aria-label="Ruta" style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', fontSize: 15, fontWeight: 800, flex: 1, minWidth: 0 }}>
+          <main style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, minWidth: 0 }}>
+              <nav aria-label="Ruta" className="dfd-migas" ref={(el) => { if (el) el.scrollLeft = el.scrollWidth; }} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 15, fontWeight: 800, flex: 1, minWidth: 0 }}>
                 {buscando ? <span>Resultados para «{buscando}»</span> : (
                   <>
                     <button type="button" onClick={() => abrirCarpeta(raiz)} style={{ ...migas, color: rutaN.length ? 'var(--df-text-muted)' : 'var(--df-text-strong)' }}>DealFlow Drive</button>
@@ -280,9 +280,9 @@ function Explorador({ estado, recargarEstado }: { estado: Estado; recargarEstado
                   </>
                 )}
               </nav>
-              <div role="group" aria-label="Vista" style={{ display: 'flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }}>
+              <div role="group" aria-label="Vista" style={{ display: 'flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden', flex: '0 0 auto' }}>
                 {[false, true].map((l) => (
-                  <button key={String(l)} type="button" onClick={() => setVistaLista(l)} aria-pressed={vistaLista === l} style={{ border: 0, padding: '6px 11px', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', background: vistaLista === l ? 'var(--df-text-strong)' : 'var(--df-surface)', color: vistaLista === l ? 'var(--df-surface)' : 'var(--df-text-body)' }}>{l ? 'Lista' : 'Cuadros'}</button>
+                  <button key={String(l)} type="button" onClick={() => setVistaLista(l)} aria-pressed={vistaLista === l} style={{ border: 0, padding: '6px 11px', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', background: vistaLista === l ? 'var(--df-text-strong)' : 'var(--df-surface)', color: vistaLista === l ? 'var(--df-surface)' : 'var(--df-text-body)', minHeight: 34, display: 'inline-flex', alignItems: 'center', gap: 5 }} aria-label={l ? 'Lista' : 'Cuadros'}><span aria-hidden className="dfd-vt-ico">{l ? '☰' : '▦'}</span><span className="dfd-vt-txt">{l ? 'Lista' : 'Cuadros'}</span></button>
                 ))}
               </div>
             </div>
@@ -298,19 +298,19 @@ function Explorador({ estado, recargarEstado }: { estado: Estado; recargarEstado
               ) : vistaLista ? (
                 <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden' }}>
                   {ordenados.map((it) => (
-                    <div key={it.id} onDoubleClick={() => abrir(it)} onClick={() => abrir(it)} onContextMenu={(e) => { e.preventDefault(); setMenu({ it, x: e.clientX, y: e.clientY }); }}
-                      style={{ display: 'grid', gridTemplateColumns: '28px minmax(0,1fr) auto', gap: 12, alignItems: 'center', padding: '9px 12px', borderTop: '1px solid var(--df-border)', cursor: 'pointer', fontSize: 13.5 }}>
+                    <div key={it.id} onClick={() => abrir(it)} onContextMenu={(e) => { e.preventDefault(); setMenu({ it, x: e.clientX, y: e.clientY }); }}
+                      style={{ display: 'grid', gridTemplateColumns: '28px minmax(0,1fr) auto', gap: 12, alignItems: 'center', padding: '10px 8px 10px 12px', borderTop: '1px solid var(--df-border)', cursor: 'pointer', fontSize: 13.5, minHeight: 56 }}>
                       <IconoArchivo it={it} size={26} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nombre}</div>
-                        <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{it.carpeta ? 'Carpeta' : fmtTam(it.tamano)} · {fmtFecha(it.modificado)}{it.por ? ` · ${it.por}` : ''}</div>
+                        <div style={{ fontSize: 12, color: 'var(--df-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.carpeta ? 'Carpeta' : fmtTam(it.tamano)} · {fmtFecha(it.modificado)}{it.por ? ` · ${it.por}` : ''}</div>
                       </div>
                       <BotonMenu alAbrir={(x, y) => setMenu({ it, x, y })} />
                     </div>
                   ))}
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(170px, 100%), 1fr))', gap: 12 }}>
+                <div className="dfd-cuadros">
                   {ordenados.map((it) => (
                     <div key={it.id} onClick={() => abrir(it)} onContextMenu={(e) => { e.preventDefault(); setMenu({ it, x: e.clientX, y: e.clientY }); }} className="df-drive-tarjeta"
                       style={{ position: 'relative', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column' }}>
@@ -352,7 +352,7 @@ function Explorador({ estado, recargarEstado }: { estado: Estado; recargarEstado
       {dialogo && <Dialogos d={dialogo} raiz={raiz} carpeta={buscando ? raiz : carpeta} alCerrar={() => setDialogo(null)} alListo={(m) => { setDialogo(null); if (m) setAviso(m); void cargar(); }} />}
 
       {subidas.length > 0 && (
-        <div style={{ position: 'fixed', right: 'max(16px, env(safe-area-inset-right))', bottom: 'max(16px, env(safe-area-inset-bottom))', zIndex: 30, width: 'min(340px, calc(100vw - 32px))', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, boxShadow: '0 24px 50px -20px rgba(2,6,23,.45)', overflow: 'hidden' }}>
+        <div className="dfd-subidas" style={{ position: 'fixed', right: 'max(16px, env(safe-area-inset-right))', bottom: 'max(16px, env(safe-area-inset-bottom))', zIndex: 30, width: 'min(340px, calc(100vw - 32px))', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, boxShadow: '0 24px 50px -20px rgba(2,6,23,.45)', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', padding: '10px 12px', background: 'var(--df-bg)', fontWeight: 800, fontSize: 13 }}>
             <span style={{ flex: 1 }}>{enCurso ? `Subiendo ${enCurso} archivo${enCurso === 1 ? '' : 's'}…` : 'Subidas listas'}</span>
             {!enCurso && <button type="button" onClick={() => setSubidas([])} aria-label="Cerrar" style={{ ...btnS, padding: '3px 8px', fontSize: 12 }}>✕</button>}
@@ -372,30 +372,76 @@ function Explorador({ estado, recargarEstado }: { estado: Estado; recargarEstado
         </div>
       )}
       {aviso && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 50, background: 'var(--df-text-strong)', color: 'var(--df-surface)', borderRadius: 10, padding: '10px 16px', fontSize: 13.5, fontWeight: 700, maxWidth: 'calc(100vw - 32px)' }}>{aviso}</div>}
-      <style>{'.df-drive-tarjeta{transition:box-shadow .15s,transform .15s}.df-drive-tarjeta:hover{box-shadow:0 14px 30px -18px rgba(2,6,23,.45);transform:translateY(-1px)}@media (prefers-reduced-motion: reduce){.df-drive-tarjeta{transition:none}.df-drive-tarjeta:hover{transform:none}}'}</style>
+      <style>{CSS_DRIVE}</style>
     </div>
   );
 }
+// Diseño de la página (computador y celular). En el celular: buscador en su propia fila, botones
+// en dos columnas, cuadros de dos en dos, ruta deslizable, menú como hoja inferior y botones táctiles.
+const CSS_DRIVE = `
+.dfd{-webkit-tap-highlight-color:transparent}
+.dfd-top{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;padding:12px max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left))}
+.dfd-buscar{display:flex;min-width:0}
+.dfd-cuerpo{max-width:1240px;margin:0 auto;padding:18px max(16px,env(safe-area-inset-right)) calc(120px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+.dfd-layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:18px;align-items:start}
+.dfd-aside{display:flex;flex-direction:column;gap:12px;position:sticky;top:84px}
+.dfd-cuadros{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.dfd-migas{flex-wrap:wrap}
+.dfd-vt-ico{display:none}
+.df-drive-tarjeta{transition:box-shadow .15s,transform .15s}
+@media (hover:hover){.df-drive-tarjeta:hover{box-shadow:0 14px 30px -18px rgba(2,6,23,.45);transform:translateY(-1px)}}
+.df-drive-tarjeta:active{transform:scale(.98)}
+@media (max-width:760px){
+  .dfd-top{grid-template-columns:minmax(0,1fr) auto;gap:10px 12px;padding-top:10px;padding-bottom:10px}
+  .dfd-buscar{grid-column:1 / -1;grid-row:2}
+  .dfd-usuario b{font-size:12px}
+  .dfd-cuerpo{padding-top:14px}
+  .dfd-layout{grid-template-columns:minmax(0,1fr);gap:14px}
+  .dfd-aside{display:grid;grid-template-columns:1fr 1fr;gap:10px;position:static}
+  .dfd-aside > button{min-height:46px;font-size:13.5px;padding:10px 8px}
+  .dfd-espacio{grid-column:1 / -1;padding:10px 12px !important}
+  .dfd-migas{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;white-space:nowrap}
+  .dfd-migas::-webkit-scrollbar{display:none}
+  .dfd-migas > *, .dfd-migas button{white-space:nowrap;flex-shrink:0}
+  .dfd-vt-ico{display:inline;font-size:15px}
+  .dfd-vt-txt{display:none}
+  .dfd-cuadros{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .dfd-subidas{left:12px;right:12px !important;width:auto !important}
+  .dfd-prev-top{flex-wrap:wrap}
+  .dfd-prev-top > b{flex-basis:calc(100% - 44px) !important}
+}
+@media (prefers-reduced-motion:reduce){.df-drive-tarjeta{transition:none}.df-drive-tarjeta:hover,.df-drive-tarjeta:active{transform:none}}
+`;
 const migas: React.CSSProperties = { background: 'none', border: 0, padding: '2px 4px', borderRadius: 6, fontFamily: 'inherit', fontSize: 15, fontWeight: 800, cursor: 'pointer' };
 
 function BotonMenu({ alAbrir }: { alAbrir: (x: number, y: number) => void }) {
   return (
     <button type="button" aria-label="Más opciones" onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); alAbrir(r.right, r.bottom); }}
-      style={{ border: 0, background: 'transparent', color: 'var(--df-text-muted)', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', fontSize: 18, lineHeight: 1, flex: '0 0 auto' }}>⋮</button>
+      style={{ border: 0, background: 'transparent', color: 'var(--df-text-muted)', borderRadius: 10, width: 40, height: 40, margin: -4, cursor: 'pointer', fontSize: 20, lineHeight: 1, flex: '0 0 auto', touchAction: 'manipulation' }}>⋮</button>
   );
 }
 
 function MenuItem({ pos, alCerrar, acciones }: { pos: { x: number; y: number }; alCerrar: () => void; acciones: Record<string, (() => void) | undefined> }) {
   const etiquetas: [string, string][] = [['abrir', 'Abrir'], ['descargar', 'Descargar'], ['compartir', 'Copiar enlace para compartir'], ['renombrar', 'Cambiar nombre'], ['mover', 'Mover a…'], ['eliminar', 'Eliminar']];
   const w = 230;
+  const movil = window.innerWidth < 640;
   const left = Math.min(pos.x - w, window.innerWidth - w - 12);
+  const botones = etiquetas.filter(([k]) => acciones[k]).map(([k, t]) => (
+    <button key={k} type="button" role="menuitem" onClick={() => { alCerrar(); acciones[k]!(); }}
+      style={{ display: 'block', width: '100%', textAlign: 'left', border: 0, background: 'transparent', padding: movil ? '14px 16px' : '9px 11px', borderRadius: 10, fontFamily: 'inherit', fontSize: movil ? 15 : 13.5, cursor: 'pointer', color: k === 'eliminar' ? 'var(--df-danger-dark, #B91C1C)' : 'var(--df-text-body)', fontWeight: 600 }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--df-bg)'; }} onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>{t}</button>
+  ));
+  if (movil) return (
+    <div onClick={(e) => { e.stopPropagation(); alCerrar(); }} style={{ position: 'fixed', inset: 0, zIndex: 45, background: 'rgba(2,6,23,.4)', display: 'flex', alignItems: 'flex-end' }}>
+      <div role="menu" onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--df-surface)', borderRadius: '18px 18px 0 0', padding: '8px 8px calc(10px + env(safe-area-inset-bottom))', boxShadow: '0 -20px 40px -20px rgba(2,6,23,.5)' }}>
+        <div style={{ width: 40, height: 4, borderRadius: 99, background: 'var(--df-border)', margin: '4px auto 8px' }} />
+        {botones}
+      </div>
+    </div>
+  );
   return (
     <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', zIndex: 45, left: Math.max(12, left), top: Math.min(pos.y + 4, window.innerHeight - 250), width: w, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 20px 44px -18px rgba(2,6,23,.5)', padding: 5 }}>
-      {etiquetas.filter(([k]) => acciones[k]).map(([k, t]) => (
-        <button key={k} type="button" role="menuitem" onClick={() => { alCerrar(); acciones[k]!(); }}
-          style={{ display: 'block', width: '100%', textAlign: 'left', border: 0, background: 'transparent', padding: '9px 11px', borderRadius: 8, fontFamily: 'inherit', fontSize: 13.5, cursor: 'pointer', color: k === 'eliminar' ? 'var(--df-danger-dark, #B91C1C)' : 'var(--df-text-body)', fontWeight: 600 }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--df-bg)'; }} onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>{t}</button>
-      ))}
+      {botones}
     </div>
   );
 }
@@ -405,8 +451,8 @@ function VistaPrevia({ it, alCerrar, alCompartir }: { it: Item; alCerrar: () => 
   const t = tipo(it);
   const url = urlArchivo(it.id);
   return (
-    <div onClick={alCerrar} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(2,6,23,.86)', display: 'flex', flexDirection: 'column', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left))', color: '#fff' }}>
+    <div onClick={alCerrar} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(2,6,23,.97)', display: 'flex', flexDirection: 'column', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+      <div onClick={(e) => e.stopPropagation()} className="dfd-prev-top" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left))', color: '#fff' }}>
         <IconoArchivo it={it} size={26} />
         <b style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nombre}</b>
         <button type="button" onClick={alCompartir} style={{ ...btnS, background: 'rgba(255,255,255,.12)', color: '#fff', borderColor: 'transparent' }}>Compartir</button>
