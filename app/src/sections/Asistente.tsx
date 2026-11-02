@@ -325,7 +325,18 @@ export function Asistente({ df }: { df: DealFlowState }) {
 
             {tab === 'reglas' && (
               <>
-                <Campo titulo="Reglas" ayuda="Se cumplen siempre, pase lo que pase.">
+                {df.plantillaActiva && (
+                  <details style={{ border: '1px solid var(--df-brand-border, var(--df-border))', background: 'var(--df-brand-subtle-2, var(--df-surface-2))', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 13, lineHeight: 1.5 }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--df-brand-dark, var(--df-text-strong))' }}>
+                      🚀 Tu asistente usa la plantilla «{df.plantillaActiva.nombre}» (v{df.plantillaActiva.version}): método de venta y {df.plantillaActiva.reglas.length} reglas de venta y trato
+                    </summary>
+                    <div style={{ color: 'var(--df-text-muted)', margin: '8px 0' }}>
+                      Van aparte de tus reglas y se actualizan desde DealShop sin tocar lo tuyo. Si alguna de tus reglas dice algo distinto, gana la tuya.
+                    </div>
+                    <ol style={{ margin: 0, paddingLeft: 20, display: 'grid', gap: 3, color: 'var(--df-text-body)' }}>{df.plantillaActiva.reglas.map((r, i) => <li key={i}>{r}</li>)}</ol>
+                  </details>
+                )}
+                <Campo titulo={df.plantillaActiva ? 'Tus reglas' : 'Reglas'} ayuda="Se cumplen siempre, pase lo que pase.">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
                     {df.rules.length === 0 && <div style={{ color: 'var(--df-text-faint)', fontSize: 13, padding: '4px 2px' }}>Aún no hay reglas. Agrega la primera abajo.</div>}
                     {df.rules.map((r, i) => (

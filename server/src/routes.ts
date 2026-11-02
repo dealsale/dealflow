@@ -379,7 +379,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
     leads,
     versiones,
     suscripcion: conShopify(sid, estadoSuscripcion(sid)),
-    assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []), nombre: assistant?.nombre || '', seguimientoActivo: !!assistant?.seguimiento_on, estilo: pj(assistant?.estilo || '', {}) },
+    assistant: { instrucciones: assistant?.instrucciones || '', reglas: pj(assistant?.reglas || '[]', []), nombre: assistant?.nombre || '', seguimientoActivo: !!assistant?.seguimiento_on, estilo: pj(assistant?.estilo || '', {}), plantilla: (await import('./plantillas.js')).gestionPlantilla(sid) },
     whatsapp: {
       conectado: !!wa?.conectado,
       modo: wa?.modo || 'cloud',
@@ -2316,8 +2316,23 @@ api.get('/plantillas', requireAuth, requireStore, async (req, res) => {
 api.post('/plantillas/:id/instalar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { instalarPlantilla } = await import('./plantillas.js');
   const force = !!(req.body && (req.body as { force?: boolean }).force);
-  const r = instalarPlantilla(req.user!.storeId!, req.params.id, force);
+  const conservar = Array.isArray((req.body as { conservar?: unknown })?.conservar) ? ((req.body as { conservar: unknown[] }).conservar).map(String).slice(0, 200) : [];
+  const r = instalarPlantilla(req.user!.storeId!, req.params.id, force, conservar);
   if (r.error) return res.status(r.yaInstalada ? 409 : 400).json({ error: r.error });
+  res.json({ ok: true });
+});
+
+api.get('/plantillas/:id/previa', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { previaV2 } = await import('./plantillas.js');
+  const { ID_V2 } = await import('./plantillaEcommerceV2.js');
+  if (req.params.id !== ID_V2) return res.json({ reemplazar: [], conservar: [], quitaInstrucciones: false, respetado: [] });
+  res.json(previaV2(req.user!.storeId!));
+});
+
+api.post('/plantillas/:id/restaurar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { restaurarPlantilla } = await import('./plantillas.js');
+  const r = restaurarPlantilla(req.user!.storeId!, req.params.id);
+  if (r.error) return res.status(400).json({ error: r.error });
   res.json({ ok: true });
 });
 
