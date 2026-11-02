@@ -267,7 +267,9 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     veredicto = await (await import('./ai.js')).clasificarConfirmacion(storeId, `${items} · total ${pesos(Number(o.total) || 0)}`, t);
   }
   if (veredicto === 'si') {
-    db.prepare("UPDATE orders SET confirmacion = 'si', estado = CASE WHEN estado = 'Nuevo' THEN 'Confirmado' ELSE estado END WHERE id = ?").run(orderId);
+    // Solo una vez: si el cliente mandó dos «sí» seguidos, el segundo no confirma ni despacha de nuevo.
+    const cambio = db.prepare("UPDATE orders SET confirmacion = 'si', estado = CASE WHEN estado = 'Nuevo' THEN 'Confirmado' ELSE estado END WHERE id = ? AND confirmacion = 'esperando'").run(orderId);
+    if (!cambio.changes) return true;
     trazar(storeId, orderId, { etapa: 'pedido', nivel: 'ok', titulo: 'El cliente confirmó el pedido por WhatsApp', detalle: texto });
     await decir(`¡Gracias${nombre ? ', ' + nombre : ''}! 🎉 Tu pedido quedó confirmado. Apenas salga te enviamos por aquí el número de guía. 🚚`);
     void etiquetar(storeId, orderId, ['confirmado-whatsapp']);
