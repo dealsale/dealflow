@@ -209,7 +209,9 @@ export async function crearLlamada(u: { id: string; nombre: string; email: strin
   // Correo al equipo (ADMIN y SUPERADMIN): por si no tienen el panel abierto.
   try {
     const { enviarCorreo, plantillaCorreo, APP_URL } = await import('./correo.js');
-    const equipo = db.prepare("SELECT email FROM users WHERE role IN ('ADMIN','SUPERADMIN','SOPORTE') AND COALESCE(email,'') != ''").all() as { email: string }[];
+    // Tienda oculta: solo se avisa al superadmin (el resto del equipo no la ve).
+    const oculta = !!(db.prepare('SELECT COALESCE(oculta,0) o FROM stores WHERE id = ?').get(u.storeId) as { o: number } | undefined)?.o;
+    const equipo = db.prepare(`SELECT email FROM users WHERE role IN (${oculta ? "'SUPERADMIN'" : "'ADMIN','SUPERADMIN','SOPORTE'"}) AND COALESCE(email,'') != ''`).all() as { email: string }[];
     for (const e of equipo) {
       void enviarCorreo({ para: e.email, tipo: 'soporte_llamada', asunto: `📞 ${tienda} está esperando en soporte`, html: plantillaCorreo(`📞 ${tienda} pidió soporte por llamada`,
         [`<b>${u.nombre || u.email}</b> está esperando en la sala de llamada.`, motivo ? `Motivo: ${motivo}` : 'No escribió el motivo.', 'Entra desde Administración → Soporte en vivo (así queda registrado quién la atendió).'],
@@ -232,10 +234,16 @@ export function cancelarLlamada(id: string, userId: string): boolean {
 }
 
 // ── Panel del equipo ────────────────────────────────────────────────────────
-export function llamadasEquipo(_agente = '') {
+/** ¿La llamada es de una tienda oculta por el superadmin? (solo él la ve). */
+export function llamadaDeTiendaOculta(id: string): boolean {
+  return !!db.prepare('SELECT 1 FROM soporte_llamadas l JOIN stores s ON s.id = l.store_id WHERE l.id = ? AND COALESCE(s.oculta,0) = 1').get(id);
+}
+/** Llamadas para el panel del equipo. Las de tiendas ocultas solo las ve el superadmin. */
+export function llamadasEquipo(verOcultas = false) {
   vencer();
-  const filas = db.prepare(`SELECT * FROM soporte_llamadas WHERE estado IN ('esperando','en_curso') OR creado > datetime('now','-7 days')
-    ORDER BY CASE estado WHEN 'esperando' THEN 0 WHEN 'en_curso' THEN 1 ELSE 2 END, creado DESC LIMIT 80`).all() as Fila[];
+  const filas = db.prepare(`SELECT * FROM soporte_llamadas l WHERE (l.estado IN ('esperando','en_curso') OR l.creado > datetime('now','-7 days'))
+    ${verOcultas ? '' : "AND NOT EXISTS (SELECT 1 FROM stores s WHERE s.id = l.store_id AND COALESCE(s.oculta,0) = 1)"}
+    ORDER BY CASE l.estado WHEN 'esperando' THEN 0 WHEN 'en_curso' THEN 1 ELSE 2 END, l.creado DESC LIMIT 80`).all() as Fila[];
   return filas.map((r) => ({
     id: txt(r.id), storeId: txt(r.store_id), tienda: txt(r.tienda), usuario: txt(r.usuario), motivo: txt(r.motivo), seccion: txt(r.seccion),
     estado: txt(r.estado), atendidoPor: txt(r.atendido_por), creado: txt(r.creado), atendidoAt: txt(r.atendido_at), finAt: txt(r.fin_at),
@@ -261,7 +269,8 @@ setInterval(() => { const lim = Date.now() - 4 * 3600e3; for (const [k, v] of se
 export function rolEnLlamada(id: string, u: { id: string; role: string }): Rol | null {
   const r = db.prepare("SELECT user_id, estado FROM soporte_llamadas WHERE id = ?").get(id) as { user_id: string; estado: string } | undefined;
   if (!r) return null;
-  if (['ADMIN', 'SUPERADMIN', 'SOPORTE'].includes(u.role)) return 'soporte';
+  if (u.role === 'SUPERADMIN') return 'soporte';
+  if (['ADMIN', 'SOPORTE'].includes(u.role)) return llamadaDeTiendaOculta(id) ? null : 'soporte';
   return r.user_id === u.id ? 'tienda' : null;
 }
 export function enviarSenal(id: string, de: Rol, tipo: string, data: unknown): void {
