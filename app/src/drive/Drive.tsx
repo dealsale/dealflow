@@ -12,11 +12,11 @@ interface Estado {
 }
 interface Subida { id: string; nombre: string; tamano: number; avance: number; estado: 'subiendo' | 'listo' | 'error'; error?: string }
 
-async function api<T>(ruta: string, init: RequestInit = {}): Promise<{ data?: T; error?: string; status: number }> {
+async function api<T>(ruta: string, init: RequestInit = {}): Promise<{ data?: T; error?: string; status: number; cuenta?: string }> {
   try {
     const r = await fetch(`/api/drive${ruta}`, { credentials: 'same-origin', ...init, headers: { ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...(init.headers || {}) } });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) return { error: (d as { error?: string }).error || `Error ${r.status}`, status: r.status };
+    if (!r.ok) return { error: (d as { error?: string }).error || `Error ${r.status}`, status: r.status, cuenta: (d as { cuenta?: string }).cuenta };
     return { data: d as T, status: r.status };
   } catch { return { error: 'Sin conexión con el servidor.', status: 0 }; }
 }
@@ -85,18 +85,25 @@ export function Drive() {
   const [sesion, setSesion] = useState<'cargando' | 'sin' | 'si'>('cargando');
   const [estado, setEstado] = useState<Estado | null>(null);
   const [errorEstado, setErrorEstado] = useState('');
+  const [cuentaAjena, setCuentaAjena] = useState('');
   const cargarEstado = useCallback(async () => {
     const r = await api<Estado>('/estado');
     if (r.status === 401) { setSesion('sin'); return; }
     setSesion('si');
-    if (r.data) { setEstado(r.data); setErrorEstado(''); } else setErrorEstado(r.error || 'No pudimos abrir el Drive.');
+    if (r.data) { setEstado(r.data); setErrorEstado(''); setCuentaAjena(''); } else { setErrorEstado(r.error || 'No pudimos abrir el Drive.'); setCuentaAjena(r.status === 403 ? (r.cuenta || '') : ''); }
   }, []);
   useEffect(() => { void cargarEstado(); }, [cargarEstado]);
   useEffect(() => { document.title = 'Drive · DealFlow'; }, []);
 
   if (sesion === 'cargando') return <Pantalla><div style={{ color: 'var(--df-text-muted)' }}>Abriendo el Drive…</div></Pantalla>;
   if (sesion === 'sin') return <Login alEntrar={() => void cargarEstado()} />;
-  if (!estado) return <Pantalla><Tarjeta titulo="Drive de DealFlow"><p style={{ margin: 0, color: 'var(--df-text-muted)' }}>{errorEstado}</p></Tarjeta></Pantalla>;
+  if (!estado) return (
+    <Pantalla><Tarjeta titulo="Drive de DealFlow">
+      <p style={{ margin: 0, color: 'var(--df-text-muted)' }}>{errorEstado}</p>
+      {cuentaAjena && <p style={{ margin: '10px 0 0', color: 'var(--df-text-muted)', fontSize: 13.5 }}>Estás con la sesión de <b style={{ color: 'var(--df-text-strong)' }}>{cuentaAjena}</b>, que no es del equipo. Entra con tu cuenta del equipo DealFlow.</p>}
+      <button type="button" style={{ ...btnP, width: '100%', marginTop: 16 }} onClick={() => { void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).finally(() => { setCuentaAjena(''); setSesion('sin'); }); }}>Entrar con otra cuenta</button>
+    </Tarjeta></Pantalla>
+  );
   if (!estado.conectado) return <SinConectar estado={estado} />;
   return <Explorador estado={estado} recargarEstado={() => void cargarEstado()} />;
 }

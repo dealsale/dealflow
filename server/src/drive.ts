@@ -135,7 +135,14 @@ const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 export const drive = Router();
 
 function requireDrive(req: Request, res: Response, next: NextFunction) {
-  if (!ROLES_DRIVE.includes(String(req.user?.role || ''))) return res.status(403).json({ error: 'El Drive es solo para el equipo DealFlow.' });
+  const u = req.user;
+  // Un administrador que "entró" a una tienda desde el panel sigue siendo del equipo:
+  // en el Drive se usa su propia cuenta (la sesión se comparte entre la app y drive.).
+  if (u && !ROLES_DRIVE.includes(u.role) && u.imp) {
+    const a = db.prepare('SELECT id, email, nombre, role FROM users WHERE id = ?').get(u.imp) as { id: string; email: string; nombre: string; role: string } | undefined;
+    if (a && ROLES_DRIVE.includes(a.role)) req.user = { id: a.id, email: a.email, nombre: a.nombre, role: a.role as typeof u.role, storeId: null };
+  }
+  if (!ROLES_DRIVE.includes(String(req.user?.role || ''))) return res.status(403).json({ error: 'El Drive es solo para el equipo DealFlow.', cuenta: u?.email || '', noEquipo: true });
   next();
 }
 const responderError = (res: Response, e: unknown) => {
