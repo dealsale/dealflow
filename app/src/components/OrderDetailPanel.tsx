@@ -415,16 +415,43 @@ function useGuiaEffi(orderId?: string) {
  * Contenido abreviado del paquete a partir de los productos del pedido, para la guía:
  * "2 Blusa Verona, 1 Jogger Jaspeado" (sin tallas ni colores, sumando las variantes).
  */
-function contenidoDeItems(items: { qty: number; nombre: string }[]): string {
-  const grupos = new Map<string, number>();
+/** Productos del pedido agrupados: nombre, variante (talla, color…) y cantidad. */
+function lineasDeItems(items: { qty: number; nombre: string }[]): { q: number; base: string; variante: string }[] {
+  const m = new Map<string, { q: number; base: string; variante: string }>();
   for (const it of items) {
-    const base = it.nombre.replace(/\s*\(.*\)\s*$/, '').replace(/\s+-\s+.*$/, '').replace(/\s+/g, ' ').trim() || it.nombre;
-    const corto = base.split(' ').slice(0, 3).join(' ');
-    grupos.set(corto, (grupos.get(corto) || 0) + (Number(it.qty) || 1));
+    const n = String(it.nombre || '').replace(/\s+/g, ' ').trim();
+    const par = n.match(/\(([^()]*)\)\s*$/);
+    const base = (par ? n.slice(0, par.index) : n).replace(/\s+-\s+.*$/, '').trim() || n;
+    const variante = par ? par[1].split(/\s*[·,/|]\s*/).filter((x) => x && !/^(única|unica|unico|único|default|n\/a)$/i.test(x)).join(' · ') : '';
+    const k = `${base.toLowerCase()}|${variante.toLowerCase()}`;
+    const a = m.get(k) || { q: 0, base, variante };
+    a.q += Number(it.qty) || 1;
+    m.set(k, a);
   }
-  let t = [...grupos].map(([n, q]) => `${q} ${n}`).join(', ');
-  if (t.length > 80) t = [...grupos].map(([n, q]) => `${q} ${n.split(' ')[0]}`).join(', ');
-  return t.slice(0, 80);
+  return [...m.values()];
+}
+const palabras = (t: string, n: number) => t.split(' ').slice(0, n).join(' ');
+
+/**
+ * «Contenido» de la guía (Effi deja 80 caracteres): cantidad, producto y variante, lo que ve
+ * el proveedor al empacar. Si no cabe, acorta primero los nombres y deja tallas y colores.
+ */
+function contenidoDeItems(items: { qty: number; nombre: string }[]): string {
+  const ls = lineasDeItems(items);
+  const armar = (nombre: (b: string) => string, sepVar: string) =>
+    ls.map((l) => `${l.q} ${nombre(l.base)}${l.variante ? (sepVar === '()' ? ` (${l.variante})` : ` ${l.variante.replace(/ · /g, ' ')}`) : ''}`).join(', ');
+  for (const t of [armar((b) => b, '()'), armar((b) => palabras(b, 3), '()'), armar((b) => palabras(b, 2), '()'), armar((b) => palabras(b, 1), '()'), armar((b) => palabras(b, 1), ' ')]) {
+    if (t.length <= 80) return t;
+  }
+  return armar((b) => palabras(b, 1), ' ').slice(0, 80);
+}
+
+/** «Nota en la guía» (hasta 255 caracteres): el detalle completo de productos para el proveedor. */
+function notaDeItems(items: { qty: number; nombre: string }[]): string {
+  const ls = lineasDeItems(items);
+  const total = ls.reduce((a, l) => a + l.q, 0);
+  const completo = `${total} ${total === 1 ? 'unidad' : 'unidades'}: ` + ls.map((l) => `${l.q}× ${l.base}${l.variante ? ` (${l.variante})` : ''}`).join('; ');
+  return completo.length <= 255 ? completo : `${total} unidades: ${contenidoDeItems(items)}`.slice(0, 255);
 }
 
 /** Remitente (bodega de origen) de la guía: se ve SIEMPRE antes de crearla, aunque se ponga solo. */
@@ -491,10 +518,13 @@ function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; item
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div><label style={lb}>Contenido (opcional)</label><input value={d.contenido} onChange={(e) => set({ contenido: e.target.value })} placeholder="Se copia de la remisión" style={sel_} />
           {items.length > 0 && <button type="button" onClick={() => set({ contenido: contenidoDeItems(items) })} title={contenidoDeItems(items)}
-            style={{ marginTop: 5, background: 'none', border: '1px dashed var(--df-purple-border, var(--df-border))', borderRadius: 7, padding: '4px 8px', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: 'var(--df-purple)', cursor: 'pointer' }}>📋 Copiar de los artículos</button>}
+            style={{ marginTop: 5, background: 'none', border: '1px dashed var(--df-purple-border, var(--df-border))', borderRadius: 7, padding: '4px 8px', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: 'var(--df-purple)', cursor: 'pointer' }}>📋 Copiar de los artículos (con variantes)</button>}
         </div>
         <div><label style={lb}>Valor declarado (opcional)</label><input type="number" min={0} value={d.valorDeclarado || ''} onChange={(e) => set({ valorDeclarado: Number(e.target.value) })} placeholder="Del total de la remisión" style={sel_} /></div>
-        <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Nota en la guía (opcional)</label><input value={d.nota} onChange={(e) => set({ nota: e.target.value })} placeholder="Ej: llamar antes de entregar" style={sel_} /></div>
+        <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Nota en la guía (opcional)</label><input value={d.nota} onChange={(e) => set({ nota: e.target.value })} placeholder="Ej: llamar antes de entregar" style={sel_} />
+          {items.length > 0 && <button type="button" onClick={() => { const det = notaDeItems(items); set({ nota: d.nota && !d.nota.includes(det) ? `${d.nota} · ${det}`.slice(0, 255) : det }); }} title={notaDeItems(items)}
+            style={{ marginTop: 5, background: 'none', border: '1px dashed var(--df-purple-border, var(--df-border))', borderRadius: 7, padding: '4px 8px', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: 'var(--df-purple)', cursor: 'pointer' }}>📋 Copiar productos con tallas y cantidades</button>}
+        </div>
       </div>
       <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, cursor: 'pointer' }}>
         <input type="checkbox" checked={d.recibeSabado} onChange={(e) => set({ recibeSabado: e.target.checked })} /> Recibe los sábados
