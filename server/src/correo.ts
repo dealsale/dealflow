@@ -111,6 +111,8 @@ export async function enviarCorreo(c: Correo): Promise<{ ok: boolean; error?: st
     let msg = e instanceof Error ? e.message : String(e);
     // Railway (plan Hobby) bloquea la salida por SMTP: se ve como timeout o red inalcanzable.
     if (prov === 'smtp' && /ETIMEDOUT|ENETUNREACH|ECONNREFUSED|timeout|unreachable/i.test(msg)) msg = `No se pudo conectar a ${process.env.SMTP_HOST} (${msg}). Railway bloquea SMTP en el plan Hobby: usa RESEND_API_KEY o pasa a Pro.`;
+    // Gmail / Google Workspace: usuario o contraseña rechazados.
+    if (prov === 'smtp' && /535|BadCredentials|Username and Password not accepted/i.test(msg)) msg = `Gmail rechazó el usuario o la contraseña (535). SMTP_USER debe ser el correo completo de la cuenta real (no un alias) y SMTP_PASS una «contraseña de aplicación» de 16 letras de ESA cuenta, sin espacios (no la contraseña normal). Detalle: ${msg.slice(0, 120)}`;
     console.warn('[correo] no se pudo enviar', c.tipo, msg);
     anotar('error', msg);
     return { ok: false, error: msg };
