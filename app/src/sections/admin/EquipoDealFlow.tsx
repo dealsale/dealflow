@@ -16,7 +16,7 @@ const ROL: Record<string, [string, string, string]> = {
   SUPERADMIN: ['Superadmin', '#7C3AED', 'Todo, incluido crear cuentas del equipo.'],
   ADMIN: ['Administrador', '#1D4ED8', 'Todo el panel: tiendas, planes, cuentas, contabilidad, cupones, biblioteca, soporte.'],
   SOPORTE: ['Soporte', '#047857', 'Solo Soporte en vivo (atender llamadas), Trazabilidad y el Drive del equipo.'],
-  MARKETING: ['Marketing', '#DB2777', 'Solo el Drive del equipo (drive.dealflow.sbs): subir, organizar y compartir archivos. No entra al panel.'],
+  MARKETING: ['Marketing', '#DB2777', 'Solo el Drive del equipo (app.dealflow.sbs/drive): subir, organizar y compartir archivos. No entra al panel.'],
 };
 type RolEquipo = 'ADMIN' | 'SOPORTE' | 'MARKETING';
 const fecha = (s: string) => (s ? fmtCO('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(Date.parse(s.replace(' ', 'T') + 'Z')) : 'Nunca');
@@ -57,7 +57,7 @@ export function EquipoDealFlow() {
     <section data-screen-label="Equipo DealFlow" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Equipo DealFlow</h1>
-        <a href={/(^|\.)dealflow\.sbs$/i.test(location.hostname) ? 'https://drive.dealflow.sbs/' : '/drive'} target="_blank" rel="noopener" style={{ ...btnS, display: 'inline-block', marginTop: 8, textDecoration: 'none' }}>☁️ Abrir el Drive del equipo</a>
+        <a href={'/drive'} target="_blank" rel="noopener" style={{ ...btnS, display: 'inline-block', marginTop: 8, textDecoration: 'none' }}>☁️ Abrir el Drive del equipo</a>
         <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Cuentas de las personas que administran DealFlow o atienden el soporte. Cada quien entra con su propio correo (queda registrado quién hizo qué).</p>
       </div>
 

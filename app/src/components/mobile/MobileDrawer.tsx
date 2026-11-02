@@ -111,7 +111,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
             <div onClick={() => df.goAdmin('trazabilidad')} style={itemStyle(df.adminSection === 'trazabilidad')}>
               <span>🧭 Trazabilidad</span>
             </div>
-            <a href={/(^|\.)dealflow\.sbs$/i.test(location.hostname) ? 'https://drive.dealflow.sbs/' : '/drive'} target="_blank" rel="noopener" style={{ ...itemStyle(false), textDecoration: 'none', color: 'inherit', display: 'block' }}>
+            <a href={'/drive'} target="_blank" rel="noopener" style={{ ...itemStyle(false), textDecoration: 'none', color: 'inherit', display: 'block' }}>
               <span>☁️ Drive del equipo</span>
             </a>
             {!df.isSoporte && <div onClick={() => df.goAdmin('proveedores')} style={itemStyle(df.adminSection === 'proveedores')}>

@@ -1735,7 +1735,7 @@ export function useDealFlowState() {
   }, []);
 
   // Cuentas de la demo estática (sin backend).
-  const urlDrive = () => (/(^|\.)dealflow\.sbs$/i.test(location.hostname) ? 'https://drive.dealflow.sbs/' : '/drive');
+  const urlDrive = () => '/drive';
   const DEMO_ACCOUNTS: Record<string, { password: string; nombre: string; role: 'vendedor' | 'admin' }> = {
     'karla@lunaaccesorios.co': { password: 'demo123', nombre: 'Karla', role: 'vendedor' },
     'admin@dealflow.co': { password: 'admin123', nombre: 'Equipo DealFlow', role: 'admin' },

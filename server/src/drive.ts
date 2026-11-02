@@ -29,7 +29,8 @@ const AUTH_URL = process.env.GOOGLE_AUTH_URL || 'https://accounts.google.com/o/o
 const TOKEN_URL = process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token';
 const API = process.env.GOOGLE_DRIVE_API || 'https://www.googleapis.com/drive/v3';
 const UPLOAD = process.env.GOOGLE_DRIVE_UPLOAD || 'https://www.googleapis.com/upload/drive/v3';
-export const DRIVE_URL = (process.env.DRIVE_URL || 'https://drive.dealflow.sbs').replace(/\/+$/, '');
+// El Drive vive en app.dealflow.sbs/drive (ya no en el subdominio drive.).
+export const DRIVE_URL = (process.env.DRIVE_URL || process.env.PUBLIC_APP_URL || 'https://app.dealflow.sbs').replace(/\/+$/, '');
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const CARPETA = 'application/vnd.google-apps.folder';
 
@@ -171,7 +172,7 @@ drive.get('/google/conectar', requireAuth, requireDrive, (req, res) => {
   if (!CLIENT_ID() || !CLIENT_SECRET()) return res.status(400).json({ error: 'Faltan GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en el servidor (Railway).' });
   const st = randomBytes(18).toString('hex');
   const origen = String(req.query.volver || '');
-  const volver = /^https:\/\/([a-z0-9-]+\.)*dealflow\.sbs(\/|$)/i.test(origen) || /^http:\/\/localhost(:\d+)?\//.test(origen) ? origen : `${DRIVE_URL}/`;
+  const volver = /^https:\/\/([a-z0-9-]+\.)*dealflow\.sbs(\/|$)/i.test(origen) || /^http:\/\/localhost(:\d+)?\//.test(origen) ? origen : `${DRIVE_URL}/drive`;
   estados.set(st, { userId: req.user!.id, volver, exp: Date.now() + 15 * 60_000 });
   const p = new URLSearchParams({ client_id: CLIENT_ID(), redirect_uri: REDIRECT(), response_type: 'code', scope: `${SCOPE} openid email`, access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true', state: st });
   res.json({ url: `${AUTH_URL}?${p}` });
