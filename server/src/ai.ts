@@ -399,6 +399,11 @@ async function responderTurno(storeId: string, leadId: string) {
   const promos = (db.prepare('SELECT titulo, descripcion FROM promos WHERE store_id = ? AND activa = 1').all(storeId) as { titulo: string; descripcion: string }[])
     .map((p) => `- ${p.titulo}: ${p.descripcion}`).join('\n');
   const reglas = pj<string[]>(assistant?.reglas || '[]', []).map((r) => `- ${r}`).join('\n');
+  // Plantilla de DealShop instalada (p. ej. E-commerce V2): su método de venta y sus reglas
+  // van aparte de lo que escribió la tienda; lo de la tienda gana si se contradicen.
+  const tpl = (await import('./plantillas.js')).gestionPlantilla(storeId);
+  const metodoTpl = tpl?.metodo ? `\n\nMÉTODO DE VENTA (plantilla «${tpl.nombre}»; si algo de las instrucciones, reglas o información de la tienda lo contradice, gana lo de la tienda):\n${tpl.metodo}` : '';
+  const reglasTpl = tpl?.reglas.length ? `\n\nREGLAS DE VENTA Y TRATO (plantilla «${tpl.nombre}»; las reglas de la tienda y de cada producto tienen prioridad sobre estas):\n${tpl.reglas.map((r) => `- ${r}`).join('\n')}` : '';
 
   // IA híbrida: DeepSeek no oye ni ve. Si el cliente mandó una nota de voz o una
   // foto SIN texto, usamos OpenAI para convertirla a texto y guardarlo en el
@@ -428,10 +433,10 @@ async function responderTurno(storeId: string, leadId: string) {
 
 ${identidad}
 
-${assistant?.instrucciones || 'Atiende con calidez y ayuda a cerrar la venta.'}
+${assistant?.instrucciones || (metodoTpl ? '' : 'Atiende con calidez y ayuda a cerrar la venta.')}${metodoTpl}
 
 REGLAS GENERALES DE LA TIENDA:
-${reglas || '- Sé honesto y claro.'}
+${reglas || '- Sé honesto y claro.'}${reglasTpl}
 
 MUY IMPORTANTE: cada producto puede tener sus PROPIAS reglas (aparecen como "· Regla:" dentro de él). Esas reglas del producto son EXCEPCIONES y tienen PRIORIDAD sobre las reglas generales. Ejemplo: si la regla general dice que no se venden 2 unidades, pero un producto tiene una regla que sí permite llevar 2 por cierto precio, respeta la del producto. Usa siempre la descripción, características, modo de uso, combos, precios y reglas EXACTAS del producto del catálogo; no inventes ni generalices.
 

@@ -399,7 +399,7 @@ export const apiNovedadesEstado = () => req<EstadoNovedades>('/api/novedades/est
 export const apiNovedadesSync = () => req<{ ok: true; abiertas: number; nuevas: number }>('/api/novedades/sync', 'POST');
 export const apiNovedadSolucion = (id: string, p: PropuestaNovedad) => req<{ ok: true; estado: string }>(`/api/novedades/${encodeURIComponent(id)}/solucion`, 'POST', p);
 export const apiNovedadAvisar = (id: string) => req<{ ok: true; via: string }>(`/api/novedades/${encodeURIComponent(id)}/avisar`, 'POST');
-export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean; landings?: boolean }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; versiones?: { leads: number; orders: number }; suscripcion: Suscripcion | null }>('/api/state', 'GET');
+export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean; landings?: boolean }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente; plantilla?: PlantillaActiva | null }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; versiones?: { leads: number; orders: number }; suscripcion: Suscripcion | null }>('/api/state', 'GET');
 // Pedidos. Con `desde` (versión que la app ya vio) el servidor manda SOLO los que cambiaron
 // después (`parcial: true`); `total` permite detectar pedidos borrados.
 export const apiOrders = (desde?: number) => req<{ orders: ApiOrder[]; v?: number; total?: number; parcial?: boolean }>(`/api/orders${desde ? `?desde=${desde}` : ''}`, 'GET');
@@ -554,9 +554,22 @@ export interface Plantilla {
   precio: number;
   features: string[];
   instalada: boolean;
+  version?: string;
+  nuevo?: boolean;
+  /** Instalada con una versión anterior: hay actualización. */
+  actualizacion?: boolean;
+  /** Id de la plantilla instalada que esta mejora (se ofrece «Actualizar»). */
+  mejoraDe?: string | null;
+  puedeDeshacer?: boolean;
+  detalle?: { instrucciones: string; reglas: string[]; estilo: Record<string, unknown> } | null;
 }
+/** Plantilla activa en el asistente (su método y reglas van aparte de lo de la tienda). */
+export interface PlantillaActiva { id: string; nombre: string; version: string; metodo: string; reglas: string[] }
 export const apiPlantillas = () => req<{ plantillas: Plantilla[] }>('/api/plantillas', 'GET');
-export const apiInstalarPlantilla = (id: string, force = false) => req<{ ok: true }>(`/api/plantillas/${id}/instalar`, 'POST', force ? { force: true } : undefined);
+export const apiInstalarPlantilla = (id: string, force = false, conservar: string[] = []) => req<{ ok: true; reglasConservadas?: number; reglasQuitadas?: number; estiloRespetado?: string[] }>(`/api/plantillas/${id}/instalar`, 'POST', force || conservar.length ? { force, conservar } : undefined);
+export interface PreviaPlantilla { reemplazar: string[]; conservar: string[]; quitaInstrucciones: boolean; respetado: string[] }
+export const apiPreviaPlantilla = (id: string) => req<PreviaPlantilla>(`/api/plantillas/${id}/previa`, 'GET');
+export const apiRestaurarPlantilla = (id: string) => req<{ ok: true }>(`/api/plantillas/${id}/restaurar`, 'POST');
 export const apiDesinstalarPlantilla = (id: string, borrarDatos: boolean) => req<{ ok: true; borrados?: number }>(`/api/plantillas/${id}/desinstalar`, 'POST', { borrarDatos });
 
 // ── Multi-tienda por cuenta ──

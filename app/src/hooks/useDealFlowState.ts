@@ -86,6 +86,8 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiPlantillas,
   apiInstalarPlantilla,
   apiDesinstalarPlantilla,
+  apiRestaurarPlantilla,
+  type PlantillaActiva,
   apiMisTiendas,
   apiCambiarTienda,
   apiCrearTienda,
@@ -803,6 +805,8 @@ export function useDealFlowState() {
   }, [theme]);
   function setTheme(t: 'light' | 'dark' | 'premium') { setThemeState(t); }
   const [assistantText, setAssistantText] = useState<string>(snap?.assistantText ?? DEF_ASSISTANT);
+  // Plantilla de DealShop activa (su método y reglas van aparte de lo que escribe la tienda).
+  const [plantillaActiva, setPlantillaActiva] = useState<PlantillaActiva | null>(null);
   const [assistantNombre, setAssistantNombre] = useState<string>('');
   const [seguimientoActivo, setSeguimientoActivo] = useState<boolean>(false); // anti-baneo: el seguimiento automático viene APAGADO; el dueño lo enciende
   const [estilo, setEstilo] = useState<EstiloAsistente>({ trato: 'tu', emojis: true, largo: 'corto' });
@@ -2143,6 +2147,7 @@ export function useDealFlowState() {
         if (data.whatsapp.signup?.disponible && !data.whatsapp.conectado) setWaMethod((m) => (m === 'qr' ? 'auto' : m));
         // Datos reales de la tienda: nada de textos demo de "Luna Accesorios".
         setAssistantText(data.assistant?.instrucciones || '');
+        setPlantillaActiva(data.assistant?.plantilla || null);
         setAssistantNombre(data.assistant?.nombre || '');
         setSeguimientoActivo(data.assistant?.seguimientoActivo === true);
         setEstilo({
@@ -3351,18 +3356,21 @@ export function useDealFlowState() {
   }, [apiMode, sessionUser, section]);
 
 
-  function instalarPlantilla(id: string, force = false) {
+  function instalarPlantilla(id: string, force = false, conservar: string[] = []) {
     setInstalando(force ? 'reinstalar:' + id : id);
     setPlantillaMsg('');
-    void apiInstalarPlantilla(id, force).then((r) => {
+    void apiInstalarPlantilla(id, force, conservar).then((r) => {
       setInstalando(null);
       if (r.error) { setPlantillaMsg(r.error); return; }
-      setPlantillaMsg('¡Plantilla instalada! Tu asistente y el producto de ejemplo ya están listos.');
+      const d = r.data;
+      setPlantillaMsg(d && d.reglasConservadas !== undefined
+        ? `¡Listo! Tu asistente quedó con la plantilla. Se conservaron tus ${d.reglasConservadas} regla(s) propias y la información de tu negocio${d.reglasQuitadas ? `; se reemplazaron ${d.reglasQuitadas} regla(s) que venían de la plantilla anterior` : ''}${d.estiloRespetado?.length ? `. Respetamos lo que tú cambiaste en: ${d.estiloRespetado.join(', ')}` : ''}.`
+        : '¡Plantilla instalada! Tu asistente ya está listo.');
       reloadPlantillas();
       void reloadProducts();
       void apiState().then(({ data }) => {
         if (data) {
-          setAssistantText(data.assistant?.instrucciones || ''); setRules(data.assistant?.reglas || []);
+          setAssistantText(data.assistant?.instrucciones || ''); setRules(data.assistant?.reglas || []); setPlantillaActiva(data.assistant?.plantilla || null);
           setEstilo({
             ...(data.assistant?.estilo || {}),
             trato: data.assistant?.estilo?.trato === 'usted' ? 'usted' : 'tu',
@@ -3370,6 +3378,20 @@ export function useDealFlowState() {
             largo: data.assistant?.estilo?.largo === 'detallado' || data.assistant?.estilo?.largo === 'medio' ? data.assistant.estilo.largo : 'corto',
           });
         }
+      });
+    });
+  }
+
+  function restaurarPlantilla(id: string) {
+    setInstalando('restaurar:' + id);
+    setPlantillaMsg('');
+    void apiRestaurarPlantilla(id).then((r) => {
+      setInstalando(null);
+      if (r.error) { setPlantillaMsg(r.error); return; }
+      setPlantillaMsg('Listo: tu asistente volvió a como estaba antes de instalar la plantilla.');
+      reloadPlantillas();
+      void apiState().then(({ data }) => {
+        if (data) { setAssistantText(data.assistant?.instrucciones || ''); setRules(data.assistant?.reglas || []); setPlantillaActiva(data.assistant?.plantilla || null); setEstilo({ trato: 'tu', emojis: true, largo: 'corto', ...(data.assistant?.estilo || {}) }); }
       });
     });
   }
@@ -3384,7 +3406,7 @@ export function useDealFlowState() {
       reloadPlantillas();
       void reloadProducts();
       void apiState().then(({ data }) => {
-        if (data) { setAssistantText(data.assistant?.instrucciones || ''); setRules(data.assistant?.reglas || []); }
+        if (data) { setAssistantText(data.assistant?.instrucciones || ''); setRules(data.assistant?.reglas || []); setPlantillaActiva(data.assistant?.plantilla || null); setEstilo({ trato: 'tu', emojis: true, largo: 'corto', ...(data.assistant?.estilo || {}) }); }
       });
     });
   }
@@ -4230,6 +4252,8 @@ export function useDealFlowState() {
     plantillaMsg,
     instalarPlantilla,
     desinstalarPlantilla,
+    restaurarPlantilla,
+    plantillaActiva,
 
     products: productsDecorated,
     productRuleDraft,
