@@ -87,7 +87,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         {df.isAdmin && (
           <>
             <div style={{ color: 'var(--df-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 8px' }}>
-              {df.isSuperadmin ? 'Superadmin' : df.isSoporte ? 'Soporte' : 'Administración'}
+              {df.isSoporte ? 'Soporte' : 'Administración'}
             </div>
             {/* El superadmin ve TODO lo del admin y, además, "Todas las tiendas". */}
             {df.isSuperadmin && (

@@ -27,11 +27,11 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
 
   const soporte = ll.rol === 'soporte';
   const activa = ll.fase !== 'terminada' && ll.fase !== 'pausada';
-  const conQuien = soporte ? ll.titulo : ll.atendidoPor ? `${ll.atendidoPor} (soporte DealFlow)` : 'Soporte DealFlow';
+  const conQuien = soporte ? ll.titulo : ll.atendidoPor ? (ll.atendidoPor.includes('DealFlow') ? ll.atendidoPor : `${ll.atendidoPor} (soporte DealFlow)`) : 'Soporte DealFlow';
   const estadoTxt: Record<string, string> = {
     preparando: 'Preparando el micrófono…',
     esperando: 'Esperando a que entre alguien de soporte… normalmente tarda unos minutos.',
-    conectando: soporte ? 'Conectando con la tienda…' : `${ll.atendidoPor || 'Soporte'} está entrando a la llamada…`,
+    conectando: soporte ? (ll.timbrando ? 'Timbrando… esperando a que la tienda conteste.' : 'Conectando con la tienda…') : `${ll.atendidoPor || 'Soporte'} está entrando a la llamada…`,
     conectada: `En llamada con ${conQuien}`,
     reconectando: 'Se perdió la conexión: reconectando…',
     pausada: 'La llamada quedó en pausa (se recargó la página).',
@@ -59,7 +59,7 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: 'linear-gradient(135deg, #047857, #1D4ED8)' }}>
         <span style={{ fontSize: 18 }}>📞</span>
         <div style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
-          <div style={{ fontWeight: 800, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{soporte ? ll.titulo : 'Soporte DealFlow'}</div>
+          <div style={{ fontWeight: 800, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{soporte ? ll.titulo : ll.atendidoPor.includes('DealFlow') ? ll.atendidoPor : 'Soporte DealFlow'}</div>
           <div style={{ fontSize: 11.5, opacity: 0.85 }}>{tiempo ? `En llamada · ${tiempo}` : ll.fase === 'terminada' ? 'Terminada' : 'Llamada de voz'}</div>
         </div>
         {soporte && activa && <button onClick={() => setGrande((g) => !g)} title={grande ? 'Achicar' : 'Agrandar'} style={cab}>{grande ? '⤡' : '⤢'}</button>}

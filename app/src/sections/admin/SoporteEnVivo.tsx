@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { apiAdminLlamadas, apiAdminLlamadaAccion, type CfgLlamadas, type LlamadaEquipo, type ServicioLlamadas } from '../../lib/api';
+import { apiAdminLlamadas, apiAdminLlamadaAccion, apiAdminLlamar, apiAdminTiendasLlamar, type CfgLlamadas, type LlamadaEquipo, type ServicioLlamadas, type TiendaLlamable } from '../../lib/api';
 import { notificar } from '../../components/dialogs';
 import { fmtCO } from '../../lib/fechaCO';
 import { useLlamada, iniciarLlamada, colgarLlamada } from '../../lib/llamadaRTC';
@@ -17,8 +17,65 @@ const hace = (s: string) => { const m = Math.max(0, Math.round((Date.now() - ms(
 const fecha = (s: string) => (s ? fmtCO('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(ms(s)) : '');
 const ESTADO: Record<string, [string, string]> = {
   esperando: ['⏳ Esperando', '#B45309'], en_curso: ['🟢 En llamada', '#047857'], terminada: ['✓ Terminada', 'var(--df-text-muted)'],
-  cancelada: ['Cancelada por la tienda', 'var(--df-text-muted)'], sin_atender: ['✗ Nadie la atendió', '#B91C1C'],
+  cancelada: ['Cancelada', 'var(--df-text-muted)'], sin_atender: ['✗ Nadie la atendió', '#B91C1C'],
+  llamando: ['📳 Timbrando en la tienda', '#1D4ED8'], rechazada: ['✗ La tienda rechazó', '#B91C1C'], sin_respuesta: ['✗ La tienda no contestó', '#B91C1C'],
 };
+
+/** Solo el superadmin: llamar a una tienda (le aparece el aviso grande «El administrador de DealFlow te está llamando»). */
+function LlamarTienda({ alLlamar }: { alLlamar: () => void }) {
+  const [tiendas, setTiendas] = useState<TiendaLlamable[] | null>(null);
+  const [q, setQ] = useState('');
+  const [sel, setSel] = useState<TiendaLlamable | null>(null);
+  const [motivo, setMotivo] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+  const cargar = () => void apiAdminTiendasLlamar().then((r) => { if (r.data) setTiendas(r.data.tiendas); });
+  useEffect(() => { cargar(); const t = setInterval(cargar, 8000); return () => clearInterval(t); }, []);
+  const n = q.trim().toLowerCase();
+  const lista = (tiendas || []).filter((t) => !n || t.nombre.toLowerCase().includes(n) || t.correo.toLowerCase().includes(n))
+    .sort((a, b) => Number(b.conectada) - Number(a.conectada)).slice(0, 8);
+  const llamar = async () => {
+    if (!sel) return;
+    setOcupado(true);
+    const r = await apiAdminLlamar(sel.id, motivo.trim());
+    setOcupado(false);
+    if (!r.data) { notificar(r.error || 'No se pudo llamar.', 'error'); return; }
+    iniciarLlamada(r.data.id, 'soporte', `${r.data.tienda} · llamada saliente`);
+    setSel(null); setMotivo(''); setQ('');
+    alLlamar();
+  };
+  return (
+    <div style={card}>
+      <div style={{ fontWeight: 800, fontSize: 15 }}>📲 Llamar a una tienda</div>
+      <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', margin: '4px 0 10px' }}>A la tienda le aparece en grande «El administrador de DealFlow te está llamando» con timbre. Solo le llega si tiene DealFlow abierto (🟢). Timbra 1 minuto.</div>
+      {sel ? (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <b>{sel.nombre}</b>
+            <span style={{ fontSize: 12, color: sel.conectada ? '#047857' : 'var(--df-text-muted)', fontWeight: 700 }}>{sel.conectada ? '🟢 Tiene DealFlow abierto' : '⚪ No tiene DealFlow abierto ahora'}</span>
+            <button type="button" onClick={() => setSel(null)} style={{ ...btnS, marginLeft: 'auto' }}>Cambiar</button>
+          </div>
+          <input id="sop-llamar-motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={200} placeholder="Motivo (opcional): lo ve la tienda en el aviso"
+            style={{ font: 'inherit', fontSize: 13.5, padding: '9px 11px', borderRadius: 9, border: '1px solid var(--df-border)', background: 'var(--df-bg)', color: 'var(--df-text)' }} />
+          <button type="button" onClick={() => void llamar()} disabled={ocupado} style={{ ...btn, justifySelf: 'start', padding: '10px 18px' }}>{ocupado ? 'Llamando…' : `📞 Llamar a ${sel.nombre}`}</button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 6 }}>
+          <input id="sop-llamar-buscar" value={q} onFocus={cargar} onChange={(e) => setQ(e.target.value)} placeholder="Busca la tienda por nombre o correo…" aria-label="Buscar tienda para llamar"
+            style={{ font: 'inherit', fontSize: 13.5, padding: '9px 11px', borderRadius: 9, border: '1px solid var(--df-border)', background: 'var(--df-bg)', color: 'var(--df-text)' }} />
+          {!tiendas && <div style={{ fontSize: 13, color: 'var(--df-text-faint)' }}>Cargando tiendas…</div>}
+          {lista.map((t) => (
+            <button key={t.id} type="button" onClick={() => setSel(t)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', border: '1px solid var(--df-border)', borderRadius: 9, padding: '8px 11px', background: 'var(--df-surface)', color: 'var(--df-text)', fontFamily: 'inherit', fontSize: 13.5, cursor: 'pointer' }}>
+              <span aria-hidden>{t.conectada ? '🟢' : '⚪'}</span>
+              <span style={{ fontWeight: 700, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nombre}{t.oculta ? ' · oculta' : ''}</span>
+              <span style={{ fontSize: 12, color: 'var(--df-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '45%' }}>{t.correo}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Sonido corto de aviso (sin archivos). */
 function timbre() {
@@ -67,7 +124,7 @@ export function AvisoLlamadas({ irA }: { irA: () => void }) {
   );
 }
 
-export function SoporteEnVivo({ puedeConfigurar = true }: { puedeConfigurar?: boolean }) {
+export function SoporteEnVivo({ puedeConfigurar = true, puedeLlamar = false }: { puedeConfigurar?: boolean; puedeLlamar?: boolean }) {
   const [lista, setLista] = useState<LlamadaEquipo[] | null>(null);
   const [cfg, setCfg] = useState<CfgLlamadas | null>(null);
   const [servicio, setServicio] = useState<ServicioLlamadas | null>(null);
@@ -89,8 +146,8 @@ export function SoporteEnVivo({ puedeConfigurar = true }: { puedeConfigurar?: bo
     cargar();
   };
   const cambio = (c: CfgLlamadas, s: ServicioLlamadas) => { setCfg(c); setServicio(s); };
-  const activas = (lista || []).filter((l) => l.estado === 'esperando' || l.estado === 'en_curso');
-  const historial = (lista || []).filter((l) => l.estado !== 'esperando' && l.estado !== 'en_curso');
+  const activas = (lista || []).filter((l) => l.estado === 'esperando' || l.estado === 'en_curso' || l.estado === 'llamando');
+  const historial = (lista || []).filter((l) => l.estado !== 'esperando' && l.estado !== 'en_curso' && l.estado !== 'llamando');
 
   return (
     <section data-screen-label="Soporte en vivo" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -114,19 +171,21 @@ export function SoporteEnVivo({ puedeConfigurar = true }: { puedeConfigurar?: bo
           {activas.map((l) => (
             <div key={l.id} style={{ border: `1.5px solid ${l.estado === 'esperando' ? '#F59E0B' : '#10B981'}`, borderRadius: 10, padding: '10px 12px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 220 }}>
-                <div style={{ fontWeight: 800, fontSize: 14 }}>{l.tienda} <span style={{ fontWeight: 600, color: 'var(--df-text-muted)', fontSize: 12.5 }}>· {l.usuario}</span></div>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>{l.direccion === 'saliente' && <span title="La llamaste tú" style={{ fontSize: 11.5, fontWeight: 800, color: '#1D4ED8', background: 'rgba(29,78,216,.1)', borderRadius: 6, padding: '1px 6px', marginRight: 6 }}>↗ Saliente</span>}{l.tienda} {l.usuario && <span style={{ fontWeight: 600, color: 'var(--df-text-muted)', fontSize: 12.5 }}>· {l.usuario}</span>}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', marginTop: 2 }}>{l.motivo || <i style={{ color: 'var(--df-text-faint)' }}>Sin motivo</i>}{l.seccion ? <span style={{ color: 'var(--df-text-faint)' }}> · estaba en {l.seccion}</span> : ''}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, marginTop: 3, color: ESTADO[l.estado]?.[1] }}>{ESTADO[l.estado]?.[0]} · {l.estado === 'esperando' ? hace(l.creado) : `${l.atendidoPor} desde ${hace(l.atendidoAt)}`}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, marginTop: 3, color: ESTADO[l.estado]?.[1] }}>{ESTADO[l.estado]?.[0]} · {l.estado === 'esperando' || l.estado === 'llamando' ? hace(l.creado) : `${l.atendidoPor} desde ${hace(l.atendidoAt)}`}</div>
               </div>
               {llamada?.id === l.id && llamada.fase !== 'terminada'
                 ? <span style={{ fontSize: 12.5, fontWeight: 800, color: '#047857' }}>📞 Estás en esta llamada</span>
-                : <button onClick={() => void atender(l)} style={btn}>{l.estado === 'esperando' ? 'Atender' : 'Volver a entrar'}</button>}
+                : l.estado === 'llamando' ? null : <button onClick={() => void atender(l)} style={btn}>{l.estado === 'esperando' ? 'Atender' : 'Volver a entrar'}</button>}
               <button onClick={() => void terminar(l)} style={btnS}>Terminar</button>
             </div>
           ))}
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 10, lineHeight: 1.5 }}>La llamada es aquí mismo, dentro de DealFlow (audio y pantalla compartida, sin otra plataforma). La primera vez el navegador te pide permiso para el micrófono.</div>
       </div>
+
+      {puedeLlamar && <LlamarTienda alLlamar={cargar} />}
 
       <PausaSoporte servicio={servicio} onCambio={cambio} />
       {!puedeConfigurar && servicio && <div style={{ ...card, padding: '10px 14px', fontSize: 13, color: 'var(--df-text-muted)' }}>🕐 Horario de atención: {servicio.horario}. {servicio.abierto ? `🟢 Ahora está disponible.${servicio.hasta ? ` ${servicio.hasta}` : ''}` : `⚪ Ahora no está disponible.${servicio.siguiente ? ` ${servicio.siguiente}` : ''}`}</div>}

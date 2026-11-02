@@ -15,9 +15,9 @@ export function Superadmin({ df }: { df: DealFlowState }) {
     { id: 'onboarding', label: 'Onboarding de asistente' },
   ];
   return (
-    <section data-screen-label="Superadmin">
+    <section data-screen-label="Todas las tiendas">
       <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Superadmin</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Todas las tiendas</h1>
         <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Gestiona todas las tiendas, las bibliotecas de productos y de landings, y el alta de asistentes.</p>
       </div>
       <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden', marginBottom: 18, flexWrap: 'wrap' }}>

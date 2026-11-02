@@ -1125,6 +1125,8 @@ export function useDealFlowState() {
 
   const isAdmin = mode === 'admin';
   const isSuperadmin = sessionUser?.role === 'superadmin';
+  // En pantalla nunca se lee «superadmin»: si el nombre de la cuenta lo dice, se muestra «Administrador».
+  const nombreVisible = /super\s*-?\s*admin/i.test(sessionUser?.nombre || '') ? 'Administrador' : (sessionUser?.nombre || '');
   const isSoporte = sessionUser?.role === 'soporte';
 
   // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
@@ -4028,11 +4030,11 @@ export function useDealFlowState() {
     toggleMode,
     modeBtnLabel: isAdmin ? 'Volver al panel vendedor' : 'Panel de administración',
     headerTitle: isAdmin ? 'DealFlow · Administración' : apiMode ? storeNombre || 'Mi tienda' : 'Luna Accesorios',
-    userLabel: apiMode ? sessionUser?.nombre || (isAdmin ? 'Equipo DealFlow' : 'Vendedor') : isAdmin ? 'Equipo DealFlow' : 'Karla',
-    userInitials: apiMode ? initials(sessionUser?.nombre || (isAdmin ? 'DealFlow' : 'V')).toUpperCase() : isAdmin ? 'DF' : 'K',
-    userRoleLabel: isSuperadmin ? 'Superadmin' : isSoporte ? 'Soporte' : isAdmin ? 'Administrador' : esAgente ? 'Agente' : 'Dueño de la tienda',
+    userLabel: apiMode ? nombreVisible || (isAdmin ? 'Equipo DealFlow' : 'Vendedor') : isAdmin ? 'Equipo DealFlow' : 'Karla',
+    userInitials: apiMode ? initials(nombreVisible || (isAdmin ? 'DealFlow' : 'V')).toUpperCase() : isAdmin ? 'DF' : 'K',
+    userRoleLabel: isSuperadmin ? 'Administrador' : isSoporte ? 'Soporte' : isAdmin ? 'Administrador' : esAgente ? 'Agente' : 'Dueño de la tienda',
     userFoto: sessionUser?.foto || '',
-    saludoNombre: apiMode ? (sessionUser?.nombre?.split(' ')[0] || 'Vendedor') : 'Karla',
+    saludoNombre: apiMode ? (nombreVisible.split(' ')[0] || 'Vendedor') : 'Karla',
     storeNombre: storeNombre || 'Tu tienda',
     navStyle,
 
