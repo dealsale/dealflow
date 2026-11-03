@@ -128,6 +128,7 @@ export function PlantillasWA({ df }: { df: DealFlowState }) {
                   {p.resumen.pendiente > 0 && <span style={chip('rgba(245,158,11,.12)', '#B45309')}>⏳ {p.resumen.pendiente}</span>}
                   {p.resumen.rechazada > 0 && <span style={chip('var(--df-danger-subtle-2)', 'var(--df-danger-dark)')}>✕ {p.resumen.rechazada}</span>}
                   {p.resumen.error > 0 && <span style={chip('var(--df-danger-subtle-2)', 'var(--df-danger-dark)')}>⚠ {p.resumen.error}</span>}
+                  {!!p.reclasificadas?.length && <span title={`Meta la pasó a Marketing en: ${p.reclasificadas.join(', ')}`} style={chip('var(--df-purple-subtle)', 'var(--df-purple)')}>⚠ Marketing en {p.reclasificadas.length}</span>}
                 </div>
               )}
             </div>

@@ -483,6 +483,8 @@ export interface PlantillaAprobada {
   origen?: 'dealflow' | 'meta'; encabezadoTipo?: string; varsEncabezado?: number; mediaEjemplo?: string; botonVariable?: boolean;
   /** Qué es cada variable ({{1}} = campos[0]): 'nombre', 'pedido', 'total'… ('' = no se sabe). */
   campos?: string[]; campoEncabezado?: string; campoBoton?: string;
+  /** Se puede subir el archivo del encabezado (foto/video/PDF) desde DealFlow. */
+  adjuntable?: boolean;
 }
 export const NOMBRE_CAMPO_PLANTILLA: Record<string, string> = {
   nombre: 'nombre del cliente', nombre_completo: 'nombre completo', tienda: 'nombre de tu tienda', pedido: 'número del pedido',
@@ -491,7 +493,7 @@ export const NOMBRE_CAMPO_PLANTILLA: Record<string, string> = {
 };
 export const apiDatosPlantilla = (leadId: string, plantillaId: string) =>
   req<{ params: string[]; encabezado: string; boton: string; pedido: string }>(`/api/leads/${encodeURIComponent(leadId)}/plantilla-datos?plantillaId=${encodeURIComponent(plantillaId)}`, 'GET');
-export interface ExtraPlantilla { encabezado?: string; media?: string; boton?: string }
+export interface ExtraPlantilla { encabezado?: string; media?: string; boton?: string; mediaNombre?: string }
 /** ¿Hay que llenar algo antes de enviarla? (variables, foto/video/documento, enlace del botón) */
 export const plantillaPideDatos = (p: PlantillaAprobada) => p.variables > 0 || !!p.varsEncabezado || ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(p.encabezadoTipo || '') || !!p.botonVariable;
 export const apiPlantillasAprobadas = () => req<{ plantillas: PlantillaAprobada[] }>('/api/plantillas-aprobadas', 'GET');
@@ -760,13 +762,37 @@ export const apiStopImpersonate = () => req<{ ok: true }>('/api/auth/stop-impers
 export const apiSoporteTiendas = () => req<{ tiendas: { id: string; nombre: string }[]; actual: string | null }>('/api/auth/soporte/tiendas', 'GET');
 export const apiSoporteCambiar = (id: string) => req<{ ok: true }>(`/api/auth/soporte/cambiar/${id}`, 'POST');
 // Barra de soporte (dentro de una tienda): editarla sin volver al panel administrativo.
+// ── Plantillas de WhatsApp de la tienda (constructor, automatizaciones, documento) ──
+export interface PermisosPlantillas { crear: boolean; automatizaciones: boolean; documentos: boolean }
+export interface RiesgoPlantilla { nivel: 'bajo' | 'medio' | 'alto'; motivos: string[]; sugerencias: string[] }
+export interface PlantillaTiendaWA {
+  id: string; metaId: string; nombre: string; idioma: string; categoria: string; estado: 'aprobada' | 'pendiente' | 'rechazada' | 'pausada'; motivo: string; calidad: string;
+  encabezadoTipo: string; encabezado: string; varsEncabezado: number; cuerpo: string; pie: string; variables: number;
+  botones: { tipo: string; texto: string }[]; mediaEjemplo: boolean; creadaAqui: boolean; categoriaPedida: string; campos: string[]; reclasificada: boolean;
+}
+export interface AutomatizacionWA {
+  clave: string; titulo: string; descripcion: string; campos: string[]; doc: ('guia' | 'archivo')[]; deDealflow: string[];
+  seleccion: { metaId: string; nombre: string; mapa: string[]; doc: { fuente?: string; archivo?: string; nombre?: string }; estado: string; motivo: string; desde: string } | null;
+}
+export interface BasePlantillaWA { id: string; titulo: string; uso: string; categoria: 'UTILITY'; encabezadoTipo: '' | 'TEXT' | 'DOCUMENT' | 'IMAGE'; encabezado: string; cuerpo: string; pie: string; botones: { tipo: 'QUICK_REPLY'; texto: string }[]; documento?: boolean }
+export interface EstadoPlantillasWA { permisos: PermisosPlantillas; propias: PlantillaTiendaWA[]; automatizaciones: AutomatizacionWA[]; campos: Record<string, string>; bases: BasePlantillaWA[] }
+export interface DefPlantillaWA {
+  nombre: string; categoria: 'UTILITY' | 'MARKETING'; base?: string; encabezadoTipo: '' | 'TEXT' | 'IMAGE' | 'DOCUMENT'; encabezado?: string; archivoEjemplo?: string;
+  cuerpo: string; pie?: string; botones?: { tipo: 'QUICK_REPLY' | 'URL'; texto: string; url?: string }[];
+}
+export const apiWaPlantillas = () => req<EstadoPlantillasWA>('/api/wa-plantillas', 'GET');
+export const apiWaPlantillaRevisar = (d: DefPlantillaWA) => req<{ errores: string[]; riesgo: RiesgoPlantilla; nombre: string; vista: string; campos: string[] }>('/api/wa-plantillas/revisar', 'POST', d);
+export const apiWaPlantillaCrear = (d: DefPlantillaWA) => req<{ ok: true; nombre: string; estado: string; riesgo: RiesgoPlantilla }>('/api/wa-plantillas/crear', 'POST', d);
+export const apiWaAutomatizacion = (clave: string, b: { metaId: string; mapa?: string[]; doc?: { fuente?: string; archivo?: string; nombre?: string } }) =>
+  req<EstadoPlantillasWA & { ok: true }>(`/api/wa-plantillas/automatizacion/${clave}`, 'PUT', b);
+
 export interface TiendaSoporte {
-  tienda: { nombre: string; correo: string; plan: string; planEstado: string; planVence: string | null; activa: boolean; creditos: number; temaPremium: boolean; creada: string; whatsapp: { conectado: boolean; numero: string } };
+  tienda: { nombre: string; correo: string; plan: string; planEstado: string; planVence: string | null; activa: boolean; creditos: number; temaPremium: boolean; creada: string; whatsapp: { conectado: boolean; numero: string }; plantillas: PermisosPlantillas };
   usuarios: { id: string; nombre: string; email: string; dueno: boolean }[];
   planes: string[];
 }
 export const apiTiendaSoporte = () => req<TiendaSoporte>('/api/soporte-tienda', 'GET');
-export const apiTiendaSoporteEditar = (b: { nombre?: string; correo?: string; plan?: string; activa?: boolean; temaPremium?: boolean }) => req<{ ok: true }>('/api/soporte-tienda/editar', 'POST', b);
+export const apiTiendaSoporteEditar = (b: { nombre?: string; correo?: string; plan?: string; activa?: boolean; temaPremium?: boolean; plantillas?: Partial<PermisosPlantillas> }) => req<{ ok: true }>('/api/soporte-tienda/editar', 'POST', b);
 export const apiTiendaSoporteClave = (userId: string, password: string) => req<{ ok: true }>('/api/soporte-tienda/clave', 'POST', { userId, password });
 export const apiTiendaSoporteCreditos = (cantidad: number) => req<{ ok: true }>('/api/soporte-tienda/creditos', 'POST', { cantidad });
 export const apiTiendaSoporteSuscripcion = (dias: number) => req<{ ok: true }>('/api/soporte-tienda/suscripcion', 'POST', { dias });
@@ -826,6 +852,8 @@ export interface PlantillaMeta {
   id: string; nombre: string; categoria: string; idioma: string;
   encabezado: string; cuerpo: string; pie: string; botones: BotonPlantilla[]; ejemplos: string[];
   publicadas: number; resumen: { aprobada: number; pendiente: number; rechazada: number; error: number };
+  /** Tiendas donde Meta la pasó a Marketing aunque se creó como Utilidad. */
+  reclasificadas?: string[];
 }
 export interface NuevaPlantilla {
   nombre?: string; categoria: string; idioma: string; encabezado: string; cuerpo: string; pie: string;

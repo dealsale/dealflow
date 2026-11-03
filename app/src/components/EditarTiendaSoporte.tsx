@@ -13,7 +13,7 @@ const campo: React.CSSProperties = { font: 'inherit', fontSize: 13, padding: '8p
 const btn: React.CSSProperties = { border: 0, borderRadius: 8, padding: '8px 12px', background: '#047857', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' };
 const btnS: React.CSSProperties = { ...btn, background: 'var(--df-surface-2)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)' };
 const tit: React.CSSProperties = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--df-text-muted)', margin: '0 0 8px' };
-const caja: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 12, padding: 14, background: 'var(--df-surface)', display: 'grid', gap: 8, alignContent: 'start', minWidth: 0 };
+const caja: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 12, padding: 14, background: 'var(--df-surface)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8, alignContent: 'start', minWidth: 0 };
 const fila: React.CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 };
 
 export function EditarTiendaSoporte({ onCerrar }: { onCerrar: () => void }) {
@@ -49,7 +49,7 @@ export function EditarTiendaSoporte({ onCerrar }: { onCerrar: () => void }) {
   return (
     <div onClick={onCerrar} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(2,6,23,.35)' }}>
       <div role="dialog" aria-label="Editar tienda" onClick={(e) => e.stopPropagation()}
-        style={{ position: 'absolute', top: 30, left: 0, right: 0, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', background: 'var(--df-bg)', borderBottom: '3px solid var(--df-alert-brown)', boxShadow: '0 24px 50px -20px rgba(2,6,23,.6)', padding: '16px max(16px, env(safe-area-inset-right)) 18px max(16px, env(safe-area-inset-left))', fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", color: 'var(--df-text)' }}>
+        style={{ position: 'absolute', top: 30, left: 0, right: 0, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', background: 'var(--df-bg)', borderBottom: '3px solid var(--df-alert-brown)', boxShadow: '0 24px 50px -20px rgba(2,6,23,.6)', padding: '16px max(16px, env(safe-area-inset-right)) 18px max(16px, env(safe-area-inset-left))', fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", color: 'var(--df-text)', whiteSpace: 'normal', textAlign: 'left' }}>
         <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gap: 12 }}>
           <div style={{ ...fila, justifyContent: 'space-between', flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0 }}>
@@ -125,6 +125,22 @@ export function EditarTiendaSoporte({ onCerrar }: { onCerrar: () => void }) {
                   <input type="checkbox" checked={t.temaPremium} onChange={(e) => void hacer('tema', () => apiTiendaSoporteEditar({ temaPremium: e.target.checked }), 'Tema actualizado.', true)} />
                   <span style={{ minWidth: 0 }}>Tema premium</span>
                 </label>
+              </div>
+
+              <div style={caja}>
+                <p style={tit}>Plantillas de WhatsApp</p>
+                {([
+                  ['crear', 'Constructor de plantillas', 'La tienda crea plantillas y las manda a aprobar a SU cuenta de Meta (con revisión de riesgo de Marketing).'],
+                  ['automatizaciones', 'Plantilla propia por automatización', 'Elige qué plantilla aprobada (solo Utilidad) usa el bot en confirmación, guía, estado y novedad.'],
+                  ['documentos', 'Plantillas con documento (PDF)', 'Crear y enviar plantillas con un PDF arriba (p. ej. la guía) y adjuntarlo al enviar.'],
+                ] as const).map(([k, titulo, ayuda]) => (
+                  <label key={k} style={{ ...fila, alignItems: 'flex-start', fontSize: 13, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={t.plantillas?.[k] ?? false} disabled={ocupado === 'tpl' + k}
+                      onChange={(e) => void hacer('tpl' + k, () => apiTiendaSoporteEditar({ plantillas: { [k]: e.target.checked } }), `${titulo}: ${e.target.checked ? 'encendido' : 'apagado'}.`)} />
+                    <span style={{ minWidth: 0 }}><b style={{ fontWeight: 700 }}>{titulo}</b><br /><span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{ayuda}</span></span>
+                  </label>
+                ))}
+                <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Apagado por defecto. Las de Utilidad que Meta pase a Marketing se pausan solas en las automatizaciones.</div>
               </div>
             </div>
           )}
