@@ -15,7 +15,7 @@ import { alQuitarControl, ejecutar, terminarEjecucion, vistaLocal, type AccionCo
  */
 export type RolLlamada = 'tienda' | 'soporte';
 export type FaseLlamada = 'preparando' | 'esperando' | 'conectando' | 'conectada' | 'reconectando' | 'pausada' | 'terminada';
-export interface Remoto { clave: string; nombre: string; stream: MediaStream; video: boolean; conectado: boolean }
+export interface Remoto { clave: string; nombre: string; stream: MediaStream; video: boolean; conectado: boolean; superficie?: string }
 export interface EstadoLlamada {
   id: string; rol: RolLlamada; titulo: string; fase: FaseLlamada; atendidoPor: string; inicio: number;
   mic: boolean; silenciado: boolean; compartiendo: boolean;
@@ -38,6 +38,13 @@ export interface EstadoLlamada {
   controlAviso?: string;
   /** Equipo: ¿la tienda comparte la pestaña de DealFlow? (si no, los clics no caen donde son). */
   controlCoincide?: boolean | null;
+  /** Qué comparto yo: 'browser' (pestaña), 'monitor' (pantalla completa), 'window'. */
+  superficie?: string;
+  // ── Escritorio remoto de Chrome (todo el computador) ──
+  /** Tienda: alguien del equipo pidió acceso a todo el computador. */
+  crdPedido?: string;
+  /** Equipo: el código que mandó la tienda (no se guarda en ningún lado; vence solo). */
+  crdCodigo?: { codigo: string; t: number } | null;
 }
 
 // ── Estado global (la ventana de la llamada sigue abierta aunque cambies de sección) ──
@@ -85,10 +92,10 @@ const base = (id: string, rol: RolLlamada, titulo: string): EstadoLlamada => ({
 const ICE_DEF: RTCIceServer[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
 const hayTurn = (ice: RTCIceServer[]) => ice.some((x) => ([] as string[]).concat(x.urls).some((u) => /^turns?:/i.test(u)));
 
-interface Par { clave: string; pc: RTCPeerConnection; gen: string; pendientes: RTCIceCandidateInit[]; stream: MediaStream; video: boolean; conectado: boolean; dc?: RTCDataChannel }
+interface Par { clave: string; pc: RTCPeerConnection; gen: string; pendientes: RTCIceCandidateInit[]; stream: MediaStream; video: boolean; conectado: boolean; dc?: RTCDataChannel; superficie?: string }
 /** Mensajes del canal de control (además de las acciones). */
-type MsgControl = AccionControl | { t: 'pedir' } | { t: 'soltar' } | { t: 'ok' } | { t: 'no'; motivo?: string } | { t: 'fin'; motivo?: string } | { t: 'info'; coincide: boolean | null };
-type DatosSenal = { gen?: string; sdp?: RTCSessionDescriptionInit; c?: RTCIceCandidateInit; on?: boolean; resp?: boolean } | null;
+type MsgControl = AccionControl | { t: 'pedir' } | { t: 'soltar' } | { t: 'ok' } | { t: 'no'; motivo?: string } | { t: 'fin'; motivo?: string } | { t: 'info'; coincide: boolean | null } | { t: 'pedir-crd' } | { t: 'crd'; codigo: string };
+type DatosSenal = { gen?: string; sdp?: RTCSessionDescriptionInit; c?: RTCIceCandidateInit; on?: boolean; resp?: boolean; superficie?: string } | null;
 
 class Motor {
   pares = new Map<string, Par>();
@@ -207,7 +214,7 @@ class Motor {
 
   /** Pasa a la ventana quién está conectado, su audio y si alguien comparte pantalla. */
   publicar() {
-    const remotos: Remoto[] = [...this.pares.values()].map((p) => ({ clave: p.clave, nombre: this.nombres.get(p.clave) || (p.clave === 'tienda' ? 'La tienda' : 'Equipo DealFlow'), stream: p.stream, video: p.video, conectado: p.conectado }));
+    const remotos: Remoto[] = [...this.pares.values()].map((p) => ({ clave: p.clave, nombre: this.nombres.get(p.clave) || (p.clave === 'tienda' ? 'La tienda' : 'Equipo DealFlow'), stream: p.stream, video: p.video, conectado: p.conectado, superficie: p.superficie }));
     const conVideo = remotos.find((r) => r.video);
     const alguno = remotos.some((r) => r.conectado);
     let fase: FaseLlamada = estado?.fase || 'conectando';
@@ -259,7 +266,7 @@ class Motor {
       const p = this.pares.get(de); try { p?.pc.close(); } catch { /* nada */ }
       this.pares.delete(de); this.publicar(); return;
     }
-    if (tipo === 'pantalla') { const p = this.pares.get(de); if (p) { p.video = !!data?.on; this.publicar(); } return; }
+    if (tipo === 'pantalla') { const p = this.pares.get(de); if (p) { p.video = !!data?.on; p.superficie = data?.on ? String(data?.superficie || '') : ''; this.publicar(); } return; }
     if (tipo === 'hola') {
       if (this.ofrezco(de)) await this.ofertar(de);
       else if (!data?.resp) await this.senal('hola', { resp: true }, de);
@@ -275,7 +282,7 @@ class Motor {
       await par.pc.setLocalDescription(a);
       await this.senal('answer', { gen: par.gen, sdp: par.pc.localDescription }, de);
       await this.vaciarPendientes(par);
-      if (this.pantalla) void this.senal('pantalla', { on: true }, de);
+      if (this.pantalla) void this.senal('pantalla', { on: true, superficie: estado?.superficie || '' }, de);
       this.publicar();
       return;
     }
@@ -283,7 +290,7 @@ class Motor {
     if (tipo === 'answer' && par && data?.sdp && data.gen === par.gen && par.pc.signalingState === 'have-local-offer') {
       await par.pc.setRemoteDescription(data.sdp);
       await this.vaciarPendientes(par);
-      if (this.pantalla) void this.senal('pantalla', { on: true }, de);
+      if (this.pantalla) void this.senal('pantalla', { on: true, superficie: estado?.superficie || '' }, de);
       return;
     }
     if (tipo === 'ice' && par && data?.c && data.gen === par.gen) {
@@ -353,6 +360,7 @@ class Motor {
       else if (m.t === 'no') set({ miControl: '', controlAviso: m.motivo || 'La tienda no aceptó el control.' });
       else if (m.t === 'fin') set({ miControl: '', controlAviso: m.motivo || 'La tienda quitó el control.' });
       else if (m.t === 'info') set({ controlCoincide: m.coincide });
+      else if (m.t === 'crd') { const codigo = String(m.codigo || '').replace(/\D/g, '').slice(0, 12); if (codigo.length === 12) set({ crdCodigo: { codigo, t: Date.now() }, controlAviso: '' }); }
       return;
     }
     const c = estado?.control || {};
@@ -365,6 +373,7 @@ class Motor {
       return;
     }
     if (m.t === 'soltar') { if (c.activo?.de === de || c.pedido?.de === de) this.cerrarControl('', false); return; }
+    if (m.t === 'pedir-crd') { set({ crdPedido: nombre, minimizada: false }); return; }
     if (!c.activo || c.activo.de !== de) return;
     if (m.t === 'm' || m.t === 'c' || m.t === 'w' || m.t === 'k' || m.t === 'txt') this.ejecutarAccion(m, c.activo.nombre);
   }
@@ -430,26 +439,29 @@ class Motor {
     this.mic?.getAudioTracks().forEach((t) => { t.enabled = !s; });
     set({ silenciado: s });
   }
-  async compartir() {
+  async compartir(completa = false) {
     try {
       // En la pestaña de DealFlow se ofrece compartir ESTA pestaña (así el control remoto apunta bien);
       // en la ventana aparte, que no se ofrezca la ventanita misma.
-      const op = { video: { frameRate: 15 }, audio: false, ...(ES_APARTE ? { selfBrowserSurface: 'exclude' } : { preferCurrentTab: true, selfBrowserSurface: 'include' }) } as DisplayMediaStreamOptions;
+      const op = (completa
+        ? { video: { frameRate: 15, displaySurface: 'monitor' }, audio: false, monitorTypeSurfaces: 'include', selfBrowserSurface: 'exclude' }
+        : { video: { frameRate: 15 }, audio: false, ...(ES_APARTE ? { selfBrowserSurface: 'exclude' } : { preferCurrentTab: true, selfBrowserSurface: 'include' }) }) as DisplayMediaStreamOptions;
       const st = await navigator.mediaDevices.getDisplayMedia(op);
       const t = st.getVideoTracks()[0];
       if (!t) return;
       this.pantalla = t;
       t.onended = () => void this.dejarDeCompartir();
       for (const p of this.pares.values()) await p.pc.getTransceivers().find((x) => x.receiver.track.kind === 'video')?.sender.replaceTrack(t);
-      set({ compartiendo: true });
-      void this.senal('pantalla', { on: true });
+      const superficie = String((t.getSettings() as MediaTrackSettings & { displaySurface?: string }).displaySurface || (completa ? 'monitor' : ''));
+      set({ compartiendo: true, superficie });
+      void this.senal('pantalla', { on: true, superficie });
     } catch { /* canceló el selector de pantalla */ }
   }
   async dejarDeCompartir() {
     if (estado?.control?.activo || estado?.control?.pedido) this.cerrarControl('La tienda dejó de compartir la pantalla.');
     for (const p of this.pares.values()) { try { await p.pc.getTransceivers().find((x) => x.receiver.track.kind === 'video')?.sender.replaceTrack(null); } catch { /* nada */ } }
     this.pantalla?.stop(); this.pantalla = null;
-    set({ compartiendo: false });
+    set({ compartiendo: false, superficie: '' });
     void this.senal('pantalla', { on: false });
   }
   fin(aviso: string) {
@@ -543,7 +555,7 @@ export async function colgarLlamada(): Promise<void> {
 }
 export function cerrarVentanaLlamada(): void { if (estado?.fase === 'terminada') { estado = null; emitir(); } }
 export const silenciarLlamada = () => motor?.silenciar();
-export const compartirPantalla = () => void motor?.compartir();
+export const compartirPantalla = (completa = false) => void motor?.compartir(completa);
 export const dejarDeCompartir = () => void motor?.dejarDeCompartir();
 export const minimizarLlamada = (v: boolean) => set({ minimizada: v });
 export const puedeCompartirPantalla = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices && 'getDisplayMedia' in navigator.mediaDevices;
@@ -631,3 +643,25 @@ export async function probarConexion(): Promise<ResultadoPrueba> {
   if (!mic) r.veredicto = `Micrófono: ${micError}. ` + r.veredicto;
   return r;
 }
+
+// ── Escritorio remoto de Chrome (acceso a todo el computador) ───────────
+/** Página de Google donde la tienda genera el código (y el equipo lo escribe). */
+export const URL_ESCRITORIO_REMOTO = 'https://remotedesktop.google.com/support';
+/** Equipo: le pide a la tienda acceso a todo su computador. */
+export function pedirAccesoComputador(): void {
+  if (!motor || estado?.rol !== 'soporte') return;
+  if (!motor.enviarControl('tienda', { t: 'pedir-crd' })) { set({ controlAviso: 'Aún no hay canal con la tienda: espera unos segundos.' }); return; }
+  set({ controlAviso: 'Le pedimos a la tienda el código del Escritorio remoto de Chrome.' });
+}
+/** Tienda: manda el código de 12 números a las personas del equipo en la llamada (no se guarda). */
+export function enviarCodigoComputador(codigo: string): boolean {
+  if (!motor || estado?.rol !== 'tienda') return false;
+  const c = codigo.replace(/\D/g, '');
+  if (c.length !== 12) return false;
+  let alguno = false;
+  for (const k of motor.pares.keys()) if (k.startsWith('soporte:') && motor.enviarControl(k, { t: 'crd', codigo: c })) alguno = true;
+  if (alguno) set({ crdPedido: '' });
+  return alguno;
+}
+export const cerrarPedidoComputador = () => set({ crdPedido: '' });
+export const olvidarCodigoComputador = () => set({ crdCodigo: null });
