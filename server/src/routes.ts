@@ -28,6 +28,7 @@ import * as pm from './plantillasMeta.js';
 import * as rr from './respuestasRapidas.js';
 import * as lp from './llenarPlantilla.js';
 import type { ExtraPlantilla } from './plantillasMeta.js';
+import { guardarPermisos as guardarPermisosPlantillas, permisosPlantillas as permisosPlantillasWA } from './plantillasWA.js';
 
 export const api = proteger(Router());
 // Registro de accesos del equipo (administradores y soporte dentro de una tienda).
@@ -2717,11 +2718,12 @@ function plantillasAprobadasDe(sid: string) {
       id: String(t.id), nombre: String(t.nombre), idioma: String(t.idioma), categoria: String(t.categoria), origen: 'dealflow' as const,
       encabezado: String(t.encabezado || ''), cuerpo: String(t.cuerpo || ''), pie: String(t.pie || ''),
       variables: vars.length, ejemplos: pj<string[]>(t.ejemplos as string, []),
-      encabezadoTipo: '', varsEncabezado: 0, mediaEjemplo: '', botonVariable: false,
+      encabezadoTipo: '', varsEncabezado: 0, mediaEjemplo: '', botonVariable: false, adjuntable: false,
       campos: lp.inferirCampos(String(t.cuerpo || ''), pj<string[]>(t.ejemplos as string, [])), campoEncabezado: '' as lp.Campo, campoBoton: '' as lp.Campo,
     };
   });
   const nombres = new Set(deDealflow.map((x) => `${x.nombre}|${x.idioma}`));
+  const docs = permisosPlantillasWA(sid).documentos;
   const propias = pm.plantillasPropias(sid)
     .filter((x) => !nombres.has(`${x.nombre}|${x.idioma}`))
     .map((x) => ({
@@ -2730,6 +2732,8 @@ function plantillasAprobadasDe(sid: string) {
       encabezadoTipo: x.encabezadoTipo, varsEncabezado: x.varsEncabezado, mediaEjemplo: x.mediaEjemplo, botonVariable: x.botones.some((b) => b.variable),
       campos: lp.inferirCampos(x.cuerpo, x.ejemplos), campoEncabezado: (x.varsEncabezado ? lp.inferirCampos(x.encabezado, [x.ejemploEncabezado])[0] || '' : '') as lp.Campo,
       campoBoton: lp.campoDeBoton(x.botones.find((b) => b.variable)?.url || '') as lp.Campo,
+      // Subir el archivo del encabezado desde DealFlow (el PDF solo si la tienda tiene habilitados los documentos).
+      adjuntable: x.encabezadoTipo === 'IMAGE' || x.encabezadoTipo === 'VIDEO' || (x.encabezadoTipo === 'DOCUMENT' && docs),
     }));
   return [...deDealflow, ...propias];
 }
@@ -2746,6 +2750,53 @@ api.post('/plantillas-aprobadas/sincronizar', requireAuth, requireStore, async (
   const otras = pm.plantillasPropias(sid, false).filter((x) => x.estado !== 'aprobada').map((x) => ({ nombre: x.nombre, estado: x.estado, motivo: x.motivo }));
   res.json({ ...r, plantillas: plantillasAprobadasDe(sid), otras });
 });
+
+// ── Plantillas de WhatsApp de la tienda: constructor, automatizaciones y vigilancia ──
+// (cada parte se enciende por tienda desde la barra de soporte del equipo).
+api.get('/wa-plantillas', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  pm.sincronizarSiHaceFalta(sid);
+  const { estadoPlantillasTienda } = await import('./plantillasWA.js');
+  res.json(estadoPlantillasTienda(sid));
+});
+api.post('/wa-plantillas/revisar', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const w = await import('./plantillasWA.js');
+  const def = defPlantilla(req.body);
+  const c = w.compilar(def.cuerpo);
+  const tienda = (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(sid) as { nombre: string } | undefined)?.nombre || '';
+  const meta = w.armarParaMeta(def, tienda);
+  const cuerpo = meta.components.find((x) => x.type === 'BODY') as { text: string; example?: { body_text: string[][] } } | undefined;
+  const vista = String(cuerpo?.text || '').replace(/\{\{(\d+)\}\}/g, (_m, n) => cuerpo?.example?.body_text?.[0]?.[Number(n) - 1] || `{{${n}}}`);
+  res.json({ errores: w.erroresFormato(def, w.permisosPlantillas(sid).documentos), riesgo: w.riesgoMarketing({ ...def, campos: c.campos }), nombre: w.normalizarNombre(def.nombre), vista, campos: c.campos });
+});
+api.post('/wa-plantillas/crear', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const { crearEnMeta } = await import('./plantillasWA.js');
+  const r = await crearEnMeta(sid, defPlantilla(req.body), req.user!.nombre || req.user!.email || 'la tienda');
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.put('/wa-plantillas/automatizacion/:clave', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const w = await import('./plantillasWA.js');
+  const r = w.guardarAutomatizacion(sid, String(req.params.clave), req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  registrarLog(sid, 'info', 'plantillas', `Automatización "${req.params.clave}": ${req.body?.metaId ? 'usa una plantilla propia' : 'vuelve a la plantilla de DealFlow'} (${req.user!.nombre || req.user!.email}).`);
+  res.json({ ok: true, ...w.estadoPlantillasTienda(sid) });
+});
+function defPlantilla(b: Record<string, unknown> | undefined) {
+  const x = b || {};
+  const tipo = String(x.encabezadoTipo || '').toUpperCase();
+  return {
+    nombre: String(x.nombre || '').slice(0, 80), categoria: (x.categoria === 'MARKETING' ? 'MARKETING' : 'UTILITY') as 'UTILITY' | 'MARKETING',
+    idioma: String(x.idioma || 'es').slice(0, 10), base: String(x.base || '').slice(0, 40),
+    encabezadoTipo: (['TEXT', 'IMAGE', 'DOCUMENT'].includes(tipo) ? tipo : '') as '' | 'TEXT' | 'IMAGE' | 'DOCUMENT',
+    encabezado: String(x.encabezado || '').slice(0, 120), archivoEjemplo: String(x.archivoEjemplo || '').slice(0, 300),
+    cuerpo: String(x.cuerpo || '').slice(0, 2000), pie: String(x.pie || '').slice(0, 120),
+    botones: (Array.isArray(x.botones) ? x.botones : []).slice(0, 3).map((bt: { tipo?: string; texto?: string; url?: string }) => ({ tipo: (bt?.tipo === 'URL' ? 'URL' : 'QUICK_REPLY') as 'URL' | 'QUICK_REPLY', texto: String(bt?.texto || '').slice(0, 40), url: String(bt?.url || '').slice(0, 300) })),
+  };
+}
 
 /**
  * La plantilla a enviar (de DealFlow o propia de la tienda en Meta) con sus parámetros.
@@ -2812,8 +2863,22 @@ function plantillaParaEnviar(sid: string, id: string, dados: string[], extra: Ex
 }
 const extraDe = (b: Record<string, unknown> | undefined): ExtraPlantilla => {
   const e = (b?.extra && typeof b.extra === 'object' ? b.extra : {}) as Record<string, unknown>;
-  return { encabezado: String(e.encabezado ?? '').slice(0, 200), media: String(e.media ?? '').slice(0, 1000), boton: String(e.boton ?? '').slice(0, 300) };
+  return { encabezado: String(e.encabezado ?? '').slice(0, 200), media: String(e.media ?? '').slice(0, 1000), boton: String(e.boton ?? '').slice(0, 300), mediaNombre: String(e.mediaNombre ?? '').slice(0, 80) };
 };
+
+/** Si el archivo del encabezado se subió a DealFlow (/api/media/…), se sube a Meta y va por su media ID. */
+async function resolverArchivoPlantilla(sid: string, plantillaId: string, extra: ExtraPlantilla): Promise<ExtraPlantilla | { error: string }> {
+  const m = String(extra.media || '');
+  if (!m.startsWith('/api/media/')) return extra;
+  const p = plantillaId.startsWith('meta:') ? pm.plantillaPropia(sid, plantillaId) : null;
+  if (!p || !['IMAGE', 'VIDEO', 'DOCUMENT'].includes(p.encabezadoTipo)) return { ...extra, media: '' };
+  const { permisosPlantillas, subirArchivoLocal } = await import('./plantillasWA.js');
+  if (p.encabezadoTipo === 'DOCUMENT' && !permisosPlantillas(sid).documentos) return { error: 'Adjuntar documentos a las plantillas no está habilitado para tu tienda. Pega el enlace del PDF.' };
+  const up = await subirArchivoLocal(sid, m);
+  if ('error' in up) return up;
+  const nombre = String((extra as { mediaNombre?: string }).mediaNombre || '').trim() || up.nombre;
+  return { ...extra, media: '', mediaId: up.id, mediaNombre: nombre.slice(0, 80) };
+}
 
 // Los datos reales de este chat para llenar una plantilla (el formulario los muestra para revisar).
 api.get('/leads/:id/plantilla-datos', requireAuth, requireStore, requirePermiso('chats'), (req, res) => {
@@ -2837,7 +2902,9 @@ api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, requirePermis
   if (!l) return res.status(404).json({ error: 'Chat no encontrado.' });
   // Parámetros: los que manden; lo que falte se llena con los datos reales del chat (nunca con ejemplos).
   const dados = Array.isArray(req.body?.params) ? (req.body.params as unknown[]).map((x) => String(x)) : [];
-  const t = plantillaParaEnviar(sid, String(req.body?.plantillaId || ''), dados, extraDe(req.body), l.id);
+  const ex = await resolverArchivoPlantilla(sid, String(req.body?.plantillaId || ''), extraDe(req.body));
+  if ('error' in ex) return res.status(400).json({ error: ex.error });
+  const t = plantillaParaEnviar(sid, String(req.body?.plantillaId || ''), dados, ex, l.id);
   if ('error' in t) return res.status(400).json({ error: t.error });
   const r = await sendWhatsappTemplate(sid, l.wa_id || l.tel, t, t.params, l.tel);
   if (!r.ok) return res.status(400).json({ error: r.error });
@@ -2873,6 +2940,8 @@ api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requirePermiso('
   if (!lista.length) return res.status(400).json({ error: 'Agrega al menos un celular.' });
   const base = (Array.isArray(req.body?.params) ? req.body.params : []).map((x: unknown) => String(x ?? ''));
   const conAsistente = req.body?.asistente !== false;
+  const exIni = await resolverArchivoPlantilla(sid, pid0, extraDe(req.body));
+  if ('error' in exIni) return res.status(400).json({ error: exIni.error });
   const resultados: { tel: string; nombre: string; ok: boolean; error?: string; leadId?: string }[] = [];
   for (let i = 0; i < lista.length; i++) {
     const nombre = String(lista[i].nombre ?? '').trim().slice(0, 80);
@@ -2888,7 +2957,7 @@ api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requirePermiso('
       lead = { id, no_contactar: 0 };
     } else if (nombre) db.prepare('UPDATE leads SET nombre = ? WHERE id = ? AND (nombre = tel OR nombre = ?)').run(nombre, lead.id, tel);
     // {nombre} en las variables = el nombre de cada contacto (o "cliente" si no tiene).
-    const t = plantillaParaEnviar(sid, pid0, base.map((v: string) => v.replace(/\{nombre\}/gi, nombre.split(' ')[0] || 'cliente')), extraDe(req.body), lead.id);
+    const t = plantillaParaEnviar(sid, pid0, base.map((v: string) => v.replace(/\{nombre\}/gi, nombre.split(' ')[0] || 'cliente')), exIni, lead.id);
     if ('error' in t) { resultados.push({ tel, nombre, ok: false, error: t.error, leadId: lead.id }); continue; }
     const r = await sendWhatsappTemplate(sid, dig, t, t.params, tel);
     if (!r.ok) { resultados.push({ tel, nombre, ok: false, error: r.error, leadId: lead.id }); continue; }
@@ -3527,6 +3596,7 @@ async function leerTiendaSoporte(req: ExRequest, res: ExResponse) {
       nombre: s.nombre, correo: s.correo, plan: s.plan, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, activa: !!s.activa,
       creditos: Number(s.creditos) || 0, temaPremium: !!s.tema_premium, creada: String(s.created_at || '').slice(0, 10),
       whatsapp: { conectado: !!wa?.conectado, numero: wa?.numero || '' },
+      plantillas: (await import('./plantillasWA.js')).permisosPlantillas(t.sid),
     },
     usuarios, planes: listarPlanes().map((p) => p.nombre),
   });
@@ -3553,6 +3623,8 @@ api.post('/soporte-tienda/editar', requireAuth, (req, res) => {
   if (typeof plan === 'string' && plan.trim()) { db.prepare('UPDATE stores SET plan = ? WHERE id = ?').run(plan.trim(), s.id); hecho.push(`plan → ${plan.trim()}`); }
   if (typeof activa === 'boolean') { db.prepare('UPDATE stores SET activa = ? WHERE id = ?').run(activa ? 1 : 0, s.id); hecho.push(activa ? 'activó la cuenta' : 'desactivó la cuenta'); }
   if (typeof temaPremium === 'boolean') { db.prepare('UPDATE stores SET tema_premium = ? WHERE id = ?').run(temaPremium ? 1 : 0, s.id); hecho.push(`tema premium ${temaPremium ? 'encendido' : 'apagado'}`); }
+  const pl = (req.body || {}).plantillas;
+  if (pl && typeof pl === 'object') hecho.push(...guardarPermisosPlantillas(s.id, pl));
   if (hecho.length) registrarAccionEquipo(t.admin.email, `Barra de soporte · ${s.nombre}: ${hecho.join(', ')}`, s.id);
   res.json({ ok: true });
 });
@@ -4092,7 +4164,11 @@ api.get('/superadmin/meta-templates', requireAuth, requireSuperAdmin, (_req, res
     ).all(r.id) as { estado: string; n: number }[];
     const resumen = { aprobada: 0, pendiente: 0, rechazada: 0, error: 0 } as Record<string, number>;
     for (const e of est) resumen[e.estado] = e.n;
+    // Tiendas donde Meta la pasó a Marketing aunque se creó como Utilidad.
+    const reclasificadas = String(r.categoria || 'UTILITY') === 'UTILITY'
+      ? (db.prepare("SELECT s.nombre FROM meta_template_pub p JOIN stores s ON s.id = p.store_id WHERE p.template_id = ? AND p.categoria_meta = 'MARKETING'").all(r.id) as { nombre: string }[]).map((x) => x.nombre) : [];
     return {
+      reclasificadas,
       id: r.id, nombre: r.nombre, categoria: r.categoria, idioma: r.idioma,
       encabezado: r.encabezado || '', cuerpo: r.cuerpo, pie: r.pie || '',
       botones: pj(r.botones as string, []), ejemplos: pj(r.ejemplos as string, []),

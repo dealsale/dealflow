@@ -22,7 +22,7 @@ interface CompMeta {
   type: string; format?: string; text?: string; buttons?: BotonMeta[];
   example?: { header_handle?: string[]; header_text?: string[]; body_text?: string[][] };
 }
-interface PlantillaGraph { id: string; name: string; status: string; language: string; category: string; components?: CompMeta[]; rejected_reason?: string }
+interface PlantillaGraph { id: string; name: string; status: string; language: string; category: string; components?: CompMeta[]; rejected_reason?: string; quality_score?: { score?: string } }
 
 export type EstadoPlantilla = 'aprobada' | 'pendiente' | 'rechazada' | 'pausada';
 export function estadoDeMeta(st: string): EstadoPlantilla {
@@ -53,7 +53,7 @@ async function sincronizar(storeId: string): Promise<ResultadoSync> {
   if (w.modo === 'qr') return { error: 'Las plantillas de Meta solo existen en la conexión oficial de WhatsApp (no por QR).' };
   if (!w.waba_id || !w.access_token) return { error: 'Falta el ID de tu cuenta de WhatsApp Business (WABA). Vuelve a conectar WhatsApp.' };
   const todas: PlantillaGraph[] = [];
-  let url = `${GRAPH}/${encodeURIComponent(w.waba_id)}/message_templates?fields=id,name,status,language,category,components,rejected_reason&limit=100`;
+  let url = `${GRAPH}/${encodeURIComponent(w.waba_id)}/message_templates?fields=id,name,status,language,category,components,rejected_reason,quality_score&limit=100`;
   try {
     for (let i = 0; i < 20 && url; i++) {
       const res = await fetch(url, { headers: { Authorization: `Bearer ${w.access_token}` } });
@@ -65,22 +65,34 @@ async function sincronizar(storeId: string): Promise<ResultadoSync> {
   } catch {
     return { error: 'No pudimos conectar con Meta para leer tus plantillas.' };
   }
-  const ins = db.prepare('INSERT INTO wa_plantillas_meta (store_id, meta_id, nombre, idioma, categoria, estado, motivo, componentes) VALUES (?,?,?,?,?,?,?,?)');
+  // Cómo estaban antes (para vigilar cambios de categoría, estado y calidad).
+  const { vigilarCambios } = await import('./plantillasWA.js');
+  const antes = new Map((db.prepare('SELECT meta_id, categoria, estado, calidad FROM wa_plantillas_meta WHERE store_id = ?').all(storeId) as { meta_id: string; categoria: string; estado: string; calidad: string }[])
+    .map((r) => [r.meta_id, { categoria: r.categoria, estado: r.estado, calidad: r.calidad }]));
+  const ins = db.prepare('INSERT INTO wa_plantillas_meta (store_id, meta_id, nombre, idioma, categoria, estado, motivo, componentes, calidad) VALUES (?,?,?,?,?,?,?,?,?)');
   // Las de DealFlow (maestras) que estén en esta WABA quedan con su estado real.
-  const maestras = db.prepare('SELECT id, nombre, idioma FROM meta_templates').all() as { id: string; nombre: string; idioma: string }[];
+  const maestras = db.prepare('SELECT id, nombre, idioma, categoria FROM meta_templates').all() as { id: string; nombre: string; idioma: string; categoria: string }[];
+  const catPub = db.prepare('UPDATE meta_template_pub SET categoria_meta = ? WHERE template_id = ? AND store_id = ?');
   const pub = db.prepare(`INSERT INTO meta_template_pub (template_id, store_id, estado, meta_id, motivo, updated_at) VALUES (?,?,?,?,?,datetime('now'))
     ON CONFLICT(template_id, store_id) DO UPDATE SET estado = excluded.estado, meta_id = excluded.meta_id, motivo = excluded.motivo, updated_at = datetime('now')`);
   db.transaction(() => {
     db.prepare('DELETE FROM wa_plantillas_meta WHERE store_id = ?').run(storeId);
     for (const t of todas) {
       if (!t?.id || !t.name) continue;
-      ins.run(storeId, String(t.id), t.name, t.language || '', t.category || '', estadoDeMeta(t.status), String(t.rejected_reason || '').replace(/^NONE$/i, ''), JSON.stringify(t.components || []));
+      ins.run(storeId, String(t.id), t.name, t.language || '', t.category || '', estadoDeMeta(t.status), String(t.rejected_reason || '').replace(/^NONE$/i, ''), JSON.stringify(t.components || []), String(t.quality_score?.score || '').toUpperCase());
     }
     for (const m of maestras) {
       const t = todas.find((x) => x.name === m.nombre && (x.language === m.idioma || x.language.split('_')[0] === m.idioma.split('_')[0]));
-      if (t) pub.run(m.id, storeId, estadoDeMeta(t.status) === 'pausada' ? 'rechazada' : estadoDeMeta(t.status), String(t.id), String(t.rejected_reason || '').replace(/^NONE$/i, ''));
+      if (!t) continue;
+      // Meta puede pasar una plantilla de Utilidad a Marketing: queda anotado para el superadmin.
+      const cambio = m.categoria && t.category && t.category.toUpperCase() !== m.categoria.toUpperCase()
+        ? `Meta la clasificó como ${t.category.toUpperCase() === 'MARKETING' ? 'Marketing' : t.category} (se creó como ${m.categoria.toUpperCase() === 'UTILITY' ? 'Utilidad' : m.categoria}).` : '';
+      const motivo = [String(t.rejected_reason || '').replace(/^NONE$/i, ''), cambio].filter(Boolean).join(' ');
+      pub.run(m.id, storeId, estadoDeMeta(t.status) === 'pausada' ? 'rechazada' : estadoDeMeta(t.status), String(t.id), motivo);
+      catPub.run(String(t.category || '').toUpperCase(), m.id, storeId);
     }
   })();
+  try { vigilarCambios(storeId, antes); } catch (e) { console.warn('[plantillas] vigilancia', e); }
   ultimaSync.set(storeId, Date.now());
   const n = (e: EstadoPlantilla) => todas.filter((t) => estadoDeMeta(t.status) === e).length;
   return { ok: true, total: todas.length, aprobadas: n('aprobada'), pendientes: n('pendiente'), rechazadas: n('rechazada') + n('pausada') };
@@ -140,7 +152,7 @@ export function plantillaPropia(storeId: string, id: string): PlantillaPropia | 
   return r ? leer(r) : null;
 }
 
-export interface ExtraPlantilla { encabezado?: string; media?: string; boton?: string }
+export interface ExtraPlantilla { encabezado?: string; media?: string; boton?: string; mediaId?: string; mediaNombre?: string }
 
 /**
  * Componentes para enviar una plantilla propia: variables del encabezado, foto/video/documento
@@ -153,6 +165,10 @@ export function componentesEnvio(p: PlantillaPropia, params: string[], extra: Ex
   if (p.encabezadoTipo === 'TEXT' && p.varsEncabezado > 0) {
     if (!String(extra.encabezado || '').trim()) return { error: `Falta el dato del encabezado de "${p.nombre}".` };
     components.push({ type: 'header', parameters: [{ type: 'text', text: String(extra.encabezado) }] });
+  } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(p.encabezadoTipo) && extra.mediaId) {
+    // Archivo subido desde DealFlow (ya está en Meta con su media ID).
+    const k = p.encabezadoTipo.toLowerCase();
+    components.push({ type: 'header', parameters: [{ type: k, [k]: { id: extra.mediaId, ...(k === 'document' && extra.mediaNombre ? { filename: extra.mediaNombre } : {}) } }] });
   } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(p.encabezadoTipo)) {
     const link = String(extra.media || p.mediaEjemplo || '').trim();
     if (!/^https?:\/\//i.test(link)) return { error: `La plantilla "${p.nombre}" lleva ${p.encabezadoTipo === 'IMAGE' ? 'una foto' : p.encabezadoTipo === 'VIDEO' ? 'un video' : 'un documento'} arriba: pega el enlace del archivo.` };

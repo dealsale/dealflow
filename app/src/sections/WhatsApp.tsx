@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { PlantillasWhatsAppTienda } from '../components/PlantillasWhatsAppTienda';
 import { CalidadCard } from '../components/CalidadCard';
 import { AppsConectadas } from '../components/AppsConectadas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
@@ -316,6 +317,8 @@ export function WhatsAppSection({ df }: { df: DealFlowState }) {
       )}
 
       {df.waConnected && df.waModo === 'cloud' && <EstadoNumeroCard df={df} />}
+
+      {df.waConnected && df.waModo === 'cloud' && <PlantillasWhatsAppTienda />}
 
       {df.waConnected && df.waModo === 'cloud' && !df.waSignupAuto && (
         <div style={{ ...card, marginBottom: 0 }}>

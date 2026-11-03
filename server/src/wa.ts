@@ -321,10 +321,26 @@ async function enviarTextoReal(storeId: string, to: string, texto: string, pn?: 
  * (el canal QR no maneja plantillas de Meta). Pasa por el tope de velocidad.
  */
 export async function sendWhatsappTemplate(
-  storeId: string, to: string, plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string; componentes?: Record<string, unknown>[] },
+  storeId: string, to: string, plantilla: { nombre: string; idioma: string; encabezado?: string; cuerpo?: string; componentes?: Record<string, unknown>[]; auto?: { clave: string; maestra: string }; adjuntoGuia?: { ruta?: string; archivo?: string; url?: string } },
   params: string[] = [], pn?: string,
 ): Promise<{ ok: boolean; error?: string; wamid?: string; textoRender?: string; repetido?: boolean }> {
   if (estaBloqueado(storeId, to, pn)) return { ok: false, error: CONTACTO_BLOQUEADO };
+  // Plantilla propia de la tienda para una automatización: se traducen los datos; si falla, sale la de DealFlow.
+  if (plantilla.auto) {
+    const { adaptarEnvio } = await import('./plantillasWA.js');
+    const { plantillaAprobadaDealflow } = await import('./avisoGuia.js');
+    const a = await adaptarEnvio(storeId, plantilla, params).catch((e) => ({ error: String(e) }));
+    const deDealflow = plantillaAprobadaDealflow(storeId, plantilla.auto.maestra);
+    if ('error' in a) {
+      registrarLog(storeId, 'warn', 'envio', `Plantilla propia "${plantilla.nombre}": ${a.error}${deDealflow ? ' Se envía la de DealFlow.' : ''}`);
+      if (!deDealflow) return { ok: false, error: a.error };
+      return sendWhatsappTemplate(storeId, to, deDealflow, params, pn);
+    }
+    const r = await sendWhatsappTemplate(storeId, to, { ...a.plantilla, auto: undefined }, a.params, pn);
+    if (r.ok || !deDealflow || r.error === CONTACTO_BLOQUEADO) return r;
+    registrarLog(storeId, 'warn', 'envio', `Meta rechazó la plantilla propia "${plantilla.nombre}" (${r.error || 'error'}): se envía la de DealFlow.`);
+    return sendWhatsappTemplate(storeId, to, deDealflow, params, pn);
+  }
   // La misma plantilla con los mismos datos al mismo contacto: una sola vez cada 10 min.
   const firmaPl = `plantilla:${plantilla.nombre}:${params.join('|')}`;
   if (esRepetido(storeId, to, pn, firmaPl, 10 * 60_000)) {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiDatosPlantilla, NOMBRE_CAMPO_PLANTILLA, type ExtraPlantilla, type PlantillaAprobada } from '../lib/api';
+import { apiDatosPlantilla, apiUpload, NOMBRE_CAMPO_PLANTILLA, type ExtraPlantilla, type PlantillaAprobada } from '../lib/api';
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', margin: '6px 0 3px' };
 const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)' };
@@ -10,6 +10,37 @@ export function esDatoEjemplo(p: PlantillaAprobada, valor: string, real = ''): b
   const v = normE(valor);
   if (v.length < 2 || v === normE(real)) return false;
   return p.ejemplos.some((e) => normE(e) === v);
+}
+
+const ACEPTA: Record<string, string> = { IMAGE: 'image/jpeg,image/png', VIDEO: 'video/mp4', DOCUMENT: 'application/pdf' };
+const MAX_MB: Record<string, number> = { IMAGE: 5, VIDEO: 16, DOCUMENT: 15 };
+/** Botón para adjuntar el archivo del encabezado desde el equipo (se sube a DealFlow y de ahí a Meta al enviar). */
+function SubirArchivo({ tipo, onListo }: { tipo: string; onListo: (url: string, nombre: string) => void }) {
+  const [subiendo, setSubiendo] = useState(false);
+  const [error, setError] = useState('');
+  const elegir = (f: File | undefined) => {
+    if (!f) return;
+    setError('');
+    if (f.size > (MAX_MB[tipo] || 5) * 1024 * 1024) { setError(`Pesa más de ${MAX_MB[tipo] || 5} MB.`); return; }
+    setSubiendo(true);
+    const fr = new FileReader();
+    fr.onload = () => void apiUpload(String(fr.result), f.name).then((r) => {
+      setSubiendo(false);
+      if (!r.data) { setError(r.error || 'No se pudo subir.'); return; }
+      onListo(r.data.url, f.name);
+    });
+    fr.onerror = () => { setSubiendo(false); setError('No se pudo leer el archivo.'); };
+    fr.readAsDataURL(f);
+  };
+  return (
+    <span style={{ display: 'inline-grid', gap: 2, flexShrink: 0 }}>
+      <label style={{ border: '1px solid var(--df-border)', background: 'var(--df-surface-2)', borderRadius: 8, padding: '7px 10px', fontSize: 12.5, fontWeight: 700, cursor: subiendo ? 'wait' : 'pointer', whiteSpace: 'nowrap', color: 'var(--df-text)' }}>
+        {subiendo ? 'Subiendo…' : '📎 Adjuntar'}
+        <input type="file" accept={ACEPTA[tipo] || '*/*'} disabled={subiendo} onChange={(e) => { elegir(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
+      </label>
+      {error && <span style={{ fontSize: 11, color: 'var(--df-danger, #dc2626)' }}>{error}</span>}
+    </span>
+  );
 }
 
 /** Campos de una plantilla: encabezado, foto/video/documento, variables del cuerpo y enlace del botón. */
@@ -30,7 +61,17 @@ export function CamposPlantilla({ p, params, setParams, extra, setExtra, nombreC
       {MEDIA[tipo] && (
         <>
           <label style={lbl}>{MEDIA[tipo]} (va arriba del mensaje)</label>
-          <input value={extra.media || ''} onChange={(e) => setExtra({ ...extra, media: e.target.value })} placeholder="https://…" style={inp} />
+          {extra.media?.startsWith('/api/media/') ? (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, minWidth: 0 }}>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {extra.mediaNombre || 'Archivo adjunto'}</span>
+              <button type="button" onClick={() => setExtra({ ...extra, media: '', mediaNombre: '' })} style={{ border: '1px solid var(--df-border)', background: 'var(--df-surface)', borderRadius: 7, padding: '4px 8px', fontFamily: 'inherit', fontSize: 12, cursor: 'pointer', color: 'var(--df-text)' }}>Quitar</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={extra.media || ''} onChange={(e) => setExtra({ ...extra, media: e.target.value })} placeholder="https://…" style={inp} />
+              {p.adjuntable && <SubirArchivo tipo={tipo} onListo={(url, nombre) => setExtra({ ...extra, media: url, mediaNombre: nombre })} />}
+            </div>
+          )}
           {!!p.mediaEjemplo && !extra.media && <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 3 }}>Si lo dejas vacío, sale el de ejemplo que subiste en Meta.</div>}
         </>
       )}

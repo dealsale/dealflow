@@ -5,6 +5,7 @@ import { sendWhatsappMedia, sendWhatsappTemplate, sendWhatsappText, subirMediaCl
 import { mediaPath } from './media.js';
 import { nombreTransportadora } from './transportadoras.js';
 import { idiomaDe, avisoGuia as avisoGuiaTexto } from './idioma.js';
+import { plantillaDeAutomatizacion } from './plantillasWA.js';
 
 /**
  * Aviso de la guía al cliente, por dos vías:
@@ -25,7 +26,19 @@ const txt = (v: unknown) => (v == null ? '' : String(v));
 const diez = (t: string) => { const d = String(t || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : d; };
 
 /** Plantilla aprobada para la tienda (o null). */
-export function plantillaAprobada(storeId: string, nombre: string): { nombre: string; idioma: string; encabezado: string; cuerpo: string } | null {
+export function plantillaAprobada(storeId: string, nombre: string): { nombre: string; idioma: string; encabezado: string; cuerpo: string; auto?: { clave: string; maestra: string } } | null {
+  // La tienda eligió su propia plantilla para esta automatización (y sigue aprobada como Utilidad).
+  const propia = plantillaDeAutomatizacion(storeId, nombre);
+  if (propia) return propia;
+  const t = db.prepare(
+    `SELECT t.nombre, t.idioma, t.encabezado, t.cuerpo FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id
+      WHERE p.store_id = ? AND t.nombre = ? AND p.estado = 'aprobada'`,
+  ).get(storeId, nombre) as { nombre: string; idioma: string; encabezado: string; cuerpo: string } | undefined;
+  return t || null;
+}
+
+/** Solo la plantilla de DealFlow (sin la propia de la tienda). */
+export function plantillaAprobadaDealflow(storeId: string, nombre: string): { nombre: string; idioma: string; encabezado: string; cuerpo: string } | null {
   const t = db.prepare(
     `SELECT t.nombre, t.idioma, t.encabezado, t.cuerpo FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id
       WHERE p.store_id = ? AND t.nombre = ? AND p.estado = 'aprobada'`,
@@ -77,9 +90,16 @@ const esImagenJpgPng = (archivo: string) => /\.(png|jpe?g)$/i.test(archivo);
  * Plantilla de la guía. Si la tienda tiene aprobada la versión CON IMAGEN y hay foto de la
  * guía, va la foto en el encabezado; si no, la de solo texto.
  */
-export async function enviarPlantillaGuia(storeId: string, destino: string, pn: string, params: string[], img: { archivo: string; ruta: string } | null):
+export async function enviarPlantillaGuia(storeId: string, destino: string, pn: string, params: string[], img: { archivo: string; ruta: string } | null, guiaUrl = ''):
   Promise<{ ok: boolean; error?: string; wamid?: string; textoRender?: string; conImagen: boolean }> {
-  const tplImg = plantillaAprobada(storeId, PLANTILLA_GUIA_IMG);
+  // Plantilla propia de la tienda para la guía: sus datos y su encabezado (PDF/foto de la guía) se arman al enviar.
+  const propia = plantillaAprobada(storeId, PLANTILLA_GUIA);
+  if (propia?.auto) {
+    const r = await sendWhatsappTemplate(storeId, destino, { ...propia, adjuntoGuia: { ruta: img?.ruta, archivo: img?.archivo, url: guiaUrl } }, params, pn);
+    if (r.ok || r.repetido) return { ...r, conImagen: false };
+    registrarLog(storeId, 'warn', 'envio', `La plantilla propia de la guía falló (${r.error || 'error'}): se envía la de DealFlow.`);
+  }
+  const tplImg = plantillaAprobadaDealflow(storeId, PLANTILLA_GUIA_IMG);
   if (tplImg && img && esImagenJpgPng(img.archivo)) {
     const mime = /\.png$/i.test(img.archivo) ? 'image/png' : 'image/jpeg';
     const up = await subirMediaCloud(storeId, readFileSync(img.ruta), mime, `guia.${mime === 'image/png' ? 'png' : 'jpg'}`);
@@ -92,8 +112,8 @@ export async function enviarPlantillaGuia(storeId: string, destino: string, pn: 
       registrarLog(storeId, 'warn', 'envio', `La plantilla con la foto de la guía falló (${r.error || 'error'}): se envía la de texto.`);
     }
   }
-  const tpl = plantillaAprobada(storeId, PLANTILLA_GUIA);
-  if (!tpl) return { ok: false, error: `la plantilla "${PLANTILLA_GUIA}" no está aprobada`, conImagen: false };
+  const tpl = plantillaAprobadaDealflow(storeId, PLANTILLA_GUIA);
+  if (!tpl) return { ok: false, error: propia?.auto ? 'la plantilla propia de la guía falló y la de DealFlow no está aprobada' : `la plantilla "${PLANTILLA_GUIA}" no está aprobada`, conImagen: false };
   return { ...(await sendWhatsappTemplate(storeId, destino, tpl, params, pn)), conImagen: false };
 }
 
@@ -162,7 +182,7 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
         .run(uid(), chat.id, 'bot', texto, tipo, tipo === 'texto' ? null : archivo, mime, tipo === 'texto' ? null : `Guia-${numDF}`, 'enviado', envio.wamid || null);
     } else if (envio.bloqueadoVentana && tpl) {
       // Ventana cerrada: le llega la plantilla al chat (con la foto de la guía si esa plantilla está aprobada).
-      const r = await enviarPlantillaGuia(storeId, destino, chat.tel, params, img);
+      const r = await enviarPlantillaGuia(storeId, destino, chat.tel, params, img, txt(o.guia_url));
       if (r.ok) {
         res.chat = 'plantilla'; res.wamid = r.wamid || ''; if (r.conImagen) res.con = 'image';
         db.prepare("INSERT INTO messages (id, lead_id, de, texto, tipo, media_url, media_mime, media_nombre, estado, wa_msg_id) VALUES (?,?,'bot',?,?,?,?,?,'enviado',?)")
@@ -188,7 +208,7 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
       res.contacto = 'sin_plantilla';
       res.detalle.push(`El celular de contacto (${contacto}) es distinto al del chat, pero la plantilla "${PLANTILLA_GUIA}" aún no está aprobada para la tienda.`);
     } else {
-      const r = await enviarPlantillaGuia(storeId, '57' + contacto, '57' + contacto, params, img);
+      const r = await enviarPlantillaGuia(storeId, '57' + contacto, '57' + contacto, params, img, txt(o.guia_url));
       if (r.ok) { res.contacto = 'plantilla'; res.wamidC = r.wamid || ''; if (r.conImagen && res.chat === 'sin_chat') res.con = 'image'; }
       else { res.contacto = 'error'; res.detalle.push(`Contacto ${contacto}: ${r.error || 'Meta rechazó la plantilla'}`); }
     }
@@ -247,7 +267,7 @@ export async function estadoAvisoGuia(wamid: string, estado: 'entregado' | 'vist
   const guia = txt(ord.guia).trim();
   const transp = nombreTransportadora(txt(ord.transportadora)) || 'por confirmar';
   let r: { ok: boolean; error?: string; wamid?: string; textoRender?: string } = { ok: false, error: `no hay otra forma de reenviarla (la plantilla "${PLANTILLA_GUIA}" no está aprobada)` };
-  if (av.chat !== 'plantilla' && tpl) r = await enviarPlantillaGuia(o.store_id, chat.wa_id || chat.tel, chat.tel, [nombre, tienda, `DF-${o.numero}`, transp, guia], /131053/.test(motivo) ? null : await imagenGuia(o.store_id, ord));
+  if (av.chat !== 'plantilla' && tpl) r = await enviarPlantillaGuia(o.store_id, chat.wa_id || chat.tel, chat.tel, [nombre, tienda, `DF-${o.numero}`, transp, guia], /131053/.test(motivo) ? null : await imagenGuia(o.store_id, ord), txt(ord.guia_url));
   else if (av.con !== 'texto') {
     const idi = idiomaDe(o.store_id, txt(ord.lead_id) || undefined);
     r = await sendWhatsappText(o.store_id, chat.wa_id || chat.tel, avisoGuiaTexto(idi, { nombre, numDF: `DF-${o.numero}`, guia, transp: transp !== 'por confirmar' ? transp : '', tienda, con: 'texto' }), chat.tel);
