@@ -1768,6 +1768,19 @@ api.post('/soporte/llamadas/:id/senal', requireAuth, async (req, res) => {
   sl.enviarSenal(req.params.id, clave, tipo, req.body?.data ?? null, typeof req.body?.para === 'string' && req.body.para ? String(req.body.para).slice(0, 80) : '*');
   res.json({ ok: true, yo: clave });
 });
+// Diagnóstico: alguien de la llamada no logra conectarse (qué rutas de red encontró cada lado).
+api.post('/soporte/llamadas/:id/diagnostico', requireAuth, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const clave = sl.claveEnLlamada(req.params.id, req.user!);
+  if (!clave) return res.status(404).json({ error: 'Llamada no encontrada.' });
+  const ll = db.prepare('SELECT store_id, tienda FROM soporte_llamadas WHERE id = ?').get(req.params.id) as { store_id: string; tienda: string } | undefined;
+  const con = String(req.body?.con || '').slice(0, 80); const causa = String(req.body?.causa || '').slice(0, 400); const detalle = String(req.body?.detalle || '').slice(0, 600);
+  const quien = req.user!.nombre || req.user!.email;
+  console.warn(`[llamada ${req.params.id}] ${quien} (${clave}) no conecta con ${con}: ${causa} | ${detalle}`);
+  if (clave === 'tienda') registrarLog(ll?.store_id || '', 'warn', 'soporte', `La llamada de soporte no conectó con ${con}: ${causa}`);
+  else registrarAccionEquipo(req.user!.email, `Llamada con ${ll?.tienda || 'la tienda'}: no conectó con ${con}. ${causa} [${detalle}]`, ll?.store_id || '');
+  res.json({ ok: true });
+});
 // Control remoto dentro de la llamada: la TIENDA registra cuándo dio, negó o quitó el control.
 api.post('/soporte/llamadas/:id/control', requireAuth, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');

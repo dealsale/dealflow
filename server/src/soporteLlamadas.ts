@@ -381,7 +381,7 @@ export function leerSenales(id: string, clave: string, desde: number, nombre = '
 }
 /** Servidores para encontrar la ruta de red entre los dos navegadores (STUN público + TURN propio si hay). */
 export function servidoresIce(): { urls: string | string[]; username?: string; credential?: string }[] {
-  const lista: { urls: string | string[]; username?: string; credential?: string }[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  const lista: { urls: string | string[]; username?: string; credential?: string }[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
   const turn = (process.env.TURN_URLS || '').split(',').map((x) => x.trim()).filter(Boolean);
   if (turn.length) lista.push({ urls: turn, username: process.env.TURN_USER || '', credential: process.env.TURN_PASS || '' });
   return lista;

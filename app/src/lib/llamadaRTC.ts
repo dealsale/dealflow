@@ -83,6 +83,7 @@ const base = (id: string, rol: RolLlamada, titulo: string): EstadoLlamada => ({
 });
 
 const ICE_DEF: RTCIceServer[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+const hayTurn = (ice: RTCIceServer[]) => ice.some((x) => ([] as string[]).concat(x.urls).some((u) => /^turns?:/i.test(u)));
 
 interface Par { clave: string; pc: RTCPeerConnection; gen: string; pendientes: RTCIceCandidateInit[]; stream: MediaStream; video: boolean; conectado: boolean; dc?: RTCDataChannel }
 /** Mensajes del canal de control (además de las acciones). */
@@ -101,6 +102,8 @@ class Motor {
   infoIv: ReturnType<typeof setInterval> | null = null;
   /** Con la ventana aparte: pestañas de DealFlow abiertas (dónde se ejecuta el control). */
   vistas = new Map<string, { w: number; h: number; visible: boolean; foco: boolean; t: number }>();
+  /** Datos de conexión (ICE) que llegaron ANTES que su oferta: se guardan y se usan al llegar. */
+  huerfanos = new Map<string, RTCIceCandidateInit[]>();
   id: string; rol: RolLlamada;
   constructor(id: string, rol: RolLlamada) { this.id = id; this.rol = rol; }
 
@@ -161,7 +164,33 @@ class Motor {
       this.publicar();
     };
     this.pares.set(clave, par);
+    // Si a los 20 s no conecta, se averigua por qué (y se le dice a la persona).
+    setTimeout(() => { if (this.vivo && this.pares.get(clave) === par && !par.conectado) void this.diagnosticar(par); }, 20_000);
     return par;
+  }
+
+  /** ¿Por qué no conecta? Mira qué rutas de red encontró cada lado. */
+  async diagnosticar(par: Par) {
+    const loc = new Set<string>(); const rem = new Set<string>(); let parejas = 0; let fallidas = 0;
+    try {
+      const st = await par.pc.getStats();
+      st.forEach((r: { type: string; candidateType?: string; state?: string }) => {
+        if (r.type === 'local-candidate' && r.candidateType) loc.add(r.candidateType);
+        if (r.type === 'remote-candidate' && r.candidateType) rem.add(r.candidateType);
+        if (r.type === 'candidate-pair') { parejas++; if (r.state === 'failed') fallidas++; }
+      });
+    } catch { /* sin estadísticas */ }
+    if (!this.vivo || par.conectado || this.pares.get(par.clave) !== par) return;
+    const turn = hayTurn(this.ice);
+    const fuera = (s: Set<string>) => s.has('srflx') || s.has('prflx') || s.has('relay');
+    const causa = !rem.size ? 'no llegaron los datos de conexión del otro lado. Puede tener abierta una versión vieja de DealFlow: que recargue la página.'
+      : !fuera(loc) ? (turn ? 'tu red bloquea la conexión y tampoco alcanzó el servidor TURN (red de empresa, VPN, antivirus o firewall).' : 'tu red bloquea la conexión directa (red de empresa, VPN, antivirus, firewall o un navegador como Brave con WebRTC limitado). Prueba con otra red (por ejemplo los datos del celular) o hay que configurar un servidor TURN.')
+      : !fuera(rem) ? 'la red del otro lado bloquea la conexión directa. Que pruebe con otra red, o hay que configurar un servidor TURN.'
+      : turn ? 'las dos redes no lograron conectarse, ni siquiera por el servidor TURN.' : 'estas dos redes no permiten conexión directa entre sí (NAT estricto). Para esta combinación de redes hace falta un servidor TURN.';
+    const nombre = this.nombres.get(par.clave) || (par.clave === 'tienda' ? 'la tienda' : 'el equipo');
+    const detalle = `local: ${[...loc].join(',') || 'ninguna'} · remoto: ${[...rem].join(',') || 'ninguna'} · parejas ${parejas} (${fallidas} fallidas) · ice ${par.pc.iceConnectionState} · TURN ${turn ? 'sí' : 'no'} · ${navigator.userAgent.slice(0, 140)}`;
+    set({ aviso: `No se pudo conectar con ${nombre}: ${causa}` });
+    try { await fetch(`/api/soporte/llamadas/${this.id}/diagnostico`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ con: nombre, causa, detalle }) }); } catch { /* opcional */ }
   }
 
   /** Pasa a la ventana quién está conectado, su audio y si alguien comparte pantalla. */
@@ -228,6 +257,7 @@ class Motor {
       const par = this.nuevoPar(de);
       par.gen = data.gen || '';
       await par.pc.setRemoteDescription(data.sdp);
+      const k = `${de}|${par.gen}`; par.pendientes.push(...(this.huerfanos.get(k) || [])); this.huerfanos.delete(k);
       await this.ponerPistas(par.pc, false);
       const a = await par.pc.createAnswer();
       await par.pc.setLocalDescription(a);
@@ -247,6 +277,12 @@ class Motor {
     if (tipo === 'ice' && par && data?.c && data.gen === par.gen) {
       if (par.pc.remoteDescription) { try { await par.pc.addIceCandidate(data.c); } catch { /* candidato viejo */ } }
       else par.pendientes.push(data.c);
+    } else if (tipo === 'ice' && data?.c && data.gen) {
+      // Llegó antes que su oferta (las señales viajan en paralelo): se guarda para cuando llegue.
+      const k = `${de}|${data.gen}`; const l = this.huerfanos.get(k) || [];
+      if (l.length < 60) l.push(data.c);
+      this.huerfanos.set(k, l);
+      if (this.huerfanos.size > 20) this.huerfanos.delete(this.huerfanos.keys().next().value as string);
     }
   }
   async vaciarPendientes(par: Par) {
@@ -544,3 +580,31 @@ export function enviarAccion(a: AccionControl): void {
 // ── Control remoto: lado de la tienda ───────────────────────────────────
 export function responderControl(si: boolean): void { motor?.responderControl(si); }
 export function quitarControl(): void { motor?.cerrarControl('La tienda quitó el control.'); }
+
+// ── Prueba de conexión (sin llamada) ────────────────────────────────────
+export interface ResultadoPrueba { mic: boolean; micError: string; host: boolean; stun: boolean; turnConfigurado: boolean; turn: boolean; navegador: string; veredicto: string; ok: boolean }
+/** Revisa micrófono y rutas de red: si STUN responde y si el servidor TURN se alcanza. */
+export async function probarConexion(): Promise<ResultadoPrueba> {
+  let ice = ICE_DEF;
+  try { const r = await fetch('/api/soporte/ice', { credentials: 'same-origin' }); if (r.ok) ice = (await r.json()).iceServers || ICE_DEF; } catch { /* STUN por defecto */ }
+  let mic = false; let micError = '';
+  try { const st = await navigator.mediaDevices.getUserMedia({ audio: true }); mic = true; st.getTracks().forEach((t) => t.stop()); }
+  catch (e) { micError = (e as Error)?.name === 'NotAllowedError' ? 'el navegador no tiene permiso para el micrófono' : (e as Error)?.name === 'NotFoundError' ? 'no se encontró ningún micrófono' : 'no se pudo abrir el micrófono'; }
+  const tipos = new Set<string>();
+  try {
+    const pc = new RTCPeerConnection({ iceServers: ice });
+    pc.createDataChannel('prueba');
+    pc.onicecandidate = (e) => { const c = e.candidate?.candidate || ''; const m = c.match(/ typ (\w+)/); if (m) tipos.add(m[1]); };
+    await pc.setLocalDescription(await pc.createOffer());
+    await new Promise<void>((ok) => { const t = setTimeout(ok, 8000); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); ok(); } }; });
+    pc.close();
+  } catch { /* sin WebRTC */ }
+  const turnConfigurado = hayTurn(ice);
+  const r: ResultadoPrueba = { mic, micError, host: tipos.has('host'), stun: tipos.has('srflx'), turnConfigurado, turn: tipos.has('relay'), navegador: navigator.userAgent, veredicto: '', ok: false };
+  if (!r.host && !r.stun && !r.turn) r.veredicto = 'Este navegador no deja usar WebRTC (revisa extensiones, el modo de privacidad de Brave o la política de la empresa).';
+  else if (!r.stun && !r.turn) r.veredicto = turnConfigurado ? 'Tu red bloquea la conexión y no alcanza el servidor TURN: prueba con otra red (datos del celular) o sin VPN.' : 'Tu red bloquea la conexión directa (UDP). Prueba con otra red (datos del celular) o sin VPN/antivirus; la solución de fondo es un servidor TURN.';
+  else if (!r.turn) { r.veredicto = turnConfigurado ? 'Hay conexión directa, pero el servidor TURN no responde: revisa sus datos en Railway.' : 'Tu red permite conexión directa. Con la mayoría de tiendas conectará; con redes muy cerradas hará falta un servidor TURN.'; r.ok = true; }
+  else { r.veredicto = 'Todo bien: conexión directa y servidor TURN de respaldo funcionando.'; r.ok = true; }
+  if (!mic) r.veredicto = `Micrófono: ${micError}. ` + r.veredicto;
+  return r;
+}
