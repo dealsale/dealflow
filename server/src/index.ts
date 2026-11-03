@@ -194,7 +194,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'escritorio-11032003',
+    build: 'escritorio-11032217',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -286,7 +286,7 @@ if (existsSync(APP_DIST)) {
     const waLink = 'https://wa.me/' + waNum + '?text=' + encodeURIComponent('Hola, quiero más información sobre el dropshipping con IA de DealFlow');
     adsHtml = readFileSync(ADS_FILE, 'utf8').replace(/__WA_LINK__/g, waLink);
   }
-  const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app|academy|proveedores|drive)(\/|$)/i;
+  const ENTRADAS_APP = /^\/(entrar|registro|login|panel|app|academy|proveedores|drive|escritorio|llamada)(\/|$)/i;
   const urlEn = (req: express.Request, host: string) => `${req.protocol === 'http' && !/^localhost/.test(host) ? 'https' : req.protocol}://${host}${req.originalUrl}`;
 
   app.get(/^\/(?!api|webhooks).*/, (req, res) => {

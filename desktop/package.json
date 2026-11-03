@@ -1,7 +1,7 @@
 {
   "name": "dealflow-soporte",
   "productName": "DealFlow Soporte",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DealFlow Soporte: el equipo de DealFlow te ayuda en tu computador, siempre con tu permiso.",
   "main": "main.js",
   "author": "DealFlow",

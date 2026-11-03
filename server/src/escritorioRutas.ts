@@ -54,7 +54,7 @@ export function rutasEscritorio(api: Router) {
   api.post('/escritorio/sesion/:id/terminar', requireAuth, (req, res) => {
     const l = lado(req);
     if (!l) return res.status(404).json({ error: 'Sesión no encontrada.' });
-    res.json({ ok: er.terminar(String(req.params.id), l, String(req.body?.motivo || '').slice(0, 120)) });
+    res.json({ ok: er.terminar(String(req.params.id), l, String(req.body?.motivo || '').slice(0, 200)) });
   });
   api.get('/escritorio/sesion/:id', requireAuth, (req, res) => {
     const l = lado(req);

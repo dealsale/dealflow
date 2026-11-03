@@ -168,8 +168,16 @@ app.whenReady().then(() => {
     }).catch(() => responder({}));
   });
   // Permisos: notificaciones y portapapeles de DealFlow; nada más.
-  session.defaultSession.setPermissionRequestHandler((wc, permiso, cb) => {
+  // Ojo: para compartir la pantalla Electron pide «media» con mediaTypes VACÍO (la cámara pide
+  // ['video'] y el micrófono ['audio']). Sin esto, getDisplayMedia falla con «Permission denied».
+  // Solo la pantalla (nunca cámara ni micrófono) y solo durante una sesión que la tienda permitió.
+  session.defaultSession.setPermissionRequestHandler((wc, permiso, cb, detalles) => {
     let ok = false; try { ok = new URL(wc.getURL()).origin === ORIGEN; } catch { /* nada */ }
+    if (permiso === 'media') {
+      const tipos = (detalles && detalles.mediaTypes) || [];
+      cb(ok && sesionActiva && tipos.length === 0);
+      return;
+    }
     cb(ok && ['notifications', 'clipboard-sanitized-write', 'display-capture'].includes(permiso));
   });
   const oculta = process.argv.includes('--oculto');
