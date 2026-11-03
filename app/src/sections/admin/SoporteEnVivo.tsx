@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiAdminLlamadas, apiAdminLlamadaAccion, apiAdminLlamar, apiAdminTiendasLlamar, type CfgLlamadas, type LlamadaEquipo, type ServicioLlamadas, type TiendaLlamable } from '../../lib/api';
 import { notificar } from '../../components/dialogs';
 import { fmtCO } from '../../lib/fechaCO';
-import { useLlamada, iniciarLlamada, colgarLlamada } from '../../lib/llamadaRTC';
+import { useLlamada, iniciarLlamada, colgarLlamada, probarConexion, type ResultadoPrueba } from '../../lib/llamadaRTC';
 import { HorarioSoporte, PausaSoporte } from './HorarioSoporte';
 
 /**
@@ -179,6 +179,8 @@ export function SoporteEnVivo({ puedeConfigurar = true, puedeLlamar = false }: {
         </div>
       )}
 
+      <PruebaConexion />
+
       <div style={card}>
         <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>📞 Ahora {activas.length > 0 && <span style={{ color: '#047857' }}>({activas.length})</span>}</div>
         {!lista && <div style={{ fontSize: 13, color: 'var(--df-text-faint)' }}>Cargando…</div>}
@@ -226,5 +228,29 @@ export function SoporteEnVivo({ puedeConfigurar = true, puedeLlamar = false }: {
         </div>
       )}
     </section>
+  );
+}
+
+/** «Probar mi conexión»: micrófono y rutas de red (STUN / TURN), para saber por qué alguien no conecta. */
+function PruebaConexion() {
+  const [r, setR] = useState<ResultadoPrueba | null>(null);
+  const [probando, setProbando] = useState(false);
+  const fila = (ok: boolean, txt: string, neutro = false) => <div style={{ fontSize: 13 }}>{neutro ? '•' : ok ? '✅' : '❌'} {txt}</div>;
+  return (
+    <div style={{ ...card, padding: '12px 14px', display: 'grid', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ flex: 1, minWidth: 220, fontSize: 13 }}>🩺 <b>¿Alguien se queda en «Conectando…»?</b> Que abra esto en su computador y toque «Probar mi conexión».</span>
+        <button onClick={() => { setProbando(true); setR(null); void probarConexion().then((x) => { setR(x); setProbando(false); }); }} disabled={probando} style={btnS}>{probando ? 'Probando… (8 s)' : 'Probar mi conexión'}</button>
+      </div>
+      {r && (
+        <div role="status" style={{ display: 'grid', gap: 3, borderTop: '1px solid var(--df-border)', paddingTop: 8 }}>
+          {fila(r.mic, r.mic ? 'Micrófono' : `Micrófono: ${r.micError}`)}
+          {fila(r.host, 'WebRTC disponible en este navegador')}
+          {fila(r.stun, r.stun ? 'Conexión directa (STUN): tu red la permite' : 'Conexión directa (STUN): tu red la bloquea')}
+          {r.turnConfigurado ? fila(r.turn, r.turn ? 'Servidor TURN de respaldo: responde' : 'Servidor TURN de respaldo: no responde') : fila(false, 'Servidor TURN de respaldo: no está configurado', true)}
+          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4, color: r.ok ? '#047857' : 'var(--df-danger-dark, #b91c1c)' }}>{r.veredicto}</div>
+        </div>
+      )}
+    </div>
   );
 }
