@@ -17,6 +17,8 @@ export type Orden = 'recientes' | 'antiguos' | 'mayor' | 'menor' | 'cliente';
 type FechaRapida = 'todas' | 'hoy' | 'ayer' | '7d' | '30d' | 'mes' | 'rango';
 type Despacho = 'todos' | 'sin' | 'effi' | 'dropi';
 type Guia = 'todas' | 'con' | 'sin';
+/** Pedidos repetidos: mismo celular, misma dirección o mismo nombre del cliente. */
+export type Repetido = 'tel' | 'direccion' | 'nombre';
 
 export interface Filtros {
   estados: string[];
@@ -33,9 +35,11 @@ export interface Filtros {
   min: string;
   max: string;
   orden: Orden;
+  /** Ver solo los repetidos por estos datos (cualquiera de ellos). */
+  repetidos: Repetido[];
 }
 
-const VACIOS: Filtros = { estados: [], fecha: 'todas', desde: '', hasta: '', canales: [], landing: '', despacho: 'todos', guia: 'todas', ciudad: '', producto: '', min: '', max: '', orden: 'recientes' };
+const VACIOS: Filtros = { estados: [], fecha: 'todas', desde: '', hasta: '', canales: [], landing: '', despacho: 'todos', guia: 'todas', ciudad: '', producto: '', min: '', max: '', orden: 'recientes', repetidos: [] };
 const CLAVE = 'df-pedidos-filtros-v1';
 
 export const CANALES: { id: string; label: string }[] = [
@@ -52,6 +56,20 @@ export const ORDENES: { id: Orden; label: string }[] = [
 ];
 
 const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+export const REPETIDOS: { id: Repetido; label: string }[] = [{ id: 'tel', label: 'Mismo celular' }, { id: 'direccion', label: 'Misma dirección' }, { id: 'nombre', label: 'Mismo nombre' }];
+/** Dirección comparable: «Calle 45 # 12-30» = «cl 45 no 12 30» (más la ciudad). */
+const dirComparable = (d: string, ciudad: string) => {
+  const t = norm(d).replace(/\b(carrera|cra|kra|kr|cr|cl?r)\b\.?/g, ' cr ').replace(/\b(calle|cll|cl|clle)\b\.?/g, ' cl ').replace(/\b(avenida|av|avda)\b\.?/g, ' av ')
+    .replace(/\b(diagonal|dg|diag)\b\.?/g, ' dg ').replace(/\b(transversal|tv|trans|tr)\b\.?/g, ' tv ').replace(/\b(numero|nro|no|n)\b\.?|#|n°|nº/g, ' ').replace(/[^a-z0-9]+/g, '');
+  return t.length >= 5 ? `${norm(ciudad).replace(/[^a-z]/g, '')}|${t}` : '';
+};
+/** La clave con la que se compara cada pedido ('' = no se puede comparar). */
+export function claveRepetido(o: { tel?: string; direccion?: string; ciudad?: string; cliente?: string }, k: Repetido): string {
+  if (k === 'tel') { const d = String(o.tel || '').replace(/\D/g, '').slice(-10); return d.length >= 7 ? d : ''; }
+  if (k === 'direccion') return dirComparable(o.direccion || '', o.ciudad || '');
+  const n = norm(o.cliente || '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  return n.length >= 4 && !/^cliente\b/.test(n) ? n : '';
+}
 const diaBogota = (offset = 0) => ymdCO(Date.now() - offset * 86400000);
 /** Valor del pedido (el acordado o la suma de ítems + envío). */
 export const valorPedido = (o: DecoratedOrder) => (o.total && o.total > 0 ? o.total : o.items.reduce((a, it) => a + it.qty * it.precio, 0) + (o.envio || 0));
@@ -71,7 +89,7 @@ export const fechaCorta = (f?: string) => {
 
 export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
   const [f, setF] = useState<Filtros>(() => {
-    try { const g = JSON.parse(localStorage.getItem(CLAVE) || 'null'); return g ? { ...VACIOS, ...g } : VACIOS; } catch { return VACIOS; }
+    try { const g = JSON.parse(localStorage.getItem(CLAVE) || 'null'); return g ? { ...VACIOS, ...g, repetidos: Array.isArray(g.repetidos) ? g.repetidos : [] } : VACIOS; } catch { return VACIOS; }
   });
   useEffect(() => { try { localStorage.setItem(CLAVE, JSON.stringify(f)); } catch { /* sin almacenamiento */ } }, [f]);
   const set = (p: Partial<Filtros>) => setF((x) => ({ ...x, ...p }));
@@ -118,6 +136,25 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
     });
   }, [orders, query, f]);
 
+  // Repetidos: pedidos (dentro de los demás filtros) que comparten celular, dirección o nombre.
+  const repetidos = useMemo(() => {
+    const porTipo = {} as Record<Repetido, Map<string, DecoratedOrder[]>>;
+    for (const k of REPETIDOS.map((r) => r.id)) {
+      const m = new Map<string, DecoratedOrder[]>();
+      for (const o of base) { const c = claveRepetido(o, k); if (c) m.set(c, [...(m.get(c) || []), o]); }
+      for (const [c, l] of m) if (l.length < 2) m.delete(c);
+      porTipo[k] = m;
+    }
+    const cuenta = Object.fromEntries(REPETIDOS.map((r) => [r.id, [...porTipo[r.id].values()].reduce((a, l) => a + l.length, 0)])) as Record<Repetido, number>;
+    return { porTipo, cuenta };
+  }, [base]);
+  /** Cuántas veces se repite cada pedido (por los criterios elegidos): para la etiqueta «Repetido ×N». */
+  const vecesRepetido = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const k of f.repetidos) for (const l of repetidos.porTipo[k].values()) for (const o of l) m.set(o.id, Math.max(m.get(o.id) || 0, l.length));
+    return m;
+  }, [repetidos, f.repetidos]);
+
   const conteoEstados = useMemo(() => {
     const m: Record<string, number> = {};
     for (const o of base) m[o.estado] = (m[o.estado] || 0) + 1;
@@ -125,7 +162,16 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
   }, [base]);
 
   const filtrados = useMemo(() => {
-    const lista = f.estados.length ? base.filter((o) => f.estados.includes(o.estado)) : [...base];
+    let lista = f.estados.length ? base.filter((o) => f.estados.includes(o.estado)) : [...base];
+    if (f.repetidos.length) {
+      // Se muestran juntos: cada grupo de repetidos seguido, el grupo más reciente primero.
+      lista = lista.filter((o) => vecesRepetido.has(o.id));
+      const grupo = (o: DecoratedOrder) => { for (const k of f.repetidos) { const c = claveRepetido(o, k); if (c && repetidos.porTipo[k].has(c)) return `${k}:${c}`; } return ''; };
+      const ultimo = new Map<string, string>();
+      const fechaDe = (o: DecoratedOrder) => `${o.fecha || ''} ${o.hora || ''} ${o.id.replace(/\D/g, '').padStart(8, '0')}`;
+      for (const o of lista) { const g = grupo(o); if ((ultimo.get(g) || '') < fechaDe(o)) ultimo.set(g, fechaDe(o)); }
+      return lista.sort((a, b) => { const ga = grupo(a), gb = grupo(b); return ga === gb ? fechaDe(b).localeCompare(fechaDe(a)) : (ultimo.get(gb) || '').localeCompare(ultimo.get(ga) || '') || ga.localeCompare(gb); });
+    }
     const clave = (o: DecoratedOrder) => `${o.fecha || ''} ${o.hora || ''} ${o.id.replace(/\D/g, '').padStart(8, '0')}`;
     lista.sort((a, b) =>
       f.orden === 'antiguos' ? clave(a).localeCompare(clave(b))
@@ -134,7 +180,7 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
       : f.orden === 'cliente' ? a.cliente.localeCompare(b.cliente, 'es')
       : clave(b).localeCompare(clave(a)));
     return lista;
-  }, [base, f.estados, f.orden]);
+  }, [base, f.estados, f.orden, f.repetidos, vecesRepetido, repetidos]);
 
   // Chips de lo que está filtrando (cada uno se quita con su ✕).
   const activos: { label: string; quitar: () => void }[] = [];
@@ -146,10 +192,12 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
   if (f.guia !== 'todas') activos.push({ label: f.guia === 'con' ? 'Con guía' : 'Sin guía', quitar: () => set({ guia: 'todas' }) });
   if (f.ciudad) activos.push({ label: f.ciudad, quitar: () => set({ ciudad: '' }) });
   if (f.producto) activos.push({ label: f.producto, quitar: () => set({ producto: '' }) });
+  if (f.repetidos.length) activos.push({ label: `Repetidos: ${f.repetidos.map((k) => REPETIDOS.find((r) => r.id === k)!.label.toLowerCase()).join(' o ')}`, quitar: () => set({ repetidos: [] }) });
   if (f.min || f.max) activos.push({ label: `Valor ${f.min ? 'desde $' + Number(f.min).toLocaleString('es-CO') : ''}${f.min && f.max ? ' ' : ''}${f.max ? 'hasta $' + Number(f.max).toLocaleString('es-CO') : ''}`, quitar: () => set({ min: '', max: '' }) });
 
   const totalValor = filtrados.reduce((a, o) => a + valorPedido(o), 0);
-  return { f, set, alternar, limpiar, filtrados, activos, conteoEstados, ciudades, productos, landings, totalValor, totalBase: orders.length };
+  const alternarRepetido = (k: Repetido) => setF((x) => ({ ...x, repetidos: x.repetidos.includes(k) ? x.repetidos.filter((y) => y !== k) : [...x.repetidos, k] }));
+  return { f, set, alternar, alternarRepetido, limpiar, filtrados, activos, conteoEstados, ciudades, productos, landings, totalValor, totalBase: orders.length, repetidos: repetidos.cuenta, vecesRepetido };
 }
 
 export type FiltrosPedidos = ReturnType<typeof useFiltrosPedidos>;
@@ -225,6 +273,17 @@ export function PanelFiltros({ fp }: { fp: FiltrosPedidos }) {
           <div style={etiqueta}>Producto</div>
           <Dropdown ariaLabel="Producto" value={f.producto} onChange={(v) => set({ producto: v })} buscar options={[{ value: '', label: 'Todos los productos' }, ...fp.productos.map((p) => ({ value: p, label: p }))]} />
         </div>
+      </div>
+      <div>
+        <div style={etiqueta}>Repetidos</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {REPETIDOS.map((r) => (
+            <button key={r.id} onClick={() => fp.alternarRepetido(r.id)} style={chip(f.repetidos.includes(r.id))} title={`Pedidos que comparten ${r.label.toLowerCase().replace('mismo ', '').replace('misma ', '')} con otro`}>
+              🔁 {r.label} <span style={{ opacity: 0.7 }}>{fp.repetidos[r.id] || 0}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Salen agrupados. Combínalo con la fecha (p. ej. «7 días») para ver solo los recientes.</div>
       </div>
       <div>
         <div style={etiqueta}>Valor del pedido</div>

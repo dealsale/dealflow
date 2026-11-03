@@ -1332,7 +1332,7 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
     try {
       const ef = await import('./effiApi.js');
       if (ef.effiApiListo(storeId) && ef.cfgEffi(storeId)?.autoDespacho) {
-        const re = await ef.despacharEffi(storeId, oid);
+        const re = await ef.despacharEffi(storeId, oid, false, '', '', false, { auto: true });
         if ('error' in re) console.warn(`[effi] pedido DF-${numero} NO se envió: ${re.error}`);
       }
     } catch (e) { console.error('[effi] error auto-enviando pedido', e); }

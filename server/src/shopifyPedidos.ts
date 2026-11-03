@@ -316,7 +316,7 @@ async function despacharConfirmado(storeId: string, orderId: string): Promise<vo
     const ef = await import('./effiApi.js');
     const prov = (db.prepare("SELECT GROUP_CONCAT(DISTINCT COALESCE(p.despacho_proveedor,'')) pv FROM order_items i LEFT JOIN products p ON p.id = i.product_id WHERE i.order_id = ?").get(orderId) as { pv: string | null }).pv || '';
     if (!prov.split(',').includes('dropi') && ef.effiApiListo(storeId)) {
-      const r = await ef.despacharEffi(storeId, orderId);
+      const r = await ef.despacharEffi(storeId, orderId, false, '', '', false, { auto: true });
       if ('error' in r) registrarLog(storeId, 'warn', 'despacho', `DF-${o.numero} confirmado pero no se pudo enviar a Effi: ${r.error}. Despáchalo desde el pedido.`);
       return;
     }
