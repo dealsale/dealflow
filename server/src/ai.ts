@@ -532,13 +532,13 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   const envioTxt = await extras.contextoEnvioLead(storeId, leadId).catch(() => '');
   // Pedido ya creado que espera el "sí" del cliente (confirmación enviada por plantilla): la IA
   // resuelve dudas y pide la confirmación, pero NO crea otro pedido (el "sí" lo confirma el sistema).
-  const pendConf = db.prepare(`SELECT numero, total FROM orders WHERE store_id = ? AND lead_id = ? AND confirmacion = 'esperando' AND estado IN ('Nuevo','Confirmado') AND created_at > datetime('now','-7 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as { numero: number; total: number } | undefined;
+  const pendConf = db.prepare(`SELECT numero, total FROM orders WHERE store_id = ? AND lead_id = ? AND confirmacion = 'esperando' AND estado IN ('Nuevo','Confirmado') AND COALESCE(effi_remision,'') = '' AND COALESCE(dropi_order_id,'') = '' AND COALESCE(guia,'') = '' AND created_at > datetime('now','-7 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as { numero: number; total: number } | undefined;
   const pendTxt = pendConf ? `\n\nPEDIDO PENDIENTE DE CONFIRMAR: este cliente ya tiene el pedido DF-${pendConf.numero} (total $${Number(pendConf.total).toLocaleString('es-CO')}) esperando que diga que SÍ lo enviemos. Responde sus dudas con amabilidad y, al final, pregúntale si se lo enviamos. NO pongas el marcador ##PEDIDO para este pedido (ya existe): cuando el cliente diga que sí, el sistema lo confirma solo.` : '';
   // Pedido reciente ya confirmado o despachado: la IA lo sabe para no volver a registrarlo.
   const yaConf = pendConf ? undefined : db.prepare(`SELECT numero, estado, COALESCE(guia,'') guia FROM orders WHERE store_id = ? AND lead_id = ? AND estado != 'Cancelado'
       AND (confirmacion = 'si' OR estado NOT IN ('Nuevo') OR COALESCE(guia,'') != '' OR COALESCE(effi_remision,'') != '' OR COALESCE(dropi_order_id,'') != '')
       AND created_at > datetime('now','-3 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as { numero: number; estado: string; guia: string } | undefined;
-  const confTxt = yaConf ? `\n\nPEDIDO YA REGISTRADO: este cliente ya tiene el pedido DF-${yaConf.numero} (${yaConf.estado}${yaConf.guia ? `, guía ${yaConf.guia}` : ''}). NO vuelvas a poner el marcador ##PEDIDO para ese pedido ni le pidas que lo confirme otra vez. Si pregunta por él, respóndele sobre ese pedido. Pon ##PEDIDO solo si el cliente pide claramente un pedido NUEVO y adicional (otro producto u otra entrega).` : '';
+  const confTxt = yaConf ? `\n\nPEDIDO YA REGISTRADO: este cliente ya tiene el pedido DF-${yaConf.numero} (${yaConf.estado}${yaConf.guia ? `, guía ${yaConf.guia}` : ''}). NO vuelvas a poner el marcador ##PEDIDO para ese pedido, NO le muestres otra vez el resumen y NO le pidas que lo confirme: ya está confirmado. Si el cliente escribe «sí», «ok», «listo», «gracias» o algo parecido, NO es una nueva confirmación: agradécele y responde lo que pregunte sobre ese pedido. Pon ##PEDIDO solo si el cliente pide claramente un pedido NUEVO y adicional (otro producto u otra entrega).` : '';
   const systemFinal = mediaSinTexto
     ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}${pendTxt}${confTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
     : system + memoriaCliente + novedadTxt + envioTxt + pendTxt + confTxt;
@@ -744,7 +744,11 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     // un bucle de "¿confirmas?". Aplica aunque hubiera un marcador fallido (mp): el
     // guard anti-duplicado de crearPedido evita crear dos.
     // (No aplica si el chat está resolviendo una novedad de envío: ese "sí" es de la novedad.)
-    if (!pedidoCreado && !repetido && !novedadTxt && esAfirmacion(ultimo?.texto || '')) {
+    // Solo si este cliente NO tiene ya un pedido reciente: si lo tiene, ese "sí/ok/listo" es una
+    // respuesta sobre su pedido (o a la guía), no una confirmación nueva. Antes, el resumen que
+    // manda el sistema al crear el pedido se volvía a leer como pedido nuevo y se re-preguntaba en bucle.
+    const tienePedidoReciente = !!db.prepare("SELECT 1 FROM orders WHERE store_id = ? AND lead_id = ? AND estado != 'Cancelado' AND created_at > datetime('now','-3 days') LIMIT 1").get(storeId, leadId);
+    if (!pedidoCreado && !repetido && !novedadTxt && !tienePedidoReciente && esAfirmacion(ultimo?.texto || '')) {
       const inner = pedidoDesdeResumen(leadId);
       if (inner) { const r2 = await crearPedido(storeId, lead, inner, productRows, destino, pn); pedidoCreado = r2 === 'creado' || r2 === 'actualizado' || r2 === 'invalido'; }
     }
@@ -1220,6 +1224,14 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
     const antes = firma(itemsPrev, [String(previo.direccion), String(previo.ciudad), String(previo.departamento), String(previo.tel), String(previo.cliente)]);
     const ahora = firma(items, [direccion || String(previo.direccion), ciudad || String(previo.ciudad), departamento || String(previo.departamento), tel || String(previo.tel), cliente || String(previo.cliente)]);
     const numPrev = Number(previo.numero);
+    // Pedido ya CONFIRMADO con los mismos productos y el cliente solo dijo "sí/ok/gracias": la IA
+    // reescribió el pedido (p. ej. la dirección con otras palabras). No se toca ni se le avisa nada.
+    const ultCliente = (db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(lead.id) as { texto: string } | undefined)?.texto || '';
+    const mismosItems = firma(itemsPrev, []) === firma(items, []);
+    if (antes !== ahora && mismosItems && String(previo.confirmacion || '') === 'si' && (esAfirmacion(ultCliente) || /\b(gracias|thanks|thank you)\b/i.test(norm(ultCliente)))) {
+      trazar(storeId, String(previo.id), { etapa: 'pedido', nivel: 'info', titulo: 'El asistente reescribió el pedido ya confirmado: no se cambió nada', datos: { marcador: inner } });
+      return 'igual';
+    }
     if (antes === ahora) {
       console.log(`[ia] pedido DF-${numPrev} ya registrado (marcador repetido): no se crea otro`);
       trazar(storeId, String(previo.id), { etapa: 'pedido', nivel: 'info', titulo: 'El asistente repitió el pedido: no se creó otro', datos: { marcador: inner } });

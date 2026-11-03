@@ -245,7 +245,9 @@ const esNo = (t: string) => { const l = limpio(t); return NO.has(l.split(' ')[0]
  * no debe contestar por su cuenta).
  */
 export async function respuestaConfirmacion(storeId: string, leadId: string, texto: string): Promise<boolean> {
+  // Un pedido que ya tiene guía o remisión ya salió: su "sí" no se vuelve a pedir ni a procesar.
   const o = db.prepare(`SELECT * FROM orders WHERE store_id = ? AND lead_id = ? AND confirmacion = 'esperando' AND estado IN ('Nuevo','Confirmado')
+    AND COALESCE(effi_remision,'') = '' AND COALESCE(dropi_order_id,'') = '' AND COALESCE(guia,'') = ''
     AND created_at > datetime('now','-7 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as Fila | undefined;
   if (!o) return false;
   const t = txt(texto).trim();
