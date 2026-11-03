@@ -1768,6 +1768,19 @@ api.post('/soporte/llamadas/:id/senal', requireAuth, async (req, res) => {
   sl.enviarSenal(req.params.id, clave, tipo, req.body?.data ?? null, typeof req.body?.para === 'string' && req.body.para ? String(req.body.para).slice(0, 80) : '*');
   res.json({ ok: true, yo: clave });
 });
+// Control remoto dentro de la llamada: la TIENDA registra cuándo dio, negó o quitó el control.
+api.post('/soporte/llamadas/:id/control', requireAuth, async (req, res) => {
+  const sl = await import('./soporteLlamadas.js');
+  const clave = sl.claveEnLlamada(req.params.id, req.user!);
+  if (clave !== 'tienda' || !req.user!.storeId) return res.status(404).json({ error: 'Llamada no encontrada.' });
+  const evento = String(req.body?.evento || '');
+  if (!['concedido', 'retirado', 'rechazado'].includes(evento)) return res.status(400).json({ error: 'Evento no válido.' });
+  const quien = String(req.body?.quien || 'Soporte DealFlow').slice(0, 80);
+  const quienDio = req.user!.nombre || req.user!.email;
+  registrarLog(req.user!.storeId, 'info', 'soporte', evento === 'concedido' ? `${quienDio} le dio el control de DealFlow a ${quien} (llamada de soporte).`
+    : evento === 'retirado' ? `Terminó el control remoto de ${quien}.` : `${quienDio} no aceptó que ${quien} controlara DealFlow.`);
+  res.json({ ok: true });
+});
 // Llamada SALIENTE (el superadmin llama a la tienda): la app de la tienda pregunta cada pocos segundos.
 api.get('/soporte/entrante', requireAuth, requireStore, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');

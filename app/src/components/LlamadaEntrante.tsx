@@ -85,7 +85,7 @@ export function LlamadaEntrante({ mobile }: { mobile?: boolean }) {
   };
 
   return (
-    <div role="alertdialog" aria-modal="true" aria-labelledby="df-entrante-t" aria-describedby="df-entrante-d"
+    <div role="alertdialog" aria-modal="true" aria-labelledby="df-entrante-t" aria-describedby="df-entrante-d" data-df-no-remoto=""
       style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(2,6,23,.72)', backdropFilter: 'blur(6px)', display: 'grid', placeItems: 'center', padding: 'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))' }}>
       <div style={{ width: mobile ? '100%' : 440, maxWidth: '100%', borderRadius: 24, overflow: 'hidden', background: '#0B1220', color: '#fff', boxShadow: '0 40px 90px -20px rgba(0,0,0,.8)', textAlign: 'center' }}>
         <div style={{ background: 'linear-gradient(150deg, #047857, #1D4ED8)', padding: '34px 24px 28px', display: 'grid', justifyItems: 'center', gap: 14 }}>

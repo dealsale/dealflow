@@ -17,6 +17,10 @@ function recargar() {
   try { sessionStorage.setItem('df-actualizado', '1'); } catch { /* modo privado */ }
   location.reload();
 }
+/** Hay una llamada de soporte en curso (en esta pestaña o en otra): no se recarga sola, solo se avisa. */
+function enLlamada(): boolean {
+  try { return !!localStorage.getItem('df:llamada-soporte'); } catch { return false; }
+}
 function escribiendo(): boolean {
   const a = document.activeElement as HTMLElement | null;
   return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable);
@@ -46,14 +50,14 @@ async function revisar() {
 export function iniciarAutoActualizacion() {
   if (import.meta.env.DEV) return;
   // Si un archivo de la versión vieja ya no existe (tras un despliegue), recargamos.
-  window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); recargar(); });
+  window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); if (enLlamada()) aviso(); else recargar(); });
   ['keydown', 'pointerdown'].forEach((ev) => window.addEventListener(ev, () => { ultimaActividad = Date.now(); }, { passive: true }));
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    if (hayNueva) recargar(); else void revisar();
+    if (hayNueva) { if (!enLlamada()) recargar(); } else void revisar();
   });
   setInterval(() => {
-    if (hayNueva) { if (!escribiendo() && Date.now() - ultimaActividad > 90_000) recargar(); return; }
+    if (hayNueva) { if (!escribiendo() && !enLlamada() && Date.now() - ultimaActividad > 90_000) recargar(); return; }
     void revisar();
   }, INTERVALO);
   setTimeout(() => void revisar(), 30_000);

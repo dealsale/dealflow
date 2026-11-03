@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { apiAdminLlamadaAccion, apiSoporteCancelarLlamada } from './api';
+import { DEVOLVER_A, ES_APARTE, TAB, alCanal, avisarCanal, latidoAjeno, latir, soltarLatido } from './canalLlamada';
+import { alQuitarControl, ejecutar, terminarEjecucion, vistaLocal, type AccionControl } from './controlRemoto';
 
 /**
  * Llamada de soporte PROPIA (WebRTC), dentro de DealFlow: audio y pantalla compartida de
@@ -26,13 +28,32 @@ export interface EstadoLlamada {
   aviso: string; minimizada: boolean;
   /** Llamada saliente que todavía timbra en la tienda (nadie ha contestado). */
   timbrando?: boolean;
+  /** La llamada la lleva OTRA pestaña o la ventana aparte (aquí solo se muestra la píldora). */
+  enOtra?: boolean; otraEsVentana?: boolean;
+  // ── Control remoto ──
+  /** Tienda: alguien del equipo pide control / lo tiene. */
+  control?: { pedido?: { de: string; nombre: string }; activo?: { de: string; nombre: string } };
+  /** Equipo: hay canal de control con la tienda, y en qué va mi pedido. */
+  controlListo?: boolean; miControl?: '' | 'pidiendo' | 'activo';
+  controlAviso?: string;
+  /** Equipo: ¿la tienda comparte la pestaña de DealFlow? (si no, los clics no caen donde son). */
+  controlCoincide?: boolean | null;
 }
 
 // ── Estado global (la ventana de la llamada sigue abierta aunque cambies de sección) ──
 let estado: EstadoLlamada | null = null;
 const oyentes = new Set<() => void>();
 const emitir = () => oyentes.forEach((f) => f());
-function set(p: Partial<EstadoLlamada>) { if (estado) { estado = { ...estado, ...p }; emitir(); } }
+let ultimoResumen = '';
+function set(p: Partial<EstadoLlamada>) {
+  if (!estado) return;
+  estado = { ...estado, ...p }; emitir();
+  // La dueña de la llamada cuenta a las otras pestañas cómo va (para su píldora).
+  if (motor?.vivo) {
+    const r = JSON.stringify({ fase: estado.fase, inicio: estado.inicio, titulo: estado.titulo, atendidoPor: estado.atendidoPor });
+    if (r !== ultimoResumen) { ultimoResumen = r; avisarCanal({ t: 'estado', id: estado.id, ...JSON.parse(r) }); }
+  }
+}
 export function useLlamada(): EstadoLlamada | null {
   return useSyncExternalStore((f) => { oyentes.add(f); return () => oyentes.delete(f); }, () => estado, () => null);
 }
@@ -45,6 +66,9 @@ export function retomarGuardada(): void {
   try {
     const g = JSON.parse(localStorage.getItem(CLAVE) || 'null') as { id: string; rol: RolLlamada; titulo: string } | null;
     if (!g?.id) return;
+    // Otra pestaña (o la ventana aparte) ya la lleva: aquí solo la píldora «Traer aquí».
+    const otra = !ES_APARTE && latidoAjeno();
+    if (otra) { estado = { ...base(g.id, g.rol, g.titulo), fase: 'conectada', enOtra: true, otraEsVentana: otra.aparte }; emitir(); avisarCanal({ t: 'pide-estado' }); return; }
     void fetch(`/api/soporte/llamadas/${g.id}/senal?desde=-1`, { credentials: 'same-origin' }).then((r) => r.ok ? r.json() : null).then((d) => {
       if (!d || !['esperando', 'en_curso', 'llamando'].includes(d.estado)) { guardar(null); return; }
       iniciarLlamada(g.id, g.rol, g.titulo, d.atendidoPor || '');
@@ -60,7 +84,9 @@ const base = (id: string, rol: RolLlamada, titulo: string): EstadoLlamada => ({
 
 const ICE_DEF: RTCIceServer[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
 
-interface Par { clave: string; pc: RTCPeerConnection; gen: string; pendientes: RTCIceCandidateInit[]; stream: MediaStream; video: boolean; conectado: boolean }
+interface Par { clave: string; pc: RTCPeerConnection; gen: string; pendientes: RTCIceCandidateInit[]; stream: MediaStream; video: boolean; conectado: boolean; dc?: RTCDataChannel }
+/** Mensajes del canal de control (además de las acciones). */
+type MsgControl = AccionControl | { t: 'pedir' } | { t: 'soltar' } | { t: 'ok' } | { t: 'no'; motivo?: string } | { t: 'fin'; motivo?: string } | { t: 'info'; coincide: boolean | null };
 type DatosSenal = { gen?: string; sdp?: RTCSessionDescriptionInit; c?: RTCIceCandidateInit; on?: boolean; resp?: boolean } | null;
 
 class Motor {
@@ -71,6 +97,10 @@ class Motor {
   desde = 0; vivo = true; yo = '';
   nombres = new Map<string, string>();
   huboConexion = false;
+  latidoIv: ReturnType<typeof setInterval> | null = null;
+  infoIv: ReturnType<typeof setInterval> | null = null;
+  /** Con la ventana aparte: pestañas de DealFlow abiertas (dónde se ejecuta el control). */
+  vistas = new Map<string, { w: number; h: number; visible: boolean; foco: boolean; t: number }>();
   id: string; rol: RolLlamada;
   constructor(id: string, rol: RolLlamada) { this.id = id; this.rol = rol; }
 
@@ -89,6 +119,8 @@ class Motor {
   }
 
   async arrancar() {
+    latir(); this.latidoIv = setInterval(latir, 1500);
+    if (ES_APARTE && this.rol === 'tienda') avisarCanal({ t: 'quien-vista' });
     try { const r = await fetch('/api/soporte/ice', { credentials: 'same-origin' }); if (r.ok) this.ice = (await r.json()).iceServers || ICE_DEF; } catch { /* STUN por defecto */ }
     try {
       this.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
@@ -109,10 +141,14 @@ class Motor {
   nuevoPar(clave: string): Par {
     const viejo = this.pares.get(clave);
     try { viejo?.pc.close(); } catch { /* nada */ }
+    // Se rehízo la conexión con la tienda: el control anterior ya no vale.
+    if (viejo && this.rol === 'soporte' && clave === 'tienda' && estado?.miControl) set({ miControl: '', controlListo: false, controlAviso: 'Se reconectó la llamada: vuelve a pedir el control si lo necesitas.' });
+    if (viejo && this.rol === 'tienda' && (estado?.control?.activo?.de === clave || estado?.control?.pedido?.de === clave)) this.cerrarControl('', false);
     const pc = new RTCPeerConnection({ iceServers: this.ice });
     const par: Par = { clave, pc, gen: '', pendientes: [], stream: new MediaStream(), video: viejo?.video || false, conectado: false };
     pc.onicecandidate = (e) => { if (e.candidate) void this.senal('ice', { gen: par.gen, c: e.candidate.toJSON() }, clave); };
     pc.ontrack = (e) => { if (!par.stream.getTracks().includes(e.track)) par.stream.addTrack(e.track); this.publicar(); };
+    pc.ondatachannel = (e) => { if (e.channel.label === 'control') { par.dc = e.channel; this.atarCanal(par); } };
     pc.onconnectionstatechange = () => {
       if (this.pares.get(clave) !== par) return;
       const s = pc.connectionState;
@@ -167,6 +203,8 @@ class Motor {
   async ofertar(clave: string) {
     const par = this.nuevoPar(clave);
     par.gen = Math.random().toString(36).slice(2, 10);
+    // Canal de control remoto: lo abre el equipo hacia la tienda.
+    if (this.rol === 'soporte' && clave === 'tienda') { par.dc = par.pc.createDataChannel('control', { ordered: true }); this.atarCanal(par); }
     await this.ponerPistas(par.pc, true);
     const o = await par.pc.createOffer();
     await par.pc.setLocalDescription(o);
@@ -244,6 +282,100 @@ class Motor {
     }
   }
 
+  // ── Control remoto ──────────────────────────────────────────────────
+  atarCanal(par: Par) {
+    const dc = par.dc!;
+    dc.onopen = () => { if (this.pares.get(par.clave) === par && this.rol === 'soporte') set({ controlListo: true }); };
+    dc.onclose = () => {
+      if (this.pares.get(par.clave) !== par) return;
+      if (this.rol === 'soporte') set({ controlListo: false, miControl: '' });
+      else if (estado?.control?.activo?.de === par.clave || estado?.control?.pedido?.de === par.clave) this.cerrarControl('Se cortó la conexión con el equipo.');
+    };
+    dc.onmessage = (e) => { let m: MsgControl; try { m = JSON.parse(String(e.data)); } catch { return; } this.alControl(par.clave, m); };
+  }
+  enviarControl(clave: string, m: MsgControl) {
+    const dc = this.pares.get(clave)?.dc;
+    if (dc?.readyState === 'open') { try { dc.send(JSON.stringify(m)); return true; } catch { /* nada */ } }
+    return false;
+  }
+  alControl(de: string, m: MsgControl) {
+    if (this.rol === 'soporte') {
+      if (m.t === 'ok') set({ miControl: 'activo', controlAviso: '' });
+      else if (m.t === 'no') set({ miControl: '', controlAviso: m.motivo || 'La tienda no aceptó el control.' });
+      else if (m.t === 'fin') set({ miControl: '', controlAviso: m.motivo || 'La tienda quitó el control.' });
+      else if (m.t === 'info') set({ controlCoincide: m.coincide });
+      return;
+    }
+    const c = estado?.control || {};
+    const nombre = this.nombres.get(de) || 'Soporte DealFlow';
+    if (m.t === 'pedir') {
+      if (!this.pantalla) { this.enviarControl(de, { t: 'no', motivo: 'Primero la tienda tiene que compartir la pantalla (la pestaña de DealFlow).' }); return; }
+      if (c.activo && c.activo.de !== de) { this.enviarControl(de, { t: 'no', motivo: `${c.activo.nombre} ya tiene el control.` }); return; }
+      if (c.activo?.de === de) { this.enviarControl(de, { t: 'ok' }); return; }
+      set({ control: { ...c, pedido: { de, nombre } }, minimizada: false });
+      return;
+    }
+    if (m.t === 'soltar') { if (c.activo?.de === de || c.pedido?.de === de) this.cerrarControl('', false); return; }
+    if (!c.activo || c.activo.de !== de) return;
+    if (m.t === 'm' || m.t === 'c' || m.t === 'w' || m.t === 'k' || m.t === 'txt') this.ejecutarAccion(m, c.activo.nombre);
+  }
+  /** Dónde se ejecuta: en esta pestaña, o (con la ventana aparte) en la pestaña de DealFlow. */
+  pestanaEjecutora(): string {
+    const ahora = Date.now();
+    const l = [...this.vistas.entries()].filter(([, v]) => ahora - v.t < 120_000);
+    const mejor = l.find(([, v]) => v.foco) || l.filter(([, v]) => v.visible).sort((a, b) => b[1].t - a[1].t)[0] || l.find(([k]) => k === DEVOLVER_A);
+    return mejor?.[0] || DEVOLVER_A;
+  }
+  ejecutarAccion(m: AccionControl, nombre: string) {
+    if (!ES_APARTE) { ejecutar(m, nombre); return; }
+    avisarCanal({ t: 'ctl', para: this.pestanaEjecutora(), m, quien: nombre });
+  }
+  /** ¿Lo que comparte la tienda es la pestaña de DealFlow? (mismo tamaño) */
+  coincide(): boolean | null {
+    if (!this.pantalla) return null;
+    const s = this.pantalla.getSettings() as MediaTrackSettings & { displaySurface?: string };
+    if (s.displaySurface && s.displaySurface !== 'browser') return false;
+    const v = ES_APARTE ? this.vistas.get(this.pestanaEjecutora()) : vistaLocal();
+    if (!v || !s.width || !s.height || !v.w || !v.h) return null;
+    return Math.abs(s.width / s.height - v.w / v.h) / (v.w / v.h) < 0.05;
+  }
+  responderControl(si: boolean) {
+    const p = estado?.control?.pedido;
+    if (!p) return;
+    if (!si) { this.enviarControl(p.de, { t: 'no', motivo: 'La tienda no aceptó el control.' }); set({ control: { ...estado?.control, pedido: undefined } }); void this.registrar('rechazado', p.nombre); return; }
+    if (!this.enviarControl(p.de, { t: 'ok' })) { set({ control: { ...estado?.control, pedido: undefined }, aviso: 'Se perdió la conexión con el equipo: no se pudo dar el control.' }); return; }
+    set({ control: { activo: p } });
+    alQuitarControl(() => quitarControl());
+    const info = () => this.enviarControl(p.de, { t: 'info', coincide: this.coincide() });
+    info(); if (this.infoIv) clearInterval(this.infoIv); this.infoIv = setInterval(info, 3000);
+    void this.registrar('concedido', p.nombre);
+  }
+  cerrarControl(motivo: string, avisar = true) {
+    const c = estado?.control;
+    if (this.infoIv) { clearInterval(this.infoIv); this.infoIv = null; }
+    if (c?.activo && avisar) this.enviarControl(c.activo.de, { t: 'fin', motivo: motivo || undefined });
+    if (c?.activo) void this.registrar('retirado', c.activo.nombre);
+    alQuitarControl(null);
+    if (ES_APARTE) avisarCanal({ t: 'ctl-fin' }); else terminarEjecucion();
+    if (c) set({ control: undefined });
+  }
+  async registrar(evento: 'concedido' | 'retirado' | 'rechazado', quien: string) {
+    try { await fetch(`/api/soporte/llamadas/${this.id}/control`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ evento, quien }) }); } catch { /* opcional */ }
+  }
+  /** Otra pestaña (o la ventana aparte) toma la llamada: esta la suelta SIN colgar. */
+  soltar(otraEsVentana: boolean) {
+    if (!this.vivo) return;
+    if (estado?.control) this.cerrarControl('La llamada pasó a otra ventana.');
+    this.vivo = false;
+    for (const p of this.pares.values()) { try { p.pc.close(); } catch { /* nada */ } }
+    this.pares.clear();
+    this.mic?.getTracks().forEach((t) => t.stop());
+    this.pantalla?.stop(); this.pantalla = null;
+    if (this.latidoIv) clearInterval(this.latidoIv);
+    if (motor === this) motor = null;
+    set({ enOtra: true, otraEsVentana, remotos: [], remotoVideo: false, remotoStream: null, compartiendo: false, controlListo: false, miControl: '', control: undefined, aviso: '' });
+  }
+
   silenciar() {
     const s = !estado?.silenciado;
     this.mic?.getAudioTracks().forEach((t) => { t.enabled = !s; });
@@ -251,7 +383,10 @@ class Motor {
   }
   async compartir() {
     try {
-      const st = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+      // En la pestaña de DealFlow se ofrece compartir ESTA pestaña (así el control remoto apunta bien);
+      // en la ventana aparte, que no se ofrezca la ventanita misma.
+      const op = { video: { frameRate: 15 }, audio: false, ...(ES_APARTE ? { selfBrowserSurface: 'exclude' } : { preferCurrentTab: true, selfBrowserSurface: 'include' }) } as DisplayMediaStreamOptions;
+      const st = await navigator.mediaDevices.getDisplayMedia(op);
       const t = st.getVideoTracks()[0];
       if (!t) return;
       this.pantalla = t;
@@ -262,6 +397,7 @@ class Motor {
     } catch { /* canceló el selector de pantalla */ }
   }
   async dejarDeCompartir() {
+    if (estado?.control?.activo || estado?.control?.pedido) this.cerrarControl('La tienda dejó de compartir la pantalla.');
     for (const p of this.pares.values()) { try { await p.pc.getTransceivers().find((x) => x.receiver.track.kind === 'video')?.sender.replaceTrack(null); } catch { /* nada */ } }
     this.pantalla?.stop(); this.pantalla = null;
     set({ compartiendo: false });
@@ -269,13 +405,18 @@ class Motor {
   }
   fin(aviso: string) {
     if (!this.vivo) return;
+    if (estado?.control) this.cerrarControl('La llamada terminó.');
     this.vivo = false;
+    if (this.latidoIv) clearInterval(this.latidoIv);
+    if (this.infoIv) clearInterval(this.infoIv);
+    soltarLatido();
+    avisarCanal({ t: 'fin', id: this.id, aviso });
     for (const p of this.pares.values()) { try { p.pc.close(); } catch { /* nada */ } }
     this.pares.clear();
     this.mic?.getTracks().forEach((t) => t.stop());
     this.pantalla?.stop();
     guardar(null);
-    set({ fase: 'terminada', aviso, compartiendo: false, remotoVideo: false, remotos: [] });
+    set({ fase: 'terminada', aviso, compartiendo: false, remotoVideo: false, remotos: [], controlListo: false, miControl: '', control: undefined });
     if (motor === this) motor = null;
   }
 }
@@ -283,9 +424,41 @@ class Motor {
 let motor: Motor | null = null;
 
 // Mientras hay una llamada, el navegador pregunta antes de recargar o cerrar la pestaña.
+// (En la ventana aparte no: al cerrarla, la llamada vuelve sola a la pestaña de DealFlow.)
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', (e) => {
-    if (estado && motor?.vivo && estado.fase !== 'terminada') { e.preventDefault(); e.returnValue = ''; }
+    if (!ES_APARTE && estado && motor?.vivo && estado.fase !== 'terminada') { e.preventDefault(); e.returnValue = ''; }
+  });
+  // Al irse (recargar, cerrar), la dueña avisa: la ventana aparte devuelve la llamada a su pestaña.
+  window.addEventListener('pagehide', () => {
+    if (!motor?.vivo) return;
+    if (estado?.control?.activo) { if (ES_APARTE) avisarCanal({ t: 'ctl-fin' }); else terminarEjecucion(); }
+    soltarLatido();
+    avisarCanal({ t: 'cerrada', id: motor.id, devolverA: DEVOLVER_A });
+  });
+  alCanal((m) => {
+    const t = m.t;
+    if (t === 'tomo' && motor?.vivo && m.desdeTab !== TAB) {
+      motor.soltar(String(m.desdeTab || '').startsWith('v-'));
+      if (ES_APARTE) setTimeout(() => window.close(), 300);
+    } else if (t === 'estado' && !motor && estado?.enOtra && m.id === estado.id) {
+      set({ fase: (m.fase as FaseLlamada) || estado.fase, inicio: Number(m.inicio) || 0, atendidoPor: String(m.atendidoPor || estado.atendidoPor), otraEsVentana: String(m.desdeTab || '').startsWith('v-') });
+    } else if (t === 'pide-estado' && motor?.vivo && estado) {
+      ultimoResumen = ''; set({});
+    } else if (t === 'fin' && !motor && estado && m.id === estado.id) {
+      set({ enOtra: false, fase: 'terminada', aviso: String(m.aviso || 'La llamada terminó.') });
+    } else if (t === 'colgar-otra' && motor?.vivo) {
+      void colgarLlamada();
+    } else if (t === 'quitar-control' && motor?.vivo) {
+      quitarControl();
+    } else if (t === 'vista' && motor?.vivo) {
+      motor.vistas.set(String(m.tab), { w: Number(m.w), h: Number(m.h), visible: !!m.visible, foco: !!m.foco, t: Date.now() });
+    } else if (t === 'cerrada' && !motor && estado?.enOtra && m.id === estado.id) {
+      // La ventana aparte se cerró: la pestaña que la abrió retoma la llamada; las demás quedan en pausa.
+      const g = { id: estado.id, rol: estado.rol, titulo: estado.titulo };
+      if (m.devolverA === TAB) setTimeout(() => { if (!motor && !latidoAjeno() && estado?.enOtra) { iniciarLlamada(g.id, g.rol, g.titulo, estado.atendidoPor); set({ aviso: 'La llamada volvió a esta pestaña.' }); } }, 1200);
+      else setTimeout(() => { if (!motor && !latidoAjeno() && estado?.enOtra) set({ enOtra: false, fase: 'pausada' }); }, 2500);
+    }
   });
 }
 
@@ -296,6 +469,8 @@ export function iniciarLlamada(id: string, rol: RolLlamada, titulo: string, aten
   estado = { ...base(id, rol, titulo), atendidoPor: atendidoPor || (estado?.id === id ? estado.atendidoPor : '') };
   emitir();
   guardar({ id, rol, titulo });
+  avisarCanal({ t: 'tomo', id }); // si otra pestaña la tenía, la suelta
+  terminarEjecucion(); // un control remoto de antes no sigue en la llamada nueva
   motor = new Motor(id, rol);
   void motor.arrancar();
 }
@@ -305,6 +480,7 @@ export function iniciarLlamada(id: string, rol: RolLlamada, titulo: string, aten
  */
 export async function colgarLlamada(): Promise<void> {
   const e = estado; if (!e) return;
+  if (e.enOtra && !motor) { avisarCanal({ t: 'colgar-otra' }); return; }
   const m = motor;
   const otrosEquipo = (e.equipo || []).filter((x) => x.clave !== m?.yo).length;
   if (e.rol === 'soporte' && otrosEquipo > 0 && m) {
@@ -322,3 +498,49 @@ export const compartirPantalla = () => void motor?.compartir();
 export const dejarDeCompartir = () => void motor?.dejarDeCompartir();
 export const minimizarLlamada = (v: boolean) => set({ minimizada: v });
 export const puedeCompartirPantalla = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices && 'getDisplayMedia' in navigator.mediaDevices;
+
+// ── Ventana aparte ──────────────────────────────────────────────────────
+export const esVentanaAparte = () => ES_APARTE;
+/** Abre la llamada en una ventanita propia: así recargar DealFlow no la corta. */
+export function abrirVentanaAparte(): void {
+  if (!estado || ES_APARTE) return;
+  const soporte = estado.rol === 'soporte';
+  const w = window.open(`/llamada?de=${encodeURIComponent(TAB)}`, 'df-llamada', soporte ? 'popup,width=1120,height=780' : 'popup,width=420,height=680');
+  if (!w) { set({ aviso: 'El navegador bloqueó la ventana: permite las ventanas emergentes para DealFlow (icono a la derecha de la dirección).' }); return; }
+  // La ventana nueva avisa «tomo» al arrancar y esta pestaña suelta la llamada sola.
+}
+/** Lleva la llamada otra vez a esta pestaña (la otra ventana la suelta). */
+export function traerLlamadaAqui(): void {
+  if (!estado) return;
+  iniciarLlamada(estado.id, estado.rol, estado.titulo, estado.atendidoPor);
+}
+/** Pone al frente la ventana aparte (si está abierta). */
+export function irAVentanaAparte(): void {
+  const l = latidoAjeno();
+  if (!l?.aparte) return;
+  try { window.open('', 'df-llamada')?.focus(); } catch { /* nada */ }
+}
+/** Desde la ventana aparte: devolver la llamada a la pestaña de DealFlow y cerrar. */
+export function volverALaPestana(): void {
+  if (!ES_APARTE) return;
+  window.close(); // pagehide avisa «cerrada» y la pestaña que la abrió la retoma
+}
+
+// ── Control remoto: lado del equipo ─────────────────────────────────────
+export function pedirControl(): void {
+  if (!motor || estado?.rol !== 'soporte') return;
+  if (!motor.enviarControl('tienda', { t: 'pedir' })) { set({ controlAviso: 'Aún no hay canal con la tienda: espera unos segundos.' }); return; }
+  set({ miControl: 'pidiendo', controlAviso: '' });
+}
+export function soltarControl(): void {
+  if (!motor || estado?.rol !== 'soporte') return;
+  motor.enviarControl('tienda', { t: 'soltar' });
+  set({ miControl: '', controlAviso: '', controlCoincide: null });
+}
+/** Una acción (mover, clic, tecla…) hacia la pantalla de la tienda. */
+export function enviarAccion(a: AccionControl): void {
+  if (motor && estado?.miControl === 'activo') motor.enviarControl('tienda', a);
+}
+// ── Control remoto: lado de la tienda ───────────────────────────────────
+export function responderControl(si: boolean): void { motor?.responderControl(si); }
+export function quitarControl(): void { motor?.cerrarControl('La tienda quitó el control.'); }
