@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   useLlamada, retomarGuardada, iniciarLlamada, colgarLlamada, cerrarVentanaLlamada, silenciarLlamada, compartirPantalla,
-  dejarDeCompartir, minimizarLlamada, puedeCompartirPantalla,
+  dejarDeCompartir, minimizarLlamada, puedeCompartirPantalla, abrirVentanaAparte, traerLlamadaAqui, irAVentanaAparte, volverALaPestana,
+  pedirControl, soltarControl, enviarAccion, responderControl, quitarControl,
 } from '../lib/llamadaRTC';
 
 /**
@@ -11,13 +12,18 @@ import {
  */
 const dur = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 
-export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
+export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: boolean }) {
   const ll = useLlamada();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const marcoRef = useRef<HTMLDivElement>(null);
   const [, tic] = useState(0);
   const [grande, setGrande] = useState(false);
+  const [completa, setCompleta] = useState(false);
   useEffect(() => { retomarGuardada(); }, []);
   useEffect(() => { if (ll?.fase !== 'conectada') return; const t = setInterval(() => tic((x) => x + 1), 1000); return () => clearInterval(t); }, [ll?.fase]);
+  useEffect(() => { const f = () => setCompleta(document.fullscreenElement === marcoRef.current && !!marcoRef.current); document.addEventListener('fullscreenchange', f); return () => document.removeEventListener('fullscreenchange', f); }, []);
+  // Al tomar el control, la pantalla de la tienda se agranda sola.
+  useEffect(() => { if (ll?.miControl === 'activo') setGrande(true); }, [ll?.miControl]);
   useEffect(() => {
     if (videoRef.current && ll?.remotoStream && videoRef.current.srcObject !== ll.remotoStream) { videoRef.current.srcObject = ll.remotoStream; void videoRef.current.play().catch(() => {}); }
   });
@@ -37,12 +43,24 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
   };
   const tiempo = ll.fase === 'conectada' && ll.inicio ? dur(Date.now() - ll.inicio) : '';
 
+  // La llamada la lleva otra pestaña o la ventana aparte: aquí solo una píldora.
+  if (ll.enOtra && !aparte) {
+    const p: React.CSSProperties = { border: 0, borderRadius: 999, padding: '7px 11px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12, cursor: 'pointer' };
+    return (
+      <div data-df-no-remoto="" role="status" style={{ position: 'fixed', right: mobile ? 12 : 104, bottom: mobile ? 'calc(env(safe-area-inset-bottom,0px) + 84px)' : 32, zIndex: 58, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', maxWidth: 'calc(100vw - 24px)', borderRadius: 999, padding: '6px 6px 6px 14px', background: '#047857', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, boxShadow: '0 12px 28px -10px rgba(4,120,87,.7)' }}>
+        <span>📞 Llamada en {ll.otraEsVentana ? 'la ventana aparte' : 'otra pestaña'}{tiempo ? ` · ${tiempo}` : ''}</span>
+        {ll.otraEsVentana && <button type="button" onClick={irAVentanaAparte} style={{ ...p, background: 'rgba(255,255,255,.18)', color: '#fff' }}>Ir a la ventana</button>}
+        <button type="button" onClick={traerLlamadaAqui} style={{ ...p, background: '#fff', color: '#047857' }}>Traer aquí</button>
+      </div>
+    );
+  }
+
   // Minimizada: una píldora con el tiempo (la llamada sigue).
-  if (ll.minimizada && activa) {
+  if (ll.minimizada && activa && !aparte) {
     return (
       <>
         <Audios ll={ll} />
-        <button onClick={() => minimizarLlamada(false)} style={{ position: 'fixed', right: mobile ? 12 : 104, bottom: mobile ? 'calc(env(safe-area-inset-bottom,0px) + 84px)' : 32, zIndex: 58, border: 0, borderRadius: 999, padding: '10px 16px', background: '#047857', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: '0 12px 28px -10px rgba(4,120,87,.7)' }}>
+        <button data-df-no-remoto="" onClick={() => minimizarLlamada(false)} style={{ position: 'fixed', right: mobile ? 12 : 104, bottom: mobile ? 'calc(env(safe-area-inset-bottom,0px) + 84px)' : 32, zIndex: 58, border: 0, borderRadius: 999, padding: '10px 16px', background: '#047857', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: '0 12px 28px -10px rgba(4,120,87,.7)' }}>
           📞 {ll.fase === 'conectada' ? `En llamada ${tiempo}` : 'Llamada de soporte'}{ll.silenciado ? ' · 🔇' : ''}{ll.compartiendo ? ' · 🖥️' : ''}
         </button>
       </>
@@ -50,9 +68,15 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
   }
 
   const ancho = soporte ? (grande ? 'min(1100px, calc(100vw - 40px))' : 'min(560px, calc(100vw - 32px))') : (mobile ? 'calc(100vw - 16px)' : 340);
+  const tiendaComparte = soporte && !!ll.remotos.find((r) => r.clave === 'tienda' && r.video);
+  const controlando = soporte && ll.miControl === 'activo' && tiendaComparte;
+  const altoVideo = completa ? '100vh' : aparte ? 'calc(100vh - 250px)' : soporte ? (grande ? 'calc(100vh - 340px)' : 320) : 220;
+  const bChico: React.CSSProperties = { border: 0, borderRadius: 8, padding: '7px 11px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12, cursor: 'pointer' };
   const boton = (activo: boolean): React.CSSProperties => ({ flex: 1, minWidth: 0, border: 0, borderRadius: 10, padding: '10px 8px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', background: activo ? '#FEF3C7' : 'rgba(255,255,255,.12)', color: activo ? '#92400E' : '#fff' });
   return (
-    <div role="dialog" aria-label="Llamada de soporte" style={{ position: 'fixed', right: mobile ? 8 : 20, bottom: mobile ? 'calc(env(safe-area-inset-bottom,0px) + 84px)' : 100, zIndex: 58, width: ancho, maxHeight: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column', background: '#0B1220', color: '#fff', borderRadius: 16, boxShadow: '0 30px 70px -20px rgba(2,6,23,.75)', overflow: 'hidden', fontFamily: 'inherit' }}>
+    <div role="dialog" aria-label="Llamada de soporte" data-df-no-remoto="" style={aparte
+      ? { position: 'relative', width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', background: '#0B1220', color: '#fff', overflow: 'hidden', fontFamily: 'inherit' }
+      : { position: 'fixed', right: mobile ? 8 : 20, bottom: mobile ? 'calc(env(safe-area-inset-bottom,0px) + 84px)' : 100, zIndex: 58, width: ancho, maxHeight: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column', background: '#0B1220', color: '#fff', borderRadius: 16, boxShadow: '0 30px 70px -20px rgba(2,6,23,.75)', overflow: 'hidden', fontFamily: 'inherit' }}>
       <Audios ll={ll} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: 'linear-gradient(135deg, #047857, #1D4ED8)' }}>
         <span style={{ fontSize: 18 }}>📞</span>
@@ -60,17 +84,21 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
           <div style={{ fontWeight: 800, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{soporte ? ll.titulo : ll.atendidoPor.includes('DealFlow') ? ll.atendidoPor : 'Soporte DealFlow'}</div>
           <div style={{ fontSize: 11.5, opacity: 0.85 }}>{tiempo ? `En llamada · ${tiempo}` : ll.fase === 'terminada' ? 'Terminada' : 'Llamada de voz'}</div>
         </div>
-        {soporte && activa && <button onClick={() => setGrande((g) => !g)} title={grande ? 'Achicar' : 'Agrandar'} style={cab}>{grande ? '⤡' : '⤢'}</button>}
-        {activa && <button onClick={() => minimizarLlamada(true)} title="Minimizar (la llamada sigue)" style={cab}>—</button>}
-        {!activa && <button onClick={cerrarVentanaLlamada} aria-label="Cerrar" style={cab}>✕</button>}
+        {aparte && activa && <button onClick={volverALaPestana} title="Volver a la pestaña de DealFlow (la llamada sigue allá)" style={{ ...cab, width: 'auto', padding: '0 10px', fontSize: 12 }}>↩ Volver a la pestaña</button>}
+        {!aparte && !mobile && activa && <button onClick={abrirVentanaAparte} title="Abrir en ventana aparte: así puedes recargar DealFlow sin cortar la llamada" aria-label="Abrir en ventana aparte" style={cab}>⧉</button>}
+        {soporte && activa && !aparte && <button onClick={() => setGrande((g) => !g)} title={grande ? 'Achicar' : 'Agrandar'} style={cab}>{grande ? '⤡' : '⤢'}</button>}
+        {activa && !aparte && <button onClick={() => minimizarLlamada(true)} title="Minimizar (la llamada sigue)" style={cab}>—</button>}
+        {!activa && <button onClick={() => { cerrarVentanaLlamada(); if (aparte) window.close(); }} aria-label="Cerrar" style={cab}>✕</button>}
       </div>
 
       {/* Pantalla que comparte el otro lado */}
       {activa && ll.remotoVideo && (
-        <div style={{ position: 'relative', background: '#000' }}>
-          <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', maxHeight: soporte ? (grande ? '72vh' : 320) : 220, display: 'block', objectFit: 'contain', background: '#000' }} />
-          <button onClick={() => void videoRef.current?.requestFullscreen?.()} title="Pantalla completa" style={{ ...cab, position: 'absolute', right: 8, top: 8, background: 'rgba(0,0,0,.55)' }}>⛶</button>
-          <div style={{ position: 'absolute', left: 8, bottom: 8, fontSize: 11, fontWeight: 700, background: 'rgba(0,0,0,.55)', borderRadius: 6, padding: '2px 7px' }}>🖥️ Pantalla de {soporte ? 'la tienda' : (ll.atendidoPor || 'soporte')}</div>
+        <div ref={marcoRef} style={{ position: 'relative', background: '#000', ...(completa ? { height: '100vh' } : {}) }}>
+          <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: completa ? '100vh' : undefined, maxHeight: altoVideo, display: 'block', objectFit: 'contain', background: '#000' }} />
+          {controlando && <CapaControl video={videoRef} />}
+          <button onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void marcoRef.current?.requestFullscreen?.(); }} title="Pantalla completa" style={{ ...cab, position: 'absolute', right: 8, top: 8, background: 'rgba(0,0,0,.55)', zIndex: 2 }}>⛶</button>
+          <div style={{ position: 'absolute', left: 8, bottom: 8, fontSize: 11, fontWeight: 700, background: controlando ? '#C2410C' : 'rgba(0,0,0,.55)', borderRadius: 6, padding: '2px 7px', zIndex: 2, pointerEvents: 'none' }}>{controlando ? '🖱 Tienes el control: clic aquí y escribe' : `🖥️ Pantalla de ${soporte ? 'la tienda' : (ll.atendidoPor || 'soporte')}`}</div>
+          {controlando && <button onClick={soltarControl} style={{ ...bChico, position: 'absolute', right: 48, top: 8, background: '#fff', color: '#C2410C', zIndex: 2 }}>✋ Soltar control</button>}
         </div>
       )}
       {!(activa && ll.remotoVideo) && <video ref={videoRef} muted style={{ display: 'none' }} />}
@@ -91,6 +119,42 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
         )}
         {soporte && ll.equipo.length > 1 && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.7)' }}>Si cuelgas, sales tú y la llamada sigue con {ll.equipo.length - 1 === 1 ? 'la otra persona' : 'las demás personas'} del equipo.</div>}
         {ll.compartiendo && <div style={{ fontSize: 12, fontWeight: 700, color: '#FDE68A' }}>🖥️ Estás compartiendo tu pantalla{soporte ? '' : ': soporte la está viendo'}.</div>}
+
+        {/* Control remoto — equipo */}
+        {soporte && activa && tiendaComparte && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
+            {!ll.controlListo ? <span style={{ color: 'rgba(255,255,255,.6)' }}>Control remoto: conectando con la tienda…</span>
+              : ll.miControl === 'activo' ? <>
+                <button onClick={soltarControl} style={{ ...bChico, background: '#FED7AA', color: '#7C2D12' }}>✋ Soltar control</button>
+                <span style={{ color: 'rgba(255,255,255,.75)' }}>Clic, doble clic, clic derecho, rueda y teclado (pegar con Ctrl+V). Solo dentro de DealFlow; nunca contraseñas.</span>
+              </>
+              : ll.miControl === 'pidiendo' ? <>
+                <span style={{ color: '#FDE68A', fontWeight: 700 }}>Esperando que la tienda acepte…</span>
+                <button onClick={soltarControl} style={{ ...bChico, background: 'rgba(255,255,255,.14)', color: '#fff' }}>Cancelar</button>
+              </>
+              : <button onClick={pedirControl} style={{ ...bChico, background: '#F97316', color: '#fff' }}>🖱 Pedir control de DealFlow</button>}
+          </div>
+        )}
+        {soporte && controlando && ll.controlCoincide === false && <div style={{ fontSize: 12, color: '#FDE68A', lineHeight: 1.4 }}>⚠ La tienda no está compartiendo la pestaña de DealFlow (o la pantalla entera): los clics pueden no caer donde son. Pídele que vuelva a compartir y elija <b>la pestaña de DealFlow</b>.</div>}
+        {soporte && ll.controlAviso && <div style={{ fontSize: 12, color: '#FCA5A5' }}>{ll.controlAviso}</div>}
+
+        {/* Control remoto — tienda */}
+        {!soporte && ll.control?.pedido && (
+          <div role="alertdialog" aria-label="Permiso de control remoto" style={{ background: '#7C2D12', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
+            <div style={{ fontWeight: 800, fontSize: 13.5 }}>🖱 {ll.control.pedido.nombre} quiere controlar DealFlow para ayudarte</div>
+            <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.92 }}>Podrá hacer clic, escribir y desplazarse <b>solo dentro de DealFlow</b>, en la pestaña que estás compartiendo. No puede ver ni escribir contraseñas, ni tocar el resto de tu computador. Lo quitas cuando quieras.</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => responderControl(false)} style={{ ...boton(false), background: 'rgba(255,255,255,.16)' }}>No</button>
+              <button onClick={() => responderControl(true)} style={{ ...boton(false), background: '#fff', color: '#7C2D12' }}>Permitir</button>
+            </div>
+          </div>
+        )}
+        {!soporte && ll.control?.activo && (
+          <div style={{ background: '#7C2D12', borderRadius: 12, padding: '9px 10px 9px 12px', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700 }}>🖱 {ll.control.activo.nombre} está controlando DealFlow</span>
+            <button onClick={quitarControl} style={{ ...bChico, background: '#fff', color: '#7C2D12' }}>Quitar control</button>
+          </div>
+        )}
         {!soporte && ll.fase === 'conectada' && !ll.compartiendo && puedeCompartirPantalla() && <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)' }}>Para mostrarnos lo que ves, toca «Compartir pantalla».</div>}
         {ll.aviso && ll.fase !== 'terminada' && <div style={{ fontSize: 12, color: '#FCA5A5', lineHeight: 1.4 }}>{ll.aviso}</div>}
 
@@ -112,6 +176,55 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
       <style>{`.df-llamada-pulso { flex: 0 0 auto; width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: #34D399; animation: dfLlPulso 1.2s ease-in-out infinite }
         @keyframes dfLlPulso { 0%,100% { opacity: .35; transform: scale(.8) } 50% { opacity: 1; transform: scale(1.15) } }`}</style>
     </div>
+  );
+}
+
+/**
+ * Capa invisible sobre la pantalla de la tienda: lo que hace el equipo (mover, clic, rueda,
+ * teclado, pegar) viaja como coordenadas de 0 a 1 sobre la imagen compartida.
+ */
+function CapaControl({ video }: { video: React.RefObject<HTMLVideoElement | null> }) {
+  const capa = useRef<HTMLDivElement>(null);
+  const ultimoMov = useRef(0);
+  const [foco, setFoco] = useState(false);
+  const punto = (e: { clientX: number; clientY: number }) => {
+    const v = video.current;
+    if (!v || !v.videoWidth || !v.videoHeight) return null;
+    const r = v.getBoundingClientRect();
+    const s = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
+    const cw = v.videoWidth * s; const ch = v.videoHeight * s;
+    const x = (e.clientX - (r.left + (r.width - cw) / 2)) / cw; const y = (e.clientY - (r.top + (r.height - ch) / 2)) / ch;
+    return x < 0 || y < 0 || x > 1 || y > 1 ? null : { x: Math.round(x * 10000) / 10000, y: Math.round(y * 10000) / 10000 };
+  };
+  useEffect(() => {
+    const el = capa.current; if (!el) return;
+    el.focus();
+    const acum = { dx: 0, dy: 0, x: 0, y: 0, t: 0 as ReturnType<typeof setTimeout> | 0 };
+    const rueda = (e: WheelEvent) => {
+      e.preventDefault();
+      const p = punto(e); if (!p) return;
+      acum.dx += e.deltaX; acum.dy += e.deltaY; acum.x = p.x; acum.y = p.y;
+      if (!acum.t) acum.t = setTimeout(() => { enviarAccion({ t: 'w', x: acum.x, y: acum.y, dx: Math.round(acum.dx), dy: Math.round(acum.dy) }); acum.dx = 0; acum.dy = 0; acum.t = 0; }, 60);
+    };
+    el.addEventListener('wheel', rueda, { passive: false });
+    return () => el.removeEventListener('wheel', rueda);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div ref={capa} tabIndex={0} role="application" aria-label="Pantalla de la tienda: tienes el control"
+      onFocus={() => setFoco(true)} onBlur={() => setFoco(false)}
+      onPointerMove={(e) => { const n = performance.now(); if (n - ultimoMov.current < 40) return; ultimoMov.current = n; const p = punto(e); if (p) enviarAccion({ t: 'm', ...p }); }}
+      onPointerDown={() => capa.current?.focus()}
+      onClick={(e) => { const p = punto(e); if (p) enviarAccion({ t: 'c', ...p, b: 0, n: e.detail >= 2 ? 2 : 1 }); }}
+      onContextMenu={(e) => { e.preventDefault(); const p = punto(e); if (p) enviarAccion({ t: 'c', ...p, b: 2 }); }}
+      onKeyDown={(e) => {
+        if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) return;
+        if ((e.ctrlKey || e.metaKey) && ['v', 'c', 'x'].includes(e.key.toLowerCase())) return; // pegar llega por onPaste
+        e.preventDefault();
+        enviarAccion({ t: 'k', key: e.key, code: e.code, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, meta: e.metaKey });
+      }}
+      onPaste={(e) => { e.preventDefault(); const t = e.clipboardData.getData('text'); if (t) enviarAccion({ t: 'txt', s: t.slice(0, 2000) }); }}
+      style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'crosshair', outline: foco ? '3px solid #F97316' : '2px dashed rgba(249,115,22,.6)', outlineOffset: -3 }} />
   );
 }
 
