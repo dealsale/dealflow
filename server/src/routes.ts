@@ -1,5 +1,6 @@
 import { mensajesDe as mensajesInicialesDe, normalizarMensajes, principal } from './mensajesIniciales.js';
 import { Router } from 'express';
+import { rutasEscritorio } from './escritorioRutas.js';
 import type { Request as ExRequest, Response as ExResponse } from 'express';
 import { trazar, conPedido } from './trazabilidad.js';
 import { requirePermiso, permisosDe, PERMISOS, rolesTienda, guardarRol, borrarRol, nombreRol } from './roles.js';
@@ -31,6 +32,8 @@ import type { ExtraPlantilla } from './plantillasMeta.js';
 import { guardarPermisos as guardarPermisosPlantillas, permisosPlantillas as permisosPlantillasWA } from './plantillasWA.js';
 
 export const api = proteger(Router());
+// App de escritorio «DealFlow Soporte» (acceso a todo el computador de la tienda).
+rutasEscritorio(api);
 // Registro de accesos del equipo (administradores y soporte dentro de una tienda).
 api.use(registrarAccesosEquipo);
 // Al crear/editar productos o variantes (o marcarlos de Effi), se vinculan solos con Effi.

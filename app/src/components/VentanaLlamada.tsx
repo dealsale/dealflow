@@ -5,6 +5,7 @@ import {
   pedirControl, soltarControl, enviarAccion, responderControl, quitarControl,
   pedirAccesoComputador, enviarCodigoComputador, cerrarPedidoComputador, olvidarCodigoComputador, URL_ESCRITORIO_REMOTO,
 } from '../lib/llamadaRTC';
+import { VisorEscritorio, type EquipoRemoto } from './VisorEscritorio';
 
 /**
  * Ventana de la llamada de soporte (dentro de DealFlow). Flota sobre el panel y sigue abierta
@@ -147,6 +148,7 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
           </div>
         )}
         {soporte && controlando && ll.controlCoincide === false && <div style={{ fontSize: 12, color: '#FDE68A', lineHeight: 1.4 }}>⚠ La tienda no está compartiendo la pestaña de DealFlow (o la pantalla entera): los clics pueden no caer donde son. Pídele que vuelva a compartir y elija <b>la pestaña de DealFlow</b>.</div>}
+        {soporte && activa && <ComputadoresTienda llamadaId={ll.id} />}
         {soporte && activa && ll.controlListo && !codigoVigente && <button onClick={pedirAccesoComputador} style={{ ...bChico, justifySelf: 'start', alignSelf: 'flex-start', background: 'rgba(255,255,255,.12)', color: '#fff' }}>💻 Pedir acceso a todo el computador</button>}
         {soporte && codigoVigente && (
           <div style={{ background: '#1E3A8A', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
@@ -206,6 +208,39 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
   );
 }
 
+/** Equipo: computadores de la tienda con la app «DealFlow Soporte» → «Conectar a su computador». */
+function ComputadoresTienda({ llamadaId }: { llamadaId: string }) {
+  const [equipos, setEquipos] = useState<EquipoRemoto[] | null>(null);
+  const [abierta, setAbierta] = useState<{ sesionId: string; nombre: string } | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let vivo = true;
+    const ver = () => void fetch(`/api/admin/escritorio/equipos?llamada=${encodeURIComponent(llamadaId)}`, { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).then((d) => { if (vivo && d) setEquipos(d.equipos || []); }).catch(() => {});
+    ver(); const t = setInterval(ver, 15000);
+    return () => { vivo = false; clearInterval(t); };
+  }, [llamadaId]);
+  const conectar = async (e: EquipoRemoto) => {
+    setError('');
+    const r = await fetch(`/api/admin/escritorio/equipos/${e.id}/conectar`, { method: 'POST', credentials: 'same-origin' }).catch(() => null);
+    const d = await r?.json().catch(() => null) as { sesionId?: string; error?: string } | null;
+    if (!r?.ok || !d?.sesionId) { setError(d?.error || 'No se pudo conectar.'); return; }
+    setAbierta({ sesionId: d.sesionId, nombre: `${e.nombre}${e.pantalla ? ` · ${e.pantalla}` : ''}` });
+  };
+  const b: React.CSSProperties = { border: 0, borderRadius: 8, padding: '7px 11px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12, cursor: 'pointer' };
+  const enLinea = (equipos || []).filter((e) => e.enLinea);
+  return (
+    <>
+      {enLinea.map((e) => (
+        <button key={e.id} onClick={() => void conectar(e)} disabled={!!e.ocupado} title={e.ocupado ? `${e.ocupado} ya está conectado` : `App DealFlow Soporte ${e.version} · ${e.so}`}
+          style={{ ...b, justifySelf: 'start', alignSelf: 'flex-start', background: '#10B981', color: '#052e1f', opacity: e.ocupado ? 0.55 : 1 }}>💻 Conectar a su computador · {e.nombre}{e.ocupado ? ` (con ${e.ocupado})` : ''}</button>
+      ))}
+      {equipos && !enLinea.length && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.65)' }}>{equipos.length ? 'La app «DealFlow Soporte» de la tienda no está abierta ahora.' : 'La tienda no tiene la app «DealFlow Soporte»: para entrar a todo su computador sin códigos, que la descargue en app.dealflow.sbs/escritorio.'}</div>}
+      {error && <div style={{ fontSize: 12, color: '#FCA5A5' }}>{error}</div>}
+      {abierta && <VisorEscritorio sesionId={abierta.sesionId} equipo={abierta.nombre} onCerrar={() => setAbierta(null)} />}
+    </>
+  );
+}
+
 /** Tienda: dar acceso a TODO el computador con el Escritorio remoto de Chrome (Google). */
 function AccesoComputador({ pedido }: { pedido: string }) {
   const [abierto, setAbierto] = useState(false);
@@ -220,6 +255,10 @@ function AccesoComputador({ pedido }: { pedido: string }) {
   return (
     <div role="region" aria-label="Acceso a todo el computador" style={{ background: '#1E3A8A', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
       <div style={{ fontWeight: 800, fontSize: 13.5 }}>{quien ? `💻 ${quien} pide acceso a todo tu computador` : '💻 Acceso a todo tu computador'}</div>
+      <div style={{ fontSize: 12, lineHeight: 1.5, background: 'rgba(255,255,255,.08)', borderRadius: 8, padding: '7px 9px' }}>
+        ⭐ Lo más fácil: <a href="/api/escritorio/descargar" style={{ color: '#BBF7D0', fontWeight: 800 }}>descarga la app DealFlow Soporte (Windows)</a>, entra con tu cuenta y déjala abierta: soporte se conecta sin códigos (siempre te pide permiso).
+      </div>
+      <div style={{ fontSize: 11.5, opacity: 0.8 }}>O con el Escritorio remoto de Chrome:</div>
       <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.5 }}>
         <li>Abre el <a href={URL_ESCRITORIO_REMOTO} target="_blank" rel="noopener noreferrer" style={{ color: '#BFDBFE', fontWeight: 800 }}>Escritorio remoto de Chrome ↗</a> (la primera vez te pide instalar un programa pequeño de Google).</li>
         <li>En «Compartir esta pantalla», toca <b>Generar código</b>.</li>
@@ -244,7 +283,7 @@ function AccesoComputador({ pedido }: { pedido: string }) {
  * Capa invisible sobre la pantalla de la tienda: lo que hace el equipo (mover, clic, rueda,
  * teclado, pegar) viaja como coordenadas de 0 a 1 sobre la imagen compartida.
  */
-function CapaControl({ video }: { video: React.RefObject<HTMLVideoElement | null> }) {
+export function CapaControl({ video, enviar = enviarAccion, atajos = false }: { video: React.RefObject<HTMLVideoElement | null>; enviar?: (a: Parameters<typeof enviarAccion>[0]) => void; /** Copiar/cortar (Ctrl+C/X) van al otro lado (computador completo). */ atajos?: boolean }) {
   const capa = useRef<HTMLDivElement>(null);
   const ultimoMov = useRef(0);
   const [foco, setFoco] = useState(false);
@@ -265,7 +304,7 @@ function CapaControl({ video }: { video: React.RefObject<HTMLVideoElement | null
       e.preventDefault();
       const p = punto(e); if (!p) return;
       acum.dx += e.deltaX; acum.dy += e.deltaY; acum.x = p.x; acum.y = p.y;
-      if (!acum.t) acum.t = setTimeout(() => { enviarAccion({ t: 'w', x: acum.x, y: acum.y, dx: Math.round(acum.dx), dy: Math.round(acum.dy) }); acum.dx = 0; acum.dy = 0; acum.t = 0; }, 60);
+      if (!acum.t) acum.t = setTimeout(() => { enviar({ t: 'w', x: acum.x, y: acum.y, dx: Math.round(acum.dx), dy: Math.round(acum.dy) }); acum.dx = 0; acum.dy = 0; acum.t = 0; }, 60);
     };
     el.addEventListener('wheel', rueda, { passive: false });
     return () => el.removeEventListener('wheel', rueda);
@@ -274,17 +313,17 @@ function CapaControl({ video }: { video: React.RefObject<HTMLVideoElement | null
   return (
     <div ref={capa} tabIndex={0} role="application" aria-label="Pantalla de la tienda: tienes el control"
       onFocus={() => setFoco(true)} onBlur={() => setFoco(false)}
-      onPointerMove={(e) => { const n = performance.now(); if (n - ultimoMov.current < 40) return; ultimoMov.current = n; const p = punto(e); if (p) enviarAccion({ t: 'm', ...p }); }}
+      onPointerMove={(e) => { const n = performance.now(); if (n - ultimoMov.current < 40) return; ultimoMov.current = n; const p = punto(e); if (p) enviar({ t: 'm', ...p }); }}
       onPointerDown={() => capa.current?.focus()}
-      onClick={(e) => { const p = punto(e); if (p) enviarAccion({ t: 'c', ...p, b: 0, n: e.detail >= 2 ? 2 : 1 }); }}
-      onContextMenu={(e) => { e.preventDefault(); const p = punto(e); if (p) enviarAccion({ t: 'c', ...p, b: 2 }); }}
+      onClick={(e) => { const p = punto(e); if (p) enviar({ t: 'c', ...p, b: 0, n: e.detail >= 2 ? 2 : 1 }); }}
+      onContextMenu={(e) => { e.preventDefault(); const p = punto(e); if (p) enviar({ t: 'c', ...p, b: 2 }); }}
       onKeyDown={(e) => {
         if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) return;
-        if ((e.ctrlKey || e.metaKey) && ['v', 'c', 'x'].includes(e.key.toLowerCase())) return; // pegar llega por onPaste
+        if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'v' || (!atajos && ['c', 'x'].includes(e.key.toLowerCase())))) return; // pegar llega por onPaste
         e.preventDefault();
-        enviarAccion({ t: 'k', key: e.key, code: e.code, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, meta: e.metaKey });
+        enviar({ t: 'k', key: e.key, code: e.code, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, meta: e.metaKey });
       }}
-      onPaste={(e) => { e.preventDefault(); const t = e.clipboardData.getData('text'); if (t) enviarAccion({ t: 'txt', s: t.slice(0, 2000) }); }}
+      onPaste={(e) => { e.preventDefault(); const t = e.clipboardData.getData('text'); if (t) enviar({ t: 'txt', s: t.slice(0, 2000) }); }}
       style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: 'crosshair', outline: foco ? '3px solid #F97316' : '2px dashed rgba(249,115,22,.6)', outlineOffset: -3 }} />
   );
 }
