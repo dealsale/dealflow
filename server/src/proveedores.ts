@@ -8,6 +8,7 @@
  * La sesión del proveedor es otra cookie (df_prov) y otro token: nunca da acceso al
  * panel ni a la API de DealFlow.
  */
+import { proteger } from './protegerRutas.js';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
@@ -318,7 +319,7 @@ const fallo = (ip: string) => { const f = fallos.get(ip); const ahora = Date.now
 
 const fechaValida = (s: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? String(s) : '');
 
-export const proveedorApi = express.Router();
+export const proveedorApi = proteger(express.Router());
 proveedorApi.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 
 proveedorApi.post('/login', (req, res) => {

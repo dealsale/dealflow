@@ -12,6 +12,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { db, j, pj, uid, registrarLog, PLAN_UNICO, siguienteNumeroPedido } from './db.js';
 import { urlTienda } from './tiendaPublica.js';
 import * as sa from './shopifyApp.js';
+import { proteger } from './protegerRutas.js';
 import { registrarAccesosEquipo, registrarAccionEquipo, listarAccesos, claveInvalida, estadoSeguridad } from './seguridad.js';
 import { moverAPapelera, listarPapelera, restaurarDePapelera, listarRespaldos, prepararDescarga, copiaDiaria, DIAS_PAPELERA, eliminarRespaldo, eliminarDePapelera, espacioDisco } from './papelera.js';
 import { esImportBloqueado, productosBloqueados, MASTER_STORE_ID, asegurarMasterStore, duenoMasterStore, sincronizarSnapshotMaster, eliminarLibraryDeMaster } from './biblioteca.js';
@@ -28,7 +29,7 @@ import * as rr from './respuestasRapidas.js';
 import * as lp from './llenarPlantilla.js';
 import type { ExtraPlantilla } from './plantillasMeta.js';
 
-export const api = Router();
+export const api = proteger(Router());
 // Registro de accesos del equipo (administradores y soporte dentro de una tienda).
 api.use(registrarAccesosEquipo);
 // Al crear/editar productos o variantes (o marcarlos de Effi), se vinculan solos con Effi.
@@ -41,7 +42,7 @@ api.use((req, res, next) => {
   }
   next();
 });
-export const webhooks = Router();
+export const webhooks = proteger(Router());
 
 const ESTADOS = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Entregado'] as const;
 
@@ -1746,20 +1747,25 @@ api.get('/soporte/ice', requireAuth, async (_req, res) => {
   const sl = await import('./soporteLlamadas.js');
   res.json({ iceServers: sl.servidoresIce() });
 });
+// Nombre con el que cada persona aparece en la llamada (el superadmin, como «Administrador de DealFlow»).
+const nombreEnLlamada = (u: { role: string; nombre?: string; email?: string }, NOMBRE_ADMIN: string) => (u.role === 'SUPERADMIN' ? NOMBRE_ADMIN : (u.nombre || u.email || 'Equipo'));
 api.get('/soporte/llamadas/:id/senal', requireAuth, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
-  const rol = sl.rolEnLlamada(req.params.id, req.user!);
-  if (!rol) return res.status(404).json({ error: 'Llamada no encontrada.' });
-  res.json(sl.leerSenales(req.params.id, rol, Number(req.query.desde) || 0));
+  const clave = sl.claveEnLlamada(req.params.id, req.user!);
+  if (!clave) return res.status(404).json({ error: 'Llamada no encontrada.' });
+  const desde = Number(req.query.desde);
+  res.json(sl.leerSenales(req.params.id, clave, Number.isFinite(desde) ? desde : 0, nombreEnLlamada(req.user!, sl.NOMBRE_ADMIN)));
 });
 api.post('/soporte/llamadas/:id/senal', requireAuth, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
-  const rol = sl.rolEnLlamada(req.params.id, req.user!);
-  if (!rol) return res.status(404).json({ error: 'Llamada no encontrada.' });
+  const clave = sl.claveEnLlamada(req.params.id, req.user!);
+  if (!clave) return res.status(404).json({ error: 'Llamada no encontrada.' });
   const tipo = String(req.body?.tipo || '');
-  if (!['hola', 'offer', 'answer', 'ice', 'colgar', 'pantalla'].includes(tipo)) return res.status(400).json({ error: 'Señal no válida.' });
-  sl.enviarSenal(req.params.id, rol, tipo, req.body?.data ?? null);
-  res.json({ ok: true });
+  if (!['hola', 'offer', 'answer', 'ice', 'colgar', 'pantalla', 'bye'].includes(tipo)) return res.status(400).json({ error: 'Señal no válida.' });
+  // «colgar» (terminar para todos) solo lo manda la tienda; el equipo sale con «bye».
+  if (tipo === 'colgar' && clave !== 'tienda') return res.status(400).json({ error: 'Usa «Salir» o «Terminar».' });
+  sl.enviarSenal(req.params.id, clave, tipo, req.body?.data ?? null, typeof req.body?.para === 'string' && req.body.para ? String(req.body.para).slice(0, 80) : '*');
+  res.json({ ok: true, yo: clave });
 });
 // Llamada SALIENTE (el superadmin llama a la tienda): la app de la tienda pregunta cada pocos segundos.
 api.get('/soporte/entrante', requireAuth, requireStore, async (req, res) => {
@@ -1794,7 +1800,8 @@ api.post('/soporte/llamadas/:id/cancelar', requireAuth, async (req, res) => {
 api.get('/admin/soporte/llamadas', requireAuth, requireEquipo, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
   // Las tiendas ocultas no dejan rastro en el historial de soporte del equipo (solo el superadmin las ve).
-  res.json({ llamadas: sl.llamadasEquipo(req.user!.role === 'SUPERADMIN'), cfg: sl.cfgLlamadas(), servicio: sl.estadoServicio() });
+  const llamadas = sl.llamadasEquipo(req.user!.role === 'SUPERADMIN').map((l) => ({ ...l, equipo: l.estado === 'en_curso' ? sl.equipoEnLlamada(l.id).map((e) => ({ id: e.clave.replace(/^soporte:/, ''), nombre: e.nombre })) : [] }));
+  res.json({ llamadas, cfg: sl.cfgLlamadas(), servicio: sl.estadoServicio(), maxEquipo: sl.MAX_EQUIPO_EN_LLAMADA, yo: req.user!.id });
 });
 api.post('/admin/soporte/llamadas/:id/:accion', requireAuth, requireEquipo, async (req, res) => {
   const sl = await import('./soporteLlamadas.js');
@@ -1802,6 +1809,11 @@ api.post('/admin/soporte/llamadas/:id/:accion', requireAuth, requireEquipo, asyn
   if (req.user!.role !== 'SUPERADMIN' && (sl.llamadaDeTiendaOculta(req.params.id) || sl.esSaliente(req.params.id))) return res.status(404).json({ error: 'Llamada no encontrada.' });
   // Ante la tienda, el superadmin se presenta como «Administrador de DealFlow».
   const agente = req.user!.role === 'SUPERADMIN' ? sl.NOMBRE_ADMIN : req.user!.nombre || req.user!.email;
+  // Máximo 2 personas del equipo en la misma llamada.
+  if (a === 'atender') {
+    const otros = sl.equipoEnLlamada(req.params.id).filter((x) => x.clave !== `soporte:${req.user!.id}`);
+    if (otros.length >= sl.MAX_EQUIPO_EN_LLAMADA) return res.status(409).json({ error: `Ya hay ${otros.length} personas del equipo en esta llamada (${otros.map((x) => x.nombre).join(' y ')}).` });
+  }
   const ok = a === 'atender' ? sl.atenderLlamada(req.params.id, agente) : a === 'terminar' ? sl.terminarLlamada(req.params.id) : false;
   if (!ok) return res.status(400).json({ error: 'No se pudo (la llamada ya terminó o no existe).' });
   res.json({ ok: true });

@@ -113,12 +113,26 @@ export function AvisoLlamadas({ irA }: { irA: () => void }) {
     const t = setInterval(ver, 8000); // también con la pestaña oculta: así suena el aviso
     return () => { vivo = false; clearInterval(t); };
   }, []);
-  if (!esperando.length) return null;
+  const ll = useLlamada();
+  const [atendiendo, setAtendiendo] = useState(false);
+  const pendientes = esperando.filter((l) => !(ll && ll.id === l.id && ll.fase !== 'terminada'));
+  if (!pendientes.length) return null;
+  const atenderYa = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const l = pendientes[0];
+    setAtendiendo(true);
+    const r = await apiAdminLlamadaAccion(l.id, 'atender');
+    setAtendiendo(false);
+    if (r.error) { notificar(r.error, 'error'); return; }
+    iniciarLlamada(l.id, 'soporte', `${l.tienda} · ${l.usuario}`);
+  };
   return (
     <div onClick={irA} role="alert" style={{ position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 60, cursor: 'pointer', background: '#047857', color: '#fff', borderRadius: 999, padding: '10px 18px', fontWeight: 800, fontSize: 13.5, boxShadow: '0 14px 30px -10px rgba(4,120,87,.6)', display: 'flex', gap: 10, alignItems: 'center', maxWidth: 'calc(100vw - 32px)' }}>
       <span style={{ animation: 'dfTimbre 1s ease-in-out infinite' }}>📞</span>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{esperando.length === 1 ? `${esperando[0].tienda} está esperando en soporte` : `${esperando.length} tiendas esperando en soporte`}</span>
-      <span style={{ background: 'rgba(255,255,255,.2)', borderRadius: 999, padding: '2px 10px', fontSize: 12 }}>Atender</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pendientes.length === 1 ? `${pendientes[0].tienda} está esperando en soporte` : `${pendientes.length} tiendas esperando en soporte`}</span>
+      <button type="button" onClick={(e) => void atenderYa(e)} disabled={atendiendo} title={`Contestar a ${pendientes[0].tienda} ahora`}
+        style={{ border: 0, background: '#fff', color: '#047857', borderRadius: 999, padding: '4px 12px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>{atendiendo ? 'Conectando…' : '📞 Contestar'}</button>
+      <span style={{ background: 'rgba(255,255,255,.2)', borderRadius: 999, padding: '2px 10px', fontSize: 12 }}>Ver</span>
       <style>{'@keyframes dfTimbre { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-15deg) } 75% { transform: rotate(15deg) } }'}</style>
     </div>
   );
@@ -129,7 +143,9 @@ export function SoporteEnVivo({ puedeConfigurar = true, puedeLlamar = false }: {
   const [cfg, setCfg] = useState<CfgLlamadas | null>(null);
   const [servicio, setServicio] = useState<ServicioLlamadas | null>(null);
   const [permiso, setPermiso] = useState(() => ('Notification' in window ? Notification.permission : 'denied'));
-  const cargar = () => void apiAdminLlamadas().then((r) => { if (r.data) { setLista(r.data.llamadas); setCfg(r.data.cfg); setServicio(r.data.servicio); } });
+  const [maxEquipo, setMaxEquipo] = useState(2);
+  const [yo, setYo] = useState('');
+  const cargar = () => void apiAdminLlamadas().then((r) => { if (r.data) { setLista(r.data.llamadas); setCfg(r.data.cfg); setServicio(r.data.servicio); setMaxEquipo(r.data.maxEquipo || 2); setYo(r.data.yo || ''); } });
   useEffect(() => { cargar(); const t = setInterval(cargar, 6000); return () => clearInterval(t); }, []);
 
   const llamada = useLlamada();
@@ -174,10 +190,14 @@ export function SoporteEnVivo({ puedeConfigurar = true, puedeLlamar = false }: {
                 <div style={{ fontWeight: 800, fontSize: 14 }}>{l.direccion === 'saliente' && <span title="La llamaste tú" style={{ fontSize: 11.5, fontWeight: 800, color: '#1D4ED8', background: 'rgba(29,78,216,.1)', borderRadius: 6, padding: '1px 6px', marginRight: 6 }}>↗ Saliente</span>}{l.tienda} {l.usuario && <span style={{ fontWeight: 600, color: 'var(--df-text-muted)', fontSize: 12.5 }}>· {l.usuario}</span>}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', marginTop: 2 }}>{l.motivo || <i style={{ color: 'var(--df-text-faint)' }}>Sin motivo</i>}{l.seccion ? <span style={{ color: 'var(--df-text-faint)' }}> · estaba en {l.seccion}</span> : ''}</div>
                 <div style={{ fontSize: 12, fontWeight: 700, marginTop: 3, color: ESTADO[l.estado]?.[1] }}>{ESTADO[l.estado]?.[0]} · {l.estado === 'esperando' || l.estado === 'llamando' ? hace(l.creado) : `${l.atendidoPor} desde ${hace(l.atendidoAt)}`}</div>
+                {l.estado === 'en_curso' && (l.equipo || []).length > 0 && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 2 }}>En la llamada ahora: {(l.equipo || []).map((e) => e.nombre).join(', ')}</div>}
               </div>
               {llamada?.id === l.id && llamada.fase !== 'terminada'
                 ? <span style={{ fontSize: 12.5, fontWeight: 800, color: '#047857' }}>📞 Estás en esta llamada</span>
-                : l.estado === 'llamando' ? null : <button onClick={() => void atender(l)} style={btn}>{l.estado === 'esperando' ? 'Atender' : 'Volver a entrar'}</button>}
+                : l.estado === 'llamando' ? null
+                : l.estado === 'en_curso' && (l.equipo || []).length >= maxEquipo && !(l.equipo || []).some((e) => e.id === yo)
+                  ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Llena ({maxEquipo} del equipo)</span>
+                  : <button onClick={() => void atender(l)} style={btn}>{l.estado === 'esperando' ? 'Atender' : (l.equipo || []).some((e) => e.id === yo) ? 'Volver a entrar' : `Unirme (${(l.equipo || []).length}/${maxEquipo})`}</button>}
               <button onClick={() => void terminar(l)} style={btnS}>Terminar</button>
             </div>
           ))}

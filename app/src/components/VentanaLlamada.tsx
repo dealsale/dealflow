@@ -13,14 +13,12 @@ const dur = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); retu
 
 export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
   const ll = useLlamada();
-  const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [, tic] = useState(0);
   const [grande, setGrande] = useState(false);
   useEffect(() => { retomarGuardada(); }, []);
   useEffect(() => { if (ll?.fase !== 'conectada') return; const t = setInterval(() => tic((x) => x + 1), 1000); return () => clearInterval(t); }, [ll?.fase]);
   useEffect(() => {
-    if (audioRef.current && ll?.remotoStream && audioRef.current.srcObject !== ll.remotoStream) { audioRef.current.srcObject = ll.remotoStream; void audioRef.current.play().catch(() => {}); }
     if (videoRef.current && ll?.remotoStream && videoRef.current.srcObject !== ll.remotoStream) { videoRef.current.srcObject = ll.remotoStream; void videoRef.current.play().catch(() => {}); }
   });
   if (!ll) return null;
@@ -43,7 +41,7 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
   if (ll.minimizada && activa) {
     return (
       <>
-        <audio ref={audioRef} autoPlay />
+        <Audios ll={ll} />
         <button onClick={() => minimizarLlamada(false)} style={{ position: 'fixed', right: mobile ? 12 : 104, bottom: mobile ? 'calc(env(safe-area-inset-bottom,0px) + 84px)' : 32, zIndex: 58, border: 0, borderRadius: 999, padding: '10px 16px', background: '#047857', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: '0 12px 28px -10px rgba(4,120,87,.7)' }}>
           📞 {ll.fase === 'conectada' ? `En llamada ${tiempo}` : 'Llamada de soporte'}{ll.silenciado ? ' · 🔇' : ''}{ll.compartiendo ? ' · 🖥️' : ''}
         </button>
@@ -55,7 +53,7 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
   const boton = (activo: boolean): React.CSSProperties => ({ flex: 1, minWidth: 0, border: 0, borderRadius: 10, padding: '10px 8px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', background: activo ? '#FEF3C7' : 'rgba(255,255,255,.12)', color: activo ? '#92400E' : '#fff' });
   return (
     <div role="dialog" aria-label="Llamada de soporte" style={{ position: 'fixed', right: mobile ? 8 : 20, bottom: mobile ? 'calc(env(safe-area-inset-bottom,0px) + 84px)' : 100, zIndex: 58, width: ancho, maxHeight: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column', background: '#0B1220', color: '#fff', borderRadius: 16, boxShadow: '0 30px 70px -20px rgba(2,6,23,.75)', overflow: 'hidden', fontFamily: 'inherit' }}>
-      <audio ref={audioRef} autoPlay />
+      <Audios ll={ll} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: 'linear-gradient(135deg, #047857, #1D4ED8)' }}>
         <span style={{ fontSize: 18 }}>📞</span>
         <div style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
@@ -82,6 +80,16 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
           {(ll.fase === 'esperando' || ll.fase === 'conectando' || ll.fase === 'reconectando' || ll.fase === 'preparando') && <span className="df-llamada-pulso" />}
           <span>{estadoTxt[ll.fase]}</span>
         </div>
+        {ll.remotos.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {ll.remotos.map((r) => (
+              <span key={r.clave} title={r.conectado ? 'Conectado' : 'Conectando…'} style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '3px 9px', background: r.conectado ? 'rgba(16,185,129,.22)' : 'rgba(255,255,255,.1)', color: r.conectado ? '#6EE7B7' : 'rgba(255,255,255,.75)' }}>
+                {r.conectado ? '●' : '○'} {soporte ? r.nombre : (r.nombre === 'La tienda' ? 'Tienda' : r.nombre)}
+              </span>
+            ))}
+          </div>
+        )}
+        {soporte && ll.equipo.length > 1 && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.7)' }}>Si cuelgas, sales tú y la llamada sigue con {ll.equipo.length - 1 === 1 ? 'la otra persona' : 'las demás personas'} del equipo.</div>}
         {ll.compartiendo && <div style={{ fontSize: 12, fontWeight: 700, color: '#FDE68A' }}>🖥️ Estás compartiendo tu pantalla{soporte ? '' : ': soporte la está viendo'}.</div>}
         {!soporte && ll.fase === 'conectada' && !ll.compartiendo && puedeCompartirPantalla() && <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)' }}>Para mostrarnos lo que ves, toca «Compartir pantalla».</div>}
         {ll.aviso && ll.fase !== 'terminada' && <div style={{ fontSize: 12, color: '#FCA5A5', lineHeight: 1.4 }}>{ll.aviso}</div>}
@@ -108,3 +116,26 @@ export function VentanaLlamada({ mobile }: { mobile?: boolean }) {
 }
 
 const cab: React.CSSProperties = { width: 30, height: 30, borderRadius: 9, border: 0, background: 'rgba(255,255,255,.16)', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, flex: '0 0 auto' };
+
+/** Un audio por cada persona en la llamada. Si el navegador bloquea el sonido (pasa tras recargar), pide un toque. */
+function Audios({ ll }: { ll: NonNullable<ReturnType<typeof useLlamada>> }) {
+  const [bloqueado, setBloqueado] = useState(false);
+  const refs = useRef(new Map<string, HTMLAudioElement>());
+  useEffect(() => {
+    for (const r of ll.remotos) {
+      const el = refs.current.get(r.clave);
+      if (el && el.srcObject !== r.stream) { el.srcObject = r.stream; void el.play().then(() => setBloqueado(false)).catch(() => setBloqueado(true)); }
+    }
+  });
+  const activar = () => { for (const el of refs.current.values()) void el.play().catch(() => {}); setBloqueado(false); };
+  return (
+    <>
+      {ll.remotos.map((r) => <audio key={r.clave} autoPlay ref={(el) => { if (el) refs.current.set(r.clave, el); else refs.current.delete(r.clave); }} />)}
+      {bloqueado && (
+        <button onClick={activar} style={{ position: 'fixed', left: '50%', top: 16, transform: 'translateX(-50%)', zIndex: 95, border: 0, borderRadius: 999, padding: '12px 20px', background: '#047857', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 14px 30px -10px rgba(4,120,87,.7)' }}>
+          🔊 Toca aquí para escuchar la llamada
+        </button>
+      )}
+    </>
+  );
+}
