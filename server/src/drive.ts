@@ -15,6 +15,7 @@
  * Variables (Railway): GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET (cliente OAuth "Aplicación web"
  * con la URI de redirección GOOGLE_REDIRECT_URI, por defecto https://app.dealflow.sbs/api/drive/google/vuelta).
  */
+import { proteger } from './protegerRutas.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { Readable } from 'node:stream';
 import { randomBytes } from 'node:crypto';
@@ -133,7 +134,7 @@ const nombreLimpio = (n: unknown) => String(n || '').replace(/[\u0000-\u001f]/g,
 const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
 // ── Rutas ───────────────────────────────────────────────────────────────────
-export const drive = Router();
+export const drive = proteger(Router());
 
 function requireDrive(req: Request, res: Response, next: NextFunction) {
   const u = req.user;

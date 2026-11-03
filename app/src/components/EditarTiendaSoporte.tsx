@@ -71,7 +71,7 @@ export function EditarTiendaSoporte({ onCerrar }: { onCerrar: () => void }) {
                 <label style={{ fontSize: 12, fontWeight: 700 }} htmlFor="sop-correo">Correo de acceso del dueño</label>
                 <input id="sop-correo" type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={campo} />
                 <button type="button" disabled={ocupado === 'datos' || (nombre === t.nombre && correo === t.correo)} style={{ ...btn, justifySelf: 'start', opacity: nombre === t.nombre && correo === t.correo ? 0.5 : 1 }}
-                  onClick={() => void hacer('datos', () => apiTiendaSoporteEditar({ nombre, correo }), 'Datos guardados.', true)}>{ocupado === 'datos' ? 'Guardando…' : 'Guardar datos'}</button>
+                  onClick={() => void hacer('datos', () => apiTiendaSoporteEditar({ nombre, correo }), 'Datos guardados. El nombre nuevo se ve en el encabezado al recargar.')}>{ocupado === 'datos' ? 'Guardando…' : 'Guardar datos'}</button>
               </div>
 
               <div style={caja}>

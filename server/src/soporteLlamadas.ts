@@ -308,20 +308,33 @@ export function llamadasEquipo(verOcultas = false) {
   }));
 }
 export function atenderLlamada(id: string, agente: string): boolean {
-  return db.prepare("UPDATE soporte_llamadas SET estado = 'en_curso', atendido_por = ?, atendido_at = COALESCE(atendido_at, datetime('now')) WHERE id = ? AND estado IN ('esperando','en_curso','sin_atender')").run(agente.slice(0, 80), id).changes > 0;
+  const r = db.prepare('SELECT estado, atendido_por FROM soporte_llamadas WHERE id = ?').get(id) as { estado: string; atendido_por: string } | undefined;
+  if (!r) return false;
+  // Si ya la atendía otra persona, la segunda se suma («Laura y Administrador de DealFlow»).
+  const ya = (r.atendido_por || '').split(' y ').map((x) => x.trim()).filter(Boolean);
+  const quien = r.estado === 'en_curso' && ya.length && !ya.includes(agente) ? [...ya, agente].slice(0, MAX_EQUIPO_EN_LLAMADA + 1).join(' y ') : (r.estado === 'en_curso' && ya.includes(agente) ? r.atendido_por : agente);
+  return db.prepare("UPDATE soporte_llamadas SET estado = 'en_curso', atendido_por = ?, atendido_at = COALESCE(atendido_at, datetime('now')) WHERE id = ? AND estado IN ('esperando','en_curso','sin_atender')").run(quien.slice(0, 160), id).changes > 0;
 }
 export function terminarLlamada(id: string): boolean {
   const ok = db.prepare("UPDATE soporte_llamadas SET estado = CASE WHEN estado = 'llamando' THEN 'cancelada' ELSE 'terminada' END, fin_at = datetime('now') WHERE id = ? AND estado IN ('esperando','en_curso','llamando')").run(id).changes > 0;
-  if (ok) enviarSenal(id, 'soporte', 'colgar', null);
+  if (ok) enviarSenal(id, 'soporte:sistema', 'colgar', null);
   return ok;
 }
 
 // ── Señales de la llamada (WebRTC) ──────────────────────────────────────────
 // En memoria: solo sirven mientras dura la llamada (si el servidor se reinicia, se reconecta).
+// Cada persona en la llamada tiene una CLAVE: «tienda» o «soporte:<id del usuario>». Se conectan
+// todos con todos (la tienda y hasta 2 del equipo): cada señal va de una clave a otra (o a todos «*»).
 type Rol = 'tienda' | 'soporte';
-interface Senal { n: number; de: Rol; tipo: string; data: unknown; t: number }
+export const MAX_EQUIPO_EN_LLAMADA = 2;
+interface Senal { n: number; de: string; para: string; tipo: string; data: unknown; t: number }
 const senales = new Map<string, { n: number; lista: Senal[]; t: number }>();
-setInterval(() => { const lim = Date.now() - 4 * 3600e3; for (const [k, v] of senales) if (v.t < lim) senales.delete(k); }, 30 * 60e3).unref?.();
+const presentes = new Map<string, Map<string, { nombre: string; visto: number }>>(); // llamada → clave → última señal de vida
+setInterval(() => {
+  const lim = Date.now() - 4 * 3600e3;
+  for (const [k, v] of senales) if (v.t < lim) { senales.delete(k); presentes.delete(k); }
+}, 30 * 60e3).unref?.();
+const rolDe = (clave: string): Rol => (clave === 'tienda' ? 'tienda' : 'soporte');
 
 /** ¿Quién es este usuario en la llamada? (la tienda que llamó o alguien del equipo). */
 export function rolEnLlamada(id: string, u: { id: string; role: string }): Rol | null {
@@ -331,20 +344,39 @@ export function rolEnLlamada(id: string, u: { id: string; role: string }): Rol |
   if (['ADMIN', 'SOPORTE'].includes(u.role)) return llamadaDeTiendaOculta(id) || esSaliente(id) ? null : 'soporte';
   return r.user_id === u.id ? 'tienda' : null;
 }
-export function enviarSenal(id: string, de: Rol, tipo: string, data: unknown): void {
+/** Clave de esta persona en la llamada (o null si no puede estar en ella). */
+export function claveEnLlamada(id: string, u: { id: string; role: string }): string | null {
+  const rol = rolEnLlamada(id, u);
+  return rol === 'tienda' ? 'tienda' : rol === 'soporte' ? `soporte:${u.id}` : null;
+}
+/** Personas del equipo que están en la llamada ahora (dieron señal de vida en los últimos 15 s). */
+export function equipoEnLlamada(id: string): { clave: string; nombre: string }[] {
+  const m = presentes.get(id); if (!m) return [];
+  const ahora = Date.now();
+  return [...m].filter(([c, v]) => c !== 'tienda' && ahora - v.visto < 15_000).map(([clave, v]) => ({ clave, nombre: v.nombre }));
+}
+function marcarPresente(id: string, clave: string, nombre: string) {
+  const m = presentes.get(id) || new Map(); m.set(clave, { nombre, visto: Date.now() }); presentes.set(id, m);
+}
+/** Señal de una persona a otra («*» = a todos). Las señales viejas sin destinatario van al otro lado. */
+export function enviarSenal(id: string, de: string, tipo: string, data: unknown, para = '*'): void {
   const c = senales.get(id) || { n: 0, lista: [], t: Date.now() };
   c.n++; c.t = Date.now();
-  c.lista.push({ n: c.n, de, tipo, data, t: Date.now() });
-  if (c.lista.length > 400) c.lista.splice(0, c.lista.length - 400);
+  c.lista.push({ n: c.n, de, para, tipo, data, t: Date.now() });
+  if (c.lista.length > 600) c.lista.splice(0, c.lista.length - 600);
   senales.set(id, c);
+  if (tipo === 'bye') presentes.get(id)?.delete(de);
 }
-export function leerSenales(id: string, para: Rol, desde: number) {
+export function leerSenales(id: string, clave: string, desde: number, nombre = '') {
   vencerTimbres(id);
+  if (desde >= 0) marcarPresente(id, clave, nombre);
   const c = senales.get(id);
   const r = db.prepare('SELECT estado, atendido_por FROM soporte_llamadas WHERE id = ?').get(id) as { estado: string; atendido_por: string } | undefined;
+  const mia = (x: Senal) => x.de !== clave && (x.para === '*' ? (x.de.includes(':') || x.de === 'tienda' ? true : rolDe(x.de) !== rolDe(clave)) : x.para === clave);
   return {
-    senales: (c?.lista || []).filter((x) => x.de !== para && x.n > desde).map((x) => ({ n: x.n, tipo: x.tipo, data: x.data })),
+    senales: (c?.lista || []).filter((x) => x.n > desde && mia(x)).map((x) => ({ n: x.n, de: x.de, tipo: x.tipo, data: x.data })),
     ultimo: c?.n || 0, estado: r?.estado || 'terminada', atendidoPor: r?.atendido_por || '',
+    equipo: equipoEnLlamada(id),
   };
 }
 /** Servidores para encontrar la ruta de red entre los dos navegadores (STUN público + TURN propio si hay). */

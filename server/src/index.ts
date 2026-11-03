@@ -1,3 +1,4 @@
+import { noCaerPorPromesas } from './protegerRutas.js';
 import './landings.js'; // tablas del Creador de landings (los pagos aprobados las usan)
 import express from 'express';
 import compression from 'compression';
@@ -192,7 +193,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'barra-autor-11031515',
+    build: 'llamada-equipo-11031538',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
@@ -357,4 +358,5 @@ app.use((err: unknown, req: express.Request, res: express.Response, _next: expre
 });
 
 const PORT = Number(process.env.PORT) || 3001;
+noCaerPorPromesas();
 app.listen(PORT, () => console.log(`DealFlow API escuchando en :${PORT}`));
