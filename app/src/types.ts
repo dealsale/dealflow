@@ -56,6 +56,8 @@ export interface Order {
   /** Id de la guía en Effi (p. ej. GT-12), aunque la transportadora aún no dé el número. */
   effiGuiaTx?: string;
   /** Resultado del último aviso de la guía al cliente. */
+  /** El cliente pidió modificar el pedido después de la guía (lo resuelve la tienda). */
+  cambioCliente?: { at: string; detalle: string; anular: boolean; guia?: string } | null;
   guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string; entrega?: string; entregaC?: string; falloChat?: string; falloContacto?: string; modo?: string; reintento?: boolean } | null;
   envio: number;
   nota: string;

@@ -359,7 +359,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const itemsTienda = itemsPorPedido(sid);
   const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', landingId: o.landing_id || '', landingNombre: o.landing_id ? nombreLanding(sid, String(o.landing_id)) : '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', landingId: o.landing_id || '', landingNombre: o.landing_id ? nombreLanding(sid, String(o.landing_id)) : '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion, cambioCliente: o.cambio_cliente ? pj(String(o.cambio_cliente), null) : null,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', confirmacionError: o.confirmacion_error || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: itemsTienda.get(o.id as string) || [], novedad: novTienda.get(o.id as string) || null,
   }));
@@ -582,7 +582,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const items = itemsPorPedido(sid, parcial ? desde : undefined);
   const novs = novedadesPorPedido(sid);
   const orders = (db.prepare(`SELECT * FROM orders WHERE store_id = ? ${parcial ? 'AND v > ?' : ''} ORDER BY numero DESC`).all(...(parcial ? [sid, desde] : [sid])) as Record<string, unknown>[]).map((o) => ({
-    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', landingId: o.landing_id || '', landingNombre: o.landing_id ? nombreLanding(sid, String(o.landing_id)) : '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion,
+    id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', landingId: o.landing_id || '', landingNombre: o.landing_id ? nombreLanding(sid, String(o.landing_id)) : '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion, cambioCliente: o.cambio_cliente ? pj(String(o.cambio_cliente), null) : null,
     estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', confirmacionError: o.confirmacion_error || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));
@@ -2338,6 +2338,14 @@ api.post('/orders/:rowId/effi/despachar', requireAuth, requireStore, requirePerm
   const r = await ef.despacharEffi(sid, req.params.rowId, reintentar, forzado, remitente, req.body?.recordar === true);
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json({ ok: true, ...r });
+});
+
+// El cliente pidió modificar el pedido (ver cambiosPedido.ts): la tienda lo marca como resuelto.
+api.post('/orders/:rowId/cambio-resuelto', requireAuth, requireStore, requirePermiso('pedidos_editar'), (req, res) => {
+  const r = db.prepare("UPDATE orders SET cambio_cliente = '' WHERE id = ? AND store_id = ?").run(req.params.rowId, req.user!.storeId!);
+  if (!r.changes) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  trazar(req.user!.storeId!, String(req.params.rowId), { etapa: 'pedido', nivel: 'ok', titulo: `Cambio pedido por el cliente: resuelto (${req.user!.nombre || req.user!.email})` });
+  res.json({ ok: true });
 });
 
 // ── Leads / CRM ───────────────────────────────────────────────────────

@@ -357,6 +357,7 @@ export interface ApiOrder {
   landingNombre?: string;
   leadId?: string;
   effiGuiaTx?: string;
+  cambioCliente?: { at: string; detalle: string; anular: boolean; guia?: string } | null;
   guiaAviso?: { ok: boolean; chat: string; contacto: string; con: string; detalle: string; at: string; entrega?: string; entregaC?: string; falloChat?: string; falloContacto?: string; modo?: string; reintento?: boolean } | null;
   envio: number;
   nota: string;
@@ -665,6 +666,7 @@ export interface TableroLogistica {
 export const apiLogistica = (dias = 45) => req<TableroLogistica>(`/api/logistica/effi?dias=${dias}`, 'GET');
 export const apiLogisticaActualizar = (dias = 45) => req<TableroLogistica>('/api/logistica/effi/actualizar', 'POST', { dias });
 export const apiEffiConveniosConocidos = () => req<{ convenios: { id: string; nombre: string }[]; porDefecto: string }>('/api/effi-api/convenios-conocidos', 'GET');
+export const apiCambioResuelto = (rowId: string) => req<{ ok: true }>(`/api/orders/${rowId}/cambio-resuelto`, 'POST');
 export const apiEffiDespachar = (rowId: string, reintentar = false, convenio = '', remitente = '', recordar = false) => req<{ ok: true; remision: string; guia?: string; transportadora?: string; avisos?: string[]; aviso?: string }>(`/api/orders/${rowId}/effi/despachar`, 'POST', { reintentar, convenio, remitente, recordar });
 
 // ── Campañas del Marketing IA ──
