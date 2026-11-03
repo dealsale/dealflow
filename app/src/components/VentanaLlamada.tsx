@@ -3,6 +3,7 @@ import {
   useLlamada, retomarGuardada, iniciarLlamada, colgarLlamada, cerrarVentanaLlamada, silenciarLlamada, compartirPantalla,
   dejarDeCompartir, minimizarLlamada, puedeCompartirPantalla, abrirVentanaAparte, traerLlamadaAqui, irAVentanaAparte, volverALaPestana,
   pedirControl, soltarControl, enviarAccion, responderControl, quitarControl,
+  pedirAccesoComputador, enviarCodigoComputador, cerrarPedidoComputador, olvidarCodigoComputador, URL_ESCRITORIO_REMOTO,
 } from '../lib/llamadaRTC';
 
 /**
@@ -69,6 +70,9 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
 
   const ancho = soporte ? (grande ? 'min(1100px, calc(100vw - 40px))' : 'min(560px, calc(100vw - 32px))') : (mobile ? 'calc(100vw - 16px)' : 340);
   const tiendaComparte = soporte && !!ll.remotos.find((r) => r.clave === 'tienda' && r.video);
+  const superficieTienda = ll.remotos.find((r) => r.clave === 'tienda')?.superficie || '';
+  const tiendaPantallaCompleta = tiendaComparte && !!superficieTienda && superficieTienda !== 'browser';
+  const codigoVigente = soporte && ll.crdCodigo && Date.now() - ll.crdCodigo.t < 10 * 60_000 ? ll.crdCodigo.codigo : '';
   const controlando = soporte && ll.miControl === 'activo' && tiendaComparte;
   const altoVideo = completa ? '100vh' : aparte ? 'calc(100vh - 250px)' : soporte ? (grande ? 'calc(100vh - 340px)' : 320) : 220;
   const bChico: React.CSSProperties = { border: 0, borderRadius: 8, padding: '7px 11px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12, cursor: 'pointer' };
@@ -121,7 +125,8 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
         {ll.compartiendo && <div style={{ fontSize: 12, fontWeight: 700, color: '#FDE68A' }}>🖥️ Estás compartiendo tu pantalla{soporte ? '' : ': soporte la está viendo'}.</div>}
 
         {/* Control remoto — equipo */}
-        {soporte && activa && tiendaComparte && (
+        {soporte && activa && tiendaPantallaCompleta && ll.miControl !== 'activo' && <div style={{ fontSize: 12, color: 'rgba(255,255,255,.75)', lineHeight: 1.4 }}>La tienda comparte la pantalla completa: el control de DealFlow solo funciona compartiendo la pestaña. Para manejar todo su computador, usa «Pedir acceso a todo el computador».</div>}
+        {soporte && activa && tiendaComparte && !(tiendaPantallaCompleta && ll.miControl !== 'activo') && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
             {!ll.controlListo ? <span style={{ color: 'rgba(255,255,255,.6)' }}>Control remoto: conectando con la tienda…</span>
               : ll.miControl === 'activo' ? <>
@@ -136,7 +141,27 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
           </div>
         )}
         {soporte && controlando && ll.controlCoincide === false && <div style={{ fontSize: 12, color: '#FDE68A', lineHeight: 1.4 }}>⚠ La tienda no está compartiendo la pestaña de DealFlow (o la pantalla entera): los clics pueden no caer donde son. Pídele que vuelva a compartir y elija <b>la pestaña de DealFlow</b>.</div>}
-        {soporte && ll.controlAviso && <div style={{ fontSize: 12, color: '#FCA5A5' }}>{ll.controlAviso}</div>}
+        {soporte && activa && ll.controlListo && !codigoVigente && <button onClick={pedirAccesoComputador} style={{ ...bChico, justifySelf: 'start', alignSelf: 'flex-start', background: 'rgba(255,255,255,.12)', color: '#fff' }}>💻 Pedir acceso a todo el computador</button>}
+        {soporte && codigoVigente && (
+          <div style={{ background: '#1E3A8A', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>💻 La tienda te dio acceso a todo su computador</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 18, fontWeight: 800, letterSpacing: '.06em' }}>{codigoVigente.replace(/(\d{4})(?=\d)/g, '$1 ')}</span>
+              <button onClick={() => void navigator.clipboard?.writeText(codigoVigente).catch(() => {})} style={{ ...bChico, background: 'rgba(255,255,255,.16)', color: '#fff' }}>Copiar</button>
+              <a href={URL_ESCRITORIO_REMOTO} target="_blank" rel="noopener noreferrer" style={{ ...bChico, background: '#fff', color: '#1E3A8A', textDecoration: 'none' }}>Abrir Escritorio remoto ↗</a>
+              <button onClick={olvidarCodigoComputador} aria-label="Quitar el código" style={{ ...bChico, background: 'transparent', color: 'rgba(255,255,255,.7)' }}>✕</button>
+            </div>
+            <div style={{ fontSize: 11.5, opacity: 0.85, lineHeight: 1.4 }}>En «Ofrecer asistencia» pega el código y toca <b>Conectar</b>; la tienda acepta en la ventana de Google. El código vence en pocos minutos y no se guarda.</div>
+          </div>
+        )}
+        {soporte && ll.controlAviso && <div style={{ fontSize: 12, color: ll.controlAviso.startsWith('Le pedimos') ? '#BFDBFE' : '#FCA5A5' }}>{ll.controlAviso}</div>}
+
+        {/* Compartir — tienda: pantalla completa (sin la barra que pone Chrome arriba de la pestaña) */}
+        {!soporte && activa && ll.fase === 'conectada' && !ll.compartiendo && puedeCompartirPantalla() && (
+          <button onClick={() => compartirPantalla(true)} style={{ ...bChico, background: 'transparent', color: 'rgba(255,255,255,.8)', padding: 0, textDecoration: 'underline', justifySelf: 'start', alignSelf: 'flex-start' }}>o compartir la pantalla completa (sin la barra de arriba)</button>
+        )}
+        {!soporte && ll.compartiendo && ll.superficie && ll.superficie !== 'browser' && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.7)', lineHeight: 1.4 }}>Compartes la pantalla completa. Si soporte necesita manejar DealFlow por ti, comparte la pestaña de DealFlow; para todo el computador, usa «Dar acceso a todo mi computador».</div>}
+        {!soporte && activa && ll.fase === 'conectada' && <AccesoComputador pedido={ll.crdPedido || ''} />}
 
         {/* Control remoto — tienda */}
         {!soporte && ll.control?.pedido && (
@@ -168,13 +193,47 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
             {ll.mic && <button onClick={silenciarLlamada} style={boton(ll.silenciado)}>{ll.silenciado ? '🔇 Activar mic' : '🎤 Silenciar'}</button>}
             {puedeCompartirPantalla() && (ll.compartiendo
               ? <button onClick={dejarDeCompartir} style={boton(true)}>⏹ Dejar de compartir</button>
-              : <button onClick={compartirPantalla} disabled={ll.fase !== 'conectada'} style={{ ...boton(false), opacity: ll.fase === 'conectada' ? 1 : 0.45 }}>🖥️ Compartir pantalla</button>)}
+              : <button onClick={() => compartirPantalla()} disabled={ll.fase !== 'conectada'} style={{ ...boton(false), opacity: ll.fase === 'conectada' ? 1 : 0.45 }}>🖥️ Compartir pantalla</button>)}
             <button onClick={() => void colgarLlamada()} style={{ ...boton(false), background: '#DC2626' }}>Colgar</button>
           </div>
         ) : null}
       </div>
       <style>{`.df-llamada-pulso { flex: 0 0 auto; width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: #34D399; animation: dfLlPulso 1.2s ease-in-out infinite }
         @keyframes dfLlPulso { 0%,100% { opacity: .35; transform: scale(.8) } 50% { opacity: 1; transform: scale(1.15) } }`}</style>
+    </div>
+  );
+}
+
+/** Tienda: dar acceso a TODO el computador con el Escritorio remoto de Chrome (Google). */
+function AccesoComputador({ pedido }: { pedido: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const [codigo, setCodigo] = useState('');
+  const [msg, setMsg] = useState('');
+  const b: React.CSSProperties = { border: 0, borderRadius: 8, padding: '7px 11px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12, cursor: 'pointer' };
+  const [quien, setQuien] = useState('');
+  // Si el equipo lo pide, se abre (y sigue abierto después de enviar el código, para ver el ✓).
+  useEffect(() => { if (pedido) { setAbierto(true); setQuien(pedido); } }, [pedido]);
+  if (!abierto && !pedido) return <button onClick={() => setAbierto(true)} style={{ ...b, background: 'transparent', color: 'rgba(255,255,255,.8)', padding: 0, textDecoration: 'underline', justifySelf: 'start', alignSelf: 'flex-start' }}>💻 Dar acceso a todo mi computador</button>;
+  const digitos = codigo.replace(/\D/g, '');
+  return (
+    <div role="region" aria-label="Acceso a todo el computador" style={{ background: '#1E3A8A', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
+      <div style={{ fontWeight: 800, fontSize: 13.5 }}>{quien ? `💻 ${quien} pide acceso a todo tu computador` : '💻 Acceso a todo tu computador'}</div>
+      <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.5 }}>
+        <li>Abre el <a href={URL_ESCRITORIO_REMOTO} target="_blank" rel="noopener noreferrer" style={{ color: '#BFDBFE', fontWeight: 800 }}>Escritorio remoto de Chrome ↗</a> (la primera vez te pide instalar un programa pequeño de Google).</li>
+        <li>En «Compartir esta pantalla», toca <b>Generar código</b>.</li>
+        <li>Escribe aquí los 12 números y toca <b>Enviar</b>. Después acepta en la ventana de Google.</li>
+      </ol>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input inputMode="numeric" autoComplete="off" aria-label="Código de 12 números" value={codigo} onChange={(e) => { setCodigo(e.target.value.replace(/[^\d ]/g, '').slice(0, 16)); setMsg(''); }} placeholder="1234 5678 9012"
+          style={{ flex: 1, minWidth: 0, border: 0, borderRadius: 8, padding: '8px 10px', fontFamily: "'JetBrains Mono',monospace", fontSize: 14, letterSpacing: '.05em' }} />
+        <button disabled={digitos.length !== 12} onClick={() => { const ok = enviarCodigoComputador(digitos); setMsg(ok ? '✓ Enviado. Soporte se conecta y Google te pregunta si lo permites.' : 'No se pudo enviar: espera unos segundos e inténtalo de nuevo.'); if (ok) setCodigo(''); }}
+          style={{ ...b, background: '#fff', color: '#1E3A8A', opacity: digitos.length === 12 ? 1 : 0.5 }}>Enviar</button>
+      </div>
+      {msg && <div role="status" style={{ fontSize: 12, color: msg.startsWith('✓') ? '#BBF7D0' : '#FCA5A5' }}>{msg}</div>}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ flex: 1, minWidth: 160, fontSize: 11, opacity: 0.8, lineHeight: 1.4 }}>Lo cortas cuando quieras con «Dejar de compartir» en la ventana de Google. El código no se guarda en DealFlow.</span>
+        <button onClick={() => { setAbierto(false); setMsg(''); setQuien(''); cerrarPedidoComputador(); }} style={{ ...b, background: 'rgba(255,255,255,.14)', color: '#fff' }}>{msg.startsWith('✓') ? 'Cerrar' : 'Ahora no'}</button>
+      </div>
     </div>
   );
 }
