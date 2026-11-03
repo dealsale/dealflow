@@ -166,6 +166,11 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
         const sp = await import('./shopifyPedidos.js');
         if (await sp.respuestaConfirmacion(storeId, leadId, texto)) return;
       } catch (e) { console.error('[shopify] respuesta de confirmación', e); }
+      // ¿Responde «nuevo» o «modificar» a la pregunta sobre su pedido que ya tiene guía?
+      try {
+        const cp = await import('./cambiosPedido.js');
+        if (await cp.respuestaCambioPedido(storeId, leadId, texto)) return;
+      } catch (e) { console.error('[pedido] respuesta de cambio', e); }
       const a = await import('./ai.js');
       await a.maybeAutoReply(storeId, leadId);
     } catch (e) { console.error('[ia] error procesando entrante', e); }

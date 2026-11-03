@@ -538,10 +538,11 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   const yaConf = pendConf ? undefined : db.prepare(`SELECT numero, estado, COALESCE(guia,'') guia FROM orders WHERE store_id = ? AND lead_id = ? AND estado != 'Cancelado'
       AND (confirmacion = 'si' OR estado NOT IN ('Nuevo') OR COALESCE(guia,'') != '' OR COALESCE(effi_remision,'') != '' OR COALESCE(dropi_order_id,'') != '')
       AND created_at > datetime('now','-3 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as { numero: number; estado: string; guia: string } | undefined;
-  const confTxt = yaConf ? `\n\nPEDIDO YA REGISTRADO: este cliente ya tiene el pedido DF-${yaConf.numero} (${yaConf.estado}${yaConf.guia ? `, guía ${yaConf.guia}` : ''}). NO vuelvas a poner el marcador ##PEDIDO para ese pedido, NO le muestres otra vez el resumen y NO le pidas que lo confirme: ya está confirmado. Si el cliente escribe «sí», «ok», «listo», «gracias» o algo parecido, NO es una nueva confirmación: agradécele y responde lo que pregunte sobre ese pedido. Pon ##PEDIDO solo si el cliente pide claramente un pedido NUEVO y adicional (otro producto u otra entrega).` : '';
+  const confTxt = yaConf ? `\n\nPEDIDO YA REGISTRADO: este cliente ya tiene el pedido DF-${yaConf.numero} (${yaConf.estado}${yaConf.guia ? `, guía ${yaConf.guia}` : ''}). NO vuelvas a poner el marcador ##PEDIDO para ese pedido, NO le muestres otra vez el resumen y NO le pidas que lo confirme: ya está confirmado. Si el cliente escribe «sí», «ok», «listo», «gracias» o algo parecido, NO es una nueva confirmación: agradécele y responde lo que pregunte sobre ese pedido. Pon ##PEDIDO solo si el cliente pide claramente un pedido NUEVO y adicional (otro producto u otra entrega). Si el cliente quiere CAMBIAR algo de ese pedido (producto, talla, color, cantidad o dirección), NO le digas que ya quedó cambiado ni armes otro resumen: recuérdale su pedido${yaConf.guia ? ' y su guía' : ''} y pregúntale si quiere hacer un *pedido nuevo* aparte o *modificar* el que ya tiene (el sistema revisa si todavía se puede).` : '';
+  const cambioTxt = (await import('./cambiosPedido.js')).directivaCambio(leadId);
   const systemFinal = mediaSinTexto
-    ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}${pendTxt}${confTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
-    : system + memoriaCliente + novedadTxt + envioTxt + pendTxt + confTxt;
+    ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}${pendTxt}${confTxt}${cambioTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
+    : system + memoriaCliente + novedadTxt + envioTxt + pendTxt + confTxt + cambioTxt;
 
   const destino = lead.wa_id || lead.tel;
   const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
@@ -734,7 +735,8 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     }
     const resMarcador = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
     // 'invalido': pidió una talla/color que no existe; ya se le respondió con las opciones.
-    let pedidoCreado = resMarcador === 'creado' || resMarcador === 'actualizado' || resMarcador === 'invalido';
+    // 'pregunta': el cliente ya tenía un pedido y se le preguntó si es nuevo o un cambio (ya se le escribió).
+    let pedidoCreado = resMarcador === 'creado' || resMarcador === 'actualizado' || resMarcador === 'invalido' || resMarcador === 'pregunta';
     // La IA repitió el MISMO pedido: no se vuelve a decir "tu pedido quedó registrado".
     const repetido = resMarcador === 'igual';
 
@@ -750,7 +752,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     const tienePedidoReciente = !!db.prepare("SELECT 1 FROM orders WHERE store_id = ? AND lead_id = ? AND estado != 'Cancelado' AND created_at > datetime('now','-3 days') LIMIT 1").get(storeId, leadId);
     if (!pedidoCreado && !repetido && !novedadTxt && !tienePedidoReciente && esAfirmacion(ultimo?.texto || '')) {
       const inner = pedidoDesdeResumen(leadId);
-      if (inner) { const r2 = await crearPedido(storeId, lead, inner, productRows, destino, pn); pedidoCreado = r2 === 'creado' || r2 === 'actualizado' || r2 === 'invalido'; }
+      if (inner) { const r2 = await crearPedido(storeId, lead, inner, productRows, destino, pn); pedidoCreado = r2 === 'creado' || r2 === 'actualizado' || r2 === 'invalido' || r2 === 'pregunta'; }
     }
 
     // Si se creó el pedido, el mensaje de confirmación ya lo mandó crearPedido;
@@ -1047,7 +1049,7 @@ Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefo
   } catch { return ''; }
 }
 
-type ResultadoPedido = 'creado' | 'actualizado' | 'igual' | 'invalido' | false;
+type ResultadoPedido = 'creado' | 'actualizado' | 'igual' | 'invalido' | 'pregunta' | false;
 
 /**
  * El celular del pedido, SOLO si el cliente lo escribió en la conversación (o dijo que es
@@ -1261,26 +1263,31 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
     marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
     return 'actualizado';
   }
-  // Pedido reciente de este cliente que YA se confirmó o despachó (tiene guía/remisión, o va en
-  // camino): si el asistente repite el marcador con los MISMOS productos, es el mismo pedido
-  // (p. ej. el cliente dijo «gracias, ¿cuándo llega?» y la IA volvió a escribir el resumen).
-  // No se crea otro ni se le vuelve a pedir confirmación.
+  // Pedido «protegido» de este cliente (con guía/remisión/Dropi, ya despachado, o de Shopify / a mano):
+  // el asistente no lo toca ni crea otro encima. Mismos productos = es el mismo (no se hace nada);
+  // otra cosa = se le pregunta si quiere un pedido NUEVO aparte o MODIFICAR el que tiene.
   {
-    const firmaItems = (its: { qty: number; nombre: string }[]) => its.map((i) => `${i.qty}x${norm(i.nombre)}`).sort().join('|');
-    const recientes = db.prepare(
-      `SELECT id, numero, estado FROM orders WHERE store_id = ? AND estado NOT IN ('Cancelado','Entregado') AND COALESCE(origen,'') NOT IN ('shopify','manual')
-         AND created_at > datetime('now','-3 days')
-         AND (lead_id = ? ${tels.map(() => "OR REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-','') LIKE ?").join(' ')})
-       ORDER BY created_at DESC LIMIT 5`,
-    ).all(storeId, lead.id, ...tels.map((t) => `%${t}`)) as { id: string; numero: number; estado: string }[];
-    const nueva = firmaItems(items);
-    const igual = recientes.find((r) => firmaItems(db.prepare('SELECT qty, nombre FROM order_items WHERE order_id = ?').all(r.id) as { qty: number; nombre: string }[]) === nueva);
-    if (igual) {
-      console.log(`[ia] pedido DF-${igual.numero} ya existe (${igual.estado}): no se crea un duplicado`);
-      trazar(storeId, igual.id, { etapa: 'pedido', nivel: 'info', titulo: 'Se evitó un pedido duplicado', detalle: `El asistente volvió a escribir este mismo pedido (ya está ${igual.estado.toLowerCase()}). No se creó otro ni se pidió confirmación de nuevo.`, datos: { marcador: inner } });
-      return 'igual';
+    const cp = await import('./cambiosPedido.js');
+    const prot = cp.pedidoProtegido(storeId, lead.id, tels);
+    if (prot) {
+      const firmaItems = (its: { qty: number; nombre: string }[]) => its.map((i) => `${i.qty}x${norm(i.nombre)}`).sort().join('|');
+      const itemsProt = db.prepare('SELECT qty, nombre FROM order_items WHERE order_id = ?').all(String(prot.id)) as { qty: number; nombre: string }[];
+      if (firmaItems(itemsProt) === firmaItems(items)) {
+        console.log(`[ia] pedido DF-${prot.numero} ya existe (${prot.estado}): no se crea un duplicado`);
+        trazar(storeId, String(prot.id), { etapa: 'pedido', nivel: 'info', titulo: 'Se evitó un pedido duplicado', detalle: `El asistente volvió a escribir este mismo pedido (${String(prot.estado).toLowerCase()}${prot.origen === 'shopify' ? ', de Shopify' : ''}). No se creó otro ni se pidió confirmación de nuevo.`, datos: { marcador: inner } });
+        return 'igual';
+      }
+      if (cp.permiteNuevo(lead.id)) {
+        cp.usarPermisoNuevo(lead.id);
+        registrarLog(storeId, 'info', 'pedido', `${cliente} pidió un pedido NUEVO aparte de DF-${prot.numero}: se registra como pedido adicional.`, lead.id);
+      } else {
+        const msg = cp.preguntaNuevoOModificar(storeId, lead.id, prot, inner);
+        const mid = uid();
+        db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
+        marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
+        return 'pregunta';
+      }
     }
-    if (recientes.length) registrarLog(storeId, 'warn', 'pedido', `Revisa si es un pedido adicional: ${cliente} ya tenía DF-${recientes[0].numero} (${recientes[0].estado}) y el asistente registró otro con productos distintos.`, lead.id);
   }
 
   const numero = siguienteNumeroPedido(storeId);

@@ -9,6 +9,7 @@ import cors from 'cors';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { api, webhooks } from './routes.js';
+import './cambiosPedido.js'; // columnas y disparador de la hora de la guía (antes de cualquier ruta)
 import { proveedorApi } from './proveedores.js';
 import { db } from './db.js';
 import { paginaTienda } from './tiendaPublica.js';
@@ -193,7 +194,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'pantalla-completa-11031852',
+    build: 'cambios-pedido-11031912',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

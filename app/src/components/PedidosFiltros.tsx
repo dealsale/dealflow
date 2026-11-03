@@ -18,7 +18,7 @@ type FechaRapida = 'todas' | 'hoy' | 'ayer' | '7d' | '30d' | 'mes' | 'rango';
 type Despacho = 'todos' | 'sin' | 'effi' | 'dropi';
 type Guia = 'todas' | 'con' | 'sin';
 /** Pedidos repetidos: mismo celular, misma dirección o mismo nombre del cliente. */
-export type Repetido = 'tel' | 'direccion' | 'nombre';
+export type Repetido = 'exacto' | 'tel' | 'direccion' | 'nombre';
 
 export interface Filtros {
   estados: string[];
@@ -56,15 +56,28 @@ export const ORDENES: { id: Orden; label: string }[] = [
 ];
 
 const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-export const REPETIDOS: { id: Repetido; label: string }[] = [{ id: 'tel', label: 'Mismo celular' }, { id: 'direccion', label: 'Misma dirección' }, { id: 'nombre', label: 'Mismo nombre' }];
+export const REPETIDOS: { id: Repetido; label: string; ayuda: string }[] = [
+  { id: 'exacto', label: 'Duplicado exacto', ayuda: 'Mismo celular y mismos productos, con 3 días o menos de diferencia' },
+  { id: 'tel', label: 'Mismo celular', ayuda: 'Comparten el celular (puede ser el mismo cliente comprando otra vez)' },
+  { id: 'direccion', label: 'Misma dirección', ayuda: 'Misma dirección y ciudad' },
+  { id: 'nombre', label: 'Mismo nombre', ayuda: 'Mismo nombre completo del cliente' },
+];
 /** Dirección comparable: «Calle 45 # 12-30» = «cl 45 no 12 30» (más la ciudad). */
 const dirComparable = (d: string, ciudad: string) => {
-  const t = norm(d).replace(/\b(carrera|cra|kra|kr|cr|cl?r)\b\.?/g, ' cr ').replace(/\b(calle|cll|cl|clle)\b\.?/g, ' cl ').replace(/\b(avenida|av|avda)\b\.?/g, ' av ')
-    .replace(/\b(diagonal|dg|diag)\b\.?/g, ' dg ').replace(/\b(transversal|tv|trans|tr)\b\.?/g, ' tv ').replace(/\b(numero|nro|no|n)\b\.?|#|n°|nº/g, ' ').replace(/[^a-z0-9]+/g, '');
-  return t.length >= 5 ? `${norm(ciudad).replace(/[^a-z]/g, '')}|${t}` : '';
+  // Se separan letras y números («cll45» → «cll 45») y cada número queda como su propio pedazo:
+  // así «Calle 45 # 12-30» = «Cl 45 No 12 30», pero NO = «Calle 4 # 51-230».
+  const t = norm(d).replace(/([a-z])(\d)/g, '$1 $2').replace(/(\d)([a-z])/g, '$1 $2').replace(/\b(carrera|cra|kra|kr|cr|cl?r)\b\.?/g, ' cr ').replace(/\b(calle|cll|cl|clle)\b\.?/g, ' cl ').replace(/\b(avenida|av|avda)\b\.?/g, ' av ')
+    .replace(/\b(diagonal|dg|diag)\b\.?/g, ' dg ').replace(/\b(transversal|tv|trans|tr)\b\.?/g, ' tv ').replace(/\b(numero|nro|no|n)\b\.?|#|n°|nº/g, ' ')
+    .split(/[^a-z0-9]+/).filter(Boolean).join('-');
+  return t.replace(/-/g, '').length >= 5 && /\d/.test(t) ? `${norm(ciudad).replace(/[^a-z]/g, '')}|${t}` : '';
 };
 /** La clave con la que se compara cada pedido ('' = no se puede comparar). */
-export function claveRepetido(o: { tel?: string; direccion?: string; ciudad?: string; cliente?: string }, k: Repetido): string {
+export function claveRepetido(o: { tel?: string; direccion?: string; ciudad?: string; cliente?: string; items?: { qty: number; nombre: string }[] }, k: Repetido): string {
+  if (k === 'exacto') {
+    const d = String(o.tel || '').replace(/\D/g, '').slice(-10);
+    const its = (o.items || []).map((i) => `${i.qty}x${norm(i.nombre)}`).sort().join('|');
+    return d.length >= 7 && its ? `${d}|${its}` : '';
+  }
   if (k === 'tel') { const d = String(o.tel || '').replace(/\D/g, '').slice(-10); return d.length >= 7 ? d : ''; }
   if (k === 'direccion') return dirComparable(o.direccion || '', o.ciudad || '');
   const n = norm(o.cliente || '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -142,6 +155,11 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
     for (const k of REPETIDOS.map((r) => r.id)) {
       const m = new Map<string, DecoratedOrder[]>();
       for (const o of base) { const c = claveRepetido(o, k); if (c) m.set(c, [...(m.get(c) || []), o]); }
+      // Duplicado exacto: solo los que están a 3 días o menos de otro del mismo grupo.
+      if (k === 'exacto') for (const [c, l] of m) {
+        const dia = (o: DecoratedOrder) => new Date((o.fecha || '1970-01-01') + 'T12:00:00').getTime();
+        m.set(c, l.filter((o) => l.some((x) => x !== o && Math.abs(dia(x) - dia(o)) <= 3 * 86400e3)));
+      }
       for (const [c, l] of m) if (l.length < 2) m.delete(c);
       porTipo[k] = m;
     }
@@ -152,6 +170,18 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
   const vecesRepetido = useMemo(() => {
     const m = new Map<string, number>();
     for (const k of f.repetidos) for (const l of repetidos.porTipo[k].values()) for (const o of l) m.set(o.id, Math.max(m.get(o.id) || 0, l.length));
+    return m;
+  }, [repetidos, f.repetidos]);
+  /** Por qué sale como repetido y con cuáles («Mismo celular que DF-1052, DF-1053»). */
+  const motivoRepetido = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const k of f.repetidos) {
+      const label = REPETIDOS.find((r) => r.id === k)!.label;
+      for (const l of repetidos.porTipo[k].values()) for (const o of l) {
+        const otros = l.filter((x) => x !== o).map((x) => x.id).slice(0, 4).join(', ');
+        m.set(o.id, [m.get(o.id), `${label}${k === 'exacto' ? ' de' : ' que'} ${otros}`].filter(Boolean).join(' · '));
+      }
+    }
     return m;
   }, [repetidos, f.repetidos]);
 
@@ -197,7 +227,7 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
 
   const totalValor = filtrados.reduce((a, o) => a + valorPedido(o), 0);
   const alternarRepetido = (k: Repetido) => setF((x) => ({ ...x, repetidos: x.repetidos.includes(k) ? x.repetidos.filter((y) => y !== k) : [...x.repetidos, k] }));
-  return { f, set, alternar, alternarRepetido, limpiar, filtrados, activos, conteoEstados, ciudades, productos, landings, totalValor, totalBase: orders.length, repetidos: repetidos.cuenta, vecesRepetido };
+  return { f, set, alternar, alternarRepetido, limpiar, filtrados, activos, conteoEstados, ciudades, productos, landings, totalValor, totalBase: orders.length, repetidos: repetidos.cuenta, vecesRepetido, motivoRepetido };
 }
 
 export type FiltrosPedidos = ReturnType<typeof useFiltrosPedidos>;
@@ -278,12 +308,12 @@ export function PanelFiltros({ fp }: { fp: FiltrosPedidos }) {
         <div style={etiqueta}>Repetidos</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {REPETIDOS.map((r) => (
-            <button key={r.id} onClick={() => fp.alternarRepetido(r.id)} style={chip(f.repetidos.includes(r.id))} title={`Pedidos que comparten ${r.label.toLowerCase().replace('mismo ', '').replace('misma ', '')} con otro`}>
+            <button key={r.id} onClick={() => fp.alternarRepetido(r.id)} style={chip(f.repetidos.includes(r.id))} title={r.ayuda}>
               🔁 {r.label} <span style={{ opacity: 0.7 }}>{fp.repetidos[r.id] || 0}</span>
             </button>
           ))}
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Salen agrupados. Combínalo con la fecha (p. ej. «7 días») para ver solo los recientes.</div>
+        <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>Salen agrupados y cada uno dice con cuál coincide. «Duplicado exacto» es el más confiable; «mismo celular» también muestra clientes que volvieron a comprar.</div>
       </div>
       <div>
         <div style={etiqueta}>Valor del pedido</div>

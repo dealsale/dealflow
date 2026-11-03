@@ -8,7 +8,7 @@ import { OrdenarDireccion } from './DireccionPedido';
 import { HistorialClienteCard, useHistorialCliente, confirmarSiDevolvio, AvisoDevolucionPropia } from './HistorialCliente';
 import { confirmar, pedirTexto, notificar } from './dialogs';
 import { enProceso, ProcesoPedido } from './Proceso';
-import { apiRegistroPedido, apiDatosRemitente, type EventoPedido } from '../lib/api';
+import { apiRegistroPedido, apiDatosRemitente, apiCambioResuelto, type EventoPedido } from '../lib/api';
 import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia, type RemitenteSugerido } from '../lib/api';
 
@@ -757,6 +757,22 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
   );
 }
 
+/** El cliente pidió modificar el pedido (el asistente no creó otro): qué pidió y qué hacer. */
+function CambioCliente({ sel, onListo }: { sel: DecoratedOrder; onListo: () => void }) {
+  const c = sel.cambioCliente!;
+  const [ocupado, setOcupado] = useState(false);
+  const cuando = (() => { const d = new Date(c.at); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); })();
+  return (
+    <div role="alert" style={{ border: '1.5px solid #F59E0B', background: 'rgba(245,158,11,.1)', borderRadius: 10, padding: '11px 13px', marginBottom: 16, display: 'grid', gap: 6 }}>
+      <div style={{ fontWeight: 800, fontSize: 13.5, color: '#92400E' }}>✏️ El cliente pidió modificar este pedido{cuando ? ` · ${cuando}` : ''}</div>
+      <div style={{ fontSize: 13, color: 'var(--df-text-body)' }}>{c.detalle}</div>
+      <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{c.anular ? (sel.despachoProveedor === 'dropi' ? 'Cancela la orden en Dropi y corrige el pedido.' : 'Anula la guía/remisión en Effi (más abajo, «Anular en Effi»), corrige el pedido y vuelve a despacharlo.') : 'Corrige el pedido con lo que pidió.'} Así no queda un pedido duplicado.</div>
+      <button disabled={ocupado} onClick={() => { setOcupado(true); void apiCambioResuelto(sel.rowId!).then(() => { setOcupado(false); onListo(); }); }}
+        style={{ justifySelf: 'start', border: 0, borderRadius: 8, padding: '7px 12px', background: '#92400E', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>{ocupado ? 'Guardando…' : '✓ Ya lo resolví'}</button>
+    </div>
+  );
+}
+
 export function OrderDetailPanel({ df }: { df: DealFlowState }) {
   useEffect(() => { void df.cargarEffiApi?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!df.hasSelectedOrder || !df.sel) return null;
@@ -786,6 +802,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
             </span>
           </div>
 
+          {sel.cambioCliente && <CambioCliente sel={sel} onListo={() => void df.recargarPedidos()} />}
           {!!sel.tel && (!!sel.confirmacion || sel.estado === 'Nuevo') && <ConfirmacionShopify sel={sel} />}
 
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Datos de envío</div>

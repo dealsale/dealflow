@@ -602,6 +602,7 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     leadId: o.leadId || '',
     effiGuiaTx: o.effiGuiaTx || '',
     guiaAviso: o.guiaAviso || null,
+    cambioCliente: o.cambioCliente || null,
     envio: o.envio || 0,
     nota: o.nota || '',
     total: o.total || 0,

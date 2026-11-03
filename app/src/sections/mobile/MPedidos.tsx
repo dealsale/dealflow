@@ -78,6 +78,7 @@ export function MPedidos({ df }: { df: DealFlowState }) {
               {(fp.vecesRepetido.get(o.id) || 0) > 1 && <span style={{ fontSize: 10.5, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: 'rgba(245,158,11,.16)', color: '#B45309' }}>🔁 ×{fp.vecesRepetido.get(o.id)}</span>}
               <span>{o.cliente}</span> <span style={{ color: 'var(--df-text-faint)', fontWeight: 400, fontSize: 12.5 }}>· {o.ciudad}</span>
             </div>
+            {!!fp.motivoRepetido.get(o.id) && <div style={{ color: '#B45309', fontSize: 11.5, marginTop: 2 }}>{fp.motivoRepetido.get(o.id)}</div>}
             <div style={{ color: 'var(--df-text-muted)', fontSize: 13, margin: '3px 0 10px' }}>{o.itemsResumen}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontWeight: 800, fontSize: 16 }}>{o.totalFmt}</span>
