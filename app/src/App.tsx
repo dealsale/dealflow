@@ -14,6 +14,7 @@ import { Trazabilidad } from './sections/admin/Trazabilidad';
 import { SoporteEnVivo, AvisoLlamadas } from './sections/admin/SoporteEnVivo';
 import { VentanaLlamada } from './components/VentanaLlamada';
 import { LlamadaEntrante } from './components/LlamadaEntrante';
+import { EditarTiendaSoporte } from './components/EditarTiendaSoporte';
 import { EquipoDealFlow } from './sections/admin/EquipoDealFlow';
 import { AsistenteSoporte } from './components/AsistenteSoporte';
 import { Proveedores } from './sections/admin/Proveedores';
@@ -63,6 +64,7 @@ function ImpersonationBanner({ df }: { df: DealFlowState }) {
   const [tiendas, setTiendas] = useState<{ id: string; nombre: string }[]>([]);
   const [actual, setActual] = useState('');
   const [cambiando, setCambiando] = useState(false);
+  const [editar, setEditar] = useState(false);
   useEffect(() => {
     void apiSoporteTiendas().then((r) => { if (r.data) { setTiendas(r.data.tiendas); setActual(r.data.actual || ''); } });
   }, []);
@@ -92,7 +94,13 @@ function ImpersonationBanner({ df }: { df: DealFlowState }) {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
       </button>
       <Dropdown variant="pill" compacto ariaLabel="Cambiar de tienda" value={actual} options={opciones} onChange={cambiar} buscar={tiendas.length > 6} />
-      <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis' }}>{cambiando ? 'Cambiando de tienda…' : 'Modo soporte · los cambios afectan la tienda real'}</span>
+      <span style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{cambiando ? 'Cambiando de tienda…' : 'Modo soporte · los cambios afectan la tienda real'}</span>
+      <button type="button" onClick={() => setEditar((v) => !v)} aria-expanded={editar} title="Editar esta tienda: créditos, nombre, contraseñas, plan…"
+        style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 9px', background: editar ? '#FEF3C7' : 'rgba(255,255,255,.16)', color: editar ? 'var(--df-alert-brown)' : '#fff', border: '1px solid rgba(255,255,255,.28)', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 800 }}>
+        Editar tienda
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ transform: editar ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {editar && <EditarTiendaSoporte onCerrar={() => setEditar(false)} />}
     </div>
   );
 }

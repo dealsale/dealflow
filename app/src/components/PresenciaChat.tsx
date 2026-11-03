@@ -1,3 +1,4 @@
+import { CirculoPersona } from './AutorMensaje';
 import { textoPresencia, usePresencia } from '../lib/presencia';
 
 /** Aviso arriba de la caja de texto: quién más está en este chat o escribiendo. */
@@ -9,6 +10,9 @@ export function PresenciaChat({ chatId }: { chatId: string }) {
     <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 600, borderRadius: 9, padding: '7px 11px', marginBottom: 8,
       background: t.escribiendo ? 'var(--df-warning-subtle)' : 'var(--df-indigo-subtle)', color: t.escribiendo ? 'var(--df-warning)' : 'var(--df-indigo)',
       border: `1px solid ${t.escribiendo ? 'var(--df-warning-border)' : 'var(--df-purple-border)'}` }}>
+      <span style={{ display: 'inline-flex' }}>
+        {aqui.slice(0, 5).map((p, i) => <CirculoPersona key={p.nombre + i} nombre={p.nombre} size={22} titulo={`${p.nombre}${p.escribiendo ? ' (escribiendo)' : ' (está en este chat)'}`} style={{ marginLeft: i ? -6 : 0 }} />)}
+      </span>
       <span aria-hidden>{t.escribiendo ? '✍️' : '👀'}</span>
       <span style={{ flex: 1 }}>{t.texto}{t.escribiendo ? ' Espera antes de responder para no repetirle al cliente.' : ''}</span>
     </div>

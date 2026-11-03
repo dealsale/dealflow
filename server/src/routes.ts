@@ -412,9 +412,30 @@ const mapMensaje = (m: Record<string, unknown>) => ({
   tipo: m.tipo || 'texto', mediaUrl: m.media_url || null, mediaMime: m.media_mime || null, mediaNombre: m.media_nombre || null, estado: m.estado || '', error: m.error || '',
   // Respuesta citada (si el cliente respondió citando un mensaje).
   citaTexto: m.cita_texto || '', citaDe: m.cita_de || '',
+  // Quién del equipo lo envió (solo mensajes de la tienda).
+  autor: m.de === 'vendedor' ? (m.autor || '') : '',
 });
 const mensajesDe = (leadId: string) =>
-  (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado, error, cita_texto, cita_de FROM messages WHERE lead_id = ? ORDER BY created_at').all(leadId) as Record<string, unknown>[]).map(mapMensaje);
+  (db.prepare('SELECT id, de, texto, created_at, tipo, media_url, media_mime, media_nombre, estado, error, cita_texto, cita_de, autor FROM messages WHERE lead_id = ? ORDER BY created_at').all(leadId) as Record<string, unknown>[]).map(mapMensaje);
+
+/** Firma un mensaje enviado por alguien de la tienda (para ver quién lo mandó en el chat). */
+function firmarMensaje(mid: string, req: ExRequest): void {
+  const u = req.user;
+  if (!u) return;
+  const nombre = u.imp ? 'Soporte DealFlow' : (u.nombre || u.email || '').trim();
+  db.prepare('UPDATE messages SET autor = ?, autor_id = ? WHERE id = ?').run(nombre.slice(0, 60), u.imp ? `imp:${u.imp}` : u.id, mid);
+}
+// Mensajes viejos: en tiendas de UNA sola persona se sabe quién los mandó (los de tiendas con
+// varios colaboradores quedan sin nombre: antes no se guardaba). Una sola vez.
+try {
+  const hecho = db.prepare("SELECT valor FROM config_global WHERE clave = 'autor_mensajes_v1'").get();
+  if (!hecho) {
+    const r = db.prepare(`UPDATE messages SET autor = (SELECT u.nombre FROM leads l JOIN users u ON u.store_id = l.store_id WHERE l.id = messages.lead_id LIMIT 1)
+      WHERE de = 'vendedor' AND autor = '' AND lead_id IN (SELECT l.id FROM leads l WHERE (SELECT COUNT(*) FROM users u WHERE u.store_id = l.store_id) = 1)`).run();
+    db.prepare("INSERT OR REPLACE INTO config_global (clave, valor) VALUES ('autor_mensajes_v1', ?)").run(String(r.changes));
+    console.log(`[chat] autor asignado a ${r.changes} mensajes viejos (tiendas de una sola persona)`);
+  }
+} catch (e) { console.warn('[chat] autor de mensajes viejos', e); }
 
 /**
  * Lista de leads para el Inbox. En modo `resumen` NO trae todos los mensajes de
@@ -2613,6 +2634,7 @@ api.post('/leads/:id/messages', requireAuth, requireStore, requirePermiso('chats
   { const { ventanaDeLead, MSG_VENTANA_CERRADA } = await import('./wa.js'); const v = ventanaDeLead(req.user!.storeId!, l.id); if (v.aplica && !v.abierta) return res.status(409).json({ error: MSG_VENTANA_CERRADA, ventanaCerrada: true }); }
   const mid = uid();
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, l.id, 'vendedor', texto);
+  firmarMensaje(mid, req);
   db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
   const wa = await sendWhatsappText(req.user!.storeId!, l.wa_id || l.tel, texto, l.tel);
   marcarEnviado(mid, wa);
@@ -2810,6 +2832,7 @@ api.post('/leads/:id/enviar-plantilla', requireAuth, requireStore, requirePermis
   // Guarda el mensaje en el chat (texto renderizado) para que quede el registro.
   const mid = uid();
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, l.id, 'vendedor', r.textoRender || `[Plantilla: ${t.nombre}]`);
+  firmarMensaje(mid, req);
   marcarEnviado(mid, { ok: true, wamid: r.wamid });
   // Lo que responda el cliente lo atiende el ASISTENTE (salvo que la persona elija atenderlo ella).
   const conAsistente = req.body?.asistente !== false;
@@ -2859,6 +2882,7 @@ api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requirePermiso('
     if (!r.ok) { resultados.push({ tel, nombre, ok: false, error: r.error, leadId: lead.id }); continue; }
     const mid = uid();
     db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'vendedor', r.textoRender || `[Plantilla: ${t.nombre}]`);
+    firmarMensaje(mid, req);
     marcarEnviado(mid, { ok: true, wamid: r.wamid });
     db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(conAsistente ? 'Asistente (bot)' : req.user!.nombre, lead.id);
     resultados.push({ tel, nombre, ok: true, leadId: lead.id });
@@ -2996,6 +3020,7 @@ api.post('/leads/:id/media', requireAuth, requireStore, requirePermiso('chats'),
   const saved = saveOutgoingMedia(req.user!.storeId!, String(dataUrl), String(nombre || ''));
   if (!saved) return res.status(400).json({ error: 'El archivo no es válido.' });
   const mid = saveOutgoingMessage(l.id, String(caption || ''), saved.tipo, saved.url, saved.mime, String(nombre || ''));
+  firmarMensaje(mid, req);
   db.prepare('UPDATE leads SET asignado = ? WHERE id = ?').run(req.user!.nombre, l.id);
 
   const r = await sendWhatsappMedia(req.user!.storeId!, l.wa_id || l.tel, { buffer: saved.buffer, mime: saved.mime, tipo: saved.tipo }, String(caption || ''), String(nombre || ''), l.tel);
@@ -3466,6 +3491,88 @@ function adminDeSoporte(req: ExRequest): { id: string; role: string } | undefine
   if (!adminId) return undefined;
   return db.prepare("SELECT id, role FROM users WHERE id = ? AND role IN ('ADMIN','SUPERADMIN')").get(adminId) as { id: string; role: string } | undefined;
 }
+// ── Barra de soporte (dentro de una tienda): editar la tienda sin volver al panel ──
+// La sesión es la del dueño de la tienda (con imp = el admin que entró): se valida el admin.
+function tiendaSoporte(req: ExRequest, res: ExResponse): { admin: { id: string; role: string; email: string }; sid: string } | null {
+  const a = adminDeSoporte(req);
+  if (!a) { res.status(403).json({ error: 'Solo el equipo DealFlow en modo soporte.' }); return null; }
+  const email = (db.prepare('SELECT email FROM users WHERE id = ?').get(a.id) as { email: string } | undefined)?.email || '';
+  return { admin: { ...a, email }, sid: req.user!.storeId! };
+}
+api.get('/soporte-tienda', requireAuth, async (req, res) => {
+  try { await leerTiendaSoporte(req, res); } catch (e) { console.error('[soporte-tienda]', e); if (!res.headersSent) res.status(500).json({ error: 'No se pudo leer la tienda.' }); }
+});
+async function leerTiendaSoporte(req: ExRequest, res: ExResponse) {
+  const t = tiendaSoporte(req, res); if (!t) return;
+  const s = db.prepare('SELECT id, nombre, correo, plan, plan_estado, plan_vence, activa, COALESCE(creditos,0) creditos, COALESCE(tema_premium,0) tema_premium, owner_user_id, created_at FROM stores WHERE id = ?').get(t.sid) as Record<string, unknown> | undefined;
+  if (!s) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const wa = db.prepare('SELECT conectado, numero FROM whatsapp WHERE store_id = ?').get(t.sid) as { conectado: number; numero: string } | undefined;
+  const usuarios = (db.prepare('SELECT id, nombre, email, role_id FROM users WHERE store_id = ? ORDER BY rowid').all(t.sid) as { id: string; nombre: string; email: string; role_id: string | null }[])
+    .map((u) => ({ id: u.id, nombre: u.nombre, email: u.email, dueno: u.id === s.owner_user_id || u.email === s.correo }));
+  const { listarPlanes } = await import('./suscripcion.js');
+  res.json({
+    tienda: {
+      nombre: s.nombre, correo: s.correo, plan: s.plan, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, activa: !!s.activa,
+      creditos: Number(s.creditos) || 0, temaPremium: !!s.tema_premium, creada: String(s.created_at || '').slice(0, 10),
+      whatsapp: { conectado: !!wa?.conectado, numero: wa?.numero || '' },
+    },
+    usuarios, planes: listarPlanes().map((p) => p.nombre),
+  });
+}
+api.post('/soporte-tienda/editar', requireAuth, (req, res) => {
+  const t = tiendaSoporte(req, res); if (!t) return;
+  const s = db.prepare('SELECT id, nombre, correo FROM stores WHERE id = ?').get(t.sid) as { id: string; nombre: string; correo: string } | undefined;
+  if (!s) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const { nombre, correo, plan, activa, temaPremium } = (req.body || {}) as { nombre?: string; correo?: string; plan?: string; activa?: boolean; temaPremium?: boolean };
+  const dueno = db.prepare('SELECT id FROM users WHERE store_id = ? AND email = ?').get(s.id, s.correo) as { id: string } | undefined;
+  const hecho: string[] = [];
+  if (typeof correo === 'string' && correo.trim() && correo.toLowerCase().trim() !== s.correo) {
+    const nuevo = correo.toLowerCase().trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(nuevo)) return res.status(400).json({ error: 'Escribe un correo válido.' });
+    if (db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(nuevo, dueno?.id || '')) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
+    db.prepare('UPDATE stores SET correo = ? WHERE id = ?').run(nuevo, s.id);
+    if (dueno) db.prepare('UPDATE users SET email = ? WHERE id = ?').run(nuevo, dueno.id);
+    hecho.push(`correo → ${nuevo}`);
+  }
+  if (typeof nombre === 'string' && nombre.trim() && nombre.trim() !== s.nombre) {
+    db.prepare('UPDATE stores SET nombre = ? WHERE id = ?').run(nombre.trim().slice(0, 80), s.id);
+    hecho.push(`nombre → ${nombre.trim()}`);
+  }
+  if (typeof plan === 'string' && plan.trim()) { db.prepare('UPDATE stores SET plan = ? WHERE id = ?').run(plan.trim(), s.id); hecho.push(`plan → ${plan.trim()}`); }
+  if (typeof activa === 'boolean') { db.prepare('UPDATE stores SET activa = ? WHERE id = ?').run(activa ? 1 : 0, s.id); hecho.push(activa ? 'activó la cuenta' : 'desactivó la cuenta'); }
+  if (typeof temaPremium === 'boolean') { db.prepare('UPDATE stores SET tema_premium = ? WHERE id = ?').run(temaPremium ? 1 : 0, s.id); hecho.push(`tema premium ${temaPremium ? 'encendido' : 'apagado'}`); }
+  if (hecho.length) registrarAccionEquipo(t.admin.email, `Barra de soporte · ${s.nombre}: ${hecho.join(', ')}`, s.id);
+  res.json({ ok: true });
+});
+api.post('/soporte-tienda/clave', requireAuth, (req, res) => {
+  const t = tiendaSoporte(req, res); if (!t) return;
+  const { userId, password } = (req.body || {}) as { userId?: string; password?: string };
+  const u = db.prepare('SELECT id, email FROM users WHERE id = ? AND store_id = ?').get(String(userId || ''), t.sid) as { id: string; email: string } | undefined;
+  if (!u) return res.status(404).json({ error: 'Ese usuario no es de esta tienda.' });
+  const e = claveInvalida(String(password || ''), false); if (e) return res.status(400).json({ error: e });
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), u.id);
+  registrarAccionEquipo(t.admin.email, `Barra de soporte: cambió la contraseña de ${u.email}`, t.sid);
+  res.json({ ok: true });
+});
+api.post('/soporte-tienda/creditos', requireAuth, async (req, res) => {
+  const t = tiendaSoporte(req, res); if (!t) return;
+  const cantidad = Math.round(Number(req.body?.cantidad));
+  if (!Number.isFinite(cantidad) || cantidad === 0) return res.status(400).json({ error: 'Indica cuántos créditos dar (o quitar con negativo).' });
+  const { abonar, cobrar } = await import('./creditos.js');
+  if (cantidad > 0) abonar(t.sid, cantidad, 'Ajuste del administrador'); else cobrar(t.sid, -cantidad, 'Ajuste del administrador');
+  registrarAccionEquipo(t.admin.email, `Barra de soporte: ${cantidad > 0 ? 'dio' : 'quitó'} ${Math.abs(cantidad)} créditos`, t.sid);
+  res.json({ ok: true });
+});
+api.post('/soporte-tienda/suscripcion', requireAuth, async (req, res) => {
+  const t = tiendaSoporte(req, res); if (!t) return;
+  const dias = Math.round(Number(req.body?.dias));
+  if (!Number.isFinite(dias) || dias === 0) return res.status(400).json({ error: 'Indica cuántos días extender.' });
+  const { extenderManual } = await import('./suscripcion.js');
+  extenderManual(t.sid, dias);
+  registrarAccionEquipo(t.admin.email, `Barra de soporte: ${dias > 0 ? 'extendió' : 'restó'} ${Math.abs(dias)} días de plan`, t.sid);
+  res.json({ ok: true });
+});
+
 api.get('/auth/soporte/tiendas', requireAuth, (req, res) => {
   const admin = adminDeSoporte(req);
   if (!admin) return res.status(403).json({ error: 'Solo el equipo DealFlow en modo soporte.' });

@@ -507,6 +507,7 @@ function mapApiMensajes(mensajes: ApiLead['mensajes']): Mensaje[] {
     mediaNombre: m.mediaNombre,
     citaTexto: m.citaTexto,
     citaDe: m.citaDe,
+    autor: m.autor || '',
   }));
 }
 
@@ -1415,7 +1416,7 @@ export function useDealFlowState() {
   function decorateMensaje(m: Mensaje): DecoratedMensaje {
     return {
       ...m,
-      rowStyle: { display: 'flex', justifyContent: m.de === 'cliente' ? 'flex-start' : 'flex-end' },
+      rowStyle: { display: 'flex', justifyContent: m.de === 'cliente' ? 'flex-start' : 'flex-end', alignItems: 'flex-end', gap: 6 },
       bubbleStyle: {
         maxWidth: '78%',
         padding: '9px 12px',
