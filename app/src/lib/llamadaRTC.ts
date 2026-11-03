@@ -104,6 +104,18 @@ class Motor {
   vistas = new Map<string, { w: number; h: number; visible: boolean; foco: boolean; t: number }>();
   /** Datos de conexión (ICE) que llegaron ANTES que su oferta: se guardan y se usan al llegar. */
   huerfanos = new Map<string, RTCIceCandidateInit[]>();
+  /** Desde cuándo se intenta conectar con cada persona (no se reinicia con cada reintento). */
+  intentoDesde = new Map<string, number>();
+  diagnosticados = new Set<string>();
+  /** Si lleva más de 20 s sin conectar con alguien (aunque haya reintentado), se averigua por qué. */
+  revisarDemoras() {
+    const ahora = Date.now();
+    for (const [clave, par] of this.pares) {
+      if (par.conectado) { this.intentoDesde.delete(clave); this.diagnosticados.delete(clave); continue; }
+      const desde = this.intentoDesde.get(clave) || ahora;
+      if (ahora - desde > 20_000 && !this.diagnosticados.has(clave)) { this.diagnosticados.add(clave); void this.diagnosticar(par); }
+    }
+  }
   id: string; rol: RolLlamada;
   constructor(id: string, rol: RolLlamada) { this.id = id; this.rol = rol; }
 
@@ -164,8 +176,7 @@ class Motor {
       this.publicar();
     };
     this.pares.set(clave, par);
-    // Si a los 20 s no conecta, se averigua por qué (y se le dice a la persona).
-    setTimeout(() => { if (this.vivo && this.pares.get(clave) === par && !par.conectado) void this.diagnosticar(par); }, 20_000);
+    if (!this.intentoDesde.has(clave)) this.intentoDesde.set(clave, Date.now());
     return par;
   }
 
@@ -180,10 +191,11 @@ class Motor {
         if (r.type === 'candidate-pair') { parejas++; if (r.state === 'failed') fallidas++; }
       });
     } catch { /* sin estadísticas */ }
-    if (!this.vivo || par.conectado || this.pares.get(par.clave) !== par) return;
+    if (!this.vivo || par.conectado) return;
     const turn = hayTurn(this.ice);
     const fuera = (s: Set<string>) => s.has('srflx') || s.has('prflx') || s.has('relay');
-    const causa = !rem.size ? 'no llegaron los datos de conexión del otro lado. Puede tener abierta una versión vieja de DealFlow: que recargue la página.'
+    const causa = !loc.size ? 'tu red o tu navegador no dejan armar ninguna ruta de conexión (firewall, VPN, antivirus o un navegador con WebRTC limitado). Prueba con otra red (datos del celular) o sin VPN; la solución de fondo es un servidor TURN.'
+      : !rem.size ? 'del otro lado no llegó ninguna ruta de conexión: su red o su navegador la bloquean (firewall, VPN, antivirus) o tiene abierta una versión vieja de DealFlow (que recargue). Que pruebe con otra red; la solución de fondo es un servidor TURN.'
       : !fuera(loc) ? (turn ? 'tu red bloquea la conexión y tampoco alcanzó el servidor TURN (red de empresa, VPN, antivirus o firewall).' : 'tu red bloquea la conexión directa (red de empresa, VPN, antivirus, firewall o un navegador como Brave con WebRTC limitado). Prueba con otra red (por ejemplo los datos del celular) o hay que configurar un servidor TURN.')
       : !fuera(rem) ? 'la red del otro lado bloquea la conexión directa. Que pruebe con otra red, o hay que configurar un servidor TURN.'
       : turn ? 'las dos redes no lograron conectarse, ni siquiera por el servidor TURN.' : 'estas dos redes no permiten conexión directa entre sí (NAT estricto). Para esta combinación de redes hace falta un servidor TURN.';
@@ -304,6 +316,7 @@ class Motor {
           if ((d.estado === 'llamando') !== !!estado?.timbrando) set({ timbrando: d.estado === 'llamando' });
           if (this.rol === 'tienda' && d.estado === 'en_curso' && estado?.fase === 'esperando') set({ fase: 'conectando' });
           for (const s of d.senales) { if (!this.vivo) break; try { await this.alRecibir(s.de || (this.rol === 'tienda' ? 'soporte' : 'tienda'), s.tipo, s.data); } catch (e) { console.warn('[llamada]', e); } }
+          this.revisarDemoras();
           // Personas que se fueron sin avisar (cerraron la pestaña): se quita su conexión.
           const vivos = new Set((d.equipo || []).map((x) => x.clave));
           for (const [k, p] of this.pares) if (k !== 'tienda' && !vivos.has(k) && !p.conectado) { try { p.pc.close(); } catch { /* nada */ } this.pares.delete(k); this.publicar(); }
@@ -582,7 +595,7 @@ export function responderControl(si: boolean): void { motor?.responderControl(si
 export function quitarControl(): void { motor?.cerrarControl('La tienda quitó el control.'); }
 
 // ── Prueba de conexión (sin llamada) ────────────────────────────────────
-export interface ResultadoPrueba { mic: boolean; micError: string; host: boolean; stun: boolean; turnConfigurado: boolean; turn: boolean; navegador: string; veredicto: string; ok: boolean }
+export interface ResultadoPrueba { mic: boolean; micError: string; host: boolean; stun: boolean; simetrico: boolean; turnConfigurado: boolean; turn: boolean; navegador: string; veredicto: string; ok: boolean }
 /** Revisa micrófono y rutas de red: si STUN responde y si el servidor TURN se alcanza. */
 export async function probarConexion(): Promise<ResultadoPrueba> {
   let ice = ICE_DEF;
@@ -591,18 +604,28 @@ export async function probarConexion(): Promise<ResultadoPrueba> {
   try { const st = await navigator.mediaDevices.getUserMedia({ audio: true }); mic = true; st.getTracks().forEach((t) => t.stop()); }
   catch (e) { micError = (e as Error)?.name === 'NotAllowedError' ? 'el navegador no tiene permiso para el micrófono' : (e as Error)?.name === 'NotFoundError' ? 'no se encontró ningún micrófono' : 'no se pudo abrir el micrófono'; }
   const tipos = new Set<string>();
+  // Puertos públicos que ve cada servidor STUN: si cambian, la red es de «NAT simétrico».
+  const publicos = new Map<string, Set<string>>();
+  // Cada STUN por separado (así se nota si la red cambia el puerto según el destino).
+  const separados: RTCIceServer[] = ice.flatMap((x) => ([] as string[]).concat(x.urls).map((u) => ({ ...x, urls: u })));
   try {
-    const pc = new RTCPeerConnection({ iceServers: ice });
+    const pc = new RTCPeerConnection({ iceServers: separados });
     pc.createDataChannel('prueba');
-    pc.onicecandidate = (e) => { const c = e.candidate?.candidate || ''; const m = c.match(/ typ (\w+)/); if (m) tipos.add(m[1]); };
+    pc.onicecandidate = (e) => {
+      const c = e.candidate?.candidate || ''; const m = c.match(/ typ (\w+)/); if (m) tipos.add(m[1]);
+      const sx = c.match(/ udp \d+ ([0-9a-f.:]+) (\d+) typ srflx/i);
+      if (sx) { const l = publicos.get(sx[1]) || new Set<string>(); l.add(sx[2]); publicos.set(sx[1], l); }
+    };
     await pc.setLocalDescription(await pc.createOffer());
     await new Promise<void>((ok) => { const t = setTimeout(ok, 8000); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); ok(); } }; });
     pc.close();
   } catch { /* sin WebRTC */ }
   const turnConfigurado = hayTurn(ice);
-  const r: ResultadoPrueba = { mic, micError, host: tipos.has('host'), stun: tipos.has('srflx'), turnConfigurado, turn: tipos.has('relay'), navegador: navigator.userAgent, veredicto: '', ok: false };
+  const simetrico = [...publicos.values()].some((l) => l.size > 1);
+  const r: ResultadoPrueba = { mic, micError, host: tipos.has('host'), stun: tipos.has('srflx'), simetrico, turnConfigurado, turn: tipos.has('relay'), navegador: navigator.userAgent, veredicto: '', ok: false };
   if (!r.host && !r.stun && !r.turn) r.veredicto = 'Este navegador no deja usar WebRTC (revisa extensiones, el modo de privacidad de Brave o la política de la empresa).';
   else if (!r.stun && !r.turn) r.veredicto = turnConfigurado ? 'Tu red bloquea la conexión y no alcanza el servidor TURN: prueba con otra red (datos del celular) o sin VPN.' : 'Tu red bloquea la conexión directa (UDP). Prueba con otra red (datos del celular) o sin VPN/antivirus; la solución de fondo es un servidor TURN.';
+  else if (r.simetrico && !r.turn) r.veredicto = 'Tu red cambia el puerto en cada conexión (NAT simétrico): conectará con algunas redes y con otras se quedará en «Conectando…». Hace falta un servidor TURN.';
   else if (!r.turn) { r.veredicto = turnConfigurado ? 'Hay conexión directa, pero el servidor TURN no responde: revisa sus datos en Railway.' : 'Tu red permite conexión directa. Con la mayoría de tiendas conectará; con redes muy cerradas hará falta un servidor TURN.'; r.ok = true; }
   else { r.veredicto = 'Todo bien: conexión directa y servidor TURN de respaldo funcionando.'; r.ok = true; }
   if (!mic) r.veredicto = `Micrófono: ${micError}. ` + r.veredicto;

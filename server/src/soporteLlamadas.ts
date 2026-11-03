@@ -3,7 +3,7 @@
  * ocurre DENTRO de DealFlow, de navegador a navegador (WebRTC): sin otra plataforma, sin otra
  * pestaña ni cuentas externas. Este servidor solo pasa las "señales" para conectarse (oferta,
  * respuesta y candidatos de red); el audio y la pantalla van directo entre los dos navegadores.
- * Para redes muy cerradas se puede configurar un TURN propio con TURN_URLS, TURN_USER y TURN_PASS.
+ * Para redes muy cerradas: TURN de Cloudflare (CF_TURN_KEY_ID, CF_TURN_API_TOKEN) o uno con claves fijas (TURN_URLS, TURN_USER, TURN_PASS).
  * Al equipo le aparece al instante en Administración → Soporte en vivo (con sonido) y un correo.
  */
 import { randomBytes } from 'node:crypto';
@@ -379,9 +379,39 @@ export function leerSenales(id: string, clave: string, desde: number, nombre = '
     equipo: equipoEnLlamada(id),
   };
 }
-/** Servidores para encontrar la ruta de red entre los dos navegadores (STUN público + TURN propio si hay). */
-export function servidoresIce(): { urls: string | string[]; username?: string; credential?: string }[] {
-  const lista: { urls: string | string[]; username?: string; credential?: string }[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+/** Servidores para encontrar la ruta de red entre los dos navegadores (STUN público + TURN si hay). */
+type IceSrv = { urls: string | string[]; username?: string; credential?: string };
+let cfCache: { t: number; lista: IceSrv[] } | null = null;
+/**
+ * TURN de Cloudflare: con CF_TURN_KEY_ID y CF_TURN_API_TOKEN (en Railway) se piden credenciales
+ * temporales (24 h) y se guardan unas horas. TURN_URLS / TURN_USER / TURN_PASS sirven para un
+ * TURN con claves fijas (Metered, coturn propio…).
+ */
+async function turnCloudflare(): Promise<IceSrv[]> {
+  const id = process.env.CF_TURN_KEY_ID || ''; const tok = process.env.CF_TURN_API_TOKEN || '';
+  if (!id || !tok) return [];
+  if (cfCache && Date.now() - cfCache.t < 6 * 3600e3) return cfCache.lista;
+  const pedir = async (ruta: string) => {
+    const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(id)}/credentials/${ruta}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ttl: 86400 }), signal: AbortSignal.timeout(6000),
+    });
+    const j = (await r.json().catch(() => ({}))) as { iceServers?: IceSrv | IceSrv[] };
+    const l = Array.isArray(j.iceServers) ? j.iceServers : j.iceServers ? [j.iceServers] : [];
+    return r.ok ? l.filter((x) => x && x.urls) : [];
+  };
+  try {
+    let lista = await pedir('generate-ice-servers');
+    if (!lista.length) lista = await pedir('generate');
+    // Los navegadores no usan el puerto 53 (se demoran): se quitan esas direcciones.
+    lista = lista.map((x) => ({ ...x, urls: ([] as string[]).concat(x.urls).filter((u) => !/:53(\?|$)/.test(u)) })).filter((x) => (x.urls as string[]).length);
+    if (lista.length) cfCache = { t: Date.now(), lista };
+    else console.warn('[turn] Cloudflare no devolvió servidores TURN: revisa CF_TURN_KEY_ID y CF_TURN_API_TOKEN.');
+    return lista;
+  } catch (e) { console.warn('[turn] no se pudo pedir el TURN de Cloudflare', e); return cfCache?.lista || []; }
+}
+export async function servidoresIce(): Promise<IceSrv[]> {
+  const lista: IceSrv[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+  lista.push(...await turnCloudflare());
   const turn = (process.env.TURN_URLS || '').split(',').map((x) => x.trim()).filter(Boolean);
   if (turn.length) lista.push({ urls: turn, username: process.env.TURN_USER || '', credential: process.env.TURN_PASS || '' });
   return lista;

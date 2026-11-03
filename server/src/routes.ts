@@ -1746,7 +1746,7 @@ api.get('/soporte/llamadas/:id', requireAuth, async (req, res) => {
 // Señales de la llamada propia (WebRTC): la tienda que llamó y el equipo DealFlow.
 api.get('/soporte/ice', requireAuth, async (_req, res) => {
   const sl = await import('./soporteLlamadas.js');
-  res.json({ iceServers: sl.servidoresIce() });
+  res.json({ iceServers: await sl.servidoresIce() });
 });
 // Nombre con el que cada persona aparece en la llamada (el superadmin, como «Administrador de DealFlow»).
 const nombreEnLlamada = (u: { role: string; nombre?: string; email?: string }, NOMBRE_ADMIN: string) => (u.role === 'SUPERADMIN' ? NOMBRE_ADMIN : (u.nombre || u.email || 'Equipo'));

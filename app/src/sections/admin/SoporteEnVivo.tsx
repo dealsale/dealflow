@@ -239,7 +239,7 @@ function PruebaConexion() {
   return (
     <div style={{ ...card, padding: '12px 14px', display: 'grid', gap: 8 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={{ flex: 1, minWidth: 220, fontSize: 13 }}>🩺 <b>¿Alguien se queda en «Conectando…»?</b> Que abra esto en su computador y toque «Probar mi conexión».</span>
+        <span style={{ flex: 1, minWidth: 220, fontSize: 13 }}>🩺 <b>¿Alguien se queda en «Conectando…»?</b> Que abra esto en su computador y toque «Probar mi conexión». Ojo: revisa solo tu red; la llamada necesita que <b>las dos</b> redes (la tuya y la de la tienda) se entiendan.</span>
         <button onClick={() => { setProbando(true); setR(null); void probarConexion().then((x) => { setR(x); setProbando(false); }); }} disabled={probando} style={btnS}>{probando ? 'Probando… (8 s)' : 'Probar mi conexión'}</button>
       </div>
       {r && (
@@ -247,6 +247,7 @@ function PruebaConexion() {
           {fila(r.mic, r.mic ? 'Micrófono' : `Micrófono: ${r.micError}`)}
           {fila(r.host, 'WebRTC disponible en este navegador')}
           {fila(r.stun, r.stun ? 'Conexión directa (STUN): tu red la permite' : 'Conexión directa (STUN): tu red la bloquea')}
+          {r.stun && fila(!r.simetrico, r.simetrico ? 'Tipo de red: NAT simétrico (no conecta con todas las redes sin TURN)' : 'Tipo de red: normal')}
           {r.turnConfigurado ? fila(r.turn, r.turn ? 'Servidor TURN de respaldo: responde' : 'Servidor TURN de respaldo: no responde') : fila(false, 'Servidor TURN de respaldo: no está configurado', true)}
           <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4, color: r.ok ? '#047857' : 'var(--df-danger-dark, #b91c1c)' }}>{r.veredicto}</div>
         </div>
