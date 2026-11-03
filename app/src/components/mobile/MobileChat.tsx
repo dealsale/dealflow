@@ -1,3 +1,4 @@
+import { AutorMensaje } from '../AutorMensaje';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../Ventana24h';
 import { CargandoChat } from '../CargandoChat';
 import { BloquearContacto } from '../BloquearContacto';
@@ -124,6 +125,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
                     <div style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.4, padding: '5px 8px', borderRadius: 6, background: m.de === 'vendedor' ? 'rgba(0,0,0,.18)' : 'rgba(220,38,38,.08)', color: m.de === 'vendedor' ? '#fff' : 'var(--df-danger)' }}>⚠ {m.error}</div>
                   )}
                 </div>
+                {m.de === 'vendedor' && <AutorMensaje autor={m.autor} />}
               </div>
             </div>
           );

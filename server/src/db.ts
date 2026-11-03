@@ -426,6 +426,9 @@ addColumn('messages', "cita_de TEXT NOT NULL DEFAULT ''");
 // Lectura INTERNA de una foto del cliente (visión IA): solo la ve el bot como pista,
 // nunca se muestra en el chat. Antes se guardaba en `texto` y sesgaba al bot.
 addColumn('messages', "ia_nota TEXT NOT NULL DEFAULT ''");
+// Quién del equipo de la tienda envió el mensaje (cuando hay varios colaboradores en un chat).
+addColumn('messages', "autor TEXT NOT NULL DEFAULT ''");
+addColumn('messages', "autor_id TEXT NOT NULL DEFAULT ''");
 {
   const n = db.prepare("UPDATE messages SET ia_nota = substr(texto, 29, length(texto) - 29), texto = '' WHERE tipo = 'image' AND texto LIKE '[El cliente envió una foto: %]'").run().changes;
   if (n) console.log(`[migración] ${n} lecturas de fotos movidas a nota interna`);

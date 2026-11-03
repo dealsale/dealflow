@@ -198,6 +198,8 @@ export interface Mensaje {
   /** Respuesta citada: instantánea del mensaje al que responde el cliente. */
   citaTexto?: string;
   citaDe?: string;
+  /** Quién del equipo de la tienda lo envió (inicial en el chat). */
+  autor?: string;
 }
 
 export type Etapa = 'Explorando' | 'Cotizando' | 'Listo para comprar' | 'Postventa';

@@ -152,6 +152,8 @@ export interface ApiMensaje {
   mediaNombre?: string | null;
   citaTexto?: string;
   citaDe?: string;
+  /** Quién del equipo de la tienda lo envió. */
+  autor?: string;
 }
 
 // Anuncio del que llegó un chat (atribución de campaña). Solo viene cuando el
@@ -757,6 +759,17 @@ export const apiImpersonate = (id: string) => req<{ ok: true }>(`/api/admin/stor
 export const apiStopImpersonate = () => req<{ ok: true }>('/api/auth/stop-impersonate', 'POST');
 export const apiSoporteTiendas = () => req<{ tiendas: { id: string; nombre: string }[]; actual: string | null }>('/api/auth/soporte/tiendas', 'GET');
 export const apiSoporteCambiar = (id: string) => req<{ ok: true }>(`/api/auth/soporte/cambiar/${id}`, 'POST');
+// Barra de soporte (dentro de una tienda): editarla sin volver al panel administrativo.
+export interface TiendaSoporte {
+  tienda: { nombre: string; correo: string; plan: string; planEstado: string; planVence: string | null; activa: boolean; creditos: number; temaPremium: boolean; creada: string; whatsapp: { conectado: boolean; numero: string } };
+  usuarios: { id: string; nombre: string; email: string; dueno: boolean }[];
+  planes: string[];
+}
+export const apiTiendaSoporte = () => req<TiendaSoporte>('/api/soporte-tienda', 'GET');
+export const apiTiendaSoporteEditar = (b: { nombre?: string; correo?: string; plan?: string; activa?: boolean; temaPremium?: boolean }) => req<{ ok: true }>('/api/soporte-tienda/editar', 'POST', b);
+export const apiTiendaSoporteClave = (userId: string, password: string) => req<{ ok: true }>('/api/soporte-tienda/clave', 'POST', { userId, password });
+export const apiTiendaSoporteCreditos = (cantidad: number) => req<{ ok: true }>('/api/soporte-tienda/creditos', 'POST', { cantidad });
+export const apiTiendaSoporteSuscripcion = (dias: number) => req<{ ok: true }>('/api/soporte-tienda/suscripcion', 'POST', { dias });
 export const apiEntrarBiblioteca = () => req<{ ok: true }>('/api/superadmin/biblioteca/entrar', 'POST');
 
 export interface AdminStoreDetalle {
