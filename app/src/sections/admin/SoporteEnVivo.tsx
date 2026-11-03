@@ -180,6 +180,7 @@ export function SoporteEnVivo({ puedeConfigurar = true, puedeLlamar = false }: {
       )}
 
       <PruebaConexion />
+      <AppEscritorio puedeSubir={puedeConfigurar} />
 
       <div style={card}>
         <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>📞 Ahora {activas.length > 0 && <span style={{ color: '#047857' }}>({activas.length})</span>}</div>
@@ -252,6 +253,41 @@ function PruebaConexion() {
           <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4, color: r.ok ? '#047857' : 'var(--df-danger-dark, #b91c1c)' }}>{r.veredicto}</div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** App «DealFlow Soporte» (Windows): enlace de descarga para las tiendas y, para el superadmin, subir el instalador. */
+function AppEscritorio({ puedeSubir }: { puedeSubir: boolean }) {
+  const [info, setInfo] = useState<{ disponible: boolean; version: string; tamano: number; url: string } | null>(null);
+  const [msg, setMsg] = useState('');
+  const [subiendo, setSubiendo] = useState(false);
+  const cargar = () => void fetch('/api/escritorio/descarga', { credentials: 'same-origin' }).then((r) => r.json()).then(setInfo).catch(() => {});
+  useEffect(() => { cargar(); }, []);
+  const subir = async (f: File) => {
+    const version = (window.prompt('¿Qué versión es? (ej. 1.0.0)', info?.version || '1.0.0') || '').trim();
+    if (!version) return;
+    setSubiendo(true); setMsg('');
+    const r = await fetch(`/api/superadmin/escritorio/instalador?version=${encodeURIComponent(version)}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream' }, body: f }).catch(() => null);
+    const d = await r?.json().catch(() => null) as { error?: string } | null;
+    setSubiendo(false);
+    setMsg(r?.ok ? '✓ Instalador subido: las tiendas ya lo pueden descargar.' : d?.error || 'No se pudo subir.');
+    cargar();
+  };
+  const enlace = `${window.location.origin}/escritorio`;
+  return (
+    <div style={{ ...card, padding: '12px 14px', display: 'grid', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ flex: 1, minWidth: 220, fontSize: 13 }}>💻 <b>App DealFlow Soporte (Windows)</b> · {info?.disponible ? `versión ${info.version || '—'} (${Math.round(info.tamano / 1048576)} MB)` : 'todavía no se ha subido el instalador'}. Con la app abierta, en la llamada aparece «Conectar a su computador».</span>
+        {info?.disponible && <button onClick={() => void navigator.clipboard?.writeText(enlace).then(() => setMsg(`Enlace copiado: ${enlace}`)).catch(() => setMsg(enlace))} style={btnS}>Copiar enlace para la tienda</button>}
+        {puedeSubir && (
+          <label style={{ ...btnS, display: 'inline-flex', alignItems: 'center', cursor: subiendo ? 'wait' : 'pointer' }}>
+            {subiendo ? 'Subiendo…' : info?.disponible ? 'Subir versión nueva' : 'Subir instalador (.exe)'}
+            <input type="file" accept=".exe" disabled={subiendo} style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void subir(f); }} />
+          </label>
+        )}
+      </div>
+      {msg && <div role="status" style={{ fontSize: 12.5, color: msg.startsWith('✓') || msg.startsWith('Enlace') ? '#047857' : 'var(--df-danger-dark, #b91c1c)' }}>{msg}</div>}
     </div>
   );
 }

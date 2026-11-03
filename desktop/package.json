@@ -1,0 +1,45 @@
+{
+  "name": "dealflow-soporte",
+  "productName": "DealFlow Soporte",
+  "version": "1.0.0",
+  "description": "DealFlow Soporte: el equipo de DealFlow te ayuda en tu computador, siempre con tu permiso.",
+  "main": "main.js",
+  "author": "DealFlow",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "bash compilar/instalador.sh"
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "25.1.8",
+    "resedit": "2.0.3"
+  },
+  "build": {
+    "appId": "sbs.dealflow.soporte",
+    "productName": "DealFlow Soporte",
+    "copyright": "DealFlow",
+    "files": ["main.js", "preload.js", "entrada.ps1", "recursos/**", "package.json"],
+    "asarUnpack": ["entrada.ps1"],
+    "afterPack": "./compilar/icono-exe.cjs",
+    "directories": { "output": "dist", "buildResources": "recursos" },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "recursos/icono.ico",
+      "signAndEditExecutable": false,
+      "artifactName": "DealFlowSoporte-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "installerIcon": "recursos/icono.ico",
+      "uninstallerIcon": "recursos/icono.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DealFlow Soporte",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
