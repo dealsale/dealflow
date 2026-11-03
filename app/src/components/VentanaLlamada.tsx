@@ -11,6 +11,12 @@ import {
  * aunque cambies de sección. La tienda la ve compacta; el equipo, grande (para ver la pantalla
  * que le comparten).
  */
+/**
+ * Control de DealFlow dentro de la pestaña (opción A): apagado. Ahora la pantalla se comparte
+ * completa y el acceso al computador va por el Escritorio remoto de Chrome. El código sigue
+ * aquí por si se vuelve a encender.
+ */
+const CONTROL_DEALFLOW = false;
 const dur = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 
 export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: boolean }) {
@@ -73,7 +79,7 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
   const superficieTienda = ll.remotos.find((r) => r.clave === 'tienda')?.superficie || '';
   const tiendaPantallaCompleta = tiendaComparte && !!superficieTienda && superficieTienda !== 'browser';
   const codigoVigente = soporte && ll.crdCodigo && Date.now() - ll.crdCodigo.t < 10 * 60_000 ? ll.crdCodigo.codigo : '';
-  const controlando = soporte && ll.miControl === 'activo' && tiendaComparte;
+  const controlando = CONTROL_DEALFLOW && soporte && ll.miControl === 'activo' && tiendaComparte;
   const altoVideo = completa ? '100vh' : aparte ? 'calc(100vh - 250px)' : soporte ? (grande ? 'calc(100vh - 340px)' : 320) : 220;
   const bChico: React.CSSProperties = { border: 0, borderRadius: 8, padding: '7px 11px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12, cursor: 'pointer' };
   const boton = (activo: boolean): React.CSSProperties => ({ flex: 1, minWidth: 0, border: 0, borderRadius: 10, padding: '10px 8px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', background: activo ? '#FEF3C7' : 'rgba(255,255,255,.12)', color: activo ? '#92400E' : '#fff' });
@@ -125,8 +131,8 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
         {ll.compartiendo && <div style={{ fontSize: 12, fontWeight: 700, color: '#FDE68A' }}>🖥️ Estás compartiendo tu pantalla{soporte ? '' : ': soporte la está viendo'}.</div>}
 
         {/* Control remoto — equipo */}
-        {soporte && activa && tiendaPantallaCompleta && ll.miControl !== 'activo' && <div style={{ fontSize: 12, color: 'rgba(255,255,255,.75)', lineHeight: 1.4 }}>La tienda comparte la pantalla completa: el control de DealFlow solo funciona compartiendo la pestaña. Para manejar todo su computador, usa «Pedir acceso a todo el computador».</div>}
-        {soporte && activa && tiendaComparte && !(tiendaPantallaCompleta && ll.miControl !== 'activo') && (
+        {CONTROL_DEALFLOW && soporte && activa && tiendaPantallaCompleta && ll.miControl !== 'activo' && <div style={{ fontSize: 12, color: 'rgba(255,255,255,.75)', lineHeight: 1.4 }}>La tienda comparte la pantalla completa: el control de DealFlow solo funciona compartiendo la pestaña. Para manejar todo su computador, usa «Pedir acceso a todo el computador».</div>}
+        {CONTROL_DEALFLOW && soporte && activa && tiendaComparte && !(tiendaPantallaCompleta && ll.miControl !== 'activo') && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
             {!ll.controlListo ? <span style={{ color: 'rgba(255,255,255,.6)' }}>Control remoto: conectando con la tienda…</span>
               : ll.miControl === 'activo' ? <>
@@ -157,10 +163,6 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
         {soporte && ll.controlAviso && <div style={{ fontSize: 12, color: ll.controlAviso.startsWith('Le pedimos') ? '#BFDBFE' : '#FCA5A5' }}>{ll.controlAviso}</div>}
 
         {/* Compartir — tienda: pantalla completa (sin la barra que pone Chrome arriba de la pestaña) */}
-        {!soporte && activa && ll.fase === 'conectada' && !ll.compartiendo && puedeCompartirPantalla() && (
-          <button onClick={() => compartirPantalla(true)} style={{ ...bChico, background: 'transparent', color: 'rgba(255,255,255,.8)', padding: 0, textDecoration: 'underline', justifySelf: 'start', alignSelf: 'flex-start' }}>o compartir la pantalla completa (sin la barra de arriba)</button>
-        )}
-        {!soporte && ll.compartiendo && ll.superficie && ll.superficie !== 'browser' && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.7)', lineHeight: 1.4 }}>Compartes la pantalla completa. Si soporte necesita manejar DealFlow por ti, comparte la pestaña de DealFlow; para todo el computador, usa «Dar acceso a todo mi computador».</div>}
         {!soporte && activa && ll.fase === 'conectada' && <AccesoComputador pedido={ll.crdPedido || ''} />}
 
         {/* Control remoto — tienda */}
@@ -193,7 +195,7 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
             {ll.mic && <button onClick={silenciarLlamada} style={boton(ll.silenciado)}>{ll.silenciado ? '🔇 Activar mic' : '🎤 Silenciar'}</button>}
             {puedeCompartirPantalla() && (ll.compartiendo
               ? <button onClick={dejarDeCompartir} style={boton(true)}>⏹ Dejar de compartir</button>
-              : <button onClick={() => compartirPantalla()} disabled={ll.fase !== 'conectada'} style={{ ...boton(false), opacity: ll.fase === 'conectada' ? 1 : 0.45 }}>🖥️ Compartir pantalla</button>)}
+              : <button onClick={() => compartirPantalla(true)} disabled={ll.fase !== 'conectada'} style={{ ...boton(false), opacity: ll.fase === 'conectada' ? 1 : 0.45 }}>🖥️ Compartir pantalla</button>)}
             <button onClick={() => void colgarLlamada()} style={{ ...boton(false), background: '#DC2626' }}>Colgar</button>
           </div>
         ) : null}
