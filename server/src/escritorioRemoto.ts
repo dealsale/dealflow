@@ -111,8 +111,9 @@ export function responder(id: string, storeId: string, acepta: boolean): boolean
 export function terminar(id: string, quien: 'admin' | 'equipo', motivo = ''): boolean {
   const s = sesion(id);
   if (!s || !['pedida', 'aceptada'].includes(txt(s.estado))) return false;
-  db.prepare("UPDATE sesiones_remotas SET estado = 'terminada', fin = datetime('now'), motivo = ? WHERE id = ?").run(motivo || (quien === 'equipo' ? 'La tienda la detuvo' : 'El equipo de DealFlow la cerró'), id);
-  enviarSenal(id, quien, 'fin', null);
+  const m = motivo || (quien === 'equipo' ? 'La tienda detuvo la sesión.' : 'El equipo de DealFlow cerró la sesión.');
+  db.prepare("UPDATE sesiones_remotas SET estado = 'terminada', fin = datetime('now'), motivo = ? WHERE id = ?").run(m, id);
+  enviarSenal(id, quien, 'fin', { motivo: m.slice(0, 160) });
   const dur = txt(s.aceptada) ? Math.round((Date.now() - fecha(txt(s.aceptada))) / 60000) : 0;
   registrarLog(txt(s.store_id), 'info', 'soporte', `Terminó el control remoto de ${txt(s.admin_nombre)}${dur ? ` (${dur} min)` : ''}: ${quien === 'equipo' ? 'lo detuvo la tienda' : 'lo cerró el equipo de DealFlow'}.`);
   return true;

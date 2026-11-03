@@ -12,7 +12,7 @@ async function servidoresIce(): Promise<RTCIceServer[]> {
 async function senal(id: string, tipo: string, data: unknown) {
   try { await fetch(`/api/escritorio/sesion/${id}/senal`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo, data }) }); } catch { /* reintenta el otro lado */ }
 }
-type Datos = { sdp?: RTCSessionDescriptionInit; c?: RTCIceCandidateInit; gen?: string } | null;
+type Datos = { sdp?: RTCSessionDescriptionInit; c?: RTCIceCandidateInit; gen?: string; motivo?: string } | null;
 export type EstadoConexion = 'esperando' | 'conectando' | 'conectada' | 'reconectando' | 'terminada';
 
 abstract class Base {
@@ -49,7 +49,7 @@ abstract class Base {
         if (r.ok) {
           const d = await r.json() as { senales: { n: number; tipo: string; data: Datos }[]; ultimo: number; estado: string };
           this.desde = Math.max(this.desde, d.ultimo);
-          for (const s of d.senales) { if (!this.vivo) break; if (s.tipo === 'fin') { this.terminar('La otra parte terminó la sesión.'); break; } try { await this.alRecibir(s.tipo, s.data); } catch (e) { console.warn('[escritorio]', e); } }
+          for (const s of d.senales) { if (!this.vivo) break; if (s.tipo === 'fin') { this.terminar(s.data?.motivo || 'La otra parte terminó la sesión.'); break; } try { await this.alRecibir(s.tipo, s.data); } catch (e) { console.warn('[escritorio]', e); } }
           if (this.vivo && ['terminada', 'rechazada'].includes(d.estado)) this.terminar(d.estado === 'rechazada' ? 'La tienda no permitió la conexión.' : 'La sesión terminó.');
         }
       } catch { /* sin red: reintenta */ }

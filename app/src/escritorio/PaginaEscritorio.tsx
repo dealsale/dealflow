@@ -83,7 +83,12 @@ export function PaginaEscritorio() {
       if (e === 'terminada') { sesion.current = null; p?.modoSesion(false); setFase('listo'); setAviso(det || 'La sesión terminó.'); }
     }, (a: AccionEntrada) => p?.entrada(a));
     sesion.current = s;
-    try { await s.iniciar(); } catch { s.terminar('No se pudo compartir la pantalla.'); }
+    try { await s.iniciar(); } catch (e) {
+      // Que el equipo de DealFlow sepa por qué (si no, se queda «Esperando…»).
+      const motivo = `En el computador no se pudo compartir la pantalla (${e instanceof Error ? e.message : String(e)}).`;
+      await fetch(`/api/escritorio/sesion/${id}/terminar`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }) }).catch(() => null);
+      s.terminar('No se pudo compartir la pantalla. Cierra la app desde el ícono junto al reloj, ábrela de nuevo e inténtalo otra vez.');
+    }
   };
   const detener = async () => {
     const s = sesion.current;
