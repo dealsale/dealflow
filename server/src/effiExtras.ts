@@ -296,17 +296,26 @@ export async function unirGuiasDeEffi(storeId: string, forzar = false): Promise<
   }
   const sinCero = (g: string) => g.replace(/\s/g, '').replace(/^0+/, '');
   const yaUnidas = new Set((db.prepare("SELECT guia FROM orders WHERE store_id = ? AND COALESCE(guia,'') != ''").all(storeId) as { guia: string }[]).map((o) => sinCero(o.guia)));
-  const libres = db.prepare("SELECT id, numero, cliente, tel, ciudad, estado, created_at FROM orders WHERE store_id = ? AND COALESCE(guia,'') = '' AND created_at > datetime('now','-80 days')").all(storeId) as Fila[];
+  // Solo pedidos SIN remisión propia de DealFlow ni orden de Dropi: los que DealFlow envió a Effi
+  // reciben SU guía por su remisión (no se les pega la guía de otro envío del mismo cliente).
+  const libres = db.prepare(`SELECT id, numero, cliente, tel, ciudad, estado, created_at FROM orders WHERE store_id = ? AND COALESCE(guia,'') = ''
+      AND COALESCE(effi_doc,'') = '' AND COALESCE(effi_guia,'') = '' AND COALESCE(dropi_order_id,'') = '' AND estado NOT IN ('Cancelado','Entregado','Devuelto')
+      AND created_at > datetime('now','-80 days')`).all(storeId) as Fila[];
+  // Remisiones de DealFlow: sus guías ya tienen dueño (las une la consulta por remisión).
+  const nuestras = new Set((db.prepare("SELECT effi_doc FROM orders WHERE store_id = ? AND COALESCE(effi_doc,'') != ''").all(storeId) as { effi_doc: string }[])
+    .map((r) => { try { const d = JSON.parse(r.effi_doc); return `${d.sucursal || ''}:${d.id || ''}`; } catch { return ''; } }).filter((x) => x !== ':'));
   const usados = new Set<string>();
   let unidas = 0;
   for (const g of guias) {
     const num = txt(g.guia);
     if (!num || yaUnidas.has(sinCero(num))) continue;
+    if (txt(g.id_ref) && nuestras.has(`${txt(g.sucursal_ref)}:${txt(g.id_ref)}`)) continue;
     const fechaGuia = new Date(txt(g.fecha_trans).replace(' ', 'T') + 'Z').getTime() || Date.now();
     const enVentana = (o: Fila) => { const t = new Date(txt(o.created_at).replace(' ', 'T') + 'Z').getTime(); return t <= fechaGuia + 86400_000 && t >= fechaGuia - 30 * 86400_000; };
     const cel = celulares(g.telefonos_destinatario, g.id_destinatario);
     let cands = libres.filter((o) => !usados.has(txt(o.id)) && enVentana(o) && cel.includes(String(o.tel || '').replace(/\D/g, '').slice(-10)));
-    if (!cands.length && txt(g.nombre_destinatario)) {
+    // Por el nombre SOLO si la guía no trae celular: con celular distinto es otra persona (aunque se llame igual).
+    if (!cands.length && !cel.length && txt(g.nombre_destinatario)) {
       const nom = norm(txt(g.nombre_destinatario));
       cands = libres.filter((o) => !usados.has(txt(o.id)) && enVentana(o) && norm(txt(o.cliente)) === nom);
     }

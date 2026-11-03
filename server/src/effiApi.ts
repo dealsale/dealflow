@@ -1682,7 +1682,7 @@ async function clienteEffi(c: EffiCfg, o: Fila, ubic: { provincia: string; ciuda
   return { error: `No se pudo crear el cliente en Effi: ${mensajeError(r)}` };
 }
 
-export interface ResultadoEffi { remision: string; sucursal: string; id: string; guia: string; transportadora: string; avisos: string[] }
+export interface ResultadoEffi { remision: string; sucursal: string; id: string; guia: string; transportadora: string; avisos: string[]; /** La guía quedó creada en Effi (aunque la transportadora aún no dé el número). */ guiaCreada?: boolean }
 
 /** Lo que se le mandaría a Effi (sin crear nada): para revisar antes de despachar. */
 // Un fallo inesperado no debe tumbar el servidor: se devuelve como error (y queda en la traza).
@@ -1970,7 +1970,7 @@ export function despacharEffi(storeId: string, orderId: string, reintento = fals
 
 function despacharEffiConCandado(storeId: string, orderId: string, reintento: boolean, convenioForzado: string, remitenteElegido: string, recordar: boolean, auto: boolean): Promise<ResultadoEffi | { error: string }> {
   return conPedido(storeId, orderId, async () => {
-    const o = db.prepare('SELECT numero, effi_remision, effi_doc, effi_intento, guia, transportadora FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+    const o = db.prepare('SELECT numero, effi_remision, effi_doc, effi_intento, effi_guia, guia, transportadora FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
     if (!o) return { error: 'Pedido no encontrado.' };
     const numDF = `DF-${txt(o.numero)}`;
     // 2) Ya tiene remisión vigente: no se crea otra (aunque lo disparen de nuevo días después).
@@ -1988,7 +1988,7 @@ function despacharEffiConCandado(storeId: string, orderId: string, reintento: bo
         }
       } else {
         trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Ya estaba en Effi (remisión ${rem}): no se envía otra vez` });
-        return { remision: rem, sucursal: txt(d.sucursal), id: txt(d.id), guia: txt(o.guia), transportadora: txt(o.transportadora), avisos: ['Este pedido ya estaba en Effi: no se volvió a enviar.'] };
+        return { remision: rem, sucursal: txt(d.sucursal), id: txt(d.id), guia: txt(o.guia), transportadora: txt(o.transportadora), avisos: ['Este pedido ya estaba en Effi: no se volvió a enviar.'], guiaCreada: !!txt(o.guia) || !!pj<Fila>(txt(o.effi_guia), {}).id };
       }
     }
     // 3) Pedido repetido (mismo celular y productos) que ya está en Effi.
@@ -2133,7 +2133,7 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
       conceptos: { articulo: body.articulo, descripcion: body.descripcion, cantidad: body.cantidad, precio: body.precio, descuento: body.descuento } }), String(body.convenio_dropshipping ?? '') || '-', orderId);
   registrarLog(storeId, 'info', 'despacho', `${numDF} enviado a Effi: remisión ${remision} (cliente ${cli.tercero}).${avisos.length ? ' ' + avisos.join(' ') : ''}`);
 
-  let guia = ''; let transportadora = '';
+  let guia = ''; let transportadora = ''; let guiaCreada = false;
   // Remitente: el que eligió la persona en el pedido; si no, la bodega del proveedor del
   // pedido (fijada a mano). En pedidos de un proveedor sin bodega conocida NO se usa el
   // remitente por defecto: la guía queda para crearla desde el pedido.
@@ -2153,9 +2153,9 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
   if (c.guia.activa && c.guia.transportadora && c.guia.servicio && c.guia.formaPagoFlete && remAuto) {
     const g = await crearGuia(storeId, c, { ...c.guia, remitente: remAuto }, o, { sucursal: txt(doc!.sucursal), id: txt(doc!.id) }, cli.tercero, ubic, reintento);
     if ('error' in g) avisos.push(g.error);
-    else { guia = g.guia; transportadora = g.transportadora; }
+    else { guia = g.guia; transportadora = g.transportadora; guiaCreada = true; if (!guia) avisos.push('La guía quedó creada en Effi: el número lo pone la transportadora en unos minutos (llega solo).'); }
   }
-  return { remision, sucursal: txt(doc!.sucursal), id: txt(doc!.id), guia, transportadora, avisos };
+  return { remision, sucursal: txt(doc!.sucursal), id: txt(doc!.id), guia, transportadora, avisos, guiaCreada };
 }
 
 export interface OpcionesGuia extends EffiGuiaCfg { cantPaquetes?: number; contenido?: string; nota?: string; recibeSabado?: boolean; valorDeclarado?: number; recordar?: boolean }
@@ -2233,7 +2233,17 @@ async function crearGuia(storeId: string, c: EffiCfg, g: OpcionesGuia, o: Fila, 
 }
 
 /** Genera la guía de un pedido que YA tiene remisión en Effi, con los datos que elige el dueño. */
+const generandoGuia = new Map<string, Promise<{ guia: string; transportadora: string; idTransaccion: string } | { error: string }>>();
 export function generarGuiaPedido(storeId: string, orderId: string, g: OpcionesGuia, reintento = false): Promise<{ guia: string; transportadora: string; idTransaccion: string } | { error: string }> {
+  // Una guía a la vez por pedido (doble clic, dos pestañas): el segundo intento espera el primero.
+  const k = `${storeId}|${orderId}`;
+  const enCurso = generandoGuia.get(k);
+  if (enCurso) return enCurso;
+  const p = generarGuiaPedidoInterno(storeId, orderId, g, reintento).finally(() => generandoGuia.delete(k));
+  generandoGuia.set(k, p);
+  return p;
+}
+function generarGuiaPedidoInterno(storeId: string, orderId: string, g: OpcionesGuia, reintento: boolean): Promise<{ guia: string; transportadora: string; idTransaccion: string } | { error: string }> {
   return conPedido(storeId, orderId, async () => {
     trazar(storeId, orderId, { etapa: 'guia', titulo: 'Generación de guía iniciada', datos: { opciones: g } });
     const r = await generarGuiaInterna(storeId, orderId, g, reintento).catch(errorInterno);
@@ -2261,7 +2271,20 @@ async function generarGuiaInterna(storeId: string, orderId: string, g: OpcionesG
   // automática está apagada: si está encendida, esos valores son los de todas las guías
   // automáticas y no deben cambiar sin que el dueño lo haga en Integraciones → Effi.
   if (!c.guia.activa) guardarCfgEffi(storeId, { guia: { ...c.guia, transportadora: g.transportadora, servicio: g.servicio, formaPagoFlete: g.formaPagoFlete, peso: g.peso, volumen: g.volumen, alto: g.alto, ancho: g.ancho, largo: g.largo } });
-  const yaTenia = !!pj<Fila>(txt(o.effi_guia), {}).id;
+  const yaTenia = !!pj<Fila>(txt(o.effi_guia), {}).id || !!txt(o.guia);
+  if (yaTenia) {
+    // NUNCA dos guías para el mismo pedido: si ya tiene una vigente en Effi, no se crea otra.
+    const ver = await effi<Fila[]>(c.apiKey, 'GET', '/api/guia_transporte', { query: { id_ref: txt(d.id), por_pagina: 20 } });
+    const anulada = (x: Fila) => /anulad/i.test(`${txt(x.estado_efficommerce)} ${txt(x.estado)} ${txt(x.nombre_est_guia)} ${txt(x.estado_guia_efficommerce)}`) || txt(x.vigente) === '0';
+    const vigentes = ver.ok ? (ver.body.data || []).filter((x) => txt(x.t_trans_ref) === String(T_TRANS_REMISION_V) && !anulada(x)) : null;
+    if (!reintento || vigentes === null || vigentes.length) {
+      const e = vigentes === null
+        ? 'No pudimos confirmar con Effi si la guía anterior sigue vigente: no se crea otra para no duplicarla. Inténtalo en un momento.'
+        : `Este pedido ya tiene una guía en Effi${txt(o.guia) ? ` (${txt(o.guia)})` : ' (la transportadora aún no le pone el número: llega sola en unos minutos)'}. No se crea otra para no duplicarla; si necesitas rehacerla, primero anúlala en Effi.`;
+      trazar(storeId, orderId, { etapa: 'guia', nivel: 'warn', titulo: 'Segunda guía frenada: el pedido ya tiene una', detalle: e });
+      return { error: e };
+    }
+  }
   const r = await crearGuia(storeId, c, g, o, { sucursal: txt(d.sucursal), id: txt(d.id) }, tercero, ubic, reintento || yaTenia);
   if ('error' in r) return { error: r.error.replace('La remisión quedó creada, pero Effi no creó la guía: ', 'Effi no creó la guía: ').replace('La remisión quedó creada, pero no se generó la guía: ', 'No se generó la guía: ') };
   if (r.guia) {
@@ -2505,6 +2528,13 @@ export async function consultarEstadoEffi(storeId: string, orderId: string): Pro
   const deRemision = (r.body.data || []).filter((x) => txt(x.t_trans_ref) === String(T_TRANS_REMISION_V) && (!txt(x.sucursal_ref) || txt(x.sucursal_ref) === txt(d.sucursal)))
     .sort((a, b) => Number(b.id) - Number(a.id));
   let g: Fila | undefined = deRemision.find((x) => !anulada(x)) || deRemision[0];
+  // Dos guías vigentes sobre la misma remisión: se avisa una vez para que anulen la que sobra.
+  const vig = deRemision.filter((x) => !anulada(x));
+  if (vig.length > 1 && !db.prepare("SELECT 1 FROM order_eventos WHERE order_id = ? AND titulo LIKE 'Hay % guías vigentes%' LIMIT 1").get(orderId)) {
+    const lista = vig.map((x) => txt(x.guia) || `#${txt(x.id_transaccion) || txt(x.id)}`).join(', ');
+    trazar(storeId, orderId, { etapa: 'guia', nivel: 'warn', titulo: `Hay ${vig.length} guías vigentes en Effi para este pedido`, detalle: `${lista}. Se usa la más reciente; anula en Effi la que sobra.` });
+    registrarLog(storeId, 'warn', 'despacho', `DF-${txt(o.numero)} tiene ${vig.length} guías vigentes en Effi (${lista}). Anula en Effi la que sobra para no despachar dos veces.`);
+  }
   // La guía que DealFlow creó: si no aparece por la remisión, se busca por su propio id.
   const gd = pj<Fila>(txt(o.effi_guia), {});
   if (!g && txt(gd.id)) {

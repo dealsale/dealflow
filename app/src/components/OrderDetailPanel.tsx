@@ -179,7 +179,8 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
       const r = await apiEffiDespachar(sel.rowId!, reintentar, convenio, guiaAuto ? g.d.remitente : '', guiaAuto && !!g.d.recordar);
       if (r.error || !r.data) { setPaso('listo'); setMsg(r.error || 'Effi no creó la remisión.'); return false; }
       let texto = `✓ Remisión ${r.data.remision} creada en Effi${r.data.guia ? ` · guía ${r.data.guia}` : ''}.${r.data.avisos?.length ? ' ' + r.data.avisos.join(' ') : ''}`;
-      if (hacerGuia && !r.data.guia) {
+      // Si la guía ya quedó creada en Effi (aunque sin número todavía), NO se pide otra: saldrían dos.
+      if (hacerGuia && !r.data.guia && !r.data.guiaCreada) {
         paso('Generando la guía de transporte…');
         const rg = await apiEffiGuia(sel.rowId!, g.d);
         texto += rg.error || !rg.data

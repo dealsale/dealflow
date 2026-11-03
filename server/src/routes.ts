@@ -2327,11 +2327,11 @@ api.post('/orders/:rowId/effi/anular', requireAuth, requireStore, requirePermiso
 api.post('/orders/:rowId/effi/despachar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
-  const o = db.prepare('SELECT effi_remision, effi_anuladas FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { effi_remision: string; effi_anuladas: string } | undefined;
+  const o = db.prepare('SELECT effi_remision, effi_anuladas, effi_guia, guia FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { effi_remision: string; effi_anuladas: string; effi_guia: string; guia: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
   // Si DealFlow ya anuló una remisión de este pedido, va con clave nueva (si no, Effi devolvería la anulada).
   const reintentar = req.body?.reintentar === true || !!o.effi_anuladas;
-  if (o.effi_remision && !o.effi_remision.includes('anulada') && !reintentar) return res.json({ ok: true, remision: o.effi_remision, aviso: 'Este pedido ya tiene remisión en Effi.' });
+  if (o.effi_remision && !o.effi_remision.includes('anulada') && !reintentar) return res.json({ ok: true, remision: o.effi_remision, aviso: 'Este pedido ya tiene remisión en Effi.', guia: o.guia || '', guiaCreada: !!o.guia || !!pj<Record<string, unknown>>(o.effi_guia || '', {}).id });
   const raw = String(req.body?.convenio || '').trim();
   const forzado = raw === 'propio' ? 'propio' : raw.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
   const remitente = String(req.body?.remitente || '').replace(/\D/g, '').slice(0, 20);
