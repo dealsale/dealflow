@@ -115,7 +115,7 @@ export function Pedidos({ df }: { df: DealFlowState }) {
           </div>
         )}
         <div style={modo === 'tarjetas' ? { display: 'flex', flexDirection: 'column', gap: 10 } : undefined}>
-          {fp.filtrados.slice(0, visibles).map((o) => <Fila key={o.id} o={o} modo={modo} />)}
+          {fp.filtrados.slice(0, visibles).map((o) => <Fila key={o.id} o={o} modo={modo} repetido={fp.vecesRepetido.get(o.id) || 0} />)}
         </div>
         {/* Con miles de pedidos se pintan de a 60: al acercarse al final se cargan más solos. */}
         {fp.filtrados.length > visibles && (
@@ -147,7 +147,8 @@ export const textoGuia = (o: DecoratedOrder) => {
   return w && w !== e && !e.includes(w) && !w.includes(e) ? o.estadoWoo || '' : '';
 };
 
-function Fila({ o, modo }: { o: DecoratedOrder; modo: Modo }) {
+const chipRep: React.CSSProperties = { display: 'inline-block', marginRight: 6, fontSize: 10.5, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: 'rgba(245,158,11,.16)', color: '#B45309', verticalAlign: 'middle' };
+function Fila({ o, modo, repetido = 0 }: { o: DecoratedOrder; modo: Modo; repetido?: number }) {
   const prov = o.despachoProveedor === 'effi' ? 'Effi' : o.despachoProveedor === 'dropi' ? 'Dropi' : '';
   const fecha = `${fechaCorta(o.fecha)}${o.hora ? ` · ${o.hora}` : ''}`;
   const numero = (
@@ -161,8 +162,8 @@ function Fila({ o, modo }: { o: DecoratedOrder; modo: Modo }) {
   );
   const cliente = (
     <div style={{ minWidth: 0 }} title={`${o.cliente}${o.tel ? ` · ${o.tel}` : ''}`}>
-      <div style={{ ...celda, fontWeight: 700, fontSize: 14, color: 'var(--df-text-strong)' }}>{o.cliente}</div>
-      <div style={{ ...celda, fontSize: 12, color: 'var(--df-text-muted)', marginTop: 2 }}>{o.ciudad || '—'}{o.departamento ? ` · ${o.departamento}` : ''}</div>
+      <div style={{ ...celda, fontWeight: 700, fontSize: 14, color: 'var(--df-text-strong)' }}>{repetido > 1 && <span title={`Hay ${repetido} pedidos con estos datos`} style={chipRep}>🔁 ×{repetido}</span>}{o.cliente}</div>
+      <div style={{ ...celda, fontSize: 12, color: 'var(--df-text-muted)', marginTop: 2 }}>{repetido > 1 && o.tel ? `${o.tel} · ` : ''}{o.ciudad || '—'}{o.departamento ? ` · ${o.departamento}` : ''}</div>
     </div>
   );
   const productos = <div style={{ minWidth: 0, fontSize: 13, lineHeight: 1.4, color: 'var(--df-text-body)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={o.itemsResumen}>{o.itemsResumen}</div>;

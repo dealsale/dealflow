@@ -1935,10 +1935,91 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
 }
 
 /** Despacha el pedido a Effi: cliente + remisión (+ guía si está activa). */
-export function despacharEffi(storeId: string, orderId: string, reintento = false, convenioForzado = '', remitenteElegido = '', recordar = false): Promise<ResultadoEffi | { error: string }> {
+// ── Candados contra pedidos repetidos en Effi ───────────────────────────
+// Un mismo pedido NUNCA se manda dos veces: 1) un envío a la vez por pedido; 2) si ya tiene
+// remisión vigente no se crea otra; 3) si otro pedido igual (mismo celular y productos, en los
+// últimos 3 días) ya está en Effi, el envío automático se frena y el manual pide confirmar.
+try { db.exec("ALTER TABLE orders ADD COLUMN effi_intento TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+const enviandoEffi = new Map<string, Promise<ResultadoEffi | { error: string }>>();
+const confirmadoRepetido = new Map<string, number>();
+const dig10 = (t: unknown) => String(t ?? '').replace(/\D/g, '').slice(-10);
+const firmaItems = (orderId: string) => (db.prepare('SELECT qty, COALESCE(variant_id, \'\') v, nombre FROM order_items WHERE order_id = ?').all(orderId) as { qty: number; v: string; nombre: string }[])
+  .map((i) => `${i.qty}x${i.v || i.nombre.toLowerCase().trim()}`).sort().join('|');
+/** Otro pedido de la tienda igual a este (mismo celular, mismos productos, ±3 días) que ya está en Effi. */
+export function repetidoEnEffi(storeId: string, orderId: string): { id: string; numero: string; remision: string } | null {
+  const o = db.prepare('SELECT tel, created_at FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as { tel: string; created_at: string } | undefined;
+  const d = dig10(o?.tel);
+  if (!o || d.length < 10) return null;
+  const firma = firmaItems(orderId);
+  const otros = db.prepare(`SELECT id, numero, effi_remision FROM orders WHERE store_id = ? AND id != ? AND effi_remision != '' AND effi_remision NOT LIKE '%anulada%'
+      AND estado != 'Cancelado' AND created_at BETWEEN datetime(?, '-3 days') AND datetime(?, '+3 days')
+      AND substr(replace(replace(replace(replace(tel,' ',''),'+',''),'-',''),'(',''), -10) = ?`).all(storeId, orderId, o.created_at, o.created_at, d) as { id: string; numero: number; effi_remision: string }[];
+  const igual = otros.find((x) => firmaItems(x.id) === firma);
+  return igual ? { id: igual.id, numero: `DF-${igual.numero}`, remision: igual.effi_remision } : null;
+}
+
+export function despacharEffi(storeId: string, orderId: string, reintento = false, convenioForzado = '', remitenteElegido = '', recordar = false, opts: { auto?: boolean } = {}): Promise<ResultadoEffi | { error: string }> {
+  // 1) Un envío a la vez por pedido: si ya hay uno en curso, se espera ESE (no se manda otro).
+  const k = `${storeId}|${orderId}`;
+  const enCurso = enviandoEffi.get(k);
+  if (enCurso) { trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: 'Ya se estaba enviando a Effi: no se manda dos veces' }); return enCurso; }
+  const p = despacharEffiConCandado(storeId, orderId, reintento, convenioForzado, remitenteElegido, recordar, !!opts.auto).finally(() => enviandoEffi.delete(k));
+  enviandoEffi.set(k, p);
+  return p;
+}
+
+function despacharEffiConCandado(storeId: string, orderId: string, reintento: boolean, convenioForzado: string, remitenteElegido: string, recordar: boolean, auto: boolean): Promise<ResultadoEffi | { error: string }> {
   return conPedido(storeId, orderId, async () => {
+    const o = db.prepare('SELECT numero, effi_remision, effi_doc, effi_intento, guia, transportadora FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+    if (!o) return { error: 'Pedido no encontrado.' };
+    const numDF = `DF-${txt(o.numero)}`;
+    // 2) Ya tiene remisión vigente: no se crea otra (aunque lo disparen de nuevo días después).
+    const rem = txt(o.effi_remision);
+    if (rem && !/anulada/i.test(rem)) {
+      const d = pj<Fila>(txt(o.effi_doc), {});
+      if (reintento && d.id) {
+        // Reenvío pedido a mano: solo si la remisión ya no existe o fue anulada en Effi.
+        const c = cfgEffi(storeId);
+        const ver = c ? await effi<Fila[]>(c.apiKey, 'GET', '/api/remision_v', { query: { sucursal: txt(d.sucursal), id: txt(d.id), vigente: 1, por_pagina: 1 } }) : null;
+        if (!ver?.ok || ver.body.data?.length) {
+          const e = `${numDF} ya tiene la remisión ${rem} vigente en Effi: no se crea otra. Si quieres rehacerla, primero anúlala desde el pedido.`;
+          trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: 'Reenvío frenado: la remisión sigue vigente en Effi', detalle: e });
+          return { error: e };
+        }
+      } else {
+        trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Ya estaba en Effi (remisión ${rem}): no se envía otra vez` });
+        return { remision: rem, sucursal: txt(d.sucursal), id: txt(d.id), guia: txt(o.guia), transportadora: txt(o.transportadora), avisos: ['Este pedido ya estaba en Effi: no se volvió a enviar.'] };
+      }
+    }
+    // 3) Pedido repetido (mismo celular y productos) que ya está en Effi.
+    const rep = repetidoEnEffi(storeId, orderId);
+    if (rep) {
+      const msg = `${numDF} parece repetido de ${rep.numero}, que ya está en Effi (remisión ${rep.remision}): mismo celular y mismos productos.`;
+      if (auto) {
+        trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: 'Envío automático frenado: pedido repetido', detalle: msg });
+        registrarLog(storeId, 'warn', 'despacho', `${msg} No se envió solo a Effi: revísalo y, si es otro pedido de verdad, envíalo desde el pedido.`);
+        return { error: `${msg} No se envió automáticamente.` };
+      }
+      const ya = confirmadoRepetido.get(`${storeId}|${orderId}`) || 0;
+      if (Date.now() - ya > 10 * 60_000) {
+        confirmadoRepetido.set(`${storeId}|${orderId}`, Date.now());
+        return { error: `${msg} Si de verdad es otro pedido, vuelve a tocar «Enviar a Effi» y se envía.` };
+      }
+      confirmadoRepetido.delete(`${storeId}|${orderId}`);
+      trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: 'Enviado aunque parecía repetido (lo confirmó la persona)', detalle: msg });
+    }
+    // 4) Un envío anterior quedó sin respuesta de Effi (pudo crearse allá): el automático no reintenta solo.
+    const intento = pj<{ at?: number; sinRespuesta?: boolean }>(txt(o.effi_intento), {});
+    if (auto && intento.sinRespuesta && Date.now() - (intento.at || 0) < 7 * 86400e3) {
+      const e = `Un envío anterior de ${numDF} a Effi no tuvo respuesta (pudo quedar creado allá). Revisa en Effi si ya existe una remisión con «DealFlow ${numDF}» antes de enviarlo desde el pedido.`;
+      registrarLog(storeId, 'warn', 'despacho', e);
+      return { error: e };
+    }
     trazar(storeId, orderId, { etapa: 'despacho', titulo: reintento ? 'Reenvío a Effi iniciado' : 'Envío a Effi iniciado' });
     const r = await despacharEffiInterno(storeId, orderId, reintento, convenioForzado, remitenteElegido, recordar).catch(errorInterno);
+    // Si Effi no respondió (red caída, tiempo agotado), se anota: puede haber quedado creada allá.
+    const sinRespuesta = 'error' in r && /No pudimos conectar con Effi/i.test(r.error);
+    db.prepare('UPDATE orders SET effi_intento = ? WHERE id = ?').run(JSON.stringify({ at: Date.now(), sinRespuesta, auto }), orderId);
     if ('error' in r) trazar(storeId, orderId, { etapa: 'despacho', nivel: 'error', titulo: 'Envío a Effi falló', detalle: r.error });
     else trazar(storeId, orderId, { etapa: 'despacho', nivel: 'ok', titulo: `Remisión ${r.remision} creada en Effi${r.guia ? ` · guía ${r.guia}` : ''}`, detalle: r.avisos.join(' '), datos: r });
     return r;
