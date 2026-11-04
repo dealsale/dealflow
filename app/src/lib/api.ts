@@ -1265,3 +1265,15 @@ export interface ReporteRendimiento {
 }
 export const apiRendimiento = () => req<ReporteRendimiento>('/api/admin/rendimiento', 'GET');
 export const apiRendimientoReiniciar = () => req<{ ok: boolean }>('/api/admin/rendimiento/reiniciar', 'POST');
+
+// ── API de Conversiones de Meta para las landings (píxel + token) ──
+export interface EstadoConversiones {
+  pixeles: { pixelId: string; tieneToken: boolean; final: string; desde: string }[];
+  testCode: string;
+  resumen: { evento: string; enviados: number; errores: number }[];
+  ultimos: { evento: string; estado: string; error: string; valor: number; calidad: string; fecha: string }[];
+}
+export const apiConversiones = () => req<EstadoConversiones>('/api/landings/conversiones', 'GET');
+export const apiTokenConversiones = (pixelId: string, token: string) => req<EstadoConversiones>('/api/landings/conversiones/token', 'PUT', { pixelId, token });
+export const apiCodigoPruebaConversiones = (testCode: string) => req<EstadoConversiones>('/api/landings/conversiones/codigo-prueba', 'PUT', { testCode });
+export const apiProbarConversiones = (pixelId: string) => req<{ ok: boolean; mensaje: string }>('/api/landings/conversiones/probar', 'POST', { pixelId });
