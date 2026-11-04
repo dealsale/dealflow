@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PlantillasPropiasEncendidas } from '../../components/PlantillasPropiasEncendidas';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import type { LibraryAdminItem } from '../../lib/api';
 import { fmt } from '../../lib/format';
@@ -114,6 +115,7 @@ function Tiendas({ df }: { df: DealFlowState }) {
   const ocultas = df.superStores.length - visibles;
   return (
     <>
+      <PlantillasPropiasEncendidas />
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 16px' }}>
           <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600 }}>Total</div>

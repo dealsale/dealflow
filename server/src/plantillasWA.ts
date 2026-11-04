@@ -122,12 +122,33 @@ export function plantillaDeAutomatizacion(storeId: string, maestra: string): { n
   if (!a) return null;
   try {
     if (!permisosPlantillas(storeId).automatizaciones) return null;
-    const f = db.prepare("SELECT meta_id FROM wa_tpl_auto WHERE store_id = ? AND clave = ? AND estado = 'activa'").get(storeId, a.clave) as { meta_id: string } | undefined;
+    const f = db.prepare("SELECT meta_id, mapa FROM wa_tpl_auto WHERE store_id = ? AND clave = ? AND estado = 'activa'").get(storeId, a.clave) as { meta_id: string; mapa: string } | undefined;
     if (!f) return null;
     const p = plantillaPropia(storeId, f.meta_id);
     if (!p || p.categoria.toUpperCase() !== 'UTILITY') return null;
+    // Cada variable tiene que tener un dato que ESTA automatización manda. Si no (la plantilla
+    // cambió en Meta y ahora tiene más variables, o el dato no viene en este mensaje), se usa
+    // la de DealFlow: nunca se deja al cliente sin el mensaje.
+    const orden = a.maestras[maestra] || [];
+    const mapa = pj<string[]>(f.mapa, []);
+    const total = p.variables + (p.varsEncabezado ? 1 : 0);
+    const malo = Array.from({ length: total }, (_, i) => mapa[i]).findIndex((c) => !esCampo(c) || !orden.includes(c as CampoTpl));
+    if (malo >= 0) {
+      avisarMapaIncompleto(storeId, a, p.nombre, malo, p.variables, mapa[malo]);
+      return null;
+    }
     return { nombre: p.nombre, idioma: p.idioma, encabezado: p.encabezado, cuerpo: p.cuerpo, auto: { clave: a.clave, maestra } };
   } catch { return null; }
+}
+
+const yaAvisado = new Map<string, number>();
+function avisarMapaIncompleto(storeId: string, a: Automatizacion, nombre: string, i: number, variables: number, campo: unknown): void {
+  const k = `${storeId}:${a.clave}:${nombre}:${i}`;
+  if (Date.now() - (yaAvisado.get(k) || 0) < 6 * 3600e3) return;
+  yaAvisado.set(k, Date.now());
+  const donde = i < variables ? `la variable {{${i + 1}}}` : 'el encabezado';
+  const que = esCampo(campo) ? `«${CAMPOS[campo].nombre}» no viene en este mensaje` : 'no tiene dato elegido';
+  registrarLog(storeId, 'warn', 'plantillas', `«${a.titulo}»: en la plantilla propia "${nombre}", ${donde} ${que}. Se envió la plantilla de DealFlow. Revisa la automatización en WhatsApp → Plantillas.`);
 }
 
 export interface AdjuntoGuia { ruta?: string; archivo?: string; url?: string }

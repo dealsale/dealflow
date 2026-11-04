@@ -3665,6 +3665,27 @@ api.post('/soporte-tienda/editar', requireAuth, (req, res) => {
   if (hecho.length) registrarAccionEquipo(t.admin.email, `Barra de soporte · ${s.nombre}: ${hecho.join(', ')}`, s.id);
   res.json({ ok: true });
 });
+// Superadmin: qué tiendas tienen encendidas las plantillas propias, quién lo hizo, y apagarlas.
+api.get('/superadmin/plantillas-propias', requireAuth, requireSuperAdmin, (_req, res) => {
+  const filas = db.prepare(`SELECT id, nombre, COALESCE(wa_tpl_constructor,0) c, COALESCE(wa_tpl_auto,0) a, COALESCE(wa_tpl_doc,0) d FROM stores
+    WHERE COALESCE(wa_tpl_constructor,0) = 1 OR COALESCE(wa_tpl_auto,0) = 1 OR COALESCE(wa_tpl_doc,0) = 1 ORDER BY nombre`).all() as { id: string; nombre: string; c: number; a: number; d: number }[];
+  const tiendas = filas.map((s) => {
+    const autos = db.prepare("SELECT clave, meta_id, estado FROM wa_tpl_auto WHERE store_id = ?").all(s.id) as { clave: string; meta_id: string; estado: string }[];
+    const nombreTpl = (metaId: string) => (db.prepare('SELECT nombre FROM wa_plantillas_meta WHERE store_id = ? AND meta_id = ?').get(s.id, metaId) as { nombre: string } | undefined)?.nombre || metaId;
+    const historial = db.prepare(`SELECT usuario, ruta, at FROM accesos_equipo WHERE store_id = ? AND metodo = 'ACCION' AND ruta LIKE '%plantillas%' ORDER BY id DESC LIMIT 5`).all(s.id) as { usuario: string; ruta: string; at: string }[];
+    return { id: s.id, nombre: s.nombre, crear: !!s.c, automatizaciones: !!s.a, documentos: !!s.d,
+      elegidas: autos.map((x) => ({ clave: x.clave, plantilla: nombreTpl(x.meta_id), estado: x.estado })), historial };
+  });
+  res.json({ tiendas });
+});
+api.post('/superadmin/plantillas-propias/:storeId/apagar', requireAuth, requireSuperAdmin, (req, res) => {
+  const s = db.prepare('SELECT id, nombre FROM stores WHERE id = ?').get(String(req.params.storeId)) as { id: string; nombre: string } | undefined;
+  if (!s) return res.status(404).json({ error: 'Tienda no encontrada.' });
+  const hecho = guardarPermisosPlantillas(s.id, { crear: false, automatizaciones: false, documentos: false });
+  const email = (db.prepare('SELECT email FROM users WHERE id = ?').get(req.user!.id) as { email: string } | undefined)?.email || req.user!.email;
+  registrarAccionEquipo(email, `Superadmin · ${s.nombre}: ${hecho.join(', ')} (plantillas propias apagadas)`, s.id);
+  res.json({ ok: true });
+});
 api.post('/soporte-tienda/clave', requireAuth, (req, res) => {
   const t = tiendaSoporte(req, res); if (!t) return;
   const { userId, password } = (req.body || {}) as { userId?: string; password?: string };

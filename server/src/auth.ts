@@ -57,6 +57,8 @@ export function setAuthCookie(res: Response, user: AuthUser, host?: string) {
   const { iat, exp, nbf, ...limpio } = user as AuthUser & { iat?: number; exp?: number; nbf?: number };
   void iat; void exp; void nbf;
   const token = jwt.sign(limpio, JWT_SECRET, { expiresIn: '30d' });
+  // La pestaña que hizo esta petición pasa a ser de esta tienda (ver «pestaña de otra tienda»).
+  try { res.setHeader('X-DF-Tienda-Cambio', limpio.storeId || ''); } catch { /* respuesta ya enviada */ }
   const dom = cookieDomain(host);
   // Auto-sanación: si NO usamos dominio padre, borramos cualquier cookie de
   // sesión con dominio padre que haya quedado de un deploy anterior. Dos cookies
@@ -76,8 +78,12 @@ export function setAuthCookie(res: Response, user: AuthUser, host?: string) {
 }
 
 export function clearAuthCookie(res: Response, host?: string) {
+  try { res.setHeader('X-DF-Tienda-Cambio', ''); } catch { /* respuesta ya enviada */ }
   res.clearCookie(COOKIE, { domain: cookieDomain(host) });
 }
+
+/** Lo que cambia de tienda (entrar, salir, cambiar, iniciar sesión) se permite desde cualquier pestaña. */
+const CAMBIAN_TIENDA = /^\/api\/(auth\/|cambiar-tienda\/|crear-tienda$|admin\/stores\/[^/]+\/impersonate$|superadmin\/biblioteca\/(entrar$|[^/]+\/editar$))/;
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.cookies?.[COOKIE];
@@ -96,6 +102,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     const store = db.prepare('SELECT activa FROM stores WHERE id = ?').get(req.user.storeId) as { activa: number } | undefined;
     if (!store) return res.status(401).json({ error: 'Tu cuenta ya no existe.' });
     if (!store.activa) return res.status(403).json({ error: 'Tu cuenta está desactivada. Escríbenos para reactivarla.' });
+  }
+  // Pestaña de otra tienda: la sesión (la cookie) es UNA para todas las pestañas. Si en otra
+  // pestaña se entró a otra tienda, esta pestaña sigue mostrando la anterior pero sus cambios
+  // caerían en la nueva. Cada pestaña manda la tienda que tiene cargada (X-DF-Tienda): si no
+  // coincide con la de la sesión, NO se guarda nada y la pestaña pide recargar.
+  const actual = req.user.storeId || '';
+  res.setHeader('X-DF-Sesion-Tienda', actual);
+  const pestana = req.headers['x-df-tienda'];
+  if (typeof pestana === 'string' && req.method !== 'GET' && req.method !== 'HEAD' && pestana !== actual && !CAMBIAN_TIENDA.test(req.originalUrl.split('?')[0])) {
+    return res.status(409).json({ error: 'Esta pestaña es de otra tienda: en otra pestaña entraste a una tienda distinta. Recarga esta página antes de guardar (no se guardó nada).', otraTienda: true });
   }
   next();
 }

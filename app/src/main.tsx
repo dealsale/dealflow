@@ -10,6 +10,10 @@ const Drive = lazy(() => import('./drive/Drive').then((m) => ({ default: m.Drive
 const PaginaEscritorio = lazy(() => import('./escritorio/PaginaEscritorio').then((m) => ({ default: m.PaginaEscritorio })))
 const PaginaLlamada = lazy(() => import('./components/PaginaLlamada').then((m) => ({ default: m.PaginaLlamada })))
 import { iniciarTraduccion } from './i18n/traductor'
+import { instalarPestanaTienda } from './lib/pestanaTienda'
+
+// Antes que nada: cada pestaña recuerda su tienda (no guardar en la tienda equivocada).
+instalarPestanaTienda()
 
 // Ventana aparte de la llamada de soporte (/llamada): solo la llamada, sin recargas automáticas.
 const esLlamada = /^\/llamada(\/|$)/.test(window.location.pathname)
