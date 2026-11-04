@@ -45,6 +45,7 @@ import('./calidad.js').then((m) => m.iniciarVigilanciaCalidad()).catch((e) => co
 import('./shopifyApp.js').then((m) => m.iniciarCobroShopify()).catch((e) => console.error('[shopify-cobro]', e));
 import('./metaInsights.js').then((m) => m.iniciarInsights()).catch((e) => console.error('[ads]', e));
 import('./metaCapi.js').then((m) => m.iniciarCapi()).catch((e) => console.error('[capi]', e));
+import('./metaPixelWeb.js').then((m) => m.iniciarPixelWeb()).catch((e) => console.error('[pixel-web]', e));
 setTimeout(() => { void import('./media.js').then((m) => m.reconvertirGuias()).catch(() => {}); }, 30_000);
 iniciarSeguimiento();
 import('./versiones.js').then((m) => m.iniciarResumenLeads()).catch((e) => console.error('[leads] resumen', e));
@@ -186,15 +187,24 @@ app.options('/l/api/:id/pedido', (_req, res) => { res.set({ 'Access-Control-Allo
 app.post('/l/api/:id/pedido', async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-  const r = await (await import('./landings.js')).pedidoLanding(req.params.id, req.body || {}, ip);
+  const r = await (await import('./landings.js')).pedidoLanding(req.params.id, req.body || {}, ip, String(req.headers['user-agent'] || ''));
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
+});
+// Eventos del píxel que también van por la API de Conversiones (sendBeacon: texto plano, sin preflight).
+app.post('/l/api/:id/evento', express.text({ type: '*/*', limit: '4kb' }), (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.status(204).end();
+  let b: Record<string, unknown> = {};
+  try { b = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); } catch { return; }
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  void import('./landings.js').then((L) => L.eventoLanding(req.params.id, b, ip, String(req.headers['user-agent'] || ''))).catch(() => {});
 });
 app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'escritorio-11032217',
+    build: 'pixel-11041859',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

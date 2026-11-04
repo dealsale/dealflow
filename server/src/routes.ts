@@ -4744,6 +4744,33 @@ api.post('/landings', requireAuth, requireStore, sinMembresia, async (req, res) 
   const L = await import('./landings.js');
   res.json({ landing: L.crearLanding(req.user!.storeId!, String(req.body?.nombre || ''), String(req.body?.productId || '')) });
 });
+// API de Conversiones de Meta para las landings (píxel + token, como EasySell en Shopify).
+// El token nunca vuelve al navegador: solo sus últimos 4 caracteres.
+const pixelesDeTienda = async (sid: string) => {
+  const L = await import('./landings.js');
+  const filas = db.prepare('SELECT datos FROM landings WHERE store_id = ?').all(sid) as { datos: string }[];
+  return [L.configTienda(sid).pixelMeta, ...filas.map((f) => L.limpiarDatos(pj(f.datos, {})).pixelMeta)].filter(Boolean);
+};
+api.get('/landings/conversiones', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  res.json((await import('./metaPixelWeb.js')).estado(sid, await pixelesDeTienda(sid)));
+});
+api.put('/landings/conversiones/token', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const m = await import('./metaPixelWeb.js');
+  const r = m.guardarToken(sid, String(req.body?.pixelId || ''), String(req.body?.token || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(m.estado(sid, await pixelesDeTienda(sid)));
+});
+api.put('/landings/conversiones/codigo-prueba', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const m = await import('./metaPixelWeb.js');
+  m.guardarCodigoPrueba(sid, String(req.body?.testCode || ''));
+  res.json(m.estado(sid, await pixelesDeTienda(sid)));
+});
+api.post('/landings/conversiones/probar', requireAuth, requireStore, async (req, res) => {
+  res.json(await (await import('./metaPixelWeb.js')).probar(req.user!.storeId!, String(req.body?.pixelId || '')));
+});
 // Datos de la tienda (página de inicio con todos los productos).
 api.put('/landings/tienda', requireAuth, requireStore, async (req, res) => {
   res.json({ tienda: (await import('./landings.js')).guardarConfigTienda(req.user!.storeId!, req.body?.tienda) });

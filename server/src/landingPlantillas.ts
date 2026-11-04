@@ -105,6 +105,13 @@ const I = {
   compartir: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 5l7 7-7 7v-4c-5 0-8 1.5-10 5 .5-6 3.5-10 10-11z"/></svg>',
 };
 
+/**
+ * __dfEv(evento, datos, extra): el evento va al píxel del navegador con un eventID y, ~1 s
+ * después, el mismo eventID a DealFlow, que lo reenvía por la API de Conversiones (si la tienda
+ * puso el token). Meta junta los dos y lo cuenta una vez.
+ */
+export const EV_PIXEL = (landingId: string) => `window.__dfEv=function(ev,datos,extra){var id=ev.slice(0,2)+'.'+Date.now().toString(36)+'.'+Math.random().toString(36).slice(2,10);try{fbq('track',ev,datos,{eventID:id})}catch(e){}setTimeout(function(){try{var ck=function(n){var m=document.cookie.match(new RegExp('(?:^|; )'+n+'=([^;]*)'));return m?decodeURIComponent(m[1]):''};var o={evento:ev,eventId:id,fbp:ck('_fbp'),fbc:ck('_fbc'),url:location.href};for(var k in (extra||{}))o[k]=extra[k];var u='/l/api/'+encodeURIComponent(${JSON.stringify(landingId)})+'/evento',b=JSON.stringify(o);if(!(navigator.sendBeacon&&navigator.sendBeacon(u,b)))fetch(u,{method:'POST',body:b,keepalive:true})}catch(e){}},1200)};`;
+
 function premium(d: LandingDatos, o: OpcionesRender): string {
   const bundles: BundleL[] = d.bundles.length ? d.bundles : [{ cantidad: 1, titulo: 'Lleva 1', subtitulo: '', precio: d.precio, precioAntes: d.precioAntes, insignia: '', imagen: '' }];
   const inicial = Math.min(d.bundleInicial, bundles.length - 1);
@@ -149,7 +156,7 @@ ${cabeceraSeo({ titulo: tituloSeo, descripcion: descSeo, imagen: imagenSeo, url:
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 ${d.galeria[0] ? `<link rel="preload" as="image" href="${esc(d.galeria[0])}">` : ''}
-${pixel ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixel}');fbq('track','PageView');fbq('track','ViewContent',{content_name:${json(d.nombre)},value:${sel.precio},currency:'COP'});</script>` : ''}
+${pixel ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixel}');fbq('track','PageView');${EV_PIXEL(o.id || '')}__dfEv('ViewContent',{content_name:${json(d.nombre)},value:${sel.precio},currency:'COP'},{bundle:${inicial}});</script>` : ''}
 <style>
 :root{--p:${d.colorPrincipal};--b:${d.colorBoton};--a:${d.colorAcento};--t:#121212;--m:#6b7280;--bd:#e5e7eb;--g:#f3f3f3}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
@@ -415,7 +422,7 @@ var ICO={persona:'<svg width="16" height="16" viewBox="0 0 24 24" fill="currentC
 function campo(nombre,label,ic,input,obl){return '<div class="campo" data-c="'+nombre+'"><label>'+label+(obl?' <i>*</i>':'')+'</label><div class="grupo">'+(ic?'<span class="ic">'+ICO[ic]+'</span>':'')+input+'</div></div>'}
 function abrir(){
   var b=C.bundles[bi];
-  if(window.fbq)fbq('track','InitiateCheckout',{value:b.precio,currency:'COP',num_items:b.cantidad});
+  if(window.__dfEv)__dfEv('InitiateCheckout',{value:b.precio,currency:'COP',num_items:b.cantidad},{bundle:bi});
   var deps=Object.keys(C.geo);
   caja.innerHTML='<div class="top"><h3>'+escH(C.tituloForm)+'</h3><button class="cerrar" type="button" aria-label="Cerrar">×</button></div><div data-ofertas></div>'+
   '<div class="resumen" id="resumen"></div><form id="f" novalidate>'+
@@ -437,6 +444,7 @@ function abrir(){
 }
 $$('[data-abrir]').forEach(function(b){b.onclick=abrir});
 function confeti(){var c=document.createElement('div');c.className='confeti';var col=['#f43f5e','#f59e0b','#10b981','#3b82f6','#a855f7'];for(var i=0;i<70;i++){var p=document.createElement('i');p.style.left=Math.random()*100+'%';p.style.background=col[i%5];p.style.animationDelay=Math.random()*.6+'s';p.style.animationDuration=2+Math.random()*1.6+'s';c.appendChild(p)}document.body.appendChild(c);setTimeout(function(){c.remove()},4200)}
+function dfCk(n){try{var m=document.cookie.match(new RegExp('(?:^|; )'+n+'=([^;]*)'));return m?decodeURIComponent(m[1]):''}catch(e){return ''}}
 function enviar(e){
   e.preventDefault();var f=e.target,err=$('#err'),btn=$('#comprar'),b=C.bundles[bi];
   var v=function(n){var x=f.elements[n];return x?String(x.value||'').trim():''};
@@ -455,7 +463,7 @@ function enviar(e){
   err.textContent='';
   if(C.vista){err.textContent='Vista previa: los pedidos se reciben cuando la landing esté publicada.';return}
   btn.disabled=true;btn.textContent='Enviando tu pedido…';
-  fetch('/l/api/'+encodeURIComponent(C.id)+'/pedido',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bundle:bi,unidades:unidades,nombre:v('nombre'),apellido:v('apellido'),tel:tel,correo:v('correo'),departamento:v('departamento'),ciudad:v('ciudad'),direccion:v('direccion'),barrio:v('barrio'),url:location.href})})
+  fetch('/l/api/'+encodeURIComponent(C.id)+'/pedido',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bundle:bi,unidades:unidades,nombre:v('nombre'),apellido:v('apellido'),tel:tel,correo:v('correo'),departamento:v('departamento'),ciudad:v('ciudad'),direccion:v('direccion'),barrio:v('barrio'),url:location.href,fbp:dfCk('_fbp'),fbc:dfCk('_fbc')})})
   .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
   .then(function(r){
     if(!r.ok)throw new Error(r.j.error||'No pudimos recibir tu pedido.');
