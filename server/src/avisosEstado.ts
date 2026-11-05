@@ -17,6 +17,7 @@
  */
 import { db, registrarLog, uid } from './db.js';
 import { trazar } from './trazabilidad.js';
+import { fraseEstadoPlantilla, textoEstadoChat } from './mensajesEstado.js';
 
 export const PLANTILLA_ESTADO = 'estado_envio_pedido';
 /** Estados que se avisan solos (los cambia la transportadora). "Guía generada" la avisa avisoGuia.ts. */
@@ -51,53 +52,6 @@ const txt = (v: unknown) => (v == null ? '' : String(v));
 export function encolarAviso(storeId: string, orderId: string, estado: string, origen = 'manual'): void {
   db.prepare('INSERT INTO avisos_estado (store_id, order_id, estado, origen) VALUES (?,?,?,?)').run(storeId, orderId, estado, origen);
   setTimeout(() => void procesarAvisos().catch(() => {}), 1500).unref?.();
-}
-
-/** Frase del estado para la plantilla (una sola línea: WhatsApp no deja saltos en variables). */
-function fraseEstado(estado: string, transp: string): string {
-  switch (estado) {
-    case 'Confirmado': return 'quedó confirmado ✅ y ya lo estamos preparando para enviártelo';
-    case 'En tránsito': return `va en camino 🚚${transp ? ` con ${transp}` : ''}`;
-    case 'En reparto': return 'salió a reparto 🛵: hoy te lo entregan, ten el celular a mano';
-    case 'Novedad': return `tiene una novedad en la entrega ⚠️${transp ? ` reportada por ${transp}` : ''}: respóndenos para ayudarte a recibirlo`;
-    case 'Entregado': return 'fue entregado 🎉 Muchas gracias por tu compra';
-    case 'Cancelado': return 'fue cancelado ❌ Si fue un error, respóndenos y lo retomamos';
-    default: return `cambió de estado: ${estado}`;
-  }
-}
-
-/** Seguimiento (D+1 / D+2): cómo va el pedido HOY, en una línea para la plantilla. */
-function fraseSeguimiento(estado: string, transp: string): string {
-  switch (estado) {
-    case 'Confirmado': return 'está confirmado ✅ y lo estamos alistando para enviártelo';
-    case 'Guía generada': return `ya tiene guía 🧾 y está listo para que ${transp || 'la transportadora'} lo recoja`;
-    case 'En tránsito': return `va en camino 🚚${transp ? ` con ${transp}` : ''}`;
-    case 'En reparto': return 'salió a reparto 🛵: hoy te lo entregan, ten el celular a mano';
-    case 'Novedad': return `tiene una novedad en la entrega ⚠️${transp ? ` reportada por ${transp}` : ''}: respóndenos para ayudarte a recibirlo`;
-    default: return fraseEstado(estado, transp);
-  }
-}
-const SEG_EN: Record<string, string> = {
-  Confirmado: 'is confirmed ✅ and we are getting it ready to ship',
-  'Guía generada': 'already has a tracking number 🧾 and is ready for pickup',
-  'En tránsito': 'is on its way 🚚',
-  'En reparto': 'is out for delivery 🛵: keep your phone handy',
-  Novedad: 'has a delivery issue ⚠️: reply to this message and we will help you',
-};
-/** Mensaje del bot para el seguimiento (ventana abierta). */
-function textoSeguimiento(idi: 'es' | 'en', estado: string, d: { nombre: string; numDF: string; guia: string; transp: string }): string {
-  const saludo = idi === 'en' ? `Hi${d.nombre ? ' ' + d.nombre : ''} 👋 Quick update on your order #${d.numDF}: it ` : `Hola${d.nombre ? ' ' + d.nombre : ''} 👋 Te contamos cómo va tu pedido #${d.numDF}: `;
-  const frase = idi === 'en' ? (SEG_EN[estado] || `status: ${estado}`) : fraseSeguimiento(estado, d.transp);
-  const cola = idi === 'en' ? '\n\nAny questions? Just reply here.' : '\n\n¿Alguna duda? Respóndenos por aquí.';
-  return textoEstado(idi, estado, d, `${saludo}${frase}.`) + cola;
-}
-
-/** Mensaje del bot (ventana de 24 h abierta): más completo que la plantilla. */
-function textoEstado(idi: 'es' | 'en', estado: string, d: { nombre: string; numDF: string; guia: string; transp: string }, base: string): string {
-  const extra = d.guia && !['Confirmado', 'Cancelado'].includes(estado)
-    ? (idi === 'en' ? `\n\n🧾 Tracking: ${d.guia}${d.transp ? ` (${d.transp})` : ''}` : `\n\n🧾 Guía: ${d.guia}${d.transp ? ` (${d.transp})` : ''}`)
-    : '';
-  return `${base}${extra}`;
 }
 
 const horaCO = () => Number(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota', hour: 'numeric', hour12: false })) % 24;
@@ -183,7 +137,7 @@ async function enviarAviso(a: Fila): Promise<void> {
   // El seguimiento D+1/D+2 es opcional: si Meta bajó la calidad, no sale (los avisos de cambio de estado sí).
   if (seguimiento && frenoActivo(storeId)) return cerrar(a, 'omitido', `Seguimiento ${MOTIVO_FRENO}.`);
   const { sendWhatsappText, sendWhatsappTemplate } = await import('./wa.js');
-  const { idiomaDe, MSG_ESTADO } = await import('./idioma.js');
+  const { idiomaDe } = await import('./idioma.js');
   const { nombreTransportadora } = await import('./transportadoras.js');
 
   const chat = chatDelPedido(storeId, o);
@@ -200,8 +154,14 @@ async function enviarAviso(a: Fila): Promise<void> {
   const nombre = txt(o.cliente).trim().split(/\s+/)[0] || '';
   const tienda = (db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined)?.nombre || '';
   const idi = idiomaDe(storeId, chat?.id);
-  const base = MSG_ESTADO[idi][estado]?.(Number(o.numero)) || `Tu pedido #${numDF}: ${estado}.`;
-  const texto = seguimiento ? textoSeguimiento(idi, estado, { nombre, numDF, guia, transp }) : textoEstado(idi, estado, { nombre, numDF, guia, transp }, base);
+  // Textos simples: dónde está el pedido y qué sigue (ver mensajesEstado.ts).
+  const pagado = /\bPagado\b/.test(txt(o.nota));
+  const datosE = {
+    nombre, numDF, guia, transp, pagado,
+    total: Number(o.total) > 0 ? '$' + Number(o.total).toLocaleString('es-CO') : '',
+    motivo: estado === 'Novedad' ? txt(o.estado_woo).replace(/^novedad:?\s*/i, '').trim().toLowerCase().slice(0, 80) : '',
+  };
+  const texto = textoEstadoChat(idi, estado, datosE, seguimiento);
   const telDestino = chat ? chat.tel : '57' + celular;
   const destino = chat ? (chat.wa_id || chat.tel) : telDestino;
 
@@ -222,7 +182,7 @@ async function enviarAviso(a: Fila): Promise<void> {
   // 2) Ventana cerrada (o sin chat) → plantilla aprobada, con datos reales (si falta uno, no se inventa).
   let tpl = plantillaAprobada(storeId, PLANTILLA_ESTADO);
   let params: string[] = [];
-  if (tpl) params = [nombre, tienda, numDF, seguimiento ? fraseSeguimiento(estado, transp) : fraseEstado(estado, transp), guia || (estado === 'Confirmado' ? 'te la enviamos apenas salga tu pedido' : numDF)];
+  if (tpl) params = [nombre, tienda, numDF, fraseEstadoPlantilla('es', estado, datosE), guia || (estado === 'Confirmado' ? 'te la mandamos cuando la tengamos' : numDF)];
   else if (estado === 'En tránsito' && guia && (tpl = plantillaAprobada(storeId, PLANTILLA_GUIA))) params = [nombre, tienda, numDF, transp || 'la transportadora', guia];
   else if (estado === 'Novedad' && (tpl = plantillaAprobada(storeId, 'novedad_envio_pedido'))) params = [nombre, tienda, numDF, transp || 'la transportadora', (txt(o.estado_woo).replace(/^novedad:?\s*/i, '') || 'novedad en la entrega').toLowerCase()];
   if (!tpl) return reintentar(a, `${chat ? 'El cliente no escribe hace más de 24 h' : 'El pedido no tiene chat'} y la plantilla "${PLANTILLA_ESTADO}" aún no está aprobada por Meta para tu WhatsApp. Apenas se apruebe, sale sola.`);
@@ -348,7 +308,7 @@ export function iniciarAvisosEstado(): void {
   if (process.env.NODE_ENV === 'production') {
     setTimeout(async () => {
       // También la guía con foto (guia_envio_imagen): sin ella, a quien no escribe hace 24 h le llega solo el texto.
-      for (const nombre of [PLANTILLA_ESTADO, 'guia_envio_imagen']) {
+      for (const nombre of [PLANTILLA_ESTADO, 'guia_envio_imagen', 'confirmacion_pedido_v2', 'guia_pedido_v2', 'guia_pedido_imagen_v2', 'novedad_pedido_v2']) {
         const t = db.prepare('SELECT id FROM meta_templates WHERE nombre = ?').get(nombre) as { id: string } | undefined;
         if (!t) continue;
         const n = (db.prepare("SELECT COUNT(*) n FROM meta_template_pub WHERE template_id = ? AND estado != 'error'").get(t.id) as { n: number }).n;

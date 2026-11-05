@@ -533,7 +533,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   // Pedido ya creado que espera el "sí" del cliente (confirmación enviada por plantilla): la IA
   // resuelve dudas y pide la confirmación, pero NO crea otro pedido (el "sí" lo confirma el sistema).
   const pendConf = db.prepare(`SELECT numero, total FROM orders WHERE store_id = ? AND lead_id = ? AND confirmacion = 'esperando' AND estado IN ('Nuevo','Confirmado') AND COALESCE(effi_remision,'') = '' AND COALESCE(dropi_order_id,'') = '' AND COALESCE(guia,'') = '' AND created_at > datetime('now','-7 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as { numero: number; total: number } | undefined;
-  const pendTxt = pendConf ? `\n\nPEDIDO PENDIENTE DE CONFIRMAR: este cliente ya tiene el pedido DF-${pendConf.numero} (total $${Number(pendConf.total).toLocaleString('es-CO')}) esperando que diga que SÍ lo enviemos. Responde sus dudas con amabilidad y, al final, pregúntale si se lo enviamos. NO pongas el marcador ##PEDIDO para este pedido (ya existe): cuando el cliente diga que sí, el sistema lo confirma solo.` : '';
+  const pendTxt = pendConf ? `\n\nPEDIDO PENDIENTE DE CONFIRMAR: este cliente ya tiene el pedido DF-${pendConf.numero} (total $${Number(pendConf.total).toLocaleString('es-CO')}) esperando que diga que SÍ lo enviemos. Responde sus dudas con amabilidad y, al final, pregúntale si se lo enviamos. Si el cliente solo dice que sí, NO pongas el marcador ##PEDIDO: el sistema lo confirma solo. Si el cliente pide CAMBIAR algo de ese pedido (dirección, barrio, ciudad, nombre, celular, producto, talla, color o cantidad), escribe el marcador ##PEDIDO con TODO el pedido ya corregido (los datos que no cambian, igual que antes): el sistema actualiza ese mismo pedido DF-${pendConf.numero} (no crea otro) y le manda el resumen nuevo. Nunca le digas que ya quedó cambiado sin poner el marcador.` : '';
   // Pedido reciente ya confirmado o despachado: la IA lo sabe para no volver a registrarlo.
   const yaConf = pendConf ? undefined : db.prepare(`SELECT numero, estado, COALESCE(guia,'') guia FROM orders WHERE store_id = ? AND lead_id = ? AND estado != 'Cancelado'
       AND (confirmacion = 'si' OR estado NOT IN ('Nuevo') OR COALESCE(guia,'') != '' OR COALESCE(effi_remision,'') != '' OR COALESCE(dropi_order_id,'') != '')
@@ -1071,6 +1071,10 @@ function celularVerificado(leadId: string, valor: string, telLead: string): stri
   if (deTienda.some((t) => t.replace(/\D/g, '').includes(d))) return d;
   // El de WhatsApp solo si el cliente dijo que es el mismo.
   if (d === deLead && dijoMismo()) return d;
+  // …o el de un pedido reciente de este mismo chat (lo escribió en el formulario de la landing
+  // o de Shopify): así se puede CORREGIR ese pedido (dirección, talla…) sin pedirle el celular otra vez.
+  const delPedido = db.prepare("SELECT 1 FROM orders WHERE lead_id = ? AND created_at > datetime('now','-7 days') AND REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-','') LIKE ? LIMIT 1").get(leadId, `%${d}`);
+  if (delPedido) return d;
   return '';
 }
 export async function crearPedido(storeId: string, lead: { id: string; nombre: string; tel: string }, inner: string, productRows: Record<string, unknown>[], destino: string, pn?: string): Promise<ResultadoPedido> {
@@ -1214,9 +1218,10 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
   const d10 = (t: string) => String(t || '').replace(/\D/g, '').slice(-10);
   const tels = [...new Set([d10(lead.tel), d10(tel)].filter((x) => x.length === 10))];
   const previo = db.prepare(
-    `SELECT * FROM orders WHERE store_id = ? AND estado IN ('Nuevo','Confirmado') AND COALESCE(origen,'') NOT IN ('shopify','manual')
+    `SELECT * FROM orders WHERE store_id = ? AND estado IN ('Nuevo','Confirmado')
+       AND (COALESCE(origen,'') NOT IN ('shopify','manual') OR COALESCE(confirmacion,'') IN ('esperando','no'))
        AND COALESCE(effi_remision,'') = '' AND COALESCE(dropi_order_id,'') = '' AND COALESCE(guia,'') = '' AND COALESCE(woo_id,'') = ''
-       AND created_at > datetime('now','-2 days')
+       AND (created_at > datetime('now','-2 days') OR (COALESCE(confirmacion,'') IN ('esperando','no') AND created_at > datetime('now','-7 days')))
        AND (lead_id = ? ${tels.map(() => "OR REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-','') LIKE ?").join(' ')})
      ORDER BY created_at DESC LIMIT 1`,
   ).get(storeId, lead.id, ...tels.map((t) => `%${t}`)) as Record<string, unknown> | undefined;
@@ -1255,9 +1260,20 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
     // Si el pedido aún espera el Sí del cliente, va el resumen nuevo con la pregunta Sí/No
     // (un "no" a "¿quieres cambiar algo más?" no debe tomarse como que no lo quiere).
     const sp = await import('./shopifyPedidos.js');
-    const msg = String(previo.confirmacion || '') === 'esperando'
-      ? sp.textoResumenPedido(storeId, String(previo.id), 'preguntar', idiomaDe(storeId, lead.id) === 'en' ? 'en' : 'es')
-      : pedidoActualizado(idiomaDe(storeId, lead.id), (cliente || 'hola').split(' ')[0], numPrev, detalle);
+    const confPrev = String(previo.confirmacion || '');
+    const idi = idiomaDe(storeId, lead.id) === 'en' ? 'en' : 'es';
+    let msg: string;
+    if (confPrev !== 'si' && sp.confirmaAlCambiar(lead.id, String(previo.id))) {
+      // «Sí, pero cámbiame…»: ya aceptó; con el cambio hecho queda confirmado.
+      msg = sp.textoResumenPedido(storeId, String(previo.id), 'registrado', idi);
+      await sp.confirmarPedidoCliente(storeId, String(previo.id), ultCliente, { aviso: false, titulo: 'Pedido confirmado: el cliente dijo que sí y el cambio que pidió ya se hizo' });
+    } else if (confPrev !== 'si') {
+      // Esperaba el «sí», el cliente dijo que no para cambiar algo, o no le había llegado el
+      // resumen: va el resumen nuevo con la pregunta Sí/No y su respuesta lo confirma.
+      if (confPrev !== 'esperando') db.prepare("UPDATE orders SET confirmacion = 'esperando', confirmacion_error = '' WHERE id = ?").run(previo.id);
+      msg = sp.textoResumenPedido(storeId, String(previo.id), 'preguntar', idi);
+    } else msg = pedidoActualizado(idiomaDe(storeId, lead.id), (cliente || 'hola').split(' ')[0], numPrev, detalle);
+    if (String(previo.origen || '') === 'shopify') trazar(storeId, String(previo.id), { etapa: 'pedido', nivel: 'info', titulo: 'Cambio hecho en DealFlow (no en Shopify)', detalle: 'El pedido de Shopify sigue con los datos originales allá; se despacha con los datos corregidos de DealFlow.' });
     const mid = uid();
     db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
     marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
