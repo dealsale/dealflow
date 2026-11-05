@@ -540,9 +540,14 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       AND created_at > datetime('now','-3 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as { numero: number; estado: string; guia: string } | undefined;
   const confTxt = yaConf ? `\n\nPEDIDO YA REGISTRADO: este cliente ya tiene el pedido DF-${yaConf.numero} (${yaConf.estado}${yaConf.guia ? `, guía ${yaConf.guia}` : ''}). NO vuelvas a poner el marcador ##PEDIDO para ese pedido, NO le muestres otra vez el resumen y NO le pidas que lo confirme: ya está confirmado. Si el cliente escribe «sí», «ok», «listo», «gracias» o algo parecido, NO es una nueva confirmación: agradécele y responde lo que pregunte sobre ese pedido. Pon ##PEDIDO solo si el cliente pide claramente un pedido NUEVO y adicional (otro producto u otra entrega). Si el cliente quiere CAMBIAR algo de ese pedido (producto, talla, color, cantidad o dirección), NO le digas que ya quedó cambiado ni armes otro resumen: recuérdale su pedido${yaConf.guia ? ' y su guía' : ''} y pregúntale si quiere hacer un *pedido nuevo* aparte o *modificar* el que ya tiene (el sistema revisa si todavía se puede).` : '';
   const cambioTxt = (await import('./cambiosPedido.js')).directivaCambio(leadId);
+  const canc = db.prepare(`SELECT numero, estado, COALESCE(cancelado_cliente_at,'') cc, COALESCE(cancelacion_pedida_at,'') cp FROM orders WHERE store_id = ? AND lead_id = ?
+      AND ((estado = 'Cancelado' AND cancelado_cliente_at > datetime('now','-2 days')) OR cancelacion_pedida_at > datetime('now','-1 day')) ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as { numero: number; estado: string; cc: string; cp: string } | undefined;
+  const cancTxt = !canc ? '' : canc.estado === 'Cancelado'
+    ? `\n\nPEDIDO CANCELADO POR EL CLIENTE: el pedido DF-${canc.numero} quedó CANCELADO porque el cliente no lo quiere. Confírmale con amabilidad que quedó cancelado y pregúntale UNA sola vez si fue por algo que podamos arreglar (talla, dirección, precio o fecha de entrega). No insistas. Si cambia de opinión o quiere corregir algo, escribe el marcador ##PEDIDO con el pedido completo: el sistema reactiva ese mismo pedido DF-${canc.numero} (no crea otro).`
+    : `\n\nCANCELACIÓN PEDIDA: el cliente pidió cancelar el pedido DF-${canc.numero}, pero ya fue despachado (${canc.estado}). Dile que ya le avisamos a la tienda para intentar frenarlo y que si llega, puede no recibirlo. NO le digas que ya quedó cancelado.`;
   const systemFinal = mediaSinTexto
-    ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}${pendTxt}${confTxt}${cambioTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
-    : system + memoriaCliente + novedadTxt + envioTxt + pendTxt + confTxt + cambioTxt;
+    ? `${system}${memoriaCliente}${novedadTxt}${envioTxt}${pendTxt}${confTxt}${cambioTxt}${cancTxt}\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
+    : system + memoriaCliente + novedadTxt + envioTxt + pendTxt + confTxt + cambioTxt + cancTxt;
 
   const destino = lead.wa_id || lead.tel;
   const pn = lead.tel; // número real, para que WhatsApp entregue (resuelve el LID)
@@ -1218,7 +1223,7 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
   const d10 = (t: string) => String(t || '').replace(/\D/g, '').slice(-10);
   const tels = [...new Set([d10(lead.tel), d10(tel)].filter((x) => x.length === 10))];
   const previo = db.prepare(
-    `SELECT * FROM orders WHERE store_id = ? AND estado IN ('Nuevo','Confirmado')
+    `SELECT * FROM orders WHERE store_id = ? AND (estado IN ('Nuevo','Confirmado') OR (estado = 'Cancelado' AND COALESCE(cancelado_cliente_at,'') > datetime('now','-7 days')))
        AND (COALESCE(origen,'') NOT IN ('shopify','manual') OR COALESCE(confirmacion,'') IN ('esperando','no'))
        AND COALESCE(effi_remision,'') = '' AND COALESCE(dropi_order_id,'') = '' AND COALESCE(guia,'') = '' AND COALESCE(woo_id,'') = ''
        AND (created_at > datetime('now','-2 days') OR (COALESCE(confirmacion,'') IN ('esperando','no') AND created_at > datetime('now','-7 days')))
@@ -1243,6 +1248,12 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
       console.log(`[ia] pedido DF-${numPrev} ya registrado (marcador repetido): no se crea otro`);
       trazar(storeId, String(previo.id), { etapa: 'pedido', nivel: 'info', titulo: 'El asistente repitió el pedido: no se creó otro', datos: { marcador: inner } });
       return 'igual';
+    }
+    if (String(previo.estado) === 'Cancelado') {
+      // El cliente lo había cancelado y cambió de opinión: se reactiva el MISMO pedido.
+      db.prepare("UPDATE orders SET estado = 'Nuevo', cancelado_cliente_at = '' WHERE id = ?").run(previo.id);
+      trazar(storeId, String(previo.id), { etapa: 'pedido', nivel: 'ok', titulo: `Pedido DF-${numPrev} REACTIVADO: el cliente lo había cancelado y cambió de opinión` });
+      registrarLog(storeId, 'info', 'pedido', `DF-${numPrev} reactivado: el cliente lo había cancelado y lo volvió a pedir.`, lead.id);
     }
     db.transaction(() => {
       db.prepare('UPDATE orders SET cliente = ?, ciudad = ?, tel = ?, direccion = ?, departamento = ?, total = ?, lead_id = ? WHERE id = ?')

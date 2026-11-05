@@ -28,6 +28,10 @@ for (const col of ["shopify_id TEXT NOT NULL DEFAULT ''", "shopify_shop TEXT NOT
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_orders_shopify ON orders(store_id, shopify_id)");
 try { db.exec("ALTER TABLE orders ADD COLUMN confirmacion_at TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+// Cancelado por el cliente (para reactivarlo si cambia de opinión) y cancelación pedida de un pedido ya despachado.
+for (const col of ["cancelado_cliente_at TEXT NOT NULL DEFAULT ''", "cancelacion_pedida_at TEXT NOT NULL DEFAULT ''"]) {
+  try { db.exec(`ALTER TABLE orders ADD COLUMN ${col}`); } catch { /* ya existe */ }
+}
 // Cuándo se le pidió el «sí» al cliente (lo usa la revisión de confirmaciones perdidas).
 db.exec(`CREATE TRIGGER IF NOT EXISTS trg_orders_confirmacion_at AFTER UPDATE OF confirmacion ON orders
   FOR EACH ROW WHEN NEW.confirmacion = 'esperando' AND OLD.confirmacion IS NOT 'esperando'
@@ -333,7 +337,14 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     await confirmarPedidoCliente(storeId, orderId, texto);
     return true;
   }
+  if (veredicto === 'no' && !quiereCorregir(t) && cancelaClaro(t)) {
+    // «No» (o «cancelar») sin pedir un cambio: no quiere el pedido → queda CANCELADO.
+    await cancelarPorCliente(storeId, o, leadId, texto, 'respondió que NO a la confirmación');
+    return false; // el asistente le responde (sabe que quedó cancelado y puede reactivarlo)
+  }
   if (veredicto === 'no') {
+    // «No, la dirección está mal»: no lo cancela, quiere corregir. El asistente arregla los
+    // datos y le vuelve a pedir el «sí».
     db.prepare("UPDATE orders SET confirmacion = 'no' WHERE id = ?").run(orderId);
     // El asistente sigue la conversación (le pregunta qué pasó y si quiere cambiar algo);
     // al equipo le llega el aviso por si quiere intervenir.
@@ -353,6 +364,60 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     trazar(storeId, orderId, { etapa: 'pedido', nivel: 'info', titulo: 'El cliente dijo que sí y pidió un cambio', detalle: `${texto} · El asistente aplica el cambio y el pedido queda confirmado.` });
   }
   // Pregunta algo o pide un cambio: responde el asistente (sabe que el pedido espera su "sí").
+  return false;
+}
+
+/** «No, está mal la dirección», «no, es otra talla»: quiere corregir, no cancelar. */
+export function quiereCorregir(texto: string): boolean {
+  const l = limpio(texto);
+  return /\b(cambi\w*|correg\w*|corrij\w*|modific\w*|equivoc\w*|error|mal|incorrect\w*|otra|otro|direccion|talla|color|barrio|ciudad|nombre|celular|numero|dato|datos|cantidad)\b/.test(l);
+}
+/** «No» corto (el botón, «no gracias») o un pedido claro de cancelar. «No, mejor el lunes» NO cancela. */
+export function cancelaClaro(texto: string): boolean {
+  const l = limpio(texto);
+  return pideCancelar(texto) || /^(no|nop|nel|❌)( gracias| senor| senora| por ahora| ya no)?$/.test(l);
+}
+/** «Cancélenlo», «ya no lo quiero», «no me lo envíen» (y no «no quiero cancelar»). */
+export function pideCancelar(texto: string): boolean {
+  const l = limpio(texto);
+  if (/\bno (quiero |voy a |lo )?(cancel|anul)/.test(l)) return false;
+  return /\b(cancel\w*|anul\w*)\b/.test(l) || /\bya no (lo |la |los |las )?(quiero|necesito|lo voy a recibir)\b/.test(l)
+    || /\bno (me )?(lo |la |los |las )?(envien|manden|despachen|mandes|envies)\b/.test(l) || /\bno lo quiero\b/.test(l);
+}
+
+/** Deja el pedido CANCELADO por decisión del cliente (se puede reactivar si cambia de opinión). */
+async function cancelarPorCliente(storeId: string, o: Fila, leadId: string, texto: string, como: string): Promise<void> {
+  const orderId = txt(o.id);
+  const num = `DF-${txt(o.numero)}`;
+  const r = db.prepare("UPDATE orders SET confirmacion = 'no', estado = 'Cancelado', cancelado_cliente_at = datetime('now') WHERE id = ? AND estado != 'Cancelado'").run(orderId);
+  if (!r.changes) return;
+  db.prepare("UPDATE leads SET etiqueta = 'Seguimiento' WHERE id = ?").run(leadId);
+  trazar(storeId, orderId, { etapa: 'pedido', nivel: 'warn', titulo: `Pedido CANCELADO por el cliente (${como})`, detalle: `${texto} · Si cambia de opinión, el asistente reactiva este mismo pedido.` });
+  registrarLog(storeId, 'warn', 'pedido', `${num} quedó CANCELADO: el cliente ${como}${txt(o.origen) === 'shopify' ? ' (pedido de Shopify: cancélalo también en Shopify si hace falta)' : ''}.`, leadId);
+  void etiquetar(storeId, orderId, ['no-confirmado', 'cancelado-por-cliente']);
+  void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `${num} cancelado por el cliente ❌`, `${txt(o.cliente)} ${como}. El asistente le pregunta si fue por algo que se pueda arreglar.`, { url: '/' })).catch(() => {});
+  void import('./correo.js').then((c) => c.correoATienda(storeId, 'pedidos', `${num} cancelado por el cliente`, `❌ ${num}: cancelado por el cliente`, [`${c.escHtml(txt(o.cliente))} ${c.escHtml(como)}. El pedido quedó en <b>Cancelado</b>.`, 'Si el cliente cambia de opinión, el asistente reactiva el mismo pedido.'])).catch(() => {});
+}
+
+/**
+ * El cliente pide cancelar un pedido que YA confirmó. Si todavía no se despacha, queda
+ * Cancelado. Si ya tiene guía o remisión, no se puede cancelar solo: se le avisa a la tienda
+ * para que lo anule en Effi o Dropi. Devuelve false: el asistente le responde igual.
+ */
+export async function respuestaCancelacion(storeId: string, leadId: string, texto: string): Promise<boolean> {
+  if (!pideCancelar(texto)) return false;
+  const o = db.prepare(`SELECT * FROM orders WHERE store_id = ? AND lead_id = ? AND estado NOT IN ('Cancelado','Entregado','Devuelto')
+    AND COALESCE(confirmacion,'') != 'esperando' AND created_at > datetime('now','-10 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as Fila | undefined;
+  if (!o) return false;
+  const despachado = !!(txt(o.guia) || txt(o.effi_remision) || txt(o.dropi_order_id)) || !['Nuevo', 'Confirmado'].includes(txt(o.estado));
+  if (!despachado) { await cancelarPorCliente(storeId, o, leadId, texto, 'pidió cancelar el pedido por WhatsApp'); return false; }
+  const ya = db.prepare("UPDATE orders SET cancelacion_pedida_at = datetime('now') WHERE id = ? AND (COALESCE(cancelacion_pedida_at,'') = '' OR cancelacion_pedida_at < datetime('now','-1 day'))").run(txt(o.id));
+  if (!ya.changes) return false;
+  const num = `DF-${txt(o.numero)}`;
+  const donde = txt(o.dropi_order_id) ? 'Dropi' : txt(o.effi_remision) || txt(o.effi_doc) ? 'Effi' : 'la transportadora';
+  trazar(storeId, txt(o.id), { etapa: 'pedido', nivel: 'warn', titulo: 'El cliente pidió CANCELAR un pedido ya despachado', detalle: `${texto} · Tiene ${txt(o.guia) ? `guía ${txt(o.guia)}` : 'remisión'}: no se cancela solo. Anúlalo en ${donde} y luego márcalo Cancelado.` });
+  registrarLog(storeId, 'warn', 'pedido', `${num}: el cliente pidió CANCELAR, pero el pedido ya está despachado (${txt(o.estado)}). Anúlalo en ${donde} y márcalo Cancelado.`, leadId);
+  void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `${num}: el cliente quiere cancelar ⚠️`, `Ya está despachado: anúlalo en ${donde}.`, { url: '/' })).catch(() => {});
   return false;
 }
 

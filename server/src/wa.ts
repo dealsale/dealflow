@@ -165,6 +165,7 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
       try {
         const sp = await import('./shopifyPedidos.js');
         if (await sp.respuestaConfirmacion(storeId, leadId, texto)) return;
+        await sp.respuestaCancelacion(storeId, leadId, texto);
       } catch (e) { console.error('[shopify] respuesta de confirmación', e); }
       // ¿Responde «nuevo» o «modificar» a la pregunta sobre su pedido que ya tiene guía?
       try {
