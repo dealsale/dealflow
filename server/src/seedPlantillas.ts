@@ -93,6 +93,37 @@ const PLANTILLAS: Semilla[] = [
     ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', '2× Jean mom fit (Talla 8 · Azul)', '$129.900 · pago contra entrega', 'Camila Torres', '3001234567', 'CRA 7 # 45 - 20 APTO 301', 'Medellín', 'Antioquia'],
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Sí, confirmo' }, { tipo: 'QUICK_REPLY', texto: 'No' }],
   },
+  // ── Versión 2 (textos simples: dónde está el pedido y qué sigue) ──
+  // Mismas variables y mismo orden que las de arriba: el código usa la v2 apenas Meta la
+  // aprueba en cada tienda y, mientras tanto, la de antes.
+  {
+    nombre: 'confirmacion_pedido_v2', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nRecibimos tu pedido {{3}} 🛍️\n\nLo que pediste: {{4}}\nVas a pagar: {{5}}\n\nA dónde lo enviamos:\n👤 Nombre: {{6}}\n📞 Celular: {{7}}\n🏠 Dirección: {{8}}\n🏙️ Ciudad: {{9}}\n📍 Departamento: {{10}}\n\nPor favor revisa que todo esté bien. Si está bien, toca «Sí, está bien». Si algo está mal, toca «Corregir datos» y dinos qué cambiar.',
+    pie: 'Mensaje sobre tu compra',
+    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', '2× Jean mom fit (Talla 8 · Azul)', '$129.900 · pago contra entrega', 'Camila Torres', '3001234567', 'CRA 7 # 45 - 20 APTO 301', 'Medellín', 'Antioquia'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Sí, está bien' }, { tipo: 'QUICK_REPLY', texto: 'Corregir datos' }],
+  },
+  {
+    nombre: 'guia_pedido_v2', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nTu pedido {{3}} ya tiene guía de envío 🧾\n\n🚚 Transportadora: {{4}}\n🔢 Número de guía: {{5}}\nGuarda este número: con él puedes ver por dónde va tu pedido.\n\n¿Qué sigue? Primero la transportadora recoge el paquete en nuestra bodega y después lo lleva hasta tu ciudad. Te vamos contando cada paso por aquí.\n\nPor ahora no tienes que hacer nada. Si tienes una duda, respóndenos este mensaje.',
+    pie: 'Mensaje sobre tu compra',
+    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'Interrapidísimo', '240012345678'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Recibido, gracias' }, { tipo: 'QUICK_REPLY', texto: 'Tengo una duda' }],
+  },
+  {
+    nombre: 'guia_pedido_imagen_v2', categoria: 'UTILITY', idioma: 'es', encabezado: '{{IMAGEN}}',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nTu pedido {{3}} ya tiene guía de envío 🧾 Arriba está la foto de tu guía.\n\n🚚 Transportadora: {{4}}\n🔢 Número de guía: {{5}}\nGuarda este número: con él puedes ver por dónde va tu pedido.\n\n¿Qué sigue? Primero la transportadora recoge el paquete en nuestra bodega y después lo lleva hasta tu ciudad. Te vamos contando cada paso por aquí.\n\nPor ahora no tienes que hacer nada. Si tienes una duda, respóndenos este mensaje.',
+    pie: 'Mensaje sobre tu compra',
+    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'Interrapidísimo', '240012345678'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Recibido, gracias' }, { tipo: 'QUICK_REPLY', texto: 'Tengo una duda' }],
+  },
+  {
+    nombre: 'novedad_pedido_v2', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nEl mensajero de {{4}} no pudo entregarte el pedido {{3}} ⚠️\nMotivo: {{5}}.\n\nNo te preocupes, se puede arreglar. Respóndenos este mensaje y dinos qué prefieres:\n1️⃣ Que te lo vuelvan a llevar a la misma dirección (y qué día te queda bien).\n2️⃣ Que te lo lleven a otra dirección en tu ciudad.',
+    pie: 'Mensaje sobre tu compra',
+    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'Interrapidísimo', 'no había nadie en la casa'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Misma dirección' }, { tipo: 'QUICK_REPLY', texto: 'Otra dirección' }],
+  },
   {
     nombre: 'recordatorio_abono', categoria: 'UTILITY', idioma: 'es',
     cuerpo: 'Hola {{1}}, te recordamos que tu pedido {{2}} está apartado.\nPara despacharlo necesitamos confirmar el pago de {{3}}.\nCuando quieras, respóndenos por aquí y te ayudamos a completarlo. 🙌',

@@ -27,6 +27,11 @@ for (const col of ["shopify_id TEXT NOT NULL DEFAULT ''", "shopify_shop TEXT NOT
   try { db.exec(`ALTER TABLE orders ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_orders_shopify ON orders(store_id, shopify_id)");
+try { db.exec("ALTER TABLE orders ADD COLUMN confirmacion_at TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+// Cuándo se le pidió el «sí» al cliente (lo usa la revisión de confirmaciones perdidas).
+db.exec(`CREATE TRIGGER IF NOT EXISTS trg_orders_confirmacion_at AFTER UPDATE OF confirmacion ON orders
+  FOR EACH ROW WHEN NEW.confirmacion = 'esperando' AND OLD.confirmacion IS NOT 'esperando'
+  BEGIN UPDATE orders SET confirmacion_at = datetime('now') WHERE id = NEW.id; END`);
 
 type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));
@@ -136,14 +141,16 @@ export function textoResumenPedido(storeId: string, orderId: string, modo: 'preg
   const celular = txt(o.tel).replace(/\D/g, '').slice(-10) || '—';
   const pagado = /\bPagado\b/.test(txt(o.nota));
   const prods = items.map((i) => `• ${i.qty}× ${i.nombre}`).join('\n') || '• —';
+  // Escrito simple: qué pidió, cuánto paga, a dónde va y qué tiene que hacer el cliente.
+  // (Se conservan las palabras «resumen» y «Dirección»: así se reconoce el resumen en el chat.)
   if (idioma === 'en') {
-    const cab = modo === 'registrado' ? `✅ Done${nombre ? ', ' + nombre : ''}! Your order ${num} is registered${tienda ? ` at ${tienda}` : ''}:` : `Hi${nombre ? ' ' + nombre : ''} 👋 This is your order ${num}${tienda ? ` at ${tienda}` : ''}:`;
-    const pie = modo === 'registrado' ? 'We will send you the tracking number here as soon as it ships 🚚. If anything is wrong, just tell us.' : 'Are all the details correct and should we ship it? Reply *Yes* or *No*.';
-    return `${cab}\n\n🛍️ ${prods.replace(/^• /gm, '')}\n💰 Total: ${pesos(Number(o.total) || 0)}${pagado ? ' (paid)' : ' · cash on delivery'}\n\n📦 Shipping details\n👤 Name: ${linea(o.cliente, 80)}\n📞 Phone: ${celular}\n🏠 Address: ${linea(o.direccion)}\n🏙️ City: ${linea(o.ciudad, 60)}\n📍 State: ${linea(o.departamento, 60)}\n\n${pie}`;
+    const datosEn = `🛍️ What you ordered:\n${prods}\n💰 You pay: ${pesos(Number(o.total) || 0)}${pagado ? ' (already paid)' : ' when it arrives (cash on delivery)'}\n\n📦 Where we send it:\n👤 Name: ${linea(o.cliente, 80)}\n📞 Phone: ${celular}\n🏠 Address: ${linea(o.direccion)}\n🏙️ City: ${linea(o.ciudad, 60)}\n📍 State: ${linea(o.departamento, 60)}`;
+    if (modo === 'registrado') return `✅ Done${nombre ? ', ' + nombre : ''}! Your order ${num} is confirmed${tienda ? ` at ${tienda}` : ''}. This is the summary:\n\n${datosEn}\n\nWhat happens next?\n1️⃣ We pack your order.\n2️⃣ We create the shipping label and send it to you here.\n3️⃣ The carrier picks it up and brings it to you.\n\nIf any detail is wrong, just tell us and we fix it.`;
+    return `Hi${nombre ? ' ' + nombre : ''} 👋 This is the summary of your order ${num}${tienda ? ` at ${tienda}` : ''}:\n\n${datosEn}\n\nPlease check that everything is right.\n✅ If it is all good, reply *Yes*.\n✏️ If something is wrong, tell us what to change and we fix it.`;
   }
-  const cab = modo === 'registrado' ? `✅ ¡Listo${nombre ? ', ' + nombre : ''}! Tu pedido ${num} quedó registrado${tienda ? ` en ${tienda}` : ''}:` : `Hola${nombre ? ' ' + nombre : ''} 👋 Este es el resumen de tu pedido ${num}${tienda ? ` en ${tienda}` : ''}:`;
-  const pie = modo === 'registrado' ? 'Apenas salga te enviamos por aquí el número de guía 🚚. Si algún dato está mal, escríbenos y lo corregimos.' : 'Revisa con cuidado: ¿los datos están correctos y te lo enviamos? Responde *Sí* o *No*.';
-  return `${cab}\n\n🛍️ Pediste:\n${prods}\n💰 Total: ${pesos(Number(o.total) || 0)}${pagado ? ' (ya pagado)' : ' · pago contra entrega'}\n\n📦 Datos de envío\n👤 Nombre: ${linea(o.cliente, 80)}\n📞 Celular: ${celular}\n🏠 Dirección: ${linea(o.direccion)}\n🏙️ Ciudad: ${linea(o.ciudad, 60)}\n📍 Departamento: ${linea(o.departamento, 60)}\n\n${pie}`;
+  const datos = `🛍️ Lo que pediste:\n${prods}\n💰 Vas a pagar: ${pesos(Number(o.total) || 0)}${pagado ? ' (ya está pagado)' : ' cuando te llegue (pago contra entrega)'}\n\n📦 A dónde lo enviamos:\n👤 Nombre: ${linea(o.cliente, 80)}\n📞 Celular: ${celular}\n🏠 Dirección: ${linea(o.direccion)}\n🏙️ Ciudad: ${linea(o.ciudad, 60)}\n📍 Departamento: ${linea(o.departamento, 60)}`;
+  if (modo === 'registrado') return `✅ ¡Listo${nombre ? ', ' + nombre : ''}! Tu pedido ${num} quedó confirmado${tienda ? ` en ${tienda}` : ''}. Este es el resumen:\n\n${datos}\n\n¿Qué sigue?\n1️⃣ Empacamos tu pedido.\n2️⃣ Creamos la guía de envío y te la mandamos por aquí.\n3️⃣ La transportadora lo recoge y te lo lleva.\n\nSi algún dato está mal, escríbenos y lo corregimos.`;
+  return `Hola${nombre ? ' ' + nombre : ''} 👋 Este es el resumen de tu pedido ${num}${tienda ? ` en ${tienda}` : ''}:\n\n${datos}\n\nRevisa que todo esté bien.\n✅ Si todo está bien, responde *Sí*.\n✏️ Si algo está mal, dinos qué cambiar y lo corregimos.`;
 }
 
 /**
@@ -244,23 +251,77 @@ const esNo = (t: string) => { const l = limpio(t); return NO.has(l.split(' ')[0]
  * Respuesta del comprador a la confirmación. Devuelve true si la manejó (y el bot
  * no debe contestar por su cuenta).
  */
-export async function respuestaConfirmacion(storeId: string, leadId: string, texto: string): Promise<boolean> {
-  // Un pedido que ya tiene guía o remisión ya salió: su "sí" no se vuelve a pedir ni a procesar.
-  const o = db.prepare(`SELECT * FROM orders WHERE store_id = ? AND lead_id = ? AND confirmacion = 'esperando' AND estado IN ('Nuevo','Confirmado')
+/**
+ * El pedido de este chat que espera el «sí». Primero por el chat; si no, por el celular
+ * (el cliente a veces responde desde un chat que quedó con otro formato del número).
+ * Un pedido que ya tiene guía o remisión ya salió: su «sí» no se vuelve a pedir ni a procesar.
+ */
+export function pedidoEsperandoSi(storeId: string, leadId: string): Fila | undefined {
+  const base = `SELECT * FROM orders WHERE store_id = ? AND confirmacion = 'esperando' AND estado IN ('Nuevo','Confirmado')
     AND COALESCE(effi_remision,'') = '' AND COALESCE(dropi_order_id,'') = '' AND COALESCE(guia,'') = ''
-    AND created_at > datetime('now','-7 days') ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as Fila | undefined;
+    AND created_at > datetime('now','-7 days')`;
+  const o = db.prepare(`${base} AND lead_id = ? ORDER BY created_at DESC LIMIT 1`).get(storeId, leadId) as Fila | undefined;
+  if (o) return o;
+  const l = db.prepare('SELECT tel, wa_id FROM leads WHERE id = ?').get(leadId) as { tel: string; wa_id: string } | undefined;
+  const d10 = [txt(l?.tel), txt(l?.wa_id)].map((t) => t.replace(/\D/g, '').slice(-10)).find((t) => /^3\d{9}$/.test(t));
+  if (!d10) return undefined;
+  const p = db.prepare(`${base} AND REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-','') LIKE ? ORDER BY created_at DESC LIMIT 1`).get(storeId, `%${d10}`) as Fila | undefined;
+  if (p) db.prepare('UPDATE orders SET lead_id = ? WHERE id = ?').run(leadId, txt(p.id));
+  return p;
+}
+
+/**
+ * «Sí, pero cámbiame…»: el cliente acepta y además pide un cambio. El asistente aplica el
+ * cambio y, al actualizar ESE pedido, queda confirmado sin volver a preguntar.
+ */
+const siConCambio = new Map<string, { orderId: string; at: number }>();
+export function confirmaAlCambiar(leadId: string, orderId: string): boolean {
+  const f = siConCambio.get(leadId);
+  if (!f || f.orderId !== orderId || Date.now() - f.at > 6 * 3600e3) return false;
+  siConCambio.delete(leadId);
+  return true;
+}
+
+/**
+ * Confirma el pedido (una sola vez): estado Confirmado, aviso al cliente, etiqueta y
+ * despacho automático si la tienda lo tiene. `aviso`: false cuando el que llama ya le
+ * escribe al cliente (p. ej. con el resumen actualizado).
+ */
+export async function confirmarPedidoCliente(storeId: string, orderId: string, texto: string, opts: { aviso?: boolean; titulo?: string } = {}): Promise<boolean> {
+  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+  if (!o) return false;
+  // Solo una vez: si el cliente mandó dos «sí» seguidos, el segundo no confirma ni despacha de nuevo.
+  const cambio = db.prepare("UPDATE orders SET confirmacion = 'si', estado = CASE WHEN estado = 'Nuevo' THEN 'Confirmado' ELSE estado END WHERE id = ? AND confirmacion != 'si'").run(orderId);
+  if (!cambio.changes) return false;
+  trazar(storeId, orderId, { etapa: 'pedido', nivel: 'ok', titulo: opts.titulo || 'El cliente confirmó el pedido por WhatsApp', detalle: texto });
+  if (opts.aviso !== false && txt(o.lead_id)) {
+    const lead = db.prepare('SELECT wa_id, tel FROM leads WHERE id = ?').get(txt(o.lead_id)) as { wa_id: string; tel: string } | undefined;
+    if (lead) {
+      const { sendWhatsappText, marcarEnviado } = await import('./wa.js');
+      const nombre = txt(o.cliente).split(' ')[0];
+      const msg = `¡Gracias${nombre ? ', ' + nombre : ''}! 🎉 Tu pedido DF-${txt(o.numero)} quedó confirmado.\n\nAhora lo vamos a empacar y a crear la guía de envío. Apenas la tengamos te la mandamos por aquí. 📦`;
+      const mid = uid();
+      db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, txt(o.lead_id), msg);
+      marcarEnviado(mid, await sendWhatsappText(storeId, lead.wa_id || lead.tel, msg, lead.tel));
+    }
+  }
+  void etiquetar(storeId, orderId, ['confirmado-whatsapp']);
+  // Landing: despacha solo si esa landing lo tiene activo. Shopify: según su configuración.
+  // Los demás (asistente, a mano): si la tienda tiene "Enviar solo a Effi" encendido.
+  const auto = txt(o.origen) === 'landing'
+    ? (await import('./landings.js')).autoDespachoDeLanding(txt(o.landing_id))
+    : txt(o.origen) === 'shopify' ? cfgPedidosShopify(storeId).autoDespacho
+    : !!(await import('./effiApi.js')).cfgEffi(storeId)?.autoDespacho;
+  if (auto) void despacharConfirmado(storeId, orderId);
+  return true;
+}
+
+export async function respuestaConfirmacion(storeId: string, leadId: string, texto: string): Promise<boolean> {
+  const o = pedidoEsperandoSi(storeId, leadId);
   if (!o) return false;
   const t = txt(texto).trim();
-  const { sendWhatsappText, marcarEnviado } = await import('./wa.js');
-  const lead = db.prepare('SELECT wa_id, tel, nombre FROM leads WHERE id = ?').get(leadId) as { wa_id: string; tel: string; nombre: string };
-  const decir = async (msg: string) => {
-    const mid = uid();
-    db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, leadId, msg);
-    marcarEnviado(mid, await sendWhatsappText(storeId, lead.wa_id || lead.tel, msg, lead.tel));
-  };
   const orderId = txt(o.id);
   const num = `DF-${txt(o.numero)}`;
-  const nombre = txt(o.cliente).split(' ')[0];
 
   // Ni sí ni no claro: la IA decide si está aceptando el envío ("bueno, mándenlo el lunes").
   let veredicto: 'si' | 'no' | 'otro' = esSi(t) && !esNo(t) ? 'si' : esNo(t) ? 'no' : 'otro';
@@ -269,19 +330,7 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     veredicto = await (await import('./ai.js')).clasificarConfirmacion(storeId, `${items} · total ${pesos(Number(o.total) || 0)}`, t);
   }
   if (veredicto === 'si') {
-    // Solo una vez: si el cliente mandó dos «sí» seguidos, el segundo no confirma ni despacha de nuevo.
-    const cambio = db.prepare("UPDATE orders SET confirmacion = 'si', estado = CASE WHEN estado = 'Nuevo' THEN 'Confirmado' ELSE estado END WHERE id = ? AND confirmacion = 'esperando'").run(orderId);
-    if (!cambio.changes) return true;
-    trazar(storeId, orderId, { etapa: 'pedido', nivel: 'ok', titulo: 'El cliente confirmó el pedido por WhatsApp', detalle: texto });
-    await decir(`¡Gracias${nombre ? ', ' + nombre : ''}! 🎉 Tu pedido quedó confirmado. Apenas salga te enviamos por aquí el número de guía. 🚚`);
-    void etiquetar(storeId, orderId, ['confirmado-whatsapp']);
-    // Landing: despacha solo si esa landing lo tiene activo. Shopify: según su configuración.
-    // Los demás (asistente, a mano): si la tienda tiene "Enviar solo a Effi" encendido.
-    const auto = txt(o.origen) === 'landing'
-      ? (await import('./landings.js')).autoDespachoDeLanding(txt(o.landing_id))
-      : txt(o.origen) === 'shopify' ? cfgPedidosShopify(storeId).autoDespacho
-      : !!(await import('./effiApi.js')).cfgEffi(storeId)?.autoDespacho;
-    if (auto) void despacharConfirmado(storeId, orderId);
+    await confirmarPedidoCliente(storeId, orderId, texto);
     return true;
   }
   if (veredicto === 'no') {
@@ -296,8 +345,36 @@ export async function respuestaConfirmacion(storeId: string, leadId: string, tex
     void import('./correo.js').then((c) => c.correoATienda(storeId, 'pedidos', `${num} no confirmado`, `❌ ${num}: el cliente no confirmó`, [`${c.escHtml(txt(o.cliente))} respondió que <b>no</b> confirma el pedido.`, 'El asistente sigue la conversación para saber qué pasó; puedes intervenir desde el Inbox.'])).catch(() => {});
     return false; // que el asistente le responda
   }
+  // «Sí, pero cámbiame la dirección…»: acepta y pide un cambio. El asistente aplica el cambio
+  // y, al actualizar este pedido, queda confirmado (no se le vuelve a preguntar).
+  const primera = limpio(t).split(' ')[0];
+  if (SI.has(primera) || /^(si|claro|listo|ok)\b/.test(limpio(t))) {
+    siConCambio.set(leadId, { orderId, at: Date.now() });
+    trazar(storeId, orderId, { etapa: 'pedido', nivel: 'info', titulo: 'El cliente dijo que sí y pidió un cambio', detalle: `${texto} · El asistente aplica el cambio y el pedido queda confirmado.` });
+  }
   // Pregunta algo o pide un cambio: responde el asistente (sabe que el pedido espera su "sí").
   return false;
+}
+
+/**
+ * Red de seguridad: pedidos que siguen «esperando» aunque el último mensaje del cliente
+ * (después de pedirle el «sí») fue un sí claro. Pasa si el mensaje llegó mientras se caía
+ * algo, o si llegó por otro chat. Se revisa cada 10 minutos.
+ */
+export async function revisarConfirmacionesPerdidas(): Promise<number> {
+  const filas = db.prepare(`SELECT id, store_id, lead_id, confirmacion_at FROM orders WHERE confirmacion = 'esperando' AND estado IN ('Nuevo','Confirmado')
+    AND COALESCE(effi_remision,'') = '' AND COALESCE(dropi_order_id,'') = '' AND COALESCE(guia,'') = ''
+    AND COALESCE(lead_id,'') != '' AND created_at > datetime('now','-7 days') LIMIT 200`).all() as { id: string; store_id: string; lead_id: string; confirmacion_at: string }[];
+  let n = 0;
+  for (const f of filas) {
+    const desde = f.confirmacion_at || '1970-01-01';
+    const m = db.prepare(`SELECT texto, created_at FROM messages WHERE lead_id = ? AND de = 'cliente' AND created_at >= ? ORDER BY created_at DESC, rowid DESC LIMIT 1`).get(f.lead_id, desde) as { texto: string; created_at: string } | undefined;
+    if (!m || !esSi(m.texto) || esNo(m.texto)) continue;
+    // Que el sistema haya tenido tiempo de responder normal (3 min).
+    if (Date.now() - new Date(m.created_at.replace(' ', 'T') + 'Z').getTime() < 3 * 60_000) continue;
+    if (await confirmarPedidoCliente(f.store_id, f.id, m.texto, { titulo: 'Pedido confirmado: el cliente había dicho que sí (revisión automática)' })) n++;
+  }
+  return n;
 }
 
 /** Despacho automático del pedido confirmado (Effi por API, o simulado en modo prueba). */
@@ -513,3 +590,4 @@ async function reintentarConfirmaciones() {
   }
 }
 if (process.env.NODE_ENV === 'production') setInterval(() => void reintentarConfirmaciones(), 15 * 60_000).unref();
+setInterval(() => void revisarConfirmacionesPerdidas().then((n) => { if (n) console.log(`[pedidos] ${n} pedido(s) confirmados por la revisión de «sí» perdidos`); }).catch((e) => console.error('[pedidos] revisión de confirmaciones', e)), 10 * 60_000).unref();

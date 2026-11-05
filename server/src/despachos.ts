@@ -1,4 +1,4 @@
-import { db } from './db.js';
+import { db, registrarLog } from './db.js';
 
 /**
  * Sincronización automática de despachos (sin botón), en segundo plano:
@@ -15,15 +15,46 @@ import { estadoLogistico, siguienteEstado } from './estadosPedido.js';
 interface OrdenSync {
   id: string; store_id: string; numero: number; tel: string; guia: string | null;
   estado: string; dropi_order_id: string; guia_url: string | null; guia_avisada: number;
+  dropi_desde: string; guia_vista_at: string; dropi_sin_guia_aviso: number;
 }
-const COLS = 'id, store_id, numero, tel, guia, estado, dropi_order_id, guia_url, guia_avisada';
+const COLS = "id, store_id, numero, tel, guia, estado, dropi_order_id, guia_url, guia_avisada, COALESCE(dropi_desde,'') dropi_desde, COALESCE(guia_vista_at,'') guia_vista_at, COALESCE(dropi_sin_guia_aviso,0) dropi_sin_guia_aviso";
+
+// Calendario de consultas de Dropi POR PEDIDO, guardado en la base (sobrevive reinicios):
+//  - dropi_desde: desde cuándo seguimos esta orden de Dropi.
+//  - dropi_prox: cuándo toca la próxima consulta.
+//  - guia_vista_at: cuándo apareció el número de guía (para esperar el PDF).
+for (const col of ["dropi_desde TEXT NOT NULL DEFAULT ''", "dropi_prox TEXT NOT NULL DEFAULT ''", "guia_vista_at TEXT NOT NULL DEFAULT ''", 'dropi_sin_guia_aviso INTEGER NOT NULL DEFAULT 0']) {
+  try { db.exec(`ALTER TABLE orders ADD COLUMN ${col}`); } catch { /* ya existe */ }
+}
+db.exec("CREATE INDEX IF NOT EXISTS idx_orders_dropi_prox ON orders(dropi_prox)");
+const sqlFecha = (ms: number) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
+const msDe = (f: string) => (f ? new Date(f.replace(' ', 'T') + 'Z').getTime() : 0);
+const H = 3600_000;
+/** Dropi a veces genera la guía (y su PDF) al día siguiente: se consulta cada hora durante 24 h. */
+export const DROPI_HORAS_GUIA = 24;
+
+/**
+ * Cuándo volver a consultar una orden de Dropi:
+ *  - Sin guía: cada 10 min las primeras 2 h, cada HORA hasta las 24 h, luego cada 3 h (5 días) y cada 12 h.
+ *  - Con guía pero sin el PDF: cada hora hasta 24 h después de la guía, luego cada 3 h.
+ *  - Con guía y PDF (en camino): cada hora, para los avisos de estado.
+ */
+export function proximaConsultaDropi(desde: number, guia: boolean, pdf: boolean, guiaVista: number, ahora = Date.now()): number {
+  if (!guia) {
+    const edad = ahora - desde;
+    return ahora + (edad < 2 * H ? 10 * 60_000 : edad < DROPI_HORAS_GUIA * H ? H : edad < 5 * 24 * H ? 3 * H : 12 * H);
+  }
+  if (!pdf) return ahora + (ahora - (guiaVista || ahora) < DROPI_HORAS_GUIA * H ? H : 3 * H);
+  return ahora + H;
+}
 
 let corriendo = false;
 const avisado = new Map<string, string>(); // orderId → último motivo registrado (no repetir)
 const intentoAviso = new Map<string, number>(); // orderId → último intento de avisar la guía
-// Dropi da el número de guía antes que el PDF: se espera el PDF hasta 90 min para mandar la FOTO de la guía.
-const guiaVista = new Map<string, number>(); // orderId → cuándo apareció el número de guía (Dropi)
-const ESPERA_PDF = 90 * 60_000;
+// Dropi da el número de guía antes que el PDF (a veces el PDF sale al día siguiente): se espera
+// el PDF hasta 24 h, consultando cada hora, para mandarle al cliente la guía DIGITAL (la foto).
+// Si a las 24 h no hay PDF, se le manda el número en texto y la foto cuando llegue.
+const ESPERA_PDF = DROPI_HORAS_GUIA * H;
 const intentoImagen = new Map<string, number>(); // orderId → último intento de mandar la imagen que llegó después
 
 /** Un ciclo de sincronización de despachos para TODAS las tiendas. */
@@ -31,12 +62,20 @@ export async function sincronizarDespachos(): Promise<void> {
   if (corriendo) return; // evita solapamiento si un ciclo tarda
   corriendo = true;
   try {
+    // Solo las órdenes a las que les toca consulta (cada una tiene su calendario): así ninguna
+    // se queda sin revisar aunque haya muchas tiendas y pedidos.
     const dropi = db.prepare(
       `SELECT ${COLS} FROM orders
         WHERE COALESCE(dropi_order_id,'') != '' AND estado NOT IN ('Entregado','Devuelto','Cancelado')
-        ORDER BY created_at DESC LIMIT 150`,
+          AND (COALESCE(dropi_prox,'') = '' OR dropi_prox <= datetime('now'))
+          AND created_at > datetime('now','-45 days')
+        ORDER BY COALESCE(dropi_prox,''), created_at DESC LIMIT 150`,
     ).all() as OrdenSync[];
-    for (const o of dropi) { try { await sincronizarDropi(o); } catch { /* sigue con el próximo */ } }
+    for (const o of dropi) {
+      try { await sincronizarDropi(o); } catch { /* sigue con el próximo */ }
+      // Si la consulta falló sin programar la siguiente, se reintenta en 30 min.
+      db.prepare("UPDATE orders SET dropi_prox = ? WHERE id = ? AND (COALESCE(dropi_prox,'') = '' OR dropi_prox <= datetime('now'))").run(sqlFecha(Date.now() + 30 * 60_000), o.id);
+    }
 
     const effiPend = db.prepare(
       `SELECT id, store_id FROM orders
@@ -97,13 +136,27 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
     params.push(o.id);
     db.prepare(`UPDATE orders SET ${cambios.join(', ')} WHERE id = ?`).run(...params);
   }
-  // Aviso de la guía: si falla (p. ej. plantilla sin aprobar), se reintenta cada hora, no cada 4 min.
-  // Sin PDF todavía: se espera un rato para mandarla con la foto (no solo el número en texto).
-  if (guiaNueva && !guiaVista.has(o.id)) guiaVista.set(o.id, Date.now());
+  // Calendario: desde cuándo seguimos la orden y cuándo apareció la guía (guardados en la base).
+  const ahora = Date.now();
+  const desde = msDe(o.dropi_desde) || ahora;
+  if (!o.dropi_desde) db.prepare('UPDATE orders SET dropi_desde = ? WHERE id = ?').run(sqlFecha(desde), o.id);
+  const tieneGuia = !!(guiaNueva || o.guia);
+  let vista = msDe(o.guia_vista_at);
+  if (tieneGuia && !vista) { vista = ahora; db.prepare('UPDATE orders SET guia_vista_at = ? WHERE id = ?').run(sqlFecha(vista), o.id); }
   const conPdf = !!(r.guiaUrl || o.guia_url);
-  const esperandoPdf = !conPdf && Date.now() - (guiaVista.get(o.id) || 0) < ESPERA_PDF;
-  if (guiaNueva && !o.guia_avisada && o.tel && !esperandoPdf && Date.now() - (intentoAviso.get(o.id) || 0) > 3600_000) {
-    intentoAviso.set(o.id, Date.now());
+  db.prepare('UPDATE orders SET dropi_prox = ? WHERE id = ?').run(sqlFecha(proximaConsultaDropi(desde, tieneGuia, conPdf, vista, ahora)), o.id);
+  // 24 h y Dropi todavía no genera la guía: se le avisa a la tienda (una vez) para que revise la orden.
+  if (!tieneGuia && ahora - desde >= DROPI_HORAS_GUIA * H && !o.dropi_sin_guia_aviso) {
+    db.prepare('UPDATE orders SET dropi_sin_guia_aviso = 1 WHERE id = ?').run(o.id);
+    const { trazar } = await import('./trazabilidad.js');
+    trazar(o.store_id, o.id, { etapa: 'despacho', nivel: 'warn', titulo: 'Dropi lleva 24 horas sin generar la guía', detalle: `Estado en Dropi: ${r.estado || 'sin estado'}. Lo seguimos consultando cada 3 horas. Revisa la orden en Dropi: puede estar pendiente de confirmar, sin saldo o sin stock.` });
+    registrarLog(o.store_id, 'warn', 'despacho', `DF-${o.numero}: Dropi lleva 24 horas sin generar la guía (estado: ${r.estado || 'sin estado'}). Revisa la orden ${o.dropi_order_id} en Dropi.`);
+  }
+  // Aviso de la guía: si falla (p. ej. plantilla sin aprobar), se reintenta cada hora, no cada consulta.
+  // Sin PDF todavía: se espera hasta 24 h (consultando cada hora) para mandar la guía DIGITAL.
+  const esperandoPdf = !conPdf && ahora - (vista || ahora) < ESPERA_PDF;
+  if (guiaNueva && !o.guia_avisada && o.tel && !esperandoPdf && ahora - (intentoAviso.get(o.id) || 0) > 3600_000) {
+    intentoAviso.set(o.id, ahora);
     await avisarGuiaAlCliente(o.store_id, o.id);
   }
   return { estado: r.estado, guia: guiaNueva };
@@ -127,7 +180,9 @@ async function avisarGuiasPendientes(): Promise<void> {
     ORDER BY created_at DESC LIMIT 60`).all() as { id: string; store_id: string }[];
   for (const o of filas) {
     if (Date.now() - (intentoAviso.get(o.id) || 0) < 2 * 3600_000) continue;
-    if (guiaVista.has(o.id) && Date.now() - guiaVista.get(o.id)! < ESPERA_PDF && !(db.prepare('SELECT guia_url FROM orders WHERE id = ?').get(o.id) as { guia_url: string } | undefined)?.guia_url) continue;
+    // Dropi sin el PDF todavía: se espera hasta 24 h para mandar la guía digital (no solo el número).
+    const d = db.prepare("SELECT COALESCE(dropi_order_id,'') dropi, COALESCE(guia_url,'') url, COALESCE(guia_img,'') img, COALESCE(guia_vista_at,'') vista FROM orders WHERE id = ?").get(o.id) as { dropi: string; url: string; img: string; vista: string } | undefined;
+    if (d?.dropi && !d.url && !d.img && Date.now() - (msDe(d.vista) || Date.now()) < ESPERA_PDF) continue;
     intentoAviso.set(o.id, Date.now());
     try { await avisarGuiaAlCliente(o.store_id, o.id); } catch { /* el próximo ciclo */ }
   }

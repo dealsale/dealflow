@@ -4,7 +4,8 @@ import { db, registrarLog, uid } from './db.js';
 import { sendWhatsappMedia, sendWhatsappTemplate, sendWhatsappText, subirMediaCloud } from './wa.js';
 import { mediaPath } from './media.js';
 import { nombreTransportadora } from './transportadoras.js';
-import { idiomaDe, avisoGuia as avisoGuiaTexto } from './idioma.js';
+import { idiomaDe } from './idioma.js';
+import { textoGuiaChat as avisoGuiaTexto } from './mensajesEstado.js';
 import { plantillaDeAutomatizacion } from './plantillasWA.js';
 
 /**
@@ -25,11 +26,23 @@ type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));
 const diez = (t: string) => { const d = String(t || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : d; };
 
+/**
+ * Versión nueva (texto simple) de cada plantilla de DealFlow. Tiene las MISMAS variables en el
+ * mismo orden: si ya está aprobada en la tienda se usa; si no, sigue saliendo la de antes.
+ */
+export const VERSION_NUEVA: Record<string, string> = {
+  confirmacion_pedido_completa: 'confirmacion_pedido_v2',
+  guia_envio_pedido: 'guia_pedido_v2',
+  guia_envio_imagen: 'guia_pedido_imagen_v2',
+  novedad_envio_pedido: 'novedad_pedido_v2',
+};
+
 /** Plantilla aprobada para la tienda (o null). */
 export function plantillaAprobada(storeId: string, nombre: string): { nombre: string; idioma: string; encabezado: string; cuerpo: string; auto?: { clave: string; maestra: string } } | null {
   // La tienda eligió su propia plantilla para esta automatización (y sigue aprobada como Utilidad).
   const propia = plantillaDeAutomatizacion(storeId, nombre);
   if (propia) return propia;
+  if (VERSION_NUEVA[nombre]) { const v2 = plantillaAprobadaDealflow(storeId, VERSION_NUEVA[nombre]); if (v2) return v2; }
   const t = db.prepare(
     `SELECT t.nombre, t.idioma, t.encabezado, t.cuerpo FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id
       WHERE p.store_id = ? AND t.nombre = ? AND p.estado = 'aprobada'`,
@@ -37,8 +50,12 @@ export function plantillaAprobada(storeId: string, nombre: string): { nombre: st
   return t || null;
 }
 
-/** Solo la plantilla de DealFlow (sin la propia de la tienda). */
+/** Solo la plantilla de DealFlow (sin la propia de la tienda); la versión nueva si ya está aprobada. */
 export function plantillaAprobadaDealflow(storeId: string, nombre: string): { nombre: string; idioma: string; encabezado: string; cuerpo: string } | null {
+  const v2 = VERSION_NUEVA[nombre] ? plantillaDealflowExacta(storeId, VERSION_NUEVA[nombre]) : null;
+  return v2 || plantillaDealflowExacta(storeId, nombre);
+}
+function plantillaDealflowExacta(storeId: string, nombre: string): { nombre: string; idioma: string; encabezado: string; cuerpo: string } | null {
   const t = db.prepare(
     `SELECT t.nombre, t.idioma, t.encabezado, t.cuerpo FROM meta_template_pub p JOIN meta_templates t ON t.id = p.template_id
       WHERE p.store_id = ? AND t.nombre = ? AND p.estado = 'aprobada'`,
@@ -147,7 +164,7 @@ async function avisarGuiaInterno(storeId: string, orderId: string, opts: { conAr
   const transp = nombreTransportadora(crudoT) || 'por confirmar';
   // Texto según lo que se manda: con la imagen/PDF de la guía, el mensaje lo presenta.
   const idi = idiomaDe(storeId, txt(o.lead_id) || undefined);
-  const datos = { nombre, numDF, guia, transp: transp !== 'por confirmar' ? transp : '', tienda };
+  const datos = { nombre, numDF, guia, transp: transp !== 'por confirmar' ? transp : '', tienda, estado: txt(o.estado) };
   let texto = avisoGuiaTexto(idi, { ...datos, con: 'texto' });
   const params = [nombre, tienda, numDF, transp, guia];
   const tpl = plantillaAprobada(storeId, PLANTILLA_GUIA) || plantillaAprobada(storeId, PLANTILLA_GUIA_IMG);
