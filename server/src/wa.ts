@@ -382,9 +382,11 @@ async function enviarPlantillaReal(
         template: { name: plantilla.nombre, language: { code: plantilla.idioma || 'es' }, ...(components.length ? { components } : {}) },
       }),
     });
-    const body = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: { message?: string } };
+    const body = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: { message?: string; error_data?: { details?: string } } };
     if (!res.ok) {
-      const msg = body.error?.message || 'Meta no aceptó la plantilla.';
+      // El detalle de Meta (error_data.details) dice QUÉ dato rechazó: sin él, "(#100) Invalid parameter" no se puede diagnosticar.
+      const detalle = body.error?.error_data?.details;
+      const msg = (body.error?.message || 'Meta no aceptó la plantilla.') + (detalle ? ` · ${String(detalle).slice(0, 300)}` : '');
       registrarLog(storeId, 'error', 'envio', `Meta rechazó la plantilla "${plantilla.nombre}" a ${to}: ${msg}`);
       return { ok: false, error: msg };
     }

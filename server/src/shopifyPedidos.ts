@@ -516,8 +516,7 @@ const Q_PEDIDOS = (conCliente: boolean) => `query($q: String!) {
     shippingLines(first: 5) { nodes { originalPriceSet { shopMoney { amount } } } }
     ${conCliente ? `phone
     shippingAddress { name address1 address2 city province phone }
-    billingAddress { name phone }
-    customer { firstName lastName phone }` : ''}
+    billingAddress { name phone }` : ''}
     lineItems(first: 50) { nodes { title variantTitle quantity sku originalUnitPriceSet { shopMoney { amount } } } }
   } } }`;
 
@@ -586,7 +585,7 @@ async function traerPedidosRecientes0(storeId: string, ultimaSemana: boolean): P
     // Sin aprobación de datos protegidos, Shopify niega nombre/teléfono/dirección: se trae el pedido sin ellos.
     const r2 = await shopifyGQL<{ orders: { nodes: Nodo[] } }>(cred, Q_PEDIDOS(false), { q });
     if (!r2.ok) return { error: `Shopify no dejó leer los pedidos: ${r.error || r2.error}` };
-    aviso = 'Shopify no entrega nombre, teléfono ni dirección del comprador: falta que Shopify apruebe el "Acceso a datos de cliente protegidos" de la app DealFlow. Sin teléfono no se puede confirmar por WhatsApp.';
+    aviso = `Shopify no entrega nombre, teléfono ni dirección del comprador: falta que Shopify apruebe el "Acceso a datos de cliente protegidos" de la app DealFlow. Sin teléfono no se puede confirmar por WhatsApp. (Detalle de Shopify: ${String(r.error || 'sin detalle').slice(0, 200)})`;
     avisarUnaVez(storeId, 'datos', aviso);
     r = r2;
   }
