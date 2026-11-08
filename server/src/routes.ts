@@ -1158,10 +1158,13 @@ api.post('/novedades/:id/avisar', requireAuth, requireStore, async (req, res) =>
 
 // Elimina un pedido por completo (y sus ítems). No toca el pedido en Dropi/Woo:
 // solo lo quita del panel de DealFlow.
-api.delete('/orders/:rowId', requireAuth, requireStore, requirePermiso('pedidos_editar'), (req, res) => {
+api.delete('/orders/:rowId', requireAuth, requireStore, requirePermiso('pedidos_editar'), async (req, res) => {
   const sid = req.user!.storeId!;
   const o = db.prepare('SELECT id FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { id: string } | undefined;
   if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  // Si vino de Shopify, queda en la lista de descartados: no se vuelve a importar.
+  const { descartarPedidoShopify } = await import('./shopifyPedidos.js');
+  descartarPedidoShopify(sid, o.id);
   db.prepare('DELETE FROM order_items WHERE order_id = ?').run(o.id);
   db.prepare('DELETE FROM orders WHERE id = ?').run(o.id);
   res.json({ ok: true });

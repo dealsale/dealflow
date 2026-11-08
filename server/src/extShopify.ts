@@ -89,6 +89,9 @@ export async function recibirPedido(storeId: string, b: { shop?: string; orderId
     o = r;
   } else return { error: 'La extensión no pudo leer el pedido de la página.' };
   const { importarPedido } = await import('./shopifyPedidos.js');
+  // Importarlo a mano desde la extensión es una decisión explícita: si antes se había eliminado
+  // en DealFlow (y por eso no se trae solo), se quita de los descartados.
+  db.prepare('DELETE FROM shopify_descartados WHERE store_id = ? AND shopify_id = ?').run(storeId, orderId);
   // Lo importas tú a mano desde el pedido: la confirmación por WhatsApp sale siempre (es
   // una plantilla, no depende de la ventana de 24 h), aunque el pedido sea de días atrás.
   const oid = await importarPedido(storeId, shop || 'shopify', o, true);

@@ -27,6 +27,19 @@ for (const col of ["shopify_id TEXT NOT NULL DEFAULT ''", "shopify_shop TEXT NOT
   try { db.exec(`ALTER TABLE orders ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_orders_shopify ON orders(store_id, shopify_id)");
+// Pedidos de Shopify que la tienda ELIMINÓ en DealFlow: no se vuelven a importar nunca (ni por la
+// revisión cada 5 min, ni por el webhook, ni por el botón «Traer pedidos»).
+db.exec(`CREATE TABLE IF NOT EXISTS shopify_descartados (
+  store_id TEXT NOT NULL, shopify_id TEXT NOT NULL, numero TEXT NOT NULL DEFAULT '', at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (store_id, shopify_id))`);
+
+/** Al eliminar un pedido en DealFlow: si vino de Shopify, recordarlo para no traerlo otra vez. */
+export function descartarPedidoShopify(storeId: string, orderId: string): void {
+  const o = db.prepare("SELECT shopify_id, numero FROM orders WHERE id = ? AND store_id = ? AND COALESCE(shopify_id,'') != ''").get(orderId, storeId) as { shopify_id: string; numero: string } | undefined;
+  if (!o) return;
+  db.prepare('INSERT OR IGNORE INTO shopify_descartados (store_id, shopify_id, numero) VALUES (?,?,?)').run(storeId, o.shopify_id, String(o.numero || ''));
+}
+const descartado = (storeId: string, shopifyId: string) => !!db.prepare('SELECT 1 FROM shopify_descartados WHERE store_id = ? AND shopify_id = ?').get(storeId, shopifyId);
 try { db.exec("ALTER TABLE orders ADD COLUMN confirmacion_at TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 // Cancelado por el cliente (para reactivarlo si cambia de opinión) y cancelación pedida de un pedido ya despachado.
 for (const col of ["cancelado_cliente_at TEXT NOT NULL DEFAULT ''", "cancelacion_pedida_at TEXT NOT NULL DEFAULT ''"]) {
@@ -86,6 +99,7 @@ export async function importarPedido(storeId: string, shop: string, o: Fila, con
     if (!sid) return null;
     const ya = db.prepare('SELECT id FROM orders WHERE store_id = ? AND shopify_id = ?').get(storeId, sid) as { id: string } | undefined;
     if (ya) return ya.id; // ya importado (Shopify reintenta webhooks)
+    if (descartado(storeId, sid)) return null; // la tienda lo eliminó en DealFlow: no se vuelve a traer
     const env = (o.shipping_address || o.billing_address || {}) as Fila;
     const cust = (o.customer || {}) as Fila;
     const cliente = (txt(env.name) || `${txt(cust.first_name)} ${txt(cust.last_name)}`).trim() || 'Cliente Shopify';
@@ -593,7 +607,7 @@ async function traerPedidosRecientes0(storeId: string, ultimaSemana: boolean): P
   let nuevos = 0;
   for (const n of nodos) {
     const ya = db.prepare('SELECT 1 FROM orders WHERE store_id = ? AND shopify_id = ?').get(storeId, String(n.legacyResourceId));
-    if (ya) continue;
+    if (ya || descartado(storeId, String(n.legacyResourceId))) continue;
     const reciente = Date.now() - Date.parse(n.createdAt) < 24 * 3600_000;
     if (await importarPedido(storeId, cred.shop, aFormaWebhook(n), reciente)) nuevos++;
   }
