@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PlantillasPropiasEncendidas } from '../../components/PlantillasPropiasEncendidas';
+import { ConsumoIA } from '../../components/ConsumoIA';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import type { LibraryAdminItem } from '../../lib/api';
 import { fmt } from '../../lib/format';
@@ -115,6 +116,7 @@ function Tiendas({ df }: { df: DealFlowState }) {
   const ocultas = df.superStores.length - visibles;
   return (
     <>
+      <ConsumoIA />
       <PlantillasPropiasEncendidas />
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 16px' }}>

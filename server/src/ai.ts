@@ -1,4 +1,5 @@
 import { pasarAHumano } from './pasoHumano.js';
+import { medirIA } from './consumoIA.js';
 import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
@@ -119,7 +120,7 @@ async function entenderImagen(storeId: string, mediaUrl: string): Promise<string
       }),
     });
     if (!res.ok) { console.error('[ia] visión falló', res.status); return ''; }
-    const b = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const b = medirIA(storeId, 'imagen', '', await res.json()) as { choices?: { message?: { content?: string } }[] };
     return (b.choices?.[0]?.message?.content || '').trim();
   } catch (e) { console.error('[ia] error viendo imagen', e); return ''; }
 }
@@ -261,7 +262,7 @@ MUY IMPORTANTE — CUÁNDO NO ESCRIBIR: si la conversación YA ESTÁ CERRADA no 
       body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: system }, ...historia, directiva], max_tokens: 160, temperature: 0.8 }),
     });
     if (!res.ok) return '';
-    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const body = medirIA(storeId, 'seguimiento', leadId, await res.json()) as { choices?: { message?: { content?: string } }[] };
     let txt = (body.choices?.[0]?.message?.content || '').trim();
     txt = desenvolver(txt); // si vino como JSON o dentro de ```…```, saca solo el texto
     txt = txt.replace(/^["'“”]+|["'“”]+$/g, '').trim(); // quita comillas envolventes
@@ -289,7 +290,7 @@ export async function clasificarConfirmacion(storeId: string, resumen: string, r
       ] }),
     });
     if (!res.ok) return 'otro';
-    const b = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const b = medirIA(storeId, 'clasificar', '', await res.json()) as { choices?: { message?: { content?: string } }[] };
     const r = (b.choices?.[0]?.message?.content || '').trim().toUpperCase();
     return /^S[IÍ]/.test(r) ? 'si' : /^NO/.test(r) ? 'no' : 'otro';
   } catch { return 'otro'; }
@@ -322,6 +323,10 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
   } finally { turnos.delete(leadId); }
 }
 
+const MAX_RESPUESTAS_HORA = Number(process.env.IA_MAX_RESPUESTAS_HORA || 60);
+/** Por encima de este tamaño (caracteres), el catálogo va completo solo para los productos de la conversación. */
+const CATALOGO_MAX = Number(process.env.IA_CATALOGO_MAX || 12000);
+
 async function responderTurno(storeId: string, leadId: string) {
   const ia = resolverTexto(storeId); // DeepSeek escribe (o el proveedor de la tienda)
   if (!ia) {
@@ -337,6 +342,17 @@ async function responderTurno(storeId: string, leadId: string) {
   if (!/asistente|bot/i.test(lead.asignado)) {
     console.log(`[ia] el chat lo atiende "${lead.asignado}": no respondo (usa "Devolver al asistente")`);
     return;
+  }
+  // Freno de bucle: si en la última hora el bot ya mandó demasiados mensajes en ESTE chat (p. ej.
+  // conversa con otro bot o con una respuesta automática), se pausa y pasa al equipo. Así un
+  // chat no se come el saldo de la IA de la tienda.
+  {
+    const n = (db.prepare("SELECT COUNT(*) n FROM messages WHERE lead_id = ? AND de = 'bot' AND COALESCE(tipo,'texto') IN ('texto','text') AND created_at > datetime('now','-60 minutes')").get(leadId) as { n: number }).n;
+    if (n >= MAX_RESPUESTAS_HORA) {
+      registrarLog(storeId, 'warn', 'ia', `El asistente se pausó en este chat: ya respondió ${n} mensajes en la última hora (posible conversación con otro bot o respuesta automática). Revisa el chat y devuélvelo al asistente si todo está bien.`, leadId);
+      pasarAHumano(storeId, leadId, `el asistente respondió ${n} mensajes en una hora (posible bucle con otro bot).`);
+      return;
+    }
   }
   const t0 = Date.now(); // para que el bot tarde ~4-5 s en responder (más humano)
 
@@ -361,7 +377,12 @@ async function responderTurno(storeId: string, leadId: string) {
     | undefined;
   const store = db.prepare('SELECT nombre FROM stores WHERE id = ?').get(storeId) as { nombre: string } | undefined;
   const productRows = db.prepare('SELECT * FROM products WHERE store_id = ?').all(storeId) as Record<string, unknown>[];
-  const products = productRows.map((p) => {
+  const lineaCorta = (p: Record<string, unknown>): string => {
+    const pp = preciosDeProducto(p);
+    const precio = pp.promo ? `$${pp.promo.toLocaleString('es-CO')} COP por unidad (promoción)` : Number(p.precio) > 0 ? `$${Number(p.precio).toLocaleString('es-CO')} COP` : 'gratis';
+    return `- ${p.nombre}: ${precio}.${p.tipo === 'servicio' ? ' (servicio)' : ''}`;
+  };
+  const lineas = productRows.map((p) => {
     const vars = (db.prepare('SELECT label, stock FROM variants WHERE product_id = ?').all(p.id as string) as { label: string; stock: number }[])
       .map((v) => v.label).filter(Boolean).join(', '); // sin stock: el asistente vende todas las variantes que existen
     const reglas = pj<string[]>(p.reglas as string, []).map((r) => `  · Regla: ${r}`).join('\n');
@@ -395,7 +416,17 @@ async function responderTurno(storeId: string, leadId: string) {
       ? `\n  VARIANTES QUE EXISTEN (lista cerrada; NO se puede vender ninguna otra talla ni color, aunque el cliente insista o diga que es "parecido"): ${vars}.`
       : opciones ? '' : ' Variantes: única.';
     return `- ${p.nombre}: ${precioTxt}.${variantesTxt}${tabla ? `\n  TOTAL SEGÚN CANTIDAD (ya incluye promo y combos; usa EXACTAMENTE estos valores): ${tabla}` : ''}${extra ? '\n' + extra : ''}${combos ? '\n' + combos : ''}${reglas ? '\n' + reglas : ''}${faqs ? '\n' + faqs : ''}`;
-  }).join('\n');
+  });
+  // Catálogo grande: el detalle completo (variantes, combos, reglas, descripción, guion) solo de los
+  // productos de ESTA conversación; el resto, nombre y precio. Antes iba todo el catálogo completo en
+  // cada respuesta y en tiendas con muchos productos eso multiplicaba el costo de la IA.
+  let products = lineas.join('\n');
+  let catalogoResumido = false;
+  if (products.length > CATALOGO_MAX) {
+    const relevantes = productosDeLaConversacion(storeId, leadId, productRows);
+    products = productRows.map((p, i) => (relevantes.has(String(p.id)) ? lineas[i] : lineaCorta(p))).join('\n');
+    catalogoResumido = true;
+  }
   const promos = (db.prepare('SELECT titulo, descripcion FROM promos WHERE store_id = ? AND activa = 1').all(storeId) as { titulo: string; descripcion: string }[])
     .map((p) => `- ${p.titulo}: ${p.descripcion}`).join('\n');
   const reglas = pj<string[]>(assistant?.reglas || '[]', []).map((r) => `- ${r}`).join('\n');
@@ -441,7 +472,9 @@ ${reglas || '- Sé honesto y claro.'}${reglasTpl}
 MUY IMPORTANTE: cada producto puede tener sus PROPIAS reglas (aparecen como "· Regla:" dentro de él). Esas reglas del producto son EXCEPCIONES y tienen PRIORIDAD sobre las reglas generales. Ejemplo: si la regla general dice que no se venden 2 unidades, pero un producto tiene una regla que sí permite llevar 2 por cierto precio, respeta la del producto. Usa siempre la descripción, características, modo de uso, combos, precios y reglas EXACTAS del producto del catálogo; no inventes ni generalices.
 
 CATÁLOGO (precios en COP):
-${products || '(sin productos cargados aún)'}
+${products || '(sin productos cargados aún)'}${catalogoResumido ? `
+
+CATÁLOGO RESUMIDO: los productos que aparecen solo con nombre y precio tienen más detalle (tallas, colores, combos, reglas, descripción) que se te muestra en cuanto el cliente los nombra. Si el cliente pregunta por uno de ellos sin nombrarlo claro, pregúntale cuál le interesa usando el nombre exacto del catálogo. NUNCA inventes tallas, colores, combos ni totales de varias unidades de un producto que solo ves con nombre y precio.` : ''}
 
 COBERTURA Y CONTRAENTREGA: a dónde se envía y si hay pago contraentrega lo deciden SOLO las reglas de la tienda y de cada producto (arriba). Si un mensaje anterior de este chat dijo que no había contraentrega o cobertura en alguna ciudad, ignóralo: fue un aviso automático que ya no aplica.
 
@@ -674,7 +707,7 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       pasarAHumano(storeId, leadId, `la IA (${ia.proveedor}) falló (HTTP ${res.status}).`);
       return;
     }
-    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const body = medirIA(storeId, 'respuesta', leadId, await res.json()) as { choices?: { message?: { content?: string } }[] };
     const brutoRaw = body.choices?.[0]?.message?.content?.trim();
     if (!brutoRaw) { pasarAHumano(storeId, leadId, 'la IA respondió vacío.'); return; }
     // A veces DeepSeek envuelve su respuesta como JSON ("text": "..."). La
@@ -1045,7 +1078,7 @@ Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefo
       body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: system }, { role: 'user', content: `CATÁLOGO:\n${productos || '(sin productos)'}\n\nCONVERSACIÓN:\n${historia}` }], max_tokens: 320, temperature: 0 }),
     });
     if (!res.ok) return '';
-    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const body = medirIA(storeId, 'extraer', leadId, await res.json()) as { choices?: { message?: { content?: string } }[] };
     let out = (body.choices?.[0]?.message?.content || '').trim();
     out = desenvolver(out) || out;
     if (/SIN_PEDIDO/i.test(out)) return '';
@@ -1377,6 +1410,18 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
 }
 
 /** Normaliza texto: minúsculas, sin acentos ni signos, para comparar. */
+/** Productos de los que se está hablando en el chat: nombrados por el cliente o el bot, las presentaciones enviadas y los de sus pedidos recientes. */
+function productosDeLaConversacion(storeId: string, leadId: string, productRows: Record<string, unknown>[]): Set<string> {
+  const ids = new Set<string>();
+  const textos = (db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de IN ('cliente','bot','vendedor') AND TRIM(COALESCE(texto,'')) != '' ORDER BY created_at DESC LIMIT 20").all(leadId) as { texto: string }[]).map((m) => m.texto);
+  for (const t of textos) { const p = identificarProducto(t, productRows); if (p) ids.add(String(p.id)); }
+  const todo = ' ' + norm(textos.join(' ')) + ' ';
+  for (const p of productRows) { const n = norm(String(p.nombre || '')); if (n.length >= 4 && todo.includes(' ' + n + ' ')) ids.add(String(p.id)); }
+  for (const r of db.prepare('SELECT product_id FROM sent_presentations WHERE lead_id = ?').all(leadId) as { product_id: string }[]) ids.add(String(r.product_id));
+  for (const r of db.prepare("SELECT DISTINCT i.product_id FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.store_id = ? AND o.lead_id = ? AND o.created_at > datetime('now','-7 days')").all(storeId, leadId) as { product_id: string | null }[]) if (r.product_id) ids.add(String(r.product_id));
+  return ids;
+}
+
 function norm(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }

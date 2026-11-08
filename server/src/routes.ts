@@ -3691,6 +3691,17 @@ api.post('/soporte-tienda/editar', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 // Superadmin: qué tiendas tienen encendidas las plantillas propias, quién lo hizo, y apagarlas.
+// Consumo de IA: qué tiendas gastan más (tokens y USD estimado) y, por tienda, en qué y en qué chats.
+api.get('/superadmin/consumo-ia', requireAuth, requireSuperAdmin, async (req, res) => {
+  const { rankingConsumo } = await import('./consumoIA.js');
+  const dias = Number(req.query.dias) || 7;
+  const tiendas = rankingConsumo(dias).map((t) => ({ ...t, productos: (db.prepare('SELECT COUNT(*) n FROM products WHERE store_id = ?').get(t.store_id) as { n: number }).n }));
+  res.json({ dias, tiendas });
+});
+api.get('/superadmin/consumo-ia/:storeId', requireAuth, requireSuperAdmin, async (req, res) => {
+  const { resumenConsumo } = await import('./consumoIA.js');
+  res.json(resumenConsumo(String(req.params.storeId), Number(req.query.dias) || 14));
+});
 api.get('/superadmin/plantillas-propias', requireAuth, requireSuperAdmin, (_req, res) => {
   const filas = db.prepare(`SELECT id, nombre, COALESCE(wa_tpl_constructor,0) c, COALESCE(wa_tpl_auto,0) a, COALESCE(wa_tpl_doc,0) d FROM stores
     WHERE COALESCE(wa_tpl_constructor,0) = 1 OR COALESCE(wa_tpl_auto,0) = 1 OR COALESCE(wa_tpl_doc,0) = 1 ORDER BY nombre`).all() as { id: string; nombre: string; c: number; a: number; d: number }[];

@@ -8,6 +8,7 @@
  *   - modo "webhook": cualquier endpoint propio que reciba el mensaje y devuelva la respuesta.
  * El navegador nunca ve la URL ni la clave: todo pasa por este servidor.
  */
+import { medirIA } from './consumoIA.js';
 import { db } from './db.js';
 import { randomUUID } from 'node:crypto';
 import { cifrarTexto, descifrarTexto } from './cifrado.js';
@@ -158,7 +159,8 @@ async function preguntarDeepseek(c: CfgSoporte, texto: string, conversacion: str
       body: JSON.stringify({ model: 'deepseek-chat', temperature: 0.4, max_tokens: 1200, messages: [{ role: 'system', content: `${c.instrucciones || INSTRUCCIONES_SKY}\n\n# BASE DE CONOCIMIENTO\n${conocimiento}\n\nTu nombre es ${c.nombre}.\n${quien}` }, ...previos, { role: 'user', content: texto }] }),
       signal: AbortSignal.timeout(90_000),
     });
-    const b = (await r.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[] };
+    // Solo se cuenta como gasto de la tienda si SKY usa la clave de DeepSeek de la tienda.
+    const b = medirIA(claveSkyTienda(ctx.storeId) ? ctx.storeId : '', 'sky', '', await r.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[] };
     if (!r.ok) {
       console.warn('[soporte] DeepSeek respondió', r.status, JSON.stringify(b).slice(0, 300));
       return { error: 'SKY no pudo responder ahora. Intenta de nuevo en un momento.' };
