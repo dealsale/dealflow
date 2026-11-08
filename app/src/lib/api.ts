@@ -425,7 +425,9 @@ export const apiDropiCotizar = (rowId: string, recaudo: 'con' | 'sin' = 'con') =
 export const apiDropiCrear = (rowId: string, transportadora?: DropiTransportadora, reintentar = false, recaudo: 'con' | 'sin' = 'con', soloPedido = false) => req<{ ok: true; dropiId: string; transportadora: string; aviso?: string }>(`/api/orders/${rowId}/dropi/crear`, 'POST', { transportadora, reintentar, recaudo, soloPedido });
 
 // ── Shopify (Admin API) ──
-export const apiShopifyEstado = () => req<{ conectado: boolean; shop: string; nombre: string; via?: string; appDisponible?: boolean }>('/api/shopify/estado', 'GET');
+export interface RevisionShopify { at: string; ok: boolean; nuevos: number; revisados: number; error: string; aviso: string }
+export interface EstadoShopify { conectado: boolean; shop: string; nombre: string; via?: string; metodo?: string; revision?: RevisionShopify | null; appDisponible?: boolean }
+export const apiShopifyEstado = () => req<EstadoShopify>('/api/shopify/estado', 'GET');
 export interface TiendaPapelera { archivo: string; storeId: string; nombre: string; correo: string; eliminadaAt: string; eliminadaPor: string; venceAt: string; pedidos: number; leads: number; productos: number; tamanoKb: number }
 export interface Respaldo { archivo: string; tamanoMb: number; fecha: string; cifrado?: boolean; manual?: boolean }
 export interface EspacioDisco { totalMb: number; libreMb: number; baseMb: number; copiasMb: number; papeleraMb: number; archivosMb: number }

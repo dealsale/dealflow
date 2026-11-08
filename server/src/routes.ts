@@ -1379,10 +1379,21 @@ api.post('/dropi/preferencia', requireAuth, requireStore, requireOwner, (req, re
 
 // ── Shopify (Admin API) ──────────────────────────────────────────────
 // Estado de la conexión (sin exponer el token).
-api.get('/shopify/estado', requireAuth, requireStore, (req, res) => {
+api.get('/shopify/estado', requireAuth, requireStore, async (req, res) => {
   const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").get(req.user!.storeId!) as { config: string } | undefined;
   const cfg = row ? JSON.parse(row.config || '{}') : {};
-  res.json({ conectado: !!(cfg.shop && cfg.token), shop: cfg.shop || '', nombre: cfg.nombre || '', via: cfg.via || 'manual', appDisponible: sa.appDisponible() });
+  // Conectada con token (app pública o shpat_) O con Client ID + Secret (Dev Dashboard): antes solo
+  // se miraba el token, y la conexión con Client ID + Secret salía «desconectada» al recargar.
+  const { credShopify } = await import('./shopify.js');
+  const { ultimaRevisionShopify } = await import('./shopifyPedidos.js');
+  const sid = req.user!.storeId!;
+  const conectado = !!credShopify(sid);
+  res.json({
+    conectado, shop: cfg.shop || '', nombre: cfg.nombre || '', via: cfg.via || 'manual',
+    metodo: cfg.via === 'app' ? 'app' : cfg.token ? 'token' : cfg.clientId ? 'cc' : '',
+    revision: conectado ? ultimaRevisionShopify(sid) : null,
+    appDisponible: sa.appDisponible(),
+  });
 });
 
 // ── App pública de Shopify (instalación con un clic) ──
@@ -1452,11 +1463,22 @@ api.post('/shopify/conectar', requireAuth, requireStore, requireOwner, async (re
   olvidarTokenShopify(shop); // por si cambió los scopes: forzar token nuevo
   const prueba = await probarShopify(shop, { token, clientId, clientSecret });
   if (!prueba.ok) return res.status(400).json({ error: prueba.error });
+  // Al cambiar credenciales de la MISMA tienda se conservan sus opciones (confirmar, despachar,
+  // modo prueba) y la fecha de conexión; antes se borraban y volvían a los valores por defecto.
+  const previo = pj<Record<string, unknown>>((db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").get(sid) as { config: string } | undefined)?.config || '', {});
+  const misma = normalizarShop(String(previo.shop || '')) === shop;
+  const opciones: Record<string, unknown> = {};
+  if (misma) for (const k of ['confirmar', 'autoDespacho', 'modoPrueba', 'conectado_at']) if (previo[k] !== undefined) opciones[k] = previo[k];
   db.prepare(
     `INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?, 'shopify', ?, datetime('now'))
      ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = datetime('now')`,
-  ).run(sid, JSON.stringify({ shop, token, clientId, clientSecret, nombre: prueba.nombre }));
-  res.json({ ok: true, nombre: prueba.nombre, shop });
+  ).run(sid, JSON.stringify({ ...opciones, shop, token, clientId, clientSecret, nombre: prueba.nombre, conectado_at: opciones.conectado_at || new Date().toISOString() }));
+  registrarLog(sid, 'info', 'shopify', `Shopify ${shop} conectado a mano (${token ? 'Admin API token' : 'Client ID + Secret'}).`);
+  // Revisar los pedidos ya mismo (sin esperar la vuelta de 5 min) y dejar el resultado a la vista.
+  const { traerPedidosRecientes, olvidarRevisionShopify } = await import('./shopifyPedidos.js');
+  olvidarRevisionShopify(sid);
+  const r = await traerPedidosRecientes(sid).catch(() => null);
+  res.json({ ok: true, nombre: prueba.nombre, shop, revision: r });
 });
 
 api.post('/shopify/desconectar', requireAuth, requireStore, requireOwner, (req, res) => {

@@ -56,6 +56,22 @@ function PedidosShopifyCfg({ alTraer }: { alTraer?: () => void }) {
   );
 }
 
+/** Resultado de la última revisión automática de pedidos (cada 5 min): así se ve por qué no llegan. */
+function RevisionPedidosShopify({ df }: { df: DealFlowState }) {
+  const r = df.shopifyRevision;
+  if (!df.shopifyConectado) return null;
+  const hace = (iso: string) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 1 ? 'hace un momento' : m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`; };
+  const caja: React.CSSProperties = { fontSize: 12, lineHeight: 1.5, borderRadius: 8, padding: '8px 10px', marginTop: 8 };
+  if (!r) return <div style={{ ...caja, background: 'var(--df-bg)', color: 'var(--df-text-muted)' }}>⏳ La revisión automática de pedidos aún no ha corrido (se hace cada 5 minutos). Puedes usar «Traer pedidos de Shopify».</div>;
+  if (!r.ok) return <div style={{ ...caja, background: '#FDECEC', color: '#9B1C1C' }}><b>⚠️ No están llegando los pedidos.</b> Última revisión {hace(r.at)}: {r.error}</div>;
+  return (
+    <div style={{ ...caja, background: r.aviso ? '#FFF6E0' : '#EAF5E4', color: r.aviso ? '#7A4B00' : '#2F5B1C' }}>
+      ✓ Última revisión de pedidos {hace(r.at)}: {r.revisados} pedido(s) en Shopify desde la conexión{r.nuevos ? `, ${r.nuevos} nuevo(s) traído(s)` : ', todos ya están en DealFlow'}.
+      {r.aviso && <><br />⚠️ {r.aviso}</>}
+    </div>
+  );
+}
+
 function ShopifyCard({ df }: { df: DealFlowState }) {
   const [abierto, setAbierto] = useState(false);
   const [metodo, setMetodo] = useState<'token' | 'cc'>('cc'); // 'cc' = Client ID + Secret (Dev Dashboard)
@@ -93,7 +109,8 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           {conectada ? (
             <>
-              <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', lineHeight: 1.5 }}>✓ Conectada{df.shopifyVia === 'app' ? <> con la <b>app DealFlow</b> instalada en tu tienda</> : ''}. Los pedidos nuevos de Shopify llegan a DealFlow.</div>
+              <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', lineHeight: 1.5 }}>✓ Conectada{df.shopifyVia === 'app' ? <> con la <b>app DealFlow</b> instalada en tu tienda</> : df.shopifyMetodo === 'cc' ? <> a mano con <b>Client ID + Secret</b></> : df.shopifyMetodo === 'token' ? <> a mano con <b>Admin API token</b></> : ''}. Los pedidos nuevos de Shopify llegan a DealFlow{df.shopifyVia === 'app' ? '' : ' (se revisan cada 5 minutos)'}.</div>
+              <RevisionPedidosShopify df={df} />
               <PedidosShopifyCfg alTraer={() => void df.recargarPedidos?.()} />
             </>
           ) : (
@@ -118,6 +135,7 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
           </button>}
         </div>
       )}
+      {!df.shopifyAppDisponible && conectada && <><RevisionPedidosShopify df={df} /><PedidosShopifyCfg alTraer={() => void df.recargarPedidos?.()} /></>}
       {(manual || !df.shopifyAppDisponible) && (<>
       <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.5, marginBottom: 10 }}>
           <b>Mientras Shopify aprueba la app de DealFlow</b>, el comercio puede conectarse así: en <b>dev.shopify.com</b> (Dev Dashboard) crea una app, dale los permisos <b>read_products, read_orders, write_orders, read_merchant_managed_fulfillment_orders y write_merchant_managed_fulfillment_orders</b>, instálala en su tienda y pega aquí el <b>Client ID y el Secret</b>. Los pedidos se traen solos cada 5 min. Hay dos formas de conectar según cómo te dé Shopify las llaves.

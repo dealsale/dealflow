@@ -88,6 +88,7 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiDesinstalarPlantilla,
   apiRestaurarPlantilla,
   type PlantillaActiva,
+  type EstadoShopify,
   apiMisTiendas,
   apiCambiarTienda,
   apiCrearTienda,
@@ -2938,7 +2939,7 @@ export function useDealFlowState() {
   }
 
   // Shopify (Admin API): si la tienda tiene Shopify conectado.
-  const [shopify, setShopify] = useState<{ conectado: boolean; shop: string; nombre: string; via?: string; appDisponible?: boolean }>({ conectado: false, shop: '', nombre: '' });
+  const [shopify, setShopify] = useState<EstadoShopify>({ conectado: false, shop: '', nombre: '' });
   async function traerPedidosShopify(cb?: () => void) {
     const r = await apiShopifyTraerPedidos();
     cb?.();
@@ -2984,8 +2985,10 @@ export function useDealFlowState() {
   function conectarShopify(shop: string, creds: { token?: string; clientId?: string; clientSecret?: string }, cb?: (ok: boolean) => void) {
     void apiShopifyConectar(shop, creds).then((r) => {
       if (r.error || !r.data) { toast(r.error || 'No se pudo conectar Shopify.', 'error'); cb?.(false); return; }
-      setShopify({ conectado: true, shop: r.data.shop, nombre: r.data.nombre });
+      setShopify((s) => ({ ...s, conectado: true, shop: r.data!.shop, nombre: r.data!.nombre }));
       toast(`Shopify conectado ✓ (${r.data.nombre})`, 'ok'); cb?.(true);
+      void cargarShopify(); // trae el resultado de la primera revisión de pedidos
+      void recargarPedidos();
     });
   }
   function desconectarShopify() {
@@ -4303,6 +4306,8 @@ export function useDealFlowState() {
     setVariantSku,
     setVariantRef,
     shopifyConectado: shopify.conectado,
+    shopifyRevision: shopify.revision || null,
+    shopifyMetodo: shopify.metodo || '',
     shopifyNombre: shopify.nombre,
     shopifyShop: shopify.shop,
     shopifyVia: shopify.via || 'manual',

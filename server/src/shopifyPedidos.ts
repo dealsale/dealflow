@@ -543,14 +543,42 @@ function avisarUnaVez(storeId: string, clave: string, msg: string): void {
   registrarLog(storeId, 'warn', 'shopify', msg);
 }
 
+/** Última revisión automática de pedidos por tienda (para mostrar en Integraciones por qué no llegan). */
+export interface RevisionShopify { at: string; ok: boolean; nuevos: number; revisados: number; error: string; aviso: string }
+const revisiones = new Map<string, RevisionShopify>();
+export function ultimaRevisionShopify(storeId: string): RevisionShopify | null { return revisiones.get(storeId) || null; }
+export function olvidarRevisionShopify(storeId: string): void { revisiones.delete(storeId); avisos.delete(storeId + 'lectura'); }
+
+/** Desde cuándo traer pedidos solos: la fecha en que se conectó la tienda (no se mueve al cambiar opciones). */
+function conectadaDesde(storeId: string, shop: string): number {
+  const cfg = pj<Record<string, unknown>>((db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").get(storeId) as { config: string } | undefined)?.config || '', {});
+  const fecha = (s: string) => Date.parse(s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
+  if (cfg.conectado_at) return fecha(String(cfg.conectado_at));
+  const inst = (db.prepare('SELECT instalada_at FROM shopify_tiendas WHERE shop = ?').get(shop) as { instalada_at: string } | undefined)
+    || (db.prepare("SELECT updated_at AS instalada_at FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").get(storeId) as { instalada_at: string } | undefined);
+  return inst ? fecha(inst.instalada_at) : 0;
+}
+
 /** Trae los pedidos de Shopify creados desde que se conectó la tienda (o la última semana, desde el botón) que aún no estén en DealFlow. */
 export async function traerPedidosRecientes(storeId: string, ultimaSemana = false): Promise<{ nuevos: number; revisados: number; aviso: string } | { error: string }> {
+  const r = await traerPedidosRecientes0(storeId, ultimaSemana).catch((e) => ({ error: `Error interno: ${e instanceof Error ? e.message : e}` }));
+  const at = new Date().toISOString();
+  if ('error' in r) {
+    revisiones.set(storeId, { at, ok: false, nuevos: 0, revisados: 0, error: r.error, aviso: '' });
+    if (r.error !== 'Conecta Shopify primero.') avisarUnaVez(storeId, 'lectura', `No se pudieron traer los pedidos de Shopify: ${r.error}`);
+  } else {
+    revisiones.set(storeId, { at, ok: true, nuevos: r.nuevos, revisados: r.revisados, error: '', aviso: r.aviso });
+    avisos.delete(storeId + 'lectura');
+  }
+  return r;
+}
+
+async function traerPedidosRecientes0(storeId: string, ultimaSemana: boolean): Promise<{ nuevos: number; revisados: number; aviso: string } | { error: string }> {
   const { credShopify, shopifyGQL } = await import('./shopify.js');
   const cred = credShopify(storeId);
   if (!cred) return { error: 'Conecta Shopify primero.' };
-  const inst = (db.prepare('SELECT instalada_at FROM shopify_tiendas WHERE shop = ?').get(cred.shop) as { instalada_at: string } | undefined)
-    || (db.prepare("SELECT updated_at AS instalada_at FROM store_integrations WHERE store_id = ? AND tipo = 'shopify'").get(storeId) as { instalada_at: string } | undefined);
-  const desde = new Date(Math.max(Date.now() - 7 * 86400_000, !ultimaSemana && inst ? Date.parse(inst.instalada_at.replace(' ', 'T') + 'Z') - 3600_000 : 0));
+  const inst = conectadaDesde(storeId, cred.shop);
+  const desde = new Date(Math.max(Date.now() - 7 * 86400_000, !ultimaSemana && inst ? inst - 3600_000 : 0));
   const q = `created_at:>='${desde.toISOString()}'`;
   let aviso = '';
   let r = await shopifyGQL<{ orders: { nodes: Nodo[] } }>(cred, Q_PEDIDOS(true), { q });
@@ -578,9 +606,9 @@ export async function traerPedidosRecientes(storeId: string, ultimaSemana = fals
 async function revisarWebhook(storeId: string, shop: string): Promise<void> {
   const { credShopify } = await import('./shopify.js');
   const cred = credShopify(storeId);
-  if (!cred?.token) return;
+  if (!cred || cred.via !== 'app') return; // las conexiones manuales no tienen webhook: se revisan cada 5 min
   const { asegurarWebhookPedidos, tokenVigente } = await import('./shopifyApp.js');
-  const tk = cred.via === 'app' ? await tokenVigente(shop) : cred.token;
+  const tk = await tokenVigente(shop);
   if (!tk) return;
   const err = await asegurarWebhookPedidos(shop, tk);
   if (err) avisarUnaVez(storeId, 'webhook', `Shopify no aceptó el aviso automático de pedidos nuevos (${err.slice(0, 200)}). Mientras tanto DealFlow revisa los pedidos cada 5 minutos.`);
