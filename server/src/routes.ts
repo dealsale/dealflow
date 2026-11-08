@@ -3695,7 +3695,14 @@ api.post('/soporte-tienda/editar', requireAuth, (req, res) => {
 api.get('/superadmin/consumo-ia', requireAuth, requireSuperAdmin, async (req, res) => {
   const { rankingConsumo } = await import('./consumoIA.js');
   const dias = Number(req.query.dias) || 7;
-  const tiendas = rankingConsumo(dias).map((t) => ({ ...t, productos: (db.prepare('SELECT COUNT(*) n FROM products WHERE store_id = ?').get(t.store_id) as { n: number }).n }));
+  const { infoIATienda } = await import('./ai.js');
+  // Todas las tiendas (también las que aún no gastan), con la IA que usan y de quién es la clave.
+  const consumo = new Map(rankingConsumo(dias).map((t) => [t.store_id, t]));
+  const todas = db.prepare('SELECT id, nombre FROM stores').all() as { id: string; nombre: string }[];
+  const tiendas = todas.map((s) => {
+    const c = consumo.get(s.id) || { store_id: s.id, nombre: s.nombre, llamadas: 0, entrada: 0, cache: 0, salida: 0, usd: 0, respuestas: 0, entradaRespuestas: 0, promedioRespuesta: 0 };
+    return { ...c, nombre: s.nombre, ia: infoIATienda(s.id), productos: (db.prepare('SELECT COUNT(*) n FROM products WHERE store_id = ?').get(s.id) as { n: number }).n };
+  }).sort((a, b) => b.entrada - a.entrada || String(a.nombre).localeCompare(String(b.nombre)));
   res.json({ dias, tiendas });
 });
 api.get('/superadmin/consumo-ia/:storeId', requireAuth, requireSuperAdmin, async (req, res) => {

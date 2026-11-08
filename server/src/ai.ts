@@ -64,6 +64,18 @@ export function resolverIA(storeId: string): { url: string; model: string; key: 
   return { url: p.url, model: p.model, key, proveedor };
 }
 
+/** Qué IA usa la tienda para escribir y de quién es la clave (para el superadmin; nunca expone la clave). */
+export function infoIATienda(storeId: string): { proveedor: string; modelo: string; clave: 'tienda' | 'dealflow' | 'ninguna'; fotos: 'tienda' | 'dealflow' | 'ninguna' } {
+  const propia = (prov: string) => {
+    const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, prov) as { config: string } | undefined;
+    return !!(row ? (pj<Record<string, string>>(row.config, {}).apiKey || '').trim() : '');
+  };
+  const ia = resolverTexto(storeId);
+  const fotos = propia('openai') ? 'tienda' : process.env.OPENAI_API_KEY ? 'dealflow' : 'ninguna';
+  if (!ia) return { proveedor: '', modelo: '', clave: 'ninguna', fotos };
+  return { proveedor: PROVEEDORES_IA[ia.proveedor]?.nombre || ia.proveedor, modelo: ia.model, clave: propia(ia.proveedor) ? 'tienda' : 'dealflow', fotos };
+}
+
 /** Llave de un proveedor concreto de la tienda (o del servidor como respaldo). */
 function keyProveedor(storeId: string, prov: 'deepseek' | 'openai'): string {
   const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, prov) as { config: string } | undefined;
