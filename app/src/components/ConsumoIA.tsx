@@ -6,7 +6,7 @@ import type { CSSProperties } from 'react';
  * tienda que se disparó y ver por qué: más respuestas, respuestas más pesadas (catálogo grande)
  * o un chat que se lleva casi todo (bot en bucle con otro bot).
  */
-interface Tienda { store_id: string; nombre: string | null; llamadas: number; entrada: number; cache: number; salida: number; usd: number; respuestas: number; promedioRespuesta: number; productos: number; ia?: { proveedor: string; modelo: string; clave: 'tienda' | 'dealflow' | 'ninguna'; fotos: 'tienda' | 'dealflow' | 'ninguna' } }
+interface Tienda { store_id: string; nombre: string | null; llamadas: number; entrada: number; cache: number; salida: number; usd: number; respuestas: number; promedioRespuesta: number; productos: number; ia?: { proveedor: string; modelo: string; clave: 'tienda' | 'ninguna'; fotos: 'tienda' | 'ninguna' } }
 interface Detalle {
   porDia: { dia: string; llamadas: number; entrada: number; usd: number }[];
   porTipo: { tipo: string; nombre: string; llamadas: number; entrada: number; usd: number; promedioEntrada: number }[];
@@ -16,7 +16,7 @@ interface Detalle {
 const n = (x: number) => Math.round(x).toLocaleString('es-CO');
 const tk = (x: number) => (x >= 1e6 ? `${(x / 1e6).toFixed(1)} M` : x >= 1e3 ? `${Math.round(x / 1e3)} mil` : String(x));
 const usd = (x: number) => `US$ ${x < 1 ? x.toFixed(3) : x.toFixed(2)}`;
-const CLAVE: Record<string, string> = { tienda: 'clave de la tienda', dealflow: 'clave de DealFlow', ninguna: 'sin clave' };
+const CLAVE: Record<string, string> = { tienda: 'API de la tienda', ninguna: 'sin API de la tienda' };
 const celda: CSSProperties = { padding: '6px 8px', borderTop: '1px solid var(--df-border)', fontSize: 12.5, textAlign: 'right', whiteSpace: 'nowrap' };
 
 export function ConsumoIA() {
@@ -56,8 +56,8 @@ export function ConsumoIA() {
                     <tr onClick={() => abrir(t.store_id)} style={{ cursor: 'pointer', background: abierta === t.store_id ? 'var(--df-bg)' : undefined }}>
                       <td style={{ ...celda, textAlign: 'left', fontWeight: 700 }}>{abierta === t.store_id ? '▾' : '▸'} {t.nombre || t.store_id}</td>
                       <td style={{ ...celda, textAlign: 'left' }}>{t.ia?.proveedor
-                        ? <><b>{t.ia.proveedor}</b> · {t.ia.modelo}<br /><span style={{ fontSize: 11.5, color: t.ia.clave === 'dealflow' ? '#b45309' : 'var(--df-text-muted)' }}>{CLAVE[t.ia.clave]}</span></>
-                        : <span style={{ color: 'var(--df-danger-dark, #b91c1c)' }}>Sin IA configurada</span>}</td>
+                        ? <><b>{t.ia.proveedor}</b> · {t.ia.modelo}<br /><span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{CLAVE[t.ia.clave]}</span></>
+                        : <span style={{ color: 'var(--df-danger-dark, #b91c1c)' }}>Sin API de la tienda</span>}</td>
                       <td style={celda}>{n(t.llamadas)}</td><td style={celda}>{tk(t.entrada + t.salida)}</td>
                       <td style={{ ...celda, color: t.promedioRespuesta > 15000 ? '#b45309' : undefined, fontWeight: t.promedioRespuesta > 15000 ? 700 : 400 }}>{tk(t.promedioRespuesta)}</td>
                       <td style={celda}>{t.productos}</td><td style={{ ...celda, fontWeight: 700 }}>{usd(t.usd)}</td>

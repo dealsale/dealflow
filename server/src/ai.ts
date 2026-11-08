@@ -49,9 +49,9 @@ const PROVEEDORES_IA: Record<string, { url: string; model: string; env: string; 
 };
 
 /**
- * Resuelve qué IA usa la tienda: su proveedor predeterminado con SU propia
- * API key (Integraciones). Si no configuró nada, cae a DeepSeek con la clave
- * del servidor (comportamiento de siempre).
+ * Resuelve qué IA usa la tienda: su proveedor predeterminado con SU propia API key
+ * (Integraciones). Nunca se usa una clave de DealFlow para el bot de una tienda: si la
+ * tienda no puso la suya, no hay IA (el asistente pasa el chat al equipo y lo avisa).
  */
 export function resolverIA(storeId: string): { url: string; model: string; key: string; proveedor: string } | null {
   const asst = db.prepare('SELECT ia_proveedor FROM assistants WHERE store_id = ?').get(storeId) as { ia_proveedor: string } | undefined;
@@ -59,28 +59,28 @@ export function resolverIA(storeId: string): { url: string; model: string; key: 
   const p = PROVEEDORES_IA[proveedor] || PROVEEDORES_IA.deepseek;
   const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, proveedor) as { config: string } | undefined;
   const propia = row ? (pj<Record<string, string>>(row.config, {}).apiKey || '').trim() : '';
-  const key = propia || process.env[p.env] || '';
+  const key = propia;
   if (!key) return null;
   return { url: p.url, model: p.model, key, proveedor };
 }
 
 /** Qué IA usa la tienda para escribir y de quién es la clave (para el superadmin; nunca expone la clave). */
-export function infoIATienda(storeId: string): { proveedor: string; modelo: string; clave: 'tienda' | 'dealflow' | 'ninguna'; fotos: 'tienda' | 'dealflow' | 'ninguna' } {
+export function infoIATienda(storeId: string): { proveedor: string; modelo: string; clave: 'tienda' | 'ninguna'; fotos: 'tienda' | 'ninguna' } {
   const propia = (prov: string) => {
     const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, prov) as { config: string } | undefined;
     return !!(row ? (pj<Record<string, string>>(row.config, {}).apiKey || '').trim() : '');
   };
   const ia = resolverTexto(storeId);
-  const fotos = propia('openai') ? 'tienda' : process.env.OPENAI_API_KEY ? 'dealflow' : 'ninguna';
+  const fotos = propia('openai') ? 'tienda' : 'ninguna';
   if (!ia) return { proveedor: '', modelo: '', clave: 'ninguna', fotos };
-  return { proveedor: PROVEEDORES_IA[ia.proveedor]?.nombre || ia.proveedor, modelo: ia.model, clave: propia(ia.proveedor) ? 'tienda' : 'dealflow', fotos };
+  return { proveedor: PROVEEDORES_IA[ia.proveedor]?.nombre || ia.proveedor, modelo: ia.model, clave: 'tienda', fotos };
 }
 
-/** Llave de un proveedor concreto de la tienda (o del servidor como respaldo). */
+/** Llave de un proveedor concreto de la tienda (solo la de la tienda, nunca la de DealFlow). */
 function keyProveedor(storeId: string, prov: 'deepseek' | 'openai'): string {
   const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, prov) as { config: string } | undefined;
   const propia = row ? (pj<Record<string, string>>(row.config, {}).apiKey || '').trim() : '';
-  return propia || process.env[prov === 'openai' ? 'OPENAI_API_KEY' : 'DEEPSEEK_API_KEY'] || '';
+  return propia;
 }
 
 /**
