@@ -361,8 +361,11 @@ async function responderTurno(storeId: string, leadId: string) {
   {
     const n = (db.prepare("SELECT COUNT(*) n FROM messages WHERE lead_id = ? AND de = 'bot' AND COALESCE(tipo,'texto') IN ('texto','text') AND created_at > datetime('now','-60 minutes')").get(leadId) as { n: number }).n;
     if (n >= MAX_RESPUESTAS_HORA) {
-      registrarLog(storeId, 'warn', 'ia', `El asistente se pausó en este chat: ya respondió ${n} mensajes en la última hora (posible conversación con otro bot o respuesta automática). Revisa el chat y devuélvelo al asistente si todo está bien.`, leadId);
-      pasarAHumano(storeId, leadId, `el asistente respondió ${n} mensajes en una hora (posible bucle con otro bot).`);
+      registrarLog(storeId, 'warn', 'ia', `🤖 Posible bot: el asistente se pausó en el chat de ${lead.nombre || lead.tel || 'un cliente'} porque ya respondió ${n} mensajes en la última hora (puede ser otro bot o una respuesta automática). Así no se gasta tu IA. Revisa el chat y devuélvelo al asistente si es una persona.`, leadId);
+      pasarAHumano(storeId, leadId, `el asistente respondió ${n} mensajes en una hora (posible bucle con otro bot).`, {
+        titulo: 'Posible bot en un chat 🤖',
+        cuerpo: `${lead.nombre || 'Un cliente'}: el asistente respondió ${n} mensajes en una hora y se pausó para no gastar tu IA. Revisa el chat.`,
+      });
       return;
     }
   }

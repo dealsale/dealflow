@@ -69,7 +69,7 @@ export function ConsumoIA() {
                             {t.ia && <div><b>IA:</b> escribe con {t.ia.proveedor || '—'} ({t.ia.modelo || '—'}, {CLAVE[t.ia.clave]}) · fotos y notas de voz con OpenAI ({CLAVE[t.ia.fotos]})</div>}
                             <div><b>Por día (14 días):</b> {det.porDia.map((d) => `${d.dia.slice(5)}: ${n(d.llamadas)} llamadas · ${usd(d.usd)}`).join('  |  ') || 'sin datos'}</div>
                             <div><b>En qué se gasta:</b>{det.porTipo.map((x) => <div key={x.tipo}>• {x.nombre}: {n(x.llamadas)} llamadas · {tk(x.promedioEntrada)} tokens c/u · {usd(x.usd)}</div>)}</div>
-                            <div><b>Chats que más usan la IA (7 días):</b>{det.chats.map((c) => <div key={c.lead_id}>• {c.nombre || 'Sin nombre'} {c.tel ? `(${c.tel})` : ''}: {n(c.llamadas)} respuestas{c.llamadas >= 60 ? ' ⚠️ revisar: puede ser otro bot' : ''}</div>)}</div>
+                            <div><b>Chats que más usan la IA (7 días):</b>{det.chats.map((c) => <div key={c.lead_id}>• {c.nombre || 'Sin nombre'} {c.tel ? `(${c.tel})` : ''}: {n(c.llamadas)} llamadas a la IA (respuestas y recordatorios)</div>)}</div>
                           </div>
                         )}
                       </td></tr>

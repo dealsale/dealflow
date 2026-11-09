@@ -85,6 +85,15 @@ export async function correrSeguimiento(): Promise<void> {
       for (const tier of TIERS) if (l.ventana_min >= tier.min) objetivo = tier.nivel;
       if (objetivo <= (l.seguimiento_nivel || 0)) continue;
 
+      // ANTES de pedirle nada a la IA: ¿se puede enviar? Antes se redactaba primero y, si la
+      // calidad del número estaba en media o baja, no se enviaba ni se marcaba el nivel: al
+      // minuto siguiente se volvía a redactar el mismo recordatorio (cientos de llamadas a la
+      // IA por chat al día, a costa de la clave de la tienda).
+      const { puedeEscribirle, contarProactivo, frenoActivo } = await import('./calidad.js');
+      // Con la calidad en media o baja no se mandan recordatorios (se retoma solo cuando vuelva a alta).
+      if (frenoActivo(l.store_id)) continue;
+      if (!puedeEscribirle(l.store_id, l.tel, l.id).ok) { db.prepare('UPDATE leads SET seguimiento_nivel = 3 WHERE id = ?').run(l.id); continue; }
+
       // La IA redacta el recordatorio con el contexto del chat (retoma lo último
       // que hablaron) y decide si vale la pena escribir. Si no hay IA o falla,
       // usamos un texto de respaldo.
@@ -99,10 +108,6 @@ export async function correrSeguimiento(): Promise<void> {
       const texto = generado || seguimientoRespaldo(idiomaDe(l.store_id, l.id), objetivo, l.nombre) || mensajeSeguimiento(objetivo, l.nombre);
       const destino = l.wa_id || l.tel;
       const pn = l.tel;
-      const { puedeEscribirle, contarProactivo, frenoActivo } = await import('./calidad.js');
-      // Con la calidad en media o baja no se mandan recordatorios (se retoma solo cuando vuelva a alta).
-      if (frenoActivo(l.store_id)) continue;
-      if (!puedeEscribirle(l.store_id, l.tel, l.id).ok) { db.prepare('UPDATE leads SET seguimiento_nivel = 3 WHERE id = ?').run(l.id); continue; }
       try {
         const mid = uid();
         db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'bot', ?)").run(mid, l.id, texto);
