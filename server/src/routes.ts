@@ -2604,7 +2604,8 @@ api.post('/creditos/recargar', requireAuth, requireStore, requireOwner, async (r
   res.json({ url: r.url });
 });
 
-api.post('/admin/stores/:id/creditos', requireAuth, requireAdmin, async (req, res) => {
+// Dar o quitar créditos y días de plan: solo el superadmin.
+api.post('/admin/stores/:id/creditos', requireAuth, requireSuperAdmin, async (req, res) => {
   const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(req.params.id) as { id: string } | undefined;
   if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
   const cantidad = Math.round(Number(req.body?.cantidad));
@@ -3661,6 +3662,7 @@ async function leerTiendaSoporte(req: ExRequest, res: ExResponse) {
       plantillas: (await import('./plantillasWA.js')).permisosPlantillas(t.sid),
     },
     usuarios, planes: listarPlanes().map((p) => p.nombre),
+    esSuperadmin: t.admin.role === 'SUPERADMIN', // solo el superadmin da créditos y días de plan
   });
 }
 api.post('/soporte-tienda/editar', requireAuth, (req, res) => {
@@ -3741,6 +3743,7 @@ api.post('/soporte-tienda/clave', requireAuth, (req, res) => {
 });
 api.post('/soporte-tienda/creditos', requireAuth, async (req, res) => {
   const t = tiendaSoporte(req, res); if (!t) return;
+  if (t.admin.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Solo el superadmin puede dar o quitar créditos.' });
   const cantidad = Math.round(Number(req.body?.cantidad));
   if (!Number.isFinite(cantidad) || cantidad === 0) return res.status(400).json({ error: 'Indica cuántos créditos dar (o quitar con negativo).' });
   const { abonar, cobrar } = await import('./creditos.js');
@@ -3750,6 +3753,7 @@ api.post('/soporte-tienda/creditos', requireAuth, async (req, res) => {
 });
 api.post('/soporte-tienda/suscripcion', requireAuth, async (req, res) => {
   const t = tiendaSoporte(req, res); if (!t) return;
+  if (t.admin.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Solo el superadmin puede dar o quitar días de plan.' });
   const dias = Math.round(Number(req.body?.dias));
   if (!Number.isFinite(dias) || dias === 0) return res.status(400).json({ error: 'Indica cuántos días extender.' });
   const { extenderManual } = await import('./suscripcion.js');
@@ -4165,7 +4169,7 @@ api.delete('/admin/cupones/:id', requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-api.post('/admin/stores/:id/suscripcion', requireAuth, requireAdmin, async (req, res) => {
+api.post('/admin/stores/:id/suscripcion', requireAuth, requireSuperAdmin, async (req, res) => {
   const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(req.params.id) as { id: string } | undefined;
   if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
   const { extenderManual } = await import('./suscripcion.js');

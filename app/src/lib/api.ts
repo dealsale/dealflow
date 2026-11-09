@@ -794,6 +794,7 @@ export interface TiendaSoporte {
   tienda: { nombre: string; correo: string; plan: string; planEstado: string; planVence: string | null; activa: boolean; creditos: number; temaPremium: boolean; creada: string; whatsapp: { conectado: boolean; numero: string }; plantillas: PermisosPlantillas };
   usuarios: { id: string; nombre: string; email: string; dueno: boolean }[];
   planes: string[];
+  esSuperadmin?: boolean;
 }
 export const apiTiendaSoporte = () => req<TiendaSoporte>('/api/soporte-tienda', 'GET');
 export const apiTiendaSoporteEditar = (b: { nombre?: string; correo?: string; plan?: string; activa?: boolean; temaPremium?: boolean; plantillas?: Partial<PermisosPlantillas> }) => req<{ ok: true }>('/api/soporte-tienda/editar', 'POST', b);

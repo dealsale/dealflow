@@ -277,7 +277,8 @@ function EditarTiendaInline({ df, a, creditosDelta, setCreditosDelta, diasDelta,
         <button onClick={df.cerrarPanelStore} style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
         {df.editStoreMsg && <span style={{ color: df.editStoreMsg === 'Guardando…' ? 'var(--df-text-muted)' : 'var(--df-danger)', fontSize: 13 }}>{df.editStoreMsg}</span>}
       </div>
-      <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, borderTop: '1px solid var(--df-border)', paddingTop: 16 }}>
+      {/* Dar o quitar créditos y días de plan: solo el superadmin. */}
+      {df.isSuperadmin && <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, borderTop: '1px solid var(--df-border)', paddingTop: 16 }}>
         <div>
           <div style={labelStyle}>Créditos ({(a.creditos ?? 0).toLocaleString('es-CO')} actuales)</div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -295,7 +296,7 @@ function EditarTiendaInline({ df, a, creditosDelta, setCreditosDelta, diasDelta,
           </div>
         </div>
         {ajusteMsg && <div style={{ gridColumn: '1 / -1', fontSize: 12.5, color: 'var(--df-brand-dark)', fontWeight: 600 }}>{ajusteMsg}</div>}
-      </div>
+      </div>}
       <TiendaOnlineAdmin storeId={id} />
     </>
   );

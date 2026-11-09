@@ -74,7 +74,7 @@ export function EditarTiendaSoporte({ onCerrar }: { onCerrar: () => void }) {
                   onClick={() => void hacer('datos', () => apiTiendaSoporteEditar({ nombre, correo }), 'Datos guardados. El nombre nuevo se ve en el encabezado al recargar.')}>{ocupado === 'datos' ? 'Guardando…' : 'Guardar datos'}</button>
               </div>
 
-              <div style={caja}>
+              {d.esSuperadmin && <div style={caja}>
                 <p style={tit}>Créditos IA</p>
                 <div style={{ fontSize: 13 }}>Tiene <b>{t.creditos.toLocaleString('es-CO')}</b> créditos.</div>
                 <div style={fila}>
@@ -85,7 +85,7 @@ export function EditarTiendaSoporte({ onCerrar }: { onCerrar: () => void }) {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {[100, 500, 1500].map((n) => <button key={n} type="button" style={btnS} onClick={() => setCreditos(String(n))}>+{n}</button>)}
                 </div>
-              </div>
+              </div>}
 
               <div style={caja}>
                 <p style={tit}>Plan</p>
@@ -93,12 +93,14 @@ export function EditarTiendaSoporte({ onCerrar }: { onCerrar: () => void }) {
                 <select id="sop-plan" value={t.plan} onChange={(e) => void hacer('plan', () => apiTiendaSoporteEditar({ plan: e.target.value }), `Plan cambiado a ${e.target.value}.`)} style={campo}>
                   {[...new Set([t.plan, ...d.planes].filter(Boolean))].map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
+                {d.esSuperadmin && <>
                 <label style={{ fontSize: 12, fontWeight: 700 }} htmlFor="sop-dias">Extender el plan (días)</label>
                 <div style={fila}>
                   <input id="sop-dias" type="number" inputMode="numeric" value={dias} onChange={(e) => setDias(e.target.value)} style={campo} />
                   <button type="button" disabled={ocupado === 'dias' || !Number(dias)} style={btn}
                     onClick={() => void hacer('dias', () => apiTiendaSoporteSuscripcion(Number(dias)), `Plan ${Number(dias) > 0 ? 'extendido' : 'recortado'} ${Math.abs(Number(dias))} días.`)}>Aplicar</button>
                 </div>
+                </>}
               </div>
 
               <div style={caja}>
