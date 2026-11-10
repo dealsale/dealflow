@@ -51,10 +51,10 @@ export function proximaConsultaDropi(desde: number, guia: boolean, pdf: boolean,
 let corriendo = false;
 const avisado = new Map<string, string>(); // orderId → último motivo registrado (no repetir)
 const intentoAviso = new Map<string, number>(); // orderId → último intento de avisar la guía
-// Dropi da el número de guía antes que el PDF (a veces el PDF sale al día siguiente): se espera
-// el PDF hasta 24 h, consultando cada hora, para mandarle al cliente la guía DIGITAL (la foto).
-// Si a las 24 h no hay PDF, se le manda el número en texto y la foto cuando llegue.
-const ESPERA_PDF = DROPI_HORAS_GUIA * H;
+// Dropi da el número de guía antes que el PDF (a veces el PDF sale al día siguiente). El número
+// se le manda al cliente APENAS aparece la guía (antes se esperaba el PDF hasta 24 h y el cliente
+// se quedaba sin su número); se sigue consultando cada hora y la foto de la guía se le manda
+// después, cuando Dropi la publique (avisarGuiasPendientes → enviarImagenGuiaLuego).
 const intentoImagen = new Map<string, number>(); // orderId → último intento de mandar la imagen que llegó después
 
 /** Un ciclo de sincronización de despachos para TODAS las tiendas. */
@@ -152,11 +152,12 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
     trazar(o.store_id, o.id, { etapa: 'despacho', nivel: 'warn', titulo: 'Dropi lleva 24 horas sin generar la guía', detalle: `Estado en Dropi: ${r.estado || 'sin estado'}. Lo seguimos consultando cada 3 horas. Revisa la orden en Dropi: puede estar pendiente de confirmar, sin saldo o sin stock.` });
     registrarLog(o.store_id, 'warn', 'despacho', `DF-${o.numero}: Dropi lleva 24 horas sin generar la guía (estado: ${r.estado || 'sin estado'}). Revisa la orden ${o.dropi_order_id} en Dropi.`);
   }
-  // Aviso de la guía: si falla (p. ej. plantilla sin aprobar), se reintenta cada hora, no cada consulta.
-  // Sin PDF todavía: se espera hasta 24 h (consultando cada hora) para mandar la guía DIGITAL.
-  const esperandoPdf = !conPdf && ahora - (vista || ahora) < ESPERA_PDF;
-  if (guiaNueva && !o.guia_avisada && o.tel && !esperandoPdf && ahora - (intentoAviso.get(o.id) || 0) > 3600_000) {
+  // Aviso de la guía: apenas Dropi da el número (con o sin PDF). Si falla (p. ej. plantilla sin
+  // aprobar), se reintenta cada hora, no cada consulta.
+  if (guiaNueva && !o.guia_avisada && o.tel && ahora - (intentoAviso.get(o.id) || 0) > 3600_000) {
     intentoAviso.set(o.id, ahora);
+    const { trazar } = await import('./trazabilidad.js');
+    trazar(o.store_id, o.id, { etapa: 'despacho', nivel: 'info', titulo: `Dropi generó la guía ${guiaNueva}`, detalle: conPdf ? 'Ya trae el PDF: se le manda al cliente con la foto de la guía.' : 'Aún sin PDF: se le manda ya el número de guía al cliente y la foto cuando Dropi la publique (se consulta cada hora).' });
     await avisarGuiaAlCliente(o.store_id, o.id);
   }
   return { estado: r.estado, guia: guiaNueva };
@@ -180,9 +181,6 @@ async function avisarGuiasPendientes(): Promise<void> {
     ORDER BY created_at DESC LIMIT 60`).all() as { id: string; store_id: string }[];
   for (const o of filas) {
     if (Date.now() - (intentoAviso.get(o.id) || 0) < 2 * 3600_000) continue;
-    // Dropi sin el PDF todavía: se espera hasta 24 h para mandar la guía digital (no solo el número).
-    const d = db.prepare("SELECT COALESCE(dropi_order_id,'') dropi, COALESCE(guia_url,'') url, COALESCE(guia_img,'') img, COALESCE(guia_vista_at,'') vista FROM orders WHERE id = ?").get(o.id) as { dropi: string; url: string; img: string; vista: string } | undefined;
-    if (d?.dropi && !d.url && !d.img && Date.now() - (msDe(d.vista) || Date.now()) < ESPERA_PDF) continue;
     intentoAviso.set(o.id, Date.now());
     try { await avisarGuiaAlCliente(o.store_id, o.id); } catch { /* el próximo ciclo */ }
   }

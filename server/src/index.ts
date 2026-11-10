@@ -204,7 +204,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'seg-ia-11090439',
+    build: 'dropi-guia-ya-11101507',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es
