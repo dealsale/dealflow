@@ -2429,6 +2429,8 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
       resumen += `${guia ? ` · guía ${guia}` : ''}${estadoTxt ? ` · ${estadoTxt}` : ''}`;
       if (guia && !Number(orden.guia_avisada)) {
         try {
+          // Primero la constancia de la guía y después el aviso al cliente (así se lee en orden en la trazabilidad).
+          if (txt(orden.tel)) trazar(storeId, txt(orden.id), { etapa: 'despacho', nivel: 'info', titulo: `Effi generó la guía ${guia}${transp ? ` (${nombreTransportadora(transp) || transp})` : ''}`, detalle: urlDoc ? 'Ya trae el PDF: se le manda al cliente con la foto de la guía.' : 'Aún sin PDF: se le manda ya el número de guía al cliente y la foto cuando Effi la publique.' });
           const { avisarGuiaAlCliente } = await import('./despachos.js');
           if (txt(orden.tel)) await avisarGuiaAlCliente(txt(orden.store_id), txt(orden.id));
         } catch (e) { console.warn('[effi] no se pudo avisar la guía', e); }
