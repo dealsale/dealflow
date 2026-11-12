@@ -28,6 +28,15 @@ const BASE: PrecioServicio[] = [
   for (const s of BASE) ins.run(s.clave, s.nombre, s.descripcion, s.clave === 'tienda_online' && previa !== null ? previa : s.precio, s.unidad);
 }
 
+// Una sola vez: la Tienda en línea por aparte vale $80.000/mes (antes el valor por defecto era $25.000).
+try {
+  if (!db.prepare("SELECT 1 FROM app_flags WHERE clave = 'tienda_online_80k'").get()) {
+    db.prepare("UPDATE precios_servicios SET precio = 80000, descripcion = ?, updated_at = datetime('now') WHERE clave = 'tienda_online' AND precio = 25000")
+      .run('Membresía mensual por aparte (los planes que la incluyen no la pagan): productos y landings ilimitados, subdominio gratis y dominio propio.');
+    db.prepare("INSERT INTO app_flags (clave) VALUES ('tienda_online_80k')").run();
+  }
+} catch { /* app_flags aún no existe: se hace en el próximo arranque */ }
+
 export function listarPrecios(): PrecioServicio[] {
   return db.prepare('SELECT clave, nombre, descripcion, precio, unidad FROM precios_servicios ORDER BY nombre').all() as PrecioServicio[];
 }

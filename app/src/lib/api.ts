@@ -133,10 +133,15 @@ export interface AdminStore {
 export interface AdminPlan {
   id: string;
   nombre: string;
-  precio: number;
+  precio: number; // instalación (una vez)
+  mensual?: number; // mensualidad
+  incluyeTienda?: boolean; // incluye la Tienda en línea (no se paga aparte)
+  visible?: boolean; // se ofrece a las tiendas nuevas
+  orden?: number;
   features: string[];
   cuentas: number;
 }
+export interface PlanEditable { nombre?: string; precio?: number; mensual?: number; incluyeTienda?: boolean; visible?: boolean; orden?: number; features?: string[] }
 
 export interface ApiMensaje {
   id?: string;
@@ -211,6 +216,7 @@ export interface PlanPublico {
   precio: number; // valor inicial
   mensual: number; // renta mensual
   features: string[];
+  incluyeTienda?: boolean;
 }
 export interface Cupon {
   id: string;
@@ -222,6 +228,8 @@ export interface Cupon {
   maxUsos: number | null;
   usos: number;
   nota: string;
+  alcance?: 'instalacion' | 'total';
+  creadoPor?: string;
 }
 export interface NuevoCupon {
   codigo: string;
@@ -231,13 +239,14 @@ export interface NuevoCupon {
   vence: string | null;
   maxUsos: number | null;
   nota: string;
+  alcance?: 'instalacion' | 'total';
 }
 export const apiSuscripcion = () => req<{ suscripcion: Suscripcion | null }>('/api/suscripcion', 'GET');
 export const apiRevisarPlanShopify = () => req<{ activo: boolean; plan?: string; error?: string; suscripcion: Suscripcion | null }>('/api/suscripcion/shopify/revisar', 'POST');
 export const apiPlanes = () => req<{ planes: PlanPublico[] }>('/api/planes', 'GET');
 export const apiCheckoutSuscripcion = (plan?: string, cupon?: string) =>
   req<{ url?: string; gratis?: boolean }>('/api/suscripcion/checkout', 'POST', { ...(plan ? { plan } : {}), ...(cupon ? { cupon } : {}) });
-export const apiValidarCupon = (codigo: string) => req<{ valido: boolean; descuento: number; montoFijo: number | null; mensaje: string; codigo?: string }>('/api/suscripcion/cupon', 'POST', { codigo });
+export const apiValidarCupon = (codigo: string) => req<{ valido: boolean; descuento: number; montoFijo: number | null; mensaje: string; codigo?: string; alcance?: 'instalacion' | 'total' }>('/api/suscripcion/cupon', 'POST', { codigo });
 export const apiVerificarPago = (id: string) => req<{ activado: boolean; estado?: string }>('/api/suscripcion/verificar', 'POST', { id });
 export const apiExtenderSuscripcion = (id: string, dias: number) => req<{ ok: true }>(`/api/admin/stores/${id}/suscripcion`, 'POST', { dias });
 // Cupones (admin)
@@ -918,8 +927,8 @@ export const apiSuperBibliotecaEditar = (id: string) => req<{ ok: true; productI
 export const apiSuperBibliotecaEnviarATienda = (id: string, storeId: string) =>
   req<{ ok: true; productId: string }>(`/api/superadmin/biblioteca/${id}/enviar-a-tienda`, 'POST', { storeId });
 
-export const apiCreatePlan = (b: { nombre: string; precio: number; features: string[] }) => req<{ id: string }>('/api/admin/plans', 'POST', b);
-export const apiUpdatePlan = (id: string, b: { nombre?: string; precio?: number; features?: string[] }) =>
+export const apiCreatePlan = (b: PlanEditable & { nombre: string; precio: number; features: string[] }) => req<{ id: string }>('/api/admin/plans', 'POST', b);
+export const apiUpdatePlan = (id: string, b: PlanEditable) =>
   req<{ ok: true }>(`/api/admin/plans/${id}`, 'PATCH', b);
 export const apiDeletePlan = (id: string) => req<{ ok: true }>(`/api/admin/plans/${id}`, 'DELETE');
 
@@ -1162,7 +1171,7 @@ export const apiContaQuitarAdjunto = (id: string) => req<{ ok: true }>(`/api/adm
 export interface RemitenteAuditado { codigo: string; nombre: string; ciudad: string; direccion: string; vigente: boolean; configurado: boolean; effi: { guias: number; entregadas: number; devoluciones: number; conNovedad: number } | null; dealflow: number; porRecoger: { numero: string; guia: string; estado: string; fecha: string; transportadora: string }[] }
 export interface AuditoriaRemitentes { storeId: string; tienda: string; configurado: string; guiaAutomatica: boolean; remitentes: RemitenteAuditado[]; error?: string }
 export const apiAdminAuditoriaRemitentes = () => reqBase<{ tiendas: AuditoriaRemitentes[] }>('/api/admin/auditoria-remitentes', 'GET');
-export interface CfgPagosAdmin { offline: boolean; whatsapp: string; numeroLanding: string; wompiListo: boolean }
+export interface CfgPagosAdmin { offline: boolean; whatsapp: string; numeroLanding: string; wompiListo: boolean; boldListo?: boolean }
 export const apiAdminPagos = () => req<CfgPagosAdmin>('/api/admin/pagos', 'GET');
 export const apiAdminGuardarPagos = (b: Partial<{ offline: boolean; whatsapp: string }>) => req<CfgPagosAdmin>('/api/admin/pagos', 'PUT', b);
 export const apiAdminProbarSoporte = () => req<{ respuesta: string }>('/api/admin/soporte-chat/probar', 'POST');

@@ -2594,12 +2594,12 @@ api.get('/creditos', requireAuth, requireStore, async (req, res) => {
 });
 
 api.post('/creditos/recargar', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { crearRecargaCheckout } = await import('./suscripcion.js');
+  const { crearRecargaCheckout, enlaceDePago } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const base = `${proto}://${req.get('host')}`;
   if (await cobroShopify(req, res, 'Recarga de créditos', (p) => crearRecargaCheckout(req.user!.storeId!, req.user!.email, base, String(req.body?.paquete || ''), p))) return;
   if (await pagoOffline(req, res, 'una recarga de créditos')) return;
-  const r = crearRecargaCheckout(req.user!.storeId!, req.user!.email, base, String(req.body?.paquete || ''));
+  const r = await enlaceDePago(crearRecargaCheckout(req.user!.storeId!, req.user!.email, base, String(req.body?.paquete || '')), req.user!.email);
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ url: r.url });
 });
@@ -3388,17 +3388,22 @@ api.get('/admin/overview', requireAuth, requireAdmin, (req, res) => {
     return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, creditos: s.creditos || 0, temaPremium: !!s.tema_premium, oculta: !!s.oculta };
   });
   const plans = (db.prepare('SELECT * FROM plans').all() as Record<string, unknown>[]).map((p) => ({
-    id: p.id, nombre: p.nombre, precio: p.precio, features: pj(p.features as string, []),
+    id: p.id, nombre: p.nombre, precio: p.precio, mensual: Number(p.mensual) || 0, incluyeTienda: !!p.incluye_tienda, visible: p.visible == null ? true : !!p.visible, orden: Number(p.orden) || 0, features: pj(p.features as string, []),
     cuentas: (db.prepare('SELECT COUNT(*) AS n FROM stores WHERE plan = ? AND COALESCE(oculta,0) = 0').get(p.nombre) as { n: number }).n,
   }));
   res.json({ stores, plans });
 });
 
 api.post('/admin/plans', requireAuth, requireAdmin, (req, res) => {
-  const { nombre, precio, features } = req.body || {};
-  if (!nombre?.trim() || !Number(precio)) return res.status(400).json({ error: 'Falta el nombre o el precio.' });
+  const { nombre, precio, mensual, incluyeTienda, visible, features } = req.body || {};
+  const inst = Math.max(0, Math.round(Number(precio) || 0)), mes = Math.max(0, Math.round(Number(mensual) || 0));
+  if (!String(nombre || '').trim() || (!inst && !mes)) return res.status(400).json({ error: 'Falta el nombre o los valores (instalación y/o mensualidad).' });
+  if (db.prepare('SELECT 1 FROM plans WHERE nombre = ?').get(String(nombre).trim())) return res.status(409).json({ error: 'Ya existe un plan con ese nombre.' });
   const id = uid();
-  db.prepare('INSERT INTO plans (id, nombre, precio, features) VALUES (?,?,?,?)').run(id, nombre.trim(), Number(precio), j(Array.isArray(features) ? features : []));
+  const orden = (db.prepare('SELECT COALESCE(MAX(orden),0)+1 n FROM plans').get() as { n: number }).n;
+  db.prepare('INSERT INTO plans (id, nombre, precio, mensual, incluye_tienda, visible, orden, features) VALUES (?,?,?,?,?,?,?,?)')
+    .run(id, String(nombre).trim(), inst, mes, incluyeTienda ? 1 : 0, visible === false ? 0 : 1, orden, j(Array.isArray(features) ? features : []));
+  registrarAccionEquipo(req.user!.email, `Creó el plan ${String(nombre).trim()} (instalación ${inst}, mensualidad ${mes}${incluyeTienda ? ', con Tienda en línea' : ''})`);
   res.json({ id });
 });
 
@@ -3848,15 +3853,23 @@ api.post('/admin/stores/:id/whatsapp/sync', requireAuth, requireAdmin, async (re
 api.patch('/admin/plans/:id', requireAuth, requireAdmin, (req, res) => {
   const p = db.prepare('SELECT id, nombre FROM plans WHERE id = ?').get(req.params.id) as { id: string; nombre: string } | undefined;
   if (!p) return res.status(404).json({ error: 'Plan no encontrado.' });
-  const { nombre, precio, features } = req.body || {};
+  const { nombre, precio, mensual, incluyeTienda, visible, orden, features } = req.body || {};
   if (typeof nombre === 'string' && nombre.trim() && nombre.trim() !== p.nombre) {
     const dup = db.prepare('SELECT id FROM plans WHERE nombre = ? AND id != ?').get(nombre.trim(), p.id);
     if (dup) return res.status(409).json({ error: 'Ya existe un plan con ese nombre.' });
     db.prepare('UPDATE plans SET nombre = ? WHERE id = ?').run(nombre.trim(), p.id);
     db.prepare('UPDATE stores SET plan = ? WHERE plan = ?').run(nombre.trim(), p.nombre); // reasigna las tiendas de ese plan
   }
-  if (precio !== undefined && Number(precio) >= 0) db.prepare('UPDATE plans SET precio = ? WHERE id = ?').run(Number(precio), p.id);
+  // precio = instalación (una vez); mensual = mensualidad. Las tiendas del plan pagan la nueva
+  // mensualidad desde su próxima renovación.
+  if (precio !== undefined && Number(precio) >= 0) db.prepare('UPDATE plans SET precio = ? WHERE id = ?').run(Math.round(Number(precio)), p.id);
+  if (mensual !== undefined && Number(mensual) >= 0) db.prepare('UPDATE plans SET mensual = ? WHERE id = ?').run(Math.round(Number(mensual)), p.id);
+  if (incluyeTienda !== undefined) db.prepare('UPDATE plans SET incluye_tienda = ? WHERE id = ?').run(incluyeTienda ? 1 : 0, p.id);
+  if (visible !== undefined) db.prepare('UPDATE plans SET visible = ? WHERE id = ?').run(visible ? 1 : 0, p.id);
+  if (orden !== undefined && Number.isFinite(Number(orden))) db.prepare('UPDATE plans SET orden = ? WHERE id = ?').run(Math.round(Number(orden)), p.id);
   if (Array.isArray(features)) db.prepare('UPDATE plans SET features = ? WHERE id = ?').run(j(features), p.id);
+  const q = db.prepare('SELECT nombre, precio, mensual, incluye_tienda FROM plans WHERE id = ?').get(p.id) as { nombre: string; precio: number; mensual: number; incluye_tienda: number };
+  registrarAccionEquipo(req.user!.email, `Editó el plan ${q.nombre}: instalación ${q.precio}, mensualidad ${q.mensual}${q.incluye_tienda ? ', con Tienda en línea' : ''}`);
   res.json({ ok: true });
 });
 
@@ -4083,31 +4096,35 @@ api.get('/admin/auditoria-remitentes', requireAuth, requireSuperAdmin, async (re
 });
 api.get('/admin/pagos', requireAuth, requireSuperAdmin, async (_req, res) => {
   const P = await import('./pagosOffline.js');
-  res.json({ ...P.cfgPagos(), numeroLanding: (process.env.LANDING_WA || '').replace(/\D/g, ''), wompiListo: !!(process.env.WOMPI_PUBLIC_KEY && process.env.WOMPI_INTEGRITY) });
+  res.json({ ...P.cfgPagos(), numeroLanding: (process.env.LANDING_WA || '').replace(/\D/g, ''), wompiListo: !!(process.env.WOMPI_PUBLIC_KEY && process.env.WOMPI_INTEGRITY), boldListo: !!process.env.BOLD_API_KEY });
 });
 api.put('/admin/pagos', requireAuth, requireSuperAdmin, async (req, res) => {
   const P = await import('./pagosOffline.js');
-  res.json({ ...P.guardarCfgPagos(req.body || {}), numeroLanding: (process.env.LANDING_WA || '').replace(/\D/g, ''), wompiListo: !!(process.env.WOMPI_PUBLIC_KEY && process.env.WOMPI_INTEGRITY) });
+  res.json({ ...P.guardarCfgPagos(req.body || {}), numeroLanding: (process.env.LANDING_WA || '').replace(/\D/g, ''), wompiListo: !!(process.env.WOMPI_PUBLIC_KEY && process.env.WOMPI_INTEGRITY), boldListo: !!process.env.BOLD_API_KEY });
 });
 
 api.post('/suscripcion/checkout', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { crearCheckout } = await import('./suscripcion.js');
+  const { crearCheckout, enlaceDePago } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const base = `${proto}://${req.get('host')}`;
   // Con la app de Shopify el plan se elige y se paga en Shopify (Shopify App Pricing).
   const shopPlan = sa.shopDeTienda(req.user!.storeId!);
   if (shopPlan) return res.status(409).json({ error: 'Tu plan se paga con la facturación de Shopify.', shopify: { planesUrl: sa.urlPlanes(shopPlan) } });
-  const r = crearCheckout(req.user!.storeId!, req.user!.email, base, req.body?.plan, req.body?.cupon);
+  const r0 = crearCheckout(req.user!.storeId!, req.user!.email, base, req.body?.plan, req.body?.cupon);
+  if (r0.error) return res.status(400).json({ error: r0.error });
+  if (r0.gratis) return res.json({ gratis: true });
+  // Con cupón al 100 % se activa sin pasarela; si hay que cobrar y los pagos están apagados, es offline.
+  if (await pagoOffline(req, res, `mi plan de DealFlow${req.body?.plan ? ` (${String(req.body.plan)})` : ''}`)) return;
+  const r = await enlaceDePago(r0, req.user!.email);
   if (r.error) return res.status(400).json({ error: r.error });
-  // Con cupón al 100 % se activa sin Wompi; si hay que cobrar y los pagos están apagados, es offline.
-  if (r.url && (await pagoOffline(req, res, `mi plan de DealFlow${req.body?.plan ? ` (${String(req.body.plan)})` : ''}`))) return;
-  res.json({ url: r.url, gratis: r.gratis });
+  res.json({ url: r.url });
 });
 
 // La tienda valida un cupón para ver el descuento antes de pagar.
 api.post('/suscripcion/cupon', requireAuth, requireStore, async (req, res) => {
-  const { validarCupon } = await import('./suscripcion.js');
-  res.json(validarCupon(String(req.body?.codigo || '')));
+  const { validarCupon, estadoSuscripcion } = await import('./suscripcion.js');
+  const e = estadoSuscripcion(req.user!.storeId!);
+  res.json(validarCupon(String(req.body?.codigo || ''), e?.inicialPagado ? 'renta' : 'inicial'));
 });
 
 // Al volver del pago: verifica la transacción directamente con Wompi y activa
@@ -4121,7 +4138,7 @@ api.post('/suscripcion/verificar', requireAuth, requireStore, async (req, res) =
 // ── Cupones de descuento (los administra el admin de DealFlow) ────────
 api.get('/admin/cupones', requireAuth, requireAdmin, (_req, res) => {
   const cupones = (db.prepare('SELECT * FROM cupones ORDER BY created_at DESC').all() as Record<string, unknown>[]).map((c) => ({
-    id: c.id, codigo: c.codigo, descuento: c.descuento, montoFijo: c.monto_fijo ?? null, activo: !!c.activo,
+    id: c.id, codigo: c.codigo, descuento: c.descuento, montoFijo: c.monto_fijo ?? null, activo: !!c.activo, alcance: c.alcance === 'total' ? 'total' : 'instalacion', creadoPor: c.creado_por || '',
     vence: c.vence || null, maxUsos: c.max_usos ?? null, usos: c.usos, nota: c.nota,
   }));
   res.json({ cupones });
@@ -4145,15 +4162,20 @@ api.post('/admin/cupones', requireAuth, requireAdmin, (req, res) => {
   }
   const vence = req.body?.vence ? String(req.body.vence).slice(0, 10) : null;
   const maxUsos = req.body?.maxUsos != null && req.body.maxUsos !== '' ? Math.max(1, Math.round(Number(req.body.maxUsos))) : null;
+  // Los cupones generales (instalación + mensualidad) solo los crea el superadmin.
+  const alcance = req.body?.alcance === 'total' ? 'total' : 'instalacion';
+  if (alcance === 'total' && req.user!.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Solo el superadmin puede crear cupones generales (que cubren también la mensualidad).' });
   const id = uid();
-  db.prepare('INSERT INTO cupones (id, codigo, descuento, monto_fijo, activo, vence, max_usos, nota) VALUES (?,?,?,?,1,?,?,?)')
-    .run(id, codigo, descuento, montoFijo, vence, maxUsos, String(req.body?.nota || '').trim());
+  db.prepare('INSERT INTO cupones (id, codigo, descuento, monto_fijo, activo, vence, max_usos, nota, alcance, creado_por) VALUES (?,?,?,?,1,?,?,?,?,?)')
+    .run(id, codigo, descuento, montoFijo, vence, maxUsos, String(req.body?.nota || '').trim(), alcance, req.user!.email);
+  registrarAccionEquipo(req.user!.email, `Creó el cupón ${codigo} (${alcance === 'total' ? 'general: instalación y mensualidad' : 'solo instalación'})`);
   res.json({ id, codigo });
 });
 
 api.patch('/admin/cupones/:id', requireAuth, requireAdmin, (req, res) => {
-  const c = db.prepare('SELECT id FROM cupones WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+  const c = db.prepare('SELECT id, alcance FROM cupones WHERE id = ?').get(req.params.id) as { id: string; alcance: string } | undefined;
   if (!c) return res.status(404).json({ error: 'Cupón no encontrado.' });
+  if (c.alcance === 'total' && req.user!.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Los cupones generales solo los maneja el superadmin.' });
   if (req.body?.activo !== undefined) db.prepare('UPDATE cupones SET activo = ? WHERE id = ?').run(req.body.activo ? 1 : 0, c.id);
   if (req.body?.descuento !== undefined) {
     const d = Math.round(Number(req.body.descuento));
@@ -4163,8 +4185,9 @@ api.patch('/admin/cupones/:id', requireAuth, requireAdmin, (req, res) => {
 });
 
 api.delete('/admin/cupones/:id', requireAuth, requireAdmin, (req, res) => {
-  const c = db.prepare('SELECT id FROM cupones WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+  const c = db.prepare('SELECT id, alcance FROM cupones WHERE id = ?').get(req.params.id) as { id: string; alcance: string } | undefined;
   if (!c) return res.status(404).json({ error: 'Cupón no encontrado.' });
+  if (c.alcance === 'total' && req.user!.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Los cupones generales solo los maneja el superadmin.' });
   db.prepare('DELETE FROM cupones WHERE id = ?').run(c.id);
   res.json({ ok: true });
 });
@@ -4668,13 +4691,15 @@ api.post('/biblioteca/:id/importar', requireAuth, requireStore, requireOwner, as
 
 // Inicia el pago único de un producto de biblioteca de pago.
 api.post('/biblioteca/:id/checkout', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { crearCheckoutBiblioteca } = await import('./suscripcion.js');
+  const { crearCheckoutBiblioteca, enlaceDePago } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const base = `${proto}://${req.get('host')}`;
   if (await cobroShopify(req, res, 'Producto de la Biblioteca', (p) => crearCheckoutBiblioteca(req.user!.storeId!, req.user!.email, base, req.params.id, p))) return;
-  const r = crearCheckoutBiblioteca(req.user!.storeId!, req.user!.email, base, req.params.id);
-  if (r.error) return res.status(400).json({ error: r.error });
+  const r0 = crearCheckoutBiblioteca(req.user!.storeId!, req.user!.email, base, req.params.id);
+  if (r0.error) return res.status(400).json({ error: r0.error });
   if (await pagoOffline(req, res, 'un producto de la Biblioteca')) return;
+  const r = await enlaceDePago(r0, req.user!.email);
+  if (r.error) return res.status(400).json({ error: r.error });
   res.json({ url: r.url });
 });
 
@@ -4758,11 +4783,11 @@ api.post('/biblioteca-landings/:id/importar', requireAuth, requireStore, require
   res.json({ ok: true, landingId: r.landingId });
 });
 api.post('/biblioteca-landings/:id/checkout', requireAuth, requireStore, requireOwner, async (req, res) => {
-  const { crearCheckoutBibliotecaLanding } = await import('./suscripcion.js');
+  const { crearCheckoutBibliotecaLanding, enlaceDePago } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   if (await cobroShopify(req, res, 'Landing de la Biblioteca', (p) => crearCheckoutBibliotecaLanding(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, req.params.id, p))) return;
   if (await pagoOffline(req, res, 'una landing de la Biblioteca')) return;
-  const r = crearCheckoutBibliotecaLanding(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, req.params.id);
+  const r = await enlaceDePago(crearCheckoutBibliotecaLanding(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, req.params.id), req.user!.email);
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ url: r.url });
 });
@@ -4864,14 +4889,14 @@ api.post('/admin/stores/:id/tienda-online', requireAuth, requireAdmin, async (re
 });
 api.post('/landings/membresia/pagar', requireAuth, requireStore, async (req, res) => {
   const L = await import('./landings.js');
-  const { crearCheckoutTiendaOnline } = await import('./suscripcion.js');
+  const { crearCheckoutTiendaOnline, enlaceDePago } = await import('./suscripcion.js');
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
   const m = L.membresiaTienda(req.user!.storeId!);
-  // Gratis (precio $0): no hay nada que cobrar, ya está activa.
-  if (m.precio <= 0) return res.json({ gratis: true });
+  // Gratis (precio $0) o incluida en el plan de DealFlow: no hay nada que cobrar, ya está activa.
+  if (m.precio <= 0 || m.incluidaEnPlan) return res.json({ gratis: true });
   if (await cobroShopify(req, res, 'Tienda en línea (30 días)', (p) => crearCheckoutTiendaOnline(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, m.precio, p))) return;
   if (await pagoOffline(req, res, 'la membresía de Tienda en línea')) return;
-  const r = crearCheckoutTiendaOnline(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, m.precio);
+  const r = await enlaceDePago(crearCheckoutTiendaOnline(req.user!.storeId!, req.user!.email, `${proto}://${req.get('host')}`, m.precio), req.user!.email);
   if (r.error) return res.status(400).json({ error: r.error });
   res.json({ url: r.url });
 });
@@ -5162,6 +5187,18 @@ webhooks.post('/shopify', (req, res) => {
   const shop = String(req.headers['x-shopify-shop-domain'] || '').toLowerCase();
   const id = String(req.headers['x-shopify-webhook-id'] || req.headers['x-shopify-event-id'] || '');
   try { sa.procesarWebhook(topic, shop, id, (req.body || {}) as Record<string, unknown>); } catch (e) { console.error('[shopify-app] webhook', topic, e); }
+});
+
+// Bold: firma HMAC en x-bold-signature. Igual se confirma el pago preguntándole a Bold (bold.ts).
+webhooks.post('/bold', async (req, res) => {
+  res.sendStatus(200); // Bold reintenta si no recibe 200 rápido
+  try {
+    const { firmaBoldValida, procesarWebhookBold } = await import('./bold.js');
+    const raw = (req as unknown as { rawBody?: Buffer }).rawBody;
+    const firma = String(req.headers['x-bold-signature'] || '');
+    if (process.env.BOLD_SECRET_KEY && !firmaBoldValida(raw, firma)) { console.warn('[bold] firma inválida en el webhook: se ignora'); return; }
+    await procesarWebhookBold((req.body || {}) as Record<string, unknown>);
+  } catch (e) { console.error('[bold] webhook', e); }
 });
 
 webhooks.post('/wompi', async (req, res) => {

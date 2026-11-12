@@ -3057,8 +3057,9 @@ export function useDealFlowState() {
         if (!data.suscripcion.bloqueado) location.reload(); // ya activa → carga la app completa
       }
     });
-    // Red de seguridad: preguntamos directo a Wompi si la transacción fue aprobada (no depende del webhook).
-    if (txId) void apiVerificarPago(txId).then(() => void refrescar());
+    // Red de seguridad: preguntamos directo a la pasarela si el pago fue aprobado (no depende del webhook).
+    // Con Bold no siempre viene un id en la URL: el servidor revisa los links pendientes de la tienda.
+    void apiVerificarPago(txId).then(() => void refrescar());
     const t = setInterval(() => void refrescar(), 3000);
     setTimeout(() => clearInterval(t), 30000);
     return () => clearInterval(t);

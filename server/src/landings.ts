@@ -61,7 +61,7 @@ const hoyCo = () => new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10)
 const masDias = (fecha: string, n: number) => { const d = new Date(fecha + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 /** Días de gracia después de vencer: las páginas siguen en línea mientras renueva. */
 export const GRACIA_DIAS = 3;
-export interface Membresia { activa: boolean; cortesia: boolean; vence: string; diasRestantes: number; enGracia: boolean; precio: number }
+export interface Membresia { activa: boolean; cortesia: boolean; vence: string; diasRestantes: number; enGracia: boolean; precio: number; incluidaEnPlan?: boolean }
 // Las cortesías de antes (interruptor del superadmin) pasan a 30 días de membresía, una sola vez,
 // para que nadie pierda lo publicado de golpe. Desde ahora todas funcionan con membresía.
 if (!db.prepare("SELECT 1 FROM app_flags WHERE clave = 'tienda_cortesias_a_membresia'").get()) {
@@ -76,6 +76,13 @@ export function membresiaTienda(storeId: string): Membresia {
   const cortesia = precio <= 0;
   const vence = txt(r?.tienda_vence);
   const hoy = hoyCo();
+  // Plan de DealFlow que incluye la Tienda en línea (Admin → Planes): va con el plan, no se paga aparte.
+  const pl = db.prepare(`SELECT s.plan_vence FROM stores s JOIN plans p ON p.nombre = s.plan
+      WHERE s.id = ? AND COALESCE(p.incluye_tienda,0) = 1 AND COALESCE(s.inicial_pagado,0) = 1 AND COALESCE(s.plan_vence,'') >= ?`).get(storeId, hoy) as { plan_vence: string } | undefined;
+  if (pl) {
+    const d = Math.round((Date.parse(pl.plan_vence + 'T12:00:00Z') - Date.parse(hoy + 'T12:00:00Z')) / 864e5);
+    return { activa: true, cortesia: false, vence: pl.plan_vence, diasRestantes: d, enGracia: false, precio, incluidaEnPlan: true };
+  }
   const dias = vence ? Math.round((Date.parse(vence + 'T12:00:00Z') - Date.parse(hoy + 'T12:00:00Z')) / 864e5) : -1;
   return { activa: cortesia || dias >= 0, cortesia, vence, diasRestantes: dias, enGracia: !cortesia && !!vence && dias < 0 && dias >= -GRACIA_DIAS, precio };
 }

@@ -675,14 +675,16 @@ function PagosAdmin() {
   const numero = c.whatsapp || c.numeroLanding;
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 20 }}>
-      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>💳 Pagos en línea (Wompi)</div>
+      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>💳 Pagos en línea ({c.boldListo ? 'Bold' : 'Wompi'})</div>
       <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
         {c.offline
           ? <>Apagados: cuando una tienda va a pagar (plan, renta, Tienda en línea, Biblioteca o créditos) ve que el pago es <b>offline</b> y un botón para escribir por WhatsApp. Lo gratis (cupones al 100 %, membresías en $0) sigue funcionando.</>
-          : <>Encendidos: los pagos abren Wompi.{!c.wompiListo && <b style={{ color: 'var(--df-danger)' }}> Faltan las llaves de Wompi en el servidor.</b>}</>}
+          : c.boldListo
+            ? <>Encendidos: los pagos abren el link de pago de <b>Bold</b>.</>
+            : <>Encendidos: los pagos abren Wompi.{!c.wompiListo && <b style={{ color: 'var(--df-danger)' }}> Faltan las llaves de Bold (BOLD_API_KEY) o de Wompi en el servidor.</b>}</>}
       </div>
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
-        <input type="checkbox" checked={!c.offline} onChange={(e) => void guardar({ offline: !e.target.checked })} /> Cobrar con Wompi
+        <input type="checkbox" checked={!c.offline} onChange={(e) => void guardar({ offline: !e.target.checked })} /> Cobrar en línea ({c.boldListo ? 'Bold' : 'Wompi'})
       </label>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 14 }}>
         <div style={{ flex: '1 1 240px' }}>

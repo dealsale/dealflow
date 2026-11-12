@@ -10,6 +10,9 @@ export function Cupones({ df }: { df: DealFlowState }) {
   const [maxUsos, setMaxUsos] = useState('');
   const [nota, setNota] = useState('');
   const [armed, setArmed] = useState('');
+  // General = instalación y mensualidad (solo el superadmin); normal = solo la instalación.
+  const [alcance, setAlcance] = useState<'instalacion' | 'total'>('instalacion');
+  const esSuper = df.isSuperadmin;
 
   useEffect(() => { void df.reloadCupones(); }, []);
 
@@ -22,6 +25,7 @@ export function Cupones({ df }: { df: DealFlowState }) {
       vence: vence || null,
       maxUsos: maxUsos ? Number(maxUsos) : null,
       nota,
+      alcance: esSuper ? alcance : 'instalacion',
     });
     setCodigo(''); setDescuento(''); setMontoFijo(''); setVence(''); setMaxUsos(''); setNota('');
   };
@@ -31,7 +35,7 @@ export function Cupones({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="Admin Cupones">
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Cupones 🎁</h1>
-      <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 18px' }}>Descuentos que das a las tiendas. Aplican a la instalación y a la renta. Un cupón del 100% activa la cuenta gratis.</p>
+      <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 18px' }}>Descuentos que das a las tiendas. Los cupones normales solo cubren la <b>instalación</b> (un cupón del 100% la deja gratis). {esSuper ? 'Como superadmin también puedes crear cupones generales, que cubren la instalación y la mensualidad.' : 'Los cupones generales (que también cubren la mensualidad) solo los crea el superadmin.'}</p>
 
       {/* Crear cupón */}
       <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', maxWidth: 820, marginBottom: 22 }}>
@@ -51,6 +55,17 @@ export function Cupones({ df }: { df: DealFlowState }) {
             ))}
           </div>
         </div>
+        {esSuper && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>¿Qué cubre?</div>
+            <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden', flexWrap: 'wrap' }}>
+              {([['instalacion', 'Solo la instalación'], ['total', 'General: instalación y mensualidad']] as const).map(([v, t]) => (
+                <button key={v} onClick={() => setAlcance(v)}
+                  style={{ background: alcance === v ? 'var(--df-brand)' : 'var(--df-surface)', color: alcance === v ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{t}</button>
+              ))}
+            </div>
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 12 }}>
           <div>
             <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Código</div>
@@ -98,6 +113,7 @@ export function Cupones({ df }: { df: DealFlowState }) {
             <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 13.5 }}>{c.codigo}{c.nota ? <span style={{ display: 'block', fontFamily: 'inherit', fontWeight: 400, fontSize: 11.5, color: 'var(--df-text-faint)' }}>{c.nota}</span> : null}</span>
             <span style={{ fontWeight: 800, color: 'var(--df-brand-dark)', fontSize: c.montoFijo != null ? 12.5 : 14 }}>
               {c.montoFijo != null ? (c.montoFijo <= 0 ? 'GRATIS' : '$' + c.montoFijo.toLocaleString('es-CO')) : c.descuento + '%'}
+              <span style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: c.alcance === 'total' ? 'var(--df-purple, #7C3AED)' : 'var(--df-text-faint)' }}>{c.alcance === 'total' ? 'GENERAL' : 'INSTALACIÓN'}</span>
             </span>
             <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>
               {c.vence ? `Vence ${c.vence}` : 'Sin vencimiento'}<br />

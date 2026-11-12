@@ -261,15 +261,21 @@ const PLAN_FEATURES = [
   '30 días de soporte incluido',
 ];
 
-// Deja un solo plan (idempotente en cada arranque): crea/actualiza "DealFlow",
-// mueve a él las tiendas de planes anteriores (Básico, Premium…) y borra esos
-// planes. La renta de esas tiendas no cambia (ya era de $250.000).
+// Planes editables en Admin → Planes: instalación (precio, una vez), mensualidad, si incluyen
+// la Tienda en línea, si se muestran a las tiendas nuevas y su orden.
+addColumn('plans', 'incluye_tienda INTEGER NOT NULL DEFAULT 0');
+addColumn('plans', 'visible INTEGER NOT NULL DEFAULT 1');
+addColumn('plans', 'orden INTEGER NOT NULL DEFAULT 0');
+
+// En cada arranque: si no hay ningún plan, crea "DealFlow" con los valores por defecto. Antes
+// esto REESCRIBÍA los precios y borraba los demás planes en cada arranque (por eso no se podían
+// editar); ahora lo que el equipo cambie en Admin → Planes se respeta.
 export function ensurePlanesCanonicos(): void {
-  const ex = db.prepare('SELECT id FROM plans WHERE nombre = ?').get(PLAN_UNICO) as { id: string } | undefined;
-  if (ex) db.prepare('UPDATE plans SET precio = ?, mensual = ?, features = ? WHERE id = ?').run(PLAN_INSTALACION, PLAN_MENSUAL, JSON.stringify(PLAN_FEATURES), ex.id);
-  else db.prepare('INSERT INTO plans (id, nombre, precio, mensual, features) VALUES (?,?,?,?,?)').run(crypto.randomUUID(), PLAN_UNICO, PLAN_INSTALACION, PLAN_MENSUAL, JSON.stringify(PLAN_FEATURES));
-  db.prepare('UPDATE stores SET plan = ? WHERE plan != ?').run(PLAN_UNICO, PLAN_UNICO);
-  db.prepare('DELETE FROM plans WHERE nombre != ?').run(PLAN_UNICO);
+  const hay = (db.prepare('SELECT COUNT(*) n FROM plans').get() as { n: number }).n > 0;
+  if (!hay) db.prepare('INSERT INTO plans (id, nombre, precio, mensual, features) VALUES (?,?,?,?,?)').run(crypto.randomUUID(), PLAN_UNICO, PLAN_INSTALACION, PLAN_MENSUAL, JSON.stringify(PLAN_FEATURES));
+  // Tiendas con un plan que ya no existe: al primero (para que su renta no quede en $0).
+  const primero = (db.prepare('SELECT nombre FROM plans ORDER BY orden, precio LIMIT 1').get() as { nombre: string } | undefined)?.nombre;
+  if (primero) db.prepare('UPDATE stores SET plan = ? WHERE plan NOT IN (SELECT nombre FROM plans)').run(primero);
 }
 if (nuevaColInicial) {
   const hayTiendas = (db.prepare('SELECT COUNT(*) AS n FROM stores').get() as { n: number }).n > 0;
@@ -310,6 +316,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS cupones (
 // Cupón de precio fijo: si monto_fijo no es NULL, el pago cuesta ese valor exacto
 // (ej: $1.000) en vez de aplicar un porcentaje.
 addColumn('cupones', 'monto_fijo INTEGER');
+// Alcance: 'instalacion' (lo normal: solo el valor inicial) o 'total' (instalación y mensualidad;
+// solo los crea el superadmin, para armar ofertas o planes especiales).
+addColumn('cupones', "alcance TEXT NOT NULL DEFAULT 'instalacion'");
+addColumn('cupones', "creado_por TEXT NOT NULL DEFAULT ''");
+// Id del cobro en la pasarela externa (p. ej. el link de pago de Bold).
+addColumn('pagos', "externo TEXT NOT NULL DEFAULT ''");
 
 // Créditos del Marketing IA (texto/imágenes con OpenAI). Saldo por tienda,
 // historial de movimientos, y cuántos créditos otorga un pago de recarga.
