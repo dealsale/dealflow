@@ -17,7 +17,15 @@ export function audioAOgg(buffer: Buffer): Buffer | null {
     const entrada = path.join(dir, 'in');
     const salida = path.join(dir, 'out.ogg');
     writeFileSync(entrada, buffer);
-    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', entrada, '-vn', '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '32k', '-application', 'voip', '-f', 'ogg', salida], { timeout: 60_000 });
+    const r = spawnSync('ffmpeg', [
+      '-hide_banner', '-loglevel', 'error', '-y', '-i', entrada,
+      // Igual que una nota de voz nativa de WhatsApp: el celular es mucho más estricto que el PC
+      // ("Este audio no está disponible porque algo falló con el archivo de audio").
+      '-vn', '-map', '0:a:0', '-map_metadata', '-1', '-fflags', '+bitexact', '-flags:a', '+bitexact',
+      '-avoid_negative_ts', 'make_zero', '-ac', '1', '-ar', '16000',
+      '-c:a', 'libopus', '-b:a', '24k', '-vbr', 'on', '-application', 'voip', '-frame_duration', '20',
+      '-f', 'ogg', salida,
+    ], { timeout: 60_000 });
     if (r.status === 0 && existsSync(salida)) {
       const out = readFileSync(salida);
       if (out.length > 0) return out;
