@@ -442,11 +442,14 @@ export async function unirOrdenesDropi(storeId: string, forzar = false): Promise
     const url = guiaS3 ? (guiaS3.startsWith('http') ? guiaS3 : PDF_BASE + guiaS3.replace(/^\/+/, '')) : '';
     const estado = buscar(d, ['status', 'estado', 'order_status', 'status_name']);
     const final = /entregad|devoluci|devuelt|cancelad|anulad/i.test(estado);
+    // Estado real del envío (si ya va en reparto, no se queda en «Guía generada»).
+    const { estadoLogistico } = await import('./estadosPedido.js');
+    const real = estadoLogistico(estado, true) || 'Guía generada';
     const reciente = !final && Date.now() - fecha < 4 * 86400_000;
     db.prepare(`UPDATE orders SET dropi_order_id = ?, despacho_proveedor = CASE WHEN COALESCE(despacho_proveedor,'') = '' THEN 'dropi' ELSE despacho_proveedor END,
       guia = ?, guia_url = CASE WHEN ? != '' THEN ? ELSE guia_url END, transportadora = CASE WHEN ? != '' THEN ? ELSE transportadora END,
-      estado_woo = CASE WHEN ? != '' THEN ? ELSE estado_woo END, estado = CASE WHEN estado IN ('Nuevo','Confirmado','Despachado','') THEN 'Guía generada' ELSE estado END, guia_avisada = ? WHERE id = ?`)
-      .run(id, guia, url, url, transp, transp, estado.slice(0, 60), estado.slice(0, 60), reciente ? 0 : 1, o.id);
+      estado_woo = CASE WHEN ? != '' THEN ? ELSE estado_woo END, estado = CASE WHEN estado IN ('Nuevo','Confirmado','Despachado','','Guía generada') THEN ? ELSE estado END, guia_avisada = ? WHERE id = ?`)
+      .run(id, guia, url, url, transp, transp, estado.slice(0, 60), estado.slice(0, 60), real, reciente ? 0 : 1, o.id);
     const { trazar } = await import('./trazabilidad.js');
     trazar(storeId, o.id, { etapa: 'vinculo', nivel: 'info', titulo: `Orden ${id} de Dropi (guía ${guia}${transp ? `, ${transp}` : ''}) unida a este pedido`, detalle: 'Se creó directo en Dropi; se unió por el celular del cliente.' });
     if (reciente) { try { const { avisarGuia } = await import('./avisoGuia.js'); await avisarGuia(storeId, o.id); } catch { /* el próximo ciclo */ } }

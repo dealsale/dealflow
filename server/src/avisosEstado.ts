@@ -92,8 +92,21 @@ function reintentar(a: Fila, motivo: string): void {
 async function enviarAviso(a: Fila): Promise<void> {
   const storeId = txt(a.store_id);
   const seguimiento = txt(a.origen).startsWith('seguimiento');
-  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(txt(a.order_id), storeId) as Fila | undefined;
+  let o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(txt(a.order_id), storeId) as Fila | undefined;
   if (!o) return cerrar(a, 'omitido', 'El pedido ya no existe.');
+  // Seguimiento: primero se pregunta a la transportadora dónde va DE VERDAD el pedido. Si no,
+  // con un estado viejo («Guía generada») se le decía «está empacado en nuestra bodega» a un
+  // cliente cuyo pedido ya iba en reparto, y no lo esperaba ese día.
+  if (seguimiento && txt(o.guia)) {
+    const antes = txt(o.estado);
+    try {
+      if (txt(o.despacho_proveedor) === 'effi') { const { rastrearGuia } = await import('./effiExtras.js'); await rastrearGuia(storeId, txt(o.id), 30); }
+      else if (txt(o.dropi_order_id)) { const { sincronizarPedidoDropi } = await import('./despachos.js'); await sincronizarPedidoDropi(storeId, txt(o.id)); }
+    } catch { /* se sigue con lo que hay */ }
+    o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(txt(a.order_id), storeId) as Fila | undefined;
+    if (!o) return cerrar(a, 'omitido', 'El pedido ya no existe.');
+    if (txt(o.estado) !== antes) return cerrar(a, 'omitido', `El envío avanzó a "${txt(o.estado)}": se le avisa ese cambio en vez del seguimiento.`);
+  }
   // El seguimiento cuenta el estado de HOY; los avisos de cambio, el estado que cambió.
   const estado = seguimiento ? txt(o.estado) : txt(a.estado);
   if (seguimiento) {

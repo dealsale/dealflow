@@ -87,6 +87,18 @@ export async function sincronizarDespachos(): Promise<void> {
       const { consultarEstadoEffi } = await import('./effiApi.js');
       for (const o of effiPend) { try { await consultarEstadoEffi(o.store_id, o.id); } catch { /* sigue con el próximo */ } }
     }
+    // Rastreo de la transportadora (Effi): el estado general de la guía en Effi a veces se queda
+    // atrás («generada») cuando el mensajero ya va en reparto. El historial lo trae al día.
+    const enCamino = db.prepare(
+      `SELECT id, store_id FROM orders
+        WHERE despacho_proveedor = 'effi' AND COALESCE(guia,'') != '' AND estado IN ('Guía generada','En tránsito')
+          AND created_at > datetime('now','-20 days')
+        ORDER BY COALESCE(historial_ts,''), created_at DESC LIMIT 80`,
+    ).all() as { id: string; store_id: string }[];
+    if (enCamino.length) {
+      const { rastrearGuia } = await import('./effiExtras.js');
+      for (const o of enCamino) { try { await rastrearGuia(o.store_id, o.id, 45); } catch { /* sigue con el próximo */ } }
+    }
     // Guías hechas a mano en Effi y unidas a pedidos viejos: su estado por número de guía.
     try { const { consultarGuiasSueltas } = await import('./effiExtras.js'); await consultarGuiasSueltas(); } catch (e) { console.warn('[despachos] guías sueltas', e); }
     // Novedades de entrega que reporta la transportadora (Effi).

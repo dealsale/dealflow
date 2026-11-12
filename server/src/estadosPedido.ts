@@ -20,6 +20,8 @@ export function estadoLogistico(texto: string, hayGuia: boolean): EstadoPedido |
     if (/devuelt|devoluc|retorn|regresad/.test(e)) return 'Devuelto';
     if (/cancelad|anulad|rechazad/.test(e)) return 'Cancelado';
     if (/novedad|no entregad|fallid|incidenc|reprogramad|siniestr|direccion errada|ausente|no reclamad/.test(e)) return 'Novedad';
+    // «Entregado al mensajero / a ruta» = sale a reparto, todavía NO lo tiene el cliente.
+    if (/entregad[oa] (a|al) (mensajero|repartidor|courier|ruta|distribucion)|asignad[oa] (a|al) (mensajero|repartidor|ruta)/.test(e)) return 'En reparto';
     if (/entregad/.test(e)) return 'Entregado';
     if (/reparto|ruta de entrega|en distribucion|mensajero|ultima milla/.test(e)) return 'En reparto';
     if (/por recoger|pendiente (de|por) recog|sin recoger|en alistamiento/.test(e)) return 'Guía generada';

@@ -63,7 +63,43 @@ export async function rastrearGuia(storeId: string, orderId: string, frescuraMin
     ins.run(orderId, txt(h.fecha_hist_est), txt(h.estado_new), txt(h.estado_new_efficommerce), txt(h.observacion_hist_est), txt(h.url_foto));
   }
   db.prepare("UPDATE orders SET historial_ts = datetime('now') WHERE id = ?").run(orderId);
-  return rastreoGuardado(orderId);
+  const pasos = rastreoGuardado(orderId);
+  try { await estadoDesdeRastreo(storeId, orderId, pasos); } catch (e) { console.warn('[effi] estado desde el rastreo', e); }
+  return pasos;
+}
+
+/**
+ * El último movimiento de la transportadora manda: si el rastreo dice que ya va en reparto
+ * (o en tránsito, entregado…) y el pedido sigue en «Guía generada», se actualiza. Antes el
+ * rastreo solo se guardaba y el pedido se quedaba atrás: al cliente le llegaba «está empacado
+ * en nuestra bodega» cuando el mensajero ya iba para su casa. Al cambiar el estado, el aviso
+ * correcto («hoy sale con el mensajero») sale solo (trigger de avisos_estado).
+ */
+async function estadoDesdeRastreo(storeId: string, orderId: string, pasos: PasoRastreo[]): Promise<void> {
+  const ult = pasos[0];
+  if (!ult) return;
+  const { estadoLogistico, siguienteEstado } = await import('./estadosPedido.js');
+  const deGlobal = estadoLogistico(ult.estadoGlobal, true);
+  const deTransp = estadoLogistico(ult.estado, true);
+  // El texto de la transportadora suele ser más preciso que el estado general de Effi.
+  const real = deTransp && deTransp !== 'Guía generada' ? deTransp : deGlobal;
+  const o = db.prepare('SELECT estado, numero FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
+  if (!o) return;
+  const nuevo = siguienteEstado(txt(o.estado), real);
+  // Desde el rastreo solo se AVANZA (no se devuelve un «En reparto» a «En tránsito» por un paso viejo).
+  const orden = ['Guía generada', 'En tránsito', 'En reparto'];
+  if (!nuevo || (orden.includes(nuevo) && orden.includes(txt(o.estado)) && orden.indexOf(nuevo) < orden.indexOf(txt(o.estado)))) return;
+  const textoT = (ult.estado || ult.estadoGlobal).slice(0, 60);
+  db.prepare('UPDATE orders SET estado = ?, estado_woo = CASE WHEN ? != \'\' THEN ? ELSE estado_woo END WHERE id = ?').run(nuevo, textoT, textoT, orderId);
+  if (nuevo === 'Devuelto') alQuedarDevuelto(storeId, orderId);
+  // Movimiento viejo (más de 30 h): el estado se corrige, pero no se le escribe al cliente algo
+  // que ya pasó (p. ej. «hoy sale con el mensajero» de hace dos días).
+  const t = ult.fecha ? new Date(ult.fecha.replace(' ', 'T').slice(0, 19) + '-05:00').getTime() : NaN;
+  if (Number.isFinite(t) && Date.now() - t > 30 * 3600_000) {
+    db.prepare("UPDATE avisos_estado SET resultado = 'omitido', detalle = ? WHERE order_id = ? AND estado = ? AND resultado = ''")
+      .run('Estado corregido por el rastreo con un movimiento de hace más de 30 h: no se avisa.', orderId, nuevo);
+  }
+  trazar(storeId, orderId, { etapa: 'despacho', nivel: 'info', titulo: `Estado actualizado por el rastreo: ${txt(o.estado)} → ${nuevo}`, detalle: `Último movimiento de la transportadora: ${textoT}${ult.fecha ? ` (${ult.fecha.slice(0, 16)})` : ''}.` });
 }
 
 /**
@@ -88,9 +124,11 @@ export async function contextoEnvioLead(storeId: string, leadId: string): Promis
       if (Array.isArray(r)) pasos = r;
     } else pasos = rastreoGuardado(txt(p.id));
     const mov = pasos.slice(0, 3).map((s) => `${s.fecha.slice(0, 16)} ${s.estado}${s.observacion ? ` (${s.observacion})` : ''}`).join('; ');
-    lineas.push(`- Pedido DF-${txt(p.numero)}: estado ${txt(p.estado)}${txt(p.transportadora) ? ` · ${nombreTransportadora(txt(p.transportadora)) || txt(p.transportadora)}` : ''}${txt(p.guia) ? ` · guía ${txt(p.guia)}` : ' · aún sin guía'}${mov ? ` · últimos movimientos (UTC): ${mov}` : ''}`);
+    // El rastreo pudo actualizar el estado: se lee de nuevo.
+    const estadoHoy = (db.prepare('SELECT estado FROM orders WHERE id = ?').get(txt(p.id)) as { estado: string } | undefined)?.estado || txt(p.estado);
+    lineas.push(`- Pedido DF-${txt(p.numero)}: estado ${estadoHoy}${txt(p.transportadora) ? ` · ${nombreTransportadora(txt(p.transportadora)) || txt(p.transportadora)}` : ''}${txt(p.guia) ? ` · guía ${txt(p.guia)}` : ' · aún sin guía'}${mov ? ` · últimos movimientos (UTC): ${mov}` : ''}`);
   }
-  return `\n\nENVÍOS DE ESTE CLIENTE (datos reales, úsalos si pregunta por su pedido, la guía o cuándo llega; no inventes fechas):\n${lineas.join('\n')}`;
+  return `\n\nENVÍOS DE ESTE CLIENTE (datos reales, úsalos si pregunta por su pedido, la guía o cuándo llega; no inventes fechas):\n${lineas.join('\n')}\nSi los últimos movimientos de la transportadora dicen algo más avanzado que el estado (p. ej. reparto, en distribución, con el mensajero), créele a los movimientos: dile que ya va para su casa y que tenga el celular cerca. NUNCA le digas que el pedido está en nuestra bodega o que lo estamos empacando si ya tiene movimientos de la transportadora.`;
 }
 
 // ── 2. Cobertura ─────────────────────────────────────────────────────
