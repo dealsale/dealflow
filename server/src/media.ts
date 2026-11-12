@@ -5,16 +5,28 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { db, uid } from './db.js';
 
-/** Convierte un audio (webm, mp4…) a ogg/opus, el formato de nota de voz de WhatsApp. Devuelve null si no hay ffmpeg. */
+/**
+ * Convierte un audio (webm, mp4/m4a de Safari/iPhone, mp3…) a ogg/opus mono, el formato de nota
+ * de voz de WhatsApp. Usa archivos temporales (no pipes): el mp4 de Safari trae el índice al
+ * final y ffmpeg no siempre lo puede leer desde un pipe. Devuelve null si no hay ffmpeg o falla.
+ */
 export function audioAOgg(buffer: Buffer): Buffer | null {
+  let dir = '';
   try {
-    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-vn', '-c:a', 'libopus', '-b:a', '32k', '-f', 'ogg', 'pipe:1'], {
-      input: buffer,
-      maxBuffer: 60 * 1024 * 1024,
-    });
-    if (r.status === 0 && r.stdout && r.stdout.length > 0) return r.stdout;
-  } catch {
-    /* sin ffmpeg */
+    dir = mkdtempSync(path.join(tmpdir(), 'df-audio-'));
+    const entrada = path.join(dir, 'in');
+    const salida = path.join(dir, 'out.ogg');
+    writeFileSync(entrada, buffer);
+    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', entrada, '-vn', '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '32k', '-application', 'voip', '-f', 'ogg', salida], { timeout: 60_000 });
+    if (r.status === 0 && existsSync(salida)) {
+      const out = readFileSync(salida);
+      if (out.length > 0) return out;
+    }
+    console.error('[media] ffmpeg no pudo convertir la nota de voz:', r.error?.message || String(r.stderr || '').trim().slice(0, 300));
+  } catch (e) {
+    console.error('[media] sin ffmpeg para convertir la nota de voz', e);
+  } finally {
+    if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ }
   }
   return null;
 }

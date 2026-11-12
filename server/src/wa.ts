@@ -412,8 +412,9 @@ export async function subirMediaCloud(storeId: string, buffer: Buffer, mime: str
   try {
     const form = new FormData();
     form.append('messaging_product', 'whatsapp');
-    form.append('type', mime);
-    form.append('file', new Blob([new Uint8Array(buffer)], { type: mime }), nombre);
+    const mimeBase = mime.split(';')[0].trim();
+    form.append('type', mimeBase);
+    form.append('file', new Blob([new Uint8Array(buffer)], { type: mimeBase }), nombre);
     const up = await fetch(`${GRAPH}/${cfg.phone_number_id}/media`, { method: 'POST', headers: { Authorization: `Bearer ${cfg.access_token}` }, body: form });
     const j = (await up.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
     return up.ok && j.id ? { id: j.id } : { error: j.error?.message || 'Meta no aceptó el archivo.' };
@@ -433,8 +434,10 @@ async function cloudSendMedia(
     // 1) Subir el archivo y obtener su media ID.
     const form = new FormData();
     form.append('messaging_product', 'whatsapp');
-    form.append('type', media.mime);
-    form.append('file', new Blob([new Uint8Array(media.buffer)], { type: media.mime }), nombre || 'archivo.' + mediaExt(media.tipo, media.mime));
+    // Meta valida el tipo sin parámetros ("audio/ogg", no "audio/ogg; codecs=opus").
+    const mimeBase = media.mime.split(';')[0].trim();
+    form.append('type', mimeBase);
+    form.append('file', new Blob([new Uint8Array(media.buffer)], { type: mimeBase }), nombre || 'archivo.' + mediaExt(media.tipo, mimeBase));
     const up = await fetch(`${GRAPH}/${phoneId}/media`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
     const upj = (await up.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
     if (!up.ok || !upj.id) return { ok: false, error: upj.error?.message || 'Meta no aceptó el archivo.' };
@@ -507,9 +510,17 @@ async function enviarMediaReal(
     return { ok: false, error: BLOQUEO_VENTANA, bloqueadoVentana: true };
   }
   // Nota de voz: los navegadores graban en webm; WhatsApp la quiere en ogg/opus.
-  if (media.tipo === 'audio' && !media.mime.includes('ogg')) {
+  // Siempre se reconvierte (también si ya dice ogg): así va mono/opus y con el nombre .ogg
+  // que Meta exige; si no, Meta responde "formato no válido" y el cliente no la recibe.
+  if (media.tipo === 'audio') {
     const ogg = audioAOgg(media.buffer);
-    if (ogg) media = { buffer: ogg, mime: 'audio/ogg; codecs=opus', tipo: 'audio' };
+    if (ogg) {
+      media = { buffer: ogg, mime: 'audio/ogg; codecs=opus', tipo: 'audio' };
+      nombre = 'nota-de-voz.ogg';
+    } else if (!/^audio\/(ogg|mpeg|mp4|aac|amr)\b/.test(media.mime)) {
+      registrarLog(storeId, 'error', 'envio', `No se envió la nota de voz a ${to}: no se pudo convertir ${media.mime} a ogg/opus (¿falta ffmpeg en el servidor?).`);
+      return { ok: false, error: 'No pudimos convertir la nota de voz al formato de WhatsApp.' };
+    }
   }
   if (cfg.modo === 'qr') {
     const { sendMediaViaQr } = await import('./waqr.js');
