@@ -1,7 +1,7 @@
 /**
  * Contabilidad de DealFlow (administración): ingresos y egresos de la empresa para el
- * control interno y lo tributario. Los pagos aprobados por la pasarela (Wompi) se registran
- * solos como ingresos; lo demás (ventas offline, compras, gastos, pagos a socios, impuestos…)
+ * control interno y lo tributario. Los pagos aprobados por la pasarela (Bold, Wompi o Shopify) se
+ * registran solos como ingresos, en el momento en que se aprueban y con su comprobante en PDF; lo demás (ventas offline, compras, gastos, pagos a socios, impuestos…)
  * se registra a mano, con sus comprobantes adjuntos. Nada se borra en silencio: un
  * movimiento se anula (queda en el historial) y solo los manuales se pueden eliminar.
  */
@@ -25,7 +25,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS contabilidad_movimientos (
   retencion INTEGER NOT NULL DEFAULT 0,
   medio TEXT NOT NULL DEFAULT '',
   documento TEXT NOT NULL DEFAULT '', -- número de factura, recibo o comprobante
-  origen TEXT NOT NULL DEFAULT 'manual', -- manual | wompi
+  origen TEXT NOT NULL DEFAULT 'manual', -- manual | wompi | bold | shopify
   referencia TEXT NOT NULL DEFAULT '',
   notas TEXT NOT NULL DEFAULT '',
   estado TEXT NOT NULL DEFAULT 'vigente', -- vigente | anulado
@@ -52,28 +52,132 @@ export const CATEGORIAS = {
   ingreso: ['Instalación de plan', 'Renta mensual', 'Tienda en línea', 'Biblioteca', 'Créditos Marketing IA', 'Venta de servicio', 'Aporte de socios', 'Intereses y rendimientos', 'Otros ingresos'],
   egreso: ['Compras', 'Servidores e infraestructura', 'Software y suscripciones', 'Publicidad y marketing', 'Nómina', 'Honorarios y contratistas', 'Pago a socios / aliados', 'Comisiones de pasarela', 'Impuestos', 'Arriendo y servicios', 'Gastos bancarios', 'Otros gastos'],
 } as const;
-export const MEDIOS = ['Wompi', 'Transferencia', 'Consignación', 'Efectivo', 'Nequi', 'Daviplata', 'Tarjeta', 'Otro'];
+export const MEDIOS = ['Bold', 'Wompi', 'Shopify', 'Transferencia', 'Consignación', 'Efectivo', 'Nequi', 'Daviplata', 'Tarjeta', 'Otro'];
 
 const CATEGORIA_PAGO: Record<string, string> = { inicial: 'Instalación de plan', renta: 'Renta mensual', tienda_online: 'Tienda en línea', biblioteca: 'Biblioteca', creditos: 'Créditos Marketing IA', landing: 'Tienda en línea' };
 
-/** Pasa a la contabilidad los pagos aprobados de la pasarela que aún no estén (idempotente). */
+const MEDIO_PASARELA: Record<string, string> = { bold: 'Bold', wompi: 'Wompi', shopify: 'Shopify' };
+const ORIGENES_PASARELA = ['wompi', 'bold', 'shopify'];
+const cop = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CO');
+/** Fecha y hora de la base (UTC, «YYYY-MM-DD HH:MM:SS») en hora de Colombia. */
+const horaCO = (utc: string) => { const t = Date.parse(utc.replace(' ', 'T') + (utc.includes('Z') ? '' : 'Z')); return Number.isNaN(t) ? '' : new Date(t - 5 * 3600e3).toISOString().slice(0, 16).replace('T', ' '); };
+
+/**
+ * Registra en la contabilidad un pago aprobado de la pasarela (idempotente): el ingreso con su
+ * categoría, la tienda, el medio real (Bold/Wompi/Shopify) y, como SOPORTE, el comprobante en PDF
+ * y la respuesta de la pasarela con la que se confirmó el pago.
+ */
+export function registrarPagoEnContabilidad(referencia: string): boolean {
+  const p = db.prepare(`SELECT p.*, s.nombre tienda, s.correo FROM pagos p LEFT JOIN stores s ON s.id = p.store_id WHERE p.referencia = ? AND p.estado = 'aprobado'`).get(referencia) as Record<string, string | number | null> | undefined;
+  if (!p || !(Number(p.monto) > 0)) return false;
+  const gateway = String(p.gateway || 'wompi');
+  const origen = ORIGENES_PASARELA.includes(gateway) ? gateway : 'wompi';
+  const ya = db.prepare(`SELECT id FROM contabilidad_movimientos WHERE referencia = ? AND origen IN (${ORIGENES_PASARELA.map(() => '?').join(',')})`).get(referencia, ...ORIGENES_PASARELA) as { id: string } | undefined;
+  let movId = ya?.id;
+  if (!movId) {
+    const tipo = String(p.tipo || 'renta');
+    const cat = CATEGORIA_PAGO[tipo] || 'Otros ingresos';
+    const concepto = `${cat}${p.plan && (tipo === 'inicial' || tipo === 'renta') ? ` · plan ${p.plan}` : ''}`;
+    const medio = MEDIO_PASARELA[gateway] || 'Otro';
+    const notas = [p.transaccion ? `Transacción ${medio} ${p.transaccion}` : '', p.externo ? `Link de pago ${p.externo}` : '', p.cupon ? `Cupón ${p.cupon}` : ''].filter(Boolean).join(' · ');
+    movId = uid();
+    const fecha = horaCO(String(p.aprobado_at || p.created_at || '')).slice(0, 10) || horaCO(new Date().toISOString()).slice(0, 10);
+    const r = db.prepare(`INSERT OR IGNORE INTO contabilidad_movimientos (id, tipo, categoria, fecha, concepto, tercero, tercero_doc, store_id, valor, base, medio, documento, origen, referencia, notas, creado_por)
+      VALUES (?, 'ingreso', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pasarela')`)
+      .run(movId, cat, fecha, concepto, String(p.tienda || ''), String(p.correo || ''), String(p.store_id || ''), Number(p.monto) || 0, Number(p.monto) || 0, medio, String(p.transaccion || referencia), origen, referencia, notas);
+    if (!r.changes) return false;
+  }
+  adjuntarSoportePago(movId, p);
+  return true;
+}
+
+/** Comprobante PDF + respuesta de la pasarela, si el movimiento todavía no tiene soporte. */
+function adjuntarSoportePago(movId: string, p: Record<string, string | number | null>): void {
+  if ((db.prepare('SELECT COUNT(*) n FROM contabilidad_adjuntos WHERE movimiento_id = ?').get(movId) as { n: number }).n) return;
+  const medio = MEDIO_PASARELA[String(p.gateway || 'wompi')] || 'Pasarela';
+  const tipo = String(p.tipo || 'renta');
+  const cat = CATEGORIA_PAGO[tipo] || 'Otros ingresos';
+  const ajuste = db.prepare("SELECT despues FROM plan_ajustes WHERE referencia = ? AND tipo = 'pago' LIMIT 1").get(String(p.referencia)) as { despues: string } | undefined;
+  const aprobado = String(p.aprobado_at || p.created_at || '');
+  const lineas: [string, string][] = [
+    ['Comprobante N.º', String(p.referencia)],
+    ['Fecha del pago', aprobado ? `${horaCO(aprobado)} (hora de Colombia)` : '—'],
+    ['Cliente (tienda)', String(p.tienda || '—')],
+    ['Correo', String(p.correo || '—')],
+    ['ID de la tienda', String(p.store_id || '')],
+    ['Concepto', `${cat}${p.plan && (tipo === 'inicial' || tipo === 'renta') ? ` · plan ${p.plan}` : ''}`],
+    ...(ajuste ? [['Servicio pagado hasta', ajuste.despues] as [string, string]] : []),
+    ...(p.cupon ? [['Cupón aplicado', String(p.cupon)] as [string, string]] : []),
+    ['Valor pagado', `${cop(Number(p.monto))} COP`],
+    ['Medio de pago', medio],
+    ['Transacción', String(p.transaccion || '—')],
+    ...(p.externo ? [['Link de pago', String(p.externo)] as [string, string]] : []),
+    ['Estado', 'APROBADO'],
+  ];
+  const pdf = pdfComprobante('DealFlow · Comprobante de pago recibido', lineas, [
+    `Pago confirmado consultando directamente a ${medio}. Este comprobante es un soporte interno`,
+    'del ingreso; no reemplaza la factura electrónica.',
+  ]);
+  adjuntar(movId, 'data:application/pdf;base64,' + pdf.toString('base64'), `Comprobante ${p.referencia}.pdf`, 'Pasarela');
+  if (p.detalle) {
+    let txt = String(p.detalle);
+    try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch { /* tal cual */ }
+    adjuntar(movId, 'data:text/plain;base64,' + Buffer.from(`Respuesta de ${medio} al confirmar el pago ${p.referencia}\n\n${txt}\n`).toString('base64'), `Respuesta ${medio} ${p.referencia}.txt`, 'Pasarela');
+  }
+}
+
+/**
+ * PDF de una página (sin librerías): título, pares «campo: valor» y una nota al pie.
+ * Helvetica con WinAnsiEncoding (tildes y ñ en latin1).
+ */
+function pdfComprobante(titulo: string, campos: [string, string][], pie: string[]): Buffer {
+  const esc = (t: string) => t.replace(/[^\x20-\xff]/g, '?').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  const ops: string[] = [];
+  const texto = (x: number, y: number, f: string, tam: number, t: string) => ops.push(`BT /${f} ${tam} Tf ${x} ${y} Td (${esc(t)}) Tj ET`);
+  ops.push('0.09 0.64 0.29 rg 0 802 595 40 re f'); // franja de color arriba
+  ops.push('1 1 1 rg'); texto(50, 816, 'F2', 15, titulo); ops.push('0 0 0 rg');
+  let y = 760;
+  for (const [k, v] of campos) {
+    ops.push('0.4 0.45 0.5 rg'); texto(50, y, 'F1', 10, k); ops.push('0 0 0 rg');
+    let resto = v;
+    while (resto.length) { texto(200, y, k === 'Valor pagado' ? 'F2' : 'F1', k === 'Valor pagado' ? 13 : 11, resto.slice(0, 62)); resto = resto.slice(62); if (resto) y -= 15; }
+    y -= 24;
+  }
+  ops.push(`0.85 0.87 0.9 RG 50 ${y + 6} m 545 ${y + 6} l S`);
+  y -= 14;
+  ops.push('0.4 0.45 0.5 rg');
+  for (const l of pie) { texto(50, y, 'F1', 9, l); y -= 13; }
+  texto(50, 40, 'F1', 8, `Generado automáticamente por DealFlow el ${horaCO(new Date().toISOString())} (hora de Colombia).`);
+  const contenido = Buffer.from(ops.join('\n'), 'latin1');
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
+  ];
+  const partes: Buffer[] = [Buffer.from('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n', 'latin1')];
+  const offs: number[] = [];
+  let pos = partes[0].length;
+  const agregar = (b: Buffer) => { partes.push(b); pos += b.length; };
+  objs.forEach((o, i) => { offs.push(pos); agregar(Buffer.from(`${i + 1} 0 obj\n${o}\nendobj\n`, 'latin1')); });
+  offs.push(pos);
+  agregar(Buffer.concat([Buffer.from(`6 0 obj\n<< /Length ${contenido.length} >>\nstream\n`, 'latin1'), contenido, Buffer.from('\nendstream\nendobj\n', 'latin1')]));
+  const xref = pos;
+  agregar(Buffer.from(`xref\n0 7\n0000000000 65535 f \n${offs.map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join('')}trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`, 'latin1'));
+  return Buffer.concat(partes);
+}
+
+/** Pasa a la contabilidad los pagos aprobados que aún no estén y completa el soporte que falte. */
 export function sincronizarPagosPasarela(): number {
-  const pagos = db.prepare(`SELECT p.id, p.store_id, p.plan, p.monto, p.referencia, p.tipo, p.transaccion, p.cupon, p.created_at, s.nombre tienda
-    FROM pagos p LEFT JOIN stores s ON s.id = p.store_id
-    WHERE p.estado = 'aprobado' AND p.monto > 0 AND NOT EXISTS (SELECT 1 FROM contabilidad_movimientos m WHERE m.origen = 'wompi' AND m.referencia = p.referencia)`).all() as Record<string, string | number | null>[];
-  const ins = db.prepare(`INSERT OR IGNORE INTO contabilidad_movimientos (id, tipo, categoria, fecha, concepto, tercero, store_id, valor, base, medio, origen, referencia, notas, creado_por)
-    VALUES (?, 'ingreso', ?, ?, ?, ?, ?, ?, ?, 'Wompi', 'wompi', ?, ?, 'Pasarela')`);
+  // Pagos de Bold que quedaron marcados como Wompi (antes de esta versión).
+  db.prepare("UPDATE contabilidad_movimientos SET origen = 'bold', medio = 'Bold' WHERE origen = 'wompi' AND referencia IN (SELECT referencia FROM pagos WHERE gateway = 'bold')").run();
+  const refs = db.prepare(`SELECT p.referencia FROM pagos p WHERE p.estado = 'aprobado' AND p.monto > 0 AND (
+      NOT EXISTS (SELECT 1 FROM contabilidad_movimientos m WHERE m.referencia = p.referencia AND m.origen IN ('wompi','bold','shopify'))
+      OR EXISTS (SELECT 1 FROM contabilidad_movimientos m WHERE m.referencia = p.referencia AND m.origen IN ('wompi','bold','shopify')
+                 AND NOT EXISTS (SELECT 1 FROM contabilidad_adjuntos x WHERE x.movimiento_id = m.id)))`).all() as { referencia: string }[];
   let n = 0;
-  db.transaction(() => {
-    for (const p of pagos) {
-      const tipo = String(p.tipo || 'renta');
-      const cat = CATEGORIA_PAGO[tipo] || 'Otros ingresos';
-      const concepto = `${cat}${p.plan && (tipo === 'inicial' || tipo === 'renta') ? ` · plan ${p.plan}` : ''}`;
-      const notas = [p.transaccion ? `Transacción Wompi ${p.transaccion}` : '', p.cupon ? `Cupón ${p.cupon}` : ''].filter(Boolean).join(' · ');
-      const r = ins.run(uid(), cat, String(p.created_at || '').slice(0, 10), concepto, String(p.tienda || ''), String(p.store_id || ''), Number(p.monto) || 0, Number(p.monto) || 0, String(p.referencia), notas);
-      n += r.changes;
-    }
-  })();
+  for (const r of refs) { try { if (registrarPagoEnContabilidad(r.referencia)) n++; } catch (e) { console.error('[contabilidad] pago', r.referencia, e); } }
   return n;
 }
 
@@ -213,6 +317,6 @@ export function exportarCsv(f: Filtros): string {
   const { movimientos } = listarMovimientos(f);
   const tiendas = new Map((db.prepare('SELECT id, nombre FROM stores').all() as { id: string; nombre: string }[]).map((s) => [s.id, s.nombre]));
   const cab = ['Fecha', 'Tipo', 'Categoría', 'Concepto', 'Tercero', 'NIT/CC', 'Tienda', 'Base', 'IVA', 'Retención', 'Total', 'Medio de pago', 'Documento', 'Origen', 'Referencia', 'Estado', 'Comprobantes', 'Notas'];
-  const filas = movimientos.map((m) => [m.fecha, m.tipo, m.categoria, m.concepto, m.tercero, m.tercero_doc, tiendas.get(String(m.store_id)) || '', m.base, m.iva, m.retencion, m.valor, m.medio, m.documento, m.origen === 'wompi' ? 'Pasarela (Wompi)' : 'Manual', m.referencia, m.estado, (m.archivos as { nombre: string }[]).map((x) => x.nombre).join(' | '), m.notas]);
+  const filas = movimientos.map((m) => [m.fecha, m.tipo, m.categoria, m.concepto, m.tercero, m.tercero_doc, tiendas.get(String(m.store_id)) || '', m.base, m.iva, m.retencion, m.valor, m.medio, m.documento, m.origen === 'manual' ? 'Manual' : `Pasarela (${m.medio || m.origen})`, m.referencia, m.estado, (m.archivos as { nombre: string }[]).map((x) => x.nombre).join(' | '), m.notas]);
   return '﻿' + [cab, ...filas].map((r) => r.map((x) => `"${String(x ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
 }

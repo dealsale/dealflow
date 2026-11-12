@@ -284,6 +284,8 @@ export interface Account {
   creditos?: number;
   temaPremium?: boolean;
   oculta?: boolean;
+  diasRestantes?: number | null; // días que le quedan a la mensualidad (negativo = vencida)
+  inicialPagado?: boolean;
 }
 
 export type VendedorSection =

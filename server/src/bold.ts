@@ -65,13 +65,13 @@ export async function crearLinkBold(p: { referencia: string; monto: number; desc
 }
 
 /** Estado del link en Bold: PAID | ACTIVE | PROCESSING | EXPIRED | CANCELLED … */
-export async function estadoLinkBold(link: string): Promise<{ estado: string; transaccion: string; total: number } | null> {
+export async function estadoLinkBold(link: string): Promise<{ estado: string; transaccion: string; total: number; raw: Record<string, unknown> } | null> {
   if (!boldListo() || !link) return null;
   try {
     const r = await bold<Record<string, unknown> & { payload?: Record<string, unknown> }>('GET', `/online/link/v1/${encodeURIComponent(link)}`);
     if (!r.ok) return null;
     const d = (r.body.payload && typeof r.body.payload === 'object' ? r.body.payload : r.body) as Record<string, unknown>;
-    return { estado: txt(d.status).toUpperCase(), transaccion: txt(d.transaction_id || d.payment_id), total: Number(d.total || (d.amount as { total_amount?: number } | undefined)?.total_amount || 0) };
+    return { estado: txt(d.status).toUpperCase(), transaccion: txt(d.transaction_id || d.payment_id), total: Number(d.total || (d.amount as { total_amount?: number } | undefined)?.total_amount || 0), raw: d };
   } catch (e) {
     console.warn('[bold] estado del link', link, e);
     return null;
@@ -93,7 +93,7 @@ export async function verificarPendientesBold(storeId?: string): Promise<number>
     if (e.estado === 'PAID' || e.estado === 'APPROVED') {
       // El monto pagado debe ser el del cobro (si Bold lo informa).
       if (e.total && Math.round(e.total) !== Math.round(f.monto)) { console.warn(`[bold] ${f.referencia}: Bold dice ${e.total} y el cobro era ${f.monto}; no se aplica`); continue; }
-      if (aplicarPagoAprobado(f.referencia, e.transaccion || f.externo)) n++;
+      if (aplicarPagoAprobado(f.referencia, e.transaccion || f.externo, { fuente: 'Consulta directa a Bold (API Link de pagos)', consultado: new Date().toISOString(), link: f.externo, respuesta: e.raw })) n++;
     } else if (['EXPIRED', 'CANCELLED', 'REJECTED'].includes(e.estado)) {
       db.prepare("UPDATE pagos SET estado = ? WHERE referencia = ? AND estado = 'pendiente'").run(e.estado === 'EXPIRED' ? 'vencido' : 'rechazado', f.referencia);
     }

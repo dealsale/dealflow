@@ -145,7 +145,7 @@ export function Contabilidad() {
                     <td style={td}>
                       <div style={{ fontWeight: 700, textDecoration: m.estado === 'anulado' ? 'line-through' : undefined }}>{m.concepto}</div>
                       <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>
-                        {m.origen === 'wompi' && <span style={chip('#EDE9FE', '#6D28D9')}>Pasarela</span>}
+                        {m.origen && m.origen !== 'manual' && <span style={chip('#EDE9FE', '#6D28D9')}>{m.medio || 'Pasarela'}</span>}
                         {m.estado === 'anulado' && <span style={chip('#FEE2E2', '#B91C1C')}>Anulado</span>}
                         {m.documento && <> Doc. {m.documento}</>}{m.store_id && tiendaDe.get(m.store_id) ? ` · ${tiendaDe.get(m.store_id)}` : ''}
                       </div>
@@ -188,7 +188,7 @@ function EditorMovimiento({ m, datos, onCerrar, onCambio }: { m: Partial<Movimie
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState('');
   const nuevo = !m.id;
-  const deWompi = m.origen === 'wompi';
+  const deWompi = !!m.origen && m.origen !== 'manual'; // pago de la pasarela (Bold, Wompi o Shopify)
   const set = (p: Partial<MovimientoConta>) => setF((x) => ({ ...x, ...p }));
   const cats = f.tipo === 'egreso' ? datos.categorias.egreso : datos.categorias.ingreso;
   const num = (v: string) => Number(v.replace(/\D/g, '')) || 0;
@@ -243,7 +243,7 @@ function EditorMovimiento({ m, datos, onCerrar, onCambio }: { m: Partial<Movimie
           <div style={{ fontWeight: 800, fontSize: 17, flex: 1 }}>{nuevo ? (f.tipo === 'egreso' ? 'Nuevo egreso' : 'Nuevo ingreso') : f.tipo === 'egreso' ? 'Egreso' : 'Ingreso'}{deWompi && <span style={{ ...chip('#EDE9FE', '#6D28D9'), marginLeft: 8 }}>Pasarela</span>}</div>
           <button onClick={onCerrar} aria-label="Cerrar" style={{ ...btn(), padding: '5px 10px' }}>✕</button>
         </div>
-        {deWompi && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 12 }}>Pago aprobado por Wompi (ref. {m.referencia}). El valor y la fecha vienen de la pasarela; puedes completar los datos del tercero, el IVA y adjuntar la factura.</div>}
+        {deWompi && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 12 }}>Pago aprobado por {m.medio || 'la pasarela'} (ref. {m.referencia}). El valor y la fecha vienen de la pasarela y el comprobante se adjunta solo; puedes completar los datos del tercero, el IVA y adjuntar la factura.</div>}
         {m.estado === 'anulado' && <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)', marginBottom: 12 }}>Anulado{m.motivo_anulacion ? `: ${m.motivo_anulacion}` : ''}.</div>}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>

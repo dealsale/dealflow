@@ -129,6 +129,8 @@ export interface AdminStore {
   creditos?: number;
   temaPremium?: boolean;
   oculta?: boolean;
+  diasRestantes?: number | null;
+  inicialPagado?: boolean;
 }
 export interface AdminPlan {
   id: string;
@@ -248,7 +250,13 @@ export const apiCheckoutSuscripcion = (plan?: string, cupon?: string) =>
   req<{ url?: string; gratis?: boolean }>('/api/suscripcion/checkout', 'POST', { ...(plan ? { plan } : {}), ...(cupon ? { cupon } : {}) });
 export const apiValidarCupon = (codigo: string) => req<{ valido: boolean; descuento: number; montoFijo: number | null; mensaje: string; codigo?: string; alcance?: 'instalacion' | 'total' }>('/api/suscripcion/cupon', 'POST', { codigo });
 export const apiVerificarPago = (id: string) => req<{ activado: boolean; estado?: string }>('/api/suscripcion/verificar', 'POST', { id });
-export const apiExtenderSuscripcion = (id: string, dias: number) => req<{ ok: true }>(`/api/admin/stores/${id}/suscripcion`, 'POST', { dias });
+export const apiExtenderSuscripcion = (id: string, dias: number, motivo = 'Ajuste desde el panel') => req<{ ok: true }>(`/api/admin/stores/${id}/suscripcion`, 'POST', { dias, motivo });
+/** Ajuste de la mensualidad (admin o superadmin): suma/resta días o fija la fecha; siempre con motivo. */
+export const apiAjustarMensualidad = (id: string, b: { dias?: number; vence?: string; motivo: string }) =>
+  req<{ ok: true; antes: string; despues: string; diasRestantes: number }>(`/api/admin/stores/${id}/suscripcion`, 'POST', b);
+export interface AjustePlan { id: string; store_id: string; tienda: string | null; tipo: 'manual' | 'pago'; antes: string; despues: string; dias: number; motivo: string; quien: string; rol: string; referencia: string; created_at: string }
+/** Historial de cambios de la mensualidad (solo superadmin). */
+export const apiPlanAjustes = (storeId?: string) => req<{ ajustes: AjustePlan[] }>(`/api/admin/plan-ajustes${storeId ? `?store=${encodeURIComponent(storeId)}` : ''}`, 'GET');
 // Cupones (admin)
 export const apiCupones = () => req<{ cupones: Cupon[] }>('/api/admin/cupones', 'GET');
 export const apiCrearCupon = (c: NuevoCupon) => req<{ id: string; codigo: string }>('/api/admin/cupones', 'POST', c);
@@ -1150,7 +1158,7 @@ export const apiGuardarSkyClavePropia = (activo: boolean) => req<{ activo: boole
 export interface ArchivoConta { id: string; nombre: string; mime: string; tamano: number; created_at: string }
 export interface MovimientoConta {
   id: string; tipo: 'ingreso' | 'egreso'; categoria: string; fecha: string; concepto: string; tercero: string; tercero_doc: string; store_id: string;
-  valor: number; base: number; iva: number; retencion: number; medio: string; documento: string; origen: 'manual' | 'wompi'; referencia: string; notas: string;
+  valor: number; base: number; iva: number; retencion: number; medio: string; documento: string; origen: 'manual' | 'wompi' | 'bold' | 'shopify' | string; referencia: string; notas: string;
   estado: 'vigente' | 'anulado'; motivo_anulacion: string; creado_por: string; created_at: string; archivos: ArchivoConta[];
 }
 export interface Contabilidad {

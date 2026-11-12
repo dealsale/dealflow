@@ -3385,7 +3385,8 @@ api.get('/admin/overview', requireAuth, requireAdmin, (req, res) => {
       `SELECT COALESCE(SUM(CASE WHEN o.total > 0 THEN o.total ELSE COALESCE((SELECT SUM(qty*precio) FROM order_items WHERE order_id = o.id),0) + o.envio END), 0) AS total
        FROM orders o WHERE o.store_id = ? AND o.created_at >= date('now','start of month')`,
     ).get(s.id) as { total: number };
-    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, creditos: s.creditos || 0, temaPremium: !!s.tema_premium, oculta: !!s.oculta };
+    const diasRestantes = s.plan_vence ? Math.round((Date.parse(String(s.plan_vence).slice(0, 10) + 'T12:00:00Z') - Date.parse(new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10) + 'T12:00:00Z')) / 864e5) : null;
+    return { id: s.id, tienda: s.nombre, correo: s.correo, plan: s.plan, ventas: ventas.total, activa: !!s.activa, planEstado: s.plan_estado || 'prueba', planVence: s.plan_vence || null, diasRestantes, inicialPagado: !!s.inicial_pagado, creditos: s.creditos || 0, temaPremium: !!s.tema_premium, oculta: !!s.oculta };
   });
   const plans = (db.prepare('SELECT * FROM plans').all() as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, mensual: Number(p.mensual) || 0, incluyeTienda: !!p.incluye_tienda, visible: p.visible == null ? true : !!p.visible, orden: Number(p.orden) || 0, features: pj(p.features as string, []),
@@ -3758,11 +3759,12 @@ api.post('/soporte-tienda/creditos', requireAuth, async (req, res) => {
 });
 api.post('/soporte-tienda/suscripcion', requireAuth, async (req, res) => {
   const t = tiendaSoporte(req, res); if (!t) return;
-  if (t.admin.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Solo el superadmin puede dar o quitar días de plan.' });
+  if (!['ADMIN', 'SUPERADMIN'].includes(t.admin.role)) return res.status(403).json({ error: 'Solo el admin o el superadmin pueden dar o quitar días de plan.' });
   const dias = Math.round(Number(req.body?.dias));
   if (!Number.isFinite(dias) || dias === 0) return res.status(400).json({ error: 'Indica cuántos días extender.' });
-  const { extenderManual } = await import('./suscripcion.js');
-  extenderManual(t.sid, dias);
+  const { ajustarDiasPlan } = await import('./suscripcion.js');
+  const r = ajustarDiasPlan(t.sid, { dias }, t.admin.email, t.admin.role, String(req.body?.motivo || '').trim() || 'Ajuste desde la barra de soporte');
+  if ('error' in r) return res.status(400).json({ error: r.error });
   registrarAccionEquipo(t.admin.email, `Barra de soporte: ${dias > 0 ? 'extendió' : 'restó'} ${Math.abs(dias)} días de plan`, t.sid);
   res.json({ ok: true });
 });
@@ -4192,14 +4194,22 @@ api.delete('/admin/cupones/:id', requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-api.post('/admin/stores/:id/suscripcion', requireAuth, requireSuperAdmin, async (req, res) => {
-  const s = db.prepare('SELECT id FROM stores WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+// Días de la mensualidad: el admin y el superadmin los suman/restan o fijan la fecha de vencimiento,
+// siempre con motivo. Cada cambio queda en el historial (plan_ajustes) que ve el superadmin.
+api.post('/admin/stores/:id/suscripcion', requireAuth, requireAdmin, async (req, res) => {
+  const s = db.prepare('SELECT id, nombre FROM stores WHERE id = ?').get(req.params.id) as { id: string; nombre: string } | undefined;
   if (!s) return res.status(404).json({ error: 'Cuenta no encontrada.' });
-  const { extenderManual } = await import('./suscripcion.js');
-  const dias = Number(req.body?.dias);
-  if (!Number.isFinite(dias) || dias === 0) return res.status(400).json({ error: 'Indica cuántos días extender.' });
-  extenderManual(s.id, dias);
-  res.json({ ok: true });
+  const { ajustarDiasPlan } = await import('./suscripcion.js');
+  const vence = req.body?.vence ? String(req.body.vence).slice(0, 10) : '';
+  const r = ajustarDiasPlan(s.id, vence ? { vence } : { dias: Number(req.body?.dias) }, req.user!.email, req.user!.role, String(req.body?.motivo || ''));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  registrarAccionEquipo(req.user!.email, `Mensualidad de ${s.nombre}: vence ${r.antes || '—'} → ${r.despues} (${String(req.body?.motivo || '').slice(0, 120)})`, s.id);
+  res.json({ ok: true, ...r });
+});
+// Historial de cambios de la mensualidad (manuales y por pagos): solo el superadmin.
+api.get('/admin/plan-ajustes', requireAuth, requireSuperAdmin, async (req, res) => {
+  const { historialAjustes } = await import('./suscripcion.js');
+  res.json({ ajustes: historialAjustes(req.query.store ? String(req.query.store) : undefined) });
 });
 
 // ── Canal WEB (webchat) ───────────────────────────────────────────────

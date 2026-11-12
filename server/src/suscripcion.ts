@@ -19,6 +19,74 @@ import { boldListo, crearLinkBold } from './bold.js';
 const CHECKOUT = process.env.WOMPI_CHECKOUT_URL || 'https://checkout.wompi.co/p/';
 const DIAS_PERIODO = 30;
 
+/**
+ * Historial de la fecha de vencimiento del plan de cada tienda: cada ajuste a mano (quién, rol,
+ * antes → después y por qué) y cada pago que la movió. El superadmin lo ve completo.
+ */
+db.exec(`CREATE TABLE IF NOT EXISTS plan_ajustes (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL,
+  tipo TEXT NOT NULL DEFAULT 'manual',   -- manual | pago
+  antes TEXT NOT NULL DEFAULT '',
+  despues TEXT NOT NULL DEFAULT '',
+  dias INTEGER NOT NULL DEFAULT 0,
+  motivo TEXT NOT NULL DEFAULT '',
+  quien TEXT NOT NULL DEFAULT '',
+  rol TEXT NOT NULL DEFAULT '',
+  referencia TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_plan_ajustes_store ON plan_ajustes(store_id, created_at)');
+// Respuesta de la pasarela al confirmar el pago (soporte para la contabilidad).
+try { db.exec("ALTER TABLE pagos ADD COLUMN detalle TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+try { db.exec("ALTER TABLE pagos ADD COLUMN aprobado_at TEXT"); } catch { /* ya existe */ }
+
+const hoyCO = () => new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+const difDias = (a: string, b: string) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5);
+function anotarAjuste(a: { storeId: string; tipo: 'manual' | 'pago'; antes: string; despues: string; motivo: string; quien: string; rol: string; referencia?: string }): void {
+  db.prepare('INSERT INTO plan_ajustes (id, store_id, tipo, antes, despues, dias, motivo, quien, rol, referencia) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .run(uid(), a.storeId, a.tipo, a.antes, a.despues, difDias(a.antes && a.antes > hoyCO() ? a.antes : hoyCO(), a.despues), a.motivo.slice(0, 300), a.quien, a.rol, a.referencia || '');
+}
+
+/**
+ * Ajuste a mano de la mensualidad desde Admin → Cuentas (admin o superadmin): suma/resta días
+ * o fija la fecha de vencimiento. Siempre con motivo; queda en el historial.
+ */
+export function ajustarDiasPlan(storeId: string, o: { dias?: number; vence?: string }, quien: string, rol: string, motivo: string): { antes: string; despues: string; diasRestantes: number } | { error: string } {
+  const s = db.prepare('SELECT plan, plan_vence, inicial_pagado FROM stores WHERE id = ?').get(storeId) as { plan: string; plan_vence: string | null; inicial_pagado: number } | undefined;
+  if (!s) return { error: 'Cuenta no encontrada.' };
+  if (!motivo.trim() || motivo.trim().length < 4) return { error: 'Escribe el motivo del ajuste (queda en el historial).' };
+  const hoy = hoyCO();
+  const antes = (s.plan_vence || '').slice(0, 10);
+  let despues: string;
+  if (o.vence) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(o.vence) || Number.isNaN(Date.parse(o.vence))) return { error: 'La fecha no es válida.' };
+    despues = o.vence;
+  } else {
+    const dias = Math.round(Number(o.dias));
+    if (!Number.isFinite(dias) || dias === 0 || Math.abs(dias) > 3660) return { error: 'Indica cuántos días sumar o restar.' };
+    // Sumar: desde el vencimiento si aún no vence (si no, desde hoy). Restar: desde el vencimiento actual.
+    const base = dias > 0 ? (antes && antes > hoy ? antes : hoy) : (antes || hoy);
+    const d = new Date(base + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + dias);
+    despues = d.toISOString().slice(0, 10);
+  }
+  // Si la tienda no tenía un plan real, se le asigna el primero (para que la renta no quede en $0).
+  const tienePlan = !!s.plan && !!db.prepare('SELECT 1 FROM plans WHERE nombre = ?').get(s.plan);
+  const plan = tienePlan ? s.plan : (db.prepare('SELECT nombre FROM plans ORDER BY orden, precio LIMIT 1').get() as { nombre: string } | undefined)?.nombre || s.plan || '';
+  const vigente = despues >= hoy;
+  // Dar días a una tienda que nunca pagó la instalación la activa (igual que antes).
+  db.prepare(`UPDATE stores SET plan = ?, plan_vence = ?, plan_estado = ?, inicial_pagado = CASE WHEN ? THEN 1 ELSE inicial_pagado END WHERE id = ?`)
+    .run(plan, despues, vigente ? 'activa' : 'vencida', vigente ? 1 : 0, storeId);
+  anotarAjuste({ storeId, tipo: 'manual', antes, despues, motivo: motivo.trim(), quien, rol });
+  return { antes, despues, diasRestantes: difDias(hoy, despues) };
+}
+
+/** Historial de ajustes (de una tienda o de todas), lo más reciente primero. */
+export function historialAjustes(storeId?: string, limite = 300): Record<string, unknown>[] {
+  return db.prepare(`SELECT a.*, s.nombre tienda FROM plan_ajustes a LEFT JOIN stores s ON s.id = a.store_id
+    ${storeId ? 'WHERE a.store_id = ?' : ''} ORDER BY a.created_at DESC LIMIT ?`).all(...(storeId ? [storeId, limite] : [limite])) as Record<string, unknown>[];
+}
+
 export interface PlanInfo {
   nombre: string;
   precio: number; // valor inicial (una vez)
@@ -312,14 +380,17 @@ export function tiendaIncluidaEnPlan(storeId: string): boolean {
 }
 
 /** Marca un pago como aprobado: activa la cuenta / extiende la renta / suma créditos. */
-export function aplicarPagoAprobado(referencia: string, transaccion?: string): boolean {
-  const pago = db.prepare('SELECT id, store_id, estado, tipo, plan, cupon, creditos FROM pagos WHERE referencia = ?').get(referencia) as
-    | { id: string; store_id: string; estado: string; tipo: string; plan: string; cupon: string; creditos: number }
+export function aplicarPagoAprobado(referencia: string, transaccion?: string, detalle?: unknown): boolean {
+  const pago = db.prepare('SELECT id, store_id, estado, tipo, plan, cupon, creditos, gateway FROM pagos WHERE referencia = ?').get(referencia) as
+    | { id: string; store_id: string; estado: string; tipo: string; plan: string; cupon: string; creditos: number; gateway: string }
     | undefined;
   if (!pago) return false;
-  if (pago.estado === 'aprobado') return true; // idempotente (Wompi puede reintentar el webhook)
-  db.prepare('UPDATE pagos SET estado = ?, transaccion = ? WHERE id = ?').run('aprobado', transaccion || null, pago.id);
+  if (pago.estado === 'aprobado') return true; // idempotente (la pasarela puede reintentar el webhook)
+  db.prepare("UPDATE pagos SET estado = ?, transaccion = ?, detalle = ?, aprobado_at = datetime('now') WHERE id = ?")
+    .run('aprobado', transaccion || null, detalle ? JSON.stringify(detalle).slice(0, 20000) : '', pago.id);
   if (pago.cupon) incrementarUsoCupon(pago.cupon);
+  // Contabilidad: el ingreso queda registrado al instante, con su comprobante (ver contabilidad.ts).
+  setImmediate(() => { void import('./contabilidad.js').then((c) => c.registrarPagoEnContabilidad(referencia)).catch((e) => console.error('[contabilidad] pago', referencia, e)); });
 
   // Recarga de créditos del Marketing IA: suma al saldo y no toca el plan.
   if (pago.tipo === 'creditos') {
@@ -359,6 +430,7 @@ export function aplicarPagoAprobado(referencia: string, transaccion?: string): b
   }
 
   const s = db.prepare('SELECT plan_vence FROM stores WHERE id = ?').get(pago.store_id) as { plan_vence: string | null } | undefined;
+  const venceAntes = (s?.plan_vence || '').slice(0, 10);
   // Extiende desde hoy o desde el vencimiento futuro (si aún no vence, acumula).
   const base = s?.plan_vence && new Date(s.plan_vence).getTime() > Date.now() ? new Date(s.plan_vence) : new Date();
   base.setDate(base.getDate() + DIAS_PERIODO);
@@ -373,6 +445,8 @@ export function aplicarPagoAprobado(referencia: string, transaccion?: string): b
     db.prepare("UPDATE stores SET plan_estado = 'activa', plan_vence = ?, activa = 1 WHERE id = ?").run(nuevaFecha, pago.store_id);
     console.log(`[suscripcion] RENTA aprobada ${referencia} → tienda ${pago.store_id} al día hasta ${nuevaFecha}`);
   }
+  const pasarela = pago.gateway === 'bold' ? 'Bold' : pago.gateway === 'shopify' ? 'Shopify' : transaccion === 'CUPON-GRATIS' ? 'Cupón' : 'Wompi';
+  anotarAjuste({ storeId: pago.store_id, tipo: 'pago', antes: venceAntes, despues: nuevaFecha, motivo: `${pago.tipo === 'inicial' ? 'Instalación' : 'Mensualidad'} pagada (${pasarela})${pago.cupon ? ` · cupón ${pago.cupon}` : ''}`, quien: pasarela, rol: 'pago', referencia });
   {
     const plan = (db.prepare('SELECT plan FROM stores WHERE id = ?').get(pago.store_id) as { plan: string } | undefined)?.plan || pago.plan || '';
     void import('./correo.js').then((c) => c.correoPagoPlan(pago.store_id, plan, nuevaFecha)).catch(() => {});
@@ -409,7 +483,7 @@ export async function verificarTransaccion(storeId: string, txId: string): Promi
       // Seguridad: la referencia debe pertenecer a la tienda que consulta.
       const pago = db.prepare('SELECT store_id FROM pagos WHERE referencia = ?').get(tx.reference) as { store_id: string } | undefined;
       if (pago && pago.store_id === storeId) {
-        aplicarPagoAprobado(tx.reference, txId);
+        aplicarPagoAprobado(tx.reference, txId, tx);
         return { activado: true, estado: tx.status };
       }
     }
@@ -421,15 +495,6 @@ export async function verificarTransaccion(storeId: string, txId: string): Promi
 }
 
 /** Extiende manualmente la renta (admin), sin pasar por la pasarela. Marca la cuenta activa. */
-export function extenderManual(storeId: string, dias: number): void {
-  const s = db.prepare('SELECT plan, plan_vence FROM stores WHERE id = ?').get(storeId) as { plan: string; plan_vence: string | null } | undefined;
-  const base = s?.plan_vence && new Date(s.plan_vence).getTime() > Date.now() ? new Date(s.plan_vence) : new Date();
-  base.setDate(base.getDate() + dias);
-  // Si la tienda no tenía un plan real (nunca pagó el inicial), le asignamos uno
-  // para que la renta no aparezca en $0. Preferimos el plan más económico.
-  const tienePlan = !!s?.plan && !!db.prepare('SELECT 1 FROM plans WHERE nombre = ?').get(s.plan);
-  const plan = tienePlan
-    ? s!.plan
-    : (db.prepare('SELECT nombre FROM plans ORDER BY precio LIMIT 1').get() as { nombre: string } | undefined)?.nombre || s?.plan || '';
-  db.prepare("UPDATE stores SET plan = ?, inicial_pagado = 1, plan_estado = 'activa', plan_vence = ? WHERE id = ?").run(plan, base.toISOString().slice(0, 10), storeId);
+export function extenderManual(storeId: string, dias: number, quien = 'superadmin', rol = 'SUPERADMIN', motivo = 'Ajuste del superadmin'): void {
+  ajustarDiasPlan(storeId, { dias }, quien, rol, motivo);
 }

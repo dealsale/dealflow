@@ -2670,7 +2670,7 @@ export function useDealFlowState() {
   async function reloadAdmin() {
     const { data } = await apiAdminOverview();
     if (!data) return;
-    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa, planEstado: s.planEstado, planVence: s.planVence, creditos: s.creditos, temaPremium: s.temaPremium, oculta: s.oculta })));
+    setAccounts(data.stores.map((s) => ({ id: s.id, tienda: s.tienda, correo: s.correo, plan: s.plan, ventas: s.ventas, activa: s.activa, planEstado: s.planEstado, planVence: s.planVence, creditos: s.creditos, temaPremium: s.temaPremium, oculta: s.oculta, diasRestantes: s.diasRestantes, inicialPagado: s.inicialPagado })));
     setPlans(data.plans.map((p) => ({ id: p.id, nombre: p.nombre, precio: p.precio, cuentas: p.cuentas, features: p.features })));
   }
   useEffect(() => {
@@ -3435,7 +3435,8 @@ export function useDealFlowState() {
       accounts.map((a) => {
         // Columna de facturación: cuándo vence la renta y cuántos días faltan (o pasaron).
         const venceMs = a.planVence ? new Date(a.planVence + 'T00:00:00').getTime() : null;
-        const diffDias = venceMs != null ? Math.ceil((venceMs - Date.now()) / 86400000) : null;
+        // Días restantes: los calcula el servidor (hora de Colombia); si no vienen, se estiman aquí.
+        const diffDias = a.diasRestantes != null ? a.diasRestantes : venceMs != null ? Math.ceil((venceMs - Date.now()) / 86400000) : null;
         let facturacionFecha = a.planVence || '—';
         let facturacionDias = '';
         let facturacionColor = 'var(--df-text-muted)';

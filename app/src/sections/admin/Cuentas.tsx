@@ -6,6 +6,7 @@ import { confirmar } from '../../components/dialogs';
 import { apiAdminTiendaOnline, apiAdminAjustarTiendaOnline, type MembresiaTienda, apiAdminSoporte, apiAdminGuardarSoporte, apiAdminProbarSoporte, type CfgSoporteAdmin, apiAdminPagos, apiAdminGuardarPagos, type CfgPagosAdmin, apiAdminAuditoriaRemitentes, type AuditoriaRemitentes } from '../../lib/api';
 import { apiSeguridad, type PuntoSeguridad, type AccesoEquipo, apiAdminCorreo, apiAdminCorreoPrueba, type EstadoCorreo } from '../../lib/api';
 import { apiCifrado, apiPapelera, apiPapeleraRestaurar, apiRespaldoEliminar, apiPapeleraEliminar, type EspacioDisco, apiRespaldoAhora, type TiendaPapelera, type Respaldo } from '../../lib/api';
+import { apiAjustarMensualidad, apiPlanAjustes, type AjustePlan } from '../../lib/api';
 
 const labelStyle: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13 };
@@ -15,11 +16,9 @@ export function Cuentas({ df }: { df: DealFlowState }) {
   // Ajustes de créditos y días de renta: acciones puntuales dentro de Editar
   // (no son parte del formulario nombre/correo/plan que guarda "Guardar cambios").
   const [creditosDelta, setCreditosDelta] = useState('');
-  const [diasDelta, setDiasDelta] = useState('');
   const [ajusteMsg, setAjusteMsg] = useState('');
   useEffect(() => {
     setCreditosDelta('');
-    setDiasDelta('');
     setAjusteMsg('');
   }, [df.editStoreId]);
 
@@ -123,7 +122,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
               {/* Edición INLINE: se despliega justo debajo de la tienda (no sube al header). */}
               {editando && (
                 <div className="df-expand" style={{ background: 'var(--df-surface)', borderTop: '1px solid var(--df-purple-border)', padding: '16px 18px' }}>
-                  <EditarTiendaInline df={df} a={a} creditosDelta={creditosDelta} setCreditosDelta={setCreditosDelta} diasDelta={diasDelta} setDiasDelta={setDiasDelta} ajusteMsg={ajusteMsg} setAjusteMsg={setAjusteMsg} />
+                  <EditarTiendaInline df={df} a={a} creditosDelta={creditosDelta} setCreditosDelta={setCreditosDelta} ajusteMsg={ajusteMsg} setAjusteMsg={setAjusteMsg} />
                 </div>
               )}
               {/* Detalle INLINE: se despliega debajo de la tienda, como los productos. */}
@@ -142,6 +141,7 @@ export function Cuentas({ df }: { df: DealFlowState }) {
       {df.isSuperadmin && <CorreosServidor />}
       {df.isSuperadmin && <AuditoriaRemitentesEffi />}
       {df.isSuperadmin && <PagosAdmin />}
+      {df.isSuperadmin && <HistorialMensualidades />}
       {df.isSuperadmin && <AsistenteSoporteAdmin />}
       {df.isSuperadmin && <PapeleraYCopias df={df} />}
     </section>
@@ -242,11 +242,10 @@ function DetalleTiendaInline({ df }: { df: DealFlowState }) {
 }
 
 // Formulario de edición de una tienda, desplegado INLINE debajo de su fila.
-function EditarTiendaInline({ df, a, creditosDelta, setCreditosDelta, diasDelta, setDiasDelta, ajusteMsg, setAjusteMsg }: {
+function EditarTiendaInline({ df, a, creditosDelta, setCreditosDelta, ajusteMsg, setAjusteMsg }: {
   df: DealFlowState;
   a: DealFlowState['accounts'][number];
   creditosDelta: string; setCreditosDelta: (v: string) => void;
-  diasDelta: string; setDiasDelta: (v: string) => void;
   ajusteMsg: string; setAjusteMsg: (v: string) => void;
 }) {
   const id = String(a.id);
@@ -277,28 +276,122 @@ function EditarTiendaInline({ df, a, creditosDelta, setCreditosDelta, diasDelta,
         <button onClick={df.cerrarPanelStore} style={{ background: 'var(--df-surface)', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
         {df.editStoreMsg && <span style={{ color: df.editStoreMsg === 'Guardando…' ? 'var(--df-text-muted)' : 'var(--df-danger)', fontSize: 13 }}>{df.editStoreMsg}</span>}
       </div>
-      {/* Dar o quitar créditos y días de plan: solo el superadmin. */}
-      {df.isSuperadmin && <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, borderTop: '1px solid var(--df-border)', paddingTop: 16 }}>
-        <div>
-          <div style={labelStyle}>Créditos ({(a.creditos ?? 0).toLocaleString('es-CO')} actuales)</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input type="number" value={creditosDelta} onChange={(e) => setCreditosDelta(e.target.value)} placeholder="Ej: 500 o -200" style={{ ...inputStyle, width: 110 }} />
-            <button onClick={() => { if (creditosDelta) { df.darCreditos(id, Number(creditosDelta)); setAjusteMsg('✓ Créditos ajustados'); setCreditosDelta(''); } }} disabled={!creditosDelta}
-              style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: creditosDelta ? 'pointer' : 'default', opacity: creditosDelta ? 1 : 0.5, whiteSpace: 'nowrap' }}>Ajustar</button>
-          </div>
+      {/* Créditos: solo el superadmin. */}
+      {df.isSuperadmin && <div style={{ borderTop: '1px solid var(--df-border)', paddingTop: 16, marginBottom: 4 }}>
+        <div style={labelStyle}>Créditos ({(a.creditos ?? 0).toLocaleString('es-CO')} actuales)</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="number" value={creditosDelta} onChange={(e) => setCreditosDelta(e.target.value)} placeholder="Ej: 500 o -200" style={{ ...inputStyle, width: 130 }} />
+          <button onClick={() => { if (creditosDelta) { df.darCreditos(id, Number(creditosDelta)); setAjusteMsg('✓ Créditos ajustados'); setCreditosDelta(''); } }} disabled={!creditosDelta}
+            style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: creditosDelta ? 'pointer' : 'default', opacity: creditosDelta ? 1 : 0.5, whiteSpace: 'nowrap' }}>Ajustar</button>
+          {ajusteMsg && <span style={{ fontSize: 12.5, color: 'var(--df-brand-dark)', fontWeight: 600 }}>{ajusteMsg}</span>}
         </div>
-        <div>
-          <div style={labelStyle}>Días de renta ({a.facturacionDias || a.facturacionFecha})</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input type="number" value={diasDelta} onChange={(e) => setDiasDelta(e.target.value)} placeholder="Ej: 30 o -15" style={{ ...inputStyle, width: 110 }} />
-            <button onClick={() => { if (diasDelta) { df.extenderSuscripcion(id, Number(diasDelta)); setAjusteMsg('✓ Renta ajustada'); setDiasDelta(''); } }} disabled={!diasDelta}
-              style={{ background: 'var(--df-surface)', border: '1px solid var(--df-brand-border)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: diasDelta ? 'pointer' : 'default', opacity: diasDelta ? 1 : 0.5, whiteSpace: 'nowrap' }}>Ajustar</button>
-          </div>
-        </div>
-        {ajusteMsg && <div style={{ gridColumn: '1 / -1', fontSize: 12.5, color: 'var(--df-brand-dark)', fontWeight: 600 }}>{ajusteMsg}</div>}
       </div>}
+      {/* Mensualidad: admin y superadmin. Cada cambio queda en el historial (lo ve el superadmin). */}
+      <MensualidadAdmin df={df} a={a} />
       <TiendaOnlineAdmin storeId={id} />
     </>
+  );
+}
+
+const fechaLarga = (f: string) => (f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+
+/**
+ * Mensualidad de la tienda: días restantes y ajuste a mano (sumar/restar días o fijar la fecha),
+ * siempre con motivo. El superadmin ve además el historial de cambios (a mano y por pagos).
+ */
+function MensualidadAdmin({ df, a }: { df: DealFlowState; a: DealFlowState['accounts'][number] }) {
+  const id = String(a.id);
+  const [modo, setModo] = useState<'dias' | 'fecha'>('dias');
+  const [dias, setDias] = useState('');
+  const [vence, setVence] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [msg, setMsg] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [historial, setHistorial] = useState<AjustePlan[] | null>(null);
+  const verHistorial = () => void apiPlanAjustes(id).then((r) => setHistorial(r.data?.ajustes || []));
+  useEffect(() => { if (df.isSuperadmin) verHistorial(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const restantes = a.diasRestantes;
+  const estado = !a.planVence ? 'Sin fecha de vencimiento' : restantes == null ? `Vence el ${fechaLarga(a.planVence)}`
+    : restantes >= 0 ? `Vence el ${fechaLarga(a.planVence)} · quedan ${restantes} día${restantes === 1 ? '' : 's'}` : `Venció el ${fechaLarga(a.planVence)} (hace ${-restantes} día${restantes === -1 ? '' : 's'})`;
+  const listo = (modo === 'dias' ? !!Number(dias) : !!vence) && motivo.trim().length >= 4;
+  const guardar = async () => {
+    if (!listo) return;
+    setGuardando(true);
+    const r = await apiAjustarMensualidad(id, modo === 'dias' ? { dias: Number(dias), motivo } : { vence, motivo });
+    setGuardando(false);
+    if (r.error || !r.data) { setMsg(r.error || 'No se pudo guardar.'); return; }
+    setMsg(`✓ Ahora vence el ${fechaLarga(r.data.despues)} (${r.data.diasRestantes >= 0 ? `quedan ${r.data.diasRestantes} días` : 'vencida'}).`);
+    setDias(''); setVence(''); setMotivo('');
+    void df.reloadAdmin();
+    if (df.isSuperadmin) verHistorial();
+  };
+  const chipBtn = (activo: boolean): React.CSSProperties => ({ background: activo ? 'var(--df-brand)' : 'var(--df-surface)', color: activo ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '7px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' });
+  return (
+    <div style={{ borderTop: '1px solid var(--df-border)', paddingTop: 16, marginTop: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+        <span style={{ fontWeight: 800, fontSize: 14 }}>Mensualidad</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: restantes != null && restantes < 0 ? 'var(--df-danger-dark)' : restantes != null && restantes <= 5 ? 'var(--df-warning)' : 'var(--df-brand-dark)' }}>{estado}</span>
+      </div>
+      <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden', marginBottom: 10 }}>
+        <button onClick={() => setModo('dias')} style={chipBtn(modo === 'dias')}>Sumar / restar días</button>
+        <button onClick={() => setModo('fecha')} style={chipBtn(modo === 'fecha')}>Fijar fecha</button>
+      </div>
+      <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '160px 1fr auto', gap: 8, alignItems: 'center' }}>
+        {modo === 'dias'
+          ? <input type="number" value={dias} onChange={(e) => setDias(e.target.value)} placeholder="Ej: 30 o -5" style={inputStyle} />
+          : <input type="date" value={vence} onChange={(e) => setVence(e.target.value)} style={inputStyle} />}
+        <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo (obligatorio): ej. pagó por transferencia, compensación por caída…" style={inputStyle} />
+        <button onClick={() => void guardar()} disabled={!listo || guardando}
+          style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: listo ? 'pointer' : 'default', opacity: listo && !guardando ? 1 : 0.5, whiteSpace: 'nowrap' }}>{guardando ? 'Guardando…' : 'Aplicar'}</button>
+      </div>
+      {msg && <div style={{ fontSize: 12.5, marginTop: 8, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger)' }}>{msg}</div>}
+      {df.isSuperadmin && historial && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 6 }}>Historial de la mensualidad (solo lo ves tú)</div>
+          {historial.length === 0 ? <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Sin cambios registrados todavía.</div> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+              {historial.map((h) => <FilaAjuste key={h.id} h={h} />)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FilaAjuste({ h, conTienda }: { h: AjustePlan; conTienda?: boolean }) {
+  const cuando = new Date(h.created_at.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 10, fontSize: 12.5, background: 'var(--df-bg)', borderRadius: 8, padding: '7px 10px' }}>
+      <span style={{ color: 'var(--df-text-faint)' }}>{cuando}</span>
+      <span>
+        {conTienda && <b>{h.tienda || h.store_id} · </b>}
+        <span style={{ fontWeight: 700, color: h.tipo === 'pago' ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}>{h.tipo === 'pago' ? '💳 Pago' : '✏️ Ajuste'}</span>
+        {' '}{h.antes ? fechaLarga(h.antes) : 'sin fecha'} → <b>{fechaLarga(h.despues)}</b>
+        {h.dias ? <span style={{ color: h.dias > 0 ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)' }}> ({h.dias > 0 ? '+' : ''}{h.dias} días)</span> : null}
+        <span style={{ color: 'var(--df-text-muted)' }}> · {h.tipo === 'pago' ? h.motivo : `${h.quien} (${h.rol === 'SUPERADMIN' ? 'superadmin' : 'admin'}): ${h.motivo}`}</span>
+      </span>
+    </div>
+  );
+}
+
+/** Historial completo de cambios de mensualidad de todas las tiendas (superadmin). */
+function HistorialMensualidades() {
+  const [lista, setLista] = useState<AjustePlan[] | null>(null);
+  const [soloManual, setSoloManual] = useState(false);
+  useEffect(() => { void apiPlanAjustes().then((r) => setLista(r.data?.ajustes || [])); }, []);
+  const ver = (lista || []).filter((h) => !soloManual || h.tipo === 'manual');
+  return (
+    <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
+        <div style={{ fontWeight: 800, fontSize: 16, flex: 1 }}>🗓️ Historial de mensualidades</div>
+        <label style={{ fontSize: 12.5, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" checked={soloManual} onChange={(e) => setSoloManual(e.target.checked)} /> Solo ajustes a mano</label>
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 12 }}>Quién cambió los días de cada tienda, cuándo, de qué fecha a cuál y por qué. También los pagos que la renovaron.</div>
+      {!lista ? <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>Cargando…</div> : ver.length === 0 ? <div style={{ fontSize: 13, color: 'var(--df-text-faint)' }}>Sin cambios registrados todavía.</div> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflowY: 'auto' }}>{ver.map((h) => <FilaAjuste key={h.id} h={h} conTienda />)}</div>
+      )}
+    </div>
   );
 }
 
