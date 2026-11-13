@@ -234,7 +234,7 @@ function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
         {deDropi && <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '2px 8px', background: 'var(--df-warning-subtle)', color: 'var(--df-warning)' }}>Variantes sincronizadas con Dropi</span>}
       </div>
       <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5, marginBottom: 8 }}>
-        Pon el <b>ID del producto en Dropi</b> y DealFlow vincula cada variante que ya tienes con su variación de Dropi (por su talla y color) y toma el stock. Si el producto ya tiene variantes, <b>no crea grupos ni variantes nuevas</b>: solo vincula. Solo en un producto sin variantes las crea desde Dropi. Se actualiza solo cada 6 horas.
+        Pon el <b>ID del producto en Dropi</b> y DealFlow vincula cada variante que ya tienes con su variación de Dropi (por su talla y color) y toma el stock. Si el producto ya tiene variantes armadas por ti, <b>no crea grupos ni variantes nuevas</b>: solo vincula (si ya están sincronizadas con Dropi, crea las que falten). Solo en un producto sin variantes las crea desde Dropi. Se actualiza solo cada 6 horas.
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input value={id} onChange={(e) => setId(e.target.value)} placeholder="ID del producto en Dropi (ej: 48213)" inputMode="numeric"
@@ -252,6 +252,12 @@ function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
             : <>✓ <b>{res.nombreDropi}</b>: {res.total} variaciones en Dropi · <b>{res.vinculadas}</b> vinculadas · <b>{res.creadas}</b> nuevas{res.renombradas ? ` · ${res.renombradas} con su nombre completado (talla y color)` : ''}{res.conStock ? ` · stock tomado de Dropi en ${res.conStock}` : ''}.</>}
           {!!(res.duplicadasQuitadas || res.gruposQuitados?.length) && <div style={{ marginTop: 4, color: 'var(--df-brand-dark)' }}>🧹 Se repararon duplicados de una sincronización anterior: {res.duplicadasQuitadas ? `${res.duplicadasQuitadas} variante${res.duplicadasQuitadas === 1 ? '' : 's'} repetida${res.duplicadasQuitadas === 1 ? '' : 's'} quitada${res.duplicadasQuitadas === 1 ? '' : 's'} (sus pedidos y códigos pasaron a la original)` : ''}{res.duplicadasQuitadas && res.gruposQuitados?.length ? ' y ' : ''}{res.gruposQuitados?.length ? `grupo repetido quitado: ${res.gruposQuitados.join(', ')}` : ''}.</div>}
           {!!res.sinVariante?.length && <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>⚠️ {res.sinVariante.length} variación{res.sinVariante.length === 1 ? '' : 'es'} de Dropi no tiene{res.sinVariante.length === 1 ? '' : 'n'} variante en DealFlow: <b>{res.sinVariante.slice(0, 8).join(', ')}{res.sinVariante.length > 8 ? '…' : ''}</b>. Si las vendes, agrégalas en Opciones y vuelve a vincular.</div>}
+          {!!res.deDropi?.length && (
+            <details style={{ marginTop: 4 }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Ver las {res.total} variaciones que trae Dropi</summary>
+              <div style={{ marginTop: 4, color: 'var(--df-text-muted)' }}>{res.deDropi.join(' · ')}{res.total > res.deDropi.length ? ' …' : ''}</div>
+            </details>
+          )}
           {!!res.repetidas?.length && <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>⚠️ En Dropi hay variaciones que no se distinguen ({res.repetidas.slice(0, 4).join(', ')}). Revisa en Dropi que cada una tenga su talla y su color.</div>}
           {res.sinDropi.length > 0 && (
             <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>
