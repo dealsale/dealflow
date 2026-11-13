@@ -1,5 +1,6 @@
 import { pasarAHumano } from './pasoHumano.js';
-import { medirIA } from './consumoIA.js';
+import { medirIA, type TipoIA } from './consumoIA.js';
+import { pedirClaude, modeloClaude, HERRAMIENTAS_BOT, MECANICA_HERRAMIENTAS, aHerramientas, innerDesdeHerramienta, ordenarTurnos, type MensajeClaude } from './claude.js';
 import { elegirMensaje, mensajesDe } from './mensajesIniciales.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { trazar } from './trazabilidad.js';
@@ -48,14 +49,31 @@ const PROVEEDORES_IA: Record<string, { url: string; model: string; env: string; 
   grok: { url: 'https://api.x.ai/v1/chat/completions', model: process.env.GROK_CHAT_MODEL || 'grok-3-mini', env: 'GROK_API_KEY', nombre: 'Grok (xAI)' },
 };
 
+/** La IA con la que se hace una llamada: a dónde, con qué modelo y con qué clave (siempre la de la tienda). */
+export interface IAResuelta { url: string; model: string; key: string; proveedor: string }
+
+/** El agente que la tienda marcó como predeterminado en Integraciones (DeepSeek si no eligió). */
+function proveedorElegido(storeId: string): string {
+  const asst = db.prepare('SELECT ia_proveedor FROM assistants WHERE store_id = ?').get(storeId) as { ia_proveedor: string } | undefined;
+  return (asst?.ia_proveedor || '').trim() || 'deepseek';
+}
+
+/** Claude de la tienda: su clave y el modelo que eligió (el recomendado si no eligió). null si no lo conectó. */
+function resolverClaude(storeId: string): IAResuelta | null {
+  const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'claude'").get(storeId) as { config: string } | undefined;
+  const cfg = row ? pj<Record<string, string>>(row.config, {}) : {};
+  const key = (cfg.apiKey || '').trim();
+  return key ? { url: '', model: modeloClaude(cfg.modelo).id, key, proveedor: 'claude' } : null;
+}
+
 /**
  * Resuelve qué IA usa la tienda: su proveedor predeterminado con SU propia API key
  * (Integraciones). Nunca se usa una clave de DealFlow para el bot de una tienda: si la
  * tienda no puso la suya, no hay IA (el asistente pasa el chat al equipo y lo avisa).
  */
-export function resolverIA(storeId: string): { url: string; model: string; key: string; proveedor: string } | null {
-  const asst = db.prepare('SELECT ia_proveedor FROM assistants WHERE store_id = ?').get(storeId) as { ia_proveedor: string } | undefined;
-  const proveedor = (asst?.ia_proveedor || '').trim() || 'deepseek';
+export function resolverIA(storeId: string): IAResuelta | null {
+  const proveedor = proveedorElegido(storeId);
+  if (proveedor === 'claude') return resolverClaude(storeId);
   const p = PROVEEDORES_IA[proveedor] || PROVEEDORES_IA.deepseek;
   const row = db.prepare('SELECT config FROM store_integrations WHERE store_id = ? AND tipo = ?').get(storeId, proveedor) as { config: string } | undefined;
   const propia = row ? (pj<Record<string, string>>(row.config, {}).apiKey || '').trim() : '';
@@ -73,7 +91,7 @@ export function infoIATienda(storeId: string): { proveedor: string; modelo: stri
   const ia = resolverTexto(storeId);
   const fotos = propia('openai') ? 'tienda' : 'ninguna';
   if (!ia) return { proveedor: '', modelo: '', clave: 'ninguna', fotos };
-  return { proveedor: PROVEEDORES_IA[ia.proveedor]?.nombre || ia.proveedor, modelo: ia.model, clave: 'tienda', fotos };
+  return { proveedor: ia.proveedor === 'claude' ? 'Claude (Anthropic)' : PROVEEDORES_IA[ia.proveedor]?.nombre || ia.proveedor, modelo: ia.model, clave: 'tienda', fotos };
 }
 
 /** Llave de un proveedor concreto de la tienda (solo la de la tienda, nunca la de DealFlow). */
@@ -87,10 +105,50 @@ function keyProveedor(storeId: string, prov: 'deepseek' | 'openai'): string {
  * IA híbrida (optimiza el gasto): DeepSeek escribe los textos (más barato); si la
  * tienda no tiene DeepSeek, cae a su proveedor elegido.
  */
-export function resolverTexto(storeId: string): { url: string; model: string; key: string; proveedor: string } | null {
+export function resolverTexto(storeId: string): IAResuelta | null {
+  // Si la tienda eligió Claude como su agente, Claude escribe (con el modelo que eligió).
+  if (proveedorElegido(storeId) === 'claude') { const c = resolverClaude(storeId); if (c) return c; }
   const key = keyProveedor(storeId, 'deepseek');
   if (key) return { url: PROVEEDORES_IA.deepseek.url, model: PROVEEDORES_IA.deepseek.model, key, proveedor: 'deepseek' };
-  return resolverIA(storeId);
+  // Sin DeepSeek: su proveedor elegido; y si la única IA que conectó es Claude, esa.
+  return resolverIA(storeId) || resolverClaude(storeId);
+}
+
+/**
+ * Una llamada sencilla de texto (clasificar, extraer, redactar) a la IA de la tienda, sea cual sea.
+ * Devuelve el texto de la respuesta, o null si la IA falló. Con `tipo` se mide el consumo.
+ */
+export async function completarTexto(storeId: string, ia: IAResuelta, o: {
+  system: string; mensajes: { role: 'user' | 'assistant'; content: string }[]; maxTokens: number; temperature?: number; timeoutMs?: number; tipo?: TipoIA; leadId?: string;
+}): Promise<string | null> {
+  if (ia.proveedor === 'claude') {
+    // Claude razona antes de escribir y eso cuenta en el tope: se le deja espacio de sobra (solo se cobra lo que use).
+    const r = await pedirClaude({ storeId, tipo: o.tipo || 'otros', leadId: o.leadId, key: ia.key, modelo: ia.model, sistemaVariable: o.system,
+      mensajes: ordenarTurnos(o.mensajes, 'Continúa con la tarea que se te indicó.'), maxTokens: Math.max(2048, o.maxTokens + 2048), esfuerzo: 'low', timeoutMs: o.timeoutMs });
+    if (!r.ok) { console.error('[ia] Claude falló:', r.error); return null; }
+    return r.texto;
+  }
+  try {
+    const res = await fetch(ia.url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
+      ...(o.timeoutMs ? { signal: AbortSignal.timeout(o.timeoutMs) } : {}),
+      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: o.system }, ...o.mensajes], max_tokens: o.maxTokens, temperature: o.temperature ?? 0 }),
+    });
+    if (!res.ok) return null;
+    const cuerpo = (await res.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[] };
+    const b = o.tipo ? medirIA(storeId, o.tipo, o.leadId || '', cuerpo) : cuerpo;
+    return String(b.choices?.[0]?.message?.content || '');
+  } catch { return null; }
+}
+
+/** La foto de un cliente lista para que Claude la vea (null si no se puede leer o no es un formato que acepte). */
+function imagenClaude(storeId: string, mediaUrl: string): { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string } } | null {
+  const media = materializar(storeId, mediaUrl);
+  if (!media || media.buffer.length > 3_500_000) return null;
+  const mime = media.mime === 'image/jpg' ? 'image/jpeg' : media.mime;
+  if (mime !== 'image/jpeg' && mime !== 'image/png' && mime !== 'image/gif' && mime !== 'image/webp') return null;
+  return { type: 'image', source: { type: 'base64', media_type: mime, data: media.buffer.toString('base64') } };
 }
 
 /** Transcribe una nota de voz con OpenAI (Whisper). Devuelve '' si no se puede. */
@@ -268,14 +326,9 @@ MUY IMPORTANTE — CUÁNDO NO ESCRIBIR: si la conversación YA ESTÁ CERRADA no 
   };
 
   try {
-    const res = await fetch(ia.url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: system }, ...historia, directiva], max_tokens: 160, temperature: 0.8 }),
-    });
-    if (!res.ok) return '';
-    const body = medirIA(storeId, 'seguimiento', leadId, await res.json()) as { choices?: { message?: { content?: string } }[] };
-    let txt = (body.choices?.[0]?.message?.content || '').trim();
+    const crudo = await completarTexto(storeId, ia, { system, mensajes: [...historia, directiva], maxTokens: 160, temperature: 0.8, tipo: 'seguimiento', leadId });
+    if (crudo === null) return '';
+    let txt = crudo.trim();
     txt = desenvolver(txt); // si vino como JSON o dentro de ```…```, saca solo el texto
     txt = txt.replace(/^["'“”]+|["'“”]+$/g, '').trim(); // quita comillas envolventes
     // La IA decide que no hay que insistir (conversación cerrada / venta hecha).
@@ -292,18 +345,13 @@ export async function clasificarConfirmacion(storeId: string, resumen: string, r
   const ia = resolverTexto(storeId);
   if (!ia || !respuesta.trim()) return 'otro';
   try {
-    const res = await fetch(ia.url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({ model: ia.model, max_tokens: 4, temperature: 0, messages: [
-        { role: 'system', content: 'Clasificas la respuesta de un cliente a la pregunta "¿Confirmas que te enviemos este pedido?". Responde SOLO una palabra: SI (acepta que se envíe, aunque agregue un comentario como una hora o un saludo), NO (no lo quiere, cancela o pide no enviarlo) u OTRO (pregunta algo, pide cambiar productos/talla/dirección o no se entiende).' },
-        { role: 'user', content: `Pedido: ${resumen.slice(0, 500)}\n\nRespuesta del cliente: ${respuesta.slice(0, 400)}` },
-      ] }),
+    const crudo = await completarTexto(storeId, ia, {
+      system: 'Clasificas la respuesta de un cliente a la pregunta "¿Confirmas que te enviemos este pedido?". Responde SOLO una palabra: SI (acepta que se envíe, aunque agregue un comentario como una hora o un saludo), NO (no lo quiere, cancela o pide no enviarlo) u OTRO (pregunta algo, pide cambiar productos/talla/dirección o no se entiende).',
+      mensajes: [{ role: 'user', content: `Pedido: ${resumen.slice(0, 500)}\n\nRespuesta del cliente: ${respuesta.slice(0, 400)}` }],
+      maxTokens: 4, temperature: 0, timeoutMs: 15000, tipo: 'clasificar',
     });
-    if (!res.ok) return 'otro';
-    const b = medirIA(storeId, 'clasificar', '', await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const r = (b.choices?.[0]?.message?.content || '').trim().toUpperCase();
+    if (crudo === null) return 'otro';
+    const r = crudo.trim().toUpperCase();
     return /^S[IÍ]/.test(r) ? 'si' : /^NO/.test(r) ? 'no' : 'otro';
   } catch { return 'otro'; }
 }
@@ -338,12 +386,40 @@ export async function maybeAutoReply(storeId: string, leadId: string) {
 const MAX_RESPUESTAS_HORA = Number(process.env.IA_MAX_RESPUESTAS_HORA || 60);
 /** Por encima de este tamaño (caracteres), el catálogo va completo solo para los productos de la conversación. */
 const CATALOGO_MAX = Number(process.env.IA_CATALOGO_MAX || 12000);
+/** Con Claude el catálogo queda en caché (se cobra a una fracción mientras haya chats seguidos), así que cabe completo hasta un tamaño mayor. */
+const CATALOGO_MAX_CLAUDE = Number(process.env.IA_CATALOGO_MAX_CLAUDE || 40000);
+
+/** Cómo actúa el asistente con marcadores de texto (DeepSeek, OpenAI, Grok). Con Claude se usa MECANICA_HERRAMIENTAS. */
+const MECANICA_MARCADORES = `FORMATO DE RESPUESTA (OBLIGATORIO): responde SIEMPRE en texto plano normal, como se escribe por WhatsApp. NUNCA respondas en JSON, ni uses llaves { } ni bloques de código con acentos graves (\`\`\`). No incluyas campos como "text" u "order". Para registrar un pedido usa EXCLUSIVAMENTE el marcador ##PEDIDO en su propia línea, tal como se indica; jamás escribas el pedido como JSON.
+
+PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma general y en el CATÁLOGO hay VARIOS productos que coinciden con ese nombre (por ejemplo pide "jogger" y existen "Jogger Bota Recta Hombre", "Jogger Bota Recta Dama", "Jogger Clásico", "Jogger Clásico Dama"), NO adivines ni elijas uno al azar: pregúntale al cliente CUÁL de esos modelos exactos quiere y NO envíes fotos ni pongas el marcador todavía. Solo cuando quede claro el modelo exacto, usa su NOMBRE EXACTO del catálogo en el marcador con el formato ##MEDIA:Nombre exacto del producto## (siempre con dos puntos y el nombre; nunca "##MEDIA" suelto).
+
+FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
+
+CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CELULAR, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
+##PEDIDO cliente="Nombre Apellido"; telefono="CELULAR QUE EL CLIENTE ESCRIBIÓ"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="1x Nombre exacto del producto (Talla M · Negro), 1x Nombre exacto del producto (Talla M · Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
+El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
+En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar. Si el cliente lleva varias unidades del mismo producto en tallas o colores DISTINTOS, escribe UNA LÍNEA POR CADA VARIANTE con su cantidad (ej.: 1x Camisilla (Negro · M), 2x Camisilla (Blanco · L)); nunca "3x Camisilla" sin la variante.
+El campo telefono es el CELULAR DE CONTACTO para la entrega (10 dígitos, sin +57). REGLA OBLIGATORIA, SIN EXCEPCIONES: el celular SOLO puede ser uno que el cliente ESCRIBIÓ en esta conversación. NUNCA lo inventes, NUNCA lo completes, NUNCA lo supongas y NUNCA uses números de ejemplo o de relleno (como 3001234567, 3012345678 o 301-234-567). Si el cliente ya escribió un celular, USA ese y no lo vuelvas a pedir. Si no ha dado ninguno, PÍDELO junto con los demás datos que falten ("¿A qué número celular te llama la transportadora?") y NO muestres el resumen ni pongas el marcador hasta tenerlo. Si el cliente dice que es el mismo de WhatsApp, pon telefono="WHATSAPP". El celular SIEMPRE va en el "Resumen de tu pedido".
+El campo departamento es OBLIGATORIO. Si la ciudad es inconfundible (capitales y ciudades grandes: Medellín → Antioquia, Cali → Valle del Cauca, Barranquilla → Atlántico, Bogotá → Cundinamarca/Bogotá D.C., Bucaramanga → Santander, etc.), dedúcelo tú y NO lo preguntes. Pregúntalo solo si la ciudad existe en varios departamentos o no la reconoces, y hazlo junto con los otros datos que falten.
+Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
+FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" (con nombre, celular, ciudad, dirección, productos y total) y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
+
+DATOS EN PEDAZOS (muy importante): el cliente suele dar sus datos regados en varios mensajes (el nombre en uno, la ciudad en otro, la dirección más tarde, el teléfono suelto). ANTES de pedir cualquier dato, revisa TODA la conversación y la sección "LO QUE EL CLIENTE YA ESCRIBIÓ": si el dato ya está ahí, ÚSALO y no lo vuelvas a pedir. Pide SOLO lo que de verdad falta, y TODO lo que falte en UN SOLO mensaje (ej: "Para enviarlo solo me falta tu dirección y el barrio 😊"), nunca de a un dato por mensaje. NO reconfirmes datos uno por uno ("¿tu nombre es X?", "¿confirmas que es Medellín?"): la ÚNICA confirmación es el "Resumen de tu pedido", UNA sola vez, al final. Si el cliente corrige algo del resumen, aplica la corrección y cierra el pedido sin volver a pedir confirmación de todo.
+
+NO ENTRES EN BUCLE DE CONFIRMACIÓN: un "sí", "confirmo", "correcto", "dale" del cliente confirma EL PEDIDO, aunque lo haya dicho justo después de que le pediste un dato suelto (como el punto de referencia). Si ya mostraste el resumen y tienes nombre, ciudad y dirección, ese "sí" cierra la venta: pon el marcador ##PEDIDO. JAMÁS vuelvas a preguntar "¿confirmas?" ni pidas de nuevo datos que el cliente ya te dio. Nunca pidas confirmación dos veces seguidas.
+
+FORMATO DE TU RESPUESTA: responde SIEMPRE en texto plano, exactamente lo que verá el cliente. NUNCA respondas en formato JSON, NUNCA empieces con «text:» o «"text":», y NUNCA encierres toda tu respuesta entre comillas. Escribe el mensaje directo, nada más.
+
+FOTOS DEL CLIENTE: cuando el cliente manda una foto verás "[el cliente envió una foto · pista interna aproximada: …]". Esa pista la generó un sistema automático y puede equivocarse: es SOLO para orientarte. NUNCA la cites ni la repitas al cliente, y NUNCA digas que algo "no está disponible", "no lo manejamos" o "no tenemos esa tela/material/referencia" por lo que diga esa pista. Si la foto parece de un producto, relaciónala con el producto del CATÁLOGO que más se parezca (por tipo y color) y sigue la venta con ese; si no estás seguro, pregúntale amablemente cuál de nuestros productos le interesa o muéstrale las opciones del catálogo.
+
+OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó registrado", "ya está creado", "confirmado" o similar si en ESE MISMO mensaje no incluiste el marcador ##PEDIDO ...##. Si todavía te falta el nombre, el celular, la ciudad o la dirección exacta, pídelos primero y NO afirmes que el pedido quedó registrado. El mensaje de confirmación al cliente lo envía el sistema automáticamente, no lo escribas tú.`;
 
 async function responderTurno(storeId: string, leadId: string) {
   const ia = resolverTexto(storeId); // DeepSeek escribe (o el proveedor de la tienda)
   if (!ia) {
     console.log('[ia] sin IA configurada para la tienda (ni clave propia ni del servidor): el asistente no responde');
-    registrarLog(storeId, 'warn', 'ia', 'El asistente NO respondió: no hay IA configurada (falta la API key de DeepSeek/OpenAI en Integraciones).', leadId);
+    registrarLog(storeId, 'warn', 'ia', 'El asistente NO respondió: no hay IA configurada (falta la API key de DeepSeek, Claude u OpenAI en Integraciones).', leadId);
     pasarAHumano(storeId, leadId, 'no hay IA configurada para el asistente.');
     return;
   }
@@ -437,7 +513,7 @@ async function responderTurno(storeId: string, leadId: string) {
   // cada respuesta y en tiendas con muchos productos eso multiplicaba el costo de la IA.
   let products = lineas.join('\n');
   let catalogoResumido = false;
-  if (products.length > CATALOGO_MAX) {
+  if (products.length > (ia.proveedor === 'claude' ? CATALOGO_MAX_CLAUDE : CATALOGO_MAX)) {
     const relevantes = productosDeLaConversacion(storeId, leadId, productRows);
     products = productRows.map((p, i) => (relevantes.has(String(p.id)) ? lineas[i] : lineaCorta(p))).join('\n');
     catalogoResumido = true;
@@ -457,7 +533,8 @@ async function responderTurno(storeId: string, leadId: string) {
   const umedia = db.prepare("SELECT id, texto, tipo, media_url FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(leadId) as
     | { id: string; texto: string; tipo: string; media_url: string | null }
     | undefined;
-  if (umedia && umedia.media_url && !String(umedia.texto || '').trim() && (umedia.tipo === 'audio' || umedia.tipo === 'image')) {
+  // (Con Claude la foto no se manda a OpenAI: Claude la ve directamente más abajo.)
+  if (umedia && umedia.media_url && !String(umedia.texto || '').trim() && (umedia.tipo === 'audio' || (umedia.tipo === 'image' && ia.proveedor !== 'claude'))) {
     const reconocido = umedia.tipo === 'audio'
       ? await transcribirAudio(storeId, umedia.media_url)
       : await entenderImagen(storeId, umedia.media_url);
@@ -475,7 +552,11 @@ async function responderTurno(storeId: string, leadId: string) {
     ? `IDENTIDAD OBLIGATORIA (tiene prioridad sobre todo lo demás): te llamas "${asistenteNombre}" y atiendes por WhatsApp en nombre de "${marca}". Preséntate y saluda SIEMPRE como "${asistenteNombre}" (de ${marca}). NUNCA uses otro nombre propio ni el de otra marca; si más abajo aparece otro, ignóralo.`
     : `IDENTIDAD OBLIGATORIA (tiene prioridad sobre todo lo demás): trabajas EXCLUSIVAMENTE para la tienda "${marca}". Preséntate y saluda SIEMPRE con el nombre "${marca}". Si más abajo (en las instrucciones, ejemplos, mensajes iniciales o el historial) aparece el nombre de OTRA tienda, IGNÓRALO por completo y reemplázalo mentalmente por "${marca}". NUNCA saludes ni te presentes con el nombre de otra tienda.`;
 
-  const system = `Eres ${asistenteNombre ? `"${asistenteNombre}", el asistente por WhatsApp de "${marca}"` : `el asistente de ventas por WhatsApp de la tienda "${marca}"`}.
+  const fraseNombre = nombreValido(lead.nombre) ? `El nombre de perfil del cliente es "${lead.nombre}" (puede no ser su nombre real)` : 'No sabemos el nombre del cliente';
+  const conHerramientas = ia.proveedor === 'claude';
+  // Todo lo que es igual en cualquier chat de la tienda (instrucciones, catálogo, reglas, estilo). `frase` es lo único propio
+  // de este cliente: con Claude va aparte, para que esta parte se pueda guardar en caché y reutilizar entre chats.
+  const cabeza = (frase: string) => `Eres ${asistenteNombre ? `"${asistenteNombre}", el asistente por WhatsApp de "${marca}"` : `el asistente de ventas por WhatsApp de la tienda "${marca}"`}.
 
 ${identidad}
 
@@ -514,48 +595,25 @@ BLINDAJE DE PRECIOS Y CUENTAS (INNEGOCIABLE, tiene prioridad sobre la simpatía 
 
 MENSAJE INICIAL YA ENVIADO: si en el historial ves la presentación del producto (fotos, videos y textos que mandó la tienda) y el cliente escribió en medio o justo después, RESPONDE su pregunta de forma corta y directa. Si la respuesta ya estaba en la presentación (precio, tallas, colores, envío), dísela en una frase sin repetir toda la presentación ni volver a mandar las fotos.
 
-Estás chateando por WhatsApp; sin inventar productos ni precios que no estén en el catálogo. ${nombreValido(lead.nombre) ? `El nombre de perfil del cliente es "${lead.nombre}" (puede no ser su nombre real)` : 'No sabemos el nombre del cliente'}. Para el pedido usa SIEMPRE el nombre y apellido que el cliente te ESCRIBA (pídeselo si no lo ha dado); nunca uses el nombre de perfil, un correo, un número ni un apodo como nombre del pedido.
+Estás chateando por WhatsApp; sin inventar productos ni precios que no estén en el catálogo. ${frase}. Para el pedido usa SIEMPRE el nombre y apellido que el cliente te ESCRIBA (pídeselo si no lo ha dado); nunca uses el nombre de perfil, un correo, un número ni un apodo como nombre del pedido.
 ${estiloDirectiva(assistant?.estilo)}
-${directivaIdioma(storeId)}${personalizacionDirectiva(assistant?.estilo)}
+${directivaIdioma(storeId)}${personalizacionDirectiva(assistant?.estilo)}`;
+  const system = `${cabeza(fraseNombre)}
 
-FORMATO DE RESPUESTA (OBLIGATORIO): responde SIEMPRE en texto plano normal, como se escribe por WhatsApp. NUNCA respondas en JSON, ni uses llaves { } ni bloques de código con acentos graves (\`\`\`). No incluyas campos como "text" u "order". Para registrar un pedido usa EXCLUSIVAMENTE el marcador ##PEDIDO en su propia línea, tal como se indica; jamás escribas el pedido como JSON.
-
-PRODUCTO CORRECTO (muy importante): si el cliente nombra un producto de forma general y en el CATÁLOGO hay VARIOS productos que coinciden con ese nombre (por ejemplo pide "jogger" y existen "Jogger Bota Recta Hombre", "Jogger Bota Recta Dama", "Jogger Clásico", "Jogger Clásico Dama"), NO adivines ni elijas uno al azar: pregúntale al cliente CUÁL de esos modelos exactos quiere y NO envíes fotos ni pongas el marcador todavía. Solo cuando quede claro el modelo exacto, usa su NOMBRE EXACTO del catálogo en el marcador con el formato ##MEDIA:Nombre exacto del producto## (siempre con dos puntos y el nombre; nunca "##MEDIA" suelto).
-
-FOTOS Y VIDEOS: cuando el cliente pregunte o muestre interés en un producto específico (aunque lo nombre de forma informal, ej. "la camisa"), incluye al inicio de tu respuesta, en una línea sola, el marcador ##MEDIA:Nombre exacto del producto del catálogo## y luego una frase MUY corta de cierre (una pregunta). Si el cliente pide en general "fotos", "imágenes", "más fotos", "videos" o material del producto SIN nombrar un color, usa SIEMPRE ##MEDIA:Nombre exacto## (sin barra ni color): el sistema envía TODAS las fotos y videos. Usa ##MEDIA:Nombre del producto|Color## SOLO si pide expresamente la foto de un color específico Y ese color muestra 📷 en el catálogo. Si el color que pide NO tiene 📷, NO prometas enviar su foto ni pongas el marcador: dile con amabilidad que puedes mostrarle el catálogo de colores o las fotos generales, y ofrécelas con ##MEDIA:Nombre exacto##. El sistema envía la multimedia automáticamente; no digas que "no puedes enviar fotos".
-
-CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su NOMBRE, CELULAR, CIUDAD y DIRECCIÓN, agrega al final de tu respuesta, en una línea sola, EXACTAMENTE con este formato:
-##PEDIDO cliente="Nombre Apellido"; telefono="CELULAR QUE EL CLIENTE ESCRIBIÓ"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta con punto de referencia"; items="1x Nombre exacto del producto (Talla M · Negro), 1x Nombre exacto del producto (Talla M · Gris), 1x Otro producto (Talla L · Rojo)"; total="180000"##
-El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
-En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar. Si el cliente lleva varias unidades del mismo producto en tallas o colores DISTINTOS, escribe UNA LÍNEA POR CADA VARIANTE con su cantidad (ej.: 1x Camisilla (Negro · M), 2x Camisilla (Blanco · L)); nunca "3x Camisilla" sin la variante.
-El campo telefono es el CELULAR DE CONTACTO para la entrega (10 dígitos, sin +57). REGLA OBLIGATORIA, SIN EXCEPCIONES: el celular SOLO puede ser uno que el cliente ESCRIBIÓ en esta conversación. NUNCA lo inventes, NUNCA lo completes, NUNCA lo supongas y NUNCA uses números de ejemplo o de relleno (como 3001234567, 3012345678 o 301-234-567). Si el cliente ya escribió un celular, USA ese y no lo vuelvas a pedir. Si no ha dado ninguno, PÍDELO junto con los demás datos que falten ("¿A qué número celular te llama la transportadora?") y NO muestres el resumen ni pongas el marcador hasta tenerlo. Si el cliente dice que es el mismo de WhatsApp, pon telefono="WHATSAPP". El celular SIEMPRE va en el "Resumen de tu pedido".
-El campo departamento es OBLIGATORIO. Si la ciudad es inconfundible (capitales y ciudades grandes: Medellín → Antioquia, Cali → Valle del Cauca, Barranquilla → Atlántico, Bogotá → Cundinamarca/Bogotá D.C., Bucaramanga → Santander, etc.), dedúcelo tú y NO lo preguntes. Pregúntalo solo si la ciudad existe en varios departamentos o no la reconoces, y hazlo junto con los otros datos que falten.
-Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
-FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" (con nombre, celular, ciudad, dirección, productos y total) y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
-
-DATOS EN PEDAZOS (muy importante): el cliente suele dar sus datos regados en varios mensajes (el nombre en uno, la ciudad en otro, la dirección más tarde, el teléfono suelto). ANTES de pedir cualquier dato, revisa TODA la conversación y la sección "LO QUE EL CLIENTE YA ESCRIBIÓ": si el dato ya está ahí, ÚSALO y no lo vuelvas a pedir. Pide SOLO lo que de verdad falta, y TODO lo que falte en UN SOLO mensaje (ej: "Para enviarlo solo me falta tu dirección y el barrio 😊"), nunca de a un dato por mensaje. NO reconfirmes datos uno por uno ("¿tu nombre es X?", "¿confirmas que es Medellín?"): la ÚNICA confirmación es el "Resumen de tu pedido", UNA sola vez, al final. Si el cliente corrige algo del resumen, aplica la corrección y cierra el pedido sin volver a pedir confirmación de todo.
-
-NO ENTRES EN BUCLE DE CONFIRMACIÓN: un "sí", "confirmo", "correcto", "dale" del cliente confirma EL PEDIDO, aunque lo haya dicho justo después de que le pediste un dato suelto (como el punto de referencia). Si ya mostraste el resumen y tienes nombre, ciudad y dirección, ese "sí" cierra la venta: pon el marcador ##PEDIDO. JAMÁS vuelvas a preguntar "¿confirmas?" ni pidas de nuevo datos que el cliente ya te dio. Nunca pidas confirmación dos veces seguidas.
-
-FORMATO DE TU RESPUESTA: responde SIEMPRE en texto plano, exactamente lo que verá el cliente. NUNCA respondas en formato JSON, NUNCA empieces con «text:» o «"text":», y NUNCA encierres toda tu respuesta entre comillas. Escribe el mensaje directo, nada más.
-
-FOTOS DEL CLIENTE: cuando el cliente manda una foto verás "[el cliente envió una foto · pista interna aproximada: …]". Esa pista la generó un sistema automático y puede equivocarse: es SOLO para orientarte. NUNCA la cites ni la repitas al cliente, y NUNCA digas que algo "no está disponible", "no lo manejamos" o "no tenemos esa tela/material/referencia" por lo que diga esa pista. Si la foto parece de un producto, relaciónala con el producto del CATÁLOGO que más se parezca (por tipo y color) y sigue la venta con ese; si no estás seguro, pregúntale amablemente cuál de nuestros productos le interesa o muéstrale las opciones del catálogo.
-
-OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó registrado", "ya está creado", "confirmado" o similar si en ESE MISMO mensaje no incluiste el marcador ##PEDIDO ...##. Si todavía te falta el nombre, el celular, la ciudad o la dirección exacta, pídelos primero y NO afirmes que el pedido quedó registrado. El mensaje de confirmación al cliente lo envía el sistema automáticamente, no lo escribas tú.`;
+${MECANICA_MARCADORES}`;
 
   const nombreMedia = (tipo: string) =>
     tipo === 'audio' ? 'una nota de voz' : tipo === 'image' ? 'una imagen' : tipo === 'video' ? 'un video' : 'un archivo';
-  const historia = (db.prepare('SELECT de, texto, tipo, ia_nota, cita_texto FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 16').all(leadId) as { de: string; texto: string; tipo: string; ia_nota: string; cita_texto: string }[])
-    .reverse()
-    .map((m) => ({
-      role: m.de === 'cliente' ? ('user' as const) : ('assistant' as const),
-      // Limpiamos respuestas viejas mal formateadas ("text": "...") para que el modelo no las copie.
-      // Si el cliente respondió CITANDO un mensaje, se lo decimos a la IA para que sepa a qué responde.
-      content: (m.de === 'cliente' && m.cita_texto ? `(respondiendo a: «${m.cita_texto.replace(/\s+/g, ' ').slice(0, 160)}») ` : '') + (m.de === 'cliente' && m.tipo === 'image'
-        ? [m.texto, `[el cliente envió una foto${m.ia_nota ? ` · pista interna aproximada: ${m.ia_nota}` : ''}]`].filter(Boolean).join('\n')
-        : (m.de === 'cliente' ? m.texto : desenvolver(m.texto || '')) || (m.tipo && m.tipo !== 'texto' ? `[el cliente envió ${nombreMedia(m.tipo)}]` : '')),
-    }))
-    .filter((m) => m.content);
+  type FilaHistoria = { de: string; texto: string; tipo: string; ia_nota: string; cita_texto: string; media_url: string | null };
+  const filasHistoria = (db.prepare('SELECT de, texto, tipo, ia_nota, cita_texto, media_url FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 16').all(leadId) as FilaHistoria[]).reverse();
+  // Limpiamos respuestas viejas mal formateadas ("text": "...") para que el modelo no las copie.
+  // Si el cliente respondió CITANDO un mensaje, se lo decimos a la IA para que sepa a qué responde.
+  const citaDe = (m: FilaHistoria) => (m.de === 'cliente' && m.cita_texto ? `(respondiendo a: «${m.cita_texto.replace(/\s+/g, ' ').slice(0, 160)}») ` : '');
+  const contenidoDe = (m: FilaHistoria) => citaDe(m) + (m.de === 'cliente' && m.tipo === 'image'
+    ? [m.texto, `[el cliente envió una foto${m.ia_nota ? ` · pista interna aproximada: ${m.ia_nota}` : ''}]`].filter(Boolean).join('\n')
+    : (m.de === 'cliente' ? m.texto : desenvolver(m.texto || '')) || (m.tipo && m.tipo !== 'texto' ? `[el cliente envió ${nombreMedia(m.tipo)}]` : ''));
+  const rolDe = (m: FilaHistoria) => (m.de === 'cliente' ? ('user' as const) : ('assistant' as const));
+  const historia = filasHistoria.map((m) => ({ role: rolDe(m), content: contenidoDe(m) })).filter((m) => m.content);
 
   // Memoria de datos: el historial que ve la IA son los últimos 16 mensajes, pero el
   // cliente pudo dar su nombre, ciudad o dirección mucho antes. Le pasamos TODO lo
@@ -710,24 +768,73 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
   }
 
   try {
-    const res = await fetch(ia.url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: systemFinal }, ...historia], max_tokens: 700, temperature: 0.7 }),
-    });
-    if (!res.ok) {
-      const detalle = await res.text().catch(() => '');
-      console.error(`[ia] ${ia.proveedor} respondió`, res.status, detalle);
-      registrarLog(storeId, 'error', 'ia', `La IA (${ia.proveedor}) falló (HTTP ${res.status}). Revisa la API key o el saldo. ${String(detalle).slice(0, 160)}`, leadId);
-      pasarAHumano(storeId, leadId, `la IA (${ia.proveedor}) falló (HTTP ${res.status}).`);
-      return;
+    let bruto = '';
+    // Con Claude, el pedido, las fotos y el pase a una persona llegan como herramientas (datos ya
+    // ordenados); con las demás IA, como marcadores dentro del texto. De aquí en adelante el flujo es el mismo.
+    let pedidoHerramienta: string | null = null;
+    let fotosHerramienta: string | null = null;
+    let humanoHerramienta = false;
+    if (conHerramientas) {
+      // Lo de la tienda (se guarda en caché) y, aparte, lo de este chat. Las 2 fotos más recientes del
+      // cliente van como imagen de verdad: Claude las ve (un comprobante, una captura, una prenda).
+      const conFoto = new Map<FilaHistoria, NonNullable<ReturnType<typeof imagenClaude>>>();
+      for (const m of filasHistoria.filter((f) => f.de === 'cliente' && f.tipo === 'image' && f.media_url).slice(-2)) {
+        const img = imagenClaude(storeId, m.media_url!);
+        if (img) conFoto.set(m, img);
+      }
+      const mensajes: MensajeClaude[] = [];
+      for (const m of filasHistoria) {
+        const img = conFoto.get(m);
+        if (img) mensajes.push({ role: 'user', content: [img, { type: 'text', text: `${citaDe(m)}${m.texto || '[foto que envió el cliente]'}` }] });
+        else if (contenidoDe(m)) mensajes.push({ role: rolDe(m), content: contenidoDe(m) });
+      }
+      const ultimaFila = [...filasHistoria].reverse().find((f) => f.de === 'cliente');
+      const veLaFoto = !!ultimaFila && conFoto.has(ultimaFila);
+      const noLoPuedeAbrir = mediaSinTexto && !veLaFoto
+        ? `\n\nEl cliente acaba de enviar ${nombreMedia(ultimo!.tipo)} que NO puedes ${ultimo!.tipo === 'audio' ? 'escuchar' : 'ver'}. Salúdalo con calidez y pídele amablemente que te escriba por texto su pregunta o qué producto le interesa. No digas que eres una IA.`
+        : '';
+      const r = await pedirClaude({
+        storeId, tipo: 'respuesta', leadId, key: ia.key, modelo: ia.model,
+        sistemaEstable: `${aHerramientas(cabeza('El nombre de perfil del cliente (si se conoce) va al final, en «DATOS DE ESTE CHAT»'))}\n\n${MECANICA_HERRAMIENTAS}`,
+        sistemaVariable: `DATOS DE ESTE CHAT: ${fraseNombre}.${aHerramientas(memoriaCliente + novedadTxt + envioTxt + pendTxt + confTxt + cambioTxt + cancTxt)}${noLoPuedeAbrir}`,
+        mensajes: ordenarTurnos(mensajes, `[Nota del sistema, no es un mensaje del cliente] Lo último que escribió el cliente fue: «${String(ultimo?.texto || '').replace(/\s+/g, ' ').slice(0, 300)}». Respóndele ahora, sin repetir lo que ya le dijiste.`),
+        herramientas: HERRAMIENTAS_BOT,
+        // El tope deja espacio de sobra al razonamiento: se cobra lo que se usa, no el tope.
+        maxTokens: 8000, esfuerzo: modeloClaude(ia.model).esfuerzoChat, timeoutMs: 45_000,
+      });
+      if (!r.ok) {
+        console.error('[ia] Claude falló:', r.estado, r.error);
+        registrarLog(storeId, 'error', 'ia', `La IA (Claude) no respondió. ${r.error}`, leadId);
+        pasarAHumano(storeId, leadId, `la IA (Claude) falló: ${r.error}`);
+        return;
+      }
+      for (const u of r.usos) {
+        if (u.nombre === 'registrar_pedido') pedidoHerramienta = innerDesdeHerramienta(u.datos);
+        else if (u.nombre === 'enviar_fotos') fotosHerramienta = `${String(u.datos.producto || '')} ${String(u.datos.color || '')}`.trim();
+        else if (u.nombre === 'pasar_a_humano') humanoHerramienta = true;
+      }
+      if (!r.texto && !r.usos.length) { pasarAHumano(storeId, leadId, 'la IA respondió vacío.'); return; }
+      bruto = r.texto;
+    } else {
+      const res = await fetch(ia.url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: systemFinal }, ...historia], max_tokens: 700, temperature: 0.7 }),
+      });
+      if (!res.ok) {
+        const detalle = await res.text().catch(() => '');
+        console.error(`[ia] ${ia.proveedor} respondió`, res.status, detalle);
+        registrarLog(storeId, 'error', 'ia', `La IA (${ia.proveedor}) falló (HTTP ${res.status}). Revisa la API key o el saldo. ${String(detalle).slice(0, 160)}`, leadId);
+        pasarAHumano(storeId, leadId, `la IA (${ia.proveedor}) falló (HTTP ${res.status}).`);
+        return;
+      }
+      const body = medirIA(storeId, 'respuesta', leadId, await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const brutoRaw = body.choices?.[0]?.message?.content?.trim();
+      if (!brutoRaw) { pasarAHumano(storeId, leadId, 'la IA respondió vacío.'); return; }
+      // A veces DeepSeek envuelve su respuesta como JSON ("text": "..."). La
+      // desenvolvemos para no mandar esa basura al cliente ni contaminar el marcador.
+      bruto = desenvolver(brutoRaw);
     }
-    const body = medirIA(storeId, 'respuesta', leadId, await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const brutoRaw = body.choices?.[0]?.message?.content?.trim();
-    if (!brutoRaw) { pasarAHumano(storeId, leadId, 'la IA respondió vacío.'); return; }
-    // A veces DeepSeek envuelve su respuesta como JSON ("text": "..."). La
-    // desenvolvemos para no mandar esa basura al cliente ni contaminar el marcador.
-    const bruto = desenvolver(brutoRaw);
 
     // La IA marca cuándo debe enviar fotos. Toleramos TODAS las variantes para que
     // el marcador NUNCA se le escape crudo al cliente: ##MEDIA:Nombre##,
@@ -741,16 +848,16 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
     const m = bruto.match(marca);
     const mp = bruto.match(marcaPed);
     // Pase a humano: la IA decide (según lo configurado) que el chat lo tome una persona.
-    const pideHumano = /##\s*HUMANO\b\s*(?:##)?/i.test(bruto);
+    const pideHumano = humanoHerramienta || /##\s*HUMANO\b\s*(?:##)?/i.test(bruto);
     // Novedad de envío: el bot acordó la solución con el cliente.
     const propNovedad = novedadTxt ? leerMarcadorNovedad(bruto) : null;
     if (propNovedad) void registrarPropuestaBot(storeId, leadId, propNovedad).catch((e) => console.warn('[novedad] propuesta', e));
     const texto = quitarMarcadorNovedad(bruto).replace(/##\s*HUMANO\b\s*(?:##)?/gi, '').replace(marcaStrip, '').replace(/[^\n]*##\s*PEDIDO\b[^\n]*/gi, '').replace(/```+/g, '').replace(/[ \t]{2,}/g, ' ').trim();
     // ¿Enviamos fotos? Sí si la IA puso el marcador (con o sin nombre) o si el
     // cliente pidió fotos explícitamente (red de seguridad, igual que la del pedido).
-    const nombreMarca = m && m[1] ? m[1].replace('|', ' ').trim() : '';
+    const nombreMarca = fotosHerramienta ?? (m && m[1] ? m[1].replace('|', ' ').trim() : '');
     const pidioMedia = ultimo?.tipo === 'texto' && pidioFotos(ultimo?.texto || '');
-    if (m || pidioMedia) {
+    if (m || fotosHerramienta !== null || pidioMedia) {
       // De QUÉ producto: el nombre del marcador; si no trae nombre, el texto del
       // cliente; si aún no resuelve, el último producto hablado en el chat; y si la
       // tienda tiene un solo producto activo, ese.
@@ -786,7 +893,8 @@ OBLIGATORIO SOBRE EL PEDIDO: NUNCA le digas al cliente que su pedido "quedó reg
       registrarLog(storeId, 'warn', 'humano', 'El asistente pasó este chat a una persona del equipo (ya no responde solo). Atiéndelo desde el Inbox o devuélvelo al asistente.', leadId);
       return;
     }
-    const resMarcador = mp ? await crearPedido(storeId, lead, mp[1], productRows, destino, pn) : false;
+    const innerPedido = pedidoHerramienta ?? (mp ? mp[1] : null);
+    const resMarcador = innerPedido !== null ? await crearPedido(storeId, lead, innerPedido, productRows, destino, pn) : false;
     // 'invalido': pidió una talla/color que no existe; ya se le respondió con las opciones.
     // 'pregunta': el cliente ya tenía un pedido y se le preguntó si es nuevo o un cambio (ya se le escribió).
     let pedidoCreado = resMarcador === 'creado' || resMarcador === 'actualizado' || resMarcador === 'invalido' || resMarcador === 'pregunta';
@@ -1087,14 +1195,9 @@ export async function extraerPedidoDelChat(storeId: string, leadId: string): Pro
 ##PEDIDO cliente="Nombre y apellido"; telefono="CELULAR QUE EL CLIENTE ESCRIBIÓ"; departamento="Departamento"; ciudad="Ciudad"; direccion="Dirección exacta"; items="2x Nombre EXACTO del catálogo (Talla M · Negro), 1x Otro producto (Talla L · Rojo)"; total="139900"##
 Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefono pon el celular de contacto para la entrega (10 dígitos) SOLO si el cliente lo escribió; nunca lo inventes ni uses un número de ejemplo (si no lo dio, déjalo vacío). Si un dato no está, déjalo vacío ("" ). En items pon la cantidad, el nombre EXACTO del catálogo y entre paréntesis la variante EXACTA de la lista del catálogo. Si el cliente pidió varias tallas o colores, pon UNA LÍNEA POR CADA VARIANTE (ej.: "1x Camisilla (Negro · M), 1x Camisilla (Blanco · L), 1x Camisilla (Mostaza · M)"), nunca "3x Camisilla" sin variantes. En total pon el valor final acordado (solo números). Si no hay un pedido real en la conversación, responde exactamente: SIN_PEDIDO`;
   try {
-    const res = await fetch(ia.url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: system }, { role: 'user', content: `CATÁLOGO:\n${productos || '(sin productos)'}\n\nCONVERSACIÓN:\n${historia}` }], max_tokens: 320, temperature: 0 }),
-    });
-    if (!res.ok) return '';
-    const body = medirIA(storeId, 'extraer', leadId, await res.json()) as { choices?: { message?: { content?: string } }[] };
-    let out = (body.choices?.[0]?.message?.content || '').trim();
+    const crudo = await completarTexto(storeId, ia, { system, mensajes: [{ role: 'user', content: `CATÁLOGO:\n${productos || '(sin productos)'}\n\nCONVERSACIÓN:\n${historia}` }], maxTokens: 320, temperature: 0, tipo: 'extraer', leadId });
+    if (crudo === null) return '';
+    let out = crudo.trim();
     out = desenvolver(out) || out;
     if (/SIN_PEDIDO/i.test(out)) return '';
     const m = out.match(/##PEDIDO(.*?)##/s);

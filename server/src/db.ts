@@ -246,6 +246,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS store_integrations (
 addColumn('stores', "plan_estado TEXT NOT NULL DEFAULT 'prueba'"); // sin_plan | activa | vencida
 addColumn('stores', 'plan_vence TEXT'); // fecha ISO del próximo cobro de la renta
 addColumn('plans', 'mensual INTEGER NOT NULL DEFAULT 0'); // renta mensual (precio = valor inicial una vez)
+addColumn('stores', 'marketing_ia INTEGER NOT NULL DEFAULT 0'); // Marketing IA (estudio + campañas): en demo, lo enciende el equipo DealFlow por tienda
 const nuevaColInicial = addColumn('stores', 'inicial_pagado INTEGER NOT NULL DEFAULT 0'); // 1 = ya pagó el valor inicial
 
 // Plan único de DealFlow: instalación (valor inicial, una sola vez) + mensualidad.

@@ -332,11 +332,25 @@ api.delete('/mis-tiendas/:id', requireAuth, requireStore, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Marketing IA en demo: solo las tiendas a las que el equipo DealFlow se lo encendió ───
+const marketingIAActivo = (sid: string) => !!(db.prepare('SELECT COALESCE(marketing_ia,0) m FROM stores WHERE id = ?').get(sid) as { m: number } | undefined)?.m;
+function requireMarketingIA(req: ExRequest, res: ExResponse, next: () => void) {
+  if (marketingIAActivo(req.user!.storeId!)) return next();
+  res.status(403).json({ error: 'Marketing IA está en etapa de pruebas. Comunícate con un administrador de DealFlow para solicitar una demo.', demo: true });
+}
+/** Enlace de WhatsApp del equipo DealFlow para pedir la demo ('' si no hay número configurado). */
+async function enlaceDemoMarketing(tienda: string): Promise<string> {
+  const num = (await import('./pagosOffline.js')).whatsappPagos();
+  return num ? `https://wa.me/${num}?text=${encodeURIComponent(`Hola, soy de la tienda ${tienda} y quiero solicitar una demo de Marketing IA en DealFlow.`)}` : '';
+}
+
 // ── Estado completo de la tienda (una llamada para pintar el panel) ───
 api.get('/state', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const storeRow = db.prepare('SELECT id, nombre, plan, tema_premium FROM stores WHERE id = ?').get(sid) as { id: string; nombre: string; plan: string; tema_premium: number };
-  const store = { id: storeRow.id, nombre: storeRow.nombre, plan: storeRow.plan, temaPremium: !!storeRow.tema_premium };
+  const mkIA = marketingIAActivo(sid);
+  const store = { id: storeRow.id, nombre: storeRow.nombre, plan: storeRow.plan, temaPremium: !!storeRow.tema_premium,
+    marketingIA: mkIA, whatsappDemo: mkIA ? '' : await enlaceDemoMarketing(storeRow.nombre) };
   const bloqueados = productosBloqueados(sid); // productos de biblioteca gratuitos (estructura no editable)
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, precioPromo: Number(p.precio_promo) || 0, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
@@ -2469,25 +2483,27 @@ api.post('/plantillas/:id/desinstalar', requireAuth, requireStore, requireOwner,
 });
 
 // ── Campañas con IA (producto → creativos → textos → publicar) ───────
+// Abierta aunque Marketing IA esté apagado: Integraciones lee de aquí el estado de la cuenta de Meta Ads.
 api.get('/campanas', requireAuth, requireStore, async (req, res) => {
   const { listar } = await import('./campanas.js');
   const { estadoCuenta } = await import('./metaAds.js');
-  res.json({ campanas: listar(req.user!.storeId!), ads: estadoCuenta(req.user!.storeId!) });
+  const sid = req.user!.storeId!;
+  res.json({ campanas: marketingIAActivo(sid) ? listar(sid) : [], ads: estadoCuenta(sid) });
 });
 
-api.get('/campanas/:id', requireAuth, requireStore, async (req, res) => {
+api.get('/campanas/:id', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const { obtener } = await import('./campanas.js');
   const c = obtener(req.user!.storeId!, req.params.id);
   if (!c) return res.status(404).json({ error: 'Campaña no encontrada.' });
   res.json({ campana: c });
 });
 
-api.post('/campanas', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/campanas', requireAuth, requireStore, requireMarketingIA, requireOwner, async (req, res) => {
   const { crear } = await import('./campanas.js');
   res.json({ id: crear(req.user!.storeId!, String(req.body?.nombre || ''), String(req.body?.objetivo || 'mensajes')) });
 });
 
-api.put('/campanas/:id', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.put('/campanas/:id', requireAuth, requireStore, requireMarketingIA, requireOwner, async (req, res) => {
   const { renombrar, guardarPartes } = await import('./campanas.js');
   const sid = req.user!.storeId!;
   if (req.body?.nombre !== undefined) renombrar(sid, req.params.id, String(req.body.nombre));
@@ -2498,14 +2514,14 @@ api.put('/campanas/:id', requireAuth, requireStore, requireOwner, async (req, re
   res.json({ ok: true });
 });
 
-api.delete('/campanas/:id', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.delete('/campanas/:id', requireAuth, requireStore, requireMarketingIA, requireOwner, async (req, res) => {
   const { borrar } = await import('./campanas.js');
   borrar(req.user!.storeId!, req.params.id);
   res.json({ ok: true });
 });
 
 // Paso 1: la IA estudia el producto y arma el brief.
-api.post('/campanas/:id/producto', requireAuth, requireStore, async (req, res) => {
+api.post('/campanas/:id/producto', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const sid = req.user!.storeId!;
   const { COSTO, saldo, cobrar } = await import('./creditos.js');
   if (saldo(sid) < COSTO.texto) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos. Recarga para continuar.`, sinCreditos: true });
@@ -2521,7 +2537,7 @@ api.post('/campanas/:id/producto', requireAuth, requireStore, async (req, res) =
 });
 
 // Paso 2: creativos (imágenes) a partir del brief.
-api.post('/campanas/:id/creativos', requireAuth, requireStore, async (req, res) => {
+api.post('/campanas/:id/creativos', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const sid = req.user!.storeId!;
   const n = Math.min(4, Math.max(1, Number(req.body?.cantidad) || 1));
   const { COSTO, saldo, cobrar } = await import('./creditos.js');
@@ -2537,7 +2553,7 @@ api.post('/campanas/:id/creativos', requireAuth, requireStore, async (req, res) 
 });
 
 // Paso 3: textos principales, títulos y descripciones (estructura de Meta).
-api.post('/campanas/:id/textos', requireAuth, requireStore, async (req, res) => {
+api.post('/campanas/:id/textos', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const sid = req.user!.storeId!;
   const { COSTO, saldo, cobrar } = await import('./creditos.js');
   if (saldo(sid) < COSTO.texto) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos. Recarga para continuar.`, sinCreditos: true });
@@ -2575,7 +2591,7 @@ api.delete('/ads', requireAuth, requireStore, requireOwner, async (req, res) => 
   res.json({ ads: estadoCuenta(req.user!.storeId!) });
 });
 
-api.post('/campanas/:id/publicar', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/campanas/:id/publicar', requireAuth, requireStore, requireMarketingIA, requireOwner, async (req, res) => {
   const { publicar } = await import('./metaAds.js');
   const b = req.body || {};
   const r = await publicar(req.user!.storeId!, req.params.id, {
@@ -2588,12 +2604,12 @@ api.post('/campanas/:id/publicar', requireAuth, requireStore, requireOwner, asyn
 });
 
 // ── Estudio de creativos (Marketing IA): videos UGC y fotos, pagados con créditos ──
-api.get('/estudio', requireAuth, requireStore, async (req, res) => {
+api.get('/estudio', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const E = await import('./estudio.js');
   const { saldo } = await import('./creditos.js');
   res.json({ proyectos: E.listarProyectos(req.user!.storeId!), precios: E.preciosPublicos(), saldo: saldo(req.user!.storeId!) });
 });
-api.get('/estudio/proyectos/:id', requireAuth, requireStore, async (req, res) => {
+api.get('/estudio/proyectos/:id', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const E = await import('./estudio.js');
   // Si hay videos en curso, se aprovecha la consulta para revisarlos ya.
   if ((db.prepare("SELECT 1 FROM estudio_piezas WHERE proyecto_id = ? AND estado = 'generando' LIMIT 1").get(req.params.id))) await E.revisarVideos(req.user!.storeId!).catch(() => {});
@@ -2602,26 +2618,26 @@ api.get('/estudio/proyectos/:id', requireAuth, requireStore, async (req, res) =>
   const { saldo } = await import('./creditos.js');
   res.json({ proyecto: p, saldo: saldo(req.user!.storeId!) });
 });
-api.post('/estudio/proyectos', requireAuth, requireStore, async (req, res) => {
+api.post('/estudio/proyectos', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const r = (await import('./estudio.js')).guardarProyecto(req.user!.storeId!, null, req.body || {});
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
 });
-api.put('/estudio/proyectos/:id', requireAuth, requireStore, async (req, res) => {
+api.put('/estudio/proyectos/:id', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const r = (await import('./estudio.js')).guardarProyecto(req.user!.storeId!, req.params.id, req.body || {});
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
 });
-api.delete('/estudio/proyectos/:id', requireAuth, requireStore, async (req, res) => {
+api.delete('/estudio/proyectos/:id', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   (await import('./estudio.js')).borrarProyecto(req.user!.storeId!, req.params.id);
   res.json({ ok: true });
 });
-api.post('/estudio/proyectos/:id/paquete', requireAuth, requireStore, async (req, res) => {
+api.post('/estudio/proyectos/:id/paquete', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const r = await (await import('./estudio.js')).generarPaquete(req.user!.storeId!, req.params.id);
   if ('error' in r) return res.status(r.sinCreditos ? 402 : 400).json(r);
   res.json(r);
 });
-api.post('/estudio/proyectos/:id/piezas', requireAuth, requireStore, async (req, res) => {
+api.post('/estudio/proyectos/:id/piezas', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const r = (await import('./estudio.js')).agregarPieza(req.user!.storeId!, req.params.id, req.body || {});
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
@@ -2631,12 +2647,12 @@ api.patch('/estudio/piezas/:id', requireAuth, requireStore, async (req, res) => 
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
 });
-api.post('/estudio/piezas/:id/generar', requireAuth, requireStore, async (req, res) => {
+api.post('/estudio/piezas/:id/generar', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const r = await (await import('./estudio.js')).generarPieza(req.user!.storeId!, req.params.id);
   if ('error' in r) return res.status(r.sinCreditos ? 402 : 400).json(r);
   res.json(r);
 });
-api.get('/estudio/proyectos/:id/zip', requireAuth, requireStore, async (req, res) => {
+api.get('/estudio/proyectos/:id/zip', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const r = (await import('./estudio.js')).zipProyecto(req.user!.storeId!, req.params.id, req.query.aprobados === '1');
   if ('error' in r) return res.status(400).json(r);
   res.setHeader('Content-Type', 'application/zip');
@@ -2645,21 +2661,21 @@ api.get('/estudio/proyectos/:id/zip', requireAuth, requireStore, async (req, res
 });
 
 // Lanzar piezas del estudio a Meta (campaña → conjunto → anuncios, en pausa) y activarlas.
-api.get('/estudio/proyectos/:id/meta', requireAuth, requireStore, async (req, res) => {
+api.get('/estudio/proyectos/:id/meta', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const M = await import('./estudioMeta.js');
   res.json({ opciones: await M.opcionesLanzar(req.user!.storeId!), lanzamientos: await M.listarLanzamientos(req.user!.storeId!, req.params.id) });
 });
-api.post('/estudio/proyectos/:id/lanzar', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/estudio/proyectos/:id/lanzar', requireAuth, requireStore, requireMarketingIA, requireOwner, async (req, res) => {
   const r = await (await import('./estudioMeta.js')).crearLanzamiento(req.user!.storeId!, req.params.id, req.body || {});
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
 });
-api.post('/estudio/lanzamientos/:id/estado', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/estudio/lanzamientos/:id/estado', requireAuth, requireStore, requireMarketingIA, requireOwner, async (req, res) => {
   const r = await (await import('./estudioMeta.js')).cambiarEstado(req.user!.storeId!, req.params.id, req.body?.activar === true);
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
 });
-api.post('/estudio/lanzamientos/:id/reintentar', requireAuth, requireStore, requireOwner, async (req, res) => {
+api.post('/estudio/lanzamientos/:id/reintentar', requireAuth, requireStore, requireMarketingIA, requireOwner, async (req, res) => {
   const r = (await import('./estudioMeta.js')).reintentar(req.user!.storeId!, req.params.id);
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
@@ -3778,6 +3794,7 @@ async function leerTiendaSoporte(req: ExRequest, res: ExResponse) {
       creditos: Number(s.creditos) || 0, temaPremium: !!s.tema_premium, creada: String(s.created_at || '').slice(0, 10),
       whatsapp: { conectado: !!wa?.conectado, numero: wa?.numero || '' },
       plantillas: (await import('./plantillasWA.js')).permisosPlantillas(t.sid),
+      marketingIA: marketingIAActivo(t.sid),
     },
     usuarios, planes: listarPlanes().map((p) => p.nombre),
     esSuperadmin: t.admin.role === 'SUPERADMIN', // solo el superadmin da créditos y días de plan
@@ -3807,6 +3824,8 @@ api.post('/soporte-tienda/editar', requireAuth, (req, res) => {
   if (typeof temaPremium === 'boolean') { db.prepare('UPDATE stores SET tema_premium = ? WHERE id = ?').run(temaPremium ? 1 : 0, s.id); hecho.push(`tema premium ${temaPremium ? 'encendido' : 'apagado'}`); }
   const pl = (req.body || {}).plantillas;
   if (pl && typeof pl === 'object') hecho.push(...guardarPermisosPlantillas(s.id, pl));
+  const mk = (req.body || {}).marketingIA;
+  if (typeof mk === 'boolean') { db.prepare('UPDATE stores SET marketing_ia = ? WHERE id = ?').run(mk ? 1 : 0, s.id); hecho.push(`Marketing IA ${mk ? 'encendido' : 'apagado'}`); }
   if (hecho.length) registrarAccionEquipo(t.admin.email, `Barra de soporte · ${s.nombre}: ${hecho.join(', ')}`, s.id);
   res.json({ ok: true });
 });
@@ -4012,23 +4031,30 @@ api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
 });
 
 // ── Integraciones por tienda (API keys propias) ───────────────────────
-const IA_TIPOS = ['deepseek', 'openai', 'grok'];
+const IA_TIPOS = ['deepseek', 'openai', 'grok', 'claude'];
 
-api.get('/integraciones', requireAuth, requireStore, (req, res) => {
+api.get('/integraciones', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const rows = db.prepare('SELECT tipo, config FROM store_integrations WHERE store_id = ?').all(sid) as { tipo: string; config: string }[];
   const configuradas = rows.map((r) => {
     const cfg = pj<Record<string, string>>(r.config, {});
     // Nunca devolvemos las claves completas: solo los últimos 4 caracteres.
     const resumen: Record<string, string> = {};
-    for (const [k, v] of Object.entries(cfg)) resumen[k] = v.length > 8 ? '••••' + v.slice(-4) : '••••';
+    // (El modelo elegido no es un secreto: se devuelve tal cual.)
+    for (const [k, v] of Object.entries(cfg)) resumen[k] = k === 'modelo' ? v : v.length > 8 ? '••••' + v.slice(-4) : '••••';
     return { tipo: r.tipo, campos: resumen };
   });
   const asst = db.prepare('SELECT ia_proveedor FROM assistants WHERE store_id = ?').get(sid) as { ia_proveedor: string } | undefined;
-  res.json({ configuradas, iaPredeterminada: (asst?.ia_proveedor || '').trim() || 'deepseek' });
+  const { MODELOS_CLAUDE, modeloClaude } = await import('./claude.js');
+  const cfgClaude = pj<Record<string, string>>(rows.find((r) => r.tipo === 'claude')?.config || '', {});
+  res.json({
+    configuradas, iaPredeterminada: (asst?.ia_proveedor || '').trim() || 'deepseek',
+    // Modelos de Claude que la tienda puede elegir (precio en USD por millón de tokens) y el que tiene puesto.
+    claude: { modelo: modeloClaude(cfgClaude.modelo).id, modelos: MODELOS_CLAUDE.map((m) => ({ id: m.id, nombre: m.nombre, nota: m.nota, entrada: m.entrada, salida: m.salida })) },
+  });
 });
 
-api.put('/integraciones/:tipo', requireAuth, requireStore, requireOwner, (req, res) => {
+api.put('/integraciones/:tipo', requireAuth, requireStore, requireOwner, async (req, res) => {
   const sid = req.user!.storeId!;
   const tipo = String(req.params.tipo).toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30);
   if (!tipo) return res.status(400).json({ error: 'Integración inválida.' });
@@ -4038,6 +4064,21 @@ api.put('/integraciones/:tipo', requireAuth, requireStore, requireOwner, (req, r
     const kk = String(k).slice(0, 40);
     const vv = String(v ?? '').trim().slice(0, 500);
     if (vv) config[kk] = vv;
+  }
+  if (tipo === 'claude') {
+    // Claude: clave + modelo. Se puede cambiar solo el modelo sin volver a pegar la clave, y la clave
+    // se comprueba con Anthropic antes de guardarla (no gasta: solo consulta el modelo).
+    const { esModeloClaude, MODELO_CLAUDE_DEFECTO, probarClaveClaude } = await import('./claude.js');
+    const previa = pj<Record<string, string>>((db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'claude'").get(sid) as { config: string } | undefined)?.config || '', {});
+    const claveNueva = !!config.apiKey;
+    if (!config.apiKey && previa.apiKey) config.apiKey = previa.apiKey;
+    if (!config.apiKey) return res.status(400).json({ error: 'Pega tu API key de Claude (empieza por sk-ant-).' });
+    if (!config.modelo) config.modelo = previa.modelo || MODELO_CLAUDE_DEFECTO;
+    if (!esModeloClaude(config.modelo)) return res.status(400).json({ error: 'Ese modelo de Claude no está disponible.' });
+    if (claveNueva || config.modelo !== previa.modelo) {
+      const prueba = await probarClaveClaude(config.apiKey, config.modelo);
+      if (!prueba.ok) return res.status(400).json({ error: prueba.error });
+    }
   }
   if (!Object.keys(config).length) return res.status(400).json({ error: 'Completa los datos de la integración.' });
   db.prepare(

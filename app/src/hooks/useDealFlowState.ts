@@ -165,7 +165,7 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla } from '../lib/api';
+import type { ClaudeIA, ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -885,10 +885,14 @@ export function useDealFlowState() {
   const [storeId, setStoreId] = useState<string>('');
   // El superadmin activa el Creador de landings tienda por tienda.
   const [landingsHabilitadas, setLandingsHabilitadas] = useState(false);
+  // Marketing IA en demo: lo enciende el equipo DealFlow por tienda. null = aún no se sabe.
+  const [marketingIA, setMarketingIA] = useState<boolean | null>(null);
+  const [whatsappDemo, setWhatsappDemo] = useState('');
   // El tema Premium está disponible para TODAS las cuentas (ya no se activa por tienda).
   const premiumPermitido = true;
   const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
   const [iaPredeterminada, setIaPredeterminada] = useState('deepseek');
+  const [claudeIA, setClaudeIA] = useState<ClaudeIA>({ modelo: '', modelos: [] });
   // Los avisos de integraciones (guardar, probar conexión, sincronizar…) ahora
   // salen como pop-up flotante, no como texto fijo en el panel. Mantenemos la
   // misma firma setIntegracionMsg para no tocar cada llamada; el progreso ("…")
@@ -2144,6 +2148,8 @@ export function useDealFlowState() {
         if (data.store?.nombre) setStoreNombre(data.store.nombre);
         if (data.store?.id) setStoreId(data.store.id);
         setLandingsHabilitadas(!!data.store?.landings);
+        setMarketingIA(!!data.store?.marketingIA);
+        setWhatsappDemo(data.store?.whatsappDemo || '');
         setSuscripcion(data.suscripcion ?? null);
         if (data.whatsapp.verifyToken) setWaVerifyToken(data.whatsapp.verifyToken);
         setWaSignup(data.whatsapp.signup ?? null);
@@ -3073,6 +3079,7 @@ export function useDealFlowState() {
     for (const c of data.configuradas) map[c.tipo] = c.campos;
     setIntegracionesCfg(map);
     setIaPredeterminada(data.iaPredeterminada || 'deepseek');
+    if (data.claude) setClaudeIA(data.claude);
   }
   useEffect(() => {
     if (apiMode && sessionUser && !isAdmin && section === 'integraciones') { void reloadIntegraciones(); void reloadMetaEstado(); }
@@ -4419,6 +4426,8 @@ export function useDealFlowState() {
     setTheme,
     premiumHabilitado: premiumPermitido,
     landingsHabilitadas,
+    marketingIA,
+    whatsappDemo,
 
     // Perfil de la cuenta: nombre, foto, contraseña.
     actualizarNombrePerfil,
@@ -4519,6 +4528,7 @@ export function useDealFlowState() {
     instalarPwa,
     integracionesCfg,
     iaPredeterminada,
+    claudeIA,
     integracionMsg,
     effiMsg,
     variantesGenMsg,

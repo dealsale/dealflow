@@ -3,7 +3,7 @@
  * MAYÚSCULAS, abreviaturas oficiales, BRR (y LOC en Bogotá) y orden claro, sin inventar.
  * Como control, la respuesta no puede traer números que no estuvieran en la dirección.
  */
-import { resolverTexto } from './ai.js';
+import { resolverTexto, completarTexto } from './ai.js';
 
 const REGLAS = `Corrige y organiza la siguiente dirección en Colombia cumpliendo estas reglas:
 - Todo debe ir en MAYÚSCULA.
@@ -22,16 +22,11 @@ export async function ordenarDireccionIA(storeId: string, direccion: string, ciu
   const ia = resolverTexto(storeId);
   if (!ia) return { error: 'sin_ia' };
   try {
-    const r = await fetch(ia.url, {
-      method: 'POST', headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: ia.model, temperature: 0, max_tokens: 200, messages: [
-        { role: 'system', content: REGLAS },
-        { role: 'user', content: `Dirección: ${direccion}\nCiudad: ${ciudad || '(sin dato)'}\nDepartamento: ${departamento || '(sin dato)'}` },
-      ] }),
-      signal: AbortSignal.timeout(30_000),
+    const crudo = await completarTexto(storeId, ia, {
+      system: REGLAS, mensajes: [{ role: 'user', content: `Dirección: ${direccion}\nCiudad: ${ciudad || '(sin dato)'}\nDepartamento: ${departamento || '(sin dato)'}` }],
+      maxTokens: 200, temperature: 0, timeoutMs: 30_000,
     });
-    const b = (await r.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[] };
-    let out = String(b.choices?.[0]?.message?.content || '').split('\n').map((x) => x.trim()).filter(Boolean)[0] || '';
+    let out = String(crudo || '').split('\n').map((x) => x.trim()).filter(Boolean)[0] || '';
     out = out.replace(/^["'`«]+|["'`»]+$/g, '').replace(/^(direcci[oó]n( final)?|resultado)\s*:\s*/i, '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('es');
     if (!out || out.length > 300) return { error: 'La IA no devolvió una dirección.' };
     // Control: ningún número nuevo (placas, aptos, torres…) que el cliente no escribió.

@@ -400,7 +400,8 @@ export function Integraciones({ df }: { df: DealFlowState }) {
   function abrir(id: string) {
     setAbierta(abierta === id ? null : id);
     setForm({});
-    setPredeterminada(false);
+    // Quien conecta Claude por primera vez lo quiere como agente: la casilla sale marcada.
+    setPredeterminada(id === 'claude' && !df.integracionesCfg.claude);
   }
 
   return (
@@ -411,6 +412,8 @@ export function Integraciones({ df }: { df: DealFlowState }) {
       </p>
       <div style={{ background: 'var(--df-brand-subtle-3)', border: '1px solid #BBF7D0', borderRadius: 10, padding: '11px 14px', fontSize: 13, color: '#166534', margin: '0 0 18px', lineHeight: 1.6 }}>
         🧠 <b>Tu asistente usa dos IA para ahorrar:</b> conecta <b>DeepSeek</b> (escribe los textos, más económico) y <b>OpenAI</b> (transcribe las notas de voz y entiende las imágenes de tus clientes). Con las dos, tu asistente lee, oye y ve.
+        <br />
+        ✨ <b>¿Prefieres Claude?</b> También puede escribir las respuestas: registra los pedidos con datos ordenados, ve las imágenes por sí mismo y tú eliges el modelo. Para las notas de voz sigue haciendo falta OpenAI.
       </div>
       {df.integracionMsg && (
         <div style={{ background: df.integracionMsg.startsWith('✓') ? 'var(--df-brand-subtle-2)' : 'var(--df-danger-subtle)', border: '1px solid ' + (df.integracionMsg.startsWith('✓') ? 'var(--df-brand-border)' : 'var(--df-danger-border)'), color: df.integracionMsg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)', borderRadius: 10, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
@@ -474,6 +477,25 @@ export function Integraciones({ df }: { df: DealFlowState }) {
                             />
                           </div>
                         ))}
+                        {i.id === 'claude' && df.claudeIA.modelos.length > 0 && (() => {
+                          const elegido = form.modelo || df.claudeIA.modelo || df.claudeIA.modelos[0].id;
+                          const m = df.claudeIA.modelos.find((x) => x.id === elegido) || df.claudeIA.modelos[0];
+                          return (
+                            <div>
+                              <div style={lbl}>Modelo</div>
+                              <Dropdown
+                                value={m.id}
+                                onChange={(v) => setForm((f) => ({ ...f, modelo: v }))}
+                                options={df.claudeIA.modelos.map((x) => ({ value: x.id, label: x.nombre }))}
+                                ariaLabel="Modelo de Claude"
+                              />
+                              <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 5, lineHeight: 1.5 }}>
+                                {m.nota} Precio de Anthropic: US${m.entrada.toLocaleString('es-CO', { minimumFractionDigits: 2 })} por millón de tokens de entrada y US${m.salida.toLocaleString('es-CO', { minimumFractionDigits: 2 })} de salida.
+                              </div>
+                              {configurada && <div style={{ fontSize: 12, color: 'var(--df-text-faint)', marginTop: 3 }}>Para cambiar solo el modelo, elígelo y dale Guardar: no hace falta volver a pegar la clave.</div>}
+                            </div>
+                          );
+                        })()}
                         {i.esIA && (
                           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--df-text-body)', cursor: 'pointer' }}>
                             <input type="checkbox" checked={predeterminada} onChange={(e) => setPredeterminada(e.target.checked)} />

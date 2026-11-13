@@ -130,6 +130,15 @@ export function EditarTiendaSoporte({ onCerrar }: { onCerrar: () => void }) {
               </div>
 
               <div style={caja}>
+                <p style={tit}>Módulos en prueba</p>
+                <label style={{ ...fila, alignItems: 'flex-start', fontSize: 13, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={t.marketingIA ?? false} disabled={ocupado === 'mkia'}
+                    onChange={(e) => void hacer('mkia', () => apiTiendaSoporteEditar({ marketingIA: e.target.checked }), `Marketing IA: ${e.target.checked ? 'encendido' : 'apagado'}.`, true)} />
+                  <span style={{ minWidth: 0 }}><b style={{ fontWeight: 700 }}>Marketing IA</b><br /><span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Estudio de videos y fotos con IA y campañas en Meta. Apagado: la tienda ve la sección con el aviso «en etapa de pruebas, solicita una demo».</span></span>
+                </label>
+              </div>
+
+              <div style={caja}>
                 <p style={tit}>Plantillas de WhatsApp</p>
                 {([
                   ['crear', 'Constructor de plantillas', 'La tienda crea plantillas y las manda a aprobar a SU cuenta de Meta (con revisión de riesgo de Marketing).'],

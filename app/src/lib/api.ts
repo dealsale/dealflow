@@ -283,7 +283,9 @@ export interface IntegracionConfigurada {
   tipo: string;
   campos: Record<string, string>; // valores enmascarados (••••1234)
 }
-export const apiIntegraciones = () => req<{ configuradas: IntegracionConfigurada[]; iaPredeterminada: string }>('/api/integraciones', 'GET');
+/** Modelos de Claude que la tienda puede elegir (precios en USD por millón de tokens) y el que tiene puesto. */
+export interface ClaudeIA { modelo: string; modelos: { id: string; nombre: string; nota: string; entrada: number; salida: number }[] }
+export const apiIntegraciones = () => req<{ configuradas: IntegracionConfigurada[]; iaPredeterminada: string; claude?: ClaudeIA }>('/api/integraciones', 'GET');
 export const apiGuardarIntegracion = (tipo: string, config: Record<string, string>, predeterminada?: boolean) =>
   req<{ ok: true }>(`/api/integraciones/${tipo}`, 'PUT', { config, predeterminada });
 export const apiEliminarIntegracion = (tipo: string) => req<{ ok: true }>(`/api/integraciones/${tipo}`, 'DELETE');
@@ -419,7 +421,7 @@ export const apiNovedadesEstado = () => req<EstadoNovedades>('/api/novedades/est
 export const apiNovedadesSync = () => req<{ ok: true; abiertas: number; nuevas: number }>('/api/novedades/sync', 'POST');
 export const apiNovedadSolucion = (id: string, p: PropuestaNovedad) => req<{ ok: true; estado: string }>(`/api/novedades/${encodeURIComponent(id)}/solucion`, 'POST', p);
 export const apiNovedadAvisar = (id: string) => req<{ ok: true; via: string }>(`/api/novedades/${encodeURIComponent(id)}/avisar`, 'POST');
-export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean; landings?: boolean }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente; plantilla?: PlantillaActiva | null }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; versiones?: { leads: number; orders: number }; suscripcion: Suscripcion | null }>('/api/state', 'GET');
+export const apiState = () => req<{ store: { id: string; nombre: string; plan: string; temaPremium?: boolean; landings?: boolean; marketingIA?: boolean; whatsappDemo?: string }; assistant: { instrucciones: string; reglas: string[]; nombre?: string; seguimientoActivo?: boolean; estilo?: EstiloAsistente; plantilla?: PlantillaActiva | null }; products: ApiProduct[]; orders: ApiOrder[]; whatsapp: { conectado: boolean; modo: string; wabaId: string; phoneNumberId: string; numero: string; tokenGuardado: boolean; verifyToken: string; signup?: MetaSignupCfg; signupAuto?: boolean }; leads: ApiLead[]; versiones?: { leads: number; orders: number }; suscripcion: Suscripcion | null }>('/api/state', 'GET');
 // Pedidos. Con `desde` (versión que la app ya vio) el servidor manda SOLO los que cambiaron
 // después (`parcial: true`); `total` permite detectar pedidos borrados.
 export const apiOrders = (desde?: number) => req<{ orders: ApiOrder[]; v?: number; total?: number; parcial?: boolean }>(`/api/orders${desde ? `?desde=${desde}` : ''}`, 'GET');
@@ -808,13 +810,13 @@ export const apiWaAutomatizacion = (clave: string, b: { metaId: string; mapa?: s
   req<EstadoPlantillasWA & { ok: true }>(`/api/wa-plantillas/automatizacion/${clave}`, 'PUT', b);
 
 export interface TiendaSoporte {
-  tienda: { nombre: string; correo: string; plan: string; planEstado: string; planVence: string | null; activa: boolean; creditos: number; temaPremium: boolean; creada: string; whatsapp: { conectado: boolean; numero: string }; plantillas: PermisosPlantillas };
+  tienda: { nombre: string; correo: string; plan: string; planEstado: string; planVence: string | null; activa: boolean; creditos: number; temaPremium: boolean; marketingIA?: boolean; creada: string; whatsapp: { conectado: boolean; numero: string }; plantillas: PermisosPlantillas };
   usuarios: { id: string; nombre: string; email: string; dueno: boolean }[];
   planes: string[];
   esSuperadmin?: boolean;
 }
 export const apiTiendaSoporte = () => req<TiendaSoporte>('/api/soporte-tienda', 'GET');
-export const apiTiendaSoporteEditar = (b: { nombre?: string; correo?: string; plan?: string; activa?: boolean; temaPremium?: boolean; plantillas?: Partial<PermisosPlantillas> }) => req<{ ok: true }>('/api/soporte-tienda/editar', 'POST', b);
+export const apiTiendaSoporteEditar = (b: { nombre?: string; correo?: string; plan?: string; activa?: boolean; temaPremium?: boolean; marketingIA?: boolean; plantillas?: Partial<PermisosPlantillas> }) => req<{ ok: true }>('/api/soporte-tienda/editar', 'POST', b);
 export const apiTiendaSoporteClave = (userId: string, password: string) => req<{ ok: true }>('/api/soporte-tienda/clave', 'POST', { userId, password });
 export const apiTiendaSoporteCreditos = (cantidad: number) => req<{ ok: true }>('/api/soporte-tienda/creditos', 'POST', { cantidad });
 export const apiTiendaSoporteSuscripcion = (dias: number) => req<{ ok: true }>('/api/soporte-tienda/suscripcion', 'POST', { dias });

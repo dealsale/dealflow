@@ -1,5 +1,10 @@
 # Marketing IA, Meta Ads y Estadísticas
 
+## Marketing IA en etapa de pruebas (solicitar demo)
+Sección: marketing
+Claves: marketing ia bloqueado, etapa de pruebas, solicitar demo, no puedo usar marketing ia, activar marketing ia
+Marketing IA (estudio de videos y fotos con IA y campañas en Meta) está en etapa de pruebas y el equipo de DealFlow lo activa tienda por tienda. Si al entrar sale "Marketing IA está en etapa de pruebas", toca **Solicitar una demo por WhatsApp** (o escríbele a soporte de DealFlow) para que te lo activen. Al activarlo, recarga la página.
+
 ## Marketing IA: crear una campaña en 3 pasos
 Sección: marketing
 Claves: marketing, campaña, crear anuncio, creativos, imagenes con ia, textos del anuncio, copy, publicar en meta, creditos, angulos de venta
