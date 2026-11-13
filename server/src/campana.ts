@@ -22,6 +22,8 @@ export interface AdRef {
   ts: string; // cuándo entró
   /** ctwa_clid: id del clic en el anuncio. Sirve para reportarle a Meta las ventas (API de Conversiones). */
   clid?: string;
+  /** Cuándo llegó ese clid (si es de un clic posterior al primer anuncio). */
+  clidTs?: string;
 }
 
 /** Referral de la Cloud API de WhatsApp (viene dentro de cada `message.referral`). */
@@ -104,7 +106,17 @@ export function guardarAdEnLead(leadId: string, ad: AdRef | null): void {
     | { ad_id: string; ad_ref: string }
     | undefined;
   if (!row) return;
-  if (row.ad_id || row.ad_ref) return; // ya tiene un anuncio: no lo cambiamos
+  if (row.ad_id || row.ad_ref) {
+    // Ya tiene un anuncio: para las estadísticas sigue valiendo el primero, pero el id del ÚLTIMO
+    // clic (ctwa_clid) sí se actualiza. Con él se le reportan a Meta las ventas de este chat; si se
+    // quedaba el del primer clic (semanas atrás), las ventas de un cliente que volvió por otro
+    // anuncio no le llegaban a la campaña activa.
+    if (!ad.clid) return;
+    const previo = (() => { try { return JSON.parse(row.ad_ref || '{}') as AdRef; } catch { return null; } })();
+    if (!previo || previo.clid === ad.clid) return;
+    db.prepare('UPDATE leads SET ad_ref = ? WHERE id = ?').run(JSON.stringify({ ...previo, clid: ad.clid, clidTs: ad.ts }), leadId);
+    return;
+  }
   db.prepare('UPDATE leads SET ad_id = ?, ad_ref = ? WHERE id = ?').run(ad.id || '', JSON.stringify(ad), leadId);
 }
 
