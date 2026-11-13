@@ -152,10 +152,61 @@ function anotar(storeId: string, e: Evento, estado: string, error: string): void
 
 const segundos = (dt: string) => Math.floor(new Date(String(dt).replace(' ', 'T') + 'Z').getTime() / 1000);
 
+/** Píxel al que van las ventas por chat: el de la tienda (Tienda en línea) o el primero con token. */
+async function pixelDeVentas(storeId: string): Promise<string> {
+  const { tokenDePixel, pixelesDe } = await import('./metaPixelWeb.js');
+  const { configTienda } = await import('./landings.js');
+  const p = String(configTienda(storeId).pixelMeta || '').replace(/\D/g, '');
+  if (p && tokenDePixel(storeId, p)) return p;
+  return pixelesDe(storeId).find((x) => tokenDePixel(storeId, x)) || '';
+}
+
+/**
+ * Ventas por chat (WhatsApp, Messenger, Instagram) → API de Conversiones del PÍXEL. No depende
+ * de que el chat venga de un anuncio con ctwa_clid ni de la conexión oficial de WhatsApp: Meta
+ * reconoce a la persona por su celular, nombre y ciudad (cifrados). Las ventas de la landing ya
+ * se envían desde la landing; las de Shopify, desde Shopify.
+ */
+async function procesarVentasChat(storeId: string, cfg: CfgCapi): Promise<number> {
+  const pixel = await pixelDeVentas(storeId);
+  if (!pixel) return 0;
+  const filtro = cfg.compra === 'entregado'
+    ? "o.estado = 'Entregado'"
+    : "o.estado != 'Cancelado' AND (o.estado != 'Nuevo' OR o.created_at < datetime('now', '-2 minutes'))";
+  const pedidos = db.prepare(`SELECT o.id, o.numero, o.total, o.created_at, o.cliente, o.tel, o.ciudad, o.departamento, o.origen,
+      (SELECT GROUP_CONCAT(i.nombre, ' + ') FROM order_items i WHERE i.order_id = o.id) productos,
+      (SELECT COALESCE(SUM(i.qty),0) FROM order_items i WHERE i.order_id = o.id) cantidad
+    FROM orders o
+    WHERE o.store_id = ? AND ${filtro} AND o.created_at > datetime('now', '-7 days') AND o.total > 0
+      AND (COALESCE(o.origen,'') IN ('whatsapp','messenger','instagram') OR (COALESCE(o.lead_id,'') != '' AND COALESCE(o.origen,'') NOT IN ('landing','shopify','web')))
+      AND NOT EXISTS (SELECT 1 FROM pixel_eventos e WHERE e.store_id = o.store_id AND e.event_id = 'df-' || o.id || '-purchase' AND e.evento = 'Purchase'
+                      AND (e.estado = 'enviado' OR e.intentos >= 5))
+    ORDER BY o.created_at LIMIT 100`).all(storeId) as Record<string, string | number>[];
+  if (!pedidos.length) return 0;
+  const { enviarCompraChat } = await import('./metaPixelWeb.js');
+  const ahora = Math.floor(Date.now() / 1000);
+  let n = 0;
+  for (const o of pedidos) {
+    const partes = String(o.cliente || '').trim().split(/\s+/);
+    const r = await enviarCompraChat({
+      storeId, pixelId: pixel, eventId: `df-${o.id}-purchase`, valor: Number(o.total) || 0,
+      time: cfg.compra === 'entregado' ? ahora : Math.min(ahora, segundos(String(o.created_at))),
+      cliente: { tel: String(o.tel || ''), nombre: partes[0] || '', apellido: partes.slice(1).join(' '), ciudad: String(o.ciudad || ''), departamento: String(o.departamento || '') },
+      canal: String(o.origen || 'whatsapp') || 'whatsapp',
+      contenido: o.productos ? { nombre: String(o.productos).slice(0, 200), cantidad: Number(o.cantidad) || 1 } : undefined,
+    });
+    if (r.enviado) n++;
+  }
+  if (n) registrarLog(storeId, 'info', 'meta', `API de Conversiones: ${n} venta(s) por chat enviadas al píxel ${pixel}.`);
+  return n;
+}
+
 /** Busca lo pendiente de una tienda y lo envía. */
 export async function procesarCapi(storeId: string): Promise<number> {
   const cfg = cfgCapi(storeId);
-  if (!cfg.activo || !cfg.datasetId) return 0;
+  // Ventas por chat → píxel (siempre que haya píxel con token), aunque la API de mensajería esté apagada.
+  const porPixel = await procesarVentasChat(storeId, cfg).catch((e) => { console.warn('[capi] ventas por chat', e); return 0; });
+  if (!cfg.activo || !cfg.datasetId) return porPixel;
   const hecho = (clave: string) => {
     const r = db.prepare('SELECT estado, intentos FROM capi_eventos WHERE store_id = ? AND clave = ?').get(storeId, clave) as { estado: string; intentos: number } | undefined;
     return !!r && (r.estado === 'enviado' || r.intentos >= 5);
@@ -209,12 +260,10 @@ export function iniciarCapi(): void {
   if (iniciado) return;
   iniciado = true;
   const ronda = async () => {
-    const tiendas = db.prepare("SELECT store_id, config FROM store_integrations WHERE tipo = 'meta_capi'").all() as { store_id: string; config: string }[];
-    for (const t of tiendas) {
-      const c = pj<Partial<CfgCapi>>(t.config, {});
-      if (!c.activo || !c.datasetId) continue;
-      await procesarCapi(t.store_id).catch((e) => console.warn('[capi]', e));
-    }
+    // Tiendas con la API de mensajería activa o con un píxel con token (ventas por chat → píxel).
+    const tiendas = db.prepare(`SELECT DISTINCT store_id FROM store_integrations WHERE (tipo = 'meta_capi' AND config LIKE '%"activo":true%')
+      OR (tipo = 'meta_pixel_web' AND config LIKE '%"token"%')`).all() as { store_id: string }[];
+    for (const t of tiendas) await procesarCapi(t.store_id).catch((e) => console.warn('[capi]', e));
   };
   const r = () => void import('./rendimiento.js').then((m) => m.trabajo('meta.capi', ronda));
   setTimeout(r, 60_000);

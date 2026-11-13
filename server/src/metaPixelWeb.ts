@@ -165,6 +165,34 @@ function traducirError(e?: { message?: string; error_user_msg?: string; code?: n
   return m.slice(0, 250);
 }
 
+/**
+ * Venta que se cerró por CHAT (WhatsApp, Messenger, Instagram) al píxel de la tienda, con
+ * action_source = «chat» y los datos del cliente cifrados (celular, nombre, ciudad). Así Meta
+ * cuenta y optimiza también las ventas de WhatsApp, no solo las de la landing. El event_id es
+ * el mismo que usa la API de mensajería: si los dos llegan al mismo dataset, Meta cuenta una.
+ */
+export async function enviarCompraChat(e: { storeId: string; pixelId: string; eventId: string; valor: number; time: number; cliente: Cliente; canal: string; contenido?: { nombre: string; cantidad: number } }): Promise<{ enviado: boolean; error?: string }> {
+  const pixel = limpiarPixel(e.pixelId);
+  const token = pixel ? tokenDePixel(e.storeId, pixel) : '';
+  if (!token) return { enviado: false, error: 'El píxel no tiene token de la API de Conversiones.' };
+  const u = userData(e.cliente, {});
+  const dato = {
+    event_name: 'Purchase',
+    event_time: e.time,
+    event_id: e.eventId,
+    action_source: 'chat',
+    user_data: u,
+    custom_data: {
+      currency: 'COP', value: Math.max(0, Math.round(e.valor)), order_id: e.eventId,
+      ...(e.contenido ? { content_name: e.contenido.nombre, content_type: 'product', num_items: e.contenido.cantidad } : {}),
+      canal: e.canal,
+    },
+  };
+  db.prepare(`INSERT INTO pixel_eventos (store_id, event_id, evento, pixel_id, landing_id, valor, calidad, payload) VALUES (?,?,?,?,?,?,?,?)
+    ON CONFLICT(store_id, event_id, evento) DO UPDATE SET payload = excluded.payload`).run(e.storeId, e.eventId, 'Purchase', pixel, `chat:${e.canal}`, Math.round(e.valor), calidadDe(u), JSON.stringify(dato));
+  return mandar(e.storeId, pixel, token, e.eventId, 'Purchase', dato);
+}
+
 /** Prueba desde el panel: manda un PageView (con el código de prueba si lo hay). */
 export async function probar(storeId: string, pixelId: string): Promise<{ ok: boolean; mensaje: string }> {
   const pixel = limpiarPixel(pixelId);
