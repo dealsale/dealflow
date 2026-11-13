@@ -1020,6 +1020,8 @@ export const apiMetaResuscribir = () => req<{ ok: number; errores: string[] }>('
 export interface EstadoCapi {
   activo: boolean; datasetId: string; compra: 'pedido' | 'entregado'; leads: boolean; testCode: string; whatsapp: boolean;
   compras30: number; valor30: number; leads30: number; errores30: number;
+  /** Píxel al que van las ventas por chat (WhatsApp, Messenger, Instagram) y el que de verdad se usa (con token). */
+  pixelVentas: string; pixelActivo: string; ventasChat30: number; valorChat30: number; erroresChat30: number;
   ultimos: { evento: string; valor: number; canal: string; estado: string; error: string; created_at: string }[];
 }
 export const apiCapi = () => req<EstadoCapi>('/api/meta/capi', 'GET');

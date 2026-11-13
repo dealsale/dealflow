@@ -3357,23 +3357,23 @@ api.post('/meta/resuscribir', requireAuth, requireStore, requireOwner, async (re
 
 // Fase C: API de Conversiones (reportar ventas y chats calificados a Meta).
 api.get('/meta/capi', requireAuth, requireStore, async (req, res) => {
-  res.json((await import('./metaCapi.js')).estadoCapi(req.user!.storeId!));
+  res.json(await (await import('./metaCapi.js')).estadoCapiCompleto(req.user!.storeId!));
 });
 api.post('/meta/capi', requireAuth, requireStore, requireOwner, async (req, res) => {
   const c = await import('./metaCapi.js');
   c.guardarCfgCapi(req.user!.storeId!, req.body || {});
-  res.json(c.estadoCapi(req.user!.storeId!));
+  res.json(await c.estadoCapiCompleto(req.user!.storeId!));
 });
 api.post('/meta/capi/detectar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const c = await import('./metaCapi.js');
   const r = await c.detectarDataset(req.user!.storeId!);
   if ('error' in r) return res.status(400).json({ error: r.error });
-  res.json(c.estadoCapi(req.user!.storeId!));
+  res.json(await c.estadoCapiCompleto(req.user!.storeId!));
 });
 api.post('/meta/capi/enviar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const c = await import('./metaCapi.js');
   const n = await c.procesarCapi(req.user!.storeId!);
-  res.json({ ...c.estadoCapi(req.user!.storeId!), enviados: n });
+  res.json({ ...(await c.estadoCapiCompleto(req.user!.storeId!)), enviados: n });
 });
 
 // Desconectar Messenger/Instagram.

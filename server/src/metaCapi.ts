@@ -34,8 +34,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS capi_eventos (
   PRIMARY KEY (store_id, clave)
 )`);
 
-export interface CfgCapi { activo: boolean; datasetId: string; compra: 'pedido' | 'entregado'; leads: boolean; testCode: string }
-const DEF: CfgCapi = { activo: false, datasetId: '', compra: 'pedido', leads: true, testCode: '' };
+/** pixelVentas: píxel al que van las ventas por chat (WhatsApp, Messenger, Instagram). */
+export interface CfgCapi { activo: boolean; datasetId: string; compra: 'pedido' | 'entregado'; leads: boolean; testCode: string; pixelVentas: string }
+const DEF: CfgCapi = { activo: false, datasetId: '', compra: 'pedido', leads: true, testCode: '', pixelVentas: '' };
 
 export function cfgCapi(storeId: string): CfgCapi {
   const r = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'meta_capi'").get(storeId) as { config: string } | undefined;
@@ -49,6 +50,7 @@ export function guardarCfgCapi(storeId: string, c: Partial<CfgCapi>): CfgCapi {
     compra: c.compra === 'entregado' ? 'entregado' : c.compra === 'pedido' ? 'pedido' : act.compra,
     leads: c.leads !== undefined ? !!c.leads : act.leads,
     testCode: c.testCode !== undefined ? String(c.testCode).trim().slice(0, 40) : act.testCode,
+    pixelVentas: c.pixelVentas !== undefined ? String(c.pixelVentas).replace(/\D/g, '').slice(0, 20) : act.pixelVentas,
   };
   db.prepare(`INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?, 'meta_capi', ?, datetime('now'))
     ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).run(storeId, JSON.stringify(n));
@@ -153,9 +155,12 @@ function anotar(storeId: string, e: Evento, estado: string, error: string): void
 const segundos = (dt: string) => Math.floor(new Date(String(dt).replace(' ', 'T') + 'Z').getTime() / 1000);
 
 /** Píxel al que van las ventas por chat: el de la tienda (Tienda en línea) o el primero con token. */
-async function pixelDeVentas(storeId: string): Promise<string> {
+export async function pixelDeVentas(storeId: string): Promise<string> {
   const { tokenDePixel, pixelesDe } = await import('./metaPixelWeb.js');
   const { configTienda } = await import('./landings.js');
+  // 1) El que la tienda eligió en Integraciones; 2) el de «Mi tienda»; 3) el primero con token.
+  const elegido = cfgCapi(storeId).pixelVentas;
+  if (elegido && tokenDePixel(storeId, elegido)) return elegido;
   const p = String(configTienda(storeId).pixelMeta || '').replace(/\D/g, '');
   if (p && tokenDePixel(storeId, p)) return p;
   return pixelesDe(storeId).find((x) => tokenDePixel(storeId, x)) || '';
@@ -242,6 +247,20 @@ export async function procesarCapi(storeId: string): Promise<number> {
   }
   await enviar(storeId, cfg, evs);
   return evs.length;
+}
+
+export async function estadoCapiCompleto(storeId: string) {
+  const base = estadoCapi(storeId);
+  const pixel = await pixelDeVentas(storeId);
+  const { configTienda } = await import('./landings.js');
+  const chat = db.prepare(`SELECT SUM(estado = 'enviado') enviados, COALESCE(SUM(CASE WHEN estado = 'enviado' THEN valor END), 0) valor, SUM(estado = 'error') errores
+    FROM pixel_eventos WHERE store_id = ? AND evento = 'Purchase' AND landing_id LIKE 'chat:%' AND created_at > datetime('now','-30 days')`).get(storeId) as { enviados: number | null; valor: number | null; errores: number | null };
+  return {
+    ...base,
+    pixelVentas: base.pixelVentas || String(configTienda(storeId).pixelMeta || '').replace(/\D/g, ''),
+    pixelActivo: pixel, // el que de verdad se usa (tiene token)
+    ventasChat30: chat.enviados || 0, valorChat30: chat.valor || 0, erroresChat30: chat.errores || 0,
+  };
 }
 
 export function estadoCapi(storeId: string) {

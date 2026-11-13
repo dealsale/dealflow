@@ -3,6 +3,7 @@ import { apiMetaDiagnostico, apiMetaResuscribir, apiCapi, apiGuardarCapi, apiCap
 import { Dropdown } from './Dropdown';
 import { IntegracionFila, LogoInteg } from './IntegracionFila';
 import { fmt } from '../lib/format';
+import { ApiConversionesMeta } from './ApiConversionesMeta';
 
 import { fmtCO } from '../lib/fechaCO';
 const btn: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' };
@@ -49,65 +50,100 @@ export function DiagnosticoMessenger() {
   );
 }
 
-/** Fase C: reportar a Meta las ventas y los chats calificados de sus anuncios. */
+/**
+ * Reportar ventas a Meta (API de Conversiones). Dos caminos:
+ *  1. Píxel + token (lo principal): TODA venta cerrada por chat (WhatsApp, Messenger, Instagram)
+ *     llega a Meta como compra, con los datos del cliente cifrados. Funciona con QR o API oficial.
+ *  2. Dataset de mensajería (opcional, solo WhatsApp API oficial): además amarra la venta al clic
+ *     exacto del anuncio de «clic a WhatsApp» (más precisión en el ROAS).
+ */
 export function CapiCard() {
   const [e, setE] = useState<EstadoCapi | null>(null);
   const [abierta, setAbierta] = useState(false);
   const [msg, setMsg] = useState('');
   const [dataset, setDataset] = useState('');
   const [test, setTest] = useState('');
-  useEffect(() => { void apiCapi().then((r) => { if (r.data) { setE(r.data); setDataset(r.data.datasetId); setTest(r.data.testCode); } }); }, []);
+  const [pixel, setPixel] = useState('');
+  useEffect(() => { void apiCapi().then((r) => { if (r.data) { setE(r.data); setDataset(r.data.datasetId); setTest(r.data.testCode); setPixel(r.data.pixelVentas); } }); }, []);
   if (!e) return null;
   const guardar = async (c: Partial<EstadoCapi>) => { setMsg(''); const r = await apiGuardarCapi(c); if (r.data) setE(r.data); else setMsg(`⚠️ ${r.error}`); };
   const detectar = async () => { setMsg(''); const r = await apiCapiDetectar(); if (r.data) { setE(r.data); setDataset(r.data.datasetId); setMsg('✓ Dataset encontrado.'); } else setMsg(`⚠️ ${r.error}`); };
-  const enviar = async () => { setMsg(''); const r = await apiCapiEnviar(); if (r.data) { setE(r.data); setMsg(`✓ Revisado: ${r.data.enviados} evento(s) enviados ahora.`); } else setMsg(`⚠️ ${r.error}`); };
-  const listo = e.activo && !!e.datasetId;
+  const enviar = async () => { setMsg(''); const r = await apiCapiEnviar(); if (r.data) { setE(r.data); setMsg(`✓ Revisado: ${r.data.enviados} venta(s) enviadas ahora.`); } else setMsg(`⚠️ ${r.error}`); };
+  const mensajeria = e.activo && !!e.datasetId;
+  const porPixel = !!e.pixelActivo;
   const inp: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)', minWidth: 0, flex: '1 1 180px' };
+  const paso: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 11, padding: 12 };
+  const tit = (n: string, t: string, sub?: string) => (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 13, fontWeight: 800 }}><span style={{ display: 'inline-flex', width: 20, height: 20, borderRadius: '50%', background: 'var(--df-brand)', color: '#fff', fontSize: 11, alignItems: 'center', justifyContent: 'center', marginRight: 6 }}>{n}</span>{t}</div>
+      {sub && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 3, lineHeight: 1.5 }}>{sub}</div>}
+    </div>
+  );
   const radio = (v: 'pedido' | 'entregado', t: string, sub: string) => (
     <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, cursor: 'pointer' }}>
       <input type="radio" checked={e.compra === v} onChange={() => void guardar({ compra: v })} style={{ marginTop: 3 }} />
       <span><b>{t}</b><br /><span style={{ color: 'var(--df-text-muted)' }}>{sub}</span></span>
     </label>
   );
+  const desc = porPixel
+    ? `✓ Ventas de WhatsApp → píxel ${e.pixelActivo} · ${e.ventasChat30} compras (${fmt(e.valorChat30)}) en 30 días${e.erroresChat30 ? ` · ${e.erroresChat30} con error` : ''}${mensajeria ? ' · + API de mensajería' : ''}`
+    : 'Falta el píxel y su token: sin eso Meta no ve tus ventas de WhatsApp y el ROAS sale en cero.';
   return (
     <IntegracionFila
       logo={<LogoInteg fondo="linear-gradient(135deg,#1877F2,#10B981)">🎯</LogoInteg>}
       nombre="Reportar ventas a Meta (API de Conversiones)"
-      desc={listo ? `✓ Activo · ${e.compras30} compras (${fmt(e.valor30)}) y ${e.leads30} chats calificados reportados en 30 días${e.errores30 ? ` · ${e.errores30} con error` : ''}` : 'Meta aprende quién COMPRA (no solo quién escribe) y muestra tus anuncios a más gente parecida.'}
-      estado={listo ? 'on' : 'off'}
+      desc={desc}
+      estado={porPixel || mensajeria ? 'on' : 'off'}
       abierta={abierta}
       onToggle={() => setAbierta((v) => !v)}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.55 }}>
-          Cada pedido de un cliente que llegó por un anuncio (Click a WhatsApp o Messenger) se le reporta a Meta con su valor. Los chats orgánicos no se envían. Es automático: cada venta se reporta unos 2 minutos después de entrar (y se revisa cada minuto).
+          Cada venta que se cierra por WhatsApp, Messenger o Instagram se le reporta a Meta como <b>compra</b>, con su valor y los datos del cliente cifrados (celular, nombre, ciudad). Así Meta mide el <b>ROAS</b> y aprende a mostrar tus anuncios a gente que compra. Es automático (unos 2 minutos después de cada pedido). Las ventas de tus landings se reportan desde cada landing.
         </div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5 }}>1. Dataset de Meta</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input value={dataset} onChange={(x) => setDataset(x.target.value)} onBlur={() => dataset !== e.datasetId && void guardar({ datasetId: dataset })} placeholder="ID del dataset" style={inp} />
-            {e.whatsapp && <button onClick={() => void detectar()} style={btn}>Buscarlo automáticamente</button>}
-          </div>
-          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 4 }}>{e.whatsapp ? 'Lo buscamos (o lo creamos) en tu cuenta de WhatsApp Business. ' : ''}También lo encuentras en business.facebook.com → Administrador de eventos → tu dataset → Configuración.</div>
+
+        <div style={paso}>
+          {tit('1', 'Píxel de Meta y su token', 'Es lo principal. Funciona con WhatsApp por QR o por la API oficial.')}
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5 }}>ID del píxel</div>
+          <input value={pixel} onChange={(x) => setPixel(x.target.value.replace(/\D/g, ''))} onBlur={() => pixel !== e.pixelVentas && void guardar({ pixelVentas: pixel })} inputMode="numeric" placeholder="Ej: 1234567890123456" style={{ ...inp, width: '100%', boxSizing: 'border-box' }} />
+          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', margin: '4px 0 10px' }}>business.facebook.com → Administrador de eventos → tu píxel: el número de arriba. Si ya lo pusiste en Tienda en línea → «Mi tienda», aparece aquí solo.</div>
+          {pixel ? <ApiConversionesMeta pixelId={pixel} /> : <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>⚡ Escribe el ID del píxel para pegar su token.</div>}
+          {pixel && !porPixel && <div style={{ fontSize: 12, color: 'var(--df-warning-mid)', marginTop: 8 }}>Falta el token de este píxel: sin token no se envía nada.</div>}
         </div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>2. ¿Cuándo cuenta como compra?</div>
+
+        <div style={paso}>
+          {tit('2', '¿Cuándo cuenta como compra?')}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {radio('pedido', 'Cuando se crea el pedido (recomendado)', 'Meta recibe la señal rápido y aprende más. Los pedidos cancelados no se reportan.')}
-            {radio('entregado', 'Cuando el pedido se entrega', 'Solo cuenta lo que de verdad se cobró contra entrega. Menos señales y más tarde (máx. 7 días después del clic).')}
+            {radio('entregado', 'Cuando el pedido se entrega', 'Solo cuenta lo que de verdad se cobró contra entrega. Menos señales y más tarde (máx. 7 días después).')}
           </div>
         </div>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5, cursor: 'pointer' }}>
-          <input type="checkbox" checked={e.leads} onChange={(x) => void guardar({ leads: x.target.checked })} /> Reportar también los chats calificados (el cliente respondió)
-        </label>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5 }}>Código de prueba <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· opcional, de «Probar eventos» en el Administrador de eventos</span></div>
-          <input value={test} onChange={(x) => setTest(x.target.value)} onBlur={() => test !== e.testCode && void guardar({ testCode: test })} placeholder="TEST12345" style={{ ...inp, maxWidth: 220 }} />
-          {e.testCode && <div style={{ fontSize: 11.5, color: 'var(--df-warning-mid)', marginTop: 4 }}>Con código de prueba los eventos solo se ven en «Probar eventos» y Meta no los usa para optimizar. Bórralo cuando termines de probar.</div>}
-        </div>
+
+        <details style={paso}>
+          <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 800 }}>
+            <span style={{ display: 'inline-flex', width: 20, height: 20, borderRadius: '50%', background: mensajeria ? 'var(--df-brand)' : 'var(--df-text-faint)', color: '#fff', fontSize: 11, alignItems: 'center', justifyContent: 'center', marginRight: 6 }}>3</span>
+            Más precisión para anuncios de «clic a WhatsApp» <span style={{ fontWeight: 500, color: 'var(--df-text-muted)' }}>· opcional{mensajeria ? ' · ✓ activo' : ''}</span>
+          </summary>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Solo con WhatsApp por la <b>API oficial</b>: además amarra cada venta al clic exacto del anuncio. Las ventas no se cuentan doble (llevan el mismo ID).{!e.whatsapp ? ' Tu WhatsApp no está por la API oficial, así que este paso no aplica.' : ''}</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input value={dataset} onChange={(x) => setDataset(x.target.value)} onBlur={() => dataset !== e.datasetId && void guardar({ datasetId: dataset })} placeholder="ID del dataset de WhatsApp" style={inp} />
+              {e.whatsapp && <button onClick={() => void detectar()} style={btn}>Buscarlo automáticamente</button>}
+            </div>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5, cursor: 'pointer' }}>
+              <input type="checkbox" checked={e.leads} onChange={(x) => void guardar({ leads: x.target.checked })} /> Reportar también los chats calificados (el cliente respondió)
+            </label>
+            <div><button onClick={() => void guardar({ activo: !e.activo })} disabled={!e.datasetId && !e.activo} style={{ ...(e.activo ? btn : btnP), opacity: !e.datasetId && !e.activo ? 0.5 : 1 }}>{e.activo ? 'Pausar' : 'Activar'}</button></div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5 }}>Código de prueba <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· opcional, de «Probar eventos»</span></div>
+              <input value={test} onChange={(x) => setTest(x.target.value)} onBlur={() => test !== e.testCode && void guardar({ testCode: test })} placeholder="TEST12345" style={{ ...inp, maxWidth: 220 }} />
+              {e.testCode && <div style={{ fontSize: 11.5, color: 'var(--df-warning-mid)', marginTop: 4 }}>Con código de prueba Meta no usa los eventos para optimizar. Bórralo cuando termines.</div>}
+            </div>
+          </div>
+        </details>
+
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button onClick={() => void guardar({ activo: !e.activo })} disabled={!e.datasetId && !e.activo} style={{ ...(e.activo ? btn : btnP), opacity: !e.datasetId && !e.activo ? 0.5 : 1 }}>{e.activo ? 'Pausar' : 'Activar'}</button>
-          {listo && <button onClick={() => void enviar()} style={btn}>↻ Enviar pendientes ahora</button>}
+          {(porPixel || mensajeria) && <button onClick={() => void enviar()} style={btn}>↻ Enviar pendientes ahora</button>}
           {msg && <span style={{ fontSize: 12.5, color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</span>}
         </div>
         {e.ultimos.length > 0 && (
@@ -116,7 +152,7 @@ export function CapiCard() {
               <div key={i} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 12, padding: '6px 10px', borderTop: i ? '1px solid var(--df-border)' : 'none' }}>
                 <span>{u.estado === 'enviado' ? '✅' : '⚠️'}</span>
                 <b>{u.evento === 'Purchase' ? `Compra ${fmt(u.valor)}` : 'Chat calificado'}</b>
-                <span style={{ color: 'var(--df-text-muted)' }}>{u.canal}</span>
+                <span style={{ color: 'var(--df-text-muted)' }}>{u.canal} · mensajería</span>
                 <span style={{ color: 'var(--df-text-faint)', marginLeft: 'auto' }}>{hora(u.created_at)}</span>
                 {u.error && <span style={{ color: 'var(--df-danger)', flexBasis: '100%' }}>{u.error}</span>}
               </div>
