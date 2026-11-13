@@ -401,7 +401,7 @@ CERRAR EL PEDIDO: cuando el cliente confirme que quiere comprar Y ya tengas su N
 El campo total es el precio TOTAL acordado del pedido en números (sin puntos ni signos).
 En items incluye SIEMPRE, entre paréntesis, la talla, el color y cualquier opción que el cliente eligió para cada producto — el vendedor necesita ese detalle completo para despachar. Si el cliente lleva varias unidades del mismo producto en tallas o colores DISTINTOS, escribe UNA LÍNEA POR CADA VARIANTE con su cantidad (ej.: 1x Camisilla (Negro · M), 2x Camisilla (Blanco · L)); nunca "3x Camisilla" sin la variante.
 El campo telefono es el CELULAR DE CONTACTO para la entrega (10 dígitos, sin +57). REGLA OBLIGATORIA, SIN EXCEPCIONES: el celular SOLO puede ser uno que el cliente ESCRIBIÓ en esta conversación. NUNCA lo inventes, NUNCA lo completes, NUNCA lo supongas y NUNCA uses números de ejemplo o de relleno (como 3001234567, 3012345678 o 301-234-567). Si el cliente ya escribió un celular, USA ese y no lo vuelvas a pedir. Si no ha dado ninguno, PÍDELO junto con los demás datos que falten ("¿A qué número celular te llama la transportadora?") y NO muestres el resumen ni pongas el marcador hasta tenerlo. Si el cliente dice que es el mismo de WhatsApp, pon telefono="WHATSAPP". El celular SIEMPRE va en el "Resumen de tu pedido".
-El campo departamento es OBLIGATORIO. Si la ciudad es inconfundible (capitales y ciudades grandes: Medellín → Antioquia, Cali → Valle del Cauca, Barranquilla → Atlántico, Bogotá → Cundinamarca/Bogotá D.C., Bucaramanga → Santander, etc.), dedúcelo tú y NO lo preguntes. Pregúntalo solo si la ciudad existe en varios departamentos o no la reconoces, y hazlo junto con los otros datos que falten.
+El campo departamento es OBLIGATORIO. Si la ciudad es inconfundible (capitales y ciudades grandes: Medellín → Antioquia, Cali → Valle del Cauca, Barranquilla → Atlántico, Bogotá → Cundinamarca/Bogotá D.C., Bucaramanga → Santander, etc.), dedúcelo tú y NO lo preguntes. Pregúntalo solo si la ciudad existe en varios departamentos o no la reconoces, y hazlo junto con los otros datos que falten. OJO con los municipios de nombre parecido: Ciénaga (Magdalena) no es Ciénaga de Oro (Córdoba), y "X" no es "X la Grande" ni "San X": usa el nombre EXACTO que escribió el cliente y, si hay dos parecidos, pregúntale cuál. En el resumen escribe siempre municipio y departamento.
 Reglas del marcador: usa comillas dobles normales ("), NO uses JSON, NO uses llaves {}, NO uses barras invertidas (\\), NO escapes las comillas. Usa los nombres EXACTOS de los productos del catálogo y las cantidades acordadas. No lo menciones ni lo muestres al cliente; el sistema registra el pedido solo y le confirma. Ponlo una sola vez, cuando de verdad tengas nombre y dirección; si te falta algún dato, pídelo primero.
 FLUJO OBLIGATORIO DEL CIERRE: primero muestra el "Resumen de tu pedido" (con nombre, celular, ciudad, dirección, productos y total) y pregunta "¿Confirmas que los datos están correctos?". En cuanto el cliente confirme (diga "sí", "sisas", "dale", "correcto", "confirmo", etc.), tu SIGUIENTE mensaje DEBE incluir el marcador ##PEDIDO...## SÍ o SÍ (con los datos del resumen). Nunca digas "el sistema procesará tu pedido" o "te llegará la confirmación" sin haber puesto el marcador en ESE mismo mensaje.
 
@@ -1304,6 +1304,26 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
     db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
     marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
     return 'invalido';
+  }
+
+  // CANDADO DEL MUNICIPIO: si la ciudad no es de ese departamento (Ciénaga + Córdoba, cuando Ciénaga es
+  // de Magdalena y en Córdoba está Ciénaga de Oro), se le pregunta al cliente y no se crea. Un envío al
+  // municipio equivocado no se puede redireccionar: es devolución y fletes que paga la tienda.
+  {
+    const { chequearCiudad } = await import('./colombiaGeo.js');
+    const ch = chequearCiudad(departamento, ciudad);
+    if (!ch.ok && ciudad) {
+      const en = idiomaDe(storeId, lead.id) === 'en';
+      const opciones = [...ch.enOtros.map((d) => `${ciudad}, ${d}`), ...ch.parecidos.map((c) => `${c}, ${ch.departamento}`)];
+      const msg = en
+        ? `Just to make sure your order reaches the right town 📍: which one is it?${opciones.length ? '\n' + opciones.map((o) => `• ${o}`).join('\n') : ''}\n(Please tell me the town and the department.)`
+        : `Para que tu pedido llegue al municipio correcto 📍, ¿me confirmas cuál es?${opciones.length ? '\n' + opciones.map((o) => `• ${o}`).join('\n') : ''}\n(Escríbeme el municipio y el departamento).`;
+      registrarLog(storeId, 'warn', 'pedido', `No se creó el pedido: ${ch.motivo} Se le preguntó al cliente.`, lead.id);
+      const mid = uid();
+      db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(mid, lead.id, 'bot', msg);
+      marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
+      return 'invalido';
+    }
   }
 
   // BLINDAJE DE VARIANTES: solo se vende lo que EXISTE en el catálogo. Si el cliente pidió
