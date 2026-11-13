@@ -951,10 +951,15 @@ async function precargarGeo(apiKey: string): Promise<void> {
 for (const f of db.prepare("SELECT provincia, COUNT(*) n FROM effi_geo WHERE tipo = 'ciudad' GROUP BY provincia HAVING n > 3").all() as { provincia: string }[]) provCompletas.add(f.provincia);
 
 /** Convierte "Antioquia" + "Medellín" en los ids de Effi. Tolera tildes y "Bogotá D.C.". */
-export async function resolverUbicacion(apiKey: string, departamento: string, ciudad: string): Promise<{ provincia: string; ciudad: string; nombre: string } | { error: string }> {
-  // Municipio que no es de ese departamento (Ciénaga en Córdoba…): no se despacha, se corrige primero.
+export async function resolverUbicacion(apiKey: string, departamento: string, ciudad: string): Promise<{ provincia: string; ciudad: string; nombre: string; aviso?: string } | { error: string }> {
+  // Municipio que no es de ese departamento (Ciénaga en Córdoba…): es un AVISO. Quien despacha desde el
+  // panel decide (puede continuar); el despacho automático no sigue solo (ver despacharEffiConCandado).
   const chequeo = (await import('./colombiaGeo.js')).chequearCiudad(departamento, ciudad);
-  if (!chequeo.ok) return { error: chequeo.motivo };
+  const r = await resolverUbicacionEffi(apiKey, departamento, ciudad);
+  return !chequeo.ok && !('error' in r) ? { ...r, aviso: `⚠️ Revisa el municipio: ${chequeo.motivo}` } : r;
+}
+
+async function resolverUbicacionEffi(apiKey: string, departamento: string, ciudad: string): Promise<{ provincia: string; ciudad: string; nombre: string } | { error: string }> {
   const nc = norm(ciudad).replace(/\b(d c|dc|distrito capital)\b/g, '').trim();
   let nd = norm(departamento).replace(/\b(departamento|depto|de)\b/g, ' ').replace(/\s+/g, ' ').trim();
   if (!nd && /bogota/.test(nc)) nd = 'bogota';
@@ -968,7 +973,8 @@ export async function resolverUbicacion(apiKey: string, departamento: string, ci
   for (const p of buscarEn) {
     const cs = await ciudadesDe(apiKey, p.id);
     // Solo el nombre EXACTO: "empieza por" mandaba Ciénaga a Ciénaga de Oro (otro municipio = devolución).
-    const hit = cs.find((c) => norm(c.nombre).replace(/\b(d c|dc|distrito capital)\b/g, '').trim() === nc);
+    const { mismaCiudad } = await import('./colombiaGeo.js');
+    const hit = cs.find((c) => norm(c.nombre).replace(/\b(d c|dc|distrito capital)\b/g, '').trim() === nc) || cs.find((c) => mismaCiudad(c.nombre, ciudad));
     if (hit) { void precargarGeo(apiKey).catch(() => {}); return { provincia: p.id, ciudad: hit.id, nombre: `${hit.nombre}, ${p.nombre}` }; }
   }
   const r = await effi<Fila[]>(apiKey, 'GET', '/api/ciudad', { query: { nombre: ciudad.trim().slice(0, 40), por_pagina: 100 } });
@@ -1896,6 +1902,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
 
   const ubic = await resolverUbicacion(c.apiKey, txt(o.departamento), txt(o.ciudad));
   if ('error' in ubic) return ubic;
+  if (ubic.aviso) avisos.unshift(ubic.aviso);
 
   // Totales: la remisión SIEMPRE suma lo mismo que el pedido (lo que se le cobra
   // al cliente contra entrega). El precio de venta del bot casi nunca es el del
@@ -2013,6 +2020,17 @@ function despacharEffiConCandado(storeId: string, orderId: string, reintento: bo
       } else {
         trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Ya estaba en Effi (remisión ${rem}): no se envía otra vez` });
         return { remision: rem, sucursal: txt(d.sucursal), id: txt(d.id), guia: txt(o.guia), transportadora: txt(o.transportadora), avisos: ['Este pedido ya estaba en Effi: no se volvió a enviar.'], guiaCreada: !!txt(o.guia) || !!pj<Fila>(txt(o.effi_guia), {}).id };
+      }
+    }
+    // Municipio que no es del departamento del pedido (Ciénaga en Córdoba…): el envío automático no
+    // sigue solo, porque al municipio equivocado es devolución. Desde el panel sí se puede continuar.
+    if (auto) {
+      const od = db.prepare('SELECT departamento, ciudad FROM orders WHERE id = ?').get(orderId) as { departamento: string; ciudad: string } | undefined;
+      const ch = (await import('./colombiaGeo.js')).chequearCiudad(txt(od?.departamento), txt(od?.ciudad));
+      if (!ch.ok) {
+        trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: 'Envío automático frenado: revisa el municipio', detalle: ch.motivo });
+        registrarLog(storeId, 'warn', 'despacho', `${numDF}: ${ch.motivo} No se envió solo a Effi: revísalo y envíalo desde el pedido (puedes continuar si está bien).`);
+        return { error: ch.motivo };
       }
     }
     // 3) Pedido repetido (mismo celular y productos) que ya está en Effi.

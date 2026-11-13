@@ -154,13 +154,10 @@ export async function resolverDestino(
     if (!ciudades.length) { console.warn('[dropi] bycity vacío · dep', depto.id, depto.name, '· http', r.http, '· body:', JSON.stringify(r.body).slice(0, 500)); return { error: r.body.message || 'No pudimos leer las ciudades de Dropi.' }; }
   } catch { return { error: 'No pudimos conectar con Dropi (ciudades).' }; }
 
-  // Municipio que no es de ese departamento (Ciénaga en Córdoba…): no se despacha, se corrige primero.
-  const { chequearCiudad, normGeo } = await import('./colombiaGeo.js');
-  const chequeo = chequearCiudad(departamento, ciudad);
-  if (!chequeo.ok) return { error: chequeo.motivo, opciones: [] };
+  const { normGeo, mismaCiudad } = await import('./colombiaGeo.js');
   // Solo el nombre EXACTO (sin tildes ni paréntesis): "contiene" mandaba Ciénaga a Ciénaga de Oro.
   const cObjetivo = normGeo(ciudad);
-  const found = ciudades.find((c) => normGeo(nombreDe(c)) === cObjetivo);
+  const found = ciudades.find((c) => normGeo(nombreDe(c)) === cObjetivo) || ciudades.find((c) => mismaCiudad(nombreDe(c), ciudad));
   if (!found) {
     console.warn('[dropi] ciudad no casó:', ciudad, 'en', depto.name, '· llaves ejemplo:', ciudades[0] ? Object.keys(ciudades[0]) : 'sin datos', '· muestra:', JSON.stringify(ciudades[0] || {}).slice(0, 300));
     return { error: `Dropi no reconoce la ciudad "${ciudad}" en ${depto.name}. Escríbela como en Dropi.`, opciones: ciudades.map(nombreDe).filter(Boolean).slice(0, 80) };

@@ -13,6 +13,16 @@ export function normGeo(s: string): string {
     .replace(/\([^)]*\)/g, ' ').replace(/\b(d\s*c|distrito capital|municipio de|municipio)\b/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
+/** Nombre de uso diario → nombre oficial de la lista (el que tienen Effi/Dropi suele ser el corto). */
+const ALIAS_CIUDAD: Record<string, string> = {
+  cartagena: 'cartagena de indias', cucuta: 'san jose de cucuta', tumaco: 'san andres de tumaco', mompos: 'santa cruz de mompox', mompox: 'santa cruz de mompox',
+  'santa marta': 'santa marta', 'san andres': 'san andres', lorica: 'santa cruz de lorica', 'el carmen': 'el carmen de bolivar', guadalajara: 'guadalajara de buga', buga: 'guadalajara de buga',
+};
+/** ¿Es el mismo municipio? Nombre exacto (sin tildes ni signos) o su nombre corto/oficial (Cartagena = Cartagena de Indias). */
+export function mismaCiudad(a: string, b: string): boolean {
+  const x = normGeo(a), y = normGeo(b);
+  return !!x && (x === y || ALIAS_CIUDAD[x] === y || ALIAS_CIUDAD[y] === x);
+}
 const ALIAS_DEPTO: Record<string, string> = { bogota: 'cundinamarca', 'san andres': 'san andres y providencia', 'valle': 'valle del cauca', 'norte santander': 'norte de santander', guajira: 'la guajira' };
 function deptoDe(nombre: string): string | null {
   const n = normGeo(nombre).replace(/\b(departamento|depto|dpto)\b/g, '').replace(/^de /, '').trim();
@@ -30,18 +40,21 @@ export type ChequeoCiudad =
  * Si no hay departamento o no se reconoce, no se frena aquí (lo decide la transportadora con su lista).
  */
 export function chequearCiudad(departamento: string, ciudad: string): ChequeoCiudad {
-  const nc = normGeo(ciudad);
-  if (!nc) return { ok: false, motivo: 'El pedido no tiene ciudad.', enOtros: [], parecidos: [], departamento: '' };
+  const nc0 = normGeo(ciudad);
+  const nc = nc0;
+  const iguales = (c: string) => { const n = normGeo(c); return n === nc || ALIAS_CIUDAD[nc] === n || ALIAS_CIUDAD[n] === nc; };
+  if (!nc0) return { ok: false, motivo: 'El pedido no tiene ciudad.', enOtros: [], parecidos: [], departamento: '' };
   if (/^bogota\b/.test(nc)) return { ok: true };
   const dep = deptoDe(departamento);
-  const enOtros = Object.entries(COLOMBIA).filter(([, cs]) => cs.some((c) => normGeo(c) === nc)).map(([d]) => d);
+  const enOtros = Object.entries(COLOMBIA).filter(([, cs]) => cs.some(iguales)).map(([d]) => d);
   if (!dep) {
     if (enOtros.length > 1) return { ok: false, motivo: `Hay un municipio "${ciudad}" en ${enOtros.join(' y en ')}: falta el departamento del pedido.`, enOtros, parecidos: [], departamento: '' };
     return { ok: true };
   }
-  if (COLOMBIA[dep].some((c) => normGeo(c) === nc)) return { ok: true };
+  if (COLOMBIA[dep].some(iguales)) return { ok: true };
   const parecidos = COLOMBIA[dep].filter((c) => { const n = normGeo(c); return n.startsWith(nc + ' ') || nc.startsWith(n + ' '); });
   if (enOtros.length) return { ok: false, motivo: `"${ciudad}" no es un municipio de ${dep}: está en ${enOtros.join(', ')}.${parecidos.length ? ` En ${dep} hay uno parecido: ${parecidos.join(', ')}.` : ''} Confirma con el cliente a qué municipio va y corrige el pedido.`, enOtros, parecidos, departamento: dep };
-  if (parecidos.length) return { ok: false, motivo: `En ${dep} no hay un municipio llamado exactamente "${ciudad}"; hay uno parecido: ${parecidos.join(', ')}. Confirma con el cliente y corrige el pedido.`, enOtros, parecidos, departamento: dep };
+  // Solo un nombre parecido dentro del mismo departamento (p. ej. una escritura distinta): no se frena;
+  // la transportadora decide con su propia lista, que solo acepta el nombre exacto.
   return { ok: true }; // nombre que no está en la lista (corregimiento, otra escritura): lo decide la transportadora, sin parecidos
 }
