@@ -1297,3 +1297,27 @@ export const apiConversiones = () => req<EstadoConversiones>('/api/landings/conv
 export const apiTokenConversiones = (pixelId: string, token: string) => req<EstadoConversiones>('/api/landings/conversiones/token', 'PUT', { pixelId, token });
 export const apiCodigoPruebaConversiones = (testCode: string) => req<EstadoConversiones>('/api/landings/conversiones/codigo-prueba', 'PUT', { testCode });
 export const apiProbarConversiones = (pixelId: string) => req<{ ok: boolean; mensaje: string }>('/api/landings/conversiones/probar', 'POST', { pixelId });
+
+// ── Estudio de creativos (Marketing IA): videos UGC y fotos con créditos ──
+export interface BriefEstudio {
+  producto: string; categoria: string; precio: number; publico: string; variantes: string; oferta: string;
+  beneficios: string[]; estilo: 'ugc' | 'ecommerce' | 'mixto'; formato: '9:16' | '1:1' | '16:9'; videos: number; imagenes: number; notas: string;
+}
+export interface PiezaEstudio {
+  id: string; tipo: 'video' | 'imagen'; orden: number; angulo: string; hook: string; prompt: string; texto: string; titular: string; uso: string;
+  formato: string; modelo: string; segundos: number; calidad: string; estado: 'borrador' | 'generando' | 'listo' | 'fallido' | 'aprobado' | 'descartado';
+  creditos: number; progreso: number; url: string; miniatura: string; error: string; actualizado: string;
+}
+export interface ProyectoEstudio { id: string; nombre: string; brief: BriefEstudio; foto: string; copys: { textos?: string[]; titulares?: string[]; descripciones?: string[] }; piezas: PiezaEstudio[] }
+export interface ProyectoEstudioResumen { id: string; nombre: string; foto: string; videos: number; imagenes: number; generando: number; actualizado: string }
+export interface PreciosEstudio { paquete: number; imagen: { medium: number; high: number }; video: Record<string, Record<string, number>>; disponible: boolean }
+export const apiEstudio = () => reqBase<{ proyectos: ProyectoEstudioResumen[]; precios: PreciosEstudio; saldo: number }>('/api/estudio', 'GET');
+export const apiEstudioProyecto = (id: string) => reqBase<{ proyecto: ProyectoEstudio; saldo: number }>(`/api/estudio/proyectos/${id}`, 'GET');
+export const apiEstudioGuardar = (id: string | null, b: { nombre?: string; brief: Partial<BriefEstudio>; fotoDataUrl?: string }) =>
+  req<{ id: string }>(id ? `/api/estudio/proyectos/${id}` : '/api/estudio/proyectos', id ? 'PUT' : 'POST', b);
+export const apiEstudioBorrar = (id: string) => req<{ ok: true }>(`/api/estudio/proyectos/${id}`, 'DELETE');
+export const apiEstudioPaquete = (id: string) => req<{ ok: true; videos: number; imagenes: number }>(`/api/estudio/proyectos/${id}/paquete`, 'POST');
+export const apiEstudioAgregar = (id: string, b: { tipo: 'video' | 'imagen'; prompt: string }) => req<{ id: string }>(`/api/estudio/proyectos/${id}/piezas`, 'POST', b);
+export const apiEstudioEditarPieza = (id: string, b: Partial<Pick<PiezaEstudio, 'prompt' | 'texto' | 'titular' | 'modelo' | 'segundos' | 'calidad' | 'formato' | 'estado'>>) =>
+  reqBase<{ ok: true }>(`/api/estudio/piezas/${id}`, 'PATCH', b);
+export const apiEstudioGenerar = (id: string) => req<{ ok: true; estado: string }>(`/api/estudio/piezas/${id}/generar`, 'POST');

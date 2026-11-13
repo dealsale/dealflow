@@ -1,8 +1,10 @@
 import { db, uid } from './db.js';
 
 /**
- * Sistema de créditos recargables para el Marketing IA (texto e imágenes con
- * OpenAI, que paga DealFlow como empresa). Las tiendas recargan créditos por
+ * Sistema de créditos recargables para el Marketing IA (texto, imágenes y videos con
+ * OpenAI, que paga DealFlow como empresa). Es lo ÚNICO que se cobra del Marketing IA: no hay
+ * membresías (la tienda ya paga su mensualidad); DealFlow gana con las recargas.
+ * Los precios del Estudio de videos y fotos están en estudio.ts (PRECIOS_ESTUDIO). Las tiendas recargan créditos por
  * Wompi; cada generación descuenta créditos. El precio de venta deja ~4x sobre
  * el costo real de OpenAI.
  *
@@ -32,6 +34,7 @@ export const PAQUETES: Paquete[] = [
   { id: 'inicial', nombre: 'Inicial', creditos: 500, precio: 20000 },
   { id: 'pro', nombre: 'Pro', creditos: 1500, precio: 50000 },
   { id: 'max', nombre: 'Max', creditos: 4000, precio: 120000 },
+  { id: 'estudio', nombre: 'Estudio', creditos: 10000, precio: 280000 }, // para producir videos en volumen
 ];
 
 export function paquete(id: string): Paquete | undefined {

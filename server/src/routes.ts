@@ -2587,6 +2587,63 @@ api.post('/campanas/:id/publicar', requireAuth, requireStore, requireOwner, asyn
   res.json({ ok: true, ids: r.ids });
 });
 
+// ── Estudio de creativos (Marketing IA): videos UGC y fotos, pagados con créditos ──
+api.get('/estudio', requireAuth, requireStore, async (req, res) => {
+  const E = await import('./estudio.js');
+  const { saldo } = await import('./creditos.js');
+  res.json({ proyectos: E.listarProyectos(req.user!.storeId!), precios: E.preciosPublicos(), saldo: saldo(req.user!.storeId!) });
+});
+api.get('/estudio/proyectos/:id', requireAuth, requireStore, async (req, res) => {
+  const E = await import('./estudio.js');
+  // Si hay videos en curso, se aprovecha la consulta para revisarlos ya.
+  if ((db.prepare("SELECT 1 FROM estudio_piezas WHERE proyecto_id = ? AND estado = 'generando' LIMIT 1").get(req.params.id))) await E.revisarVideos(req.user!.storeId!).catch(() => {});
+  const p = E.obtenerProyecto(req.user!.storeId!, req.params.id);
+  if (!p) return res.status(404).json({ error: 'Proyecto no encontrado.' });
+  const { saldo } = await import('./creditos.js');
+  res.json({ proyecto: p, saldo: saldo(req.user!.storeId!) });
+});
+api.post('/estudio/proyectos', requireAuth, requireStore, async (req, res) => {
+  const r = (await import('./estudio.js')).guardarProyecto(req.user!.storeId!, null, req.body || {});
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+api.put('/estudio/proyectos/:id', requireAuth, requireStore, async (req, res) => {
+  const r = (await import('./estudio.js')).guardarProyecto(req.user!.storeId!, req.params.id, req.body || {});
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+api.delete('/estudio/proyectos/:id', requireAuth, requireStore, async (req, res) => {
+  (await import('./estudio.js')).borrarProyecto(req.user!.storeId!, req.params.id);
+  res.json({ ok: true });
+});
+api.post('/estudio/proyectos/:id/paquete', requireAuth, requireStore, async (req, res) => {
+  const r = await (await import('./estudio.js')).generarPaquete(req.user!.storeId!, req.params.id);
+  if ('error' in r) return res.status(r.sinCreditos ? 402 : 400).json(r);
+  res.json(r);
+});
+api.post('/estudio/proyectos/:id/piezas', requireAuth, requireStore, async (req, res) => {
+  const r = (await import('./estudio.js')).agregarPieza(req.user!.storeId!, req.params.id, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.patch('/estudio/piezas/:id', requireAuth, requireStore, async (req, res) => {
+  const r = (await import('./estudio.js')).editarPieza(req.user!.storeId!, req.params.id, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/estudio/piezas/:id/generar', requireAuth, requireStore, async (req, res) => {
+  const r = await (await import('./estudio.js')).generarPieza(req.user!.storeId!, req.params.id);
+  if ('error' in r) return res.status(r.sinCreditos ? 402 : 400).json(r);
+  res.json(r);
+});
+api.get('/estudio/proyectos/:id/zip', requireAuth, requireStore, async (req, res) => {
+  const r = (await import('./estudio.js')).zipProyecto(req.user!.storeId!, req.params.id, req.query.aprobados === '1');
+  if ('error' in r) return res.status(400).json(r);
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(r.nombre)}"; filename*=UTF-8''${encodeURIComponent(r.nombre)}`);
+  res.send(r.datos);
+});
+
 // ── Créditos del Marketing IA (saldo, paquetes, recarga por Wompi) ────
 api.get('/creditos', requireAuth, requireStore, async (req, res) => {
   const { saldo, movimientos, PAQUETES, COSTO } = await import('./creditos.js');

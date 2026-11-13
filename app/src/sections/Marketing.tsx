@@ -3,6 +3,7 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import type { Campana } from '../lib/api';
 import { Dropdown } from '../components/Dropdown';
 import { comprimirImagen } from '../components/PhotoUpload';
+import { EstudioCreativos } from './EstudioCreativos';
 
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 };
 const label: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
@@ -497,6 +498,9 @@ function ListaCampanas({ df }: { df: DealFlowState }) {
 export function Marketing({ df }: { df: DealFlowState }) {
   const c = df.campana;
   const [paso, setPaso] = useState(1);
+  // Dos espacios: el Estudio de videos y fotos (UGC / e-commerce) y las campañas para Meta.
+  const [vista, setVista] = useState<'estudio' | 'campanas'>(() => { try { return (localStorage.getItem('df-mk-vista') as 'estudio' | 'campanas') || 'estudio'; } catch { return 'estudio'; } });
+  const irA = (v: 'estudio' | 'campanas') => { setVista(v); try { localStorage.setItem('df-mk-vista', v); } catch { /* sin almacenamiento */ } };
   // Al entrar refrescamos campañas y saldo (por ref: las funciones se recrean en cada render).
   const recargar = useRef({ campanas: df.reloadCampanas, creditos: df.reloadCreditos });
   recargar.current = { campanas: df.reloadCampanas, creditos: df.reloadCreditos };
@@ -510,14 +514,22 @@ export function Marketing({ df }: { df: DealFlowState }) {
         <div style={{ flex: 1, minWidth: 220 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Marketing IA</h1>
           <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>
-            {c ? 'Arma tu campaña paso a paso y publícala en Meta.' : 'Crea campañas completas: la IA estudia tu producto, crea los creativos y escribe los anuncios.'}
+            {c ? 'Arma tu campaña paso a paso y publícala en Meta.' : vista === 'estudio' ? 'Crea videos UGC y fotos de producto con IA para vender en redes y en tu tienda.' : 'Crea campañas completas: la IA estudia tu producto, crea los creativos y escribe los anuncios.'}
           </p>
         </div>
-        <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '9px 14px', textAlign: 'center' }}>
+        {(c || vista !== 'estudio') && <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '9px 14px', textAlign: 'center' }}>
           <div style={{ color: 'var(--df-text-muted)', fontSize: 11.5, fontWeight: 600 }}>CRÉDITOS</div>
           <div style={{ fontWeight: 800, fontSize: 17, color: df.creditos > 20 ? 'var(--df-brand-dark)' : 'var(--df-warning)' }}>{df.creditos}</div>
-        </div>
+        </div>}
       </div>
+
+      {!c && (
+        <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 10, overflow: 'hidden', marginBottom: 14 }}>
+          {([['estudio', '🎬 Videos y fotos'], ['campanas', '📣 Campañas en Meta']] as const).map(([v, t]) => (
+            <button key={v} onClick={() => irA(v)} style={{ background: vista === v ? 'var(--df-brand)' : 'var(--df-surface)', color: vista === v ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>{t}</button>
+          ))}
+        </div>
+      )}
 
       {df.mkSinCreditos && (
         <div style={{ ...card, background: 'var(--df-warning-subtle-2)', borderColor: 'var(--df-warning-border)' }}>
@@ -526,7 +538,9 @@ export function Marketing({ df }: { df: DealFlowState }) {
         </div>
       )}
 
-      {!c ? (
+      {!c && vista === 'estudio' ? (
+        <EstudioCreativos df={df} />
+      ) : !c ? (
         <ListaCampanas df={df} />
       ) : (
         <>

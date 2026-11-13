@@ -128,6 +128,8 @@ export function textoDeUrl(url: string, method: string): string | null {
   if (/\/landings\/[^/]+\/publicar$/.test(u)) return 'Publicando tu landing…';
   if (/\/landings\/membresia\/pagar$/.test(u)) return 'Abriendo el pago seguro…';
   if (/\/landings\/tienda(\/vista)?$/.test(u)) return null;
+  if (/\/estudio\/proyectos\/[^/]+\/paquete$/.test(u)) return 'La IA está pensando las ideas, los guiones y los textos…';
+  if (/\/estudio\/piezas\/[^/]+\/generar$/.test(u)) return 'Generando con IA… (una foto tarda hasta un minuto)';
   if (method === 'DELETE') return 'Eliminando…';
   if (/effi\/despachar/.test(u)) return 'Creando la remisión en Effi…';
   if (/effi\/guia|guia-manual/.test(u)) return 'Generando la guía de transporte…';
