@@ -4012,23 +4012,30 @@ api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
 });
 
 // ── Integraciones por tienda (API keys propias) ───────────────────────
-const IA_TIPOS = ['deepseek', 'openai', 'grok'];
+const IA_TIPOS = ['deepseek', 'openai', 'grok', 'claude'];
 
-api.get('/integraciones', requireAuth, requireStore, (req, res) => {
+api.get('/integraciones', requireAuth, requireStore, async (req, res) => {
   const sid = req.user!.storeId!;
   const rows = db.prepare('SELECT tipo, config FROM store_integrations WHERE store_id = ?').all(sid) as { tipo: string; config: string }[];
   const configuradas = rows.map((r) => {
     const cfg = pj<Record<string, string>>(r.config, {});
     // Nunca devolvemos las claves completas: solo los últimos 4 caracteres.
     const resumen: Record<string, string> = {};
-    for (const [k, v] of Object.entries(cfg)) resumen[k] = v.length > 8 ? '••••' + v.slice(-4) : '••••';
+    // (El modelo elegido no es un secreto: se devuelve tal cual.)
+    for (const [k, v] of Object.entries(cfg)) resumen[k] = k === 'modelo' ? v : v.length > 8 ? '••••' + v.slice(-4) : '••••';
     return { tipo: r.tipo, campos: resumen };
   });
   const asst = db.prepare('SELECT ia_proveedor FROM assistants WHERE store_id = ?').get(sid) as { ia_proveedor: string } | undefined;
-  res.json({ configuradas, iaPredeterminada: (asst?.ia_proveedor || '').trim() || 'deepseek' });
+  const { MODELOS_CLAUDE, modeloClaude } = await import('./claude.js');
+  const cfgClaude = pj<Record<string, string>>(rows.find((r) => r.tipo === 'claude')?.config || '', {});
+  res.json({
+    configuradas, iaPredeterminada: (asst?.ia_proveedor || '').trim() || 'deepseek',
+    // Modelos de Claude que la tienda puede elegir (precio en USD por millón de tokens) y el que tiene puesto.
+    claude: { modelo: modeloClaude(cfgClaude.modelo).id, modelos: MODELOS_CLAUDE.map((m) => ({ id: m.id, nombre: m.nombre, nota: m.nota, entrada: m.entrada, salida: m.salida })) },
+  });
 });
 
-api.put('/integraciones/:tipo', requireAuth, requireStore, requireOwner, (req, res) => {
+api.put('/integraciones/:tipo', requireAuth, requireStore, requireOwner, async (req, res) => {
   const sid = req.user!.storeId!;
   const tipo = String(req.params.tipo).toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30);
   if (!tipo) return res.status(400).json({ error: 'Integración inválida.' });
@@ -4038,6 +4045,21 @@ api.put('/integraciones/:tipo', requireAuth, requireStore, requireOwner, (req, r
     const kk = String(k).slice(0, 40);
     const vv = String(v ?? '').trim().slice(0, 500);
     if (vv) config[kk] = vv;
+  }
+  if (tipo === 'claude') {
+    // Claude: clave + modelo. Se puede cambiar solo el modelo sin volver a pegar la clave, y la clave
+    // se comprueba con Anthropic antes de guardarla (no gasta: solo consulta el modelo).
+    const { esModeloClaude, MODELO_CLAUDE_DEFECTO, probarClaveClaude } = await import('./claude.js');
+    const previa = pj<Record<string, string>>((db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'claude'").get(sid) as { config: string } | undefined)?.config || '', {});
+    const claveNueva = !!config.apiKey;
+    if (!config.apiKey && previa.apiKey) config.apiKey = previa.apiKey;
+    if (!config.apiKey) return res.status(400).json({ error: 'Pega tu API key de Claude (empieza por sk-ant-).' });
+    if (!config.modelo) config.modelo = previa.modelo || MODELO_CLAUDE_DEFECTO;
+    if (!esModeloClaude(config.modelo)) return res.status(400).json({ error: 'Ese modelo de Claude no está disponible.' });
+    if (claveNueva || config.modelo !== previa.modelo) {
+      const prueba = await probarClaveClaude(config.apiKey, config.modelo);
+      if (!prueba.ok) return res.status(400).json({ error: prueba.error });
+    }
   }
   if (!Object.keys(config).length) return res.status(400).json({ error: 'Completa los datos de la integración.' });
   db.prepare(

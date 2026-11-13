@@ -47,7 +47,7 @@ interface Estructura {
 
 /** La IA ordena lo que no trae etiqueta exacta (bundles, variantes, reglas, preguntas…). */
 async function estructurarConIA(storeId: string, imp: ImportacionExt, precio: number): Promise<Partial<Estructura>> {
-  const { resolverTexto } = await import('./ai.js');
+  const { resolverTexto, completarTexto } = await import('./ai.js');
   const ia = resolverTexto(storeId);
   if (!ia) return {};
   const material = [
@@ -68,13 +68,7 @@ Reglas:
 - "disparador": la frase o palabra clave que activa el mensaje inicial, si aparece.
 - Usa SOLO lo que está en el texto. Si algo no aparece, déjalo vacío.`;
   try {
-    const r = await fetch(ia.url, {
-      method: 'POST', headers: { Authorization: `Bearer ${ia.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: ia.model, messages: [{ role: 'system', content: system }, { role: 'user', content: material }], max_tokens: 2500, temperature: 0 }),
-      signal: AbortSignal.timeout(60_000),
-    });
-    const b = (await r.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[] };
-    const crudo = String(b.choices?.[0]?.message?.content || '');
+    const crudo = String((await completarTexto(storeId, ia, { system, mensajes: [{ role: 'user', content: material }], maxTokens: 2500, temperature: 0, timeoutMs: 60_000 })) || '');
     const m = crudo.match(/\{[\s\S]*\}/);
     return m ? (JSON.parse(m[0]) as Partial<Estructura>) : {};
   } catch { return {}; }

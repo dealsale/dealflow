@@ -35,7 +35,7 @@ export function ConsumoIA() {
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontWeight: 800, fontSize: 15 }}>🧠 IA por tienda: modelo y consumo</div>
-          <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Tokens enviados a DeepSeek/OpenAI y costo estimado. «Peso por respuesta» alto = catálogo o instrucciones muy largas; muchas respuestas en un solo chat = posible bucle.</div>
+          <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Tokens enviados a la IA de cada tienda (DeepSeek, Claude u OpenAI) y costo estimado. «Peso por respuesta» alto = catálogo o instrucciones muy largas; muchas respuestas en un solo chat = posible bucle.</div>
         </div>
         <select value={dias} onChange={(e) => setDias(Number(e.target.value))} style={{ border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 8px', fontFamily: 'inherit', fontSize: 12.5 }}>
           <option value={1}>Hoy</option><option value={3}>3 días</option><option value={7}>7 días</option><option value={30}>30 días</option>
@@ -80,7 +80,7 @@ export function ConsumoIA() {
             </table>
           </div>
         )}
-      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Costo estimado con precios de DeepSeek (entrada US$0,28/M, en caché US$0,028/M, salida US$0,42/M). Lo exacto está en la consola de DeepSeek de la tienda.</div>
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Costo estimado con el precio de la IA que atendió cada llamada: DeepSeek (entrada US$0,28/M, en caché US$0,028/M, salida US$0,42/M) o el modelo de Claude que eligió la tienda. Lo exacto está en la consola de DeepSeek o de Anthropic de la tienda.</div>
     </div>
   );
 }

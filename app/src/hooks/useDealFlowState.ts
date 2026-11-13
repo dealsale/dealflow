@@ -165,7 +165,7 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiToggleCupon,
   apiEliminarCupon,
 } from '../lib/api';
-import type { ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla } from '../lib/api';
+import type { ClaudeIA, ApiLead, ApiOrder, ApiProduct, Plantilla, TeamMember, AdminStoreDetalle, SuperStore, Campana, Brief, CopysAnuncio, CuentaAds, OpcionesAds, Suscripcion, PlanPublico, Cupon, NuevoCupon, PaqueteCreditos, MovimientoCredito, MiTienda, MetaSignupCfg, EstadoNumero, LibraryItem, LibraryAdminItem, SuperStoreProduct, EventoLog, Estadisticas, PropuestaPedido, ReporteBaneo, PlantillaMeta, NuevaPlantilla } from '../lib/api';
 import { fmt } from '../lib/format';
 import { clearSnapshot, loadSnapshot, saveSnapshot } from '../lib/persist';
 import { playOrderChime } from '../lib/sound';
@@ -889,6 +889,7 @@ export function useDealFlowState() {
   const premiumPermitido = true;
   const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
   const [iaPredeterminada, setIaPredeterminada] = useState('deepseek');
+  const [claudeIA, setClaudeIA] = useState<ClaudeIA>({ modelo: '', modelos: [] });
   // Los avisos de integraciones (guardar, probar conexión, sincronizar…) ahora
   // salen como pop-up flotante, no como texto fijo en el panel. Mantenemos la
   // misma firma setIntegracionMsg para no tocar cada llamada; el progreso ("…")
@@ -3073,6 +3074,7 @@ export function useDealFlowState() {
     for (const c of data.configuradas) map[c.tipo] = c.campos;
     setIntegracionesCfg(map);
     setIaPredeterminada(data.iaPredeterminada || 'deepseek');
+    if (data.claude) setClaudeIA(data.claude);
   }
   useEffect(() => {
     if (apiMode && sessionUser && !isAdmin && section === 'integraciones') { void reloadIntegraciones(); void reloadMetaEstado(); }
@@ -4519,6 +4521,7 @@ export function useDealFlowState() {
     instalarPwa,
     integracionesCfg,
     iaPredeterminada,
+    claudeIA,
     integracionMsg,
     effiMsg,
     variantesGenMsg,

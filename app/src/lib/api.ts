@@ -283,7 +283,9 @@ export interface IntegracionConfigurada {
   tipo: string;
   campos: Record<string, string>; // valores enmascarados (••••1234)
 }
-export const apiIntegraciones = () => req<{ configuradas: IntegracionConfigurada[]; iaPredeterminada: string }>('/api/integraciones', 'GET');
+/** Modelos de Claude que la tienda puede elegir (precios en USD por millón de tokens) y el que tiene puesto. */
+export interface ClaudeIA { modelo: string; modelos: { id: string; nombre: string; nota: string; entrada: number; salida: number }[] }
+export const apiIntegraciones = () => req<{ configuradas: IntegracionConfigurada[]; iaPredeterminada: string; claude?: ClaudeIA }>('/api/integraciones', 'GET');
 export const apiGuardarIntegracion = (tipo: string, config: Record<string, string>, predeterminada?: boolean) =>
   req<{ ok: true }>(`/api/integraciones/${tipo}`, 'PUT', { config, predeterminada });
 export const apiEliminarIntegracion = (tipo: string) => req<{ ok: true }>(`/api/integraciones/${tipo}`, 'DELETE');
