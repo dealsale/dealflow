@@ -1266,7 +1266,27 @@ export interface PanelRemarketing {
   mensajes: { id: string; titulo: string; plantilla: string; segmentos: SegmentoRmk[]; campos: { id: string; titulo: string; ejemplo: string }[]; ejemplo: string; aprobacion: { estado: string; motivo: string } }[];
   automaticos: { rescate: ResultadoRmk; recuperacion: ResultadoRmk };
   campanas: (ResultadoRmk & { id: string; nombre: string; segmento: SegmentoRmk; mensaje: string; estado: string; motivo: string; creado: string })[];
+  etiquetas: { etiqueta: string; n: number }[];
+  importados: number;
+  plantillas: PlantillaRmk[];
+  puedeCrearPlantillas: boolean;
 }
+/** Plantilla propia de la tienda aprobada por Meta (la única que se puede usar en campañas). */
+export interface PlantillaRmk {
+  id: string; nombre: string; categoria: string; cuerpo: string; variables: number; ejemplos: string[];
+  encabezado: string; encabezadoTipo: string; varsEncabezado: number; pie: string;
+  botones: { tipo: string; texto: string; variable: boolean }[];
+}
+export interface VariableRmk { tipo: 'nombre' | 'tienda' | 'texto'; valor?: string }
+export interface FiltroRmk { segmentos: SegmentoRmk[]; etiquetas: string[]; dias: number }
+export interface DestinatarioRmk { clave: string; leadId: string; contactoId: string; nombre: string; tel: string; origen: 'chat' | 'importado'; motivo: string; excluido: string }
+export const apiRemarketingAudiencia = (f: FiltroRmk) => req<{ total: number; aptos: number; importados: number; muestra: DestinatarioRmk[] }>('/api/remarketing/audiencia', 'POST', f);
+export const apiRemarketingCampanaPlantilla = (d: FiltroRmk & { plantillaId: string; variables: VariableRmk[]; extra: { encabezado?: string; media?: string; boton?: string }; limite: number; nombre?: string }) =>
+  req<{ ok: true; id: string; encolados: number; excluidos: number }>('/api/remarketing/campanas-plantilla', 'POST', d);
+export interface ResultadoImportacion { creados: number; yaEran: number; invalidos: number; repetidos: number; ejemplosInvalidos: string[]; etiqueta: string }
+export const apiImportarContactos = (d: { filas: { nombre: string; telefono: string; etiquetas?: string }[]; etiqueta: string; origen: string; consentimiento: boolean }) =>
+  req<{ ok: true } & ResultadoImportacion>('/api/contactos/importar', 'POST', d);
+export const apiBorrarEtiqueta = (etiqueta: string) => req<{ ok: true; quitadas: number }>(`/api/contactos/etiquetas/${encodeURIComponent(etiqueta)}`, 'DELETE');
 export interface LeadRmk { id: string; nombre: string; tel: string; ultimo: string; ultCliente: string; excluido: string; ventanaAbierta: boolean }
 export const apiRemarketing = (dias = 60) => req<PanelRemarketing>(`/api/remarketing?dias=${dias}`, 'GET');
 export const apiRemarketingConfig = (p: Partial<CfgRemarketing>) => req<{ cfg: CfgRemarketing }>('/api/remarketing/config', 'PUT', p);

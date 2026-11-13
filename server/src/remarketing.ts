@@ -45,6 +45,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS remarketing_envios (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_rmk_envios_store ON remarketing_envios(store_id, estado)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_rmk_envios_lead ON remarketing_envios(lead_id)');
+// Contacto importado que todavía no es un chat: el chat se crea al enviarle (contactos.ts).
+try { db.exec("ALTER TABLE remarketing_envios ADD COLUMN contacto_id TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 
 // ── Configuración por tienda ────────────────────────────────────────────────
 export interface CfgRemarketing { rescate24h: boolean; recuperar: boolean; toques: 1 | 2; topeDiario: number }
@@ -188,6 +190,96 @@ export const MENSAJES: MensajeRmk[] = [
 ];
 export const mensajeRmk = (id: string) => MENSAJES.find((m) => m.id === id);
 
+// ── Audiencia: por estado del lead y/o por etiqueta ──────────────────────────
+export interface FiltroAudiencia { segmentos: Segmento[]; etiquetas: string[]; dias: number }
+export interface Destinatario { clave: string; leadId: string; contactoId: string; nombre: string; tel: string; origen: 'chat' | 'importado'; motivo: string; excluido: string }
+
+/** Quién recibe: los leads de los estados elegidos + todos los contactos (chats o importados) con alguna de las etiquetas. */
+export function audiencia(storeId: string, f: FiltroAudiencia): Destinatario[] {
+  const out = new Map<string, Destinatario>();
+  const segs = new Set(f.segmentos || []);
+  if (segs.size) {
+    const tit = new Map(SEGMENTOS.map((x) => [x.id, x.titulo]));
+    for (const l of leadsPorSegmento(storeId, f.dias || 60)) {
+      if (!segs.has(l.segmento)) continue;
+      out.set(diez(l.tel) || l.id, { clave: diez(l.tel) || l.id, leadId: l.id, contactoId: '', nombre: l.nombre, tel: l.tel, origen: 'chat', motivo: tit.get(l.segmento) || l.segmento, excluido: l.excluido });
+    }
+  }
+  const ets = (f.etiquetas || []).map((e) => String(e).trim()).filter(Boolean);
+  if (ets.length) {
+    const tels = db.prepare(`SELECT tel10, GROUP_CONCAT(etiqueta, ', ') ets FROM contacto_etiquetas WHERE store_id = ? AND etiqueta IN (${ets.map(() => '?').join(',')}) GROUP BY tel10`).all(storeId, ...ets) as { tel10: string; ets: string }[];
+    if (tels.length) {
+      const leads = new Map<string, Fila>();
+      for (const l of db.prepare(`SELECT l.id, l.nombre, l.tel, l.wa_id, l.no_contactar, l.ult_cliente_at,
+          (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.lead_id = l.id AND r.estado = 'enviado') ult_rmk
+        FROM leads l WHERE l.store_id = ? AND COALESCE(l.canal,'whatsapp') = 'whatsapp'`).all(storeId) as Fila[]) {
+        for (const k of [diez(l.tel), diez(txt(l.wa_id).split('@')[0])]) if (k.length === 10 && !leads.has(k)) leads.set(k, l);
+      }
+      const imp = new Map((db.prepare(`SELECT c.id, c.tel10, c.nombre,
+          (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.contacto_id = c.id AND r.estado = 'enviado') ult_rmk
+        FROM contactos_importados c WHERE c.store_id = ?`).all(storeId) as Fila[]).map((c) => [txt(c.tel10), c]));
+      const hace = (iso: string) => (Date.now() - new Date(iso.replace(' ', 'T') + 'Z').getTime()) / 3600e3;
+      for (const t of tels) {
+        if (out.has(t.tel10)) continue;
+        const l = leads.get(t.tel10);
+        if (l) {
+          let excluido = '';
+          if (Number(l.no_contactar)) excluido = 'Pidió que no le escribamos';
+          else if (l.ult_rmk && hace(txt(l.ult_rmk)) < 7 * 24) excluido = 'Ya recibió un mensaje de remarketing esta semana';
+          else if (l.ult_cliente_at && hace(txt(l.ult_cliente_at)) < 2) excluido = 'Está conversando ahora mismo';
+          out.set(t.tel10, { clave: t.tel10, leadId: txt(l.id), contactoId: '', nombre: txt(l.nombre), tel: txt(l.tel), origen: 'chat', motivo: t.ets, excluido });
+          continue;
+        }
+        const c = imp.get(t.tel10);
+        if (!c) continue;
+        out.set(t.tel10, { clave: t.tel10, leadId: '', contactoId: txt(c.id), nombre: txt(c.nombre), tel: '+57' + t.tel10, origen: 'importado', motivo: t.ets,
+          excluido: c.ult_rmk && hace(txt(c.ult_rmk)) < 7 * 24 ? 'Ya recibió un mensaje de remarketing esta semana' : '' });
+      }
+    }
+  }
+  return [...out.values()];
+}
+
+/** Variable de la plantilla: el nombre del cliente, el de la tienda o un texto fijo que escribe la tienda. */
+export interface VariableCampana { tipo: 'nombre' | 'tienda' | 'texto'; valor?: string }
+export interface ExtraCampana { encabezado?: string; media?: string; mediaId?: string; mediaNombre?: string; boton?: string }
+
+const valorVariable = (v: VariableCampana, storeId: string, nombre: string) =>
+  v.tipo === 'nombre' ? (primer(nombre) !== 'hola' ? primer(nombre) : 'cliente') : v.tipo === 'tienda' ? limpio(tiendaDe(storeId)) : limpio(String(v.valor || ''), 200);
+
+/**
+ * Campaña con una plantilla PROPIA de la tienda aprobada por Meta (la única forma de escribirle
+ * a quien no ha escrito en 24 h). Siempre sale con la plantilla, nunca como texto suelto.
+ */
+export async function crearCampanaPlantilla(storeId: string, d: {
+  plantillaId: string; variables: VariableCampana[]; extra: ExtraCampana; filtro: FiltroAudiencia; limite: number; nombre?: string;
+}): Promise<{ id: string; encolados: number; excluidos: number } | { error: string }> {
+  const modo = db.prepare('SELECT modo, conectado FROM whatsapp WHERE store_id = ?').get(storeId) as { modo: string; conectado: number } | undefined;
+  if (!modo?.conectado) return { error: 'Conecta WhatsApp primero.' };
+  if (modo.modo === 'qr') return { error: 'Las campañas con plantilla necesitan la conexión oficial de WhatsApp (por QR Meta no permite plantillas).' };
+  const { plantillaPropia, componentesEnvio } = await import('./plantillasMeta.js');
+  const p = plantillaPropia(storeId, d.plantillaId);
+  if (!p) return { error: 'Esa plantilla no está aprobada por Meta en tu cuenta. Solo se pueden enviar plantillas aprobadas.' };
+  const vars = (d.variables || []).slice(0, p.variables);
+  if (vars.length < p.variables) return { error: `La plantilla "${p.nombre}" tiene ${p.variables} dato(s) para llenar: elige qué va en cada uno.` };
+  const sinTexto = vars.findIndex((v) => v.tipo === 'texto' && !String(v.valor || '').trim());
+  if (sinTexto >= 0) return { error: `Escribe el texto de {{${sinTexto + 1}}}.` };
+  const prueba = componentesEnvio(p, vars.map((v) => valorVariable(v, storeId, 'Camila')), d.extra || {});
+  if ('error' in prueba) return prueba;
+  if (!d.filtro?.segmentos?.length && !d.filtro?.etiquetas?.length) return { error: 'Elige a quién enviarlo: un estado de los leads o una etiqueta.' };
+  const todos = audiencia(storeId, d.filtro);
+  const aptos = todos.filter((x) => !x.excluido).slice(0, Math.max(1, Math.min(5000, d.limite || 200)));
+  if (!aptos.length) return { error: 'No hay contactos para enviar con ese filtro (o todos están excluidos).' };
+  const id = uid();
+  const desc = [...(d.filtro.segmentos || []).map((x) => SEGMENTOS.find((y) => y.id === x)?.titulo || x), ...(d.filtro.etiquetas || []).map((e) => `🏷️ ${e}`)].join(' + ');
+  db.prepare('INSERT INTO remarketing_campanas (id, store_id, nombre, segmento, mensaje, campos, total) VALUES (?,?,?,?,?,?,?)')
+    .run(id, storeId, (d.nombre || `${p.nombre} · ${desc}`).slice(0, 80), JSON.stringify(d.filtro), `tpl:${p.metaId}`, JSON.stringify({ variables: vars, extra: d.extra || {} }), aptos.length);
+  const ins = db.prepare('INSERT INTO remarketing_envios (id, store_id, lead_id, contacto_id, campana_id, tipo, mensaje, params) VALUES (?,?,?,?,?,?,?,?)');
+  db.transaction(() => { for (const a of aptos) ins.run(uid(), storeId, a.leadId, a.contactoId, id, 'campana', `tpl:${p.metaId}`, JSON.stringify(vars.map((v) => valorVariable(v, storeId, a.nombre)))); })();
+  registrarLog(storeId, 'info', 'remarketing', `Campaña "${p.nombre}" en cola: ${aptos.length} contacto(s) (${desc}).`);
+  return { id, encolados: aptos.length, excluidos: todos.length - aptos.length };
+}
+
 // ── Cola y envío ────────────────────────────────────────────────────────────
 const MOTIVOS_PAUSA = /131048|131049|130429|131056|spam|limit|restringid|bloquead/i;
 
@@ -232,6 +324,14 @@ async function enviarUno(e: Fila): Promise<void> {
   const fin = (estado: string, motivo = '', extra: { via?: string; wamid?: string } = {}) =>
     db.prepare("UPDATE remarketing_envios SET estado = ?, motivo = ?, via = ?, wamid = ?, enviado_at = CASE WHEN ? = 'enviado' THEN datetime('now') ELSE enviado_at END WHERE id = ?")
       .run(estado, motivo.slice(0, 300), extra.via || '', extra.wamid || '', estado, txt(e.id));
+  // Contacto importado: su chat se crea ahora, al escribirle por primera vez.
+  if (!txt(e.lead_id) && txt(e.contacto_id)) {
+    const { chatDeContacto } = await import('./contactos.js');
+    const nuevo = await chatDeContacto(storeId, txt(e.contacto_id));
+    if (!nuevo) return void fin('omitido', 'El contacto importado ya no existe.');
+    db.prepare('UPDATE remarketing_envios SET lead_id = ? WHERE id = ?').run(nuevo, txt(e.id));
+    e.lead_id = nuevo;
+  }
   const l = db.prepare('SELECT id, nombre, tel, wa_id, no_contactar FROM leads WHERE id = ? AND store_id = ?').get(txt(e.lead_id), storeId) as Fila | undefined;
   if (!l) return void fin('omitido', 'El chat ya no existe.');
   const ok = puedeEscribirle(storeId, txt(l.tel), txt(l.id));
@@ -239,8 +339,34 @@ async function enviarUno(e: Fila): Promise<void> {
   // ¿Compró o escribió desde que se puso en cola? Ya no hace falta.
   const compro = db.prepare("SELECT 1 FROM orders WHERE store_id = ? AND (lead_id = ? OR (? != '' AND substr(replace(replace(replace(tel,' ',''),'+',''),'-',''), -10) = ?)) AND created_at > ? AND estado != 'Cancelado' LIMIT 1").get(storeId, txt(l.id), diez(l.tel), diez(l.tel), txt(e.creado));
   if (compro) return void fin('omitido', 'Ya compró.');
-  const m = mensajeRmk(txt(e.mensaje));
   const params = pj<string[]>(txt(e.params), []);
+  // Campaña con plantilla propia aprobada por Meta: siempre sale con la plantilla.
+  if (txt(e.mensaje).startsWith('tpl:')) {
+    const { plantillaPropia, componentesEnvio } = await import('./plantillasMeta.js');
+    const p = plantillaPropia(storeId, txt(e.mensaje).slice(4));
+    if (!p) return void fin('fallido', 'La plantilla ya no está aprobada por Meta (revisa su estado en WhatsApp → Plantillas).');
+    const camp = db.prepare('SELECT campos FROM remarketing_campanas WHERE id = ?').get(txt(e.campana_id)) as { campos: string } | undefined;
+    const extra = pj<{ extra?: Record<string, string> }>(camp?.campos || '{}', {}).extra || {};
+    const comp = componentesEnvio(p, params, extra);
+    if ('error' in comp) return void fin('fallido', comp.error);
+    const ultCli0 = (db.prepare("SELECT created_at FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(txt(l.id)) as { created_at: string } | undefined)?.created_at || '';
+    if (ultCli0 && ultCli0 > txt(e.creado)) return void fin('omitido', 'El cliente volvió a escribir.');
+    const r = await sendWhatsappTemplate(storeId, txt(l.wa_id) || txt(l.tel), { nombre: p.nombre, idioma: p.idioma, encabezado: p.encabezado, cuerpo: p.cuerpo, componentes: comp.components }, params, txt(l.tel));
+    if (!r.ok) {
+      fin('fallido', r.error || 'error', { via: 'plantilla' });
+      if (MOTIVOS_PAUSA.test(r.error || '') && txt(e.campana_id)) {
+        db.prepare("UPDATE remarketing_campanas SET estado = 'pausada', motivo = ? WHERE id = ?").run(`Pausada sola: Meta avisó un límite (${(r.error || '').slice(0, 120)}). Espera unas horas antes de reanudar.`, txt(e.campana_id));
+        registrarLog(storeId, 'warn', 'remarketing', `Campaña pausada: Meta avisó un límite o spam (${r.error}).`);
+      }
+      return;
+    }
+    contarProactivo(storeId, txt(l.tel), 'remarketing');
+    const texto = r.textoRender || p.cuerpo.replace(/\{\{\s*(\d+)\s*\}\}/g, (_x, n) => params[Number(n) - 1] || '');
+    db.prepare("INSERT INTO messages (id, lead_id, de, texto, estado, wa_msg_id) VALUES (?,?,'bot',?,'enviado',?)").run(uid(), txt(l.id), texto, r.wamid || null);
+    db.prepare("UPDATE leads SET seguimiento_nivel = 3 WHERE id = ?").run(txt(l.id));
+    return void fin('enviado', '', { via: 'plantilla', wamid: r.wamid || '' });
+  }
+  const m = mensajeRmk(txt(e.mensaje));
   const destino = txt(l.wa_id) || txt(l.tel);
   const ultCli = (db.prepare("SELECT created_at FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(txt(l.id)) as { created_at: string } | undefined)?.created_at || '';
   if (ultCli && ultCli > txt(e.creado) && txt(e.tipo) !== 'rescate') return void fin('omitido', 'El cliente volvió a escribir.');
@@ -368,7 +494,11 @@ function resultados(where: string, args: unknown[]): Resultado {
 }
 
 /** Todo lo que necesita la pantalla de Remarketing. */
-export function panelRemarketing(storeId: string, dias = 60) {
+export async function panelRemarketing(storeId: string, dias = 60) {
+  const { plantillasPropias, sincronizarSiHaceFalta } = await import('./plantillasMeta.js');
+  const { etiquetasTienda } = await import('./contactos.js');
+  const { permisosPlantillas } = await import('./plantillasWA.js');
+  sincronizarSiHaceFalta(storeId);
   const leads = leadsPorSegmento(storeId, dias);
   const w = db.prepare('SELECT modo, conectado FROM whatsapp WHERE store_id = ?').get(storeId) as { modo: string; conectado: number } | undefined;
   const estadoPlantilla = (nombre: string) => {
@@ -379,6 +509,13 @@ export function panelRemarketing(storeId: string, dias = 60) {
     cfg: cfgRemarketing(storeId),
     whatsapp: w?.conectado ? (w.modo === 'qr' ? 'qr' : 'oficial') : 'desconectado',
     enviadosHoy: enviadosHoy(storeId),
+    // Para las campañas con plantilla propia: etiquetas de la tienda y sus plantillas APROBADAS por Meta.
+    etiquetas: etiquetasTienda(storeId),
+    importados: (db.prepare("SELECT COUNT(*) n FROM contactos_importados WHERE store_id = ? AND lead_id = ''").get(storeId) as { n: number }).n,
+    plantillas: plantillasPropias(storeId).map((p) => ({ id: p.id, nombre: p.nombre, categoria: p.categoria, cuerpo: p.cuerpo, variables: p.variables, ejemplos: p.ejemplos,
+      encabezado: p.encabezado, encabezadoTipo: p.encabezadoTipo, varsEncabezado: p.varsEncabezado, pie: p.pie,
+      botones: p.botones.map((b) => ({ tipo: b.tipo, texto: b.texto, variable: b.variable })) })),
+    puedeCrearPlantillas: permisosPlantillas(storeId).crear,
     segmentos: SEGMENTOS.map((s) => {
       const ls = leads.filter((l) => l.segmento === s.id);
       return { ...s, total: ls.length, aptos: ls.filter((l) => !l.excluido).length, ventanaAbierta: ls.filter((l) => !l.excluido && l.ventanaAbierta).length };
