@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { resolverNombreCliente, nombreValido } from './nombres.js';
+import { resolverNombreCliente, nombreValido, limpiarNombre } from './nombres.js';
 import { db, pj, registrarLog } from './db.js';
 import { conPedido, trazar, trazarApi } from './trazabilidad.js';
 import { emparejarItem, emparejarArticulos, palabrasClave, separarItemsPedido, type Emparejado, tokensVariante, mismoToken } from './emparejar.js';
@@ -952,6 +952,9 @@ for (const f of db.prepare("SELECT provincia, COUNT(*) n FROM effi_geo WHERE tip
 
 /** Convierte "Antioquia" + "Medellín" en los ids de Effi. Tolera tildes y "Bogotá D.C.". */
 export async function resolverUbicacion(apiKey: string, departamento: string, ciudad: string): Promise<{ provincia: string; ciudad: string; nombre: string } | { error: string }> {
+  // Municipio que no es de ese departamento (Ciénaga en Córdoba…): no se despacha, se corrige primero.
+  const chequeo = (await import('./colombiaGeo.js')).chequearCiudad(departamento, ciudad);
+  if (!chequeo.ok) return { error: chequeo.motivo };
   const nc = norm(ciudad).replace(/\b(d c|dc|distrito capital)\b/g, '').trim();
   let nd = norm(departamento).replace(/\b(departamento|depto|de)\b/g, ' ').replace(/\s+/g, ' ').trim();
   if (!nd && /bogota/.test(nc)) nd = 'bogota';
@@ -964,7 +967,8 @@ export async function resolverUbicacion(apiKey: string, departamento: string, ci
   const buscarEn = candProv.length ? candProv : [];
   for (const p of buscarEn) {
     const cs = await ciudadesDe(apiKey, p.id);
-    const hit = cs.find((c) => norm(c.nombre) === nc) || cs.find((c) => nc && (norm(c.nombre).startsWith(nc) || nc.startsWith(norm(c.nombre))));
+    // Solo el nombre EXACTO: "empieza por" mandaba Ciénaga a Ciénaga de Oro (otro municipio = devolución).
+    const hit = cs.find((c) => norm(c.nombre).replace(/\b(d c|dc|distrito capital)\b/g, '').trim() === nc);
     if (hit) { void precargarGeo(apiKey).catch(() => {}); return { provincia: p.id, ciudad: hit.id, nombre: `${hit.nombre}, ${p.nombre}` }; }
   }
   const r = await effi<Fila[]>(apiKey, 'GET', '/api/ciudad', { query: { nombre: ciudad.trim().slice(0, 40), por_pagina: 100 } });
@@ -1635,21 +1639,41 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_effi_eventos_store ON effi_eventos(store
 const celular10 = (t: string) => { const d = String(t || '').replace(/\D/g, ''); return d.length > 10 && d.startsWith('57') ? d.slice(-10) : d.slice(-10); };
 const hoyMas = (dias: number) => new Date(Date.now() - 5 * 3600e3 + dias * 86400e3).toISOString().slice(0, 10); // hora Colombia
 
+/**
+ * Nombre de persona para Effi: el que el cliente escribió en el chat; si no, el del pedido limpio de
+ * emojis, símbolos y correos. '' si no hay ninguno que sirva (nunca "Cliente", un correo o un número).
+ */
+function nombreParaEffi(o: Fila): string {
+  const elegido = resolverNombreCliente(txt(o.lead_id), txt(o.cliente), '');
+  if (nombreValido(elegido)) return limpiarNombre(elegido).slice(0, 120);
+  // "ana.perez@gmail.com" o "💕Ana Pérez💕 3001234567": se quita lo que no es nombre y se vuelve a mirar.
+  const crudo = txt(o.cliente).replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, ' ').replace(/\d+/g, ' ');
+  const limpio = limpiarNombre(crudo);
+  return nombreValido(limpio) ? limpio.slice(0, 120) : '';
+}
+
 /** Busca el cliente en Effi por cédula (= celular); si no existe, lo crea. Devuelve el código del tercero. */
 async function clienteEffi(c: EffiCfg, o: Fila, ubic: { provincia: string; ciudad: string }): Promise<{ tercero: string } | { error: string }> {
   const numero = celular10(txt(o.tel));
   if (numero.length < 7) return { error: 'El pedido no tiene un celular válido (se usa como documento del cliente en Effi).' };
   const busca = await effi<Fila[]>(c.apiKey, 'GET', '/api/cliente', { query: { t_dni: T_DNI_CEDULA, numero, por_pagina: 5 } });
   // Nombre real del cliente (el que escribió en el chat), nunca un correo o un apodo de perfil.
-  const nombre = resolverNombreCliente(txt(o.lead_id), txt(o.cliente), '').slice(0, 120);
+  const nombre = nombreParaEffi(o);
+  if (!nombre) {
+    // Sin un nombre de persona no se crea el cliente: quedaría en Effi (y en la guía) como un correo,
+    // símbolos o "Cliente", y la transportadora no encuentra a quién entregar.
+    return { error: `El pedido no tiene un nombre de cliente válido («${txt(o.cliente) || 'vacío'}»). Escribe el nombre y apellido del cliente en el pedido y vuelve a despachar.` };
+  }
   if (busca.ok && busca.body.data?.length) {
-    const yaEnEffi = txt(busca.body.data[0].nombre);
-    // El cliente ya existía en Effi (mismo celular) con un nombre que no es de persona: se avisa.
-    const tercero = txt(busca.body.data[0].tercero);
-    // El cliente ya existía en Effi (mismo celular) con otro nombre: se corrige al del pedido
-    // (PUT api/cliente solo cambia lo que se envía), para que la remisión y la guía salgan bien.
+    const fila = busca.body.data[0];
+    // Effi manda el nombre en `nombre` o, según la cuenta, en razón social / nombre del tercero.
+    const yaEnEffi = txt(fila.nombre) || txt(fila.razon_social) || txt(fila.nombre_tercero) || nombreDeFila(fila);
+    const tercero = txt(fila.tercero);
+    // El cliente ya existía en Effi (mismo celular) con otro nombre (o con un correo/símbolos): se
+    // corrige al del pedido (PUT api/cliente solo cambia lo que se envía), para que la remisión y la
+    // guía salgan bien. Antes, si Effi no traía el nombre en `nombre`, no se corregía nunca.
     const norm = (x: string) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
-    if (yaEnEffi && nombreValido(nombre) && norm(yaEnEffi) !== norm(nombre)) {
+    if (norm(yaEnEffi) !== norm(nombre)) {
       const up = await effi<Fila>(c.apiKey, 'PUT', '/api/cliente', { body: { codigo: Number(tercero), nombre } });
       trazar(txt(o.store_id), txt(o.id), up.ok
         ? { etapa: 'despacho', nivel: 'info', titulo: `Nombre del cliente corregido en Effi: «${yaEnEffi}» → «${nombre}»` }
