@@ -75,3 +75,12 @@ WhatsApp solo deja escribirle primero a un cliente con una **plantilla aprobada*
 3. Deja marcado **Que el asistente atienda cuando respondan** si quieres que el bot siga la conversación.
 4. **Enviar**: va por tandas, con pausas, para cuidar tu número. Al final ves cuáles salieron y cuáles no (con el motivo) y puedes **Abrir chat**.
 No se envía a clientes bloqueados ni a quien pidió que no le escribieran. Escríbele solo a clientes que ya compraron o aceptaron que los contactes: si muchos bloquean o reportan, Meta baja la calidad del número. Meta cobra cada plantilla. Solo el dueño de la tienda puede usarlo. Si no tienes plantillas aprobadas, pide al equipo de DealFlow que publique una.
+
+
+## Importar contactos (CSV) con etiqueta y campañas de remarketing con tu plantilla
+Sección: leads, remarketing
+Claves: importar contactos, csv, excel, contactos de otro bot, etiqueta, etiquetas personalizadas, campaña, remarketing, plantilla propia, plantilla aprobada, enviar a etiqueta
+En **Leads → Remarketing**:
+1. **Contactos y etiquetas → Importar CSV**: sube el exporte del otro bot (en Excel: Guardar como → CSV). Elige la columna del celular (y la del nombre), escribe la **etiqueta** para todos (ej. "Bot anterior") y confirma que esos contactos aceptaron mensajes de tu tienda. Los celulares inválidos o repetidos no se importan; si un número ya era un chat, solo recibe la etiqueta. Los importados no aparecen en el Inbox hasta que les envíes una campaña o te escriban.
+2. **Campaña con tu plantilla**: solo se pueden usar **plantillas tuyas aprobadas por Meta**. Con **＋ Crear plantilla y enviarla a Meta** la creas ahí mismo (si tu tienda tiene el constructor activo) y esperas la aprobación. Luego elige la plantilla, qué va en cada {{n}} (nombre del cliente, nombre de la tienda o un texto tuyo) y **a quién**: por estado del lead, por etiqueta, o las dos. Verás cuántos la pueden recibir antes de enviar.
+Sale de a pocos (8 a. m. a 8 p. m.), nunca a quien pidió la baja ni a quien ya recibió remarketing esa semana, y se pausa sola si Meta avisa límite o spam.

@@ -3168,7 +3168,53 @@ api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requirePermiso('
 // ── Remarketing saliente (remarketing.ts) ──
 api.get('/remarketing', requireAuth, requireStore, requireOwner, async (req, res) => {
   const rm = await import('./remarketing.js');
-  res.json(rm.panelRemarketing(req.user!.storeId!, Math.min(365, Math.max(7, Number(req.query.dias) || 60))));
+  res.json(await rm.panelRemarketing(req.user!.storeId!, Math.min(365, Math.max(7, Number(req.query.dias) || 60))));
+});
+// Audiencia de una campaña (estados del lead y/o etiquetas): cuántos y los primeros 100.
+const filtroAudiencia = (b: Record<string, unknown>) => ({
+  segmentos: (Array.isArray(b.segmentos) ? b.segmentos : []).map(String).slice(0, 10) as never[],
+  etiquetas: (Array.isArray(b.etiquetas) ? b.etiquetas : []).map((e) => String(e).slice(0, 40)).slice(0, 30),
+  dias: Math.min(365, Math.max(7, Number(b.dias) || 60)),
+});
+api.post('/remarketing/audiencia', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const rm = await import('./remarketing.js');
+  const todos = rm.audiencia(req.user!.storeId!, filtroAudiencia(req.body || {}));
+  res.json({ total: todos.length, aptos: todos.filter((x) => !x.excluido).length, importados: todos.filter((x) => x.origen === 'importado' && !x.excluido).length, muestra: todos.slice(0, 100) });
+});
+// Campaña con una plantilla PROPIA aprobada por Meta (la única que se puede enviar).
+api.post('/remarketing/campanas-plantilla', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const rm = await import('./remarketing.js');
+  const b = req.body || {};
+  const sid = req.user!.storeId!;
+  const plantillaId = String(b.plantillaId || '');
+  let extra = extraDe(b);
+  const ar = await resolverArchivoPlantilla(sid, plantillaId, extra);
+  if ('error' in ar) return res.status(400).json(ar);
+  extra = ar;
+  const variables = (Array.isArray(b.variables) ? b.variables : []).slice(0, 20).map((v: Record<string, unknown>) => ({
+    tipo: (v?.tipo === 'nombre' || v?.tipo === 'tienda' ? v.tipo : 'texto') as 'nombre' | 'tienda' | 'texto', valor: String(v?.valor ?? '').slice(0, 200),
+  }));
+  const r = await rm.crearCampanaPlantilla(sid, { plantillaId, variables, extra, filtro: filtroAudiencia(b), limite: Number(b.limite) || 200, nombre: b.nombre ? String(b.nombre).slice(0, 80) : undefined });
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ok: true, ...r });
+});
+// ── Contactos importados (CSV) y etiquetas ──
+api.post('/contactos/importar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const b = req.body || {};
+  if (b.consentimiento !== true) return res.status(400).json({ error: 'Confirma que estos contactos aceptaron recibir mensajes de tu tienda (Meta lo exige para las campañas).' });
+  const { importarContactos } = await import('./contactos.js');
+  const filas = (Array.isArray(b.filas) ? b.filas : []).map((f: Record<string, unknown>) => ({ nombre: String(f?.nombre ?? ''), telefono: String(f?.telefono ?? ''), etiquetas: String(f?.etiquetas ?? '') }));
+  const r = importarContactos(req.user!.storeId!, filas, String(b.etiqueta || ''), String(b.origen || 'CSV'));
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ok: true, ...r });
+});
+api.get('/contactos/etiquetas', requireAuth, requireStore, async (req, res) => {
+  const { etiquetasTienda } = await import('./contactos.js');
+  res.json({ etiquetas: etiquetasTienda(req.user!.storeId!) });
+});
+api.delete('/contactos/etiquetas/:etiqueta', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { borrarEtiqueta } = await import('./contactos.js');
+  res.json({ ok: true, quitadas: borrarEtiqueta(req.user!.storeId!, String(req.params.etiqueta)) });
 });
 api.put('/remarketing/config', requireAuth, requireStore, requireOwner, async (req, res) => {
   const rm = await import('./remarketing.js');
