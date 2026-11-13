@@ -103,12 +103,12 @@ function repararDuplicados(productId: string, opciones: { nombre: string; valore
   return { opciones: quedan, borradas, grupos: gruposQuitados };
 }
 
-export interface ResultadoSyncDropi { tipo: 'SIMPLE' | 'VARIABLE'; nombreDropi: string; vinculadas: number; creadas: number; conStock: number; sinDropi: string[]; total: number; renombradas?: number; repetidas?: string[]; sinVariante?: string[]; duplicadasQuitadas?: number; gruposQuitados?: string[] }
+export interface ResultadoSyncDropi { deDropi?: string[]; tipo: 'SIMPLE' | 'VARIABLE'; nombreDropi: string; vinculadas: number; creadas: number; conStock: number; sinDropi: string[]; total: number; renombradas?: number; repetidas?: string[]; sinVariante?: string[]; duplicadasQuitadas?: number; gruposQuitados?: string[] }
 
 export async function sincronizarProductoDropi(storeId: string, productId: string, dropiIdBody?: string, silencioso = false): Promise<ResultadoSyncDropi | { error: string }> {
   const cred = credDropi(storeId);
   if (!cred) return { error: 'Conecta Dropi en Integraciones primero.' };
-  const p = db.prepare('SELECT id, nombre, sku, opciones, despacho_proveedor FROM products WHERE id = ? AND store_id = ?').get(productId, storeId) as { id: string; nombre: string; sku: string; opciones: string; despacho_proveedor: string } | undefined;
+  const p = db.prepare("SELECT id, nombre, sku, opciones, despacho_proveedor, COALESCE(variantes_fuente,'') variantes_fuente FROM products WHERE id = ? AND store_id = ?").get(productId, storeId) as { id: string; nombre: string; sku: string; opciones: string; despacho_proveedor: string; variantes_fuente: string } | undefined;
   if (!p) return { error: 'Producto no encontrado.' };
   const dropiId = String(dropiIdBody || p.sku || '').replace(/\D/g, '');
   if (!dropiId) return { error: 'Escribe el ID del producto en Dropi (el número que sale en Dropi en el detalle del producto).' };
@@ -165,8 +165,11 @@ export async function sincronizarProductoDropi(storeId: string, productId: strin
 
   const existentes = db.prepare("SELECT id, label, COALESCE(refs,'{}') refs FROM variants WHERE product_id = ? ORDER BY orden").all(productId) as { id: string; label: string; refs: string }[];
   const reales = existentes.filter((e) => norm(e.label) !== 'unica' && e.label.trim());
-  // Con variantes ya armadas, sincronizar SOLO vincula: no crea variantes ni grupos nuevos.
-  const soloVincular = reales.length > 0;
+  // Con variantes armadas por la tienda, sincronizar SOLO vincula: no crea variantes ni grupos nuevos.
+  // Si las variantes las define Dropi (ya se sincronizó antes), Dropi manda: se crean las variaciones
+  // que falten (p. ej. quedaron 2 variantes solo con color y en Dropi son 12 de talla y color).
+  const deDropi = p.variantes_fuente === 'dropi';
+  const soloVincular = reales.length > 0 && !deDropi;
   const usadas = new Set<string>();
   let vinculadas = 0, creadas = 0, conStock = 0;
   const sinVariante: string[] = [];
@@ -221,10 +224,23 @@ export async function sincronizarProductoDropi(storeId: string, productId: strin
     db.prepare("UPDATE products SET opciones = ?, variantes_fuente = 'dropi' WHERE id = ?").run(JSON.stringify(nuevas), productId);
   })();
 
+  // Variantes definidas por Dropi que ya no corresponden a ninguna variación (p. ej. las viejas con
+  // solo el color) y sin pedidos: se quitan, para que el asistente no ofrezca combinaciones que no existen.
+  let quitadas = 0;
+  if (deDropi && dp.variaciones.length) {
+    for (const e of reales.filter((x) => !usadas.has(x.id))) {
+      const conPedidos = db.prepare('SELECT 1 FROM order_items WHERE variant_id = ? LIMIT 1').get(e.id);
+      if (conPedidos) continue;
+      db.prepare('DELETE FROM variants WHERE id = ?').run(e.id);
+      usadas.add(e.id); quitadas++;
+    }
+  }
   const sinDropi = reales.filter((e) => !usadas.has(e.id)).map((e) => e.label);
   if (!silencioso || creadas || reparadas.borradas) registrarLog(storeId, 'info', 'dropi', `Producto "${p.nombre}" sincronizado con Dropi #${dropiId}: ${vinculadas} vinculadas, ${creadas} nuevas${sinDropi.length ? `, ${sinDropi.length} sin variación en Dropi` : ''}${sinVariante.length ? `, ${sinVariante.length} variaciones de Dropi sin variante en DealFlow` : ''}${reparadas.borradas ? `, ${reparadas.borradas} duplicadas quitadas` : ''}.`);
   if (conRepetidas.length) registrarLog(storeId, 'warn', 'dropi', `Producto "${p.nombre}": Dropi tiene variaciones que no se distinguen por sus atributos (${conRepetidas.slice(0, 5).join(', ')}). Muestra: ${JSON.stringify(dp.variaciones.slice(0, 2).map((v) => ({ id: v.id, nombre: v.nombre, attrs: v.attrs })))}`);
-  return { tipo: 'VARIABLE', nombreDropi: dp.name, vinculadas, creadas, conStock, sinDropi, total: dp.variaciones.length, renombradas, repetidas: conRepetidas, sinVariante, duplicadasQuitadas: reparadas.borradas, gruposQuitados: reparadas.grupos };
+  return { tipo: 'VARIABLE', nombreDropi: dp.name, vinculadas, creadas, conStock, sinDropi, total: dp.variaciones.length, renombradas, repetidas: conRepetidas, sinVariante, duplicadasQuitadas: reparadas.borradas + quitadas, gruposQuitados: reparadas.grupos,
+    // Lo que Dropi devolvió, para ver de un vistazo si cada variación trae su talla y su color.
+    deDropi: dp.variaciones.slice(0, 60).map((v) => etiquetas.get(v.id) || v.atributos) };
 }
 
 /** Repaso periódico: re-sincroniza (stock y variaciones nuevas) los productos ya vinculados con Dropi. */
