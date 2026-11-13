@@ -354,15 +354,50 @@ function guiaPorPatron(o: unknown, nivel = 0): string {
 }
 
 /** Estado, guía, transportadora asignada y PDF de una orden de Dropi (venga como venga la respuesta). */
-export async function estadoOrden(cred: DropiCred, id: string): Promise<{ estado: string; guia: string; transportadora: string; guiaUrl: string; llaves: string[]; cruda: Record<string, unknown> } | { error: string }> {
+// Listado de órdenes de Dropi por cuenta (caché de 3 min): una sola lectura sirve para todos los
+// pedidos de la tienda en el mismo ciclo.
+const cacheListado = new Map<string, { at: number; ordenes: Map<string, Record<string, unknown>> }>();
+async function ordenDelListado(cred: DropiCred, id: string): Promise<Record<string, unknown> | null> {
+  let c = cacheListado.get(cred.token);
+  if (!c || Date.now() - c.at > 3 * 60_000) {
+    const ordenes = new Map<string, Record<string, unknown>>();
+    for (let start = 0; start < 300; start += 100) {
+      const r = await dropiHttp<unknown>(cred, 'GET', `/orders/myorders?result_number=100&start=${start}`);
+      if (!r.ok) break;
+      const b = r.body as Record<string, unknown>;
+      const lista = (Array.isArray(b.objects) ? b.objects : Array.isArray(b.data) ? b.data : []) as Record<string, unknown>[];
+      for (const x of lista) { const k = String(x.id ?? x.order_id ?? ''); if (k) ordenes.set(k, x); }
+      if (lista.length < 100) break;
+    }
+    c = { at: Date.now(), ordenes };
+    cacheListado.set(cred.token, c);
+  }
+  return c.ordenes.get(String(id)) || null;
+}
+/** Estado que todavía espera la confirmación de la tienda en Dropi (o que no dice nada). */
+const sinConfirmar = (e: string) => !e.trim() || /pendiente\s*(de\s*)?confirm/i.test(e.replace(/_/g, ' '));
+
+export async function estadoOrden(cred: DropiCred, id: string): Promise<{ estado: string; guia: string; transportadora: string; guiaUrl: string; llaves: string[]; cruda: Record<string, unknown>; fuente?: string } | { error: string }> {
   try {
     const r = await dropi<Record<string, unknown>>(cred, 'GET', `/orders/myorders/${encodeURIComponent(id)}`);
-    if (!r.ok) return { error: `Dropi respondió ${r.http || 'sin conexión'} al consultar la orden ${id}: ${r.body.message || 'sin detalle'}` };
     // La orden puede venir en objects (objeto o lista), en data o suelta.
     const b = r.body as Record<string, unknown>;
     const cand = b.objects ?? b.data ?? b;
-    const o = (Array.isArray(cand) ? cand[0] : cand) as Record<string, unknown> | undefined;
-    if (!o || typeof o !== 'object') return { error: `Dropi no devolvió la orden ${id}.` };
+    let o = (r.ok ? (Array.isArray(cand) ? cand[0] : cand) : null) as Record<string, unknown> | null | undefined;
+    // El detalle de la orden a veces se queda en «PENDIENTE CONFIRMACIÓN» aunque la tienda ya la
+    // confirmó en Dropi (o falla). El listado de órdenes sí trae el estado al día: si dice otra cosa,
+    // manda el listado. Así el pedido avanza y salen los avisos al cliente.
+    let fuente = 'detalle';
+    const estadoDetalle = o && typeof o === 'object' ? buscar(o, ['status', 'estado', 'order_status', 'status_name']) : '';
+    if (!o || typeof o !== 'object' || sinConfirmar(estadoDetalle)) {
+      const enLista = await ordenDelListado(cred, id).catch(() => null);
+      const estadoLista = enLista ? buscar(enLista, ['status', 'estado', 'order_status', 'status_name']) : '';
+      if (enLista && (!o || typeof o !== 'object' || (estadoLista && !sinConfirmar(estadoLista)))) {
+        o = o && typeof o === 'object' ? { ...o, ...Object.fromEntries(Object.entries(enLista).filter(([, v]) => v != null && v !== '')) } : enLista;
+        fuente = 'listado';
+      }
+    }
+    if (!o || typeof o !== 'object') return { error: r.ok ? `Dropi no devolvió la orden ${id}.` : `Dropi respondió ${r.http || 'sin conexión'} al consultar la orden ${id}: ${r.body.message || 'sin detalle'}` };
     // Si la orden dice que ya hay guía pero el detalle no trae el número, se busca la
     // misma orden en el listado (a veces trae los datos de envío que el detalle no).
     let extra: Record<string, unknown> | null = null;
@@ -383,6 +418,7 @@ export async function estadoOrden(cred: DropiCred, id: string): Promise<{ estado
       guiaUrl: guiaS3 ? (guiaS3.startsWith('http') ? guiaS3 : PDF_BASE + guiaS3.replace(/^\/+/, '')) : '',
       llaves: Object.keys(o).slice(0, 40),
       cruda: o,
+      fuente,
     };
   } catch {
     return { error: 'No pudimos consultar la orden en Dropi.' };

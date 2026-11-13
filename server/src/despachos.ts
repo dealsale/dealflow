@@ -15,9 +15,9 @@ import { estadoLogistico, siguienteEstado } from './estadosPedido.js';
 interface OrdenSync {
   id: string; store_id: string; numero: number; tel: string; guia: string | null;
   estado: string; dropi_order_id: string; guia_url: string | null; guia_avisada: number;
-  dropi_desde: string; guia_vista_at: string; dropi_sin_guia_aviso: number;
+  dropi_desde: string; guia_vista_at: string; dropi_sin_guia_aviso: number; estado_woo?: string;
 }
-const COLS = "id, store_id, numero, tel, guia, estado, dropi_order_id, guia_url, guia_avisada, COALESCE(dropi_desde,'') dropi_desde, COALESCE(guia_vista_at,'') guia_vista_at, COALESCE(dropi_sin_guia_aviso,0) dropi_sin_guia_aviso";
+const COLS = "id, store_id, numero, tel, guia, estado, COALESCE(estado_woo,'') estado_woo, dropi_order_id, guia_url, guia_avisada, COALESCE(dropi_desde,'') dropi_desde, COALESCE(guia_vista_at,'') guia_vista_at, COALESCE(dropi_sin_guia_aviso,0) dropi_sin_guia_aviso";
 
 // Calendario de consultas de Dropi POR PEDIDO, guardado en la base (sobrevive reinicios):
 //  - dropi_desde: desde cuándo seguimos esta orden de Dropi.
@@ -115,13 +115,13 @@ export async function sincronizarDespachos(): Promise<void> {
 
 /** Lee una orden de Dropi (API oficial): guía, PDF y estado; avisa la guía si es nueva. */
 async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: string } | { error: string }> {
-  let r: { estado: string; guia: string; guiaUrl?: string; transportadora?: string } | { error: string };
+  let r: { estado: string; guia: string; guiaUrl?: string; transportadora?: string; fuente?: string } | { error: string };
   try {
     const { credDropi, estadoOrden } = await import('./dropiApi.js');
     const c = credDropi(o.store_id);
     if (!c) return { error: 'Dropi API sin conectar.' };
     const rr = await estadoOrden(c, o.dropi_order_id);
-    r = 'error' in rr ? rr : { estado: rr.estado, guia: rr.guia, guiaUrl: rr.guiaUrl, transportadora: rr.transportadora };
+    r = 'error' in rr ? rr : { estado: rr.estado, guia: rr.guia, guiaUrl: rr.guiaUrl, transportadora: rr.transportadora, fuente: rr.fuente };
     // Rastro para el dueño (una vez por motivo): por qué no avanza este pedido.
     const motivo = 'error' in rr ? `error:${rr.error}` : (!rr.guia ? `sin-guia:${rr.estado}` : '');
     if (motivo && avisado.get(o.id) !== motivo) {
@@ -139,6 +139,10 @@ async function sincronizarDropi(o: OrdenSync): Promise<{ estado: string; guia: s
   if (guiaNueva && guiaNueva !== (o.guia || '')) { cambios.push('guia = ?'); params.push(guiaNueva); }
   if (r.guiaUrl && r.guiaUrl !== (o.guia_url || '')) { cambios.push('guia_url = ?'); params.push(r.guiaUrl); }
   if (r.estado) { cambios.push('estado_woo = ?'); params.push(r.estado); }
+  if (r.estado && r.estado !== (o.estado_woo || '')) {
+    const { trazar } = await import('./trazabilidad.js');
+    trazar(o.store_id, o.id, { etapa: 'despacho', nivel: 'info', titulo: `Dropi: ${o.estado_woo || 'sin estado'} → ${r.estado}`, detalle: r.fuente === 'listado' ? 'Leído del listado de órdenes de Dropi (el detalle de la orden seguía con el estado anterior).' : '' });
+  }
   // La transportadora real (Interrapidísimo, Envía…) para el mensaje al cliente.
   if (r.transportadora && r.transportadora.trim()) { cambios.push('transportadora = ?'); params.push(r.transportadora.trim().slice(0, 60)); }
   const destino = siguienteEstado(o.estado, estadoLogistico(r.estado, !!(guiaNueva || o.guia)));
