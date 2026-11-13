@@ -29,13 +29,14 @@ export const SIN_OPENAI = 'El Marketing IA no está disponible ahora mismo. (Fal
 export async function chatJSON<T>(
   system: string,
   user: string,
-  opciones: { imagen?: string; maxTokens?: number; temperatura?: number } = {},
+  opciones: { imagen?: string; imagenes?: string[]; maxTokens?: number; temperatura?: number } = {},
 ): Promise<{ data?: T; error?: string }> {
   const key = claveOpenAI();
   if (!key) return { error: SIN_OPENAI };
-  const conImagen = !!opciones.imagen && opciones.imagen.startsWith('data:image');
-  const contenido: unknown = conImagen
-    ? [{ type: 'text', text: user }, { type: 'image_url', image_url: { url: opciones.imagen } }]
+  // Una o varias imágenes (data URL): la IA las mira todas (más fotos = entiende mejor el producto).
+  const imgs = [...(opciones.imagen ? [opciones.imagen] : []), ...(opciones.imagenes || [])].filter((u) => u && u.startsWith('data:image')).slice(0, 10);
+  const contenido: unknown = imgs.length
+    ? [{ type: 'text', text: user }, ...imgs.map((u) => ({ type: 'image_url', image_url: { url: u } }))]
     : user;
   try {
     const res = await fetch(`${OPENAI}/chat/completions`, {

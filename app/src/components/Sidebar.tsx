@@ -128,6 +128,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             </a>
             {!df.isSoporte && <>
             {adminItem('proveedores', <span style={{ fontSize: 16 }}>🤝</span>, 'Proveedores')}
+            {adminItem('estudio', <span style={{ fontSize: 16 }}>🎬</span>, 'Estudio IA')}
             {adminItem('contabilidad', <IconVentas />, 'Contabilidad')}
             {adminItem('planes', <IconPlanes />, 'Planes')}
             {adminItem('cuentas', <IconCuentas />, 'Cuentas')}

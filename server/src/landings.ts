@@ -538,7 +538,7 @@ export function tiendaDeHost(host: string): string | null {
   }
   return null;
 }
-function dominioActivo(storeId: string): string {
+export function dominioActivo(storeId: string): string {
   const r = db.prepare('SELECT landing_dominio, landing_dominio_estado FROM stores WHERE id = ?').get(storeId) as { landing_dominio: string; landing_dominio_estado: string } | undefined;
   if (r?.landing_dominio && r.landing_dominio_estado === 'activo') return r.landing_dominio;
   return RAIZ_LANDINGS ? `${subdominioTienda(storeId)}.${RAIZ_LANDINGS}` : '';

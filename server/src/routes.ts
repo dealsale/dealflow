@@ -2644,6 +2644,61 @@ api.get('/estudio/proyectos/:id/zip', requireAuth, requireStore, async (req, res
   res.send(r.datos);
 });
 
+// Lanzar piezas del estudio a Meta (campaña → conjunto → anuncios, en pausa) y activarlas.
+api.get('/estudio/proyectos/:id/meta', requireAuth, requireStore, async (req, res) => {
+  const M = await import('./estudioMeta.js');
+  res.json({ opciones: await M.opcionesLanzar(req.user!.storeId!), lanzamientos: await M.listarLanzamientos(req.user!.storeId!, req.params.id) });
+});
+api.post('/estudio/proyectos/:id/lanzar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const r = await (await import('./estudioMeta.js')).crearLanzamiento(req.user!.storeId!, req.params.id, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/estudio/lanzamientos/:id/estado', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const r = await (await import('./estudioMeta.js')).cambiarEstado(req.user!.storeId!, req.params.id, req.body?.activar === true);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/estudio/lanzamientos/:id/reintentar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const r = (await import('./estudioMeta.js')).reintentar(req.user!.storeId!, req.params.id);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+
+// Referencias de estilo del Estudio (Admin → Estudio IA): videos de ejemplo + indicaciones generales.
+api.get('/admin/estudio', requireAuth, requireAdmin, async (_req, res) => {
+  res.json((await import('./estudio.js')).listarReferencias());
+});
+api.put('/admin/estudio/indicaciones', requireAuth, requireAdmin, async (req, res) => {
+  (await import('./estudio.js')).guardarIndicaciones(String(req.body?.texto || ''));
+  registrarAccionEquipo(req.user!.email, 'Editó las indicaciones generales del Estudio IA');
+  res.json({ ok: true });
+});
+api.post('/admin/estudio/referencias', requireAuth, requireAdmin, async (req, res) => {
+  const r = (await import('./estudio.js')).subirReferencia(req.body || {}, req.user!.email);
+  if ('error' in r) return res.status(400).json(r);
+  registrarAccionEquipo(req.user!.email, `Subió un video de referencia al Estudio IA (${String(req.body?.titulo || '').slice(0, 60)})`);
+  res.json(r);
+});
+api.patch('/admin/estudio/referencias/:id', requireAuth, requireAdmin, async (req, res) => {
+  (await import('./estudio.js')).editarReferencia(req.params.id, req.body || {});
+  res.json({ ok: true });
+});
+api.post('/admin/estudio/referencias/:id/analizar', requireAuth, requireAdmin, async (req, res) => {
+  void (await import('./estudio.js')).analizarReferencia(req.params.id);
+  res.json({ ok: true });
+});
+api.delete('/admin/estudio/referencias/:id', requireAuth, requireAdmin, async (req, res) => {
+  (await import('./estudio.js')).borrarReferencia(req.params.id);
+  res.json({ ok: true });
+});
+api.get('/estudio-ref/:file', requireAuth, requireAdmin, async (req, res) => {
+  const { DIR_REF } = await import('./estudio.js');
+  const f = mediaPath(DIR_REF, req.params.file);
+  if (!existsSync(f)) return res.status(404).end();
+  res.sendFile(f);
+});
+
 // ── Créditos del Marketing IA (saldo, paquetes, recarga por Wompi) ────
 api.get('/creditos', requireAuth, requireStore, async (req, res) => {
   const { saldo, movimientos, PAQUETES, COSTO } = await import('./creditos.js');

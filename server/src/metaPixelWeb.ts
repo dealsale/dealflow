@@ -50,6 +50,8 @@ function guardar(storeId: string, c: Cfg): void {
     ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).run(storeId, JSON.stringify(c));
 }
 const limpiarPixel = (p: unknown) => String(p || '').replace(/\D/g, '').slice(0, 20);
+/** Píxeles que la tienda ya configuró (con token de Conversions API). */
+export function pixelesDe(storeId: string): string[] { return Object.keys(cfg(storeId).tokens).filter(Boolean); }
 export function tokenDePixel(storeId: string, pixelId: string): string { return cfg(storeId).tokens[limpiarPixel(pixelId)]?.token || ''; }
 
 /** Guarda (o borra, con token vacío) el token de un píxel. */

@@ -130,6 +130,9 @@ export function textoDeUrl(url: string, method: string): string | null {
   if (/\/landings\/tienda(\/vista)?$/.test(u)) return null;
   if (/\/estudio\/proyectos\/[^/]+\/paquete$/.test(u)) return 'La IA está pensando las ideas, los guiones y los textos…';
   if (/\/estudio\/piezas\/[^/]+\/generar$/.test(u)) return 'Generando con IA… (una foto tarda hasta un minuto)';
+  if (/\/estudio\/proyectos\/[^/]+\/lanzar$/.test(u)) return 'Preparando la campaña para Meta…';
+  if (/\/estudio\/lanzamientos\/[^/]+\/estado$/.test(u)) return 'Actualizando la campaña en Meta…';
+  if (/\/admin\/estudio\/referencias$/.test(u)) return 'Subiendo el video de referencia…';
   if (method === 'DELETE') return 'Eliminando…';
   if (/effi\/despachar/.test(u)) return 'Creando la remisión en Effi…';
   if (/effi\/guia|guia-manual/.test(u)) return 'Generando la guía de transporte…';

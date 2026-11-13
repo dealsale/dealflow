@@ -18,6 +18,7 @@ import { EditarTiendaSoporte } from './components/EditarTiendaSoporte';
 import { EquipoDealFlow } from './sections/admin/EquipoDealFlow';
 import { AsistenteSoporte } from './components/AsistenteSoporte';
 import { Proveedores } from './sections/admin/Proveedores';
+import { EstudioAdmin } from './sections/admin/EstudioAdmin';
 import { Dropdown } from './components/Dropdown';
 import { apiSoporteTiendas, apiSoporteCambiar, apiRevisarPlanShopify } from './lib/api';
 import { Sidebar } from './components/Sidebar';
@@ -383,6 +384,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
       {df.adminSection === 'trazabilidad' && <Trazabilidad df={df} />}
       {df.isSoporte ? null : <>
       {df.adminSection === 'proveedores' && <Proveedores />}
+      {df.adminSection === 'estudio' && !df.isSoporte && <EstudioAdmin />}
       {df.adminSection === 'contabilidad' && <Contabilidad />}
       {df.adminSection === 'planes' && <Planes df={df} />}
       {df.adminSection === 'cuentas' && <Cuentas df={df} />}

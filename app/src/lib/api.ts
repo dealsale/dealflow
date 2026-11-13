@@ -1308,12 +1308,12 @@ export interface PiezaEstudio {
   formato: string; modelo: string; segundos: number; calidad: string; estado: 'borrador' | 'generando' | 'listo' | 'fallido' | 'aprobado' | 'descartado';
   creditos: number; progreso: number; url: string; miniatura: string; error: string; actualizado: string;
 }
-export interface ProyectoEstudio { id: string; nombre: string; brief: BriefEstudio; foto: string; copys: { textos?: string[]; titulares?: string[]; descripciones?: string[] }; piezas: PiezaEstudio[] }
+export interface ProyectoEstudio { id: string; nombre: string; brief: BriefEstudio; foto: string; fotos: string[]; copys: { textos?: string[]; titulares?: string[]; descripciones?: string[] }; piezas: PiezaEstudio[] }
 export interface ProyectoEstudioResumen { id: string; nombre: string; foto: string; videos: number; imagenes: number; generando: number; actualizado: string }
 export interface PreciosEstudio { paquete: number; imagen: { medium: number; high: number }; video: Record<string, Record<string, number>>; disponible: boolean }
 export const apiEstudio = () => reqBase<{ proyectos: ProyectoEstudioResumen[]; precios: PreciosEstudio; saldo: number }>('/api/estudio', 'GET');
 export const apiEstudioProyecto = (id: string) => reqBase<{ proyecto: ProyectoEstudio; saldo: number }>(`/api/estudio/proyectos/${id}`, 'GET');
-export const apiEstudioGuardar = (id: string | null, b: { nombre?: string; brief: Partial<BriefEstudio>; fotoDataUrl?: string }) =>
+export const apiEstudioGuardar = (id: string | null, b: { nombre?: string; brief: Partial<BriefEstudio>; fotos?: string[]; fotosNuevas?: string[] }) =>
   req<{ id: string }>(id ? `/api/estudio/proyectos/${id}` : '/api/estudio/proyectos', id ? 'PUT' : 'POST', b);
 export const apiEstudioBorrar = (id: string) => req<{ ok: true }>(`/api/estudio/proyectos/${id}`, 'DELETE');
 export const apiEstudioPaquete = (id: string) => req<{ ok: true; videos: number; imagenes: number }>(`/api/estudio/proyectos/${id}/paquete`, 'POST');
@@ -1321,3 +1321,25 @@ export const apiEstudioAgregar = (id: string, b: { tipo: 'video' | 'imagen'; pro
 export const apiEstudioEditarPieza = (id: string, b: Partial<Pick<PiezaEstudio, 'prompt' | 'texto' | 'titular' | 'modelo' | 'segundos' | 'calidad' | 'formato' | 'estado'>>) =>
   reqBase<{ ok: true }>(`/api/estudio/piezas/${id}`, 'PATCH', b);
 export const apiEstudioGenerar = (id: string) => req<{ ok: true; estado: string }>(`/api/estudio/piezas/${id}/generar`, 'POST');
+
+// Lanzar piezas del estudio a Meta
+export interface OpcionesLanzar { conectada: boolean; cuenta: string; pagina: string; tienePagina: boolean; moneda: string; whatsapp: string; pixeles: string[]; enlace: string }
+export interface LanzamientoEstudio {
+  id: string; nombre: string; objetivo: 'mensajes' | 'ventas' | 'trafico'; presupuesto: number; estado: 'creando' | 'en_pausa' | 'activa' | 'error'; paso: string; error: string; creada: string; enlaceMeta: string;
+  metricas: { gasto: number; impresiones: number; clics: number; conversaciones: number; compras: number };
+  anuncios: { id: string; piezaId: string; tipo: string; nombre: string; estadoMeta: string; listo: boolean; metricas: { gasto: number; impresiones: number; clics: number; ctr: number; conversaciones: number; compras: number } | null }[];
+}
+export const apiEstudioMeta = (proyectoId: string) => reqBase<{ opciones: OpcionesLanzar; lanzamientos: LanzamientoEstudio[] }>(`/api/estudio/proyectos/${proyectoId}/meta`, 'GET');
+export const apiEstudioLanzar = (proyectoId: string, b: { nombre?: string; objetivo: string; presupuesto: number; enlace?: string; pixelId?: string; publico: { advantage: boolean; edadMin: number; edadMax: number; genero: string }; piezas: { id: string; texto: string; titular: string }[] }) =>
+  req<{ id: string }>(`/api/estudio/proyectos/${proyectoId}/lanzar`, 'POST', b);
+export const apiEstudioLanzEstado = (id: string, activar: boolean) => req<{ ok: true }>(`/api/estudio/lanzamientos/${id}/estado`, 'POST', { activar });
+export const apiEstudioLanzReintentar = (id: string) => req<{ ok: true }>(`/api/estudio/lanzamientos/${id}/reintentar`, 'POST');
+
+// Referencias de estilo del Estudio (admin)
+export interface ReferenciaEstudio { id: string; titulo: string; estilo: 'ugc' | 'ecommerce' | 'general'; video: string; cuadros: string[]; transcripcion: string; guia: string; activa: boolean; estado: 'analizando' | 'listo' | 'error'; error: string; creadoPor: string; creada: string }
+export const apiAdminEstudio = () => reqBase<{ indicaciones: string; referencias: ReferenciaEstudio[] }>('/api/admin/estudio', 'GET');
+export const apiAdminEstudioIndicaciones = (texto: string) => req<{ ok: true }>('/api/admin/estudio/indicaciones', 'PUT', { texto });
+export const apiAdminEstudioSubir = (b: { titulo: string; estilo: string; videoDataUrl: string }) => req<{ id: string }>('/api/admin/estudio/referencias', 'POST', b);
+export const apiAdminEstudioEditar = (id: string, b: Partial<Pick<ReferenciaEstudio, 'guia' | 'titulo' | 'estilo' | 'activa'>>) => reqBase<{ ok: true }>(`/api/admin/estudio/referencias/${id}`, 'PATCH', b);
+export const apiAdminEstudioAnalizar = (id: string) => reqBase<{ ok: true }>(`/api/admin/estudio/referencias/${id}/analizar`, 'POST');
+export const apiAdminEstudioBorrar = (id: string) => req<{ ok: true }>(`/api/admin/estudio/referencias/${id}`, 'DELETE');

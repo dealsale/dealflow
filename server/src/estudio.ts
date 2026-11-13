@@ -40,6 +40,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS estudio_proyectos (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_estudio_proy_store ON estudio_proyectos(store_id, created_at)');
+// Varias fotos del producto (la IA entiende mejor con más ángulos). La primera es la principal
+// (va como primer cuadro de los videos); `foto` se mantiene igual a la principal.
+try { db.exec("ALTER TABLE estudio_proyectos ADD COLUMN fotos TEXT NOT NULL DEFAULT '[]'"); } catch { /* ya existe */ }
+const MAX_FOTOS = 6;
+const fotosDe = (p: Fila): string[] => { const l = pj<string[]>(p.fotos, []).filter((x) => typeof x === 'string' && x); return l.length ? l : txt(p.foto) ? [txt(p.foto)] : []; };
 db.exec(`CREATE TABLE IF NOT EXISTS estudio_piezas (
   id TEXT PRIMARY KEY,
   proyecto_id TEXT NOT NULL REFERENCES estudio_proyectos(id) ON DELETE CASCADE,
@@ -134,6 +139,143 @@ function mapPieza(p: Fila) {
     url: txt(p.url), miniatura: txt(p.miniatura), error: txt(p.error), actualizado: txt(p.updated_at),
   };
 }
+// ── Referencias de estilo del equipo DealFlow (Admin → Estudio IA) ──────────
+// El equipo sube videos de ejemplo de cómo deben verse y sonar los anuncios. DealFlow extrae
+// cuadros y transcribe el audio, y la IA resume el estilo (escenas, cámara, ritmo, voz, guion,
+// música). Esas guías se le pasan a la IA cada vez que una tienda pide ideas.
+db.exec(`CREATE TABLE IF NOT EXISTS estudio_referencias (
+  id TEXT PRIMARY KEY,
+  titulo TEXT NOT NULL DEFAULT '',
+  estilo TEXT NOT NULL DEFAULT 'general',  -- ugc | ecommerce | general
+  video TEXT NOT NULL DEFAULT '',          -- /api/estudio-ref/<archivo>
+  cuadros TEXT NOT NULL DEFAULT '[]',
+  transcripcion TEXT NOT NULL DEFAULT '',
+  guia TEXT NOT NULL DEFAULT '',
+  activa INTEGER NOT NULL DEFAULT 1,
+  estado TEXT NOT NULL DEFAULT 'listo',    -- analizando | listo | error
+  error TEXT NOT NULL DEFAULT '',
+  creado_por TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS estudio_ajustes (clave TEXT PRIMARY KEY, valor TEXT NOT NULL DEFAULT '')`);
+export const DIR_REF = '__estudio__';
+
+/** Indicaciones generales del equipo + guías de las referencias activas del estilo pedido. */
+function guiaEstiloEquipo(estilo: string): string {
+  const general = txt((db.prepare("SELECT valor FROM estudio_ajustes WHERE clave = 'indicaciones'").get() as { valor: string } | undefined)?.valor).trim();
+  const refs = db.prepare(`SELECT titulo, estilo, guia FROM estudio_referencias WHERE activa = 1 AND estado = 'listo' AND guia != ''
+      AND (estilo = 'general' OR ? = 'mixto' OR estilo = ?) ORDER BY created_at DESC LIMIT 5`).all(estilo, estilo) as { titulo: string; estilo: string; guia: string }[];
+  if (!general && !refs.length) return '';
+  return `\n\nGUÍA DE ESTILO DEL EQUIPO DEALFLOW (síguela: así deben verse y sonar los videos):${general ? `\n${general.slice(0, 2000)}` : ''}${refs.map((r, i) => `\nReferencia ${i + 1} (${r.estilo}) «${r.titulo}»: ${r.guia.slice(0, 1500)}`).join('')}`;
+}
+
+export function listarReferencias() {
+  const indicaciones = txt((db.prepare("SELECT valor FROM estudio_ajustes WHERE clave = 'indicaciones'").get() as { valor: string } | undefined)?.valor);
+  const refs = (db.prepare('SELECT * FROM estudio_referencias ORDER BY created_at DESC').all() as Fila[]).map((r) => ({
+    id: txt(r.id), titulo: txt(r.titulo), estilo: txt(r.estilo), video: txt(r.video), cuadros: pj<string[]>(r.cuadros, []), transcripcion: txt(r.transcripcion),
+    guia: txt(r.guia), activa: !!r.activa, estado: txt(r.estado), error: txt(r.error), creadoPor: txt(r.creado_por), creada: txt(r.created_at),
+  }));
+  return { indicaciones, referencias: refs };
+}
+export function guardarIndicaciones(texto: string): void {
+  db.prepare("INSERT INTO estudio_ajustes (clave, valor) VALUES ('indicaciones', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor").run(texto.slice(0, 4000));
+}
+
+/** Duración del video (s) con ffprobe. */
+function duracion(archivo: string): number {
+  const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', archivo], { timeout: 20_000 });
+  return Number(String(r.stdout || '').trim()) || 0;
+}
+
+export function subirReferencia(b: Record<string, unknown>, quien: string): { id: string } | { error: string } {
+  const m = /^data:(video\/(mp4|quicktime|webm));base64,(.+)$/s.exec(txt(b.videoDataUrl));
+  if (!m) return { error: 'Sube un video MP4, MOV o WEBM.' };
+  const buf = Buffer.from(m[3], 'base64');
+  if (buf.length > 18 * 1024 * 1024) return { error: 'El video pesa más de 18 MB. Usa uno más corto (los anuncios de referencia de 15–60 s bastan).' };
+  const id = uid();
+  const ext = m[2] === 'quicktime' ? 'mov' : m[2];
+  const file = `${id}.${ext}`;
+  writeFileSync(path.join(mediaDir(DIR_REF), file), buf);
+  const estilo = ['ugc', 'ecommerce', 'general'].includes(txt(b.estilo)) ? txt(b.estilo) : 'general';
+  db.prepare("INSERT INTO estudio_referencias (id, titulo, estilo, video, estado, creado_por) VALUES (?,?,?,?, 'analizando', ?)")
+    .run(id, txt(b.titulo).trim().slice(0, 120) || 'Video de referencia', estilo, `/api/estudio-ref/${file}`, quien);
+  setImmediate(() => void analizarReferencia(id).catch((e) => console.error('[estudio] referencia', e)));
+  return { id };
+}
+
+/** Extrae 6 cuadros y el audio, transcribe y le pide a la IA la guía de estilo. Lo paga DealFlow. */
+export async function analizarReferencia(id: string): Promise<void> {
+  const r = db.prepare('SELECT * FROM estudio_referencias WHERE id = ?').get(id) as Fila | undefined;
+  if (!r) return;
+  const err = (m: string) => db.prepare("UPDATE estudio_referencias SET estado = 'error', error = ? WHERE id = ?").run(m, id);
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) { err(SIN_OPENAI); return; }
+  const archivo = mediaPath(DIR_REF, txt(r.video).split('/').pop()!);
+  if (!existsSync(archivo)) { err('El video ya no está.'); return; }
+  db.prepare("UPDATE estudio_referencias SET estado = 'analizando', error = '' WHERE id = ?").run(id);
+  let dir = '';
+  try {
+    dir = mkdtempSync(path.join(tmpdir(), 'df-refv-'));
+    const dur = duracion(archivo) || 10;
+    const cuadros: string[] = [];
+    const urls: string[] = [];
+    for (let k = 0; k < 6; k++) {
+      const t = Math.max(0, (dur * (k + 0.5)) / 6);
+      const out = path.join(dir, `c${k}.jpg`);
+      const x = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-ss', t.toFixed(2), '-i', archivo, '-frames:v', '1', '-vf', 'scale=512:-2', '-q:v', '4', out], { timeout: 30_000 });
+      if (x.status === 0 && existsSync(out)) {
+        const b = readFileSync(out);
+        cuadros.push(`data:image/jpeg;base64,${b.toString('base64')}`);
+        const f = `${id}-c${k}.jpg`;
+        writeFileSync(path.join(mediaDir(DIR_REF), f), b);
+        urls.push(`/api/estudio-ref/${f}`);
+      }
+    }
+    // Audio → texto (lo que dicen, para copiar el tipo de guion y de voz).
+    let transcripcion = '';
+    const mp3 = path.join(dir, 'a.mp3');
+    const a = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', archivo, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '48k', mp3], { timeout: 60_000 });
+    if (a.status === 0 && existsSync(mp3)) {
+      const form = new FormData();
+      form.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1');
+      form.append('language', 'es');
+      form.append('file', new Blob([new Uint8Array(readFileSync(mp3))], { type: 'audio/mpeg' }), 'audio.mp3');
+      const t = await fetch(`${OPENAI}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(120_000) }).catch(() => null);
+      const tj = t ? ((await t.json().catch(() => ({}))) as { text?: string }) : {};
+      transcripcion = txt(tj.text).trim();
+    }
+    if (!cuadros.length) { err('No pudimos leer el video.'); return; }
+    const g = await chatJSON<{ guia?: string }>(
+      'Eres director creativo de anuncios en video para e-commerce en Colombia. Analizas un video de REFERENCIA (cuadros en orden + transcripción del audio) para que otra IA haga videos con el mismo estilo. Devuelve SOLO JSON {"guia": "..."}.',
+      `Escribe una guía de estilo concreta y reutilizable (no describas este producto en particular), en viñetas cortas, que cubra:
+- Formato y duración aproximada (${Math.round(dur)} s), tipo de video (UGC con celular, estudio, mixto).
+- Estructura y ritmo: qué pasa en el gancho de los primeros 2 s, cómo sigue y cómo cierra; cortes por segundo.
+- Escenas, encuadres y movimientos de cámara; luz; cómo se muestra el producto.
+- Personas: quién aparece (sin describir rasgos de personas reales), cómo actúa.
+- AUDIO: tipo de voz (narrador/persona a cámara), tono, ritmo al hablar, acento; frases tipo del guion; música y sonido ambiente.
+- Textos en pantalla si los hay (estilo, no el texto exacto).
+Transcripción del audio: ${transcripcion ? `"${transcripcion.slice(0, 3000)}"` : '(sin voz o no se pudo transcribir)'}`,
+      { imagenes: cuadros, maxTokens: 1500, temperatura: 0.4 },
+    );
+    if (!g.data?.guia) { err(g.error || 'La IA no devolvió la guía.'); return; }
+    db.prepare("UPDATE estudio_referencias SET cuadros = ?, transcripcion = ?, guia = ?, estado = 'listo', error = '' WHERE id = ?")
+      .run(JSON.stringify(urls), transcripcion.slice(0, 6000), txt(g.data.guia).slice(0, 4000), id);
+  } catch (e) { err('No pudimos analizar el video: ' + ((e as Error)?.message || 'error')); }
+  finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
+}
+
+export function editarReferencia(id: string, b: Record<string, unknown>): void {
+  if (typeof b.guia === 'string') db.prepare('UPDATE estudio_referencias SET guia = ? WHERE id = ?').run(b.guia.slice(0, 4000), id);
+  if (typeof b.titulo === 'string') db.prepare('UPDATE estudio_referencias SET titulo = ? WHERE id = ?').run(b.titulo.slice(0, 120), id);
+  if (typeof b.estilo === 'string' && ['ugc', 'ecommerce', 'general'].includes(b.estilo)) db.prepare('UPDATE estudio_referencias SET estilo = ? WHERE id = ?').run(b.estilo, id);
+  if (b.activa !== undefined) db.prepare('UPDATE estudio_referencias SET activa = ? WHERE id = ?').run(b.activa ? 1 : 0, id);
+}
+export function borrarReferencia(id: string): void {
+  const r = db.prepare('SELECT video, cuadros FROM estudio_referencias WHERE id = ?').get(id) as Fila | undefined;
+  if (r) for (const u of [txt(r.video), ...pj<string[]>(r.cuadros, [])]) { try { rmSync(mediaPath(DIR_REF, u.split('/').pop()!), { force: true }); } catch { /* nada */ } }
+  db.prepare('DELETE FROM estudio_referencias WHERE id = ?').run(id);
+}
+
 export function listarProyectos(storeId: string) {
   return (db.prepare(`SELECT p.id, p.nombre, p.foto, p.created_at, p.updated_at,
       (SELECT COUNT(*) FROM estudio_piezas x WHERE x.proyecto_id = p.id AND x.tipo = 'video' AND x.url != '') videos,
@@ -146,7 +288,8 @@ export function obtenerProyecto(storeId: string, id: string) {
   const p = db.prepare('SELECT * FROM estudio_proyectos WHERE id = ? AND store_id = ?').get(id, storeId) as Fila | undefined;
   if (!p) return null;
   const piezas = (db.prepare("SELECT * FROM estudio_piezas WHERE proyecto_id = ? AND estado != 'descartado' ORDER BY tipo DESC, orden").all(id) as Fila[]).map(mapPieza);
-  return { id: txt(p.id), nombre: txt(p.nombre), brief: pj<BriefEstudio | Record<string, never>>(p.brief, {}), foto: txt(p.foto), copys: pj(p.copys, {}), piezas };
+  const fotos = fotosDe(p);
+  return { id: txt(p.id), nombre: txt(p.nombre), brief: pj<BriefEstudio | Record<string, never>>(p.brief, {}), foto: fotos[0] || '', fotos, copys: pj(p.copys, {}), piezas };
 }
 
 /** Guarda una imagen (data URL) como foto de referencia del producto. */
@@ -163,19 +306,27 @@ function guardarFotoReferencia(storeId: string, dataUrl: string): string {
 export function guardarProyecto(storeId: string, id: string | null, body: Record<string, unknown>): { id: string } | { error: string } {
   const brief = limpiarBrief((body.brief || {}) as Record<string, unknown>);
   if (!brief.producto) return { error: 'Escribe el nombre del producto.' };
-  let foto = '';
-  if (typeof body.fotoDataUrl === 'string' && body.fotoDataUrl.startsWith('data:image')) {
-    foto = guardarFotoReferencia(storeId, body.fotoDataUrl);
-    if (!foto) return { error: 'La foto no es válida (usa JPG, PNG o WEBP de máximo 12 MB).' };
-  } else if (typeof body.foto === 'string' && body.foto.startsWith(`/api/media/${storeId}/`)) foto = body.foto;
+  // Fotos: `fotos` = las que ya estaban y se conservan (en orden, la primera es la principal);
+  // `fotosNuevas` = data URLs que se suben. Compatible con `fotoDataUrl` (una sola).
+  const prefijo = `/api/media/${storeId}/`;
+  const anteriores = id ? fotosDe((db.prepare('SELECT foto, fotos FROM estudio_proyectos WHERE id = ? AND store_id = ?').get(id, storeId) as Fila | undefined) || {}) : [];
+  let fotos: string[] = Array.isArray(body.fotos) ? (body.fotos as unknown[]).map(txt).filter((u) => u.startsWith(prefijo)) : anteriores;
+  const nuevas = [...(Array.isArray(body.fotosNuevas) ? body.fotosNuevas as unknown[] : []), ...(typeof body.fotoDataUrl === 'string' ? [body.fotoDataUrl] : [])].map(txt).filter((u) => u.startsWith('data:image'));
+  for (const d of nuevas) {
+    if (fotos.length >= MAX_FOTOS) break;
+    const u = guardarFotoReferencia(storeId, d);
+    if (!u) return { error: 'Alguna foto no es válida (usa JPG, PNG o WEBP de máximo 12 MB).' };
+    fotos.push(u);
+  }
+  fotos = [...new Set(fotos)].slice(0, MAX_FOTOS);
   const nombre = txt(body.nombre).trim().slice(0, 120) || brief.producto;
   if (id) {
-    const r = db.prepare(`UPDATE estudio_proyectos SET nombre = ?, brief = ?, foto = CASE WHEN ? != '' THEN ? ELSE foto END, updated_at = datetime('now') WHERE id = ? AND store_id = ?`)
-      .run(nombre, JSON.stringify(brief), foto, foto, id, storeId);
+    const r = db.prepare(`UPDATE estudio_proyectos SET nombre = ?, brief = ?, foto = ?, fotos = ?, updated_at = datetime('now') WHERE id = ? AND store_id = ?`)
+      .run(nombre, JSON.stringify(brief), fotos[0] || '', JSON.stringify(fotos), id, storeId);
     return r.changes ? { id } : { error: 'Proyecto no encontrado.' };
   }
   const nuevo = uid();
-  db.prepare('INSERT INTO estudio_proyectos (id, store_id, nombre, brief, foto) VALUES (?,?,?,?,?)').run(nuevo, storeId, nombre, JSON.stringify(brief), foto);
+  db.prepare('INSERT INTO estudio_proyectos (id, store_id, nombre, brief, foto, fotos) VALUES (?,?,?,?,?,?)').run(nuevo, storeId, nombre, JSON.stringify(brief), fotos[0] || '', JSON.stringify(fotos));
   return { id: nuevo };
 }
 export function borrarProyecto(storeId: string, id: string): void {
@@ -222,12 +373,12 @@ Devuelve SOLO un JSON con esta forma:
 {"videos":[{"angulo":"","hook":"","prompt":"","texto":"","titular":""}],"imagenes":[{"uso":"","prompt":"","texto":"","titular":""}],"copys":{"textos":[""],"titulares":[""],"descripciones":[""]}}
 Reglas:
 - "videos": exactamente ${b.videos}. Cada uno con un ÁNGULO DISTINTO (rota entre: ${ANGULOS_BASE}). "hook" = lo que pasa o se dice en los primeros 2 segundos para detener el scroll.
-- El "prompt" de cada video es para Sora (generador de video), en español, con esta estructura en líneas: Formato (vertical ${b.formato}, estilo ${estilo}) · Escena · Sujeto (el producto, fiel a la foto de referencia en color, forma y detalles) · Acción (qué pasa segundo a segundo) · Cámara · Luz · Beneficio a mostrar · Restricciones: ${RESTRICCIONES}
+- El "prompt" de cada video es para Sora (genera video CON audio), en español, con esta estructura en líneas: Formato (vertical ${b.formato}, estilo ${estilo}) · Escena · Sujeto (el producto, fiel a las fotos de referencia en color, forma y detalles) · Acción (qué pasa segundo a segundo) · Cámara · Luz · Audio (voz: quién habla, tono y acento colombiano natural, y el TEXTO EXACTO que dice entre comillas, corto para que quepa en el tiempo; más sonido ambiente y música si aplica) · Beneficio a mostrar · Restricciones: ${RESTRICCIONES}
 - Si hay personas: adultos genéricos generados (nunca reales), preferiblemente tomas sin rostro o de espaldas, manos, cuello hacia abajo.
 - "imagenes": exactamente ${b.imagenes}, para anuncios y catálogo (packshot fondo blanco, producto en uso, detalle, variantes, foto estilo cliente real, banner con espacio para oferta…). "uso" = dónde sirve. El "prompt" es para un generador de imágenes, fotográfico y realista, con las mismas restricciones.
 - "texto" (texto principal del anuncio, 1–3 frases, cálido, colombiano, con la oferta) y "titular" (máx. 40 caracteres) para cada pieza.
 - "copys": 5 textos principales, 5 titulares y 3 descripciones extra.
-- Políticas de Meta (obligatorias): ${POLITICAS_META}`;
+- Políticas de Meta (obligatorias): ${POLITICAS_META}${guiaEstiloEquipo(b.estilo)}`;
   const user = `Producto: ${b.producto}
 Categoría: ${b.categoria || 'no indicada (dedúcela)'}
 Precio: ${b.precio ? '$' + b.precio.toLocaleString('es-CO') + ' COP' : 'no indicado'}
@@ -236,8 +387,8 @@ Variantes: ${b.variantes || 'no indicadas'}
 Oferta: ${b.oferta || 'pago contraentrega'}
 Beneficios: ${b.beneficios.join('; ') || 'dedúcelos de la foto y el producto'}
 Notas: ${b.notas || '—'}
-${pr.foto ? 'Te adjunto la foto real del producto: describe el producto con fidelidad en cada prompt.' : 'No hay foto: describe el producto de forma genérica pero creíble.'}`;
-  const r = await chatJSON<PaqueteIA>(system, user, { imagen: dataUrlDe(storeId, txt(pr.foto)) || undefined, maxTokens: 6000, temperatura: 0.8 });
+${fotosDe(pr).length ? `Te adjunto ${fotosDe(pr).length} foto(s) reales del producto: míralas todas y describe el producto con fidelidad (forma, color, materiales, tamaño, detalles) en cada prompt.` : 'No hay foto: describe el producto de forma genérica pero creíble.'}`;
+  const r = await chatJSON<PaqueteIA>(system, user, { imagenes: fotosDe(pr).map((u) => dataUrlDe(storeId, u)).filter(Boolean), maxTokens: 7000, temperatura: 0.8 });
   if (r.error || !r.data) { abonar(storeId, costo, 'Devolución: no se pudo armar el paquete'); return { error: r.error || 'La IA no respondió.' }; }
   const vids = (r.data.videos || []).filter((v) => txt(v.prompt).trim()).slice(0, b.videos);
   const imgs = (r.data.imagenes || []).filter((v) => txt(v.prompt).trim()).slice(0, b.imagenes);
@@ -334,14 +485,15 @@ export async function generarPieza(storeId: string, id: string): Promise<{ ok: t
   if (p.estado === 'generando') return { error: 'Esta pieza ya se está generando.' };
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { error: SIN_OPENAI };
-  const pr = db.prepare('SELECT foto, brief FROM estudio_proyectos WHERE id = ?').get(txt(p.proyecto_id)) as Fila;
+  const pr = db.prepare('SELECT foto, fotos, brief FROM estudio_proyectos WHERE id = ?').get(txt(p.proyecto_id)) as Fila;
   const costo = costoPieza({ tipo: txt(p.tipo), modelo: txt(p.modelo), segundos: Number(p.segundos), calidad: txt(p.calidad) });
   if (saldo(storeId) < costo || !cobrar(storeId, costo, `Estudio IA: ${p.tipo === 'video' ? `video ${p.segundos}s (${p.modelo})` : 'foto'} · ${txt(p.angulo || p.uso || 'pieza').slice(0, 40)}`)) {
     return { error: `Necesitas ${costo} créditos para esta ${p.tipo === 'video' ? 'pieza de video' : 'foto'}. Recarga para seguir.`, sinCreditos: true };
   }
   db.prepare("UPDATE estudio_piezas SET estado = 'generando', creditos = ?, error = '', progreso = 0, externo = '', updated_at = datetime('now') WHERE id = ?").run(costo, id);
   const fila = { ...p, creditos: costo } as Fila;
-  const foto = txt(pr?.foto);
+  const fotos = pr ? fotosDe(pr) : [];
+  const foto = fotos[0] || '';
   const prompt = `${txt(p.prompt)}\n\n${RESTRICCIONES}`;
 
   if (p.tipo === 'imagen') {
@@ -349,16 +501,18 @@ export async function generarPieza(storeId: string, id: string): Promise<{ ok: t
       const size = tamanoImagen(txt(p.formato));
       const modelo = txt(p.modelo) || 'gpt-image-1';
       let res: Response;
-      const ref = foto.startsWith(`/api/media/${storeId}/`) ? mediaPath(storeId, foto.split('/').pop()!) : '';
-      if (ref && existsSync(ref)) {
-        // Con la foto real: edits mantiene el producto fiel.
+      const refs = fotos.filter((u) => u.startsWith(`/api/media/${storeId}/`)).map((u) => mediaPath(storeId, u.split('/').pop()!)).filter((r) => existsSync(r)).slice(0, 4);
+      if (refs.length) {
+        // Con las fotos reales: edits mantiene el producto fiel (hasta 4 ángulos de referencia).
         const form = new FormData();
         form.append('model', modelo);
-        form.append('prompt', prompt);
+        form.append('prompt', refs.length > 1 ? `${prompt}\n\nLas imágenes adjuntas son el MISMO producto desde distintos ángulos: respétalo con fidelidad.` : prompt);
         form.append('size', size);
         form.append('quality', txt(p.calidad) || 'medium');
-        const ext = path.extname(ref).slice(1).toLowerCase();
-        form.append('image[]', new Blob([new Uint8Array(readFileSync(ref))], { type: `image/${ext === 'jpg' ? 'jpeg' : ext}` }), `producto.${ext}`);
+        refs.forEach((ref, k) => {
+          const ext = path.extname(ref).slice(1).toLowerCase();
+          form.append('image[]', new Blob([new Uint8Array(readFileSync(ref))], { type: `image/${ext === 'jpg' ? 'jpeg' : ext}` }), `producto${k + 1}.${ext}`);
+        });
         res = await fetch(`${OPENAI}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(240_000) });
       } else {
         res = await fetch(`${OPENAI}/images/generations`, {
