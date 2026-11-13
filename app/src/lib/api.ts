@@ -1064,7 +1064,8 @@ export const apiBorrarCodigoExt = (id: string) => req<{ ok: true }>(`/api/ext/co
 // ── Creador de landings ──────────────────────────────────────────────
 export interface LandingOpcion { nombre: string; valores: { valor: string; foto: string }[] }
 export interface LandingBundle { cantidad: number; titulo: string; subtitulo: string; precio: number; precioAntes: number; insignia: string; imagen: string }
-export interface LandingTestimonio { autor: string; avatar: string; tiempo: string; texto: string; imagen: string; reacciones: string; comentarioAutor: string; comentarioAvatar: string; comentarioTexto: string }
+export interface LandingComentario { autor: string; avatar: string; texto: string }
+export interface LandingTestimonio { autor: string; avatar: string; tiempo: string; texto: string; imagen: string; reacciones: string; comentarioAutor: string; comentarioAvatar: string; comentarioTexto: string; comentarios?: LandingComentario[] }
 export interface LandingDatos {
   plantilla: string; nombre: string; mostrarTitulo: boolean; precio: number; precioAntes: number; calificacion: number; resenas: string; destacado: string; anuncios: string[];
   bannerSuperior: string; galeria: string[]; opciones: LandingOpcion[]; tituloOfertas: string; bundles: LandingBundle[]; bundleInicial: number;

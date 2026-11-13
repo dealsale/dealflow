@@ -5,7 +5,7 @@ import {
   apiBorrarLanding, apiCrearLanding, apiDespublicarLanding, apiDuplicarLanding, apiGuardarLanding, apiImagenLanding, apiLanding, apiLandings,
   apiPagarMembresia, apiGuardarTienda, apiVistaTienda, apiPublicarLanding, apiVistaLanding, apiConectarDominio, apiVerificarDominio, apiEstadoDominio, apiQuitarDominio, apiInicioDominio, apiSubdominio,
 } from '../lib/api';
-import type { MembresiaTienda, TiendaConfig, DominioLandings, Landing, LandingBundle, LandingDatos, LandingResumen } from '../lib/api';
+import type { MembresiaTienda, TiendaConfig, DominioLandings, Landing, LandingBundle, LandingComentario, LandingDatos, LandingResumen } from '../lib/api';
 import { confirmar, notificar } from '../components/dialogs';
 import { BibliotecaLandingsModal } from '../components/BibliotecaLandings';
 import { LandingCodigo } from '../components/LandingCodigo';
@@ -718,13 +718,36 @@ function Testimonios({ d, set }: { d: LandingDatos; set: (p: Partial<LandingDato
               <UnaImagen titulo="Foto del producto" url={t.imagen} onChange={(imagen) => cambiar(i, { imagen })} />
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 8 }}>
-            <Campo label="Respuesta de (opcional)"><input value={t.comentarioAutor} onChange={(e) => cambiar(i, { comentarioAutor: e.target.value })} placeholder="María Nieto" style={inp} /></Campo>
-            <Campo label="Comentario debajo"><input value={t.comentarioTexto} onChange={(e) => cambiar(i, { comentarioTexto: e.target.value })} placeholder="¡Te queda hermoso amiga! 😍" style={inp} /></Campo>
+          <ComentariosTestimonio t={t} onChange={(comentarios) => cambiar(i, { comentarios, comentarioAutor: '', comentarioAvatar: '', comentarioTexto: '' })} />
+        </div>
+      ))}
+      {ts.length < 20 && <button type="button" onClick={() => set({ testimonios: [...ts, { autor: '', avatar: '', tiempo: 'Hace 1 día', texto: '', imagen: '', reacciones: '', comentarioAutor: '', comentarioAvatar: '', comentarioTexto: '', comentarios: [] }] })} style={{ ...btn, alignSelf: 'flex-start' }}>+ Agregar testimonio</button>}
+    </div>
+  );
+}
+
+/** Comentarios debajo del testimonio (hasta 5), cada uno con su nombre, foto de perfil y texto. */
+function ComentariosTestimonio({ t, onChange }: { t: LandingDatos['testimonios'][number]; onChange: (c: LandingComentario[]) => void }) {
+  // Las landings guardadas antes tienen un solo comentario en comentario*: se muestra como el primero de la lista.
+  const lista: LandingComentario[] = t.comentarios?.length ? t.comentarios
+    : t.comentarioTexto || t.comentarioAutor ? [{ autor: t.comentarioAutor, avatar: t.comentarioAvatar, texto: t.comentarioTexto }] : [];
+  const cambiar = (k: number, p: Partial<LandingComentario>) => onChange(lista.map((c, j) => (j === k ? { ...c, ...p } : c)));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 700 }}>Comentarios debajo <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· opcional, hasta 5</span></div>
+      {lista.map((c, k) => (
+        <div key={k} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 10, alignItems: 'start', background: 'var(--df-bg)', borderRadius: 8, padding: 8 }}>
+          <UnaImagen titulo="Foto" url={c.avatar} onChange={(avatar) => cambiar(k, { avatar })} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'end' }}>
+              <Campo label="Nombre"><input value={c.autor} onChange={(e) => cambiar(k, { autor: e.target.value })} placeholder="María Nieto" style={inp} /></Campo>
+              <button type="button" onClick={() => onChange(lista.filter((_, j) => j !== k))} style={{ ...btn, color: 'var(--df-danger)' }} aria-label="Quitar comentario">✕</button>
+            </div>
+            <Campo label="Comentario"><input value={c.texto} onChange={(e) => cambiar(k, { texto: e.target.value })} placeholder="¡Te queda hermoso amiga! 😍" style={inp} /></Campo>
           </div>
         </div>
       ))}
-      {ts.length < 20 && <button type="button" onClick={() => set({ testimonios: [...ts, { autor: '', avatar: '', tiempo: 'Hace 1 día', texto: '', imagen: '', reacciones: '', comentarioAutor: '', comentarioAvatar: '', comentarioTexto: '' }] })} style={{ ...btn, alignSelf: 'flex-start' }}>+ Agregar testimonio</button>}
+      {lista.length < 5 && <button type="button" onClick={() => onChange([...lista, { autor: '', avatar: '', texto: '' }])} style={{ ...btn, alignSelf: 'flex-start' }}>+ Agregar comentario</button>}
     </div>
   );
 }
