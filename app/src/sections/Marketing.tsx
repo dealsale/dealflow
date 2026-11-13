@@ -555,7 +555,39 @@ function ListaCampanas({ df }: { df: DealFlowState }) {
 }
 
 // ── Sección ───────────────────────────────────────────────────────────
+/** Marketing IA está en demo: la tienda ve la sección, pero solo la usa si el equipo DealFlow se la activó. */
 export function Marketing({ df }: { df: DealFlowState }) {
+  if (df.marketingIA === null) return null; // cargando
+  if (!df.marketingIA) return <MarketingEnPruebas whatsapp={df.whatsappDemo} />;
+  return <MarketingActivo df={df} />;
+}
+
+function MarketingEnPruebas({ whatsapp }: { whatsapp: string }) {
+  return (
+    <section data-screen-label="Marketing IA" style={{ display: 'grid', placeItems: 'center', minHeight: '60vh', padding: 16 }}>
+      <div style={{ width: 'min(520px, 100%)', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 18, padding: 28, textAlign: 'center' }}>
+        <div style={{ fontSize: 44, lineHeight: 1 }}>🧪</div>
+        <h1 style={{ fontSize: 21, fontWeight: 800, margin: '12px 0 6px', letterSpacing: '-0.02em' }}>Marketing IA está en etapa de pruebas</h1>
+        <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--df-text-muted)', margin: '0 0 8px' }}>
+          Crea videos estilo UGC y fotos de producto con inteligencia artificial, y lánzalos como campañas en Meta desde DealFlow.
+        </p>
+        <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--df-text-muted)', margin: '0 0 20px' }}>
+          Por ahora está disponible solo para algunas tiendas. Comunícate con un administrador de DealFlow para solicitar una demo.
+        </p>
+        {whatsapp ? (
+          <a href={whatsapp} target="_blank" rel="noreferrer"
+            style={{ display: 'inline-block', background: '#25D366', color: '#fff', textDecoration: 'none', fontWeight: 800, fontSize: 15, padding: '12px 22px', borderRadius: 12 }}>
+            Solicitar una demo por WhatsApp
+          </a>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>Escríbele al equipo de DealFlow para solicitar tu demo.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MarketingActivo({ df }: { df: DealFlowState }) {
   const c = df.campana;
   const [paso, setPaso] = useState(1);
   // Dos espacios: el Estudio de videos y fotos (UGC / e-commerce) y las campañas para Meta.

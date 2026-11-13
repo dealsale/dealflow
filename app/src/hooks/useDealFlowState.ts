@@ -885,6 +885,9 @@ export function useDealFlowState() {
   const [storeId, setStoreId] = useState<string>('');
   // El superadmin activa el Creador de landings tienda por tienda.
   const [landingsHabilitadas, setLandingsHabilitadas] = useState(false);
+  // Marketing IA en demo: lo enciende el equipo DealFlow por tienda. null = aún no se sabe.
+  const [marketingIA, setMarketingIA] = useState<boolean | null>(null);
+  const [whatsappDemo, setWhatsappDemo] = useState('');
   // El tema Premium está disponible para TODAS las cuentas (ya no se activa por tienda).
   const premiumPermitido = true;
   const [integracionesCfg, setIntegracionesCfg] = useState<Record<string, Record<string, string>>>({});
@@ -2145,6 +2148,8 @@ export function useDealFlowState() {
         if (data.store?.nombre) setStoreNombre(data.store.nombre);
         if (data.store?.id) setStoreId(data.store.id);
         setLandingsHabilitadas(!!data.store?.landings);
+        setMarketingIA(!!data.store?.marketingIA);
+        setWhatsappDemo(data.store?.whatsappDemo || '');
         setSuscripcion(data.suscripcion ?? null);
         if (data.whatsapp.verifyToken) setWaVerifyToken(data.whatsapp.verifyToken);
         setWaSignup(data.whatsapp.signup ?? null);
@@ -4421,6 +4426,8 @@ export function useDealFlowState() {
     setTheme,
     premiumHabilitado: premiumPermitido,
     landingsHabilitadas,
+    marketingIA,
+    whatsappDemo,
 
     // Perfil de la cuenta: nombre, foto, contraseña.
     actualizarNombrePerfil,
