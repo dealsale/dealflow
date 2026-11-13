@@ -120,7 +120,10 @@ const slugify = (s: string) => String(s || '').toLowerCase().normalize('NFD').re
 // ── Datos de una landing ───────────────────────────────────────────────
 export interface OpcionL { nombre: string; valores: { valor: string; foto: string }[] }
 export interface BundleL { cantidad: number; titulo: string; subtitulo: string; precio: number; precioAntes: number; insignia: string; imagen: string }
-export interface TestimonioL { autor: string; avatar: string; tiempo: string; texto: string; imagen: string; reacciones: string; comentarioAutor: string; comentarioAvatar: string; comentarioTexto: string }
+/** Comentario debajo de un testimonio (como en Facebook), con su foto de perfil. */
+export interface ComentarioL { autor: string; avatar: string; texto: string }
+/** `comentario*` es el formato viejo (un solo comentario); hoy van en `comentarios`. */
+export interface TestimonioL { autor: string; avatar: string; tiempo: string; texto: string; imagen: string; reacciones: string; comentarioAutor: string; comentarioAvatar: string; comentarioTexto: string; comentarios: ComentarioL[] }
 export interface LandingDatos {
   /** Diseño de la página (por ahora "premium"; con el tiempo habrá más). */
   plantilla: string;
@@ -217,7 +220,12 @@ export function limpiarDatos(raw: unknown): LandingDatos {
     imagenes: (Array.isArray(r.imagenes) ? r.imagenes : []).map(url).filter(Boolean).slice(0, 30),
     tituloTestimonios: corto(r.tituloTestimonios, 80),
     testimonios: arr(r.testimonios, 20, (t) => ({ autor: corto(t.autor, 50), avatar: url(t.avatar), tiempo: corto(t.tiempo, 30), texto: largo(t.texto, 700), imagen: url(t.imagen), reacciones: corto(t.reacciones, 10),
-      comentarioAutor: corto(t.comentarioAutor, 50), comentarioAvatar: url(t.comentarioAvatar), comentarioTexto: largo(t.comentarioTexto, 300) }))
+      comentarioAutor: corto(t.comentarioAutor, 50), comentarioAvatar: url(t.comentarioAvatar), comentarioTexto: largo(t.comentarioTexto, 300),
+      // Hasta 5 comentarios con foto. Las landings guardadas antes traen uno solo en comentario*: se pasa a la lista.
+      comentarios: (Array.isArray(t.comentarios)
+        ? arr(t.comentarios, 5, (c) => ({ autor: corto(c.autor, 50), avatar: url(c.avatar), texto: largo(c.texto, 300) }))
+        : txt(t.comentarioTexto).trim() ? [{ autor: corto(t.comentarioAutor, 50), avatar: url(t.comentarioAvatar), texto: largo(t.comentarioTexto, 300) }] : [])
+        .filter((c) => c.texto.trim()) }))
       .filter((t) => t.autor || t.texto),
     colorPrincipal: color(r.colorPrincipal, '#121212'),
     colorBoton: color(r.colorBoton, '#16a34a'),
