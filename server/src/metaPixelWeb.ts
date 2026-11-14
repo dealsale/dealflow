@@ -39,7 +39,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS pixel_eventos (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_pixel_eventos_fecha ON pixel_eventos (store_id, created_at)');
 
-interface Cfg { tokens: Record<string, { token: string; at: string }>; testCode: string }
+/** auto = sin token pegado: usa el acceso de la cuenta de Anuncios conectada (siempre el vigente). */
+interface TokenPixel { token: string; at: string; auto?: boolean }
+interface Cfg { tokens: Record<string, TokenPixel>; testCode: string }
 function cfg(storeId: string): Cfg {
   const r = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'meta_pixel_web'").get(storeId) as { config: string } | undefined;
   const c = pj<Partial<Cfg>>(r?.config || '{}', {});
@@ -52,7 +54,42 @@ function guardar(storeId: string, c: Cfg): void {
 const limpiarPixel = (p: unknown) => String(p || '').replace(/\D/g, '').slice(0, 20);
 /** Píxeles que la tienda ya configuró (con token de Conversions API). */
 export function pixelesDe(storeId: string): string[] { return Object.keys(cfg(storeId).tokens).filter(Boolean); }
-export function tokenDePixel(storeId: string, pixelId: string): string { return cfg(storeId).tokens[limpiarPixel(pixelId)]?.token || ''; }
+export function tokenDePixel(storeId: string, pixelId: string): string {
+  const t = cfg(storeId).tokens[limpiarPixel(pixelId)];
+  if (!t) return '';
+  if (t.auto) return tokenAnuncios(storeId);
+  return t.token || '';
+}
+/** Acceso de la cuenta de Anuncios (Meta Ads) conectada, si la hay. */
+function tokenAnuncios(storeId: string): string {
+  const r = db.prepare('SELECT access_token, conectada FROM ads_cuentas WHERE store_id = ?').get(storeId) as { access_token: string; conectada: number } | undefined;
+  return r?.conectada ? r.access_token || '' : '';
+}
+export function anunciosConectados(storeId: string): boolean { return !!tokenAnuncios(storeId); }
+
+/**
+ * Conecta el píxel SIN pegar token: usa el acceso de la cuenta de Anuncios. Lo prueba con Meta
+ * en ese momento; si Meta no lo acepta, deja todo como estaba y explica cómo sacar el token.
+ */
+export async function conectarAuto(storeId: string, pixelId: string): Promise<{ ok: true; mensaje: string } | { error: string }> {
+  const p = limpiarPixel(pixelId);
+  if (p.length < 8) return { error: 'Elige primero el píxel.' };
+  if (!tokenAnuncios(storeId)) return { error: 'Conecta primero tu cuenta de Anuncios (Integraciones → Meta Ads).' };
+  const c = cfg(storeId);
+  const antes = c.tokens[p];
+  c.tokens[p] = { token: '', at: new Date().toISOString(), auto: true };
+  guardar(storeId, c);
+  const r = await probar(storeId, p);
+  if (r.ok) {
+    registrarLog(storeId, 'info', 'meta', `El píxel ${p} quedó conectado a la API de Conversiones con la cuenta de Anuncios.`);
+    return { ok: true, mensaje: '✓ Píxel conectado con tu cuenta de Meta. Ya se reportan las ventas desde el servidor.' };
+  }
+  const c2 = cfg(storeId);
+  if (antes) c2.tokens[p] = antes; else delete c2.tokens[p];
+  guardar(storeId, c2);
+  const detalle = /Administrador de eventos/.test(r.mensaje) ? '' : ` (${r.mensaje})`;
+  return { error: `Meta no aceptó la conexión automática para este píxel${detalle}. Pega el token del píxel: Administrador de eventos → el píxel → Configuración → API de Conversiones → Generar token de acceso.` };
+}
 
 /** Guarda (o borra, con token vacío) el token de un píxel. */
 export function guardarToken(storeId: string, pixelId: string, token: string): { ok: true } | { error: string } {
@@ -210,15 +247,15 @@ export async function probar(storeId: string, pixelId: string): Promise<{ ok: bo
 
 /** Lo que ve la tienda en el panel (nunca el token completo). */
 export function estado(storeId: string, pixeles: string[]): {
-  pixeles: { pixelId: string; tieneToken: boolean; final: string; desde: string }[];
-  testCode: string; resumen: { evento: string; enviados: number; errores: number }[];
+  pixeles: { pixelId: string; tieneToken: boolean; final: string; desde: string; auto: boolean }[];
+  testCode: string; anuncios: boolean; resumen: { evento: string; enviados: number; errores: number }[];
   ultimos: { evento: string; estado: string; error: string; valor: number; calidad: string; fecha: string }[];
 } {
   const c = cfg(storeId);
   const lista = [...new Set([...pixeles.map(limpiarPixel).filter(Boolean), ...Object.keys(c.tokens)])];
   return {
-    pixeles: lista.map((p) => ({ pixelId: p, tieneToken: !!c.tokens[p], final: c.tokens[p] ? c.tokens[p].token.slice(-4) : '', desde: c.tokens[p]?.at || '' })),
-    testCode: c.testCode,
+    pixeles: lista.map((p) => ({ pixelId: p, tieneToken: !!tokenDePixel(storeId, p), final: c.tokens[p] && !c.tokens[p].auto ? c.tokens[p].token.slice(-4) : '', desde: c.tokens[p]?.at || '', auto: !!c.tokens[p]?.auto })),
+    testCode: c.testCode, anuncios: anunciosConectados(storeId),
     resumen: db.prepare(`SELECT evento, SUM(estado = 'enviado') enviados, SUM(estado = 'error') errores FROM pixel_eventos
       WHERE store_id = ? AND created_at > datetime('now','-7 days') GROUP BY evento`).all(storeId) as { evento: string; enviados: number; errores: number }[],
     ultimos: (db.prepare(`SELECT evento, estado, error, valor, calidad, created_at fecha FROM pixel_eventos WHERE store_id = ? AND evento = 'Purchase'

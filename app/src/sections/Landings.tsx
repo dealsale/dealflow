@@ -10,6 +10,7 @@ import { confirmar, notificar } from '../components/dialogs';
 import { BibliotecaLandingsModal } from '../components/BibliotecaLandings';
 import { LandingCodigo } from '../components/LandingCodigo';
 import { ApiConversionesMeta } from '../components/ApiConversionesMeta';
+import { SelectorPixel } from '../components/SelectorPixel';
 import { PlantillasModal, DisenoLanding } from '../components/PlantillasTienda';
 import { apiVistaPlantillaTienda, apiPlantillasTienda } from '../lib/api';
 
@@ -421,7 +422,7 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
         <Campo label="Mensaje al terminar el pedido"><textarea value={d.gracias} onChange={(e) => set({ gracias: e.target.value })} rows={2} style={{ ...inp, resize: 'vertical' }} /></Campo>
         <Dos>
           <Campo label="WhatsApp del botón flotante" ayuda="Con indicativo, ej. 573001234567. Vacío = sin botón."><input value={d.whatsapp} onChange={(e) => set({ whatsapp: e.target.value.replace(/\D/g, '') })} inputMode="numeric" style={inp} /></Campo>
-          <Campo label="ID del Píxel de Meta" ayuda="Vacío = usa el píxel de «Mi tienda». Registra visitas, inicio de compra y compras."><input value={d.pixelMeta} onChange={(e) => set({ pixelMeta: e.target.value.replace(/\D/g, '') })} inputMode="numeric" style={inp} /></Campo>
+          <Campo label="Píxel de Meta" ayuda="Vacío = usa el píxel de «Mi tienda». Registra visitas, inicio de compra y compras."><SelectorPixel valor={d.pixelMeta} onChange={(pixelMeta) => set({ pixelMeta })} vacio="Usar el de «Mi tienda»" estilo={inp} /></Campo>
         </Dos>
         {d.pixelMeta ? <ApiConversionesMeta pixelId={d.pixelMeta} /> : <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>⚡ Esta landing usa el píxel (y el token de la API de Conversiones) de <b>«Mi tienda · página de inicio»</b>.</div>}
       </Bloque>
@@ -979,7 +980,7 @@ function TiendaCard({ t, onGuardada }: { t: TiendaConfig; onGuardada: (t: Tienda
             </Dos>
             <Dos>
               <Campo label="WhatsApp (botón flotante)"><input value={c.whatsapp} onChange={(e) => set({ whatsapp: e.target.value.replace(/\D/g, '') })} placeholder="573001234567" inputMode="numeric" style={inp} /></Campo>
-              <Campo label="ID del Píxel de Meta" ayuda="Lo usan todas las landings que no tengan uno propio."><input value={c.pixelMeta} onChange={(e) => set({ pixelMeta: e.target.value.replace(/\D/g, '') })} inputMode="numeric" style={inp} /></Campo>
+              <Campo label="Píxel de Meta" ayuda="Lo usan todas las landings que no tengan uno propio."><SelectorPixel valor={c.pixelMeta} onChange={(pixelMeta) => set({ pixelMeta })} estilo={inp} /></Campo>
             </Dos>
             <ApiConversionesMeta pixelId={c.pixelMeta} />
             <div style={{ borderTop: '1px solid var(--df-border)', paddingTop: 10 }}>

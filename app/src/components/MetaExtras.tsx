@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { apiMetaDiagnostico, apiMetaResuscribir, apiCapi, apiGuardarCapi, apiCapiDetectar, apiCapiEnviar, apiAnunciosMeta, apiVincularAnuncio, type DiagnosticoMeta, type EstadoCapi, type AnuncioMeta } from '../lib/api';
+import { apiMetaDiagnostico, apiMetaResuscribir, apiCapi, apiConfigurarPixelMeta, apiGuardarCapi, apiCapiDetectar, apiCapiEnviar, apiAnunciosMeta, apiVincularAnuncio, type DiagnosticoMeta, type EstadoCapi, type AnuncioMeta } from '../lib/api';
 import { Dropdown } from './Dropdown';
 import { IntegracionFila, LogoInteg } from './IntegracionFila';
 import { fmt } from '../lib/format';
 import { ApiConversionesMeta } from './ApiConversionesMeta';
+import { SelectorPixel } from './SelectorPixel';
 
 import { fmtCO } from '../lib/fechaCO';
 const btn: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' };
@@ -64,10 +65,21 @@ export function CapiCard() {
   const [dataset, setDataset] = useState('');
   const [test, setTest] = useState('');
   const [pixel, setPixel] = useState('');
+  const [auto, setAuto] = useState(false);
+  const [autoMsg, setAutoMsg] = useState('');
   useEffect(() => { void apiCapi().then((r) => { if (r.data) { setE(r.data); setDataset(r.data.datasetId); setTest(r.data.testCode); setPixel(r.data.pixelVentas); } }); }, []);
   if (!e) return null;
   const guardar = async (c: Partial<EstadoCapi>) => { setMsg(''); const r = await apiGuardarCapi(c); if (r.data) setE(r.data); else setMsg(`⚠️ ${r.error}`); };
   const detectar = async () => { setMsg(''); const r = await apiCapiDetectar(); if (r.data) { setE(r.data); setDataset(r.data.datasetId); setMsg('✓ Dataset encontrado.'); } else setMsg(`⚠️ ${r.error}`); };
+  const configurarAuto = async () => {
+    setAuto(true); setAutoMsg('');
+    const r = await apiConfigurarPixelMeta();
+    setAuto(false);
+    if (r.error || !r.data) { setAutoMsg(`⚠️ ${r.error || 'No se pudo configurar.'}`); return; }
+    setAutoMsg(r.data.mensaje);
+    const x = await apiCapi();
+    if (x.data) { setE(x.data); setPixel(x.data.pixelVentas); }
+  };
   const enviar = async () => { setMsg(''); const r = await apiCapiEnviar(); if (r.data) { setE(r.data); setMsg(`✓ Revisado: ${r.data.enviados} venta(s) enviadas ahora.`); } else setMsg(`⚠️ ${r.error}`); };
   const mensajeria = e.activo && !!e.datasetId;
   const porPixel = !!e.pixelActivo;
@@ -104,10 +116,17 @@ export function CapiCard() {
 
         <div style={paso}>
           {tit('1', 'Píxel de Meta y su token', 'Es lo principal. Funciona con WhatsApp por QR o por la API oficial.')}
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5 }}>ID del píxel</div>
-          <input value={pixel} onChange={(x) => setPixel(x.target.value.replace(/\D/g, ''))} onBlur={() => pixel !== e.pixelVentas && void guardar({ pixelVentas: pixel })} inputMode="numeric" placeholder="Ej: 1234567890123456" style={{ ...inp, width: '100%', boxSizing: 'border-box' }} />
-          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', margin: '4px 0 10px' }}>business.facebook.com → Administrador de eventos → tu píxel: el número de arriba. Si ya lo pusiste en Tienda en línea → «Mi tienda», aparece aquí solo.</div>
-          {pixel ? <ApiConversionesMeta pixelId={pixel} /> : <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>⚡ Escribe el ID del píxel para pegar su token.</div>}
+          {!porPixel && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', background: 'var(--df-brand-subtle, rgba(16,185,129,.08))', border: '1px solid var(--df-brand, #10B981)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
+              <button type="button" disabled={auto} onClick={() => void configurarAuto()} style={{ background: 'var(--df-brand)', color: '#fff', border: 0, borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{auto ? 'Configurando…' : '⚡ Configurar mi píxel automáticamente'}</button>
+              <span style={{ fontSize: 12, color: 'var(--df-text-muted)', flex: '1 1 220px' }}>Usa el píxel de tu cuenta de Anuncios (o crea uno), lo pone en «Mi tienda» y en las ventas de WhatsApp, y lo conecta sin copiar tokens.</span>
+            </div>
+          )}
+          {autoMsg && <div role="status" style={{ fontSize: 12.5, marginBottom: 10, color: autoMsg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{autoMsg}</div>}
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5 }}>Píxel</div>
+          <SelectorPixel valor={pixel} onChange={(id) => { setPixel(id); if (id !== e.pixelVentas && (id.length >= 8 || !id)) void guardar({ pixelVentas: id }); }} />
+          <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', margin: '4px 0 10px' }}>Si ya lo pusiste en Tienda en línea → «Mi tienda», aparece aquí solo.</div>
+          {pixel ? <ApiConversionesMeta key={pixel} pixelId={pixel} /> : <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>⚡ Elige el píxel para conectarlo.</div>}
           {pixel && !porPixel && <div style={{ fontSize: 12, color: 'var(--df-warning-mid)', marginTop: 8 }}>Falta el token de este píxel: sin token no se envía nada.</div>}
         </div>
 

@@ -5189,6 +5189,35 @@ api.put('/landings/conversiones/codigo-prueba', requireAuth, requireStore, async
 api.post('/landings/conversiones/probar', requireAuth, requireStore, async (req, res) => {
   res.json(await (await import('./metaPixelWeb.js')).probar(req.user!.storeId!, String(req.body?.pixelId || '')));
 });
+// Píxeles de Meta desde la cuenta de Anuncios (metaPixeles.ts): listar, crear, usar y conectar sin token.
+api.get('/meta/pixeles', requireAuth, requireStore, async (req, res) => {
+  res.json(await (await import('./metaPixeles.js')).listarPixeles(req.user!.storeId!));
+});
+api.post('/meta/pixeles', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const m = await import('./metaPixeles.js');
+  const r = await m.crearPixel(req.user!.storeId!, String(req.body?.nombre || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ...r, ...(await m.listarPixeles(req.user!.storeId!)) });
+});
+api.post('/meta/pixeles/usar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const m = await import('./metaPixeles.js');
+  const b = req.body || {};
+  const r = await m.usarPixel(req.user!.storeId!, String(b.pixelId || ''), { tienda: b.tienda === true, ventas: b.ventas === true, conectar: b.conectar !== false });
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/meta/pixeles/configurar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const r = await (await import('./metaPixeles.js')).configurarTodo(req.user!.storeId!);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/landings/conversiones/auto', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const m = await import('./metaPixelWeb.js');
+  const r = await m.conectarAuto(sid, String(req.body?.pixelId || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ...m.estado(sid, await pixelesDeTienda(sid)), mensaje: r.mensaje });
+});
 // Datos de la tienda (página de inicio con todos los productos).
 api.put('/landings/tienda', requireAuth, requireStore, async (req, res) => {
   res.json({ tienda: (await import('./landings.js')).guardarConfigTienda(req.user!.storeId!, req.body?.tienda) });

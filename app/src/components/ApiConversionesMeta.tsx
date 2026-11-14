@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { apiCodigoPruebaConversiones, apiConversiones, apiProbarConversiones, apiTokenConversiones } from '../lib/api';
+import { apiCodigoPruebaConversiones, apiConectarAutoConversiones, apiConversiones, apiProbarConversiones, apiTokenConversiones } from '../lib/api';
 import type { EstadoConversiones } from '../lib/api';
 
 /**
@@ -43,6 +43,14 @@ export function ApiConversionesMeta({ pixelId }: { pixelId: string }) {
     setOcupado(false);
     setMsg(r.data ? { ok: r.data.ok, t: r.data.mensaje } : { ok: false, t: r.error || 'No se pudo probar.' });
   };
+  // Sin token: con el acceso de la cuenta de Anuncios (DealFlow lo prueba con Meta en el momento).
+  const conectarAuto = async () => {
+    setOcupado(true); setMsg(null);
+    const r = await apiConectarAutoConversiones(pixel);
+    setOcupado(false);
+    if (r.error || !r.data) { setMsg({ ok: false, t: r.error || 'No se pudo conectar.' }); return; }
+    setE(r.data); setMsg({ ok: true, t: r.data.mensaje });
+  };
   const guardarCodigo = async () => {
     const r = await apiCodigoPruebaConversiones(codigo);
     if (r.data) { setE(r.data); setMsg({ ok: true, t: codigo ? 'Código de prueba guardado: los eventos saldrán en «Probar eventos» de Meta.' : 'Código de prueba quitado.' }); }
@@ -58,7 +66,7 @@ export function ApiConversionesMeta({ pixelId }: { pixelId: string }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 700, fontSize: 13 }}>⚡ API de Conversiones (token)</span>
         <span style={{ fontSize: 11.5, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: conToken ? '#dcfce7' : '#fef3c7', color: conToken ? '#166534' : '#92400e' }}>
-          {conToken ? `Activa · token ····${fila!.final}` : 'Sin token: solo el píxel del navegador'}
+          {conToken ? (fila!.auto ? 'Activa · con tu cuenta de Anuncios' : `Activa · token ····${fila!.final}`) : 'Sin conectar: solo el píxel del navegador'}
         </span>
       </div>
       <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.45 }}>
@@ -73,6 +81,12 @@ export function ApiConversionesMeta({ pixelId }: { pixelId: string }) {
           <li>Pégalo aquí y toca <b>Guardar token</b>. DealFlow lo prueba con Meta en ese momento.</li>
         </ol>
       )}
+      {!conToken && e?.anuncios && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" disabled={ocupado} onClick={() => void conectarAuto()} style={btnPri}>{ocupado ? 'Conectando…' : '⚡ Conectar con mi cuenta de Meta'}</button>
+          <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Sin copiar tokens: usa tu conexión de Anuncios. Si Meta no lo acepta, pega el token abajo.</span>
+        </div>
+      )}
       {(!conToken || cambiar) && (
         <div style={{ display: 'flex', gap: 6 }}>
           <input type="password" autoComplete="off" value={token} onChange={(x) => setToken(x.target.value.trim())} placeholder="Pega aquí el token (empieza por EAA…)" style={{ ...inp, flex: 1, minWidth: 0 }} aria-label="Token de la API de Conversiones" />
@@ -83,7 +97,7 @@ export function ApiConversionesMeta({ pixelId }: { pixelId: string }) {
       {conToken && !cambiar && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button type="button" disabled={ocupado} onClick={() => void probar()} style={btn}>{ocupado ? 'Probando…' : 'Probar envío'}</button>
-          <button type="button" onClick={() => setCambiar(true)} style={btn}>Cambiar token</button>
+          <button type="button" onClick={() => setCambiar(true)} style={btn}>{fila!.auto ? 'Usar un token' : 'Cambiar token'}</button>
           <button type="button" onClick={() => void guardarToken('')} style={{ ...btn, color: 'var(--df-danger-dark, #b91c1c)' }}>Quitar</button>
         </div>
       )}
