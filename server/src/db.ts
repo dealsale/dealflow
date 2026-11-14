@@ -459,6 +459,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_push_store ON push_subscriptions(store_id)');
+addColumn('push_subscriptions', 'dueno INTEGER NOT NULL DEFAULT 0'); // 1 = celular del dueño (recibe alertas de anuncios)
 // Biblioteca: el admin elige por producto si el cliente puede editarlo (1) o no (0).
 // Por defecto editable, para no bloquear nada sin que el admin lo decida.
 addColumn('library_products', 'editable INTEGER NOT NULL DEFAULT 1');

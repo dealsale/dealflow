@@ -1398,3 +1398,26 @@ export const apiAdsSugerencia = (accion: NonNullable<SugerenciaAds['accion']>) =
 export const apiAdsConfig = (c: Partial<ConfigAds>) => req<{ config: ConfigAds }>('/api/anuncios/config', 'PUT', c);
 export const apiAdsRegla = (r: Partial<ReglaAds>) => req<{ reglas: ReglaAds[] }>('/api/anuncios/reglas', 'POST', r);
 export const apiAdsBorrarRegla = (id: string) => req<{ reglas: ReglaAds[] }>(`/api/anuncios/reglas/${id}`, 'DELETE');
+
+// Alertas al celular y pruebas A/B de anuncios
+export type TipoAlertaAds = 'gasto_sin_venta' | 'cpa_alto' | 'rechazado' | 'cuenta' | 'pixel' | 'resumen';
+export interface CfgAlertasAds { activas: TipoAlertaAds[]; gastoSinVenta: number; correo: boolean }
+export interface AlertaAds { tipo: TipoAlertaAds; titulo: string; detalle: string; creado: string }
+export const apiAdsAlertas = () => req<{ config: CfgAlertasAds; tipos: Record<TipoAlertaAds, string>; ultimas: AlertaAds[] }>('/api/anuncios/alertas', 'GET');
+export const apiAdsGuardarAlertas = (c: Partial<CfgAlertasAds>) => req<{ config: CfgAlertasAds }>('/api/anuncios/alertas', 'PUT', c);
+export const apiAdsProbarAlerta = () => req<{ ok: true }>('/api/anuncios/alertas/probar', 'POST', {});
+export const apiAdsRevisarAlertas = () => req<{ enviadas: number; ultimas: AlertaAds[] }>('/api/anuncios/alertas/revisar', 'POST', {});
+export interface LadoPruebaAds { id: string; nombre: string; gasto: number; ventas: number; pedidos: number; cpa: number; roas: number; devueltos: number }
+export interface PruebaAds {
+  id: string; nombre: string; nivel: 'ad' | 'adset'; metrica: 'cpa' | 'roas'; diasMin: number; ventasMin: number; accion: 'pausar' | 'avisar';
+  estado: 'corriendo' | 'terminada'; ganador: '' | 'a' | 'b' | 'empate'; resumen: string; desde: string; dias: number; terminada: string;
+  a: LadoPruebaAds; b: LadoPruebaAds; ventaja: number; progreso: string;
+}
+export interface OpcionesPruebaAds { anuncios: { id: string; nombre: string; campana: string; conjunto: string; gasto: number }[]; conjuntos: { id: string; nombre: string; campana: string; activa: boolean }[] }
+export const apiAdsPruebas = () => req<{ pruebas: PruebaAds[] }>('/api/anuncios/pruebas', 'GET');
+export const apiAdsOpcionesPrueba = () => req<OpcionesPruebaAds>('/api/anuncios/pruebas/opciones', 'GET');
+export const apiAdsCrearPrueba = (p: { nombre?: string; nivel: 'ad' | 'adset'; aId: string; aNombre: string; bId: string; bNombre: string; metrica: 'cpa' | 'roas'; diasMin: number; ventasMin: number; accion: 'pausar' | 'avisar' }) =>
+  req<{ ok: true; id: string; pruebas: PruebaAds[] }>('/api/anuncios/pruebas', 'POST', p);
+export const apiAdsTerminarPrueba = (id: string) => req<{ pruebas: PruebaAds[] }>(`/api/anuncios/pruebas/${id}/terminar`, 'POST', {});
+export const apiAdsBorrarPrueba = (id: string) => req<{ pruebas: PruebaAds[] }>(`/api/anuncios/pruebas/${id}`, 'DELETE');
+export const apiAdsDuplicarConjunto = (id: string) => req<{ ok: true; id: string }>('/api/anuncios/conjuntos/duplicar', 'POST', { id });

@@ -26,16 +26,16 @@ export function vapidPublicKey(): string { return listo ? PUB : ''; }
 interface SubEntrante { endpoint?: string; keys?: { p256dh?: string; auth?: string } }
 
 /** Guarda (o actualiza) una suscripción push con sus preferencias de tipo. */
-export function guardarSuscripcion(storeId: string, sub: SubEntrante, prefs?: { pedidos?: boolean; contactos?: boolean }): boolean {
+export function guardarSuscripcion(storeId: string, sub: SubEntrante, prefs?: { pedidos?: boolean; contactos?: boolean }, dueno = false): boolean {
   const endpoint = sub?.endpoint;
   const p256dh = sub?.keys?.p256dh;
   const auth = sub?.keys?.auth;
   if (!endpoint || !p256dh || !auth) return false;
   db.prepare(
-    `INSERT INTO push_subscriptions (id, store_id, endpoint, p256dh, auth, pedidos, contactos)
-     VALUES (?,?,?,?,?,?,?)
-     ON CONFLICT(endpoint) DO UPDATE SET store_id = excluded.store_id, p256dh = excluded.p256dh, auth = excluded.auth, pedidos = excluded.pedidos, contactos = excluded.contactos`,
-  ).run(uid(), storeId, endpoint, p256dh, auth, prefs?.pedidos === false ? 0 : 1, prefs?.contactos === false ? 0 : 1);
+    `INSERT INTO push_subscriptions (id, store_id, endpoint, p256dh, auth, pedidos, contactos, dueno)
+     VALUES (?,?,?,?,?,?,?,?)
+     ON CONFLICT(endpoint) DO UPDATE SET store_id = excluded.store_id, p256dh = excluded.p256dh, auth = excluded.auth, pedidos = excluded.pedidos, contactos = excluded.contactos, dueno = excluded.dueno`,
+  ).run(uid(), storeId, endpoint, p256dh, auth, prefs?.pedidos === false ? 0 : 1, prefs?.contactos === false ? 0 : 1, dueno ? 1 : 0);
   return true;
 }
 
@@ -47,10 +47,11 @@ export function eliminarSuscripcion(endpoint: string): void {
  * Envía una notificación push a todas las suscripciones de la tienda que tengan
  * activado ese tipo. Borra las suscripciones muertas (404/410).
  */
-export async function enviarPush(storeId: string, tipo: 'pedidos' | 'contactos', titulo: string, cuerpo: string, data?: Record<string, unknown>): Promise<void> {
+export async function enviarPush(storeId: string, tipo: 'pedidos' | 'contactos' | 'dueno', titulo: string, cuerpo: string, data?: Record<string, unknown>): Promise<void> {
   if (!listo) return;
-  const col = tipo === 'pedidos' ? 'pedidos' : 'contactos';
-  const subs = db.prepare(`SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE store_id = ? AND ${col} = 1`).all(storeId) as
+  // 'dueno': solo los celulares del dueño de la tienda (p. ej. alertas de anuncios con gasto y ventas).
+  const filtro = tipo === 'dueno' ? 'dueno = 1' : tipo === 'pedidos' ? 'pedidos = 1' : 'contactos = 1';
+  const subs = db.prepare(`SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE store_id = ? AND ${filtro}`).all(storeId) as
     { endpoint: string; p256dh: string; auth: string }[];
   if (!subs.length) return;
   const payload = JSON.stringify({ titulo, cuerpo, tipo, data: data || {} });
