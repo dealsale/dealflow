@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { confirmar, notificar } from '../components/dialogs';
 import { ymdCO } from '../lib/fechaCO';
 import {
-  apiAdsBorrarRegla, apiAdsConfig, apiAdsEstado, apiAdsPanel, apiAdsPresupuesto, apiAdsRegla, apiAdsSincronizar, apiAdsSugerencia,
-  type CampanaAds, type ConfigAds, type PanelAds, type ReglaAds, type SugerenciaAds,
+  apiAdsAlertas, apiAdsBorrarPrueba, apiAdsBorrarRegla, apiAdsConfig, apiAdsCrearPrueba, apiAdsDuplicarConjunto, apiAdsEstado, apiAdsGuardarAlertas,
+  apiAdsOpcionesPrueba, apiAdsPanel, apiAdsPresupuesto, apiAdsProbarAlerta, apiAdsPruebas, apiAdsRegla, apiAdsRevisarAlertas, apiAdsSincronizar,
+  apiAdsSugerencia, apiAdsTerminarPrueba,
+  type AlertaAds, type CampanaAds, type CfgAlertasAds, type ConfigAds, type OpcionesPruebaAds, type PanelAds, type PruebaAds, type ReglaAds,
+  type SugerenciaAds, type TipoAlertaAds,
 } from '../lib/api';
 
 /**
@@ -248,6 +251,11 @@ export function AdsManager() {
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' }}>
+        <PruebasAB onCambio={cargar} />
+        <Alertas />
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' }}>
         <Costos config={p.config} onCambio={cargar} />
         {/* Historial */}
         <div style={{ ...card, flex: '2 1 420px', minWidth: 0 }}>
@@ -258,7 +266,7 @@ export function AdsManager() {
               {p.historial.map((h, i) => (
                 <div key={i} style={{ fontSize: 12.5, borderBottom: '1px solid var(--df-border)', paddingBottom: 6 }}>
                   <b>{h.nombre}</b> · {ACCION[h.accion] || h.accion}{h.antes || h.despues ? `: ${h.antes}${h.antes && h.despues ? ' → ' : ''}${h.despues}` : ''}
-                  <span style={{ color: h.ok ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}> · {h.origen === 'manual' ? h.usuario || 'a mano' : h.origen === 'sugerencia' ? 'sugerencia' : 'regla automática'} · {new Date(h.creado.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}{h.ok ? '' : ` · falló: ${h.error}`}</span>
+                  <span style={{ color: h.ok ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}> · {h.origen === 'manual' ? h.usuario || 'a mano' : h.origen === 'sugerencia' ? 'sugerencia' : h.origen === 'prueba A/B' ? 'prueba A/B' : 'regla automática'} · {new Date(h.creado.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}{h.ok ? '' : ` · falló: ${h.error}`}</span>
                 </div>
               ))}
             </div>
@@ -268,7 +276,7 @@ export function AdsManager() {
     </section>
   );
 }
-const ACCION: Record<string, string> = { activar: 'activada', pausar: 'pausada', subir_presupuesto: 'presupuesto subido', bajar_presupuesto: 'presupuesto bajado', aviso: 'aviso' };
+const ACCION: Record<string, string> = { activar: 'activada', pausar: 'pausada', subir_presupuesto: 'presupuesto subido', bajar_presupuesto: 'presupuesto bajado', aviso: 'aviso', duplicar: 'duplicado' };
 
 function FilaCampana({ c, abierta, onAbrir, ocupado, onEstado, onPres }: {
   c: CampanaAds; abierta: boolean; onAbrir: () => void; ocupado: string;
@@ -401,6 +409,220 @@ function Costos({ config, onCambio }: { config: ConfigAds; onCambio: () => void 
       {campo('cpaObjetivo', 'Costo por venta objetivo ($)', 'Para las sugerencias (0 = sin objetivo)')}
       {campo('topeDiarioCuenta', 'Tope de gasto diario de la cuenta ($)', 'Las reglas nunca suben más de esto (0 = sin tope)')}
       <button onClick={() => void guardar()} style={{ ...btnP, alignSelf: 'flex-start' }}>Guardar</button>
+    </div>
+  );
+}
+
+// ── Pruebas A/B ──────────────────────────────────────────────────────────────────────────────
+function PruebasAB({ onCambio }: { onCambio: () => void }) {
+  const [pruebas, setPruebas] = useState<PruebaAds[] | null>(null);
+  const [ops, setOps] = useState<OpcionesPruebaAds | null>(null);
+  const [f, setF] = useState<{ nivel: 'ad' | 'adset'; aId: string; bId: string; metrica: 'cpa' | 'roas'; diasMin: number; ventasMin: number; accion: 'pausar' | 'avisar' } | null>(null);
+  const [dup, setDup] = useState('');
+  const [ocupado, setOcupado] = useState('');
+  const cargar = () => void apiAdsPruebas().then((r) => setPruebas(r.data?.pruebas || []));
+  useEffect(cargar, []);
+  const abrir = async () => {
+    setF({ nivel: 'ad', aId: '', bId: '', metrica: 'cpa', diasMin: 3, ventasMin: 5, accion: 'pausar' });
+    if (!ops) { const r = await apiAdsOpcionesPrueba(); setOps(r.data || { anuncios: [], conjuntos: [] }); }
+  };
+  const lista = f?.nivel === 'adset' ? (ops?.conjuntos || []).map((x) => ({ id: x.id, nombre: x.nombre, sub: x.campana + (x.activa ? '' : ' · en pausa') }))
+    : (ops?.anuncios || []).map((x) => ({ id: x.id, nombre: x.nombre || x.id, sub: `${x.campana} · ${x.conjunto}` }));
+  const nombreDe = (id: string) => lista.find((x) => x.id === id)?.nombre || '';
+  const crear = async () => {
+    if (!f) return;
+    setOcupado('crear');
+    const r = await apiAdsCrearPrueba({ ...f, aNombre: nombreDe(f.aId), bNombre: nombreDe(f.bId) });
+    setOcupado('');
+    if (r.error || !r.data) return notificar(r.error || 'No se pudo crear la prueba.', 'error');
+    setPruebas(r.data.pruebas); setF(null);
+    notificar('✓ Prueba creada. Te avisamos al celular cuando haya un ganador.');
+  };
+  const terminar = async (p: PruebaAds) => {
+    if (!(await confirmar({ titulo: 'Terminar la prueba', mensaje: `Se cierra con los números de hoy.${p.accion === 'pausar' ? ' Si ya hay una diferencia clara, pausamos al perdedor.' : ''}`, aceptar: 'Terminar' }))) return;
+    setOcupado('fin' + p.id);
+    const r = await apiAdsTerminarPrueba(p.id);
+    setOcupado('');
+    if (r.error) return notificar(r.error, 'error');
+    setPruebas(r.data?.pruebas || []); onCambio();
+  };
+  const borrar = async (p: PruebaAds) => {
+    if (!(await confirmar({ titulo: 'Borrar la prueba', mensaje: 'Solo se borra de DealFlow; tus anuncios en Meta no cambian.', aceptar: 'Borrar', peligro: true }))) return;
+    const r = await apiAdsBorrarPrueba(p.id);
+    setPruebas(r.data?.pruebas || []);
+  };
+  const duplicar = async () => {
+    if (!dup) return;
+    setOcupado('dup');
+    const r = await apiAdsDuplicarConjunto(dup);
+    setOcupado('');
+    if (r.error) return notificar(r.error, 'error');
+    notificar('✓ Conjunto duplicado en pausa. Cámbiale el anuncio o el público en Meta, actívalo y crea la prueba.');
+    setDup(''); setOps(null); onCambio();
+  };
+  const valor = (p: PruebaAds, l: PruebaAds['a']) => (p.metrica === 'cpa' ? (l.pedidos ? pesos(l.cpa) : '—') : (l.gasto ? dec(l.roas) : '—'));
+  return (
+    <div style={{ ...card, flex: '1 1 420px', minWidth: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <b style={{ fontSize: 14 }}>Pruebas A/B</b>
+        {!f && <button onClick={() => void abrir()} style={btnS}>+ Nueva prueba</button>}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 10px' }}>Compara dos anuncios o dos conjuntos con tus ventas reales (no con clics). Gana el que venda más barato con al menos 15 % de diferencia; al terminar te avisamos y, si quieres, pausamos al perdedor.</div>
+      {f && (
+        <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12.5, marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(['ad', 'adset'] as const).map((n) => <button key={n} onClick={() => setF({ ...f, nivel: n, aId: '', bId: '' })} style={{ ...btnS, ...(f.nivel === n ? { background: 'var(--df-brand)', color: '#fff', borderColor: 'var(--df-brand)' } : {}) }}>{n === 'ad' ? 'Dos anuncios' : 'Dos conjuntos'}</button>)}
+          </div>
+          {!ops ? <div style={{ color: 'var(--df-text-faint)' }}>Cargando…</div> : !lista.length ? <div style={{ color: 'var(--df-text-faint)' }}>{f.nivel === 'ad' ? 'No hay anuncios con gasto en los últimos 30 días.' : 'No hay conjuntos en tu cuenta.'}</div> : (
+            (['aId', 'bId'] as const).map((k, i) => (
+              <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 3, fontWeight: 600, color: 'var(--df-text-muted)' }}>
+                Opción {i ? 'B' : 'A'}
+                <select value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} style={{ ...inp, width: '100%' }}>
+                  <option value="">Elige…</option>
+                  {lista.filter((x) => x.id !== (k === 'aId' ? f.bId : f.aId)).map((x) => <option key={x.id} value={x.id}>{x.nombre} — {x.sub}</option>)}
+                </select>
+              </label>
+            ))
+          )}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            Gana el de
+            <select value={f.metrica} onChange={(e) => setF({ ...f, metrica: e.target.value as 'cpa' | 'roas' })} style={inp} aria-label="Métrica"><option value="cpa">menor costo por venta</option><option value="roas">mayor ROAS esperado</option></select>
+            tras
+            <select value={String(f.diasMin)} onChange={(e) => setF({ ...f, diasMin: Number(e.target.value) })} style={inp} aria-label="Días mínimos">{[2, 3, 4, 5, 7].map((d) => <option key={d} value={d}>{d} días</option>)}</select>
+            y
+            <select value={String(f.ventasMin)} onChange={(e) => setF({ ...f, ventasMin: Number(e.target.value) })} style={inp} aria-label="Ventas mínimas">{[3, 5, 8, 10, 15].map((d) => <option key={d} value={d}>{d} ventas</option>)}</select>
+            cada uno
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            Al terminar
+            <select value={f.accion} onChange={(e) => setF({ ...f, accion: e.target.value as 'pausar' | 'avisar' })} style={inp} aria-label="Al terminar"><option value="pausar">pausar al perdedor y avisarme</option><option value="avisar">solo avisarme</option></select>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => void crear()} disabled={!f.aId || !f.bId || ocupado === 'crear'} style={{ ...btnP, opacity: !f.aId || !f.bId ? 0.5 : 1 }}>Empezar prueba</button>
+            <button onClick={() => setF(null)} style={btnS}>Cancelar</button>
+          </div>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {pruebas === null ? <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Cargando…</div> : !pruebas.length && !f ? <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Sin pruebas todavía.</div> : pruebas.map((p) => (
+          <div key={p.id} style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 10, fontSize: 12.5, opacity: p.estado === 'terminada' ? 0.85 : 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+              <div style={{ minWidth: 0 }}>
+                <b>{p.nombre}</b>
+                <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{p.nivel === 'ad' ? 'Anuncios' : 'Conjuntos'} · {p.metrica === 'cpa' ? 'costo por venta' : 'ROAS esperado'} · {p.estado === 'corriendo' ? `día ${p.dias}` : 'terminada'}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                {p.estado === 'corriendo' && <button onClick={() => void terminar(p)} disabled={ocupado === 'fin' + p.id} style={{ ...btnS, padding: '3px 8px' }}>Terminar</button>}
+                <button onClick={() => void borrar(p)} aria-label="Borrar prueba" style={{ ...btnS, padding: '3px 8px', color: 'var(--df-danger-dark)' }}>✕</button>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+              {(['a', 'b'] as const).map((k) => {
+                const l = p[k];
+                const gana = p.ganador === k;
+                const pierde = (p.ganador === 'a' || p.ganador === 'b') && !gana;
+                return (
+                  <div key={k} style={{ borderRadius: 8, padding: 8, background: gana ? 'var(--df-brand-50, rgba(16,185,129,.1))' : 'var(--df-bg)', border: `1px solid ${gana ? 'var(--df-brand)' : 'var(--df-border)'}`, opacity: pierde ? 0.6 : 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)' }}>{k.toUpperCase()}{gana ? ' · 🏆 Ganador' : pierde ? ' · Perdedor' : ''}</div>
+                    <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.nombre}>{l.nombre}</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{valor(p, l)}</div>
+                    <div style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>{pesos(l.gasto)} gastado · {l.pedidos} ventas{l.devueltos ? ` · ${l.devueltos} devueltas` : ''}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 12, color: p.estado === 'terminada' ? 'var(--df-text-body)' : 'var(--df-text-muted)' }}>{p.progreso}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ borderTop: '1px solid var(--df-border)', marginTop: 12, paddingTop: 10, fontSize: 12.5 }}>
+        <b>¿Quieres probar un cambio?</b>
+        <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 6px' }}>Duplica un conjunto con sus anuncios. La copia queda en pausa para que le cambies el video, el texto o el público en Meta antes de activarla.</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <select value={dup} onFocus={() => { if (!ops) void apiAdsOpcionesPrueba().then((r) => setOps(r.data || { anuncios: [], conjuntos: [] })); }} onChange={(e) => setDup(e.target.value)} style={{ ...inp, flex: '1 1 200px', minWidth: 0 }} aria-label="Conjunto a duplicar">
+            <option value="">Elige un conjunto…</option>
+            {(ops?.conjuntos || []).map((x) => <option key={x.id} value={x.id}>{x.nombre} — {x.campana}</option>)}
+          </select>
+          <button onClick={() => void duplicar()} disabled={!dup || ocupado === 'dup'} style={{ ...btnS, opacity: dup ? 1 : 0.5 }}>{ocupado === 'dup' ? 'Duplicando…' : 'Duplicar en pausa'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Alertas al celular ───────────────────────────────────────────────────────────────────────
+const ICONO_ALERTA: Record<TipoAlertaAds, string> = { gasto_sin_venta: '💸', cpa_alto: '📈', rechazado: '⛔', cuenta: '💳', pixel: '📡', resumen: '☀️' };
+function Alertas() {
+  const [cfg, setCfg] = useState<CfgAlertasAds | null>(null);
+  const [tipos, setTipos] = useState<Record<TipoAlertaAds, string> | null>(null);
+  const [ultimas, setUltimas] = useState<AlertaAds[]>([]);
+  const [ocupado, setOcupado] = useState('');
+  const permiso = typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+  useEffect(() => { void apiAdsAlertas().then((r) => { if (r.data) { setCfg(r.data.config); setTipos(r.data.tipos); setUltimas(r.data.ultimas); } }); }, []);
+  const guardar = async (c: CfgAlertasAds) => {
+    setCfg(c);
+    const r = await apiAdsGuardarAlertas(c);
+    if (r.error) return notificar(r.error, 'error');
+    if (r.data) setCfg(r.data.config);
+  };
+  const probar = async () => {
+    setOcupado('probar');
+    await apiAdsProbarAlerta();
+    setOcupado('');
+    notificar(permiso === 'granted' ? '✓ Enviada. Debe llegarte en unos segundos.' : '✓ Enviada. Si no te llega, activa las notificaciones en la campana 🔔 de arriba.');
+  };
+  const revisar = async () => {
+    setOcupado('revisar');
+    const r = await apiAdsRevisarAlertas();
+    setOcupado('');
+    if (r.error || !r.data) return notificar(r.error || 'No se pudo revisar.', 'error');
+    setUltimas(r.data.ultimas);
+    notificar(r.data.enviadas ? `Se enviaron ${r.data.enviadas} alerta(s).` : '✓ Todo en orden: no hay nada que avisar ahora.');
+  };
+  if (!cfg || !tipos) return <div style={{ ...card, flex: '1 1 340px', minWidth: 0, fontSize: 12.5, color: 'var(--df-text-faint)' }}>Cargando alertas…</div>;
+  const on = (t: TipoAlertaAds) => cfg.activas.includes(t);
+  const cambiar = (t: TipoAlertaAds) => void guardar({ ...cfg, activas: on(t) ? cfg.activas.filter((x) => x !== t) : [...cfg.activas, t] });
+  return (
+    <div style={{ ...card, flex: '1 1 340px', minWidth: 0 }}>
+      <b style={{ fontSize: 14 }}>Alertas al celular</b>
+      <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 10px' }}>Te llegan como notificación al celular del dueño (y por correo si quieres). Se revisan cada 30 minutos y cada alerta sale como mucho una vez al día.</div>
+      {permiso !== 'granted' && <div style={{ fontSize: 12, background: 'var(--df-warning-bg, #fff7e6)', color: 'var(--df-warning-dark, #8a5a00)', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{permiso === 'unsupported' ? 'Este navegador no recibe notificaciones. Abre DealFlow en tu celular (Chrome o la app instalada).' : 'Las notificaciones no están activas en este dispositivo. Actívalas en la campana 🔔 de arriba, desde tu celular.'}</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {(Object.keys(tipos) as TipoAlertaAds[]).map((t) => (
+          <div key={t} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 12.5 }}>
+            <Switch on={on(t)} label={`${on(t) ? 'Apagar' : 'Encender'}: ${tipos[t]}`} onChange={() => cambiar(t)} />
+            <span style={{ flex: 1 }}>{ICONO_ALERTA[t]} {tipos[t]}</span>
+            {t === 'gasto_sin_venta' && on(t) && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--df-text-muted)' }}>
+                desde
+                <input type="number" min={1000} step={5000} defaultValue={cfg.gastoSinVenta} onBlur={(e) => { const v = Number(e.target.value); if (v && v !== cfg.gastoSinVenta) void guardar({ ...cfg, gastoSinVenta: v }); }} style={{ ...inp, width: 100 }} aria-label="Gasto sin venta" />
+              </label>
+            )}
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 12.5, borderTop: '1px solid var(--df-border)', paddingTop: 8 }}>
+          <Switch on={cfg.correo} label={cfg.correo ? 'No enviar por correo' : 'Enviar también por correo'} onChange={() => void guardar({ ...cfg, correo: !cfg.correo })} />
+          <span style={{ flex: 1 }}>✉️ También por correo</span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+        <button onClick={() => void probar()} disabled={ocupado === 'probar'} style={btnS}>Enviar alerta de prueba</button>
+        <button onClick={() => void revisar()} disabled={ocupado === 'revisar'} style={btnS}>{ocupado === 'revisar' ? 'Revisando…' : 'Revisar ahora'}</button>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 6 }}>Últimas alertas</div>
+        {!ultimas.length ? <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Ninguna todavía.</div> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+            {ultimas.map((a, i) => (
+              <div key={i} style={{ fontSize: 12.5, borderBottom: '1px solid var(--df-border)', paddingBottom: 6 }}>
+                <b>{ICONO_ALERTA[a.tipo] || '🔔'} {a.titulo}</b>
+                <div style={{ color: 'var(--df-text-muted)' }}>{a.detalle}</div>
+                <div style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>{new Date(a.creado.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

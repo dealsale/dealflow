@@ -42,14 +42,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS ads_config (
   costo_devolucion REAL NOT NULL DEFAULT 12000, cpa_objetivo REAL NOT NULL DEFAULT 0, tope_diario_cuenta REAL NOT NULL DEFAULT 0
 )`);
 
-interface Cuenta { act: string; token: string; moneda: string }
-function cuenta(storeId: string): Cuenta | null {
+export interface Cuenta { act: string; token: string; moneda: string }
+export function cuenta(storeId: string): Cuenta | null {
   const c = db.prepare('SELECT ad_account_id, access_token, moneda, conectada FROM ads_cuentas WHERE store_id = ?').get(storeId) as { ad_account_id: string; access_token: string; moneda: string; conectada: number } | undefined;
   if (!c?.conectada || !c.access_token || !c.ad_account_id) return null;
   return { act: c.ad_account_id.startsWith('act_') ? c.ad_account_id : `act_${c.ad_account_id}`, token: c.access_token, moneda: c.moneda || 'COP' };
 }
 
-async function graph<T>(c: Cuenta, ruta: string, metodo: 'GET' | 'POST' = 'GET', datos?: Record<string, string>): Promise<{ ok: true; body: T } | { ok: false; error: string }> {
+export async function graph<T>(c: Cuenta, ruta: string, metodo: 'GET' | 'POST' = 'GET', datos?: Record<string, string>): Promise<{ ok: true; body: T } | { ok: false; error: string }> {
   try {
     const url = metodo === 'GET' ? `${GRAPH}/${ruta}${ruta.includes('?') ? '&' : '?'}${new URLSearchParams(datos || {})}` : `${GRAPH}/${ruta}`;
     const r = await fetch(url, {
@@ -106,7 +106,7 @@ export async function estructura(storeId: string, forzar = false): Promise<{ cam
 }
 
 // ── Acciones en Meta (con historial) ─────────────────────────────────────────────────────────
-function anotarCambio(storeId: string, d: { objeto: string; nivel: string; nombre: string; accion: string; antes: string; despues: string; origen: string; usuario: string; ok: boolean; error?: string }) {
+export function anotarCambio(storeId: string, d: { objeto: string; nivel: string; nombre: string; accion: string; antes: string; despues: string; origen: string; usuario: string; ok: boolean; error?: string }) {
   db.prepare('INSERT INTO ads_cambios (id, store_id, objeto_id, nivel, nombre, accion, antes, despues, origen, usuario, ok, error) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(uid(), storeId, d.objeto, d.nivel, d.nombre.slice(0, 120), d.accion, d.antes, d.despues, d.origen, d.usuario, d.ok ? 1 : 0, (d.error || '').slice(0, 300));
 }
@@ -129,6 +129,18 @@ export async function cambiarEstado(storeId: string, id: string, activar: boolea
   const r = await graph(c, id, 'POST', { status: activar ? 'ACTIVE' : 'PAUSED' });
   anotarCambio(storeId, { objeto: id, nivel: o.nivel, nombre: o.nombre, accion: activar ? 'activar' : 'pausar', antes: o.activa ? 'Activa' : 'Pausada', despues: activar ? 'Activa' : 'Pausada', origen, usuario, ok: r.ok, error: r.ok ? '' : r.error });
   cache.delete(storeId);
+  return r.ok ? { ok: true } : { error: r.error };
+}
+
+/** Encender/pausar un anuncio suelto (se verifica que sea de la cuenta conectada). */
+export async function cambiarEstadoAnuncio(storeId: string, adId: string, activar: boolean, origen = 'manual', usuario = ''): Promise<{ ok: true } | { error: string }> {
+  const c = cuenta(storeId);
+  if (!c) return { error: 'Conecta tu Administrador de anuncios.' };
+  const o = await graph<{ name?: string; status?: string; account_id?: string }>(c, adId, 'GET', { fields: 'name,status,account_id' });
+  if (!o.ok) return { error: o.error };
+  if (`act_${o.body.account_id || ''}` !== c.act) return { error: 'Ese anuncio no es de tu cuenta publicitaria.' };
+  const r = await graph(c, adId, 'POST', { status: activar ? 'ACTIVE' : 'PAUSED' });
+  anotarCambio(storeId, { objeto: adId, nivel: 'ad', nombre: o.body.name || adId, accion: activar ? 'activar' : 'pausar', antes: o.body.status === 'ACTIVE' ? 'Activo' : 'Pausado', despues: activar ? 'Activo' : 'Pausado', origen, usuario, ok: r.ok, error: r.ok ? '' : r.error });
   return r.ok ? { ok: true } : { error: r.error };
 }
 

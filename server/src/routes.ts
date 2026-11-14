@@ -3220,6 +3220,67 @@ api.delete('/anuncios/reglas/:id', requireAuth, requireStore, requireOwner, asyn
   res.json({ reglas: am.borrarRegla(req.user!.storeId!, String(req.params.id)) });
 });
 
+// Alertas al celular (adsAlertas.ts)
+api.get('/anuncios/alertas', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const al = await import('./adsAlertas.js');
+  res.json({ config: al.cfgAlertas(req.user!.storeId!), tipos: al.TIPOS_ALERTA, ultimas: al.ultimasAlertas(req.user!.storeId!) });
+});
+api.put('/anuncios/alertas', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const al = await import('./adsAlertas.js');
+  const b = req.body || {};
+  const p: Partial<import('./adsAlertas.js').CfgAlertas> = {};
+  if (Array.isArray(b.activas)) p.activas = b.activas.map(String);
+  if (b.gastoSinVenta !== undefined) p.gastoSinVenta = Number(b.gastoSinVenta) || 0;
+  if (b.correo !== undefined) p.correo = b.correo === true;
+  res.json({ config: al.guardarCfgAlertas(req.user!.storeId!, p) });
+});
+api.post('/anuncios/alertas/probar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const al = await import('./adsAlertas.js');
+  al.notificar(req.user!.storeId!, 'Prueba de alertas de anuncios', 'Así te llegarán los avisos de tus campañas: gasto sin ventas, anuncios rechazados, problemas de pago y más.');
+  res.json({ ok: true });
+});
+api.post('/anuncios/alertas/revisar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const al = await import('./adsAlertas.js');
+  try { res.json({ enviadas: await al.revisarAlertas(req.user!.storeId!), ultimas: al.ultimasAlertas(req.user!.storeId!) }); }
+  catch (e) { console.error('[anuncios] alertas', e); res.status(500).json({ error: 'No se pudieron revisar las alertas.' }); }
+});
+
+// Pruebas A/B (adsPruebas.ts)
+api.get('/anuncios/pruebas', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const pr = await import('./adsPruebas.js');
+  try { res.json({ pruebas: await pr.listarPruebas(req.user!.storeId!) }); }
+  catch (e) { console.error('[anuncios] pruebas', e); res.status(500).json({ error: 'No se pudieron cargar las pruebas.' }); }
+});
+api.get('/anuncios/pruebas/opciones', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const pr = await import('./adsPruebas.js');
+  res.json(await pr.opcionesPrueba(req.user!.storeId!));
+});
+api.post('/anuncios/pruebas', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const pr = await import('./adsPruebas.js');
+  const r = pr.crearPrueba(req.user!.storeId!, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ ...r, pruebas: await pr.listarPruebas(req.user!.storeId!) });
+});
+api.post('/anuncios/pruebas/:id/terminar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const pr = await import('./adsPruebas.js');
+  const r = await pr.terminarPrueba(req.user!.storeId!, String(req.params.id), quien(req));
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ pruebas: await pr.listarPruebas(req.user!.storeId!) });
+});
+api.delete('/anuncios/pruebas/:id', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const pr = await import('./adsPruebas.js');
+  pr.borrarPrueba(req.user!.storeId!, String(req.params.id));
+  res.json({ pruebas: await pr.listarPruebas(req.user!.storeId!) });
+});
+api.post('/anuncios/conjuntos/duplicar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const pr = await import('./adsPruebas.js');
+  const am = await import('./adsManager.js');
+  const r = await pr.duplicarConjunto(req.user!.storeId!, String(req.body?.id || ''), quien(req));
+  if ('error' in r) return res.status(400).json(r);
+  await am.estructura(req.user!.storeId!, true);
+  res.json(r);
+});
+
 // ── Remarketing saliente (remarketing.ts) ──
 api.get('/remarketing', requireAuth, requireStore, requireOwner, async (req, res) => {
   const rm = await import('./remarketing.js');
@@ -5316,7 +5377,7 @@ api.get('/push/vapid', requireAuth, requireStore, async (_req, res) => {
 // Guarda/actualiza la suscripción del navegador con sus preferencias de tipo.
 api.post('/push/subscribe', requireAuth, requireStore, async (req, res) => {
   const { guardarSuscripcion } = await import('./push.js');
-  const ok = guardarSuscripcion(req.user!.storeId!, req.body?.sub || {}, req.body?.prefs || {});
+  const ok = guardarSuscripcion(req.user!.storeId!, req.body?.sub || {}, req.body?.prefs || {}, esDuenoDeTienda(req.user));
   if (!ok) return res.status(400).json({ error: 'Suscripción inválida.' });
   res.json({ ok: true });
 });

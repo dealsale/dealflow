@@ -51,7 +51,12 @@ self.addEventListener('notificationclick', (e) => {
   const destino = (e.notification.data && e.notification.data.url) || '/';
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cli) => {
-      for (const c of cli) { if ('focus' in c) return c.focus(); }
+      for (const c of cli) {
+        if (!('focus' in c)) continue;
+        // Si el aviso lleva a una sección (p. ej. /anuncios), la abre en la ventana que ya estaba.
+        if (destino !== '/' && 'navigate' in c) { try { c.navigate(destino); } catch (err) { /* sin navegación */ } }
+        return c.focus();
+      }
       if (self.clients.openWindow) return self.clients.openWindow(destino);
     }),
   );
