@@ -99,6 +99,15 @@ export function IconLeads() {
   );
 }
 
+export function IconComentarios() {
+  return (
+    <svg {...common}>
+      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z"></path>
+      <path d="M8.5 11h7M8.5 14h4"></path>
+    </svg>
+  );
+}
+
 export function IconCRM() {
   return (
     <svg {...common}>

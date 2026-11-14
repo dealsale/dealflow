@@ -2,7 +2,7 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import logo from '../assets/logo.png';
 import {
   IconAsistente,
-  IconCRM,
+  IconComentarios, IconCRM,
   IconCuentas,
   IconEquipo,
   IconDealShop,
@@ -101,6 +101,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
             'Inbox',
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid)', marginLeft: 'auto', animation: 'dfpulse 1.8s infinite' }} />,
           )}
+          {item('comentarios', <IconComentarios />, 'Comentarios')}
           {item('marketing', <IconMarketing />, 'Marketing IA')}
           {item('anuncios', <IconEstadisticas />, 'Anuncios')}
           {item('biblioteca', <IconBiblioteca />, 'Biblioteca')}

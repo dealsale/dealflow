@@ -298,6 +298,7 @@ export type VendedorSection =
   | 'pedidos'
   | 'leads'
   | 'crm'
+  | 'comentarios'
   | 'equipo'
   | 'marketing'
   | 'anuncios'

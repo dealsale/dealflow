@@ -14,10 +14,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS ia_consumo_chat (
   llamadas INTEGER NOT NULL DEFAULT 0, entrada INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (store_id, lead_id, dia))`);
 
-export type TipoIA = 'respuesta' | 'seguimiento' | 'clasificar' | 'extraer' | 'imagen' | 'sky' | 'otros';
+export type TipoIA = 'respuesta' | 'seguimiento' | 'clasificar' | 'extraer' | 'imagen' | 'sky' | 'comentarios' | 'otros';
 export const NOMBRE_TIPO: Record<TipoIA, string> = {
   respuesta: 'Respuestas del bot en el chat', seguimiento: 'Mensajes de seguimiento', clasificar: 'Leer el «sí / no» de la confirmación',
-  extraer: 'Sacar el pedido del chat (botón)', imagen: 'Entender fotos (OpenAI)', sky: 'SKY (asistente de ayuda)', otros: 'Otras tareas (ordenar direcciones, importar productos y pedidos)',
+  extraer: 'Sacar el pedido del chat (botón)', imagen: 'Entender fotos (OpenAI)', sky: 'SKY (asistente de ayuda)', comentarios: 'Responder comentarios de Facebook e Instagram', otros: 'Otras tareas (ordenar direcciones, importar productos y pedidos)',
 };
 
 // Precio estimado en USD por millón de tokens (DeepSeek chat). Se puede ajustar en Railway si cambia.

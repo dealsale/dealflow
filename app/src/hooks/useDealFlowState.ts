@@ -1138,10 +1138,10 @@ export function useDealFlowState() {
 
   // Roles de tienda: el dueño ve todo; el agente solo estas secciones.
   // Cada sección se abre con un permiso del rol del colaborador (Equipo → Roles).
-  const SECCION_PERMISO: Partial<Record<VendedorSection, string>> = { crm: 'chats', pedidos: 'pedidos', leads: 'leads', productos: 'productos', logistica: 'despachar', resumen: 'estadisticas', estadisticas: 'estadisticas' };
+  const SECCION_PERMISO: Partial<Record<VendedorSection, string>> = { crm: 'chats', comentarios: 'chats', pedidos: 'pedidos', leads: 'leads', productos: 'productos', logistica: 'despachar', resumen: 'estadisticas', estadisticas: 'estadisticas' };
   const seccionesAgente = (): VendedorSection[] => {
     const p = permisosRef.current;
-    if (!p) return ['productos', 'crm', 'leads', 'pedidos', 'logistica'];
+    if (!p) return ['productos', 'crm', 'comentarios', 'leads', 'pedidos', 'logistica'];
     return (Object.entries(SECCION_PERMISO) as [VendedorSection, string][]).filter(([, x]) => p.includes(x)).map(([sec]) => sec);
   };
   const esAgente = apiMode && sessionUser?.role === 'vendedor' && sessionUser?.esDueno === false;
