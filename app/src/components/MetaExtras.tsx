@@ -80,6 +80,17 @@ export function CapiCard() {
     const x = await apiCapi();
     if (x.data) { setE(x.data); setPixel(x.data.pixelVentas); }
   };
+  const activarCtwa = async () => {
+    setMsg('');
+    if (!e.datasetId) {
+      const r = await apiCapiDetectar();
+      if (!r.data) { setMsg(`⚠️ ${r.error || 'No encontramos el conjunto de datos de tu WhatsApp. Pega su ID.'}`); return; }
+      setDataset(r.data.datasetId);
+    }
+    await guardar({ activo: true });
+    const x = await apiCapiEnviar();
+    if (x.data) { setE(x.data); setMsg(`✓ Activo. ${x.data.enviados} evento(s) enviados ahora.`); }
+  };
   const enviar = async () => { setMsg(''); const r = await apiCapiEnviar(); if (r.data) { setE(r.data); setMsg(`✓ Revisado: ${r.data.enviados} venta(s) enviadas ahora.`); } else setMsg(`⚠️ ${r.error}`); };
   const mensajeria = e.activo && !!e.datasetId;
   const porPixel = !!e.pixelActivo;
@@ -138,28 +149,47 @@ export function CapiCard() {
           </div>
         </div>
 
-        <details style={paso}>
-          <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 800 }}>
-            <span style={{ display: 'inline-flex', width: 20, height: 20, borderRadius: '50%', background: mensajeria ? 'var(--df-brand)' : 'var(--df-text-faint)', color: '#fff', fontSize: 11, alignItems: 'center', justifyContent: 'center', marginRight: 6 }}>3</span>
-            Más precisión para anuncios de «clic a WhatsApp» <span style={{ fontWeight: 500, color: 'var(--df-text-muted)' }}>· opcional{mensajeria ? ' · ✓ activo' : ''}</span>
-          </summary>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-            <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Solo con WhatsApp por la <b>API oficial</b>: además amarra cada venta al clic exacto del anuncio. Las ventas no se cuentan doble (llevan el mismo ID).{!e.whatsapp ? ' Tu WhatsApp no está por la API oficial, así que este paso no aplica.' : ''}</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <input value={dataset} onChange={(x) => setDataset(x.target.value)} onBlur={() => dataset !== e.datasetId && void guardar({ datasetId: dataset })} placeholder="ID del dataset de WhatsApp" style={inp} />
-              {e.whatsapp && <button onClick={() => void detectar()} style={btn}>Buscarlo automáticamente</button>}
+        <div style={{ ...paso, borderColor: mensajeria ? 'var(--df-brand)' : e.whatsapp ? 'var(--df-warning-mid, #d97706)' : 'var(--df-border)' }}>
+          {tit('3', 'Campañas de clic a WhatsApp', 'Meta solo le cuenta las ventas a un anuncio de clic a WhatsApp si le llegan al conjunto de datos de tu WhatsApp con el código del clic. El píxel web no sirve para eso.')}
+          {!e.whatsapp ? (
+            <div style={{ fontSize: 12.5, lineHeight: 1.5, background: 'var(--df-warning-subtle, #fff7e6)', borderRadius: 8, padding: '8px 10px' }}>
+              Tu WhatsApp está conectado <b>por QR</b>. DealFlow ya registra de qué anuncio llega cada chat, pero Meta solo acepta reportar ventas a campañas de clic a WhatsApp desde la <b>API oficial</b> de WhatsApp. Las ventas sí van a tu píxel (paso 1).
             </div>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5, cursor: 'pointer' }}>
-              <input type="checkbox" checked={e.leads} onChange={(x) => void guardar({ leads: x.target.checked })} /> Reportar también los chats calificados (el cliente respondió)
-            </label>
-            <div><button onClick={() => void guardar({ activo: !e.activo })} disabled={!e.datasetId && !e.activo} style={{ ...(e.activo ? btn : btnP), opacity: !e.datasetId && !e.activo ? 0.5 : 1 }}>{e.activo ? 'Pausar' : 'Activar'}</button></div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5 }}>Código de prueba <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· opcional, de «Probar eventos»</span></div>
-              <input value={test} onChange={(x) => setTest(x.target.value)} onBlur={() => test !== e.testCode && void guardar({ testCode: test })} placeholder="TEST12345" style={{ ...inp, maxWidth: 220 }} />
-              {e.testCode && <div style={{ fontSize: 11.5, color: 'var(--df-warning-mid)', marginTop: 4 }}>Con código de prueba Meta no usa los eventos para optimizar. Bórralo cuando termines.</div>}
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: mensajeria ? 'var(--df-success)' : 'var(--df-warning-mid, #b45309)' }}>
+                {mensajeria ? `✓ Activo · conjunto de datos ${e.datasetId}${e.testCode ? ' · ⚠️ con código de prueba (no cuenta para las campañas)' : ''}` : e.activoManual && !e.activo ? 'Pausado por ti' : 'Sin activar: tus campañas de clic a WhatsApp no están recibiendo las ventas'}
+              </div>
+              {e.ctwa && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+                  {([['Chats de anuncios', e.ctwa.chats], ['Con código del clic', e.ctwa.chatsConClic], ['Ventas de esos chats', e.ctwa.ventasDeAnuncio], ['Enviadas a Meta', e.ctwa.enviadas]] as const).map(([t, v]) => (
+                    <div key={t} style={{ border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 9px' }}>
+                      <div style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>{t} · 7 días</div>
+                      <div style={{ fontSize: 17, fontWeight: 800 }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {e.ctwa && e.ctwa.chats > 0 && e.ctwa.chatsConClic === 0 && <div style={{ fontSize: 12, color: 'var(--df-warning-mid, #b45309)' }}>Los chats de anuncios no traen el código del clic. Pasa cuando el anuncio no es de «clic a WhatsApp» (por ejemplo, un enlace wa.me en un anuncio de tráfico): esas ventas no se pueden atribuir a la campaña.</div>}
+              {e.ctwa && e.ctwa.errores > 0 && <div style={{ fontSize: 12, color: 'var(--df-danger)' }}>{e.ctwa.errores} venta(s) con error. Último: {e.ctwa.ultimoError}</div>}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                {!mensajeria && <button onClick={() => void activarCtwa()} style={btnP}>{e.datasetId ? 'Activar' : 'Buscar mi conjunto de datos y activar'}</button>}
+                {mensajeria && <button onClick={() => void guardar({ activo: false })} style={btn}>Pausar</button>}
+                <input value={dataset} onChange={(x) => setDataset(x.target.value)} onBlur={() => dataset !== e.datasetId && void guardar({ datasetId: dataset })} placeholder="ID del conjunto de datos de WhatsApp" style={inp} aria-label="ID del conjunto de datos de WhatsApp" />
+                <button onClick={() => void detectar()} style={btn}>Buscarlo</button>
+              </div>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5, cursor: 'pointer' }}>
+                <input type="checkbox" checked={e.leads} onChange={(x) => void guardar({ leads: x.target.checked })} /> Reportar también los chats calificados (el cliente respondió)
+              </label>
+              <details>
+                <summary style={{ cursor: 'pointer', fontSize: 12.5, fontWeight: 700 }}>Código de prueba (opcional)</summary>
+                <input value={test} onChange={(x) => setTest(x.target.value)} onBlur={() => test !== e.testCode && void guardar({ testCode: test })} placeholder="TEST12345" style={{ ...inp, maxWidth: 220, marginTop: 6 }} />
+                {e.testCode && <div style={{ fontSize: 11.5, color: 'var(--df-warning-mid)', marginTop: 4 }}>Con código de prueba Meta no usa los eventos para tus campañas. Bórralo cuando termines.</div>}
+              </details>
+              <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', lineHeight: 1.5 }}>En el Administrador de anuncios, mira la columna «Compras» (o «Compras por mensajes») de la campaña; los eventos pueden tardar hasta una hora en verse. Se envían también las ventas de los últimos 7 días.</div>
             </div>
-          </div>
-        </details>
+          )}
+        </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {(porPixel || mensajeria) && <button onClick={() => void enviar()} style={btn}>↻ Enviar pendientes ahora</button>}

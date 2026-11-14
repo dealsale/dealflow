@@ -6,6 +6,7 @@ import path from 'node:path';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { db, uid } from './db.js';
 import { saveIncomingMessage } from './wa.js';
+import { refDesdeQr, type AdRef, type AdReplyQr } from './campana.js';
 import { esperarTurno } from './ratelimit.js';
 import { mediaExt } from './media.js';
 
@@ -211,6 +212,12 @@ async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
     || (q.imageMessage as { caption?: string } | undefined)?.caption || (q.videoMessage as { caption?: string } | undefined)?.caption
     || (q.imageMessage ? '[image]' : q.videoMessage ? '[video]' : q.audioMessage ? '[audio]' : q.documentMessage ? '[document]' : '')) : '';
   const cita = ctx?.stanzaId ? { wamid: String(ctx.stanzaId), texto: citaCopia, deCliente: !!ctx.participant && ctx.participant === m.key.remoteJid } : undefined;
+  // Clic a WhatsApp: el anuncio y el id del clic vienen en contextInfo.externalAdReply del primer mensaje.
+  let ad: AdRef | null = null;
+  try {
+    const ext = ((msg?.extendedTextMessage?.contextInfo || (mediaMsg as { contextInfo?: { externalAdReply?: AdReplyQr } } | undefined)?.contextInfo) as { externalAdReply?: AdReplyQr } | undefined)?.externalAdReply;
+    ad = refDesdeQr(ext);
+  } catch (e) { console.error('[wa-qr] anuncio ilegible (se ignora la atribución):', e); }
   console.log(`[wa-qr] ${storeId}: mensaje entrante de ${waId}${tel ? ` (${tel})` : ''}${texto ? '' : mediaMsg ? ' [adjunto]' : ' [sin contenido legible]'}`);
 
   if (mediaMsg) {
@@ -223,15 +230,15 @@ async function handleIncoming(storeId: string, sock: WASocket, m: WAMessage) {
       const file = uid() + '.' + mediaExt(tipo, mime);
       mkdirSync(path.join(DATA_DIR, 'media', storeId), { recursive: true });
       writeFileSync(path.join(DATA_DIR, 'media', storeId, file), buffer);
-      saveIncomingMessage(storeId, waId, nombre, caption, { tipo, url: '/api/media/' + storeId + '/' + file, mime, nombre: nombreArch }, tel, null, m.key.id || undefined, cita);
+      saveIncomingMessage(storeId, waId, nombre, caption, { tipo, url: '/api/media/' + storeId + '/' + file, mime, nombre: nombreArch }, tel, ad, m.key.id || undefined, cita);
     } catch (e) {
       console.error('[wa-qr] no se pudo descargar el adjunto', e);
-      saveIncomingMessage(storeId, waId, nombre, caption || '[adjunto no disponible]', undefined, tel);
+      saveIncomingMessage(storeId, waId, nombre, caption || '[adjunto no disponible]', undefined, tel, ad);
     }
     return;
   }
 
-  if (texto) saveIncomingMessage(storeId, waId, nombre, texto, undefined, tel, null, m.key.id || undefined, cita);
+  if (texto) saveIncomingMessage(storeId, waId, nombre, texto, undefined, tel, ad, m.key.id || undefined, cita);
 }
 
 function tipoDeMime(mime: string): 'image' | 'video' | 'audio' | 'document' {

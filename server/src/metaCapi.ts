@@ -35,8 +35,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS capi_eventos (
 )`);
 
 /** pixelVentas: píxel al que van las ventas por chat (WhatsApp, Messenger, Instagram). */
-export interface CfgCapi { activo: boolean; datasetId: string; compra: 'pedido' | 'entregado'; leads: boolean; testCode: string; pixelVentas: string }
-const DEF: CfgCapi = { activo: false, datasetId: '', compra: 'pedido', leads: true, testCode: '', pixelVentas: '' };
+/** activoManual: el dueño prendió o apagó a mano el envío a campañas de clic a WhatsApp (entonces no se toca solo). */
+export interface CfgCapi { activo: boolean; datasetId: string; compra: 'pedido' | 'entregado'; leads: boolean; testCode: string; pixelVentas: string; activoManual: boolean }
+const DEF: CfgCapi = { activo: false, datasetId: '', compra: 'pedido', leads: true, testCode: '', pixelVentas: '', activoManual: false };
 
 export function cfgCapi(storeId: string): CfgCapi {
   const r = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'meta_capi'").get(storeId) as { config: string } | undefined;
@@ -51,6 +52,7 @@ export function guardarCfgCapi(storeId: string, c: Partial<CfgCapi>): CfgCapi {
     leads: c.leads !== undefined ? !!c.leads : act.leads,
     testCode: c.testCode !== undefined ? String(c.testCode).trim().slice(0, 40) : act.testCode,
     pixelVentas: c.pixelVentas !== undefined ? String(c.pixelVentas).replace(/\D/g, '').slice(0, 20) : act.pixelVentas,
+    activoManual: c.activoManual !== undefined ? !!c.activoManual : act.activoManual,
   };
   db.prepare(`INSERT INTO store_integrations (store_id, tipo, config, updated_at) VALUES (?, 'meta_capi', ?, datetime('now'))
     ON CONFLICT(store_id, tipo) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).run(storeId, JSON.stringify(n));
@@ -207,8 +209,47 @@ async function procesarVentasChat(storeId: string, cfg: CfgCapi): Promise<number
 }
 
 /** Busca lo pendiente de una tienda y lo envía. */
+/**
+ * Campañas de «clic a WhatsApp»: Meta solo les atribuye las ventas que llegan al dataset de la
+ * cuenta de WhatsApp Business con el ctwa_clid del clic (no las del píxel web). Con la API oficial
+ * conectada se busca el dataset y se activa solo, salvo que el dueño lo haya apagado a mano.
+ */
+const ultimaBusqueda = new Map<string, number>();
+export async function autoMensajeria(storeId: string, forzar = false): Promise<CfgCapi> {
+  let cfg = cfgCapi(storeId);
+  if (cfg.activoManual && !forzar) return cfg;
+  const { waba, token } = waDe(storeId);
+  if (!waba || !token) return cfg;
+  if (!cfg.datasetId) {
+    if (!forzar && Date.now() - (ultimaBusqueda.get(storeId) || 0) < 6 * 3600_000) return cfg;
+    ultimaBusqueda.set(storeId, Date.now());
+    const r = await detectarDataset(storeId);
+    if ('error' in r) { registrarLog(storeId, 'warn', 'meta', `No encontramos el dataset de WhatsApp para reportar ventas a las campañas de clic a WhatsApp: ${r.error}`); return cfgCapi(storeId); }
+    cfg = cfgCapi(storeId);
+  }
+  if (!cfg.activo) {
+    cfg = guardarCfgCapi(storeId, { activo: true });
+    registrarLog(storeId, 'info', 'meta', `Activamos el reporte de ventas a tus campañas de clic a WhatsApp (dataset ${cfg.datasetId}). Se envían también las ventas de los últimos 7 días.`);
+  }
+  return cfg;
+}
+
+/** Diagnóstico de clic a WhatsApp (últimos 7 días) para el panel. */
+export function diagnosticoCtwa(storeId: string) {
+  const chats = db.prepare(`SELECT COUNT(*) n, SUM(CASE WHEN json_valid(ad_ref) AND COALESCE(json_extract(ad_ref, '$.clid'), '') != '' THEN 1 ELSE 0 END) clid
+    FROM leads WHERE store_id = ? AND COALESCE(canal, 'whatsapp') = 'whatsapp' AND COALESCE(ad_id, '') != ''
+      AND created_at > datetime('now', '-7 days')`).get(storeId) as { n: number; clid: number | null };
+  const ventas = (db.prepare(`SELECT COUNT(*) n FROM orders o JOIN leads l ON l.id = o.lead_id
+    WHERE o.store_id = ? AND o.estado != 'Cancelado' AND o.created_at > datetime('now', '-7 days')
+      AND (CASE WHEN json_valid(l.ad_ref) THEN COALESCE(json_extract(l.ad_ref, '$.clid'), '') ELSE '' END) != ''`).get(storeId) as { n: number }).n;
+  const ev = db.prepare(`SELECT SUM(estado = 'enviado') ok, SUM(estado = 'error') err FROM capi_eventos
+    WHERE store_id = ? AND canal = 'whatsapp' AND evento = 'Purchase' AND created_at > datetime('now', '-7 days')`).get(storeId) as { ok: number | null; err: number | null };
+  const ultimoError = (db.prepare("SELECT error FROM capi_eventos WHERE store_id = ? AND estado = 'error' AND error != '' ORDER BY created_at DESC LIMIT 1").get(storeId) as { error: string } | undefined)?.error || '';
+  return { chats: chats.n || 0, chatsConClic: chats.clid || 0, ventasDeAnuncio: ventas, enviadas: ev.ok || 0, errores: ev.err || 0, ultimoError };
+}
+
 export async function procesarCapi(storeId: string): Promise<number> {
-  const cfg = cfgCapi(storeId);
+  const cfg = await autoMensajeria(storeId).catch(() => cfgCapi(storeId));
   // Ventas por chat → píxel (siempre que haya píxel con token), aunque la API de mensajería esté apagada.
   const porPixel = await procesarVentasChat(storeId, cfg).catch((e) => { console.warn('[capi] ventas por chat', e); return 0; });
   if (!cfg.activo || !cfg.datasetId) return porPixel;
@@ -271,7 +312,7 @@ export function estadoCapi(storeId: string) {
     FROM capi_eventos WHERE store_id = ? AND created_at > datetime('now', '-30 days')`).get(storeId) as { compras: number | null; valor: number | null; leads: number | null; errores: number | null };
   const ultimos = db.prepare('SELECT evento, valor, canal, estado, error, created_at FROM capi_eventos WHERE store_id = ? ORDER BY created_at DESC LIMIT 12').all(storeId);
   const { waba } = waDe(storeId);
-  return { ...c, whatsapp: !!waba, compras30: tot.compras || 0, valor30: tot.valor || 0, leads30: tot.leads || 0, errores30: tot.errores || 0, ultimos };
+  return { ...c, whatsapp: !!waba, ctwa: diagnosticoCtwa(storeId), compras30: tot.compras || 0, valor30: tot.valor || 0, leads30: tot.leads || 0, errores30: tot.errores || 0, ultimos };
 }
 
 let iniciado = false;
@@ -281,7 +322,8 @@ export function iniciarCapi(): void {
   const ronda = async () => {
     // Tiendas con la API de mensajería activa o con un píxel con token (ventas por chat → píxel).
     const tiendas = db.prepare(`SELECT DISTINCT store_id FROM store_integrations WHERE (tipo = 'meta_capi' AND config LIKE '%"activo":true%')
-      OR (tipo = 'meta_pixel_web' AND config LIKE '%"token"%')`).all() as { store_id: string }[];
+      OR (tipo = 'meta_pixel_web' AND config LIKE '%"token"%')
+      UNION SELECT store_id FROM whatsapp WHERE conectado = 1 AND COALESCE(waba_id, '') != '' AND COALESCE(access_token, '') != ''`).all() as { store_id: string }[];
     for (const t of tiendas) await procesarCapi(t.store_id).catch((e) => console.warn('[capi]', e));
   };
   const r = () => void import('./rendimiento.js').then((m) => m.trabajo('meta.capi', ronda));

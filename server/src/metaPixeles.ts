@@ -106,6 +106,14 @@ export async function usarPixel(storeId: string, pixelId: string, d: { tienda?: 
 
 /** Todo en un clic: usa el píxel de la cuenta (o crea uno) y lo deja conectado. */
 export async function configurarTodo(storeId: string): Promise<{ ok: true; id: string; creado: boolean; conectado: boolean; mensaje: string } | { error: string }> {
+  // Si ya hay un píxel funcionando (con token) para las ventas, no se cambia nada.
+  const { pixelDeVentas } = await import('./metaCapi.js');
+  const yaFunciona = await pixelDeVentas(storeId);
+  if (yaFunciona) {
+    const L0 = await import('./landings.js');
+    if (!L0.configTienda(storeId).pixelMeta) L0.guardarConfigTienda(storeId, { pixelMeta: yaFunciona });
+    return { ok: true, id: yaFunciona, creado: false, conectado: true, mensaje: `✓ Ya tienes el píxel ${yaFunciona} conectado y enviando: lo dejamos como está.` };
+  }
   const l = await listarPixeles(storeId);
   if (!l.conectada) return { error: 'Conecta primero tu cuenta de Anuncios (Integraciones → Meta Ads).' };
   if (l.error) return { error: l.error };
@@ -122,7 +130,8 @@ export async function configurarTodo(storeId: string): Promise<{ ok: true; id: s
     if ('error' in c) return c;
     id = c.id; creado = !c.existente;
   }
-  const u = await usarPixel(storeId, id, { tienda: true, ventas: true, conectar: true });
+  // «Mi tienda» solo se llena si estaba vacía (no se pisa un píxel que el dueño puso a mano).
+  const u = await usarPixel(storeId, id, { tienda: !actual || actual === id, ventas: true, conectar: true });
   if ('error' in u) return u;
   return { ok: true, id, creado, conectado: u.conectado, mensaje: `${creado ? '✓ Creamos tu píxel. ' : ''}${u.mensaje}` };
 }

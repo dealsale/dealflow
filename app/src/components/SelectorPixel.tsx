@@ -53,7 +53,8 @@ export function SelectorPixel({ valor, onChange, vacio, estilo }: { valor: strin
     void cargarLista(true);
     setManual(false);
     onChange(r.data.id);
-    notificar(r.data.existente ? 'Meta solo permite un píxel en esta cuenta: elegimos el que ya tienes.' : '✓ Píxel creado y elegido. Guarda los cambios.');
+    const base = r.data.existente ? 'Meta solo permite un píxel en esta cuenta: elegimos el que ya tienes.' : '✓ Píxel creado y elegido.';
+    notificar(`${base} ${r.data.conectado ? 'Ya quedó conectado y Meta recibió un evento de prueba.' : r.data.conexion || ''} Guarda los cambios para que tu tienda lo use.`, r.data.conectado ? 'ok' : 'error', 9000);
   };
 
   return (
