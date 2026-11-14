@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { resolverNombreCliente, nombreValido, limpiarNombre } from './nombres.js';
+import { nombreDelPedido, nombreValido, limpiarNombre } from './nombres.js';
 import { db, pj, registrarLog } from './db.js';
 import { conPedido, trazar, trazarApi } from './trazabilidad.js';
 import { emparejarItem, emparejarArticulos, palabrasClave, separarItemsPedido, type Emparejado, tokensVariante, mismoToken } from './emparejar.js';
@@ -1650,7 +1650,8 @@ const hoyMas = (dias: number) => new Date(Date.now() - 5 * 3600e3 + dias * 86400
  * emojis, símbolos y correos. '' si no hay ninguno que sirva (nunca "Cliente", un correo o un número).
  */
 function nombreParaEffi(o: Fila): string {
-  const elegido = resolverNombreCliente(txt(o.lead_id), txt(o.cliente), '');
+  // El del pedido manda (la tienda lo corrige a mano antes de reenviar); el del chat solo si falta.
+  const elegido = nombreDelPedido(txt(o.lead_id), txt(o.cliente));
   if (nombreValido(elegido)) return limpiarNombre(elegido).slice(0, 120);
   // "ana.perez@gmail.com" o "💕Ana Pérez💕 3001234567": se quita lo que no es nombre y se vuelve a mirar.
   const crudo = txt(o.cliente).replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, ' ').replace(/\d+/g, ' ');
