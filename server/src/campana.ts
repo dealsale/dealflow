@@ -71,6 +71,29 @@ export function refDesdeWhatsapp(r?: WhatsappReferral | null): AdRef | null {
   };
 }
 
+/**
+ * Anuncio de «clic a WhatsApp» visto desde la conexión por QR: WhatsApp pega en el primer mensaje
+ * un `contextInfo.externalAdReply` con el id del anuncio (sourceId) y el id del clic (ctwaClid).
+ */
+export interface AdReplyQr { title?: string | null; body?: string | null; sourceType?: string | null; sourceId?: string | null; sourceUrl?: string | null; thumbnailUrl?: string | null; originalImageUrl?: string | null; mediaUrl?: string | null; mediaType?: number | null; ctwaClid?: string | null }
+export function refDesdeQr(r?: AdReplyQr | null): AdRef | null {
+  if (!r) return null;
+  const tipo = String(r.sourceType || '').toLowerCase();
+  if (!r.sourceId && !r.ctwaClid) return null;
+  if (tipo && tipo !== 'ad') return null; // publicaciones orgánicas compartidas no son anuncios
+  return {
+    id: String(r.sourceId || ''),
+    titular: String(r.title || ''),
+    texto: String(r.body || ''),
+    media: String(r.originalImageUrl || r.thumbnailUrl || ''),
+    mediaTipo: r.mediaType === 2 ? 'video' : r.mediaType === 1 ? 'image' : '',
+    url: String(r.sourceUrl || ''),
+    canal: 'whatsapp',
+    ts: new Date().toISOString(),
+    clid: String(r.ctwaClid || ''),
+  };
+}
+
 /** Normaliza un referral de Messenger/Instagram a la forma común. Devuelve null si no es un anuncio. */
 export function refDesdeMeta(r?: MetaReferral | null, canal = 'messenger'): AdRef | null {
   if (!r) return null;

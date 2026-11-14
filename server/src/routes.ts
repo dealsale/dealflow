@@ -3539,7 +3539,10 @@ api.get('/meta/capi', requireAuth, requireStore, async (req, res) => {
 });
 api.post('/meta/capi', requireAuth, requireStore, requireOwner, async (req, res) => {
   const c = await import('./metaCapi.js');
-  c.guardarCfgCapi(req.user!.storeId!, req.body || {});
+  const b = { ...(req.body || {}) } as Record<string, unknown>;
+  delete b.activoManual;
+  // Si el dueño prende o apaga a mano el envío a clic a WhatsApp, se respeta (no se reactiva solo).
+  c.guardarCfgCapi(req.user!.storeId!, { ...b, ...(b.activo !== undefined ? { activoManual: true } : {}) });
   res.json(await c.estadoCapiCompleto(req.user!.storeId!));
 });
 api.post('/meta/capi/detectar', requireAuth, requireStore, requireOwner, async (req, res) => {
@@ -5197,7 +5200,11 @@ api.post('/meta/pixeles', requireAuth, requireStore, requireOwner, async (req, r
   const m = await import('./metaPixeles.js');
   const r = await m.crearPixel(req.user!.storeId!, String(req.body?.nombre || ''));
   if ('error' in r) return res.status(400).json(r);
-  res.json({ ...r, ...(await m.listarPixeles(req.user!.storeId!)) });
+  // Píxel recién creado: se conecta a la API de Conversiones y recibe un evento de prueba, así Meta
+  // lo marca como activo (si no, sale «Termina de configurar» hasta la primera visita).
+  const w = await import('./metaPixelWeb.js');
+  const con = w.tokenDePixel(req.user!.storeId!, r.id) ? { ok: true as const, mensaje: '' } : await w.conectarAuto(req.user!.storeId!, r.id);
+  res.json({ ...r, ...(await m.listarPixeles(req.user!.storeId!)), conexion: 'ok' in con ? con.mensaje : con.error, conectado: 'ok' in con });
 });
 api.post('/meta/pixeles/usar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const m = await import('./metaPixeles.js');

@@ -1024,6 +1024,9 @@ export interface EstadoCapi {
   compras30: number; valor30: number; leads30: number; errores30: number;
   /** Píxel al que van las ventas por chat (WhatsApp, Messenger, Instagram) y el que de verdad se usa (con token). */
   pixelVentas: string; pixelActivo: string; ventasChat30: number; valorChat30: number; erroresChat30: number;
+  /** Clic a WhatsApp, últimos 7 días: chats de anuncios, cuántos traen el id del clic, ventas de esos chats y envíos a Meta. */
+  ctwa?: { chats: number; chatsConClic: number; ventasDeAnuncio: number; enviadas: number; errores: number; ultimoError: string };
+  activoManual?: boolean;
   ultimos: { evento: string; valor: number; canal: string; estado: string; error: string; created_at: string }[];
 }
 export const apiCapi = () => req<EstadoCapi>('/api/meta/capi', 'GET');
@@ -1428,7 +1431,7 @@ export const apiAdsDuplicarConjunto = (id: string) => req<{ ok: true; id: string
 export interface PixelMeta { id: string; nombre: string; ultimoEvento: string; disponible: boolean; usos: string[]; conectado: boolean; auto: boolean }
 export interface ListaPixeles { conectada: boolean; pixeles: PixelMeta[]; error?: string }
 export const apiPixelesMeta = () => req<ListaPixeles>('/api/meta/pixeles', 'GET');
-export const apiCrearPixelMeta = (nombre: string) => req<ListaPixeles & { ok: true; id: string; existente?: boolean }>('/api/meta/pixeles', 'POST', { nombre });
+export const apiCrearPixelMeta = (nombre: string) => req<ListaPixeles & { ok: true; id: string; existente?: boolean; conexion: string; conectado: boolean }>('/api/meta/pixeles', 'POST', { nombre });
 export const apiUsarPixelMeta = (pixelId: string, d: { tienda?: boolean; ventas?: boolean; conectar?: boolean }) => req<{ ok: true; conectado: boolean; mensaje: string }>('/api/meta/pixeles/usar', 'POST', { pixelId, ...d });
 export const apiConfigurarPixelMeta = () => req<{ ok: true; id: string; creado: boolean; conectado: boolean; mensaje: string }>('/api/meta/pixeles/configurar', 'POST', {});
 export const apiConectarAutoConversiones = (pixelId: string) => req<EstadoConversiones & { mensaje: string }>('/api/landings/conversiones/auto', 'POST', { pixelId });
