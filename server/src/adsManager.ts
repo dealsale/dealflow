@@ -49,15 +49,15 @@ export function cuenta(storeId: string): Cuenta | null {
   return { act: c.ad_account_id.startsWith('act_') ? c.ad_account_id : `act_${c.ad_account_id}`, token: c.access_token, moneda: c.moneda || 'COP' };
 }
 
-export async function graph<T>(c: Cuenta, ruta: string, metodo: 'GET' | 'POST' = 'GET', datos?: Record<string, string>): Promise<{ ok: true; body: T } | { ok: false; error: string }> {
+export async function graph<T>(c: Cuenta, ruta: string, metodo: 'GET' | 'POST' = 'GET', datos?: Record<string, string>): Promise<{ ok: true; body: T } | { ok: false; error: string; codigo?: number }> {
   try {
     const url = metodo === 'GET' ? `${GRAPH}/${ruta}${ruta.includes('?') ? '&' : '?'}${new URLSearchParams(datos || {})}` : `${GRAPH}/${ruta}`;
     const r = await fetch(url, {
       method: metodo, headers: { Authorization: `Bearer ${c.token}`, ...(metodo === 'POST' ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
       body: metodo === 'POST' ? new URLSearchParams(datos || {}) : undefined, signal: AbortSignal.timeout(25_000),
     });
-    const b = (await r.json().catch(() => ({}))) as T & { error?: { message?: string; error_user_msg?: string } };
-    if (!r.ok || b.error) return { ok: false, error: b.error?.error_user_msg || b.error?.message || `Meta respondió ${r.status}.` };
+    const b = (await r.json().catch(() => ({}))) as T & { error?: { message?: string; error_user_msg?: string; code?: number } };
+    if (!r.ok || b.error) return { ok: false, error: b.error?.error_user_msg || b.error?.message || `Meta respondió ${r.status}.`, codigo: b.error?.code };
     return { ok: true, body: b };
   } catch { return { ok: false, error: 'No pudimos hablar con Meta.' }; }
 }

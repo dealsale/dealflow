@@ -18,14 +18,20 @@ const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1p
 const btnS: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' };
 const btnP: React.CSSProperties = { background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
 const inp: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)', boxSizing: 'border-box' };
-const th: React.CSSProperties = { textAlign: 'left', padding: '8px 10px', fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 700, whiteSpace: 'nowrap' };
-const td: React.CSSProperties = { padding: '8px 10px', borderTop: '1px solid var(--df-border)', fontSize: 12.5, whiteSpace: 'nowrap' };
+const th: React.CSSProperties = { textAlign: 'left', padding: '8px 8px', fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 700, whiteSpace: 'nowrap' };
+const td: React.CSSProperties = { padding: '8px 8px', borderTop: '1px solid var(--df-border)', fontSize: 12.5, whiteSpace: 'nowrap' };
 const tdN: React.CSSProperties = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
 const pesos = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CO');
 const dec = (n: number) => (n || 0).toLocaleString('es-CO', { maximumFractionDigits: 2 });
 
 const PERIODOS: { k: string; label: string; dias: number }[] = [
   { k: 'hoy', label: 'Hoy', dias: 0 }, { k: 'ayer', label: 'Ayer', dias: -1 }, { k: '7d', label: '7 días', dias: 7 }, { k: '30d', label: '30 días', dias: 30 },
+];
+const activo: React.CSSProperties = { background: 'var(--df-brand)', color: '#fff', borderColor: 'var(--df-brand)' };
+type Tab = 'resumen' | 'campanas' | 'anuncios' | 'automatizar' | 'ajustes';
+const TABS: { k: Tab; label: string }[] = [
+  { k: 'resumen', label: 'Resumen' }, { k: 'campanas', label: 'Campañas' }, { k: 'anuncios', label: 'Anuncios' },
+  { k: 'automatizar', label: 'Reglas, alertas y A/B' }, { k: 'ajustes', label: 'Costos e historial' },
 ];
 const restar = (f: string, n: number) => new Date(new Date(f + 'T12:00:00Z').getTime() - n * 86400000).toISOString().slice(0, 10);
 function rango(k: string): { desde: string; hasta: string } {
@@ -60,7 +66,12 @@ export function AdsManager() {
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({});
   const [sync, setSync] = useState(false);
   const [actualizado, setActualizado] = useState(0);
+  const [tab, setTab] = useState<Tab>(() => { try { const t = localStorage.getItem('ads:tab'); return (TABS.some((x) => x.k === t) ? t : 'resumen') as Tab; } catch { return 'resumen'; } });
+  const [filtroCamp, setFiltroCamp] = useState<'gasto' | 'activas' | 'todas'>('gasto');
+  const [buscar, setBuscar] = useState('');
+  const [verTodosAds, setVerTodosAds] = useState(false);
   const r = useMemo(() => rango(periodo), [periodo]);
+  const irA = (t: Tab) => { setTab(t); setBuscar(''); try { localStorage.setItem('ads:tab', t); } catch { /* sin almacenamiento */ } };
 
   const cargar = async () => {
     const x = await apiAdsPanel(r.desde, r.hasta);
@@ -100,6 +111,13 @@ export function AdsManager() {
   })();
 
   const maxSerie = Math.max(1, ...p.serie.map((x) => Math.max(x.gasto, x.ventas)));
+  const q = buscar.trim().toLowerCase();
+  const conGasto = p.campanas.filter((c) => c.gasto > 0).length;
+  const activas = p.campanas.filter((c) => c.activa).length;
+  const campanasVistas = p.campanas
+    .filter((c) => filtroCamp === 'todas' || (filtroCamp === 'activas' ? c.activa : c.gasto > 0 || c.chats > 0 || c.pedidos > 0))
+    .filter((c) => !q || c.nombre.toLowerCase().includes(q) || c.conjuntos.some((a) => a.nombre.toLowerCase().includes(q)));
+  const anunciosVistos = p.anuncios.filter((a) => !q || `${a.nombre} ${a.campana} ${a.conjunto} ${a.producto}`.toLowerCase().includes(q));
   const kpis: [string, string, string?][] = [
     ['Gasto', pesos(s.gasto)],
     ['Ventas (pedidos)', pesos(s.ventas), `${s.pedidos - s.cancelados} pedidos`],
@@ -121,7 +139,7 @@ export function AdsManager() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {PERIODOS.map((x) => <button key={x.k} onClick={() => setPeriodo(x.k)} style={{ ...btnS, ...(periodo === x.k ? { background: 'var(--df-text-strong, #0F172A)', color: '#fff', borderColor: 'transparent' } : {}) }}>{x.label}</button>)}
+          {PERIODOS.map((x) => <button key={x.k} onClick={() => setPeriodo(x.k)} aria-pressed={periodo === x.k} style={{ ...btnS, ...(periodo === x.k ? activo : {}) }}>{x.label}</button>)}
           <button onClick={() => void sincronizar()} disabled={sync || !p.conectada} style={{ ...btnS, opacity: sync || !p.conectada ? 0.6 : 1 }}>{sync ? 'Sincronizando…' : '↻ Sincronizar'}</button>
         </div>
       </div>
@@ -132,7 +150,7 @@ export function AdsManager() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(max(150px, calc((100% - 30px) / 4)), 1fr))', gap: 10 }}>
         {kpis.map(([t, v, sub]) => (
           <div key={t} style={{ ...card, padding: '12px 14px' }}>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)' }}>{t}</div>
@@ -142,17 +160,40 @@ export function AdsManager() {
         ))}
       </div>
 
+      <div role="tablist" aria-label="Secciones de anuncios" style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--df-border)', overflowX: 'auto' }}>
+        {TABS.map((x) => {
+          const n = x.k === 'campanas' ? conGasto : x.k === 'anuncios' ? p.anuncios.length : x.k === 'resumen' ? p.sugerencias.length : 0;
+          return (
+            <button key={x.k} role="tab" aria-selected={tab === x.k} onClick={() => irA(x.k)}
+              style={{ background: 'none', border: 0, borderBottom: `2px solid ${tab === x.k ? 'var(--df-brand)' : 'transparent'}`, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13.5, fontWeight: tab === x.k ? 800 : 600, color: tab === x.k ? 'var(--df-text-strong, var(--df-text))' : 'var(--df-text-muted)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {x.label}{n ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: 'var(--df-bg)', color: 'var(--df-text-muted)' }}>{n}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === 'resumen' && <>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'stretch' }}>
         <div style={{ ...card, flex: '3 1 480px', minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-            <b style={{ fontSize: 14 }}>Gasto vs. ventas por día</b>
+            <b style={{ fontSize: 14 }}>{p.serie.length === 1 ? 'Gasto vs. ventas' : 'Gasto vs. ventas por día'}</b>
             <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>▮ gris = gasto · ▮ verde = ventas</span>
           </div>
-          {p.serie.length ? (
+          {p.serie.length === 1 ? (
+            <div style={{ display: 'grid', gap: 12, padding: '8px 0' }}>
+              {([['Gasto', p.serie[0].gasto, '#94A3B8'], ['Ventas', p.serie[0].ventas, '#10B981']] as const).map(([t, v, color]) => (
+                <div key={t}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}><span style={{ color: 'var(--df-text-muted)' }}>{t}</span><b>{pesos(v)}</b></div>
+                  <div style={{ height: 14, borderRadius: 7, background: 'var(--df-bg)' }}><div style={{ width: `${(v / maxSerie) * 100}%`, height: '100%', borderRadius: 7, background: color, minWidth: v ? 4 : 0 }} /></div>
+                </div>
+              ))}
+              <div style={{ fontSize: 12, color: 'var(--df-text-faint)' }}>Elige 7 o 30 días para ver la tendencia por día.</div>
+            </div>
+          ) : p.serie.length ? (
             <div role="img" aria-label="Gasto y ventas por día" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 6, height: 160, borderBottom: '1px solid var(--df-border)' }}>
               {p.serie.map((x) => (
                 <div key={x.fecha} title={`${x.fecha}: gasto ${pesos(x.gasto)} · ventas ${pesos(x.ventas)} · ${x.pedidos} pedidos`} style={{ flex: '1 1 0', maxWidth: 56, display: 'flex', gap: 2, alignItems: 'flex-end', height: '100%' }}>
-                  <div style={{ flex: 1, height: `${(x.gasto / maxSerie) * 100}%`, background: '#CBD5E1', borderRadius: '3px 3px 0 0', minHeight: x.gasto ? 2 : 0 }} />
+                  <div style={{ flex: 1, height: `${(x.gasto / maxSerie) * 100}%`, background: '#94A3B8', borderRadius: '3px 3px 0 0', minHeight: x.gasto ? 2 : 0 }} />
                   <div style={{ flex: 1, height: `${(x.ventas / maxSerie) * 100}%`, background: '#10B981', borderRadius: '3px 3px 0 0', minHeight: x.ventas ? 2 : 0 }} />
                 </div>
               ))}
@@ -175,36 +216,71 @@ export function AdsManager() {
         </div>
       </div>
 
-      {/* Campañas */}
-      <div style={card}>
-        <b style={{ fontSize: 14 }}>Campañas</b>
-        <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 10px' }}>Ventas = pedidos de DealFlow que llegaron por cada anuncio (WhatsApp, landing o Shopify). ROAS esperado = lo entregado + lo que va en camino × tu tasa de entrega.</div>
+        {/* Ciudades */}
+        <div style={{ ...card, flex: '1 1 100%', minWidth: 0 }}>
+          <b style={{ fontSize: 14 }}>Ciudades que más devuelven</b>
+          <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 10px' }}>Pedidos que llegaron por anuncios. Una ciudad que devuelve mucho te cuesta flete de ida y vuelta: sácala de la segmentación en Meta.</div>
+          {!p.ciudades.length ? <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Aún no hay suficientes pedidos de anuncios en este periodo.</div> : (
+            <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--df-border)', borderRadius: 10 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr style={{ background: 'var(--df-bg)' }}>{['Ciudad', 'Pedidos', 'Entregados', 'Devueltos', '% devolución'].map((h, i) => <th key={h} style={{ ...th, textAlign: i ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
+                <tbody>{p.ciudades.map((c) => (
+                  <tr key={c.ciudad + c.dep}>
+                    <td style={td}><b>{c.ciudad}</b>{c.dep && <span style={{ color: 'var(--df-text-muted)' }}> · {c.dep}</span>}</td>
+                    <td style={tdN}>{c.pedidos}</td><td style={tdN}>{c.entregados}</td><td style={tdN}>{c.devueltos}</td>
+                    <td style={{ ...tdN, fontWeight: 700, color: c.tasaDevolucion >= 40 && c.cerrados >= 4 ? 'var(--df-danger-dark)' : undefined }}>{c.cerrados ? `${c.tasaDevolucion}%` : '—'}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </>}
+
+      {tab === 'campanas' && <>
+            <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <b style={{ fontSize: 14 }}>Campañas</b>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {([['gasto', `Con gasto (${conGasto})`], ['activas', `Activas (${activas})`], ['todas', `Todas (${p.campanas.length})`]] as const).map(([k, t]) => (
+              <button key={k} onClick={() => setFiltroCamp(k)} aria-pressed={filtroCamp === k} style={{ ...btnS, padding: '5px 10px', ...(filtroCamp === k ? activo : {}) }}>{t}</button>
+            ))}
+            <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar campaña…" aria-label="Buscar campaña" style={{ ...inp, width: 180 }} />
+          </div>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '4px 0 10px' }}>Ventas = pedidos de DealFlow que llegaron por cada anuncio (WhatsApp, landing o Shopify). ROAS esperado = lo entregado + lo que va en camino × tu tasa de entrega.</div>
         <div style={{ overflowX: 'auto', border: '1px solid var(--df-border)', borderRadius: 10 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
             <thead><tr style={{ background: 'var(--df-bg)' }}>
               {['', 'Campaña', 'Presupuesto diario', 'Gasto', 'Chats', 'Pedidos', 'Entregados', 'Devol.', 'ROAS', 'ROAS esperado', 'Costo/venta', 'Utilidad'].map((h, i) => <th key={i} style={{ ...th, textAlign: i >= 3 ? 'right' : 'left' }}>{h}</th>)}
             </tr></thead>
             <tbody>
               {!p.campanas.length && <tr><td colSpan={12} style={{ ...td, color: 'var(--df-text-faint)' }}>No hay campañas {p.conectada ? 'en tu cuenta' : '(conecta Meta Ads)'}.</td></tr>}
-              {p.campanas.map((c) => <FilaCampana key={c.id} c={c} abierta={!!abiertas[c.id]} onAbrir={() => setAbiertas((a) => ({ ...a, [c.id]: !a[c.id] }))} ocupado={ocupado}
+              {!!p.campanas.length && !campanasVistas.length && <tr><td colSpan={12} style={{ ...td, color: 'var(--df-text-faint)' }}>Ninguna campaña con ese filtro. <button onClick={() => { setFiltroCamp('todas'); setBuscar(''); }} style={{ ...btnS, padding: '3px 8px' }}>Ver todas</button></td></tr>}
+              {campanasVistas.map((c) => <FilaCampana key={c.id} c={c} abierta={!!abiertas[c.id]} onAbrir={() => setAbiertas((a) => ({ ...a, [c.id]: !a[c.id] }))} ocupado={ocupado}
                 onEstado={cambiarEstado} onPres={cambiarPres} />)}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Embudo por anuncio */}
-      <div style={card}>
-        <b style={{ fontSize: 14 }}>Embudo de WhatsApp por anuncio</b>
-        <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 10px' }}>Dónde se cae cada anuncio: si trae chats que no compran, el problema es el anuncio o el mensaje; si compran pero devuelven, el producto o la ciudad.</div>
+      </>}
+
+      {tab === 'anuncios' && <>
+            <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <b style={{ fontSize: 14 }}>Embudo de WhatsApp por anuncio</b>
+          <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar anuncio o campaña…" aria-label="Buscar anuncio" style={{ ...inp, width: 220 }} />
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '4px 0 10px' }}>Dónde se cae cada anuncio: si trae chats que no compran, el problema es el anuncio o el mensaje; si compran pero devuelven, el producto o la ciudad.</div>
         <div style={{ overflowX: 'auto', border: '1px solid var(--df-border)', borderRadius: 10 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
             <thead><tr style={{ background: 'var(--df-bg)' }}>
               {['Anuncio', 'Gasto', 'Clics', 'Chats', 'Respondieron', 'Dieron datos', 'Pedidos', 'Entregados', 'Devueltos', 'CTR', 'Frecuencia', 'ROAS esperado'].map((h, i) => <th key={h} style={{ ...th, textAlign: i ? 'right' : 'left' }}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {!p.anuncios.length && <tr><td colSpan={12} style={{ ...td, color: 'var(--df-text-faint)' }}>Sin anuncios con gasto o chats en este periodo.</td></tr>}
-              {p.anuncios.slice(0, 60).map((a) => (
+              {!anunciosVistos.length && <tr><td colSpan={12} style={{ ...td, color: 'var(--df-text-faint)' }}>{p.anuncios.length ? 'Ningún anuncio coincide con la búsqueda.' : 'Sin anuncios con gasto o chats en este periodo.'}</td></tr>}
+              {anunciosVistos.slice(0, verTodosAds || q ? 200 : 15).map((a) => (
                 <tr key={a.id}>
                   <td style={{ ...td, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -225,36 +301,22 @@ export function AdsManager() {
             </tbody>
           </table>
         </div>
+        {!q && anunciosVistos.length > 15 && <button onClick={() => setVerTodosAds(!verTodosAds)} style={{ ...btnS, marginTop: 10 }}>{verTodosAds ? 'Ver menos' : `Ver los ${anunciosVistos.length} anuncios`}</button>}
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' }}>
-        {/* Ciudades */}
-        <div style={{ ...card, flex: '1 1 380px', minWidth: 0 }}>
-          <b style={{ fontSize: 14 }}>Ciudades que más devuelven</b>
-          <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 10px' }}>Pedidos que llegaron por anuncios. Una ciudad que devuelve mucho te cuesta flete de ida y vuelta: sácala de la segmentación en Meta.</div>
-          {!p.ciudades.length ? <div style={{ fontSize: 12.5, color: 'var(--df-text-faint)' }}>Aún no hay suficientes pedidos de anuncios en este periodo.</div> : (
-            <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--df-border)', borderRadius: 10 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr style={{ background: 'var(--df-bg)' }}>{['Ciudad', 'Pedidos', 'Entregados', 'Devueltos', '% devolución'].map((h, i) => <th key={h} style={{ ...th, textAlign: i ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
-                <tbody>{p.ciudades.map((c) => (
-                  <tr key={c.ciudad + c.dep}>
-                    <td style={td}><b>{c.ciudad}</b>{c.dep && <span style={{ color: 'var(--df-text-muted)' }}> · {c.dep}</span>}</td>
-                    <td style={tdN}>{c.pedidos}</td><td style={tdN}>{c.entregados}</td><td style={tdN}>{c.devueltos}</td>
-                    <td style={{ ...tdN, fontWeight: 700, color: c.tasaDevolucion >= 40 && c.cerrados >= 4 ? 'var(--df-danger-dark)' : undefined }}>{c.cerrados ? `${c.tasaDevolucion}%` : '—'}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
-          )}
+      </>}
+
+      {tab === 'automatizar' && <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 14, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gap: 14, minWidth: 0 }}>
+          <Reglas reglas={p.reglas} onCambio={cargar} />
+          <PruebasAB onCambio={cargar} />
         </div>
-        <Reglas reglas={p.reglas} onCambio={cargar} />
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' }}>
-        <PruebasAB onCambio={cargar} />
         <Alertas />
       </div>
+      </>}
 
+      {tab === 'ajustes' && <>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' }}>
         <Costos config={p.config} onCambio={cargar} />
         {/* Historial */}
@@ -273,6 +335,7 @@ export function AdsManager() {
           )}
         </div>
       </div>
+      </>}
     </section>
   );
 }

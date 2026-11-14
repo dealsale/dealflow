@@ -55,7 +55,9 @@ Claves: mi tienda, pagina de inicio, dominio propio, conectar dominio, cname, dn
 
 ## Píxel de Meta en la Tienda en línea
 Sección: tienda-en-linea, marketing
-Claves: pixel, pixel de meta, facebook pixel, dataset, conjunto de datos, events manager, eventos, purchase, compra, no llegan eventos, probar eventos, pixel helper
+Claves: pixel, pixel de meta, facebook pixel, dataset, conjunto de datos, events manager, eventos, purchase, compra, no llegan eventos, probar eventos, pixel helper, crear pixel, token, api de conversiones
+**Lo más fácil (con la cuenta de Anuncios conectada en Integraciones → Meta Ads):** Integraciones → **Reportar ventas a Meta** → **⚡ Configurar mi píxel automáticamente**. DealFlow usa el píxel de tu cuenta publicitaria (o crea uno si no tienes), lo pone en **Mi tienda** (y con eso en todas las landings sin píxel propio) y en las ventas de WhatsApp, y lo conecta a la API de Conversiones **sin copiar tokens** (usa el acceso de Anuncios; lo prueba con Meta en ese momento). En Mi tienda, en cada landing y en Integraciones el campo **Píxel de Meta** es una lista con tus píxeles y el botón **+ Nuevo** crea uno. Si un píxel no tiene token, el botón **⚡ Conectar con mi cuenta de Meta** lo conecta. Si Meta no acepta la conexión automática (por ejemplo el píxel es de otro negocio), se pega el token como antes. Meta a veces solo deja un píxel por cuenta publicitaria: entonces DealFlow usa el que ya existe. Si desconectas Anuncios, los píxeles conectados así dejan de enviar desde el servidor (vuelve a conectar o pega un token).
+**A mano (sin la cuenta de Anuncios):**
 1. En business.facebook.com abre **Administrador de eventos** → Orígenes de datos y elige tu píxel o conjunto de datos (si no tienes: **Conectar orígenes de datos → Web**).
 2. En **Configuración** copia el **Identificador** (15 o 16 dígitos).
 3. Pégalo en el editor del producto → **Pedidos y seguimiento** → **ID del Píxel de Meta**, en cada producto que pautes. Para la página de inicio pégalo en **Mi tienda → ID del Píxel de Meta**. Si un producto no tiene píxel propio usa el de Mi tienda.

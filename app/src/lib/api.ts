@@ -1313,8 +1313,10 @@ export const apiRendimientoReiniciar = () => req<{ ok: boolean }>('/api/admin/re
 
 // ── API de Conversiones de Meta para las landings (píxel + token) ──
 export interface EstadoConversiones {
-  pixeles: { pixelId: string; tieneToken: boolean; final: string; desde: string }[];
+  pixeles: { pixelId: string; tieneToken: boolean; final: string; desde: string; auto: boolean }[];
   testCode: string;
+  /** Hay cuenta de Anuncios conectada: se puede conectar el píxel sin pegar token. */
+  anuncios: boolean;
   resumen: { evento: string; enviados: number; errores: number }[];
   ultimos: { evento: string; estado: string; error: string; valor: number; calidad: string; fecha: string }[];
 }
@@ -1421,3 +1423,12 @@ export const apiAdsCrearPrueba = (p: { nombre?: string; nivel: 'ad' | 'adset'; a
 export const apiAdsTerminarPrueba = (id: string) => req<{ pruebas: PruebaAds[] }>(`/api/anuncios/pruebas/${id}/terminar`, 'POST', {});
 export const apiAdsBorrarPrueba = (id: string) => req<{ pruebas: PruebaAds[] }>(`/api/anuncios/pruebas/${id}`, 'DELETE');
 export const apiAdsDuplicarConjunto = (id: string) => req<{ ok: true; id: string }>('/api/anuncios/conjuntos/duplicar', 'POST', { id });
+
+// Píxeles de Meta desde la cuenta de Anuncios
+export interface PixelMeta { id: string; nombre: string; ultimoEvento: string; disponible: boolean; usos: string[]; conectado: boolean; auto: boolean }
+export interface ListaPixeles { conectada: boolean; pixeles: PixelMeta[]; error?: string }
+export const apiPixelesMeta = () => req<ListaPixeles>('/api/meta/pixeles', 'GET');
+export const apiCrearPixelMeta = (nombre: string) => req<ListaPixeles & { ok: true; id: string; existente?: boolean }>('/api/meta/pixeles', 'POST', { nombre });
+export const apiUsarPixelMeta = (pixelId: string, d: { tienda?: boolean; ventas?: boolean; conectar?: boolean }) => req<{ ok: true; conectado: boolean; mensaje: string }>('/api/meta/pixeles/usar', 'POST', { pixelId, ...d });
+export const apiConfigurarPixelMeta = () => req<{ ok: true; id: string; creado: boolean; conectado: boolean; mensaje: string }>('/api/meta/pixeles/configurar', 'POST', {});
+export const apiConectarAutoConversiones = (pixelId: string) => req<EstadoConversiones & { mensaje: string }>('/api/landings/conversiones/auto', 'POST', { pixelId });
