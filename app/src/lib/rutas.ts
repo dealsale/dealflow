@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import type { AdminSection, VendedorSection } from '../types';
 
-const VENDEDOR: VendedorSection[] = ['resumen', 'estadisticas', 'productos', 'asistente', 'whatsapp', 'logistica', 'pedidos', 'leads', 'crm', 'equipo', 'marketing', 'dealshop', 'biblioteca', 'integraciones', 'landings'];
+const VENDEDOR: VendedorSection[] = ['resumen', 'estadisticas', 'productos', 'asistente', 'whatsapp', 'logistica', 'pedidos', 'leads', 'crm', 'equipo', 'marketing', 'anuncios', 'dealshop', 'biblioteca', 'integraciones', 'landings'];
 const ADMIN: AdminSection[] = ['contabilidad', 'planes', 'cuentas', 'cupones', 'superadmin', 'biblioteca', 'plantillas', 'trazabilidad', 'proveedores', 'soporte', 'equipo', 'estudio'];
 // Nombre en la URL distinto al interno (más claro para el usuario).
 const A_URL: Partial<Record<VendedorSection, string>> = { crm: 'inbox', landings: 'tienda-en-linea' };

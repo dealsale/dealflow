@@ -3165,6 +3165,61 @@ api.post('/leads/iniciar-plantilla', requireAuth, requireStore, requirePermiso('
   res.json({ resultados });
 });
 
+// ── Administrador de anuncios (adsManager.ts) ──
+const fechaOk = (v: unknown, def: string) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : def);
+api.get('/anuncios/panel', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const am = await import('./adsManager.js');
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const desde = fechaOk(req.query.desde, hoy), hasta = fechaOk(req.query.hasta, hoy);
+  try { res.json(await am.panel(req.user!.storeId!, desde <= hasta ? desde : hasta, hasta)); }
+  catch (e) { console.error('[anuncios] panel', e); res.status(500).json({ error: 'No se pudo armar el panel de anuncios.' }); }
+});
+api.post('/anuncios/sincronizar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { sincronizarInsights } = await import('./metaInsights.js');
+  const am = await import('./adsManager.js');
+  const r = await sincronizarInsights(req.user!.storeId!, Math.min(30, Math.max(1, Number(req.body?.dias) || 3)));
+  await am.estructura(req.user!.storeId!, true);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+const quien = (req: ExRequest) => (db.prepare('SELECT email FROM users WHERE id = ?').get(req.user!.id) as { email: string } | undefined)?.email || '';
+api.post('/anuncios/estado', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const am = await import('./adsManager.js');
+  const r = await am.cambiarEstado(req.user!.storeId!, String(req.body?.id || ''), req.body?.activar === true, 'manual', quien(req));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/anuncios/presupuesto', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const am = await import('./adsManager.js');
+  const r = await am.cambiarPresupuesto(req.user!.storeId!, String(req.body?.id || ''), Number(req.body?.valor) || 0, 'manual', quien(req));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/anuncios/sugerencia', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const am = await import('./adsManager.js');
+  const a = (req.body?.accion || {}) as { tipo?: string; id?: string; valor?: number };
+  const r = await am.aplicarSugerencia(req.user!.storeId!, { tipo: String(a.tipo || ''), id: String(a.id || ''), valor: Number(a.valor) || 0 }, quien(req));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.put('/anuncios/config', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const am = await import('./adsManager.js');
+  const b = req.body || {};
+  const p: Record<string, number> = {};
+  for (const k of ['costoProductoPct', 'flete', 'costoDevolucion', 'cpaObjetivo', 'topeDiarioCuenta']) if (b[k] !== undefined && Number(b[k]) >= 0) p[k] = Number(b[k]);
+  res.json({ config: am.guardarConfig(req.user!.storeId!, p) });
+});
+api.post('/anuncios/reglas', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const am = await import('./adsManager.js');
+  const r = am.guardarRegla(req.user!.storeId!, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json({ reglas: r });
+});
+api.delete('/anuncios/reglas/:id', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const am = await import('./adsManager.js');
+  res.json({ reglas: am.borrarRegla(req.user!.storeId!, String(req.params.id)) });
+});
+
 // ── Remarketing saliente (remarketing.ts) ──
 api.get('/remarketing', requireAuth, requireStore, requireOwner, async (req, res) => {
   const rm = await import('./remarketing.js');

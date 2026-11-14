@@ -1368,3 +1368,33 @@ export const apiAdminEstudioSubir = (b: { titulo: string; estilo: string; videoD
 export const apiAdminEstudioEditar = (id: string, b: Partial<Pick<ReferenciaEstudio, 'guia' | 'titulo' | 'estilo' | 'activa'>>) => reqBase<{ ok: true }>(`/api/admin/estudio/referencias/${id}`, 'PATCH', b);
 export const apiAdminEstudioAnalizar = (id: string) => reqBase<{ ok: true }>(`/api/admin/estudio/referencias/${id}/analizar`, 'POST');
 export const apiAdminEstudioBorrar = (id: string) => req<{ ok: true }>(`/api/admin/estudio/referencias/${id}`, 'DELETE');
+
+// ── Administrador de anuncios ──
+export interface MetricasAds {
+  gasto: number; impresiones: number; clics: number; chats: number; respondieron: number; dieronDatos: number; pedidos: number; cancelados: number;
+  entregados: number; devueltos: number; enCamino: number; ventas: number; ventasEntregadas: number;
+  roas: number; roasNeto: number; cpa: number; cpaEntregado: number; costoChat: number; ctr: number; frecuencia: number;
+  tasaDevolucion: number; conversion: number; ventasEsperadas: number; utilidad: number;
+}
+export interface ConjuntoAds extends MetricasAds { id: string; nombre: string; campaignId: string; estado: string; activa: boolean; presupuesto: number; aprendizaje: string; edad: string; ubicaciones: string }
+export interface CampanaAds extends MetricasAds { id: string; nombre: string; objetivo: string; estado: string; activa: boolean; presupuesto: number; presupuestoEn: 'campaign' | 'adset' | ''; conjuntos: ConjuntoAds[] }
+export interface AnuncioAds extends MetricasAds { id: string; nombre: string; campaignId: string; campana: string; conjunto: string; thumb: string; url: string; producto: string }
+export interface SugerenciaAds { id: string; tipo: 'escalar' | 'recortar' | 'creativo' | 'publico' | 'aviso'; titulo: string; porque: string; accion?: { tipo: 'presupuesto' | 'estado'; id: string; valor: number } }
+export interface ReglaAds { id: string; metrica: 'cpa' | 'roas_neto' | 'gasto_sin_venta' | 'tasa_devolucion'; operador: '>' | '<'; valor: number; dias: number; accion: 'pausar' | 'subir' | 'bajar' | 'avisar'; pct: number; tope: number; activa: boolean; ultima: string }
+export interface ConfigAds { costoProductoPct: number; flete: number; costoDevolucion: number; cpaObjetivo: number; topeDiarioCuenta: number }
+export interface PanelAds {
+  rango: { desde: string; hasta: string }; conectada: boolean; errorMeta: string; moneda: string;
+  resumen: MetricasAds; serie: { fecha: string; gasto: number; ventas: number; pedidos: number }[];
+  campanas: CampanaAds[]; anuncios: AnuncioAds[];
+  ciudades: { ciudad: string; dep: string; pedidos: number; entregados: number; devueltos: number; ventas: number; tasaDevolucion: number; cerrados: number }[];
+  config: ConfigAds; tasaEntregaTienda: number; sugerencias: SugerenciaAds[]; reglas: ReglaAds[];
+  historial: { objeto_id: string; nivel: string; nombre: string; accion: string; antes: string; despues: string; origen: string; usuario: string; ok: number; error: string; creado: string }[];
+}
+export const apiAdsPanel = (desde: string, hasta: string) => req<PanelAds>(`/api/anuncios/panel?desde=${desde}&hasta=${hasta}`, 'GET');
+export const apiAdsSincronizar = (dias = 3) => req<{ ok: true; filas: number }>('/api/anuncios/sincronizar', 'POST', { dias });
+export const apiAdsEstado = (id: string, activar: boolean) => req<{ ok: true }>('/api/anuncios/estado', 'POST', { id, activar });
+export const apiAdsPresupuesto = (id: string, valor: number) => req<{ ok: true; presupuesto: number }>('/api/anuncios/presupuesto', 'POST', { id, valor });
+export const apiAdsSugerencia = (accion: NonNullable<SugerenciaAds['accion']>) => req<{ ok: true }>('/api/anuncios/sugerencia', 'POST', { accion });
+export const apiAdsConfig = (c: Partial<ConfigAds>) => req<{ config: ConfigAds }>('/api/anuncios/config', 'PUT', c);
+export const apiAdsRegla = (r: Partial<ReglaAds>) => req<{ reglas: ReglaAds[] }>('/api/anuncios/reglas', 'POST', r);
+export const apiAdsBorrarRegla = (id: string) => req<{ reglas: ReglaAds[] }>(`/api/anuncios/reglas/${id}`, 'DELETE');

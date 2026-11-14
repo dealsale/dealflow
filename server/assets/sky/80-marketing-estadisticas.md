@@ -54,3 +54,18 @@ Sección: estadisticas
 Claves: conversion por anuncio, costo por chat, costo por pedido, roas por anuncio, que anuncio vende, traer ahora, gasto meta
 En **Estadísticas → 📈 Conversión por anuncio** ves por anuncio (o por conjunto/campaña): 💸 Gasto, 💬 Chats, Costo/chat, Respondieron, 🛒 Pedidos, Conversión, Costo/pedido, 🚚 Despachados, ✅ Entregados, ↩️ Devueltos, ❌ Cancelados, Entregado $ y ROAS. Vistas **📢 Por anuncio** y **📅 Por día** (toca un día para ver solo ese día). Filtros: campaña, anuncio, búsqueda, **Solo con ventas**, **Incluir orgánico**. **↻ Traer ahora** actualiza desde Meta ("✓ Listo: N registros de Meta actualizados").
 Sin Meta Ads conectado ves chats y pedidos por anuncio pero no el gasto: "Conecta tu Administrador de anuncios para ver el gasto, el costo por chat, el costo por pedido y el ROAS".
+
+
+## Administrador de anuncios (sección Anuncios)
+Sección: anuncios, marketing
+Claves: administrador de anuncios, anuncios, campañas meta, subir presupuesto, bajar presupuesto, pausar campaña, roas, roas esperado, utilidad, devoluciones por ciudad, embudo, reglas automaticas, optimizador
+En **Anuncios** (solo el dueño) ves tus campañas de Meta con tus ventas REALES de DealFlow y las manejas sin entrar a Meta:
+- **Indicadores**: gasto, ventas, ROAS, **ROAS esperado** (lo entregado + lo que va en camino × tu tasa de entrega: descuenta devoluciones), costo por venta, **utilidad estimada** (después de producto, flete, devoluciones y anuncios), chats y % de devolución. Se actualiza solo cada minuto; el gasto de Meta llega cada 30 min o con **↻ Sincronizar**.
+- **Campañas**: el interruptor pausa o activa en Meta; **− / +** baja o sube 10% el presupuesto diario (pide confirmación). Si el presupuesto está en los conjuntos, abre la campaña (▸) y cámbialo en cada conjunto.
+- **Optimizador**: sugerencias con su motivo (subir 20% a la que rinde, pausar la que gasta sin vender, creativos cansados, ciudades que devuelven) que se aplican con un clic.
+- **Embudo por anuncio**: clics → chats → respondieron → dieron datos → pedidos → entregados → devueltos.
+- **Ciudades que más devuelven**: para sacarlas de la segmentación en Meta.
+- **Reglas automáticas**: "si el costo por venta supera $X en 2 días → pausar", "si el ROAS esperado pasa de 3 → subir 15% (máximo $Y)". Se revisan cada 30 min, actúan máximo una vez al día por campaña y te avisan.
+- **Tus costos**: % del producto, flete, devolución, costo por venta objetivo y tope de gasto diario de la cuenta (las reglas nunca lo superan).
+- **Historial**: cada cambio hecho desde DealFlow (a mano, sugerencia o regla).
+Necesita la cuenta publicitaria conectada en **Integraciones → Meta Ads**.

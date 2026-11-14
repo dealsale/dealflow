@@ -47,6 +47,7 @@ import('./remarketing.js').then((m) => m.iniciarRemarketing()).catch((e) => cons
 import('./calidad.js').then((m) => m.iniciarVigilanciaCalidad()).catch((e) => console.error('[calidad]', e));
 import('./shopifyApp.js').then((m) => m.iniciarCobroShopify()).catch((e) => console.error('[shopify-cobro]', e));
 import('./metaInsights.js').then((m) => m.iniciarInsights()).catch((e) => console.error('[ads]', e));
+import('./adsManager.js').then((m) => m.iniciarAdsManager()).catch((e) => console.error('[anuncios]', e));
 import('./metaCapi.js').then((m) => m.iniciarCapi()).catch((e) => console.error('[capi]', e));
 import('./metaPixelWeb.js').then((m) => m.iniciarPixelWeb()).catch((e) => console.error('[pixel-web]', e));
 setTimeout(() => { void import('./media.js').then((m) => m.reconvertirGuias()).catch(() => {}); }, 30_000);
