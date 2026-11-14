@@ -1,6 +1,6 @@
 import { deflateSync } from 'node:zlib';
 import path from 'node:path';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { db, uid } from './db.js';
@@ -36,6 +36,25 @@ export function audioAOgg(buffer: Buffer): Buffer | null {
   } finally {
     if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ }
   }
+  return null;
+}
+
+/**
+ * Versión para ESCUCHAR en el panel: AAC en .m4a, que suena en cualquier navegador (Safari del
+ * iPhone y la app instalada no reproducen webm ni ogg, que es lo que graban Chrome/Android y lo que
+ * manda WhatsApp). Se convierte una vez y queda guardada junto al original. null si no se pudo.
+ */
+export function audioParaEscuchar(archivo: string): string | null {
+  if (/\.(m4a|mp3|aac)$/i.test(archivo)) return archivo;
+  const destino = archivo + '.escuchar.m4a';
+  if (existsSync(destino)) return destino;
+  const tmp = destino + '.tmp.m4a';
+  try {
+    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', archivo, '-vn', '-map', '0:a:0', '-ac', '1', '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', tmp], { timeout: 60_000 });
+    if (r.status === 0 && existsSync(tmp)) { renameSync(tmp, destino); return destino; }
+    console.error('[media] no se pudo preparar el audio para escuchar:', r.error?.message || String(r.stderr || '').trim().slice(0, 300));
+  } catch (e) { console.error('[media] sin ffmpeg para preparar el audio', e); }
+  try { rmSync(tmp, { force: true }); } catch { /* nada */ }
   return null;
 }
 

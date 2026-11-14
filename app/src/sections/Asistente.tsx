@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AudioChat } from '../components/MediaBubble';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { apiWebchatList, apiWebchatSend } from '../lib/api';
 import type { ApiMensaje } from '../lib/api';
@@ -140,7 +141,7 @@ function PruebaAsistente({ storeId }: { storeId: string }) {
               <div style={{ maxWidth: '72%', background: mio ? 'var(--df-green-subtle)' : 'var(--df-surface)', border: '1px solid ' + (mio ? '#BBF7D0' : 'var(--df-border)'), borderRadius: 12, padding: '9px 12px', fontSize: 13.5, lineHeight: 1.5 }}>
                 {m.tipo === 'image' && m.mediaUrl && <img src={m.mediaUrl} alt="" style={{ maxWidth: 220, borderRadius: 8, display: 'block', marginBottom: m.texto ? 6 : 0 }} />}
                 {m.tipo === 'video' && m.mediaUrl && <video src={m.mediaUrl} controls style={{ maxWidth: 220, borderRadius: 8, display: 'block', marginBottom: m.texto ? 6 : 0 }} />}
-                {m.tipo === 'audio' && m.mediaUrl && <audio src={m.mediaUrl} controls style={{ maxWidth: 220, display: 'block' }} />}
+                {m.tipo === 'audio' && m.mediaUrl && <AudioChat url={m.mediaUrl} ancho={220} />}
                 {m.texto && <span style={{ whiteSpace: 'pre-wrap' }}>{m.texto}</span>}
                 <span style={{ display: 'block', textAlign: 'right', color: 'var(--df-text-faint)', fontSize: 10.5, marginTop: 3 }}>{m.hora}</span>
               </div>

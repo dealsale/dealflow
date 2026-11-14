@@ -5427,13 +5427,22 @@ api.post('/push/unsubscribe', requireAuth, requireStore, async (req, res) => {
 // ── Archivos de conversaciones (imágenes, videos, etc.) ──────────────
 // Servidos bajo /api/media para que la sesión (cookie) los proteja: cada
 // tienda solo ve los suyos.
-api.get('/media/:storeId/:file', requireAuth, (req, res) => {
+api.get('/media/:storeId/:file', requireAuth, async (req, res) => {
   // Cada tienda ve lo suyo; el equipo DealFlow (admin/superadmin, sin tienda) ve
   // cualquiera, para poder mostrar las fotos de la biblioteca y al mover productos.
   const esAdmin = ['ADMIN', 'SUPERADMIN', 'SOPORTE'].includes(req.user!.role);
   if (!esAdmin && req.params.storeId !== req.user!.storeId) return res.status(403).end();
   const file = mediaPath(req.params.storeId, req.params.file);
   if (!existsSync(file)) return res.status(404).end();
+  // ?formato=m4a: versión que suena en cualquier celular (iPhone no reproduce webm/ogg).
+  if (req.query.formato === 'm4a' && /\.(webm|ogg|oga|opus|weba|mp4|m4a|mp3|aac|amr|wav|3gp)$/i.test(file)) {
+    const { audioParaEscuchar } = await import('./media.js');
+    const m4a = audioParaEscuchar(file);
+    if (m4a) {
+      res.setHeader('Cache-Control', 'private, max-age=604800');
+      return res.sendFile(m4a, { headers: { 'Content-Type': /\.mp3$/i.test(m4a) ? 'audio/mpeg' : 'audio/mp4' } });
+    }
+  }
   res.sendFile(file);
 });
 
