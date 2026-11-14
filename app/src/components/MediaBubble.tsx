@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { DecoratedMensaje } from '../hooks/useDealFlowState';
 
@@ -25,7 +26,7 @@ export function MediaContent({ m }: { m: DecoratedMensaje }) {
     );
   }
   if (tipo === 'audio' && url) {
-    return <audio src={url} controls style={{ maxWidth: 240 }} />;
+    return <AudioChat url={url} />;
   }
   if (tipo === 'document' && url) {
     const linkColor: CSSProperties = { color: m.de === 'vendedor' ? '#fff' : 'var(--df-brand)', textDecoration: 'underline' };
@@ -60,5 +61,43 @@ export function AttachButton({ onFile, size = 44 }: { onFile: (f: File) => void;
         }}
       />
     </label>
+  );
+}
+
+/**
+ * Nota de voz del chat. En el celular (sobre todo iPhone y la app instalada) el reproductor no
+ * suena con webm/ogg —lo que graban Chrome/Android y lo que manda WhatsApp— y a veces pide el
+ * archivo sin la sesión. Por eso se descarga la versión .m4a (suena en todos) con la sesión y se
+ * reproduce desde memoria. Los audios recién grabados (data:/blob:) se reproducen tal cual.
+ */
+const audiosListos = new Map<string, Promise<string>>();
+function urlEscuchable(url: string): Promise<string> {
+  let p = audiosListos.get(url);
+  if (!p) {
+    p = fetch(url + (url.includes('?') ? '&' : '?') + 'formato=m4a', { credentials: 'include' })
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.blob(); })
+      .then((b) => URL.createObjectURL(b));
+    p.catch(() => audiosListos.delete(url)); // si falla, se reintenta la próxima vez
+    audiosListos.set(url, p);
+  }
+  return p;
+}
+export function AudioChat({ url, ancho = 240 }: { url: string; ancho?: number }) {
+  const directo = url.startsWith('data:') || url.startsWith('blob:') || !url.startsWith('/api/media/');
+  const [src, setSrc] = useState(directo ? url : '');
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    if (directo) { setSrc(url); return; }
+    let vivo = true;
+    setError(false);
+    urlEscuchable(url).then((u) => { if (vivo) setSrc(u); }).catch(() => { if (vivo) { setError(true); setSrc(url); } });
+    return () => { vivo = false; };
+  }, [url, directo]);
+  if (!src) return <div style={{ fontSize: 12, opacity: 0.7, padding: '6px 2px', minWidth: 160 }}>🎤 Cargando audio…</div>;
+  return (
+    <div>
+      <audio src={src} controls preload="metadata" playsInline style={{ maxWidth: ancho, display: 'block' }} />
+      {error && <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: 'inherit', textDecoration: 'underline' }}>Abrir audio</a>}
+    </div>
   );
 }
