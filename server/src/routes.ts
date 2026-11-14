@@ -3281,6 +3281,48 @@ api.post('/anuncios/conjuntos/duplicar', requireAuth, requireStore, requireOwner
   res.json(r);
 });
 
+// ── Comentarios de Facebook e Instagram (metaComentarios.ts) ──
+api.get('/comentarios', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
+  const c = await import('./metaComentarios.js');
+  res.json(c.listar(req.user!.storeId!, { estado: String(req.query.estado || ''), canal: String(req.query.canal || ''), q: String(req.query.q || '') }));
+});
+api.put('/comentarios/config', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const c = await import('./metaComentarios.js');
+  res.json({ config: c.guardarCfgComentarios(req.user!.storeId!, req.body || {}) });
+});
+api.post('/comentarios/sincronizar', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
+  const c = await import('./metaComentarios.js');
+  res.json(await c.sincronizar(req.user!.storeId!));
+});
+api.post('/comentarios/:id/responder', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
+  const c = await import('./metaComentarios.js');
+  const sid = req.user!.storeId!, id = String(req.params.id), u = quien(req);
+  const publico = String(req.body?.texto || '').trim();
+  const privado = String(req.body?.privado || '').trim();
+  if (!publico && !privado) return res.status(400).json({ error: 'Escribe la respuesta.' });
+  const errores: string[] = [];
+  if (publico) { const r = await c.responderPublico(sid, id, publico, u); if ('error' in r) errores.push(`Público: ${r.error}`); }
+  if (privado) { const r = await c.responderPrivado(sid, id, privado, u); if ('error' in r) errores.push(`Privado: ${r.error}`); }
+  if (errores.length) return res.status(400).json({ error: errores.join(' · ') });
+  res.json({ ok: true });
+});
+api.post('/comentarios/:id/ocultar', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
+  const c = await import('./metaComentarios.js');
+  const r = await c.ocultar(req.user!.storeId!, String(req.params.id), req.body?.ocultar !== false, req.body?.ocultar !== false ? 'ocultado a mano' : '');
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/comentarios/:id/ignorar', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
+  const c = await import('./metaComentarios.js');
+  res.json({ ok: c.ignorar(req.user!.storeId!, String(req.params.id), req.body?.ignorar !== false) });
+});
+api.post('/comentarios/:id/sugerir', requireAuth, requireStore, requirePermiso('chats'), async (req, res) => {
+  const c = await import('./metaComentarios.js');
+  const r = await c.sugerirRespuesta(req.user!.storeId!, String(req.params.id));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+
 // ── Remarketing saliente (remarketing.ts) ──
 api.get('/remarketing', requireAuth, requireStore, requireOwner, async (req, res) => {
   const rm = await import('./remarketing.js');

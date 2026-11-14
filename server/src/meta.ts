@@ -20,10 +20,10 @@ import { canjearAcceso, type AccesoMeta } from './metaToken.js';
 
 const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
 
-interface PaginaConectada { pageId: string; nombre: string; token: string; igId?: string }
+export interface PaginaConectada { pageId: string; nombre: string; token: string; igId?: string }
 
 /** Páginas/IG conectados de una tienda. */
-function paginasDeTienda(storeId: string): PaginaConectada[] {
+export function paginasDeTienda(storeId: string): PaginaConectada[] {
   const row = db.prepare("SELECT config FROM store_integrations WHERE store_id = ? AND tipo = 'meta_paginas'").get(storeId) as { config: string } | undefined;
   if (!row) return [];
   return pj<{ paginas: PaginaConectada[] }>(row.config, { paginas: [] }).paginas || [];
@@ -38,7 +38,7 @@ export function guardarPaginas(storeId: string, paginas: PaginaConectada[]): voi
 }
 
 /** Encuentra la tienda (y la página) dueña de un pageId o igId entrante. */
-function resolverPagina(routeId: string): { storeId: string; pagina: PaginaConectada } | null {
+export function resolverPagina(routeId: string): { storeId: string; pagina: PaginaConectada } | null {
   const rows = db.prepare("SELECT store_id, config FROM store_integrations WHERE tipo = 'meta_paginas'").all() as { store_id: string; config: string }[];
   for (const r of rows) {
     const paginas = pj<{ paginas: PaginaConectada[] }>(r.config, { paginas: [] }).paginas || [];
@@ -79,11 +79,13 @@ const noConectadas = new Map<string, string>();
 
 export function handleMetaWebhook(object: 'page' | 'instagram', body: unknown): void {
   const canal = object === 'instagram' ? 'instagram' : 'messenger';
-  const b = body as { entry?: { id?: string; messaging?: Record<string, unknown>[] }[] };
+  const b = body as { entry?: { id?: string; messaging?: Record<string, unknown>[]; changes?: { field?: string; value?: Record<string, unknown> }[] }[] };
   for (const entry of b.entry || []) {
     const routeId = String(entry.id || '');
     ultimoAviso.set(routeId, new Date().toISOString());
     if (!resolverPagina(routeId)) noConectadas.set(routeId, new Date().toISOString());
+    // Comentarios (Facebook: campo «feed»; Instagram: «comments»).
+    if (entry.changes?.length) void import('./metaComentarios.js').then((m) => m.procesarCambios(object, routeId, entry.changes || [])).catch((e) => console.error('[meta] comentarios', e));
     for (const m of entry.messaging || []) {
       const msg = m as {
         sender?: { id?: string };
@@ -171,14 +173,19 @@ export async function conectarPaginasMeta(storeId: string, acceso: AccesoMeta): 
     const paginas: PaginaConectada[] = [];
     for (const p of pag.data) {
       // 3) suscribir nuestra app a los webhooks de la página.
-      try {
-        const sr = await fetch(`${GRAPH}/${p.id}/subscribed_apps?access_token=${encodeURIComponent(p.access_token)}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscribed_fields: 'messages,messaging_postbacks,messaging_referrals,message_reactions' }),
-        });
-        const sb = (await sr.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
-        if (!sb.success) registrarLog(storeId, 'warn', 'meta', `La página ${p.name} se conectó, pero Meta no aceptó suscribirla a los mensajes: ${sb.error?.message || 'sin detalle'}.`);
-      } catch { /* seguimos: al menos guardamos la página */ }
+      // Con «feed» llegan también los comentarios; si la app aún no tiene ese permiso, solo mensajes.
+      let errSub = '';
+      for (const campos of [SUSCRIPCION, SUSCRIPCION_MENSAJES]) {
+        try {
+          const sr = await fetch(`${GRAPH}/${p.id}/subscribed_apps?access_token=${encodeURIComponent(p.access_token)}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscribed_fields: campos }),
+          });
+          const sb = (await sr.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
+          if (sb.success) { errSub = ''; if (campos === SUSCRIPCION_MENSAJES) registrarLog(storeId, 'warn', 'meta', `La página ${p.name} recibe mensajes, pero no comentarios: a la app de Meta le falta el permiso para el campo «feed».`); break; }
+          errSub = sb.error?.message || 'sin detalle';
+        } catch { errSub = 'no pudimos hablar con Meta'; break; }
+      }
+      if (errSub) registrarLog(storeId, 'warn', 'meta', `La página ${p.name} se conectó, pero Meta no aceptó suscribirla a los mensajes: ${errSub}.`);
       paginas.push({ pageId: p.id, nombre: p.name, token: p.access_token, igId: p.instagram_business_account?.id });
     }
     guardarPaginas(storeId, paginas);
@@ -195,7 +202,8 @@ export function metaConectado(storeId: string): { messenger: boolean; instagram:
   return { messenger: paginas.length > 0, instagram: paginas.some((p) => !!p.igId), paginas: paginas.map((p) => p.nombre) };
 }
 
-const SUSCRIPCION = 'messages,messaging_postbacks,messaging_referrals,message_reactions';
+const SUSCRIPCION = 'messages,messaging_postbacks,messaging_referrals,message_reactions,feed';
+const SUSCRIPCION_MENSAJES = 'messages,messaging_postbacks,messaging_referrals,message_reactions';
 
 /**
  * Revisa por qué no llegan los mensajes de Messenger: si cada página tiene a DealFlow
@@ -232,7 +240,7 @@ export async function resuscribirPaginas(storeId: string): Promise<{ ok: number;
   for (const p of paginasDeTienda(storeId)) {
     // Si Meta rechaza algún campo (p. ej. "feed" sin permiso), se reintenta con los esenciales.
     let ultimo = '';
-    for (const campos of [SUSCRIPCION, 'messages,messaging_postbacks,messaging_referrals', 'messages']) {
+    for (const campos of [SUSCRIPCION, SUSCRIPCION_MENSAJES, 'messages,messaging_postbacks,messaging_referrals', 'messages']) {
       try {
         const res = await fetch(`${GRAPH}/${p.pageId}/subscribed_apps?access_token=${encodeURIComponent(p.token)}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscribed_fields: campos }),

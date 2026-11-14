@@ -30,6 +30,7 @@ export function DiagnosticoMessenger() {
             <div key={p.pageId} style={{ border: '1px solid var(--df-border)', borderRadius: 9, padding: '9px 11px' }}>
               <b>{p.nombre}</b>{p.ig ? ' · con Instagram' : ''}
               <div>{p.error ? `⚠️ ${p.error}` : p.suscrita ? (p.faltan.length ? `⚠️ Suscrita, pero faltan los avisos: ${p.faltan.join(', ')}.` : '✅ DealFlow está suscrito a los mensajes de esta página.') : '❌ DealFlow NO está suscrito a esta página.'}</div>
+              {p.suscrita && !p.error && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{p.campos.includes('feed') ? '💬 Comentarios de Facebook: activos.' : '💬 Comentarios de Facebook: no llegan (la app de Meta no tiene el campo «feed»). Dale «Volver a suscribir» cuando agregues el permiso.'}</div>}
               <div style={{ color: 'var(--df-text-muted)' }}>{p.ultimoAviso ? `Último aviso de Meta: ${hora(p.ultimoAviso)}` : 'Meta no ha mandado ningún aviso de esta página desde el último reinicio del servidor.'}</div>
             </div>
           ))}

@@ -1435,3 +1435,22 @@ export const apiCrearPixelMeta = (nombre: string) => req<ListaPixeles & { ok: tr
 export const apiUsarPixelMeta = (pixelId: string, d: { tienda?: boolean; ventas?: boolean; conectar?: boolean }) => req<{ ok: true; conectado: boolean; mensaje: string }>('/api/meta/pixeles/usar', 'POST', { pixelId, ...d });
 export const apiConfigurarPixelMeta = () => req<{ ok: true; id: string; creado: boolean; conectado: boolean; mensaje: string }>('/api/meta/pixeles/configurar', 'POST', {});
 export const apiConectarAutoConversiones = (pixelId: string) => req<EstadoConversiones & { mensaje: string }>('/api/landings/conversiones/auto', 'POST', { pixelId });
+
+// Comentarios de Facebook e Instagram
+export interface CfgComentarios { auto: boolean; modo: 'plantilla' | 'ia'; publicas: string[]; privado: string; enviarPrivado: boolean; ocultarGroserias: boolean; palabras: string[]; avisar: boolean }
+export interface ComentarioMeta {
+  id: string; canal: 'facebook' | 'instagram'; postId: string; postTexto: string; postUrl: string; adId: string; parentId: string;
+  autorId: string; autor: string; texto: string; estado: 'nuevo' | 'respondido' | 'oculto' | 'ignorado'; respuesta: string; privado: string;
+  oculto: boolean; motivo: string; error: string; auto: boolean; usuario: string; creado: string;
+}
+export interface ListaComentarios {
+  comentarios: ComentarioMeta[]; config: CfgComentarios; paginas: { nombre: string; instagram: boolean }[];
+  resumen: { nuevos: number; respondidos: number; ocultos: number; ignorados: number; total: number; ultimo: string };
+}
+export const apiComentarios = (f: { estado?: string; canal?: string; q?: string }) => req<ListaComentarios>(`/api/comentarios?${new URLSearchParams(f as Record<string, string>)}`, 'GET');
+export const apiConfigComentarios = (c: Partial<CfgComentarios>) => req<{ config: CfgComentarios }>('/api/comentarios/config', 'PUT', c);
+export const apiSincronizarComentarios = () => req<{ nuevos: number; errores: string[] }>('/api/comentarios/sincronizar', 'POST', {});
+export const apiResponderComentario = (id: string, texto: string, privado: string) => req<{ ok: true }>(`/api/comentarios/${encodeURIComponent(id)}/responder`, 'POST', { texto, privado });
+export const apiOcultarComentario = (id: string, ocultar: boolean) => req<{ ok: true }>(`/api/comentarios/${encodeURIComponent(id)}/ocultar`, 'POST', { ocultar });
+export const apiIgnorarComentario = (id: string, ignorar: boolean) => req<{ ok: boolean }>(`/api/comentarios/${encodeURIComponent(id)}/ignorar`, 'POST', { ignorar });
+export const apiSugerirComentario = (id: string) => req<{ texto: string }>(`/api/comentarios/${encodeURIComponent(id)}/sugerir`, 'POST', {});
