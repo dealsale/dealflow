@@ -14,6 +14,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { aPresupuestoMeta } from './adsManager.js';
 import { db, registrarLog, uid } from './db.js';
 import { mediaPath } from './media.js';
 
@@ -269,7 +270,7 @@ export async function avanzar(id: string): Promise<void> {
         name: txt(L.nombre),
         objective: objetivo === 'ventas' ? 'OUTCOME_SALES' : objetivo === 'trafico' ? 'OUTCOME_TRAFFIC' : 'OUTCOME_ENGAGEMENT',
         status: 'PAUSED', special_ad_categories: [], buying_type: 'AUCTION',
-        daily_budget: Number(L.presupuesto) * 100, bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+        daily_budget: aPresupuestoMeta(Number(L.presupuesto), c.moneda), // COP va en pesos enteros (antes ×100 = 100 veces el presupuesto) bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
       });
       campaign = txt(r.id);
       db.prepare('UPDATE estudio_lanzamientos SET campaign_id = ? WHERE id = ?').run(campaign, id);

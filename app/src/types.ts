@@ -300,6 +300,7 @@ export type VendedorSection =
   | 'crm'
   | 'equipo'
   | 'marketing'
+  | 'anuncios'
   | 'dealshop'
   | 'landings'
   | 'biblioteca'

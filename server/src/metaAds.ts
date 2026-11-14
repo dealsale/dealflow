@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { db, j } from './db.js';
+import { aPresupuestoMeta } from './adsManager.js';
 import { obtener as obtenerCampana } from './campanas.js';
 import { mediaPath } from './media.js';
 import { canjearAcceso, type AccesoMeta } from './metaToken.js';
@@ -212,7 +213,7 @@ export async function publicar(
   const adset = await post<{ id?: string }>(`${act}/adsets`, {
     name: `${c.nombre} · conjunto`,
     campaign_id: camp.body.id,
-    daily_budget: presupuesto * 100,
+    daily_budget: aPresupuestoMeta(presupuesto, f.moneda || 'COP'), // COP va en pesos enteros (antes ×100 = 100 veces el presupuesto)
     billing_event: 'IMPRESSIONS',
     optimization_goal: c.objetivo === 'trafico' ? 'LINK_CLICKS' : c.objetivo === 'reconocimiento' ? 'REACH' : 'CONVERSATIONS',
     bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
