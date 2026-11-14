@@ -1636,7 +1636,7 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requirePermiso
   const soloPedido = req.body?.soloPedido === true;
   const t = soloPedido ? undefined : req.body?.transportadora as { id: number; nombre: string; service: string; precio: number } | undefined;
   // Nombre real del cliente (el que escribió en el chat), no el de perfil ni un correo.
-  const nombreReal = (await import('./nombres.js')).resolverNombreCliente(String(o.lead_id || ''), String(o.cliente || ''), '');
+  const nombreReal = (await import('./nombres.js')).nombreDelPedido(String(o.lead_id || ''), String(o.cliente || ''));
   const [nombre, ...resto] = nombreReal.split(' ');
   const crear = await dropi.crearOrden(c, {
     total: Number(o.total || 0), notas: '', // sin notas: la tienda no quiere el rótulo de DealFlow/Shopify en la orden de Dropi

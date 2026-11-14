@@ -19,7 +19,10 @@ const NO_EN_NOMBRE = new Set(('claro cuantos cuantas cuanto cuanta dias dia habi
   + 'si no ok okay listo dale vale buena perfecto genial gracias hola buenas buenos tardes noches porfa favor confirmo confirmado confirmar '
   + 'envio envios enviar envian pedido pedidos precio precios talla tallas color colores producto productos pago pagar contraentrega contra entrega domicilio '
   + 'direccion cra cl barrio numero celular telefono whatsapp correo llega llegan demora tarda valor total oferta promo '
-  + 'manana hoy ayer semana mes horas hora senor senora cliente usuario').split(' '));
+  + 'manana hoy ayer semana mes horas hora senor senora cliente usuario '
+  // Respuestas a «¿Confirmas que los datos están correctos?» que se guardaban como nombre («Correcto Confirmo»).
+  + 'correcto correcta correctos correctas exacto exacta exactamente afirmativo todo toda todos todas acuerdo verdad '
+  + 'asi seguro super excelente mandalo mandelo mandamelo envialo envielo envienlo enviamelo despachalo datos dato').split(' '));
 const sinTilde = (w: string) => w.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 /** Quita emojis/símbolos y deja "Nombre Apellido" con mayúscula inicial. */
@@ -54,7 +57,7 @@ export function nombreValido(n: string): boolean {
 const PATRON = /(?:me llamo|mi nombre es|mi nombre completo es|a nombre de|nombre(?: completo)?\s*[:=-])\s*([\p{L}][\p{L} '.-]{1,58})/iu;
 
 /** Nombre que el cliente dio en el chat (el más reciente). '' si no lo dijo. */
-export function nombreDelChat(leadId: string): string {
+export function nombreDelChat(leadId: string, soloExplicito = false): string {
   const msgs = db.prepare("SELECT de, texto FROM messages WHERE lead_id = ? AND texto != '' ORDER BY created_at DESC LIMIT 80").all(leadId) as { de: string; texto: string }[];
   // msgs va del más nuevo al más viejo.
   for (let i = 0; i < msgs.length; i++) {
@@ -68,9 +71,14 @@ export function nombreDelChat(leadId: string): string {
         if (nombreValido(n)) return n;
       }
     }
-    // 2) Respondió solo con su nombre justo después de que el bot se lo pidió.
+    // 2) Respondió solo con su nombre justo después de que el bot se lo PIDIÓ. No vale cuando el
+    //    mensaje del bot era el «Resumen de tu pedido» (trae «Nombre:» y pregunta si confirma): ahí la
+    //    respuesta es «Correcto, confirmo», no un nombre.
     const anterior = msgs.slice(i + 1).find((x) => x.de !== 'cliente');
-    if (anterior && /nombre/i.test(anterior.texto) && /\?/.test(anterior.texto)) {
+    const pidioNombre = !!anterior && /\?/.test(anterior.texto)
+      && /(tu|su) nombre|nombre (y|completo|del destinatario)|a nombre de qui[eé]n|c[oó]mo te llamas|qui[eé]n (lo )?recibe|name/i.test(anterior.texto)
+      && !/resumen|confirm|correct|summary/i.test(anterior.texto);
+    if (pidioNombre && !soloExplicito) {
       const primera = m.texto.split(/\n/)[0].trim();
       const n = limpiarNombre(primera);
       if (n.split(' ').length >= 2 && n.split(' ').length <= 5 && nombreValido(primera)) return n;
@@ -84,11 +92,24 @@ export function nombreDelChat(leadId: string): string {
  * WhatsApp/Messenger. Si el cliente dio su nombre en el chat, ese manda.
  */
 export function resolverNombreCliente(leadId: string, propuesto: string, perfil: string): string {
-  const delChat = leadId ? nombreDelChat(leadId) : '';
-  if (delChat) return delChat;
+  // 1) Lo que el cliente dijo con todas las letras («me llamo…», «Nombre: …»).
+  const explicito = leadId ? nombreDelChat(leadId, true) : '';
+  if (explicito) return explicito;
+  // 2) El nombre propuesto (marcador del bot, o el del pedido) si de verdad parece un nombre.
   const p = limpiarNombre(propuesto);
-  // El "propuesto" igual al nombre de perfil solo vale si de verdad parece un nombre.
   if (nombreValido(propuesto)) return p;
+  // 3) Su respuesta cuando el bot le pidió el nombre.
+  const respuesta = leadId ? nombreDelChat(leadId) : '';
+  if (respuesta) return respuesta;
   if (nombreValido(perfil)) return limpiarNombre(perfil);
   return 'Cliente';
+}
+
+/**
+ * Nombre para despachar (Effi, Dropi): el del PEDIDO manda si es un nombre de persona, porque es el que
+ * la tienda revisa y corrige a mano. Solo si el pedido no trae uno válido se busca en el chat.
+ */
+export function nombreDelPedido(leadId: string, cliente: string): string {
+  if (nombreValido(cliente)) return limpiarNombre(cliente);
+  return resolverNombreCliente(leadId, cliente, '');
 }
