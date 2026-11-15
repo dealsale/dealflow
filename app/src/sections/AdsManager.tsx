@@ -66,6 +66,7 @@ export function AdsManager() {
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({});
   const [sync, setSync] = useState(false);
   const [actualizado, setActualizado] = useState(0);
+  const [editPres, setEditPres] = useState<{ id: string; nombre: string; actual: number } | null>(null);
   const [tab, setTab] = useState<Tab>(() => { try { const t = localStorage.getItem('ads:tab'); return (TABS.some((x) => x.k === t) ? t : 'resumen') as Tab; } catch { return 'resumen'; } });
   const [filtroCamp, setFiltroCamp] = useState<'gasto' | 'activas' | 'todas'>('gasto');
   const [buscar, setBuscar] = useState('');
@@ -261,7 +262,7 @@ export function AdsManager() {
               {!p.campanas.length && <tr><td colSpan={12} style={{ ...td, color: 'var(--df-text-faint)' }}>No hay campañas {p.conectada ? 'en tu cuenta' : '(conecta Meta Ads)'}.</td></tr>}
               {!!p.campanas.length && !campanasVistas.length && <tr><td colSpan={12} style={{ ...td, color: 'var(--df-text-faint)' }}>Ninguna campaña con ese filtro. <button onClick={() => { setFiltroCamp('todas'); setBuscar(''); }} style={{ ...btnS, padding: '3px 8px' }}>Ver todas</button></td></tr>}
               {campanasVistas.map((c) => <FilaCampana key={c.id} c={c} abierta={!!abiertas[c.id]} onAbrir={() => setAbiertas((a) => ({ ...a, [c.id]: !a[c.id] }))} ocupado={ocupado}
-                onEstado={cambiarEstado} onPres={cambiarPres} />)}
+                onEstado={cambiarEstado} onPres={cambiarPres} onEditar={(id, nombre, actual) => setEditPres({ id, nombre, actual })} />)}
             </tbody>
           </table>
         </div>
@@ -339,20 +340,28 @@ export function AdsManager() {
         </div>
       </div>
       </>}
+      {editPres && (
+        <EditorPresupuesto {...editPres} tope={p.config.topeDiarioCuenta}
+          totalActivo={p.campanas.filter((x) => x.activa).reduce((t, x) => t + (x.presupuestoEn === 'campaign' ? x.presupuesto : x.conjuntos.filter((a) => a.activa).reduce((u, a) => u + (a.presupuesto || 0), 0)), 0)}
+          onCerrar={() => setEditPres(null)}
+          onAplicar={async (nuevo) => { const e = editPres; setEditPres(null); await hacer('pres' + e.id, () => apiAdsPresupuesto(e.id, nuevo), `✓ Presupuesto de ${e.nombre}: ${pesos(nuevo)} al día.`); }} />
+      )}
     </section>
   );
 }
 const ACCION: Record<string, string> = { activar: 'activada', pausar: 'pausada', subir_presupuesto: 'presupuesto subido', bajar_presupuesto: 'presupuesto bajado', aviso: 'aviso', duplicar: 'duplicado' };
 
-function FilaCampana({ c, abierta, onAbrir, ocupado, onEstado, onPres }: {
+function FilaCampana({ c, abierta, onAbrir, ocupado, onEstado, onPres, onEditar }: {
   c: CampanaAds; abierta: boolean; onAbrir: () => void; ocupado: string;
   onEstado: (id: string, nombre: string, activar: boolean) => void; onPres: (id: string, nombre: string, actual: number, factor: number) => void;
+  onEditar: (id: string, nombre: string, actual: number) => void;
 }) {
   const archivada = c.estado === 'ARCHIVED';
   const presBotones = (id: string, nombre: string, valor: number) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       <button onClick={() => onPres(id, nombre, valor, 0.9)} disabled={ocupado === 'pres' + id} aria-label={`Bajar 10% ${nombre}`} style={{ ...btnS, padding: '3px 8px' }}>−</button>
-      <span style={{ minWidth: 76, textAlign: 'center', fontWeight: 700 }}>{pesos(valor)}</span>
+      <button onClick={() => onEditar(id, nombre, valor)} disabled={ocupado === 'pres' + id} title="Cambiar el presupuesto: porcentaje, monto o valor fijo" aria-label={`Editar presupuesto de ${nombre}`}
+        style={{ minWidth: 86, textAlign: 'center', fontWeight: 700, background: 'none', border: '1px dashed var(--df-border)', borderRadius: 6, padding: '2px 6px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, color: 'inherit' }}>{pesos(valor)} ✎</button>
       <button onClick={() => onPres(id, nombre, valor, 1.1)} disabled={ocupado === 'pres' + id} aria-label={`Subir 10% ${nombre}`} style={{ ...btnS, padding: '3px 8px' }}>+</button>
     </span>
   );
@@ -716,6 +725,89 @@ function ParametrosUrl({ campanas }: { campanas: string[] }) {
           <li>Meta cuenta compras con su propio criterio (hasta 7 días después del clic, e incluso solo por ver el anuncio): sus números no van a ser iguales a los pedidos reales que ves aquí.</li>
         </ol>
       )}
+    </div>
+  );
+}
+
+// ── Editor de presupuesto: porcentaje, sumar/restar un monto o valor fijo ───────────────────
+type ModoPres = 'pct' | 'monto' | 'fijo';
+function EditorPresupuesto({ nombre, actual, tope, totalActivo, onCerrar, onAplicar }: {
+  id: string; nombre: string; actual: number; tope: number; totalActivo: number; onCerrar: () => void; onAplicar: (nuevo: number) => void | Promise<void>;
+}) {
+  const [modo, setModo] = useState<ModoPres>('pct');
+  const [subir, setSubir] = useState(true);
+  const [pct, setPct] = useState('20');
+  const [monto, setMonto] = useState('20000');
+  const [fijo, setFijo] = useState(String(actual));
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onCerrar(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onCerrar]);
+  const n = (v: string) => Number(String(v).replace(/[^\d.]/g, '')) || 0;
+  const signo = subir ? 1 : -1;
+  const bruto = modo === 'pct' ? actual * (1 + (signo * n(pct)) / 100) : modo === 'monto' ? actual + signo * n(monto) : n(fijo);
+  const nuevo = Math.max(0, Math.round(bruto / 100) * 100);
+  const dif = nuevo - actual;
+  const difPct = actual ? Math.round((dif / actual) * 100) : 0;
+  const errores: string[] = [];
+  if (nuevo < 1000) errores.push('El presupuesto diario debe ser de al menos $1.000.');
+  const avisos: string[] = [];
+  if (Math.abs(difPct) > 20 && nuevo >= 1000) avisos.push('Cambios de más de 20 % pueden reiniciar la fase de aprendizaje de Meta. Si va bien, mejor subir de a 20 % cada 2 o 3 días.');
+  if (tope > 0 && dif > 0 && totalActivo + dif > tope) avisos.push(`Con este cambio la cuenta gastaría hasta ${pesos(totalActivo + dif)} al día, más que tu tope de ${pesos(tope)}.`);
+  if (actual && nuevo > actual * 3) avisos.push('Es más del triple del presupuesto actual: revisa que el valor esté bien escrito.');
+  const chip = (activo: boolean): React.CSSProperties => ({ ...btnS, padding: '5px 10px', ...(activo ? { background: 'var(--df-brand)', color: '#fff', borderColor: 'var(--df-brand)' } : {}) });
+  const sinCambio = nuevo === actual;
+  return (
+    <div role="dialog" aria-modal="true" aria-label={`Presupuesto de ${nombre}`} onClick={onCerrar}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 1000 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: 'min(460px, 100%)', maxHeight: '90vh', overflowY: 'auto', display: 'grid', gap: 12, boxShadow: '0 20px 50px rgba(0,0,0,.3)' }}>
+        <div>
+          <b style={{ fontSize: 15 }}>Presupuesto diario</b>
+          <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre} · hoy {pesos(actual)} al día</div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {([['pct', 'Porcentaje'], ['monto', 'Sumar o restar'], ['fijo', 'Valor fijo']] as const).map(([k, t]) => <button key={k} onClick={() => setModo(k)} aria-pressed={modo === k} style={chip(modo === k)}>{t}</button>)}
+        </div>
+        {modo !== 'fijo' && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => setSubir(true)} aria-pressed={subir} style={chip(subir)}>▲ Subir</button>
+            <button onClick={() => setSubir(false)} aria-pressed={!subir} style={chip(!subir)}>▼ Bajar</button>
+          </div>
+        )}
+        {modo === 'pct' && (
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[10, 15, 20, 30, 50, 100].map((x) => <button key={x} onClick={() => setPct(String(x))} aria-pressed={n(pct) === x} style={chip(n(pct) === x)}>{x} %</button>)}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>Otro:
+              <input inputMode="decimal" value={pct} onChange={(e) => setPct(e.target.value.replace(/[^\d.]/g, '').slice(0, 5))} aria-label="Porcentaje" style={{ ...inp, width: 90 }} /> %
+            </label>
+          </div>
+        )}
+        {modo === 'monto' && (
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[5000, 10000, 20000, 50000, 100000].map((x) => <button key={x} onClick={() => setMonto(String(x))} aria-pressed={n(monto) === x} style={chip(n(monto) === x)}>{subir ? '+' : '−'}{pesos(x)}</button>)}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>Otro monto: $
+              <input inputMode="numeric" value={n(monto) ? n(monto).toLocaleString('es-CO') : ''} onChange={(e) => setMonto(e.target.value.replace(/\D/g, '').slice(0, 10))} aria-label="Monto" style={{ ...inp, width: 140 }} />
+            </label>
+          </div>
+        )}
+        {modo === 'fijo' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>Nuevo presupuesto: $
+            <input inputMode="numeric" autoFocus value={n(fijo) ? n(fijo).toLocaleString('es-CO') : ''} onChange={(e) => setFijo(e.target.value.replace(/\D/g, '').slice(0, 10))} aria-label="Presupuesto diario" style={{ ...inp, width: 160 }} /> al día
+          </label>
+        )}
+        <div style={{ background: 'var(--df-bg)', borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Queda en</div>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>{pesos(nuevo)} <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--df-text-muted)' }}>al día</span></div>
+          {!sinCambio && <div style={{ fontSize: 12.5, fontWeight: 700, color: dif > 0 ? 'var(--df-brand-dark, #047857)' : 'var(--df-danger-dark, #b91c1c)' }}>{dif > 0 ? '▲ +' : '▼ −'}{pesos(Math.abs(dif))} ({dif > 0 ? '+' : '−'}{Math.abs(difPct)} %)</div>}
+        </div>
+        {errores.map((x) => <div key={x} style={{ fontSize: 12.5, color: 'var(--df-danger-dark, #b91c1c)' }}>⛔ {x}</div>)}
+        {avisos.map((x) => <div key={x} style={{ fontSize: 12, color: 'var(--df-warning-dark, #92400e)', background: 'var(--df-warning-subtle, #fff7e6)', borderRadius: 8, padding: '6px 9px' }}>⚠️ {x}</div>)}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onCerrar} style={btnS}>Cancelar</button>
+          <button onClick={() => void onAplicar(nuevo)} disabled={!!errores.length || sinCambio} style={{ ...btnP, opacity: errores.length || sinCambio ? 0.5 : 1 }}>Aplicar en Meta</button>
+        </div>
+      </div>
     </div>
   );
 }
