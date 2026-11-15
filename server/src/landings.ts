@@ -825,6 +825,8 @@ export async function pedidoLanding(landingId: string, b: Fila, ip: string, ua =
   void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido de tu landing DF-${numero} 🛒`, `${nombre} · ${pesos(bundle.precio)}`, { url: '/pedidos' })).catch(() => {});
   void import('./correo.js').then((c) => c.correoPedidoNuevo(storeId, oid, 'Landing')).catch(() => {});
   if (d.confirmarWhatsapp) void import('./shopifyPedidos.js').then((m) => m.enviarConfirmacion(storeId, oid)).catch(() => {});
+  // ¿De qué anuncio vino? (parámetros de la dirección de entrada o anuncios que llevan a esta landing).
+  void import('./atribucion.js').then((m) => m.atribuirPedido(storeId, oid, [txt(b.atrib), txt(b.url)], [`/${txt(l.slug)}`], 'landing')).catch(() => {});
   // API de Conversiones de Meta (si el píxel tiene token): la misma compra que el píxel del
   // navegador, con el mismo event_id (Meta la cuenta una vez) y los datos del formulario.
   const pixel = d.pixelMeta || configTienda(storeId).pixelMeta;

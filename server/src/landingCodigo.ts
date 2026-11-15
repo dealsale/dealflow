@@ -11,6 +11,7 @@
  * opaco): no puede leer cookies ni usar la sesión del panel.
  */
 import { db, pj } from './db.js';
+import { ATRIB_JS } from './atribucion.js';
 import { limpiarDatos, configTienda, type LandingDatos } from './landings.js';
 import { plantillaDe, renderPlantilla } from './plantillasTienda.js';
 
@@ -135,6 +136,7 @@ export function graciasPorDefecto(l: Fila): string {
 export const SDK = String.raw`(function(){
 "use strict";
 var C=window.__DF||{};var D=window.DealFlow={config:C};
+${ATRIB_JS}
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
 var norm=function(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'')};
 var fmt=D.formatear=function(n){return '$'+Math.round(n||0).toLocaleString('es-CO')};
@@ -168,7 +170,7 @@ D.pedido=function(x){
   var vals=(C.opciones||[]).map(function(op){var pedido=(x.variantes||{})[op.nombre];for(var k in (x.variantes||{}))if(norm(k)===norm(op.nombre))pedido=x.variantes[k];var ok=op.valores.filter(function(v){return norm(v)===norm(pedido)})[0];return ok||op.valores[0]});
   var unidades=[];for(var u=0;u<((C.opciones||[]).length?o.cantidad:0);u++)unidades.push(vals);
   if(C.vista)return Promise.reject(new Error('Vista previa: los pedidos se reciben cuando la landing esté publicada.'));
-  return fetch('/l/api/'+encodeURIComponent(C.id)+'/pedido',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bundle:x.oferta||0,unidades:unidades,nombre:x.nombre||'',apellido:x.apellido||'',tel:String(x.telefono||'').replace(/\D/g,'').replace(/^57(?=3\d{9}$)/,''),correo:x.correo||'',departamento:x.departamento||'',ciudad:x.ciudad||'',direccion:x.direccion||'',barrio:x.barrio||'',url:location.href,fbp:ck('_fbp'),fbc:ck('_fbc')})})
+  return fetch('/l/api/'+encodeURIComponent(C.id)+'/pedido',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bundle:x.oferta||0,unidades:unidades,nombre:x.nombre||'',apellido:x.apellido||'',tel:String(x.telefono||'').replace(/\D/g,'').replace(/^57(?=3\d{9}$)/,''),correo:x.correo||'',departamento:x.departamento||'',ciudad:x.ciudad||'',direccion:x.direccion||'',barrio:x.barrio||'',url:location.href,atrib:(window.dfAtrib?window.dfAtrib():''),fbp:ck('_fbp'),fbc:ck('_fbc')})})
   .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'No pudimos recibir tu pedido.');
     if(window.fbq)fbq('track','Purchase',{value:o.precio,currency:'COP',content_name:C.nombre,num_items:o.cantidad},{eventID:j.eventId||''});
     var ev;try{ev=new CustomEvent('dealflow:pedido',{detail:{numero:j.numero,total:o.precio}})}catch(e){}if(ev)document.dispatchEvent(ev);

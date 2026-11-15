@@ -11,6 +11,7 @@
 import type { LandingDatos, BundleL, TiendaConfig, ProductoCatalogo } from './landings.js';
 import { BASE_TIENDA } from './tiendaPublica.js';
 import { COLOMBIA } from './colombiaGeo.js';
+import { ATRIB_JS } from './atribucion.js';
 
 const txt = (v: unknown) => (v == null ? '' : String(v));
 const esc = (s: unknown) => txt(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -156,6 +157,7 @@ ${cabeceraSeo({ titulo: tituloSeo, descripcion: descSeo, imagen: imagenSeo, url:
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 ${d.galeria[0] ? `<link rel="preload" as="image" href="${esc(d.galeria[0])}">` : ''}
+<script>${o.vista ? '' : ATRIB_JS}</script>
 ${pixel ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixel}');fbq('track','PageView');${EV_PIXEL(o.id || '')}__dfEv('ViewContent',{content_name:${json(d.nombre)},value:${sel.precio},currency:'COP'},{bundle:${inicial}});</script>` : ''}
 <style>
 :root{--p:${d.colorPrincipal};--b:${d.colorBoton};--a:${d.colorAcento};--t:#121212;--m:#6b7280;--bd:#e5e7eb;--g:#f3f3f3}
@@ -465,7 +467,7 @@ function enviar(e){
   err.textContent='';
   if(C.vista){err.textContent='Vista previa: los pedidos se reciben cuando la landing esté publicada.';return}
   btn.disabled=true;btn.textContent='Enviando tu pedido…';
-  fetch('/l/api/'+encodeURIComponent(C.id)+'/pedido',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bundle:bi,unidades:unidades,nombre:v('nombre'),apellido:v('apellido'),tel:tel,correo:v('correo'),departamento:v('departamento'),ciudad:v('ciudad'),direccion:v('direccion'),barrio:v('barrio'),url:location.href,fbp:dfCk('_fbp'),fbc:dfCk('_fbc')})})
+  fetch('/l/api/'+encodeURIComponent(C.id)+'/pedido',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bundle:bi,unidades:unidades,nombre:v('nombre'),apellido:v('apellido'),tel:tel,correo:v('correo'),departamento:v('departamento'),ciudad:v('ciudad'),direccion:v('direccion'),barrio:v('barrio'),url:location.href,atrib:(window.dfAtrib?window.dfAtrib():''),fbp:dfCk('_fbp'),fbc:dfCk('_fbc')})})
   .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
   .then(function(r){
     if(!r.ok)throw new Error(r.j.error||'No pudimos recibir tu pedido.');
@@ -499,6 +501,7 @@ export function renderCatalogo(t: TiendaConfig, productos: ProductoCatalogo[], b
 ${cabeceraSeo({ titulo: tituloSeo, descripcion: descSeo, imagen: t.seoImagen || t.banner || productos[0]?.foto || t.logo, url, favicon: t.favicon || t.logo, sitio: t.nombre, color: t.colorPrincipal, tipo: 'website', jsonld, vista })}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>${ATRIB_JS}</script>
 ${t.pixelMeta ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${t.pixelMeta}');fbq('track','PageView');</script>` : ''}
 <style>
 :root{--p:${t.colorPrincipal};--b:${t.colorBoton};--a:${t.colorAcento};--t:#121212;--m:#6b7280;--g:#f3f3f3}

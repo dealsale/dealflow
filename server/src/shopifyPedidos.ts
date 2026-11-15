@@ -133,6 +133,16 @@ export async function importarPedido(storeId: string, shop: string, o: Fila, con
     void import('./push.js').then((p) => p.enviarPush(storeId, 'pedidos', `Nuevo pedido de Shopify DF-${numero} 🛍️`, `${cliente} · ${pesos(total)}`, { url: '/' })).catch(() => {});
     void import('./correo.js').then((c) => c.correoPedidoNuevo(storeId, oid, 'Shopify')).catch(() => {});
     void import('./metaCapi.js').then((c) => c.avisarCapi(storeId)).catch(() => {});
+    // ¿De qué anuncio vino? Shopify manda la página de entrada (landing_site, con utm/fbclid) y
+    // apps como EasySell guardan los parámetros en las notas del pedido (note_attributes).
+    {
+      const notas = (Array.isArray(o.note_attributes) ? o.note_attributes as Fila[] : []);
+      const enNotas = notas.filter((n) => /utm|fbclid|ad_?id|campaign|landing|url|source/i.test(txt(n.name)));
+      const urls = [txt(o.landing_site), ...enNotas.filter((n) => /^(https?:\/\/|\/|\?)/i.test(txt(n.value))).map((n) => txt(n.value)),
+        enNotas.length ? '?' + enNotas.map((n) => `${encodeURIComponent(txt(n.name).toLowerCase().replace(/\s+/g, '_'))}=${encodeURIComponent(txt(n.value))}`).join('&') : ''].filter(Boolean);
+      const handles = [...new Set(urls.map((u) => (u.match(/\/products\/([a-z0-9-]+)/i) || [])[1]).filter(Boolean))].map((h) => `/products/${String(h).toLowerCase()}`);
+      if (urls.length) void import('./atribucion.js').then((m) => m.atribuirPedido(storeId, oid, urls, handles, 'shopify')).catch(() => {});
+    }
     if (!tel) trazar(storeId, oid, { etapa: 'pedido', nivel: 'warn', titulo: 'El pedido de Shopify llegó sin teléfono', detalle: 'No se puede confirmar por WhatsApp. ¿Falta aprobar el acceso a datos de clientes en Shopify, o el checkout no pide el teléfono?' });
     else if (confirmar && cfgPedidosShopify(storeId).confirmar) await enviarConfirmacion(storeId, oid);
     else if (!confirmar) trazar(storeId, oid, { etapa: 'pedido', nivel: 'info', titulo: 'Pedido antiguo: no se envió confirmación automática', detalle: 'Se trajo de Shopify más de 24 h después de creado. Puedes enviar la confirmación con el botón del pedido.' });
