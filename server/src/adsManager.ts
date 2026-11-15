@@ -183,8 +183,10 @@ export function guardarConfig(storeId: string, p: Partial<Config>): Config {
 interface Metricas {
   gasto: number; impresiones: number; clics: number; chats: number; respondieron: number; dieronDatos: number; pedidos: number; cancelados: number;
   entregados: number; devueltos: number; enCamino: number; ventas: number; ventasEntregadas: number;
+  /** Lo que reporta Meta (píxel / API de Conversiones), como en el Administrador de anuncios. */
+  comprasMeta: number; valorMeta: number; visitas: number; carritos: number; pagos: number;
 }
-const vacia = (): Metricas => ({ gasto: 0, impresiones: 0, clics: 0, chats: 0, respondieron: 0, dieronDatos: 0, pedidos: 0, cancelados: 0, entregados: 0, devueltos: 0, enCamino: 0, ventas: 0, ventasEntregadas: 0 });
+const vacia = (): Metricas => ({ gasto: 0, impresiones: 0, clics: 0, chats: 0, respondieron: 0, dieronDatos: 0, pedidos: 0, cancelados: 0, entregados: 0, devueltos: 0, enCamino: 0, ventas: 0, ventasEntregadas: 0, comprasMeta: 0, valorMeta: 0, visitas: 0, carritos: 0, pagos: 0 });
 const sumar = (a: Metricas, b: Partial<Metricas>) => { for (const k of Object.keys(a) as (keyof Metricas)[]) a[k] += num(b[k]); return a; };
 
 /** Tasa de entrega histórica de la tienda (entregados / cerrados) de los últimos 90 días. */
@@ -212,6 +214,10 @@ function derivadas(m: Metricas, cfg: Config, tasa: number) {
     tasaDevolucion: cerrados ? Math.round((m.devueltos / cerrados) * 100) : 0,
     conversion: m.chats ? +((efectivos / m.chats) * 100).toFixed(1) : 0,
     ventasEsperadas: Math.round(ventasEsperadas), utilidad: Math.round(utilidad),
+    roasMeta: m.gasto ? +(m.valorMeta / m.gasto).toFixed(2) : 0,
+    cpaMeta: m.comprasMeta ? Math.round(m.gasto / m.comprasMeta) : 0,
+    /** Meta reporta compras pero a DealFlow no le llegó ningún pedido asignado a este anuncio (landing/Shopify sin parámetros). */
+    soloMeta: efectivos === 0 && m.comprasMeta > 0,
   };
 }
 
@@ -232,7 +238,8 @@ export async function panel(storeId: string, desde: string, hasta: string) {
   const porConjunto = new Map<string, Metricas>();
   const total = vacia();
   const ads = anuncios.filter((a) => a.gasto > 0 || a.chats > 0).map((a) => {
-    const m: Metricas = { gasto: a.gasto, impresiones: a.impresiones, clics: a.clics, chats: a.chats, respondieron: a.respondieron, dieronDatos: datosPorAd.get(a.id) || 0, pedidos: a.pedidos, cancelados: a.cancelados, entregados: a.entregados, devueltos: a.devueltos, enCamino: a.enCamino, ventas: a.ventas, ventasEntregadas: a.ventasEntregadas };
+    const m: Metricas = { gasto: a.gasto, impresiones: a.impresiones, clics: a.clics, chats: a.chats, respondieron: a.respondieron, dieronDatos: datosPorAd.get(a.id) || 0, pedidos: a.pedidos, cancelados: a.cancelados, entregados: a.entregados, devueltos: a.devueltos, enCamino: a.enCamino, ventas: a.ventas, ventasEntregadas: a.ventasEntregadas,
+      comprasMeta: a.comprasMeta, valorMeta: a.valorMeta, visitas: a.visitas, carritos: a.carritos, pagos: a.pagos };
     sumar(total, m);
     if (a.campaignId) sumar(porCampana.get(a.campaignId) || (porCampana.set(a.campaignId, vacia()), porCampana.get(a.campaignId)!), m);
     if (a.adsetId) sumar(porConjunto.get(a.adsetId) || (porConjunto.set(a.adsetId, vacia()), porConjunto.get(a.adsetId)!), m);
@@ -290,7 +297,10 @@ function sugerencias(campanas: CampanaPanel[], ads: (Metricas & ReturnType<typeo
     const donde = c.presupuestoEn === 'campaign' ? c.id : c.conjuntos.length === 1 && c.conjuntos[0].presupuesto ? c.conjuntos[0].id : '';
     const pres = c.presupuestoEn === 'campaign' ? c.presupuesto : c.conjuntos[0]?.presupuesto || 0;
     const aprendiendo = c.conjuntos.some((a) => a.aprendizaje === 'En aprendizaje');
-    if (c.roasNeto >= 3 && c.pedidos - c.cancelados >= 3 && donde && !aprendiendo) {
+    if (c.soloMeta) {
+      // Meta dice que vende, pero DealFlow no tiene sus pedidos: no se sugiere pausar con datos incompletos.
+      out.push({ id: `meta-${c.id}`, tipo: 'aviso', titulo: `${c.nombre}: Meta reporta ${c.comprasMeta} compra(s), DealFlow ninguna`, porque: `ROAS según Meta ${c.roasMeta}. Los pedidos de la landing o de Shopify no se están asignando a este anuncio: agrégale los Parámetros de URL (pestaña Campañas → «¿Cómo?»). Mientras tanto, júzgala por los números de Meta.` });
+    } else if (c.roasNeto >= 3 && c.pedidos - c.cancelados >= 3 && donde && !aprendiendo) {
       out.push({ id: `esc-${c.id}`, tipo: 'escalar', titulo: `Sube 20% a ${c.nombre}`, porque: `ROAS con lo que se espera cobrar: ${c.roasNeto} (${c.tasaDevolucion}% de devolución). Subir de a 20% no reinicia el aprendizaje de Meta.`, accion: { tipo: 'presupuesto', id: donde, valor: Math.round(pres * 1.2) } });
     } else if ((c.roasNeto < 1 && c.gasto > 30000) || (objetivo && c.cpa > objetivo * 2 && c.gasto > objetivo)) {
       out.push({ id: `pau-${c.id}`, tipo: 'recortar', titulo: `Pausa ${c.nombre}`, porque: `Gastó ${fmt(c.gasto)} con ${c.pedidos - c.cancelados} venta(s) (ROAS esperado ${c.roasNeto}). ${c.chats && c.conversion < 5 ? 'Llegan chats pero no compran: revisa el precio, el mensaje inicial o el creativo.' : ''}`, accion: { tipo: 'estado', id: c.id, valor: 0 } });
@@ -301,7 +311,7 @@ function sugerencias(campanas: CampanaPanel[], ads: (Metricas & ReturnType<typeo
   }
   for (const a of ads.filter((x) => x.gasto > 0)) {
     if (a.frecuencia >= 3.5 && a.ctr < 1.2) out.push({ id: `fat-${a.id}`, tipo: 'creativo', titulo: `"${a.nombre}" está cansado`, porque: `Frecuencia ${a.frecuencia} y CTR ${a.ctr}%: la gente ya lo vio muchas veces. Rótalo con un creativo nuevo del Estudio IA.` });
-    else if (a.gasto >= Math.max(30000, objetivo) && a.pedidos - a.cancelados === 0) out.push({ id: `sin-${a.id}`, tipo: 'creativo', titulo: `"${a.nombre}" gastó ${fmt(a.gasto)} sin ventas`, porque: `${a.chats} chats y ninguna venta. Pausa ese anuncio en Meta o cambia su mensaje inicial.` });
+    else if (a.gasto >= Math.max(30000, objetivo) && a.pedidos - a.cancelados === 0 && !a.comprasMeta) out.push({ id: `sin-${a.id}`, tipo: 'creativo', titulo: `"${a.nombre}" gastó ${fmt(a.gasto)} sin ventas`, porque: `${a.chats} chats y ninguna venta. Pausa ese anuncio en Meta o cambia su mensaje inicial.` });
   }
   const malas = ciudades.filter((c) => c.tasaDevolucion >= 40 && c.cerrados >= 4).slice(0, 5);
   if (malas.length) out.push({ id: 'ciudades', tipo: 'publico', titulo: `Excluye ${malas.length === 1 ? 'una ciudad' : `${malas.length} ciudades`} que devuelven mucho`, porque: malas.map((c) => `${c.ciudad} (${c.tasaDevolucion}%)`).join(', ') + '. Sácalas de la segmentación de tus conjuntos en Meta.' });
@@ -356,6 +366,8 @@ export async function correrReglas(storeId: string): Promise<number> {
       if (ya) continue;
       const valor = r.metrica === 'cpa' ? c.cpa : r.metrica === 'roas_neto' ? c.roasNeto : r.metrica === 'tasa_devolucion' ? c.tasaDevolucion : (c.pedidos - c.cancelados === 0 ? c.gasto : 0);
       if (r.metrica === 'cpa' && !(c.pedidos - c.cancelados)) continue; // sin ventas: eso lo mide «gasto sin venta»
+      // Meta reporta compras que DealFlow no tiene (landing/Shopify sin parámetros): no se pausa ni se baja a ciegas.
+      if (c.soloMeta && r.metrica !== 'tasa_devolucion') continue;
       const cumple = r.operador === '>' ? valor > r.valor : valor < r.valor;
       if (!cumple) continue;
       const desc = `${METRICAS[r.metrica]} ${r.operador} ${r.valor.toLocaleString('es-CO')} en ${r.dias} día(s) (va en ${valor.toLocaleString('es-CO')})`;

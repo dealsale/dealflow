@@ -95,7 +95,7 @@ export async function revisarAlertas(storeId: string): Promise<number> {
     const semana = on('cpa_alto') ? await panel(storeId, menos(hoy, 7), menos(hoy, 1)) : null;
     for (const cp of d.campanas.filter((x) => x.activa)) {
       const ventas = cp.pedidos - cp.cancelados;
-      if (on('gasto_sin_venta') && ventas === 0 && cp.gasto >= cfg.gastoSinVenta) {
+      if (on('gasto_sin_venta') && ventas === 0 && !cp.comprasMeta && cp.gasto >= cfg.gastoSinVenta) {
         if (avisar(storeId, cfg, 'gasto_sin_venta', `gsv:${cp.id}`, `${cp.nombre} gastó ${pesos(cp.gasto)} sin vender`, `Hoy lleva ${pesos(cp.gasto)}, ${cp.chats} chats y ninguna venta. Revisa el anuncio o pausa la campaña en Anuncios.`)) n++;
       }
       const antes = semana?.campanas.find((x) => x.id === cp.id);
