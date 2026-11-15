@@ -1380,6 +1380,10 @@ export interface MetricasAds {
   entregados: number; devueltos: number; enCamino: number; ventas: number; ventasEntregadas: number;
   roas: number; roasNeto: number; cpa: number; cpaEntregado: number; costoChat: number; ctr: number; frecuencia: number;
   tasaDevolucion: number; conversion: number; ventasEsperadas: number; utilidad: number;
+  /** Según Meta (píxel / API de Conversiones), como en el Administrador de anuncios. */
+  comprasMeta: number; valorMeta: number; visitas: number; carritos: number; pagos: number; roasMeta: number; cpaMeta: number;
+  /** Meta reporta compras pero DealFlow no tiene pedidos asignados a este anuncio. */
+  soloMeta: boolean;
 }
 export interface ConjuntoAds extends MetricasAds { id: string; nombre: string; campaignId: string; estado: string; activa: boolean; presupuesto: number; aprendizaje: string; edad: string; ubicaciones: string }
 export interface CampanaAds extends MetricasAds { id: string; nombre: string; objetivo: string; estado: string; activa: boolean; presupuesto: number; presupuestoEn: 'campaign' | 'adset' | ''; conjuntos: ConjuntoAds[] }

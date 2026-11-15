@@ -31,6 +31,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS ads_insights (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (store_id, ad_id, fecha)
 )`);
+// Resultados que reporta Meta (píxel / API de Conversiones / mensajería), igual que el Administrador de anuncios.
+for (const col of ['compras_meta REAL NOT NULL DEFAULT 0', 'valor_meta REAL NOT NULL DEFAULT 0', 'visitas INTEGER NOT NULL DEFAULT 0', 'carritos INTEGER NOT NULL DEFAULT 0', 'pagos INTEGER NOT NULL DEFAULT 0']) {
+  try { db.exec(`ALTER TABLE ads_insights ADD COLUMN ${col}`); } catch { /* ya existe */ }
+}
 // Miniatura y post de cada anuncio (para mostrarlos aunque el anuncio no haya traído chats).
 db.exec(`CREATE TABLE IF NOT EXISTS ads_meta (
   store_id TEXT NOT NULL, ad_id TEXT NOT NULL, thumb TEXT NOT NULL DEFAULT '', post_id TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT '',
@@ -42,6 +46,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS ads_sync (
   error TEXT NOT NULL DEFAULT '',
   filas INTEGER NOT NULL DEFAULT 0
 )`);
+// version 2 = ya trae compras/valor de Meta (la primera vez se re-sincronizan 30 días).
+try { db.exec('ALTER TABLE ads_sync ADD COLUMN version INTEGER NOT NULL DEFAULT 0'); } catch { /* ya existe */ }
+const VERSION_SYNC = 2;
 
 const hoyBogota = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
 const restarDias = (f: string, n: number) => new Date(new Date(f + 'T12:00:00Z').getTime() - n * 86400000).toISOString().slice(0, 10);
@@ -59,6 +66,16 @@ export function estadoInsights(storeId: string): EstadoInsights {
 }
 
 const ACCIONES_CONVERSACION = ['onsite_conversion.messaging_conversation_started_7d', 'onsite_conversion.total_messaging_connection'];
+// Meta repite la misma compra con varios nombres (omni = todas las fuentes). Se toma la primera que
+// exista en este orden, como la columna «Compras» del Administrador de anuncios; nunca se suman.
+const COMPRA = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase', 'onsite_web_purchase', 'onsite_conversion.purchase', 'offline_conversion.purchase'];
+const VISITA = ['omni_landing_page_view', 'landing_page_view'];
+const CARRITO = ['omni_add_to_cart', 'add_to_cart', 'offsite_conversion.fb_pixel_add_to_cart', 'onsite_web_add_to_cart'];
+const PAGO = ['omni_initiated_checkout', 'initiate_checkout', 'offsite_conversion.fb_pixel_initiate_checkout', 'onsite_web_initiate_checkout'];
+export function accionMeta(lista: { action_type: string; value: string }[] | undefined, tipos: string[]): number {
+  for (const t of tipos) { const a = (lista || []).find((x) => x.action_type === t); if (a) return Number(a.value) || 0; }
+  return 0;
+}
 
 /** Trae los insights por anuncio y día de [desde, hasta] y los guarda. */
 export async function sincronizarInsights(storeId: string, dias = 3): Promise<{ ok: true; filas: number } | { error: string }> {
@@ -71,15 +88,18 @@ export async function sincronizarInsights(storeId: string, dias = 3): Promise<{ 
     level: 'ad',
     time_increment: '1',
     time_range: JSON.stringify({ since: desde, until: hasta }),
-    fields: 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,actions,date_start',
+    fields: 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,actions,action_values,date_start',
+    // Misma ventana de atribución que el Administrador de anuncios (p. ej. 7 días clic / 1 día visualización).
+    use_unified_attribution_setting: 'true',
     limit: '500',
   });
   let url: string | undefined = `${GRAPH}/${act}/insights?${params}`;
-  const guardar = db.prepare(`INSERT INTO ads_insights (store_id, ad_id, fecha, ad_name, adset_id, adset_name, campaign_id, campaign_name, gasto, impresiones, alcance, clics, conversaciones, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
+  const guardar = db.prepare(`INSERT INTO ads_insights (store_id, ad_id, fecha, ad_name, adset_id, adset_name, campaign_id, campaign_name, gasto, impresiones, alcance, clics, conversaciones, compras_meta, valor_meta, visitas, carritos, pagos, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
     ON CONFLICT(store_id, ad_id, fecha) DO UPDATE SET ad_name = excluded.ad_name, adset_id = excluded.adset_id, adset_name = excluded.adset_name,
       campaign_id = excluded.campaign_id, campaign_name = excluded.campaign_name, gasto = excluded.gasto, impresiones = excluded.impresiones,
-      alcance = excluded.alcance, clics = excluded.clics, conversaciones = excluded.conversaciones, updated_at = excluded.updated_at`);
+      alcance = excluded.alcance, clics = excluded.clics, conversaciones = excluded.conversaciones, compras_meta = excluded.compras_meta,
+      valor_meta = excluded.valor_meta, visitas = excluded.visitas, carritos = excluded.carritos, pagos = excluded.pagos, updated_at = excluded.updated_at`);
   let filas = 0;
   const anotar = (error: string) => db.prepare(`INSERT INTO ads_sync (store_id, ultima, error, filas) VALUES (?, datetime('now'), ?, ?)
     ON CONFLICT(store_id) DO UPDATE SET ultima = excluded.ultima, error = excluded.error, filas = excluded.filas`).run(storeId, error, filas);
@@ -87,7 +107,7 @@ export async function sincronizarInsights(storeId: string, dias = 3): Promise<{ 
     for (let pagina = 0; url && pagina < 40; pagina++) {
       const res: Response = await fetch(url, { headers: { Authorization: `Bearer ${c.access_token}` }, signal: AbortSignal.timeout(30_000) });
       const body = (await res.json().catch(() => ({}))) as {
-        data?: { ad_id?: string; ad_name?: string; adset_id?: string; adset_name?: string; campaign_id?: string; campaign_name?: string; spend?: string; impressions?: string; reach?: string; clicks?: string; date_start?: string; actions?: { action_type: string; value: string }[] }[];
+        data?: { ad_id?: string; ad_name?: string; adset_id?: string; adset_name?: string; campaign_id?: string; campaign_name?: string; spend?: string; impressions?: string; reach?: string; clicks?: string; date_start?: string; actions?: { action_type: string; value: string }[]; action_values?: { action_type: string; value: string }[] }[];
         paging?: { next?: string };
         error?: { message?: string; code?: number };
       };
@@ -105,13 +125,15 @@ export async function sincronizarInsights(storeId: string, dias = 3): Promise<{ 
           if (!d.ad_id || !d.date_start) continue;
           const conv = (d.actions || []).filter((a) => ACCIONES_CONVERSACION.includes(a.action_type)).reduce((m, a) => Math.max(m, Number(a.value) || 0), 0);
           guardar.run(storeId, d.ad_id, d.date_start, d.ad_name || '', d.adset_id || '', d.adset_name || '', d.campaign_id || '', d.campaign_name || '',
-            Number(d.spend) || 0, Number(d.impressions) || 0, Number(d.reach) || 0, Number(d.clicks) || 0, conv);
+            Number(d.spend) || 0, Number(d.impressions) || 0, Number(d.reach) || 0, Number(d.clicks) || 0, conv,
+            accionMeta(d.actions, COMPRA), accionMeta(d.action_values, COMPRA), accionMeta(d.actions, VISITA), accionMeta(d.actions, CARRITO), accionMeta(d.actions, PAGO));
           filas++;
         }
       })();
       url = body.paging?.next;
     }
     anotar('');
+    if (dias >= 30) db.prepare('UPDATE ads_sync SET version = ? WHERE store_id = ?').run(VERSION_SYNC, storeId);
     await traerMiniaturas(storeId, c.access_token).catch((e) => console.warn('[ads] miniaturas', e));
     try { autoVincularPorNombre(storeId); } catch (e) { console.warn('[ads] auto-vínculo', e); }
     return { ok: true, filas };
@@ -198,21 +220,23 @@ export function autoVincularPorNombre(storeId: string): number {
   return n;
 }
 
-export interface InsightAd { adId: string; adName: string; adsetId: string; adsetName: string; campaignId: string; campaignName: string; gasto: number; impresiones: number; alcance: number; clics: number; conversaciones: number; porDia: Map<string, number> }
+export interface InsightAd { adId: string; adName: string; adsetId: string; adsetName: string; campaignId: string; campaignName: string; gasto: number; impresiones: number; alcance: number; clics: number; conversaciones: number; comprasMeta: number; valorMeta: number; visitas: number; carritos: number; pagos: number; porDia: Map<string, number> }
 
 /** Suma de los insights de cada anuncio en el rango (y el gasto por día). */
 export function insightsEnRango(storeId: string, desde: string, hasta: string): Map<string, InsightAd> {
   const out = new Map<string, InsightAd>();
   const filas = db.prepare('SELECT * FROM ads_insights WHERE store_id = ? AND fecha BETWEEN ? AND ? ORDER BY fecha').all(storeId, desde, hasta) as {
     ad_id: string; fecha: string; ad_name: string; adset_id: string; adset_name: string; campaign_id: string; campaign_name: string; gasto: number; impresiones: number; alcance: number; clics: number; conversaciones: number;
+    compras_meta: number; valor_meta: number; visitas: number; carritos: number; pagos: number;
   }[];
   for (const f of filas) {
     let a = out.get(f.ad_id);
-    if (!a) { a = { adId: f.ad_id, adName: '', adsetId: '', adsetName: '', campaignId: '', campaignName: '', gasto: 0, impresiones: 0, alcance: 0, clics: 0, conversaciones: 0, porDia: new Map() }; out.set(f.ad_id, a); }
+    if (!a) { a = { adId: f.ad_id, adName: '', adsetId: '', adsetName: '', campaignId: '', campaignName: '', gasto: 0, impresiones: 0, alcance: 0, clics: 0, conversaciones: 0, comprasMeta: 0, valorMeta: 0, visitas: 0, carritos: 0, pagos: 0, porDia: new Map() }; out.set(f.ad_id, a); }
     // Nombres: los más recientes.
     a.adName = f.ad_name || a.adName; a.adsetId = f.adset_id || a.adsetId; a.adsetName = f.adset_name || a.adsetName;
     a.campaignId = f.campaign_id || a.campaignId; a.campaignName = f.campaign_name || a.campaignName;
     a.gasto += f.gasto; a.impresiones += f.impresiones; a.alcance += f.alcance; a.clics += f.clics; a.conversaciones += f.conversaciones;
+    a.comprasMeta += f.compras_meta || 0; a.valorMeta += f.valor_meta || 0; a.visitas += f.visitas || 0; a.carritos += f.carritos || 0; a.pagos += f.pagos || 0;
     a.porDia.set(f.fecha, (a.porDia.get(f.fecha) || 0) + f.gasto);
   }
   return out;
@@ -226,8 +250,9 @@ export function iniciarInsights(): void {
   const ronda = async () => {
     const tiendas = db.prepare("SELECT store_id FROM ads_cuentas WHERE conectada = 1 AND access_token != '' AND ad_account_id != ''").all() as { store_id: string }[];
     for (const t of tiendas) {
-      const previo = db.prepare('SELECT filas, ultima FROM ads_sync WHERE store_id = ?').get(t.store_id) as { filas: number; ultima: string } | undefined;
-      await sincronizarInsights(t.store_id, previo?.ultima ? 3 : 30).catch((e) => console.warn('[ads] insights', e));
+      const previo = db.prepare('SELECT filas, ultima, version FROM ads_sync WHERE store_id = ?').get(t.store_id) as { filas: number; ultima: string; version: number } | undefined;
+      // Primera vez (o antes de traer las compras de Meta): 30 días; después, los últimos 3.
+      await sincronizarInsights(t.store_id, previo?.ultima && (previo.version || 0) >= VERSION_SYNC ? 3 : 30).catch((e) => console.warn('[ads] insights', e));
       await new Promise((r) => setTimeout(r, 2000));
     }
   };

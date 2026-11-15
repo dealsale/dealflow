@@ -23,6 +23,8 @@ export interface FilaAnuncio {
   // Del Administrador de anuncios (si está conectado):
   adName: string; campaignId: string; campaignName: string; adsetId: string; adsetName: string;
   gasto: number; impresiones: number; clics: number; conversacionesMeta: number;
+  /** Lo que reporta Meta (píxel / API de Conversiones): compras, su valor, visitas a la página, carritos y pagos iniciados. */
+  comprasMeta: number; valorMeta: number; visitas: number; carritos: number; pagos: number;
   costoChat: number; costoPedido: number; costoEntregado: number; roas: number;
 }
 
@@ -55,7 +57,7 @@ export function conversionPorAnuncio(sid: string, desde: string, hasta: string):
         chats: 0, respondieron: 0, pedidos: 0, conversion: 0, confirmados: 0, despachados: 0, enCamino: 0, entregados: 0, devueltos: 0, cancelados: 0,
         ventas: 0, ventasEntregadas: 0, ticket: 0, tasaEntrega: 0, productos: [], serie: [],
         adName: '', campaignId: '', campaignName: '', adsetId: '', adsetName: '',
-        gasto: 0, impresiones: 0, clics: 0, conversacionesMeta: 0, costoChat: 0, costoPedido: 0, costoEntregado: 0, roas: 0,
+        gasto: 0, impresiones: 0, clics: 0, conversacionesMeta: 0, comprasMeta: 0, valorMeta: 0, visitas: 0, carritos: 0, pagos: 0, costoChat: 0, costoPedido: 0, costoEntregado: 0, roas: 0,
       };
       filas.set(id, f);
     }
@@ -128,6 +130,7 @@ export function conversionPorAnuncio(sid: string, desde: string, hasta: string):
     f.adName = a.adName; f.campaignId = a.campaignId; f.campaignName = a.campaignName; f.adsetId = a.adsetId; f.adsetName = a.adsetName;
     if (f.titular === 'Anuncio' && a.adName) f.titular = a.adName;
     f.gasto = Math.round(a.gasto); f.impresiones = a.impresiones; f.clics = a.clics; f.conversacionesMeta = a.conversaciones;
+    f.comprasMeta = Math.round(a.comprasMeta); f.valorMeta = Math.round(a.valorMeta); f.visitas = a.visitas; f.carritos = a.carritos; f.pagos = a.pagos;
     for (const [d, g] of a.porDia) dia(a.adId, d).gasto += g;
   }
 
