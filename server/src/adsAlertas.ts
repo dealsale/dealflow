@@ -162,6 +162,7 @@ export function iniciarAlertasAds(): void {
     const tiendas = db.prepare('SELECT store_id FROM ads_cuentas WHERE conectada = 1').all() as { store_id: string }[];
     for (const t of tiendas) {
       await revisarAlertas(t.store_id).catch((e) => console.warn('[anuncios] alertas', e));
+      await import('./atribucion.js').then((m) => m.reatribuirRecientes(t.store_id, 7)).catch((e) => console.warn('[anuncios] atribución', e));
       const { revisarPruebas } = await import('./adsPruebas.js');
       await revisarPruebas(t.store_id).catch((e) => console.warn('[anuncios] pruebas', e));
     }

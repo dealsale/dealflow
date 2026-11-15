@@ -117,6 +117,8 @@ export function AdsManager() {
   const campanasVistas = p.campanas
     .filter((c) => filtroCamp === 'todas' || (filtroCamp === 'activas' ? c.activa : c.gasto > 0 || c.chats > 0 || c.pedidos > 0))
     .filter((c) => !q || c.nombre.toLowerCase().includes(q) || c.conjuntos.some((a) => a.nombre.toLowerCase().includes(q)));
+  // Campañas que gastan sin chats ni pedidos: casi siempre son de landing / Shopify sin parámetros de URL.
+  const webSinPedidos = p.campanas.filter((c) => c.gasto > 0 && !c.chats && !c.pedidos).map((c) => c.nombre);
   const anunciosVistos = p.anuncios.filter((a) => !q || `${a.nombre} ${a.campana} ${a.conjunto} ${a.producto}`.toLowerCase().includes(q));
   const kpis: [string, string, string?][] = [
     ['Gasto', pesos(s.gasto)],
@@ -238,6 +240,7 @@ export function AdsManager() {
       </>}
 
       {tab === 'campanas' && <>
+        {webSinPedidos.length > 0 && <ParametrosUrl campanas={webSinPedidos} />}
             <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <b style={{ fontSize: 14 }}>Campañas</b>
@@ -686,6 +689,33 @@ function Alertas() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Cómo marcar los anuncios de landing / Shopify para que DealFlow sepa de qué anuncio vino cada pedido. */
+const PARAMS_URL = 'utm_source=facebook&utm_medium={{adset.name}}&utm_campaign={{campaign.name}}&utm_content={{ad.id}}';
+function ParametrosUrl({ campanas }: { campanas: string[] }) {
+  const [abierto, setAbierto] = useState(false);
+  const copiar = () => { void navigator.clipboard?.writeText(PARAMS_URL).then(() => notificar('✓ Copiado.')).catch(() => notificar('Cópialo a mano.', 'error')); };
+  return (
+    <div style={{ ...card, background: 'var(--df-warning-subtle, #fff7e6)', borderColor: 'var(--df-warning, #d97706)', fontSize: 12.5, lineHeight: 1.55 }}>
+      <b>{campanas.length === 1 ? `«${campanas[0]}» gasta` : `${campanas.length} campañas gastan`} sin chats ni pedidos en DealFlow.</b>{' '}
+      Si llevan a tu landing o a Shopify, DealFlow reconoce el anuncio por la dirección de entrada (y, si no tiene datos, por el enlace del anuncio). Para que no se pierda ninguna venta, agrégales los parámetros de URL.{' '}
+      <button onClick={() => setAbierto(!abierto)} style={{ background: 'none', border: 0, padding: 0, color: 'var(--df-brand)', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5 }}>{abierto ? 'Ocultar' : '¿Cómo?'}</button>
+      {abierto && (
+        <ol style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+          <li>En el Administrador de anuncios de Meta, edita cada anuncio de esas campañas.</li>
+          <li>Baja hasta <b>Seguimiento → Parámetros de URL</b> y pega esto:
+            <div style={{ display: 'flex', gap: 6, margin: '4px 0', flexWrap: 'wrap' }}>
+              <code style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 6, padding: '4px 8px', fontSize: 11.5, wordBreak: 'break-all', flex: '1 1 260px' }}>{PARAMS_URL}</code>
+              <button onClick={copiar} style={{ ...btnS, padding: '4px 10px' }}>Copiar</button>
+            </div>
+          </li>
+          <li>Publica. Desde ese momento cada pedido de la landing o de Shopify queda con su anuncio exacto. Los pedidos sin esos datos se asignan por el enlace del anuncio y salen como «estimado».</li>
+          <li>Meta cuenta compras con su propio criterio (hasta 7 días después del clic, e incluso solo por ver el anuncio): sus números no van a ser iguales a los pedidos reales que ves aquí.</li>
+        </ol>
+      )}
     </div>
   );
 }
