@@ -122,14 +122,15 @@ function DatosEffi({ guia, pedido, titulo, onCerrar }: { guia: string; pedido: s
         {!d && !error && <div style={{ fontSize: 13, color: 'var(--df-text-faint)' }}>Cargando…</div>}
         {d && (
           <>
-            <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Si el flete no cuadra con el de Effi, mándale una captura de esta ventana a soporte: con estos nombres de campo se corrige exacto.</div>
+            <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>El flete es <b>valor_flete</b> (el total que muestra Effi). Si no cuadra, mándale una captura de esta ventana a soporte.</div>
             <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5 }}><input type="checkbox" checked={soloValores} onChange={(e) => setSoloValores(e.target.checked)} /> Mostrar solo valores en plata</label>
             {d.fuentes.map((f) => (
               <div key={f.nombre} style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}>
                 <b style={{ fontSize: 13 }}>{f.nombre}</b>
                 <div style={{ fontSize: 12.5 }}>
-                  Flete que calcula DealFlow: <b>{pesos(f.flete.total)}</b>
-                  {f.flete.base > 0 && f.flete.cargos > 0 && <> = envío {pesos(f.flete.base)} + cargos {pesos(f.flete.cargos)}</>}
+                  Flete: <b>{pesos(f.flete.total)}</b>
+                  {(f.flete.base > 0 || f.flete.cargos > 0) && <span style={{ color: 'var(--df-text-muted)' }}> = envío {pesos(f.flete.base)}{f.flete.manejo > 0 ? ` + manejo ${pesos(f.flete.manejo)}` : ''}{f.flete.otros > 0 ? ` + otros (comisión del recaudo…) ${pesos(f.flete.otros)}` : ''}</span>}
+                  {f.flete.descuento > 0 && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Descuento de Effi: {pesos(f.flete.descuento)}</div>}
                   <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Campos usados: {f.flete.campos.join(', ') || 'ninguno'}</div>
                 </div>
                 <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--df-border)', borderRadius: 8 }}>
