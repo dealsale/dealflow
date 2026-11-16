@@ -4,7 +4,6 @@ import { DevolucionEffi, RastreoGuia } from './EnvioEffi';
 import { useState, useEffect, useRef } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
-import { SelectorTransportadoras } from './SelectorTransportadoras';
 import { OrdenarDireccion } from './DireccionPedido';
 import { HistorialClienteCard, useHistorialCliente, confirmarSiDevolvio, AvisoDevolucionPropia } from './HistorialCliente';
 import { confirmar, pedirTexto, notificar } from './dialogs';
@@ -410,7 +409,7 @@ function useGuiaEffi(orderId?: string) {
     setTimeout(() => document.getElementById('df-campo-remitente')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     return false;
   };
-  return { orderId, ops, d, setD, cargar, sugerir, sugerido, elegirRemitente, nombrarRemitente, cargaMsg, listo, casiListo, exigirRemitente, avisoRemitente, setAvisoRemitente };
+  return { ops, d, setD, cargar, sugerir, sugerido, elegirRemitente, nombrarRemitente, cargaMsg, listo, casiListo, exigirRemitente, avisoRemitente, setAvisoRemitente };
 }
 
 /**
@@ -492,15 +491,9 @@ function CampoRemitente({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
 /** Campos de la guía (transportadora, servicio, paquete…). */
 function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; items?: { qty: number; nombre: string }[] }) {
   const { ops, d, setD } = g;
-  const [sinCotizador, setSinCotizador] = useState(false);
   if (!ops) return g.cargaMsg ? <div style={{ fontSize: 12.5, color: g.cargaMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{g.cargaMsg}</div> : null;
   const set = (p: Partial<DatosGuia>) => setD((x) => ({ ...x, ...p }));
   const t = ops.transportadoras.find((x) => x.id === d.transportadora);
-  // Al elegir la transportadora: si tiene un solo servicio o una sola forma de pago, quedan puestos.
-  const elegirTransp = (v: string) => {
-    const tr = ops.transportadoras.find((x) => x.id === v);
-    set({ transportadora: v, servicio: tr?.servicios.length === 1 ? tr.servicios[0].id : '', formaPagoFlete: tr?.formasPago.length === 1 ? tr.formasPago[0].id : '' });
-  };
   const sel_: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 9px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)' };
   const lb: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 4 };
   return (
@@ -508,10 +501,7 @@ function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; item
       {/* Una debajo de la otra: los nombres de servicio y pago son largos y en dos columnas se cortaban. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8 }}>
         <div><label style={lb}>Transportadora</label>
-          {g.orderId && !sinCotizador
-            ? <SelectorTransportadoras orderId={g.orderId} remitente={d.remitente} value={d.transportadora} onElegir={elegirTransp} onSinDatos={() => setSinCotizador(true)} />
-            : <Dropdown ariaLabel="Transportadora" placeholder="Elige…" value={d.transportadora} onChange={elegirTransp} options={ops.transportadoras.map((x) => ({ value: x.id, label: x.effi ? `${x.nombre} (Effi)` : x.nombre }))} />}
-        </div>
+          <Dropdown ariaLabel="Transportadora" placeholder="Elige…" value={d.transportadora} onChange={(v) => set({ transportadora: v, servicio: '', formaPagoFlete: '' })} options={ops.transportadoras.map((x) => ({ value: x.id, label: x.effi ? `${x.nombre} (Effi)` : x.nombre }))} /></div>
         <div><label style={lb}>Servicio</label>
           <Dropdown ariaLabel="Servicio" placeholder="Elige…" value={d.servicio} onChange={(v) => set({ servicio: v })} options={(t?.servicios || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
         <div><label style={lb}>Pago del flete</label>

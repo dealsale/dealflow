@@ -215,7 +215,7 @@ export async function listasEffi(apiKey: string): Promise<Record<string, unknown
     cajas: L(5).map((f) => ({ id: `${txt(f.sucursal)}:${txt(f.id)}`, nombre: `${txt(f.nombre)} (${txt(f.nombre_sucursal)})` })),
     cuentas: L(6).map((f) => ({ id: txt(f.id), nombre: [txt(f.nombre_banco), txt(f.nombre)].filter(Boolean).join(' · ') })),
     transportadoras: L(7).map((f) => ({
-      id: txt(f.id), nombre: txt(f.nombre), effi: txt(f.nombre_transportadora_efficommerce), effiId: txt(f.transportadora_efficommerce),
+      id: txt(f.id), nombre: txt(f.nombre), effi: txt(f.nombre_transportadora_efficommerce),
       servicios: Array.isArray(f.t_servicio) ? (f.t_servicio as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
       formasPago: Array.isArray(f.t_forma_pago) ? (f.t_forma_pago as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
     })),
