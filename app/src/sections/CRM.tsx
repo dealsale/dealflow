@@ -161,6 +161,8 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
   );
 }
 
+const NOMBRE_SECCION: Partial<Record<string, string>> = { leads: 'Leads', pedidos: 'Pedidos', logistica: 'Logística', comentarios: 'Comentarios', resumen: 'Resumen', estadisticas: 'Estadísticas', anuncios: 'Anuncios' };
+
 export function CRM({ df }: { df: DealFlowState }) {
   const chat = df.crmChat;
   const ventana = useVentana24h(chat);
@@ -228,6 +230,11 @@ export function CRM({ df }: { df: DealFlowState }) {
   ];
   return (
     <section data-screen-label="CRM">
+      {df.chatVolverA && (
+        <button onClick={() => df.go(df.chatVolverA!)} style={{ background: 'none', border: 0, padding: '0 0 6px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: 'var(--df-brand, #10B981)' }}>
+          ‹ Volver a {NOMBRE_SECCION[df.chatVolverA] || 'la sección anterior'}
+        </button>
+      )}
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Inbox · Chats en vivo</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 14px' }}>Tus chats de WhatsApp, Instagram, Messenger y el chat web en un solo lugar. Entra a un chat si quieres tomar el control.</p>
 
