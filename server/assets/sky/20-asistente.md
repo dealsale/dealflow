@@ -77,3 +77,12 @@ Problemas:
 - Registro "Una foto o video de … no se envió porque su archivo ya no está en el servidor": vuelve a subir esa pieza en el producto.
 - "Se activó … pero NO se envió ninguna pieza": revisa la conexión de WhatsApp.
 - Recomendación anti-baneo: mensaje inicial corto (saludo, 2-3 fotos y una pregunta).
+
+## El bot lee fotos, recibos y PDF del cliente
+Sección: asistente
+Claves: foto direccion, captura direccion, recibo servicio publico, factura, pdf, no lee la imagen, bot no ve la foto, comprobante
+Cuando el cliente manda una **foto** (captura con sus datos, **recibo de servicios públicos** de luz/agua/gas/internet, factura, comprobante) o un **PDF**, el bot lee lo que dice y lo usa como datos del cliente (no le vuelve a pedir la dirección; se la confirma en el resumen del pedido). En un recibo, la dirección que toma es la del **suscriptor / predio**, no la de la empresa. Funciona aunque la foto traiga texto o el cliente escriba después «esa es mi dirección» (se revisan las últimas 3 fotos/PDF de las últimas 6 horas, una sola vez cada una).
+- Tiendas con **ChatGPT (OpenAI)**: la foto se lee con la visión de OpenAI de la tienda (cuesta un poco; sale en el consumo como «Entender fotos»). Tiendas con **DeepSeek**: igual, si tienen también la clave de OpenAI; si no, el bot no puede ver fotos y le pide al cliente que escriba.
+- Tiendas con **Claude**: Claude ve la foto directamente.
+- **PDF**: se lee su texto gratis (sin IA); si es un PDF escaneado, su primera página se lee como foto (necesita OpenAI).
+- El botón «Sacar el pedido del chat» también usa lo leído de fotos y PDF.
