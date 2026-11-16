@@ -164,7 +164,7 @@ export async function subirArchivoLocal(storeId: string, url: string): Promise<{
   const mime = ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : /^jpe?g$/.test(ext) ? 'image/jpeg' : ext === 'mp4' ? 'video/mp4' : 'application/octet-stream';
   const { subirMediaCloud } = await import('./wa.js');
   const up = await subirMediaCloud(storeId, readFileSync(ruta), mime, archivo);
-  return 'id' in up ? { id: up.id, nombre: archivo, mime } : up;
+  return 'id' in up ? { id: up.id, nombre: archivo, mime: up.mime || mime } : up;
 }
 
 /**
