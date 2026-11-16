@@ -776,6 +776,8 @@ export function useDealFlowState() {
   const [waConnected, setWaConnected] = useState<boolean>(snap?.waConnected ?? !bootServed);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [mobileChatOpen, setMobileChatOpen] = useState<boolean>(false);
+  // Sección desde la que se abrió el chat (Leads, Pedidos, Logística…): al volver del chat se regresa ahí, no al Inbox.
+  const [chatVolverA, setChatVolverA] = useState<VendedorSection | null>(null);
   // Vista web: mostrar/ocultar el menú lateral y activar un botón flotante de menú.
   // Se recuerdan en el navegador (por dispositivo).
   const [sidebarVisible, setSidebarVisible] = useState<boolean>(() => {
@@ -1183,6 +1185,7 @@ export function useDealFlowState() {
 
   function go(id: VendedorSection) {
     if (!puedeVerSeccion(id)) return; // el agente no entra a secciones bloqueadas
+    if (id !== 'crm') setChatVolverA(null);
     setMode('vendedor');
     setSection(id);
     setSelectedOrderId(null);
@@ -4151,7 +4154,9 @@ export function useDealFlowState() {
       setCrmSendWarn('');
       if (apiMode) cargarMensajesChat(id);
       setMobileChatOpen(true);
+      const desde = section;
       go('crm');
+      setChatVolverA(desde !== 'crm' ? desde : null);
     },
     // Desde Leads: abre ese chat en el Inbox (en celular, directo la conversación).
     abrirChat: (id: number | string) => {
@@ -4159,14 +4164,19 @@ export function useDealFlowState() {
       setCrmSendWarn('');
       if (apiMode) cargarMensajesChat(id);
       setMobileChatOpen(true);
+      const desde = section;
       go('crm');
+      setChatVolverA(desde !== 'crm' ? desde : null);
     },
     openMobileChat: (id: number | string) => {
       setCrmSelectedId(id);
       setMobileChatOpen(true);
     },
+    chatVolverA,
     closeMobileChat: () => {
       setMobileChatOpen(false);
+      // Abierto desde Leads / Pedidos / Logística: vuelve a esa sección (como el botón atrás del celular).
+      if (chatVolverA) { const v = chatVolverA; setChatVolverA(null); go(v); }
     },
     // El estado de intervención se DERIVA del chat real (su "asignado"), no de un
     // booleano suelto: así queda guardado y no se desincroniza al cambiar de chat.
