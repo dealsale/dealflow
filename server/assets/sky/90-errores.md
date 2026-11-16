@@ -86,3 +86,8 @@ Claves: error del servidor, ocurrio un error, no carga, pantalla en blanco, lent
 - "No pudimos hablar con Meta / con Effi / con Dropi / con Shopify": el servicio externo no respondió; casi siempre se arregla reintentando en unos minutos.
 - Pantalla en blanco o el panel no carga: recarga, borra la caché del navegador o prueba en incógnito; revisa tu internet.
 - Si la app instalada se ve vieja después de una actualización, ciérrala y ábrela de nuevo.
+
+## «Param file must be a file with one of the following types…»
+Sección: inbox, whatsapp
+Claves: param file must be, #100, archivo no enviado, video no llega, foto no llega, formato no permitido, mov, heic, webp, gif
+Es WhatsApp (Meta) rechazando un archivo por su formato. Solo acepta fotos **JPG/PNG**, videos **MP4** (H.264), audios y documentos PDF/Word/Excel/PowerPoint/TXT. Pasaba con videos grabados en iPhone (.MOV, HEVC), fotos .heic/.webp/.gif/.avif o archivos guardados con una extensión rara. Ahora DealFlow reconoce el tipo real del archivo y lo convierte solo antes de enviarlo (foto → JPG, video → MP4 H.264, GIF → video); la conversión se guarda y no se repite con cada cliente. Si aún así no se puede (por ejemplo un .zip, o un video de más de 16 MB que no baja de tamaño), el chat muestra el motivo en español. Para evitarlo: sube los videos de los productos en MP4 y las fotos en JPG.

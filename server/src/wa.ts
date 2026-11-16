@@ -440,7 +440,10 @@ async function cloudSendMedia(
     form.append('file', new Blob([new Uint8Array(media.buffer)], { type: mimeBase }), nombre || 'archivo.' + mediaExt(media.tipo, mimeBase));
     const up = await fetch(`${GRAPH}/${phoneId}/media`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
     const upj = (await up.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
-    if (!up.ok || !upj.id) return { ok: false, error: upj.error?.message || 'Meta no aceptó el archivo.' };
+    if (!up.ok || !upj.id) {
+      const m = upj.error?.message || '';
+      return { ok: false, error: /must be a file with one of the following types/i.test(m) ? `WhatsApp no acepta este tipo de archivo (${mimeBase}). Envía una foto JPG/PNG, un video MP4 o un PDF.` : m || 'Meta no aceptó el archivo.' };
+    }
 
     // 2) Enviar el mensaje que referencia ese media ID.
     const tw = media.tipo === 'image' ? 'image' : media.tipo === 'video' ? 'video' : media.tipo === 'audio' ? 'audio' : 'document';
@@ -521,6 +524,19 @@ async function enviarMediaReal(
       registrarLog(storeId, 'error', 'envio', `No se envió la nota de voz a ${to}: no se pudo convertir ${media.mime} a ogg/opus (¿falta ffmpeg en el servidor?).`);
       return { ok: false, error: 'No pudimos convertir la nota de voz al formato de WhatsApp.' };
     }
+  }
+  // Fotos y videos en un formato que WhatsApp acepte (JPG/PNG, MP4 H.264): si no, Meta responde
+  // «Param file must be a file with one of the following types…» y el cliente no recibe nada.
+  if (media.tipo !== 'audio') {
+    const { prepararParaWhatsapp } = await import('./media.js');
+    const p = prepararParaWhatsapp(media, nombre);
+    if ('error' in p) {
+      registrarLog(storeId, 'error', 'envio', `No se envió el archivo a ${to}: ${p.error}`);
+      return { ok: false, error: p.error };
+    }
+    if (p.mime !== media.mime.split(';')[0] || p.buffer !== media.buffer) console.log(`[wa] archivo adaptado para WhatsApp: ${media.mime} → ${p.mime}`);
+    media = { buffer: p.buffer, mime: p.mime, tipo: p.tipo };
+    if (!nombre || p.nombre !== nombre) nombre = p.nombre;
   }
   if (cfg.modo === 'qr') {
     const { sendMediaViaQr } = await import('./waqr.js');
