@@ -2162,13 +2162,6 @@ api.get('/effi-api/opciones-guia', requireAuth, requireStore, requirePermiso('de
     ? await ef.remitenteSugerido(req.user!.storeId!, c.apiKey, { orderId: String(req.query.orderId || ''), convenio: String(req.query.convenio || '') }) : null;
   res.json({ ...r, defaults: c.guia, sugerido });
 });
-// Cotizador: flete estimado, cobertura, contra entrega y días de cada transportadora para este pedido.
-api.get('/effi-api/cotizar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
-  const { cotizarPedido } = await import('./cotizadorEffi.js');
-  const r = await cotizarPedido(req.user!.storeId!, String(req.query.orderId || ''), String(req.query.remitente || ''));
-  if ('error' in r) return res.status(400).json(r);
-  res.json(r);
-});
 // Apodo de un remitente (Effi les pone a todos el nombre de la tienda).
 api.put('/effi-api/remitentes/:codigo/alias', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
