@@ -174,3 +174,8 @@ En **Integraciones → Effi → 🔎 Revisar la integración** DealFlow revisa t
 - Conexión (API key), configuración de la remisión (sucursal, bodega, centro de costos, forma de pago), remitentes identificados, remitente por defecto, guía automática, avisos de Effi (webhooks) y convenios.
 - Cada producto de Effi: variantes vinculadas, **convenio** (fijado por ti o de su última venta) y **bodega** (fijada, aprendida con cuántos envíos recogidos, o por defecto). Se puede buscar y **⬇ Descargar CSV**.
 Cómo funciona por dentro: al despachar, DealFlow crea (o reutiliza) el cliente en Effi, arma la remisión con el artículo de Effi de cada variante y el convenio de cada producto, y, si la guía está activa, crea la guía con el remitente elegido como se explica arriba. Los estados de la guía llegan por los avisos de Effi y por consultas periódicas.
+
+## Flete de las guías en Logística Effi
+Sección: logistica
+Claves: flete, flete no cuadra, valor del flete, comisión recaudo, costo envío, fletes, datos de effi
+El **Flete** de cada guía es el total que cobra Effi: el envío más la comisión por el recaudo contra entrega (por ejemplo Envía cobra cerca del 4,5 % del recaudo y Coordinadora cerca del 5,3 %), igual que la columna «Flete» de Effi → Guías de transporte. Si Effi manda un total, se usa ese; si manda el envío y la comisión por separado, se suman (nunca se suma el valor a recaudar). La tarjeta «Fletes» suma los de todas las guías del periodo. Si un flete no cuadra con el de Effi: en la tarjeta de la guía toca **🔍 (Ver datos de Effi)**: muestra todos los valores que manda Effi de esa guía y cuáles usa DealFlow; esa captura permite corregirlo exacto.
