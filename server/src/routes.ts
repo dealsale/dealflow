@@ -1699,6 +1699,21 @@ api.get('/logistica/effi', requireAuth, requireStore, async (req, res) => {
   const { tableroLogistica } = await import('./logistica.js');
   res.json(tableroLogistica(req.user!.storeId!, Number(req.query.dias) || 45));
 });
+// Todos los campos que Effi manda de una guía (para revisar el flete campo por campo).
+api.get('/logistica/effi/guia', requireAuth, requireStore, async (req, res) => {
+  const L = await import('./logistica.js');
+  const sid = req.user!.storeId!;
+  const guia = String(req.query.guia || '').trim();
+  const rowId = String(req.query.pedido || '').trim();
+  const o = rowId ? db.prepare('SELECT guia, effi_guia_info FROM orders WHERE id = ? AND store_id = ?').get(rowId, sid) as { guia: string; effi_guia_info: string } | undefined : undefined;
+  const numGuia = guia || o?.guia || '';
+  const raw = numGuia ? (db.prepare('SELECT raw FROM effi_guias WHERE store_id = ? AND guia = ? ORDER BY actualizado DESC LIMIT 1').get(sid, numGuia) as { raw: string } | undefined)?.raw : '';
+  const fuentes = [] as { nombre: string; flete: ReturnType<typeof L.fleteDe>; campos: { campo: string; valor: string }[] }[];
+  if (raw) { const f = pj<Record<string, unknown>>(raw, {}); fuentes.push({ nombre: 'Registro de guías de Effi', flete: L.fleteDe(f), campos: L.camposGuia(f) }); }
+  if (o?.effi_guia_info) { const f = pj<Record<string, unknown>>(o.effi_guia_info, {}); fuentes.push({ nombre: 'Consulta del pedido en Effi', flete: L.fleteDe(f), campos: L.camposGuia(f) }); }
+  if (!fuentes.length) return res.status(404).json({ error: 'Todavía no tenemos datos de Effi de esta guía. Toca «Actualizar desde Effi».' });
+  res.json({ guia: numGuia, fuentes });
+});
 api.post('/logistica/effi/actualizar', requireAuth, requireStore, async (req, res) => {
   const { refrescarLogistica, tableroLogistica } = await import('./logistica.js');
   const r = await refrescarLogistica(req.user!.storeId!);

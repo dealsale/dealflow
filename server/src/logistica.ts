@@ -52,6 +52,52 @@ function etapaTexto(estado: string, guia: string): Etapa {
   }
 }
 
+/**
+ * Flete REAL de una guía de Effi (lo que muestra Effi como «Flete»). Effi cobra el envío más una
+ * comisión por el recaudo contra entrega (p. ej. Envía: ≈4,5 % del recaudo; Coordinadora ≈5,3 %),
+ * y en el JSON pueden venir por separado. Orden:
+ *  1. un campo de TOTAL del flete/envío, si existe;
+ *  2. si no, el flete base + los cargos (manejo, comisión, seguro, sobreflete, costo del recaudo).
+ * Nunca se confunde con el valor A recaudar (lo que paga el cliente).
+ */
+export function fleteDe(info: Fila): { total: number; base: number; cargos: number; campos: string[] } {
+  const planos: [string, number][] = [];
+  const recorrer = (o: Fila, pref: string, prof: number) => {
+    for (const [k, v] of Object.entries(o || {})) {
+      if (v && typeof v === 'object' && !Array.isArray(v) && prof < 1) { recorrer(v as Fila, `${pref}${k}.`, prof + 1); continue; }
+      if (v == null || typeof v === 'object') continue;
+      const n = num(v);
+      if (n > 0 && /^-?[\d.,\s$]+$/.test(String(v))) planos.push([`${pref}${k}`.toLowerCase(), n]);
+    }
+  };
+  recorrer(info, '', 0);
+  const nombre = (k: string) => k.split('.').pop() || k;
+  // Lo que paga el cliente (no es costo): recaudo, valor a cobrar, declarado, totales de la venta.
+  const esRecaudo = (k: string) => /^(valor_)?recaudo$|valor_(a_)?(recaudar|cobrar)|^recaudo_|contra_?entrega$|declarado|valor_mercancia|valor_comercial|total_venta|valor_total_factura/.test(nombre(k));
+  const total = planos.find(([k]) => !esRecaudo(k) && /(total.*(flete|envio|guia|transporte))|((flete|envio|transporte).*total)|^costo_total$/.test(nombre(k)));
+  if (total) return { total: Math.round(total[1]), base: 0, cargos: 0, campos: [total[0]] };
+  const base = planos.find(([k]) => !esRecaudo(k) && /^(valor_)?flete$|^valor_flete|^flete_(base|fijo|variable|transporte|cotizado|liquidado)|valor_envio|costo_envio|valor_servicio|valor_transporte/.test(nombre(k)));
+  const vistos = new Set<number>();
+  const cargos = planos.filter(([k]) => !esRecaudo(k) && k !== base?.[0] && /manejo|comision|seguro|sobre_?flete|costo_recaudo|cargo_recaudo|flete_recaudo|recargo|costo_adicional|valor_adicional/.test(nombre(k)) && !/porcentaje|pct|tasa/.test(nombre(k)))
+    .filter(([, n]) => { if (vistos.has(n)) return false; vistos.add(n); return true; }); // mismo cargo con dos nombres: una vez
+  const sumaCargos = cargos.reduce((a, [, n]) => a + n, 0);
+  return { total: Math.round((base?.[1] || 0) + sumaCargos), base: Math.round(base?.[1] || 0), cargos: Math.round(sumaCargos), campos: [...(base ? [base[0]] : []), ...cargos.map(([k]) => k)] };
+}
+
+/** Todos los valores (números y textos cortos) que manda Effi de una guía, para revisar campo por campo. */
+export function camposGuia(info: Fila): { campo: string; valor: string }[] {
+  const out: { campo: string; valor: string }[] = [];
+  const recorrer = (o: Fila, pref: string, prof: number) => {
+    for (const [k, v] of Object.entries(o || {})) {
+      if (v && typeof v === 'object' && !Array.isArray(v) && prof < 1) { recorrer(v as Fila, `${pref}${k}.`, prof + 1); continue; }
+      if (v == null || typeof v === 'object' || String(v).length > 120) continue;
+      out.push({ campo: `${pref}${k}`, valor: String(v) });
+    }
+  };
+  recorrer(info, '', 0);
+  return out;
+}
+
 /** Busca un valor por nombres parecidos en el JSON de la guía de Effi. */
 function buscarEn(info: Fila, patron: RegExp, esNumero: boolean): string | number {
   for (const [k, v] of Object.entries(info)) {
@@ -70,12 +116,15 @@ export function tableroLogistica(storeId: string, dias = 45) {
       ORDER BY o.created_at DESC`,
   ).all(storeId, `-${Math.max(1, Math.min(180, dias))} days`) as Fila[];
   const ult = db.prepare('SELECT fecha, estado, observacion FROM guia_historial WHERE order_id = ? ORDER BY fecha DESC LIMIT 1');
+  const rawDeGuia = db.prepare('SELECT raw FROM effi_guias WHERE store_id = ? AND guia = ? ORDER BY actualizado DESC LIMIT 1');
   const hoyCO = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
   const guias = filas.map((o) => {
     const info = pj<Fila>(txt(o.effi_guia_info), {});
     const mov = ult.get(txt(o.id)) as Fila | undefined;
     const etapa = etapaDe(o);
-    const flete = Number(buscarEn(info, /flete|valor_envio|costo_envio|valor_servicio/i, true)) || 0;
+    // El flete total: del registro general de guías de Effi (listado) o de la consulta del pedido; el mayor (incluye la comisión).
+    const raw = txt(o.guia) ? (rawDeGuia.get(storeId, txt(o.guia)) as { raw: string } | undefined)?.raw : '';
+    const flete = Math.max(fleteDe(info).total, raw ? fleteDe(pj<Fila>(raw, {})).total : 0);
     const estimada = String(buscarEn(info, /fecha.*(entrega|estimad)|(entrega|estimad).*fecha/i, false) || '').slice(0, 10);
     const recaudo = /contra ?entrega/i.test(txt(o.nota)) || !/pagado/i.test(txt(o.nota)) ? Number(o.total) || 0 : 0;
     return {
@@ -177,7 +226,7 @@ export async function sincronizarGuiasEffi(storeId: string, dias = 60): Promise<
           campo(f, /nombre_ciudad_destin|ciudad_destin/i),
           campo(f, /telefono_destin|celular_destin|movil_destin/i),
           campo(f, /^fecha_creacion$|^fecha$|fecha_guia|fecha_registro/i),
-          num(campo(f, /flete|valor_envio|valor_servicio/i)), num(campo(f, /recaudo|valor_cobrar|contra_?entrega/i)),
+          fleteDe(f).total, num(campo(f, /^(valor_)?recaudo$|valor_(a_)?(recaudar|cobrar)|contra_?entrega/i) || campo(f, /recaudo|valor_cobrar|contra_?entrega/i)),
           txt(f.id_ref), urlDocumentoGuia(f), JSON.stringify(f).slice(0, 6000));
         n++;
       }

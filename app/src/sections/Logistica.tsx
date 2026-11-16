@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRecordado } from '../lib/rutas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { NovedadesBandeja } from '../components/Novedades';
-import { apiLogistica, apiLogisticaActualizar, type GuiaLogistica, type TableroLogistica } from '../lib/api';
+import { apiGuiaEffiDatos, apiLogistica, apiLogisticaActualizar, type DatosGuiaEffi, type GuiaLogistica, type TableroLogistica } from '../lib/api';
 
 import { fmtCO } from '../lib/fechaCO';
 /**
@@ -56,6 +57,7 @@ function Progreso({ etapa, color }: { etapa: Etapa; color: string }) {
 function Tarjeta({ g, df, i }: { g: GuiaLogistica; df: DealFlowState; i: number }) {
   const e = ETAPAS.find((x) => x.id === g.etapa)!;
   const [copiado, setCopiado] = useState(false);
+  const [datos, setDatos] = useState(false);
   return (
     <div className={`df-log-card${g.llegaHoy ? ' df-log-hoy' : ''}`} style={{ animationDelay: `${Math.min(i, 12) * 35}ms`, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderLeft: `3px solid ${e.color}`, borderRadius: 11, padding: '10px 11px', display: 'flex', flexDirection: 'column', gap: 6, cursor: 'pointer' }}
       onClick={() => { if (!g.externa) df.verPedido(g.id); }}>
@@ -90,10 +92,65 @@ function Tarjeta({ g, df, i }: { g: GuiaLogistica; df: DealFlowState; i: number 
           </button>
         ) : <span style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>{g.remision || 'Sin remisión'}</span>}
         <span style={{ flex: 1 }} />
+        {(g.guia || g.rowId) && <button onClick={() => setDatos(true)} title="Ver los datos que manda Effi de esta guía (flete, recaudo…)" aria-label="Ver datos de Effi" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, padding: 0 }}>🔍</button>}
         {g.guiaUrl && <a href={g.guiaUrl} target="_blank" rel="noreferrer" title="Ver la guía" style={{ fontSize: 13, textDecoration: 'none' }}>📄</a>}
         {(g.leadId || g.tel) && <button onClick={() => df.abrirChatDePedido({ leadId: g.leadId, tel: g.tel })} title="Abrir el chat del cliente" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: 0 }}>💬</button>}
       </div>
+      {datos && <DatosEffi guia={g.guia} pedido={g.rowId} titulo={g.externa ? `Guía ${g.guia}` : `${g.id} · guía ${g.guia || 'sin número'}`} onCerrar={() => setDatos(false)} />}
     </div>
+  );
+}
+
+/** Lo que Effi manda de una guía, campo por campo, y cómo DealFlow calcula el flete. */
+function DatosEffi({ guia, pedido, titulo, onCerrar }: { guia: string; pedido: string; titulo: string; onCerrar: () => void }) {
+  const [d, setD] = useState<DatosGuiaEffi | null>(null);
+  const [error, setError] = useState('');
+  const [soloValores, setSoloValores] = useState(true);
+  useEffect(() => { void apiGuiaEffiDatos({ guia, pedido }).then((r) => { if (r.data) setD(r.data); else setError(r.error || 'No se pudo cargar.'); }); }, [guia, pedido]);
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onCerrar(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onCerrar]);
+  const plata = (v: string) => /^-?[\d.,\s$]+$/.test(v) && Number(v.replace(/[^\d.-]/g, '')) > 0;
+  // En un portal: la tarjeta tiene animación (transform) y dejaría la ventana atrapada adentro.
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label={`Datos de Effi: ${titulo}`} onClick={(e) => { e.stopPropagation(); onCerrar(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 1000, cursor: 'default' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 16, width: 'min(560px, 100%)', maxHeight: '88vh', overflowY: 'auto', display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <b style={{ fontSize: 15, flex: 1 }}>Datos de Effi · {titulo}</b>
+          <button onClick={onCerrar} aria-label="Cerrar" style={{ background: 'none', border: 0, fontSize: 18, cursor: 'pointer', color: 'var(--df-text-muted)' }}>×</button>
+        </div>
+        {error && <div style={{ fontSize: 13, color: 'var(--df-danger-dark, #b91c1c)' }}>{error}</div>}
+        {!d && !error && <div style={{ fontSize: 13, color: 'var(--df-text-faint)' }}>Cargando…</div>}
+        {d && (
+          <>
+            <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Si el flete no cuadra con el de Effi, mándale una captura de esta ventana a soporte: con estos nombres de campo se corrige exacto.</div>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5 }}><input type="checkbox" checked={soloValores} onChange={(e) => setSoloValores(e.target.checked)} /> Mostrar solo valores en plata</label>
+            {d.fuentes.map((f) => (
+              <div key={f.nombre} style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}>
+                <b style={{ fontSize: 13 }}>{f.nombre}</b>
+                <div style={{ fontSize: 12.5 }}>
+                  Flete que calcula DealFlow: <b>{pesos(f.flete.total)}</b>
+                  {f.flete.base > 0 && f.flete.cargos > 0 && <> = envío {pesos(f.flete.base)} + cargos {pesos(f.flete.cargos)}</>}
+                  <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Campos usados: {f.flete.campos.join(', ') || 'ninguno'}</div>
+                </div>
+                <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--df-border)', borderRadius: 8 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <tbody>
+                      {f.campos.filter((c) => !soloValores || plata(c.valor)).map((c) => (
+                        <tr key={c.campo} style={{ background: f.flete.campos.includes(c.campo.toLowerCase()) ? 'rgba(245,158,11,.14)' : undefined }}>
+                          <td style={{ padding: '4px 8px', borderTop: '1px solid var(--df-border)', fontFamily: "'JetBrains Mono', monospace", wordBreak: 'break-all' }}>{c.campo}</td>
+                          <td style={{ padding: '4px 8px', borderTop: '1px solid var(--df-border)', textAlign: 'right', whiteSpace: 'nowrap' }}>{c.valor}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
