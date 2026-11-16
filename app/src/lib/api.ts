@@ -654,6 +654,13 @@ export const apiEffiApiEventos = () => req<{ eventos: EffiEvento[] }>('/api/effi
 export interface RemitenteSugerido { remitente: string; nombre: string; motivo: string; convenio?: string; proveedor?: string; pendiente?: boolean }
 export interface OpcionesGuia { transportadoras: EffiTransportadora[]; remitentes: EffiOpcion[]; defaults: EffiGuiaCfg; sugerido?: RemitenteSugerido | null }
 export interface DatosGuia { transportadora: string; servicio: string; formaPagoFlete: string; remitente: string; cantPaquetes: number; peso: number; volumen: number; alto: number; ancho: number; largo: number; contenido: string; valorDeclarado: number; nota: string; recibeSabado: boolean; recordar?: boolean }
+export interface CotizacionEffi {
+  transportadoraId: string; nombre: string; effi: boolean; opcion: string; modalidad: 'con' | 'sin' | '';
+  flete: number; base: number; manejo: number; comision: number; pctComision: number;
+  llega: boolean | null; admiteRecaudo: boolean | null; dias: number | null; diasFuente: 'effi' | 'historial' | '';
+  muestras: number; nivel: 'ciudad' | 'departamento' | 'general' | 'sin_datos'; detalle: string;
+}
+export const apiEffiCotizar = (orderId: string, remitente = '') => req<{ cotizaciones: CotizacionEffi[]; recaudo: number; ciudad: string; departamento: string; aviso: string }>(`/api/effi-api/cotizar?orderId=${encodeURIComponent(orderId)}&remitente=${encodeURIComponent(remitente)}`, 'GET');
 export const apiEffiOpcionesGuia = (orderId?: string, convenio?: string) => req<OpcionesGuia>(`/api/effi-api/opciones-guia${orderId || convenio ? `?orderId=${encodeURIComponent(orderId || '')}&convenio=${encodeURIComponent(convenio || '')}` : ''}`, 'GET');
 export interface GuiaBodegaEquivocada { orderId: string; numero: string; estado: string; guia: string; fecha: string; proveedor: string; usado: string; correcta: string[]; recogida: boolean }
 export interface RemitentesConvenioResp {
