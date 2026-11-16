@@ -171,28 +171,65 @@ async function transcribirAudio(storeId: string, mediaUrl: string): Promise<stri
   } catch (e) { console.error('[ia] error transcribiendo audio', e); return ''; }
 }
 
-/** Describe una imagen con OpenAI (visión). Devuelve '' si no se puede. */
-async function entenderImagen(storeId: string, mediaUrl: string): Promise<string> {
+/**
+ * Lee una imagen con OpenAI (visión): qué es y, sobre todo, el TEXTO que se ve (una captura con la
+ * dirección, un comprobante, un documento…). Antes solo decía «qué tipo de cosa es» y el bot nunca
+ * se enteraba de la dirección escrita en la foto. Devuelve '' si no se puede.
+ */
+async function leerImagenOpenAI(storeId: string, buffer: Buffer, mime: string): Promise<string> {
   const key = keyProveedor(storeId, 'openai');
-  if (!key) return '';
-  const media = materializar(storeId, mediaUrl);
-  if (!media || media.tipo !== 'image') return '';
+  if (!key || buffer.length > 15_000_000) return '';
   try {
-    const dataUrl = `data:${media.mime};base64,${media.buffer.toString('base64')}`;
+    const dataUrl = `data:${mime};base64,${buffer.toString('base64')}`;
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
-        model: process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini', max_tokens: 150,
+        model: process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini', max_tokens: 450, temperature: 0,
         messages: [{ role: 'user', content: [
-          { type: 'text', text: 'Un cliente envió esta imagen por WhatsApp a una tienda. En español y en UNA frase corta, di solo QUÉ TIPO de cosa es (ej: "una prenda tipo vestido largo color negro", "un comprobante de pago", "una captura de una publicación", "una tabla de tallas"). Menciona el color si se ve. NO adivines material, tela, composición, marca ni calidad.' },
-          { type: 'image_url', image_url: { url: dataUrl } },
+          { type: 'text', text: 'Un cliente envió esta imagen por WhatsApp a una tienda online colombiana. Responde en español, en este formato:\nEs: <en una frase corta, qué es (ej: "una captura con datos de envío", "un comprobante de pago", "una prenda tipo vestido negro"). Menciona el color si es un producto. NO adivines material, marca ni calidad.>\nTexto: <transcribe EXACTO todo el texto útil que se lea: nombre, cédula, celular, dirección, barrio, ciudad, departamento, referencias, producto, talla, color, cantidades, valor, banco, fecha. Respeta números y abreviaturas tal cual. Si no hay texto legible, escribe "ninguno".>\nDirección de entrega: <SOLO si la imagen trae una dirección del cliente. OJO con los recibos de servicios públicos (luz, agua, gas, internet, teléfono: EPM, ESSA, Codensa/Enel, Air-e, Afinia, Gases del Oriente, Vanti, Acueducto, Claro, Movistar, Tigo…) y las facturas: la dirección del cliente es la del SUSCRIPTOR / PREDIO / «dirección de servicio» o «de entrega», NO la de la empresa ni la de sus oficinas o puntos de pago. Escríbela así: nombre del titular · dirección · barrio · ciudad · departamento (lo que se vea). Si no hay, escribe "ninguna".>' },
+          { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
         ] }],
       }),
     });
     if (!res.ok) { console.error('[ia] visión falló', res.status); return ''; }
     const b = medirIA(storeId, 'imagen', '', await res.json()) as { choices?: { message?: { content?: string } }[] };
-    return (b.choices?.[0]?.message?.content || '').trim();
+    return (b.choices?.[0]?.message?.content || '').trim().slice(0, 1800);
   } catch (e) { console.error('[ia] error viendo imagen', e); return ''; }
+}
+
+/**
+ * Fotos y PDF del cliente → texto para el bot (queda en messages.ia_nota):
+ *  - PDF: su texto (pdftotext, sin costo de IA); si es escaneado, su primera página como imagen.
+ *  - Foto: con OpenAI (las tiendas con Claude no la necesitan: Claude ve la foto directamente).
+ * Se revisan las últimas fotos/PDF sin leer (no solo el último mensaje): el cliente suele mandar
+ * la captura y luego escribir «esa es mi dirección».
+ */
+async function leerAdjuntosCliente(storeId: string, leadId: string, proveedor: string): Promise<void> {
+  const pend = db.prepare(`SELECT id, tipo, media_url, media_mime FROM messages WHERE lead_id = ? AND de = 'cliente' AND tipo IN ('image','document')
+      AND COALESCE(media_url,'') != '' AND COALESCE(ia_nota,'') = '' AND created_at > datetime('now','-6 hours') ORDER BY created_at DESC LIMIT 3`).all(leadId) as { id: string; tipo: string; media_url: string; media_mime: string | null }[];
+  for (const m of pend) {
+    const media = materializar(storeId, m.media_url);
+    if (!media) continue;
+    let nota = '';
+    if (m.tipo === 'document') {
+      if (!/pdf/i.test(media.mime || m.media_mime || '') && !/\.pdf$/i.test(m.media_url)) continue;
+      const { textoDePdf, pdfAPng } = await import('./media.js');
+      const t = textoDePdf(media.buffer);
+      if (t.length >= 8) nota = `Es: un PDF\nTexto: ${t.replace(/\s*\n\s*/g, ' | ').slice(0, 1800)}`;
+      else {
+        const png = pdfAPng(media.buffer);
+        const v = png ? await leerImagenOpenAI(storeId, png, 'image/png') : '';
+        nota = v ? v.replace(/^Es:\s*/i, 'Es: un PDF escaneado · ') : 'Es: un PDF sin texto legible';
+      }
+    } else if (proveedor !== 'claude') {
+      nota = await leerImagenOpenAI(storeId, media.buffer, media.mime);
+    }
+    if (nota) {
+      db.prepare('UPDATE messages SET ia_nota = ? WHERE id = ?').run(nota, m.id);
+      console.log(`[ia] ${m.tipo} leído: ${nota.replace(/\s+/g, ' ').slice(0, 100)}`);
+    }
+  }
 }
 
 /** Personalización del asistente que guarda la tienda (JSON en assistants.estilo). */
@@ -533,18 +570,16 @@ async function responderTurno(storeId: string, leadId: string) {
   const umedia = db.prepare("SELECT id, texto, tipo, media_url FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(leadId) as
     | { id: string; texto: string; tipo: string; media_url: string | null }
     | undefined;
-  // (Con Claude la foto no se manda a OpenAI: Claude la ve directamente más abajo.)
-  if (umedia && umedia.media_url && !String(umedia.texto || '').trim() && (umedia.tipo === 'audio' || (umedia.tipo === 'image' && ia.proveedor !== 'claude'))) {
-    const reconocido = umedia.tipo === 'audio'
-      ? await transcribirAudio(storeId, umedia.media_url)
-      : await entenderImagen(storeId, umedia.media_url);
+  if (umedia && umedia.media_url && !String(umedia.texto || '').trim() && umedia.tipo === 'audio') {
+    const reconocido = await transcribirAudio(storeId, umedia.media_url);
     if (reconocido) {
-      // El audio se transcribe al texto (se lee en el chat); la foto queda como nota INTERNA.
-      if (umedia.tipo === 'audio') db.prepare('UPDATE messages SET texto = ? WHERE id = ?').run(reconocido, umedia.id);
-      else db.prepare('UPDATE messages SET ia_nota = ? WHERE id = ?').run(reconocido, umedia.id);
-      console.log(`[ia] ${umedia.tipo} → texto (OpenAI): ${reconocido.slice(0, 90)}`);
+      // El audio se transcribe al texto (se lee en el chat).
+      db.prepare('UPDATE messages SET texto = ? WHERE id = ?').run(reconocido, umedia.id);
+      console.log(`[ia] audio → texto (OpenAI): ${reconocido.slice(0, 90)}`);
     }
   }
+  // Fotos y PDF: el texto que se lee (direcciones, comprobantes…) queda como nota para el bot.
+  await leerAdjuntosCliente(storeId, leadId, ia.proveedor).catch((e) => console.error('[ia] leer adjuntos', e));
 
   const marca = store?.nombre || 'la tienda';
   const asistenteNombre = (assistant?.nombre || '').trim();
@@ -609,8 +644,8 @@ ${MECANICA_MARCADORES}`;
   // Limpiamos respuestas viejas mal formateadas ("text": "...") para que el modelo no las copie.
   // Si el cliente respondió CITANDO un mensaje, se lo decimos a la IA para que sepa a qué responde.
   const citaDe = (m: FilaHistoria) => (m.de === 'cliente' && m.cita_texto ? `(respondiendo a: «${m.cita_texto.replace(/\s+/g, ' ').slice(0, 160)}») ` : '');
-  const contenidoDe = (m: FilaHistoria) => citaDe(m) + (m.de === 'cliente' && m.tipo === 'image'
-    ? [m.texto, `[el cliente envió una foto${m.ia_nota ? ` · pista interna aproximada: ${m.ia_nota}` : ''}]`].filter(Boolean).join('\n')
+  const contenidoDe = (m: FilaHistoria) => citaDe(m) + (m.de === 'cliente' && (m.tipo === 'image' || m.tipo === 'document')
+    ? [m.texto, `[el cliente envió ${m.tipo === 'image' ? 'una foto' : 'un archivo'}${m.ia_nota ? `. Lo que contiene (leído del archivo): ${m.ia_nota.replace(/\s*\n\s*/g, ' · ')}` : ''}]`].filter(Boolean).join('\n')
     : (m.de === 'cliente' ? m.texto : desenvolver(m.texto || '')) || (m.tipo && m.tipo !== 'texto' ? `[el cliente envió ${nombreMedia(m.tipo)}]` : ''));
   const rolDe = (m: FilaHistoria) => (m.de === 'cliente' ? ('user' as const) : ('assistant' as const));
   const historia = filasHistoria.map((m) => ({ role: rolDe(m), content: contenidoDe(m) })).filter((m) => m.content);
@@ -618,18 +653,25 @@ ${MECANICA_MARCADORES}`;
   // Memoria de datos: el historial que ve la IA son los últimos 16 mensajes, pero el
   // cliente pudo dar su nombre, ciudad o dirección mucho antes. Le pasamos TODO lo
   // que escribió el cliente en esta conversación para que no vuelva a pedirlo.
-  const escritosCliente = (db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'cliente' AND TRIM(COALESCE(texto,'')) != '' ORDER BY created_at DESC LIMIT 60").all(leadId) as { texto: string }[])
-    .reverse().map((m) => '- ' + String(m.texto).replace(/\s+/g, ' ').slice(0, 300));
+  const escritosCliente = (db.prepare(`SELECT texto, tipo, ia_nota FROM messages WHERE lead_id = ? AND de = 'cliente'
+      AND (TRIM(COALESCE(texto,'')) != '' OR (tipo IN ('image','document') AND COALESCE(ia_nota,'') LIKE '%Texto:%' AND COALESCE(ia_nota,'') NOT LIKE '%Texto: ninguno%'))
+      ORDER BY created_at DESC LIMIT 60`).all(leadId) as { texto: string; tipo: string; ia_nota: string }[])
+    .reverse().map((m) => {
+      const leido = (m.tipo === 'image' || m.tipo === 'document') && /Texto:/.test(m.ia_nota || '') && !/Texto:\s*ninguno/i.test(m.ia_nota) ? ` (en ${m.tipo === 'image' ? 'una foto' : 'un PDF'} que envió: ${String(m.ia_nota).split(/Texto:/i)[1].replace(/\s+/g, ' ').trim().slice(0, 600)})` : '';
+      return '- ' + `${String(m.texto || '').replace(/\s+/g, ' ').slice(0, 300)}${leido}`.trim();
+    });
   const memoriaCliente = escritosCliente.length
-    ? `\n\nLO QUE EL CLIENTE YA ESCRIBIÓ EN ESTA CONVERSACIÓN (de lo más antiguo a lo más reciente; úsalo para NO volver a pedir datos que ya dio):\n${escritosCliente.join('\n')}`
+    ? `\n\nLO QUE EL CLIENTE YA ESCRIBIÓ EN ESTA CONVERSACIÓN (de lo más antiguo a lo más reciente; úsalo para NO volver a pedir datos que ya dio). Lo que dice «en una foto/PDF que envió» lo leyó el sistema de su archivo (p. ej. su dirección en una captura o en un recibo de servicios públicos): úsalo como dato que el cliente dio (en un recibo, la dirección del cliente es la del suscriptor/predio, no la de la empresa) y, si vas a crear el pedido, confírmaselo en el resumen:\n${escritosCliente.join('\n')}`
     : '';
 
   // Si el último mensaje del cliente es multimedia sin texto (nota de voz, foto…),
   // DeepSeek no lo puede oír/ver: le pedimos que responda igual, pidiendo texto.
-  const ultimo = db.prepare("SELECT texto, tipo FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(leadId) as
-    | { texto: string; tipo: string }
+  const ultimo = db.prepare("SELECT texto, tipo, ia_nota FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 1").get(leadId) as
+    | { texto: string; tipo: string; ia_nota: string }
     | undefined;
-  const mediaSinTexto = !!ultimo && ultimo.tipo !== 'texto' && !String(ultimo.texto || '').trim();
+  // Multimedia que el bot NO pudo leer (una foto que ya se leyó, o que Claude ve, no cuenta).
+  const mediaSinTexto = !!ultimo && ultimo.tipo !== 'texto' && !String(ultimo.texto || '').trim() && !String(ultimo.ia_nota || '').trim()
+    && !(ultimo.tipo === 'image' && ia.proveedor === 'claude');
   const { directivaNovedad, leerMarcadorNovedad, quitarMarcadorNovedad, registrarPropuestaBot } = await import('./novedades.js');
   const novedadTxt = directivaNovedad(storeId, leadId);
   // Envío real de sus pedidos (rastreo). La cobertura NO se le da al asistente: los
@@ -785,7 +827,7 @@ ${MECANICA_MARCADORES}`;
       const mensajes: MensajeClaude[] = [];
       for (const m of filasHistoria) {
         const img = conFoto.get(m);
-        if (img) mensajes.push({ role: 'user', content: [img, { type: 'text', text: `${citaDe(m)}${m.texto || '[foto que envió el cliente]'}` }] });
+        if (img) mensajes.push({ role: 'user', content: [img, { type: 'text', text: `${citaDe(m)}${m.texto || '[foto que envió el cliente]'}\n[Nota del sistema: si la foto trae datos de envío —una captura, un recibo de servicios públicos (luz, agua, gas, internet) o una factura—, léelos y úsalos como datos del cliente. En un recibo, la dirección del cliente es la del suscriptor/predio, no la de la empresa ni sus oficinas. Confírmaselos antes de crear el pedido.]` }] });
         else if (contenidoDe(m)) mensajes.push({ role: rolDe(m), content: contenidoDe(m) });
       }
       const ultimaFila = [...filasHistoria].reverse().find((f) => f.de === 'cliente');
@@ -1185,9 +1227,10 @@ export async function extraerPedidoDelChat(storeId: string, leadId: string): Pro
       const vs = (variantesDe.all(p.id) as { label: string }[]).map((v) => v.label).filter((l) => l && l.toLowerCase() !== 'única');
       return `- ${p.nombre}: ${Number(p.precio) > 0 ? '$' + Number(p.precio).toLocaleString('es-CO') : 'gratis'}${vs.length ? ` · variantes: ${vs.join(', ')}` : ''}`;
     }).join('\n');
-  const historia = (db.prepare('SELECT de, texto, tipo FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 40').all(leadId) as { de: string; texto: string; tipo: string }[])
+  const historia = (db.prepare('SELECT de, texto, tipo, ia_nota FROM messages WHERE lead_id = ? ORDER BY created_at DESC LIMIT 40').all(leadId) as { de: string; texto: string; tipo: string; ia_nota: string | null }[])
     .reverse()
-    .map((m) => `${m.de === 'cliente' ? 'CLIENTE' : 'TIENDA'}: ${(m.texto || '').trim() || `[${m.tipo}]`}`)
+    // Fotos y PDF del cliente: lo que se leyó de ellos (p. ej. la dirección en una captura) cuenta como dato del cliente.
+    .map((m) => `${m.de === 'cliente' ? 'CLIENTE' : 'TIENDA'}: ${[(m.texto || '').trim(), m.de === 'cliente' && m.ia_nota && /Texto:/i.test(m.ia_nota) && !/Texto:\s*ninguno/i.test(m.ia_nota) ? `[en ${m.tipo === 'image' ? 'una foto' : 'un archivo'}: ${m.ia_nota.split(/Texto:/i)[1].replace(/\s+/g, ' ').trim().slice(0, 600)}]` : ''].filter(Boolean).join(' ') || `[${m.tipo}]`}`)
     .filter((l) => l.length > 8)
     .join('\n');
   if (!historia.trim()) return '';

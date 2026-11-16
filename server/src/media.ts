@@ -109,6 +109,19 @@ export function guiaAcostada(o: Record<string, unknown>): boolean {
   return /inter\s*-?\s*rap/i.test(t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
 }
 
+/** Texto de las primeras páginas de un PDF (pdftotext). '' si no tiene texto (escaneado) o falla. */
+export function textoDePdf(pdf: Buffer, paginas = 2): string {
+  let dir = '';
+  try {
+    dir = mkdtempSync(path.join(tmpdir(), 'pdftxt-'));
+    const entrada = path.join(dir, 'in.pdf');
+    writeFileSync(entrada, pdf);
+    const r = spawnSync('pdftotext', ['-layout', '-f', '1', '-l', String(paginas), '-enc', 'UTF-8', entrada, '-'], { timeout: 20_000, maxBuffer: 4 * 1024 * 1024 });
+    if (r.status !== 0) return '';
+    return String(r.stdout || '').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, 2500);
+  } catch { return ''; } finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
+}
+
 /**
  * Primera página de un PDF como PNG (pdftoppm), lista para WhatsApp:
  *  - se recorta el margen blanco (muchas guías vienen en una hoja carta con la
