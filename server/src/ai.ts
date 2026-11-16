@@ -15,6 +15,7 @@ import { saveOutgoingMedia, mediaPath, tipoDeMime } from './media.js';
 const MIME_POR_EXT: Record<string, string> = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
   mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', ogg: 'audio/ogg', mp3: 'audio/mpeg', m4a: 'audio/mp4', pdf: 'application/pdf',
+  quicktime: 'video/quicktime', '3gp': 'video/3gpp', '3gpp': 'video/3gpp', mkv: 'video/x-matroska', avi: 'video/x-msvideo', heic: 'image/heic', heif: 'image/heic', avif: 'image/avif', bmp: 'image/bmp', aac: 'audio/aac', opus: 'audio/opus', amr: 'audio/amr', mpeg: 'audio/mpeg', txt: 'text/plain',
 };
 
 /** Obtiene el archivo (buffer/mime/tipo/url) de un valor: enlace guardado o data URL. */

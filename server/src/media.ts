@@ -3,6 +3,7 @@ import path from 'node:path';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { db, uid } from './db.js';
 
 /**
@@ -269,4 +270,112 @@ export async function reconvertirGuias(): Promise<void> {
     } catch { /* sigue con la próxima */ }
   }
   if (n) console.log(`[guías] ${n} imagen(es) de guía reconvertidas (recortadas/enderezadas)`);
+}
+
+// ── Archivos para WhatsApp: tipo real y formatos que WhatsApp acepta ─────────────────────────
+/** Tipo real de un archivo por sus primeros bytes ('' si no se reconoce). */
+export function mimeReal(buf: Buffer): string {
+  if (!buf || buf.length < 12) return '';
+  const h = buf.subarray(0, 16);
+  const asc = (a: number, b: number) => h.subarray(a, b).toString('latin1');
+  if (h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff) return 'image/jpeg';
+  if (h[0] === 0x89 && asc(1, 4) === 'PNG') return 'image/png';
+  if (asc(0, 4) === 'GIF8') return 'image/gif';
+  if (asc(0, 4) === 'RIFF' && asc(8, 12) === 'WEBP') return 'image/webp';
+  if (asc(0, 4) === 'RIFF' && asc(8, 12) === 'AVI ') return 'video/x-msvideo';
+  if (asc(0, 4) === 'RIFF' && asc(8, 12) === 'WAVE') return 'audio/wav';
+  if (asc(0, 2) === 'BM') return 'image/bmp';
+  if (asc(0, 4) === '%PDF') return 'application/pdf';
+  if (asc(0, 4) === 'OggS') return 'audio/ogg';
+  if (asc(0, 3) === 'ID3' || (h[0] === 0xff && (h[1] & 0xe0) === 0xe0)) return 'audio/mpeg';
+  if (h[0] === 0x1a && h[1] === 0x45 && h[2] === 0xdf && h[3] === 0xa3) return 'video/webm';
+  if (asc(4, 8) === 'ftyp') {
+    const marca = asc(8, 12).toLowerCase();
+    if (/^(heic|heix|hevc|heim|heis|mif1|msf1)/.test(marca)) return 'image/heic';
+    if (/^avi[fs]/.test(marca)) return 'image/avif';
+    if (marca.startsWith('qt')) return 'video/quicktime';
+    if (marca.startsWith('m4a') || marca.startsWith('m4b')) return 'audio/mp4';
+    if (marca.startsWith('3g')) return 'video/3gpp';
+    return 'video/mp4';
+  }
+  if (asc(0, 4) === 'PK\u0003\u0004') return 'application/zip'; // docx/xlsx/pptx también son zip: se deja el del nombre
+  return '';
+}
+
+/** Tipos que WhatsApp (Cloud API) acepta, por tipo de mensaje. */
+const WA_OK: Record<string, RegExp> = {
+  image: /^image\/(jpeg|png)$/,
+  video: /^video\/(mp4|3gpp)$/,
+  audio: /^audio\/(aac|mp4|mpeg|amr|ogg|opus)$/,
+  document: /^(application\/(pdf|msword|vnd\.ms-excel|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation))|text\/plain)$/,
+};
+const LIMITE_WA: Record<string, number> = { image: 5 * 1024 * 1024, video: 16 * 1024 * 1024, audio: 16 * 1024 * 1024, document: 100 * 1024 * 1024 };
+
+/** Convierte con ffmpeg (caché por contenido: el mismo video del producto no se convierte con cada cliente). */
+function convertir(buf: Buffer, destinoExt: 'jpg' | 'mp4', args: string[]): Buffer | null {
+  const hash = createHash('sha1').update(buf).digest('hex');
+  const cacheDir = path.resolve(DATA_DIR, 'media', '__wa__');
+  const cache = path.join(cacheDir, `${hash}.${destinoExt}`);
+  try { if (existsSync(cache)) return readFileSync(cache); } catch { /* sigue */ }
+  let dir = '';
+  try {
+    dir = mkdtempSync(path.join(tmpdir(), 'df-wa-'));
+    const entrada = path.join(dir, 'in'), salida = path.join(dir, `out.${destinoExt}`);
+    writeFileSync(entrada, buf);
+    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', entrada, ...args, salida], { timeout: 180_000 });
+    if (r.status !== 0 || !existsSync(salida)) { console.error('[media] ffmpeg no pudo convertir para WhatsApp:', String(r.stderr || r.error?.message || '').trim().slice(0, 300)); return null; }
+    const out = readFileSync(salida);
+    try { mkdirSync(cacheDir, { recursive: true }); writeFileSync(cache, out); } catch { /* sin caché */ }
+    return out;
+  } catch (e) { console.error('[media] sin ffmpeg para convertir', e); return null; } finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
+}
+
+/**
+ * Deja el archivo en un formato que WhatsApp acepte antes de enviarlo:
+ *  - el tipo se toma del contenido (un .MOV guardado como «.quicktime» o un .heic llegaban como
+ *    «application/octet-stream» y Meta respondía «Param file must be a file with one of the following types…»);
+ *  - fotos que no son JPG/PNG (webp, gif, heic, avif, bmp…) → JPG; videos que no son MP4 H.264
+ *    (mov, webm, avi…) o pasan de 16 MB → MP4 H.264/AAC.
+ * Los audios se convierten aparte (nota de voz a ogg/opus). Si no se puede, explica por qué.
+ */
+export function prepararParaWhatsapp(media: { buffer: Buffer; mime: string; tipo: string }, nombre = ''): { buffer: Buffer; mime: string; tipo: string; nombre: string } | { error: string } {
+  let mime = media.mime.split(';')[0].trim().toLowerCase();
+  if (mime === 'image/jpg' || mime === 'image/pjpeg') mime = 'image/jpeg';
+  const real = mimeReal(media.buffer);
+  // El contenido manda (salvo los documentos de Office, que por dentro son un zip).
+  if (real && !(real === 'application/zip' && /officedocument|msword|ms-excel|ms-powerpoint/.test(mime))) mime = real;
+  let tipo = mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'audio' : 'document';
+  const base = (nombre || 'archivo').replace(/\.[a-z0-9]{2,10}$/i, '') || 'archivo';
+  if (tipo === 'image' && !WA_OK.image.test(mime)) {
+    // GIF animado: mejor como video (WhatsApp no anima GIF enviados como imagen).
+    if (mime === 'image/gif') {
+      const mp4 = convertir(media.buffer, 'mp4', ['-movflags', '+faststart', '-pix_fmt', 'yuv420p', '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-an']);
+      if (mp4) return { buffer: mp4, mime: 'video/mp4', tipo: 'video', nombre: `${base}.mp4` };
+    }
+    const jpg = convertir(media.buffer, 'jpg', ['-frames:v', '1', '-q:v', '3']);
+    if (!jpg) return { error: `WhatsApp no acepta fotos en formato ${mime.split('/')[1].toUpperCase()} y no se pudo convertir a JPG.` };
+    return { buffer: jpg, mime: 'image/jpeg', tipo: 'image', nombre: `${base}.jpg` };
+  }
+  if (tipo === 'image' && media.buffer.length > LIMITE_WA.image) {
+    const jpg = convertir(media.buffer, 'jpg', ['-frames:v', '1', '-vf', "scale='min(2048,iw)':-2", '-q:v', '5']);
+    if (jpg) return { buffer: jpg, mime: 'image/jpeg', tipo: 'image', nombre: `${base}.jpg` };
+  }
+  if (tipo === 'video') {
+    // iPhone graba en HEVC (H.265): WhatsApp en muchos celulares no lo reproduce; se pasa a H.264.
+    const hevc = media.buffer.subarray(0, Math.min(media.buffer.length, 400_000)).includes(Buffer.from('hvc1'));
+    if (!WA_OK.video.test(mime) || hevc || media.buffer.length > LIMITE_WA.video) {
+      const grande = media.buffer.length > LIMITE_WA.video;
+      const mp4 = convertir(media.buffer, 'mp4', ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', grande ? '30' : '26', '-vf', "scale='min(1280,iw)':-2", '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart']);
+      if (!mp4) return { error: `WhatsApp no acepta videos en formato ${mime.split('/')[1].toUpperCase()} y no se pudo convertir a MP4.` };
+      if (mp4.length > LIMITE_WA.video) return { error: 'El video pesa más de 16 MB, el máximo de WhatsApp. Súbelo más corto o más liviano.' };
+      return { buffer: mp4, mime: 'video/mp4', tipo: 'video', nombre: `${base}.mp4` };
+    }
+  }
+  if (tipo === 'document' && !WA_OK.document.test(mime)) {
+    return { error: `WhatsApp no acepta archivos de tipo «${mime || 'desconocido'}». Envía una foto (JPG/PNG), un video MP4 o un PDF.` };
+  }
+  if (media.buffer.length > (LIMITE_WA[tipo] || LIMITE_WA.document)) return { error: `El archivo pesa más de lo que permite WhatsApp para ${tipo === 'image' ? 'fotos (5 MB)' : tipo === 'audio' ? 'audios (16 MB)' : 'documentos (100 MB)'}.` };
+  // El nombre con la extensión del formato real (un JPG llamado «.heic» confunde al celular).
+  const ext = mime === 'image/jpeg' ? 'jpg' : mime === 'text/plain' ? 'txt' : tipo === 'document' && nombre ? (nombre.split('.').pop() || 'pdf') : mediaExt(tipo, mime);
+  return { buffer: media.buffer, mime, tipo, nombre: tipo === 'document' && nombre ? nombre : `${base}.${ext}` };
 }
