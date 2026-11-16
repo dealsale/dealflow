@@ -21,6 +21,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS effi_guias (
   url TEXT NOT NULL DEFAULT '', raw TEXT NOT NULL DEFAULT '', actualizado TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (store_id, id)
 )`);
+// vigente = 0: guía anulada en Effi (no cuenta en el tablero ni en los fletes).
+try { db.exec('ALTER TABLE effi_guias ADD COLUMN vigente INTEGER NOT NULL DEFAULT 1'); } catch { /* ya existe */ }
 const ultimaSync = new Map<string, number>();
 
 export type Etapa = 'sin_guia' | 'por_recoger' | 'transito' | 'reparto' | 'novedad' | 'entregado' | 'devuelto';
@@ -53,35 +55,41 @@ function etapaTexto(estado: string, guia: string): Etapa {
 }
 
 /**
- * Flete REAL de una guía de Effi (lo que muestra Effi como «Flete»). Effi cobra el envío más una
- * comisión por el recaudo contra entrega (p. ej. Envía: ≈4,5 % del recaudo; Coordinadora ≈5,3 %),
- * y en el JSON pueden venir por separado. Orden:
- *  1. un campo de TOTAL del flete/envío, si existe;
- *  2. si no, el flete base + los cargos (manejo, comisión, seguro, sobreflete, costo del recaudo).
- * Nunca se confunde con el valor A recaudar (lo que paga el cliente).
+ * Flete de una guía según la documentación de la API de Effi (GET /api/guia_transporte):
+ *  - valor_flete = VALOR TOTAL del flete (lo que muestra Effi como «Flete»);
+ *  - su desglose: costo_flete_api_calculado (envío) + costo_manejo_api_calculado + costo_otros_api_calculado
+ *    (ahí va p. ej. la comisión del recaudo contra entrega); descuento = descuento aplicado al flete.
+ * Ojo: antes se tomaba «el primer campo que diga flete» y costo_flete_api_calculado viene antes que
+ * valor_flete en la respuesta: salía solo el envío. Si una guía vieja no trae estos campos, se usa
+ * una búsqueda por nombres parecidos.
  */
-export function fleteDe(info: Fila): { total: number; base: number; cargos: number; campos: string[] } {
-  const planos: [string, number][] = [];
-  const recorrer = (o: Fila, pref: string, prof: number) => {
-    for (const [k, v] of Object.entries(o || {})) {
-      if (v && typeof v === 'object' && !Array.isArray(v) && prof < 1) { recorrer(v as Fila, `${pref}${k}.`, prof + 1); continue; }
-      if (v == null || typeof v === 'object') continue;
-      const n = num(v);
-      if (n > 0 && /^-?[\d.,\s$]+$/.test(String(v))) planos.push([`${pref}${k}`.toLowerCase(), n]);
-    }
-  };
-  recorrer(info, '', 0);
-  const nombre = (k: string) => k.split('.').pop() || k;
-  // Lo que paga el cliente (no es costo): recaudo, valor a cobrar, declarado, totales de la venta.
-  const esRecaudo = (k: string) => /^(valor_)?recaudo$|valor_(a_)?(recaudar|cobrar)|^recaudo_|contra_?entrega$|declarado|valor_mercancia|valor_comercial|total_venta|valor_total_factura/.test(nombre(k));
-  const total = planos.find(([k]) => !esRecaudo(k) && /(total.*(flete|envio|guia|transporte))|((flete|envio|transporte).*total)|^costo_total$/.test(nombre(k)));
-  if (total) return { total: Math.round(total[1]), base: 0, cargos: 0, campos: [total[0]] };
-  const base = planos.find(([k]) => !esRecaudo(k) && /^(valor_)?flete$|^valor_flete|^flete_(base|fijo|variable|transporte|cotizado|liquidado)|valor_envio|costo_envio|valor_servicio|valor_transporte/.test(nombre(k)));
-  const vistos = new Set<number>();
-  const cargos = planos.filter(([k]) => !esRecaudo(k) && k !== base?.[0] && /manejo|comision|seguro|sobre_?flete|costo_recaudo|cargo_recaudo|flete_recaudo|recargo|costo_adicional|valor_adicional/.test(nombre(k)) && !/porcentaje|pct|tasa/.test(nombre(k)))
-    .filter(([, n]) => { if (vistos.has(n)) return false; vistos.add(n); return true; }); // mismo cargo con dos nombres: una vez
-  const sumaCargos = cargos.reduce((a, [, n]) => a + n, 0);
-  return { total: Math.round((base?.[1] || 0) + sumaCargos), base: Math.round(base?.[1] || 0), cargos: Math.round(sumaCargos), campos: [...(base ? [base[0]] : []), ...cargos.map(([k]) => k)] };
+export interface FleteGuia { total: number; base: number; manejo: number; otros: number; descuento: number; cargos: number; campos: string[] }
+export function fleteDe(info: Fila): FleteGuia {
+  // Campos exactos: en la raíz o un nivel adentro (algunas respuestas vienen envueltas).
+  const plano: Fila = { ...info };
+  for (const v of Object.values(info || {})) if (v && typeof v === 'object' && !Array.isArray(v)) for (const [k, x] of Object.entries(v as Fila)) if (!(k in plano)) plano[k] = x;
+  const v = (k: string) => num(plano[k]);
+  const base = v('costo_flete_api_calculado'), manejo = v('costo_manejo_api_calculado'), otros = v('costo_otros_api_calculado'), descuento = v('descuento');
+  const total = v('valor_flete');
+  if (total > 0) return { total: Math.round(total), base: Math.round(base), manejo: Math.round(manejo), otros: Math.round(otros), descuento: Math.round(descuento), cargos: Math.round(manejo + otros), campos: ['valor_flete'] };
+  if (base + manejo + otros > 0) {
+    const campos = ['costo_flete_api_calculado', 'costo_manejo_api_calculado', 'costo_otros_api_calculado'].filter((k) => v(k) > 0);
+    return { total: Math.round(base + manejo + otros), base: Math.round(base), manejo: Math.round(manejo), otros: Math.round(otros), descuento: Math.round(descuento), cargos: Math.round(manejo + otros), campos };
+  }
+  // Respaldo (formato desconocido): el primer campo parecido a un flete que no sea lo que se recauda.
+  for (const [k, x] of Object.entries(plano)) {
+    if (x == null || typeof x === 'object') continue;
+    const n = num(x);
+    if (n > 0 && /flete|valor_envio|costo_envio|valor_servicio/i.test(k) && !/recaudo|declarado/i.test(k)) return { total: Math.round(n), base: 0, manejo: 0, otros: 0, descuento: 0, cargos: 0, campos: [k.toLowerCase()] };
+  }
+  return { total: 0, base: 0, manejo: 0, otros: 0, descuento: 0, cargos: 0, campos: [] };
+}
+
+/** Valor a recaudar contra entrega. En Effi «recaudo» es 1/0 (si tiene recaudo); el valor es «valor_recaudo». */
+export function recaudoDe(info: Fila): number {
+  if (info && 'valor_recaudo' in info) return txt(info.recaudo) === '0' ? 0 : num(info.valor_recaudo);
+  for (const [k, x] of Object.entries(info || {})) if (x != null && typeof x !== 'object' && /valor_(a_)?(recaudar|cobrar)|^valor_recaudo$/i.test(k) && num(x) > 0) return num(x);
+  return 0;
 }
 
 /** Todos los valores (números y textos cortos) que manda Effi de una guía, para revisar campo por campo. */
@@ -116,7 +124,7 @@ export function tableroLogistica(storeId: string, dias = 45) {
       ORDER BY o.created_at DESC`,
   ).all(storeId, `-${Math.max(1, Math.min(180, dias))} days`) as Fila[];
   const ult = db.prepare('SELECT fecha, estado, observacion FROM guia_historial WHERE order_id = ? ORDER BY fecha DESC LIMIT 1');
-  const rawDeGuia = db.prepare('SELECT raw FROM effi_guias WHERE store_id = ? AND guia = ? ORDER BY actualizado DESC LIMIT 1');
+  const rawDeGuia = db.prepare('SELECT raw FROM effi_guias WHERE store_id = ? AND guia = ? ORDER BY vigente DESC, actualizado DESC LIMIT 1');
   const hoyCO = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
   const guias = filas.map((o) => {
     const info = pj<Fila>(txt(o.effi_guia_info), {});
@@ -124,9 +132,12 @@ export function tableroLogistica(storeId: string, dias = 45) {
     const etapa = etapaDe(o);
     // El flete total: del registro general de guías de Effi (listado) o de la consulta del pedido; el mayor (incluye la comisión).
     const raw = txt(o.guia) ? (rawDeGuia.get(storeId, txt(o.guia)) as { raw: string } | undefined)?.raw : '';
-    const flete = Math.max(fleteDe(info).total, raw ? fleteDe(pj<Fila>(raw, {})).total : 0);
+    // valor_flete del registro general de guías (el más reciente); si no, el de la consulta del pedido.
+    const flete = (raw ? fleteDe(pj<Fila>(raw, {})).total : 0) || fleteDe(info).total;
     const estimada = String(buscarEn(info, /fecha.*(entrega|estimad)|(entrega|estimad).*fecha/i, false) || '').slice(0, 10);
-    const recaudo = /contra ?entrega/i.test(txt(o.nota)) || !/pagado/i.test(txt(o.nota)) ? Number(o.total) || 0 : 0;
+    const rawInfo = raw ? pj<Fila>(raw, {}) : {};
+    const recaudoEffi = recaudoDe(rawInfo) || recaudoDe(info);
+    const recaudo = recaudoEffi || (/contra ?entrega/i.test(txt(o.nota)) || !/pagado/i.test(txt(o.nota)) ? Number(o.total) || 0 : 0);
     return {
       id: 'DF-' + txt(o.numero), rowId: txt(o.id), numero: Number(o.numero), cliente: txt(o.cliente), tel: txt(o.tel), leadId: txt(o.lead_id),
       ciudad: txt(o.ciudad), departamento: txt(o.departamento), total: Number(o.total) || 0, envioCobrado: Number(o.envio) || 0,
@@ -142,7 +153,7 @@ export function tableroLogistica(storeId: string, dias = 45) {
   // Guías que están en Effi pero no son de ningún pedido de DealFlow.
   const conocidas = new Set(guias.map((g) => g.guia).filter(Boolean));
   const desdeTxt = new Date(Date.now() - Math.max(1, Math.min(180, dias)) * 86400e3).toISOString().slice(0, 10);
-  const externas = (db.prepare("SELECT * FROM effi_guias WHERE store_id = ? AND (fecha = '' OR substr(fecha,1,10) >= ?) ORDER BY fecha DESC LIMIT 1500").all(storeId, desdeTxt) as Fila[])
+  const externas = (db.prepare("SELECT * FROM effi_guias WHERE store_id = ? AND vigente = 1 AND (fecha = '' OR substr(fecha,1,10) >= ?) ORDER BY fecha DESC LIMIT 1500").all(storeId, desdeTxt) as Fila[])
     .filter((e) => !txt(e.guia) || !conocidas.has(txt(e.guia)))
     .map((e) => {
       const etapa = etapaTexto(txt(e.estado), txt(e.guia));
@@ -206,11 +217,11 @@ export async function sincronizarGuiasEffi(storeId: string, dias = 60): Promise<
   const hoy = new Date(Date.now() - 5 * 3600e3);
   const desde = new Date(hoy.getTime() - dias * 86400e3).toISOString().slice(0, 10);
   const hasta = hoy.toISOString().slice(0, 10);
-  const ins = db.prepare(`INSERT INTO effi_guias (store_id, id, guia, transportadora, estado, destinatario, ciudad, telefono, fecha, flete, recaudo, id_ref, url, raw, actualizado)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+  const ins = db.prepare(`INSERT INTO effi_guias (store_id, id, guia, transportadora, estado, destinatario, ciudad, telefono, fecha, flete, recaudo, id_ref, url, raw, vigente, actualizado)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
     ON CONFLICT(store_id, id) DO UPDATE SET guia = excluded.guia, transportadora = excluded.transportadora, estado = excluded.estado, destinatario = excluded.destinatario,
       ciudad = excluded.ciudad, telefono = excluded.telefono, fecha = excluded.fecha, flete = excluded.flete, recaudo = excluded.recaudo, id_ref = excluded.id_ref,
-      url = excluded.url, raw = excluded.raw, actualizado = excluded.actualizado`);
+      url = excluded.url, raw = excluded.raw, vigente = excluded.vigente, actualizado = excluded.actualizado`);
   let n = 0;
   for (let pagina = 1; pagina <= 30; pagina++) {
     const r = await effi<Fila[]>(c.apiKey, 'GET', '/api/guia_transporte', { query: { desde, hasta, pagina, por_pagina: 100 } });
@@ -224,10 +235,10 @@ export async function sincronizarGuiasEffi(storeId: string, dias = 60): Promise<
           campo(f, /^estado_efficommerce$|^estado_guia_efficommerce$|^nombre_est_guia$|^estado$/i),
           campo(f, /nombre_destinatario|^destinatario$|nombre_cliente|razon_social_destinatario/i),
           campo(f, /nombre_ciudad_destin|ciudad_destin/i),
-          campo(f, /telefono_destin|celular_destin|movil_destin/i),
-          campo(f, /^fecha_creacion$|^fecha$|fecha_guia|fecha_registro/i),
-          fleteDe(f).total, num(campo(f, /^(valor_)?recaudo$|valor_(a_)?(recaudar|cobrar)|contra_?entrega/i) || campo(f, /recaudo|valor_cobrar|contra_?entrega/i)),
-          txt(f.id_ref), urlDocumentoGuia(f), JSON.stringify(f).slice(0, 6000));
+          campo(f, /telefonos?_destin|celular_destin|movil_destin/i),
+          campo(f, /^fecha_trans$|^fecha_creacion$|^fecha$|fecha_guia|fecha_registro/i),
+          fleteDe(f).total, recaudoDe(f),
+          txt(f.id_ref), urlDocumentoGuia(f), JSON.stringify(f).slice(0, 6000), txt(f.vigente) === '0' ? 0 : 1);
         n++;
       }
     })();

@@ -685,7 +685,7 @@ export interface TableroLogistica {
   resumen: { total: number; activas: number; llegaHoy: number; novedades: number; entregadas: number; devueltas: number; porRecaudar: number; fleteTotal: number; envioCobrado: number; efectividad: number | null; soloEffi?: number };
 }
 export const apiLogistica = (dias = 45) => req<TableroLogistica>(`/api/logistica/effi?dias=${dias}`, 'GET');
-export interface FleteGuia { total: number; base: number; cargos: number; campos: string[] }
+export interface FleteGuia { total: number; base: number; manejo: number; otros: number; descuento: number; cargos: number; campos: string[] }
 export interface DatosGuiaEffi { guia: string; fuentes: { nombre: string; flete: FleteGuia; campos: { campo: string; valor: string }[] }[] }
 export const apiGuiaEffiDatos = (o: { guia?: string; pedido?: string }) => req<DatosGuiaEffi>(`/api/logistica/effi/guia?${new URLSearchParams({ guia: o.guia || '', pedido: o.pedido || '' })}`, 'GET');
 export const apiLogisticaActualizar = (dias = 45) => req<TableroLogistica>('/api/logistica/effi/actualizar', 'POST', { dias });
