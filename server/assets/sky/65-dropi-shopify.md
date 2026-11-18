@@ -81,7 +81,8 @@ Claves: dropi variantes, vincular variantes dropi, verifica las variantes, revis
 Sección: pedidos
 Claves: huella, huella dropi, solo pedido, sin guia, pendiente confirmacion, generar guia en dropi, revisar cliente dropi, historial transportadora
 En el pedido → **Despacho con Dropi** hay dos botones:
-- **📦 Generar en Dropi (con guía)**: cotizas, eliges transportadora y Dropi genera la guía.
+- **Cobro**: interruptor *Contra entrega / Pagado* (Pagado = sin recaudo).
+- **📦 Cotizar y generar guía**: salen las transportadoras de Dropi de la más barata a la más cara (las 4 primeras; «Ver N más» para el resto), con precio redondeado y la etiqueta *Más barata*. También «Que Dropi elija (automático)». El botón dice cuál se crea: «Crear en Dropi · VELOCES $19.347».
 - **📝 Solo enviar el pedido (la guía la hago en Dropi)**: el pedido se crea en Dropi como **Pendiente confirmación**, sin transportadora ni guía. En Dropi revisas la **huella** del cliente (su historial con las transportadoras), confirmas y generas la guía. Cuando la generes, la guía llega sola a DealFlow (se revisa cada pocos minutos) y se le avisa al cliente por WhatsApp.
 - **Si en Dropi hiciste otra orden** (la duplicaste, la creaste a mano o llegó por la integración de Shopify con Dropi) y generaste la guía ahí en vez de confirmar la que mandó DealFlow: cada 20 min DealFlow busca la orden con guía y la une a su pedido, primero por la referencia del pedido (df-…) y si no por el **celular del cliente**. Esto pasa cuando la orden que mandó DealFlow sigue en Pendiente confirmación, Pendiente o Cancelada. Desde ahí se sigue la orden nueva: estado, guía y avisos al cliente. En el registro del pedido queda «Orden X de Dropi unida a este pedido». El botón **Actualizar** del pedido hace esta búsqueda al instante. No se adivina si el mismo cliente tiene dos pedidos el mismo día.
 - DealFlow lee hasta 1.000 órdenes recientes de Dropi, así que también funciona en tiendas con muchas órdenes.
