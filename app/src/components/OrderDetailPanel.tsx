@@ -206,9 +206,6 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
   if (error) return <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>No se pudo cotizar ({error}). Elige la transportadora abajo.</div>;
   if (!cot) return <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Cotizando transportadoras de Effi…</div>;
   if (!cot.opciones.length) return null;
-  const validas = cot.opciones.filter(sirveEffi);
-  const barata = validas.filter((o) => o.flete > 0).reduce<OpcionCotizadaEffi | null>((a, o) => (!a || o.flete < a.flete ? o : a), null);
-  const rapida = validas.filter((o) => o.dias).reduce<OpcionCotizadaEffi | null>((a, o) => (!a || (o.dias || 99) < (a.dias || 99) ? o : a), null);
   const ocultas = cot.opciones.filter((o) => !sirveEffi(o) && o.id !== valor);
   const lista = verTodas ? cot.opciones : cot.opciones.filter((o) => sirveEffi(o) || (o.id && o.id === valor));
   const sel = cot.opciones.find((o) => o.id && o.id === valor);
@@ -222,7 +219,7 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
         : <>Aún no has enviado a {cot.ciudad}{desde}: es la tarifa más común en el departamento.</>}{' '}
     </>
   ) : sel ? <>Sin guías anteriores con {sel.nombre}. </> : null;
-  const pie = <div style={{ fontSize: 11, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>{detalle}El valor exacto lo pone Effi al crear la guía.{!cot.cobertura && ' Effi no respondió la cobertura de esta ciudad: revisa que la transportadora llegue.'}</div>;
+  const pie = <div style={{ fontSize: 11, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>{detalle}El valor exacto lo pone Effi al crear la guía.</div>;
   if (compacto) {
     if (!sel) return null;
     return (
@@ -252,19 +249,10 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
               style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', boxSizing: 'border-box', textAlign: 'left', padding: '7px 10px', minHeight: 50, borderRadius: 10, cursor: o.id ? 'pointer' : 'not-allowed', fontFamily: 'inherit', color: 'var(--df-text)', border: `1.5px solid ${on ? 'var(--df-purple)' : 'var(--df-border)'}`, background: on ? 'var(--df-purple-subtle)' : 'var(--df-surface)', opacity: sirve || on ? 1 : 0.6 }}>
               <LogoTransp nombre={o.nombre} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
-                <span style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap' }}><b style={{ fontSize: 13 }}>{o.nombre}</b>{o.recaudo !== false && <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>con recaudo</span>}</span>
-                <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {barata === o && validas.length > 1 && <span style={chipT('rgba(16,185,129,.15)', 'var(--df-brand-dark)')}>Más barata</span>}
-                  {rapida === o && validas.length > 1 && <span style={chipT('rgba(59,130,246,.14)', 'var(--df-info)')}>Más rápida</span>}
-                  {o.llega === false && <span style={chipT('rgba(220,38,38,.12)', 'var(--df-danger-dark)')}>No llega a {cot.ciudad || 'esta ciudad'}</span>}
-                  {o.llega !== false && o.recaudo === false && <span style={chipT('var(--df-warning-subtle)', 'var(--df-warning)')}>No cobra contra entrega aquí</span>}
-                  {!o.id && <span style={chipT('var(--df-surface-2)', 'var(--df-text-muted)')}>No está en tu cuenta de Effi</span>}
-                  {o.flete > 0 && o.alcance !== 'ciudad' && <span style={chipT('var(--df-surface-2)', 'var(--df-text-muted)')}>{o.alcance === 'departamento' ? 'Ciudad nueva' : 'Otra bodega'}</span>}
-                </span>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap' }}><b style={{ fontSize: 13 }}>{o.nombre}</b></span>
               </span>
               <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
                 <b style={{ fontSize: o.flete ? 14 : 11.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: o.flete ? 'var(--df-text)' : 'var(--df-text-muted)' }}>{o.flete ? `≈ ${pesos(o.flete)}` : 'Sin guías previas'}</b>
-                {!!o.dias && <span style={{ fontSize: 11, color: 'var(--df-text-muted)', whiteSpace: 'nowrap' }}>{o.dias} día{o.dias === 1 ? '' : 's'}</span>}
               </span>
             </button>
           );
