@@ -109,7 +109,7 @@ export function leadsPorSegmento(storeId: string, dias = 60): LeadSegmento[] {
     let seg: Segmento | '' = '';
     if (vivos.length) {
       const ult = vivos.sort((a, b) => b.at.localeCompare(a.at))[0];
-      if (vivos.some((p) => p.estado === 'Entregado') && hace(ult.at) >= 15 * 24 && !['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Novedad'].includes(ult.estado)) seg = 'compradores';
+      if (vivos.some((p) => p.estado === 'Entregado') && hace(ult.at) >= 15 * 24 && !['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'En oficina', 'Novedad'].includes(ult.estado)) seg = 'compradores';
     } else if (ps.length) seg = 'cancelados';
     else if (l.resumen_at) seg = 'datos_completos';
     else if (Number(l.pidio_datos) || Number(l.dio_datos)) seg = 'faltan_datos';

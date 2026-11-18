@@ -32,6 +32,7 @@ export const ESTADOS: Record<EstadoPedido, EstadoCfg> = {
   'Guía generada': { color: 'var(--df-warning)', bg: 'var(--df-warning-subtle)', next: null, nextEstado: null },
   'En tránsito': { color: 'var(--df-st-transito)', bg: 'var(--df-st-transito-bg)', next: null, nextEstado: null },
   'En reparto': { color: 'var(--df-st-reparto)', bg: 'var(--df-st-reparto-bg)', next: null, nextEstado: null },
+  'En oficina': { color: 'var(--df-st-oficina)', bg: 'var(--df-st-oficina-bg)', next: null, nextEstado: null },
   Novedad: { color: 'var(--df-st-novedad)', bg: 'var(--df-st-novedad-bg)', next: null, nextEstado: null },
   Entregado: { color: 'var(--df-brand-dark)', bg: 'var(--df-brand-subtle)', next: null, nextEstado: null },
   Devuelto: { color: 'var(--df-st-devuelto)', bg: 'var(--df-st-devuelto-bg)', next: null, nextEstado: null },
@@ -41,7 +42,7 @@ export const ESTADOS: Record<EstadoPedido, EstadoCfg> = {
 // Progresión "normal" (para la línea de tiempo). Novedad, Devuelto y Cancelado van aparte.
 export const ESTADO_ORDER: EstadoPedido[] = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Entregado'];
 // Todos los estados (filtros y el selector del detalle del pedido).
-export const ESTADOS_TODOS: EstadoPedido[] = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Novedad', 'Entregado', 'Devuelto', 'Cancelado'];
+export const ESTADOS_TODOS: EstadoPedido[] = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'En oficina', 'Novedad', 'Entregado', 'Devuelto', 'Cancelado'];
 
 export function swatch(label: string, fallback: string): string {
   const l = label.toLowerCase();

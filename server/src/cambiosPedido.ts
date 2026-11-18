@@ -28,7 +28,7 @@ db.exec(`CREATE TRIGGER IF NOT EXISTS orders_guia_at AFTER UPDATE OF guia ON ord
   WHEN COALESCE(OLD.guia,'') = '' AND COALESCE(NEW.guia,'') != '' AND COALESCE(NEW.guia_at,'') = ''
   BEGIN UPDATE orders SET guia_at = datetime('now') WHERE id = NEW.id; END`);
 
-const ESTADOS_DESPACHADO = ['En tránsito', 'En reparto', 'Entregado', 'Novedad', 'Devuelto'];
+const ESTADOS_DESPACHADO = ['En tránsito', 'En reparto', 'En oficina', 'Entregado', 'Novedad', 'Devuelto'];
 const d10 = (t: unknown) => txt(t).replace(/\D/g, '').slice(-10);
 
 /** Pedido reciente del cliente que el asistente NO debe tocar ni duplicar solo. */

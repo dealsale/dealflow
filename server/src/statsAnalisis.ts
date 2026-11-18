@@ -11,7 +11,7 @@ import './metaInsights.js'; // crea ads_insights / anuncio_producto si aún no e
 
 export interface FiltrosAnalisis { canal?: string; origen?: string; producto?: string; campana?: string; ad?: string; ciudad?: string; estado?: string }
 
-const EN_CAMINO = ['Guía generada', 'En tránsito', 'En reparto', 'Novedad'];
+const EN_CAMINO = ['Guía generada', 'En tránsito', 'En reparto', 'En oficina', 'Novedad'];
 // Pedidos que llegan por su propio canal (el chat que se abre después es solo para confirmar).
 const ORIGEN_PROPIO = ['shopify', 'landing', 'web'];
 // Las ventas no cuentan los pedidos cancelados ni los devueltos (esa plata no entró).

@@ -14,7 +14,9 @@ Claves: pedidos, buscar pedido, filtros, filtrar, exportar, excel, csv, ordenar,
 ## Estados del pedido y cómo cambian
 Sección: pedidos
 Claves: estados, estado del pedido, nuevo, confirmado, guia generada, en transito, en reparto, novedad, entregado, devuelto, cancelado, cambiar estado
-Flujo: **Nuevo → Confirmado → Guía generada → En tránsito → En reparto → Entregado**. Aparte: **Novedad** (problema en la entrega), **Devuelto** y **Cancelado**.
+Flujo: **Nuevo → Confirmado → Guía generada → En tránsito → En reparto (o **En oficina**) → Entregado**. Aparte: **Novedad** (problema en la entrega), **Devuelto** y **Cancelado**.
+
+**En oficina**: la transportadora dejó el paquete en su oficina para que el cliente lo recoja (Interrapidísimo «Reclame en oficina», Effi «Disponible para retiro en oficina», Dropi «Reclamar en oficina»…). DealFlow lo detecta solo y le avisa al cliente por WhatsApp (por el chat o, si no escribe hace más de 24 h, con la plantilla `estado_envio_pedido`): que su pedido está en la oficina de la transportadora, que lo recoja con su cédula y el número de guía, cuánto pagar si es contra entrega y que solo lo guardan unos días. Si el rastreo trae la oficina o la dirección, va en el mensaje. En Logística sale en la columna 🏢 **En oficina**.
 - Con guía, el estado lo pone sola la sincronización con Effi/Dropi (Effi se revisa cada pocos minutos). Un pedido entregado, devuelto o cancelado ya no cambia solo.
 - A mano: abre el pedido → abajo en **Estado del pedido** elige el estado. Si ese estado tiene mensaje para el cliente, se le envía por WhatsApp.
 - "Este pedido ya está entregado": no se puede avanzar más.

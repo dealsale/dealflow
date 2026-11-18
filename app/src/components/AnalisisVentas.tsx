@@ -8,7 +8,7 @@ import { Dropdown } from './Dropdown';
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 18, boxShadow: '0 1px 2px rgba(15,23,42,.04)', minWidth: 0 };
 const titulo: React.CSSProperties = { fontWeight: 700, fontSize: 15, marginBottom: 10 };
 const COLOR_CANAL: Record<string, string> = { whatsapp: '#10B981', messenger: '#3B82F6', instagram: '#EC4899', web: '#F59E0B', shopify: '#5E8E3E', landing: '#8B5CF6', manual: '#94A3B8' };
-const COLOR_ESTADO: Record<string, string> = { Nuevo: '#3B82F6', Confirmado: '#6366F1', 'Guía generada': '#8B5CF6', 'En tránsito': '#F59E0B', 'En reparto': '#F97316', Novedad: '#EF4444', Entregado: '#10B981', Devuelto: '#DC2626', Cancelado: '#94A3B8' };
+const COLOR_ESTADO: Record<string, string> = { Nuevo: '#3B82F6', Confirmado: '#6366F1', 'Guía generada': '#8B5CF6', 'En tránsito': '#F59E0B', 'En reparto': '#F97316', 'En oficina': '#DB2777', Novedad: '#EF4444', Entregado: '#10B981', Devuelto: '#DC2626', Cancelado: '#94A3B8' };
 const money = (n: number) => (Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : Math.abs(n) >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`);
 
 function Kpi({ label, valor, sub, color }: { label: string; valor: string; sub?: string; color?: string }) {

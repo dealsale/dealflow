@@ -138,17 +138,18 @@ export function borrarProveedor(id: string): boolean {
 
 // ── Pedidos del proveedor ────────────────────────────────────────────────────
 
-type Etapa = 'por_despachar' | 'por_recoger' | 'transito' | 'reparto' | 'novedad' | 'entregado' | 'devuelto' | 'cancelado';
+type Etapa = 'por_despachar' | 'por_recoger' | 'transito' | 'reparto' | 'oficina' | 'novedad' | 'entregado' | 'devuelto' | 'cancelado';
 function etapaDe(o: Fila, novedad: boolean): Etapa {
   if (txt(o.estado) === 'Cancelado') return 'cancelado';
   if (novedad) return 'novedad';
   let e = txt(o.estado);
-  if (!['Guía generada', 'En tránsito', 'En reparto', 'Novedad', 'Entregado', 'Devuelto'].includes(e)) e = estadoLogistico(txt(o.estado_woo), !!txt(o.guia)) || e;
+  if (!['Guía generada', 'En tránsito', 'En reparto', 'En oficina', 'Novedad', 'Entregado', 'Devuelto'].includes(e)) e = estadoLogistico(txt(o.estado_woo), !!txt(o.guia)) || e;
   switch (e) {
     case 'Devuelto': return 'devuelto';
     case 'Entregado': return 'entregado';
     case 'Novedad': return 'novedad';
     case 'En reparto': return 'reparto';
+    case 'En oficina': return 'oficina';
     case 'En tránsito': return 'transito';
     default: return txt(o.guia) ? 'por_recoger' : 'por_despachar';
   }
@@ -222,6 +223,7 @@ const ETAPAS: { id: Etapa; label: string; color: string }[] = [
   { id: 'por_recoger', label: 'Guía generada', color: '#6366F1' },
   { id: 'transito', label: 'En tránsito', color: '#0EA5E9' },
   { id: 'reparto', label: 'En reparto', color: '#F59E0B' },
+  { id: 'oficina', label: 'En oficina', color: '#DB2777' },
   { id: 'novedad', label: 'Novedad', color: '#EF4444' },
   { id: 'entregado', label: 'Entregado', color: '#10B981' },
   { id: 'devuelto', label: 'Devuelto', color: '#B45309' },

@@ -7,7 +7,7 @@
  * línea: «Tu pedido DF-123 {{4}}.»), así el cliente lee lo mismo por los dos caminos.
  */
 export type Idi = 'es' | 'en';
-export interface DatosEstado { transp?: string; total?: string; pagado?: boolean; motivo?: string }
+export interface DatosEstado { transp?: string; total?: string; pagado?: boolean; motivo?: string; oficina?: string }
 
 /** «dónde está» empieza con verbo (se lee después de «Tu pedido DF-123 …»). */
 export function partesEstado(idi: Idi, estado: string, d: DatosEstado = {}): { donde: string; sigue: string } | null {
@@ -20,6 +20,7 @@ export function partesEstado(idi: Idi, estado: string, d: DatosEstado = {}): { d
       case 'Guía generada': return { donde: 'is packed in our warehouse 📦 and already has a shipping label', sigue: `We are waiting for ${t} to pick it up. We will let you know when they do` };
       case 'En tránsito': return { donde: `was picked up by ${t} 🚚 and is on its way to your city`, sigue: 'This usually takes 2 to 5 business days. You don\'t need to do anything for now' };
       case 'En reparto': return { donde: 'is in your city and goes out today with the courier 🛵', sigue: `Keep your phone close, the courier may call you${pagar ? `, and have ${pagar} ready to pay when you receive it` : ''}` };
+      case 'En oficina': return { donde: `is waiting for you at the ${t} office${d.oficina ? ` (${d.oficina})` : ''} 🏢, ready to be picked up`, sigue: `Go pick it up with your ID and the tracking number${pagar ? `, and bring ${pagar} to pay` : ''}. They only keep it a few days before returning it` };
       case 'Novedad': return { donde: `could not be delivered ⚠️${d.motivo ? ` (${d.motivo})` : ''}`, sigue: 'Reply to this message and we will help you get it (they can bring it again)' };
       case 'Entregado': return { donde: 'was delivered 🎉', sigue: 'Thank you so much for your purchase! If something is wrong with the product, message us' };
       case 'Cancelado': return { donde: 'was cancelled ❌', sigue: 'If it was a mistake or you still want it, reply and we will pick it back up' };
@@ -31,6 +32,7 @@ export function partesEstado(idi: Idi, estado: string, d: DatosEstado = {}): { d
     case 'Guía generada': return { donde: 'ya está empacado en nuestra bodega 📦 y ya tiene guía de envío', sigue: `Estamos esperando que ${T || 'la transportadora'} pase a recogerlo. Cuando lo recoja, te avisamos` };
     case 'En tránsito': return { donde: `ya lo recogió ${T || 'la transportadora'} 🚚 y lo está llevando hacia tu ciudad`, sigue: 'Esto suele tardar de 2 a 5 días hábiles. Por ahora no tienes que hacer nada' };
     case 'En reparto': return { donde: 'ya llegó a tu ciudad y hoy sale con el mensajero para llevártelo 🛵', sigue: `Ten el celular cerca porque el mensajero te puede llamar${pagar ? `, y ten listos ${pagar} para pagar cuando lo recibas` : ''}` };
+    case 'En oficina': return { donde: `ya está en la oficina de ${T || 'la transportadora'}${d.oficina ? ` (${d.oficina})` : ''} 🏢, listo para que lo recojas`, sigue: `Acércate con tu cédula y el número de guía${pagar ? `, y lleva ${pagar} para pagarlo` : ''}. Solo lo guardan unos días antes de devolverlo` };
     case 'Novedad': return { donde: `no se pudo entregar ⚠️${d.motivo ? ` (${d.motivo})` : ''}`, sigue: 'Respóndenos este mensaje y te ayudamos a recibirlo (te lo pueden volver a llevar)' };
     case 'Entregado': return { donde: 'ya te fue entregado 🎉', sigue: '¡Muchas gracias por tu compra! Si tienes algún problema con el producto, escríbenos' };
     case 'Cancelado': return { donde: 'fue cancelado ❌', sigue: 'Si fue un error o lo quieres de nuevo, respóndenos y lo retomamos' };

@@ -678,7 +678,7 @@ export const apiEffiPreview = (rowId: string, convenio = '') => req<EffiPreview>
 export interface GuiaLogistica {
   id: string; rowId: string; numero: number; cliente: string; tel: string; leadId: string; ciudad: string; departamento: string;
   total: number; envioCobrado: number; recaudo: number; flete: number; guia: string; guiaUrl: string; transportadora: string; remision: string;
-  estado: string; estadoEffi: string; etapa: 'sin_guia' | 'por_recoger' | 'transito' | 'reparto' | 'novedad' | 'entregado' | 'devuelto'; creado: string;
+  estado: string; estadoEffi: string; etapa: 'sin_guia' | 'por_recoger' | 'transito' | 'reparto' | 'oficina' | 'novedad' | 'entregado' | 'devuelto'; creado: string;
   ultimoMovimiento: { fecha: string; estado: string; observacion: string } | null; entregaEstimada: string; llegaHoy: boolean; entregadoHoy: boolean;
   /** Guía que está en Effi pero no es de un pedido de DealFlow. */
   externa?: boolean;

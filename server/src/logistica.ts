@@ -25,18 +25,19 @@ db.exec(`CREATE TABLE IF NOT EXISTS effi_guias (
 try { db.exec('ALTER TABLE effi_guias ADD COLUMN vigente INTEGER NOT NULL DEFAULT 1'); } catch { /* ya existe */ }
 const ultimaSync = new Map<string, number>();
 
-export type Etapa = 'sin_guia' | 'por_recoger' | 'transito' | 'reparto' | 'novedad' | 'entregado' | 'devuelto';
+export type Etapa = 'sin_guia' | 'por_recoger' | 'transito' | 'reparto' | 'oficina' | 'novedad' | 'entregado' | 'devuelto';
 
 /** Etapa del tablero: el estado del pedido (que ya sigue a la guía) y, si aún no es logístico, el texto de Effi. */
 function etapaDe(o: Fila): Etapa {
   if (Number(o.novedad_activa) > 0) return 'novedad';
   let e = txt(o.estado);
-  if (!['Guía generada', 'En tránsito', 'En reparto', 'Novedad', 'Entregado', 'Devuelto'].includes(e)) e = estadoLogistico(txt(o.estado_woo), !!txt(o.guia)) || e;
+  if (!['Guía generada', 'En tránsito', 'En reparto', 'En oficina', 'Novedad', 'Entregado', 'Devuelto'].includes(e)) e = estadoLogistico(txt(o.estado_woo), !!txt(o.guia)) || e;
   switch (e) {
     case 'Devuelto': return 'devuelto';
     case 'Entregado': return 'entregado';
     case 'Novedad': return 'novedad';
     case 'En reparto': return 'reparto';
+    case 'En oficina': return 'oficina';
     case 'En tránsito': return 'transito';
     default: return txt(o.guia) ? 'por_recoger' : 'sin_guia';
   }
@@ -49,6 +50,7 @@ function etapaTexto(estado: string, guia: string): Etapa {
     case 'Entregado': return 'entregado';
     case 'Novedad': return 'novedad';
     case 'En reparto': return 'reparto';
+    case 'En oficina': return 'oficina';
     case 'En tránsito': return 'transito';
     default: return guia ? 'por_recoger' : 'sin_guia';
   }

@@ -9,6 +9,7 @@
   /* Estados del envío (pills de pedidos) */
   --df-st-transito: #0E7490; --df-st-transito-bg: #CFFAFE;
   --df-st-reparto: #1D4ED8; --df-st-reparto-bg: #DBEAFE;
+  --df-st-oficina: #BE185D; --df-st-oficina-bg: #FCE7F3;
   --df-st-novedad: #C2410C; --df-st-novedad-bg: #FFEDD5;
   --df-st-devuelto: #9D174D; --df-st-devuelto-bg: #FCE7F3;
 
@@ -86,6 +87,7 @@
 :root[data-theme='dark'] {
   --df-st-transito: #67E8F9; --df-st-transito-bg: rgba(34, 211, 238, 0.14);
   --df-st-reparto: #93C5FD; --df-st-reparto-bg: rgba(96, 165, 250, 0.16);
+  --df-st-oficina: #F9A8D4; --df-st-oficina-bg: rgba(236, 72, 153, 0.16);
   --df-st-novedad: #FDBA74; --df-st-novedad-bg: rgba(251, 146, 60, 0.16);
   --df-st-devuelto: #F9A8D4; --df-st-devuelto-bg: rgba(244, 114, 182, 0.16);
 
@@ -148,6 +150,7 @@
 :root[data-theme='premium'] {
   --df-st-transito: #67E8F9; --df-st-transito-bg: rgba(34, 211, 238, 0.14);
   --df-st-reparto: #93C5FD; --df-st-reparto-bg: rgba(96, 165, 250, 0.16);
+  --df-st-oficina: #F9A8D4; --df-st-oficina-bg: rgba(236, 72, 153, 0.16);
   --df-st-novedad: #FDBA74; --df-st-novedad-bg: rgba(251, 146, 60, 0.16);
   --df-st-devuelto: #F9A8D4; --df-st-devuelto-bg: rgba(244, 114, 182, 0.16);
 

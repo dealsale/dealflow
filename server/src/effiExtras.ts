@@ -87,7 +87,7 @@ async function estadoDesdeRastreo(storeId: string, orderId: string, pasos: PasoR
   if (!o) return;
   const nuevo = siguienteEstado(txt(o.estado), real);
   // Desde el rastreo solo se AVANZA (no se devuelve un «En reparto» a «En tránsito» por un paso viejo).
-  const orden = ['Guía generada', 'En tránsito', 'En reparto'];
+  const orden = ['Guía generada', 'En tránsito', 'En reparto', 'En oficina'];
   if (!nuevo || (orden.includes(nuevo) && orden.includes(txt(o.estado)) && orden.indexOf(nuevo) < orden.indexOf(txt(o.estado)))) return;
   const textoT = (ult.estado || ult.estadoGlobal).slice(0, 60);
   db.prepare('UPDATE orders SET estado = ?, estado_woo = CASE WHEN ? != \'\' THEN ? ELSE estado_woo END WHERE id = ?').run(nuevo, textoT, textoT, orderId);
