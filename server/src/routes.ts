@@ -3235,6 +3235,17 @@ api.delete('/anuncios/reglas/:id', requireAuth, requireStore, requireOwner, asyn
   res.json({ reglas: am.borrarRegla(req.user!.storeId!, String(req.params.id)) });
 });
 
+// ¿De qué anuncio vinieron los pedidos de la landing y de Shopify? (atribucion.ts)
+api.get('/anuncios/atribucion', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const m = await import('./atribucion.js');
+  res.json(m.diagnosticoAtribucion(req.user!.storeId!, 7));
+});
+api.post('/anuncios/atribucion/revisar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const m = await import('./atribucion.js');
+  const asignados = await m.reatribuirRecientes(req.user!.storeId!, 7).catch(() => 0);
+  res.json({ asignados, ...m.diagnosticoAtribucion(req.user!.storeId!, 7) });
+});
+
 // Alertas al celular (adsAlertas.ts)
 api.get('/anuncios/alertas', requireAuth, requireStore, requireOwner, async (req, res) => {
   const al = await import('./adsAlertas.js');

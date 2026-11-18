@@ -21,6 +21,23 @@ export const ATRIB_JS = `(function(){try{if(/[?&](fbclid|utm_[a-z]+|ad_id|fb_ad_
 type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));
 
+// Direcciones de entrada guardadas en el pedido (para reintentar) y en qué quedó la atribución:
+// '' = pendiente · 'sin_anuncio' = trae datos de Meta pero aún no se encontró el anuncio ·
+// 'sin_datos' = no trae de qué anuncio vino (orgánico o creado por una app sin los UTM) · 'ok'.
+for (const col of ["atrib_urls TEXT NOT NULL DEFAULT ''", "atrib_estado TEXT NOT NULL DEFAULT ''"]) {
+  try { db.exec(`ALTER TABLE orders ADD COLUMN ${col}`); } catch { /* ya existe */ }
+}
+const leerUrls = (s: string): string[] => { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a.map(String).filter(Boolean) : []; } catch { return []; } };
+/** Junta direcciones nuevas con las ya guardadas del pedido (sin repetir, máx. 8). */
+function guardarUrls(orderId: string, urls: string[]): string[] {
+  const previas = leerUrls((db.prepare('SELECT atrib_urls FROM orders WHERE id = ?').get(orderId) as { atrib_urls: string } | undefined)?.atrib_urls || '');
+  const todas = [...new Set([...previas, ...urls.map((u) => txt(u).trim().slice(0, 1500)).filter(Boolean)])].slice(0, 8);
+  if (todas.length !== previas.length) db.prepare('UPDATE orders SET atrib_urls = ? WHERE id = ?').run(JSON.stringify(todas), orderId);
+  return todas;
+}
+/** ¿Los parámetros traen las variables de Meta sin reemplazar («{{ad.id}}»)? Pasa si se pegaron en otro campo. */
+const macroSinReemplazar = (urls: string[]) => urls.some((u) => /(%7B%7B|\{\{)\s*(ad|adset|campaign)\./i.test(u));
+
 export interface Atribucion { adId: string; metodo: 'parametro' | 'campana' | 'nombre' | 'destino'; estimado: boolean; detalle: string }
 
 /** Parámetros de una o varias direcciones (acepta rutas relativas como «/products/x?utm_…»). */
@@ -120,8 +137,14 @@ export async function atribuir(storeId: string, urls: string[], claves: string[]
 export async function atribuirPedido(storeId: string, orderId: string, urls: string[], claves: string[], fuente: 'landing' | 'shopify'): Promise<Atribucion | null> {
   const o = db.prepare('SELECT ad_id FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as { ad_id: string } | undefined;
   if (!o || o.ad_id) return null;
-  const a = await atribuir(storeId, urls, claves).catch((e) => { console.warn('[atribucion]', e); return null; });
-  if (!a) return null;
+  const todas = guardarUrls(orderId, urls);
+  const a = await atribuir(storeId, todas, claves).catch((e) => { console.warn('[atribucion]', e); return null; });
+  if (!a) {
+    const estado = vinoDeMeta(parametros(todas).p) || macroSinReemplazar(todas) ? 'sin_anuncio' : 'sin_datos';
+    db.prepare('UPDATE orders SET atrib_estado = ? WHERE id = ?').run(estado, orderId);
+    return null;
+  }
+  db.prepare("UPDATE orders SET atrib_estado = 'ok' WHERE id = ?").run(orderId);
   const nombre = (db.prepare('SELECT ad_name, campaign_name FROM ads_insights WHERE store_id = ? AND ad_id = ? ORDER BY fecha DESC LIMIT 1').get(storeId, a.adId) as { ad_name: string; campaign_name: string } | undefined);
   db.prepare("UPDATE orders SET ad_id = ?, ad_ref = ? WHERE id = ? AND COALESCE(ad_id, '') = ''")
     .run(a.adId, JSON.stringify({ id: a.adId, titular: nombre?.ad_name || '', canal: fuente, fuente, metodo: a.metodo, estimado: a.estimado, detalle: a.detalle, ts: new Date().toISOString() }), orderId);
@@ -132,16 +155,115 @@ export async function atribuirPedido(storeId: string, orderId: string, urls: str
   return a;
 }
 
-/** Re-atribuye pedidos web recientes sin anuncio (landing: con la dirección guardada en su trazabilidad). */
+/** Lo que Shopify sabe de cómo llegó la persona (visita de entrada y la última antes de comprar) y los atributos del pedido. */
+const Q_VIAJE = `query($ids: [ID!]!) { nodes(ids: $ids) { ... on Order { id customAttributes { key value }
+  customerJourneySummary { ready
+    lastVisit { landingPage referrerUrl utmParameters { source medium campaign content term } }
+    firstVisit { landingPage referrerUrl utmParameters { source medium campaign content term } } } } } }`;
+interface Viaje { listo: boolean; urls: string[] }
+type Visita = { landingPage?: string | null; referrerUrl?: string | null; utmParameters?: Record<string, string | null> | null } | null | undefined;
+function urlsDeVisita(v: Visita): string[] {
+  if (!v) return [];
+  const out: string[] = [];
+  if (v.landingPage) out.push(v.landingPage);
+  const u = v.utmParameters || {};
+  const q = new URLSearchParams();
+  for (const k of ['source', 'medium', 'campaign', 'content', 'term']) if (u[k]) q.set(`utm_${k}`, String(u[k]));
+  if ([...q.keys()].length) out.push('?' + q.toString());
+  if (v.referrerUrl && /facebook|instagram|fb\.|l\.messenger/i.test(v.referrerUrl)) out.push('?utm_source=facebook');
+  return out;
+}
+/** Atributos de un pedido («utm_content: 123…», «landing: https…») → direcciones con parámetros. */
+export function urlsDeAtributos(attrs: { name?: unknown; value?: unknown; key?: unknown }[]): string[] {
+  const enNotas = attrs.map((n) => ({ name: txt(n.name ?? n.key), value: txt(n.value) })).filter((n) => /utm|fbclid|ad_?id|campaign|landing|url|source/i.test(n.name));
+  return [...enNotas.filter((n) => /^(https?:\/\/|\/|\?)/i.test(n.value)).map((n) => n.value),
+    enNotas.length ? '?' + enNotas.map((n) => `${encodeURIComponent(n.name.toLowerCase().replace(/\s+/g, '_'))}=${encodeURIComponent(n.value)}`).join('&') : ''].filter(Boolean);
+}
+async function viajesShopify(storeId: string, gids: string[]): Promise<Map<string, Viaje>> {
+  const out = new Map<string, Viaje>();
+  if (!gids.length) return out;
+  const { credShopify, shopifyGQL } = await import('./shopify.js');
+  const cred = credShopify(storeId);
+  if (!cred) return out;
+  for (let i = 0; i < gids.length; i += 50) {
+    const r = await shopifyGQL<{ nodes: ({ id: string; customAttributes?: { key: string; value: string }[]; customerJourneySummary?: { ready: boolean; lastVisit: Visita; firstVisit: Visita } | null } | null)[] }>(cred, Q_VIAJE, { ids: gids.slice(i, i + 50) });
+    if (!r.ok) { console.warn('[atribucion] shopify', r.error); break; }
+    for (const n of r.data?.nodes || []) {
+      if (!n?.id) continue;
+      const j = n.customerJourneySummary;
+      out.set(n.id, { listo: !!j?.ready, urls: [...urlsDeVisita(j?.lastVisit), ...urlsDeVisita(j?.firstVisit), ...urlsDeAtributos(n.customAttributes || [])] });
+    }
+  }
+  return out;
+}
+const handlesDe = (urls: string[]) => [...new Set(urls.map((u) => (u.match(/\/products\/([a-z0-9-]+)/i) || [])[1]).filter(Boolean))].map((h) => `/products/${String(h).toLowerCase()}`);
+
+/**
+ * Pedido de Shopify recién importado: intenta con lo que trajo (landing_site, notas) y, si no basta,
+ * pregunta a Shopify el recorrido del cliente (tarda unos minutos en estar listo; si no, la ronda
+ * de cada 30 min lo vuelve a intentar).
+ */
+export async function atribuirPedidoShopify(storeId: string, orderId: string, gid: string, urls: string[]): Promise<void> {
+  if (urls.length && await atribuirPedido(storeId, orderId, urls, handlesDe(urls), 'shopify')) return;
+  if (!urls.length) guardarUrls(orderId, []);
+  if (!gid) return;
+  await new Promise((r) => setTimeout(r, 90_000).unref?.());
+  const v = (await viajesShopify(storeId, [gid]).catch(() => new Map<string, Viaje>())).get(gid);
+  if (!v) return;
+  const todas = guardarUrls(orderId, v.urls);
+  await atribuirPedido(storeId, orderId, todas, handlesDe(todas), 'shopify');
+}
+
+/**
+ * Re-atribuye pedidos web recientes sin anuncio: los de la landing con la dirección guardada y los
+ * de Shopify con su recorrido (por si el anuncio aún no estaba sincronizado o Shopify no lo tenía listo).
+ */
 export async function reatribuirRecientes(storeId: string, dias = 7): Promise<number> {
-  const filas = db.prepare(`SELECT o.id, o.origen, o.landing_id, (SELECT detalle FROM order_eventos e WHERE e.order_id = o.id AND e.etapa = 'pedido' AND e.detalle LIKE 'http%' ORDER BY e.rowid LIMIT 1) url
-    FROM orders o WHERE o.store_id = ? AND COALESCE(o.ad_id, '') = '' AND o.origen = 'landing' AND o.created_at > datetime('now', ?)`).all(storeId, `-${dias} days`) as { id: string; origen: string; landing_id: string; url: string | null }[];
+  const filas = db.prepare(`SELECT o.id, o.origen, o.landing_id, o.atrib_urls, (SELECT detalle FROM order_eventos e WHERE e.order_id = o.id AND e.etapa = 'pedido' AND e.detalle LIKE 'http%' ORDER BY e.rowid LIMIT 1) url
+    FROM orders o WHERE o.store_id = ? AND COALESCE(o.ad_id, '') = '' AND o.origen = 'landing' AND o.created_at > datetime('now', ?)`).all(storeId, `-${dias} days`) as { id: string; origen: string; landing_id: string; atrib_urls: string; url: string | null }[];
   let n = 0;
   for (const f of filas) {
-    if (!f.url) continue;
+    const urls = [...(f.url ? [f.url] : []), ...leerUrls(f.atrib_urls)];
+    if (!urls.length) continue;
     const slug = (db.prepare('SELECT slug FROM landings WHERE id = ?').get(f.landing_id) as { slug: string } | undefined)?.slug || '';
-    if (await atribuirPedido(storeId, f.id, [f.url], slug ? [`/${slug}`] : [], 'landing')) n++;
+    if (await atribuirPedido(storeId, f.id, urls, slug ? [`/${slug}`] : [], 'landing')) n++;
   }
-  if (n) registrarLog(storeId, 'info', 'anuncios', `Se asignaron ${n} pedido(s) de la landing a sus anuncios.`);
+  // Shopify: los que no se cerraron como «sin datos» (ese estado solo se pone con el recorrido ya listo).
+  const shop = db.prepare(`SELECT id, shopify_gid, atrib_urls, atrib_estado FROM orders WHERE store_id = ? AND origen = 'shopify' AND COALESCE(ad_id, '') = ''
+    AND COALESCE(shopify_gid, '') != '' AND atrib_estado != 'sin_datos_final' AND created_at > datetime('now', ?) ORDER BY created_at DESC LIMIT 200`).all(storeId, `-${dias} days`) as { id: string; shopify_gid: string; atrib_urls: string; atrib_estado: string }[];
+  if (shop.length) {
+    const viajes = await viajesShopify(storeId, shop.map((s) => s.shopify_gid)).catch(() => new Map<string, Viaje>());
+    for (const s of shop) {
+      const v = viajes.get(s.shopify_gid);
+      const urls = guardarUrls(s.id, v?.urls || []);
+      if (urls.length && await atribuirPedido(storeId, s.id, urls, handlesDe(urls), 'shopify')) { n++; continue; }
+      if (!urls.length) db.prepare("UPDATE orders SET atrib_estado = 'sin_datos' WHERE id = ?").run(s.id);
+      // Recorrido listo y sin nada de Meta: no hay más que buscar.
+      const st = (db.prepare('SELECT atrib_estado FROM orders WHERE id = ?').get(s.id) as { atrib_estado: string }).atrib_estado;
+      if (v?.listo && st === 'sin_datos') db.prepare("UPDATE orders SET atrib_estado = 'sin_datos_final' WHERE id = ?").run(s.id);
+    }
+  }
+  if (n) registrarLog(storeId, 'info', 'anuncios', `Se asignaron ${n} pedido(s) de la landing o de Shopify a sus anuncios.`);
   return n;
+}
+
+export interface DiagnosticoAtribucion {
+  dias: number;
+  fuentes: { fuente: 'shopify' | 'landing'; total: number; conAnuncio: number; sinAnuncio: number; sinDatos: number; macros: number; pendientes: number }[];
+}
+/** ¿Cuántos pedidos web quedaron con su anuncio y por qué no los demás? */
+export function diagnosticoAtribucion(storeId: string, dias = 7): DiagnosticoAtribucion {
+  const filas = db.prepare(`SELECT origen, ad_id, atrib_estado, atrib_urls FROM orders WHERE store_id = ? AND origen IN ('shopify','landing') AND created_at > datetime('now', ?)`).all(storeId, `-${dias} days`) as { origen: 'shopify' | 'landing'; ad_id: string; atrib_estado: string; atrib_urls: string }[];
+  const fuentes = (['shopify', 'landing'] as const).map((fuente) => {
+    const fs = filas.filter((f) => f.origen === fuente);
+    const sin = fs.filter((f) => !f.ad_id);
+    return {
+      fuente, total: fs.length, conAnuncio: fs.length - sin.length,
+      sinAnuncio: sin.filter((f) => f.atrib_estado === 'sin_anuncio' && !macroSinReemplazar(leerUrls(f.atrib_urls))).length,
+      sinDatos: sin.filter((f) => f.atrib_estado.startsWith('sin_datos')).length,
+      macros: sin.filter((f) => macroSinReemplazar(leerUrls(f.atrib_urls))).length,
+      pendientes: sin.filter((f) => !f.atrib_estado).length,
+    };
+  });
+  return { dias, fuentes };
 }

@@ -1415,6 +1415,10 @@ export const apiAdsBorrarRegla = (id: string) => req<{ reglas: ReglaAds[] }>(`/a
 export type TipoAlertaAds = 'gasto_sin_venta' | 'cpa_alto' | 'rechazado' | 'cuenta' | 'pixel' | 'resumen';
 export interface CfgAlertasAds { activas: TipoAlertaAds[]; gastoSinVenta: number; correo: boolean }
 export interface AlertaAds { tipo: TipoAlertaAds; titulo: string; detalle: string; creado: string }
+export interface FuenteAtribucion { fuente: 'shopify' | 'landing'; total: number; conAnuncio: number; sinAnuncio: number; sinDatos: number; macros: number; pendientes: number }
+export interface DiagnosticoAtribucion { dias: number; fuentes: FuenteAtribucion[]; asignados?: number }
+export const apiAdsAtribucion = () => req<DiagnosticoAtribucion>('/api/anuncios/atribucion', 'GET');
+export const apiAdsRevisarAtribucion = () => req<DiagnosticoAtribucion>('/api/anuncios/atribucion/revisar', 'POST', {});
 export const apiAdsAlertas = () => req<{ config: CfgAlertasAds; tipos: Record<TipoAlertaAds, string>; ultimas: AlertaAds[] }>('/api/anuncios/alertas', 'GET');
 export const apiAdsGuardarAlertas = (c: Partial<CfgAlertasAds>) => req<{ config: CfgAlertasAds }>('/api/anuncios/alertas', 'PUT', c);
 export const apiAdsProbarAlerta = () => req<{ ok: true }>('/api/anuncios/alertas/probar', 'POST', {});
