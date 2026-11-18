@@ -157,7 +157,7 @@ function InterruptorCobro({ cod, onCambio, color, total }: { cod: boolean; onCam
 // Logo de la transportadora (app/public/logos/transportadoras) o, si aún no hay, iniciales con su color.
 const COLOR_T: [RegExp, string, string, string?][] = [
   [/inter\s*-?\s*rapid/i, '#0646A5', 'IR'], [/envia/i, '#E50916', 'E', 'envia'], [/coordinadora/i, '#0750A5', 'C', 'coordinadora'], [/servientrega/i, '#078B43', 'S'],
-  [/^tcc|veloces/i, '#E51B23', 'TCC'], [/domina/i, '#0B2A6B', 'D', 'domina'], [/99\s*minutos|^99/i, '#5B21B6', '99', '99minutos'], [/derocha/i, '#1E3A8A', 'DX', 'derocha'],
+  [/veloces/i, '#FF0A78', 'V', 'veloces'], [/^tcc/i, '#E51B23', 'TCC'], [/domina/i, '#0B2A6B', 'D', 'domina'], [/99\s*minutos|^99/i, '#5B21B6', '99', '99minutos'], [/derocha/i, '#1E3A8A', 'DX', 'derocha'],
   [/jamv/i, '#111827', 'JD'], [/wilog/i, '#1E3A8A', 'WL'], [/deprisa/i, '#9F1239', 'DP'], [/mensajeros/i, '#1D4ED8', 'MU'],
 ];
 function logoTransp(nombre: string, px = 28): { estilo: React.CSSProperties; ini: string; img?: string } {
