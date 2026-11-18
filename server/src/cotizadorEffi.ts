@@ -41,6 +41,10 @@ export interface OpcionCotizada {
   alcance: 'ciudad' | 'ciudad_otra_bodega' | 'departamento' | 'nacional' | 'otras_tiendas' | 'promedio' | '';
   /** igual = una guía reciente idéntica (mismo destino, bodega y valores): su flete exacto. */
   metodo: 'igual' | 'tarifa' | '';
+  /** Es la versión «sin recaudo» de Effi (el cliente no paga al recibir). */
+  sinRecaudo: boolean;
+  /** Guías que la tienda hizo con ella en los últimos 60 días. */
+  usos: number;
 }
 export interface Cotizacion {
   ciudad: string; departamento: string; recaudo: number; cobertura: boolean; opciones: OpcionCotizada[];
@@ -207,16 +211,26 @@ export async function cotizarEffi(storeId: string, orderId: string, opts: { remi
   }
 
   // Todas las transportadoras de la cuenta, más las que da la cobertura aunque la cuenta no las tenga.
-  const nombres = new Map<string, { id: string; nombre: string }>();
+  // Una opción por transportadora. Effi suele tener la misma «CON RECAUDO» y «SIN RECAUDO»: el pedido es
+  // contra entrega, así que manda la CON recaudo (con la SIN, el cliente no pagaría al recibir).
+  const nombres = new Map<string, { id: string; nombre: string; sin: boolean }>();
   for (const t of transportadoras) {
     const k = clave(t.effi || t.nombre);
-    if (!nombres.has(k)) nombres.set(k, { id: t.id, nombre: nombreTransportadora(t.effi || t.nombre) || t.nombre });
+    const sin = /sin\s+recaudo/i.test(t.nombre), con = /con\s+recaudo/i.test(t.nombre);
+    const ya = nombres.get(k);
+    if (ya && !(ya.sin && con)) continue;
+    const base = nombreTransportadora(t.effi || t.nombre) || t.nombre;
+    nombres.set(k, { id: t.id, nombre: sin && !/sin\s+recaudo/i.test(base) ? `${base} (sin recaudo)` : base, sin });
   }
+  // Cuántas guías ha hecho la tienda con cada una (los últimos 60 días): la de siempre queda elegida.
+  const hace60 = Date.now() - 60 * DIA;
+  const usos = new Map<string, number>();
+  for (const g of guias) if (g.f >= hace60) usos.set(g.t, (usos.get(g.t) || 0) + 1);
 
   const opciones: OpcionCotizada[] = [...nombres.entries()].map(([k, t]) => {
     const cb = porCob.get(k);
     return {
-      id: t.id, nombre: t.nombre,
+      id: t.id, nombre: t.nombre, sinRecaudo: t.sin, usos: usos.get(k) || 0,
       llega: conCobertura ? !!cb : null,
       recaudo: conCobertura ? !!cb?.recaudo : null,
       dias: cb?.dias || null,
@@ -229,8 +243,11 @@ export async function cotizarEffi(storeId: string, orderId: string, opts: { remi
     const otras = guiasOtrasTiendas(storeId, faltan);
     [...nombres.keys()].forEach((k, i) => {
       if (!faltan.has(k)) return;
-      const e = estimar(otras.filter((g) => g.t === k), ori, depto, ciudad, recaudo, Math.max(0, Number(opts.declarado) || 0));
-      if (e.flete) Object.assign(opciones[i], e, { alcance: 'otras_tiendas', metodo: 'tarifa' });
+      // Solo guías que salieron de la MISMA ciudad (un envío local en Medellín no sirve para uno desde Bogotá).
+      const mismas = otras.filter((g) => g.t === k && g.ori === ori);
+      if (!ori || !mismas.length) return;
+      const e = estimar(mismas, ori, depto, ciudad, recaudo, Math.max(0, Number(opts.declarado) || 0));
+      if (e.flete && e.alcance !== 'ciudad_otra_bodega') Object.assign(opciones[i], e, { alcance: 'otras_tiendas', metodo: 'tarifa' });
     });
   }
   // Y si tampoco hay: el promedio de las demás transportadoras para este pedido.
@@ -240,7 +257,9 @@ export async function cotizarEffi(storeId: string, orderId: string, opts: { remi
     for (const x of opciones) if (!x.flete) Object.assign(x, { flete: Math.round(med / 100) * 100, base: 0, seguro: 0, comision: 0, alcance: 'promedio', metodo: 'tarifa' });
   }
   // Primero las que sirven (llegan y cobran contra entrega), de la más barata a la más cara.
-  const sirve = (x: OpcionCotizada) => x.llega !== false && x.recaudo !== false && !!x.id;
-  opciones.sort((a, b) => Number(sirve(b)) - Number(sirve(a)) || (a.flete || 9e9) - (b.flete || 9e9) || (a.dias || 99) - (b.dias || 99) || a.nombre.localeCompare(b.nombre));
+  // Primero las que la tienda ya usa (estimado con SUS guías), de la más barata a la más cara; después
+  // las estimadas con otras tiendas o con el promedio; al final las «sin recaudo».
+  const grupo = (x: OpcionCotizada) => (x.sinRecaudo ? 3 : x.alcance === 'otras_tiendas' || x.alcance === 'promedio' || !x.flete ? 2 : 1);
+  opciones.sort((a, b) => grupo(a) - grupo(b) || (a.flete || 9e9) - (b.flete || 9e9) || a.nombre.localeCompare(b.nombre));
   return { ciudad: o.ciudad || '', departamento: o.departamento || '', recaudo, cobertura: conCobertura, opciones, predeterminada: txt(c.guia?.transportadora), origen };
 }
