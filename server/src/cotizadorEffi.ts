@@ -171,10 +171,10 @@ export async function cotizarEffi(storeId: string, orderId: string, opts: { remi
   const c = ef.cfgEffi(storeId);
   if (!c?.apiKey) return { error: 'Conecta Effi primero.' };
   const recaudo = Math.max(0, Math.round(Number(o.total) || 0));
-  const [ops, cob] = await Promise.all([
-    ef.opcionesGuiaEffi(c.apiKey).catch(() => ({ error: 'Effi no respondió.' })),
-    import('./effiExtras.js').then((m) => m.coberturaCiudad(storeId, o.departamento || '', o.ciudad || '')).catch(() => null),
-  ]);
+  // Solo transportadora y flete: la cobertura de Effi no coincidía con los nombres de las
+  // transportadoras y las marcaba todas como «no llega». Lo de si llega lo revisa la tienda.
+  const ops = await ef.opcionesGuiaEffi(c.apiKey).catch(() => ({ error: 'Effi no respondió.' }));
+  const cob = null as { error?: string; transportadoras: { nombre: string; recaudo: boolean; dias: number }[] } | null;
   const transportadoras = 'error' in ops ? [] : (ops.transportadoras as { id: string; nombre: string; effi: string }[]);
   // Una lista vacía casi siempre es que Effi no reconoció el trayecto, no que nadie llegue: se toma como «no se sabe».
   const conCobertura = !!cob && !cob.error && cob.transportadoras.length > 0;
@@ -199,7 +199,6 @@ export async function cotizarEffi(storeId: string, orderId: string, opts: { remi
     const k = clave(t.effi || t.nombre);
     if (!nombres.has(k)) nombres.set(k, { id: t.id, nombre: nombreTransportadora(t.effi || t.nombre) || t.nombre });
   }
-  for (const [k, t] of porCob) if (!nombres.has(k)) nombres.set(k, { id: '', nombre: t.nombre });
 
   const opciones: OpcionCotizada[] = [...nombres.entries()].map(([k, t]) => {
     const cb = porCob.get(k);
