@@ -109,6 +109,7 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
           return (
             <button key={`${t.id}-${t.service}`} role="radio" aria-checked={on} onClick={() => { setElegida(t); setAuto(false); }} style={fila(on)}>
               <span style={punto(on)} />
+              <LogoTransp nombre={t.nombre} px={24} />
               <span style={{ fontWeight: 700, fontSize: 12.5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nombre}{t.service && t.service !== 'normal' ? ` · ${t.service}` : ''}</span>
               {masBarata === t && disponibles.length > 1 && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 999, background: 'rgba(16,185,129,.15)', color: 'var(--df-brand-dark)', whiteSpace: 'nowrap' }}>Más barata</span>}
               <span style={{ fontWeight: 700, fontSize: 12.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{precioRedondo(t.precio)}</span>
@@ -153,14 +154,23 @@ function InterruptorCobro({ cod, onCambio, color, total }: { cod: boolean; onCam
 }
 
 // ── Cotizador de Effi: cobertura real + fletes de las guías anteriores de la tienda ──
-const COLOR_T: [RegExp, string, string][] = [
-  [/interr?apid/i, '#B45309', 'IR'], [/envia/i, '#C81E1E', 'E'], [/coordinadora/i, '#0B4EA2', 'C'], [/servientrega/i, '#15803D', 'S'],
-  [/^tcc/i, '#334155', 'TCC'], [/domina/i, '#7C3AED', 'D'], [/99/i, '#0F766E', '99'], [/deprisa/i, '#9F1239', 'DP'], [/mensajeros/i, '#1D4ED8', 'MU'],
+// Logo de la transportadora (app/public/logos/transportadoras) o, si aún no hay, iniciales con su color.
+const COLOR_T: [RegExp, string, string, string?][] = [
+  [/inter\s*-?\s*rapid/i, '#0646A5', 'IR'], [/envia/i, '#E50916', 'E', 'envia'], [/coordinadora/i, '#0750A5', 'C', 'coordinadora'], [/servientrega/i, '#078B43', 'S'],
+  [/^tcc|veloces/i, '#E51B23', 'TCC'], [/domina/i, '#0B2A6B', 'D', 'domina'], [/99\s*minutos|^99/i, '#5B21B6', '99', '99minutos'], [/derocha/i, '#1E3A8A', 'DX', 'derocha'],
+  [/jamv/i, '#111827', 'JD'], [/wilog/i, '#1E3A8A', 'WL'], [/deprisa/i, '#9F1239', 'DP'], [/mensajeros/i, '#1D4ED8', 'MU'],
 ];
-function logoTransp(nombre: string, px = 28): { estilo: React.CSSProperties; ini: string } {
+function logoTransp(nombre: string, px = 28): { estilo: React.CSSProperties; ini: string; img?: string } {
   const c = COLOR_T.find(([re]) => re.test(nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '')));
   const ini = c ? c[2] : nombre.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase();
-  return { ini, estilo: { width: px, height: px, borderRadius: 8, background: c ? c[1] : '#475569', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: ini.length > 2 ? 9.5 : 12, flexShrink: 0 } };
+  const img = c?.[3] ? `/logos/transportadoras/${c[3]}.webp` : undefined;
+  return { ini, img, estilo: { width: px, height: px, borderRadius: Math.round(px * 0.24), overflow: 'hidden', background: img ? '#fff' : c ? c[1] : '#475569', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: ini.length > 2 ? 9.5 : 12, flexShrink: 0, boxShadow: img ? 'inset 0 0 0 1px var(--df-border)' : 'none' } };
+}
+/** Logo de la transportadora (imagen o iniciales). */
+function LogoTransp({ nombre, px = 28 }: { nombre: string; px?: number }) {
+  const lg = logoTransp(nombre, px);
+  // La imagen es el mosaico redondeado de la marca: se agranda un poco para recortar el borde blanco.
+  return <span aria-hidden="true" style={lg.estilo}>{lg.img ? <img src={lg.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.1)' }} /> : lg.ini}</span>;
 }
 const chipT = (bg: string, fg: string): React.CSSProperties => ({ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: bg, color: fg, whiteSpace: 'nowrap' });
 const sirveEffi = (o: OpcionCotizadaEffi) => o.llega !== false && o.recaudo !== false && !!o.id;
@@ -215,11 +225,10 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
   const pie = <div style={{ fontSize: 11, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>{detalle}El valor exacto lo pone Effi al crear la guía.{!cot.cobertura && ' Effi no respondió la cobertura de esta ciudad: revisa que la transportadora llegue.'}</div>;
   if (compacto) {
     if (!sel) return null;
-    const lg = logoTransp(sel.nombre, 30);
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1.5px solid var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 10, padding: '8px 10px' }}>
-          <span aria-hidden="true" style={lg.estilo}>{lg.ini}</span>
+          <LogoTransp nombre={sel.nombre} px={30} />
           <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}><b style={{ fontSize: 13 }}>{sel.nombre}</b><span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>Con recaudo{sel.dias ? ` · ${sel.dias} días` : ''}</span></span>
           {sel.flete > 0 && <b style={{ fontSize: 13.5, whiteSpace: 'nowrap' }}>≈ {pesos(sel.flete)}</b>}
           {onCambiar && <button type="button" onClick={onCambiar} style={{ background: 'none', border: 'none', padding: '0 2px', minHeight: 32, color: 'var(--df-purple)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Cambiar</button>}
@@ -238,11 +247,10 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
         {lista.map((o) => {
           const on = !!o.id && o.id === valor;
           const sirve = sirveEffi(o);
-          const lg = logoTransp(o.nombre);
           return (
             <button key={o.nombre} role="radio" aria-checked={on} disabled={!o.id} onClick={() => o.id && onElegir(o)} title={!o.id ? 'Esta transportadora no está habilitada en tu cuenta de Effi' : undefined}
               style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', boxSizing: 'border-box', textAlign: 'left', padding: '7px 10px', minHeight: 50, borderRadius: 10, cursor: o.id ? 'pointer' : 'not-allowed', fontFamily: 'inherit', color: 'var(--df-text)', border: `1.5px solid ${on ? 'var(--df-purple)' : 'var(--df-border)'}`, background: on ? 'var(--df-purple-subtle)' : 'var(--df-surface)', opacity: sirve || on ? 1 : 0.6 }}>
-              <span aria-hidden="true" style={lg.estilo}>{lg.ini}</span>
+              <LogoTransp nombre={o.nombre} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
                 <span style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap' }}><b style={{ fontSize: 13 }}>{o.nombre}</b>{o.recaudo !== false && <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>con recaudo</span>}</span>
                 <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
