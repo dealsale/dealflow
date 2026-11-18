@@ -172,7 +172,6 @@ function LogoTransp({ nombre, px = 28 }: { nombre: string; px?: number }) {
   // La imagen es el mosaico redondeado de la marca: se agranda un poco para recortar el borde blanco.
   return <span aria-hidden="true" style={lg.estilo}>{lg.img ? <img src={lg.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.1)' }} /> : lg.ini}</span>;
 }
-const chipT = (bg: string, fg: string): React.CSSProperties => ({ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: bg, color: fg, whiteSpace: 'nowrap' });
 const sirveEffi = (o: OpcionCotizadaEffi) => o.llega !== false && o.recaudo !== false && !!o.id;
 
 /**
