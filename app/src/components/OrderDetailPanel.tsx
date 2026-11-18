@@ -194,10 +194,15 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
       if (!vivo) return;
       if (r.error || !r.data) { setError(r.error || 'No se pudo cotizar.'); onCargado?.(false); return; }
       setError(''); setCot(r.data); onCargado?.(true);
+      // Queda elegida la que ya estaba (o la configurada para las guías) o, si no, la que la tienda MÁS USA.
+      // Nunca una con la que la tienda no ha enviado (su flete es un estimado ajeno) ni una «sin recaudo».
+      const elegible = (o: OpcionCotizadaEffi) => !!o.id && !o.sinRecaudo;
       const actual = r.data.opciones.find((o) => o.id && o.id === (valorRef.current || (primera.current ? r.data!.predeterminada : '')));
-      if (actual) { if (primera.current && !sirveEffi(actual) && !compacto) { const m = r.data.opciones.find(sirveEffi); if (m) onElegir(m); } else onElegir(actual); }
-      // Sin transportadora elegida: la configurada para las guías (si sirve) o la más barata que sirve.
-      else if (!valorRef.current || primera.current) { const m = r.data.opciones.find(sirveEffi); if (m) onElegir(m); }
+      if (actual && (!primera.current || elegible(actual))) onElegir(actual);
+      else if (!valorRef.current || primera.current) {
+        const m = r.data.opciones.filter((o) => elegible(o) && o.usos > 0).sort((a, b) => b.usos - a.usos)[0];
+        if (m) onElegir(m);
+      }
       primera.current = false;
     }), primera.current ? 0 : 450);
     return () => { vivo = false; clearTimeout(t); };
@@ -229,7 +234,7 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1.5px solid var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 10, padding: '8px 10px' }}>
           <LogoTransp nombre={sel.nombre} px={30} />
           <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}><b style={{ fontSize: 13 }}>{sel.nombre}</b><span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>Con recaudo{sel.dias ? ` · ${sel.dias} días` : ''}</span></span>
-          {sel.flete > 0 && <b style={{ fontSize: 13.5, whiteSpace: 'nowrap' }}>≈ {pesos(sel.flete)}</b>}
+          {sel.flete > 0 && <b style={{ fontSize: 13.5, whiteSpace: 'nowrap' }}><span style={{ fontSize: 11, fontWeight: 600, color: 'var(--df-text-muted)' }}>aprox. </span>{pesos(sel.flete)}</b>}
           {onCambiar && <button type="button" onClick={onCambiar} style={{ background: 'none', border: 'none', padding: '0 2px', minHeight: 32, color: 'var(--df-purple)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Cambiar</button>}
         </div>
         {pie}
@@ -240,7 +245,7 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-strong)' }}>Transportadora para <span style={{ color: 'var(--df-purple)' }}>{cot.ciudad || 'el destino'}</span></span>
-        <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>≈ según tus guías{desde}</span>
+        <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>Precios aproximados, según tus guías{desde}</span>
       </div>
       <div role="radiogroup" aria-label="Transportadora de Effi" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {lista.map((o) => {
@@ -252,9 +257,11 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
               <LogoTransp nombre={o.nombre} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
                 <span style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap' }}><b style={{ fontSize: 13 }}>{o.nombre}</b></span>
+                {(o.alcance === 'otras_tiendas' || o.alcance === 'promedio') && <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>Aún no has enviado con ella</span>}
+                {o.sinRecaudo && <span style={{ fontSize: 11, color: 'var(--df-danger-dark)' }}>Sin recaudo: el cliente no paga al recibir</span>}
               </span>
               <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
-                <b style={{ fontSize: o.flete ? 14 : 11.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: o.flete ? 'var(--df-text)' : 'var(--df-text-muted)' }}>{o.flete ? `≈ ${pesos(o.flete)}` : 'Sin guías previas'}</b>
+                <b style={{ fontSize: o.flete ? 14 : 11.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: o.flete ? 'var(--df-text)' : 'var(--df-text-muted)' }}>{o.flete ? <><span style={{ fontSize: 11, fontWeight: 600, color: 'var(--df-text-muted)' }}>aprox. </span>{pesos(o.flete)}</> : 'Effi lo calcula'}</b>
               </span>
             </button>
           );
