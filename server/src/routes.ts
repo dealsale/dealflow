@@ -48,7 +48,7 @@ api.use((req, res, next) => {
 });
 export const webhooks = proteger(Router());
 
-const ESTADOS = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Entregado'] as const;
+const ESTADOS = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Entregado'] as const; // avance a mano (En oficina lo pone la transportadora)
 
 /** Hora local de Bogotá (GMT-5) a partir del datetime UTC que guarda SQLite. */
 // Hora de Colombia (UTC-5 todo el año, sin horario de verano). Con aritmética y no con

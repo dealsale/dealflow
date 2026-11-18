@@ -11,7 +11,7 @@ import { db, pj } from './db.js';
 import { insightsEnRango, miniaturas } from './metaInsights.js';
 
 const ORGANICO = 'organico';
-const EN_CAMINO = ['Guía generada', 'En tránsito', 'En reparto', 'Novedad'];
+const EN_CAMINO = ['Guía generada', 'En tránsito', 'En reparto', 'En oficina', 'Novedad'];
 
 export interface FilaAnuncio {
   id: string; titular: string; canal: string; url: string; media: string; producto: string;

@@ -21,7 +21,7 @@ import { fraseEstadoPlantilla, textoEstadoChat } from './mensajesEstado.js';
 
 export const PLANTILLA_ESTADO = 'estado_envio_pedido';
 /** Estados que se avisan solos (los cambia la transportadora). "Guía generada" la avisa avisoGuia.ts. */
-export const ESTADOS_AVISADOS = ['En tránsito', 'En reparto', 'Novedad', 'Entregado'];
+export const ESTADOS_AVISADOS = ['En tránsito', 'En reparto', 'En oficina', 'Novedad', 'Entregado'];
 
 db.exec(`CREATE TABLE IF NOT EXISTS avisos_estado (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,7 +39,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS avisos_estado (
 try { db.exec("ALTER TABLE avisos_estado ADD COLUMN wamid TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 db.exec("CREATE INDEX IF NOT EXISTS idx_avisos_estado_pend ON avisos_estado(resultado, proximo)");
 db.exec('CREATE INDEX IF NOT EXISTS idx_avisos_estado_orden ON avisos_estado(order_id, estado)');
-db.exec(`CREATE TRIGGER IF NOT EXISTS trg_orders_aviso_estado AFTER UPDATE OF estado ON orders
+// Se rehace siempre: así toma los estados nuevos de ESTADOS_AVISADOS (p. ej. «En oficina»).
+db.exec('DROP TRIGGER IF EXISTS trg_orders_aviso_estado');
+db.exec(`CREATE TRIGGER trg_orders_aviso_estado AFTER UPDATE OF estado ON orders
   FOR EACH ROW WHEN NEW.estado IS NOT OLD.estado AND NEW.estado IN (${ESTADOS_AVISADOS.map((e) => `'${e}'`).join(',')})
   BEGIN
     INSERT INTO avisos_estado (store_id, order_id, estado) VALUES (NEW.store_id, NEW.id, NEW.estado);
@@ -47,6 +49,18 @@ db.exec(`CREATE TRIGGER IF NOT EXISTS trg_orders_aviso_estado AFTER UPDATE OF es
 
 type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));
+
+// Pedidos que ya estaban en la oficina de la transportadora antes de existir «En oficina» (salían
+// como «Guía generada» o «En tránsito» y al cliente no le llegaba nada): se corrigen al arrancar y
+// el trigger les encola el aviso. Solo los de los últimos 20 días.
+(async () => {
+  const { estadoLogistico } = await import('./estadosPedido.js');
+  const filas = db.prepare(`SELECT id, estado_woo, guia FROM orders WHERE estado IN ('Guía generada','En tránsito','En reparto')
+    AND COALESCE(estado_woo,'') != '' AND created_at > datetime('now','-20 days')`).all() as { id: string; estado_woo: string; guia: string }[];
+  let n = 0;
+  for (const f of filas) if (estadoLogistico(f.estado_woo, !!f.guia) === 'En oficina') { db.prepare("UPDATE orders SET estado = 'En oficina' WHERE id = ?").run(f.id); n++; }
+  if (n) console.log(`[avisos] ${n} pedido(s) en la oficina de la transportadora pasaron a «En oficina».`);
+})().catch((e) => console.warn('[avisos] en oficina', e));
 
 /** Encola un aviso a mano (p. ej. "Confirmado" o "Cancelado" cambiados desde el panel). */
 export function encolarAviso(storeId: string, orderId: string, estado: string, origen = 'manual'): void {
@@ -173,6 +187,7 @@ async function enviarAviso(a: Fila): Promise<void> {
     nombre, numDF, guia, transp, pagado,
     total: Number(o.total) > 0 ? '$' + Number(o.total).toLocaleString('es-CO') : '',
     motivo: estado === 'Novedad' ? txt(o.estado_woo).replace(/^novedad:?\s*/i, '').trim().toLowerCase().slice(0, 80) : '',
+    oficina: estado === 'En oficina' ? oficinaDe(txt(o.id), txt(o.ciudad)) : '',
   };
   const texto = textoEstadoChat(idi, estado, datosE, seguimiento);
   const telDestino = chat ? chat.tel : '57' + celular;
@@ -212,10 +227,19 @@ async function enviarAviso(a: Fila): Promise<void> {
   return cerrar(a, 'plantilla', `${seguimiento ? `Seguimiento (pedido en "${estado}") con plantilla` : `Plantilla "${tpl.nombre}"`} (${porque}).`);
 }
 
+/** Dónde recogerlo: la observación del último movimiento de la guía (la transportadora suele poner la oficina) o la ciudad. */
+function oficinaDe(orderId: string, ciudad: string): string {
+  const h = db.prepare("SELECT observacion FROM guia_historial WHERE order_id = ? AND COALESCE(observacion,'') != '' ORDER BY fecha DESC LIMIT 1").get(orderId) as { observacion: string } | undefined;
+  const obs = (h?.observacion || '').replace(/\s+/g, ' ').trim();
+  // Solo si parece una oficina o una dirección (no un texto genérico del estado).
+  if (obs && obs.length <= 140 && /oficina|sede|punto|centro|calle|carrera|cra|cl\.?\s|av(enida)?\.?\s|#|local/i.test(obs)) return obs;
+  return ciudad ? `en ${ciudad}` : '';
+}
+
 const diez = (t: string) => { const d = String(t || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : d; };
 
 /** Estados en los que vale la pena contarle al cliente cómo va su pedido. */
-export const ESTADOS_SEGUIMIENTO = ['Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Novedad'];
+export const ESTADOS_SEGUIMIENTO = ['Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'En oficina', 'Novedad'];
 
 /**
  * Seguimiento del pedido: a las 24 h (D+1) y a las 48 h (D+2) de creado, se encola un aviso
@@ -243,7 +267,7 @@ export function programarSeguimientos(): number {
 
 /** Motivo legible y agrupable (sin "Reintento N:" ni números de pedido o celular). */
 function motivoCorto(detalle: string): string {
-  return detalle.replace(/^Reintento \d+:\s*/i, '').replace(/DF-\d+/g, 'DF-…').replace(/\b\d{7,}\b/g, '…').replace(/"(En tránsito|En reparto|Entregado|Novedad|Confirmado|Guía generada|Cancelado|Devuelto)"/g, '"…"').slice(0, 160);
+  return detalle.replace(/^Reintento \d+:\s*/i, '').replace(/DF-\d+/g, 'DF-…').replace(/\b\d{7,}\b/g, '…').replace(/"(En tránsito|En reparto|En oficina|Entregado|Novedad|Confirmado|Guía generada|Cancelado|Devuelto)"/g, '"…"').slice(0, 160);
 }
 
 /** Omisiones que son la regla funcionando (no un problema): ya se avisó algo más nuevo o reciente. */

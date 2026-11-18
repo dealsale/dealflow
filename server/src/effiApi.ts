@@ -664,7 +664,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS effi_remitente_producto (
   usos INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0, actualizado TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (store_id, product_id)
 )`);
-const RECOGIDOS = ['En tránsito', 'En reparto', 'Novedad', 'Entregado', 'Devuelto'];
+const RECOGIDOS = ['En tránsito', 'En reparto', 'En oficina', 'Novedad', 'Entregado', 'Devuelto'];
 
 /** Recalcula la bodega de cada producto (y de cada convenio) con los envíos recogidos de la tienda. */
 export function aprenderBodegasTienda(storeId: string): { productos: number; convenios: number; envios: number } {
@@ -2550,7 +2550,7 @@ export function anularEnEffi(storeId: string, orderId: string, motivo = ''): Pro
     const hist = [txt(o.effi_anuladas), [remision, ...anuladas].join(' + ')].filter(Boolean).join(' · ').slice(-500);
     db.prepare(`UPDATE orders SET effi_remision = '', effi_doc = '', effi_guia = '', effi_convenio = '', woo_id = CASE WHEN despacho_proveedor = 'effi' THEN '' ELSE woo_id END,
         despacho_proveedor = CASE WHEN despacho_proveedor = 'effi' THEN '' ELSE despacho_proveedor END, guia = '', guia_url = '', guia_img = '', estado_woo = '', effi_anuladas = ?,
-        estado = CASE WHEN estado IN ('Guía generada','En tránsito','En reparto','Novedad') THEN 'Confirmado' ELSE estado END WHERE id = ?`).run(hist, orderId);
+        estado = CASE WHEN estado IN ('Guía generada','En tránsito','En reparto','En oficina','Novedad') THEN 'Confirmado' ELSE estado END WHERE id = ?`).run(hist, orderId);
     trazar(storeId, orderId, { etapa: 'despacho', nivel: 'ok', titulo: `Remisión ${remision} anulada en Effi`, detalle: `${obs}. El pedido quedó listo para volver a despacharse.` });
     registrarLog(storeId, 'info', 'despacho', `${numDF}: remisión ${remision}${anuladas.length ? ` y guía ${anuladas.join(', ')}` : ''} anuladas en Effi desde DealFlow.`);
     return { ok: true as const, remision, guias: anuladas };

@@ -19,6 +19,7 @@ const ETAPAS: { id: Etapa; titulo: string; icono: string; color: string; ayuda: 
   { id: 'por_recoger', titulo: 'Por recoger', icono: '📦', color: '#8B5CF6', ayuda: 'Guía generada: la transportadora aún no la recoge.' },
   { id: 'transito', titulo: 'En tránsito', icono: '🚚', color: '#0EA5E9', ayuda: 'Va en camino hacia la ciudad del cliente.' },
   { id: 'reparto', titulo: 'Llega hoy', icono: '🛵', color: '#F59E0B', ayuda: 'En reparto: el mensajero la lleva hoy.' },
+  { id: 'oficina', titulo: 'En oficina', icono: '🏢', color: '#DB2777', ayuda: 'Para recoger en la oficina de la transportadora: el cliente tiene unos días antes de que la devuelvan.' },
   { id: 'novedad', titulo: 'Novedad', icono: '⚠️', color: '#EF4444', ayuda: 'La transportadora reportó un problema.' },
   { id: 'entregado', titulo: 'Entregado', icono: '✅', color: '#10B981', ayuda: 'El cliente ya lo recibió.' },
   { id: 'devuelto', titulo: 'Devuelto', icono: '↩️', color: '#64748B', ayuda: 'Volvió a la bodega.' },
@@ -45,7 +46,7 @@ function Contador({ valor, formato }: { valor: number; formato?: (n: number) => 
 }
 
 function Progreso({ etapa, color }: { etapa: Etapa; color: string }) {
-  const i = etapa === 'novedad' ? 2.5 : etapa === 'devuelto' ? 2 : PASOS.indexOf(etapa);
+  const i = etapa === 'novedad' ? 2.5 : etapa === 'devuelto' ? 2 : etapa === 'oficina' ? PASOS.indexOf('reparto') : PASOS.indexOf(etapa);
   const pct = Math.max(0, (i / (PASOS.length - 1)) * 100);
   return (
     <div style={{ position: 'relative', height: 6, borderRadius: 999, background: 'var(--df-border)', overflow: 'hidden' }}>
@@ -276,7 +277,7 @@ export function Logistica({ df }: { df: DealFlowState }) {
             return (
               <div key={e.id} style={{ flex: '1 0 220px', maxWidth: 320, minWidth: 220, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 12, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 260px)', minHeight: 180, scrollSnapAlign: 'start' }}>
                 <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--df-border)', display: 'flex', alignItems: 'center', gap: 7 }} title={e.ayuda}>
-                  <span className={e.id === 'reparto' || e.id === 'novedad' ? 'df-log-punto' : undefined} style={{ width: 8, height: 8, borderRadius: '50%', background: e.color, display: 'inline-block' }} />
+                  <span className={e.id === 'reparto' || e.id === 'oficina' || e.id === 'novedad' ? 'df-log-punto' : undefined} style={{ width: 8, height: 8, borderRadius: '50%', background: e.color, display: 'inline-block' }} />
                   <b style={{ fontSize: 13, flex: 1 }}>{e.icono} {e.titulo}</b>
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 999, padding: '1px 8px' }}>{lista.length}</span>
                 </div>

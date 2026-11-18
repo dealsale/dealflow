@@ -11,7 +11,7 @@ import { fmtCO } from '../lib/fechaCO';
  * sesión (/api/proveedor/*), separada de la del panel.
  */
 
-type Etapa = 'por_despachar' | 'por_recoger' | 'transito' | 'reparto' | 'novedad' | 'entregado' | 'devuelto' | 'cancelado';
+type Etapa = 'por_despachar' | 'por_recoger' | 'transito' | 'reparto' | 'oficina' | 'novedad' | 'entregado' | 'devuelto' | 'cancelado';
 interface Yo { nombre: string; email: string; convenios: string[]; comoAdmin?: boolean }
 interface Pedido {
   id: string; codigo: string; numero: number; fecha: string; dia: string; tienda: string; cliente: string; tel: string; ciudad: string; departamento: string; direccion: string;
@@ -40,6 +40,7 @@ const ETAPA: Record<Etapa, { label: string; color: string; bg: string }> = {
   por_recoger: { label: 'Guía generada', color: '#4F46E5', bg: 'rgba(99,102,241,.14)' },
   transito: { label: 'En tránsito', color: '#0369A1', bg: 'rgba(14,165,233,.14)' },
   reparto: { label: 'En reparto', color: '#B45309', bg: 'rgba(245,158,11,.16)' },
+  oficina: { label: 'En oficina', color: '#BE185D', bg: 'rgba(236,72,153,.14)' },
   novedad: { label: 'Novedad', color: '#DC2626', bg: 'rgba(239,68,68,.14)' },
   entregado: { label: 'Entregado', color: '#047857', bg: 'rgba(16,185,129,.15)' },
   devuelto: { label: 'Devuelto', color: '#9D174D', bg: 'rgba(236,72,153,.13)' },

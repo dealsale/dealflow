@@ -1401,10 +1401,11 @@ export function useDealFlowState() {
       sincronizarEffi: () => sincronizarEffi(o.id),
       despachado: !!(o.wooId || o.dropiOrderId),
       despachoProveedor: o.despachoProveedor || '',
-      timeline: ESTADO_ORDER.map((est) => {
-        // Novedad cuenta como "en camino"; Devuelto/Cancelado no marcan pasos de entrega.
-        const actual = o.estado === 'Novedad' ? 'En tránsito' : o.estado;
-        const done = ESTADO_ORDER.indexOf(est) <= ESTADO_ORDER.indexOf(actual);
+      timeline: ESTADO_ORDER.map((est0) => {
+        // Novedad cuenta como "en camino"; En oficina ocupa el paso de "En reparto"; Devuelto/Cancelado no marcan pasos de entrega.
+        const actual = o.estado === 'Novedad' ? 'En tránsito' : o.estado === 'En oficina' ? 'En reparto' : o.estado;
+        const done = ESTADO_ORDER.indexOf(est0) <= ESTADO_ORDER.indexOf(actual);
+        const est = est0 === 'En reparto' && o.estado === 'En oficina' ? 'En oficina' : est0;
         return {
           estado: est,
           dotStyle: { width: '10px', height: '10px', borderRadius: '50%', background: done ? ESTADOS[est].color : 'var(--df-border)', flexShrink: 0 },

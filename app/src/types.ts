@@ -1,4 +1,4 @@
-export type EstadoPedido = 'Nuevo' | 'Confirmado' | 'Guía generada' | 'En tránsito' | 'En reparto' | 'Novedad' | 'Entregado' | 'Devuelto' | 'Cancelado';
+export type EstadoPedido = 'Nuevo' | 'Confirmado' | 'Guía generada' | 'En tránsito' | 'En reparto' | 'En oficina' | 'Novedad' | 'Entregado' | 'Devuelto' | 'Cancelado';
 
 export interface OrderItem {
   qty: number;
