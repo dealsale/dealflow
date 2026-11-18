@@ -2153,7 +2153,7 @@ api.get('/effi-api/eventos', requireAuth, requireStore, requireOwner, async (req
 // Cotizador de transportadoras de Effi para un pedido (cobertura real + fletes de las guías anteriores).
 api.get('/orders/:rowId/effi/cotizar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const { cotizarEffi } = await import('./cotizadorEffi.js');
-  const r = await cotizarEffi(req.user!.storeId!, String(req.params.rowId));
+  const r = await cotizarEffi(req.user!.storeId!, String(req.params.rowId), { remitente: String(req.query.remitente || ''), declarado: Number(req.query.declarado) || 0 });
   if ('error' in r) return res.status(400).json({ error: r.error });
   res.json(r);
 });

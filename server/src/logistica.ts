@@ -211,12 +211,19 @@ function campo(f: Fila, patron: RegExp): string {
 }
 
 /** Trae de Effi TODAS las guías de transporte de los últimos `dias` días y las guarda. */
-export async function sincronizarGuiasEffi(storeId: string, dias = 60): Promise<{ guias: number } | { error: string }> {
+/** JSON de la guía para guardar: completo si cabe; si no, sin los textos largos (nunca cortado a la mitad: tiene que seguir siendo JSON). */
+function rawGuia(f: Fila): string {
+  const todo = JSON.stringify(f);
+  if (todo.length <= 20000) return todo;
+  return JSON.stringify(Object.fromEntries(Object.entries(f).filter(([, v]) => v == null || typeof v !== 'string' || v.length <= 300)));
+}
+
+export async function sincronizarGuiasEffi(storeId: string, dias = 60, rango?: { desde: string; hasta: string }): Promise<{ guias: number } | { error: string }> {
   const c = cfgEffi(storeId);
   if (!c?.apiKey) return { error: 'Effi no está conectado.' };
   const hoy = new Date(Date.now() - 5 * 3600e3);
-  const desde = new Date(hoy.getTime() - dias * 86400e3).toISOString().slice(0, 10);
-  const hasta = hoy.toISOString().slice(0, 10);
+  const desde = rango?.desde || new Date(hoy.getTime() - dias * 86400e3).toISOString().slice(0, 10);
+  const hasta = rango?.hasta || hoy.toISOString().slice(0, 10);
   const ins = db.prepare(`INSERT INTO effi_guias (store_id, id, guia, transportadora, estado, destinatario, ciudad, telefono, fecha, flete, recaudo, id_ref, url, raw, vigente, actualizado)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
     ON CONFLICT(store_id, id) DO UPDATE SET guia = excluded.guia, transportadora = excluded.transportadora, estado = excluded.estado, destinatario = excluded.destinatario,
@@ -238,15 +245,33 @@ export async function sincronizarGuiasEffi(storeId: string, dias = 60): Promise<
           campo(f, /telefonos?_destin|celular_destin|movil_destin/i),
           campo(f, /^fecha_trans$|^fecha_creacion$|^fecha$|fecha_guia|fecha_registro/i),
           fleteDe(f).total, recaudoDe(f),
-          txt(f.id_ref), urlDocumentoGuia(f), JSON.stringify(f).slice(0, 6000), txt(f.vigente) === '0' ? 0 : 1);
+          txt(f.id_ref), urlDocumentoGuia(f), rawGuia(f), txt(f.vigente) === '0' ? 0 : 1);
         n++;
       }
     })();
     const tp = Number(r.body.paginacion?.total_paginas || 1);
     if (pagina >= tp || !filas.length) break;
   }
-  ultimaSync.set(storeId, Date.now());
+  if (!rango) ultimaSync.set(storeId, Date.now());
   return { guias: n };
+}
+
+// Historial de un año (una sola vez por tienda): el cotizador de fletes aprende de todas las guías,
+// no solo de los últimos 60 días. Se pide mes por mes para no pasar el límite de páginas de Effi.
+db.exec('CREATE TABLE IF NOT EXISTS effi_guias_historial (store_id TEXT PRIMARY KEY, hecho_at TEXT NOT NULL DEFAULT (datetime(\'now\')), guias INTEGER NOT NULL DEFAULT 0)');
+export async function traerHistorialGuiasEffi(storeId: string, meses = 12): Promise<number> {
+  if (db.prepare('SELECT 1 FROM effi_guias_historial WHERE store_id = ?').get(storeId)) return 0;
+  const hoy = new Date(Date.now() - 5 * 3600e3);
+  let total = 0;
+  for (let m = 2; m <= meses; m++) {
+    const fin = new Date(hoy.getTime() - (m - 1) * 30 * 86400e3), ini = new Date(hoy.getTime() - m * 30 * 86400e3);
+    const r = await sincronizarGuiasEffi(storeId, 0, { desde: ini.toISOString().slice(0, 10), hasta: fin.toISOString().slice(0, 10) });
+    if ('error' in r) { if (m === 2) return 0; break; } // Effi no respondió: se reintenta en la próxima vuelta
+    total += r.guias;
+    await new Promise((ok) => setTimeout(ok, 1500));
+  }
+  db.prepare('INSERT OR REPLACE INTO effi_guias_historial (store_id, guias) VALUES (?, ?)').run(storeId, total);
+  return total;
 }
 
 /** Cada 20 min: registro general de guías de las tiendas con Effi. */
@@ -254,6 +279,7 @@ export function iniciarGuiasEffi(): void {
   const vuelta = async () => {
     const tiendas = db.prepare("SELECT store_id FROM store_integrations WHERE tipo = 'effi_api'").all() as { store_id: string }[];
     for (const t of tiendas) { try { await sincronizarGuiasEffi(t.store_id); } catch (e) { console.warn('[logistica] guías', e); } }
+    for (const t of tiendas) { try { await traerHistorialGuiasEffi(t.store_id); } catch (e) { console.warn('[logistica] historial de guías', e); } }
   };
   setTimeout(() => void vuelta(), 3 * 60_000);
   setInterval(() => void vuelta(), 20 * 60_000);

@@ -72,7 +72,12 @@ Sección: pedidos, effi
 Claves: despachar, enviar a effi, crear remision, crear guia, generar guia, despacho effi, revisar envio
 1. Abre el pedido → **Despacho** → **Effi** (remisión + guía).
 2. **Cotizador de transportadoras** (antes de revisar, si la guía automática está apagada): para la ciudad del pedido salen las transportadoras con el **flete estimado (≈)**, los días de entrega y etiquetas: *Más barata*, *Más rápida*, *No llega a…*, *No cobra contra entrega aquí*, *No está en tu cuenta de Effi*. Las que no sirven quedan en «Ver N más». Queda elegida la transportadora configurada para las guías (si sirve) o la más barata.
-   - El estimado sale de las **guías anteriores de la tienda** y cuadra con Effi: si hay una guía reciente a esa misma ciudad con el mismo valor a recaudar, es su flete exacto; si no, la parte fija de las últimas guías (envío + manejo − descuento) + la comisión del recaudo en % × lo que se va a recaudar. Busca primero guías a la misma ciudad, luego al departamento y luego a todo el país. Debajo dice de dónde salió («según 4 guías a Ciénaga»).
+   - El estimado sale de las **guías anteriores de la tienda** y se arma como cobra Effi: **envío + seguro + comisión del recaudo**.
+     - Envío: el de la última guía a esa ciudad desde la misma bodega, llevado a la tarifa de hoy (si la transportadora cambió su tarifa o Effi cambió tu descuento, se ajusta). Ciudad nueva: la tarifa más común en ese departamento desde esa bodega (chip «Ciudad nueva»).
+     - Seguro: el de tus guías con el mismo valor declarado (Inter 2 %, Servientrega 1 %, Coordinadora fijo + 1 %; si con una transportadora siempre declaras lo mismo, p. ej. $10.000 en Envía, se usa eso).
+     - Recaudo: el % de la transportadora sobre lo que se cobra, con su mínimo (Inter 5 % mín. $2.500, Envía 3,5 % mín. $3.000, Coordinadora 3,5 % mín. $4.000).
+     - Probado con un año de guías reales (4.467): 82 % exactas al peso y 89 % cuando ya hay guías a esa ciudad desde la misma bodega.
+     - Se vuelve a calcular al elegir la bodega (remitente) o cambiar el valor declarado. DealFlow trae solo el último año de guías de Effi (una vez) para conocer más ciudades.
    - Llega / días / contra entrega vienen de la **cobertura de Effi** para esa ciudad. Si Effi no responde, sale el aviso de revisar que la transportadora llegue.
    - El valor final lo pone Effi al crear la guía. Sin guías anteriores con una transportadora sale «Sin guías previas».
    - El mismo cotizador aparece en **🚚 Generar guía en Effi** (pedido con remisión y sin guía).

@@ -165,26 +165,34 @@ function logoTransp(nombre: string, px = 28): { estilo: React.CSSProperties; ini
 const chipT = (bg: string, fg: string): React.CSSProperties => ({ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: bg, color: fg, whiteSpace: 'nowrap' });
 const sirveEffi = (o: OpcionCotizadaEffi) => o.llega !== false && o.recaudo !== false && !!o.id;
 
-/** Lista de transportadoras con flete estimado para elegir la de la guía de Effi. */
-function CotizadorEffi({ rowId, valor, onElegir, onCargado }: { rowId: string; valor: string; onElegir: (o: OpcionCotizadaEffi) => void; onCargado?: (ok: boolean) => void }) {
-  const [cot, setCot] = useState<{ ciudad: string; cobertura: boolean; opciones: OpcionCotizadaEffi[] } | null>(null);
+/**
+ * Transportadoras con flete estimado para la guía de Effi. `compacto`: solo la elegida, con «Cambiar»
+ * (en la revisión del envío). Se vuelve a cotizar cuando cambian la bodega de origen o el valor declarado.
+ */
+function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', declarado = 0, compacto = false, onCambiar }: {
+  rowId: string; valor: string; onElegir: (o: OpcionCotizadaEffi) => void; onCargado?: (ok: boolean) => void;
+  remitente?: string; declarado?: number; compacto?: boolean; onCambiar?: () => void;
+}) {
+  const [cot, setCot] = useState<{ ciudad: string; cobertura: boolean; origen: string; opciones: OpcionCotizadaEffi[] } | null>(null);
   const [error, setError] = useState('');
   const [verTodas, setVerTodas] = useState(false);
   const valorRef = useRef(valor);
   valorRef.current = valor;
+  const primera = useRef(true);
   useEffect(() => {
     let vivo = true;
-    void apiEffiCotizar(rowId).then((r) => {
+    const t = setTimeout(() => void apiEffiCotizar(rowId, remitente, declarado).then((r) => {
       if (!vivo) return;
       if (r.error || !r.data) { setError(r.error || 'No se pudo cotizar.'); onCargado?.(false); return; }
-      setCot(r.data); onCargado?.(true);
-      // La que ya estaba elegida o la configurada para las guías, si sirve; si no, la más barata que sirve.
-      const actual = r.data.opciones.find((o) => o.id && o.id === (valorRef.current || r.data!.predeterminada));
-      const elegir = actual && sirveEffi(actual) ? actual : r.data.opciones.find(sirveEffi);
-      if (elegir) onElegir(elegir);
-    });
-    return () => { vivo = false; };
-  }, [rowId]); // eslint-disable-line react-hooks/exhaustive-deps
+      setError(''); setCot(r.data); onCargado?.(true);
+      const actual = r.data.opciones.find((o) => o.id && o.id === (valorRef.current || (primera.current ? r.data!.predeterminada : '')));
+      if (actual) { if (primera.current && !sirveEffi(actual) && !compacto) { const m = r.data.opciones.find(sirveEffi); if (m) onElegir(m); } else onElegir(actual); }
+      // Sin transportadora elegida: la configurada para las guías (si sirve) o la más barata que sirve.
+      else if (!valorRef.current || primera.current) { const m = r.data.opciones.find(sirveEffi); if (m) onElegir(m); }
+      primera.current = false;
+    }), primera.current ? 0 : 450);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [rowId, remitente, declarado]); // eslint-disable-line react-hooks/exhaustive-deps
   if (error) return <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>No se pudo cotizar ({error}). Elige la transportadora abajo.</div>;
   if (!cot) return <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Cotizando transportadoras de Effi…</div>;
   if (!cot.opciones.length) return null;
@@ -194,12 +202,37 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado }: { rowId: string; v
   const ocultas = cot.opciones.filter((o) => !sirveEffi(o) && o.id !== valor);
   const lista = verTodas ? cot.opciones : cot.opciones.filter((o) => sirveEffi(o) || (o.id && o.id === valor));
   const sel = cot.opciones.find((o) => o.id && o.id === valor);
-  const donde = (o: OpcionCotizadaEffi) => (o.alcance === 'ciudad' ? cot.ciudad || 'esta ciudad' : o.alcance === 'departamento' ? 'este departamento' : 'todo el país');
+  const desde = cot.origen ? ` desde ${cot.origen}` : '';
+  const detalle = sel && sel.flete ? (
+    <>
+      {sel.nombre}: envío {pesos(sel.base)}{sel.seguro ? <> + seguro {pesos(sel.seguro)}</> : null}{sel.comision ? <> + recaudo {String(sel.pct).replace('.', ',')} % {pesos(sel.comision)}</> : null} = <b>{pesos(sel.flete)}</b>.{' '}
+      {sel.metodo === 'igual' ? <>Igual a tu guía más reciente a {cot.ciudad}{desde}.</>
+        : sel.alcance === 'ciudad' ? <>Tarifa actual a {cot.ciudad}{desde}, según tus guías.</>
+        : sel.alcance === 'ciudad_otra_bodega' ? <>Según tus guías a {cot.ciudad} desde otra bodega: puede variar.</>
+        : <>Aún no has enviado a {cot.ciudad}{desde}: es la tarifa más común en el departamento.</>}{' '}
+    </>
+  ) : sel ? <>Sin guías anteriores con {sel.nombre}. </> : null;
+  const pie = <div style={{ fontSize: 11, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>{detalle}El valor exacto lo pone Effi al crear la guía.{!cot.cobertura && ' Effi no respondió la cobertura de esta ciudad: revisa que la transportadora llegue.'}</div>;
+  if (compacto) {
+    if (!sel) return null;
+    const lg = logoTransp(sel.nombre, 30);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1.5px solid var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 10, padding: '8px 10px' }}>
+          <span aria-hidden="true" style={lg.estilo}>{lg.ini}</span>
+          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}><b style={{ fontSize: 13 }}>{sel.nombre}</b><span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>Con recaudo{sel.dias ? ` · ${sel.dias} días` : ''}</span></span>
+          {sel.flete > 0 && <b style={{ fontSize: 13.5, whiteSpace: 'nowrap' }}>≈ {pesos(sel.flete)}</b>}
+          {onCambiar && <button type="button" onClick={onCambiar} style={{ background: 'none', border: 'none', padding: '0 2px', minHeight: 32, color: 'var(--df-purple)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Cambiar</button>}
+        </div>
+        {pie}
+      </div>
+    );
+  }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-strong)' }}>Transportadora para <span style={{ color: 'var(--df-purple)' }}>{cot.ciudad || 'el destino'}</span></span>
-        <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>≈ según tus guías anteriores</span>
+        <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>≈ según tus guías{desde}</span>
       </div>
       <div role="radiogroup" aria-label="Transportadora de Effi" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {lista.map((o) => {
@@ -218,6 +251,7 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado }: { rowId: string; v
                   {o.llega === false && <span style={chipT('rgba(220,38,38,.12)', 'var(--df-danger-dark)')}>No llega a {cot.ciudad || 'esta ciudad'}</span>}
                   {o.llega !== false && o.recaudo === false && <span style={chipT('var(--df-warning-subtle)', 'var(--df-warning)')}>No cobra contra entrega aquí</span>}
                   {!o.id && <span style={chipT('var(--df-surface-2)', 'var(--df-text-muted)')}>No está en tu cuenta de Effi</span>}
+                  {o.flete > 0 && o.alcance !== 'ciudad' && <span style={chipT('var(--df-surface-2)', 'var(--df-text-muted)')}>{o.alcance === 'departamento' ? 'Ciudad nueva' : 'Otra bodega'}</span>}
                 </span>
               </span>
               <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
@@ -233,29 +267,7 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado }: { rowId: string; v
           {verTodas ? 'Ocultar las que no sirven' : `Ver ${ocultas.length} más (no llegan o no cobran contra entrega)`}
         </button>
       )}
-      <div style={{ fontSize: 11, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>
-        {sel && sel.flete
-          ? <>{sel.nombre}: {sel.metodo === 'igual'
-            ? <>igual a tu guía más reciente a {donde(sel)} con el mismo valor a recaudar ({pesos(sel.base)} envío + {pesos(sel.flete - sel.base)} de recaudo)</>
-            : sel.metodo === 'desglose'
-              ? <>envío {pesos(sel.base)}{sel.flete > sel.base ? <> + recaudo {String(sel.pct).replace('.', ',')} % {pesos(sel.flete - sel.base)}</> : null} = {pesos(sel.flete)}, con el desglose de tus últimas guías a {donde(sel)}</>
-              : <>flete de tus guías a {donde(sel)} con un valor a recaudar parecido</>} ({sel.muestras} guía{sel.muestras === 1 ? '' : 's'}). </>
-          : sel ? <>Sin guías anteriores con {sel.nombre}: </> : null}
-        El valor exacto lo pone Effi al crear la guía.{!cot.cobertura && ' Effi no respondió la cobertura de esta ciudad: revisa que la transportadora llegue.'}
-      </div>
-    </div>
-  );
-}
-
-/** Tarjeta de la transportadora elegida en el cotizador (con «Cambiar»). */
-function TranspElegida({ o, onCambiar }: { o: OpcionCotizadaEffi; onCambiar: () => void }) {
-  const lg = logoTransp(o.nombre, 30);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1.5px solid var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 10, padding: '8px 10px' }}>
-      <span aria-hidden="true" style={lg.estilo}>{lg.ini}</span>
-      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}><b style={{ fontSize: 13 }}>{o.nombre}</b><span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>Con recaudo{o.dias ? ` · ${o.dias} días` : ''}</span></span>
-      {o.flete > 0 && <b style={{ fontSize: 13.5, whiteSpace: 'nowrap' }}>≈ {pesos(o.flete)}</b>}
-      <button type="button" onClick={onCambiar} style={{ background: 'none', border: 'none', padding: '0 2px', minHeight: 32, color: 'var(--df-purple)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Cambiar</button>
+      {pie}
     </div>
   );
 }
@@ -348,7 +360,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {selectorConvenio}
       {(paso === 'idle' || paso === 'revisando') && !guiaAuto && sel.rowId && (
-        <CotizadorEffi rowId={String(sel.rowId)} valor={g.d.transportadora} onElegir={(o) => { setCot(o); g.elegirTransportadora(o.id); }} onCargado={setCotOk} />
+        <CotizadorEffi rowId={String(sel.rowId)} valor={g.d.transportadora} remitente={g.d.remitente || g.sugerido?.remitente || ''} onElegir={(o) => { setCot(o); g.elegirTransportadora(o.id); }} onCargado={setCotOk} />
       )}
       {paso === 'idle' || paso === 'revisando' ? (
         <button onClick={() => void revisar()} disabled={paso === 'revisando'} style={{ ...btnP, opacity: paso === 'revisando' ? 0.7 : 1 }}>
@@ -377,7 +389,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                 <input type="checkbox" checked={conGuia} onChange={(e) => setConGuia(e.target.checked)} /> 🚚 Crear también la guía de transporte
               </label>
-              {conGuia && cot && cotOk && cot.id === g.d.transportadora && <TranspElegida o={cot} onCambiar={() => { setPaso('idle'); setPrev(null); }} />}
+              {conGuia && cotOk && sel.rowId && <CotizadorEffi compacto rowId={String(sel.rowId)} valor={g.d.transportadora} remitente={g.d.remitente} declarado={g.d.valorDeclarado} onElegir={(o) => setCot(o)} onCambiar={() => { setPaso('idle'); setPrev(null); }} />}
               {conGuia && <CamposGuia g={g} items={sel.items} sinTransportadora={!!cot && cotOk && cot.id === g.d.transportadora} />}
             </div>
           )}
@@ -723,7 +735,7 @@ function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
         <b style={{ fontSize: 13.5, flex: 1 }}>Guía de transporte</b>
         <button onClick={() => setAbierto(false)} style={{ ...btnS, padding: '5px 10px' }}>Cerrar</button>
       </div>
-      {sel.rowId && <CotizadorEffi rowId={String(sel.rowId)} valor={g.d.transportadora} onElegir={(o) => g.elegirTransportadora(o.id)} onCargado={setCotOk} />}
+      {sel.rowId && <CotizadorEffi rowId={String(sel.rowId)} valor={g.d.transportadora} remitente={g.d.remitente} declarado={g.d.valorDeclarado} onElegir={(o) => g.elegirTransportadora(o.id)} onCargado={setCotOk} />}
       <CamposGuia g={g} items={sel.items} sinTransportadora={cotOk} />
       {g.ops && <button onClick={crear} disabled={!g.casiListo || enviando} style={{ ...btnP, opacity: !g.casiListo || enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Crear guía en Effi'}</button>}
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
