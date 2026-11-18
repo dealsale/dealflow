@@ -210,13 +210,16 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
   const sel = cot.opciones.find((o) => o.id && o.id === valor);
   const desde = cot.origen ? ` desde ${cot.origen}` : '';
   const detalle = sel && sel.flete ? (
+    sel.alcance === 'promedio' ? <>{sel.nombre}: aún no hay guías con esta transportadora; ≈ {pesos(sel.flete)} es el promedio de las demás para este pedido. </> : (
     <>
       {sel.nombre}: envío {pesos(sel.base)}{sel.seguro ? <> + seguro {pesos(sel.seguro)}</> : null}{sel.comision ? <> + recaudo {String(sel.pct).replace('.', ',')} % {pesos(sel.comision)}</> : null} = <b>{pesos(sel.flete)}</b>.{' '}
       {sel.metodo === 'igual' ? <>Igual a tu guía más reciente a {cot.ciudad}{desde}.</>
         : sel.alcance === 'ciudad' ? <>Tarifa actual a {cot.ciudad}{desde}, según tus guías.</>
         : sel.alcance === 'ciudad_otra_bodega' ? <>Según tus guías a {cot.ciudad} desde otra bodega: puede variar.</>
-        : <>Aún no has enviado a {cot.ciudad}{desde}: es la tarifa más común en el departamento.</>}{' '}
-    </>
+        : sel.alcance === 'departamento' ? <>Aún no has enviado a {cot.ciudad}{desde}: es la tarifa más común en el departamento.</>
+        : sel.alcance === 'nacional' ? <>Aún no has enviado a este departamento: es su tarifa más común{desde}.</>
+        : <>Aún no has enviado con {sel.nombre}: estimado con las guías de otras tiendas de DealFlow.</>}{' '}
+    </>)
   ) : sel ? <>Sin guías anteriores con {sel.nombre}. </> : null;
   const pie = <div style={{ fontSize: 11, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>{detalle}El valor exacto lo pone Effi al crear la guía.</div>;
   if (compacto) {

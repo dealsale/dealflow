@@ -79,7 +79,7 @@ Claves: despachar, enviar a effi, crear remision, crear guia, generar guia, desp
      - Probado con un año de guías reales (4.467): 82 % exactas al peso y 89 % cuando ya hay guías a esa ciudad desde la misma bodega.
      - Se vuelve a calcular al elegir la bodega (remitente) o cambiar el valor declarado. DealFlow trae solo el último año de guías de Effi (una vez) para conocer más ciudades.
    - Llega / días / contra entrega vienen de la **cobertura de Effi** para esa ciudad. Si Effi no responde, sale el aviso de revisar que la transportadora llegue.
-   - El valor final lo pone Effi al crear la guía. Sin guías anteriores con una transportadora sale «Sin guías previas».
+   - El valor final lo pone Effi al crear la guía. Sin guías propias con una transportadora: se estima con las guías de otras tiendas de DealFlow (solo sus fletes); si nadie ha enviado con ella, sale el promedio de las demás para ese pedido. Nunca al departamento: la tarifa más común de esa transportadora desde la bodega.
    - El mismo cotizador aparece en **🚚 Generar guía en Effi** (pedido con remisión y sin guía).
 3. **Revisar envío a Effi →**: ves cómo va cada producto con su artículo de Effi y el convenio.
 4. Si la guía automática está apagada, marca **🚚 Crear también la guía de transporte**: la transportadora elegida en el cotizador ya viene puesta (con «Cambiar»); el servicio se elige con botones (si tiene uno solo queda puesto), y faltan pago del flete y remitente. El botón dice lo que falta («Falta: servicio»).

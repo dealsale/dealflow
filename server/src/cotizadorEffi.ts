@@ -38,7 +38,7 @@ export interface OpcionCotizada {
   declarado: number;
   muestras: number;
   /** De dónde salió el envío: guías a la misma ciudad desde la misma bodega, desde otra bodega, o al departamento. */
-  alcance: 'ciudad' | 'ciudad_otra_bodega' | 'departamento' | '';
+  alcance: 'ciudad' | 'ciudad_otra_bodega' | 'departamento' | 'nacional' | 'otras_tiendas' | 'promedio' | '';
   /** igual = una guía reciente idéntica (mismo destino, bodega y valores): su flete exacto. */
   metodo: 'igual' | 'tarifa' | '';
 }
@@ -69,6 +69,14 @@ export function aGuia(f: { transportadora: string; ciudad: string; flete: number
     t: clave(f.transportadora), ori: norm(txt(raw.nombre_ciudad_remitente)), dep: norm(txt(raw.nombre_provincia_destinatario || raw.nombre_departamento_destinatario)), ciu: norm(f.ciudad),
     fl: env, man, rec, tot, decl: n('valor_declarado'), vrec: f.recaudo, desc: d > 0 && d < 1 ? d : 0, f: Date.parse(String(f.fecha || '').replace(' ', 'T')) || 0,
   };
+}
+
+/** Guías de las DEMÁS tiendas de DealFlow (solo sus fletes, nunca sus datos) de esas transportadoras: para estimar cuando la tienda nunca ha enviado con ellas. */
+function guiasOtrasTiendas(storeId: string, claves: Set<string>): Guia[] {
+  if (!claves.size) return [];
+  const filas = db.prepare(`SELECT transportadora, ciudad, flete, recaudo, fecha, raw FROM effi_guias WHERE store_id != ? AND vigente = 1 AND flete > 0
+    AND COALESCE(fecha, '') >= date('now', '-120 days') ORDER BY fecha DESC LIMIT 12000`).all(storeId) as { transportadora: string; ciudad: string; flete: number; recaudo: number; fecha: string; raw: string }[];
+  return filas.filter((f) => claves.has(clave(f.transportadora))).map(aGuia).filter((g) => g.t && g.f).sort((a, b) => a.f - b.f);
 }
 
 function guiasDeTienda(storeId: string): Guia[] {
@@ -131,6 +139,11 @@ function envioDe(pt: Guia[], ori: string, dep: string, ciu: string): { base: num
   }
   if (!cand.length) { cand = pt.filter((g) => g.fl > 0 && g.ciu === ciu && g.dep === dep); alcance = 'ciudad_otra_bodega'; }
   if (!cand.length) { cand = pt.filter((g) => g.fl > 0 && g.dep === dep); alcance = 'departamento'; }
+  if (!cand.length) {
+    // Nunca a ese departamento: la tarifa más común de la transportadora desde esa bodega (muchas cobran casi igual a todo el país).
+    const base = (pt.some((g) => g.ori === ori && g.fl > 0) ? pt.filter((g) => g.ori === ori && g.fl > 0) : pt.filter((g) => g.fl > 0)).slice(-40);
+    if (base.length) { const m = moda(base.map((g) => g.fl)); cand = base.filter((g) => g.fl === m); alcance = 'nacional'; }
+  }
   if (!cand.length) return null;
   const ult = cand[cand.length - 1];
   const po = pt.filter((g) => g.ori === ult.ori && g.fl > 0);
@@ -210,6 +223,22 @@ export async function cotizarEffi(storeId: string, orderId: string, opts: { remi
       ...estimar(guias.filter((g) => g.t === k), ori, depto, ciudad, recaudo, Math.max(0, Number(opts.declarado) || 0)),
     };
   });
+  // Sin guías propias con esa transportadora: con las de otras tiendas de DealFlow (mismo cálculo).
+  const faltan = new Set([...nombres.keys()].filter((k, i) => !opciones[i].flete));
+  if (faltan.size) {
+    const otras = guiasOtrasTiendas(storeId, faltan);
+    [...nombres.keys()].forEach((k, i) => {
+      if (!faltan.has(k)) return;
+      const e = estimar(otras.filter((g) => g.t === k), ori, depto, ciudad, recaudo, Math.max(0, Number(opts.declarado) || 0));
+      if (e.flete) Object.assign(opciones[i], e, { alcance: 'otras_tiendas', metodo: 'tarifa' });
+    });
+  }
+  // Y si tampoco hay: el promedio de las demás transportadoras para este pedido.
+  const conFlete = opciones.filter((x) => x.flete > 0).map((x) => x.flete).sort((a, b) => a - b);
+  if (conFlete.length) {
+    const med = conFlete[Math.floor(conFlete.length / 2)];
+    for (const x of opciones) if (!x.flete) Object.assign(x, { flete: Math.round(med / 100) * 100, base: 0, seguro: 0, comision: 0, alcance: 'promedio', metodo: 'tarifa' });
+  }
   // Primero las que sirven (llegan y cobran contra entrega), de la más barata a la más cara.
   const sirve = (x: OpcionCotizada) => x.llega !== false && x.recaudo !== false && !!x.id;
   opciones.sort((a, b) => Number(sirve(b)) - Number(sirve(a)) || (a.flete || 9e9) - (b.flete || 9e9) || (a.dias || 99) - (b.dias || 99) || a.nombre.localeCompare(b.nombre));
