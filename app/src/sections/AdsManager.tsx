@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { confirmar, notificar } from '../components/dialogs';
 import { ymdCO } from '../lib/fechaCO';
 import {
-  apiAdsAlertas, apiAdsBorrarPrueba, apiAdsBorrarRegla, apiAdsConfig, apiAdsCrearPrueba, apiAdsDuplicarConjunto, apiAdsEstado, apiAdsGuardarAlertas,
-  apiAdsOpcionesPrueba, apiAdsPanel, apiAdsPresupuesto, apiAdsProbarAlerta, apiAdsPruebas, apiAdsRegla, apiAdsRevisarAlertas, apiAdsSincronizar,
+  apiAdsAlertas, apiAdsAtribucion, apiAdsBorrarPrueba, apiAdsBorrarRegla, apiAdsConfig, apiAdsCrearPrueba, apiAdsDuplicarConjunto, apiAdsEstado, apiAdsGuardarAlertas,
+  apiAdsOpcionesPrueba, apiAdsPanel, apiAdsPresupuesto, apiAdsProbarAlerta, apiAdsPruebas, apiAdsRegla, apiAdsRevisarAlertas, apiAdsRevisarAtribucion, apiAdsSincronizar,
   apiAdsSugerencia, apiAdsTerminarPrueba,
-  type AlertaAds, type CampanaAds, type CfgAlertasAds, type ConfigAds, type OpcionesPruebaAds, type PanelAds, type PruebaAds, type ReglaAds,
+  type AlertaAds, type CampanaAds, type DiagnosticoAtribucion, type CfgAlertasAds, type ConfigAds, type OpcionesPruebaAds, type PanelAds, type PruebaAds, type ReglaAds,
   type SugerenciaAds, type TipoAlertaAds,
 } from '../lib/api';
 
@@ -242,6 +242,7 @@ export function AdsManager() {
 
       {tab === 'campanas' && <>
         {webSinPedidos.length > 0 && <ParametrosUrl campanas={webSinPedidos} />}
+        <OrigenPedidosWeb />
             <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <b style={{ fontSize: 14 }}>Campañas</b>
@@ -726,6 +727,52 @@ function ParametrosUrl({ campanas }: { campanas: string[] }) {
           <li>Meta cuenta compras con su propio criterio (hasta 7 días después del clic, e incluso solo por ver el anuncio): sus números no van a ser iguales a los pedidos reales que ves aquí.</li>
         </ol>
       )}
+    </div>
+  );
+}
+
+// ── ¿Los pedidos de Shopify y de la landing quedaron con su anuncio? ─────────────────────────
+function OrigenPedidosWeb() {
+  const [d, setD] = useState<DiagnosticoAtribucion | null>(null);
+  const [revisando, setRevisando] = useState(false);
+  useEffect(() => { apiAdsAtribucion().then((r) => { if (r.data) setD(r.data); }).catch(() => {}); }, []);
+  const fuentes = (d?.fuentes || []).filter((f) => f.total > 0);
+  if (!fuentes.length) return null;
+  const revisar = async () => {
+    setRevisando(true);
+    const r = await apiAdsRevisarAtribucion();
+    setRevisando(false);
+    if (r.error || !r.data) return notificar(r.error || 'No se pudo revisar.', 'error');
+    setD(r.data);
+    notificar(r.data.asignados ? `✓ ${r.data.asignados} pedido(s) quedaron con su anuncio. Sincroniza para verlos en la tabla.` : 'Revisado: no hubo pedidos nuevos para asignar.');
+  };
+  const nombre = { shopify: 'Shopify', landing: 'Landing DealFlow' } as const;
+  return (
+    <div style={{ ...card, fontSize: 12.5, lineHeight: 1.55 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <b style={{ fontSize: 13.5 }}>¿De qué anuncio vinieron tus pedidos web? <span style={{ fontWeight: 500, color: 'var(--df-text-muted)' }}>· últimos {d?.dias || 7} días</span></b>
+        <button onClick={() => void revisar()} disabled={revisando} style={{ ...btnS, padding: '5px 10px' }}>{revisando ? 'Revisando…' : 'Revisar ahora'}</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 10, marginTop: 8 }}>
+        {fuentes.map((f) => (
+          <div key={f.fuente} style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px' }}>
+            <div style={{ fontWeight: 700 }}>{nombre[f.fuente]}: {f.conAnuncio} de {f.total} con su anuncio</div>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 18, color: 'var(--df-text-body)' }}>
+              {f.sinDatos > 0 && <li><b>{f.sinDatos}</b> llegaron sin datos del anuncio (sin utm ni fbclid).</li>}
+              {f.sinAnuncio > 0 && <li><b>{f.sinAnuncio}</b> traen datos de Meta pero su anuncio no está en la cuenta conectada.</li>}
+              {f.macros > 0 && <li style={{ color: 'var(--df-danger-dark)' }}><b>{f.macros}</b> llegaron con «{'{{ad.id}}'}» sin reemplazar.</li>}
+              {f.pendientes > 0 && <li><b>{f.pendientes}</b> en revisión (se reintenta cada 30 min).</li>}
+            </ul>
+            {f.fuente === 'shopify' && f.sinDatos > 0 && (
+              <div style={{ marginTop: 6, color: 'var(--df-text-muted)' }}>
+                Si tus pedidos los crea un formulario contra entrega (EasySell, Releasit…), esa app debe guardar los UTM en el pedido: actívalo en su configuración. Revisa también que los parámetros estén en <b>Seguimiento → Parámetros de URL</b> de cada anuncio. Las compras que mide el píxel siguen saliendo en «Compras Meta».
+              </div>
+            )}
+            {f.sinAnuncio > 0 && <div style={{ marginTop: 6, color: 'var(--df-text-muted)' }}>Puede ser un anuncio de otra cuenta publicitaria, o uno nuevo que aún no se sincroniza (pulsa Sincronizar).</div>}
+            {f.macros > 0 && <div style={{ marginTop: 6, color: 'var(--df-text-muted)' }}>Pega los parámetros en el campo «Parámetros de URL», no dentro del enlace del sitio web.</div>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

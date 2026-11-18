@@ -137,11 +137,9 @@ export async function importarPedido(storeId: string, shop: string, o: Fila, con
     // apps como EasySell guardan los parámetros en las notas del pedido (note_attributes).
     {
       const notas = (Array.isArray(o.note_attributes) ? o.note_attributes as Fila[] : []);
-      const enNotas = notas.filter((n) => /utm|fbclid|ad_?id|campaign|landing|url|source/i.test(txt(n.name)));
-      const urls = [txt(o.landing_site), ...enNotas.filter((n) => /^(https?:\/\/|\/|\?)/i.test(txt(n.value))).map((n) => txt(n.value)),
-        enNotas.length ? '?' + enNotas.map((n) => `${encodeURIComponent(txt(n.name).toLowerCase().replace(/\s+/g, '_'))}=${encodeURIComponent(txt(n.value))}`).join('&') : ''].filter(Boolean);
-      const handles = [...new Set(urls.map((u) => (u.match(/\/products\/([a-z0-9-]+)/i) || [])[1]).filter(Boolean))].map((h) => `/products/${String(h).toLowerCase()}`);
-      if (urls.length) void import('./atribucion.js').then((m) => m.atribuirPedido(storeId, oid, urls, handles, 'shopify')).catch(() => {});
+      const urls = [txt(o.landing_site)].filter(Boolean);
+      const gid = txt(o.admin_graphql_api_id) || `gid://shopify/Order/${sid}`;
+      void import('./atribucion.js').then((m) => m.atribuirPedidoShopify(storeId, oid, gid, [...urls, ...m.urlsDeAtributos(notas)])).catch(() => {});
     }
     if (!tel) trazar(storeId, oid, { etapa: 'pedido', nivel: 'warn', titulo: 'El pedido de Shopify llegó sin teléfono', detalle: 'No se puede confirmar por WhatsApp. ¿Falta aprobar el acceso a datos de clientes en Shopify, o el checkout no pide el teléfono?' });
     else if (confirmar && cfgPedidosShopify(storeId).confirmar) await enviarConfirmacion(storeId, oid);
@@ -536,6 +534,7 @@ export async function marcarEnviadoShopify(storeId: string, orderId: string): Pr
 const Q_PEDIDOS = (conCliente: boolean) => `query($q: String!) {
   orders(first: 25, sortKey: CREATED_AT, reverse: true, query: $q) { nodes {
     id legacyResourceId name createdAt note displayFinancialStatus
+    customAttributes { key value }
     totalPriceSet { shopMoney { amount } }
     shippingLines(first: 5) { nodes { originalPriceSet { shopMoney { amount } } } }
     ${conCliente ? `phone
@@ -550,6 +549,7 @@ function aFormaWebhook(n: Nodo): Fila {
   const dir = (a: Nodo | null | undefined) => (a ? { ...a } : undefined);
   return {
     id: n.legacyResourceId, admin_graphql_api_id: n.id, name: n.name, note: n.note, created_at: n.createdAt,
+    note_attributes: (n.customAttributes || []).map((a: Nodo) => ({ name: a.key, value: a.value })),
     financial_status: String(n.displayFinancialStatus || '').toLowerCase(),
     total_price: n.totalPriceSet?.shopMoney?.amount, phone: n.phone,
     shipping_address: dir(n.shippingAddress), billing_address: dir(n.billingAddress),
