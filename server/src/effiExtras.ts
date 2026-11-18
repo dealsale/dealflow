@@ -10,7 +10,7 @@
  *     para que el inventario vuelva a cuadrar.
  */
 import { db, pj, registrarLog } from './db.js';
-import { cfgEffi, effi, mensajeError, prepararRemision, resolverUbicacion } from './effiApi.js';
+import { cfgEffi, effi, guiaAnuladaEffi, mensajeError, prepararRemision, resolverUbicacion } from './effiApi.js';
 import { conPedido, trazar } from './trazabilidad.js';
 import { nombreTransportadora } from './transportadoras.js';
 
@@ -334,6 +334,11 @@ export async function unirGuiasDeEffi(storeId: string, forzar = false): Promise<
   }
   const sinCero = (g: string) => g.replace(/\s/g, '').replace(/^0+/, '');
   const yaUnidas = new Set((db.prepare("SELECT guia FROM orders WHERE store_id = ? AND COALESCE(guia,'') != ''").all(storeId) as { guia: string }[]).map((o) => sinCero(o.guia)));
+  // Guías y remisiones que DealFlow ya anuló (historial del pedido): nunca se vuelven a pegar.
+  const anuladasDF = new Set<string>();
+  for (const r of db.prepare("SELECT effi_anuladas FROM orders WHERE store_id = ? AND COALESCE(effi_anuladas,'') != ''").all(storeId) as { effi_anuladas: string }[]) {
+    for (const t of r.effi_anuladas.split(/[·+,\s]+/)) if (t.trim()) anuladasDF.add(sinCero(t.trim()));
+  }
   // Solo pedidos SIN remisión propia de DealFlow ni orden de Dropi: los que DealFlow envió a Effi
   // reciben SU guía por su remisión (no se les pega la guía de otro envío del mismo cliente).
   const libres = db.prepare(`SELECT id, numero, cliente, tel, ciudad, estado, created_at FROM orders WHERE store_id = ? AND COALESCE(guia,'') = ''
@@ -347,6 +352,8 @@ export async function unirGuiasDeEffi(storeId: string, forzar = false): Promise<
   for (const g of guias) {
     const num = txt(g.guia);
     if (!num || yaUnidas.has(sinCero(num))) continue;
+    // Una guía ANULADA no se une a ningún pedido: así no se pega la vieja después de anularla (la nueva sí).
+    if (guiaAnuladaEffi(g) || anuladasDF.has(sinCero(num)) || anuladasDF.has(sinCero(txt(g.id_transaccion)))) continue;
     if (txt(g.id_ref) && nuestras.has(`${txt(g.sucursal_ref)}:${txt(g.id_ref)}`)) continue;
     const fechaGuia = new Date(txt(g.fecha_trans).replace(' ', 'T') + 'Z').getTime() || Date.now();
     const enVentana = (o: Fila) => { const t = new Date(txt(o.created_at).replace(' ', 'T') + 'Z').getTime(); return t <= fechaGuia + 86400_000 && t >= fechaGuia - 30 * 86400_000; };
