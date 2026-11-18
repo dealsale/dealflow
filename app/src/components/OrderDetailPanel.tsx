@@ -10,6 +10,7 @@ import { confirmar, pedirTexto, notificar } from './dialogs';
 import { enProceso, ProcesoPedido } from './Proceso';
 import { apiRegistroPedido, apiDatosRemitente, apiCambioResuelto, type EventoPedido } from '../lib/api';
 import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
+import { apiEffiCotizar, type OpcionCotizadaEffi } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia, type RemitenteSugerido } from '../lib/api';
 
 import { fmtCO } from '../lib/fechaCO';
@@ -66,77 +67,205 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
     });
   };
 
-  const btnP: React.CSSProperties = { background: 'var(--df-warning)', border: 'none', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' };
+  const btnP: React.CSSProperties = { background: 'var(--df-warning)', border: 'none', borderRadius: 9, padding: '0 12px', minHeight: 44, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' };
+  const [verTodas, setVerTodas] = useState(false);
 
   if (paso === 'idle' || paso === 'cargando' || paso === 'solo') {
     return (
-      <div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {/* Recaudo: contra entrega (Dropi cobra al entregar) vs prepagado (ya pagó). */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 9 }}>
-          {(['con', 'sin'] as const).map((r) => (
-            <button key={r} onClick={() => setRecaudo(r)} style={{
-              background: recaudo === r ? 'var(--df-warning)' : 'var(--df-surface)', color: recaudo === r ? '#fff' : 'var(--df-warning)',
-              border: '1px solid var(--df-warning)', borderRadius: 7, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-            }}>{r === 'con' ? 'Con recaudo (contra entrega)' : 'Sin recaudo (pagado)'}</button>
-          ))}
-        </div>
+        <InterruptorCobro cod={recaudo === 'con'} onCambio={(c) => setRecaudo(c ? 'con' : 'sin')} color="var(--df-warning)" total={sel.total && sel.total > 0 ? sel.total : sel.items.reduce((a, it) => a + it.qty * it.precio, 0) + (sel.envio || 0)} />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={cotizar} disabled={paso !== 'idle'} style={{ ...btnP, opacity: paso !== 'idle' ? 0.7 : 1 }}>
-            {paso === 'cargando' ? 'Cotizando…' : '📦 Generar en Dropi (con guía)'}
+          <button onClick={cotizar} disabled={paso !== 'idle'} style={{ ...btnP, flex: '1 1 170px', opacity: paso !== 'idle' ? 0.7 : 1 }}>
+            {paso === 'cargando' ? 'Cotizando…' : '📦 Cotizar y generar guía'}
           </button>
           <button onClick={() => void soloPedido()} disabled={paso !== 'idle'} title="Crea el pedido en Dropi sin transportadora ni guía, para revisar la huella del cliente y generar la guía allá"
-            style={{ ...btnP, background: 'var(--df-surface)', color: 'var(--df-warning)', border: '1px solid var(--df-warning)', opacity: paso !== 'idle' ? 0.7 : 1 }}>
-            {paso === 'solo' ? 'Enviando…' : '📝 Solo enviar el pedido (la guía la hago en Dropi)'}
+            style={{ ...btnP, flex: '1 1 150px', background: 'var(--df-surface)', color: 'var(--df-warning)', border: '1px solid var(--df-warning)', opacity: paso !== 'idle' ? 0.7 : 1 }}>
+            {paso === 'solo' ? 'Enviando…' : '📝 Solo enviar el pedido'}
           </button>
         </div>
-        {msg && <div style={{ marginTop: 8, fontSize: 12.5, color: msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
-        {/talla\/color|no tiene la variante|No pudimos emparejar/.test(msg) && <div style={{ marginTop: 8 }}><CorregirVariantes key={msg} df={df} sel={sel} onListo={() => { setMsg(''); notificar('✓ Variantes corregidas. Ahora elige: generar con guía o solo enviar el pedido.'); }} /></div>}
+        <div style={{ fontSize: 11, color: 'var(--df-text-muted)', lineHeight: 1.45 }}>«Solo enviar»: queda en Dropi como Pendiente confirmación; revisas la huella del cliente y haces la guía allá. Llega sola a DealFlow.</div>
+        {msg && <div style={{ fontSize: 12.5, color: msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
+        {/talla\/color|no tiene la variante|No pudimos emparejar/.test(msg) && <CorregirVariantes key={msg} df={df} sel={sel} onListo={() => { setMsg(''); notificar('✓ Variantes corregidas. Ahora elige: generar con guía o solo enviar el pedido.'); }} />}
       </div>
     );
   }
+  const VISIBLES = 4;
+  const masBarata = disponibles.reduce<DropiTransportadora | null>((a, t) => (!a || t.precio < a.precio ? t : a), null);
+  const esElegida = (t: DropiTransportadora) => !auto && elegida?.id === t.id && elegida?.service === t.service;
+  const lista = verTodas ? disponibles : disponibles.filter((t, i) => i < VISIBLES || esElegida(t));
+  const fila = (on: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, width: '100%', boxSizing: 'border-box', textAlign: 'left', background: on ? 'var(--df-warning-subtle)' : 'var(--df-surface)', border: `1px solid ${on ? 'var(--df-warning)' : 'var(--df-border)'}`, borderRadius: 8, padding: '0 10px', minHeight: 40, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--df-text)' });
+  const punto = (on: boolean): React.CSSProperties => ({ width: 14, height: 14, borderRadius: '50%', boxSizing: 'border-box', border: `2px solid ${on ? 'var(--df-warning)' : 'var(--df-border-strong)'}`, background: on ? 'var(--df-warning)' : 'transparent', boxShadow: on ? 'inset 0 0 0 2px var(--df-surface)' : 'none', flexShrink: 0 });
+  const precioRedondo = (n: number) => pesos(Math.round(n));
   return (
-    <div>
-      <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8 }}>Transportadoras para <b>{ciudad || 'el destino'}</b> — elige una:</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {disponibles.map((t) => {
-          const on = !auto && elegida?.id === t.id && elegida?.service === t.service;
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-strong)' }}>Transportadoras para <span style={{ color: 'var(--df-warning)' }}>{ciudad || 'el destino'}</span></span>
+        <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>{disponibles.length} opciones · {recaudo === 'con' ? 'con recaudo' : 'sin recaudo'}</span>
+      </div>
+      <div role="radiogroup" aria-label="Transportadora de Dropi" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {lista.map((t) => {
+          const on = esElegida(t);
           return (
-            <button key={`${t.id}-${t.service}`} onClick={() => { setElegida(t); setAuto(false); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: on ? 'var(--df-warning-subtle)' : 'var(--df-surface)', border: `1px solid ${on ? 'var(--df-warning)' : 'var(--df-border)'}`, borderRadius: 9, padding: '9px 12px', cursor: 'pointer' }}>
-              <span style={{ width: 15, height: 15, borderRadius: '50%', border: `2px solid ${on ? 'var(--df-warning)' : 'var(--df-border)'}`, background: on ? 'var(--df-warning)' : 'transparent', flexShrink: 0 }} />
-              <span style={{ fontWeight: 700, fontSize: 13, flex: 1 }}>{t.nombre}{t.service && t.service !== 'normal' ? ` · ${t.service}` : ''}</span>
-              <span style={{ fontWeight: 700, fontSize: 13 }}>{pesos(t.precio)}</span>
+            <button key={`${t.id}-${t.service}`} role="radio" aria-checked={on} onClick={() => { setElegida(t); setAuto(false); }} style={fila(on)}>
+              <span style={punto(on)} />
+              <span style={{ fontWeight: 700, fontSize: 12.5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nombre}{t.service && t.service !== 'normal' ? ` · ${t.service}` : ''}</span>
+              {masBarata === t && disponibles.length > 1 && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 999, background: 'rgba(16,185,129,.15)', color: 'var(--df-brand-dark)', whiteSpace: 'nowrap' }}>Más barata</span>}
+              <span style={{ fontWeight: 700, fontSize: 12.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{precioRedondo(t.precio)}</span>
             </button>
           );
         })}
-        <button onClick={() => setAuto(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: auto ? 'var(--df-warning-subtle)' : 'var(--df-surface)', border: `1px solid ${auto ? 'var(--df-warning)' : 'var(--df-border)'}`, borderRadius: 9, padding: '9px 12px', cursor: 'pointer' }}>
-          <span style={{ width: 15, height: 15, borderRadius: '50%', border: `2px solid ${auto ? 'var(--df-warning)' : 'var(--df-border)'}`, background: auto ? 'var(--df-warning)' : 'transparent', flexShrink: 0 }} />
-          <span style={{ fontWeight: 700, fontSize: 13, flex: 1 }}>Que Dropi elija (automático)</span>
+        <button role="radio" aria-checked={auto} onClick={() => setAuto(true)} style={fila(auto)}>
+          <span style={punto(auto)} />
+          <span style={{ fontWeight: 700, fontSize: 12.5, flex: 1 }}>Que Dropi elija (automático)</span>
         </button>
       </div>
-      {!!noDisp.length && (
-        <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)' }}>
-          Sin cobertura: {noDisp.map((n) => n.nombre).join(', ')}
-        </div>
+      {disponibles.length > VISIBLES && (
+        <button onClick={() => setVerTodas((v) => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, minHeight: 28, color: 'var(--df-warning)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+          {verTodas ? 'Ver menos' : `Ver ${disponibles.length - VISIBLES} más`}
+        </button>
       )}
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button onClick={crear} disabled={paso === 'creando' || (!auto && !elegida)} style={{ ...btnP, opacity: paso === 'creando' || (!auto && !elegida) ? 0.6 : 1 }}>
-          {paso === 'creando' ? 'Creando…' : 'Crear en Dropi'}
+      {!!noDisp.length && <div style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>Sin cobertura: {noDisp.map((n) => n.nombre).join(', ')}</div>}
+      <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+        <button onClick={crear} disabled={paso === 'creando' || (!auto && !elegida)} style={{ ...btnP, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: paso === 'creando' || (!auto && !elegida) ? 0.6 : 1 }}>
+          {paso === 'creando' ? 'Creando…' : auto ? 'Crear en Dropi · automático' : elegida ? `Crear en Dropi · ${elegida.nombre} ${precioRedondo(elegida.precio)}` : 'Crear en Dropi'}
         </button>
-        <button onClick={() => { setPaso('idle'); setMsg(''); }} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-muted)', cursor: 'pointer' }}>Cancelar</button>
+        <button onClick={() => { setPaso('idle'); setMsg(''); }} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '0 14px', minHeight: 44, fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-muted)', cursor: 'pointer' }}>Cancelar</button>
       </div>
-      {msg && <div style={{ marginTop: 8, fontSize: 12.5, color: msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
+      {msg && <div style={{ marginTop: 4, fontSize: 12.5, color: msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+/** Interruptor «Contra entrega / Pagado» (compacto). */
+function InterruptorCobro({ cod, onCambio, color, total }: { cod: boolean; onCambio: (cod: boolean) => void; color: string; total?: number }) {
+  const pill = (on: boolean): React.CSSProperties => ({ border: 'none', borderRadius: 999, padding: '0 11px', minHeight: 30, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer', background: on ? 'var(--df-surface)' : 'transparent', color: on ? color : 'var(--df-text-secondary)', boxShadow: on ? '0 1px 2px rgba(15,23,42,.14)' : 'none' });
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Cobro:</span>
+      <div role="group" aria-label="Forma de pago del pedido" style={{ display: 'inline-flex', background: 'var(--df-surface-2)', borderRadius: 999, padding: 3, gap: 2 }}>
+        <button type="button" aria-pressed={cod} onClick={() => onCambio(true)} style={pill(cod)}>Contra entrega</button>
+        <button type="button" aria-pressed={!cod} onClick={() => onCambio(false)} style={pill(!cod)}>Pagado</button>
+      </div>
+      {total != null && <span style={{ fontSize: 12, color: 'var(--df-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{cod ? `recauda ${pesos(total)}` : 'sin recaudo'}</span>}
+    </div>
+  );
+}
+
+// ── Cotizador de Effi: cobertura real + fletes de las guías anteriores de la tienda ──
+const COLOR_T: [RegExp, string, string][] = [
+  [/interr?apid/i, '#B45309', 'IR'], [/envia/i, '#C81E1E', 'E'], [/coordinadora/i, '#0B4EA2', 'C'], [/servientrega/i, '#15803D', 'S'],
+  [/^tcc/i, '#334155', 'TCC'], [/domina/i, '#7C3AED', 'D'], [/99/i, '#0F766E', '99'], [/deprisa/i, '#9F1239', 'DP'], [/mensajeros/i, '#1D4ED8', 'MU'],
+];
+function logoTransp(nombre: string, px = 28): { estilo: React.CSSProperties; ini: string } {
+  const c = COLOR_T.find(([re]) => re.test(nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '')));
+  const ini = c ? c[2] : nombre.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase();
+  return { ini, estilo: { width: px, height: px, borderRadius: 8, background: c ? c[1] : '#475569', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: ini.length > 2 ? 9.5 : 12, flexShrink: 0 } };
+}
+const chipT = (bg: string, fg: string): React.CSSProperties => ({ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: bg, color: fg, whiteSpace: 'nowrap' });
+const sirveEffi = (o: OpcionCotizadaEffi) => o.llega !== false && o.recaudo !== false && !!o.id;
+
+/** Lista de transportadoras con flete estimado para elegir la de la guía de Effi. */
+function CotizadorEffi({ rowId, valor, onElegir, onCargado }: { rowId: string; valor: string; onElegir: (o: OpcionCotizadaEffi) => void; onCargado?: (ok: boolean) => void }) {
+  const [cot, setCot] = useState<{ ciudad: string; cobertura: boolean; opciones: OpcionCotizadaEffi[] } | null>(null);
+  const [error, setError] = useState('');
+  const [verTodas, setVerTodas] = useState(false);
+  const valorRef = useRef(valor);
+  valorRef.current = valor;
+  useEffect(() => {
+    let vivo = true;
+    void apiEffiCotizar(rowId).then((r) => {
+      if (!vivo) return;
+      if (r.error || !r.data) { setError(r.error || 'No se pudo cotizar.'); onCargado?.(false); return; }
+      setCot(r.data); onCargado?.(true);
+      // La que ya estaba elegida o la configurada para las guías, si sirve; si no, la más barata que sirve.
+      const actual = r.data.opciones.find((o) => o.id && o.id === (valorRef.current || r.data!.predeterminada));
+      const elegir = actual && sirveEffi(actual) ? actual : r.data.opciones.find(sirveEffi);
+      if (elegir) onElegir(elegir);
+    });
+    return () => { vivo = false; };
+  }, [rowId]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (error) return <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>No se pudo cotizar ({error}). Elige la transportadora abajo.</div>;
+  if (!cot) return <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Cotizando transportadoras de Effi…</div>;
+  if (!cot.opciones.length) return null;
+  const validas = cot.opciones.filter(sirveEffi);
+  const barata = validas.filter((o) => o.flete > 0).reduce<OpcionCotizadaEffi | null>((a, o) => (!a || o.flete < a.flete ? o : a), null);
+  const rapida = validas.filter((o) => o.dias).reduce<OpcionCotizadaEffi | null>((a, o) => (!a || (o.dias || 99) < (a.dias || 99) ? o : a), null);
+  const ocultas = cot.opciones.filter((o) => !sirveEffi(o) && o.id !== valor);
+  const lista = verTodas ? cot.opciones : cot.opciones.filter((o) => sirveEffi(o) || (o.id && o.id === valor));
+  const sel = cot.opciones.find((o) => o.id && o.id === valor);
+  const donde = (o: OpcionCotizadaEffi) => (o.alcance === 'ciudad' ? cot.ciudad || 'esta ciudad' : o.alcance === 'departamento' ? 'este departamento' : 'todo el país');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-strong)' }}>Transportadora para <span style={{ color: 'var(--df-purple)' }}>{cot.ciudad || 'el destino'}</span></span>
+        <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>≈ según tus guías anteriores</span>
+      </div>
+      <div role="radiogroup" aria-label="Transportadora de Effi" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {lista.map((o) => {
+          const on = !!o.id && o.id === valor;
+          const sirve = sirveEffi(o);
+          const lg = logoTransp(o.nombre);
+          return (
+            <button key={o.nombre} role="radio" aria-checked={on} disabled={!o.id} onClick={() => o.id && onElegir(o)} title={!o.id ? 'Esta transportadora no está habilitada en tu cuenta de Effi' : undefined}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', boxSizing: 'border-box', textAlign: 'left', padding: '7px 10px', minHeight: 50, borderRadius: 10, cursor: o.id ? 'pointer' : 'not-allowed', fontFamily: 'inherit', color: 'var(--df-text)', border: `1.5px solid ${on ? 'var(--df-purple)' : 'var(--df-border)'}`, background: on ? 'var(--df-purple-subtle)' : 'var(--df-surface)', opacity: sirve || on ? 1 : 0.6 }}>
+              <span aria-hidden="true" style={lg.estilo}>{lg.ini}</span>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap' }}><b style={{ fontSize: 13 }}>{o.nombre}</b>{o.recaudo !== false && <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>con recaudo</span>}</span>
+                <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {barata === o && validas.length > 1 && <span style={chipT('rgba(16,185,129,.15)', 'var(--df-brand-dark)')}>Más barata</span>}
+                  {rapida === o && validas.length > 1 && <span style={chipT('rgba(59,130,246,.14)', 'var(--df-info)')}>Más rápida</span>}
+                  {o.llega === false && <span style={chipT('rgba(220,38,38,.12)', 'var(--df-danger-dark)')}>No llega a {cot.ciudad || 'esta ciudad'}</span>}
+                  {o.llega !== false && o.recaudo === false && <span style={chipT('var(--df-warning-subtle)', 'var(--df-warning)')}>No cobra contra entrega aquí</span>}
+                  {!o.id && <span style={chipT('var(--df-surface-2)', 'var(--df-text-muted)')}>No está en tu cuenta de Effi</span>}
+                </span>
+              </span>
+              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
+                <b style={{ fontSize: o.flete ? 14 : 11.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: o.flete ? 'var(--df-text)' : 'var(--df-text-muted)' }}>{o.flete ? `≈ ${pesos(o.flete)}` : 'Sin guías previas'}</b>
+                {!!o.dias && <span style={{ fontSize: 11, color: 'var(--df-text-muted)', whiteSpace: 'nowrap' }}>{o.dias} día{o.dias === 1 ? '' : 's'}</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {(ocultas.length > 0 || verTodas) && (
+        <button onClick={() => setVerTodas((v) => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, minHeight: 28, color: 'var(--df-purple)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+          {verTodas ? 'Ocultar las que no sirven' : `Ver ${ocultas.length} más (no llegan o no cobran contra entrega)`}
+        </button>
+      )}
+      <div style={{ fontSize: 11, color: 'var(--df-text-faint)', lineHeight: 1.45 }}>
+        {sel && sel.flete
+          ? <>{sel.nombre}: {sel.metodo === 'igual'
+            ? <>igual a tu guía más reciente a {donde(sel)} con el mismo valor a recaudar ({pesos(sel.base)} envío + {pesos(sel.flete - sel.base)} de recaudo)</>
+            : sel.metodo === 'desglose'
+              ? <>envío {pesos(sel.base)}{sel.flete > sel.base ? <> + recaudo {String(sel.pct).replace('.', ',')} % {pesos(sel.flete - sel.base)}</> : null} = {pesos(sel.flete)}, con el desglose de tus últimas guías a {donde(sel)}</>
+              : <>flete de tus guías a {donde(sel)} con un valor a recaudar parecido</>} ({sel.muestras} guía{sel.muestras === 1 ? '' : 's'}). </>
+          : sel ? <>Sin guías anteriores con {sel.nombre}: </> : null}
+        El valor exacto lo pone Effi al crear la guía.{!cot.cobertura && ' Effi no respondió la cobertura de esta ciudad: revisa que la transportadora llegue.'}
+      </div>
+    </div>
+  );
+}
+
+/** Tarjeta de la transportadora elegida en el cotizador (con «Cambiar»). */
+function TranspElegida({ o, onCambiar }: { o: OpcionCotizadaEffi; onCambiar: () => void }) {
+  const lg = logoTransp(o.nombre, 30);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1.5px solid var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 10, padding: '8px 10px' }}>
+      <span aria-hidden="true" style={lg.estilo}>{lg.ini}</span>
+      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}><b style={{ fontSize: 13 }}>{o.nombre}</b><span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>Con recaudo{o.dias ? ` · ${o.dias} días` : ''}</span></span>
+      {o.flete > 0 && <b style={{ fontSize: 13.5, whiteSpace: 'nowrap' }}>≈ {pesos(o.flete)}</b>}
+      <button type="button" onClick={onCambiar} style={{ background: 'none', border: 'none', padding: '0 2px', minHeight: 32, color: 'var(--df-purple)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Cambiar</button>
     </div>
   );
 }
 
 const tarjetaProv = (activo: boolean, disponible: boolean): React.CSSProperties => ({
-  flex: 1, minWidth: 0, textAlign: 'left', cursor: disponible ? 'pointer' : 'default', fontFamily: 'inherit',
-  border: '1.5px solid ' + (activo ? 'var(--df-purple)' : 'var(--df-border)'), borderRadius: 12, padding: '12px 12px 11px',
+  width: '100%', minWidth: 0, boxSizing: 'border-box', textAlign: 'left', cursor: disponible ? 'pointer' : 'default', fontFamily: 'inherit',
+  border: '1.5px solid ' + (activo ? 'var(--df-purple)' : 'var(--df-border)'), borderRadius: 10, padding: '8px 10px', minHeight: 48,
   background: activo ? 'var(--df-purple-subtle)' : 'var(--df-surface)', opacity: disponible ? 1 : 0.55,
   boxShadow: activo ? '0 6px 18px -10px rgba(124,58,237,.6)' : 'none', transition: 'border-color .15s, background .15s',
-  display: 'flex', flexDirection: 'column', gap: 6,
+  display: 'flex', alignItems: 'center', gap: 8,
 });
 const chip = (bg: string, fg: string): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 5, background: bg, color: fg, borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' });
 const btnP: React.CSSProperties = { width: '100%', background: 'var(--df-purple)', border: 'none', borderRadius: 10, padding: '12px 16px', fontFamily: 'inherit', fontWeight: 800, fontSize: 13.5, color: '#fff', cursor: 'pointer' };
@@ -153,6 +282,10 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
   // la remisión y enseguida la guía (si la guía automática está apagada).
   const g = useGuiaEffi(sel.rowId ? String(sel.rowId) : undefined);
   const [conGuia, setConGuia] = useState(true);
+  // Transportadora elegida en el cotizador (flete estimado con las guías anteriores).
+  const [cot, setCot] = useState<OpcionCotizadaEffi | null>(null);
+  const [cotOk, setCotOk] = useState(false);
+  useEffect(() => { if (!guiaAuto) void g.cargar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Convenio para ESTE envío: '' = automático, 'propio' = sin convenio, o un código.
   const [convenio, setConvenio] = useState('');
   const [convenios, setConvenios] = useState<{ id: string; nombre: string }[]>([]);
@@ -214,6 +347,9 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {selectorConvenio}
+      {(paso === 'idle' || paso === 'revisando') && !guiaAuto && sel.rowId && (
+        <CotizadorEffi rowId={String(sel.rowId)} valor={g.d.transportadora} onElegir={(o) => { setCot(o); g.elegirTransportadora(o.id); }} onCargado={setCotOk} />
+      )}
       {paso === 'idle' || paso === 'revisando' ? (
         <button onClick={() => void revisar()} disabled={paso === 'revisando'} style={{ ...btnP, opacity: paso === 'revisando' ? 0.7 : 1 }}>
           {paso === 'revisando' ? 'Preparando…' : reintentar ? 'Revisar y crear otra remisión' : 'Revisar envío a Effi →'}
@@ -241,13 +377,14 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                 <input type="checkbox" checked={conGuia} onChange={(e) => setConGuia(e.target.checked)} /> 🚚 Crear también la guía de transporte
               </label>
-              {conGuia && <CamposGuia g={g} items={sel.items} />}
+              {conGuia && cot && cotOk && cot.id === g.d.transportadora && <TranspElegida o={cot} onCambiar={() => { setPaso('idle'); setPrev(null); }} />}
+              {conGuia && <CamposGuia g={g} items={sel.items} sinTransportadora={!!cot && cotOk && cot.id === g.d.transportadora} />}
             </div>
           )}
           <div style={{ padding: 12, borderTop: '1px solid var(--df-border)', display: 'flex', gap: 8 }}>
             <button onClick={() => { setPaso('idle'); setPrev(null); }} style={btnS}>Atrás</button>
-            <button onClick={enviar} disabled={paso === 'enviando' || (hacerGuia && !g.casiListo)} style={{ ...btnP, flex: 1, opacity: paso === 'enviando' || (hacerGuia && !g.casiListo) ? 0.6 : 1 }}>
-              {paso === 'enviando' ? 'Enviando…' : guiaAuto || hacerGuia ? 'Crear remisión y guía' : 'Crear solo la remisión'}
+            <button onClick={enviar} disabled={paso === 'enviando' || (hacerGuia && !g.casiListo)} style={{ ...btnP, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: paso === 'enviando' || (hacerGuia && !g.casiListo) ? 0.6 : 1 }}>
+              {paso === 'enviando' ? 'Enviando…' : hacerGuia && !g.casiListo ? `Falta: ${[!g.d.transportadora && 'transportadora', !g.d.servicio && 'servicio', !g.d.formaPagoFlete && 'pago del flete'].filter(Boolean).join(', ')}` : guiaAuto || hacerGuia ? 'Crear remisión y guía' : 'Crear solo la remisión'}
             </button>
           </div>
         </div>
@@ -365,6 +502,20 @@ function useGuiaEffi(orderId?: string) {
   const [avisoRemitente, setAvisoRemitente] = useState(false);
   const [sugerido, setSugerido] = useState<RemitenteSugerido | null>(null);
   const manual = useRef(false);
+  // Transportadora elegida en el cotizador antes de que carguen las opciones de Effi.
+  const pendiente = useRef('');
+  /** Pone la transportadora y, si tiene un solo servicio o una sola forma de pago, los deja puestos. */
+  const conTransp = (o: OpcionesGuia, id: string, x: DatosGuia): DatosGuia => {
+    const t = o.transportadoras.find((y) => y.id === id);
+    if (!t) return x;
+    return { ...x, transportadora: id,
+      servicio: t.servicios.some((v) => v.id === x.servicio) ? x.servicio : t.servicios.length === 1 ? t.servicios[0].id : '',
+      formaPagoFlete: t.formasPago.some((v) => v.id === x.formaPagoFlete) ? x.formaPagoFlete : t.formasPago.length === 1 ? t.formasPago[0].id : '' };
+  };
+  const elegirTransportadora = (id: string) => {
+    if (!ops) { pendiente.current = id; setD((x) => ({ ...x, transportadora: id })); return; }
+    setD((x) => conTransp(ops, id, x));
+  };
   const aplicarSugerido = (s?: RemitenteSugerido | null) => {
     setSugerido(s || null);
     // Proveedor sin bodega conocida: lo que se elija queda como su bodega (se puede desmarcar).
@@ -378,7 +529,10 @@ function useGuiaEffi(orderId?: string) {
     setCargaMsg('');
     setOps(r.data);
     const g = r.data.defaults;
-    setD((x) => ({ ...x, transportadora: g.transportadora || '', servicio: g.servicio || '', formaPagoFlete: g.formaPagoFlete || '', remitente: '', peso: g.peso || 1, volumen: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10 }));
+    setD((x) => {
+      const base = { ...x, transportadora: g.transportadora || '', servicio: g.servicio || '', formaPagoFlete: g.formaPagoFlete || '', remitente: '', peso: g.peso || 1, volumen: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10 };
+      return pendiente.current ? conTransp(r.data!, pendiente.current, base) : base;
+    });
     aplicarSugerido(r.data.sugerido);
   };
   /** Vuelve a buscar el remitente cuando ya se sabe el convenio del envío (p. ej. tras revisar la remisión). */
@@ -409,7 +563,7 @@ function useGuiaEffi(orderId?: string) {
     setTimeout(() => document.getElementById('df-campo-remitente')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     return false;
   };
-  return { ops, d, setD, cargar, sugerir, sugerido, elegirRemitente, nombrarRemitente, cargaMsg, listo, casiListo, exigirRemitente, avisoRemitente, setAvisoRemitente };
+  return { ops, d, setD, cargar, sugerir, sugerido, elegirTransportadora, elegirRemitente, nombrarRemitente, cargaMsg, listo, casiListo, exigirRemitente, avisoRemitente, setAvisoRemitente };
 }
 
 /**
@@ -489,7 +643,7 @@ function CampoRemitente({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
 }
 
 /** Campos de la guía (transportadora, servicio, paquete…). */
-function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; items?: { qty: number; nombre: string }[] }) {
+function CamposGuia({ g, items = [], sinTransportadora = false }: { g: ReturnType<typeof useGuiaEffi>; items?: { qty: number; nombre: string }[]; sinTransportadora?: boolean }) {
   const { ops, d, setD } = g;
   if (!ops) return g.cargaMsg ? <div style={{ fontSize: 12.5, color: g.cargaMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{g.cargaMsg}</div> : null;
   const set = (p: Partial<DatosGuia>) => setD((x) => ({ ...x, ...p }));
@@ -500,10 +654,20 @@ function CamposGuia({ g, items = [] }: { g: ReturnType<typeof useGuiaEffi>; item
     <>
       {/* Una debajo de la otra: los nombres de servicio y pago son largos y en dos columnas se cortaban. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8 }}>
-        <div><label style={lb}>Transportadora</label>
-          <Dropdown ariaLabel="Transportadora" placeholder="Elige…" value={d.transportadora} onChange={(v) => set({ transportadora: v, servicio: '', formaPagoFlete: '' })} options={ops.transportadoras.map((x) => ({ value: x.id, label: x.effi ? `${x.nombre} (Effi)` : x.nombre }))} /></div>
+        {!sinTransportadora && <div><label style={lb}>Transportadora</label>
+          <Dropdown ariaLabel="Transportadora" placeholder="Elige…" value={d.transportadora} onChange={(v) => set({ transportadora: v, servicio: '', formaPagoFlete: '' })} options={ops.transportadoras.map((x) => ({ value: x.id, label: x.effi ? `${x.nombre} (Effi)` : x.nombre }))} /></div>}
         <div><label style={lb}>Servicio</label>
-          <Dropdown ariaLabel="Servicio" placeholder="Elige…" value={d.servicio} onChange={(v) => set({ servicio: v })} options={(t?.servicios || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
+          {/* Pocos servicios: botones (se ve todo de una); muchos: lista. */}
+          {t && t.servicios.length > 0 && t.servicios.length <= 4 ? (
+            <div role="radiogroup" aria-label="Servicio" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {t.servicios.map((x) => {
+                const on = d.servicio === x.id;
+                return <button key={x.id} type="button" role="radio" aria-checked={on} onClick={() => set({ servicio: x.id })}
+                  style={{ border: `1px solid ${on ? 'var(--df-purple)' : 'var(--df-border-strong)'}`, background: on ? 'var(--df-purple-subtle)' : 'var(--df-surface)', color: on ? 'var(--df-purple)' : 'var(--df-text-body)', borderRadius: 999, padding: '0 11px', minHeight: 34, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}>{x.nombre}</button>;
+              })}
+            </div>
+          ) : <Dropdown ariaLabel="Servicio" placeholder="Elige…" value={d.servicio} onChange={(v) => set({ servicio: v })} options={(t?.servicios || []).map((x) => ({ value: x.id, label: x.nombre }))} />}
+        </div>
         <div><label style={lb}>Pago del flete</label>
           <Dropdown ariaLabel="Pago del flete" placeholder="Elige…" value={d.formaPagoFlete} onChange={(v) => set({ formaPagoFlete: v })} options={(t?.formasPago || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
       </div>
@@ -541,6 +705,7 @@ function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
   const g = useGuiaEffi(sel.rowId ? String(sel.rowId) : undefined);
   const [msg, setMsg] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [cotOk, setCotOk] = useState(false);
   const abrir = () => { setAbierto(true); void g.cargar(); };
   const crear = async () => {
     if (!sel.rowId || !g.exigirRemitente() || !g.listo) return;
@@ -558,7 +723,8 @@ function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
         <b style={{ fontSize: 13.5, flex: 1 }}>Guía de transporte</b>
         <button onClick={() => setAbierto(false)} style={{ ...btnS, padding: '5px 10px' }}>Cerrar</button>
       </div>
-      <CamposGuia g={g} items={sel.items} />
+      {sel.rowId && <CotizadorEffi rowId={String(sel.rowId)} valor={g.d.transportadora} onElegir={(o) => g.elegirTransportadora(o.id)} onCargado={setCotOk} />}
+      <CamposGuia g={g} items={sel.items} sinTransportadora={cotOk} />
       {g.ops && <button onClick={crear} disabled={!g.casiListo || enviando} style={{ ...btnP, opacity: !g.casiListo || enviando ? 0.6 : 1 }}>{enviando ? 'Creando…' : 'Crear guía en Effi'}</button>}
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
     </div>
@@ -725,7 +891,7 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
   }
 
   return (
-    <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: 14, marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: 12, marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <AvisoDevolucionPropia h={histDespacho} />
       {redespachar && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-warning-subtle-2)', border: '1px solid var(--df-warning-border)', borderRadius: 9, padding: '8px 10px' }}>
@@ -733,22 +899,20 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
           <button onClick={() => setRedespachar(false)} style={btnS}>Cancelar</button>
         </div>
       )}
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={() => effiOk && setProv('effi')} style={tarjetaProv(elegido === 'effi', effiOk)}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 26, height: 26, borderRadius: 7, background: '#fff', border: '1px solid var(--df-border)', display: 'grid', placeItems: 'center', padding: 3, boxSizing: 'border-box' }}><img src="/logos/effi.png" alt="" style={{ maxWidth: '100%', maxHeight: '100%' }} /></span>
-            <b style={{ fontSize: 14, color: 'var(--df-text-strong)' }}>Effi</b>
-            {elegido === 'effi' && <span style={{ marginLeft: 'auto', color: 'var(--df-purple)', fontWeight: 800 }}>●</span>}
+      <div role="radiogroup" aria-label="Con quién despachar" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+        <button role="radio" aria-checked={elegido === 'effi'} onClick={() => effiOk && setProv('effi')} style={tarjetaProv(elegido === 'effi', effiOk)}>
+          <span style={{ width: 24, height: 24, borderRadius: 7, background: '#fff', border: '1px solid var(--df-border)', display: 'grid', placeItems: 'center', padding: 3, boxSizing: 'border-box', flexShrink: 0 }}><img src="/logos/effi.png" alt="" style={{ maxWidth: '100%', maxHeight: '100%' }} /></span>
+          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+            <b style={{ fontSize: 13.5, color: 'var(--df-text-strong)' }}>Effi</b>
+            <span style={{ fontSize: 11, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{effiOk ? 'Remisión + guía' : 'Conéctalo en Integraciones'}</span>
           </span>
-          <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.35 }}>{effiOk ? 'Remisión + guía' : 'Conéctalo en Integraciones'}</span>
         </button>
-        <button onClick={() => dropiOk && setProv('dropi')} style={tarjetaProv(elegido === 'dropi', dropiOk)}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <img src="/logos/dropi.jpg" alt="" style={{ width: 26, height: 26, borderRadius: 7, objectFit: 'cover' }} />
-            <b style={{ fontSize: 14, color: 'var(--df-text-strong)' }}>Dropi</b>
-            {elegido === 'dropi' && <span style={{ marginLeft: 'auto', color: 'var(--df-purple)', fontWeight: 800 }}>●</span>}
+        <button role="radio" aria-checked={elegido === 'dropi'} onClick={() => dropiOk && setProv('dropi')} style={tarjetaProv(elegido === 'dropi', dropiOk)}>
+          <img src="/logos/dropi.jpg" alt="" style={{ width: 24, height: 24, borderRadius: 7, objectFit: 'cover', flexShrink: 0 }} />
+          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+            <b style={{ fontSize: 13.5, color: 'var(--df-text-strong)' }}>Dropi</b>
+            <span style={{ fontSize: 11, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dropiOk ? 'Cotiza y elige transportadora' : 'Conéctalo en Integraciones'}</span>
           </span>
-          <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.35 }}>{dropiOk ? 'Cotiza y elige transportadora' : 'Conéctalo en Integraciones'}</span>
         </button>
       </div>
 

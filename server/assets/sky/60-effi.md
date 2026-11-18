@@ -71,10 +71,15 @@ No necesitas crearlos: DealFlow consulta a Effi solo (estados de guías y noveda
 Sección: pedidos, effi
 Claves: despachar, enviar a effi, crear remision, crear guia, generar guia, despacho effi, revisar envio
 1. Abre el pedido → **Despacho** → **Effi** (remisión + guía).
-2. **Revisar envío a Effi →**: ves cómo va cada producto con su artículo de Effi y el convenio.
-3. Si la guía automática está apagada, marca **🚚 Crear también la guía de transporte** y elige transportadora, servicio, pago del flete y remitente.
-4. **Crear remisión y guía** (o **Crear solo la remisión**). "✓ Remisión … creada en Effi".
-5. Cuando sale la guía, se le avisa al cliente por WhatsApp sola.
+2. **Cotizador de transportadoras** (antes de revisar, si la guía automática está apagada): para la ciudad del pedido salen las transportadoras con el **flete estimado (≈)**, los días de entrega y etiquetas: *Más barata*, *Más rápida*, *No llega a…*, *No cobra contra entrega aquí*, *No está en tu cuenta de Effi*. Las que no sirven quedan en «Ver N más». Queda elegida la transportadora configurada para las guías (si sirve) o la más barata.
+   - El estimado sale de las **guías anteriores de la tienda** y cuadra con Effi: si hay una guía reciente a esa misma ciudad con el mismo valor a recaudar, es su flete exacto; si no, la parte fija de las últimas guías (envío + manejo − descuento) + la comisión del recaudo en % × lo que se va a recaudar. Busca primero guías a la misma ciudad, luego al departamento y luego a todo el país. Debajo dice de dónde salió («según 4 guías a Ciénaga»).
+   - Llega / días / contra entrega vienen de la **cobertura de Effi** para esa ciudad. Si Effi no responde, sale el aviso de revisar que la transportadora llegue.
+   - El valor final lo pone Effi al crear la guía. Sin guías anteriores con una transportadora sale «Sin guías previas».
+   - El mismo cotizador aparece en **🚚 Generar guía en Effi** (pedido con remisión y sin guía).
+3. **Revisar envío a Effi →**: ves cómo va cada producto con su artículo de Effi y el convenio.
+4. Si la guía automática está apagada, marca **🚚 Crear también la guía de transporte**: la transportadora elegida en el cotizador ya viene puesta (con «Cambiar»); el servicio se elige con botones (si tiene uno solo queda puesto), y faltan pago del flete y remitente. El botón dice lo que falta («Falta: servicio»).
+5. **Crear remisión y guía** (o **Crear solo la remisión**). "✓ Remisión … creada en Effi".
+6. Cuando sale la guía, se le avisa al cliente por WhatsApp sola.
 Generar la guía después: **🚚 Generar guía en Effi** (paquetes: peso, peso volumétrico, alto, ancho, largo; contenido; valor declarado; nota; "Recibe los sábados"). El recaudo contra entrega se toma del saldo de la remisión y la dirección es la del pedido.
 Si el cliente ya te devolvió antes, primero sale la confirmación de riesgo.
 

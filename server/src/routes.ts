@@ -2150,6 +2150,13 @@ api.get('/effi-api/eventos', requireAuth, requireStore, requireOwner, async (req
 });
 // Lo necesario para el formulario de guía: transportadoras (con servicios y pago del flete),
 // remitentes y los valores por defecto (la última elección).
+// Cotizador de transportadoras de Effi para un pedido (cobertura real + fletes de las guías anteriores).
+api.get('/orders/:rowId/effi/cotizar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
+  const { cotizarEffi } = await import('./cotizadorEffi.js');
+  const r = await cotizarEffi(req.user!.storeId!, String(req.params.rowId));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
 api.get('/effi-api/opciones-guia', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const ef = await import('./effiApi.js');
   const c = ef.cfgEffi(req.user!.storeId!);
