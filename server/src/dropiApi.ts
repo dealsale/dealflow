@@ -355,27 +355,43 @@ function guiaPorPatron(o: unknown, nivel = 0): string {
 
 /** Estado, guía, transportadora asignada y PDF de una orden de Dropi (venga como venga la respuesta). */
 // Listado de órdenes de Dropi por cuenta (caché de 3 min): una sola lectura sirve para todos los
-// pedidos de la tienda en el mismo ciclo.
-const cacheListado = new Map<string, { at: number; ordenes: Map<string, Record<string, unknown>> }>();
-async function ordenDelListado(cred: DropiCred, id: string): Promise<Record<string, unknown> | null> {
-  let c = cacheListado.get(cred.token);
-  if (!c || Date.now() - c.at > 3 * 60_000) {
-    const ordenes = new Map<string, Record<string, unknown>>();
-    for (let start = 0; start < 300; start += 100) {
-      const r = await dropiHttp<unknown>(cred, 'GET', `/orders/myorders?result_number=100&start=${start}`);
-      if (!r.ok) break;
-      const b = r.body as Record<string, unknown>;
-      const lista = (Array.isArray(b.objects) ? b.objects : Array.isArray(b.data) ? b.data : []) as Record<string, unknown>[];
-      for (const x of lista) { const k = String(x.id ?? x.order_id ?? ''); if (k) ordenes.set(k, x); }
-      if (lista.length < 100) break;
-    }
-    c = { at: Date.now(), ordenes };
-    cacheListado.set(cred.token, c);
+// pedidos de la tienda en el mismo ciclo. Se piden las más nuevas primero (si Dropi no acepta el
+// orden, se pide sin él) y hasta 1.000 órdenes: con tiendas grandes, las 300 primeras podían ser
+// órdenes viejas y la de hoy nunca aparecía.
+const cacheListado = new Map<string, { at: number; ordenes: Record<string, unknown>[] }>();
+const ordenarRecientes = new Map<string, boolean>(); // ¿Dropi aceptó el orden descendente con este token?
+export async function listarOrdenesDropi(cred: DropiCred, max = 1000): Promise<{ ordenes: Record<string, unknown>[] } | { error: string }> {
+  const c = cacheListado.get(cred.token);
+  if (c && Date.now() - c.at < 3 * 60_000) return { ordenes: c.ordenes };
+  const ordenes: Record<string, unknown>[] = [];
+  const vistos = new Set<string>();
+  let conOrden = ordenarRecientes.get(cred.token) !== false;
+  for (let start = 0; start < max; start += 100) {
+    const base = `/orders/myorders?result_number=100&start=${start}`;
+    let r = await dropiHttp<unknown>(cred, 'GET', conOrden ? `${base}&orderBy=id&orderDirection=desc` : base);
+    if (!r.ok && conOrden && start === 0) { conOrden = false; ordenarRecientes.set(cred.token, false); r = await dropiHttp<unknown>(cred, 'GET', base); }
+    if (!r.ok) { if (!start) return { error: `Dropi respondió ${r.http}: ${r.body.message || 'sin detalle'}` }; break; }
+    const b = r.body as Record<string, unknown>;
+    const lista = (Array.isArray(b.objects) ? b.objects : Array.isArray(b.data) ? b.data : sacarArray(b)) as Record<string, unknown>[];
+    let nuevos = 0;
+    for (const x of lista) { const k = String(x.id ?? x.order_id ?? ''); if (k && !vistos.has(k)) { vistos.add(k); ordenes.push(x); nuevos++; } }
+    if (lista.length < 100 || !nuevos) break; // última página (o Dropi repite la misma: no pagina)
   }
-  return c.ordenes.get(String(id)) || null;
+  if (conOrden) ordenarRecientes.set(cred.token, true);
+  // Más nuevas primero, venga como venga.
+  ordenes.sort((a, b) => (Number(b.id ?? b.order_id) || 0) - (Number(a.id ?? a.order_id) || 0));
+  cacheListado.set(cred.token, { at: Date.now(), ordenes });
+  return { ordenes };
+}
+async function ordenDelListado(cred: DropiCred, id: string): Promise<Record<string, unknown> | null> {
+  const r = await listarOrdenesDropi(cred);
+  if ('error' in r) return null;
+  return r.ordenes.find((x) => String(x.id ?? x.order_id ?? '') === String(id)) || null;
 }
 /** Estado que todavía espera la confirmación de la tienda en Dropi (o que no dice nada). */
 const sinConfirmar = (e: string) => !e.trim() || /pendiente\s*(de\s*)?confirm/i.test(e.replace(/_/g, ' '));
+/** Orden de Dropi que no avanzó (sin confirmar, pendiente o cancelada): si aparece otra orden del mismo pedido con guía, manda esa. */
+export const quieta = (e: string) => sinConfirmar(e) || /^\s*pendiente\s*$/i.test(e) || /cancel|anulad|rechaz/i.test(e);
 
 export async function estadoOrden(cred: DropiCred, id: string): Promise<{ estado: string; guia: string; transportadora: string; guiaUrl: string; llaves: string[]; cruda: Record<string, unknown>; fuente?: string } | { error: string }> {
   try {
@@ -403,10 +419,7 @@ export async function estadoOrden(cred: DropiCred, id: string): Promise<{ estado
     let extra: Record<string, unknown> | null = null;
     const estado0 = buscar(o, ['status', 'estado', 'order_status', 'status_name']);
     if (/guia|generad|transito|entregad/i.test(estado0) && !(buscar(o, ['shipping_guide', 'tracking_number', 'guide_number', 'numero_guia', 'guia']) || guiaPorPatron(o))) {
-      const l = await dropi<unknown>(cred, 'GET', `/orders/myorders?result_number=50&start=0`);
-      const lb = l.body as Record<string, unknown>;
-      const lista = (Array.isArray(lb.objects) ? lb.objects : Array.isArray(lb.data) ? lb.data : []) as Record<string, unknown>[];
-      extra = lista.find((x) => String(x.id ?? x.order_id ?? '') === String(id)) || null;
+      extra = await ordenDelListado(cred, id).catch(() => null);
     }
     if (extra) Object.assign(o, Object.fromEntries(Object.entries(extra).filter(([k, v]) => v != null && v !== '' && (o[k] == null || o[k] === ''))));
     const guiaS3 = buscar(o, ['guia_urls3', 'guia_url', 'guide_url', 'url_guia', 'shipping_guide_url', 'sticker', 'sticker_url', 'label_url']);
@@ -445,19 +458,18 @@ export async function unirOrdenesDropi(storeId: string, forzar = false): Promise
   if (!cred) return { error: 'Dropi API sin conectar.' };
   if (!forzar && Date.now() - (ultimaUnionDropi.get(storeId) || 0) < 20 * 60_000) return { unidas: 0, revisadas: 0 };
   ultimaUnionDropi.set(storeId, Date.now());
-  const ordenes: Record<string, unknown>[] = [];
-  for (let start = 0; start < 300; start += 100) {
-    const r = await dropiHttp<unknown>(cred, 'GET', `/orders/myorders?result_number=100&start=${start}`);
-    if (!r.ok) { if (!start) return { error: `Dropi respondió ${r.http}: ${r.body.message || 'sin detalle'}` }; break; }
-    const b = r.body as Record<string, unknown>;
-    const lista = (Array.isArray(b.objects) ? b.objects : Array.isArray(b.data) ? b.data : []) as Record<string, unknown>[];
-    ordenes.push(...lista);
-    if (lista.length < 100) break;
-  }
+  const lr = await listarOrdenesDropi(cred);
+  if ('error' in lr) return lr;
+  const ordenes = lr.ordenes;
   const yaUnidas = new Set((db.prepare("SELECT dropi_order_id FROM orders WHERE store_id = ? AND COALESCE(dropi_order_id,'') != ''").all(storeId) as { dropi_order_id: string }[]).map((x) => String(x.dropi_order_id)));
   const guiasYa = new Set((db.prepare("SELECT guia FROM orders WHERE store_id = ? AND COALESCE(guia,'') != ''").all(storeId) as { guia: string }[]).map((x) => x.guia.replace(/^0+/, '')));
-  const libres = db.prepare(`SELECT id, numero, tel, created_at FROM orders WHERE store_id = ? AND COALESCE(guia,'') = '' AND COALESCE(dropi_order_id,'') = ''
-    AND COALESCE(effi_doc,'') = '' AND estado NOT IN ('Cancelado','Entregado','Devuelto') AND created_at > datetime('now','-40 days')`).all(storeId) as { id: string; numero: number; tel: string; created_at: string }[];
+  // Pedidos sin guía: los que no tienen orden en Dropi y también los que DealFlow mandó a Dropi pero
+  // esa orden quedó quieta (PENDIENTE CONFIRMACIÓN / PENDIENTE / cancelada) porque la tienda hizo la
+  // orden y la guía por su cuenta en Dropi (o llegó por la integración de Shopify con Dropi).
+  const libres = (db.prepare(`SELECT id, numero, tel, created_at, COALESCE(dropi_order_id,'') dropi_order_id, COALESCE(estado_woo,'') estado_woo FROM orders WHERE store_id = ? AND COALESCE(guia,'') = ''
+    AND COALESCE(effi_doc,'') = '' AND estado NOT IN ('Cancelado','Entregado','Devuelto') AND created_at > datetime('now','-40 days')`).all(storeId) as { id: string; numero: number; tel: string; created_at: string; dropi_order_id: string; estado_woo: string }[])
+    .filter((o) => !o.dropi_order_id || quieta(o.estado_woo));
+  const porId = new Map(libres.map((o) => [o.id, o]));
   const usados = new Set<string>();
   let unidas = 0;
   for (const d of ordenes) {
@@ -465,15 +477,26 @@ export async function unirOrdenesDropi(storeId: string, forzar = false): Promise
     if (!id || yaUnidas.has(id)) continue;
     const guia = buscar(d, ['shipping_guide', 'tracking_number', 'guide_number', 'numero_guia', 'guia']) || guiaPorPatron(d);
     if (!guia || guiasYa.has(guia.replace(/^0+/, ''))) continue;
-    const cels = celularesDe(d);
-    if (!cels.size) continue;
+    // 1) La orden dice de qué pedido viene (DealFlow manda shop_order_id = df-<id>; al duplicarla en Dropi se conserva).
     const fecha = new Date(String(d.created_at ?? d.createdAt ?? '').replace(' ', 'T')).getTime() || Date.now();
-    const cands = libres.filter((o) => !usados.has(o.id) && cels.has(diez(o.tel)) && (() => { const t = new Date(o.created_at.replace(' ', 'T') + 'Z').getTime(); return t <= fecha + 86400_000 && t >= fecha - 20 * 86400_000; })())
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
-    const o = cands[0];
-    // Dos pedidos del mismo cliente el mismo día: no se adivina.
-    if (!o || (cands.length > 1 && cands[1].created_at.slice(0, 10) === o.created_at.slice(0, 10))) continue;
+    const ref = buscar(d, ['shop_order_id']);
+    const porRef = ref.startsWith('df-') ? porId.get(ref.slice(3)) : undefined;
+    let o = porRef && !usados.has(porRef.id) ? porRef : undefined;
+    let como = 'por la referencia del pedido';
+    if (!o) {
+      // 2) Por el celular del cliente.
+      if (ref.startsWith('df-')) continue; // es de otro pedido de DealFlow (ya tiene su orden)
+      const cels = celularesDe(d);
+      if (!cels.size) continue;
+      const cands = libres.filter((x) => !usados.has(x.id) && cels.has(diez(x.tel)) && (() => { const t = new Date(x.created_at.replace(' ', 'T') + 'Z').getTime(); return t <= fecha + 86400_000 && t >= fecha - 20 * 86400_000; })())
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
+      o = cands[0];
+      // Dos pedidos del mismo cliente el mismo día: no se adivina.
+      if (!o || (cands.length > 1 && cands[1].created_at.slice(0, 10) === o.created_at.slice(0, 10))) continue;
+      como = 'por el celular del cliente';
+    }
     usados.add(o.id);
+    const anterior = o.dropi_order_id && o.dropi_order_id !== id ? o : null;
     const dc = (d.distributionCompany || d.distribution_company || d.transportadora) as unknown;
     const transp = (typeof dc === 'object' && dc ? buscar(dc, ['name', 'nombre']) : String(dc || '')) || buscar(d, ['distribution_company_name', 'carrier']);
     const guiaS3 = buscar(d, ['guia_urls3', 'guia_url', 'guide_url', 'url_guia', 'shipping_guide_url', 'sticker', 'sticker_url', 'label_url']);
@@ -489,11 +512,12 @@ export async function unirOrdenesDropi(storeId: string, forzar = false): Promise
       estado_woo = CASE WHEN ? != '' THEN ? ELSE estado_woo END, estado = CASE WHEN estado IN ('Nuevo','Confirmado','Despachado','','Guía generada') THEN ? ELSE estado END, guia_avisada = ? WHERE id = ?`)
       .run(id, guia, url, url, transp, transp, estado.slice(0, 60), estado.slice(0, 60), real, reciente ? 0 : 1, o.id);
     const { trazar } = await import('./trazabilidad.js');
-    trazar(storeId, o.id, { etapa: 'vinculo', nivel: 'info', titulo: `Orden ${id} de Dropi (guía ${guia}${transp ? `, ${transp}` : ''}) unida a este pedido`, detalle: 'Se creó directo en Dropi; se unió por el celular del cliente.' });
+    trazar(storeId, o.id, { etapa: 'vinculo', nivel: 'info', titulo: `Orden ${id} de Dropi (guía ${guia}${transp ? `, ${transp}` : ''}) unida a este pedido`,
+      detalle: anterior ? `La orden ${anterior.dropi_order_id} que DealFlow había mandado a Dropi seguía en «${anterior.estado_woo || 'sin estado'}»: la guía se hizo en otra orden de Dropi. Se unió ${como}; desde ahora se sigue esa.` : `Se creó directo en Dropi; se unió ${como}.` });
     if (reciente) { try { const { avisarGuia } = await import('./avisoGuia.js'); await avisarGuia(storeId, o.id); } catch { /* el próximo ciclo */ } }
     unidas++;
   }
-  if (unidas) { const { registrarLog } = await import('./db.js'); registrarLog(storeId, 'info', 'despacho', `${unidas} orden(es) creadas directo en Dropi se unieron a su pedido en DealFlow (por el celular del cliente).`); }
+  if (unidas) { const { registrarLog } = await import('./db.js'); registrarLog(storeId, 'info', 'despacho', `${unidas} orden(es) con guía hechas en Dropi se unieron a su pedido en DealFlow (por la referencia o el celular del cliente).`); }
   return { unidas, revisadas: ordenes.length };
 }
 export async function unirOrdenesDropiTodas(): Promise<void> {

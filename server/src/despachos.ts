@@ -210,7 +210,17 @@ export async function sincronizarPedidoDropi(storeId: string, rowId: string): Pr
   // Desde el botón "Actualizar": la consulta a Dropi (con su respuesta) queda en el registro del pedido.
   avisado.delete(o.id);
   const { conPedido } = await import('./trazabilidad.js');
-  return conPedido(storeId, o.id, () => sincronizarDropi(o));
+  const r = await conPedido(storeId, o.id, () => sincronizarDropi(o));
+  // Sigue sin guía y la orden de Dropi está quieta: ¿la tienda hizo la guía en otra orden de Dropi?
+  if (!('error' in r) && !r.guia && !o.guia) {
+    const { quieta, unirOrdenesDropi } = await import('./dropiApi.js');
+    if (quieta(r.estado)) {
+      await unirOrdenesDropi(storeId, true).catch(() => null);
+      const nuevo = db.prepare('SELECT guia, estado_woo, dropi_order_id FROM orders WHERE id = ?').get(o.id) as { guia: string; estado_woo: string; dropi_order_id: string } | undefined;
+      if (nuevo?.guia && nuevo.dropi_order_id !== o.dropi_order_id) return { estado: nuevo.estado_woo, guia: nuevo.guia };
+    }
+  }
+  return r;
 }
 
 /** Aviso de la guía al chat del pedido y, si el cliente dejó otro celular, plantilla a ese número. */
