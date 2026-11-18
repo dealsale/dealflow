@@ -1166,7 +1166,8 @@ export function useDealFlowState() {
     if (r.mode === 'admin' && r.adminSection && esAdm) {
       // Soporte solo entra a Soporte en vivo y Trazabilidad.
       if (rol === 'soporte' && !SECCIONES_SOPORTE.includes(r.adminSection)) { setMode('admin'); setAdminSection('soporte'); return; }
-      if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'equipo' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
+      if (r.adminSection === 'superadmin' || r.adminSection === 'plantillas' || r.adminSection === 'equipo' || r.adminSection === 'contabilidad' || r.adminSection === 'biblioteca' ? rol === 'superadmin' || r.adminSection === 'biblioteca' : true) { setMode('admin'); setAdminSection(r.adminSection); }
+      else if (r.adminSection === 'contabilidad') { setMode('admin'); setAdminSection('planes'); }
     } else if (r.section && (!agente || seccionesAgente().includes(r.section))) {
       setMode('vendedor'); setSection(r.section);
     }
@@ -1194,6 +1195,8 @@ export function useDealFlowState() {
 
   function goAdmin(id: AdminSection) {
     if (sessionUser?.role === 'soporte' && !SECCIONES_SOPORTE.includes(id)) id = 'soporte';
+    // Contabilidad: solo el superadmin.
+    if (id === 'contabilidad' && sessionUser?.role !== 'superadmin') id = 'planes';
     setMode('admin');
     setAdminSection(id);
     setSelectedOrderId(null);
@@ -1206,7 +1209,7 @@ export function useDealFlowState() {
       setSection('resumen');
     } else {
       setMode('admin');
-      setAdminSection('contabilidad');
+      setAdminSection(sessionUser?.role === 'superadmin' ? 'contabilidad' : 'planes');
     }
     setSelectedOrderId(null);
   }
@@ -1762,7 +1765,7 @@ export function useDealFlowState() {
     setSessionUser(user);
     setMode(user.role === 'vendedor' ? 'vendedor' : 'admin');
     setSection(user.role === 'vendedor' && user.esDueno === false ? inicioAgente() : 'resumen');
-    setAdminSection(user.role === 'superadmin' ? 'superadmin' : user.role === 'soporte' ? 'soporte' : 'contabilidad');
+    setAdminSection(user.role === 'superadmin' ? 'superadmin' : user.role === 'soporte' ? 'soporte' : 'planes');
     setLoginError('');
     aplicarRuta(leerRuta(), user.role, user.role === 'vendedor' && user.esDueno === false);
     rutaLista.current = true;

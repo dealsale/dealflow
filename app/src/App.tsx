@@ -387,7 +387,7 @@ function AdminContent({ df }: { df: DealFlowState }) {
       {df.isSoporte ? null : <>
       {df.adminSection === 'proveedores' && <Proveedores />}
       {df.adminSection === 'estudio' && !df.isSoporte && <EstudioAdmin />}
-      {df.adminSection === 'contabilidad' && <Contabilidad />}
+      {df.adminSection === 'contabilidad' && df.isSuperadmin && <Contabilidad />}
       {df.adminSection === 'planes' && <Planes df={df} />}
       {df.adminSection === 'cuentas' && <Cuentas df={df} />}
       {df.adminSection === 'cupones' && <Cupones df={df} />}
