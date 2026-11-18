@@ -2318,7 +2318,7 @@ async function generarGuiaInterna(storeId: string, orderId: string, g: OpcionesG
   if (yaTenia) {
     // NUNCA dos guías para el mismo pedido: si ya tiene una vigente en Effi, no se crea otra.
     const ver = await effi<Fila[]>(c.apiKey, 'GET', '/api/guia_transporte', { query: { id_ref: txt(d.id), por_pagina: 20 } });
-    const anulada = (x: Fila) => /anulad/i.test(`${txt(x.estado_efficommerce)} ${txt(x.estado)} ${txt(x.nombre_est_guia)} ${txt(x.estado_guia_efficommerce)}`) || txt(x.vigente) === '0';
+    const anulada = (x: Fila) => guiaAnuladaEffi(x);
     const vigentes = ver.ok ? (ver.body.data || []).filter((x) => txt(x.t_trans_ref) === String(T_TRANS_REMISION_V) && !anulada(x)) : null;
     if (!reintento || vigentes === null || vigentes.length) {
       const e = vigentes === null
@@ -2376,6 +2376,18 @@ function revisarNovedadesPronto(storeId: string): void {
 
 /** Busca un campo por varios nombres posibles (Effi manda los datos "como la API" y anida a veces). */
 /** Número de guía de la transportadora en los datos de Effi (el nombre del campo varía). */
+/**
+ * ¿La guía está anulada en Effi? Effi no siempre lo pone en el texto del estado: a veces solo la
+ * marca como no vigente (vigente = 0) o lo dice el estado GLOBAL («Anulada»). Se revisan todos.
+ */
+export function guiaAnuladaEffi(x: unknown): boolean {
+  if (!x || typeof x !== 'object') return false;
+  const o = x as Fila;
+  if (txt(o.vigente) === '0' || txt(o.fecha_anulacion).trim() || txt(o.fecha_anulado).trim()) return true;
+  // (El estado de la guía de DEVOLUCIÓN no cuenta: esa es otra guía.)
+  return Object.entries(o).some(([k, v]) => /estado|est_/i.test(k) && !/devol/i.test(k) && typeof v === 'string' && /anulad/i.test(v));
+}
+
 export function numeroGuiaEffi(datos: unknown): string {
   const g = campo(datos, 'guia', 'numero_guia', 'guia_transportadora', 'numero_guia_transportadora', 'codigo_guia', 'numero_seguimiento', 'tracking', 'guia_efficommerce');
   if (g) return g;
@@ -2440,12 +2452,15 @@ export async function procesarWebhookEffi(storeId: string, evento: string, entre
     } else if (esGuia) {
       const guia = numeroGuiaEffi(datos);
       const estadoGuia = campo(datos, 'estado_efficommerce', 'estado_guia_efficommerce', 'estado', 'nombre_est_guia');
-      if (/anulad/i.test(estadoGuia) || /anulac/.test(ev)) {
+      if (/anulad/i.test(estadoGuia) || /anulac/.test(ev) || guiaAnuladaEffi(datos)) {
         // Guía anulada en Effi: se suelta del pedido (si era la suya) para poder hacer otra.
         const idG = campo(datos, 'id');
         const actual = pj<Fila>(txt(orden.effi_guia), {});
         if (!txt(actual.id) || !idG || txt(actual.id) === idG) {
-          db.prepare("UPDATE orders SET effi_guia = '', guia = CASE WHEN ? != '' AND guia = ? THEN '' ELSE guia END, estado_woo = 'Guía anulada en Effi' WHERE id = ?").run(guia, guia, orden.id);
+          // Se suelta la guía (y su PDF) y, si el pedido solo iba en «Guía generada», vuelve a Confirmado para hacer otra.
+          db.prepare(`UPDATE orders SET effi_guia = '', guia = CASE WHEN ? != '' AND guia = ? THEN '' ELSE guia END,
+              guia_url = CASE WHEN ? != '' AND guia = ? THEN '' ELSE guia_url END, guia_img = CASE WHEN ? != '' AND guia = ? THEN '' ELSE guia_img END,
+              estado = CASE WHEN estado = 'Guía generada' THEN 'Confirmado' ELSE estado END, estado_woo = 'Guía anulada en Effi' WHERE id = ?`).run(guia, guia, guia, guia, guia, guia, orden.id);
           trazar(storeId, txt(orden.id), { etapa: 'despacho', nivel: 'warn', titulo: `Effi anuló la guía${guia ? ` ${guia}` : ''}`, detalle: 'Genera una nueva (con otra transportadora si la primera no llega a la ciudad). La remisión sigue vigente.', datos });
           registrarLog(storeId, 'warn', 'despacho', `${numDF}: Effi anuló la guía${guia ? ` ${guia}` : ''}. Genera otra desde el pedido.`);
           void import('./correo.js').then((c) => c.correoATienda(storeId, 'alertas', `${numDF}: Effi anuló la guía`, `🚫 Effi anuló la guía de ${numDF}`, ['La transportadora no pudo tomar el envío (muchas veces es porque no tiene cobertura en esa ciudad). La remisión sigue vigente.', 'Abre el pedido y genera una guía nueva, con otra transportadora si hace falta.'])).catch(() => {});
@@ -2516,7 +2531,7 @@ export function anularEnEffi(storeId: string, orderId: string, motivo = ''): Pro
     if (!d.id) return { error: 'Este pedido no tiene remisión en Effi.' };
     const obs = (txt(motivo) || 'Anulada desde DealFlow para corregir el pedido').slice(0, 255);
     const numDF = `DF-${txt(o.numero)}`;
-    const anulada = (x: Fila) => txt(x.vigente) === '0' || /anulad/i.test(`${txt(x.estado)} ${txt(x.estado_efficommerce)} ${txt(x.nombre_est_guia)}`);
+    const anulada = (x: Fila) => guiaAnuladaEffi(x);
     // 1) Guías vigentes de esta remisión (y la que DealFlow guardó, por si no aparece por la remisión).
     const r = await effi<Fila[]>(c.apiKey, 'GET', '/api/guia_transporte', { query: { id_ref: txt(d.id), por_pagina: 20 } });
     const guias = (r.ok ? r.body.data || [] : []).filter((x) => txt(x.t_trans_ref) === String(T_TRANS_REMISION_V) && (!txt(x.sucursal_ref) || txt(x.sucursal_ref) === txt(d.sucursal)) && !anulada(x));
@@ -2569,7 +2584,7 @@ export async function consultarEstadoEffi(storeId: string, orderId: string): Pro
   if (!r.ok) return { error: mensajeError(r) };
   // Si Effi anuló una guía (p. ej. la transportadora no llegaba a la ciudad) y se hizo otra,
   // vale la más reciente que NO esté anulada.
-  const anulada = (x: Fila) => /anulad/i.test(`${txt(x.estado_efficommerce)} ${txt(x.estado)} ${txt(x.nombre_est_guia)} ${txt(x.estado_guia_efficommerce)}`) || txt(x.vigente) === '0';
+  const anulada = (x: Fila) => guiaAnuladaEffi(x);
   const deRemision = (r.body.data || []).filter((x) => txt(x.t_trans_ref) === String(T_TRANS_REMISION_V) && (!txt(x.sucursal_ref) || txt(x.sucursal_ref) === txt(d.sucursal)))
     .sort((a, b) => Number(b.id) - Number(a.id));
   let g: Fila | undefined = deRemision.find((x) => !anulada(x)) || deRemision[0];
