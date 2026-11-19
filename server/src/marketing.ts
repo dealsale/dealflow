@@ -49,6 +49,8 @@ export async function chatJSON<T>(
         temperature: opciones.temperatura ?? 0.85,
         response_format: { type: 'json_object' },
       }),
+      // Sin límite, una llamada colgada dejaba la petición (y los créditos cobrados) esperando para siempre.
+      signal: AbortSignal.timeout(Number(process.env.OPENAI_CHAT_TIMEOUT_MS) || 180_000),
     });
     if (!res.ok) {
       const err = await res.text().catch(() => '');
@@ -61,7 +63,8 @@ export async function chatJSON<T>(
     } catch {
       return { error: 'La IA devolvió una respuesta que no pudimos leer. Intenta de nuevo.' };
     }
-  } catch {
+  } catch (e) {
+    if ((e as Error)?.name === 'TimeoutError') return { error: 'La IA tardó demasiado en responder. Intenta de nuevo.' };
     return { error: 'No pudimos hablar con la IA. Revisa la conexión del servidor.' };
   }
 }
@@ -83,6 +86,7 @@ export async function generarImagen(
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1', prompt, n, size, quality: process.env.OPENAI_IMAGE_QUALITY || 'medium' }),
+      signal: AbortSignal.timeout(300_000),
     });
     const body = (await res.json().catch(() => ({}))) as { data?: { b64_json?: string; url?: string }[]; error?: { message?: string } };
     if (!res.ok) return { error: body.error?.message || 'OpenAI no aceptó la solicitud.' };

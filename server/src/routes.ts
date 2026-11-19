@@ -2545,16 +2545,17 @@ api.delete('/campanas/:id', requireAuth, requireStore, requireMarketingIA, requi
 // Paso 1: la IA estudia el producto y arma el brief.
 api.post('/campanas/:id/producto', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const sid = req.user!.storeId!;
-  const { COSTO, saldo, cobrar } = await import('./creditos.js');
-  if (saldo(sid) < COSTO.texto) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos. Recarga para continuar.`, sinCreditos: true });
+  const { COSTO, saldo, cobrar, abonar } = await import('./creditos.js');
+  // Se cobra ANTES de llamar a la IA (si no, varias peticiones a la vez pasaban la revisión del
+  // saldo y solo se cobraba una); si la IA falla, se devuelve.
+  if (!cobrar(sid, COSTO.texto, 'Estudio del producto')) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos. Recarga para continuar.`, sinCreditos: true });
   const { analizarProducto } = await import('./campanas.js');
   const { idea, precio, imagen, publico } = req.body || {};
   const r = await analizarProducto(sid, req.params.id, {
     idea: String(idea || ''), precio: String(precio || ''), publico: String(publico || ''),
     imagen: typeof imagen === 'string' ? imagen : undefined,
-  });
-  if (r.error) return res.status(400).json({ error: r.error });
-  cobrar(sid, COSTO.texto, 'Estudio del producto'); // solo si salió bien
+  }).catch(() => ({ error: 'No pudimos hablar con la IA.' } as { error: string; brief?: undefined }));
+  if (r.error) { abonar(sid, COSTO.texto, 'Devolución: estudio del producto que no salió'); return res.status(400).json({ error: r.error }); }
   res.json({ brief: r.brief, creditos: saldo(sid) });
 });
 
@@ -2562,27 +2563,28 @@ api.post('/campanas/:id/producto', requireAuth, requireStore, requireMarketingIA
 api.post('/campanas/:id/creativos', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const sid = req.user!.storeId!;
   const n = Math.min(4, Math.max(1, Number(req.body?.cantidad) || 1));
-  const { COSTO, saldo, cobrar } = await import('./creditos.js');
+  const { COSTO, saldo, cobrar, abonar } = await import('./creditos.js');
   const costo = COSTO.imagen * n;
-  if (saldo(sid) < costo) return res.status(402).json({ error: `Necesitas ${costo} créditos para ${n} creativo${n > 1 ? 's' : ''}. Recarga para continuar.`, sinCreditos: true });
+  // Cobro antes de generar (ver /producto); si falla, se devuelve.
+  if (!cobrar(sid, costo, `Creativos del anuncio (${n})`)) return res.status(402).json({ error: `Necesitas ${costo} créditos para ${n} creativo${n > 1 ? 's' : ''}. Recarga para continuar.`, sinCreditos: true });
   const { crearCreativos } = await import('./campanas.js');
   const r = await crearCreativos(sid, req.params.id, {
     instruccion: String(req.body?.instruccion || ''), cantidad: n, tamano: String(req.body?.tamano || 'feed'),
-  });
-  if (r.error) return res.status(400).json({ error: r.error });
-  cobrar(sid, costo, `Creativos del anuncio (${n})`);
+  }).catch(() => ({ error: 'No pudimos hablar con la IA.' } as { error: string; creativos?: undefined }));
+  if (r.error) { abonar(sid, costo, 'Devolución: creativos que no se pudieron generar'); return res.status(400).json({ error: r.error }); }
   res.json({ creativos: r.creativos, creditos: saldo(sid) });
 });
 
 // Paso 3: textos principales, títulos y descripciones (estructura de Meta).
 api.post('/campanas/:id/textos', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const sid = req.user!.storeId!;
-  const { COSTO, saldo, cobrar } = await import('./creditos.js');
-  if (saldo(sid) < COSTO.texto) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos. Recarga para continuar.`, sinCreditos: true });
+  const { COSTO, saldo, cobrar, abonar } = await import('./creditos.js');
+  // Cobro antes de generar (ver /producto); si falla, se devuelve.
+  if (!cobrar(sid, COSTO.texto, 'Textos del anuncio')) return res.status(402).json({ error: `Necesitas ${COSTO.texto} créditos. Recarga para continuar.`, sinCreditos: true });
   const { crearTextos } = await import('./campanas.js');
-  const r = await crearTextos(sid, req.params.id, { tono: String(req.body?.tono || ''), cantidad: Number(req.body?.cantidad) || 4 });
-  if (r.error) return res.status(400).json({ error: r.error });
-  cobrar(sid, COSTO.texto, 'Textos del anuncio');
+  const r = await crearTextos(sid, req.params.id, { tono: String(req.body?.tono || ''), cantidad: Number(req.body?.cantidad) || 4 })
+    .catch(() => ({ error: 'No pudimos hablar con la IA.' } as { error: string; copys?: undefined }));
+  if (r.error) { abonar(sid, COSTO.texto, 'Devolución: textos que no se pudieron escribir'); return res.status(400).json({ error: r.error }); }
   res.json({ copys: r.copys, creditos: saldo(sid) });
 });
 
