@@ -81,16 +81,16 @@ export interface LeadSegmento {
   id: string; nombre: string; tel: string; destino: string; segmento: Segmento; ultCliente: string; ultimo: string;
   excluido: string; ventanaAbierta: boolean;
 }
+/** Un chat de WhatsApp con todo lo que sirve para filtrar una campaña (segmento '' si no cae en ninguno). */
+interface LeadBase extends Omit<LeadSegmento, 'segmento'> {
+  segmento: Segmento | ''; adId: string; etiquetaCrm: string; estadoPedido: string;
+  /** Igual que `excluido` pero sin el "No compró" (ese solo cuenta al elegir por estado del lead). */
+  excluidoBase: string;
+}
+const hace = (iso: string) => (Date.now() - new Date(iso.replace(' ', 'T') + 'Z').getTime()) / 3600e3;
 
-/** Leads de la tienda con su segmento (y por qué se excluyen, si aplica). */
-export function leadsPorSegmento(storeId: string, dias = 60): LeadSegmento[] {
-  // Último mensaje y señales del embudo: guardados en el lead (versiones.ts), sin recorrer mensajes.
-  const rows = db.prepare(`SELECT l.id, l.nombre, l.tel, l.wa_id, l.canal, l.no_contactar, l.estado_manual,
-      l.ult_cliente_at AS ult_cliente, l.ult_at, l.ult_texto, l.f_resumen_at AS resumen_at,
-      l.f_pidio AS pidio_datos, l.f_dio AS dio_datos, l.f_intencion AS intencion,
-      (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.lead_id = l.id AND r.estado = 'enviado') AS ult_rmk
-    FROM leads l WHERE l.store_id = ? AND COALESCE(l.canal,'whatsapp') = 'whatsapp'`).all(storeId) as Fila[];
-  // Pedidos por chat y por celular.
+/** Pedidos de la tienda por chat (id del lead) y por celular ('t' + 10 dígitos). */
+function pedidosTienda(storeId: string) {
   const pedidos = new Map<string, { at: string; estado: string }[]>();
   const add = (k: string, v: { at: string; estado: string }) => { if (!k) return; const l = pedidos.get(k) || []; l.push(v); pedidos.set(k, l); };
   for (const o of db.prepare('SELECT lead_id, tel, estado, created_at FROM orders WHERE store_id = ?').all(storeId) as Fila[]) {
@@ -98,33 +98,51 @@ export function leadsPorSegmento(storeId: string, dias = 60): LeadSegmento[] {
     add(txt(o.lead_id), v);
     if (diez(o.tel).length === 10) add('t' + diez(o.tel), v);
   }
+  return pedidos;
+}
+
+/** Todos los chats de WhatsApp de la tienda, del más reciente al más viejo, con su segmento (si tiene). */
+function leadsTodos(storeId: string, dias = 60, pedidos = pedidosTienda(storeId)): LeadBase[] {
+  // Último mensaje y señales del embudo: guardados en el lead (versiones.ts), sin recorrer mensajes.
+  const rows = db.prepare(`SELECT l.id, l.nombre, l.tel, l.wa_id, l.canal, l.no_contactar, l.estado_manual, l.ad_id, l.etiqueta,
+      l.ult_cliente_at AS ult_cliente, l.ult_at, l.ult_texto, l.f_resumen_at AS resumen_at,
+      l.f_pidio AS pidio_datos, l.f_dio AS dio_datos, l.f_intencion AS intencion,
+      (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.lead_id = l.id AND r.estado = 'enviado') AS ult_rmk
+    FROM leads l WHERE l.store_id = ? AND COALESCE(l.canal,'whatsapp') = 'whatsapp'`).all(storeId) as Fila[];
   const limite = new Date(Date.now() - dias * 86400e3).toISOString().replace('T', ' ').slice(0, 19);
-  const hace = (iso: string) => (Date.now() - new Date(iso.replace(' ', 'T') + 'Z').getTime()) / 3600e3;
-  const out: LeadSegmento[] = [];
+  const out: LeadBase[] = [];
   for (const l of rows) {
     const destino = txt(l.wa_id) || txt(l.tel);
-    if (!destino || destino.startsWith('web:') || !l.ult_cliente) continue;
-    const ps = [...(pedidos.get(txt(l.id)) || []), ...(diez(l.tel).length === 10 ? pedidos.get('t' + diez(l.tel)) || [] : [])];
+    if (!destino || destino.startsWith('web:')) continue;
+    const ps = [...(pedidos.get(txt(l.id)) || []), ...(diez(l.tel).length === 10 ? pedidos.get('t' + diez(l.tel)) || [] : [])].sort((a, b) => b.at.localeCompare(a.at));
     const vivos = ps.filter((p) => p.estado !== 'Cancelado');
     let seg: Segmento | '' = '';
-    if (vivos.length) {
-      const ult = vivos.sort((a, b) => b.at.localeCompare(a.at))[0];
+    if (!l.ult_cliente) seg = '';
+    else if (vivos.length) {
+      const ult = vivos[0];
       if (vivos.some((p) => p.estado === 'Entregado') && hace(ult.at) >= 15 * 24 && !['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'En oficina', 'Novedad'].includes(ult.estado)) seg = 'compradores';
     } else if (ps.length) seg = 'cancelados';
     else if (l.resumen_at) seg = 'datos_completos';
     else if (Number(l.pidio_datos) || Number(l.dio_datos)) seg = 'faltan_datos';
     else if (Number(l.intencion)) seg = 'interesados';
-    if (!seg) continue;
-    const refFecha = seg === 'compradores' ? (vivos[0]?.at || txt(l.ult_cliente)) : txt(l.ult_cliente);
-    if (seg !== 'compradores' && refFecha < limite) continue;
-    let excluido = '';
-    if (Number(l.no_contactar)) excluido = 'Pidió que no le escribamos';
-    else if (txt(l.estado_manual) === 'perdido') excluido = 'Lo marcaste como "No compró"';
-    else if (l.ult_rmk && hace(txt(l.ult_rmk)) < 7 * 24) excluido = 'Ya recibió un mensaje de remarketing esta semana';
-    else if (hace(txt(l.ult_cliente)) < 2) excluido = 'Está conversando ahora mismo';
-    out.push({ id: txt(l.id), nombre: txt(l.nombre), tel: txt(l.tel), destino, segmento: seg, ultCliente: txt(l.ult_cliente), ultimo: txt(l.ult_texto).replace(/\s+/g, ' ').slice(0, 90), excluido, ventanaAbierta: hace(txt(l.ult_cliente)) < 23.5 });
+    // Fuera de la ventana de días elegida: el chat sigue ahí (para anuncio, etiqueta o búsqueda), pero sin segmento.
+    if (seg && seg !== 'compradores' && txt(l.ult_cliente) < limite) seg = '';
+    let excluidoBase = '';
+    if (Number(l.no_contactar)) excluidoBase = 'Pidió que no le escribamos';
+    else if (l.ult_rmk && hace(txt(l.ult_rmk)) < 7 * 24) excluidoBase = 'Ya recibió un mensaje de remarketing esta semana';
+    else if (l.ult_cliente && hace(txt(l.ult_cliente)) < 2) excluidoBase = 'Está conversando ahora mismo';
+    const excluido = !Number(l.no_contactar) && txt(l.estado_manual) === 'perdido' ? 'Lo marcaste como "No compró"' : excluidoBase;
+    out.push({ id: txt(l.id), nombre: txt(l.nombre), tel: txt(l.tel), destino, segmento: seg, ultCliente: txt(l.ult_cliente), ultimo: txt(l.ult_texto).replace(/\s+/g, ' ').slice(0, 90),
+      excluido, excluidoBase, ventanaAbierta: !!l.ult_cliente && hace(txt(l.ult_cliente)) < 23.5,
+      adId: txt(l.ad_id), etiquetaCrm: txt(l.etiqueta), estadoPedido: ps[0]?.estado || '' });
   }
   return out.sort((a, b) => b.ultCliente.localeCompare(a.ultCliente));
+}
+
+/** Leads de la tienda con su segmento (y por qué se excluyen, si aplica). */
+export function leadsPorSegmento(storeId: string, dias = 60): LeadSegmento[] {
+  return leadsTodos(storeId, dias).filter((l): l is LeadBase & { segmento: Segmento } => !!l.segmento)
+    .map(({ adId: _a, etiquetaCrm: _e, estadoPedido: _p, excluidoBase: _b, ...l }) => l);
 }
 
 // ── Datos para personalizar ─────────────────────────────────────────────────
@@ -190,55 +208,153 @@ export const MENSAJES: MensajeRmk[] = [
 ];
 export const mensajeRmk = (id: string) => MENSAJES.find((m) => m.id === id);
 
-// ── Audiencia: por estado del lead y/o por etiqueta ──────────────────────────
-export interface FiltroAudiencia { segmentos: Segmento[]; etiquetas: string[]; dias: number }
-export interface Destinatario { clave: string; leadId: string; contactoId: string; nombre: string; tel: string; origen: 'chat' | 'importado'; motivo: string; excluido: string }
-
-/** Quién recibe: los leads de los estados elegidos + todos los contactos (chats o importados) con alguna de las etiquetas. */
-export function audiencia(storeId: string, f: FiltroAudiencia): Destinatario[] {
-  const out = new Map<string, Destinatario>();
-  const segs = new Set(f.segmentos || []);
-  if (segs.size) {
-    const tit = new Map(SEGMENTOS.map((x) => [x.id, x.titulo]));
-    for (const l of leadsPorSegmento(storeId, f.dias || 60)) {
-      if (!segs.has(l.segmento)) continue;
-      out.set(diez(l.tel) || l.id, { clave: diez(l.tel) || l.id, leadId: l.id, contactoId: '', nombre: l.nombre, tel: l.tel, origen: 'chat', motivo: tit.get(l.segmento) || l.segmento, excluido: l.excluido });
-    }
-  }
-  const ets = (f.etiquetas || []).map((e) => String(e).trim()).filter(Boolean);
-  if (ets.length) {
-    const tels = db.prepare(`SELECT tel10, GROUP_CONCAT(etiqueta, ', ') ets FROM contacto_etiquetas WHERE store_id = ? AND etiqueta IN (${ets.map(() => '?').join(',')}) GROUP BY tel10`).all(storeId, ...ets) as { tel10: string; ets: string }[];
-    if (tels.length) {
-      const leads = new Map<string, Fila>();
-      for (const l of db.prepare(`SELECT l.id, l.nombre, l.tel, l.wa_id, l.no_contactar, l.ult_cliente_at,
-          (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.lead_id = l.id AND r.estado = 'enviado') ult_rmk
-        FROM leads l WHERE l.store_id = ? AND COALESCE(l.canal,'whatsapp') = 'whatsapp'`).all(storeId) as Fila[]) {
-        for (const k of [diez(l.tel), diez(txt(l.wa_id).split('@')[0])]) if (k.length === 10 && !leads.has(k)) leads.set(k, l);
-      }
-      const imp = new Map((db.prepare(`SELECT c.id, c.tel10, c.nombre,
-          (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.contacto_id = c.id AND r.estado = 'enviado') ult_rmk
-        FROM contactos_importados c WHERE c.store_id = ?`).all(storeId) as Fila[]).map((c) => [txt(c.tel10), c]));
-      const hace = (iso: string) => (Date.now() - new Date(iso.replace(' ', 'T') + 'Z').getTime()) / 3600e3;
-      for (const t of tels) {
-        if (out.has(t.tel10)) continue;
-        const l = leads.get(t.tel10);
-        if (l) {
-          let excluido = '';
-          if (Number(l.no_contactar)) excluido = 'Pidió que no le escribamos';
-          else if (l.ult_rmk && hace(txt(l.ult_rmk)) < 7 * 24) excluido = 'Ya recibió un mensaje de remarketing esta semana';
-          else if (l.ult_cliente_at && hace(txt(l.ult_cliente_at)) < 2) excluido = 'Está conversando ahora mismo';
-          out.set(t.tel10, { clave: t.tel10, leadId: txt(l.id), contactoId: '', nombre: txt(l.nombre), tel: txt(l.tel), origen: 'chat', motivo: t.ets, excluido });
-          continue;
-        }
-        const c = imp.get(t.tel10);
-        if (!c) continue;
-        out.set(t.tel10, { clave: t.tel10, leadId: '', contactoId: txt(c.id), nombre: txt(c.nombre), tel: '+57' + t.tel10, origen: 'importado', motivo: t.ets,
-          excluido: c.ult_rmk && hace(txt(c.ult_rmk)) < 7 * 24 ? 'Ya recibió un mensaje de remarketing esta semana' : '' });
-      }
-    }
-  }
-  return [...out.values()];
+// ── Audiencia: anuncio de origen, estado del lead, estado del pedido, etiqueta o clientes elegidos ──
+/** Anuncio de origen "sin anuncio" (el chat llegó solo). */
+export const ORGANICO = 'organico';
+/** Estado del pedido "nunca ha pedido". */
+export const SIN_PEDIDO = 'sin_pedido';
+export interface FiltroAudiencia {
+  segmentos: Segmento[]; etiquetas: string[]; dias: number;
+  /** Id del anuncio por el que llegó el chat (ORGANICO = sin anuncio). */
+  anuncios?: string[];
+  /** Estado del último pedido (SIN_PEDIDO = nunca pidió). */
+  estadosPedido?: string[];
+  /** 'todos': tiene que cumplir cada criterio elegido · 'alguno': basta con uno (se suman sin repetir). */
+  combinar?: 'todos' | 'alguno';
+  /** Clientes elegidos uno por uno (su `clave`): si viene, la audiencia son solo ellos. */
+  claves?: string[];
 }
+export interface Destinatario {
+  clave: string; leadId: string; contactoId: string; nombre: string; tel: string; origen: 'chat' | 'importado'; motivo: string; excluido: string;
+  /** Para mostrarlo en la lista: estado, pedido, anuncio y etiquetas. */
+  detalle: string;
+}
+interface Candidato extends Destinatario { segmento: Segmento | ''; adId: string; etiquetas: string[]; estadoPedido: string; perdido: boolean }
+
+/** Nombre de cada anuncio por el que llegaron chats (de las estadísticas de Meta o del propio anuncio). */
+function nombresAnuncios(storeId: string): Map<string, { nombre: string; campana: string }> {
+  const out = new Map<string, { nombre: string; campana: string }>();
+  for (const r of db.prepare("SELECT ad_id, MAX(ad_ref) ref FROM leads WHERE store_id = ? AND ad_id != '' GROUP BY ad_id").all(storeId) as { ad_id: string; ref: string }[]) {
+    const a = pj<{ titular?: string }>(r.ref || '', {});
+    out.set(r.ad_id, { nombre: String(a.titular || '').trim(), campana: '' });
+  }
+  try {
+    for (const r of db.prepare("SELECT ad_id, MAX(ad_name) n, MAX(campaign_name) c FROM ads_insights WHERE store_id = ? GROUP BY ad_id").all(storeId) as { ad_id: string; n: string; c: string }[]) {
+      const x = out.get(r.ad_id);
+      if (x) out.set(r.ad_id, { nombre: r.n || x.nombre, campana: r.c || '' });
+    }
+  } catch { /* sin estadísticas de Meta */ }
+  for (const [id, x] of out) if (!x.nombre) x.nombre = `Anuncio …${id.slice(-5)}`;
+  return out;
+}
+
+/** Todos a los que se les podría escribir: chats de WhatsApp + contactos importados que aún no son chat. */
+function candidatos(storeId: string, dias: number): { lista: Candidato[]; anuncios: Map<string, { nombre: string; campana: string }> } {
+  const pedidos = pedidosTienda(storeId);
+  const etsPorTel = new Map<string, string[]>();
+  for (const r of db.prepare('SELECT tel10, etiqueta FROM contacto_etiquetas WHERE store_id = ? ORDER BY etiqueta').all(storeId) as { tel10: string; etiqueta: string }[]) {
+    const l = etsPorTel.get(r.tel10) || []; l.push(r.etiqueta); etsPorTel.set(r.tel10, l);
+  }
+  const anuncios = nombresAnuncios(storeId);
+  const tit = new Map(SEGMENTOS.map((x) => [x.id, x.titulo]));
+  const out = new Map<string, Candidato>();
+  for (const l of leadsTodos(storeId, dias, pedidos)) {
+    const clave = diez(l.tel).length === 10 ? diez(l.tel) : diez(l.destino.split('@')[0]).length === 10 ? diez(l.destino.split('@')[0]) : 'l:' + l.id;
+    if (out.has(clave)) continue; // el chat más reciente de ese celular
+    const etiquetas = [...new Set([l.etiquetaCrm, ...(etsPorTel.get(clave) || [])].filter(Boolean))];
+    const detalle = [
+      l.segmento ? tit.get(l.segmento) : '',
+      l.estadoPedido ? `Pedido: ${l.estadoPedido}` : '',
+      l.adId ? `📣 ${anuncios.get(l.adId)?.nombre || 'Anuncio'}` : '',
+      etiquetas.length ? `🏷️ ${etiquetas.join(', ')}` : '',
+    ].filter(Boolean).join(' · ');
+    out.set(clave, { clave, leadId: l.id, contactoId: '', nombre: l.nombre, tel: l.tel, origen: 'chat', motivo: '', excluido: l.excluidoBase, detalle,
+      segmento: l.segmento, adId: l.adId, etiquetas, estadoPedido: l.estadoPedido, perdido: l.excluido !== l.excluidoBase });
+  }
+  for (const c of db.prepare(`SELECT c.id, c.tel10, c.nombre,
+      (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.contacto_id = c.id AND r.estado = 'enviado') ult_rmk
+    FROM contactos_importados c WHERE c.store_id = ? AND c.lead_id = ''`).all(storeId) as Fila[]) {
+    const k = txt(c.tel10);
+    if (!k || out.has(k)) continue;
+    const etiquetas = etsPorTel.get(k) || [];
+    const estadoPedido = (pedidos.get('t' + k) || []).sort((a, b) => b.at.localeCompare(a.at))[0]?.estado || '';
+    out.set(k, { clave: k, leadId: '', contactoId: txt(c.id), nombre: txt(c.nombre), tel: '+57' + k, origen: 'importado', motivo: '',
+      excluido: c.ult_rmk && hace(txt(c.ult_rmk)) < 7 * 24 ? 'Ya recibió un mensaje de remarketing esta semana' : '',
+      detalle: ['📇 Importado', estadoPedido ? `Pedido: ${estadoPedido}` : '', etiquetas.length ? `🏷️ ${etiquetas.join(', ')}` : ''].filter(Boolean).join(' · '),
+      segmento: '', adId: '', etiquetas, estadoPedido, perdido: false });
+  }
+  return { lista: [...out.values()], anuncios };
+}
+
+const limpiarCand = ({ segmento: _s, adId: _a, etiquetas: _e, estadoPedido: _p, perdido: _x, ...d }: Candidato): Destinatario => d;
+
+/**
+ * Quién recibe. Cada criterio elegido es un grupo (dentro del grupo basta con una opción):
+ * con `combinar: 'todos'` tiene que cumplir todos los grupos; con 'alguno', cualquiera.
+ * Si vienen `claves`, son solo esos clientes (elegidos a mano).
+ */
+export function audiencia(storeId: string, f: FiltroAudiencia): Destinatario[] {
+  const { lista, anuncios } = candidatos(storeId, f.dias || 60);
+  const claves = (f.claves || []).filter(Boolean);
+  if (claves.length) {
+    const porClave = new Map(lista.map((c) => [c.clave, c]));
+    return claves.map((k) => porClave.get(k)).filter((c): c is Candidato => !!c)
+      .map((c) => limpiarCand({ ...c, motivo: 'Elegido por ti' }));
+  }
+  const tit = new Map(SEGMENTOS.map((x) => [x.id, x.titulo]));
+  const segs = new Set(f.segmentos || []);
+  const ets = new Set((f.etiquetas || []).map((e) => String(e).trim()).filter(Boolean));
+  const ads = new Set((f.anuncios || []).filter(Boolean));
+  const eps = new Set((f.estadosPedido || []).filter(Boolean));
+  const grupos: ((c: Candidato) => string)[] = [];
+  if (segs.size) grupos.push((c) => (c.segmento && segs.has(c.segmento) ? tit.get(c.segmento) || c.segmento : ''));
+  if (ads.size) grupos.push((c) => (c.origen !== 'chat' ? '' : c.adId ? (ads.has(c.adId) ? `📣 ${anuncios.get(c.adId)?.nombre || 'Anuncio'}` : '') : ads.has(ORGANICO) ? 'Sin anuncio' : ''));
+  if (eps.size) grupos.push((c) => (c.estadoPedido ? (eps.has(c.estadoPedido) ? `Pedido: ${c.estadoPedido}` : '') : eps.has(SIN_PEDIDO) ? 'Sin pedidos' : ''));
+  if (ets.size) grupos.push((c) => { const hit = c.etiquetas.filter((e) => ets.has(e)); return hit.length ? `🏷️ ${hit.join(', ')}` : ''; });
+  if (!grupos.length) return [];
+  const todos = f.combinar === 'todos';
+  const out: Destinatario[] = [];
+  for (const c of lista) {
+    const hits = grupos.map((g) => g(c));
+    if (todos ? hits.some((h) => !h) : hits.every((h) => !h)) continue;
+    // "No compró" (marcado a mano) solo saca a alguien cuando se elige por estado del lead, como antes.
+    const excluido = c.excluido || (segs.size && c.perdido ? 'Lo marcaste como "No compró"' : '');
+    out.push(limpiarCand({ ...c, motivo: hits.filter(Boolean).join(' · '), excluido }));
+  }
+  return out;
+}
+
+/** Buscador de clientes para elegirlos uno por uno (nombre o celular). */
+export function buscarClientes(storeId: string, q: string, limite = 40): Destinatario[] {
+  const t = norm(q);
+  const d = String(q || '').replace(/\D/g, '');
+  if (t.length < 2 && d.length < 3) return [];
+  return candidatos(storeId, 60).lista
+    .filter((c) => (t.length >= 2 && norm(c.nombre).includes(t)) || (d.length >= 3 && String(c.tel).replace(/\D/g, '').includes(d)))
+    .slice(0, limite).map(limpiarCand);
+}
+
+/** Anuncios por los que llegaron chats (para elegirlos en la campaña) y cuántos de cada uno. */
+export function anunciosDeOrigen(storeId: string): { id: string; nombre: string; campana: string; chats: number; ultimo: string }[] {
+  const nombres = nombresAnuncios(storeId);
+  const filas = db.prepare(`SELECT COALESCE(NULLIF(ad_id,''), '${ORGANICO}') id, COUNT(*) n, MAX(created_at) ult FROM leads
+    WHERE store_id = ? AND COALESCE(canal,'whatsapp') = 'whatsapp' AND COALESCE(wa_id, tel, '') NOT LIKE 'web:%' GROUP BY 1 ORDER BY ult DESC`).all(storeId) as { id: string; n: number; ult: string }[];
+  return filas.map((r) => ({ id: r.id, nombre: r.id === ORGANICO ? 'Sin anuncio (llegaron solos)' : nombres.get(r.id)?.nombre || `Anuncio …${r.id.slice(-5)}`, campana: nombres.get(r.id)?.campana || '', chats: r.n, ultimo: r.ult }));
+}
+
+/** Texto corto del filtro (para el nombre de la campaña). */
+function descFiltro(storeId: string, f: FiltroAudiencia): string {
+  if (f.claves?.length) return `${f.claves.length} cliente(s) elegidos`;
+  const nombres = f.anuncios?.length ? nombresAnuncios(storeId) : new Map<string, { nombre: string }>();
+  const partes = [
+    ...(f.anuncios || []).map((a) => `📣 ${a === ORGANICO ? 'Sin anuncio' : nombres.get(a)?.nombre || 'Anuncio'}`),
+    ...(f.segmentos || []).map((x) => SEGMENTOS.find((y) => y.id === x)?.titulo || x),
+    ...(f.estadosPedido || []).map((e) => (e === SIN_PEDIDO ? 'Sin pedidos' : `Pedido ${e}`)),
+    ...(f.etiquetas || []).map((e) => `🏷️ ${e}`),
+  ];
+  return partes.join(f.combinar === 'todos' ? ' y ' : ' + ');
+}
+const filtroVacio = (f: FiltroAudiencia) => !f.claves?.length && !f.segmentos?.length && !f.etiquetas?.length && !f.anuncios?.length && !f.estadosPedido?.length;
 
 /** Variable de la plantilla: el nombre del cliente, el de la tienda o un texto fijo que escribe la tienda. */
 export interface VariableCampana { tipo: 'nombre' | 'tienda' | 'texto'; valor?: string }
@@ -266,12 +382,12 @@ export async function crearCampanaPlantilla(storeId: string, d: {
   if (sinTexto >= 0) return { error: `Escribe el texto de {{${sinTexto + 1}}}.` };
   const prueba = componentesEnvio(p, vars.map((v) => valorVariable(v, storeId, 'Camila')), d.extra || {});
   if ('error' in prueba) return prueba;
-  if (!d.filtro?.segmentos?.length && !d.filtro?.etiquetas?.length) return { error: 'Elige a quién enviarlo: un estado de los leads o una etiqueta.' };
+  if (!d.filtro || filtroVacio(d.filtro)) return { error: 'Elige a quién enviarlo: un anuncio, un estado, una etiqueta o los clientes uno por uno.' };
   const todos = audiencia(storeId, d.filtro);
   const aptos = todos.filter((x) => !x.excluido).slice(0, Math.max(1, Math.min(5000, d.limite || 200)));
   if (!aptos.length) return { error: 'No hay contactos para enviar con ese filtro (o todos están excluidos).' };
   const id = uid();
-  const desc = [...(d.filtro.segmentos || []).map((x) => SEGMENTOS.find((y) => y.id === x)?.titulo || x), ...(d.filtro.etiquetas || []).map((e) => `🏷️ ${e}`)].join(' + ');
+  const desc = descFiltro(storeId, d.filtro);
   db.prepare('INSERT INTO remarketing_campanas (id, store_id, nombre, segmento, mensaje, campos, total) VALUES (?,?,?,?,?,?,?)')
     .run(id, storeId, (d.nombre || `${p.nombre} · ${desc}`).slice(0, 80), JSON.stringify(d.filtro), `tpl:${p.metaId}`, JSON.stringify({ variables: vars, extra: d.extra || {} }), aptos.length);
   const ins = db.prepare('INSERT INTO remarketing_envios (id, store_id, lead_id, contacto_id, campana_id, tipo, mensaje, params) VALUES (?,?,?,?,?,?,?,?)');
@@ -510,7 +626,13 @@ export async function panelRemarketing(storeId: string, dias = 60) {
     whatsapp: w?.conectado ? (w.modo === 'qr' ? 'qr' : 'oficial') : 'desconectado',
     enviadosHoy: enviadosHoy(storeId),
     // Para las campañas con plantilla propia: etiquetas de la tienda y sus plantillas APROBADAS por Meta.
-    etiquetas: etiquetasTienda(storeId),
+    // Etiquetas propias (por celular) + la etiqueta del Inbox de cada chat, con cuántos tienen cada una.
+    etiquetas: (() => {
+      const m = new Map(etiquetasTienda(storeId).map((e) => [e.etiqueta, e.n]));
+      for (const r of db.prepare("SELECT etiqueta, COUNT(*) n FROM leads WHERE store_id = ? AND COALESCE(etiqueta,'') != '' AND COALESCE(canal,'whatsapp') = 'whatsapp' GROUP BY etiqueta").all(storeId) as { etiqueta: string; n: number }[]) m.set(r.etiqueta, (m.get(r.etiqueta) || 0) + r.n);
+      return [...m].map(([etiqueta, n]) => ({ etiqueta, n })).sort((a, b) => b.n - a.n || a.etiqueta.localeCompare(b.etiqueta));
+    })(),
+    anuncios: anunciosDeOrigen(storeId),
     importados: (db.prepare("SELECT COUNT(*) n FROM contactos_importados WHERE store_id = ? AND lead_id = ''").get(storeId) as { n: number }).n,
     plantillas: plantillasPropias(storeId).map((p) => ({ id: p.id, nombre: p.nombre, categoria: p.categoria, cuerpo: p.cuerpo, variables: p.variables, ejemplos: p.ejemplos,
       encabezado: p.encabezado, encabezadoTipo: p.encabezadoTipo, varsEncabezado: p.varsEncabezado, pie: p.pie,

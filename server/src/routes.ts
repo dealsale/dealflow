@@ -3422,11 +3422,20 @@ const filtroAudiencia = (b: Record<string, unknown>) => ({
   segmentos: (Array.isArray(b.segmentos) ? b.segmentos : []).map(String).slice(0, 10) as never[],
   etiquetas: (Array.isArray(b.etiquetas) ? b.etiquetas : []).map((e) => String(e).slice(0, 40)).slice(0, 30),
   dias: Math.min(365, Math.max(7, Number(b.dias) || 60)),
+  anuncios: (Array.isArray(b.anuncios) ? b.anuncios : []).map((e) => String(e).slice(0, 40)).slice(0, 100),
+  estadosPedido: (Array.isArray(b.estadosPedido) ? b.estadosPedido : []).map((e) => String(e).slice(0, 30)).slice(0, 15),
+  combinar: (b.combinar === 'todos' ? 'todos' : 'alguno') as 'todos' | 'alguno',
+  claves: (Array.isArray(b.claves) ? b.claves : []).map((e) => String(e).slice(0, 60)).slice(0, 5000),
 });
 api.post('/remarketing/audiencia', requireAuth, requireStore, requireOwner, async (req, res) => {
   const rm = await import('./remarketing.js');
   const todos = rm.audiencia(req.user!.storeId!, filtroAudiencia(req.body || {}));
   res.json({ total: todos.length, aptos: todos.filter((x) => !x.excluido).length, importados: todos.filter((x) => x.origen === 'importado' && !x.excluido).length, muestra: todos.slice(0, 100) });
+});
+// Buscador de clientes para la campaña (nombre o celular): para elegirlos uno por uno.
+api.get('/remarketing/buscar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const rm = await import('./remarketing.js');
+  res.json({ clientes: rm.buscarClientes(req.user!.storeId!, String(req.query.q || '').slice(0, 60)) });
 });
 // Campaña con una plantilla PROPIA aprobada por Meta (la única que se puede enviar).
 api.post('/remarketing/campanas-plantilla', requireAuth, requireStore, requireOwner, async (req, res) => {

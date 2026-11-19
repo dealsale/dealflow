@@ -1276,6 +1276,8 @@ export interface PanelRemarketing {
   automaticos: { rescate: ResultadoRmk; recuperacion: ResultadoRmk };
   campanas: (ResultadoRmk & { id: string; nombre: string; segmento: SegmentoRmk; mensaje: string; estado: string; motivo: string; creado: string })[];
   etiquetas: { etiqueta: string; n: number }[];
+  /** Anuncios por los que llegaron chats ('organico' = sin anuncio). */
+  anuncios: { id: string; nombre: string; campana: string; chats: number; ultimo: string }[];
   importados: number;
   plantillas: PlantillaRmk[];
   puedeCrearPlantillas: boolean;
@@ -1287,9 +1289,13 @@ export interface PlantillaRmk {
   botones: { tipo: string; texto: string; variable: boolean }[];
 }
 export interface VariableRmk { tipo: 'nombre' | 'tienda' | 'texto'; valor?: string }
-export interface FiltroRmk { segmentos: SegmentoRmk[]; etiquetas: string[]; dias: number }
-export interface DestinatarioRmk { clave: string; leadId: string; contactoId: string; nombre: string; tel: string; origen: 'chat' | 'importado'; motivo: string; excluido: string }
+export interface FiltroRmk {
+  segmentos: SegmentoRmk[]; etiquetas: string[]; dias: number;
+  anuncios?: string[]; estadosPedido?: string[]; combinar?: 'todos' | 'alguno'; claves?: string[];
+}
+export interface DestinatarioRmk { clave: string; leadId: string; contactoId: string; nombre: string; tel: string; origen: 'chat' | 'importado'; motivo: string; excluido: string; detalle: string }
 export const apiRemarketingAudiencia = (f: FiltroRmk) => req<{ total: number; aptos: number; importados: number; muestra: DestinatarioRmk[] }>('/api/remarketing/audiencia', 'POST', f);
+export const apiRemarketingBuscar = (q: string) => req<{ clientes: DestinatarioRmk[] }>(`/api/remarketing/buscar?q=${encodeURIComponent(q)}`, 'GET');
 export const apiRemarketingCampanaPlantilla = (d: FiltroRmk & { plantillaId: string; variables: VariableRmk[]; extra: { encabezado?: string; media?: string; boton?: string }; limite: number; nombre?: string }) =>
   req<{ ok: true; id: string; encolados: number; excluidos: number }>('/api/remarketing/campanas-plantilla', 'POST', d);
 export interface ResultadoImportacion { creados: number; yaEran: number; invalidos: number; repetidos: number; ejemplosInvalidos: string[]; etiqueta: string }
