@@ -55,6 +55,9 @@ DealFlow es una plataforma SaaS para tiendas online y dropshippers en Colombia: 
   cd app; npm run build; cd ..
   cd server; $env:DATA_DIR="./data-local"; $env:SUPERADMIN_PASSWORD="prueba123"; npm run dev
   ```
-  Abre http://localhost:3001 y entra con `superadmin@dealflow.sbs` / `prueba123`. (`npm run dev` dentro de `app/` sola abre el modo demo sin servidor.)
+  Abre http://localhost:3001 y entra con `superadmin@dealflow.sbs` / `prueba123`.
+- **Modo en vivo (para programar):** con el servidor anterior prendido, en otra terminal `cd app; npm run dev` y abre **http://localhost:5173**: los cambios de pantallas se ven al instante y `/api` va al servidor local (proxy en `app/vite.config.ts`). El servidor (`tsx watch`) también se recarga solo.
+- Flujo con el dueño: haces el cambio → él lo prueba en `localhost:5173` → solo cuando diga «súbelo» se publica a producción.
+- En el PC del dueño hay una tienda de prueba «Moda Prueba» (`tienda@prueba.co` / `prueba123`) con productos, chats y pedidos de ejemplo en `server/data-local` (no se sube a git).
 - Para pruebas automáticas se simulan los servicios externos con variables: `GRAPH_URL` (WhatsApp/Meta), `DROPI_BASE_URL`, `EFFI_BASE_URL`, `SHOPIFY_TEST_BASE`, y se reemplaza `globalThis.fetch` en un script que importa los módulos de `server/dist/`.
 - Para cerrar servidores de prueba, mata por PID (`ps aux | grep "node .*dist/index.js"`), nunca con `pkill -f`.

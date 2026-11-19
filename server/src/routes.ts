@@ -4017,7 +4017,8 @@ function entrarATiendaComo(res: ExResponse, hostname: string, storeId: string, a
   const dueno = (s.owner_user_id
     ? db.prepare("SELECT id, email, nombre, role FROM users WHERE id = ?").get(s.owner_user_id) as Dueno | undefined
     : undefined)
-    || (db.prepare("SELECT id, email, nombre, role FROM users WHERE email = ? ORDER BY (role = 'VENDEDOR') DESC, created_at LIMIT 1").get(s.correo) as Dueno | undefined);
+    // (users no tiene created_at: el orden de creación es el rowid).
+    || (db.prepare("SELECT id, email, nombre, role FROM users WHERE email = ? ORDER BY (role = 'VENDEDOR') DESC, rowid LIMIT 1").get(s.correo) as Dueno | undefined);
   if (!dueno) return 'Esta tienda no tiene un dueño para entrar.';
   // Entramos EN esta tienda (storeId = s.id), sin importar dónde estuviera parado el dueño.
   setAuthCookie(res, { id: dueno.id, email: dueno.email, nombre: dueno.nombre, role: dueno.role, storeId: s.id, imp: adminId }, hostname);
@@ -4343,7 +4344,10 @@ api.post('/admin/stores', requireAuth, requireAdmin, (req, res) => {
   // Las tiendas creadas por el admin quedan activadas (el admin las da de alta ya pagadas).
   db.prepare("INSERT INTO stores (id, nombre, correo, plan, plan_estado, plan_vence, inicial_pagado) VALUES (?,?,?,?, 'activa', date('now','+30 days'), 1)")
     .run(storeId, nombre.trim(), email, String(plan));
-  db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)').run(uid(), email, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', storeId);
+  const duenoId = uid();
+  db.prepare('INSERT INTO users (id, email, password_hash, nombre, role, store_id) VALUES (?,?,?,?,?,?)').run(duenoId, email, hashPassword(String(password)), nombre.trim(), 'VENDEDOR', storeId);
+  // Dueño marcado desde el inicio (entrar a la tienda y la multi-tienda lo buscan aquí).
+  db.prepare('UPDATE stores SET owner_user_id = ? WHERE id = ?').run(duenoId, storeId);
   db.prepare('INSERT INTO whatsapp (store_id) VALUES (?)').run(storeId);
   db.prepare('INSERT INTO assistants (store_id) VALUES (?)').run(storeId);
   res.json({ storeId });
