@@ -22,8 +22,11 @@ export function estadoLogistico(texto: string, hayGuia: boolean): EstadoPedido |
     if (/cancelad|anulad|rechazad/.test(e)) return 'Cancelado';
     if (/novedad|no entregad|fallid|incidenc|reprogramad|siniestr|direccion errada|ausente|no reclamad/.test(e)) return 'Novedad';
     // Para recoger en la oficina de la transportadora: «Reclame en oficina» (Interrapidísimo),
-    // «Disponible para retiro en oficina» (Effi), «Reclamar en oficina» (Dropi)…
-    if (/reclam[ae]r? en|para reclamar|retiro en (la )?oficina|recoger en (la )?oficina|retirar en (la )?oficina|disponible (para|en) (retiro|recoger|oficina|punto)|punto de (retiro|recogida)|en oficina para (retiro|recoger|reclamar)/.test(e)) return 'En oficina';
+    // «Disponible para retiro en oficina» (Effi), «Reclamar en oficina» (Dropi), «Pendiente por
+    // reclamar», «En espera de retiro», «Listo para recoger», «Entrega en oficina», «En oficina»…
+    // Ojo: «Pendiente por recoger» / «Por recoger en bodega» es la transportadora que aún no pasa
+    // por el paquete (Guía generada, más abajo): por eso «recoger» solo cuenta junto a oficina/punto.
+    if (/reclam[ae]r? en|para reclamar|(pendiente|espera) (de|por|a) (ser )?reclam|(retir[ao]|retirar|recoger|recoge|reclamo) en (la |el )?(oficina|agencia|sede|punto)|disponible (para|en) (retiro|recoger|reclamar|reclamo|oficina|agencia|sede|punto)|list[oa] para (reclamar|ser reclamad)|punto de (retiro|recogida|reclamo)|entrega en (la )?(oficina|agencia|sede|punto)|en oficina para|en (oficina|agencia) (de )?(reclamo|retiro|entrega)|^en (oficina|agencia)$/.test(e)) return 'En oficina';
     // «Entregado al mensajero / a ruta» = sale a reparto, todavía NO lo tiene el cliente.
     if (/entregad[oa] (a|al) (mensajero|repartidor|courier|ruta|distribucion)|asignad[oa] (a|al) (mensajero|repartidor|ruta)/.test(e)) return 'En reparto';
     if (/entregad/.test(e)) return 'Entregado';

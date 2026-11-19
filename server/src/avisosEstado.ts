@@ -20,6 +20,8 @@ import { trazar } from './trazabilidad.js';
 import { fraseEstadoPlantilla, textoEstadoChat } from './mensajesEstado.js';
 
 export const PLANTILLA_ESTADO = 'estado_envio_pedido';
+/** Plantilla propia de «En oficina»: el pedido espera al cliente en la oficina de la transportadora. */
+export const PLANTILLA_OFICINA = 'pedido_en_oficina';
 /** Estados que se avisan solos (los cambia la transportadora). "Guía generada" la avisa avisoGuia.ts. */
 export const ESTADOS_AVISADOS = ['En tránsito', 'En reparto', 'En oficina', 'Novedad', 'Entregado'];
 
@@ -208,14 +210,23 @@ async function enviarAviso(a: Fila): Promise<void> {
   }
 
   // 2) Ventana cerrada (o sin chat) → plantilla aprobada, con datos reales (si falta uno, no se inventa).
-  let tpl = plantillaAprobada(storeId, PLANTILLA_ESTADO);
+  // «En oficina» tiene su propia plantilla (dónde recogerlo, guía y qué pagar); si aún no está
+  // aprobada en la tienda, sale con la general de estado, como antes.
+  let tpl = estado === 'En oficina' ? plantillaAprobada(storeId, PLANTILLA_OFICINA) : null;
   let params: string[] = [];
-  if (tpl) params = [nombre, tienda, numDF, fraseEstadoPlantilla('es', estado, datosE), guia || (estado === 'Confirmado' ? 'te la mandamos cuando la tengamos' : numDF)];
+  if (tpl) {
+    const donde = datosE.oficina.replace(/^en\s+/i, '').trim() || (txt(o.ciudad).trim() ? `la oficina de ${transp || 'la transportadora'} en ${txt(o.ciudad).trim()}` : `la oficina de ${transp || 'la transportadora'} de tu ciudad`);
+    const pago = datosE.pagado ? 'ya está pagado ✅' : datosE.total ? `lleva ${datosE.total} para pagarlo` : 'lleva el valor de tu pedido para pagarlo';
+    params = [nombre, tienda, numDF, transp || 'la transportadora', donde, guia || numDF, pago];
+  } else if ((tpl = plantillaAprobada(storeId, PLANTILLA_ESTADO))) params = [nombre, tienda, numDF, fraseEstadoPlantilla('es', estado, datosE), guia || (estado === 'Confirmado' ? 'te la mandamos cuando la tengamos' : numDF)];
   else if (estado === 'En tránsito' && guia && (tpl = plantillaAprobada(storeId, PLANTILLA_GUIA))) params = [nombre, tienda, numDF, transp || 'la transportadora', guia];
   else if (estado === 'Novedad' && (tpl = plantillaAprobada(storeId, 'novedad_envio_pedido'))) params = [nombre, tienda, numDF, transp || 'la transportadora', (txt(o.estado_woo).replace(/^novedad:?\s*/i, '') || 'novedad en la entrega').toLowerCase()];
-  if (!tpl) return reintentar(a, `${chat ? 'El cliente no escribe hace más de 24 h' : 'El pedido no tiene chat'} y la plantilla "${PLANTILLA_ESTADO}" aún no está aprobada por Meta para tu WhatsApp. Apenas se apruebe, sale sola.`);
+  if (!tpl) return reintentar(a, `${chat ? 'El cliente no escribe hace más de 24 h' : 'El pedido no tiene chat'} y la plantilla "${estado === 'En oficina' ? `${PLANTILLA_OFICINA}" (o "${PLANTILLA_ESTADO}` : PLANTILLA_ESTADO}" aún no está aprobada por Meta para tu WhatsApp. Apenas se apruebe, sale sola.`);
   const falta = params.findIndex((p) => !p.trim());
-  if (falta >= 0) return cerrar(a, 'fallido', `Falta el ${['nombre del cliente', 'nombre de la tienda', 'número del pedido', 'estado', 'número de guía'][falta] || 'dato'} en el pedido: no se envía la plantilla con datos inventados.`);
+  const nombresDatos = tpl.nombre === PLANTILLA_OFICINA
+    ? ['nombre del cliente', 'nombre de la tienda', 'número del pedido', 'transportadora', 'lugar de recogida', 'número de guía', 'valor a pagar']
+    : ['nombre del cliente', 'nombre de la tienda', 'número del pedido', 'estado', 'número de guía'];
+  if (falta >= 0) return cerrar(a, 'fallido', `Falta el ${nombresDatos[falta] || 'dato'} en el pedido: no se envía la plantilla con datos inventados.`);
   const r = await sendWhatsappTemplate(storeId, destino, tpl, params, telDestino);
   if (!r.ok) return reintentar(a, r.error || 'Meta rechazó la plantilla.');
   if (!r.repetido) {
@@ -345,7 +356,7 @@ export function iniciarAvisosEstado(): void {
   if (process.env.NODE_ENV === 'production') {
     setTimeout(async () => {
       // También la guía con foto (guia_envio_imagen): sin ella, a quien no escribe hace 24 h le llega solo el texto.
-      for (const nombre of [PLANTILLA_ESTADO, 'guia_envio_imagen', 'confirmacion_pedido_v2', 'guia_pedido_v2', 'guia_pedido_imagen_v2', 'novedad_pedido_v2']) {
+      for (const nombre of [PLANTILLA_ESTADO, PLANTILLA_OFICINA, 'guia_envio_imagen', 'confirmacion_pedido_v2', 'guia_pedido_v2', 'guia_pedido_imagen_v2', 'novedad_pedido_v2']) {
         const t = db.prepare('SELECT id FROM meta_templates WHERE nombre = ?').get(nombre) as { id: string } | undefined;
         if (!t) continue;
         const n = (db.prepare("SELECT COUNT(*) n FROM meta_template_pub WHERE template_id = ? AND estado != 'error'").get(t.id) as { n: number }).n;

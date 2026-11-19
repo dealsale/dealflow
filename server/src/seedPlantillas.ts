@@ -74,6 +74,16 @@ const PLANTILLAS: Semilla[] = [
     ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'salió a reparto 🛵: hoy te lo entregan, ten el celular a mano', '240012345678'],
   },
   {
+    // El pedido quedó en la oficina de la transportadora para que el cliente lo recoja («Reclame en
+    // oficina», «Disponible para retiro»…), cuando el cliente no escribe hace más de 24 h.
+    // Variables: nombre, tienda, pedido, transportadora, dónde recogerlo, guía y qué pagar.
+    nombre: 'pedido_en_oficina', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nTu pedido {{3}} ya llegó a la oficina de {{4}} 🏢 y está listo para que lo recojas.\n\n📍 Dónde: {{5}}\n🧾 Número de guía: {{6}}\n💵 Pago: {{7}}\n\nAcércate con tu cédula y el número de guía. La transportadora solo lo guarda unos días antes de devolverlo, así que te recomendamos recogerlo pronto. ¿Tienes una duda? Respóndenos este mensaje.',
+    pie: 'Mensaje sobre tu compra',
+    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'Interrapidísimo', 'Oficina Cali Centro, Cra 5 # 12-30', '240012345678', 'lleva $129.900 para pagarlo'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Voy a recogerlo' }, { tipo: 'QUICK_REPLY', texto: 'Tengo una duda' }],
+  },
+  {
     // Pedido que entró por la tienda online (Shopify): el comprador confirma con un
     // botón y, si dice que sí, se despacha solo. Variables: nombre, tienda, productos, total.
     nombre: 'confirmacion_pedido_tienda', categoria: 'UTILITY', idioma: 'es',
