@@ -29,10 +29,13 @@ const esAcademy = /^academy\./i.test(window.location.hostname) || /^\/academy(\/
 const esProveedores = /^proveedores\./i.test(window.location.hostname) || /^\/proveedores(\/|$)/i.test(window.location.pathname);
 // Drive del equipo DealFlow: drive.<dominio> o la ruta /drive (misma sesión).
 const esDrive = /^drive\./i.test(window.location.hostname) || /^\/drive(\/|$)/i.test(window.location.pathname);
+// Muestra de los íconos de DealFlow (/iconos): para revisar el estilo antes de usarlos en el panel.
+const esIconos = /^\/iconos\/?$/i.test(window.location.pathname);
+const IconosMuestra = lazy(() => import('./components/IconosMuestra').then((m) => ({ default: m.IconosMuestra })))
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {esEscritorio ? <Suspense fallback={null}><PaginaEscritorio /></Suspense> : esLlamada ? <Suspense fallback={null}><PaginaLlamada /></Suspense> : esDrive ? <Suspense fallback={null}><Drive /></Suspense> : esProveedores ? <PortalProveedores /> : esAcademy ? <Academy /> : <><App /><PagoOffline /></>}
+    {esIconos ? <Suspense fallback={null}><IconosMuestra /></Suspense> : esEscritorio ? <Suspense fallback={null}><PaginaEscritorio /></Suspense> : esLlamada ? <Suspense fallback={null}><PaginaLlamada /></Suspense> : esDrive ? <Suspense fallback={null}><Drive /></Suspense> : esProveedores ? <PortalProveedores /> : esAcademy ? <Academy /> : <><App /><PagoOffline /></>}
   </StrictMode>,
 )
 
