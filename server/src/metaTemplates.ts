@@ -167,6 +167,7 @@ function motivoRechazo(r: string): string {
     INVALID_FORMAT: 'Formato inválido (revisa variables y ejemplos).',
     TAG_CONTENT_MISMATCH: 'La categoría no coincide con el contenido (p. ej. marketing marcada como utilidad).',
     PROMOTIONAL: 'Meta la considera promocional: debe ir como Marketing.',
+    INCORRECT_CATEGORY: 'Meta cree que no es de Utilidad (la ve como Marketing): quita frases de urgencia o de venta y deja solo la información del pedido.',
     ABUSIVE_CONTENT: 'Contenido no permitido por Meta.',
     SCAM: 'Meta la marcó como posible estafa.',
     NONE: '',

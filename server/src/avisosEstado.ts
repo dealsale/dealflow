@@ -216,14 +216,17 @@ async function enviarAviso(a: Fila): Promise<void> {
   let params: string[] = [];
   if (tpl) {
     const donde = datosE.oficina.replace(/^en\s+/i, '').trim() || (txt(o.ciudad).trim() ? `la oficina de ${transp || 'la transportadora'} en ${txt(o.ciudad).trim()}` : `la oficina de ${transp || 'la transportadora'} de tu ciudad`);
-    const pago = datosE.pagado ? 'ya está pagado ✅' : datosE.total ? `lleva ${datosE.total} para pagarlo` : 'lleva el valor de tu pedido para pagarlo';
+    // La v2 dice «Valor a pagar al recogerlo: {{7}}»; la primera, «Pago: {{7}}».
+    const pago = tpl.nombre === `${PLANTILLA_OFICINA}_v2`
+      ? (datosE.pagado ? '$0 (ya está pagado)' : datosE.total || 'el valor de tu pedido')
+      : (datosE.pagado ? 'ya está pagado ✅' : datosE.total ? `lleva ${datosE.total} para pagarlo` : 'lleva el valor de tu pedido para pagarlo');
     params = [nombre, tienda, numDF, transp || 'la transportadora', donde, guia || numDF, pago];
   } else if ((tpl = plantillaAprobada(storeId, PLANTILLA_ESTADO))) params = [nombre, tienda, numDF, fraseEstadoPlantilla('es', estado, datosE), guia || (estado === 'Confirmado' ? 'te la mandamos cuando la tengamos' : numDF)];
   else if (estado === 'En tránsito' && guia && (tpl = plantillaAprobada(storeId, PLANTILLA_GUIA))) params = [nombre, tienda, numDF, transp || 'la transportadora', guia];
   else if (estado === 'Novedad' && (tpl = plantillaAprobada(storeId, 'novedad_envio_pedido'))) params = [nombre, tienda, numDF, transp || 'la transportadora', (txt(o.estado_woo).replace(/^novedad:?\s*/i, '') || 'novedad en la entrega').toLowerCase()];
   if (!tpl) return reintentar(a, `${chat ? 'El cliente no escribe hace más de 24 h' : 'El pedido no tiene chat'} y la plantilla "${estado === 'En oficina' ? `${PLANTILLA_OFICINA}" (o "${PLANTILLA_ESTADO}` : PLANTILLA_ESTADO}" aún no está aprobada por Meta para tu WhatsApp. Apenas se apruebe, sale sola.`);
   const falta = params.findIndex((p) => !p.trim());
-  const nombresDatos = tpl.nombre === PLANTILLA_OFICINA
+  const nombresDatos = tpl.nombre.startsWith(PLANTILLA_OFICINA)
     ? ['nombre del cliente', 'nombre de la tienda', 'número del pedido', 'transportadora', 'lugar de recogida', 'número de guía', 'valor a pagar']
     : ['nombre del cliente', 'nombre de la tienda', 'número del pedido', 'estado', 'número de guía'];
   if (falta >= 0) return cerrar(a, 'fallido', `Falta el ${nombresDatos[falta] || 'dato'} en el pedido: no se envía la plantilla con datos inventados.`);
@@ -356,7 +359,7 @@ export function iniciarAvisosEstado(): void {
   if (process.env.NODE_ENV === 'production') {
     setTimeout(async () => {
       // También la guía con foto (guia_envio_imagen): sin ella, a quien no escribe hace 24 h le llega solo el texto.
-      for (const nombre of [PLANTILLA_ESTADO, PLANTILLA_OFICINA, 'guia_envio_imagen', 'confirmacion_pedido_v2', 'guia_pedido_v2', 'guia_pedido_imagen_v2', 'novedad_pedido_v2']) {
+      for (const nombre of [PLANTILLA_ESTADO, `${PLANTILLA_OFICINA}_v2`, 'guia_envio_imagen', 'confirmacion_pedido_v2', 'guia_pedido_v2', 'guia_pedido_imagen_v2', 'novedad_pedido_v2']) {
         const t = db.prepare('SELECT id FROM meta_templates WHERE nombre = ?').get(nombre) as { id: string } | undefined;
         if (!t) continue;
         const n = (db.prepare("SELECT COUNT(*) n FROM meta_template_pub WHERE template_id = ? AND estado != 'error'").get(t.id) as { n: number }).n;

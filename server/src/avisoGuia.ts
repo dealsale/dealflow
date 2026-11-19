@@ -35,6 +35,7 @@ export const VERSION_NUEVA: Record<string, string> = {
   guia_envio_pedido: 'guia_pedido_v2',
   guia_envio_imagen: 'guia_pedido_imagen_v2',
   novedad_envio_pedido: 'novedad_pedido_v2',
+  pedido_en_oficina: 'pedido_en_oficina_v2',
 };
 
 /** Plantilla aprobada para la tienda (o null). */
