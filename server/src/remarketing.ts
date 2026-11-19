@@ -83,7 +83,7 @@ export interface LeadSegmento {
 }
 /** Un chat de WhatsApp con todo lo que sirve para filtrar una campaña (segmento '' si no cae en ninguno). */
 interface LeadBase extends Omit<LeadSegmento, 'segmento'> {
-  segmento: Segmento | ''; adId: string; etiquetaCrm: string; estadoPedido: string;
+  segmento: Segmento | ''; adId: string; etiquetaCrm: string; estadoPedido: string; creado: string;
   /** Igual que `excluido` pero sin el "No compró" (ese solo cuenta al elegir por estado del lead). */
   excluidoBase: string;
 }
@@ -104,7 +104,7 @@ function pedidosTienda(storeId: string) {
 /** Todos los chats de WhatsApp de la tienda, del más reciente al más viejo, con su segmento (si tiene). */
 function leadsTodos(storeId: string, dias = 60, pedidos = pedidosTienda(storeId)): LeadBase[] {
   // Último mensaje y señales del embudo: guardados en el lead (versiones.ts), sin recorrer mensajes.
-  const rows = db.prepare(`SELECT l.id, l.nombre, l.tel, l.wa_id, l.canal, l.no_contactar, l.estado_manual, l.ad_id, l.etiqueta,
+  const rows = db.prepare(`SELECT l.id, l.nombre, l.tel, l.wa_id, l.canal, l.no_contactar, l.estado_manual, l.ad_id, l.etiqueta, l.created_at,
       l.ult_cliente_at AS ult_cliente, l.ult_at, l.ult_texto, l.f_resumen_at AS resumen_at,
       l.f_pidio AS pidio_datos, l.f_dio AS dio_datos, l.f_intencion AS intencion,
       (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.lead_id = l.id AND r.estado = 'enviado') AS ult_rmk
@@ -134,7 +134,7 @@ function leadsTodos(storeId: string, dias = 60, pedidos = pedidosTienda(storeId)
     const excluido = !Number(l.no_contactar) && txt(l.estado_manual) === 'perdido' ? 'Lo marcaste como "No compró"' : excluidoBase;
     out.push({ id: txt(l.id), nombre: txt(l.nombre), tel: txt(l.tel), destino, segmento: seg, ultCliente: txt(l.ult_cliente), ultimo: txt(l.ult_texto).replace(/\s+/g, ' ').slice(0, 90),
       excluido, excluidoBase, ventanaAbierta: !!l.ult_cliente && hace(txt(l.ult_cliente)) < 23.5,
-      adId: txt(l.ad_id), etiquetaCrm: txt(l.etiqueta), estadoPedido: ps[0]?.estado || '' });
+      adId: txt(l.ad_id), etiquetaCrm: txt(l.etiqueta), estadoPedido: ps[0]?.estado || '', creado: txt(l.created_at) });
   }
   return out.sort((a, b) => b.ultCliente.localeCompare(a.ultCliente));
 }
@@ -142,7 +142,7 @@ function leadsTodos(storeId: string, dias = 60, pedidos = pedidosTienda(storeId)
 /** Leads de la tienda con su segmento (y por qué se excluyen, si aplica). */
 export function leadsPorSegmento(storeId: string, dias = 60): LeadSegmento[] {
   return leadsTodos(storeId, dias).filter((l): l is LeadBase & { segmento: Segmento } => !!l.segmento)
-    .map(({ adId: _a, etiquetaCrm: _e, estadoPedido: _p, excluidoBase: _b, ...l }) => l);
+    .map(({ adId: _a, etiquetaCrm: _e, estadoPedido: _p, excluidoBase: _b, creado: _c, ...l }) => l);
 }
 
 // ── Datos para personalizar ─────────────────────────────────────────────────
@@ -223,13 +223,44 @@ export interface FiltroAudiencia {
   combinar?: 'todos' | 'alguno';
   /** Clientes elegidos uno por uno (su `clave`): si viene, la audiencia son solo ellos. */
   claves?: string[];
+  /** Fecha (hora Colombia): siempre se suma como "y además", sea cual sea `combinar`. */
+  fecha?: FiltroFecha;
+}
+/**
+ * campo: 'llegada' = cuándo escribió por primera vez (o se importó) · 'ultimo' = su último mensaje.
+ * modo: últimas `horas` · hoy · ayer · rango de días `desde`–`hasta` (AAAA-MM-DD, ambos incluidos).
+ */
+export interface FiltroFecha { campo: 'llegada' | 'ultimo'; modo: 'horas' | 'hoy' | 'ayer' | 'rango'; horas?: number; desde?: string; hasta?: string }
+
+/** Límites en UTC ('AAAA-MM-DD HH:MM:SS', como se guardan las fechas) de un filtro de fecha en hora Colombia. */
+export function rangoFecha(f?: FiltroFecha): { desde: string; hasta: string; texto: string } | null {
+  if (!f) return null;
+  const iso = (ms: number) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
+  const diaCO = (d: string) => Date.parse(d + 'T05:00:00Z'); // 00:00 en Colombia = 05:00 UTC
+  const valida = (d?: string) => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(diaCO(d));
+  const corto = (d: string) => d.slice(8, 10) + '/' + d.slice(5, 7);
+  if (f.modo === 'horas') {
+    const h = Math.min(24 * 90, Math.max(1, Math.round(Number(f.horas) || 0)));
+    if (!Number(f.horas)) return null;
+    return { desde: iso(Date.now() - h * 3600e3), hasta: iso(Date.now() + 60e3), texto: `últimas ${h} h` };
+  }
+  const hoy = hoyCO();
+  if (f.modo === 'hoy') return { desde: iso(diaCO(hoy)), hasta: iso(diaCO(hoy) + 86400e3), texto: 'hoy' };
+  if (f.modo === 'ayer') return { desde: iso(diaCO(hoy) - 86400e3), hasta: iso(diaCO(hoy)), texto: 'ayer' };
+  if (f.modo === 'rango' && (valida(f.desde) || valida(f.hasta))) {
+    const d = valida(f.desde) ? f.desde! : f.hasta!;
+    const h = valida(f.hasta) ? f.hasta! : f.desde!;
+    const [a, b] = d <= h ? [d, h] : [h, d];
+    return { desde: iso(diaCO(a)), hasta: iso(diaCO(b) + 86400e3), texto: a === b ? `el ${corto(a)}` : `del ${corto(a)} al ${corto(b)}` };
+  }
+  return null;
 }
 export interface Destinatario {
   clave: string; leadId: string; contactoId: string; nombre: string; tel: string; origen: 'chat' | 'importado'; motivo: string; excluido: string;
   /** Para mostrarlo en la lista: estado, pedido, anuncio y etiquetas. */
   detalle: string;
 }
-interface Candidato extends Destinatario { segmento: Segmento | ''; adId: string; etiquetas: string[]; estadoPedido: string; perdido: boolean }
+interface Candidato extends Destinatario { segmento: Segmento | ''; adId: string; etiquetas: string[]; estadoPedido: string; perdido: boolean; llegada: string; ultimoMsg: string }
 
 /** Nombre de cada anuncio por el que llegaron chats (de las estadísticas de Meta o del propio anuncio). */
 function nombresAnuncios(storeId: string): Map<string, { nombre: string; campana: string }> {
@@ -269,9 +300,9 @@ function candidatos(storeId: string, dias: number): { lista: Candidato[]; anunci
       etiquetas.length ? `🏷️ ${etiquetas.join(', ')}` : '',
     ].filter(Boolean).join(' · ');
     out.set(clave, { clave, leadId: l.id, contactoId: '', nombre: l.nombre, tel: l.tel, origen: 'chat', motivo: '', excluido: l.excluidoBase, detalle,
-      segmento: l.segmento, adId: l.adId, etiquetas, estadoPedido: l.estadoPedido, perdido: l.excluido !== l.excluidoBase });
+      segmento: l.segmento, adId: l.adId, etiquetas, estadoPedido: l.estadoPedido, perdido: l.excluido !== l.excluidoBase, llegada: l.creado, ultimoMsg: l.ultCliente });
   }
-  for (const c of db.prepare(`SELECT c.id, c.tel10, c.nombre,
+  for (const c of db.prepare(`SELECT c.id, c.tel10, c.nombre, c.creado,
       (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.contacto_id = c.id AND r.estado = 'enviado') ult_rmk
     FROM contactos_importados c WHERE c.store_id = ? AND c.lead_id = ''`).all(storeId) as Fila[]) {
     const k = txt(c.tel10);
@@ -281,12 +312,12 @@ function candidatos(storeId: string, dias: number): { lista: Candidato[]; anunci
     out.set(k, { clave: k, leadId: '', contactoId: txt(c.id), nombre: txt(c.nombre), tel: '+57' + k, origen: 'importado', motivo: '',
       excluido: c.ult_rmk && hace(txt(c.ult_rmk)) < 7 * 24 ? 'Ya recibió un mensaje de remarketing esta semana' : '',
       detalle: ['📇 Importado', estadoPedido ? `Pedido: ${estadoPedido}` : '', etiquetas.length ? `🏷️ ${etiquetas.join(', ')}` : ''].filter(Boolean).join(' · '),
-      segmento: '', adId: '', etiquetas, estadoPedido, perdido: false });
+      segmento: '', adId: '', etiquetas, estadoPedido, perdido: false, llegada: txt(c.creado), ultimoMsg: '' });
   }
   return { lista: [...out.values()], anuncios };
 }
 
-const limpiarCand = ({ segmento: _s, adId: _a, etiquetas: _e, estadoPedido: _p, perdido: _x, ...d }: Candidato): Destinatario => d;
+const limpiarCand = ({ segmento: _s, adId: _a, etiquetas: _e, estadoPedido: _p, perdido: _x, llegada: _l, ultimoMsg: _u, ...d }: Candidato): Destinatario => d;
 
 /**
  * Quién recibe. Cada criterio elegido es un grupo (dentro del grupo basta con una opción):
@@ -311,12 +342,18 @@ export function audiencia(storeId: string, f: FiltroAudiencia): Destinatario[] {
   if (ads.size) grupos.push((c) => (c.origen !== 'chat' ? '' : c.adId ? (ads.has(c.adId) ? `📣 ${anuncios.get(c.adId)?.nombre || 'Anuncio'}` : '') : ads.has(ORGANICO) ? 'Sin anuncio' : ''));
   if (eps.size) grupos.push((c) => (c.estadoPedido ? (eps.has(c.estadoPedido) ? `Pedido: ${c.estadoPedido}` : '') : eps.has(SIN_PEDIDO) ? 'Sin pedidos' : ''));
   if (ets.size) grupos.push((c) => { const hit = c.etiquetas.filter((e) => ets.has(e)); return hit.length ? `🏷️ ${hit.join(', ')}` : ''; });
-  if (!grupos.length) return [];
+  const rango = rangoFecha(f.fecha);
+  if (!grupos.length && !rango) return [];
+  const campoFecha = f.fecha?.campo === 'ultimo' ? 'ultimoMsg' : 'llegada';
+  const textoFecha = rango ? `${campoFecha === 'ultimoMsg' ? 'Escribió' : 'Llegó'} ${rango.texto}` : '';
   const todos = f.combinar === 'todos';
   const out: Destinatario[] = [];
   for (const c of lista) {
-    const hits = grupos.map((g) => g(c));
+    // La fecha siempre restringe (es un "y además"): sin fecha (importado sin mensajes) no entra.
+    if (rango) { const v = c[campoFecha]; if (!v || v < rango.desde || v >= rango.hasta) continue; }
+    const hits = grupos.length ? grupos.map((g) => g(c)) : [textoFecha];
     if (todos ? hits.some((h) => !h) : hits.every((h) => !h)) continue;
+    if (grupos.length && rango) hits.push(textoFecha);
     // "No compró" (marcado a mano) solo saca a alguien cuando se elige por estado del lead, como antes.
     const excluido = c.excluido || (segs.size && c.perdido ? 'Lo marcaste como "No compró"' : '');
     out.push(limpiarCand({ ...c, motivo: hits.filter(Boolean).join(' · '), excluido }));
@@ -352,9 +389,11 @@ function descFiltro(storeId: string, f: FiltroAudiencia): string {
     ...(f.estadosPedido || []).map((e) => (e === SIN_PEDIDO ? 'Sin pedidos' : `Pedido ${e}`)),
     ...(f.etiquetas || []).map((e) => `🏷️ ${e}`),
   ];
-  return partes.join(f.combinar === 'todos' ? ' y ' : ' + ');
+  const r = rangoFecha(f.fecha);
+  const fecha = r ? `${f.fecha?.campo === 'ultimo' ? 'escribieron' : 'llegaron'} ${r.texto}` : '';
+  return [partes.join(f.combinar === 'todos' ? ' y ' : ' + '), fecha].filter(Boolean).join(' · ');
 }
-const filtroVacio = (f: FiltroAudiencia) => !f.claves?.length && !f.segmentos?.length && !f.etiquetas?.length && !f.anuncios?.length && !f.estadosPedido?.length;
+const filtroVacio = (f: FiltroAudiencia) => !f.claves?.length && !f.segmentos?.length && !f.etiquetas?.length && !f.anuncios?.length && !f.estadosPedido?.length && !rangoFecha(f.fecha);
 
 /** Variable de la plantilla: el nombre del cliente, el de la tienda o un texto fijo que escribe la tienda. */
 export interface VariableCampana { tipo: 'nombre' | 'tienda' | 'texto'; valor?: string }
@@ -638,6 +677,8 @@ export async function panelRemarketing(storeId: string, dias = 60) {
       encabezado: p.encabezado, encabezadoTipo: p.encabezadoTipo, varsEncabezado: p.varsEncabezado, pie: p.pie,
       botones: p.botones.map((b) => ({ tipo: b.tipo, texto: b.texto, variable: b.variable })) })),
     puedeCrearPlantillas: permisosPlantillas(storeId).crear,
+    // Fotos y videos del encabezado siempre se pueden subir; los PDF, si la tienda lo tiene habilitado.
+    puedeAdjuntarDocumentos: permisosPlantillas(storeId).documentos,
     segmentos: SEGMENTOS.map((s) => {
       const ls = leads.filter((l) => l.segmento === s.id);
       return { ...s, total: ls.length, aptos: ls.filter((l) => !l.excluido).length, ventanaAbierta: ls.filter((l) => !l.excluido && l.ventanaAbierta).length };

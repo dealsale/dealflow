@@ -3426,6 +3426,12 @@ const filtroAudiencia = (b: Record<string, unknown>) => ({
   estadosPedido: (Array.isArray(b.estadosPedido) ? b.estadosPedido : []).map((e) => String(e).slice(0, 30)).slice(0, 15),
   combinar: (b.combinar === 'todos' ? 'todos' : 'alguno') as 'todos' | 'alguno',
   claves: (Array.isArray(b.claves) ? b.claves : []).map((e) => String(e).slice(0, 60)).slice(0, 5000),
+  fecha: (() => {
+    const f = (b.fecha && typeof b.fecha === 'object' ? b.fecha : null) as Record<string, unknown> | null;
+    if (!f || !['horas', 'hoy', 'ayer', 'rango'].includes(String(f.modo))) return undefined;
+    return { campo: (f.campo === 'ultimo' ? 'ultimo' : 'llegada') as 'llegada' | 'ultimo', modo: String(f.modo) as 'horas' | 'hoy' | 'ayer' | 'rango',
+      horas: Number(f.horas) || 0, desde: String(f.desde || '').slice(0, 10), hasta: String(f.hasta || '').slice(0, 10) };
+  })(),
 });
 api.post('/remarketing/audiencia', requireAuth, requireStore, requireOwner, async (req, res) => {
   const rm = await import('./remarketing.js');

@@ -1281,6 +1281,7 @@ export interface PanelRemarketing {
   importados: number;
   plantillas: PlantillaRmk[];
   puedeCrearPlantillas: boolean;
+  puedeAdjuntarDocumentos?: boolean;
 }
 /** Plantilla propia de la tienda aprobada por Meta (la única que se puede usar en campañas). */
 export interface PlantillaRmk {
@@ -1292,11 +1293,13 @@ export interface VariableRmk { tipo: 'nombre' | 'tienda' | 'texto'; valor?: stri
 export interface FiltroRmk {
   segmentos: SegmentoRmk[]; etiquetas: string[]; dias: number;
   anuncios?: string[]; estadosPedido?: string[]; combinar?: 'todos' | 'alguno'; claves?: string[];
+  /** Fecha en hora Colombia: 'llegada' = primer mensaje · 'ultimo' = su último mensaje. */
+  fecha?: { campo: 'llegada' | 'ultimo'; modo: 'horas' | 'hoy' | 'ayer' | 'rango'; horas?: number; desde?: string; hasta?: string };
 }
 export interface DestinatarioRmk { clave: string; leadId: string; contactoId: string; nombre: string; tel: string; origen: 'chat' | 'importado'; motivo: string; excluido: string; detalle: string }
 export const apiRemarketingAudiencia = (f: FiltroRmk) => req<{ total: number; aptos: number; importados: number; muestra: DestinatarioRmk[] }>('/api/remarketing/audiencia', 'POST', f);
 export const apiRemarketingBuscar = (q: string) => req<{ clientes: DestinatarioRmk[] }>(`/api/remarketing/buscar?q=${encodeURIComponent(q)}`, 'GET');
-export const apiRemarketingCampanaPlantilla = (d: FiltroRmk & { plantillaId: string; variables: VariableRmk[]; extra: { encabezado?: string; media?: string; boton?: string }; limite: number; nombre?: string }) =>
+export const apiRemarketingCampanaPlantilla = (d: FiltroRmk & { plantillaId: string; variables: VariableRmk[]; extra: { encabezado?: string; media?: string; mediaNombre?: string; boton?: string }; limite: number; nombre?: string }) =>
   req<{ ok: true; id: string; encolados: number; excluidos: number }>('/api/remarketing/campanas-plantilla', 'POST', d);
 export interface ResultadoImportacion { creados: number; yaEran: number; invalidos: number; repetidos: number; ejemplosInvalidos: string[]; etiqueta: string }
 export const apiImportarContactos = (d: { filas: { nombre: string; telefono: string; etiquetas?: string }[]; etiqueta: string; origen: string; consentimiento: boolean }) =>

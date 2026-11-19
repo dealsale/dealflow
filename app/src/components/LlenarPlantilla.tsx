@@ -15,7 +15,7 @@ export function esDatoEjemplo(p: PlantillaAprobada, valor: string, real = ''): b
 const ACEPTA: Record<string, string> = { IMAGE: 'image/jpeg,image/png', VIDEO: 'video/mp4', DOCUMENT: 'application/pdf' };
 const MAX_MB: Record<string, number> = { IMAGE: 5, VIDEO: 16, DOCUMENT: 15 };
 /** Botón para adjuntar el archivo del encabezado desde el equipo (se sube a DealFlow y de ahí a Meta al enviar). */
-function SubirArchivo({ tipo, onListo }: { tipo: string; onListo: (url: string, nombre: string) => void }) {
+export function SubirArchivo({ tipo, onListo, texto }: { tipo: string; onListo: (url: string, nombre: string, archivo: File) => void; texto?: string }) {
   const [subiendo, setSubiendo] = useState(false);
   const [error, setError] = useState('');
   const elegir = (f: File | undefined) => {
@@ -27,7 +27,7 @@ function SubirArchivo({ tipo, onListo }: { tipo: string; onListo: (url: string, 
     fr.onload = () => void apiUpload(String(fr.result), f.name).then((r) => {
       setSubiendo(false);
       if (!r.data) { setError(r.error || 'No se pudo subir.'); return; }
-      onListo(r.data.url, f.name);
+      onListo(r.data.url, f.name, f);
     });
     fr.onerror = () => { setSubiendo(false); setError('No se pudo leer el archivo.'); };
     fr.readAsDataURL(f);
@@ -35,7 +35,7 @@ function SubirArchivo({ tipo, onListo }: { tipo: string; onListo: (url: string, 
   return (
     <span style={{ display: 'inline-grid', gap: 2, flexShrink: 0 }}>
       <label style={{ border: '1px solid var(--df-border)', background: 'var(--df-surface-2)', borderRadius: 8, padding: '7px 10px', fontSize: 12.5, fontWeight: 700, cursor: subiendo ? 'wait' : 'pointer', whiteSpace: 'nowrap', color: 'var(--df-text)' }}>
-        {subiendo ? 'Subiendo…' : '📎 Adjuntar'}
+        {subiendo ? 'Subiendo…' : texto || '📎 Adjuntar'}
         <input type="file" accept={ACEPTA[tipo] || '*/*'} disabled={subiendo} onChange={(e) => { elegir(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
       </label>
       {error && <span style={{ fontSize: 11, color: 'var(--df-danger, #dc2626)' }}>{error}</span>}

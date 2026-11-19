@@ -3,6 +3,7 @@ import { Dropdown } from './Dropdown';
 import { confirmar, notificar } from './dialogs';
 import { PlantillasWhatsAppTienda } from './PlantillasWhatsAppTienda';
 import { SearchInput } from './Filters';
+import { SubirArchivo } from './LlenarPlantilla';
 import {
   apiRemarketingAudiencia, apiRemarketingBuscar, apiRemarketingCampanaPlantilla,
   type DestinatarioRmk, type FiltroRmk, type PanelRemarketing, type SegmentoRmk, type VariableRmk,
@@ -33,7 +34,15 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
   const [crear, setCrear] = useState(false);
   const [plantillaId, setPlantillaId] = useState('');
   const [vars, setVars] = useState<VariableRmk[]>([]);
-  const [extra, setExtra] = useState<{ encabezado: string; media: string; boton: string }>({ encabezado: '', media: '', boton: '' });
+  const [extra, setExtra] = useState<{ encabezado: string; media: string; mediaNombre?: string; boton: string }>({ encabezado: '', media: '', boton: '' });
+  /** Vista previa local de la foto o el video que se subió (el archivo en DealFlow necesita sesión). */
+  const [previa, setPrevia] = useState('');
+  useEffect(() => () => { if (previa) URL.revokeObjectURL(previa); }, [previa]);
+  const [fechaModo, setFechaModo] = useState<'' | 'hoy' | 'ayer' | 'horas' | 'rango'>('');
+  const [fechaCampo, setFechaCampo] = useState<'llegada' | 'ultimo'>('llegada');
+  const [horas, setHoras] = useState(24);
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   const [segmentos, setSegmentos] = useState<SegmentoRmk[]>([]);
   const [etiquetas, setEtiquetas] = useState<string[]>([]);
   const [anuncios, setAnuncios] = useState<string[]>([]);
@@ -54,13 +63,20 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
   const plantilla = p.plantillas.find((x) => x.id === plantillaId);
   useEffect(() => { if (!plantilla && p.plantillas.length) setPlantillaId(p.plantillas[0].id); }, [p.plantillas]); // eslint-disable-line react-hooks/exhaustive-deps
   // Cada {{n}}: por defecto el primero es el nombre del cliente y el resto texto que escribe la tienda.
-  useEffect(() => { setVars(Array.from({ length: plantilla?.variables || 0 }, (_, i) => (i === 0 ? { tipo: 'nombre' } : { tipo: 'texto', valor: '' }))); setExtra({ encabezado: '', media: '', boton: '' }); }, [plantillaId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setVars(Array.from({ length: plantilla?.variables || 0 }, (_, i) => (i === 0 ? { tipo: 'nombre' } : { tipo: 'texto', valor: '' }))); setExtra({ encabezado: '', media: '', boton: '' }); setPrevia(''); }, [plantillaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const grupos = [anuncios, segmentos, estadosPedido, etiquetas].filter((x) => x.length > 0).length;
-  const hayAQuien = modo === 'manual' ? elegidos.length > 0 : grupos > 0;
+  const fecha = useMemo<FiltroRmk['fecha']>(() => {
+    if (fechaModo === 'hoy' || fechaModo === 'ayer') return { campo: fechaCampo, modo: fechaModo };
+    if (fechaModo === 'horas' && horas > 0) return { campo: fechaCampo, modo: 'horas', horas };
+    if (fechaModo === 'rango' && (desde || hasta)) return { campo: fechaCampo, modo: 'rango', desde, hasta };
+    return undefined;
+  }, [fechaModo, fechaCampo, horas, desde, hasta]);
+  const hayAQuien = modo === 'manual' ? elegidos.length > 0 : grupos > 0 || !!fecha;
   const filtro = useMemo<FiltroRmk>(() => (modo === 'manual'
     ? { segmentos: [], etiquetas: [], dias, claves: elegidos.map((d) => d.clave) }
-    : { segmentos, etiquetas, dias, anuncios, estadosPedido, combinar }), [modo, segmentos, etiquetas, dias, anuncios, estadosPedido, combinar, elegidos]);
+    : { segmentos, etiquetas, dias, anuncios, estadosPedido, combinar, fecha }), [modo, segmentos, etiquetas, dias, anuncios, estadosPedido, combinar, elegidos, fecha]);
+  const textoFecha = !fecha ? '' : `${fechaCampo === 'ultimo' ? 'escribieron' : 'llegaron'} ${fecha.modo === 'hoy' ? 'hoy' : fecha.modo === 'ayer' ? 'ayer' : fecha.modo === 'horas' ? `en las últimas ${horas} h` : desde && hasta && desde !== hasta ? `del ${desde.split('-').reverse().slice(0, 2).join('/')} al ${hasta.split('-').reverse().slice(0, 2).join('/')}` : `el ${(desde || hasta).split('-').reverse().slice(0, 2).join('/')}`}`;
   useEffect(() => {
     if (!hayAQuien) { setAud(null); return; }
     const t = setTimeout(() => void apiRemarketingAudiencia(filtro).then((r) => setAud(r.data || null)), 350);
@@ -78,7 +94,10 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
   }, [busca]);
   const agregar = (ds: DestinatarioRmk[]) => setElegidos((xs) => [...xs, ...ds.filter((d) => !xs.some((x) => x.clave === d.clave))]);
   const quitar = (clave: string) => setElegidos((xs) => xs.filter((x) => x.clave !== clave));
-  const limpiarFiltros = () => { setAnuncios([]); setSegmentos([]); setEstadosPedido([]); setEtiquetas([]); };
+  const limpiarFiltros = () => { setAnuncios([]); setSegmentos([]); setEstadosPedido([]); setEtiquetas([]); setFechaModo(''); setDesde(''); setHasta(''); };
+  const hoyCO = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+  const tipoMedia = plantilla?.encabezadoTipo || '';
+  const subible = tipoMedia === 'IMAGE' || tipoMedia === 'VIDEO' || (tipoMedia === 'DOCUMENT' && !!p.puedeAdjuntarDocumentos);
   const adsVisibles = useMemo(() => {
     const q = buscaAd.trim().toLowerCase();
     const xs = q ? p.anuncios.filter((a) => `${a.nombre} ${a.campana}`.toLowerCase().includes(q)) : p.anuncios;
@@ -141,7 +160,25 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={{ ...lbl, marginBottom: 0 }}>2 · Datos de la plantilla</label>
                 {plantilla.varsEncabezado > 0 && <input value={extra.encabezado} onChange={(e) => setExtra({ ...extra, encabezado: e.target.value })} placeholder={`Encabezado: ${plantilla.encabezado}`} style={inp} />}
-                {media && <input value={extra.media} onChange={(e) => setExtra({ ...extra, media: e.target.value })} placeholder={`Enlace de ${plantilla.encabezadoTipo === 'IMAGE' ? 'la foto' : plantilla.encabezadoTipo === 'VIDEO' ? 'el video' : 'el documento'} (vacío = el que registraste en Meta)`} style={inp} />}
+                {media && (extra.media.startsWith('/api/media/') ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', border: '1px solid var(--df-border)', borderRadius: 8, padding: 6 }}>
+                    {previa && tipoMedia === 'IMAGE' ? <img src={previa} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 6 }} />
+                      : <span style={{ fontSize: 22, width: 46, textAlign: 'center' }}>{tipoMedia === 'VIDEO' ? '🎬' : '📄'}</span>}
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{extra.mediaNombre || 'Archivo subido'}</span>
+                    <button type="button" onClick={() => { setExtra({ ...extra, media: '', mediaNombre: '' }); setPrevia(''); }} style={{ ...btnS, padding: '4px 9px' }}>Quitar</button>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {subible && <SubirArchivo tipo={tipoMedia} texto={tipoMedia === 'IMAGE' ? '📷 Subir foto' : tipoMedia === 'VIDEO' ? '🎬 Subir video' : '📄 Subir PDF'}
+                        onListo={(url, nombre, f) => { setExtra({ ...extra, media: url, mediaNombre: nombre }); setPrevia(tipoMedia === 'DOCUMENT' ? '' : URL.createObjectURL(f)); }} />}
+                      <input value={extra.media} onChange={(e) => setExtra({ ...extra, media: e.target.value })} placeholder={`${subible ? 'o pega el enlace' : 'Enlace'} de ${tipoMedia === 'IMAGE' ? 'la foto' : tipoMedia === 'VIDEO' ? 'el video' : 'el documento'}`} style={inp} />
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 3 }}>
+                      {tipoMedia === 'IMAGE' ? 'JPG o PNG, hasta 5 MB.' : tipoMedia === 'VIDEO' ? 'MP4, hasta 16 MB.' : 'PDF, hasta 15 MB.'} Si lo dejas vacío, sale el que registraste en Meta.
+                    </div>
+                  </div>
+                ))}
                 {vars.map((v, i) => (
                   <div key={i} style={{ display: 'grid', gridTemplateColumns: '52px 150px 1fr', gap: 6, alignItems: 'center' }}>
                     <b style={{ fontSize: 12.5 }}>{`{{${i + 1}}}`}</b>
@@ -175,6 +212,34 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
                     <button type="button" onClick={() => setCombinar('alguno')} style={chip(combinar === 'alguno')}>Cualquiera (O)</button>
                   </div>
                 )}
+
+                <div>
+                  <label style={lbl}>Fecha {fecha && <span style={{ color: 'var(--df-purple)' }}>· {textoFecha}</span>}</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Dropdown variant="pill" value={fechaCampo} onChange={(v) => setFechaCampo(v as 'llegada' | 'ultimo')} ariaLabel="Qué fecha"
+                      options={[{ value: 'llegada', label: 'Llegaron (primer mensaje)' }, { value: 'ultimo', label: 'Su último mensaje' }]} />
+                    {([['', 'Cualquier fecha'], ['hoy', 'Hoy'], ['ayer', 'Ayer'], ['horas', 'Últimas horas'], ['rango', 'De tal día a tal día']] as const).map(([m, t]) => (
+                      <button key={m || 'todas'} type="button" onClick={() => { setFechaModo(m); if (m === 'rango' && !desde && !hasta) { setDesde(hoyCO); setHasta(hoyCO); } }} style={chip(fechaModo === m)}>{t}</button>
+                    ))}
+                  </div>
+                  {fechaModo === 'horas' && (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
+                      <span>En las últimas</span>
+                      <input type="number" min={1} max={2160} value={horas} onChange={(e) => setHoras(Math.max(1, Math.min(2160, Math.round(Number(e.target.value) || 1))))} style={{ ...inp, width: 80 }} />
+                      <span>horas</span>
+                      {[6, 12, 24, 48, 72].map((h) => <button key={h} type="button" onClick={() => setHoras(h)} style={{ ...chip(horas === h), padding: '4px 9px' }}>{h} h</button>)}
+                    </div>
+                  )}
+                  {fechaModo === 'rango' && (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
+                      <span>Del</span>
+                      <input type="date" value={desde} max={hasta || hoyCO} onChange={(e) => setDesde(e.target.value)} style={{ ...inp, width: 150 }} />
+                      <span>al</span>
+                      <input type="date" value={hasta} min={desde || undefined} max={hoyCO} onChange={(e) => setHasta(e.target.value)} style={{ ...inp, width: 150 }} />
+                    </div>
+                  )}
+                  {fecha && fechaCampo === 'ultimo' && <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 4 }}>Los contactos importados que nunca han escrito no entran con esta fecha.</div>}
+                </div>
 
                 <div>
                   <label style={lbl}>Llegaron por el anuncio {anuncios.length > 0 && <span style={{ color: 'var(--df-purple)' }}>· {anuncios.length} elegido{anuncios.length === 1 ? '' : 's'}</span>}</label>
@@ -229,9 +294,12 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
                   ) : <div style={{ fontSize: 12, color: 'var(--df-text-faint)' }}>Ponle una etiqueta a los chats en el Inbox o importa contactos con una etiqueta (arriba) para elegirlos aquí.</div>}
                 </div>
 
-                {grupos > 0 && (
+                {(grupos > 0 || fecha) && (
                   <div style={{ fontSize: 12, color: 'var(--df-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span>{grupos >= 2 ? (combinar === 'todos' ? 'Les llega a quienes cumplen todos los filtros a la vez.' : 'Les llega a quienes cumplen al menos uno (sin repetir a nadie).') : 'Dentro de un mismo filtro basta con una de las opciones.'}</span>
+                    <span>
+                      {grupos >= 2 ? (combinar === 'todos' ? 'Les llega a quienes cumplen todos los filtros a la vez.' : 'Les llega a quienes cumplen al menos uno (sin repetir a nadie).') : grupos === 1 ? 'Dentro de un mismo filtro basta con una de las opciones.' : `Les llega a todos los que ${textoFecha}.`}
+                      {grupos > 0 && fecha ? ` Y además ${textoFecha}.` : ''}
+                    </span>
                     <button type="button" onClick={limpiarFiltros} style={{ ...btnS, padding: '3px 8px' }}>Limpiar filtros</button>
                   </div>
                 )}
@@ -310,7 +378,10 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
               <label style={lbl}>Así le llega (ejemplo)</label>
               <div style={{ background: '#E7FFDB', color: '#111B21', borderRadius: 10, padding: '10px 12px', fontSize: 13, lineHeight: 1.45, whiteSpace: 'pre-wrap', boxShadow: '0 1px 1px rgba(0,0,0,.1)' }}>
                 {plantilla.encabezado && <b style={{ display: 'block', marginBottom: 4 }}>{plantilla.varsEncabezado ? plantilla.encabezado.replace(/\{\{\s*1\s*\}\}/, extra.encabezado || '…') : plantilla.encabezado}</b>}
-                {media && <div style={{ fontSize: 11.5, color: '#54656F', marginBottom: 4 }}>[{plantilla.encabezadoTipo === 'IMAGE' ? 'foto' : plantilla.encabezadoTipo === 'VIDEO' ? 'video' : 'documento'}]</div>}
+                {media && (previa && tipoMedia === 'IMAGE' ? <img src={previa} alt="" style={{ display: 'block', width: '100%', maxHeight: 260, objectFit: 'cover', borderRadius: 7, marginBottom: 6 }} />
+                  : previa && tipoMedia === 'VIDEO' ? <video src={previa} muted style={{ display: 'block', width: '100%', maxHeight: 260, borderRadius: 7, marginBottom: 6 }} />
+                    : /^https?:\/\//.test(extra.media) && tipoMedia === 'IMAGE' ? <img src={extra.media} alt="" style={{ display: 'block', width: '100%', maxHeight: 260, objectFit: 'cover', borderRadius: 7, marginBottom: 6 }} />
+                      : <div style={{ fontSize: 11.5, color: '#54656F', marginBottom: 4 }}>[{tipoMedia === 'IMAGE' ? 'foto' : tipoMedia === 'VIDEO' ? 'video' : 'documento'}{extra.mediaNombre ? `: ${extra.mediaNombre}` : ''}]</div>)}
                 {vista}
                 {plantilla.pie && <div style={{ fontSize: 11.5, color: '#667781', marginTop: 4 }}>{plantilla.pie}</div>}
                 {plantilla.botones.length > 0 && <div style={{ borderTop: '1px solid rgba(0,0,0,.08)', marginTop: 8, paddingTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>{plantilla.botones.map((b, i) => <span key={i} style={{ color: '#027EB5', textAlign: 'center', fontWeight: 600 }}>{b.texto}</span>)}</div>}
