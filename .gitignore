@@ -1,2 +1,5 @@
 *.jar
 tsconfig.tsbuildinfo
+
+# Base de datos local de pruebas
+server/data-local/
