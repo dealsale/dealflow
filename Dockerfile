@@ -23,7 +23,8 @@ ENV NODE_ENV=production
 WORKDIR /srv
 # ffmpeg: convierte las notas de voz grabadas a ogg/opus (formato de WhatsApp)
 # poppler-utils (pdftoppm): convierte el PDF de la guía en imagen para enviarla por WhatsApp
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg poppler-utils && rm -rf /var/lib/apt/lists/*
+# fonts-dejavu-core: la letra de los subtítulos de los videos UGC (ffmpeg drawtext)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg poppler-utils fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 COPY server/package*.json ./
 # Las dependencias ya instaladas (y compiladas) en la etapa anterior, sin las de desarrollo: misma
 # imagen base, así que los módulos nativos sirven tal cual y no se vuelven a descargar ni compilar.

@@ -133,6 +133,11 @@ export function textoDeUrl(url: string, method: string): string | null {
   if (/\/estudio\/proyectos\/[^/]+\/lanzar$/.test(u)) return 'Preparando la campaña para Meta…';
   if (/\/estudio\/lanzamientos\/[^/]+\/estado$/.test(u)) return 'Actualizando la campaña en Meta…';
   if (/\/admin\/estudio\/referencias$/.test(u)) return 'Subiendo el video de referencia…';
+  if (/\/ugc\/actores$/.test(u)) return 'Creando tu personaje con IA… (hasta un minuto)';
+  if (/\/ugc\/videos\/[^/]+\/guion$/.test(u)) return 'La IA está escribiendo el guion…';
+  if (/\/ugc\/videos\/[^/]+\/generar$/.test(u)) return 'Enviando las 4 tomas a Seedance…';
+  if (/\/ugc\/videos\/[^/]+\/tomas\/\d+\/rehacer$/.test(u)) return 'Rehaciendo la toma…';
+  if (/\/ugc\/videos\/[^/]+\/montar$/.test(u)) return 'Armando el video…';
   if (method === 'DELETE') return 'Eliminando…';
   if (/effi\/despachar/.test(u)) return 'Creando la remisión en Effi…';
   if (/effi\/guia|guia-manual/.test(u)) return 'Generando la guía de transporte…';

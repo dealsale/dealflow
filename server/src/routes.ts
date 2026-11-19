@@ -2703,6 +2703,60 @@ api.post('/estudio/lanzamientos/:id/reintentar', requireAuth, requireStore, requ
   res.json(r);
 });
 
+// ── Video UGC con Seedance (Marketing IA, ugc.ts) ───────────────────
+api.get('/ugc', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  res.json((await import('./ugc.js')).estadoUgc(req.user!.storeId!));
+});
+api.post('/ugc/actores', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = await (await import('./ugc.js')).crearActor(req.user!.storeId!, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.delete('/ugc/actores/:id', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  (await import('./ugc.js')).borrarActor(req.user!.storeId!, String(req.params.id));
+  res.json({ ok: true });
+});
+api.get('/ugc/videos/:id', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const v = (await import('./ugc.js')).obtenerVideo(req.user!.storeId!, String(req.params.id));
+  if (!v) return res.status(404).json({ error: 'Video no encontrado.' });
+  res.json({ video: v });
+});
+api.post('/ugc/videos', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = (await import('./ugc.js')).guardarVideo(req.user!.storeId!, null, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.put('/ugc/videos/:id', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = (await import('./ugc.js')).guardarVideo(req.user!.storeId!, String(req.params.id), req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.delete('/ugc/videos/:id', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  (await import('./ugc.js')).borrarVideo(req.user!.storeId!, String(req.params.id));
+  res.json({ ok: true });
+});
+api.post('/ugc/videos/:id/guion', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const parte = req.body?.parte === undefined ? -1 : Number(req.body.parte);
+  const r = await (await import('./ugc.js')).generarGuion(req.user!.storeId!, String(req.params.id), Number.isInteger(parte) && parte >= 0 && parte < 4 ? parte : -1);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/ugc/videos/:id/generar', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = await (await import('./ugc.js')).generarVideo(req.user!.storeId!, String(req.params.id));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/ugc/videos/:id/tomas/:i/rehacer', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = await (await import('./ugc.js')).rehacerToma(req.user!.storeId!, String(req.params.id), Number(req.params.i), req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/ugc/videos/:id/montar', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = await (await import('./ugc.js')).reintentarMontaje(req.user!.storeId!, String(req.params.id));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+
 // Referencias de estilo del Estudio (Admin → Estudio IA): videos de ejemplo + indicaciones generales.
 api.get('/admin/estudio', requireAuth, requireAdmin, async (_req, res) => {
   res.json((await import('./estudio.js')).listarReferencias());

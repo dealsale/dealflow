@@ -4,6 +4,7 @@ import type { Campana } from '../lib/api';
 import { Dropdown } from '../components/Dropdown';
 import { comprimirImagen } from '../components/PhotoUpload';
 import { EstudioCreativos } from './EstudioCreativos';
+import { VideoUGC } from './VideoUGC';
 
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 };
 const label: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 6 };
@@ -591,8 +592,9 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
   const c = df.campana;
   const [paso, setPaso] = useState(1);
   // Dos espacios: el Estudio de videos y fotos (UGC / e-commerce) y las campañas para Meta.
-  const [vista, setVista] = useState<'estudio' | 'campanas'>(() => { try { return (localStorage.getItem('df-mk-vista') as 'estudio' | 'campanas') || 'estudio'; } catch { return 'estudio'; } });
-  const irA = (v: 'estudio' | 'campanas') => { setVista(v); try { localStorage.setItem('df-mk-vista', v); } catch { /* sin almacenamiento */ } };
+  type Vista = 'estudio' | 'ugc' | 'campanas';
+  const [vista, setVista] = useState<Vista>(() => { try { const x = localStorage.getItem('df-mk-vista'); return x === 'ugc' || x === 'campanas' ? x : 'estudio'; } catch { return 'estudio'; } });
+  const irA = (v: Vista) => { setVista(v); try { localStorage.setItem('df-mk-vista', v); } catch { /* sin almacenamiento */ } };
   // Al entrar refrescamos campañas y saldo (por ref: las funciones se recrean en cada render).
   const recargar = useRef({ campanas: df.reloadCampanas, creditos: df.reloadCreditos });
   recargar.current = { campanas: df.reloadCampanas, creditos: df.reloadCreditos };
@@ -606,7 +608,7 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
         <div style={{ flex: 1, minWidth: 220 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Marketing IA</h1>
           <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>
-            {c ? 'Arma tu campaña paso a paso y publícala en Meta.' : vista === 'estudio' ? 'Crea videos UGC y fotos de producto con IA para vender en redes y en tu tienda.' : 'Campañas completas: la IA estudia tu producto, crea las imágenes, escribe los textos y la publica.'}
+            {c ? 'Arma tu campaña paso a paso y publícala en Meta.' : vista === 'estudio' ? 'Crea videos UGC y fotos de producto con IA para vender en redes y en tu tienda.' : vista === 'ugc' ? 'Una persona creada con IA presenta tu producto, habla en español y muestra la oferta. Hecho con Seedance.' : 'Campañas completas: la IA estudia tu producto, crea las imágenes, escribe los textos y la publica.'}
           </p>
         </div>
         {(c || vista !== 'estudio') && (
@@ -619,8 +621,8 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
       </div>
 
       {!c && (
-        <div style={{ display: 'inline-flex', gap: 4, padding: 4, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 12, marginBottom: 16 }}>
-          {([['estudio', '🎬 Videos y fotos'], ['campanas', '📣 Campañas en Meta']] as const).map(([v, t]) => (
+        <div style={{ display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%', gap: 4, padding: 4, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 12, marginBottom: 16 }}>
+          {([['estudio', '🎬 Videos y fotos'], ['ugc', '🎥 Video UGC'], ['campanas', '📣 Campañas en Meta']] as const).map(([v, t]) => (
             <button key={v} onClick={() => irA(v)} style={{ background: vista === v ? 'var(--df-surface)' : 'transparent', color: vista === v ? 'var(--df-text)' : 'var(--df-text-muted)', border: 'none', borderRadius: 9, padding: '8px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', boxShadow: vista === v ? '0 1px 3px rgba(15,23,42,.12)' : 'none' }}>{t}</button>
           ))}
         </div>
@@ -638,6 +640,8 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
 
       {!c && vista === 'estudio' ? (
         <EstudioCreativos df={df} />
+      ) : !c && vista === 'ugc' ? (
+        <VideoUGC df={df} onIrEstudio={() => irA('estudio')} />
       ) : !c ? (
         <ListaCampanas df={df} />
       ) : (

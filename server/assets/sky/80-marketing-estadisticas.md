@@ -16,6 +16,18 @@ En **Marketing IA** la IA te guía en 3 pasos (usa **créditos**):
 4. **Publicar en mi Administrador de anuncios →**: el anuncio se crea **en pausa**; no se gasta nada hasta que entres al Administrador de anuncios y le des play. La pauta la pagas tú directamente a Meta.
 Errores: "Necesitas N créditos… Recarga para continuar" / "Te quedaste sin créditos" (recarga en la sección de créditos); "Primero estudia el producto (paso 1)"; "Cuéntanos qué vendes (o sube una foto)"; "No pudimos entender el producto. Descríbelo con más detalle"; "No pudimos escribir los textos. Intenta de nuevo"; "Para publicar necesitas al menos un creativo (paso 2) y los textos (paso 3)"; "Necesitas elegir una página de Facebook"; "El presupuesto diario mínimo es 1.000"; "Para anuncios que llevan a WhatsApp necesitas tener tu número conectado"; "No encontramos el archivo del creativo. Genéralo de nuevo en el paso 2".
 
+## Video UGC con Seedance (persona con IA que presenta el producto)
+Sección: marketing
+Claves: video ugc, seedance, personaje ia, actor ia, avatar, persona que habla, video con persona, guion, voz en off, subtitulos, rehacer toma
+En **Marketing IA → 🎥 Video UGC** se arma un video corto en el que una persona creada con IA presenta tu producto, en 4 pasos (usa **créditos**):
+1. **Producto**: elige el producto, marca hasta 4 fotos (con varios ángulos sale más fiel), escribe lo que lo hace especial y el precio que se menciona (vacío = no se dice).
+2. **Personaje y voz**: elige un personaje o crea uno (100 créditos, una sola vez): nombre, mujer u hombre, edad, ropa, cómo se ve, dónde graba y voz. Luego **¿Cómo suena?**: «La persona habla a cámara» (la voz sale con los labios sincronizados) o «Voz en off» (eliges la voz del narrador). No se pueden usar fotos de personas reales ni de famosos.
+3. **Guion**: duración (15 o 30 s), tono, objetivo, oferta y llamado a la acción → **Escribir el guion con IA** (2 créditos). Salen 4 tomas (Gancho, Problema, Producto en uso, Cierre con oferta); en cada una se edita lo que se dice, la escena, el plano, los segundos (4 a 12) y si la persona habla. «Otra idea para esta toma» reescribe solo esa.
+4. **Generar**: formato (vertical, cuadrado, horizontal), subtítulos (blancos, con caja o sin), calidad (Alta o Rápida, más barata) y texto de la oferta al final. Muestra el costo antes de generar. Tarda unos minutos y se puede salir y volver.
+Si una toma falla se devuelven sus créditos y se puede **Rehacer** solo esa (también si no te gustó). El video terminado queda en el Estudio (proyecto «Videos UGC») para descargarlo o lanzarlo a Meta.
+La persona habla como vocera de la marca: Meta no permite presentar un personaje de IA como un cliente real que «lo compró y le funcionó».
+Errores: "El video UGC todavía no está activo" (falta conectar Seedance en el servidor; avisa a soporte de DealFlow); "Falta: el producto con fotos / el personaje / el guion"; "Necesitas N créditos" (recarga en «🎬 Videos y fotos» → Recargar créditos).
+
 ## Conectar Meta Ads (Administrador de anuncios)
 Sección: integraciones, marketing, estadisticas
 Claves: meta ads, administrador de anuncios, cuenta publicitaria, conectar facebook ads, gasto de anuncios, roas, cuenta equivocada
