@@ -224,7 +224,7 @@ export function Logistica({ df }: { df: DealFlowState }) {
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Logística Effi</h1>
           <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Todas las guías de tu Effi (también las que hiciste por fuera de DealFlow), por dónde va cada una y cuáles llegan hoy.</p>
         </div>
-        <button onClick={() => void actualizar()} disabled={actualizando} style={{ background: 'var(--df-purple)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: actualizando ? 0.75 : 1 }}>
+        <button onClick={() => void actualizar()} disabled={actualizando} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: actualizando ? 0.75 : 1 }}>
           {actualizando ? <><span className="df-log-gira">↻</span> Consultando Effi…</> : '↻ Actualizar desde Effi'}
         </button>
       </div>

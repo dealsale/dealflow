@@ -48,7 +48,7 @@ export function ExtensionDescarga({ titulo, desc, zip, pasos }: { titulo: string
           <div style={{ fontWeight: 800, fontSize: 14 }}>{titulo}</div>
           <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{desc}</div>
         </div>
-        <a href={zip} download style={{ ...btn, background: 'var(--df-purple)', color: '#fff', border: 'none', fontWeight: 700 }}>⬇ Descargar extensión</a>
+        <a href={zip} download className="df-btn-primary" style={{ ...btn, background: 'var(--df-brand)', color: '#fff', border: 'none', fontWeight: 700 }}>⬇ Descargar extensión</a>
       </div>
       <ol style={{ fontSize: 12.5, lineHeight: 1.65, margin: '12px 0 10px', paddingLeft: 20 }}>
         {pasos.map((x, i) => <li key={i}>{x}</li>)}

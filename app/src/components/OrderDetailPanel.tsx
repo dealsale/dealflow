@@ -67,20 +67,20 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
     });
   };
 
-  const btnP: React.CSSProperties = { background: 'var(--df-warning)', border: 'none', borderRadius: 9, padding: '0 12px', minHeight: 44, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' };
+  const btnP: React.CSSProperties = { background: 'var(--df-brand)', border: 'none', borderRadius: 9, padding: '0 12px', minHeight: 44, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' };
   const [verTodas, setVerTodas] = useState(false);
 
   if (paso === 'idle' || paso === 'cargando' || paso === 'solo') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {/* Recaudo: contra entrega (Dropi cobra al entregar) vs prepagado (ya pagó). */}
-        <InterruptorCobro cod={recaudo === 'con'} onCambio={(c) => setRecaudo(c ? 'con' : 'sin')} color="var(--df-warning)" total={sel.total && sel.total > 0 ? sel.total : sel.items.reduce((a, it) => a + it.qty * it.precio, 0) + (sel.envio || 0)} />
+        <InterruptorCobro cod={recaudo === 'con'} onCambio={(c) => setRecaudo(c ? 'con' : 'sin')} color="var(--df-brand)" total={sel.total && sel.total > 0 ? sel.total : sel.items.reduce((a, it) => a + it.qty * it.precio, 0) + (sel.envio || 0)} />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={cotizar} disabled={paso !== 'idle'} style={{ ...btnP, flex: '1 1 170px', opacity: paso !== 'idle' ? 0.7 : 1 }}>
             {paso === 'cargando' ? 'Cotizando…' : '📦 Cotizar y generar guía'}
           </button>
           <button onClick={() => void soloPedido()} disabled={paso !== 'idle'} title="Crea el pedido en Dropi sin transportadora ni guía, para revisar la huella del cliente y generar la guía allá"
-            style={{ ...btnP, flex: '1 1 150px', background: 'var(--df-surface)', color: 'var(--df-warning)', border: '1px solid var(--df-warning)', opacity: paso !== 'idle' ? 0.7 : 1 }}>
+            style={{ ...btnP, flex: '1 1 150px', background: 'var(--df-surface)', color: 'var(--df-brand-dark)', border: '1.5px solid var(--df-brand)', textShadow: 'none', opacity: paso !== 'idle' ? 0.7 : 1 }}>
             {paso === 'solo' ? 'Enviando…' : '📝 Solo enviar el pedido'}
           </button>
         </div>
@@ -94,13 +94,13 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
   const masBarata = disponibles.reduce<DropiTransportadora | null>((a, t) => (!a || t.precio < a.precio ? t : a), null);
   const esElegida = (t: DropiTransportadora) => !auto && elegida?.id === t.id && elegida?.service === t.service;
   const lista = verTodas ? disponibles : disponibles.filter((t, i) => i < VISIBLES || esElegida(t));
-  const fila = (on: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, width: '100%', boxSizing: 'border-box', textAlign: 'left', background: on ? 'var(--df-warning-subtle)' : 'var(--df-surface)', border: `1px solid ${on ? 'var(--df-warning)' : 'var(--df-border)'}`, borderRadius: 8, padding: '0 10px', minHeight: 40, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--df-text)' });
-  const punto = (on: boolean): React.CSSProperties => ({ width: 14, height: 14, borderRadius: '50%', boxSizing: 'border-box', border: `2px solid ${on ? 'var(--df-warning)' : 'var(--df-border-strong)'}`, background: on ? 'var(--df-warning)' : 'transparent', boxShadow: on ? 'inset 0 0 0 2px var(--df-surface)' : 'none', flexShrink: 0 });
+  const fila = (on: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, width: '100%', boxSizing: 'border-box', textAlign: 'left', background: on ? 'var(--df-brand-subtle)' : 'var(--df-surface)', border: `1px solid ${on ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 8, padding: '0 10px', minHeight: 40, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--df-text)' });
+  const punto = (on: boolean): React.CSSProperties => ({ width: 14, height: 14, borderRadius: '50%', boxSizing: 'border-box', border: `2px solid ${on ? 'var(--df-brand)' : 'var(--df-border-strong)'}`, background: on ? 'var(--df-brand)' : 'transparent', boxShadow: on ? 'inset 0 0 0 2px var(--df-surface)' : 'none', flexShrink: 0 });
   const precioRedondo = (n: number) => pesos(Math.round(n));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-strong)' }}>Transportadoras para <span style={{ color: 'var(--df-warning)' }}>{ciudad || 'el destino'}</span></span>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-strong)' }}>Transportadoras para <span style={{ color: 'var(--df-brand-dark)' }}>{ciudad || 'el destino'}</span></span>
         <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>{disponibles.length} opciones · {recaudo === 'con' ? 'con recaudo' : 'sin recaudo'}</span>
       </div>
       <div role="radiogroup" aria-label="Transportadora de Dropi" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -122,7 +122,7 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
         </button>
       </div>
       {disponibles.length > VISIBLES && (
-        <button onClick={() => setVerTodas((v) => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, minHeight: 28, color: 'var(--df-warning)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+        <button onClick={() => setVerTodas((v) => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, minHeight: 28, color: 'var(--df-brand-dark)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
           {verTodas ? 'Ver menos' : `Ver ${disponibles.length - VISIBLES} más`}
         </button>
       )}
@@ -268,7 +268,7 @@ function CotizadorEffi({ rowId, valor, onElegir, onCargado, remitente = '', decl
         })}
       </div>
       {(ocultas.length > 0 || verTodas) && (
-        <button onClick={() => setVerTodas((v) => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, minHeight: 28, color: 'var(--df-purple)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+        <button onClick={() => setVerTodas((v) => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, minHeight: 28, color: 'var(--df-brand-dark)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
           {verTodas ? 'Ocultar las que no sirven' : `Ver ${ocultas.length} más (no llegan o no cobran contra entrega)`}
         </button>
       )}
@@ -285,7 +285,7 @@ const tarjetaProv = (activo: boolean, disponible: boolean): React.CSSProperties 
   display: 'flex', alignItems: 'center', gap: 8,
 });
 const chip = (bg: string, fg: string): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 5, background: bg, color: fg, borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' });
-const btnP: React.CSSProperties = { width: '100%', background: 'var(--df-purple)', border: 'none', borderRadius: 10, padding: '12px 16px', fontFamily: 'inherit', fontWeight: 800, fontSize: 13.5, color: '#fff', cursor: 'pointer' };
+const btnP: React.CSSProperties = { width: '100%', background: 'var(--df-brand)', border: 'none', borderRadius: 10, padding: '12px 16px', fontFamily: 'inherit', fontWeight: 800, fontSize: 13.5, color: '#fff', cursor: 'pointer' };
 const btnS: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, color: 'var(--df-text-body)', cursor: 'pointer', whiteSpace: 'nowrap' };
 
 /** Effi por API: revisar lo que se va a enviar y crear la remisión (+ guía). */
@@ -794,7 +794,7 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 140, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-strong)' }}>Guía {sel.guia}</div>
         <button onClick={() => df.copyGuia(sel.guia!)} className="df-copy-btn" style={btnS}>{df.guiaBtnLabel}</button>
-        {archivo && <a href={archivo} download={`Guia-${sel.id}`} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-purple)', textDecoration: 'none' }}>⬇ Descargar</a>}
+        {archivo && <a href={archivo} download={`Guia-${sel.id}`} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)', textDecoration: 'none' }}>⬇ Descargar</a>}
       </div>
       {sel.guiaImg && <a href={sel.guiaImg} target="_blank" rel="noreferrer"><img src={sel.guiaImg} alt={`Guía ${sel.guia}`} style={{ width: '100%', maxHeight: 380, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--df-border)', background: '#fff' }} /></a>}
       {/* La guía se le envía sola al cliente: subir/enviar a mano solo aparece si ese envío falló. */}
@@ -854,7 +854,7 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
             <div style={{ fontWeight: 800, fontSize: 14 }}>Enviado a {dropiCreado ? 'Dropi' : 'Effi'}</div>
             <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Estado: <b style={{ color: 'var(--df-text-strong)' }}>{sel.estadoWoo || (sel.hasGuia ? 'guía generada' : 'esperando guía…')}</b></div>
           </div>
-          <button onClick={sel.sincronizarEffi} style={{ ...btnS, color: 'var(--df-purple)', borderColor: 'var(--df-purple-border)' }}>↻ Actualizar</button>
+          <button onClick={sel.sincronizarEffi} style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)' }}>↻ Actualizar</button>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
           {remision && <span style={chip('var(--df-purple-subtle)', 'var(--df-purple)')}>🧾 {remision}</span>}
@@ -871,8 +871,8 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
           <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--df-text-muted)', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div>🚚 Guía creada en Effi{sel.effiGuiaTx ? <> (<b style={{ color: 'var(--df-text-strong)' }}>{sel.effiGuiaTx}</b>)</> : ''} · esperando que la transportadora asigne el número. Llega solo; apenas llegue se le envía al cliente.</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {(sel.guiaUrl || sel.guiaImg) && <a href={sel.guiaImg || sel.guiaUrl} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-purple)', textDecoration: 'none' }}>📄 Ver la guía</a>}
-              <button onClick={sel.sincronizarEffi} style={{ ...btnS, color: 'var(--df-purple)' }}>↻ Buscar el número ahora</button>
+              {(sel.guiaUrl || sel.guiaImg) && <a href={sel.guiaImg || sel.guiaUrl} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)', textDecoration: 'none' }}>📄 Ver la guía</a>}
+              <button onClick={sel.sincronizarEffi} style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)' }}>↻ Buscar el número ahora</button>
             </div>
           </div>
         )}

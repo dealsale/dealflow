@@ -10,7 +10,7 @@ import { fmtCO } from '../../lib/fechaCO';
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 16 };
 const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' };
 const lbl: React.CSSProperties = { display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 5 };
-const btn: React.CSSProperties = { border: 0, borderRadius: 9, padding: '10px 16px', background: 'var(--df-purple)', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer' };
+const btn: React.CSSProperties = { border: 0, borderRadius: 9, padding: '10px 16px', background: 'var(--df-brand)', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer' };
 const btnS: React.CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 10px', background: 'var(--df-surface)', color: 'var(--df-text-body)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' };
 const ROL: Record<string, [string, string, string]> = {
   SUPERADMIN: ['Administrador', '#7C3AED', 'Cuenta principal: todo, incluido crear cuentas del equipo y llamar a las tiendas.'],

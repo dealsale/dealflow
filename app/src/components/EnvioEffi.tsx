@@ -87,7 +87,7 @@ export function DevolucionEffi({ df, sel }: { df: DealFlowState; sel: DecoratedO
     <div style={{ ...caja, borderColor: 'var(--df-warning-border)', background: 'var(--df-warning-subtle-2)' }}>
       <b>↩️ Pedido devuelto</b>
       <div style={{ color: 'var(--df-text-body)', margin: '2px 0 8px' }}>Registra la devolución en Effi para que los productos vuelvan al inventario de tu bodega.</div>
-      <button onClick={registrar} disabled={enviando} style={{ background: 'var(--df-purple)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 13px', fontWeight: 700, fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', opacity: enviando ? 0.6 : 1 }}>Registrar devolución en Effi</button>
+      <button onClick={registrar} disabled={enviando} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 13px', fontWeight: 700, fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', opacity: enviando ? 0.6 : 1 }}>Registrar devolución en Effi</button>
       {msg && <div style={{ marginTop: 6, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
     </div>
   );

@@ -18,7 +18,7 @@ type Filtro = 'effi' | 'sin' | 'dropi';
 
 const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 9, padding: '8px 10px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)' };
-const btn: React.CSSProperties = { background: 'var(--df-purple)', color: '#fff', border: 'none', borderRadius: 9, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' };
+const btn: React.CSSProperties = { background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 9, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' };
 const mini: React.CSSProperties = { border: '1px solid var(--df-border)', background: 'var(--df-surface)', borderRadius: 7, padding: '5px 9px', fontFamily: 'inherit', fontWeight: 600, fontSize: 11.5, cursor: 'pointer', color: 'var(--df-text-body)', whiteSpace: 'nowrap' };
 
 const tokens = (s: string) => norm(s).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((t) => t.length > 1);
@@ -544,7 +544,7 @@ export function RevisionVinculos({ productId, onCambio }: { productId: string; o
             <span style={{ flex: 1 }} />
             <button onClick={() => setMarcadas(new Set(filas.filter((f) => f.sugerido).map((f) => f.variantId)))} style={mini}>Marcar todas</button>
             <button onClick={() => setMarcadas(new Set())} style={mini}>Ninguna</button>
-            <button onClick={() => void aplicar()} disabled={cargando || !marcadas.size} style={{ ...mini, background: 'var(--df-purple)', color: '#fff', borderColor: 'var(--df-purple)', opacity: marcadas.size ? 1 : 0.5 }}>Aplicar sugeridos ({marcadas.size})</button>
+            <button onClick={() => void aplicar()} disabled={cargando || !marcadas.size} style={{ ...mini, background: 'var(--df-brand)', color: '#fff', borderColor: 'var(--df-purple)', opacity: marcadas.size ? 1 : 0.5 }}>Aplicar sugeridos ({marcadas.size})</button>
             <button onClick={() => void aplicar(true)} disabled={cargando || !marcadas.size} title="Quita el vínculo de las marcadas (para elegirlas a mano)" style={{ ...mini, color: 'var(--df-danger)' }}>Desvincular marcadas</button>
           </div>
           <div style={{ maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>

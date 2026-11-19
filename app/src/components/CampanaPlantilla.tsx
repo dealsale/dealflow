@@ -21,7 +21,7 @@ const ESTADOS_PEDIDO: [string, string][] = [
  * Desde aquí también se crea la plantilla y se manda a aprobación.
  */
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 16 };
-const btn: React.CSSProperties = { background: 'var(--df-purple)', color: '#fff', border: 'none', borderRadius: 9, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
+const btn: React.CSSProperties = { background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 9, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
 const btnS: React.CSSProperties = { background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer' };
 const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' };
 const lbl: React.CSSProperties = { display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', marginBottom: 5 };
@@ -343,7 +343,7 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
                               <b>{d.nombre || d.tel}</b> <span style={{ color: 'var(--df-text-faint)' }}>{d.nombre ? d.tel : ''}</span>
                               {(d.detalle || d.excluido) && <span style={{ display: 'block', fontSize: 11.5, color: d.excluido ? '#B45309' : 'var(--df-text-muted)' }}>{d.excluido || d.detalle}</span>}
                             </span>
-                            <button type="button" onClick={() => (ya ? quitar(d.clave) : agregar([d]))} style={{ ...btnS, padding: '3px 9px', ...(ya ? { background: 'var(--df-purple)', color: '#fff', borderColor: 'var(--df-purple)' } : {}) }}>{ya ? '✓ Elegido' : '＋'}</button>
+                            <button type="button" onClick={() => (ya ? quitar(d.clave) : agregar([d]))} style={{ ...btnS, padding: '3px 9px', ...(ya ? { background: 'var(--df-brand)', color: '#fff', borderColor: 'var(--df-purple)' } : {}) }}>{ya ? '✓ Elegido' : '＋'}</button>
                           </div>
                         );
                       })}

@@ -234,7 +234,7 @@ function AccionesSinPedido({ n, alTerminar }: { n: NovedadPedido; alTerminar: ()
         <>
           <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>DF-</span>
           <input value={numero} onChange={(e) => setNumero(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => { if (e.key === 'Enter' && numero) void unir(); }} placeholder="1049" aria-label="Número del pedido" style={{ width: 70, border: '1px solid var(--df-border-strong)', borderRadius: 7, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)' }} autoFocus />
-          <button onClick={unir} disabled={!numero} style={{ ...b, background: 'var(--df-purple)', color: '#fff', border: 'none', opacity: numero ? 1 : 0.5 }}>Unir</button>
+          <button onClick={unir} disabled={!numero} style={{ ...b, background: 'var(--df-brand)', color: '#fff', border: 'none', opacity: numero ? 1 : 0.5 }}>Unir</button>
           <button onClick={() => { setAbierto(false); setMsg(''); }} style={b}>Cancelar</button>
         </>
       ) : (

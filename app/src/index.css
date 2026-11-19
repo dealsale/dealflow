@@ -296,6 +296,7 @@
   background-size: 180% 100% !important;
   background-position: 0% 0;
   color: #fff !important;
+  text-shadow: 0 0 1px rgba(3, 32, 40, .55), 0 1px 2px rgba(3, 32, 40, .45);
   box-shadow: 0 8px 24px -8px rgba(59, 130, 246, .7);
   transition: background-position .5s ease, box-shadow .3s ease, transform .2s ease;
 }
@@ -665,6 +666,9 @@ button[style*="background: var(--df-brand)"],
   background-position: 0% 50% !important;
   border-color: transparent !important;
   color: #fff !important;
+  /* Borde fino y sombra en las letras: el blanco se lee también sobre el verde claro del degradado
+     y en el tema claro. */
+  text-shadow: 0 0 1px rgba(3, 32, 40, .55), 0 1px 2px rgba(3, 32, 40, .45);
   box-shadow: 0 8px 22px -10px rgba(46, 139, 255, 0.75);
   transition: background-position .5s var(--df-ease), box-shadow .3s, transform .15s !important;
 }

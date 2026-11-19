@@ -254,7 +254,7 @@ function CardTienda({ l, df, alCambiar }: { l: SuperLandingTienda; df: DealFlowS
               {!gratis && <input value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="Precio" style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 7, padding: '5px 8px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 }} />}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => void aBiblioteca()} disabled={!!ocupado || (!gratis && !precio.trim())} style={{ flex: 1, border: 'none', background: 'var(--df-purple)', color: '#fff', borderRadius: 7, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{ocupado === 'bib' ? 'Copiando…' : 'Confirmar'}</button>
+              <button onClick={() => void aBiblioteca()} disabled={!!ocupado || (!gratis && !precio.trim())} style={{ flex: 1, border: 'none', background: 'var(--df-brand)', color: '#fff', borderRadius: 7, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{ocupado === 'bib' ? 'Copiando…' : 'Confirmar'}</button>
               <button onClick={() => setAbrirBib(false)} style={{ ...btn, padding: '6px 10px', fontSize: 12 }}>Cancelar</button>
             </div>
           </div>
