@@ -95,6 +95,14 @@ const PLANTILLAS: Semilla[] = [
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Tengo una pregunta' }],
   },
   {
+    // v3, la más simple: Meta toma como Marketing cualquier plantilla de Utilidad que empiece a
+    // llevar precios, direcciones o detalles del pedido. Solo el nombre del cliente y el aviso.
+    // Es la que se usa primero; si no está aprobada en la tienda, sigue la v2/v1 y luego la general.
+    nombre: 'pedido_en_oficina_v3', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋\nTu pedido ya está disponible para recoger en la oficina de la transportadora.\n¡Gracias por tu compra!',
+    ejemplos: ['Camila'],
+  },
+  {
     // Pedido que entró por la tienda online (Shopify): el comprador confirma con un
     // botón y, si dice que sí, se despacha solo. Variables: nombre, tienda, productos, total.
     nombre: 'confirmacion_pedido_tienda', categoria: 'UTILITY', idioma: 'es',

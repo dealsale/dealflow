@@ -22,6 +22,8 @@ import { fraseEstadoPlantilla, textoEstadoChat } from './mensajesEstado.js';
 export const PLANTILLA_ESTADO = 'estado_envio_pedido';
 /** Plantilla propia de «En oficina»: el pedido espera al cliente en la oficina de la transportadora. */
 export const PLANTILLA_OFICINA = 'pedido_en_oficina';
+/** La versión simple (solo el nombre del cliente), la que Meta aprueba como Utilidad. */
+export const PLANTILLA_OFICINA_SIMPLE = 'pedido_en_oficina_v3';
 /** Estados que se avisan solos (los cambia la transportadora). "Guía generada" la avisa avisoGuia.ts. */
 export const ESTADOS_AVISADOS = ['En tránsito', 'En reparto', 'En oficina', 'Novedad', 'Entregado'];
 
@@ -230,11 +232,12 @@ async function enviarAviso(a: Fila): Promise<void> {
   }
 
   // 2) Ventana cerrada (o sin chat) → plantilla aprobada, con datos reales (si falta uno, no se inventa).
-  // «En oficina» tiene su propia plantilla (dónde recogerlo, guía y qué pagar); si aún no está
-  // aprobada en la tienda, sale con la general de estado, como antes.
-  let tpl = estado === 'En oficina' ? plantillaAprobada(storeId, PLANTILLA_OFICINA) : null;
+  // «En oficina» tiene su propia plantilla. Primero la v3 (solo el nombre: Meta la acepta como
+  // Utilidad); si no está aprobada, la v2/v1 (con dónde, guía y qué pagar); si tampoco, la general.
+  let tpl = estado === 'En oficina' ? plantillaAprobada(storeId, PLANTILLA_OFICINA_SIMPLE) : null;
   let params: string[] = [];
-  if (tpl) {
+  if (tpl) params = [nombre];
+  else if (estado === 'En oficina' && (tpl = plantillaAprobada(storeId, PLANTILLA_OFICINA))) {
     const donde = datosE.oficina.replace(/^en\s+/i, '').trim() || (txt(o.ciudad).trim() ? `la oficina de ${transp || 'la transportadora'} en ${txt(o.ciudad).trim()}` : `la oficina de ${transp || 'la transportadora'} de tu ciudad`);
     // La v2 dice «Valor a pagar al recogerlo: {{7}}»; la primera, «Pago: {{7}}».
     const pago = tpl.nombre === `${PLANTILLA_OFICINA}_v2`
@@ -379,7 +382,7 @@ export function iniciarAvisosEstado(): void {
   if (process.env.NODE_ENV === 'production') {
     setTimeout(async () => {
       // También la guía con foto (guia_envio_imagen): sin ella, a quien no escribe hace 24 h le llega solo el texto.
-      for (const nombre of [PLANTILLA_ESTADO, `${PLANTILLA_OFICINA}_v2`, 'guia_envio_imagen', 'confirmacion_pedido_v2', 'guia_pedido_v2', 'guia_pedido_imagen_v2', 'novedad_pedido_v2']) {
+      for (const nombre of [PLANTILLA_ESTADO, PLANTILLA_OFICINA_SIMPLE, 'guia_envio_imagen', 'confirmacion_pedido_v2', 'guia_pedido_v2', 'guia_pedido_imagen_v2', 'novedad_pedido_v2']) {
         const t = db.prepare('SELECT id FROM meta_templates WHERE nombre = ?').get(nombre) as { id: string } | undefined;
         if (!t) continue;
         const n = (db.prepare("SELECT COUNT(*) n FROM meta_template_pub WHERE template_id = ? AND estado != 'error'").get(t.id) as { n: number }).n;
