@@ -1347,6 +1347,37 @@ export interface PiezaEstudio {
 export interface ProyectoEstudio { id: string; nombre: string; brief: BriefEstudio; foto: string; fotos: string[]; copys: { textos?: string[]; titulares?: string[]; descripciones?: string[] }; piezas: PiezaEstudio[] }
 export interface ProyectoEstudioResumen { id: string; nombre: string; foto: string; videos: number; imagenes: number; generando: number; actualizado: string }
 export interface PreciosEstudio { paquete: number; imagen: { medium: number; high: number }; video: Record<string, Record<string, number>>; disponible: boolean }
+// ── Video UGC con Seedance (Marketing IA) ──
+export interface ActorUgc { id: string; nombre: string; genero: string; edad: string; estilo: string; apariencia: string; ambiente: string; voz: string; imagen: string }
+export interface ConfigUgc {
+  producto: { id: string; nombre: string; fotos: string[]; notas: string; precio: number };
+  voz: { modo: 'persona' | 'locutor'; id: string };
+  duracion: 15 | 30; tono: string; objetivo: string; oferta: string; cta: string;
+  formato: '9:16' | '1:1' | '16:9'; subtitulos: 'blanco' | 'caja' | 'no'; textoFinal: string; calidad: 'alta' | 'rapida';
+}
+export interface ParteGuionUgc { etiqueta: string; texto: string; escena: string; camara: string; segundos: number; habla: boolean }
+export interface VideoUgc {
+  id: string; nombre: string; actorId: string; config: ConfigUgc; guion: ParteGuionUgc[];
+  estado: 'borrador' | 'generando' | 'parcial' | 'montando' | 'listo' | 'fallido';
+  tomas: { estado: 'pendiente' | 'generando' | 'lista' | 'fallida'; url: string; error: string; creditos: number }[];
+  video: string; miniatura: string; creditos: number; error: string; piezaId: string; costo: number; creado: string; actualizado: string;
+}
+export interface EstadoUgc {
+  activo: { seedance: boolean; openai: boolean; subtitulos: boolean };
+  precios: { segundo: number; segundoRapido: number; actor: number; guion: number };
+  voces: { id: string; nombre: string }[]; camaras: string[]; saldo: number; actores: ActorUgc[]; videos: VideoUgc[];
+}
+export const apiUgc = () => reqBase<EstadoUgc>('/api/ugc', 'GET');
+export const apiUgcCrearActor = (b: Partial<ActorUgc>) => req<{ actor: ActorUgc }>('/api/ugc/actores', 'POST', b);
+export const apiUgcBorrarActor = (id: string) => reqBase<{ ok: true }>(`/api/ugc/actores/${encodeURIComponent(id)}`, 'DELETE');
+export const apiUgcVideo = (id: string) => reqBase<{ video: VideoUgc }>(`/api/ugc/videos/${encodeURIComponent(id)}`, 'GET');
+export const apiUgcNuevo = (b: { actorId?: string; config?: Partial<ConfigUgc> }) => reqBase<{ video: VideoUgc }>('/api/ugc/videos', 'POST', b);
+export const apiUgcGuardar = (id: string, b: { nombre?: string; actorId?: string; config?: Partial<ConfigUgc>; guion?: ParteGuionUgc[] }) => reqBase<{ video: VideoUgc }>(`/api/ugc/videos/${encodeURIComponent(id)}`, 'PUT', b);
+export const apiUgcBorrar = (id: string) => reqBase<{ ok: true }>(`/api/ugc/videos/${encodeURIComponent(id)}`, 'DELETE');
+export const apiUgcGuion = (id: string, parte?: number) => req<{ video: VideoUgc }>(`/api/ugc/videos/${encodeURIComponent(id)}/guion`, 'POST', parte === undefined ? {} : { parte });
+export const apiUgcGenerar = (id: string) => req<{ video: VideoUgc }>(`/api/ugc/videos/${encodeURIComponent(id)}/generar`, 'POST', {});
+export const apiUgcRehacer = (id: string, i: number, b: { texto?: string; escena?: string; camara?: string } = {}) => req<{ video: VideoUgc }>(`/api/ugc/videos/${encodeURIComponent(id)}/tomas/${i}/rehacer`, 'POST', b);
+export const apiUgcMontar = (id: string) => req<{ video: VideoUgc }>(`/api/ugc/videos/${encodeURIComponent(id)}/montar`, 'POST', {});
 export const apiEstudio = () => reqBase<{ proyectos: ProyectoEstudioResumen[]; precios: PreciosEstudio; saldo: number }>('/api/estudio', 'GET');
 export const apiEstudioProyecto = (id: string) => reqBase<{ proyecto: ProyectoEstudio; saldo: number }>(`/api/estudio/proyectos/${id}`, 'GET');
 export const apiEstudioGuardar = (id: string | null, b: { nombre?: string; brief: Partial<BriefEstudio>; fotos?: string[]; fotosNuevas?: string[] }) =>

@@ -35,6 +35,7 @@ import('./metaTemplates.js').then((m) => m.iniciarRevisionPlantillas()).catch(()
 import('./effiApi.js').then((m) => m.iniciarAutoVinculoEffi()).catch(() => {});
 import('./bold.js').then((m) => m.iniciarBold()).catch((e) => console.error('[bold]', e));
 import('./estudio.js').then((m) => m.iniciarEstudio()).catch((e) => console.error('[estudio]', e));
+import('./ugc.js').then((m) => m.iniciarUgc()).catch((e) => console.error('[ugc]', e));
 import('./estudioMeta.js').then((m) => m.iniciarEstudioMeta()).catch((e) => console.error('[estudio-meta]', e));
 import('./papelera.js').then((m) => m.iniciarRespaldos()).catch((e) => console.error('[respaldos]', e));
 import('./dropiSync.js').then((m) => m.iniciarSyncDropi()).catch((e) => console.error('[dropi-sync]', e));
