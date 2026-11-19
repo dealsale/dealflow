@@ -148,8 +148,11 @@ async function subirImagen(act: string, token: string, storeId: string, urlCreat
   }
 }
 
-/** A dónde manda el anuncio: al WhatsApp de la tienda, o a su tienda web. */
-function destinoDelAnuncio(storeId: string, objetivo: string): { enlace: string } | { error: string } {
+/**
+ * A dónde manda el anuncio: al WhatsApp de la tienda, o a SU tienda en línea (nunca a DealFlow).
+ * Para «ventas» también hace falta el píxel de la tienda (Meta optimiza por compras).
+ */
+async function destinoDelAnuncio(storeId: string, objetivo: string): Promise<{ enlace: string; pixel?: string } | { error: string }> {
   if (objetivo === 'mensajes') {
     const wa = db.prepare('SELECT numero FROM whatsapp WHERE store_id = ? AND conectado = 1').get(storeId) as { numero: string } | undefined;
     const num = (wa?.numero || '').replace(/\D/g, '');
@@ -157,7 +160,23 @@ function destinoDelAnuncio(storeId: string, objetivo: string): { enlace: string 
     if (!num) return { error: 'Para anuncios que llevan a WhatsApp necesitas tener tu número conectado en la sección WhatsApp.' };
     return { enlace: `https://wa.me/${num}` };
   }
-  return { enlace: process.env.PUBLIC_URL || 'https://dealflow.sbs' };
+  const { dominioActivo } = await import('./landings.js');
+  const dom = dominioActivo(storeId);
+  if (!dom) return { error: 'Para este objetivo el anuncio lleva a tu tienda en línea, y todavía no tiene dirección. Actívala en «Tienda en línea» o elige el objetivo «Mensajes a WhatsApp».' };
+  const enlace = `https://${dom}`;
+  if (objetivo !== 'ventas') return { enlace };
+  const { pixelesDe } = await import('./metaPixelWeb.js');
+  const pixel = pixelesDe(storeId)[0] || '';
+  if (!pixel) return { error: 'Para optimizar por ventas necesitas el píxel de Meta (configúralo en tu Tienda en línea) o elige el objetivo «Tráfico».' };
+  return { enlace, pixel };
+}
+
+/** Meta pide un objetivo de optimización acorde al de la campaña (y destino/píxel según el caso). */
+function optimizacion(objetivo: string, pageId: string, pixel?: string): Record<string, unknown> {
+  if (objetivo === 'mensajes') return { optimization_goal: 'CONVERSATIONS', destination_type: 'WHATSAPP', promoted_object: { page_id: pageId } };
+  if (objetivo === 'ventas') return { optimization_goal: 'OFFSITE_CONVERSIONS', promoted_object: { pixel_id: pixel, custom_event_type: 'PURCHASE' } };
+  if (objetivo === 'reconocimiento') return { optimization_goal: 'REACH' };
+  return { optimization_goal: 'LINK_CLICKS', destination_type: 'WEBSITE' };
 }
 
 /**
@@ -183,7 +202,7 @@ export async function publicar(
 
   // Se valida el destino antes de crear nada en Meta, para no dejar campañas
   // a medias si resulta que falta el número de WhatsApp.
-  const destino = destinoDelAnuncio(storeId, c.objetivo);
+  const destino = await destinoDelAnuncio(storeId, c.objetivo);
   if ('error' in destino) return { error: destino.error };
 
   const act = f.ad_account_id.startsWith('act_') ? f.ad_account_id : `act_${f.ad_account_id}`;
@@ -208,26 +227,31 @@ export async function publicar(
     special_ad_categories: [],
   });
   if (!camp.ok || !camp.body.id) return { error: camp.body.error?.message || 'Meta rechazó la creación de la campaña.' };
+  // Si algo falla después, se borra la campaña recién creada para no dejarla huérfana en la cuenta.
+  const campaignId = camp.body.id;
+  const fallar = async (error: string) => {
+    await post(campaignId, { status: 'DELETED' }).catch(() => null);
+    return { error };
+  };
 
   // 2) Conjunto de anuncios con el presupuesto diario.
   const adset = await post<{ id?: string }>(`${act}/adsets`, {
     name: `${c.nombre} · conjunto`,
-    campaign_id: camp.body.id,
+    campaign_id: campaignId,
     daily_budget: aPresupuestoMeta(presupuesto, f.moneda || 'COP'), // COP va en pesos enteros (antes ×100 = 100 veces el presupuesto)
     billing_event: 'IMPRESSIONS',
-    optimization_goal: c.objetivo === 'trafico' ? 'LINK_CLICKS' : c.objetivo === 'reconocimiento' ? 'REACH' : 'CONVERSATIONS',
     bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
     targeting: { geo_locations: { countries: ['CO'] }, age_min: 18, age_max: 65 },
     status: 'PAUSED',
-    ...(c.objetivo === 'mensajes' ? { destination_type: 'WHATSAPP', promoted_object: { page_id: f.page_id } } : {}),
+    ...optimizacion(c.objetivo, f.page_id, destino.pixel),
   });
-  if (!adset.ok || !adset.body.id) return { error: adset.body.error?.message || 'Meta rechazó la creación del conjunto de anuncios.' };
+  if (!adset.ok || !adset.body.id) return fallar(adset.body.error?.message || 'Meta rechazó la creación del conjunto de anuncios.');
 
   // 3) Subimos la imagen a Meta y usamos su hash. Nuestras URLs /api/media
   // están protegidas por sesión, así que Meta no podría descargarlas: hay que
   // enviarle los bytes.
   const subida = await subirImagen(act, token, storeId, creativo);
-  if ('error' in subida) return { error: subida.error };
+  if ('error' in subida) return fallar(subida.error);
 
   const creative = await post<{ id?: string }>(`${act}/adcreatives`, {
     name: `${c.nombre} · creativo`,
@@ -239,11 +263,13 @@ export async function publicar(
         description: descripcion,
         image_hash: subida.hash,
         link: destino.enlace,
-        call_to_action: { type: c.objetivo === 'mensajes' ? 'WHATSAPP_MESSAGE' : 'LEARN_MORE' },
+        call_to_action: c.objetivo === 'mensajes'
+          ? { type: 'WHATSAPP_MESSAGE', value: { app_destination: 'WHATSAPP', link: destino.enlace } }
+          : { type: c.objetivo === 'ventas' ? 'SHOP_NOW' : 'LEARN_MORE', value: { link: destino.enlace } },
       },
     },
   });
-  if (!creative.ok || !creative.body.id) return { error: creative.body.error?.message || 'Meta rechazó el creativo.' };
+  if (!creative.ok || !creative.body.id) return fallar(creative.body.error?.message || 'Meta rechazó el creativo.');
 
   // 4) El anuncio, también en pausa.
   const ad = await post<{ id?: string }>(`${act}/ads`, {
@@ -252,9 +278,9 @@ export async function publicar(
     creative: { creative_id: creative.body.id },
     status: 'PAUSED',
   });
-  if (!ad.ok || !ad.body.id) return { error: ad.body.error?.message || 'Meta rechazó el anuncio.' };
+  if (!ad.ok || !ad.body.id) return fallar(ad.body.error?.message || 'Meta rechazó el anuncio.');
 
-  const ids = { campaignId: camp.body.id, adsetId: adset.body.id, creativeId: creative.body.id, adId: ad.body.id, cuenta: act };
+  const ids = { campaignId, adsetId: adset.body.id, creativeId: creative.body.id, adId: ad.body.id, cuenta: act };
   db.prepare("UPDATE campanas SET estado = 'publicada', publicacion = ?, updated_at = datetime('now') WHERE id = ? AND store_id = ?")
     .run(j({ ...ids, fecha: new Date().toISOString() }), campanaId, storeId);
   console.log(`[ads] tienda ${storeId} publicó la campaña ${campanaId} → ${ad.body.id}`);

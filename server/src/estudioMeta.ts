@@ -13,8 +13,8 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { aPresupuestoMeta } from './adsManager.js';
+import { ffmpeg } from './proceso.js';
 import { db, registrarLog, uid } from './db.js';
 import { mediaPath } from './media.js';
 
@@ -175,23 +175,23 @@ export async function crearLanzamiento(storeId: string, proyectoId: string, p: P
 
 // ── Avance (idempotente) ─────────────────────────────────────────────────────
 /** Portada JPG del video (primer segundo) para el creativo: Meta la exige para anuncios de video. */
-function portadaVideo(archivo: string): Buffer | null {
+async function portadaVideo(archivo: string): Promise<Buffer | null> {
   let dir = '';
   try {
     dir = mkdtempSync(path.join(tmpdir(), 'df-portada-'));
     const out = path.join(dir, 'p.jpg');
-    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-ss', '0.5', '-i', archivo, '-frames:v', '1', '-q:v', '3', out], { timeout: 30_000 });
+    const r = await ffmpeg(['-ss', '0.5', '-i', archivo, '-frames:v', '1', '-q:v', '3', out], 30_000);
     return r.status === 0 && existsSync(out) ? readFileSync(out) : null;
   } catch { return null; } finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
 }
 /** Imagen a JPG (Meta no acepta webp en adimages). */
-function aJpg(archivo: string): Buffer | null {
+async function aJpg(archivo: string): Promise<Buffer | null> {
   if (/\.(jpe?g|png)$/i.test(archivo)) return readFileSync(archivo);
   let dir = '';
   try {
     dir = mkdtempSync(path.join(tmpdir(), 'df-jpg-'));
     const out = path.join(dir, 'i.jpg');
-    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', archivo, '-q:v', '3', out], { timeout: 30_000 });
+    const r = await ffmpeg(['-i', archivo, '-q:v', '3', out], 30_000);
     return r.status === 0 && existsSync(out) ? readFileSync(out) : null;
   } catch { return null; } finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
 }
@@ -235,11 +235,11 @@ export async function avanzar(id: string): Promise<void> {
         }
         if (!a.image_hash) {
           const miniatura = txt(a.miniatura) ? mediaPath(storeId, txt(a.miniatura).split('/').pop()!) : '';
-          const portada = portadaVideo(archivo) || (miniatura && existsSync(miniatura) ? aJpg(miniatura) : null);
+          const portada = (await portadaVideo(archivo)) || (miniatura && existsSync(miniatura) ? await aJpg(miniatura) : null);
           if (portada) setA(txt(a.id), 'image_hash', await subirImagen(token, act, portada, 'portada.jpg'));
         }
       } else if (!a.image_hash) {
-        const bytes = aJpg(archivo);
+        const bytes = await aJpg(archivo);
         if (!bytes) throw new MetaError(`No pudimos preparar la foto «${a.nombre}».`);
         setA(txt(a.id), 'image_hash', await subirImagen(token, act, bytes, /\.png$/i.test(archivo) ? 'foto.png' : 'foto.jpg'));
       }
@@ -270,7 +270,8 @@ export async function avanzar(id: string): Promise<void> {
         name: txt(L.nombre),
         objective: objetivo === 'ventas' ? 'OUTCOME_SALES' : objetivo === 'trafico' ? 'OUTCOME_TRAFFIC' : 'OUTCOME_ENGAGEMENT',
         status: 'PAUSED', special_ad_categories: [], buying_type: 'AUCTION',
-        daily_budget: aPresupuestoMeta(Number(L.presupuesto), c.moneda), // COP va en pesos enteros (antes ×100 = 100 veces el presupuesto) bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+        daily_budget: aPresupuestoMeta(Number(L.presupuesto), c.moneda), // COP va en pesos enteros (antes ×100 = 100 veces el presupuesto)
+        bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
       });
       campaign = txt(r.id);
       db.prepare('UPDATE estudio_lanzamientos SET campaign_id = ? WHERE id = ?').run(campaign, id);

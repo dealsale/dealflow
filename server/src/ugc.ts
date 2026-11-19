@@ -20,8 +20,9 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { db, uid } from './db.js';
+import { duracionMedia, ffmpeg, tieneAudioMedia } from './proceso.js';
+import { descargarImagenSegura } from './descargaSegura.js';
 import { abonar, cobrar, saldo } from './creditos.js';
 import { chatJSON, SIN_OPENAI } from './marketing.js';
 import { mediaDir, mediaPath } from './media.js';
@@ -166,7 +167,8 @@ async function bytesDe(storeId: string, src: string): Promise<Buffer | null> {
   if (m) return Buffer.from(m[1], 'base64');
   const r = rutaMedia(storeId, src);
   if (r) return existsSync(r) ? readFileSync(r) : null;
-  if (/^https?:\/\//.test(src)) { try { const res = await fetch(src, { signal: AbortSignal.timeout(30_000) }); return res.ok ? Buffer.from(await res.arrayBuffer()) : null; } catch { return null; } }
+  // Fotos externas del producto (p. ej. de Dropi): solo https públicas, nunca direcciones internas.
+  if (/^https:\/\//i.test(src)) return descargarImagenSegura(src);
   return null;
 }
 /** Imagen de referencia para Seedance: JPG de máx. 1024 px como data URL (las fotos de DealFlow no son públicas). */
@@ -177,7 +179,7 @@ async function referencia(storeId: string, src: string): Promise<string> {
   try {
     dir = mkdtempSync(path.join(tmpdir(), 'df-ugc-ref-'));
     writeFileSync(path.join(dir, 'in'), buf);
-    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', path.join(dir, 'in'), '-vf', "scale='min(1024,iw)':'min(1024,ih)':force_original_aspect_ratio=decrease", '-frames:v', '1', '-q:v', '3', path.join(dir, 'out.jpg')], { timeout: 30_000 });
+    const r = await ffmpeg(['-i', path.join(dir, 'in'), '-vf', "scale='min(1024,iw)':'min(1024,ih)':force_original_aspect_ratio=decrease", '-frames:v', '1', '-q:v', '3', path.join(dir, 'out.jpg')], 30_000);
     const out = path.join(dir, 'out.jpg');
     return r.status === 0 && existsSync(out) ? `data:image/jpeg;base64,${readFileSync(out).toString('base64')}` : '';
   } catch { return ''; } finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
@@ -404,10 +406,17 @@ export async function revisarUgc(): Promise<void> {
         continue;
       }
       if (t.estado !== 'generando' || !t.task) continue;
+      // Si Seedance responde con error, se cae la red o no se deja descargar, la toma no puede
+      // quedarse «generando» para siempre (el video quedaba bloqueado y los créditos no volvían).
+      const vencida = (min: number) => !!t.inicio && Date.now() - Date.parse(t.inicio) > min * 60_000;
       try {
         const res = await fetch(`${SEEDANCE()}/contents/generations/tasks/${encodeURIComponent(t.task)}`, { headers: { Authorization: `Bearer ${claveSeedance()}` }, signal: AbortSignal.timeout(30_000) });
         const r = (await res.json().catch(() => ({}))) as Fila;
-        if (!res.ok) { if (res.status === 404) fallaToma(storeId, id, i, 'Seedance ya no tiene esta toma.'); continue; }
+        if (!res.ok) {
+          if (res.status === 404) fallaToma(storeId, id, i, 'Seedance ya no tiene esta toma.');
+          else if (vencida(45)) fallaToma(storeId, id, i, `Seedance no respondió bien (${res.status}) durante mucho tiempo. Se devolvieron sus créditos.`);
+          continue;
+        }
         const estado = txt(r.status);
         if (/failed|cancel|expired/i.test(estado)) { fallaToma(storeId, id, i, mensajeSeedance(r, 200)); continue; }
         if (estado !== 'succeeded') {
@@ -417,13 +426,19 @@ export async function revisarUgc(): Promise<void> {
         const urlVideo = txt(((r.content || {}) as Fila).video_url);
         if (!urlVideo) { fallaToma(storeId, id, i, 'Seedance terminó la toma sin video.'); continue; }
         const mp4 = await fetch(urlVideo, { signal: AbortSignal.timeout(180_000) });
-        if (!mp4.ok) continue; // se reintenta en la próxima vuelta (la URL de Seedance dura horas)
+        if (!mp4.ok) { // se reintenta en la próxima vuelta (la URL de Seedance dura horas), pero no para siempre
+          if (vencida(90)) fallaToma(storeId, id, i, 'No pudimos descargar la toma de Seedance. Se devolvieron sus créditos.');
+          continue;
+        }
         const url = guardarArchivo(storeId, Buffer.from(await mp4.arrayBuffer()), 'mp4');
         const fila = db.prepare('SELECT tomas FROM ugc_videos WHERE id = ?').get(id) as Fila;
         const ts = pj<Toma[]>(fila.tomas, []);
         ts[i] = { ...ts[i], estado: 'lista', url, error: '' };
         db.prepare("UPDATE ugc_videos SET tomas = ?, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(ts), id);
-      } catch (e) { console.warn('[ugc] revisar toma', id, i, (e as Error)?.message); }
+      } catch (e) {
+        console.warn('[ugc] revisar toma', id, i, (e as Error)?.message);
+        if (vencida(45)) fallaToma(storeId, id, i, 'No pudimos hablar con Seedance durante mucho tiempo. Se devolvieron sus créditos.');
+      }
     }
     const ahora = pj<Toma[]>((db.prepare('SELECT tomas FROM ugc_videos WHERE id = ?').get(id) as Fila).tomas, []);
     if (ahora.some((t) => t.estado === 'generando' || t.estado === 'pendiente')) continue;
@@ -450,15 +465,10 @@ async function voz(texto: string, vozId: string): Promise<Buffer | null> {
     return res.ok ? Buffer.from(await res.arrayBuffer()) : null;
   } catch { return null; }
 }
-const ff = (args: string[], timeout = 180_000) => spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { timeout, encoding: 'utf8' });
-function duracionDe(archivo: string): number {
-  const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', archivo], { timeout: 20_000, encoding: 'utf8' });
-  return Number(txt(r.stdout).trim()) || 0;
-}
-function tieneAudio(archivo: string): boolean {
-  const r = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', archivo], { timeout: 20_000, encoding: 'utf8' });
-  return txt(r.stdout).trim().length > 0;
-}
+// ffmpeg / ffprobe en segundo plano (proceso.ts): no congelan el servidor mientras codifican.
+const ff = ffmpeg;
+const duracionDe = duracionMedia;
+const tieneAudio = tieneAudioMedia;
 /** Parte el texto en líneas cortas para los subtítulos (máx. 3). */
 function lineas(texto: string, max: number): string[] {
   const out: string[] = [];
@@ -471,8 +481,16 @@ function lineas(texto: string, max: number): string[] {
   return out;
 }
 
+// Videos que se están montando ahora mismo: el montaje ya no bloquea el servidor, así que el
+// revisor de fondo y el botón «Reintentar el montaje» podrían arrancarlo dos veces a la vez.
+const enMontaje = new Set<string>();
 /** Une las tomas: subtítulos, voz en off (si aplica), texto de la oferta al final; guarda el MP4 y lo deja en el Estudio. */
 export async function montar(storeId: string, id: string): Promise<void> {
+  if (enMontaje.has(id)) return;
+  enMontaje.add(id);
+  try { await montarVideo(storeId, id); } finally { enMontaje.delete(id); }
+}
+async function montarVideo(storeId: string, id: string): Promise<void> {
   const v = db.prepare('SELECT * FROM ugc_videos WHERE id = ? AND store_id = ?').get(id, storeId) as Fila | undefined;
   if (!v) return;
   const config = { ...CONFIG_BASE, ...pj<ConfigUgc>(v.config, CONFIG_BASE) };
@@ -493,13 +511,16 @@ export async function montar(storeId: string, id: string): Promise<void> {
       const p = guion[i];
       const src = rutaMedia(storeId, tomas[i]?.url || '');
       if (!src || !existsSync(src)) return fallar(`Falta el video de la toma ${i + 1}.`);
-      const dClip = duracionDe(src) || p.segundos;
+      const dClip = (await duracionDe(src)) || p.segundos;
       let vozArch = '';
       if (config.voz.modo === 'locutor' && p.texto) {
         const b = await voz(p.texto, config.voz.id);
-        if (b) { vozArch = path.join(dir, `voz${i}.mp3`); writeFileSync(vozArch, b); }
+        // Sin voz no se entrega el video «como si nada» (antes salía mudo y cobrado completo):
+        // el montaje se reintenta solo y, si sigue fallando, queda para reintentarlo gratis.
+        if (!b) return fallar(`No se pudo generar la voz en off de la toma ${i + 1} (OpenAI). Se reintenta el montaje.`);
+        vozArch = path.join(dir, `voz${i}.mp3`); writeFileSync(vozArch, b);
       }
-      const dVoz = vozArch ? duracionDe(vozArch) : 0;
+      const dVoz = vozArch ? await duracionDe(vozArch) : 0;
       const D = Math.max(dClip, dVoz ? dVoz + 0.4 : 0);
       // Video: llenar el formato, 30 fps, congelar el último cuadro si la voz dura más; subtítulos y oferta.
       const filtros = [`scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},fps=30,setsar=1${D > dClip + 0.05 ? `,tpad=stop_mode=clone:stop_duration=${(D - dClip + 0.1).toFixed(2)}` : ''}`];
@@ -518,7 +539,7 @@ export async function montar(storeId: string, id: string): Promise<void> {
         filtros.push(`drawtext=fontfile=${FUENTE}:textfile=${f}:fontsize=${Math.round(fs * 0.85)}:fontcolor=black:box=1:boxcolor=0xFDE047:boxborderw=16:x=(w-text_w)/2:y=h*0.88`);
       }
       const args = ['-i', src];
-      const clipAudio = tieneAudio(src);
+      const clipAudio = await tieneAudio(src);
       if (vozArch) args.push('-i', vozArch);
       let audio = '';
       if (vozArch && clipAudio) audio = `[0:a]volume=0.15,aresample=44100,apad[b];[1:a]aresample=44100,adelay=200|200,apad[v];[b][v]amix=inputs=2:duration=longest:normalize=0[a]`;
@@ -526,7 +547,7 @@ export async function montar(storeId: string, id: string): Promise<void> {
       else if (clipAudio) audio = `[0:a]aresample=44100,apad[a]`;
       else { args.push('-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo'); audio = `[${vozArch ? 2 : 1}:a]anull[a]`; }
       const seg = path.join(dir, `seg${i}.mp4`);
-      const r = ff([...args, '-filter_complex', `[0:v]${filtros.join(',')}[vv];${audio}`, '-map', '[vv]', '-map', '[a]', '-t', D.toFixed(2),
+      const r = await ff([...args, '-filter_complex', `[0:v]${filtros.join(',')}[vv];${audio}`, '-map', '[vv]', '-map', '[a]', '-t', D.toFixed(2),
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '2', seg]);
       if (r.status !== 0 || !existsSync(seg)) return fallar(`No se pudo armar la toma ${i + 1}: ${txt(r.stderr).slice(-200)}`);
       segmentos.push(seg);
@@ -534,13 +555,13 @@ export async function montar(storeId: string, id: string): Promise<void> {
     const lista = path.join(dir, 'lista.txt');
     writeFileSync(lista, segmentos.map((s) => `file '${s}'`).join('\n'));
     const final = path.join(dir, 'final.mp4');
-    const r = ff(['-f', 'concat', '-safe', '0', '-i', lista, '-c', 'copy', '-movflags', '+faststart', final]);
+    const r = await ff(['-f', 'concat', '-safe', '0', '-i', lista, '-c', 'copy', '-movflags', '+faststart', final]);
     if (r.status !== 0 || !existsSync(final)) return fallar(`No se pudo unir el video: ${txt(r.stderr).slice(-200)}`);
     const thumb = path.join(dir, 'thumb.jpg');
-    ff(['-ss', '1', '-i', final, '-frames:v', '1', '-vf', 'scale=360:-2', thumb], 30_000);
+    await ff(['-ss', '1', '-i', final, '-frames:v', '1', '-vf', 'scale=360:-2', thumb], 30_000);
     const video = guardarArchivo(storeId, readFileSync(final), 'mp4');
     const miniatura = existsSync(thumb) ? guardarArchivo(storeId, readFileSync(thumb), 'jpg') : '';
-    const piezaId = alEstudio(storeId, v, config, guion, video, miniatura, Math.round(duracionDe(final)));
+    const piezaId = alEstudio(storeId, v, config, guion, video, miniatura, Math.round(await duracionDe(final)));
     db.prepare("UPDATE ugc_videos SET estado = 'listo', video = ?, miniatura = ?, pieza_id = ?, error = '', updated_at = datetime('now') WHERE id = ?").run(video, miniatura, piezaId, id);
   } catch (e) {
     fallar(`Error al montar: ${(e as Error)?.message || e}`);
@@ -574,6 +595,7 @@ function alEstudio(storeId: string, v: Fila, config: ConfigUgc, guion: ParteGuio
 export async function reintentarMontaje(storeId: string, id: string): Promise<{ video: VideoUgc } | { error: string }> {
   const v = db.prepare('SELECT * FROM ugc_videos WHERE id = ? AND store_id = ?').get(id, storeId) as Fila | undefined;
   if (!v) return { error: 'Video no encontrado.' };
+  if (txt(v.estado) === 'montando' || enMontaje.has(id)) return { error: 'El video ya se está armando. Espera a que termine.' };
   if (!pj<Toma[]>(v.tomas, []).every((t) => t.estado === 'lista')) return { error: 'Faltan tomas por generar.' };
   db.prepare("UPDATE ugc_videos SET estado = 'montando', montajes = 0, error = '', updated_at = datetime('now') WHERE id = ?").run(id);
   await montar(storeId, id);

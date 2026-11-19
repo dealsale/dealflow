@@ -19,8 +19,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { crc32 } from 'node:zlib';
+import { duracionMedia, ffmpeg } from './proceso.js';
 import { db, uid } from './db.js';
 import { abonar, cobrar, saldo } from './creditos.js';
 import { chatJSON, SIN_OPENAI } from './marketing.js';
@@ -181,11 +181,8 @@ export function guardarIndicaciones(texto: string): void {
   db.prepare("INSERT INTO estudio_ajustes (clave, valor) VALUES ('indicaciones', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor").run(texto.slice(0, 4000));
 }
 
-/** Duración del video (s) con ffprobe. */
-function duracion(archivo: string): number {
-  const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', archivo], { timeout: 20_000 });
-  return Number(String(r.stdout || '').trim()) || 0;
-}
+/** Duración del video (s) con ffprobe, sin bloquear el servidor (proceso.ts). */
+const duracion = duracionMedia;
 
 export function subirReferencia(b: Record<string, unknown>, quien: string): { id: string } | { error: string } {
   const m = /^data:(video\/(mp4|quicktime|webm));base64,(.+)$/s.exec(txt(b.videoDataUrl));
@@ -216,13 +213,13 @@ export async function analizarReferencia(id: string): Promise<void> {
   let dir = '';
   try {
     dir = mkdtempSync(path.join(tmpdir(), 'df-refv-'));
-    const dur = duracion(archivo) || 10;
+    const dur = (await duracion(archivo)) || 10;
     const cuadros: string[] = [];
     const urls: string[] = [];
     for (let k = 0; k < 6; k++) {
       const t = Math.max(0, (dur * (k + 0.5)) / 6);
       const out = path.join(dir, `c${k}.jpg`);
-      const x = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-ss', t.toFixed(2), '-i', archivo, '-frames:v', '1', '-vf', 'scale=512:-2', '-q:v', '4', out], { timeout: 30_000 });
+      const x = await ffmpeg(['-ss', t.toFixed(2), '-i', archivo, '-frames:v', '1', '-vf', 'scale=512:-2', '-q:v', '4', out], 30_000);
       if (x.status === 0 && existsSync(out)) {
         const b = readFileSync(out);
         cuadros.push(`data:image/jpeg;base64,${b.toString('base64')}`);
@@ -234,7 +231,7 @@ export async function analizarReferencia(id: string): Promise<void> {
     // Audio → texto (lo que dicen, para copiar el tipo de guion y de voz).
     let transcripcion = '';
     const mp3 = path.join(dir, 'a.mp3');
-    const a = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', archivo, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '48k', mp3], { timeout: 60_000 });
+    const a = await ffmpeg(['-i', archivo, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '48k', mp3], 60_000);
     if (a.status === 0 && existsSync(mp3)) {
       const form = new FormData();
       form.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1');
@@ -447,7 +444,7 @@ const tamanoImagen = (f: string) => (f === '16:9' ? '1536x1024' : f === '1:1' ? 
 const tamanoVideo = (f: string, modelo: string) => (f === '16:9' ? (modelo === 'sora-2-pro' ? '1792x1024' : '1280x720') : modelo === 'sora-2-pro' ? '1024x1792' : '720x1280');
 
 /** Foto de referencia escalada y con relleno al tamaño EXACTO que pide Sora (input_reference). */
-function referenciaVideo(storeId: string, foto: string, size: string): Buffer | null {
+async function referenciaVideo(storeId: string, foto: string, size: string): Promise<Buffer | null> {
   if (!foto.startsWith(`/api/media/${storeId}/`)) return null;
   const src = mediaPath(storeId, foto.split('/').pop()!);
   if (!existsSync(src)) return null;
@@ -456,7 +453,7 @@ function referenciaVideo(storeId: string, foto: string, size: string): Buffer | 
   try {
     dir = mkdtempSync(path.join(tmpdir(), 'df-ref-'));
     const out = path.join(dir, 'ref.png');
-    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', src, '-vf', `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=white`, '-frames:v', '1', out], { timeout: 30_000 });
+    const r = await ffmpeg(['-i', src, '-vf', `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=white`, '-frames:v', '1', out], 30_000);
     return r.status === 0 && existsSync(out) ? readFileSync(out) : null;
   } catch { return null; } finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
 }
@@ -542,7 +539,7 @@ export async function generarPieza(storeId: string, id: string): Promise<{ ok: t
     form.append('prompt', prompt);
     form.append('seconds', String(Number(p.segundos) || 8));
     form.append('size', size);
-    const ref = foto ? referenciaVideo(storeId, foto, size) : null;
+    const ref = foto ? await referenciaVideo(storeId, foto, size) : null;
     if (ref) form.append('input_reference', new Blob([new Uint8Array(ref)], { type: 'image/png' }), 'referencia.png');
     const res = await fetch(`${OPENAI}/videos`, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(60_000) });
     const body = (await res.json().catch(() => ({}))) as { id?: string; status?: string; error?: { message?: string; code?: string } };
@@ -560,6 +557,11 @@ const tocarProyecto = (id: string) => db.prepare("UPDATE estudio_proyectos SET u
 
 /** Revisa los videos en curso: progreso, descarga del MP4 y la miniatura, o devolución si fallan. */
 export async function revisarVideos(storeId?: string): Promise<void> {
+  const edad = (p: Fila) => Date.now() - Date.parse(txt(p.updated_at).replace(' ', 'T') + 'Z');
+  // Fotos que quedaron «generando» (p. ej. el servidor se reinició mientras OpenAI la hacía, que
+  // tarda máx. 4 min): sin esto quedaban así para siempre, sin poder rehacerlas ni recuperar créditos.
+  const fotos = db.prepare(`SELECT * FROM estudio_piezas WHERE estado = 'generando' AND tipo = 'imagen' ${storeId ? 'AND store_id = ?' : ''} ORDER BY updated_at LIMIT 30`).all(...(storeId ? [storeId] : [])) as Fila[];
+  for (const p of fotos) if (edad(p) > 10 * 60_000) fallo(p, 'La foto no alcanzó a crearse. Se devolvieron los créditos.');
   const key = process.env.OPENAI_API_KEY;
   if (!key) return;
   const filas = db.prepare(`SELECT * FROM estudio_piezas WHERE estado = 'generando' AND tipo = 'video' ${storeId ? 'AND store_id = ?' : ''} ORDER BY updated_at LIMIT 30`).all(...(storeId ? [storeId] : [])) as Fila[];
@@ -573,7 +575,12 @@ export async function revisarVideos(storeId?: string): Promise<void> {
     try {
       const r = await fetch(`${OPENAI}/videos/${encodeURIComponent(ext)}`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(30_000) });
       const v = (await r.json().catch(() => ({}))) as { status?: string; progress?: number; error?: { message?: string; code?: string } };
-      if (!r.ok) { if (r.status === 404) fallo(p, 'OpenAI ya no tiene este video.'); continue; }
+      if (!r.ok) {
+        // Error que no se arregla solo (clave cambiada, caída larga…): no puede quedar «generando» para siempre.
+        if (r.status === 404) fallo(p, 'OpenAI ya no tiene este video.');
+        else if (edad(p) > 60 * 60_000) fallo(p, `OpenAI no respondió bien (${r.status}) durante mucho tiempo. Se devolvieron los créditos.`);
+        continue;
+      }
       if (v.status === 'failed') { fallo(p, mensajeOpenAI(v, 200)); continue; }
       if (v.status !== 'completed') {
         db.prepare('UPDATE estudio_piezas SET progreso = ? WHERE id = ?').run(Math.max(0, Math.min(99, Math.round(Number(v.progress) || 0))), txt(p.id));
@@ -582,7 +589,10 @@ export async function revisarVideos(storeId?: string): Promise<void> {
         continue;
       }
       const mp4 = await fetch(`${OPENAI}/videos/${encodeURIComponent(ext)}/content`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(180_000) });
-      if (!mp4.ok) continue; // se reintenta en la próxima vuelta
+      if (!mp4.ok) { // se reintenta en la próxima vuelta, pero no para siempre
+        if (edad(p) > 90 * 60_000) fallo(p, 'No pudimos descargar el video de OpenAI. Se devolvieron los créditos.');
+        continue;
+      }
       const url = guardarArchivo(txt(p.store_id), Buffer.from(await mp4.arrayBuffer()), 'mp4');
       let miniatura = '';
       try {
@@ -591,7 +601,10 @@ export async function revisarVideos(storeId?: string): Promise<void> {
       } catch { /* sin miniatura */ }
       db.prepare("UPDATE estudio_piezas SET estado = 'listo', url = ?, miniatura = ?, progreso = 100, updated_at = datetime('now') WHERE id = ?").run(url, miniatura, txt(p.id));
       tocarProyecto(txt(p.proyecto_id));
-    } catch (e) { console.warn('[estudio] revisar video', txt(p.id), (e as Error)?.message); }
+    } catch (e) {
+      console.warn('[estudio] revisar video', txt(p.id), (e as Error)?.message);
+      if (edad(p) > 60 * 60_000) fallo(p, 'No pudimos hablar con OpenAI durante mucho tiempo. Se devolvieron los créditos.');
+    }
   }
 }
 
