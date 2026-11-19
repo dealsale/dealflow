@@ -3426,6 +3426,14 @@ const filtroAudiencia = (b: Record<string, unknown>) => ({
   estadosPedido: (Array.isArray(b.estadosPedido) ? b.estadosPedido : []).map((e) => String(e).slice(0, 30)).slice(0, 15),
   combinar: (b.combinar === 'todos' ? 'todos' : 'alguno') as 'todos' | 'alguno',
   claves: (Array.isArray(b.claves) ? b.claves : []).map((e) => String(e).slice(0, 60)).slice(0, 5000),
+  excluir: (() => {
+    const x = (b.excluir && typeof b.excluir === 'object' ? b.excluir : {}) as Record<string, unknown>;
+    return {
+      compraron: x.compraron === true, compraronDias: Math.min(3650, Math.max(0, Math.round(Number(x.compraronDias) || 0))),
+      etiquetas: (Array.isArray(x.etiquetas) ? x.etiquetas : []).map((e) => String(e).slice(0, 40)).slice(0, 30),
+      claves: (Array.isArray(x.claves) ? x.claves : []).map((e) => String(e).slice(0, 60)).slice(0, 5000),
+    };
+  })(),
   fecha: (() => {
     const f = (b.fecha && typeof b.fecha === 'object' ? b.fecha : null) as Record<string, unknown> | null;
     if (!f || !['horas', 'hoy', 'ayer', 'rango'].includes(String(f.modo))) return undefined;

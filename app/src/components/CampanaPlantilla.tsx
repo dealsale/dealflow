@@ -55,6 +55,13 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
   const [buscando, setBuscando] = useState(false);
   const [elegidos, setElegidos] = useState<DestinatarioRmk[]>([]);
   const [dias, setDias] = useState(60);
+  // Excluir: por defecto NO le llega a quien ya te compró (era el error más caro: mandarle promo al que ya compró).
+  const [exCompraron, setExCompraron] = useState(true);
+  const [exDias, setExDias] = useState(0);
+  const [exEtiquetas, setExEtiquetas] = useState<string[]>([]);
+  const [exClientes, setExClientes] = useState<DestinatarioRmk[]>([]);
+  const [exBusca, setExBusca] = useState('');
+  const [exResultados, setExResultados] = useState<DestinatarioRmk[]>([]);
   const [limite, setLimite] = useState(500);
   const [aud, setAud] = useState<{ total: number; aptos: number; importados: number; muestra: DestinatarioRmk[] } | null>(null);
   const [verLista, setVerLista] = useState(false);
@@ -73,9 +80,11 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
     return undefined;
   }, [fechaModo, fechaCampo, horas, desde, hasta]);
   const hayAQuien = modo === 'manual' ? elegidos.length > 0 : grupos > 0 || !!fecha;
+  const excluir = useMemo<FiltroRmk['excluir']>(() => ({ compraron: exCompraron, compraronDias: exDias, etiquetas: exEtiquetas, claves: exClientes.map((d) => d.clave) }), [exCompraron, exDias, exEtiquetas, exClientes]);
   const filtro = useMemo<FiltroRmk>(() => (modo === 'manual'
-    ? { segmentos: [], etiquetas: [], dias, claves: elegidos.map((d) => d.clave) }
-    : { segmentos, etiquetas, dias, anuncios, estadosPedido, combinar, fecha }), [modo, segmentos, etiquetas, dias, anuncios, estadosPedido, combinar, elegidos, fecha]);
+    ? { segmentos: [], etiquetas: [], dias, claves: elegidos.map((d) => d.clave), excluir }
+    : { segmentos, etiquetas, dias, anuncios, estadosPedido, combinar, fecha, excluir }), [modo, segmentos, etiquetas, dias, anuncios, estadosPedido, combinar, elegidos, fecha, excluir]);
+  const nExcluir = (exCompraron ? 1 : 0) + exEtiquetas.length + exClientes.length;
   const textoFecha = !fecha ? '' : `${fechaCampo === 'ultimo' ? 'escribieron' : 'llegaron'} ${fecha.modo === 'hoy' ? 'hoy' : fecha.modo === 'ayer' ? 'ayer' : fecha.modo === 'horas' ? `en las últimas ${horas} h` : desde && hasta && desde !== hasta ? `del ${desde.split('-').reverse().slice(0, 2).join('/')} al ${hasta.split('-').reverse().slice(0, 2).join('/')}` : `el ${(desde || hasta).split('-').reverse().slice(0, 2).join('/')}`}`;
   useEffect(() => {
     if (!hayAQuien) { setAud(null); return; }
@@ -92,6 +101,14 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
     const t = setTimeout(() => void apiRemarketingBuscar(q).then((r) => { if (vivo) { setResultados(r.data?.clientes || []); setBuscando(false); } }), 300);
     return () => { vivo = false; clearTimeout(t); };
   }, [busca]);
+  // Buscador de clientes para EXCLUIR uno por uno.
+  useEffect(() => {
+    const q = exBusca.trim();
+    if (q.length < 2) { setExResultados([]); return; }
+    let vivo = true;
+    const t = setTimeout(() => void apiRemarketingBuscar(q).then((r) => { if (vivo) setExResultados(r.data?.clientes || []); }), 300);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [exBusca]);
   const agregar = (ds: DestinatarioRmk[]) => setElegidos((xs) => [...xs, ...ds.filter((d) => !xs.some((x) => x.clave === d.clave))]);
   const quitar = (clave: string) => setElegidos((xs) => xs.filter((x) => x.clave !== clave));
   const limpiarFiltros = () => { setAnuncios([]); setSegmentos([]); setEstadosPedido([]); setEtiquetas([]); setFechaModo(''); setDesde(''); setHasta(''); };
@@ -122,7 +139,7 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
     if (!plantilla || falta) return;
     if (!(await confirmar({
       titulo: `¿Enviar "${plantilla.nombre}" a ${n} contacto${n === 1 ? '' : 's'}?`,
-      mensaje: `Sale con tu plantilla aprobada por Meta, de a pocos (unos 5 por minuto, de 8 a. m. a 8 p. m.) y con un máximo de ${p.cfg.topeDiario} al día. Nunca a quien pidió la baja ni a quien ya recibió remarketing esta semana. Si Meta avisa límite o spam, se pausa sola.${aud?.importados ? ` ${aud.importados} son contactos importados: su chat aparece en el Inbox cuando se les envíe.` : ''}`,
+      mensaje: `Sale con tu plantilla aprobada por Meta, de a pocos (unos 5 por minuto, de 8 a. m. a 8 p. m.) y con un máximo de ${p.cfg.topeDiario} al día. Nunca a quien pidió la baja ni a quien ya recibió remarketing esta semana${exCompraron ? ', ni a quien ya te compró' : ''}. Si Meta avisa límite o spam, se pausa sola.${aud?.importados ? ` ${aud.importados} son contactos importados: su chat aparece en el Inbox cuando se les envíe.` : ''}`,
       aceptar: 'Enviar',
     }))) return;
     setEnviando(true);
@@ -349,6 +366,55 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
                 </div>
               </div>
             )}
+            <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--df-bg)' }}>
+              <label style={{ ...lbl, marginBottom: 0 }}>🚫 Excluir {nExcluir > 0 && <span style={{ color: 'var(--df-purple)' }}>· {nExcluir} regla{nExcluir === 1 ? '' : 's'}</span>}</label>
+              <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: -6 }}>Aunque cumplan los filtros (o los elijas a mano), a estos no les llega.</div>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, cursor: 'pointer', flexWrap: 'wrap' }}>
+                <input type="checkbox" checked={exCompraron} onChange={(e) => setExCompraron(e.target.checked)} />
+                <b>Quienes ya me compraron</b>
+                {exCompraron && (
+                  <Dropdown variant="pill" value={String(exDias)} onChange={(v) => setExDias(Number(v))} ariaLabel="Desde cuándo"
+                    options={[{ value: '0', label: 'Cualquier compra' }, { value: '30', label: 'Compraron en los últimos 30 días' }, { value: '60', label: 'Últimos 60 días' }, { value: '90', label: 'Últimos 90 días' }, { value: '180', label: 'Últimos 6 meses' }]} />
+                )}
+              </label>
+              {exCompraron && <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: -6 }}>Cuenta cualquier pedido que no se canceló ni se devolvió (también los que van en camino).</div>}
+              {p.etiquetas.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Con la etiqueta</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {p.etiquetas.map((e) => <button key={e.etiqueta} type="button" onClick={() => setExEtiquetas(toggle(exEtiquetas, e.etiqueta))} style={{ ...chip(exEtiquetas.includes(e.etiqueta)), ...(exEtiquetas.includes(e.etiqueta) ? { borderColor: '#B45309', background: 'rgba(245,158,11,.12)' } : {}) }}>🚫 {e.etiqueta}</button>)}
+                  </div>
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Clientes puntuales</div>
+                <SearchInput value={exBusca} onChange={setExBusca} placeholder="Buscar por nombre o celular para excluirlo…" width="100%" />
+                {exBusca.trim().length >= 2 && (
+                  <div style={{ border: '1px solid var(--df-border)', borderRadius: 9, maxHeight: 170, overflowY: 'auto', marginTop: 6, background: 'var(--df-surface)' }}>
+                    {!exResultados.length && <div style={{ padding: '8px 10px', fontSize: 12, color: 'var(--df-text-faint)' }}>Nadie con ese nombre o celular.</div>}
+                    {exResultados.map((d) => {
+                      const ya = exClientes.some((x) => x.clave === d.clave);
+                      return (
+                        <div key={d.clave} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid var(--df-border)', fontSize: 12.5 }}>
+                          <span style={{ flex: 1, minWidth: 0 }}><b>{d.nombre || d.tel}</b> <span style={{ color: 'var(--df-text-faint)' }}>{d.nombre ? d.tel : ''}</span></span>
+                          <button type="button" onClick={() => setExClientes((xs) => (ya ? xs.filter((x) => x.clave !== d.clave) : [...xs, d]))} style={{ ...btnS, padding: '3px 9px', ...(ya ? { background: '#B45309', color: '#fff', borderColor: '#B45309' } : {}) }}>{ya ? '✓ Excluido' : 'Excluir'}</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {exClientes.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                    {exClientes.map((d) => (
+                      <span key={d.clave} style={{ ...chip(true), borderColor: '#B45309', background: 'rgba(245,158,11,.12)', cursor: 'default', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        🚫 {d.nombre || d.tel}
+                        <button type="button" onClick={() => setExClientes((xs) => xs.filter((x) => x.clave !== d.clave))} aria-label={`Volver a incluir a ${d.nombre || d.tel}`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 13, color: 'var(--df-text-muted)' }}>✕</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
               <div><label style={lbl}>Máximo de contactos</label><input type="number" min={1} max={5000} value={limite} onChange={(e) => setLimite(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))} style={{ ...inp, width: 130 }} /></div>
               {aud && (

@@ -1295,6 +1295,8 @@ export interface FiltroRmk {
   anuncios?: string[]; estadosPedido?: string[]; combinar?: 'todos' | 'alguno'; claves?: string[];
   /** Fecha en hora Colombia: 'llegada' = primer mensaje · 'ultimo' = su último mensaje. */
   fecha?: { campo: 'llegada' | 'ultimo'; modo: 'horas' | 'hoy' | 'ayer' | 'rango'; horas?: number; desde?: string; hasta?: string };
+  /** A quién NO enviarle aunque cumpla los filtros. compraronDias: 0 = cualquier compra. */
+  excluir?: { compraron?: boolean; compraronDias?: number; etiquetas?: string[]; claves?: string[] };
 }
 export interface DestinatarioRmk { clave: string; leadId: string; contactoId: string; nombre: string; tel: string; origen: 'chat' | 'importado'; motivo: string; excluido: string; detalle: string }
 export const apiRemarketingAudiencia = (f: FiltroRmk) => req<{ total: number; aptos: number; importados: number; muestra: DestinatarioRmk[] }>('/api/remarketing/audiencia', 'POST', f);

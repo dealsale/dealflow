@@ -84,9 +84,13 @@ export interface LeadSegmento {
 /** Un chat de WhatsApp con todo lo que sirve para filtrar una campaña (segmento '' si no cae en ninguno). */
 interface LeadBase extends Omit<LeadSegmento, 'segmento'> {
   segmento: Segmento | ''; adId: string; etiquetaCrm: string; estadoPedido: string; creado: string;
+  /** Fecha del último pedido que SÍ fue una venta (ni cancelado ni devuelto); '' si nunca le ha comprado. */
+  compraAt: string;
   /** Igual que `excluido` pero sin el "No compró" (ese solo cuenta al elegir por estado del lead). */
   excluidoBase: string;
 }
+/** Último pedido que fue venta (ni cancelado ni devuelto). */
+const ultimaCompra = (ps: { at: string; estado: string }[]) => ps.filter((p) => p.estado !== 'Cancelado' && p.estado !== 'Devuelto').map((p) => p.at).sort().pop() || '';
 const hace = (iso: string) => (Date.now() - new Date(iso.replace(' ', 'T') + 'Z').getTime()) / 3600e3;
 
 /** Pedidos de la tienda por chat (id del lead) y por celular ('t' + 10 dígitos). */
@@ -134,7 +138,7 @@ function leadsTodos(storeId: string, dias = 60, pedidos = pedidosTienda(storeId)
     const excluido = !Number(l.no_contactar) && txt(l.estado_manual) === 'perdido' ? 'Lo marcaste como "No compró"' : excluidoBase;
     out.push({ id: txt(l.id), nombre: txt(l.nombre), tel: txt(l.tel), destino, segmento: seg, ultCliente: txt(l.ult_cliente), ultimo: txt(l.ult_texto).replace(/\s+/g, ' ').slice(0, 90),
       excluido, excluidoBase, ventanaAbierta: !!l.ult_cliente && hace(txt(l.ult_cliente)) < 23.5,
-      adId: txt(l.ad_id), etiquetaCrm: txt(l.etiqueta), estadoPedido: ps[0]?.estado || '', creado: txt(l.created_at) });
+      adId: txt(l.ad_id), etiquetaCrm: txt(l.etiqueta), estadoPedido: ps[0]?.estado || '', creado: txt(l.created_at), compraAt: ultimaCompra(ps) });
   }
   return out.sort((a, b) => b.ultCliente.localeCompare(a.ultCliente));
 }
@@ -142,7 +146,7 @@ function leadsTodos(storeId: string, dias = 60, pedidos = pedidosTienda(storeId)
 /** Leads de la tienda con su segmento (y por qué se excluyen, si aplica). */
 export function leadsPorSegmento(storeId: string, dias = 60): LeadSegmento[] {
   return leadsTodos(storeId, dias).filter((l): l is LeadBase & { segmento: Segmento } => !!l.segmento)
-    .map(({ adId: _a, etiquetaCrm: _e, estadoPedido: _p, excluidoBase: _b, creado: _c, ...l }) => l);
+    .map(({ adId: _a, etiquetaCrm: _e, estadoPedido: _p, excluidoBase: _b, creado: _c, compraAt: _v, ...l }) => l);
 }
 
 // ── Datos para personalizar ─────────────────────────────────────────────────
@@ -225,6 +229,18 @@ export interface FiltroAudiencia {
   claves?: string[];
   /** Fecha (hora Colombia): siempre se suma como "y además", sea cual sea `combinar`. */
   fecha?: FiltroFecha;
+  /** A quién NO enviarle, aunque cumpla los filtros (también con los clientes elegidos a mano). */
+  excluir?: ExcluirAudiencia;
+}
+export interface ExcluirAudiencia {
+  /** Quienes ya le compraron a la tienda (pedido que no se canceló ni se devolvió). */
+  compraron?: boolean;
+  /** Solo si la compra fue en los últimos N días (0 o vacío = cualquier compra). */
+  compraronDias?: number;
+  /** Quienes tienen alguna de estas etiquetas. */
+  etiquetas?: string[];
+  /** Clientes puntuales (su `clave`). */
+  claves?: string[];
 }
 /**
  * campo: 'llegada' = cuándo escribió por primera vez (o se importó) · 'ultimo' = su último mensaje.
@@ -260,7 +276,7 @@ export interface Destinatario {
   /** Para mostrarlo en la lista: estado, pedido, anuncio y etiquetas. */
   detalle: string;
 }
-interface Candidato extends Destinatario { segmento: Segmento | ''; adId: string; etiquetas: string[]; estadoPedido: string; perdido: boolean; llegada: string; ultimoMsg: string }
+interface Candidato extends Destinatario { segmento: Segmento | ''; adId: string; etiquetas: string[]; estadoPedido: string; perdido: boolean; llegada: string; ultimoMsg: string; compraAt: string }
 
 /** Nombre de cada anuncio por el que llegaron chats (de las estadísticas de Meta o del propio anuncio). */
 function nombresAnuncios(storeId: string): Map<string, { nombre: string; campana: string }> {
@@ -300,7 +316,7 @@ function candidatos(storeId: string, dias: number): { lista: Candidato[]; anunci
       etiquetas.length ? `🏷️ ${etiquetas.join(', ')}` : '',
     ].filter(Boolean).join(' · ');
     out.set(clave, { clave, leadId: l.id, contactoId: '', nombre: l.nombre, tel: l.tel, origen: 'chat', motivo: '', excluido: l.excluidoBase, detalle,
-      segmento: l.segmento, adId: l.adId, etiquetas, estadoPedido: l.estadoPedido, perdido: l.excluido !== l.excluidoBase, llegada: l.creado, ultimoMsg: l.ultCliente });
+      segmento: l.segmento, adId: l.adId, etiquetas, estadoPedido: l.estadoPedido, perdido: l.excluido !== l.excluidoBase, llegada: l.creado, ultimoMsg: l.ultCliente, compraAt: l.compraAt });
   }
   for (const c of db.prepare(`SELECT c.id, c.tel10, c.nombre, c.creado,
       (SELECT MAX(enviado_at) FROM remarketing_envios r WHERE r.contacto_id = c.id AND r.estado = 'enviado') ult_rmk
@@ -308,16 +324,32 @@ function candidatos(storeId: string, dias: number): { lista: Candidato[]; anunci
     const k = txt(c.tel10);
     if (!k || out.has(k)) continue;
     const etiquetas = etsPorTel.get(k) || [];
-    const estadoPedido = (pedidos.get('t' + k) || []).sort((a, b) => b.at.localeCompare(a.at))[0]?.estado || '';
+    const psC = (pedidos.get('t' + k) || []).sort((a, b) => b.at.localeCompare(a.at));
+    const estadoPedido = psC[0]?.estado || '';
     out.set(k, { clave: k, leadId: '', contactoId: txt(c.id), nombre: txt(c.nombre), tel: '+57' + k, origen: 'importado', motivo: '',
       excluido: c.ult_rmk && hace(txt(c.ult_rmk)) < 7 * 24 ? 'Ya recibió un mensaje de remarketing esta semana' : '',
       detalle: ['📇 Importado', estadoPedido ? `Pedido: ${estadoPedido}` : '', etiquetas.length ? `🏷️ ${etiquetas.join(', ')}` : ''].filter(Boolean).join(' · '),
-      segmento: '', adId: '', etiquetas, estadoPedido, perdido: false, llegada: txt(c.creado), ultimoMsg: '' });
+      segmento: '', adId: '', etiquetas, estadoPedido, perdido: false, llegada: txt(c.creado), ultimoMsg: '', compraAt: ultimaCompra(psC) });
   }
   return { lista: [...out.values()], anuncios };
 }
 
-const limpiarCand = ({ segmento: _s, adId: _a, etiquetas: _e, estadoPedido: _p, perdido: _x, llegada: _l, ultimoMsg: _u, ...d }: Candidato): Destinatario => d;
+const limpiarCand = ({ segmento: _s, adId: _a, etiquetas: _e, estadoPedido: _p, perdido: _x, llegada: _l, ultimoMsg: _u, compraAt: _v, ...d }: Candidato): Destinatario => d;
+
+/** Por qué este cliente queda fuera según las exclusiones elegidas ('' = no se excluye). */
+function motivoExcluir(c: Candidato, ex?: ExcluirAudiencia): string {
+  if (!ex) return '';
+  if ((ex.claves || []).includes(c.clave)) return 'Lo excluiste a mano';
+  if (ex.compraron && c.compraAt) {
+    const dias = Math.round(Number(ex.compraronDias) || 0);
+    const limite = dias > 0 ? new Date(Date.now() - dias * 86400e3).toISOString().replace('T', ' ').slice(0, 19) : '';
+    if (!limite || c.compraAt >= limite) return `Ya te compró (pedido del ${c.compraAt.slice(8, 10)}/${c.compraAt.slice(5, 7)}/${c.compraAt.slice(2, 4)})`;
+  }
+  const ets = new Set((ex.etiquetas || []).filter(Boolean));
+  const hit = c.etiquetas.find((e) => ets.has(e));
+  if (hit) return `Excluido por la etiqueta «${hit}»`;
+  return '';
+}
 
 /**
  * Quién recibe. Cada criterio elegido es un grupo (dentro del grupo basta con una opción):
@@ -330,7 +362,7 @@ export function audiencia(storeId: string, f: FiltroAudiencia): Destinatario[] {
   if (claves.length) {
     const porClave = new Map(lista.map((c) => [c.clave, c]));
     return claves.map((k) => porClave.get(k)).filter((c): c is Candidato => !!c)
-      .map((c) => limpiarCand({ ...c, motivo: 'Elegido por ti' }));
+      .map((c) => limpiarCand({ ...c, motivo: 'Elegido por ti', excluido: c.excluido || motivoExcluir(c, f.excluir) }));
   }
   const tit = new Map(SEGMENTOS.map((x) => [x.id, x.titulo]));
   const segs = new Set(f.segmentos || []);
@@ -355,7 +387,7 @@ export function audiencia(storeId: string, f: FiltroAudiencia): Destinatario[] {
     if (todos ? hits.some((h) => !h) : hits.every((h) => !h)) continue;
     if (grupos.length && rango) hits.push(textoFecha);
     // "No compró" (marcado a mano) solo saca a alguien cuando se elige por estado del lead, como antes.
-    const excluido = c.excluido || (segs.size && c.perdido ? 'Lo marcaste como "No compró"' : '');
+    const excluido = c.excluido || motivoExcluir(c, f.excluir) || (segs.size && c.perdido ? 'Lo marcaste como "No compró"' : '');
     out.push(limpiarCand({ ...c, motivo: hits.filter(Boolean).join(' · '), excluido }));
   }
   return out;
