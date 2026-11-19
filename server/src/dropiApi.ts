@@ -502,10 +502,12 @@ export async function unirOrdenesDropi(storeId: string, forzar = false): Promise
     const guiaS3 = buscar(d, ['guia_urls3', 'guia_url', 'guide_url', 'url_guia', 'shipping_guide_url', 'sticker', 'sticker_url', 'label_url']);
     const url = guiaS3 ? (guiaS3.startsWith('http') ? guiaS3 : PDF_BASE + guiaS3.replace(/^\/+/, '')) : '';
     const estado = buscar(d, ['status', 'estado', 'order_status', 'status_name']);
-    const final = /entregad|devoluci|devuelt|cancelad|anulad/i.test(estado);
     // Estado real del envío (si ya va en reparto, no se queda en «Guía generada»).
     const { estadoLogistico } = await import('./estadosPedido.js');
     const real = estadoLogistico(estado, true) || 'Guía generada';
+    // Final según el estado traducido: «Entregado a transportadora» NO es final (antes la palabra
+    // «entregad…» lo hacía final y al cliente no le llegaba la guía).
+    const final = ['Entregado', 'Devuelto', 'Cancelado'].includes(real);
     const reciente = !final && Date.now() - fecha < 4 * 86400_000;
     db.prepare(`UPDATE orders SET dropi_order_id = ?, despacho_proveedor = CASE WHEN COALESCE(despacho_proveedor,'') = '' THEN 'dropi' ELSE despacho_proveedor END,
       guia = ?, guia_url = CASE WHEN ? != '' THEN ? ELSE guia_url END, transportadora = CASE WHEN ? != '' THEN ? ELSE transportadora END,

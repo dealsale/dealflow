@@ -27,6 +27,9 @@ export function estadoLogistico(texto: string, hayGuia: boolean): EstadoPedido |
     // Ojo: «Pendiente por recoger» / «Por recoger en bodega» es la transportadora que aún no pasa
     // por el paquete (Guía generada, más abajo): por eso «recoger» solo cuenta junto a oficina/punto.
     if (/reclam[ae]r? en|para reclamar|(pendiente|espera) (de|por|a) (ser )?reclam|(retir[ao]|retirar|recoger|recoge|reclamo) en (la |el )?(oficina|agencia|sede|punto)|disponible (para|en) (retiro|recoger|reclamar|reclamo|oficina|agencia|sede|punto)|list[oa] para (reclamar|ser reclamad)|punto de (retiro|recogida|reclamo)|entrega en (la )?(oficina|agencia|sede|punto)|en oficina para|en (oficina|agencia) (de )?(reclamo|retiro|entrega)|^en (oficina|agencia)$/.test(e)) return 'En oficina';
+    // «Entregado a transportadora» (Dropi), «Entregado al operador», «Entregado en bodega»… = el
+    // paquete pasó a la transportadora y va en camino: todavía NO lo tiene el cliente.
+    if (/entregad[oa] (a|al|en) (la |el )?(transportador|operador|bodega|centro|terminal|dropi|coordinadora|servientrega|inter ?rapidisimo|envia|tcc|deprisa|domina|veloces|472)/.test(e)) return 'En tránsito';
     // «Entregado al mensajero / a ruta» = sale a reparto, todavía NO lo tiene el cliente.
     if (/entregad[oa] (a|al) (mensajero|repartidor|courier|ruta|distribucion)|asignad[oa] (a|al) (mensajero|repartidor|ruta)/.test(e)) return 'En reparto';
     if (/entregad/.test(e)) return 'Entregado';

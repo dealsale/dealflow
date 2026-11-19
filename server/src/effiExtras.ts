@@ -373,7 +373,8 @@ export async function unirGuiasDeEffi(storeId: string, forzar = false): Promise<
     const estadoTxt = txt(g.estado_efficommerce) || txt(g.estado);
     const { estadoLogistico, siguienteEstado } = await import('./estadosPedido.js');
     const nuevo = siguienteEstado(txt(o.estado), estadoLogistico(estadoTxt, true));
-    const final = /entregad|devuel|anulad/i.test(estadoTxt) || ['Entregado', 'Devuelto', 'Cancelado'].includes(nuevo || txt(o.estado));
+    // Final según el estado traducido (no por la palabra: «Entregado a transportadora» va en camino).
+    const final = ['Entregado', 'Devuelto', 'Cancelado'].includes(estadoLogistico(estadoTxt, true) || '') || ['Entregado', 'Devuelto', 'Cancelado'].includes(nuevo || txt(o.estado));
     const reciente = !final && Date.now() - fechaGuia < 4 * 86400_000;
     db.prepare(`UPDATE orders SET guia = ?, transportadora = CASE WHEN ? != '' THEN ? ELSE transportadora END,
         despacho_proveedor = CASE WHEN COALESCE(despacho_proveedor,'') = '' THEN 'effi' ELSE despacho_proveedor END,

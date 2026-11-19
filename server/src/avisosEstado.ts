@@ -64,6 +64,26 @@ const txt = (v: unknown) => (v == null ? '' : String(v));
   if (n) console.log(`[avisos] ${n} pedido(s) en la oficina de la transportadora pasaron a «En oficina».`);
 })().catch((e) => console.warn('[avisos] en oficina', e));
 
+// Pedidos que quedaron «Entregado» por error porque la transportadora decía «Entregado a
+// transportadora» (Dropi) o similar: vuelven a su estado real para que se sigan rastreando
+// (un pedido Entregado ya no se sincroniza). El aviso que dispara el cambio se omite: el
+// cliente recibirá el siguiente estado real (en reparto, entregado de verdad…).
+(async () => {
+  const { estadoLogistico } = await import('./estadosPedido.js');
+  const filas = db.prepare(`SELECT id, store_id, estado_woo, guia FROM orders WHERE estado = 'Entregado'
+    AND LOWER(COALESCE(estado_woo,'')) LIKE '%entregad%' AND created_at > datetime('now','-45 days')`).all() as { id: string; store_id: string; estado_woo: string; guia: string }[];
+  let n = 0;
+  for (const f of filas) {
+    const real = estadoLogistico(f.estado_woo, !!f.guia);
+    if (!real || real === 'Entregado') continue;
+    db.prepare('UPDATE orders SET estado = ? WHERE id = ?').run(real, f.id);
+    db.prepare("UPDATE avisos_estado SET resultado = 'omitido', detalle = 'Corrección: el pedido estaba marcado Entregado por error («Entregado a transportadora»).' WHERE order_id = ? AND resultado = ''").run(f.id);
+    trazar(f.store_id, f.id, { etapa: 'aviso', nivel: 'info', titulo: `Estado corregido: de «Entregado» a «${real}»`, detalle: `La transportadora decía «${f.estado_woo}»: el paquete va en camino, todavía no lo tiene el cliente.` });
+    n++;
+  }
+  if (n) console.log(`[avisos] ${n} pedido(s) marcados «Entregado» por error («Entregado a transportadora») volvieron a su estado real.`);
+})().catch((e) => console.warn('[avisos] corrección entregado', e));
+
 /** Encola un aviso a mano (p. ej. "Confirmado" o "Cancelado" cambiados desde el panel). */
 export function encolarAviso(storeId: string, orderId: string, estado: string, origen = 'manual'): void {
   db.prepare('INSERT INTO avisos_estado (store_id, order_id, estado, origen) VALUES (?,?,?,?)').run(storeId, orderId, estado, origen);
