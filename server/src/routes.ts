@@ -4813,9 +4813,16 @@ api.put('/superadmin/meta-templates/:id', requireAuth, requireSuperAdmin, (req, 
   res.json({ ok: true });
 });
 
-api.delete('/superadmin/meta-templates/:id', requireAuth, requireSuperAdmin, (req, res) => {
-  db.prepare('DELETE FROM meta_templates WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
+// Eliminar una plantilla de DealFlow también la borra de la cuenta de Meta de cada tienda.
+api.delete('/superadmin/meta-templates/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+  const t = db.prepare('SELECT id, nombre FROM meta_templates WHERE id = ?').get(req.params.id) as { id: string; nombre: string } | undefined;
+  if (!t) return res.status(404).json({ error: 'Plantilla no encontrada.' });
+  const { borrarEnTodas } = await import('./metaTemplates.js');
+  const r = await borrarEnTodas(t.nombre);
+  db.prepare('DELETE FROM meta_template_pub WHERE template_id = ?').run(t.id);
+  db.prepare('DELETE FROM meta_templates WHERE id = ?').run(t.id);
+  registrarAccionEquipo(req.user!.email, `Eliminó la plantilla ${t.nombre} (borrada en Meta en ${r.borradas}/${r.total} tiendas)`);
+  res.json({ ok: true, borradas: r.borradas, total: r.total, errores: r.errores.length });
 });
 
 // Publica la plantilla en la WABA de TODAS las tiendas Cloud API (una acción).

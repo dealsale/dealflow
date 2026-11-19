@@ -20,9 +20,7 @@ import { trazar } from './trazabilidad.js';
 import { fraseEstadoPlantilla, textoEstadoChat } from './mensajesEstado.js';
 
 export const PLANTILLA_ESTADO = 'estado_envio_pedido';
-/** Plantilla propia de «En oficina»: el pedido espera al cliente en la oficina de la transportadora. */
-export const PLANTILLA_OFICINA = 'pedido_en_oficina';
-/** La versión simple (solo el nombre del cliente), la que Meta aprueba como Utilidad. */
+/** Plantilla de «En oficina» (solo el nombre del cliente: la que Meta aprueba como Utilidad; la v1 y la v2 se retiraron). */
 export const PLANTILLA_OFICINA_SIMPLE = 'pedido_en_oficina_v3';
 /** Estados que se avisan solos (los cambia la transportadora). "Guía generada" la avisa avisoGuia.ts. */
 export const ESTADOS_AVISADOS = ['En tránsito', 'En reparto', 'En oficina', 'Novedad', 'Entregado'];
@@ -232,26 +230,17 @@ async function enviarAviso(a: Fila): Promise<void> {
   }
 
   // 2) Ventana cerrada (o sin chat) → plantilla aprobada, con datos reales (si falta uno, no se inventa).
-  // «En oficina» tiene su propia plantilla. Primero la v3 (solo el nombre: Meta la acepta como
-  // Utilidad); si no está aprobada, la v2/v1 (con dónde, guía y qué pagar); si tampoco, la general.
+  // «En oficina» tiene su propia plantilla (pedido_en_oficina_v3, solo el nombre); si no está
+  // aprobada en la tienda, sale la general de estado del envío.
   let tpl = estado === 'En oficina' ? plantillaAprobada(storeId, PLANTILLA_OFICINA_SIMPLE) : null;
   let params: string[] = [];
   if (tpl) params = [nombre];
-  else if (estado === 'En oficina' && (tpl = plantillaAprobada(storeId, PLANTILLA_OFICINA))) {
-    const donde = datosE.oficina.replace(/^en\s+/i, '').trim() || (txt(o.ciudad).trim() ? `la oficina de ${transp || 'la transportadora'} en ${txt(o.ciudad).trim()}` : `la oficina de ${transp || 'la transportadora'} de tu ciudad`);
-    // La v2 dice «Valor a pagar al recogerlo: {{7}}»; la primera, «Pago: {{7}}».
-    const pago = tpl.nombre === `${PLANTILLA_OFICINA}_v2`
-      ? (datosE.pagado ? '$0 (ya está pagado)' : datosE.total || 'el valor de tu pedido')
-      : (datosE.pagado ? 'ya está pagado ✅' : datosE.total ? `lleva ${datosE.total} para pagarlo` : 'lleva el valor de tu pedido para pagarlo');
-    params = [nombre, tienda, numDF, transp || 'la transportadora', donde, guia || numDF, pago];
-  } else if ((tpl = plantillaAprobada(storeId, PLANTILLA_ESTADO))) params = [nombre, tienda, numDF, fraseEstadoPlantilla('es', estado, datosE), guia || (estado === 'Confirmado' ? 'te la mandamos cuando la tengamos' : numDF)];
+  else if ((tpl = plantillaAprobada(storeId, PLANTILLA_ESTADO))) params = [nombre, tienda, numDF, fraseEstadoPlantilla('es', estado, datosE), guia || (estado === 'Confirmado' ? 'te la mandamos cuando la tengamos' : numDF)];
   else if (estado === 'En tránsito' && guia && (tpl = plantillaAprobada(storeId, PLANTILLA_GUIA))) params = [nombre, tienda, numDF, transp || 'la transportadora', guia];
   else if (estado === 'Novedad' && (tpl = plantillaAprobada(storeId, 'novedad_envio_pedido'))) params = [nombre, tienda, numDF, transp || 'la transportadora', (txt(o.estado_woo).replace(/^novedad:?\s*/i, '') || 'novedad en la entrega').toLowerCase()];
-  if (!tpl) return reintentar(a, `${chat ? 'El cliente no escribe hace más de 24 h' : 'El pedido no tiene chat'} y la plantilla "${estado === 'En oficina' ? `${PLANTILLA_OFICINA}" (o "${PLANTILLA_ESTADO}` : PLANTILLA_ESTADO}" aún no está aprobada por Meta para tu WhatsApp. Apenas se apruebe, sale sola.`);
+  if (!tpl) return reintentar(a, `${chat ? 'El cliente no escribe hace más de 24 h' : 'El pedido no tiene chat'} y la plantilla "${estado === 'En oficina' ? `${PLANTILLA_OFICINA_SIMPLE}" (o "${PLANTILLA_ESTADO}` : PLANTILLA_ESTADO}" aún no está aprobada por Meta para tu WhatsApp. Apenas se apruebe, sale sola.`);
   const falta = params.findIndex((p) => !p.trim());
-  const nombresDatos = tpl.nombre.startsWith(PLANTILLA_OFICINA)
-    ? ['nombre del cliente', 'nombre de la tienda', 'número del pedido', 'transportadora', 'lugar de recogida', 'número de guía', 'valor a pagar']
-    : ['nombre del cliente', 'nombre de la tienda', 'número del pedido', 'estado', 'número de guía'];
+  const nombresDatos = ['nombre del cliente', 'nombre de la tienda', 'número del pedido', 'estado', 'número de guía'];
   if (falta >= 0) return cerrar(a, 'fallido', `Falta el ${nombresDatos[falta] || 'dato'} en el pedido: no se envía la plantilla con datos inventados.`);
   const r = await sendWhatsappTemplate(storeId, destino, tpl, params, telDestino);
   if (!r.ok) return reintentar(a, r.error || 'Meta rechazó la plantilla.');

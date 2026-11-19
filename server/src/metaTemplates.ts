@@ -298,4 +298,54 @@ export function enviarTodasEnSegundoPlano(): ProgresoEnvio {
 export function iniciarRevisionPlantillas(): void {
   setInterval(() => { if (!progresoEnvio.corriendo) void sincronizarTodas(true).catch(() => {}); }, 30 * 60_000);
   setTimeout(() => { void sincronizarTodas(true).catch(() => {}); }, 90_000);
+  // Plantillas retiradas: se borran de la cuenta de Meta de cada tienda y de DealFlow (una sola vez).
+  if (process.env.NODE_ENV === 'production') setTimeout(() => { void retirarPlantillas(PLANTILLAS_RETIRADAS).catch((e) => console.warn('[plantillas] retirando', e)); }, 2 * 60_000);
+}
+
+/**
+ * Plantillas que DealFlow ya no usa. pedido_en_oficina y pedido_en_oficina_v2: Meta las rechazó por
+ * categoría (INCORRECT_CATEGORY) en todas las tiendas; quedó la v3 (pedido_en_oficina_v3).
+ */
+export const PLANTILLAS_RETIRADAS = ['pedido_en_oficina', 'pedido_en_oficina_v2'];
+
+/** Borra una plantilla (por nombre, todos sus idiomas) de la WABA de una tienda. Ya borrada = ok. */
+export async function borrarEnTienda(wabaId: string, token: string, nombre: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${GRAPH}/${encodeURIComponent(wabaId)}/message_templates?name=${encodeURIComponent(nombre)}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000),
+    });
+    const j = (await res.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string; code?: number; error_subcode?: number } };
+    if (res.ok && j.success !== false) return { ok: true };
+    // No existe en esa cuenta (nunca se publicó o ya se borró): no hay nada que borrar.
+    if (/not\s*found|does not exist|no existe|couldn.t be found/i.test(j.error?.message || '') || j.error?.error_subcode === 2593002) return { ok: true };
+    return { ok: false, error: j.error?.message || `HTTP ${res.status}` };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'red' }; }
+}
+
+/** Borra la plantilla en la cuenta de Meta de TODAS las tiendas con WhatsApp oficial. */
+export async function borrarEnTodas(nombre: string): Promise<{ total: number; borradas: number; errores: { store_id: string; error: string }[] }> {
+  const tiendas = tiendasCloud();
+  const errores: { store_id: string; error: string }[] = [];
+  let borradas = 0;
+  for (const t of tiendas) {
+    const r = await borrarEnTienda(t.waba_id, t.access_token, nombre);
+    if (r.ok) borradas++; else errores.push({ store_id: t.store_id, error: r.error || 'error' });
+    await dormir(300);
+  }
+  return { total: tiendas.length, borradas, errores };
+}
+
+/** Retira plantillas: las borra de Meta en todas las tiendas y de DealFlow. Cada una se hace una vez (si alguna tienda falla, se reintenta al reiniciar). */
+export async function retirarPlantillas(nombres: string[]): Promise<void> {
+  const clave = 'plantillas_retiradas';
+  const hechas = new Set<string>(JSON.parse((db.prepare('SELECT valor FROM config_global WHERE clave = ?').get(clave) as { valor: string } | undefined)?.valor || '[]'));
+  for (const nombre of nombres) {
+    if (hechas.has(nombre)) continue;
+    const r = await borrarEnTodas(nombre);
+    const t = db.prepare('SELECT id FROM meta_templates WHERE nombre = ?').get(nombre) as { id: string } | undefined;
+    if (t) { db.prepare('DELETE FROM meta_template_pub WHERE template_id = ?').run(t.id); db.prepare('DELETE FROM meta_templates WHERE id = ?').run(t.id); }
+    console.log(`[plantillas] ${nombre} retirada: borrada en Meta en ${r.borradas}/${r.total} tiendas${r.errores.length ? ` (${r.errores.length} con error: ${r.errores.map((e) => e.error).slice(0, 3).join(' | ')})` : ''}`);
+    if (!r.errores.length) hechas.add(nombre);
+  }
+  db.prepare("INSERT INTO config_global (clave, valor) VALUES (?, ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor").run(clave, JSON.stringify([...hechas]));
 }

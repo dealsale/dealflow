@@ -74,30 +74,10 @@ const PLANTILLAS: Semilla[] = [
     ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'salió a reparto 🛵: hoy te lo entregan, ten el celular a mano', '240012345678'],
   },
   {
-    // El pedido quedó en la oficina de la transportadora para que el cliente lo recoja («Reclame en
-    // oficina», «Disponible para retiro»…), cuando el cliente no escribe hace más de 24 h.
-    // Variables: nombre, tienda, pedido, transportadora, dónde recogerlo, guía y qué pagar.
-    nombre: 'pedido_en_oficina', categoria: 'UTILITY', idioma: 'es',
-    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nTu pedido {{3}} ya llegó a la oficina de {{4}} 🏢 y está listo para que lo recojas.\n\n📍 Dónde: {{5}}\n🧾 Número de guía: {{6}}\n💵 Pago: {{7}}\n\nAcércate con tu cédula y el número de guía. La transportadora solo lo guarda unos días antes de devolverlo, así que te recomendamos recogerlo pronto. ¿Tienes una duda? Respóndenos este mensaje.',
-    pie: 'Mensaje sobre tu compra',
-    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'Interrapidísimo', 'Oficina Cali Centro, Cra 5 # 12-30', '240012345678', 'lleva $129.900 para pagarlo'],
-    botones: [{ tipo: 'QUICK_REPLY', texto: 'Voy a recogerlo' }, { tipo: 'QUICK_REPLY', texto: 'Tengo una duda' }],
-  },
-  {
-    // v2 de la anterior: Meta la rechazó en todas las tiendas por INCORRECT_CATEGORY (la tomó
-    // como Marketing por el tono de urgencia). Esta solo informa el estado del envío: sin
-    // «recógelo pronto», sin emojis de llamada y con un solo botón para preguntar.
-    // Mismas variables y orden; {{7}} es el valor a pagar al recogerlo.
-    nombre: 'pedido_en_oficina_v2', categoria: 'UTILITY', idioma: 'es',
-    cuerpo: 'Hola {{1}}, te escribimos de {{2}} sobre tu pedido {{3}}.\n\nLa transportadora {{4}} informa que el pedido está disponible para recoger en su oficina.\n\nDirección de la oficina: {{5}}\nNúmero de guía: {{6}}\nValor a pagar al recogerlo: {{7}}\n\nPara recogerlo, presenta tu documento de identidad y el número de guía. Si tienes alguna pregunta sobre este envío, responde a este mensaje.',
-    pie: 'Mensaje sobre tu compra',
-    ejemplos: ['Camila', 'Luna Accesorios', 'DF-1049', 'Interrapidísimo', 'Oficina Cali Centro, Cra 5 # 12-30', '240012345678', '$129.900'],
-    botones: [{ tipo: 'QUICK_REPLY', texto: 'Tengo una pregunta' }],
-  },
-  {
     // v3, la más simple: Meta toma como Marketing cualquier plantilla de Utilidad que empiece a
     // llevar precios, direcciones o detalles del pedido. Solo el nombre del cliente y el aviso.
-    // Es la que se usa primero; si no está aprobada en la tienda, sigue la v2/v1 y luego la general.
+    // Las versiones anteriores (pedido_en_oficina y _v2) Meta las rechazó por categoría y se retiraron.
+    // Si la v3 no está aprobada en la tienda, sale la plantilla general de estado del envío.
     nombre: 'pedido_en_oficina_v3', categoria: 'UTILITY', idioma: 'es',
     cuerpo: 'Hola {{1}} 👋\nTu pedido ya está disponible para recoger en la oficina de la transportadora.\n¡Gracias por tu compra!',
     ejemplos: ['Camila'],
