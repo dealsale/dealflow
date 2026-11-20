@@ -336,6 +336,7 @@ export const apiUpload = (dataUrl: string, nombre?: string) => req<{ url: string
 export const apiCreateProduct = (b: { nombre: string; precio: number; stock: number; tipo?: string; duracion?: string }) => req<{ id: string }>('/api/products', 'POST', b);
 export const apiPatchProduct = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/products/${id}`, 'PATCH', patch);
 export const apiDeleteProduct = (id: string) => req<{ ok: true }>(`/api/products/${id}`, 'DELETE');
+export const apiDuplicarProducto = (id: string) => req<{ ok: true; id: string; nombre: string }>(`/api/products/${id}/duplicar`, 'POST');
 export const apiAddVariant = (productId: string, b: { label: string; stock: number }) => req<{ id: string }>(`/api/products/${productId}/variants`, 'POST', b);
 export const apiGenerarVariantes = (productId: string) => req<{ ok: true; creadas: number; eliminadas: number; total: number }>(`/api/products/${productId}/variants/generar`, 'POST');
 export const apiPatchVariant = (id: string, patch: Record<string, unknown>) => req<{ ok: true }>(`/api/variants/${id}`, 'PATCH', patch);

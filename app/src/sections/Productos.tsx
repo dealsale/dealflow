@@ -792,6 +792,10 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
         >
           {p.deleteArmed ? '¿Seguro? Sí, eliminar' : 'Eliminar producto'}
         </button>
+        <button onClick={p.duplicar} title="Crea una copia con fotos, mensajes, reglas, combos y variantes"
+          style={{ background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+          ⧉ Duplicar producto
+        </button>
         <div style={{ flex: 1 }} />
         {p.saved && <span style={{ color: 'var(--df-brand)', fontSize: 13, fontWeight: 600 }}>✓ Producto guardado. El asistente ya lo ofrece así.</span>}
         <button onClick={p.save} className="df-btn-primary" style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Guardar producto</button>

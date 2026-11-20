@@ -889,6 +889,37 @@ api.patch('/products/:id', requireAuth, requireStore, requirePermiso('productos_
   res.json({ ok: true });
 });
 
+// Duplica un producto con todo (fotos, mensajes iniciales, reglas, combos, preguntas y variantes).
+// La copia queda sin vínculos externos (SKU, artículos de Effi/Dropi/Shopify) ni frase disparadora,
+// para que no choque con el original: eso se configura después en la copia.
+api.post('/products/:id/duplicar', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
+  const sid = req.user!.storeId!;
+  const p = db.prepare('SELECT * FROM products WHERE id = ? AND store_id = ?').get(req.params.id, sid) as Record<string, unknown> | undefined;
+  if (!p) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const id = uid();
+  const base = String(p.nombre || 'Producto').replace(/\s*\(copia(?: \d+)?\)$/i, '');
+  const usados = new Set((db.prepare('SELECT nombre FROM products WHERE store_id = ?').all(sid) as { nombre: string }[]).map((r) => r.nombre));
+  let nombre = `${base} (copia)`;
+  for (let n = 2; usados.has(nombre); n++) nombre = `${base} (copia ${n})`;
+  const fila: Record<string, unknown> = { ...p, id, nombre, sku: '', disparador: '', plantilla_id: '' };
+  delete fila.created_at;
+  const colsP = (db.prepare('PRAGMA table_info(products)').all() as { name: string }[]).map((c) => c.name).filter((c) => c in fila);
+  const colsV = (db.prepare('PRAGMA table_info(variants)').all() as { name: string }[]).map((c) => c.name);
+  db.transaction(() => {
+    db.prepare(`INSERT INTO products (${colsP.join(', ')}) VALUES (${colsP.map(() => '?').join(', ')})`).run(...colsP.map((c) => fila[c] as never));
+    for (const v of db.prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY orden, rowid').all(req.params.id) as Record<string, unknown>[]) {
+      const nv: Record<string, unknown> = { ...v, id: uid(), product_id: id };
+      if ('sku' in nv) nv.sku = '';
+      if ('refs' in nv) nv.refs = '{}';
+      const cs = colsV.filter((c) => c in nv);
+      db.prepare(`INSERT INTO variants (${cs.join(', ')}) VALUES (${cs.map(() => '?').join(', ')})`).run(...cs.map((c) => nv[c] as never));
+    }
+  })();
+  if (sid === MASTER_STORE_ID) sincronizarSnapshotMaster(id); // producto de biblioteca
+  registrarLog(sid, 'info', 'productos', `Producto duplicado: «${String(p.nombre)}» → «${nombre}».`);
+  res.json({ ok: true, id, nombre });
+});
+
 api.delete('/products/:id', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
   if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
   if (req.user!.storeId === MASTER_STORE_ID) eliminarLibraryDeMaster(req.params.id); // quita su entrada de biblioteca

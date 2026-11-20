@@ -23,6 +23,7 @@ import { apiEffiApiEstado, type EffiApiEstado,
   apiCreatePlan,
   apiCreateProduct,
   apiDeleteProduct,
+  apiDuplicarProducto,
   apiDeleteVariant,
   apiPatchProduct,
   apiPatchVariant,
@@ -326,6 +327,7 @@ export interface DecoratedProduct extends Product {
   save: () => void;
   saved: boolean;
   addVariante: () => void;
+  duplicar: () => void;
   requestDelete: () => void;
   deleteArmed: boolean;
   setNombre: (v: string) => void;
@@ -1706,6 +1708,17 @@ export function useDealFlowState() {
     if (apiMode && vid) void apiDeleteVariant(vid);
   }
 
+  /** Duplica el producto (con fotos, mensajes, reglas y variantes) y abre la copia. */
+  function duplicarProducto(id: number | string) {
+    if (!apiMode || typeof id !== 'string') { toast('Duplicar productos necesita la conexión con el servidor.', 'error'); return; }
+    void apiDuplicarProducto(id).then(async (r) => {
+      if (r.error || !r.data) { toast(r.error || 'No se pudo duplicar el producto.', 'error'); return; }
+      await reloadProducts();
+      setExpandedProductId(r.data.id);
+      toast(`✓ Se creó «${r.data.nombre}». Cámbiale el nombre y lo que necesites.`, 'ok', 5000);
+    });
+  }
+
   function deleteProduct(id: number | string) {
     if (armedDeleteProductId !== id) {
       armDelete('product', id);
@@ -2410,6 +2423,7 @@ export function useDealFlowState() {
         saved: savedProductId === p.id,
         addVariante: () => addVariante(p.id),
         requestDelete: () => deleteProduct(p.id),
+        duplicar: () => duplicarProducto(p.id),
         deleteArmed: armedDeleteProductId === p.id,
         setNombre: (v: string) => updateProduct(p.id, { nombre: v }),
         setPrecio: (v: string) => updateProduct(p.id, { precio: parseInt(v.replace(/[^0-9]/g, ''), 10) || 0 }),
