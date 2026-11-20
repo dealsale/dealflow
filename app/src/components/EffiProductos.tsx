@@ -136,7 +136,7 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
     setCargando(false);
     if (r.error || !r.data) { onMsg(r.error || 'No se pudo sincronizar.'); return; }
     const d = r.data;
-    onMsg(`✓ ${d.total} artículos ${d.soloVinculados ? 'vinculados a tu e-commerce' : 'de venta'} leídos de Effi · ${d.vinculadas} variantes de Effi vinculadas${d.marcados ? ` · ${d.marcados} productos encontrados en Effi y marcados como de Effi` : ''}${d.sinVinculo.length ? ` · ${d.sinVinculo.length} por vincular` : ''}${d.sinProveedor ? ` · ${d.sinProveedor} productos sin definir si son de Effi o Dropi` : ''}${d.stockActualizado ? ` · stock actualizado en ${d.stockActualizado} variantes` : ''}.`);
+    onMsg(`✓ ${d.total} artículos leídos de Effi · ${d.vinculadas} variantes de Effi vinculadas${d.marcados ? ` · ${d.marcados} productos encontrados en Effi y marcados como de Effi` : ''}${d.sinVinculo.length ? ` · ${d.sinVinculo.length} por vincular` : ''}${d.sinProveedor ? ` · ${d.sinProveedor} productos sin definir si son de Effi o Dropi` : ''}${d.stockActualizado ? ` · stock actualizado en ${d.stockActualizado} variantes` : ''}.`);
     await cargar();
   };
   const vincular = async (v: EffiVarianteDF, a: EffiArticulo) => {
@@ -379,9 +379,27 @@ function SelectorArticulo({ lista, valor, ocupado, onElegir }: { lista: Articulo
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('keydown', esc); };
   }, [abierto]);
-  const sel = lista?.find((a) => a.id === valor);
-  const nq = q.trim().toLowerCase();
-  const filtrados = (lista || []).filter((a) => !nq || `${a.id} ${a.descripcion} ${a.referencia}`.toLowerCase().includes(nq)).slice(0, 80);
+  // Lo que no está en la lista descargada se busca en vivo en Effi (cuentas con miles de artículos).
+  const [remotos, setRemotos] = useState<ArticuloSimple[]>([]);
+  const [buscandoEffi, setBuscandoEffi] = useState(false);
+  useEffect(() => {
+    const t = q.trim();
+    if (!abierto || t.length < 2) { setRemotos([]); setBuscandoEffi(false); return; }
+    setBuscandoEffi(true);
+    let vivo = true;
+    const h = setTimeout(() => void apiEffiApiBuscar(t).then((r) => {
+      if (!vivo) return;
+      setBuscandoEffi(false);
+      setRemotos((r.data?.articulos || []).map((a) => ({ id: a.id, descripcion: a.descripcion, referencia: a.referencia, drop: 0, stock: a.stock ?? null })));
+    }), 450);
+    return () => { vivo = false; clearTimeout(h); };
+  }, [q, abierto]);
+  const todos = useMemo(() => { const m = new Map((lista || []).map((a) => [a.id, a])); for (const a of remotos) if (!m.has(a.id)) m.set(a.id, a); return [...m.values()]; }, [lista, remotos]);
+  const sel = todos.find((a) => a.id === valor);
+  // Sin tildes y por palabras en cualquier orden («jean azul 8» encuentra «JEAN MOM AZUL TALLA 8»).
+  const sinTilde = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const palabras = sinTilde(q.trim().replace(/^#/, '')).split(/\s+/).filter(Boolean);
+  const filtrados = todos.filter((a) => { if (!palabras.length) return true; const d = sinTilde(`${a.id} ${a.descripcion} ${a.referencia}`); return palabras.every((w) => d.includes(w)); }).slice(0, 120);
   const linea = (a: ArticuloSimple) => (
     <>
       <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 800, color: 'var(--df-purple)' }}>#{a.id}</span>
@@ -413,7 +431,8 @@ function SelectorArticulo({ lista, valor, ocupado, onElegir }: { lista: Articulo
                 {linea(a)}{a.id === valor && <span style={{ color: 'var(--df-purple)', fontWeight: 800 }}>✓</span>}
               </button>
             ))}
-            {lista && !filtrados.length && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', padding: 8 }}>Ningún artículo coincide.</div>}
+            {buscandoEffi && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', padding: '6px 8px' }}>Buscando también en Effi…</div>}
+            {lista && !filtrados.length && !buscandoEffi && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', padding: 8 }}>Ningún artículo coincide, ni en DealFlow ni en Effi. Prueba con la referencia o el ID del artículo.</div>}
           </div>
         </div>,
         document.body,

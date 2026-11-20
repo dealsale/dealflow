@@ -178,12 +178,20 @@ export function mensajeError(r: { http: number; body: EffiResp<unknown> }): stri
 /** GET paginado: trae todas las páginas (con tope de seguridad). */
 async function todo<T>(apiKey: string, path: string, query: Record<string, string | number | undefined> = {}, maxPaginas = 30): Promise<T[] | { error: string }> {
   const out: T[] = [];
+  let primeraAnterior = '';
   for (let pagina = 1; pagina <= maxPaginas; pagina++) {
     const r = await effi<T[]>(apiKey, 'GET', path, { query: { ...query, pagina, por_pagina: 100 } });
     if (!r.ok) return { error: mensajeError(r) };
-    out.push(...(r.body.data || []));
-    const tp = Number(r.body.paginacion?.total_paginas || 1);
-    if (pagina >= tp) break;
+    const datos = r.body.data || [];
+    // Si Effi devuelve la misma página otra vez (ignora «pagina»), se para para no repetir.
+    const primera = JSON.stringify(datos[0] ?? '');
+    if (pagina > 1 && primera === primeraAnterior) break;
+    primeraAnterior = primera;
+    out.push(...datos);
+    // Se sigue mientras la página venga llena: no se depende solo de «paginacion» (si Effi no la
+    // manda, antes se quedaba en la primera página y faltaban artículos en cuentas grandes).
+    const tp = Number(r.body.paginacion?.total_paginas || 0);
+    if (datos.length < 100 || (tp > 0 && pagina >= tp)) break;
   }
   return out;
 }
@@ -1028,15 +1036,15 @@ export interface ArticuloEffi { id: string; descripcion: string; referencia: str
  * dropshipping, etc.). Lo demás se busca en vivo por nombre o referencia.
  */
 export async function descargarArticulos(storeId: string, apiKey: string): Promise<{ total: number; soloVinculados: boolean } | { error: string }> {
-  let r = await todo<Fila>(apiKey, '/api/articulo', { existe_vinculacion: 1 }, 40);
-  if (!Array.isArray(r)) return r;
-  const soloVinculados = r.length > 0;
-  if (!soloVinculados) {
-    // Sin vínculos de e-commerce todavía: caemos a los artículos de venta (con tope).
-    const t = await todo<Fila>(apiKey, '/api/articulo', { ventas: 1 }, 20);
-    if (!Array.isArray(t)) return t;
-    r = t;
-  }
+  const vinc = await todo<Fila>(apiKey, '/api/articulo', { existe_vinculacion: 1 }, 60);
+  if (!Array.isArray(vinc)) return vinc;
+  // Más los artículos de VENTA de la tienda: en cuentas con más de 1.000 artículos muchos no están
+  // vinculados a un e-commerce en Effi y antes no aparecían al catalogar.
+  const venta = await todo<Fila>(apiKey, '/api/articulo', { ventas: 1 }, 60);
+  const soloVinculados = false;
+  const r = [...vinc];
+  if (Array.isArray(venta)) { const ya = new Set(r.map((f) => txt(f.id))); for (const f of venta) if (!ya.has(txt(f.id))) { ya.add(txt(f.id)); r.push(f); } }
+  else if (!vinc.length) return venta;
   // Artículos vinculados a un proveedor dropshipping: se marcan (y se agregan aunque
   // no estén enlazados al e-commerce, porque el dueño los vincula a mano).
   const drop = await todo<Fila>(apiKey, '/api/articulo', { dropshipping_distribuidor: 1 }, 40);
@@ -1342,14 +1350,31 @@ export async function buscarArticulosEffi(storeId: string, q: string): Promise<A
   if (!c?.apiKey) return { error: 'Conecta Effi primero.' };
   const term = q.trim().slice(0, 60);
   if (term.length < 2) return [];
-  const [porNombre, porRef] = await Promise.all([
-    effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { descripcion: term, por_pagina: 100 } }),
-    effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { referencia: `${term}%`, por_pagina: 50 } }),
-  ]);
+  // Por ID (#123 o 123): ese artículo exacto.
+  const soloId = term.replace(/^#/, '');
+  if (/^\d+$/.test(soloId)) {
+    const a = await articuloPorId(storeId, c.apiKey, soloId);
+    if (a) return [a];
+  }
+  // Palabras en cualquier orden y sin importar tildes: se le pide a Effi por la palabra más
+  // larga (en serie: Effi responde 429 si le llegan varias a la vez) y aquí se exige que estén todas.
+  const sinTilde = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const palabras = sinTilde(term).split(/[^a-z0-9]+/).filter((w) => w.length >= 2);
+  // Las 3 palabras más largas, una por una (una con tilde en Effi, p. ej. «PANTALÓN», no casa con
+  // «pantalon»; las otras sí). De lo que llegue se quedan solo los que tienen TODAS las palabras.
+  const largas = [...new Set(palabras.filter((w) => w.length >= 3))].sort((a, b) => b.length - a.length).slice(0, 3);
+  const porNombre = await effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { descripcion: term, por_pagina: 100 } });
+  const porPalabras: Fila[] = [];
+  if (palabras.length > 1) for (const w of largas) {
+    const r = await effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { descripcion: w, por_pagina: 100 } });
+    if (r.ok) porPalabras.push(...(r.body.data || []));
+  }
+  const porRef = await effi<Fila[]>(c.apiKey, 'GET', '/api/articulo', { query: { referencia: `%${term}%`, por_pagina: 50 } });
   if (!porNombre.ok && !porRef.ok) return { error: mensajeError(porNombre) };
   const vistos = new Set<string>();
   const out: ArticuloEffi[] = [];
-  for (const f of [...(porRef.body.data || []), ...(porNombre.body.data || [])]) {
+  const todas = (f: Fila) => { const d = sinTilde(`${txt(f.descripcion)} ${txt(f.referencia)} ${txt(f.id)}`); return palabras.every((w) => d.includes(w)); };
+  for (const f of [...(porRef.body.data || []), ...(porNombre.body.data || []), ...porPalabras.filter(todas)]) {
     const id = txt(f.id);
     if (!id || vistos.has(id) || txt(f.vigente) === '0') continue;
     vistos.add(id);
