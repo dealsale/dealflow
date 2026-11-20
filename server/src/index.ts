@@ -32,6 +32,13 @@ congelarSiFalta();
 restoreQrSessions();
 iniciarSincronizacionDespachos();
 import('./metaTemplates.js').then((m) => m.iniciarRevisionPlantillas()).catch(() => {});
+// Recepción de WhatsApp: tiendas a las que Meta no les manda los mensajes a DealFlow (conectadas a
+// mano sin suscripción) se arreglan solas al arrancar y cada 6 horas.
+if (process.env.NODE_ENV === 'production') {
+  const revisarRecepcion = () => void import('./bloqueos.js').then((m) => m.revisarRecepcionTodas()).catch((e) => console.warn('[whatsapp] revisando recepción', e));
+  setTimeout(revisarRecepcion, 3 * 60_000).unref?.();
+  setInterval(revisarRecepcion, 6 * 3600_000).unref?.();
+}
 import('./effiApi.js').then((m) => m.iniciarAutoVinculoEffi()).catch(() => {});
 import('./bold.js').then((m) => m.iniciarBold()).catch((e) => console.error('[bold]', e));
 import('./estudio.js').then((m) => m.iniciarEstudio()).catch((e) => console.error('[estudio]', e));
@@ -210,7 +217,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'duplicar-prod-11200032',
+    build: 'wa-recepcion-11201619',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

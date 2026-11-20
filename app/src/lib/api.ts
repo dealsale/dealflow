@@ -536,7 +536,7 @@ export const apiActualizarPedido = (rowId: string, body: { cliente: string; tel?
   req<{ ok: true; id: string }>(`/api/orders/${rowId}`, 'PUT', body);
 
 export const apiWaLinkCloud = (b: { wabaId: string; phoneNumberId: string; accessToken: string }) =>
-  req<{ conectado: boolean; numero: string }>('/api/whatsapp', 'PUT', b);
+  req<{ conectado: boolean; numero: string; aviso?: string }>('/api/whatsapp', 'PUT', b);
 export const apiWaUnlink = () => req<{ conectado: boolean }>('/api/whatsapp', 'DELETE');
 /** Conexión en un clic: datos que devuelve el popup de Facebook (Embedded Signup). */
 export interface MetaSignupCfg { disponible: boolean; appId: string; configId: string; messagingConfigId?: string }
@@ -973,7 +973,8 @@ export const apiLeadBloqueo = (id: string) => req<EstadoBloqueo>(`/api/leads/${i
 export const apiLeadBloquear = (id: string) => req<{ ok: true; enMeta: boolean; nota: string }>(`/api/leads/${id}/bloquear`, 'POST');
 export const apiLeadDesbloquear = (id: string) => req<{ ok: true }>(`/api/leads/${id}/desbloquear`, 'POST');
 export interface AppConectada { id: string; nombre: string; enlace: string; esDealFlow: boolean }
-export const apiAppsConectadas = () => req<{ apps: AppConectada[]; waba: string }>('/api/whatsapp/apps-conectadas', 'GET');
+export const apiAppsConectadas = () => req<{ apps: AppConectada[]; waba: string; faltaDealflow?: boolean }>('/api/whatsapp/apps-conectadas', 'GET');
+export const apiActivarRecepcion = () => req<{ apps: AppConectada[]; waba: string; faltaDealflow?: boolean; ok: boolean; error?: string }>('/api/whatsapp/apps-conectadas/suscribir', 'POST');
 
 export interface ResultadoSyncDropi { deDropi?: string[]; tipo: 'SIMPLE' | 'VARIABLE'; nombreDropi: string; vinculadas: number; creadas: number; conStock: number; sinDropi: string[]; total: number; renombradas?: number; repetidas?: string[]; sinVariante?: string[]; duplicadasQuitadas?: number; gruposQuitados?: string[] }
 export const apiSincronizarDropi = (productId: string, dropiId: string) => req<ResultadoSyncDropi>(`/api/products/${encodeURIComponent(productId)}/dropi/sincronizar`, 'POST', { dropiId });

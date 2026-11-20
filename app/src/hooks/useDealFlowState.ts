@@ -1950,6 +1950,7 @@ export function useDealFlowState() {
         setWaConnected(true);
         setWaCfg({ wabaId: waForm.wabaId.trim(), phoneNumberId: waForm.phoneNumberId.trim(), numero: r.data.numero });
         setWaForm({ wabaId: '', phoneNumberId: '', accessToken: '' });
+        if (r.data.aviso) toast(r.data.aviso, 'error', 12000);
       });
       return;
     }

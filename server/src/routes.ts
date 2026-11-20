@@ -2483,6 +2483,16 @@ api.post('/leads/:id/desbloquear', requireAuth, requireStore, async (req, res) =
   res.json(r);
 });
 // Qué apps siguen conectadas (reciben los mensajes) a la cuenta de WhatsApp de la tienda.
+// Activa la recepción: suscribe DealFlow a la cuenta de WhatsApp de la tienda (si Meta no le manda los mensajes).
+api.post('/whatsapp/apps-conectadas/suscribir', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const b = await import('./bloqueos.js');
+  const sid = req.user!.storeId!;
+  const s = await b.suscribirRecepcion(sid);
+  const a = await b.appsConectadas(sid);
+  if ('error' in a) return res.status(400).json({ error: s.error || a.error });
+  if (!a.faltaDealflow) registrarLog(sid, 'info', 'whatsapp', 'Se activó la recepción de mensajes: Meta ya le manda a DealFlow lo que te escriben.');
+  res.json({ ...a, ok: !a.faltaDealflow, error: a.faltaDealflow ? (s.error || 'Meta aceptó, pero el token que conectaste es de otra app de Meta. Reconecta el número con el botón «Conectar con Facebook» para que los mensajes lleguen a DealFlow.') : undefined });
+});
 api.get('/whatsapp/apps-conectadas', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { appsConectadas } = await import('./bloqueos.js');
   const r = await appsConectadas(req.user!.storeId!);
@@ -3818,7 +3828,11 @@ api.put('/whatsapp', requireAuth, requireStore, requireOwner, async (req, res) =
        access_token = excluded.access_token, numero = excluded.numero, conectado = 1, modo = 'cloud'`,
   ).run(req.user!.storeId, wabaId.trim(), phoneNumberId.trim(), accessToken.trim(), check.numero);
   console.log(`[whatsapp] tienda ${req.user!.storeId} conectó phone_number_id=${phoneNumberId.trim()} (${check.numero})`);
-  res.json({ conectado: true, numero: check.numero });
+  // Sin esta suscripción Meta no le manda a DealFlow los mensajes que llegan (el número se ve
+  // conectado y puede enviar, pero el Inbox no recibe nada).
+  const sus = await (await import('./bloqueos.js')).suscribirRecepcion(req.user!.storeId!);
+  if (!sus.ok) registrarLog(req.user!.storeId!, 'warn', 'whatsapp', `El número quedó conectado, pero no se pudo activar la recepción de mensajes en Meta (${sus.error}). Revisa WhatsApp → Apps conectadas.`);
+  res.json({ conectado: true, numero: check.numero, ...(sus.ok ? {} : { aviso: `El número quedó conectado, pero Meta no aceptó activar la recepción de mensajes (${sus.error}). Revisa «Apps conectadas a tu número».` }) });
   // En segundo plano: publica las plantillas maestras en la WABA recién conectada.
   const sidWa = req.user!.storeId!;
   void import('./metaTemplates.js').then((m) => m.publicarTodasEnTienda(sidWa)).then((res2) => {

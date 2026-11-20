@@ -95,8 +95,43 @@ export function estadoBloqueo(storeId: string, leadId: string): { bloqueado: boo
 
 export interface AppConectada { id: string; nombre: string; enlace: string; esDealFlow: boolean }
 
+/**
+ * Suscribe la app al webhook de la cuenta de WhatsApp (WABA) de la tienda: sin esto Meta no le
+ * manda a DealFlow los mensajes que llegan, aunque el número se vea conectado y pueda enviar.
+ * La conexión con el botón de Facebook ya lo hacía; la conexión a mano (WABA ID + token) no.
+ */
+export async function suscribirRecepcion(storeId: string): Promise<{ ok: boolean; error?: string }> {
+  const c = cfgWa(storeId);
+  if (!c?.conectado || c.modo === 'qr' || !c.waba_id || !c.access_token) return { ok: false, error: 'La tienda no tiene WhatsApp oficial conectado.' };
+  try {
+    const r = await fetch(`${GRAPH}/${encodeURIComponent(c.waba_id)}/subscribed_apps`, { method: 'POST', headers: { Authorization: `Bearer ${c.access_token}` }, signal: AbortSignal.timeout(20000) });
+    const body = (await r.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
+    if (!r.ok || body.success === false) return { ok: false, error: body.error?.message || `Meta respondió ${r.status}` };
+    return { ok: true };
+  } catch { return { ok: false, error: 'No pudimos conectar con Meta.' }; }
+}
+
+/** Revisa todas las tiendas con WhatsApp oficial y suscribe las que no le estén mandando los mensajes a DealFlow. */
+export async function revisarRecepcionTodas(): Promise<void> {
+  const nuestra = String(process.env.META_APP_ID || '');
+  if (!nuestra) return;
+  const tiendas = db.prepare("SELECT store_id FROM whatsapp WHERE conectado = 1 AND modo = 'cloud' AND COALESCE(waba_id,'') != '' AND COALESCE(access_token,'') != ''").all() as { store_id: string }[];
+  for (const t of tiendas) {
+    const a = await appsConectadas(t.store_id);
+    if ('error' in a || a.apps.some((x) => x.esDealFlow)) continue;
+    const s = await suscribirRecepcion(t.store_id);
+    const despues = s.ok ? await appsConectadas(t.store_id) : null;
+    const quedo = !!despues && !('error' in despues) && despues.apps.some((x) => x.esDealFlow);
+    registrarLog(t.store_id, quedo ? 'info' : 'warn', 'whatsapp', quedo
+      ? 'Meta no le estaba mandando a DealFlow los mensajes que te escriben: se activó la recepción. Desde ahora llegan al Inbox.'
+      : `Meta no le está mandando a DealFlow los mensajes que te escriben y no se pudo activar solo (${s.error || 'el token es de otra app de Meta'}). Ve a WhatsApp → Apps conectadas, o reconecta el número con el botón «Conectar con Facebook».`);
+    console.log(`[whatsapp] recepción de ${t.store_id}: ${quedo ? 'activada' : 'NO se pudo activar'}${s.error ? ` (${s.error})` : ''}`);
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
 /** Apps que reciben los mensajes de la cuenta de WhatsApp (suscritas a su webhook). */
-export async function appsConectadas(storeId: string): Promise<{ apps: AppConectada[]; waba: string } | { error: string }> {
+export async function appsConectadas(storeId: string): Promise<{ apps: AppConectada[]; waba: string; faltaDealflow?: boolean } | { error: string }> {
   const c = cfgWa(storeId);
   if (!c?.conectado || c.modo === 'qr') return { error: 'Conecta WhatsApp por la conexión oficial para ver las apps conectadas.' };
   if (!c.waba_id) return { error: 'No tenemos el id de tu cuenta de WhatsApp Business (WABA). Reconecta WhatsApp.' };
@@ -109,6 +144,6 @@ export async function appsConectadas(storeId: string): Promise<{ apps: AppConect
       const a = d.whatsapp_business_api_data || {};
       return { id: String(a.id || ''), nombre: String(a.name || 'App sin nombre'), enlace: String(a.link || ''), esDealFlow: !!nuestra && String(a.id) === nuestra };
     });
-    return { apps, waba: c.waba_id };
+    return { apps, waba: c.waba_id, faltaDealflow: !!nuestra && !apps.some((a) => a.esDealFlow) };
   } catch { return { error: 'No pudimos conectar con Meta.' }; }
 }
