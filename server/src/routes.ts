@@ -355,7 +355,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, precioPromo: Number(p.precio_promo) || 0, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
     tipo: p.tipo || 'producto', duracion: p.duracion || '', sku: p.sku || '', plantillaId: p.plantilla_id || '',
-    despachoProveedor: p.despacho_proveedor || '', variantesFuente: p.variantes_fuente || '',
+    despachoProveedor: p.despacho_proveedor || '', bodegaId: p.bodega_id || '', variantesFuente: p.variantes_fuente || '',
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
     descripcion: p.descripcion || '', caracteristicas: p.caracteristicas || '', mensajeInicial: p.mensaje_inicial || '',
     faqs: pj(p.faqs as string, []), testimonios: pj(p.testimonios as string, []), modosUso: p.modos_uso || '',
@@ -377,7 +377,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const novTienda = novedadesPorPedido(sid);
   const orders = (db.prepare('SELECT * FROM orders WHERE store_id = ? ORDER BY numero DESC').all(sid) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', landingId: o.landing_id || '', landingNombre: o.landing_id ? nombreLanding(sid, String(o.landing_id)) : '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion, cambioCliente: o.cambio_cliente ? pj(String(o.cambio_cliente), null) : null,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', confirmacionError: o.confirmacion_error || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', skydropxEnvio: o.skydropx_envio || '', bodegaId: o.bodega_id || '', guiaProveedor: pj(String(o.guia_proveedor || ''), null), guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', confirmacionError: o.confirmacion_error || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: itemsTienda.get(o.id as string) || [], novedad: novTienda.get(o.id as string) || null,
   }));
   // Resumen (sin todos los mensajes de cada chat): la carga inicial del panel no
@@ -600,7 +600,7 @@ api.get('/orders', requireAuth, requireStore, (req, res) => {
   const novs = novedadesPorPedido(sid);
   const orders = (db.prepare(`SELECT * FROM orders WHERE store_id = ? ${parcial ? 'AND v > ?' : ''} ORDER BY numero DESC`).all(...(parcial ? [sid, desde] : [sid])) as Record<string, unknown>[]).map((o) => ({
     id: 'DF-' + o.numero, rowId: o.id, cliente: o.cliente, ciudad: o.ciudad, departamento: o.departamento || '', effiRemision: o.effi_remision || '', origen: o.origen || '', landingId: o.landing_id || '', landingNombre: o.landing_id ? nombreLanding(sid, String(o.landing_id)) : '', leadId: o.lead_id || '', guiaAviso: o.guia_aviso ? pj(String(o.guia_aviso), null) : null, tel: o.tel, direccion: o.direccion, cambioCliente: o.cambio_cliente ? pj(String(o.cambio_cliente), null) : null,
-    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', confirmacionError: o.confirmacion_error || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
+    estado: o.estado, transportadora: o.transportadora, guia: o.guia || undefined, wooId: o.woo_id || '', dropiOrderId: o.dropi_order_id || '', skydropxEnvio: o.skydropx_envio || '', bodegaId: o.bodega_id || '', guiaProveedor: pj(String(o.guia_proveedor || ''), null), guiaUrl: o.guia_url || '', guiaImg: o.guia_img || '', effiGuiaCreada: !!o.effi_guia, effiGuiaTx: o.effi_guia ? String(pj<Record<string, unknown>>(String(o.effi_guia), {}).id_transaccion || '') : '', despachoProveedor: o.despacho_proveedor || '', estadoWoo: o.estado_woo || '', effiDevolucion: o.effi_devolucion || '', confirmacion: o.confirmacion || '', confirmacionError: o.confirmacion_error || '', shopifyEnviado: !!o.shopify_fulfilled, envio: o.envio, nota: o.nota, total: o.total, createdAt: o.created_at,
     items: items.get(o.id as string) || [], novedad: novs.get(o.id as string) || null,
   }));
   res.json({ orders, v, total, parcial });
@@ -876,6 +876,11 @@ api.patch('/products/:id', requireAuth, requireStore, requirePermiso('productos_
   if (req.body?.tipo !== undefined) db.prepare('UPDATE products SET tipo = ? WHERE id = ?').run(req.body.tipo === 'servicio' ? 'servicio' : 'producto', req.params.id);
   if (req.body?.duracion !== undefined) db.prepare('UPDATE products SET duracion = ? WHERE id = ?').run(String(req.body.duracion), req.params.id);
   if (req.body?.sku !== undefined) db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(String(req.body.sku).trim(), req.params.id);
+  if (req.body?.bodegaId !== undefined) {
+    const pid = String(req.body.bodegaId || '');
+    const existe = !pid || db.prepare('SELECT 1 FROM bodegas_proveedor WHERE id = ? AND store_id = ?').get(pid, req.user!.storeId);
+    db.prepare('UPDATE products SET bodega_id = ? WHERE id = ?').run(existe ? pid : '', req.params.id);
+  }
   if (req.body?.despachoProveedor !== undefined) {
     const dp = req.body.despachoProveedor === 'dropi' || req.body.despachoProveedor === 'effi' ? req.body.despachoProveedor : '';
     db.prepare('UPDATE products SET despacho_proveedor = ? WHERE id = ?').run(dp, req.params.id);
@@ -1289,6 +1294,13 @@ api.post('/orders/:rowId/despachar/sync', requireAuth, requireStore, requirePerm
     if ('error' in r) return res.status(400).json({ error: r.error });
     return res.json(r);
   }
+  const so = db.prepare("SELECT COALESCE(skydropx_envio,'') e FROM orders WHERE id = ? AND store_id = ?").get(req.params.rowId, sid) as { e: string } | undefined;
+  if (so?.e) {
+    const { consultarEnvioSkydropx } = await import('./skydropxApi.js');
+    const rs = await consultarEnvioSkydropx(sid, req.params.rowId);
+    if ('error' in rs) return res.status(400).json({ error: rs.error });
+    return res.json(rs);
+  }
   const { sincronizarPedidoDropi } = await import('./despachos.js');
   const r = await sincronizarPedidoDropi(sid, req.params.rowId);
   if ('error' in r) return res.status(400).json({ error: r.error });
@@ -1685,6 +1697,124 @@ api.post('/orders/:rowId/dropi/crear', requireAuth, requireStore, requirePermiso
   registrarLog(sid, 'info', 'despacho', `DF-${o.numero} creado en Dropi (orden ${crear.id})${soloPedido ? ' sin guía: pendiente de confirmar en Dropi' : nombreTransp ? ' por ' + nombreTransp : ''}.`);
   res.json({ ok: true, dropiId: crear.id, transportadora: nombreTransp, ...(soloPedido ? { aviso: `Pedido enviado a Dropi (orden ${crear.id}) como "Pendiente confirmación", sin guía. Revisa la huella del cliente en Dropi y genera allá la guía: llega aquí sola.` } : {}) });
   });
+});
+
+// ── Skydropx (cotiza con varias transportadoras y genera la guía) ──
+function urlWebhookSkydropx(req: import('express').Request, token: string): string {
+  const base = (process.env.PUBLIC_APP_URL || `https://${req.get('host') || 'app.dealflow.sbs'}`).replace(/\/+$/, '');
+  return token ? `${base}/webhooks/skydropx/${token}` : '';
+}
+api.get('/skydropx/estado', requireAuth, requireStore, async (req, res) => {
+  const { estadoSkydropx } = await import('./skydropxApi.js');
+  const { webhookToken, ...resto } = estadoSkydropx(req.user!.storeId!);
+  res.json({ ...resto, webhookUrl: urlWebhookSkydropx(req, webhookToken) });
+});
+api.post('/skydropx/conectar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const sid = req.user!.storeId!;
+  const sk = await import('./skydropxApi.js');
+  const b = req.body || {};
+  const ya = sk.estadoSkydropx(sid).conectado;
+  if (!String(b.clientId || '').trim() || (!ya && !String(b.clientSecret || '').trim())) return res.status(400).json({ error: 'Falta el Client ID o el Client Secret de Skydropx.' });
+  sk.guardarCfgSkydropx(sid, { clientId: b.clientId, clientSecret: b.clientSecret, ambiente: b.ambiente, origen: b.origen, paquete: b.paquete });
+  const r = await sk.verificarSkydropx(sid);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+api.post('/skydropx/desconectar', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { desconectarSkydropx } = await import('./skydropxApi.js');
+  desconectarSkydropx(req.user!.storeId!);
+  res.json({ ok: true });
+});
+// Variantes de la tienda ↔ productos creados en Skydropx.
+api.get('/skydropx/productos', requireAuth, requireStore, async (req, res) => {
+  const sk = await import('./skydropxApi.js');
+  const sid = req.user!.storeId!;
+  const prods = await sk.productosDeSkydropx(sid);
+  res.json({ variantes: sk.variantesParaSkydropx(sid), productosSky: 'error' in prods ? [] : prods, error: 'error' in prods ? prods.error : '' });
+});
+api.post('/skydropx/productos/auto', requireAuth, requireStore, async (req, res) => {
+  const { vincularAutoSkydropx } = await import('./skydropxApi.js');
+  const r = await vincularAutoSkydropx(req.user!.storeId!);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.post('/skydropx/productos/vincular', requireAuth, requireStore, async (req, res) => {
+  const { vincularVarianteSkydropx } = await import('./skydropxApi.js');
+  const b = req.body || {};
+  const productId = String(b.productId || '');
+  const sid = req.user!.storeId!;
+  if (!db.prepare('SELECT 1 FROM products WHERE id = ? AND store_id = ?').get(productId, sid)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const sky = b.skyId ? { id: String(b.skyId), nombre: String(b.skyNombre || ''), sku: String(b.skySku || '') } : null;
+  vincularVarianteSkydropx(sid, productId, String(b.variantId || ''), sky);
+  res.json({ ok: true });
+});
+api.get('/skydropx/productos/csv', requireAuth, requireStore, async (req, res) => {
+  const { csvVariantesSkydropx } = await import('./skydropxApi.js');
+  res.json({ csv: csvVariantesSkydropx(req.user!.storeId!) });
+});
+api.post('/orders/:rowId/skydropx/cotizar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
+  const sid = req.user!.storeId!;
+  const { cotizarSkydropx } = await import('./skydropxApi.js');
+  const r = await conPedido(sid, req.params.rowId, () => cotizarSkydropx(sid, req.params.rowId, { recaudo: req.body?.recaudo !== 'sin', proveedorId: String(req.body?.bodegaId || '') }));
+  if ('error' in r) {
+    trazar(sid, req.params.rowId, { etapa: 'despacho', nivel: 'error', titulo: 'Cotización en Skydropx falló', detalle: r.error });
+    return res.status(400).json({ error: r.error });
+  }
+  trazar(sid, req.params.rowId, { etapa: 'despacho', nivel: 'info', titulo: `Cotizado en Skydropx para ${r.ciudad}`, detalle: `${r.disponibles.length} opciones` });
+  res.json(r);
+});
+api.post('/orders/:rowId/skydropx/crear', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
+  const sid = req.user!.storeId!;
+  const o = db.prepare("SELECT COALESCE(skydropx_envio,'') e FROM orders WHERE id = ? AND store_id = ?").get(req.params.rowId, sid) as { e: string } | undefined;
+  if (!o) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (o.e) return res.status(400).json({ error: 'Este pedido ya tiene un envío en Skydropx. Cancélalo primero para hacer otro.' });
+  const t = req.body?.tarifa as { id?: string; transportadora?: string } | undefined;
+  const { crearEnvioSkydropx } = await import('./skydropxApi.js');
+  const r = await conPedido(sid, req.params.rowId, () => crearEnvioSkydropx(sid, req.params.rowId, { id: String(t?.id || ''), transportadora: String(t?.transportadora || '') }, String(req.body?.bodegaId || '')));
+  if ('error' in r) {
+    trazar(sid, req.params.rowId, { etapa: 'despacho', nivel: 'error', titulo: 'Guía en Skydropx falló', detalle: r.error });
+    return res.status(400).json({ error: r.error });
+  }
+  trazar(sid, req.params.rowId, { etapa: 'despacho', nivel: 'ok', titulo: `Envío creado en Skydropx${r.guia ? ` · guía ${r.guia}` : ''}` });
+  res.json(r);
+});
+// Bodegas de los proveedores (dropshipping): desde dónde recoge la transportadora y a quién le llega la guía.
+api.get('/bodegas', requireAuth, requireStore, async (req, res) => {
+  const { listarProveedores } = await import('./bodegas.js');
+  res.json({ bodegas: listarProveedores(req.user!.storeId!) });
+});
+api.post('/bodegas', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { guardarProveedor } = await import('./bodegas.js');
+  const r = guardarProveedor(req.user!.storeId!, req.body || {});
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+api.delete('/bodegas/:id', requireAuth, requireStore, requireOwner, async (req, res) => {
+  const { borrarProveedor } = await import('./bodegas.js');
+  borrarProveedor(req.user!.storeId!, req.params.id);
+  res.json({ ok: true });
+});
+// Bodega sugerida para despachar el pedido (según el proveedor de sus productos).
+api.get('/orders/:rowId/bodega', requireAuth, requireStore, async (req, res) => {
+  const sid = req.user!.storeId!;
+  if (!db.prepare('SELECT 1 FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid)) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const { bodegaDelPedido } = await import('./bodegas.js');
+  res.json(bodegaDelPedido(sid, req.params.rowId));
+});
+// Vuelve a mandarle la guía al proveedor por WhatsApp.
+api.post('/orders/:rowId/proveedor/reenviar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
+  const sid = req.user!.storeId!;
+  const { enviarGuiaAProveedor } = await import('./bodegas.js');
+  const r = await enviarGuiaAProveedor(sid, req.params.rowId, { forzar: true });
+  if (r.estado === 'error') return res.status(400).json({ error: r.detalle || 'No se pudo enviar la guía al proveedor.' });
+  res.json(r);
+});
+api.post('/orders/:rowId/skydropx/cancelar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
+  const sid = req.user!.storeId!;
+  const { cancelarEnvioSkydropx } = await import('./skydropxApi.js');
+  const r = await cancelarEnvioSkydropx(sid, req.params.rowId, String(req.body?.motivo || ''));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
 });
 
 // ── Effi por API directa (reemplaza el puente WooCommerce) ──
@@ -5810,6 +5940,15 @@ webhooks.post('/wompi', async (req, res) => {
 // Webhooks de Effi ERP: un token por tienda en la URL y firma HMAC-SHA256 del
 // cuerpo en X-Effi-Signature (con el secreto que Effi mostró al crear el webhook).
 // Effi exige 2xx en < 5 s: respondemos de inmediato y procesamos después.
+// Skydropx → Conexiones → Webhooks: estados del paquete (guía, recogido, en camino, entregado…).
+webhooks.post('/skydropx/:token', async (req, res) => {
+  const sk = await import('./skydropxApi.js');
+  const sid = sk.tiendaPorWebhookSkydropx(String(req.params.token || ''));
+  if (!sid) return res.sendStatus(404);
+  res.sendStatus(200);
+  sk.procesarWebhookSkydropx(sid, req.body || {}).catch((e) => console.warn('[skydropx-webhook] error procesando', e));
+});
+
 webhooks.post('/effi/:token', async (req, res) => {
   const ef = await import('./effiApi.js');
   const sid = ef.tiendaPorWebhookToken(String(req.params.token || ''));

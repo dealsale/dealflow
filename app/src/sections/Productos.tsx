@@ -8,6 +8,9 @@ import { BloquesBuilder } from '../components/BloquesBuilder';
 import type { Variante, Opcion } from '../types';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 import { EffiVinculoProducto, ConvenioProductoEffi } from '../components/EffiProductos';
+import { Dropdown } from '../components/Dropdown';
+import { useSkydropx } from '../components/SkydropxCard';
+import { useBodegas } from '../components/BodegasProveedores';
 import { apiSincronizarDropi, apiSoltarVariantesDropi, type ResultadoSyncDropi } from '../lib/api';
 
 
@@ -140,6 +143,25 @@ function SeDespachaPor({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
       </div>
       {p.despachoProveedor === 'effi' && df.effiApi?.conectado && <ConvenioProductoEffi productId={String(p.id)} />}
       {p.despachoProveedor && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>{p.despachoProveedor === 'effi' ? 'El artículo de Effi de cada variante' : 'La conexión con Dropi'} está en <b>Variantes</b> (plegado).</div>}
+    </div>
+  );
+}
+
+/**
+ * Dropshipping con Skydropx: desde qué bodega sale el producto (la del proveedor o la tuya).
+ * Solo aparece cuando Skydropx está conectado y hay al menos una bodega de proveedor.
+ */
+function SaleDesde({ p }: { p: DecoratedProduct }) {
+  const sky = useSkydropx();
+  const bodegas = useBodegas();
+  if (!sky?.conectado || !bodegas.length) return null;
+  const actual = bodegas.some((b) => b.id === p.bodegaId) ? String(p.bodegaId) : '';
+  return (
+    <div style={{ marginBottom: 12, maxWidth: 380 }}>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>🏭 Sale desde (Skydropx)</div>
+      <Dropdown ariaLabel="Bodega desde la que sale el producto" value={actual} onChange={(v) => p.setBodegaId(v)}
+        options={[{ value: '', label: `Tu dirección${sky.origen.ciudad ? ` (${sky.origen.ciudad})` : ''}` }, ...bodegas.map((b) => ({ value: b.id, label: `Bodega de ${b.nombre} (${b.ciudad})` }))]} />
+      {actual && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>La transportadora lo recoge en la bodega del proveedor y a él le llega la guía por WhatsApp.</div>}
     </div>
   );
 }
@@ -498,6 +520,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             </div>
           )}
           {(p.tipo || 'producto') === 'producto' && <SeDespachaPor p={p} df={df} />}
+          {(p.tipo || 'producto') === 'producto' && <SaleDesde p={p} />}
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 10, marginBottom: 14, maxWidth: 560 }}>
             <div>
               <div style={label}>Nombre</div>

@@ -161,6 +161,11 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
   if (estaBloqueado(storeId, waId, tel)) return leadId;
   void (async () => {
     try {
+      // ¿Es un proveedor (dropshipping)? El bot no le contesta y le llegan las guías pendientes.
+      try {
+        const pv = await import('./bodegas.js');
+        if (await pv.alEscribirProveedor(storeId, leadId)) return;
+      } catch (e) { console.error('[bodegas] mensaje entrante', e); }
       // ¿Es la respuesta Sí/No a la confirmación de un pedido de Shopify? Entonces no contesta el bot.
       try {
         const sp = await import('./shopifyPedidos.js');

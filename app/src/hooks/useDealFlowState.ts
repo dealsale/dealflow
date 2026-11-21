@@ -335,6 +335,7 @@ export interface DecoratedProduct extends Product {
   setPrecioPromo: (v: string) => void;
   setSku: (v: string) => void;
   setDespachoProveedor: (v: string) => void;
+  setBodegaId: (v: string) => void;
   /** Suelta el vínculo: limpia el SKU del producto, el de todas sus variantes y el proveedor, para poder cambiar de Dropi a Effi (o al revés). */
   desvincularDespacho: () => void;
   generarVariantes: () => void;
@@ -594,6 +595,8 @@ function mapApiOrders(items: ApiOrder[]): Order[] {
     guiaImg: o.guiaImg || '',
     effiGuiaCreada: !!o.effiGuiaCreada,
     despachoProveedor: o.despachoProveedor || '',
+    bodegaId: o.bodegaId || '',
+    guiaProveedor: o.guiaProveedor || null,
     estadoWoo: o.estadoWoo || '',
     effiRemision: o.effiRemision || '',
     novedad: o.novedad || null,
@@ -637,6 +640,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     duracion: p.duracion || '',
     sku: p.sku || '',
     despachoProveedor: p.despachoProveedor || '',
+    bodegaId: p.bodegaId || '',
     variantesFuente: p.variantesFuente || '',
     bloqueado: !!p.bloqueado,
     reglas: p.reglas || [],
@@ -1401,7 +1405,7 @@ export function useDealFlowState() {
         setSection('pedidos');
       },
       sincronizarEffi: () => sincronizarEffi(o.id),
-      despachado: !!(o.wooId || o.dropiOrderId),
+      despachado: !!(o.wooId || o.dropiOrderId || o.despachoProveedor === 'skydropx'),
       despachoProveedor: o.despachoProveedor || '',
       timeline: ESTADO_ORDER.map((est0) => {
         // Novedad cuenta como "en camino"; En oficina ocupa el paso de "En reparto"; Devuelto/Cancelado no marcan pasos de entrega.
@@ -2431,6 +2435,7 @@ export function useDealFlowState() {
         setPrecioPromo: (v: string) => updateProduct(p.id, { precioPromo: parseInt(v.replace(/[^0-9]/g, ''), 10) || 0 }),
         setSku: (v: string) => updateProduct(p.id, { sku: v }),
         setDespachoProveedor: (v: string) => updateProduct(p.id, { despachoProveedor: v }),
+        setBodegaId: (v: string) => updateProduct(p.id, { bodegaId: v }),
         desvincularDespacho: () => {
           updateProduct(p.id, { sku: '', despachoProveedor: '' });
           (p.variantes || []).forEach((v) => { if (v.id && (v.sku || '').trim()) setVariantSku(p.id, v.id, ''); });

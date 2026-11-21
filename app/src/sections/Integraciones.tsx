@@ -1,6 +1,7 @@
 import { apiGuardarSkyClavePropia, apiSkyClavePropia, apiShopifyPedidosCfg, apiShopifyPedidosGuardar, apiShopifyTraerPedidos, type CfgPedidosShopify } from '../lib/api';
 import { useEffect, useRef, useState } from 'react';
 import { EffiApiCard } from '../components/EffiApiCard';
+import { SkydropxCard } from '../components/SkydropxCard';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { IntegracionFila, LogoInteg } from '../components/IntegracionFila';
@@ -423,7 +424,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
 
       {GRUPOS.map((g) => {
         const items = df.integrations.filter((i) => (i.grupo || 'canales') === g.id);
-        const extras = g.id === 'envios' ? 4 : g.id === 'canales' || g.id === 'publicidad' ? 1 : 0;
+        const extras = g.id === 'envios' ? 5 : g.id === 'canales' || g.id === 'publicidad' ? 1 : 0;
         if (!items.length && !extras) return null;
         return (
           <div key={g.id} style={{ marginBottom: 26 }}>
@@ -434,6 +435,7 @@ export function Integraciones({ df }: { df: DealFlowState }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {g.id === 'envios' && <EffiApiCard df={df} />}
               {g.id === 'envios' && <DropiApiCard df={df} />}
+              {g.id === 'envios' && <SkydropxCard />}
               {g.id === 'envios' && <ShopifyCard df={df} />}
               {g.id === 'envios' && <ImportarLucidCard />}
               {g.id === 'canales' && <MetaCanalesCard df={df} />}

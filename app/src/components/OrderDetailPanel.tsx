@@ -13,6 +13,10 @@ import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiCo
 import { apiEffiCotizar, type OpcionCotizadaEffi } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia, type RemitenteSugerido } from '../lib/api';
 
+import { apiSkydropxCotizar, apiSkydropxCrear, apiSkydropxCancelar, type TarifaSkydropx } from '../lib/api';
+import { useSkydropx, LogoSkydropx } from './SkydropxCard';
+import { useBodegas } from './BodegasProveedores';
+import { apiBodegaPedido, apiGuiaProveedorReenviar } from '../lib/api';
 import { fmtCO } from '../lib/fechaCO';
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
 
@@ -173,6 +177,161 @@ function LogoTransp({ nombre, px = 28 }: { nombre: string; px?: number }) {
   return <span aria-hidden="true" style={lg.estilo}>{lg.img ? <img src={lg.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.1)' }} /> : lg.ini}</span>;
 }
 const sirveEffi = (o: OpcionCotizadaEffi) => o.llega !== false && o.recaudo !== false && !!o.id;
+
+/**
+ * Despacho por Skydropx: cotiza con todas las transportadoras de la cuenta para el destino
+ * del pedido, el operador elige una y Skydropx genera la guía (número + PDF).
+ */
+function SkydropxDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: DecoratedOrder; onHecho?: () => void }) {
+  const hist = useHistorialCliente(sel.rowId, sel.tel);
+  const [paso, setPaso] = useState<'idle' | 'cargando' | 'elegir' | 'creando'>('idle');
+  const [ciudad, setCiudad] = useState('');
+  const [tarifas, setTarifas] = useState<TarifaSkydropx[]>([]);
+  const [noDisp, setNoDisp] = useState<{ nombre: string; motivo: string }[]>([]);
+  const [elegida, setElegida] = useState<TarifaSkydropx | null>(null);
+  const [verTodas, setVerTodas] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [recaudo, setRecaudo] = useState<'con' | 'sin'>('con');
+  const total = sel.total && sel.total > 0 ? sel.total : sel.items.reduce((a, it) => a + it.qty * it.precio, 0) + (sel.envio || 0);
+  // Dropshipping: desde qué bodega sale (la sugiere el proveedor de los productos del pedido).
+  const sky = useSkydropx();
+  const bodegas = useBodegas();
+  const [bodega, setBodega] = useState('');
+  const [mixto, setMixto] = useState(false);
+  useEffect(() => {
+    if (!sel.rowId) return;
+    let vivo = true;
+    void apiBodegaPedido(sel.rowId).then((r) => { if (vivo && r.data) { setBodega(r.data.sugerido); setMixto(r.data.mixto); } });
+    return () => { vivo = false; };
+  }, [sel.rowId]);
+  const bodegaSel = bodegas.find((b) => b.id === bodega);
+  const desdeTxt = bodegaSel ? `bodega de ${bodegaSel.nombre} (${bodegaSel.ciudad})` : `tu dirección${sky?.origen.ciudad ? ` (${sky.origen.ciudad})` : ''}`;
+
+  const cotizar = () => {
+    if (!sel.rowId) return;
+    setPaso('cargando'); setMsg('');
+    void enProceso('Cotizando transportadoras en Skydropx…', () => apiSkydropxCotizar(sel.rowId!, recaudo, bodegaSel ? bodega : ''), 'pedido').then((r) => {
+      if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos cotizar.'); return; }
+      setCiudad(r.data.ciudad); setTarifas(r.data.disponibles); setNoDisp(r.data.noDisponibles);
+      setElegida(r.data.disponibles[0] || null);
+      if (!r.data.disponibles.length) { setPaso('idle'); setMsg(`Ninguna transportadora de Skydropx llega a ${r.data.ciudad}${recaudo === 'con' ? ' con contra entrega' : ''}.${r.data.noDisponibles.length ? ' ' + r.data.noDisponibles.slice(0, 3).map((n) => `${n.nombre}: ${n.motivo}`).join(' · ') : ''}`); return; }
+      setPaso('elegir');
+    });
+  };
+  const crear = async () => {
+    if (!sel.rowId || !elegida) return;
+    if (!(await confirmarSiDevolvio(hist))) return;
+    setPaso('creando'); setMsg('');
+    void enProceso('Generando la guía en Skydropx…', () => apiSkydropxCrear(sel.rowId!, elegida, bodegaSel ? bodega : ''), 'pedido').then(async (r) => {
+      if (r.error || !r.data) { setPaso('elegir'); setMsg(r.error || 'No pudimos generar la guía.'); return; }
+      notificar((r.data.guia ? `✓ Guía ${r.data.guia} generada en Skydropx. Se le avisa al cliente por WhatsApp.` : '✓ Envío creado en Skydropx. La guía llega en unos minutos y se le avisa al cliente.') + (bodegaSel?.avisar ? ` A ${bodegaSel.nombre} le llega la guía con el PDF.` : ''), 'ok', 6000);
+      await df.recargarPedidos();
+      onHecho?.();
+    });
+  };
+
+  const btnP: React.CSSProperties = { background: 'var(--df-brand)', border: 'none', borderRadius: 9, padding: '0 12px', minHeight: 44, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'pointer' };
+  if (paso === 'idle' || paso === 'cargando') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {bodegas.length > 0 && (
+          <div>
+            <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>🏭 Sale desde</div>
+            <Dropdown ariaLabel="Bodega desde la que sale el envío" value={bodegaSel ? bodega : ''} onChange={setBodega}
+              options={[{ value: '', label: `Tu dirección${sky?.origen.ciudad ? ` (${sky.origen.ciudad})` : ''}` }, ...bodegas.map((b) => ({ value: b.id, label: `Bodega de ${b.nombre} (${b.ciudad})` }))]} />
+            {mixto && <div style={{ fontSize: 11.5, color: 'var(--df-warning)', marginTop: 4 }}>⚠️ Este pedido tiene productos de bodegas distintas. Una guía sale de un solo lugar: elige desde dónde, o divide el pedido.</div>}
+          </div>
+        )}
+        <InterruptorCobro cod={recaudo === 'con'} onCambio={(c) => setRecaudo(c ? 'con' : 'sin')} color="var(--df-brand)" total={total} />
+        <button onClick={cotizar} disabled={paso !== 'idle'} style={{ ...btnP, opacity: paso !== 'idle' ? 0.7 : 1 }}>
+          {paso === 'cargando' ? 'Cotizando…' : '📦 Cotizar y generar guía'}
+        </button>
+        {msg && <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)' }}>{msg}</div>}
+      </div>
+    );
+  }
+  const VISIBLES = 4;
+  const igual = (t: TarifaSkydropx) => elegida?.id === t.id;
+  const lista = verTodas ? tarifas : tarifas.filter((t, i) => i < VISIBLES || igual(t));
+  const fila = (on: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, width: '100%', boxSizing: 'border-box', textAlign: 'left', background: on ? 'var(--df-brand-subtle)' : 'var(--df-surface)', border: `1px solid ${on ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 8, padding: '0 10px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--df-text)' });
+  const punto = (on: boolean): React.CSSProperties => ({ width: 14, height: 14, borderRadius: '50%', boxSizing: 'border-box', border: `2px solid ${on ? 'var(--df-brand)' : 'var(--df-border-strong)'}`, background: on ? 'var(--df-brand)' : 'transparent', boxShadow: on ? 'inset 0 0 0 2px var(--df-surface)' : 'none', flexShrink: 0 });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-strong)' }}>Transportadoras para <span style={{ color: 'var(--df-brand-dark)' }}>{ciudad}</span></span>
+        <span style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>{tarifas.length} opciones · {recaudo === 'con' ? 'contra entrega' : 'ya pagó'} · sale desde {desdeTxt}</span>
+      </div>
+      <div role="radiogroup" aria-label="Transportadora de Skydropx" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {lista.map((t, i) => {
+          const on = igual(t);
+          return (
+            <button key={t.id} role="radio" aria-checked={on} onClick={() => setElegida(t)} style={fila(on)}>
+              <span style={punto(on)} />
+              <LogoTransp nombre={t.transportadora} px={24} />
+              <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <span style={{ fontWeight: 700, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.transportadora}</span>
+                <span style={{ fontSize: 11, color: 'var(--df-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[t.servicio, t.dias != null ? `${t.dias} día${t.dias === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')}</span>
+              </span>
+              {i === 0 && tarifas.length > 1 && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 999, background: 'rgba(16,185,129,.15)', color: 'var(--df-brand-dark)', whiteSpace: 'nowrap' }}>Más barata</span>}
+              <span style={{ fontWeight: 700, fontSize: 12.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{pesos(Math.round(t.precio))}</span>
+            </button>
+          );
+        })}
+      </div>
+      {tarifas.length > VISIBLES && (
+        <button onClick={() => setVerTodas((v) => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, minHeight: 28, color: 'var(--df-brand-dark)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+          {verTodas ? 'Ver menos' : `Ver ${tarifas.length - VISIBLES} más`}
+        </button>
+      )}
+      {!!noDisp.length && <div style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>Sin cobertura: {noDisp.map((n) => n.nombre).join(', ')}</div>}
+      <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+        <button onClick={() => void crear()} disabled={paso === 'creando' || !elegida} style={{ ...btnP, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: paso === 'creando' || !elegida ? 0.6 : 1 }}>
+          {paso === 'creando' ? 'Generando guía…' : elegida ? `Generar guía · ${elegida.transportadora} ${pesos(Math.round(elegida.precio))}` : 'Generar guía'}
+        </button>
+        <button onClick={() => { setPaso('idle'); setMsg(''); }} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '0 14px', minHeight: 44, fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-muted)', cursor: 'pointer' }}>Cancelar</button>
+      </div>
+      {msg && <div style={{ marginTop: 4, fontSize: 12.5, color: 'var(--df-danger-dark)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+/** Dropshipping: ¿le llegó la guía al proveedor por WhatsApp? Con botón para mandarla otra vez. */
+function GuiaAlProveedor({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
+  const bodegas = useBodegas();
+  const b = bodegas.find((x) => x.id === sel.bodegaId);
+  const e = sel.guiaProveedor;
+  const [enviando, setEnviando] = useState(false);
+  const quien = b ? b.nombre : 'el proveedor';
+  const reenviar = async () => {
+    if (!sel.rowId) return;
+    setEnviando(true);
+    const r = await apiGuiaProveedorReenviar(sel.rowId);
+    setEnviando(false);
+    if (r.error) return notificar(r.error, 'error', 9000);
+    notificar(r.data?.estado === 'enviada' ? `✓ Guía enviada a ${quien} por WhatsApp.` : (r.data?.detalle || 'Listo.'), 'ok', 7000);
+    await df.recargarPedidos();
+  };
+  const [icono, texto, color] = !e
+    ? ['⏳', sel.hasGuia ? `Preparando la guía para ${quien}…` : `Cuando llegue la guía se le manda a ${quien}.`, 'var(--df-text-muted)']
+    : e.estado === 'enviada' ? ['✅', `Guía enviada a ${quien} por WhatsApp.`, 'var(--df-brand-dark)']
+      : e.estado === 'pendiente' ? ['⏳', `Esperando que ${quien} responda en WhatsApp para mandarle la guía.`, 'var(--df-text-muted)']
+        : e.estado === 'apagado' ? ['🔕', `${quien} tiene apagado el aviso por WhatsApp.`, 'var(--df-text-muted)']
+          : ['⚠️', `No se pudo mandar la guía a ${quien}.`, 'var(--df-danger-dark)'];
+  return (
+    <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '8px 10px' }}>
+      <span>{icono}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color }}>{texto}</div>
+        {e?.detalle && e.estado !== 'enviada' && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 2 }}>{e.detalle}</div>}
+      </div>
+      {sel.hasGuia && df.puede('despachar') && (
+        <button onClick={() => void reenviar()} disabled={enviando} style={{ background: 'transparent', border: 'none', color: 'var(--df-brand-dark)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap', opacity: enviando ? 0.6 : 1 }}>
+          {enviando ? 'Enviando…' : e?.estado === 'enviada' ? 'Reenviar' : 'Enviar ahora'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 /**
  * Transportadoras con flete estimado para la guía de Effi. `compacto`: solo la elegida, con «Cambiar»
@@ -827,9 +986,23 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
   const effiApiListo = !!df.effiApi.listo;
   const effiOk = effiApiListo;
   const dropiOk = !!df.dropiConectado;
-  const [prov, setProv] = useState<'effi' | 'dropi' | ''>('');
-  const elegido = prov || (effiOk ? 'effi' : dropiOk ? 'dropi' : '');
+  const sky = useSkydropx();
+  const skyOk = !!sky?.conectado;
+  const [prov, setProv] = useState<'effi' | 'dropi' | 'skydropx' | ''>('');
+  const elegido = prov || (effiOk ? 'effi' : dropiOk ? 'dropi' : skyOk ? 'skydropx' : '');
   const dropiCreado = sel.despachoProveedor === 'dropi';
+  const skyCreado = sel.despachoProveedor === 'skydropx';
+
+  // Cancela el envío en Skydropx; el pedido queda listo para corregirlo y volver a despacharlo.
+  const cancelarSky = async () => {
+    if (!sel.rowId) return;
+    const motivo = await pedirTexto({ titulo: `¿Cancelar en Skydropx el envío de ${sel.id}?`, mensaje: 'Se cancela la guía en Skydropx y el pedido queda listo para corregirlo y volver a despacharlo. Si la transportadora ya recogió el paquete, Skydropx no deja cancelar.', placeholder: 'Motivo (ej. corregir dirección)', valor: 'Corregir datos del pedido', aceptar: 'Cancelar envío' });
+    if (motivo === null) return;
+    const r = await enProceso('Cancelando en Skydropx…', () => apiSkydropxCancelar(sel.rowId!, motivo), 'pedido');
+    if (r.error) return notificar(r.error, 'error', 9000);
+    notificar('✓ Envío cancelado en Skydropx. Corrige el pedido y vuelve a despacharlo.', 'ok', 7000);
+    await df.recargarPedidos();
+  };
 
   // Anula en Effi la guía y la remisión; el pedido queda listo para corregirlo y volver a enviarlo.
   const anularEffi = async () => {
@@ -847,11 +1020,11 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
     return (
       <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: '14px', marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {dropiCreado
+          {skyCreado ? <LogoSkydropx px={30} /> : dropiCreado
             ? <img src="/logos/dropi.jpg" alt="Dropi" style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover' }} />
             : <span style={{ width: 30, height: 30, borderRadius: 8, background: '#fff', border: '1px solid var(--df-border)', display: 'grid', placeItems: 'center', padding: 3, boxSizing: 'border-box' }}><img src="/logos/effi.png" alt="Effi" style={{ maxWidth: '100%', maxHeight: '100%' }} /></span>}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 14 }}>Enviado a {dropiCreado ? 'Dropi' : 'Effi'}</div>
+            <div style={{ fontWeight: 800, fontSize: 14 }}>Enviado a {skyCreado ? 'Skydropx' : dropiCreado ? 'Dropi' : 'Effi'}</div>
             <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Estado: <b style={{ color: 'var(--df-text-strong)' }}>{sel.estadoWoo || (sel.hasGuia ? 'guía generada' : 'esperando guía…')}</b></div>
           </div>
           <button onClick={sel.sincronizarEffi} style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)' }}>↻ Actualizar</button>
@@ -884,9 +1057,14 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
             <button onClick={() => void anularEffi()} title="Anula en Effi la guía y la remisión para corregir el pedido y volver a despacharlo"
               style={{ background: 'transparent', border: 'none', color: 'var(--df-danger)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Anular en Effi</button>
           )}
-          {df.puede('despachar') && <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Volver a despachar</button>}
+          {df.puede('despachar') && skyCreado && (
+            <button onClick={() => void cancelarSky()} title="Cancela la guía en Skydropx para corregir el pedido y volver a despacharlo"
+              style={{ background: 'transparent', border: 'none', color: 'var(--df-danger)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Cancelar en Skydropx</button>
+          )}
+          {df.puede('despachar') && !skyCreado && <button onClick={() => setRedespachar(true)} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-muted)', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>Volver a despachar</button>}
         </div>
         {df.effiMsg && <div style={{ marginTop: 8, fontSize: 12.5, color: df.effiMsg.startsWith('✓') || df.effiMsg.startsWith('Estado') ? 'var(--df-purple)' : df.effiMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.effiMsg}</div>}
+        {skyCreado && !!sel.bodegaId && <GuiaAlProveedor df={df} sel={sel} />}
       </div>
     );
   }
@@ -899,10 +1077,10 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
     );
   }
 
-  if (!effiOk && !dropiOk) {
+  if (!effiOk && !dropiOk && !skyOk) {
     return (
       <div style={{ border: '1px dashed var(--df-border-strong)', borderRadius: 12, padding: 16, marginBottom: 18, textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 13 }}>
-        Conecta <b>Effi</b> o <b>Dropi</b> en <b>Integraciones</b> para despachar este pedido con un toque.
+        Conecta <b>Effi</b>, <b>Dropi</b> o <b>Skydropx</b> en <b>Integraciones</b> para despachar este pedido con un toque.
       </div>
     );
   }
@@ -916,7 +1094,7 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
           <button onClick={() => setRedespachar(false)} style={btnS}>Cancelar</button>
         </div>
       )}
-      <div role="radiogroup" aria-label="Con quién despachar" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+      <div role="radiogroup" aria-label="Con quién despachar" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
         <button role="radio" aria-checked={elegido === 'effi'} onClick={() => effiOk && setProv('effi')} style={tarjetaProv(elegido === 'effi', effiOk)}>
           <span style={{ width: 24, height: 24, borderRadius: 7, background: '#fff', border: '1px solid var(--df-border)', display: 'grid', placeItems: 'center', padding: 3, boxSizing: 'border-box', flexShrink: 0 }}><img src="/logos/effi.png" alt="" style={{ maxWidth: '100%', maxHeight: '100%' }} /></span>
           <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
@@ -931,10 +1109,20 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
             <span style={{ fontSize: 11, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dropiOk ? 'Cotiza y elige transportadora' : 'Conéctalo en Integraciones'}</span>
           </span>
         </button>
+        {skyOk && (
+          <button role="radio" aria-checked={elegido === 'skydropx'} onClick={() => setProv('skydropx')} style={tarjetaProv(elegido === 'skydropx', true)}>
+            <LogoSkydropx px={24} />
+            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+              <b style={{ fontSize: 13.5, color: 'var(--df-text-strong)' }}>Skydropx</b>
+              <span style={{ fontSize: 11, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sky?.ambiente === 'sandbox' ? 'Modo pruebas' : 'Varias transportadoras'}</span>
+            </span>
+          </button>
+        )}
       </div>
 
       {elegido === 'effi' && effiApiListo && <EffiApiDespacho df={df} sel={sel} reintentar={redespachar} onHecho={() => setRedespachar(false)} />}
       {elegido === 'dropi' && <DropiDespacho df={df} sel={sel} onHecho={() => setRedespachar(false)} />}
+      {elegido === 'skydropx' && skyOk && <SkydropxDespacho df={df} sel={sel} onHecho={() => setRedespachar(false)} />}
     </div>
   );
 }

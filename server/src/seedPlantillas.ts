@@ -134,6 +134,15 @@ const PLANTILLAS: Semilla[] = [
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Misma dirección' }, { tipo: 'QUICK_REPLY', texto: 'Otra dirección' }],
   },
   {
+    // Dropshipping (proveedores.ts): al proveedor que no ha escrito en 24 h. Solo avisa; cuando
+    // responde, DealFlow le manda las guías (número + PDF) dentro de la ventana abierta.
+    // Variables: nombre del proveedor y tienda.
+    nombre: 'guia_para_proveedor', categoria: 'UTILITY', idioma: 'es',
+    cuerpo: 'Hola {{1}} 👋 Te escribimos de {{2}}.\nTenemos pedidos listos para despachar 📦\nResponde este mensaje y te enviamos las guías por aquí.',
+    ejemplos: ['Carlos', 'Luna Accesorios'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Enviar guías' }],
+  },
+  {
     nombre: 'recordatorio_abono', categoria: 'UTILITY', idioma: 'es',
     cuerpo: 'Hola {{1}}, te recordamos que tu pedido {{2}} está apartado.\nPara despacharlo necesitamos confirmar el pago de {{3}}.\nCuando quieras, respóndenos por aquí y te ayudamos a completarlo. 🙌',
     ejemplos: ['Camila', '#1098', '$60.000'],

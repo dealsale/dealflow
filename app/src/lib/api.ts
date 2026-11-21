@@ -309,6 +309,7 @@ export interface ApiProduct {
   sku?: string;
   /** Por cuál se despacha este producto: 'dropi' | 'effi' | '' (sin definir, se muestran ambos). */
   despachoProveedor?: string;
+  bodegaId?: string;
   variantesFuente?: string;
   bloqueado?: boolean;
   plantillaId?: string;
@@ -370,6 +371,9 @@ export interface ApiOrder {
   guiaImg?: string;
   effiGuiaCreada?: boolean;
   despachoProveedor?: string;
+  /** Dropshipping (Skydropx): bodega del proveedor desde la que salió y si la guía le llegó. */
+  bodegaId?: string;
+  guiaProveedor?: { estado: string; at: string; detalle: string } | null;
   estadoWoo?: string;
   effiRemision?: string;
   origen?: string;
@@ -443,6 +447,31 @@ export const apiDropiProducto = (id: string) => req<DropiProducto>(`/api/dropi/p
 export interface DropiTransportadora { id: number; nombre: string; service: string; precio: number }
 export const apiDropiCotizar = (rowId: string, recaudo: 'con' | 'sin' = 'con') => req<{ ciudad: string; disponibles: DropiTransportadora[]; noDisponibles: { nombre: string; motivo: string }[] }>(`/api/orders/${rowId}/dropi/cotizar`, 'POST', { recaudo });
 export const apiDropiCrear = (rowId: string, transportadora?: DropiTransportadora, reintentar = false, recaudo: 'con' | 'sin' = 'con', soloPedido = false) => req<{ ok: true; dropiId: string; transportadora: string; aviso?: string }>(`/api/orders/${rowId}/dropi/crear`, 'POST', { transportadora, reintentar, recaudo, soloPedido });
+// Skydropx: una cuenta para cotizar y generar guías con varias transportadoras.
+export interface OrigenSkydropx { nombre: string; empresa: string; telefono: string; email: string; direccion: string; referencia: string; departamento: string; ciudad: string; nit: string }
+export interface PaqueteSkydropx { largo: number; ancho: number; alto: number; peso: number; contenido: string }
+export interface EstadoSkydropx { conectado: boolean; clientId: string; ambiente: 'sandbox' | 'produccion'; origen: OrigenSkydropx; paquete: PaqueteSkydropx; webhookUrl: string }
+export interface TarifaSkydropx { id: string; transportadora: string; carrier: string; servicio: string; precio: number; dias: number | null }
+export const apiSkydropxEstado = () => req<EstadoSkydropx>('/api/skydropx/estado', 'GET');
+export const apiSkydropxConectar = (body: { clientId: string; clientSecret: string; ambiente: string; origen: OrigenSkydropx; paquete: PaqueteSkydropx }) => req<{ ok: true }>('/api/skydropx/conectar', 'POST', body);
+export const apiSkydropxDesconectar = () => req<{ ok: true }>('/api/skydropx/desconectar', 'POST');
+export const apiSkydropxCotizar = (rowId: string, recaudo: 'con' | 'sin' = 'con', bodegaId = '') => req<{ ciudad: string; disponibles: TarifaSkydropx[]; noDisponibles: { nombre: string; motivo: string }[] }>(`/api/orders/${rowId}/skydropx/cotizar`, 'POST', { recaudo, bodegaId });
+export const apiSkydropxCrear = (rowId: string, tarifa: TarifaSkydropx, bodegaId = '') => req<{ ok: true; envioId: string; guia: string }>(`/api/orders/${rowId}/skydropx/crear`, 'POST', { tarifa, bodegaId });
+// Variantes de la tienda ↔ productos creados en Skydropx.
+export interface ProductoSkydropx { id: string; nombre: string; sku: string; precio: number }
+export interface VarianteSkydropx { productId: string; variantId: string; producto: string; label: string; sku: string; precio: number; skyId: string; skyNombre: string; auto: boolean }
+export const apiSkydropxProductos = () => req<{ variantes: VarianteSkydropx[]; productosSky: ProductoSkydropx[]; error: string }>('/api/skydropx/productos', 'GET');
+export const apiSkydropxVincularAuto = () => req<{ vinculadas: number; sinVinculo: number; total: number; productosSky: number }>('/api/skydropx/productos/auto', 'POST');
+export const apiSkydropxVincular = (productId: string, variantId: string, sky: ProductoSkydropx | null) => req<{ ok: true }>('/api/skydropx/productos/vincular', 'POST', { productId, variantId, skyId: sky?.id || '', skyNombre: sky?.nombre || '', skySku: sky?.sku || '' });
+export const apiSkydropxCsv = () => req<{ csv: string }>('/api/skydropx/productos/csv', 'GET');
+// Bodegas de los proveedores (dropshipping): desde dónde recoge la transportadora y a quién se le manda la guía.
+export interface BodegaProveedor { id: string; nombre: string; empresa: string; telefono: string; email: string; direccion: string; referencia: string; departamento: string; ciudad: string; nit: string; avisar: boolean }
+export const apiBodegas = () => req<{ bodegas: BodegaProveedor[] }>('/api/bodegas', 'GET');
+export const apiBodegaGuardar = (b: Partial<BodegaProveedor>) => req<{ ok: true; id: string }>('/api/bodegas', 'POST', b);
+export const apiBodegaBorrar = (id: string) => req<{ ok: true }>(`/api/bodegas/${id}`, 'DELETE');
+export const apiBodegaPedido = (rowId: string) => req<{ sugerido: string; mixto: boolean }>(`/api/orders/${rowId}/bodega`, 'GET');
+export const apiGuiaProveedorReenviar = (rowId: string) => req<{ estado: string; detalle: string }>(`/api/orders/${rowId}/proveedor/reenviar`, 'POST');
+export const apiSkydropxCancelar = (rowId: string, motivo: string) => req<{ ok: true }>(`/api/orders/${rowId}/skydropx/cancelar`, 'POST', { motivo });
 
 // ── Shopify (Admin API) ──
 export interface RevisionShopify { at: string; ok: boolean; nuevos: number; revisados: number; error: string; aviso: string }

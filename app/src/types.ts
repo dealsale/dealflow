@@ -34,6 +34,9 @@ export interface Order {
   effiGuiaCreada?: boolean;
   /** proveedor por el que se despachó: 'dropi' | 'effi' */
   despachoProveedor?: string;
+  /** Dropshipping (Skydropx): bodega del proveedor desde la que salió y si la guía le llegó. */
+  bodegaId?: string;
+  guiaProveedor?: { estado: string; at: string; detalle: string } | null;
   /** último estado leído del WooCommerce del proveedor (Effi/Dropi) */
   estadoWoo?: string;
   /** remisión de venta creada en Effi por API (ej. PPAL-270) */
@@ -133,6 +136,8 @@ export interface Product {
   sku?: string;
   /** Por cuál se despacha: 'dropi' | 'effi' | '' (sin definir, se muestran las dos integraciones). */
   despachoProveedor?: string;
+  /** Bodega del proveedor desde la que sale con Skydropx ('' = tu dirección). */
+  bodegaId?: string;
   /** 'dropi' = las variantes las define Dropi (se sincronizan desde su ID), no las opciones. */
   variantesFuente?: string;
   /** Producto de biblioteca gratuito: estructura bloqueada (solo precio/SKU editables). */

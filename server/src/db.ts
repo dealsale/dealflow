@@ -386,6 +386,11 @@ addColumn('order_items', "product_id TEXT NOT NULL DEFAULT ''");
 // Estado del lead elegido A MANO en Leads (si está vacío, se calcula solo).
 addColumn('leads', "estado_manual TEXT NOT NULL DEFAULT ''");
 addColumn('order_items', "variant_id TEXT NOT NULL DEFAULT ''");
+// Dropshipping con Skydropx (bodegas.ts): bodega del proveedor de cada producto,
+// bodega desde la que salió el envío y si la guía ya le llegó al proveedor.
+addColumn('products', "bodega_id TEXT NOT NULL DEFAULT ''");
+addColumn('orders', "bodega_id TEXT NOT NULL DEFAULT ''");
+addColumn('orders', "guia_proveedor TEXT NOT NULL DEFAULT ''");
 
 // Multi-tienda: un dueño puede tener varias tiendas (mismo correo). Para eso hay
 // que quitar el UNIQUE de stores.correo. Además, quién es el dueño (owner_user_id).

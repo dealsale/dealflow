@@ -105,6 +105,8 @@ export async function sincronizarDespachos(): Promise<void> {
     try { const { sincronizarNovedadesTodas } = await import('./novedades.js'); await sincronizarNovedadesTodas(); } catch (e) { console.warn('[despachos] novedades', e); }
     // Dropi: órdenes creadas directo en Dropi (no desde DealFlow) → se unen a su pedido por el celular.
     try { const { unirOrdenesDropiTodas } = await import('./dropiApi.js'); await unirOrdenesDropiTodas(); } catch (e) { console.warn('[despachos] unir Dropi', e); }
+    // Skydropx: envíos que siguen en camino (el webhook los trae al instante; esto es el respaldo).
+    try { const { sincronizarSkydropxTodas } = await import('./skydropxApi.js'); await sincronizarSkydropxTodas(); } catch (e) { console.warn('[despachos] Skydropx', e); }
     // Red de seguridad: toda guía reciente que todavía no le llegó al cliente se le envía
     // (Effi de cualquier transportadora, Dropi, guía puesta a mano…). Un intento cada 2 h por pedido.
     await avisarGuiasPendientes();
