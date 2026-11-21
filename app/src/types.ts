@@ -4,6 +4,7 @@ export interface OrderItem {
   qty: number;
   nombre: string;
   precio: number;
+  productId?: string;
 }
 
 export interface Order {

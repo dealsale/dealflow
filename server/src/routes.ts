@@ -418,10 +418,10 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
 // Ítems de TODOS los pedidos de la tienda en una sola consulta (antes era una
 // consulta por pedido en cada sondeo de 5 s, y con miles de pedidos frenaba el
 // servidor, que es el mismo que procesa los mensajes de WhatsApp).
-function itemsPorPedido(sid: string, desde?: number): Map<string, { qty: number; nombre: string; precio: number }[]> {
-  const m = new Map<string, { qty: number; nombre: string; precio: number }[]>();
-  const rows = db.prepare(`SELECT i.order_id, i.qty, i.nombre, i.precio FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.store_id = ? ${desde ? 'AND o.v > ?' : ''}`).all(...(desde ? [sid, desde] : [sid])) as { order_id: string; qty: number; nombre: string; precio: number }[];
-  for (const r of rows) { const l = m.get(r.order_id); const it = { qty: r.qty, nombre: r.nombre, precio: r.precio }; if (l) l.push(it); else m.set(r.order_id, [it]); }
+function itemsPorPedido(sid: string, desde?: number): Map<string, { qty: number; nombre: string; precio: number; productId?: string }[]> {
+  const m = new Map<string, { qty: number; nombre: string; precio: number; productId?: string }[]>();
+  const rows = db.prepare(`SELECT i.order_id, i.qty, i.nombre, i.precio, COALESCE(i.product_id,'') product_id FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.store_id = ? ${desde ? 'AND o.v > ?' : ''}`).all(...(desde ? [sid, desde] : [sid])) as { order_id: string; qty: number; nombre: string; precio: number; product_id: string }[];
+  for (const r of rows) { const l = m.get(r.order_id); const it = { qty: r.qty, nombre: r.nombre, precio: r.precio, ...(r.product_id ? { productId: String(r.product_id) } : {}) }; if (l) l.push(it); else m.set(r.order_id, [it]); }
   return m;
 }
 
@@ -882,7 +882,7 @@ api.patch('/products/:id', requireAuth, requireStore, requirePermiso('productos_
     db.prepare('UPDATE products SET bodega_id = ? WHERE id = ?').run(existe ? pid : '', req.params.id);
   }
   if (req.body?.despachoProveedor !== undefined) {
-    const dp = req.body.despachoProveedor === 'dropi' || req.body.despachoProveedor === 'effi' ? req.body.despachoProveedor : '';
+    const dp = ['dropi', 'effi', 'skydropx'].includes(req.body.despachoProveedor) ? req.body.despachoProveedor : '';
     db.prepare('UPDATE products SET despacho_proveedor = ? WHERE id = ?').run(dp, req.params.id);
   }
   if (Array.isArray(faqs)) db.prepare('UPDATE products SET faqs = ? WHERE id = ?').run(j(faqs), req.params.id);
@@ -1720,6 +1720,13 @@ api.post('/skydropx/conectar', requireAuth, requireStore, requireOwner, async (r
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json({ ok: true });
 });
+// Municipio al que pertenece una ciudad que no está en la lista (se recuerda para la tienda).
+api.post('/skydropx/municipio', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
+  const { recordarMunicipio } = await import('./skydropxApi.js');
+  const r = recordarMunicipio(req.user!.storeId!, String(req.body?.departamento || ''), String(req.body?.ciudad || ''), String(req.body?.codigo || ''));
+  if ('error' in r) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
 api.post('/skydropx/desconectar', requireAuth, requireStore, requireOwner, async (req, res) => {
   const { desconectarSkydropx } = await import('./skydropxApi.js');
   desconectarSkydropx(req.user!.storeId!);
@@ -1754,10 +1761,15 @@ api.get('/skydropx/productos/csv', requireAuth, requireStore, async (req, res) =
 });
 api.post('/orders/:rowId/skydropx/cotizar', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {
   const sid = req.user!.storeId!;
-  const { cotizarSkydropx } = await import('./skydropxApi.js');
+  const { cotizarSkydropx, municipiosParaElegir } = await import('./skydropxApi.js');
   const r = await conPedido(sid, req.params.rowId, () => cotizarSkydropx(sid, req.params.rowId, { recaudo: req.body?.recaudo !== 'sin', proveedorId: String(req.body?.bodegaId || '') }));
   if ('error' in r) {
-    trazar(sid, req.params.rowId, { etapa: 'despacho', nivel: 'error', titulo: 'Cotización en Skydropx falló', detalle: r.error });
+    trazar(sid, req.params.rowId, { etapa: 'despacho', nivel: 'warn', titulo: 'Cotización en Skydropx falló', detalle: r.error });
+    // Ciudad que no es un municipio (vereda, corregimiento): el panel deja escoger a cuál pertenece.
+    if (r.elegir) {
+      const o = db.prepare('SELECT departamento, ciudad FROM orders WHERE id = ? AND store_id = ?').get(req.params.rowId, sid) as { departamento: string; ciudad: string } | undefined;
+      return res.json({ elegirMunicipio: { mensaje: r.error, departamento: o?.departamento || '', ciudad: o?.ciudad || '', opciones: municipiosParaElegir(o?.departamento || '', o?.ciudad || '') } });
+    }
     return res.status(400).json({ error: r.error });
   }
   trazar(sid, req.params.rowId, { etapa: 'despacho', nivel: 'info', titulo: `Cotizado en Skydropx para ${r.ciudad}`, detalle: `${r.disponibles.length} opciones` });
@@ -2237,7 +2249,7 @@ api.get('/effi-api/articulos/buscar', requireAuth, requireStore, requirePermiso(
 });
 // Marca por quién se despacha un producto (effi | dropi | '').
 api.post('/effi-api/producto-proveedor', requireAuth, requireStore, requirePermiso('productos_editar'), (req, res) => {
-  const dp = req.body?.proveedor === 'dropi' || req.body?.proveedor === 'effi' ? req.body.proveedor : '';
+  const dp = ['dropi', 'effi', 'skydropx'].includes(req.body?.proveedor) ? req.body.proveedor : '';
   const ids: string[] = Array.isArray(req.body?.productIds) ? req.body.productIds.map(String) : [String(req.body?.productId || '')];
   const upd = db.prepare('UPDATE products SET despacho_proveedor = ? WHERE id = ? AND store_id = ?');
   let n = 0;

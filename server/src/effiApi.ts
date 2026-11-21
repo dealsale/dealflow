@@ -2020,6 +2020,15 @@ export function despacharEffi(storeId: string, orderId: string, reintento = fals
   const k = `${storeId}|${orderId}`;
   const enCurso = enviandoEffi.get(k);
   if (enCurso) { trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: 'Ya se estaba enviando a Effi: no se manda dos veces' }); return enCurso; }
+  // Envío automático: si algún producto del pedido se despacha por Skydropx o Dropi, no se manda a Effi.
+  if (opts.auto) {
+    const pv = String((db.prepare("SELECT GROUP_CONCAT(DISTINCT COALESCE(p.despacho_proveedor,'')) pv FROM order_items i LEFT JOIN products p ON p.id = i.product_id WHERE i.order_id = ?").get(orderId) as { pv: string | null } | undefined)?.pv || '').split(',');
+    const otro = pv.includes('skydropx') ? 'Skydropx' : pv.includes('dropi') ? 'Dropi' : '';
+    if (otro) {
+      trazar(storeId, orderId, { etapa: 'despacho', nivel: 'info', titulo: `No se envió a Effi: el producto se despacha por ${otro}`, detalle: `Genera la guía con ${otro} desde el pedido.` });
+      return Promise.resolve({ error: `El producto se despacha por ${otro}: genera la guía desde el pedido.` });
+    }
+  }
   const p = despacharEffiConCandado(storeId, orderId, reintento, convenioForzado, remitenteElegido, recordar, !!opts.auto).finally(() => enviandoEffi.delete(k));
   enviandoEffi.set(k, p);
   return p;

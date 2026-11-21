@@ -72,7 +72,7 @@ export function EditarPedidoModal({ df }: { df: DealFlowState }) {
         <div style={{ overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {orden.despachoProveedor && (
             <div style={{ background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border, var(--df-border))', color: 'var(--df-warning)', borderRadius: 10, padding: '9px 12px', fontSize: 12.5 }}>
-              Este pedido ya se despachó a {orden.despachoProveedor === 'dropi' ? 'Dropi' : 'Effi'}. Editar aquí cambia el pedido en DealFlow, pero para actualizarlo en el proveedor tendrás que reenviarlo.
+              Este pedido ya se despachó a {orden.despachoProveedor === 'dropi' ? 'Dropi' : orden.despachoProveedor === 'skydropx' ? 'Skydropx' : 'Effi'}. Editar aquí cambia el pedido en DealFlow, pero para actualizarlo en el proveedor tendrás que reenviarlo.
             </div>
           )}
           <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Datos del cliente</span>

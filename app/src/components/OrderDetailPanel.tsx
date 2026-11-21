@@ -14,7 +14,7 @@ import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiCo
 import { apiEffiCotizar, type OpcionCotizadaEffi } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia, type RemitenteSugerido } from '../lib/api';
 
-import { apiSkydropxCotizar, apiSkydropxCrear, apiSkydropxCancelar, type TarifaSkydropx } from '../lib/api';
+import { apiSkydropxCotizar, apiSkydropxCrear, apiSkydropxCancelar, apiSkydropxMunicipio, type TarifaSkydropx, type ElegirMunicipioSkydropx } from '../lib/api';
 import { useSkydropx, LogoSkydropx } from './SkydropxCard';
 import { useBodegas } from './BodegasProveedores';
 import { apiBodegaPedido, apiGuiaProveedorReenviar } from '../lib/api';
@@ -208,16 +208,31 @@ function SkydropxDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: Decora
   const bodegaSel = bodegas.find((b) => b.id === bodega);
   const desdeTxt = bodegaSel ? `bodega de ${bodegaSel.nombre} (${bodegaSel.ciudad})` : `tu dirección${sky?.origen.ciudad ? ` (${sky.origen.ciudad})` : ''}`;
 
+  // Ciudad que no es municipio (vereda, corregimiento): se escoge a cuál pertenece y se recuerda.
+  const [mpio, setMpio] = useState<ElegirMunicipioSkydropx | null>(null);
+  const [mpioCod, setMpioCod] = useState('');
+  const otros = [df.effiApi.listo && 'Effi', df.dropiConectado && 'Dropi'].filter(Boolean).join(' o ');
   const cotizar = () => {
     if (!sel.rowId) return;
-    setPaso('cargando'); setMsg('');
+    setPaso('cargando'); setMsg(''); setMpio(null);
     void enProceso('Cotizando transportadoras en Skydropx…', () => apiSkydropxCotizar(sel.rowId!, recaudo, bodegaSel ? bodega : ''), 'pedido').then((r) => {
       if (r.error || !r.data) { setPaso('idle'); setMsg(r.error || 'No pudimos cotizar.'); return; }
+      if (r.data.elegirMunicipio) {
+        const e = r.data.elegirMunicipio;
+        setPaso('idle'); setMpio(e); setMpioCod(e.opciones.find((o) => o.sugerido)?.codigo || ''); return;
+      }
       setCiudad(r.data.ciudad); setTarifas(r.data.disponibles); setNoDisp(r.data.noDisponibles);
       setElegida(r.data.disponibles[0] || null);
-      if (!r.data.disponibles.length) { setPaso('idle'); setMsg(`Ninguna transportadora de Skydropx llega a ${r.data.ciudad}${recaudo === 'con' ? ' con contra entrega' : ''}.${r.data.noDisponibles.length ? ' ' + r.data.noDisponibles.slice(0, 3).map((n) => `${n.nombre}: ${n.motivo}`).join(' · ') : ''}`); return; }
+      if (!r.data.disponibles.length) { setPaso('idle'); setMsg(`Ninguna transportadora de Skydropx llega a ${r.data.ciudad}${recaudo === 'con' ? ' con contra entrega' : ''}.${r.data.noDisponibles.length ? ' ' + r.data.noDisponibles.slice(0, 3).map((n) => `${n.nombre}: ${n.motivo}`).join(' · ') : ''}${otros ? ` Prueba despacharlo por ${otros}: tienen su propia cobertura.` : ''}`); return; }
       setPaso('elegir');
     });
+  };
+  const usarMunicipio = async () => {
+    if (!mpio || !mpioCod) return;
+    const r = await apiSkydropxMunicipio(mpio.departamento, mpio.ciudad, mpioCod);
+    if (r.error) { setMsg(r.error); return; }
+    notificar(`✓ Listo: "${mpio.ciudad}" queda como ${r.data!.ciudad}. DealFlow lo recuerda para los próximos pedidos.`, 'ok', 6000);
+    cotizar();
   };
   const crear = async () => {
     if (!sel.rowId || !elegida) return;
@@ -248,6 +263,15 @@ function SkydropxDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: Decora
           {paso === 'cargando' ? 'Cotizando…' : '📦 Cotizar y generar guía'}
         </button>
         {msg && <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)' }}>{msg}</div>}
+        {mpio && (
+          <div style={{ border: '1px solid var(--df-warning)', background: 'var(--df-warning-subtle)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--df-text)', lineHeight: 1.45 }}>📍 {mpio.mensaje}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.45 }}>Skydropx solo trabaja con municipios. {otros ? `${otros} tiene${otros.includes(' o ') ? 'n' : ''} su propia lista de ciudades, por eso allá sí puede aparecer. ` : ''}La dirección y «{mpio.ciudad}» siguen yendo en la guía para el mensajero.</div>
+            <Dropdown ariaLabel={`Municipio al que pertenece ${mpio.ciudad}`} buscar placeholder="Escoge el municipio…" value={mpioCod} onChange={setMpioCod}
+              options={mpio.opciones.map((o) => ({ value: o.codigo, label: `${o.sugerido ? '⭐ ' : ''}${o.nombre}${o.depto && !mpio.departamento ? ` (${o.depto})` : ''}` }))} />
+            <button onClick={() => void usarMunicipio()} disabled={!mpioCod} style={{ ...btnP, opacity: mpioCod ? 1 : 0.6 }}>Usar este municipio y cotizar</button>
+          </div>
+        )}
       </div>
     );
   }
@@ -995,7 +1019,10 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
   const sky = useSkydropx();
   const skyOk = !!sky?.conectado;
   const [prov, setProv] = useState<'effi' | 'dropi' | 'skydropx' | ''>('');
-  const elegido = prov || (effiOk ? 'effi' : dropiOk ? 'dropi' : skyOk ? 'skydropx' : '');
+  // Por defecto, por quién se despacha el producto del pedido (si está conectado); si no, el primero conectado.
+  const provProductos = new Set((sel.items || []).map((i) => df.products.find((p) => String(p.id) === String(i.productId))?.despachoProveedor || '').filter(Boolean));
+  const provProducto = provProductos.has('skydropx') && skyOk ? 'skydropx' : provProductos.has('dropi') && dropiOk ? 'dropi' : provProductos.has('effi') && effiOk ? 'effi' : '';
+  const elegido = prov || provProducto || (effiOk ? 'effi' : dropiOk ? 'dropi' : skyOk ? 'skydropx' : '');
   const dropiCreado = sel.despachoProveedor === 'dropi';
   const skyCreado = sel.despachoProveedor === 'skydropx';
 

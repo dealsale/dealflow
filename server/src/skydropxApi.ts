@@ -4,6 +4,7 @@ import { trazar, trazarApi } from './trazabilidad.js';
 import { cifrarTexto, descifrarTexto } from './cifrado.js';
 import { normGeo } from './colombiaGeo.js';
 import { DANE } from './daneCodigos.js';
+import { CENTROS_POBLADOS } from './centrosPoblados.js';
 import { estadoLogistico, siguienteEstado } from './estadosPedido.js';
 
 /**
@@ -165,17 +166,57 @@ const ALIAS_CIUDAD: Record<string, string> = { cartagena: 'cartagena de indias',
 const ALIAS_DEPTO: Record<string, string> = { 'bogota': 'bogota', 'san andres': 'archipielago de san andres providencia y santa catalina', 'san andres y providencia': 'archipielago de san andres providencia y santa catalina', valle: 'valle del cauca', guajira: 'la guajira', 'norte santander': 'norte de santander' };
 const DANE_N: { depto: string; dn: string; mpios: { nombre: string; n: string; codigo: string }[] }[] = Object.entries(DANE).map(([d, m]) => ({ depto: d, dn: normGeo(d), mpios: Object.entries(m).map(([nombre, codigo]) => ({ nombre, n: normGeo(nombre), codigo })) }));
 
-/** Código DANE del municipio (Skydropx lo usa como código postal) y los nombres oficiales. */
-export function codigoDane(departamento: string, ciudad: string): { codigo: string; depto: string; ciudad: string } | { error: string } {
-  const nc0 = normGeo(ciudad);
+// Corregimientos y caseríos del DANE → su municipio (el cliente escribe «Santa Elena», «La Buitrera»…).
+const CP_N: { codigo: string; nombre: string; n: string }[] = Object.entries(CENTROS_POBLADOS).flatMap(([codigo, ns]) => ns.map((nombre) => ({ codigo, nombre, n: normGeo(nombre) })));
+const MPIO_POR_CODIGO = new Map(DANE_N.flatMap((d) => d.mpios.map((m) => [m.codigo, { d, m }] as const)));
+
+// Municipio que la tienda escogió a mano para una ciudad que no estaba en la lista (se recuerda).
+db.exec(`CREATE TABLE IF NOT EXISTS skydropx_ciudades (
+  store_id TEXT NOT NULL, depto_n TEXT NOT NULL, ciudad_n TEXT NOT NULL, codigo TEXT NOT NULL,
+  actualizado TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (store_id, depto_n, ciudad_n)
+)`);
+
+const bonito = (s: string) => s.toLowerCase().replace(/(^|[\s(-])(\p{L})/gu, (_, a: string, b: string) => a + b.toUpperCase()).replace(/\b(De|Del|La|Las|Los|Y|El)\b/g, (x) => x.toLowerCase()).replace(/^./, (x) => x.toUpperCase());
+const normDepto = (departamento: string) => { const nd0 = normGeo(departamento).replace(/\b(departamento|depto|dpto)\b/g, '').replace(/^de /, '').trim(); return ALIAS_DEPTO[nd0] || nd0; };
+// Quita lo que el cliente antepone: «corregimiento de», «vereda», «municipio de», «barrio»…
+const normCiudad = (ciudad: string) => normGeo(ciudad).replace(/^(corregimiento|correg|vereda|inspeccion|caserio|municipio|mpio|centro poblado|cp|barrio)( de| del)? /, '').trim();
+
+/** Distancia entre dos textos (letras cambiadas); para errores de escritura. */
+function distancia(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 2) return 9;
+  const v = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = v[0]; v[0] = i;
+    for (let j = 1; j <= b.length; j++) { const t = v[j]; v[j] = Math.min(v[j] + 1, v[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; }
+  }
+  return v[b.length];
+}
+
+type Ubicacion = { codigo: string; depto: string; ciudad: string; localidad?: string };
+const deCodigo = (codigo: string, localidad?: string): Ubicacion | null => {
+  const x = MPIO_POR_CODIGO.get(codigo);
+  return x ? { codigo, depto: bonito(x.d.depto), ciudad: bonito(x.m.nombre), ...(localidad ? { localidad } : {}) } : null;
+};
+
+/**
+ * Código DANE del municipio (Skydropx lo usa como código postal) y los nombres oficiales.
+ * Skydropx solo entiende MUNICIPIOS; Effi y Dropi tienen listas propias con corregimientos.
+ * Orden: municipio exacto → nombre corto/largo → corregimiento del DANE → error de escritura →
+ * lo que la tienda escogió antes a mano. Si es corregimiento, su nombre va en `localidad`.
+ */
+export function codigoDane(departamento: string, ciudad: string, storeId = ''): Ubicacion | { error: string; elegir?: true } {
+  const nc0 = normCiudad(ciudad);
   if (!nc0) return { error: 'El pedido no tiene ciudad.' };
   if (/^bogota\b/.test(nc0)) return { codigo: '11001', depto: 'Bogotá D.C.', ciudad: 'Bogotá' };
   const nc = ALIAS_CIUDAD[nc0] || nc0;
-  const nd0 = normGeo(departamento).replace(/\b(departamento|depto|dpto)\b/g, '').replace(/^de /, '').trim();
-  const nd = ALIAS_DEPTO[nd0] || nd0;
-  const bonito = (s: string) => s.toLowerCase().replace(/(^|[\s(-])(\p{L})/gu, (_, a: string, b: string) => a + b.toUpperCase()).replace(/\b(De|Del|La|Las|Los|Y|El)\b/g, (x) => x.toLowerCase()).replace(/^./, (x) => x.toUpperCase());
+  const nd = normDepto(departamento);
   const iguales = (n: string) => n === nc || n === nc0 || ALIAS_CIUDAD[n] === nc;
   const dep = nd ? DANE_N.find((d) => d.dn === nd) : undefined;
+  if (storeId) {
+    const g = db.prepare('SELECT codigo FROM skydropx_ciudades WHERE store_id = ? AND depto_n = ? AND ciudad_n = ?').get(storeId, nd, nc0) as { codigo: string } | undefined;
+    const u = g && deCodigo(g.codigo, normGeo(ciudad) !== normGeo(MPIO_POR_CODIGO.get(g.codigo)?.m.nombre || '') ? txt(ciudad).trim() : '');
+    if (u) return u;
+  }
   if (dep) {
     const m = dep.mpios.find((x) => iguales(x.n));
     if (m) return { codigo: m.codigo, depto: bonito(dep.depto), ciudad: bonito(m.nombre) };
@@ -188,8 +229,42 @@ export function codigoDane(departamento: string, ciudad: string): { codigo: stri
   }
   const todos = DANE_N.flatMap((d) => d.mpios.filter((x) => iguales(x.n)).map((x) => ({ d, x })));
   if (todos.length === 1) return { codigo: todos[0].x.codigo, depto: bonito(todos[0].d.depto), ciudad: bonito(todos[0].x.nombre) };
-  if (todos.length > 1) return { error: `Hay un municipio "${ciudad}" en ${todos.map((t) => bonito(t.d.depto)).join(', ')}: revisa el departamento del pedido.` };
-  return { error: `No encontramos el municipio "${ciudad}"${departamento ? ` en ${departamento}` : ''}. Corrige la ciudad del pedido con el nombre oficial del municipio.` };
+  if (todos.length > 1) return { error: `Hay un municipio "${ciudad}" en ${todos.map((t) => bonito(t.d.depto)).join(', ')}: revisa el departamento del pedido.`, elegir: true };
+  // Corregimiento / caserío del DANE (dentro del departamento si lo sabemos): un solo municipio posible.
+  const enDepto = (codigo: string) => !dep || dep.mpios.some((m) => m.codigo === codigo);
+  const cps = CP_N.filter((x) => x.n === nc0 && enDepto(x.codigo));
+  const mpiosCp = [...new Set(cps.map((x) => x.codigo))];
+  if (mpiosCp.length === 1) { const u = deCodigo(mpiosCp[0], bonito(cps[0].nombre)); if (u) return u; }
+  // Error de escritura en el municipio (Bucaramnga, Fusagasuga…): solo si hay UNO muy parecido.
+  if (nc0.length >= 5) {
+    const cand = (dep ? [dep] : DANE_N).flatMap((d) => d.mpios.filter((x) => distancia(x.n, nc0) <= (nc0.length >= 8 ? 2 : 1)).map((x) => ({ d, x })));
+    if (cand.length === 1) return { codigo: cand[0].x.codigo, depto: bonito(cand[0].d.depto), ciudad: bonito(cand[0].x.nombre) };
+  }
+  if (mpiosCp.length > 1) return { error: `"${ciudad}" es un corregimiento que existe en varios municipios (${mpiosCp.map((c) => MPIO_POR_CODIGO.get(c)?.m.nombre).filter(Boolean).map((s) => bonito(String(s))).join(', ')}): escoge a cuál pertenece.`, elegir: true };
+  return { error: `No encontramos "${ciudad}"${departamento ? ` en ${departamento}` : ''} en la lista de municipios. Puede ser una vereda o un corregimiento: escoge el municipio al que pertenece.`, elegir: true };
+}
+
+/** Municipios para escoger a mano (los del departamento del pedido primero, con los sugeridos arriba). */
+export function municipiosParaElegir(departamento: string, ciudad: string): { codigo: string; nombre: string; depto: string; sugerido: boolean }[] {
+  const nd = normDepto(departamento); const nc = normCiudad(ciudad);
+  const dep = nd ? DANE_N.find((d) => d.dn === nd) : undefined;
+  const sugeridos = new Set<string>([
+    ...CP_N.filter((x) => x.n === nc || (nc.length >= 5 && distancia(x.n, nc) <= 2)).map((x) => x.codigo),
+    ...DANE_N.flatMap((d) => d.mpios.filter((m) => m.n === nc || (nc.length >= 5 && distancia(m.n, nc) <= 2)).map((m) => m.codigo)),
+  ]);
+  const lista = (dep ? [dep] : DANE_N).flatMap((d) => d.mpios.map((m) => ({ codigo: m.codigo, nombre: bonito(m.nombre), depto: bonito(d.depto), sugerido: sugeridos.has(m.codigo) })));
+  return lista.sort((a, b) => Number(b.sugerido) - Number(a.sugerido) || a.nombre.localeCompare(b.nombre, 'es'));
+}
+
+/** Recuerda para la tienda a qué municipio pertenece una ciudad que no estaba en la lista. */
+export function recordarMunicipio(storeId: string, departamento: string, ciudad: string, codigo: string): { ok: true; ciudad: string } | { error: string } {
+  const u = deCodigo(String(codigo || ''));
+  if (!u) return { error: 'Escoge un municipio de la lista.' };
+  const nc = normCiudad(ciudad);
+  if (!nc) return { error: 'El pedido no tiene ciudad.' };
+  db.prepare("INSERT INTO skydropx_ciudades (store_id, depto_n, ciudad_n, codigo) VALUES (?,?,?,?) ON CONFLICT(store_id, depto_n, ciudad_n) DO UPDATE SET codigo = excluded.codigo, actualizado = datetime('now')")
+    .run(storeId, normDepto(departamento), nc, u.codigo);
+  return { ok: true, ciudad: `${u.ciudad} (${u.depto})` };
 }
 
 // ── Conexión ──────────────────────────────────────────────────────────
@@ -373,23 +448,23 @@ async function origenEnvio(storeId: string, c: CfgSky, proveedorId: string): Pro
   return f ? { error: f } : { origen, proveedorId: p.id };
 }
 
-export async function cotizarSkydropx(storeId: string, orderId: string, opts: { recaudo: boolean; proveedorId?: string }): Promise<{ ciudad: string; disponibles: TarifaSky[]; noDisponibles: { nombre: string; motivo: string }[]; cotizacion: string } | { error: string }> {
+export async function cotizarSkydropx(storeId: string, orderId: string, opts: { recaudo: boolean; proveedorId?: string }): Promise<{ ciudad: string; disponibles: TarifaSky[]; noDisponibles: { nombre: string; motivo: string }[]; cotizacion: string } | { error: string; elegir?: true }> {
   const c = cfgSkydropx(storeId);
   if (!c) return { error: 'Conecta Skydropx primero en Integraciones.' };
   const og = await origenEnvio(storeId, c, txt(opts.proveedorId));
   if ('error' in og) return og;
   const o = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(orderId, storeId) as Fila | undefined;
   if (!o) return { error: 'Pedido no encontrado.' };
-  const desde = codigoDane(og.origen.departamento, og.origen.ciudad);
+  const desde = codigoDane(og.origen.departamento, og.origen.ciudad, storeId);
   if ('error' in desde) return { error: `Ciudad de origen${og.proveedorId ? ' de la bodega del proveedor' : ''} (Integraciones → Skydropx): ${desde.error}` };
-  const hacia = codigoDane(txt(o.departamento), txt(o.ciudad));
-  if ('error' in hacia) return { error: hacia.error };
+  const hacia = codigoDane(txt(o.departamento), txt(o.ciudad), storeId);
+  if ('error' in hacia) return hacia;
   const total = Math.max(num(o.total), 1000);
   const p = c.paquete;
   const r = await sky(storeId, c, 'POST', '/api/v1/quotations', {
     quotation: {
       address_from: { country_code: 'CO', postal_code: desde.codigo, area_level1: desde.depto, area_level2: desde.ciudad, area_level3: desde.ciudad },
-      address_to: { country_code: 'CO', postal_code: hacia.codigo, area_level1: hacia.depto, area_level2: hacia.ciudad, area_level3: txt(o.barrio).replace(/\s+/g, ' ').trim().slice(0, 60) || hacia.ciudad },
+      address_to: { country_code: 'CO', postal_code: hacia.codigo, area_level1: hacia.depto, area_level2: hacia.ciudad, area_level3: barrioSky(o, hacia) },
       parcels: [{ length: Math.round(p.largo), width: Math.round(p.ancho), height: Math.round(p.alto), weight: Math.max(1, p.peso), declared_amount: total }],
       // Con contra entrega Skydropx exige el valor a cobrarle al cliente (sin él responde «products no puede estar en blanco»).
       cash_on_delivery: opts.recaudo, recipient_pays_shipping: false, ...(opts.recaudo ? { on_delivery_amount: Math.round(num(o.total)) } : {}),
@@ -418,6 +493,12 @@ export async function cotizarSkydropx(storeId: string, orderId: string, opts: { 
   return { ciudad: `${hacia.ciudad} (${hacia.depto})`, disponibles, noDisponibles, cotizacion: id };
 }
 
+/** Barrio para Skydropx (area_level3): si la ciudad era un corregimiento, va su nombre primero. Igual en cotización y guía. */
+function barrioSky(o: Fila, u: { ciudad: string; localidad?: string }): string {
+  const b = txt(o.barrio).replace(/\s+/g, ' ').trim();
+  return (u.localidad ? (b && normGeo(b) !== normGeo(u.localidad) ? `${u.localidad} - ${b}` : u.localidad) : b || u.ciudad).slice(0, 60);
+}
+
 // ── Crear el envío ────────────────────────────────────────────────────
 const corta = (s: string, n: number) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
 const soloDigitos = (s: string) => String(s || '').replace(/\D/g, '').replace(/^57(?=3\d{9}$)/, '');
@@ -438,9 +519,9 @@ export async function crearEnvioSkydropx(storeId: string, orderId: string, tarif
   const og = ori.origen;
   // Skydropx pide en la guía la misma ubicación que en la cotización (país, código, depto, ciudad)
   // más area_level3 (barrio). Si no hay barrio se repite la ciudad.
-  const desde = codigoDane(og.departamento, og.ciudad);
+  const desde = codigoDane(og.departamento, og.ciudad, storeId);
   if ('error' in desde) return { error: `Ciudad de origen${ori.proveedorId ? ' de la bodega del proveedor' : ''} (Integraciones → Skydropx): ${desde.error}` };
-  const hacia = codigoDane(txt(o.departamento), txt(o.ciudad));
+  const hacia = codigoDane(txt(o.departamento), txt(o.ciudad), storeId);
   if ('error' in hacia) return { error: hacia.error };
   const ubic = (u: { codigo: string; depto: string; ciudad: string }, barrio: string) => ({
     country_code: 'CO', postal_code: u.codigo, area_level1: u.depto, area_level2: u.ciudad, area_level3: corta(barrio, 60) || u.ciudad,
@@ -449,7 +530,7 @@ export async function crearEnvioSkydropx(storeId: string, orderId: string, tarif
     shipment: {
       rate_id: tarifa.id, printing_format: 'standard',
       address_from: { ...ubic(desde, ''), street1: corta(og.direccion, 100), name: corta(og.nombre, 30), company: corta(og.empresa || og.nombre, 60), phone: soloDigitos(og.telefono), email: og.email, reference: corta(og.referencia || og.direccion, 30), ...(og.nit ? { tax_id_number: og.nit } : {}) },
-      address_to: { ...ubic(hacia, txt(o.barrio)), street1: dir, name: corta(nombreCliente, 30), company: corta(nombreCliente, 60), phone: tel, email: og.email, reference: corta(txt(o.barrio) || txt(o.nota) || dir, 40) },
+      address_to: { ...ubic(hacia, barrioSky(o, hacia)), street1: dir, name: corta(nombreCliente, 30), company: corta(nombreCliente, 60), phone: tel, email: og.email, reference: corta(txt(o.barrio) || txt(o.nota) || dir, 40) },
       // package_type es obligatorio para Skydropx: '4G' = caja de cartón (el empaque normal de una tienda).
       packages: [{ package_number: '1', package_protected: false, package_type: '4G', package_content: corta(c.paquete.contenido, 60), products: productosSky(storeId, o, c.paquete.contenido) }],
     },

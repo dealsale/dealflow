@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { IntegracionFila, LogoInteg } from './IntegracionFila';
+import { IntegracionFila } from './IntegracionFila';
 import { Dropdown } from './Dropdown';
 import { BodegasProveedores } from './BodegasProveedores';
 import { SkydropxProductos } from './SkydropxProductos';
@@ -30,9 +30,11 @@ export function useSkydropx(): EstadoSkydropx | null {
   return e;
 }
 
-export const LogoSkydropx = ({ px = 40 }: { px?: number }) => px >= 40
-  ? <LogoInteg fondo="#2E1A87"><span style={{ color: '#fff', fontWeight: 900, fontSize: 18 }}>S</span></LogoInteg>
-  : <span style={{ width: px, height: px, borderRadius: 7, background: '#2E1A87', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 900, fontSize: Math.round(px * 0.55), flexShrink: 0 }}>S</span>;
+// El ícono ya trae su fondo azul oscuro y esquinas redondeadas: se muestra completo, sin marco blanco.
+export const LogoSkydropx = ({ px = 40 }: { px?: number }) => {
+  const lado = px >= 40 ? 44 : px;
+  return <img src="/logos/skydropx-icono.svg" alt="Skydropx" width={lado} height={lado} style={{ width: lado, height: lado, borderRadius: Math.round(lado * 0.2), display: 'block', flexShrink: 0 }} />;
+};
 
 const ORIGEN_VACIO: OrigenSkydropx = { nombre: '', empresa: '', telefono: '', email: '', direccion: '', referencia: '', departamento: '', ciudad: '', nit: '' };
 

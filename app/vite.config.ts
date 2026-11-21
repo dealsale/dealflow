@@ -12,7 +12,7 @@ export default defineConfig({
     proxy: {
       '/api': { target: servidor, ws: true },
       '/webhooks': servidor,
-      '/l': servidor,
+      '/l/': servidor, // enlaces cortos (no «/logos»)
       '/salud': servidor,
     },
   },

@@ -10,6 +10,7 @@ import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState'
 import { EffiVinculoProducto, ConvenioProductoEffi } from '../components/EffiProductos';
 import { Dropdown } from '../components/Dropdown';
 import { useSkydropx } from '../components/SkydropxCard';
+import { SkydropxProductos } from '../components/SkydropxProductos';
 import { useBodegas } from '../components/BodegasProveedores';
 import { apiSincronizarDropi, apiSoltarVariantesDropi, type ResultadoSyncDropi } from '../lib/api';
 
@@ -124,25 +125,37 @@ const INTEGRACIONES: { id: IntegId; nombre: string; logo?: string; color: string
   { id: 'shopify', nombre: 'Shopify', color: '#5E8E3E', placeholder: 'SKU en Shopify' },
 ];
 
-/** Por quién se despacha el producto (arriba del producto): Effi, Dropi o sin definir. */
+const COLOR_SKY = '#3D2BB5';
+
+/** Por quién se despacha el producto (arriba del producto): Effi, Dropi, Skydropx o sin definir. */
 function SeDespachaPor({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
-  if (!df.effiApi?.conectado && !df.dropiConectado) return null;
+  const sky = useSkydropx();
+  const actual = p.despachoProveedor || '';
+  // Solo las conectadas (y la que ya tenga elegida, aunque se haya desconectado).
+  const opciones = ([
+    { k: 'effi', t: 'Effi', logo: '/logos/effi.png', color: 'var(--df-purple)', ok: !!df.effiApi?.conectado },
+    { k: 'dropi', t: 'Dropi', logo: '/logos/dropi.jpg', color: 'var(--df-warning)', ok: !!df.dropiConectado },
+    { k: 'skydropx', t: 'Skydropx', logo: '/logos/skydropx-icono.svg', color: COLOR_SKY, ok: !!sky?.conectado },
+  ]).filter((o) => o.ok || o.k === actual);
+  if (!opciones.length) return null;
+  const donde = actual === 'effi' ? 'El artículo de Effi de cada variante' : actual === 'dropi' ? 'La conexión con Dropi' : 'El producto de Skydropx de cada variante';
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>🚚 Se despacha por</div>
-      <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }}>
-        {([['effi', 'Effi'], ['dropi', 'Dropi'], ['', 'Sin definir']] as const).map(([k, t]) => {
-          const on = (p.despachoProveedor || '') === k;
+      <div style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }}>
+        {[...opciones, { k: '', t: 'Sin definir', logo: '', color: 'var(--df-surface-2)', ok: true }].map((o) => {
+          const on = actual === o.k;
           return (
-            <button key={k || 'none'} onClick={() => p.setDespachoProveedor(k)}
-              style={{ border: 'none', padding: '7px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', background: on ? (k === 'effi' ? 'var(--df-purple)' : k === 'dropi' ? 'var(--df-warning)' : 'var(--df-surface-2)') : 'var(--df-surface)', color: on && k ? '#fff' : 'var(--df-text-muted)' }}>
-              {t}
+            <button key={o.k || 'none'} onClick={() => p.setDespachoProveedor(o.k)} aria-pressed={on}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', padding: '7px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', background: on ? o.color : 'var(--df-surface)', color: on && o.k ? '#fff' : 'var(--df-text-muted)' }}>
+              {o.logo && <span style={{ width: 18, height: 18, borderRadius: 5, background: '#fff', display: 'grid', placeItems: 'center', padding: 2, boxSizing: 'border-box' }}><img src={o.logo} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 3 }} /></span>}
+              {o.t}
             </button>
           );
         })}
       </div>
-      {p.despachoProveedor === 'effi' && df.effiApi?.conectado && <ConvenioProductoEffi productId={String(p.id)} />}
-      {p.despachoProveedor && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>{p.despachoProveedor === 'effi' ? 'El artículo de Effi de cada variante' : 'La conexión con Dropi'} está en <b>Variantes</b> (plegado).</div>}
+      {actual === 'effi' && df.effiApi?.conectado && <ConvenioProductoEffi productId={String(p.id)} />}
+      {actual && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 6 }}>{donde} está en <b>Variantes</b> (plegado).</div>}
     </div>
   );
 }
@@ -154,7 +167,7 @@ function SeDespachaPor({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
 function SaleDesde({ p }: { p: DecoratedProduct }) {
   const sky = useSkydropx();
   const bodegas = useBodegas();
-  if (!sky?.conectado || !bodegas.length) return null;
+  if (!sky?.conectado || !bodegas.length || p.despachoProveedor === 'effi' || p.despachoProveedor === 'dropi') return null;
   const actual = bodegas.some((b) => b.id === p.bodegaId) ? String(p.bodegaId) : '';
   return (
     <div style={{ marginBottom: 12, maxWidth: 380 }}>
@@ -189,6 +202,7 @@ function BloquePlegable({ logo, titulo, color, resumen, abiertoInicial, children
  */
 function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
   useEffect(() => { void df.cargarShopify?.(); }, []); // saber si Shopify está conectado
+  const sky = useSkydropx();
   const variantes = (p.variantes || []).filter((v) => v.id && (v.label || '').toLowerCase() !== 'única');
   const conectada = (id: IntegId) => id === 'dropi' ? df.dropiConectado
     : id === 'effi' ? !!df.effiApi?.conectado
@@ -200,7 +214,8 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
   const effiVinc = todasVars.length ? todasVars.filter((v) => (v.refs?.effi_id || '').trim()).length : null;
   const hayEffi = conectada('effi') && p.despachoProveedor === 'effi';
   const hayDropi = conectada('dropi') && p.despachoProveedor === 'dropi';
-  if (!hayEffi && !hayDropi && !activas.length) return null;
+  const haySky = !!sky?.conectado && p.despachoProveedor === 'skydropx';
+  if (!hayEffi && !hayDropi && !haySky && !activas.length) return null;
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
       {hayEffi && (
@@ -213,6 +228,12 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
         <BloquePlegable logo="/logos/dropi.jpg" titulo="Dropi" color="var(--df-warning)" abiertoInicial={false}
           resumen={`${p.variantesFuente === 'dropi' ? 'Sincronizado con Dropi (cada 6 h)' : 'Trae las variantes y el stock con el ID del producto en Dropi'}${variantes.length ? ` · ${variantes.filter((v) => (v.refs?.dropi || '').trim()).length}/${variantes.length} variantes vinculadas` : ''}.`}>
           <SyncDropi p={p} df={df} />
+        </BloquePlegable>
+      )}
+      {haySky && (
+        <BloquePlegable logo="/logos/skydropx-icono.svg" titulo="Skydropx" color={COLOR_SKY} abiertoInicial={false}
+          resumen="Producto de Skydropx de cada variante. Con ese producto va en la guía.">
+          <SkydropxProductos productId={String(p.id)} />
         </BloquePlegable>
       )}
       {activas.length > 0 && <>

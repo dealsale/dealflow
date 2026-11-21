@@ -15,7 +15,7 @@ import { Dropdown } from './Dropdown';
 
 export type Orden = 'recientes' | 'antiguos' | 'mayor' | 'menor' | 'cliente';
 type FechaRapida = 'todas' | 'hoy' | 'ayer' | '7d' | '30d' | 'mes' | 'rango';
-type Despacho = 'todos' | 'sin' | 'effi' | 'dropi';
+type Despacho = 'todos' | 'sin' | 'effi' | 'dropi' | 'skydropx';
 type Guia = 'todas' | 'con' | 'sin';
 /** Pedidos repetidos: mismo celular, misma dirección o mismo nombre del cliente. */
 export type Repetido = 'exacto' | 'tel' | 'direccion' | 'nombre';
@@ -133,6 +133,7 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
       if (f.despacho === 'sin' && o.despachado) return false;
       if (f.despacho === 'effi' && o.despachoProveedor !== 'effi') return false;
       if (f.despacho === 'dropi' && o.despachoProveedor !== 'dropi') return false;
+      if (f.despacho === 'skydropx' && o.despachoProveedor !== 'skydropx') return false;
       if (f.guia === 'con' && !o.hasGuia) return false;
       if (f.guia === 'sin' && o.hasGuia) return false;
       if (ciudad && norm(o.ciudad) !== ciudad) return false;
@@ -218,7 +219,7 @@ export function useFiltrosPedidos(orders: DecoratedOrder[], query: string) {
   if (f.fecha !== 'todas') activos.push({ label: f.fecha === 'rango' ? `Del ${f.desde || '…'} al ${f.hasta || '…'}` : FECHAS.find((x) => x.id === f.fecha)!.label, quitar: () => set({ fecha: 'todas', desde: '', hasta: '' }) });
   for (const c of f.canales) activos.push({ label: CANALES.find((x) => x.id === c)?.label || c, quitar: () => alternar('canales', c) });
   if (f.landing) activos.push({ label: `Landing: ${landings.find((l) => l.id === f.landing)?.nombre || '—'}`, quitar: () => set({ landing: '' }) });
-  if (f.despacho !== 'todos') activos.push({ label: f.despacho === 'sin' ? 'Sin despachar' : f.despacho === 'effi' ? 'Por Effi' : 'Por Dropi', quitar: () => set({ despacho: 'todos' }) });
+  if (f.despacho !== 'todos') activos.push({ label: f.despacho === 'sin' ? 'Sin despachar' : f.despacho === 'effi' ? 'Por Effi' : f.despacho === 'skydropx' ? 'Por Skydropx' : 'Por Dropi', quitar: () => set({ despacho: 'todos' }) });
   if (f.guia !== 'todas') activos.push({ label: f.guia === 'con' ? 'Con guía' : 'Sin guía', quitar: () => set({ guia: 'todas' }) });
   if (f.ciudad) activos.push({ label: f.ciudad, quitar: () => set({ ciudad: '' }) });
   if (f.producto) activos.push({ label: f.producto, quitar: () => set({ producto: '' }) });
@@ -288,7 +289,7 @@ export function PanelFiltros({ fp }: { fp: FiltrosPedidos }) {
       <div>
         <div style={etiqueta}>Despacho</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-          {([['todos', 'Todos'], ['sin', 'Sin despachar'], ['effi', 'Effi'], ['dropi', 'Dropi']] as const).map(([id, l]) => <button key={id} onClick={() => set({ despacho: id })} style={chip(f.despacho === id)}>{l}</button>)}
+          {([['todos', 'Todos'], ['sin', 'Sin despachar'], ['effi', 'Effi'], ['dropi', 'Dropi'], ['skydropx', 'Skydropx']] as const).map(([id, l]) => <button key={id} onClick={() => set({ despacho: id })} style={chip(f.despacho === id)}>{l}</button>)}
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {([['todas', 'Con o sin guía'], ['con', 'Con guía'], ['sin', 'Sin guía']] as const).map(([id, l]) => <button key={id} onClick={() => set({ guia: id })} style={chip(f.guia === id)}>{l}</button>)}

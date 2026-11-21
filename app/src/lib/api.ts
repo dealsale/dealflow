@@ -455,7 +455,10 @@ export interface TarifaSkydropx { id: string; transportadora: string; carrier: s
 export const apiSkydropxEstado = () => req<EstadoSkydropx>('/api/skydropx/estado', 'GET');
 export const apiSkydropxConectar = (body: { clientId: string; clientSecret: string; ambiente: string; origen: OrigenSkydropx; paquete: PaqueteSkydropx }) => req<{ ok: true }>('/api/skydropx/conectar', 'POST', body);
 export const apiSkydropxDesconectar = () => req<{ ok: true }>('/api/skydropx/desconectar', 'POST');
-export const apiSkydropxCotizar = (rowId: string, recaudo: 'con' | 'sin' = 'con', bodegaId = '') => req<{ ciudad: string; disponibles: TarifaSkydropx[]; noDisponibles: { nombre: string; motivo: string }[] }>(`/api/orders/${rowId}/skydropx/cotizar`, 'POST', { recaudo, bodegaId });
+export interface MunicipioSkydropx { codigo: string; nombre: string; depto: string; sugerido: boolean }
+export interface ElegirMunicipioSkydropx { mensaje: string; departamento: string; ciudad: string; opciones: MunicipioSkydropx[] }
+export const apiSkydropxMunicipio = (departamento: string, ciudad: string, codigo: string) => req<{ ok: true; ciudad: string }>('/api/skydropx/municipio', 'POST', { departamento, ciudad, codigo });
+export const apiSkydropxCotizar = (rowId: string, recaudo: 'con' | 'sin' = 'con', bodegaId = '') => req<{ ciudad: string; disponibles: TarifaSkydropx[]; noDisponibles: { nombre: string; motivo: string }[]; elegirMunicipio?: undefined } | { elegirMunicipio: ElegirMunicipioSkydropx; ciudad?: undefined; disponibles?: undefined; noDisponibles?: undefined }>(`/api/orders/${rowId}/skydropx/cotizar`, 'POST', { recaudo, bodegaId });
 export const apiSkydropxCrear = (rowId: string, tarifa: TarifaSkydropx, bodegaId = '') => req<{ ok: true; envioId: string; guia: string }>(`/api/orders/${rowId}/skydropx/crear`, 'POST', { tarifa, bodegaId });
 // Variantes de la tienda ↔ productos creados en Skydropx.
 export interface ProductoSkydropx { id: string; nombre: string; sku: string; precio: number }

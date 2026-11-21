@@ -15,7 +15,8 @@ const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').t
 
 type Filtro = 'todas' | 'sin' | 'con';
 
-export function SkydropxProductos() {
+/** Con productId: solo las variantes de ese producto (dentro de la ficha del producto). */
+export function SkydropxProductos({ productId }: { productId?: string } = {}) {
   const [vars, setVars] = useState<VarianteSkydropx[]>([]);
   const [prods, setProds] = useState<ProductoSkydropx[]>([]);
   const [error, setError] = useState('');
@@ -29,7 +30,7 @@ export function SkydropxProductos() {
     const r = await apiSkydropxProductos();
     setCargando(false);
     if (r.error) { setError(r.error); return; }
-    setVars(r.data?.variantes || []); setProds(r.data?.productosSky || []); setError(r.data?.error || '');
+    setVars((r.data?.variantes || []).filter((v) => !productId || String(v.productId) === String(productId))); setProds(r.data?.productosSky || []); setError(r.data?.error || '');
   };
   useEffect(() => { void cargar(); }, []);
 
@@ -67,8 +68,8 @@ export function SkydropxProductos() {
   const visibles = vars.filter((v) => (filtro === 'sin' ? !v.skyId : filtro === 'con' ? !!v.skyId : true) && (!q.trim() || norm(`${v.producto} ${v.label} ${v.sku}`).includes(norm(q.trim()))));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--df-border)', paddingTop: 14, marginTop: 4 }}>
-      <div style={{ fontWeight: 800, fontSize: 13 }}>Productos en Skydropx</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, ...(productId ? {} : { borderTop: '1px solid var(--df-border)', paddingTop: 14, marginTop: 4 }) }}>
+      {!productId && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 13 }}><img src="/logos/skydropx-icono.svg" alt="" style={{ height: 18, width: 18 }} />Productos en Skydropx</div>}
       <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, lineHeight: 1.55 }}>
         Cada talla y color va como un producto en Skydropx, igual que en Effi. Skydropx no deja que DealFlow los cree solo, así que:
         <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>
