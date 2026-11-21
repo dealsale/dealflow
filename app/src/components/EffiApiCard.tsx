@@ -8,6 +8,7 @@ import {
   apiEffiApiSecreto, apiEffiConvenios, apiRemitentesConvenio, apiFijarRemitenteConvenio, apiDatosRemitente, apiNombrarConvenio,
   type EffiApiEstado, type EffiEvento, type EffiGuiaCfg, type EffiListas, type RemitentesConvenioResp,
 } from '../lib/api';
+import { servicioMasLiviano } from '../lib/servicioLiviano';
 
 /**
  * Effi por API directa: la tienda pega la API key de su usuario de Effi, elige
@@ -432,7 +433,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                 <p style={ayuda}>Si la activas, apenas se crea la remisión DealFlow también crea la guía con la transportadora que elijas, y le avisa la guía al cliente por WhatsApp. Si no, la generas tú dentro de Effi.</p>
                 {guia.activa && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
-                    <Select label="Transportadora" value={guia.transportadora} onChange={(v) => setGuia({ transportadora: v, servicio: '', formaPagoFlete: '' })} opciones={listas.transportadoras.map((t) => ({ id: t.id, nombre: t.effi ? `${t.nombre} (Effi: ${t.effi})` : t.nombre }))} />
+                    <Select label="Transportadora" value={guia.transportadora} onChange={(v) => setGuia({ transportadora: v, servicio: servicioMasLiviano(listas.transportadoras.find((t) => t.id === v)?.servicios), formaPagoFlete: '' })} opciones={listas.transportadoras.map((t) => ({ id: t.id, nombre: t.effi ? `${t.nombre} (Effi: ${t.effi})` : t.nombre }))} />
                     <Select label="Servicio" value={guia.servicio} onChange={(v) => setGuia({ servicio: v })} opciones={transp?.servicios || []} />
                     <Select label="Pago del flete" value={guia.formaPagoFlete} onChange={(v) => setGuia({ formaPagoFlete: v })} opciones={transp?.formasPago || []} />
                     <div><label style={lbl}>Peso (kg)</label><input type="number" min={0.1} step={0.1} value={guia.peso} onChange={(e) => setGuia({ peso: Number(e.target.value) })} style={inp} /></div>

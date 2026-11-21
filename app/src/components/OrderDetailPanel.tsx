@@ -9,6 +9,7 @@ import { HistorialClienteCard, useHistorialCliente, confirmarSiDevolvio, AvisoDe
 import { confirmar, pedirTexto, notificar } from './dialogs';
 import { enProceso, ProcesoPedido } from './Proceso';
 import { apiRegistroPedido, apiDatosRemitente, apiCambioResuelto, type EventoPedido } from '../lib/api';
+import { servicioMasLiviano } from '../lib/servicioLiviano';
 import { apiEffiAnular, apiShopifyReenviarConfirmacion, apiGuiaManual, apiEffiConveniosConocidos, apiVariantesFaltantes, apiCorregirVariante, type VarianteFaltante } from '../lib/api';
 import { apiEffiCotizar, type OpcionCotizadaEffi } from '../lib/api';
 import { apiDropiCotizar, apiDropiCrear, apiEffiPreview, apiEffiDespachar, apiEffiOpcionesGuia, apiEffiGuia, apiGuiaDocumento, apiGuiaEnviar, type DropiTransportadora, type EffiPreview, type OpcionesGuia, type DatosGuia, type RemitenteSugerido } from '../lib/api';
@@ -680,12 +681,15 @@ function useGuiaEffi(orderId?: string) {
   const manual = useRef(false);
   // Transportadora elegida en el cotizador antes de que carguen las opciones de Effi.
   const pendiente = useRef('');
-  /** Pone la transportadora y, si tiene un solo servicio o una sola forma de pago, los deja puestos. */
+  /**
+   * Pone la transportadora con su servicio MÁS LIVIANO (el de menos kg) para no pagar flete de
+   * más; si los servicios no dicen su peso, el que ya estaba o el único. Igual con la forma de pago.
+   */
   const conTransp = (o: OpcionesGuia, id: string, x: DatosGuia): DatosGuia => {
     const t = o.transportadoras.find((y) => y.id === id);
     if (!t) return x;
     return { ...x, transportadora: id,
-      servicio: t.servicios.some((v) => v.id === x.servicio) ? x.servicio : t.servicios.length === 1 ? t.servicios[0].id : '',
+      servicio: servicioMasLiviano(t.servicios) || (t.servicios.some((v) => v.id === x.servicio) ? x.servicio : t.servicios.length === 1 ? t.servicios[0].id : ''),
       formaPagoFlete: t.formasPago.some((v) => v.id === x.formaPagoFlete) ? x.formaPagoFlete : t.formasPago.length === 1 ? t.formasPago[0].id : '' };
   };
   const elegirTransportadora = (id: string) => {
@@ -707,7 +711,9 @@ function useGuiaEffi(orderId?: string) {
     const g = r.data.defaults;
     setD((x) => {
       const base = { ...x, transportadora: g.transportadora || '', servicio: g.servicio || '', formaPagoFlete: g.formaPagoFlete || '', remitente: '', peso: g.peso || 1, volumen: g.volumen || 1, alto: g.alto || 10, ancho: g.ancho || 10, largo: g.largo || 10 };
-      return pendiente.current ? conTransp(r.data!, pendiente.current, base) : base;
+      // También con la transportadora por defecto: el servicio guardado (6 o 20 kg) cede al más liviano.
+      const id = pendiente.current || base.transportadora;
+      return id ? conTransp(r.data!, id, base) : base;
     });
     aplicarSugerido(r.data.sugerido);
   };
