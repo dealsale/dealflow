@@ -154,7 +154,7 @@ export interface ArticuloBase { id: string; descripcion: string; stock?: number 
  * distintivas; lo que le sobra al nombre (talla, color) tiene que ser exactamente la
  * variante. Nunca asigna el mismo artículo a dos variantes. Devuelve variantId → artículo.
  */
-export function emparejarArticulos<A extends ArticuloBase>(producto: string, variantes: { variantId: string; label: string }[], arts: A[], usados: Set<string> = new Set()): Map<string, A> {
+export function emparejarArticulos<A extends ArticuloBase>(producto: string, variantes: { variantId: string; label: string }[], arts: A[], usados: Set<string> = new Set(), preferir: 'drop' | 'propio' | '' = '', dudas?: Map<string, A[]>): Map<string, A> {
   const out = new Map<string, A>();
   const tp = norm(producto).split(' ').filter(Boolean);
   const clave = palabrasClave(producto);
@@ -166,21 +166,31 @@ export function emparejarArticulos<A extends ArticuloBase>(producto: string, var
     return { a, ta, resto: ta.filter((t) => !tiene(tp, t) && !VACIAS.has(t) && !GENERICAS.has(t)) };
   }).filter((x) => clave.every((t) => x.ta.includes(t))); // exacto: "Helen" no es "Helena"
   if (!cands.length) return out;
-  // Entre artículos iguales: primero el del proveedor (dropshipping), luego el de más stock.
-  const mejor = (lista: typeof cands) => [...lista].sort((x, y) => ((y.a.drop === 1 ? 1 : 0) - (x.a.drop === 1 ? 1 : 0)) || (Number(y.a.stock ?? -1) - Number(x.a.stock ?? -1)) || Number(y.a.id) - Number(x.a.id))[0];
+  // Entre artículos con el mismo nombre: el del proveedor si el producto es de proveedor…
+  // Pero NO se adivina: se usa el ÚNICO del tipo que pide el producto (del proveedor o propio).
+  // Si quedan dos o más, la variante se deja para que la tienda elija (van en `dudas`).
+  const unico = (lista: typeof cands): A | undefined => {
+    const de = (t: 'drop' | 'propio') => lista.filter((c) => (t === 'drop' ? c.a.drop === 1 : c.a.drop !== 1));
+    if (preferir) { const p = de(preferir); if (p.length === 1) return p[0].a; if (p.length > 1) return undefined; }
+    if (lista.length === 1) return lista[0].a;
+    if (!preferir) { const d = de('drop'); if (d.length === 1) return d[0].a; }
+    return undefined;
+  };
   const pendientes = variantes.map((v) => ({ v, tv: tokensVariante(v.label).filter((t) => !VACIAS.has(t)) }));
   // 1) Lo que sobra es EXACTAMENTE la variante (mismas palabras, cualquier orden).
   for (const { v, tv } of pendientes) {
     const exactos = cands.filter((c) => !usados.has(c.a.id) && c.resto.length === tv.length && tv.every((t) => tiene(c.resto, t)));
     if (!exactos.length) continue;
-    const a = mejor(exactos).a;
+    const a = unico(exactos);
+    if (!a) { dudas?.set(v.variantId, exactos.map((c) => c.a)); continue; }
     out.set(v.variantId, a); usados.add(a.id);
   }
   // 2) La variante está contenida y es el artículo con menos palabras de más (sin empates).
   for (const { v, tv } of pendientes) {
-    if (out.has(v.variantId) || !tv.length) continue;
+    if (out.has(v.variantId) || dudas?.has(v.variantId) || !tv.length) continue;
     const sub = cands.filter((c) => !usados.has(c.a.id) && tv.every((t) => tiene(c.resto, t))).map((c) => ({ c, extra: c.resto.length - tv.length })).sort((x, y) => x.extra - y.extra);
     if (sub.length && (sub.length === 1 || sub[1].extra > sub[0].extra)) { out.set(v.variantId, sub[0].c.a); usados.add(sub[0].c.a.id); }
+    else if (sub.length) dudas?.set(v.variantId, sub.filter((x) => x.extra === sub[0].extra).map((x) => x.c.a));
   }
   return out;
 }

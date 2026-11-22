@@ -42,10 +42,33 @@ api.use((req, res, next) => {
     res.on('finish', () => {
       const sid = (req as { user?: { storeId?: string } }).user?.storeId;
       if (res.statusCode < 400 && sid) void import('./effiApi.js').then((m) => m.autoVincularPronto(sid)).catch(() => {});
+      // Variantes nuevas de un producto que ya está con Dropi o Skydropx: se vinculan solas.
+      const pid = /^\/products\/([^/]+)/.exec(req.path)?.[1];
+      if (res.statusCode < 400 && sid && pid && !/\/(dropi|vinculos)\//.test(req.path)) vincularOtrasPronto(sid, pid);
     });
   }
   next();
 });
+const otrasPronto = new Map<string, ReturnType<typeof setTimeout>>();
+function vincularOtrasPronto(storeId: string, productId: string): void {
+  clearTimeout(otrasPronto.get(productId));
+  otrasPronto.set(productId, setTimeout(() => {
+    otrasPronto.delete(productId);
+    void (async () => {
+      const p = db.prepare("SELECT COALESCE(despacho_proveedor,'') prov, COALESCE(variantes_fuente,'') fuente, COALESCE(sku,'') sku FROM products WHERE id = ? AND store_id = ?").get(productId, storeId) as { prov: string; fuente: string; sku: string } | undefined;
+      if (!p) return;
+      const { vinculoPausado } = await import('./vinculos.js');
+      if (p.fuente === 'dropi' && p.sku && !vinculoPausado(productId, 'dropi')) {
+        const { sincronizarProductoDropi } = await import('./dropiSync.js');
+        await sincronizarProductoDropi(storeId, productId, undefined, true);
+      }
+      if (p.prov === 'skydropx' && !vinculoPausado(productId, 'skydropx')) {
+        const sk = await import('./skydropxApi.js');
+        if (sk.cfgSkydropx(storeId)) await sk.vincularAutoSkydropx(storeId);
+      }
+    })().catch((e) => console.error('[vínculos] al guardar producto', e));
+  }, 8000));
+}
 export const webhooks = proteger(Router());
 
 const ESTADOS = ['Nuevo', 'Confirmado', 'Guía generada', 'En tránsito', 'En reparto', 'Entregado'] as const; // avance a mano (En oficina lo pone la transportadora)
@@ -1595,6 +1618,8 @@ api.post('/products/:id/dropi/sincronizar', requireAuth, requireStore, requirePe
   const { sincronizarProductoDropi } = await import('./dropiSync.js');
   const r = await sincronizarProductoDropi(req.user!.storeId!, req.params.id, String(req.body?.dropiId || ''));
   if ('error' in r) return res.status(400).json({ error: r.error });
+  // Volver a poner el ID de Dropi es pedir que se vincule de nuevo (quita la pausa de «Quitar todo»).
+  void import('./vinculos.js').then((m) => m.pausarVinculo(req.user!.storeId!, req.params.id, 'dropi', false)).catch(() => {});
   res.json(r);
 });
 // Volver a armar las variantes con las opciones (deja de usar las de Dropi).
@@ -1737,7 +1762,8 @@ api.get('/skydropx/productos', requireAuth, requireStore, async (req, res) => {
   const sk = await import('./skydropxApi.js');
   const sid = req.user!.storeId!;
   const prods = await sk.productosDeSkydropx(sid);
-  res.json({ variantes: sk.variantesParaSkydropx(sid), productosSky: 'error' in prods ? [] : prods, error: 'error' in prods ? prods.error : '' });
+  const { productosPausados } = await import('./vinculos.js');
+  res.json({ variantes: sk.variantesParaSkydropx(sid), productosSky: 'error' in prods ? [] : prods, error: 'error' in prods ? prods.error : '', pausados: [...productosPausados(sid, 'skydropx')] });
 });
 api.post('/skydropx/productos/auto', requireAuth, requireStore, async (req, res) => {
   const { vincularAutoSkydropx } = await import('./skydropxApi.js');
@@ -2226,8 +2252,8 @@ api.get('/effi-api/articulos', requireAuth, requireStore, requirePermiso('produc
   const ef = await import('./effiApi.js');
   const sid = req.user!.storeId!;
   const arts = ef.articulosCache(sid);
-  const variantes = (db.prepare("SELECT v.id, p.id pid, p.nombre producto, v.label, COALESCE(p.despacho_proveedor,'') proveedor, COALESCE(json_extract(v.refs,'$.effi_id'),'') effi_id, COALESCE(json_extract(v.refs,'$.effi_auto'),0) effi_auto, COALESCE(json_extract(v.refs,'$.effi_prov_id'),'') prov_id FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND (? = '' OR p.id = ?) ORDER BY p.nombre, v.label").all(sid, String(req.query.productId || ''), String(req.query.productId || '')) as { id: string; pid: string; producto: string; label: string; proveedor: string; effi_id: string; effi_auto: number; prov_id: string }[])
-    .map((v) => ({ variantId: v.id, productId: v.pid, producto: v.producto, proveedor: v.proveedor, nombre: v.label && v.label.toLowerCase() !== 'única' ? `${v.producto} (${v.label})` : v.producto, effiId: String(v.effi_id || ''), auto: Number(v.effi_auto) === 1, provId: String(v.prov_id || '') }));
+  const variantes = (db.prepare("SELECT v.id, p.id pid, p.nombre producto, v.label, COALESCE(p.despacho_proveedor,'') proveedor, COALESCE(json_extract(v.refs,'$.effi_id'),'') effi_id, COALESCE(json_extract(v.refs,'$.effi_auto'),0) effi_auto, COALESCE(json_extract(v.refs,'$.effi_prov_id'),'') prov_id, COALESCE(json_extract(v.refs,'$.effi_sin'),0) effi_sin FROM variants v JOIN products p ON p.id = v.product_id WHERE p.store_id = ? AND (? = '' OR p.id = ?) ORDER BY p.nombre, v.label").all(sid, String(req.query.productId || ''), String(req.query.productId || '')) as { id: string; pid: string; producto: string; label: string; proveedor: string; effi_id: string; effi_auto: number; prov_id: string; effi_sin: number }[])
+    .map((v) => ({ variantId: v.id, productId: v.pid, producto: v.producto, proveedor: v.proveedor, nombre: v.label && v.label.toLowerCase() !== 'única' ? `${v.producto} (${v.label})` : v.producto, effiId: String(v.effi_id || ''), auto: Number(v.effi_auto) === 1, provId: String(v.prov_id || ''), sinAuto: Number(v.effi_sin) === 1 }));
   // El nombre del artículo vinculado (aunque no esté en la caché), para mostrarlo.
   const nombres: Record<string, string> = {};
   for (const a of arts) nombres[a.id] = a.descripcion + (a.referencia ? ` [${a.referencia}]` : '');
@@ -2265,6 +2291,35 @@ api.post('/effi-api/producto-convenio', requireAuth, requireStore, requirePermis
   let n = 0;
   for (const id of ids) n += upd.run(conv, id, req.user!.storeId!).changes;
   res.json({ ok: true, actualizados: n });
+});
+// Al abrir el bloque de Effi del producto: vincula solo lo que falta y devuelve las variantes con
+// varios artículos posibles (para elegir con un clic) y si la automática está pausada.
+api.post('/effi-api/producto/:id/auto', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {
+  if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const ef = await import('./effiApi.js');
+  const r = await ef.vinculosProductoEffi(req.user!.storeId!, String(req.params.id));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+// «Quitar todo»: desconecta todas las variantes del producto en Effi, Dropi o Skydropx y pausa
+// su vinculación automática (si no, el repaso siguiente las volvería a vincular).
+api.post('/products/:id/vinculos/quitar', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {
+  const { esIntegVinculo, quitarVinculos } = await import('./vinculos.js');
+  const integ = req.body?.integ;
+  if (!esIntegVinculo(integ)) return res.status(400).json({ error: 'Integración no válida.' });
+  if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const n = quitarVinculos(req.user!.storeId!, String(req.params.id), integ);
+  registrarAccionEquipo(req.user!.email, `Quitó los vínculos de ${integ} del producto ${String(req.params.id)} (${n} variante(s))`, req.user!.storeId!);
+  res.json({ ok: true, quitadas: n });
+});
+// Vuelve a prender la vinculación automática del producto (después de «Quitar todo»).
+api.post('/products/:id/vinculos/reanudar', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {
+  const { esIntegVinculo, pausarVinculo } = await import('./vinculos.js');
+  const integ = req.body?.integ;
+  if (!esIntegVinculo(integ)) return res.status(400).json({ error: 'Integración no válida.' });
+  if (!ownProduct(req, req.params.id)) return res.status(404).json({ error: 'Producto no encontrado.' });
+  pausarVinculo(req.user!.storeId!, String(req.params.id), integ, false);
+  res.json({ ok: true });
 });
 // Revisión rápida de vínculos de un producto: actual vs. sugerido, y aplicar varios de una vez.
 api.get('/effi-api/producto/:id/vinculos', requireAuth, requireStore, requirePermiso('productos_editar'), async (req, res) => {

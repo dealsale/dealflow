@@ -61,6 +61,7 @@ export async function reenviarPlantillaGuardada(storeId: string, wamid: string, 
 }
 
 const alertaPago = new Map<string, number>(); // storeId → último aviso de problema de pago en Meta
+const alertaBloqueo = new Map<string, number>(); // storeId → último aviso de cuenta bloqueada por Meta (131031)
 /** Guarda el motivo del fallo en el mensaje, lo deja en el registro del chat y, si era del bot, pasa el chat al equipo. */
 function registrarFallo(rowId: string, error: string): void {
   try {
@@ -79,6 +80,13 @@ function registrarFallo(rowId: string, error: string): void {
       registrarLog(m.store_id, 'error', 'meta', 'Meta no está entregando los mensajes que cobra (plantillas y mensajes fuera de la ventana gratis): hay un problema con el método de pago de tu cuenta de WhatsApp Business. Arréglalo en business.facebook.com → Cuentas de WhatsApp → Configuración de pago. Las respuestas gratis (dentro de 24 h) siguen saliendo.');
       void import('./push.js').then((p) => p.enviarPush(m.store_id, 'contactos', '⚠️ WhatsApp: problema de pago en Meta', 'Algunos mensajes no se están entregando. Revisa el método de pago de tu cuenta de WhatsApp Business.', { url: '/' })).catch(() => {});
       void import('./correo.js').then((c) => c.correoATienda(m.store_id, 'alertas', 'WhatsApp: problema de pago en Meta', '⚠️ Meta pide revisar el método de pago', ['Meta no está entregando los mensajes que cobra (plantillas y mensajes fuera de la ventana de 24 h) por un problema con el <b>método de pago</b> de tu cuenta de WhatsApp Business.', 'Arréglalo en <b>business.facebook.com → Cuentas de WhatsApp → Configuración de pago</b>. Las respuestas dentro de las 24 h siguen saliendo.'], { texto: 'Abrir Meta Business', url: 'https://business.facebook.com/' })).catch(() => {});
+    }
+    // Cuenta bloqueada o en revisión por Meta (131031): no sale NINGÚN mensaje → alerta general (1 vez cada 6 h).
+    if (/131031/.test(error) && Date.now() - (alertaBloqueo.get(m.store_id) || 0) > 6 * 3600e3) {
+      alertaBloqueo.set(m.store_id, Date.now());
+      registrarLog(m.store_id, 'error', 'meta', 'Meta está bloqueando todos los mensajes de tu WhatsApp (código 131031): la cuenta está restringida o en revisión. No es un fallo de DealFlow. Entra a business.facebook.com → Estado de la cuenta (Business Support Home), mira el motivo y pide la revisión. Mientras tanto los chats pasan a tu equipo.');
+      void import('./push.js').then((p) => p.enviarPush(m.store_id, 'contactos', '⚠️ WhatsApp: Meta bloqueó los envíos', 'Tu cuenta de WhatsApp Business está restringida o en revisión. Revisa el estado de la cuenta en Meta.', { url: '/whatsapp' })).catch(() => {});
+      void import('./correo.js').then((c) => c.correoATienda(m.store_id, 'alertas', 'WhatsApp: Meta bloqueó los envíos', '⚠️ Meta está bloqueando tus mensajes de WhatsApp', ['Meta tiene tu cuenta de WhatsApp Business <b>restringida o en revisión</b> y no está dejando salir ningún mensaje (código 131031). No es un fallo de DealFlow.', 'Entra a <b>business.facebook.com → Estado de la cuenta</b>, mira el motivo y pide la revisión si aparece el botón. Cuando Meta la libere, los mensajes vuelven a salir solos.'], { texto: 'Ver estado de la cuenta', url: 'https://business.facebook.com/business-support-home/' })).catch(() => {});
     }
     if (m.de === 'bot' && !/bloqueaste|bloqueado/i.test(error)) {
       void import('./pasoHumano.js').then((h) => h.pasarAHumano(m.store_id, m.lead_id, `WhatsApp no entregó la respuesta del asistente (${error})`)).catch(() => {});

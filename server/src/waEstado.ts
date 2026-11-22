@@ -53,6 +53,7 @@ function enlaces(wabaId: string, businessId: string): EnlaceRapido[] {
     { id: 'perfil', titulo: 'Perfil del negocio', sub: 'Foto, descripción, dirección y horario en WhatsApp', url: `${BM}/wa/manage/profile/${waba}` },
     { id: 'calidad', titulo: 'Calidad y estadísticas', sub: 'Cómo te califican tus clientes y cuánto envías', url: `${BM}/wa/manage/insights/${waba}` },
     { id: 'plantillas', titulo: 'Plantillas de mensajes', sub: 'Para escribirle primero a un cliente pasadas 24 h', url: `${BM}/wa/manage/message-templates/${waba}` },
+    { id: 'estado', titulo: 'Estado de la cuenta', sub: 'Si Meta restringió tu cuenta: el motivo y el botón para pedir revisión', url: businessId ? `${BM}/business-support-home/?business_id=${encodeURIComponent(businessId)}` : `${BM}/business-support-home/` },
     { id: 'cuenta', titulo: 'Cuenta de WhatsApp Business', sub: 'Todo el panel de Meta para tu cuenta', url: `${BM}/wa/manage/home/${waba}` },
   ];
 }
@@ -119,7 +120,18 @@ export async function estadoNumero(storeId: string): Promise<EstadoNumero> {
   if (calidad === 'RED') marcar('problema', 'Tus clientes están bloqueando o reportando los mensajes. Escribe solo a quien te escribió primero.');
   else if (calidad === 'YELLOW') marcar('aviso', 'La calidad bajó a media. Cuida el tono y la frecuencia de los mensajes.');
   if (!verificado) marcar('problema', 'Falta verificar el número con el código que envía Meta. Hazlo en «Mis números».');
-  if (revision === 'PENDING') marcar('aviso', 'Meta está revisando tu cuenta de WhatsApp Business.');
+  // Meta puede bloquear los envíos (131031) aunque el número salga «conectado» y en calidad alta:
+  // lo sabemos por los mensajes que rechazó en las últimas 6 horas.
+  let bloqueada = false;
+  try {
+    bloqueada = !!db.prepare(`SELECT 1 FROM messages m JOIN leads l ON l.id = m.lead_id
+      WHERE l.store_id = ? AND m.error LIKE '%131031%' AND m.created_at > datetime('now','-6 hours') LIMIT 1`).get(storeId);
+  } catch { /* opcional */ }
+  if (bloqueada) {
+    marcar('problema', revision === 'PENDING'
+      ? 'Meta está revisando tu cuenta de WhatsApp Business y, mientras tanto, NO deja salir los mensajes (código 131031). Entra a «Estado de la cuenta» para ver el motivo y pedir la revisión.'
+      : 'Meta está bloqueando los mensajes de tu cuenta (código 131031): la cuenta está restringida. Entra a «Estado de la cuenta» para ver el motivo y apelar.');
+  } else if (revision === 'PENDING') marcar('aviso', 'Meta está revisando tu cuenta de WhatsApp Business.');
   else if (revision === 'REJECTED') marcar('problema', 'Meta rechazó la revisión de tu cuenta. Revísala en el panel de Meta.');
   if (nombreEstado === 'DECLINED') marcar('aviso', 'Meta rechazó el nombre que ven tus clientes. Cámbialo en «Mis números».');
   else if (nombreEstado === 'PENDING_REVIEW') marcar('aviso', 'Meta está revisando el nombre que ven tus clientes.');

@@ -6,6 +6,7 @@ import { normGeo } from './colombiaGeo.js';
 import { DANE } from './daneCodigos.js';
 import { CENTROS_POBLADOS } from './centrosPoblados.js';
 import { estadoLogistico, siguienteEstado } from './estadosPedido.js';
+import { productosPausados } from './vinculos.js';
 
 /**
  * Integración con Skydropx (Colombia): una sola cuenta para cotizar y generar guías con
@@ -371,7 +372,8 @@ export async function vincularAutoSkydropx(storeId: string): Promise<{ vinculada
   if ('error' in prods) return prods;
   const porSku = new Map(prods.filter((p) => p.sku).map((p) => [normSku(p.sku), p]));
   const porNombre = new Map(prods.map((p) => [normTxt(p.nombre), p]));
-  const vars = variantesParaSkydropx(storeId);
+  const pausados = productosPausados(storeId, 'skydropx'); // «Quitar todo»: no se vuelven a vincular solos
+  const vars = variantesParaSkydropx(storeId).filter((v) => !pausados.has(v.productId));
   let vinculadas = 0;
   for (const v of vars) {
     // Si el producto vinculado ya no existe en Skydropx, se vuelve a buscar.

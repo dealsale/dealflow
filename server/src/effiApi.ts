@@ -5,6 +5,7 @@ import { conPedido, trazar, trazarApi } from './trazabilidad.js';
 import { emparejarItem, emparejarArticulos, palabrasClave, separarItemsPedido, type Emparejado, tokensVariante, mismoToken } from './emparejar.js';
 import { nombreTransportadora } from './transportadoras.js';
 import { estadoLogistico, siguienteEstado } from './estadosPedido.js';
+import { productosPausados, vinculoPausado } from './vinculos.js';
 
 /**
  * Integración DIRECTA con la API de Effi ERP (https://effi.com.co/api).
@@ -1103,9 +1104,12 @@ export async function repararVinculosDrop(storeId: string, apiKey: string): Prom
   if (!drops.length) return 0;
   const idsDrop = new Set(drops.map((d) => d.id));
   const cache = new Map(articulosCache(storeId).map((a) => [a.id, a]));
-  const vars = db.prepare(`SELECT v.id, json_extract(v.refs,'$.effi_id') effi FROM variants v JOIN products p ON p.id = v.product_id
-    WHERE p.store_id = ? AND COALESCE(p.despacho_proveedor,'') = 'effi' AND COALESCE(p.effi_convenio,'') != 'propio' AND COALESCE(json_extract(v.refs,'$.effi_id'),'') != ''`).all(storeId) as { id: string; effi: string }[];
-  const usados = new Set(vars.map((v) => String(v.effi)));
+  const todasV = db.prepare(`SELECT v.id, p.id pid, json_extract(v.refs,'$.effi_id') effi, COALESCE(json_extract(v.refs,'$.effi_auto'),0) auto FROM variants v JOIN products p ON p.id = v.product_id
+    WHERE p.store_id = ? AND COALESCE(p.despacho_proveedor,'') = 'effi' AND COALESCE(p.effi_convenio,'') != 'propio' AND COALESCE(json_extract(v.refs,'$.effi_id'),'') != ''`).all(storeId) as { id: string; pid: string; effi: string; auto: number }[];
+  const usados = new Set(todasV.map((v) => String(v.effi)));
+  // Solo los vínculos que puso DealFlow: lo fijado a mano (o con la automática pausada) no se toca.
+  const pausados = productosPausados(storeId, 'effi');
+  const vars = todasV.filter((v) => Number(v.auto) === 1 && !pausados.has(v.pid));
   let n = 0;
   for (const v of vars) {
     const id = String(v.effi);
@@ -1399,7 +1403,11 @@ function idEcommerceDeRef(storeId: string, ref: string): number | null {
 // refPropia: la referencia es de ESTA variante (no la heredada del producto, que comparten todas).
 interface VarianteDF { productId: string; variantId: string | null; producto: string; label: string; ref: string; effiId: string; proveedor: string; refPropia?: boolean;
   /** Artículo del PROVEEDOR dropshipping elegido a mano: con este se despacha y de este sale el stock. */
-  provId?: string }
+  provId?: string;
+  /** El vínculo lo puso DealFlow solo (false = elegido a mano: nunca se cambia). */
+  auto?: boolean;
+  /** La tienda le quitó el artículo a mano: la vinculación automática no se lo vuelve a poner. */
+  sinAuto?: boolean }
 
 /** Todas las variantes (y productos sin variantes) de la tienda con su vínculo actual. */
 function variantesTienda(storeId: string): VarianteDF[] {
@@ -1412,7 +1420,7 @@ function variantesTienda(storeId: string): VarianteDF[] {
     for (const v of vs) {
       const refs = pj<Record<string, string>>(v.refs, {});
       const propia = String(refs.effi || v.sku || '');
-      out.push({ productId: p.id, variantId: v.id, producto: p.nombre, label: v.label || '', ref: propia || String(p.sku || ''), effiId: String(refs.effi_id || ''), proveedor: p.proveedor, refPropia: !!propia || vs.length === 1, provId: String(refs.effi_prov_id || '') });
+      out.push({ productId: p.id, variantId: v.id, producto: p.nombre, label: v.label || '', ref: propia || String(p.sku || ''), effiId: String(refs.effi_id || ''), proveedor: p.proveedor, refPropia: !!propia || vs.length === 1, provId: String(refs.effi_prov_id || ''), auto: Number(refs.effi_auto) === 1, sinAuto: Number(refs.effi_sin) === 1 });
     }
   }
   return out;
@@ -1432,9 +1440,36 @@ function articuloPara(storeId: string, v: VarianteDF, arts: ArticuloEffi[]): Art
   // 2) Misma referencia.
   if (ref) { const a = arts.find((x) => x.referencia && x.referencia.trim().toLowerCase() === ref.trim().toLowerCase()); if (a) return a; }
   // 3) Mismo nombre ("Producto - Variante" o "Producto Variante").
+  // Si hay varios con ese nombre (el propio y el del proveedor), sin adivinar: el único del
+  // tipo que pide el producto; si no hay uno solo, se deja para la búsqueda por nombre.
   const esUnica = !v.label || norm(v.label) === 'unica';
   const nombres = esUnica ? [norm(v.producto)] : [norm(`${v.producto} ${v.label.replace(/·/g, ' ')}`)];
-  return arts.find((a) => nombres.includes(norm(a.descripcion)));
+  const iguales = arts.filter((a) => nombres.includes(norm(a.descripcion)));
+  if (iguales.length <= 1) return iguales[0];
+  const pref = preferenciaProducto(v.productId);
+  const delTipo = iguales.filter((a) => (pref === 'propio' ? a.drop !== 1 : a.drop === 1));
+  return delTipo.length === 1 ? delTipo[0] : undefined;
+}
+
+/** Qué artículo de Effi busca el producto: el del proveedor (con convenio) o el propio. */
+function preferenciaProducto(productId: string): 'drop' | 'propio' | '' {
+  const cm = convenioDeProducto(productId);
+  return cm === 'propio' ? 'propio' : cm ? 'drop' : '';
+}
+
+/** Artículos de Effi que pueden ser de un producto: la caché, la búsqueda en vivo por su nombre y los del proveedor. */
+async function articulosDelProducto(storeId: string, apiKey: string, producto: string, arts: ArticuloEffi[]): Promise<ArticuloEffi[]> {
+  const clave = palabrasClave(producto);
+  if (!clave.length) return [];
+  const vivos = await effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { descripcion: clave.join(' '), por_pagina: 100 } });
+  const lista = new Map<string, ArticuloEffi>(arts.map((a) => [a.id, a]));
+  for (const f of vivos.ok ? vivos.body.data || [] : []) {
+    if (txt(f.vigente) === '0' || lista.has(txt(f.id))) continue;
+    lista.set(txt(f.id), { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: stockDe(f) });
+  }
+  // Los vinculados a un proveedor llevan su marca (la búsqueda en vivo no la trae).
+  for (const d of await articulosDrop(storeId, apiKey)) if (palabrasClave(d.descripcion).some((t) => clave.includes(t))) lista.set(d.id, d);
+  return [...lista.values()].sort((x, y) => (y.drop === 1 ? 1 : 0) - (x.drop === 1 ? 1 : 0));
 }
 
 /**
@@ -1443,24 +1478,15 @@ function articuloPara(storeId: string, v: VarianteDF, arts: ArticuloEffi[]): Art
  * Effi después no estaban ahí y nunca se vinculaban solos). Tolera el orden de las
  * palabras y "T8"/"Talla 8". Devuelve cuántas vinculó.
  */
-async function vincularPorNombre(storeId: string, apiKey: string, vars: VarianteDF[], arts: ArticuloEffi[]): Promise<number> {
-  const pendientes = vars.filter((v) => v.variantId && !v.effiId) as (VarianteDF & { variantId: string })[];
+async function vincularPorNombre(storeId: string, apiKey: string, vars: VarianteDF[], arts: ArticuloEffi[], dudas?: Map<string, ArticuloEffi[]>): Promise<number> {
+  const pendientes = vars.filter((v) => v.variantId && !v.effiId && !v.sinAuto) as (VarianteDF & { variantId: string })[];
   if (!pendientes.length) return 0;
   const producto = pendientes[0].producto;
-  const clave = palabrasClave(producto);
-  if (!clave.length) return 0;
-  const vivos = await effi<Fila[]>(apiKey, 'GET', '/api/articulo', { query: { descripcion: clave.join(' '), por_pagina: 100 } });
-  const lista = new Map<string, ArticuloEffi>(arts.map((a) => [a.id, a]));
-  for (const f of vivos.ok ? vivos.body.data || [] : []) {
-    if (txt(f.vigente) === '0' || lista.has(txt(f.id))) continue;
-    lista.set(txt(f.id), { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: stockDe(f) });
-  }
-  // Los del proveedor (dropshipping) primero: si una prenda existe dos veces en Effi, gana esa.
-  for (const d of await articulosDrop(storeId, apiKey)) if (palabrasClave(d.descripcion).some((t) => clave.includes(t))) lista.set(d.id, d);
-  const ordenados = [...lista.values()].sort((x, y) => (y.drop === 1 ? 1 : 0) - (x.drop === 1 ? 1 : 0));
+  const ordenados = await articulosDelProducto(storeId, apiKey, producto, arts);
+  if (!ordenados.length) return 0;
   // Los artículos que ya usan otras variantes del producto no se repiten.
   const usados = new Set(vars.map((v) => v.effiId).filter(Boolean));
-  const m = emparejarArticulos(producto, pendientes.map((v) => ({ variantId: v.variantId, label: v.label })), ordenados, usados);
+  const m = emparejarArticulos(producto, pendientes.map((v) => ({ variantId: v.variantId, label: v.label })), ordenados, usados, preferenciaProducto(pendientes[0].productId), dudas);
   for (const [variantId, a] of m) {
     vincularArticulo(storeId, variantId, a.id, true);
     const v = pendientes.find((x) => x.variantId === variantId);
@@ -1492,9 +1518,11 @@ export async function proveedorSugerido(storeId: string, effiId: string): Promis
 export function vincularArticulo(storeId: string, variantId: string, effiId: string, auto = false): boolean {
   const own = db.prepare('SELECT v.id FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ? AND p.store_id = ?').get(variantId, storeId);
   if (!own) return false;
-  if (auto) db.prepare("UPDATE variants SET refs = json_set(COALESCE(refs,'{}'), '$.effi_id', ?, '$.effi_auto', 1) WHERE id = ?").run(effiId, variantId);
+  if (auto) db.prepare("UPDATE variants SET refs = json_set(COALESCE(refs,'{}'), '$.effi_id', ?, '$.effi_auto', 1) WHERE id = ? AND COALESCE(json_extract(refs,'$.effi_sin'),0) = 0").run(effiId, variantId);
   // Elegido a mano: es EL artículo de la variante (se quita cualquier otro vínculo de proveedor).
-  else db.prepare("UPDATE variants SET refs = json_remove(json_set(COALESCE(refs,'{}'), '$.effi_id', ?), '$.effi_auto', '$.effi_prov_id') WHERE id = ?").run(effiId, variantId);
+  // Quitado a mano (vacío): queda marcado para que la vinculación automática no lo vuelva a poner.
+  else if (effiId) db.prepare("UPDATE variants SET refs = json_remove(json_set(COALESCE(refs,'{}'), '$.effi_id', ?), '$.effi_auto', '$.effi_prov_id', '$.effi_sin') WHERE id = ?").run(effiId, variantId);
+  else db.prepare("UPDATE variants SET refs = json_remove(json_set(COALESCE(refs,'{}'), '$.effi_id', '', '$.effi_sin', 1), '$.effi_auto', '$.effi_prov_id') WHERE id = ?").run(variantId);
   return true;
 }
 
@@ -1509,14 +1537,17 @@ export function vincularArticulo(storeId: string, variantId: string, effiId: str
 const intentos = new Map<string, { firma: string; at: number }>(); // productId → último intento en vivo
 async function vincularTienda(storeId: string, apiKey: string, arts: ArticuloEffi[], ahorrar: boolean): Promise<{ todas: VarianteDF[]; deEffi: VarianteDF[]; marcados: number }> {
   const todas = variantesTienda(storeId);
-  const sinDropi = !db.prepare("SELECT 1 FROM store_integrations WHERE store_id = ? AND tipo = 'dropi_api'").get(storeId);
-  const candidatas = todas.filter((v) => v.proveedor === 'effi' || (!v.proveedor && sinDropi));
+  // Solo los productos que se despachan por Effi y sin la automática pausada («Quitar todo»).
+  // Los «Sin definir» no se tocan: antes se marcaban solos como de Effi y eso confundía
+  // a las tiendas que despachan por varias partes (Dropi, Skydropx, mercancía propia).
+  const pausados = productosPausados(storeId, 'effi');
+  const candidatas = todas.filter((v) => v.proveedor === 'effi' && !pausados.has(v.productId));
   const usadosPorProducto = new Map<string, Set<string>>();
   for (const v of candidatas) if (v.effiId) { const u = usadosPorProducto.get(v.productId) || new Set(); u.add(v.effiId); usadosPorProducto.set(v.productId, u); }
   for (const v of candidatas) {
     // Un vínculo ya guardado (a mano o antes) se respeta: el artículo puede no estar
     // en la caché (búsqueda en vivo, proveedor dropshipping) y aun así ser el correcto.
-    if (v.effiId) continue;
+    if (v.effiId || v.sinAuto) continue;
     const a = articuloPara(storeId, v, arts);
     if (!a) continue;
     const usados = usadosPorProducto.get(v.productId) || new Set();
@@ -1537,15 +1568,7 @@ async function vincularTienda(storeId: string, apiKey: string, arts: ArticuloEff
     await vincularPorNombre(storeId, apiKey, vars, arts);
     intentos.set(pid, { firma: vars.map((v) => `${v.producto}|${v.label}|${v.effiId}`).join(';'), at: Date.now() });
   }
-  // "Sin definir" que sí está en Effi → se marca como de Effi.
-  let marcados = 0;
-  for (const [pid, vars] of porProducto) {
-    if (vars[0].proveedor || !vars.some((v) => v.effiId)) continue;
-    marcados += db.prepare("UPDATE products SET despacho_proveedor = 'effi' WHERE id = ? AND store_id = ? AND COALESCE(despacho_proveedor,'') = ''").run(pid, storeId).changes;
-    for (const v of vars) v.proveedor = 'effi';
-  }
-  if (marcados) registrarLog(storeId, 'info', 'effi', `${marcados} producto(s) sin proveedor se encontraron en Effi y se marcaron como de Effi.`);
-  return { todas, deEffi: candidatas.filter((v) => v.proveedor === 'effi'), marcados };
+  return { todas, deEffi: candidatas, marcados: 0 };
 }
 
 /** Descarga artículos y vincula automáticamente todas las variantes que casen (botón del panel). */
@@ -1556,11 +1579,9 @@ export async function sincronizarArticulos(storeId: string): Promise<{ total: nu
   if ('error' in d) return d;
   cacheAt.set(storeId, Date.now());
   const arts = articulosCache(storeId);
-  // Modo manual: solo se descarga el catálogo y el stock; no se toca ningún vínculo.
-  const { todas, deEffi, marcados } = c.vinculoManual
-    ? (() => { const t = variantesTienda(storeId); return { todas: t, deEffi: t.filter((v) => v.proveedor === 'effi'), marcados: 0 }; })()
-    : await vincularTienda(storeId, c.apiKey, arts, false);
-  if (!c.vinculoManual) { try { await repararVinculosDrop(storeId, c.apiKey); } catch (e) { console.warn('[effi] reparar vínculos', e); } }
+  // Vincula solo lo que falta (lo elegido a mano nunca se cambia).
+  const { todas, deEffi, marcados } = await vincularTienda(storeId, c.apiKey, arts, false);
+  try { await repararVinculosDrop(storeId, c.apiKey); } catch (e) { console.warn('[effi] reparar vínculos', e); }
   const stock = await sincronizarStockEffi(storeId, c.apiKey);
   let vinculadas = 0;
   const sinVinculo: { variantId: string | null; nombre: string }[] = [];
@@ -1590,12 +1611,46 @@ export async function autoVincularEffi(storeId: string): Promise<void> {
       if ('error' in d) return;
       cacheAt.set(storeId, Date.now());
     }
-    if (!c.vinculoManual) {
-      await vincularTienda(storeId, c.apiKey, articulosCache(storeId), true);
-      await repararVinculosDrop(storeId, c.apiKey).catch(() => 0);
-    }
-    await sincronizarStockEffi(storeId, c.apiKey); // el stock sí se actualiza siempre
+    await vincularTienda(storeId, c.apiKey, articulosCache(storeId), true);
+    await repararVinculosDrop(storeId, c.apiKey).catch(() => 0);
+    await sincronizarStockEffi(storeId, c.apiKey);
   } catch (e) { console.error('[effi] auto-vínculo', e); } finally { enCurso.delete(storeId); }
+}
+
+export interface ArticuloOpcion { id: string; descripcion: string; referencia: string; drop: boolean; stock: number | null }
+/**
+ * Al abrir el bloque de Effi de un producto: vincula SOLAS sus variantes sin artículo (si
+ * la automática no está pausada) y devuelve, para las que tienen dos o más artículos
+ * posibles, esas opciones para elegir con un clic. Lo elegido a mano no se toca.
+ */
+export async function vinculosProductoEffi(storeId: string, productId: string): Promise<{ pausado: boolean; vinculadas: number; dudas: Record<string, ArticuloOpcion[]> } | { error: string }> {
+  const c = cfgEffi(storeId);
+  if (!c?.apiKey) return { error: 'Conecta Effi primero.' };
+  const pausado = vinculoPausado(productId, 'effi');
+  const dudas: Record<string, ArticuloOpcion[]> = {};
+  if (pausado) return { pausado, vinculadas: 0, dudas };
+  if (!cacheAt.has(storeId) || Date.now() - cacheAt.get(storeId)! > 25 * 60e3 || !articulosCache(storeId).length) {
+    const d = await descargarArticulos(storeId, c.apiKey);
+    if (!('error' in d)) cacheAt.set(storeId, Date.now());
+  }
+  const arts = articulosCache(storeId);
+  const vars = variantesTienda(storeId).filter((v) => v.productId === productId);
+  const usados = new Set(vars.map((v) => v.effiId).filter(Boolean));
+  let vinculadas = 0;
+  for (const v of vars) {
+    if (v.effiId || v.sinAuto || !v.variantId) continue;
+    const a = articuloPara(storeId, v, arts);
+    if (!a || usados.has(a.id)) continue;
+    vincularArticulo(storeId, v.variantId, a.id, true);
+    v.effiId = a.id; usados.add(a.id); vinculadas++;
+  }
+  const mapa = new Map<string, ArticuloEffi[]>();
+  vinculadas += await vincularPorNombre(storeId, c.apiKey, vars, arts, mapa);
+  for (const [vid, lista] of mapa) {
+    dudas[vid] = lista.slice(0, 6).map((a) => ({ id: a.id, descripcion: a.descripcion, referencia: a.referencia, drop: a.drop === 1, stock: a.stock ?? null }));
+  }
+  if (vinculadas) intentos.delete(productId);
+  return { pausado, vinculadas, dudas };
 }
 /**
  * Pasa el stock de Effi a las variantes vinculadas (lo que el asistente le dice al
@@ -1785,6 +1840,9 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
   for (const it of items) {
     const emp = varianteDeItem(it, todas);
     const v = emp.v;
+    // Lo elegido a mano (o un producto con la automática pausada) nunca se cambia al despachar.
+    const pausa = v ? vinculoPausado(v.productId, 'effi') : false;
+    const aMano = !!v?.effiId && !v?.auto;
     let a = v ? articuloPara(storeId, v, arts) : undefined;
     // Artículo del PROVEEDOR elegido a mano: manda sobre el propio (con ese se despacha).
     if (v?.provId) {
@@ -1798,7 +1856,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
       enVivo.add(v.effiId);
       a = (await articuloPorId(storeId, c.apiKey, v.effiId)) || { id: v.effiId, descripcion: v.producto, referencia: v.ref, ecommerce: '', stock: null };
     }
-    if (!a && v?.variantId && !v.effiId && v.proveedor !== 'dropi' && !c.vinculoManual) {
+    if (!a && v?.variantId && !v.effiId && !v.sinAuto && v.proveedor !== 'dropi' && !pausa) {
       // Variante sin vínculo: se busca el producto en vivo en Effi y se vincula por nombre.
       await vincularPorNombre(storeId, c.apiKey, todas.filter((x) => x.productId === v.productId), arts);
       if (v.effiId) { enVivo.add(v.effiId); a = await articuloPorId(storeId, c.apiKey, v.effiId); }
@@ -1809,7 +1867,7 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
       const f = r.ok ? r.body.data?.[0] : undefined;
       if (f) a = { id: txt(f.id), descripcion: txt(f.descripcion), referencia: txt(f.referencia), ecommerce: txt(f.articulos_ecommerce), stock: null };
     }
-    if (!a && !c.vinculoManual) {
+    if (!a && !pausa && !v?.sinAuto) {
       // Último recurso: buscar EN EFFI por el nombre del producto + la talla/color pedidos.
       // Si hay UN solo artículo que tenga todas esas palabras, ese es (así no se traba el pedido).
       const directo = await articuloPorTexto(storeId, it.nombre);
@@ -1821,12 +1879,12 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     }
     if (!a) {
       // Mensaje preciso: qué parte del vínculo falta.
-      const motivo = !v ? emp.motivo : `la variante ${v.label || 'única'} de ${v.producto} no tiene artículo de Effi vinculado${c.vinculoManual ? ': vincúlala a mano con el ID del artículo' : ''}`;
+      const motivo = !v ? emp.motivo : `la variante ${v.label || 'única'} de ${v.producto} no tiene artículo de Effi vinculado${pausa || v.sinAuto ? ': quitaste sus vínculos y la vinculación automática de este producto está pausada. Elige el artículo en Productos → el producto → Variantes → Effi' : ': DealFlow no encontró en Effi un artículo con ese nombre y variante (o encontró varios). Elígelo en Productos → el producto → Variantes → Effi'}`;
       sinVinculo.push(`${it.nombre} (${motivo})`);
       trazar(storeId, orderId, { etapa: 'despacho', nivel: 'warn', titulo: `Sin vínculo: ${it.nombre}`, detalle: motivo, datos: { item: it.nombre, idsGuardados: { producto: it.product_id, variante: it.variant_id }, productosParecidos: emp.parecidos, variante: v ? { producto: v.producto, label: v.label, ref: v.ref, effiId: v.effiId, proveedor: v.proveedor } : null } });
       continue;
     }
-    if (v?.variantId && v.effiId !== a.id && !c.vinculoManual) vincularArticulo(storeId, v.variantId, a.id, true);
+    if (v?.variantId && !v.effiId && !v.sinAuto && !pausa) vincularArticulo(storeId, v.variantId, a.id, true);
     // ¿Artículo de proveedor dropshipping? La caché vieja no traía la marca: se confirma en vivo.
     if (a.drop !== 1 && !enVivo.has(a.id)) {
       const vivo = await articuloPorId(storeId, c.apiKey, a.id);
@@ -1837,10 +1895,11 @@ async function prepararRemisionInterna(storeId: string, orderId: string, reinten
     // El convenio puesto a mano manda: con código es de proveedor; "propio" es mercancía tuya.
     // Artículo PROPIO sin stock con un "gemelo" vinculado al proveedor (mismo nombre): se usa
     // el del proveedor y la variante queda vinculada a él (si no, Effi rechaza la remisión).
-    if (c.vinculoManual && a.drop !== 1 && cm !== 'propio' && a.stock != null && !(Number(a.stock) > 0)) {
-      avisos.push(`"${it.nombre}" está vinculado a tu artículo propio #${a.id} y Effi dice que no tiene stock. Si lo despacha un proveedor, pon el ID del artículo del proveedor en «Proveedor» (Productos → el producto → Vínculo con Effi).`);
+    const fijo = aMano || pausa || !!v?.provId;
+    if (fijo && a.drop !== 1 && cm !== 'propio' && a.stock != null && !(Number(a.stock) > 0)) {
+      avisos.push(`"${it.nombre}" está vinculado a tu artículo propio #${a.id} y Effi dice que no tiene stock. Si lo despacha un proveedor, elige el artículo del proveedor en Productos → el producto → Variantes → Effi.`);
     }
-    if (!c.vinculoManual && a.drop !== 1 && cm !== 'propio' && !(Number(a.stock) > 0)) {
+    if (!fijo && a.drop !== 1 && cm !== 'propio' && !(Number(a.stock) > 0)) {
       const gem = await gemeloDrop(storeId, c.apiKey, a);
       if (gem) {
         avisos.push(`"${it.nombre}" estaba vinculado a tu artículo propio #${a.id} (sin stock): se usó el del proveedor «${gem.descripcion}» #${gem.id}, y la variante quedó vinculada a ese.`);
@@ -2193,7 +2252,13 @@ async function despacharEffiInterno(storeId: string, orderId: string, reintento 
     const queConoce = !convMalo ? '' : lista.length
       ? ` En la cuenta de Effi conectada aparecen estos convenios (de ventas anteriores o artículos de proveedor): ${lista.slice(0, 8).map((k) => `${k.nombre && !k.nombre.startsWith('Convenio ') ? `${k.nombre} · ` : ''}${k.id}`).join(' — ')}. Si el de este proveedor es uno de esos, ponlo en el producto.`
       : ' En la cuenta de Effi conectada no aparece ningún convenio usado antes. Si aceptaste el convenio en otra cuenta o empresa de Effi, la API key de Integraciones → Effi tiene que ser de esa misma cuenta (la API key se saca en Effi con el usuario de la empresa que tiene el convenio).';
-    const e = `Effi no creó la remisión: ${mensajeError(r)}${sinStock ? ' → Si estos productos los despacha un proveedor, asígnales su convenio en Integraciones → Effi → Artículos (o marca uno por defecto con ★) y vuelve a enviar.' : ''}${convMalo ? ` → Effi no reconoce el código de convenio «${String(body.convenio_dropshipping)}» en la cuenta conectada. Revisa en Effi → Dropshipping → Convenios que esté ACEPTADO y activo, y cópialo EXACTO${ambiguo ? ' (ojo: este código tiene letras que se confunden, como I mayúscula y l minúscula, o 0 y O)' : ''}.${queConoce}` : ''}`;
+    // Dropshipping: Effi revisa el stock del artículo DEL PROVEEDOR al que está vinculado el tuyo
+    // (ese vínculo se hace en Effi, no en DealFlow). Si sale en 0, casi siempre es una de dos:
+    // el vínculo apunta a otra referencia del proveedor, o su stock está en otra bodega.
+    const provSinStock = /existencias en la bodega del proveedor/i.test(mensajeError(r));
+    const artProv = /proveedor\s+\S+\s*#(\d+)/i.exec(mensajeError(r))?.[1] || '';
+    const bodProv = /bodega del proveedor\s*\(([^)]{1,60})\)/i.exec(mensajeError(r))?.[1] || '';
+    const e = `Effi no creó la remisión: ${mensajeError(r)}${provSinStock ? ` → DealFlow lo mandó bien con el convenio${body.convenio_dropshipping ? ` ${String(body.convenio_dropshipping)}` : ''}; quien dice que no hay stock es Effi, mirando el artículo${artProv ? ` #${artProv}` : ''} DEL PROVEEDOR. Lo más común: el proveedor tiene las unidades en OTRA bodega. Effi solo descuenta de la bodega que el proveedor usa para dropshipping${bodProv ? ` (aquí: ${bodProv})` : ''} y eso no se puede escoger desde DealFlow: el proveedor tiene que pasar las unidades a esa bodega o cambiar en su Effi la bodega del convenio. Si no es eso, revisa en Effi → Dropshipping que tu artículo esté vinculado a la referencia correcta del proveedor (misma talla y color). Cuando lo corrijan, vuelve a enviar el pedido.` : ''}${sinStock ? ' → Si estos productos los despacha un proveedor, asígnales su convenio en Integraciones → Effi → Artículos (o marca uno por defecto con ★) y vuelve a enviar.' : ''}${convMalo ? ` → Effi no reconoce el código de convenio «${String(body.convenio_dropshipping)}» en la cuenta conectada. Revisa en Effi → Dropshipping → Convenios que esté ACEPTADO y activo, y cópialo EXACTO${ambiguo ? ' (ojo: este código tiene letras que se confunden, como I mayúscula y l minúscula, o 0 y O)' : ''}.${queConoce}` : ''}`;
     registrarLog(storeId, 'error', 'despacho', `${numDF}: ${e}`);
     return { error: e };
   }

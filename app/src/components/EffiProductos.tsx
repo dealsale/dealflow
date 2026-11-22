@@ -4,8 +4,9 @@ import { Dropdown } from './Dropdown';
 import {
   apiEffiTodos,
   apiEffiApiArticulos, apiEffiApiBuscar, apiRevisarVinculos, apiAplicarVinculos, type SugerenciaVinculo, type ArtVinculo, apiEffiApiProveedor, apiEffiApiConvenioProducto, apiEffiApiSyncArticulos, apiEffiApiVincular, apiBodegaProducto, apiFijarBodegaProducto, type BodegaProducto,
-  type EffiArticulo, type EffiVarianteDF,
+  type EffiArticulo, type EffiVarianteDF, apiEffiProductoAuto, type ArticuloOpcionEffi,
 } from '../lib/api';
+import { VinculosBarra } from './VinculosBarra';
 
 /**
  * Productos de la tienda ↔ artículos de Effi.
@@ -278,50 +279,81 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { p
   const [msg, setMsg] = useState('');
   const [guardando, setGuardando] = useState('');
   const [guardados, setGuardados] = useState<Record<string, string>>({}); // variante → ID recién guardado
-  const [actualizando, setActualizando] = useState(false);
+  const [auto, setAuto] = useState<{ pausado: boolean; dudas: Record<string, ArticuloOpcionEffi[]> } | null>(null);
+  const [recarga, setRecarga] = useState(0);
+  // Al abrir: DealFlow vincula solo lo que falta (sin botón) y luego se muestran las variantes.
   useEffect(() => {
-    void apiEffiApiArticulos(productId).then((r) => { if (r.data) setVars(r.data.variantes); else setMsg(r.error || 'No pudimos leer Effi.'); });
-    void cargarTodos().then((l) => setLista(ordenarPorProducto(l, productoNombre)));
-  }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const actualizar = async () => {
-    setActualizando(true);
-    setLista(ordenarPorProducto(await cargarTodos(true), productoNombre));
-    setActualizando(false);
-  };
+    let vivo = true;
+    setMsg('');
+    void (async () => {
+      const a = await apiEffiProductoAuto(productId);
+      if (!vivo) return;
+      setAuto(a.data ? { pausado: a.data.pausado, dudas: a.data.dudas || {} } : { pausado: false, dudas: {} });
+      if (a.error) setMsg(a.error);
+      const r = await apiEffiApiArticulos(productId);
+      if (!vivo) return;
+      if (r.data) setVars(r.data.variantes); else setMsg(r.error || 'No pudimos leer Effi.');
+      if (a.data?.vinculadas) onCambio?.();
+    })();
+    return () => { vivo = false; };
+  }, [productId, recarga]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void cargarTodos().then((l) => setLista(ordenarPorProducto(l, productoNombre))); }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
   const elegir = async (v: EffiVarianteDF, id: string) => {
     setGuardando(v.variantId); setMsg('');
     const r = await apiEffiApiVincular(v.variantId, id);
     setGuardando('');
     if (r.error) { setMsg(`⚠️ ${r.error}`); return; }
-    setVars((vs) => (vs || []).map((x) => (x.variantId === v.variantId ? { ...x, effiId: id, provId: '', auto: false } : x)));
+    setVars((vs) => (vs || []).map((x) => (x.variantId === v.variantId ? { ...x, effiId: id, provId: '', auto: false, sinAuto: !id } : x)));
+    setAuto((s) => (s ? { ...s, dudas: Object.fromEntries(Object.entries(s.dudas).filter(([k]) => k !== v.variantId)) } : s));
     setGuardados((g) => ({ ...g, [v.variantId]: id }));
     onCambio?.();
   };
-  if (!vars) return <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{msg || 'Leyendo Effi…'}</div>;
+  if (!vars || !auto) return <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{msg || 'Vinculando con Effi…'}</div>;
   const actual = (v: EffiVarianteDF) => v.provId || v.effiId;
   const vinculadas = vars.filter(actual).length;
+  const estado = (v: EffiVarianteDF): { t: string; c: string } => actual(v)
+    ? (v.auto ? { t: '⚡ automático', c: 'var(--df-brand-dark)' } : { t: '✋ fijado a mano', c: 'var(--df-purple)' })
+    : auto.dudas[v.variantId]?.length ? { t: '⚠ elige uno', c: 'var(--df-warning)' }
+      : v.sinAuto ? { t: 'sin artículo (lo quitaste)', c: 'var(--df-text-muted)' }
+        : auto.pausado ? { t: 'sin conexión', c: 'var(--df-text-muted)' }
+          : { t: '✗ no está en Effi con ese nombre', c: 'var(--df-danger)' };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: vinculadas === vars.length ? 'var(--df-purple)' : 'var(--df-warning)' }}>{vinculadas}/{vars.length} variantes con artículo de Effi</span>
-        <button onClick={() => void actualizar()} disabled={actualizando} style={{ ...mini, marginLeft: 'auto' }}>{actualizando ? 'Trayendo de Effi…' : '↻ Traer artículos de Effi'}</button>
-      </div>
+      <VinculosBarra productId={productId} integ="effi" pausado={auto.pausado} vinculadas={vinculadas} total={vars.length}
+        onCambio={() => { setVars(null); setAuto(null); setGuardados({}); setRecarga((n) => n + 1); onCambio?.(); }} />
       {vars.map((v) => {
         const etiqueta = v.nombre.startsWith(productoNombre) ? (v.nombre.slice(productoNombre.length).replace(/^\s*\(|\)\s*$/g, '') || 'Única') : v.nombre;
+        const e = estado(v);
+        const opciones = !actual(v) ? auto.dudas[v.variantId] || [] : [];
         return (
-          <div key={v.variantId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', borderTop: '1px dashed var(--df-border)', paddingTop: 7 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700, minWidth: 110 }}>{etiqueta}</span>
-            <div style={{ flex: '1 1 260px', minWidth: 220 }}>
-              <SelectorArticulo lista={lista} valor={actual(v)} ocupado={guardando === v.variantId} onElegir={(id) => void elegir(v, id)} />
+          <div key={v.variantId} style={{ borderTop: '1px dashed var(--df-border)', paddingTop: 7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, minWidth: 110 }}>{etiqueta}</span>
+              <div style={{ flex: '1 1 260px', minWidth: 220 }}>
+                <SelectorArticulo lista={lista} valor={actual(v)} ocupado={guardando === v.variantId} onElegir={(id) => void elegir(v, id)} />
+              </div>
+              {guardados[v.variantId] !== undefined
+                ? <span style={{ fontSize: 11.5, fontWeight: 700, color: guardados[v.variantId] ? 'var(--df-success)' : 'var(--df-text-muted)' }}>{guardados[v.variantId] ? `✓ Guardado #${guardados[v.variantId]}` : '✓ Quitado'}</span>
+                : <span style={{ fontSize: 11, fontWeight: 700, color: e.c, whiteSpace: 'nowrap' }}>{e.t}</span>}
             </div>
-            {guardados[v.variantId] !== undefined && (
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: guardados[v.variantId] ? 'var(--df-success)' : 'var(--df-text-muted)' }}>
-                {guardados[v.variantId] ? `✓ Guardado #${guardados[v.variantId]}` : '✓ Quitado'}
-              </span>
+            {opciones.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '6px 0 0 120px' }}>
+                <span style={{ fontSize: 11, color: 'var(--df-text-muted)', alignSelf: 'center' }}>Hay {opciones.length} en Effi con ese nombre, ¿cuál es?</span>
+                {opciones.map((o) => (
+                  <button key={o.id} onClick={() => void elegir(v, o.id)} disabled={guardando === v.variantId} title={o.descripcion}
+                    style={{ ...mini, display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: 320 }}>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 800, color: 'var(--df-purple)' }}>#{o.id}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.descripcion}</span>
+                    {o.stock != null && <span style={{ color: Number(o.stock) > 0 ? 'var(--df-success)' : 'var(--df-text-faint)' }}>stock {o.stock}</span>}
+                    <span style={{ fontSize: 10, fontWeight: 800, color: o.drop ? 'var(--df-purple)' : 'var(--df-text-muted)' }}>{o.drop ? 'PROVEEDOR' : 'PROPIO'}</span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         );
       })}
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>El stock llega solo de Effi cada 30 minutos. Lo que elijas a mano nunca se cambia.</div>
       {msg && <div style={{ fontSize: 12, color: 'var(--df-danger)' }}>{msg}</div>}
     </div>
   );

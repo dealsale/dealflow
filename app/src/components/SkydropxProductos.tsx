@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Dropdown } from './Dropdown';
 import { notificar } from './dialogs';
+import { VinculosBarra } from './VinculosBarra';
 import { apiSkydropxProductos, apiSkydropxVincularAuto, apiSkydropxVincular, apiSkydropxCsv, type ProductoSkydropx, type VarianteSkydropx } from '../lib/api';
 
 /**
@@ -24,6 +25,7 @@ export function SkydropxProductos({ productId }: { productId?: string } = {}) {
   const [trabajando, setTrabajando] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [q, setQ] = useState('');
+  const [pausado, setPausado] = useState(false);
 
   const cargar = async () => {
     setCargando(true);
@@ -31,20 +33,16 @@ export function SkydropxProductos({ productId }: { productId?: string } = {}) {
     setCargando(false);
     if (r.error) { setError(r.error); return; }
     setVars((r.data?.variantes || []).filter((v) => !productId || String(v.productId) === String(productId))); setProds(r.data?.productosSky || []); setError(r.data?.error || '');
+    setPausado(!!productId && (r.data?.pausados || []).includes(String(productId)));
   };
-  useEffect(() => { void cargar(); }, []);
-
-  const auto = async () => {
+  // Sin botón: al abrir, DealFlow vincula solo lo que falta (por código o por nombre) y luego muestra.
+  const vincularYCargar = async () => {
     setTrabajando(true);
-    const r = await apiSkydropxVincularAuto();
+    await apiSkydropxVincularAuto();
     setTrabajando(false);
-    if (r.error || !r.data) { notificar(r.error || 'No se pudo vincular.'); return; }
-    const d = r.data;
-    notificar(d.productosSky
-      ? `✓ ${d.vinculadas} variante${d.vinculadas === 1 ? '' : 's'} vinculada${d.vinculadas === 1 ? '' : 's'} ahora. ${d.sinVinculo ? `Faltan ${d.sinVinculo}: elígelas abajo.` : 'Todas quedaron vinculadas.'}`
-      : 'Tu cuenta de Skydropx aún no tiene productos. Descarga el archivo de variantes y súbelo en Skydropx primero.');
     await cargar();
   };
+  useEffect(() => { void vincularYCargar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const descargar = async () => {
     const r = await apiSkydropxCsv();
@@ -75,14 +73,13 @@ export function SkydropxProductos({ productId }: { productId?: string } = {}) {
         <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>
           <li><b>Descarga el archivo</b> con todas tus variantes (nombre, código y precio).</li>
           <li>En <b>Skydropx → Productos</b>, créalas o impórtalas con ese archivo, usando el mismo <b>código (SKU)</b>.</li>
-          <li>Vuelve aquí y toca <b>Vincular automático</b>: DealFlow casa cada variante por código o por nombre. Las que no casen, elígelas a mano.</li>
+          <li>Listo: DealFlow casa <b>solo</b> cada variante por código o por nombre (al abrir esto y al guardar el producto, también las variantes nuevas). Las que no casen, elígelas a mano abajo.</li>
         </ol>
       </div>
+      {productId && !cargando && <VinculosBarra productId={productId} integ="skydropx" pausado={pausado} vinculadas={vinculadas} total={vars.length} onCambio={() => void vincularYCargar()} />}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={() => void descargar()} style={btnSec}>⬇ Descargar variantes</button>
-        <button onClick={() => void auto()} disabled={trabajando} style={{ ...btn, opacity: trabajando ? 0.6 : 1 }}>{trabajando ? 'Vinculando…' : 'Vincular automático'}</button>
-        <button onClick={() => void cargar()} disabled={cargando} style={btnSec}>{cargando ? 'Cargando…' : '↻ Recargar'}</button>
-        {!cargando && <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}><b>{vinculadas}</b> de {vars.length} vinculadas · {prods.length} producto{prods.length === 1 ? '' : 's'} en Skydropx</span>}
+        <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{trabajando ? 'Vinculando con Skydropx…' : cargando ? 'Cargando…' : <><b>{vinculadas}</b> de {vars.length} vinculadas · {prods.length} producto{prods.length === 1 ? '' : 's'} en Skydropx</>}</span>
       </div>
       {error && <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)' }}>{error}</div>}
 

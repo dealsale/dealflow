@@ -240,12 +240,6 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
     await df.cargarEffiApi();
     setMsg('✓ Listo. Revisa abajo lo que elegimos y cámbialo si quieres.');
   };
-  const sincronizarYa = async () => {
-    setCargando(true); setMsg('Leyendo tus artículos de Effi y vinculando…');
-    const r = await apiEffiAutoconfigurar('productos');
-    setCargando(false);
-    setMsg(r.data ? `${r.data.ok ? '✓ ' : ''}${r.data.detalle}` : r.error || 'No se pudo.');
-  };
   const conectar = async () => {
     setCargando(true); setMsg('Verificando la API key con Effi…');
     const r = await apiEffiApiConectar(apiKey.trim());
@@ -492,15 +486,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
               {/* 3. Productos: el vínculo se hace en cada producto (Productos → Variantes). */}
               <div style={seccion}>
                 <div style={titulo}>3 · Productos</div>
-                <div style={{ display: 'flex', gap: 6, margin: '4px 0 10px', flexWrap: 'wrap' }}>
-                  {([[true, '✋ Manual (recomendado)'], [false, '⚡ Automático']] as [boolean, string][]).map(([v, t]) => (
-                    <button key={t} onClick={() => set({ vinculoManual: v })} style={{ ...btnSec, background: (cfg.vinculoManual !== false) === v ? 'var(--df-purple)' : 'var(--df-surface)', color: (cfg.vinculoManual !== false) === v ? '#fff' : 'var(--df-text-body)', borderColor: (cfg.vinculoManual !== false) === v ? 'var(--df-purple)' : 'var(--df-border)' }}>{t}</button>
-                  ))}
-                </div>
-                {cfg.vinculoManual !== false
-                  ? <p style={ayuda}><b>Manual:</b> cada variante se despacha EXACTAMENTE con el artículo de Effi que tú le pongas (por su <b>ID</b> o buscándolo), en <b>Productos → el producto → Variantes → Vínculo con Effi</b>. DealFlow nunca lo cambia ni lo busca solo. El stock sí llega de Effi cada 30 min.</p>
-                  : <p style={ayuda}><b>Automático:</b> DealFlow vincula solo por nombre y variante, y si un artículo propio no tiene stock usa el del proveedor. Úsalo solo si cada variante tiene un único artículo en Effi.</p>}
-                <button onClick={() => void sincronizarYa()} disabled={cargando} style={btnSec}>{cfg.vinculoManual !== false ? '↻ Traer catálogo y stock de Effi ahora' : '↻ Volver a vincular y traer stock ahora'}</button>
+                <p style={ayuda}><b>⚡ Todo es automático.</b> En los productos que se despachan por Effi, DealFlow vincula solo cada variante con su artículo (por referencia o por nombre + talla/color), al guardar el producto, al abrirlo y cada 30 min, y también las variantes nuevas. Si el producto es de un proveedor, usa el artículo vinculado al proveedor. Si hay dos artículos iguales en Effi, <b>no adivina</b>: te los muestra en el producto para que elijas con un clic. <b>Lo que elijas a mano nunca se cambia.</b> El stock llega solo de Effi cada 30 min. Para desconectar un producto entero: <b>Productos → el producto → Variantes → Effi → Quitar todo</b>.</p>
               </div>
 
               {/* 4. Webhooks */}

@@ -11,6 +11,7 @@ import { EffiVinculoProducto, ConvenioProductoEffi } from '../components/EffiPro
 import { Dropdown } from '../components/Dropdown';
 import { useSkydropx } from '../components/SkydropxCard';
 import { SkydropxProductos } from '../components/SkydropxProductos';
+import { VinculosBarra } from '../components/VinculosBarra';
 import { useBodegas } from '../components/BodegasProveedores';
 import { apiSincronizarDropi, apiSoltarVariantesDropi, type ResultadoSyncDropi } from '../lib/api';
 
@@ -260,6 +261,10 @@ function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
   const [res, setRes] = useState<ResultadoSyncDropi | null>(null);
   const [error, setError] = useState('');
   const deDropi = p.variantesFuente === 'dropi';
+  const todasV = (p.variantes || []).filter((v) => v.id);
+  const conDropi = todasV.filter((v) => (v.refs?.dropi || '').trim()).length;
+  // Sin botón: al poner (o cambiar) el ID y salir del campo, se vincula solo.
+  const alSalir = () => { const t = id.trim(); if (t && !cargando && (t !== String(p.sku || '').trim() || !deDropi)) void traer(); };
   const traer = async () => {
     setCargando(true); setError(''); setRes(null);
     const r = await apiSincronizarDropi(String(p.id), id.trim());
@@ -277,15 +282,13 @@ function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
         {deDropi && <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '2px 8px', background: 'var(--df-warning-subtle)', color: 'var(--df-warning)' }}>Variantes sincronizadas con Dropi</span>}
       </div>
       <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5, marginBottom: 8 }}>
-        Pon el <b>ID del producto en Dropi</b> y DealFlow vincula cada variante que ya tienes con su variación de Dropi (por su talla y color) y toma el stock. Si el producto ya tiene variantes armadas por ti, <b>no crea grupos ni variantes nuevas</b>: solo vincula (si ya están sincronizadas con Dropi, crea las que falten). Solo en un producto sin variantes las crea desde Dropi. Se actualiza solo cada 6 horas.
+        Pon el <b>ID del producto en Dropi</b> una sola vez: DealFlow vincula solo cada variante con su variación de Dropi (por su talla y color) y toma el stock. Después se mantiene solo: cada 6 horas y cada vez que guardas el producto, así que <b>las variantes nuevas se vinculan solas</b>. Si el producto ya tiene variantes armadas por ti, no crea grupos ni variantes nuevas: solo vincula.
       </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <input value={id} onChange={(e) => setId(e.target.value)} placeholder="ID del producto en Dropi (ej: 48213)" inputMode="numeric"
+      {deDropi && <div style={{ marginBottom: 8 }}><VinculosBarra productId={String(p.id)} integ="dropi" pausado={false} vinculadas={conDropi} total={todasV.length} onCambio={() => { setRes(null); void df.reloadProducts(); }} /></div>}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input value={id} onChange={(e) => setId(e.target.value)} onBlur={alSalir} onKeyDown={(e) => { if (e.key === 'Enter') alSalir(); }} placeholder="ID del producto en Dropi (ej: 48213)" inputMode="numeric" disabled={cargando}
           style={{ flex: 1, minWidth: 180, border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
-        <button onClick={() => void traer()} disabled={cargando || !id.trim()}
-          style={{ background: 'var(--df-warning)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', opacity: cargando || !id.trim() ? 0.6 : 1 }}>
-          {cargando ? 'Vinculando con Dropi…' : deDropi ? '↻ Volver a vincular con Dropi' : '🔗 Vincular variantes'}
-        </button>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: cargando ? 'var(--df-warning)' : 'var(--df-text-faint)' }}>{cargando ? 'Vinculando con Dropi…' : deDropi ? '✓ Conectado' : 'Se vincula al salir del campo'}</span>
       </div>
       {error && <div style={{ fontSize: 12.5, color: 'var(--df-danger)', marginTop: 8 }}>{error}</div>}
       {res && (

@@ -463,7 +463,7 @@ export const apiSkydropxCrear = (rowId: string, tarifa: TarifaSkydropx, bodegaId
 // Variantes de la tienda ↔ productos creados en Skydropx.
 export interface ProductoSkydropx { id: string; nombre: string; sku: string; precio: number }
 export interface VarianteSkydropx { productId: string; variantId: string; producto: string; label: string; sku: string; precio: number; skyId: string; skyNombre: string; auto: boolean }
-export const apiSkydropxProductos = () => req<{ variantes: VarianteSkydropx[]; productosSky: ProductoSkydropx[]; error: string }>('/api/skydropx/productos', 'GET');
+export const apiSkydropxProductos = () => req<{ variantes: VarianteSkydropx[]; productosSky: ProductoSkydropx[]; error: string; pausados?: string[] }>('/api/skydropx/productos', 'GET');
 export const apiSkydropxVincularAuto = () => req<{ vinculadas: number; sinVinculo: number; total: number; productosSky: number }>('/api/skydropx/productos/auto', 'POST');
 export const apiSkydropxVincular = (productId: string, variantId: string, sky: ProductoSkydropx | null) => req<{ ok: true }>('/api/skydropx/productos/vincular', 'POST', { productId, variantId, skyId: sky?.id || '', skyNombre: sky?.nombre || '', skySku: sky?.sku || '' });
 export const apiSkydropxCsv = () => req<{ csv: string }>('/api/skydropx/productos/csv', 'GET');
@@ -669,7 +669,7 @@ export const apiEffiApiConfig = (cfg: Partial<EffiApiEstado>) => req<{ ok: true;
 export const apiEffiApiSecreto = (secreto: string) => req<{ ok: true; secretos: number }>('/api/effi-api/webhook-secreto', 'POST', { secreto });
 export const apiEffiApiDesconectar = () => req<{ ok: true }>('/api/effi-api/desconectar', 'POST');
 export const apiEffiApiSyncArticulos = () => req<{ total: number; soloVinculados: boolean; vinculadas: number; sinVinculo: { variantId: string | null; nombre: string }[]; productosEffi: number; sinProveedor: number; marcados?: number; stockActualizado?: number }>('/api/effi-api/articulos/sync', 'POST');
-export interface EffiVarianteDF { variantId: string; productId: string; producto: string; proveedor: string; nombre: string; effiId: string; auto?: boolean; provId?: string }
+export interface EffiVarianteDF { variantId: string; productId: string; producto: string; proveedor: string; nombre: string; effiId: string; auto?: boolean; provId?: string; sinAuto?: boolean }
 export const apiEffiApiArticulos = (productId = '') => req<{ articulos: EffiArticulo[]; variantes: EffiVarianteDF[]; nombres: Record<string, string>; conveniosProducto?: Record<string, string>; conveniosAprendidos?: Record<string, string>; convenios?: { id: string; nombre: string }[] }>(`/api/effi-api/articulos${productId ? `?productId=${encodeURIComponent(productId)}` : ''}`, 'GET');
 export const apiEffiApiBuscar = (q: string) => req<{ articulos: EffiArticulo[] }>(`/api/effi-api/articulos/buscar?q=${encodeURIComponent(q)}`, 'GET');
 export const apiEffiApiProveedor = (productIds: string[], proveedor: 'effi' | 'dropi' | '') => req<{ ok: true; actualizados: number }>('/api/effi-api/producto-proveedor', 'POST', { productIds, proveedor });
@@ -1011,6 +1011,13 @@ export const apiActivarRecepcion = () => req<{ apps: AppConectada[]; waba: strin
 export interface ResultadoSyncDropi { deDropi?: string[]; tipo: 'SIMPLE' | 'VARIABLE'; nombreDropi: string; vinculadas: number; creadas: number; conStock: number; sinDropi: string[]; total: number; renombradas?: number; repetidas?: string[]; sinVariante?: string[]; duplicadasQuitadas?: number; gruposQuitados?: string[] }
 export const apiSincronizarDropi = (productId: string, dropiId: string) => req<ResultadoSyncDropi>(`/api/products/${encodeURIComponent(productId)}/dropi/sincronizar`, 'POST', { dropiId });
 export const apiSoltarVariantesDropi = (productId: string) => req<{ ok: true }>(`/api/products/${encodeURIComponent(productId)}/dropi/soltar-variantes`, 'POST');
+
+// Vinculación de variantes por producto: automática, «Quitar todo» (pausa) y reanudar.
+export type IntegVinculo = 'effi' | 'dropi' | 'skydropx';
+export interface ArticuloOpcionEffi { id: string; descripcion: string; referencia: string; drop: boolean; stock: number | null }
+export const apiEffiProductoAuto = (productId: string) => req<{ pausado: boolean; vinculadas: number; dudas: Record<string, ArticuloOpcionEffi[]> }>(`/api/effi-api/producto/${encodeURIComponent(productId)}/auto`, 'POST');
+export const apiQuitarVinculos = (productId: string, integ: IntegVinculo) => req<{ ok: true; quitadas: number }>(`/api/products/${encodeURIComponent(productId)}/vinculos/quitar`, 'POST', { integ });
+export const apiReanudarVinculos = (productId: string, integ: IntegVinculo) => req<{ ok: true }>(`/api/products/${encodeURIComponent(productId)}/vinculos/reanudar`, 'POST', { integ });
 
 export interface CfgPedidosShopify { confirmar: boolean; autoDespacho: boolean; modoPrueba: boolean }
 export const apiShopifyPedidosCfg = () => req<CfgPedidosShopify>('/api/shopify/pedidos-config', 'GET');
