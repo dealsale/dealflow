@@ -389,7 +389,8 @@ addColumn('order_items', "variant_id TEXT NOT NULL DEFAULT ''");
 // Dropshipping con Skydropx (bodegas.ts): bodega del proveedor de cada producto,
 // bodega desde la que salió el envío y si la guía ya le llegó al proveedor.
 addColumn('products', "bodega_id TEXT NOT NULL DEFAULT ''");
-addColumn('products', "color_chat TEXT NOT NULL DEFAULT ''"); // color con que se marcan en el Inbox los chats que vienen de este producto ('' = sin color)
+addColumn('products', "color_chat TEXT NOT NULL DEFAULT ''");
+addColumn('products', 'color_chat_fondo INTEGER NOT NULL DEFAULT 1'); // 1 = también pinta la fila del chat; 0 = solo la etiqueta con el nombre // color con que se marcan en el Inbox los chats que vienen de este producto ('' = sin color)
 addColumn('orders', "bodega_id TEXT NOT NULL DEFAULT ''");
 addColumn('orders', "guia_proveedor TEXT NOT NULL DEFAULT ''");
 

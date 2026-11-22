@@ -289,7 +289,7 @@ export interface DecoratedCrmChat extends DecoratedLead {
   /** Mensajes del cliente sin responder al final del chat (badge tipo WhatsApp). */
   sinResponder: number;
   /** Producto del que vino el chat y su color en el Inbox (vacío si el producto no tiene color). */
-  origenProducto: { nombre: string; color: string } | null;
+  origenProducto: { nombre: string; color: string; fondo: boolean } | null;
 }
 
 export interface DecoratedVariante {
@@ -340,6 +340,7 @@ export interface DecoratedProduct extends Product {
   setDespachoProveedor: (v: string) => void;
   setBodegaId: (v: string) => void;
   setColorChat: (v: string) => void;
+  setColorChatFondo: (v: boolean) => void;
   /** Suelta el vínculo: limpia el SKU del producto, el de todas sus variantes y el proveedor, para poder cambiar de Dropi a Effi (o al revés). */
   desvincularDespacho: () => void;
   generarVariantes: () => void;
@@ -647,6 +648,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     despachoProveedor: p.despachoProveedor || '',
     bodegaId: p.bodegaId || '',
     colorChat: p.colorChat || '',
+    colorChatFondo: p.colorChatFondo !== false,
     variantesFuente: p.variantesFuente || '',
     bloqueado: !!p.bloqueado,
     reglas: p.reglas || [],
@@ -1492,7 +1494,7 @@ export function useDealFlowState() {
   const lead = leadsDecorated.find((l) => l.id === selectedLeadId) || null;
 
   // Nombre y color de cada producto, para marcar los chats que vienen de él.
-  const colorPorProducto = useMemo(() => new Map(products.map((p) => [String(p.id), { nombre: p.nombre, color: p.colorChat || '' }])), [products]);
+  const colorPorProducto = useMemo(() => new Map(products.map((p) => [String(p.id), { nombre: p.nombre, color: p.colorChat || '', fondo: p.colorChatFondo !== false }])), [products]);
   const crmChats: DecoratedCrmChat[] = useMemo(
     () =>
       // Orden tipo WhatsApp: el chat con actividad más reciente va PRIMERO.
@@ -1530,7 +1532,7 @@ export function useDealFlowState() {
           liveStyle: { display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 700, color: live ? 'var(--df-brand-dark)' : 'var(--df-text-faint)', marginTop: '5px' },
           liveDot: { width: '7px', height: '7px', borderRadius: '50%', background: live ? 'var(--df-brand-mid)' : 'var(--df-border-strong)', animation: live ? 'dfpulse 1.8s infinite' : 'none', flexShrink: 0 },
           crmRowStyle: { display: 'flex', gap: '11px', padding: '12px 14px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer', background: selC ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', borderLeft: selC ? '3px solid var(--df-brand)' : '3px solid transparent',
-            ...(origenProducto && !selC ? franjaColorChat(origenProducto.color) : {}) },
+            ...(origenProducto && origenProducto.fondo && !selC ? franjaColorChat(origenProducto.color) : {}) },
         };
       }),
     [leadsSource, crmSelectedId, apiMode, apiLeadsState, colorPorProducto],
@@ -2450,6 +2452,7 @@ export function useDealFlowState() {
         setDespachoProveedor: (v: string) => updateProduct(p.id, { despachoProveedor: v }),
         setBodegaId: (v: string) => updateProduct(p.id, { bodegaId: v }),
         setColorChat: (v: string) => updateProduct(p.id, { colorChat: v }),
+        setColorChatFondo: (v: boolean) => updateProduct(p.id, { colorChatFondo: v }),
         desvincularDespacho: () => {
           updateProduct(p.id, { sku: '', despachoProveedor: '' });
           (p.variantes || []).forEach((v) => { if (v.id && (v.sku || '').trim()) setVariantSku(p.id, v.id, ''); });

@@ -34,7 +34,7 @@ export function MCRM({ df }: { df: DealFlowState }) {
       <div ref={rootRef} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, overflow: 'hidden' }}>
         {chatsVisibles.map((c) => (
           <div key={c.id} onClick={() => df.openMobileChat(c.id)} style={{ display: 'flex', gap: 11, padding: '13px 14px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer',
-            ...(c.origenProducto ? franjaColorChat(c.origenProducto.color) : {}), ...(c.origenProducto ? { paddingLeft: 10 } : {}) }}>
+            ...(c.origenProducto?.fondo ? { ...franjaColorChat(c.origenProducto.color), paddingLeft: 10 } : {}) }}>
             <AvatarCanal avatarStyle={c.avatarStyle} iniciales={c.iniciales} canal={canalDe(c)} />
             <div style={{ flex: 1, minWidth: 0 }}>
               {c.origenProducto && <div style={{ display: 'flex', marginBottom: 4, minWidth: 0 }}><EtiquetaProductoChat color={c.origenProducto.color} nombre={c.origenProducto.nombre} /></div>}

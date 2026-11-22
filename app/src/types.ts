@@ -141,6 +141,8 @@ export interface Product {
   bodegaId?: string;
   /** Color con que se marcan en el Inbox los chats que vienen de este producto ('' = sin color). */
   colorChat?: string;
+  /** Si es false, el chat solo lleva la etiqueta con el nombre del producto (sin pintar la fila). */
+  colorChatFondo?: boolean;
   /** 'dropi' = las variantes las define Dropi (se sincronizan desde su ID), no las opciones. */
   variantesFuente?: string;
   /** Producto de biblioteca gratuito: estructura bloqueada (solo precio/SKU editables). */

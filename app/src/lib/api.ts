@@ -312,6 +312,7 @@ export interface ApiProduct {
   despachoProveedor?: string;
   bodegaId?: string;
   colorChat?: string;
+  colorChatFondo?: boolean;
   variantesFuente?: string;
   bloqueado?: boolean;
   plantillaId?: string;

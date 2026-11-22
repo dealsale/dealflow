@@ -662,7 +662,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
             </PasoMensaje>
 
             <PasoMensaje n={4} ultimo titulo="Color del chat en el Inbox" ayuda="Los chats que llegan por este producto (por su mensaje inicial o su anuncio) se ven marcados con este color en el Inbox, para reconocerlos de un vistazo.">
-              <SelectorColorChat valor={p.colorChat || ''} onCambio={p.setColorChat} />
+              <SelectorColorChat valor={p.colorChat || ''} onCambio={p.setColorChat} fondo={p.colorChatFondo !== false} onFondo={p.setColorChatFondo} />
             </PasoMensaje>
           </>
         );

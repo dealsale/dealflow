@@ -61,6 +61,19 @@ function FraseMotivacional() {
   );
 }
 
+// Color propio de cada sección del menú (íconos de colores sobre el fondo oscuro).
+const COLOR_SECCION: Record<string, string> = {
+  resumen: '#60A5FA', estadisticas: '#A78BFA', productos: '#F472B6', landings: '#34D399', asistente: '#22D3EE',
+  whatsapp: '#25D366', logistica: '#FBBF24', pedidos: '#FB923C', leads: '#F87171', crm: '#38BDF8',
+  comentarios: '#C084FC', marketing: '#E879F9', anuncios: '#818CF8', biblioteca: '#FACC15', dealshop: '#2DD4BF',
+  equipo: '#93C5FD', integraciones: '#A3E635',
+  // Admin
+  contabilidad: '#34D399', planes: '#FBBF24', cuentas: '#60A5FA',
+};
+const iconoColor = (id: string, icon: React.ReactNode) => (
+  <span style={{ display: 'inline-flex', color: COLOR_SECCION[id] || 'currentColor', filter: 'drop-shadow(0 0 6px color-mix(in srgb, currentColor 35%, transparent))' }}>{icon}</span>
+);
+
 export function Sidebar({ df }: { df: DealFlowState }) {
   const vSection = df.isVendedor ? df.section : null;
   const aSection = df.isAdmin ? df.adminSection : null;
@@ -86,7 +99,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
   ) =>
     df.puedeVerSeccion(id) ? (
       <EnlaceApp key={id} href={urlDe({ mode: 'vendedor', section: id })} onAbrir={() => df.go(id)} title="Ctrl + clic para abrir en otra pestaña" style={navStylePremium(vSection === id)}>
-        {icon}
+        {iconoColor(id, icon)}
         <span>{label}</span>
         {extra}
       </EnlaceApp>
@@ -94,7 +107,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
 
   const adminItem = (id: AdminSection, icon: React.ReactNode, label: string) => (
     <EnlaceApp key={id} href={urlDe({ mode: 'admin', adminSection: id })} onAbrir={() => df.goAdmin(id)} style={navStylePremium(aSection === id)}>
-      {icon}
+      {iconoColor(id, icon)}
       <span>{label}</span>
     </EnlaceApp>
   );
@@ -182,7 +195,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
         href="/tutoriales"
         style={{ ...df.navStyle(false), textDecoration: 'none', marginTop: 8, borderTop: '1px solid var(--df-text-strong)', paddingTop: 12, borderRadius: 0 }}
       >
-        <Icono nombre="tutoriales" tam={17} grosor={1.8} />
+        <Icono nombre="tutoriales" tam={17} grosor={1.8} color="#FDBA74" />
         <span>Tutoriales</span>
       </a>
 

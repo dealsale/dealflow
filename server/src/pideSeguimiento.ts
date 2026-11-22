@@ -47,3 +47,47 @@ export function revisarPideSeguimiento(storeId: string, leadId: string, texto: s
     return false;
   }
 }
+
+/**
+ * Chats VIEJOS (una sola vez, al arrancar): si entre los 3 últimos mensajes del cliente pidió que
+ * lo contacten después y no compró (sin pedido activo), el chat queda en «Seguimiento».
+ * Solo toca chats sin etiqueta y que no pidieron que no les escribamos. Va por tandas para no
+ * frenar el servidor.
+ */
+db.exec('CREATE TABLE IF NOT EXISTS tareas_unicas (nombre TEXT PRIMARY KEY, hecho_at TEXT NOT NULL DEFAULT (datetime(\'now\')))');
+const TAREA_VIEJOS = 'seguimiento-chats-viejos-v1';
+
+export async function repasarChatsViejos(): Promise<{ revisados: number; marcados: number }> {
+  const res = { revisados: 0, marcados: 0 };
+  if (db.prepare('SELECT 1 FROM tareas_unicas WHERE nombre = ?').get(TAREA_VIEJOS)) return res;
+  // Quien compró (pedido activo) no va a Seguimiento: por chat o por celular (últimos 10 dígitos).
+  const diez = (t: unknown) => String(t || '').replace(/\D/g, '').slice(-10);
+  const compraron = new Set<string>();
+  for (const o of db.prepare("SELECT store_id, tel FROM orders WHERE estado NOT IN ('Cancelado','Devuelto')").all() as { store_id: string; tel: string }[]) if (diez(o.tel).length >= 7) compraron.add(o.store_id + '|' + diez(o.tel));
+  const ids = (db.prepare(`SELECT l.id, l.store_id, l.tel FROM leads l
+    WHERE COALESCE(l.etiqueta,'') = '' AND COALESCE(l.no_contactar,0) = 0
+      AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.lead_id = l.id AND o.estado NOT IN ('Cancelado','Devuelto'))`).all()) as { id: string; store_id: string; tel: string }[];
+  const ultimos = db.prepare("SELECT texto FROM messages WHERE lead_id = ? AND de = 'cliente' ORDER BY created_at DESC LIMIT 3");
+  const marcar = db.prepare("UPDATE leads SET etiqueta = 'Seguimiento' WHERE id = ? AND COALESCE(etiqueta,'') = ''");
+  const porTienda = new Map<string, number>();
+  for (let i = 0; i < ids.length; i += 300) {
+    for (const l of ids.slice(i, i + 300)) {
+      res.revisados++;
+      if (diez(l.tel).length >= 7 && compraron.has(l.store_id + '|' + diez(l.tel))) continue;
+      const textos = (ultimos.all(l.id) as { texto: string }[]).map((m) => m.texto);
+      if (textos.some((t) => pideContactoDespues(t)) && marcar.run(l.id).changes) {
+        res.marcados++;
+        porTienda.set(l.store_id, (porTienda.get(l.store_id) || 0) + 1);
+      }
+    }
+    await new Promise((r) => setTimeout(r, 25)); // deja respirar al servidor entre tandas
+  }
+  for (const [sid, n] of porTienda) registrarLog(sid, 'info', 'seguimiento', `Repaso de chats anteriores: ${n} chat${n === 1 ? '' : 's'} quedaron con la etiqueta Seguimiento porque el cliente pidió que lo contactaran después y no compró.`);
+  db.prepare('INSERT OR IGNORE INTO tareas_unicas (nombre) VALUES (?)').run(TAREA_VIEJOS);
+  console.log(`[seguimiento] chats viejos: ${res.revisados} revisados, ${res.marcados} quedaron en Seguimiento`);
+  return res;
+}
+
+if (process.env.SEGUIMIENTO_VIEJOS !== 'off') {
+  setTimeout(() => { void repasarChatsViejos().catch((e) => console.warn('[seguimiento] repaso de chats viejos falló', e)); }, 20_000).unref();
+}

@@ -378,7 +378,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, precioPromo: Number(p.precio_promo) || 0, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
     tipo: p.tipo || 'producto', duracion: p.duracion || '', sku: p.sku || '', plantillaId: p.plantilla_id || '',
-    despachoProveedor: p.despacho_proveedor || '', bodegaId: p.bodega_id || '', variantesFuente: p.variantes_fuente || '', colorChat: p.color_chat || '',
+    despachoProveedor: p.despacho_proveedor || '', bodegaId: p.bodega_id || '', variantesFuente: p.variantes_fuente || '', colorChat: p.color_chat || '', colorChatFondo: Number(p.color_chat_fondo ?? 1) !== 0,
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
     descripcion: p.descripcion || '', caracteristicas: p.caracteristicas || '', mensajeInicial: p.mensaje_inicial || '',
     faqs: pj(p.faqs as string, []), testimonios: pj(p.testimonios as string, []), modosUso: p.modos_uso || '',
@@ -914,6 +914,7 @@ api.patch('/products/:id', requireAuth, requireStore, requirePermiso('productos_
   if (req.body?.tipo !== undefined) db.prepare('UPDATE products SET tipo = ? WHERE id = ?').run(req.body.tipo === 'servicio' ? 'servicio' : 'producto', req.params.id);
   if (req.body?.duracion !== undefined) db.prepare('UPDATE products SET duracion = ? WHERE id = ?').run(String(req.body.duracion), req.params.id);
   if (req.body?.sku !== undefined) db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(String(req.body.sku).trim(), req.params.id);
+  if (req.body?.colorChatFondo !== undefined) db.prepare('UPDATE products SET color_chat_fondo = ? WHERE id = ?').run(req.body.colorChatFondo ? 1 : 0, req.params.id);
   if (req.body?.colorChat !== undefined) {
     const c = String(req.body.colorChat || '').trim();
     db.prepare('UPDATE products SET color_chat = ? WHERE id = ?').run(/^#[0-9a-f]{6}$/i.test(c) ? c.toUpperCase() : '', req.params.id);
