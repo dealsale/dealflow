@@ -378,7 +378,7 @@ api.get('/state', requireAuth, requireStore, async (req, res) => {
   const products = (db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(sid) as Record<string, unknown>[]).map((p) => ({
     id: p.id, nombre: p.nombre, precio: p.precio, precioPromo: Number(p.precio_promo) || 0, color: p.color, txt: p.txt, bloqueado: bloqueados.has(String(p.id)),
     tipo: p.tipo || 'producto', duracion: p.duracion || '', sku: p.sku || '', plantillaId: p.plantilla_id || '',
-    despachoProveedor: p.despacho_proveedor || '', bodegaId: p.bodega_id || '', variantesFuente: p.variantes_fuente || '',
+    despachoProveedor: p.despacho_proveedor || '', bodegaId: p.bodega_id || '', variantesFuente: p.variantes_fuente || '', colorChat: p.color_chat || '',
     reglas: pj(p.reglas as string, []), fotos: pj(p.fotos as string, []), fotosSubidas: pj(p.fotos_subidas as string, []),
     descripcion: p.descripcion || '', caracteristicas: p.caracteristicas || '', mensajeInicial: p.mensaje_inicial || '',
     faqs: pj(p.faqs as string, []), testimonios: pj(p.testimonios as string, []), modosUso: p.modos_uso || '',
@@ -493,6 +493,20 @@ try {
 } catch { /* ya existe */ }
 const marcarVisto = (sid: string, leadId: string) => db.prepare(`UPDATE leads SET visto_equipo_at = datetime('now'), sin_leer = 0 WHERE id = ? AND store_id = ? AND sin_leer > 0`).run(leadId, sid);
 
+/**
+ * Producto del que vino cada chat: el PRIMER mensaje inicial que se le envió (por la palabra
+ * clave o por el anuncio). Con eso el Inbox marca el chat con el color de ese producto.
+ */
+function productoOrigenDe(sid: string, ids: string[]): Map<string, string> {
+  const m = new Map<string, string>();
+  if (!ids.length) return m;
+  const sql = `SELECT sp.lead_id, sp.product_id FROM sent_presentations sp JOIN products p ON p.id = sp.product_id
+    WHERE p.store_id = ? ${ids.length <= 300 ? `AND sp.lead_id IN (${ids.map(() => '?').join(',')})` : ''} ORDER BY COALESCE(sp.created_at, '')`;
+  const filas = db.prepare(sql).all(sid, ...(ids.length <= 300 ? ids : [])) as { lead_id: string; product_id: string }[];
+  for (const f of filas) if (!m.has(f.lead_id)) m.set(f.lead_id, String(f.product_id));
+  return m;
+}
+
 function listarLeads(sid: string, resumen: boolean, abierto?: string, desde?: number) {
   // Una sola consulta: datos del chat + su último mensaje + cuántos mensajes del
   // cliente no ha leído el equipo (antes eran 2 consultas por chat en cada sondeo).
@@ -501,9 +515,10 @@ function listarLeads(sid: string, resumen: boolean, abierto?: string, desde?: nu
     ? `SELECT l.*, l.sin_leer AS sin_responder FROM leads l WHERE l.store_id = ? ${desde ? 'AND l.v > ?' : ''} ORDER BY l.created_at DESC`
     : 'SELECT * FROM leads WHERE store_id = ? ORDER BY created_at DESC').all(...(desde ? [sid, desde] : [sid])) as Record<string, unknown>[];
   const etiquetaMedia: Record<string, string> = { image: '📷 Foto', audio: '🎤 Nota de voz', video: '🎬 Video', document: '📄 Documento' };
+  const origen = productoOrigenDe(sid, rows.map((l) => String(l.id)));
   return rows.map((l) => {
     const base = {
-      id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado,
+      id: l.id, nombre: l.nombre, tel: l.tel, etapa: l.etapa, asignado: l.asignado, productoOrigen: origen.get(String(l.id)) || '',
       etiqueta: l.etiqueta || '', canal: l.canal || 'whatsapp', notaInterna: l.nota_interna || '',
       anuncio: l.ad_ref ? pj<Record<string, unknown>>(l.ad_ref as string, null as never) : null,
       promosOptin: Number(l.promos_optin) === 1,
@@ -899,6 +914,10 @@ api.patch('/products/:id', requireAuth, requireStore, requirePermiso('productos_
   if (req.body?.tipo !== undefined) db.prepare('UPDATE products SET tipo = ? WHERE id = ?').run(req.body.tipo === 'servicio' ? 'servicio' : 'producto', req.params.id);
   if (req.body?.duracion !== undefined) db.prepare('UPDATE products SET duracion = ? WHERE id = ?').run(String(req.body.duracion), req.params.id);
   if (req.body?.sku !== undefined) db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(String(req.body.sku).trim(), req.params.id);
+  if (req.body?.colorChat !== undefined) {
+    const c = String(req.body.colorChat || '').trim();
+    db.prepare('UPDATE products SET color_chat = ? WHERE id = ?').run(/^#[0-9a-f]{6}$/i.test(c) ? c.toUpperCase() : '', req.params.id);
+  }
   if (req.body?.bodegaId !== undefined) {
     const pid = String(req.body.bodegaId || '');
     const existe = !pid || db.prepare('SELECT 1 FROM bodegas_proveedor WHERE id = ? AND store_id = ?').get(pid, req.user!.storeId);
@@ -4954,6 +4973,7 @@ api.post('/webchat/:storeId/messages', async (req, res) => {
   }
   db.prepare('INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?,?,?)').run(uid(), lead.id, 'cliente', texto);
   db.prepare('UPDATE leads SET seguimiento_nivel = 0 WHERE id = ?').run(lead.id); // el cliente respondió
+  void import('./pideSeguimiento.js').then((s) => s.revisarPideSeguimiento(store.id, lead!.id, texto)).catch(() => {});
   if (contactoNuevo) {
     const quien = String(req.body?.nombre || '').trim().split(' ')[0] || 'Un cliente';
     void import('./push.js').then((p) => p.enviarPush(store.id, 'contactos', 'Nuevo contacto 👋', `${quien} le escribió a tu tienda.`, { url: '/' })).catch(() => {});

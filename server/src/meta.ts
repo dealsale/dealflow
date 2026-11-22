@@ -117,6 +117,7 @@ export function handleMetaWebhook(object: 'page' | 'instagram', body: unknown): 
         if (ad) guardarAdEnLead(leadId, ad);
         db.prepare('UPDATE leads SET seguimiento_nivel = 0 WHERE id = ?').run(leadId);
         db.prepare("INSERT INTO messages (id, lead_id, de, texto) VALUES (?,?, 'cliente', ?)").run(uid(), leadId, texto);
+        void import('./pideSeguimiento.js').then((s) => s.revisarPideSeguimiento(destinatario.storeId, leadId, texto)).catch(() => {});
         void (async () => {
           try { const a = await import('./ai.js'); await a.maybeAutoReply(destinatario.storeId, leadId); }
           catch (e) { console.error('[meta] error IA', e); }

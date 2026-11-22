@@ -17,6 +17,7 @@ import { VinculosBarra } from '../components/VinculosBarra';
 import { useBodegas } from '../components/BodegasProveedores';
 import { apiSincronizarDropi, apiSoltarVariantesDropi, type ResultadoSyncDropi } from '../lib/api';
 import { LogoMarca } from '../components/LogoMarca';
+import { SelectorColorChat } from '../components/ColorChat';
 
 
 // Subtítulo dentro de un grupo (jerarquía secundaria, en gris).
@@ -636,7 +637,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
               <MensajesTabs p={p} />
             </PasoMensaje>
 
-            <PasoMensaje n={3} titulo={<>Qué se envía en <span style={{ color: 'var(--df-brand)' }}>«{nombreVersion(sel?.nombre || 'Mensaje 1')}»</span></>} ayuda="Cada bloque le llega al cliente como un mensaje de WhatsApp aparte, en este orden. Arrastra ⠿ para cambiar el orden." ultimo>
+            <PasoMensaje n={3} titulo={<>Qué se envía en <span style={{ color: 'var(--df-brand)' }}>«{nombreVersion(sel?.nombre || 'Mensaje 1')}»</span></>} ayuda="Cada bloque le llega al cliente como un mensaje de WhatsApp aparte, en este orden. Arrastra ⠿ para cambiar el orden.">
               <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.55fr) minmax(250px,1fr)', gap: 16, alignItems: 'start' }}>
                 <div style={{ minWidth: 0 }}>
                   {p.bloquesDecorados.length === 0 && !!(p.mensajeInicial || '').trim() && (
@@ -658,6 +659,10 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
                 </div>
                 <VistaPreviaWhatsApp disparador={p.disparador || ''} bloques={p.bloquesDecorados} apagado={!on || !sel?.activo} />
               </div>
+            </PasoMensaje>
+
+            <PasoMensaje n={4} ultimo titulo="Color del chat en el Inbox" ayuda="Los chats que llegan por este producto (por su mensaje inicial o su anuncio) se ven marcados con este color en el Inbox, para reconocerlos de un vistazo.">
+              <SelectorColorChat valor={p.colorChat || ''} onCambio={p.setColorChat} />
             </PasoMensaje>
           </>
         );

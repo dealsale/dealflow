@@ -139,6 +139,8 @@ export interface Product {
   despachoProveedor?: string;
   /** Bodega del proveedor desde la que sale con Skydropx ('' = tu dirección). */
   bodegaId?: string;
+  /** Color con que se marcan en el Inbox los chats que vienen de este producto ('' = sin color). */
+  colorChat?: string;
   /** 'dropi' = las variantes las define Dropi (se sincronizan desde su ID), no las opciones. */
   variantesFuente?: string;
   /** Producto de biblioteca gratuito: estructura bloqueada (solo precio/SKU editables). */
@@ -229,6 +231,8 @@ export interface Lead {
   canal?: string;
   /** Nota interna del equipo sobre este chat (nunca la ve el cliente). */
   notaInterna?: string;
+  /** Producto del que vino el chat (su primer mensaje inicial): id, o '' si no se sabe. */
+  productoOrigen?: string;
   /** Anuncio del que llegó el chat (atribución de campaña); null si es orgánico. */
   anuncio?: Anuncio | null;
   /** El cliente aceptó recibir promociones (opt-in): habilita el remarketing. */

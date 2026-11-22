@@ -3,6 +3,7 @@ import { estaBloqueado } from './bloqueos.js';
 import { mediaExt, audioAOgg } from './media.js';
 import { guardarAdEnLead, refDesdeWhatsapp, type AdRef } from './campana.js';
 import { esperarTurno } from './ratelimit.js';
+import { revisarPideSeguimiento } from './pideSeguimiento.js';
 
 const GRAPH = process.env.GRAPH_URL || 'https://graph.facebook.com/v20.0';
 try { db.exec("ALTER TABLE messages ADD COLUMN error TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
@@ -160,6 +161,8 @@ export function saveIncomingMessage(storeId: string, waId: string, nombre: strin
   if (ad) { try { guardarAdEnLead(leadId, ad); } catch (e) { console.error('[webhook] no se pudo guardar atribución de anuncio (el mensaje sí se guardó):', e); } }
   // El cliente respondió: reinicia el contador de recordatorios de seguimiento.
   db.prepare('UPDATE leads SET seguimiento_nivel = 0 WHERE id = ?').run(leadId);
+  // ¿Pidió que lo contacten después? El chat queda con la etiqueta «Seguimiento».
+  if (texto) revisarPideSeguimiento(storeId, leadId, texto);
   // Contacto NUEVO: notifica al dueño por Web Push (si lo tiene activado).
   if (nuevo) {
     const quien = (nombre || '').trim().split(' ')[0] || 'Un cliente';

@@ -10,6 +10,7 @@ import { LlenarPlantilla } from '../components/LlenarPlantilla';
 import { CargandoChat } from '../components/CargandoChat';
 import { urlDe, useRecordado } from '../lib/rutas';
 import { AvatarCanal, ChipsCanal, canalDe, nombreCanal } from '../components/CanalChat';
+import { EtiquetaProductoChat } from '../components/ColorChat';
 import { OrigenBadge } from '../components/OrigenPedido';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../components/Ventana24h';
 import { useEffect, useRef, useState } from 'react';
@@ -335,6 +336,7 @@ export function CRM({ df }: { df: DealFlowState }) {
             <div key={c.id} {...clicAparte(urlDe({ mode: 'vendedor', section: 'crm', chat: String(c.id) }), c.select)} style={c.crmRowStyle}>
               <AvatarCanal avatarStyle={c.avatarStyle} iniciales={c.iniciales} canal={canalDe(c)} />
               <div style={{ flex: 1, minWidth: 0 }}>
+                {c.origenProducto && <div style={{ display: 'flex', marginBottom: 4, minWidth: 0 }}><EtiquetaProductoChat color={c.origenProducto.color} nombre={c.origenProducto.nombre} /></div>}
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontWeight: c.sinResponder ? 800 : 600, fontSize: 14 }}>{c.nombre}</span>
                   {c.anuncio && (c.anuncio.titular || c.anuncio.id || c.anuncio.url) && <span title={`Vino del anuncio: ${c.anuncio.titular || 'campaña'}`} style={{ fontSize: 11, display: 'inline-flex', color: 'var(--df-brand-dark)' }}><Icono nombre="campana" tam={12} /></span>}
@@ -376,7 +378,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                 <AvatarCanal avatarStyle={chat.avatarStyle} iniciales={chat.iniciales} canal={canalDe(chat)} />
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>{chat.nombre} <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><OrigenBadge origen={canalDe(chat)} size={14} />{nombreCanal(canalDe(chat))}</span></div>
-                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-muted)' }}>{chat.tel}</div>
+                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: 'var(--df-text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>{chat.tel}{chat.origenProducto && <EtiquetaProductoChat color={chat.origenProducto.color} nombre={chat.origenProducto.nombre} />}</div>
                 </div>
                 <span style={{ fontSize: 10, color: 'var(--df-text-faint)', transform: panelCliente ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</span>
               </div>

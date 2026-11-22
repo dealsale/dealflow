@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { franjaColorChat } from '../components/ColorChat';
 import { ymdCO, msDe, hhmmCO, fmtCO } from '../lib/fechaCO';
 import type { CSSProperties } from 'react';
 import {
@@ -287,6 +288,8 @@ export interface DecoratedCrmChat extends DecoratedLead {
   fechaHoraLabel: string;
   /** Mensajes del cliente sin responder al final del chat (badge tipo WhatsApp). */
   sinResponder: number;
+  /** Producto del que vino el chat y su color en el Inbox (vacío si el producto no tiene color). */
+  origenProducto: { nombre: string; color: string } | null;
 }
 
 export interface DecoratedVariante {
@@ -336,6 +339,7 @@ export interface DecoratedProduct extends Product {
   setSku: (v: string) => void;
   setDespachoProveedor: (v: string) => void;
   setBodegaId: (v: string) => void;
+  setColorChat: (v: string) => void;
   /** Suelta el vínculo: limpia el SKU del producto, el de todas sus variantes y el proveedor, para poder cambiar de Dropi a Effi (o al revés). */
   desvincularDespacho: () => void;
   generarVariantes: () => void;
@@ -490,6 +494,7 @@ function mapApiLeads(leads: ApiLead[]): Lead[] {
     ventana24h: l.ventana24h,
     ultClienteIso: l.ultClienteIso ?? null,
     notaInterna: l.notaInterna || '',
+    productoOrigen: l.productoOrigen || '',
     anuncio: l.anuncio || null,
     promosOptin: l.promosOptin || false,
     mensajes: mapApiMensajes(l.mensajes),
@@ -641,6 +646,7 @@ function mapApiProducts(items: ApiProduct[]): Product[] {
     sku: p.sku || '',
     despachoProveedor: p.despachoProveedor || '',
     bodegaId: p.bodegaId || '',
+    colorChat: p.colorChat || '',
     variantesFuente: p.variantesFuente || '',
     bloqueado: !!p.bloqueado,
     reglas: p.reglas || [],
@@ -1485,6 +1491,8 @@ export function useDealFlowState() {
   );
   const lead = leadsDecorated.find((l) => l.id === selectedLeadId) || null;
 
+  // Nombre y color de cada producto, para marcar los chats que vienen de él.
+  const colorPorProducto = useMemo(() => new Map(products.map((p) => [String(p.id), { nombre: p.nombre, color: p.colorChat || '' }])), [products]);
   const crmChats: DecoratedCrmChat[] = useMemo(
     () =>
       // Orden tipo WhatsApp: el chat con actividad más reciente va PRIMERO.
@@ -1508,8 +1516,12 @@ export function useDealFlowState() {
           }
         }
         if (selC) sinResponder = 0;
+        // Color del producto del que vino el chat (se elige en el producto, «Mensaje inicial»).
+        const po = l.productoOrigen ? colorPorProducto.get(String(l.productoOrigen)) : undefined;
+        const origenProducto = po && po.color ? po : null;
         return {
           ...d,
+          origenProducto,
           live,
           sinResponder,
           fechaISO,
@@ -1517,10 +1529,11 @@ export function useDealFlowState() {
           liveLabel: live ? 'En vivo' : 'Esperando',
           liveStyle: { display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 700, color: live ? 'var(--df-brand-dark)' : 'var(--df-text-faint)', marginTop: '5px' },
           liveDot: { width: '7px', height: '7px', borderRadius: '50%', background: live ? 'var(--df-brand-mid)' : 'var(--df-border-strong)', animation: live ? 'dfpulse 1.8s infinite' : 'none', flexShrink: 0 },
-          crmRowStyle: { display: 'flex', gap: '11px', padding: '12px 14px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer', background: selC ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', borderLeft: selC ? '3px solid var(--df-brand)' : '3px solid transparent' },
+          crmRowStyle: { display: 'flex', gap: '11px', padding: '12px 14px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer', background: selC ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', borderLeft: selC ? '3px solid var(--df-brand)' : '3px solid transparent',
+            ...(origenProducto && !selC ? franjaColorChat(origenProducto.color) : {}) },
         };
       }),
-    [leadsSource, crmSelectedId, apiMode, apiLeadsState],
+    [leadsSource, crmSelectedId, apiMode, apiLeadsState, colorPorProducto],
   );
   const crmChat = crmChats.find((c) => c.id === crmSelectedId) || null;
   // ¿El chat seleccionado lo atiende el asistente? (fuente de verdad: su "asignado")
@@ -2436,6 +2449,7 @@ export function useDealFlowState() {
         setSku: (v: string) => updateProduct(p.id, { sku: v }),
         setDespachoProveedor: (v: string) => updateProduct(p.id, { despachoProveedor: v }),
         setBodegaId: (v: string) => updateProduct(p.id, { bodegaId: v }),
+        setColorChat: (v: string) => updateProduct(p.id, { colorChat: v }),
         desvincularDespacho: () => {
           updateProduct(p.id, { sku: '', despachoProveedor: '' });
           (p.variantes || []).forEach((v) => { if (v.id && (v.sku || '').trim()) setVariantSku(p.id, v.id, ''); });

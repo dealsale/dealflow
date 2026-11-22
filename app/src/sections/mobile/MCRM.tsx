@@ -3,6 +3,7 @@ import { useLazyList } from '../../hooks/useLazyList';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { IniciarConversacion } from '../../components/IniciarConversacion';
 import { AvatarCanal, ChipsCanal, canalDe } from '../../components/CanalChat';
+import { EtiquetaProductoChat, franjaColorChat } from '../../components/ColorChat';
 import { useRecordado } from '../../lib/rutas';
 import { useState } from 'react';
 
@@ -32,9 +33,11 @@ export function MCRM({ df }: { df: DealFlowState }) {
       </div>
       <div ref={rootRef} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, overflow: 'hidden' }}>
         {chatsVisibles.map((c) => (
-          <div key={c.id} onClick={() => df.openMobileChat(c.id)} style={{ display: 'flex', gap: 11, padding: '13px 14px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer' }}>
+          <div key={c.id} onClick={() => df.openMobileChat(c.id)} style={{ display: 'flex', gap: 11, padding: '13px 14px', borderBottom: '1px solid var(--df-border)', cursor: 'pointer',
+            ...(c.origenProducto ? franjaColorChat(c.origenProducto.color) : {}), ...(c.origenProducto ? { paddingLeft: 10 } : {}) }}>
             <AvatarCanal avatarStyle={c.avatarStyle} iniciales={c.iniciales} canal={canalDe(c)} />
             <div style={{ flex: 1, minWidth: 0 }}>
+              {c.origenProducto && <div style={{ display: 'flex', marginBottom: 4, minWidth: 0 }}><EtiquetaProductoChat color={c.origenProducto.color} nombre={c.origenProducto.nombre} /></div>}
               <div style={{ display: 'flex', alignItems: 'baseline' }}>
                 <span style={{ fontWeight: 600, fontSize: 14 }}>{c.nombre}</span>
                 <span style={{ color: c.sinResponder ? '#25D366' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>

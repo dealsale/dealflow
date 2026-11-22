@@ -185,6 +185,7 @@ export interface ApiLead {
   etiqueta?: string;
   canal?: string;
   notaInterna?: string;
+  productoOrigen?: string;
   anuncio?: Anuncio | null;
   promosOptin?: boolean;
   mensajes: ApiMensaje[];
@@ -310,6 +311,7 @@ export interface ApiProduct {
   /** Por cuál se despacha este producto: 'dropi' | 'effi' | '' (sin definir, se muestran ambos). */
   despachoProveedor?: string;
   bodegaId?: string;
+  colorChat?: string;
   variantesFuente?: string;
   bloqueado?: boolean;
   plantillaId?: string;
