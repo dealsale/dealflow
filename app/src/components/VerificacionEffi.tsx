@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Icono, IcoTexto, type NombreIcono } from './Icono';
 import { apiEffiVerificacion, type ChequeoEffi, type ProductoVerificado } from '../lib/api';
 
-const ICONO: Record<ChequeoEffi['estado'], string> = { ok: '✅', aviso: '⚠️', error: '❌' };
+const ICONO: Record<ChequeoEffi['estado'], NombreIcono> = { ok: 'ok', aviso: 'alerta', error: 'error' };
+const COLOR_ICONO: Record<ChequeoEffi['estado'], string> = { ok: 'var(--df-success)', aviso: '#B45309', error: 'var(--df-danger)' };
 const th: React.CSSProperties = { textAlign: 'left', padding: '7px 8px', fontSize: 11.5, color: 'var(--df-text-muted)', fontWeight: 700, borderBottom: '1px solid var(--df-border)', whiteSpace: 'nowrap' };
 const td: React.CSSProperties = { padding: '7px 8px', fontSize: 12.5, borderBottom: '1px solid var(--df-border)', verticalAlign: 'top' };
 
@@ -36,7 +38,7 @@ export function VerificacionEffi() {
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={() => void revisar()} disabled={cargando} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', color: 'var(--df-text)' }}>
-          {cargando ? 'Revisando…' : datos ? '↻ Revisar de nuevo' : '🔎 Revisar la integración'}
+          {cargando ? 'Revisando…' : datos ? '↻ Revisar de nuevo' : <><IcoTexto n="buscar" tam={13} />Revisar la integración</>}
         </button>
         <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Conexión, configuración, remitentes y cada producto: vínculo, convenio y bodega.</span>
       </div>
@@ -46,7 +48,7 @@ export function VerificacionEffi() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {datos.chequeos.map((c) => (
               <div key={c.titulo} style={{ display: 'flex', gap: 8, fontSize: 13, lineHeight: 1.45 }}>
-                <span>{ICONO[c.estado]}</span>
+                <Icono nombre={ICONO[c.estado]} tam={15} color={COLOR_ICONO[c.estado]} />
                 <span><b>{c.titulo}:</b> <span style={{ color: 'var(--df-text-muted)' }}>{c.detalle}</span></span>
               </div>
             ))}
@@ -56,7 +58,7 @@ export function VerificacionEffi() {
             <>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar producto…" style={{ border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)', minWidth: 0, flex: '1 1 180px', maxWidth: 280 }} />
-                <button onClick={csv} style={{ background: 'none', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 11px', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', color: 'var(--df-text)' }}>⬇ Descargar CSV</button>
+                <button onClick={csv} style={{ background: 'none', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 11px', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', color: 'var(--df-text)' }}><IcoTexto n="descargar" />Descargar CSV</button>
               </div>
               <div style={{ overflowX: 'auto', border: '1px solid var(--df-border)', borderRadius: 10, maxHeight: 420 }}>
                 <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 640 }}>
@@ -65,7 +67,7 @@ export function VerificacionEffi() {
                     {visibles.map((p) => (
                       <tr key={p.id}>
                         <td style={{ ...td, fontWeight: 600 }}>{p.nombre}</td>
-                        <td style={td}>{p.vinculadas < p.variantes ? '⚠️' : '✅'} {p.vinculadas}/{p.variantes}</td>
+                        <td style={td}><IcoTexto n={p.vinculadas < p.variantes ? 'alerta' : 'ok'} tam={13} color={p.vinculadas < p.variantes ? '#B45309' : 'var(--df-success)'} />{p.vinculadas}/{p.variantes}</td>
                         <td style={td}>{p.convenio.nombre || <span style={{ color: 'var(--df-text-faint)' }}>Sin convenio aún</span>}{p.convenio.origen && p.convenio.origen !== 'propio' && <div style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>{p.convenio.origen === 'fijo' ? 'fijado por ti' : 'de su última venta'}</div>}</td>
                         <td style={td}>
                           {p.bodega.nombre || <span style={{ color: 'var(--df-danger-dark)' }}>{p.convenio.id ? `Falta la bodega de ${p.convenio.nombre}: fíjala en "Bodega de cada proveedor"` : 'Sin bodega: se elige en cada pedido'}</span>}

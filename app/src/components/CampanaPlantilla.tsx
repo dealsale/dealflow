@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import { Dropdown } from './Dropdown';
 import { confirmar, notificar } from './dialogs';
 import { PlantillasWhatsAppTienda } from './PlantillasWhatsAppTienda';
@@ -153,7 +154,7 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-        <div style={{ fontWeight: 800, fontSize: 15, flex: 1 }}>📣 Campaña con tu plantilla</div>
+        <div style={{ fontWeight: 800, fontSize: 15, flex: 1 }}><IcoTexto n="campana" />Campaña con tu plantilla</div>
         {p.puedeCrearPlantillas && <button onClick={() => setCrear(!crear)} style={btnS}>{crear ? 'Cerrar' : '＋ Crear plantilla y enviarla a Meta'}</button>}
       </div>
       <p style={{ fontSize: 12.5, color: 'var(--df-text-muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
@@ -180,14 +181,14 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
                 {media && (extra.media.startsWith('/api/media/') ? (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', border: '1px solid var(--df-border)', borderRadius: 8, padding: 6 }}>
                     {previa && tipoMedia === 'IMAGE' ? <img src={previa} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 6 }} />
-                      : <span style={{ fontSize: 22, width: 46, textAlign: 'center' }}>{tipoMedia === 'VIDEO' ? '🎬' : '📄'}</span>}
+                      : <span style={{ fontSize: 22, width: 46, textAlign: 'center' }}><Icono nombre={tipoMedia === 'VIDEO' ? 'video' : 'documento'} tam={22} degradado /></span>}
                     <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{extra.mediaNombre || 'Archivo subido'}</span>
                     <button type="button" onClick={() => { setExtra({ ...extra, media: '', mediaNombre: '' }); setPrevia(''); }} style={{ ...btnS, padding: '4px 9px' }}>Quitar</button>
                   </div>
                 ) : (
                   <div>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      {subible && <SubirArchivo tipo={tipoMedia} texto={tipoMedia === 'IMAGE' ? '📷 Subir foto' : tipoMedia === 'VIDEO' ? '🎬 Subir video' : '📄 Subir PDF'}
+                      {subible && <SubirArchivo tipo={tipoMedia} texto={tipoMedia === 'IMAGE' ? 'Subir foto' : tipoMedia === 'VIDEO' ? 'Subir video' : 'Subir PDF'}
                         onListo={(url, nombre, f) => { setExtra({ ...extra, media: url, mediaNombre: nombre }); setPrevia(tipoMedia === 'DOCUMENT' ? '' : URL.createObjectURL(f)); }} />}
                       <input value={extra.media} onChange={(e) => setExtra({ ...extra, media: e.target.value })} placeholder={`${subible ? 'o pega el enlace' : 'Enlace'} de ${tipoMedia === 'IMAGE' ? 'la foto' : tipoMedia === 'VIDEO' ? 'el video' : 'el documento'}`} style={inp} />
                     </div>
@@ -213,7 +214,7 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
             <div>
               <label style={lbl}>3 · A quién</label>
               <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 9, padding: 2, gap: 2, marginBottom: 10 }}>
-                {([['filtros', '🎯 Por filtros'], ['manual', '🔍 Elegir clientes']] as const).map(([m, t]) => (
+                {([['filtros', 'Por filtros'], ['manual', 'Elegir clientes']] as const).map(([m, t]) => (
                   <button key={m} type="button" onClick={() => setModo(m)}
                     style={{ border: 'none', borderRadius: 7, padding: '6px 12px', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', background: modo === m ? 'var(--df-purple)' : 'transparent', color: modo === m ? '#fff' : 'var(--df-text-body)' }}>{t}</button>
                 ))}
@@ -270,7 +271,7 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
                           <label key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '7px 10px', borderBottom: '1px solid var(--df-border)', fontSize: 12.5, cursor: 'pointer', background: anuncios.includes(a.id) ? 'var(--df-purple-subtle, rgba(124,58,237,.08))' : 'transparent' }}>
                             <input type="checkbox" checked={anuncios.includes(a.id)} onChange={() => setAnuncios(toggle(anuncios, a.id))} />
                             <span style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.id === 'organico' ? '🌱 ' : '📣 '}{a.nombre}</span>
+                              <span style={{ fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><IcoTexto n={a.id === 'organico' ? 'brote' : 'campana'} tam={12} />{a.nombre}</span>
                               {a.campana && <span style={{ color: 'var(--df-text-muted)', fontSize: 11.5, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.campana}</span>}
                             </span>
                             <span style={{ color: 'var(--df-text-muted)', whiteSpace: 'nowrap' }}>{a.chats.toLocaleString('es-CO')} chats</span>
@@ -306,7 +307,7 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
                   <label style={lbl}>Etiqueta</label>
                   {p.etiquetas.length ? (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {p.etiquetas.map((e) => <button key={e.etiqueta} type="button" onClick={() => setEtiquetas(toggle(etiquetas, e.etiqueta))} style={chip(etiquetas.includes(e.etiqueta))}>🏷️ {e.etiqueta} <span style={{ color: 'var(--df-text-muted)' }}>{e.n}</span></button>)}
+                      {p.etiquetas.map((e) => <button key={e.etiqueta} type="button" onClick={() => setEtiquetas(toggle(etiquetas, e.etiqueta))} style={chip(etiquetas.includes(e.etiqueta))}><IcoTexto n="etiqueta" />{e.etiqueta} <span style={{ color: 'var(--df-text-muted)' }}>{e.n}</span></button>)}
                     </div>
                   ) : <div style={{ fontSize: 12, color: 'var(--df-text-faint)' }}>Ponle una etiqueta a los chats en el Inbox o importa contactos con una etiqueta (arriba) para elegirlos aquí.</div>}
                 </div>
@@ -367,7 +368,7 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
               </div>
             )}
             <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--df-bg)' }}>
-              <label style={{ ...lbl, marginBottom: 0 }}>🚫 Excluir {nExcluir > 0 && <span style={{ color: 'var(--df-purple)' }}>· {nExcluir} regla{nExcluir === 1 ? '' : 's'}</span>}</label>
+              <label style={{ ...lbl, marginBottom: 0 }}><IcoTexto n="bloquear" />Excluir {nExcluir > 0 && <span style={{ color: 'var(--df-purple)' }}>· {nExcluir} regla{nExcluir === 1 ? '' : 's'}</span>}</label>
               <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: -6 }}>Aunque cumplan los filtros (o los elijas a mano), a estos no les llega.</div>
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, cursor: 'pointer', flexWrap: 'wrap' }}>
                 <input type="checkbox" checked={exCompraron} onChange={(e) => setExCompraron(e.target.checked)} />
@@ -382,7 +383,7 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Con la etiqueta</div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {p.etiquetas.map((e) => <button key={e.etiqueta} type="button" onClick={() => setExEtiquetas(toggle(exEtiquetas, e.etiqueta))} style={{ ...chip(exEtiquetas.includes(e.etiqueta)), ...(exEtiquetas.includes(e.etiqueta) ? { borderColor: '#B45309', background: 'rgba(245,158,11,.12)' } : {}) }}>🚫 {e.etiqueta}</button>)}
+                    {p.etiquetas.map((e) => <button key={e.etiqueta} type="button" onClick={() => setExEtiquetas(toggle(exEtiquetas, e.etiqueta))} style={{ ...chip(exEtiquetas.includes(e.etiqueta)), ...(exEtiquetas.includes(e.etiqueta) ? { borderColor: '#B45309', background: 'rgba(245,158,11,.12)' } : {}) }}><IcoTexto n="bloquear" />{e.etiqueta}</button>)}
                   </div>
                 </div>
               )}
@@ -407,7 +408,7 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
                     {exClientes.map((d) => (
                       <span key={d.clave} style={{ ...chip(true), borderColor: '#B45309', background: 'rgba(245,158,11,.12)', cursor: 'default', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                        🚫 {d.nombre || d.tel}
+                        <IcoTexto n="bloquear" />{d.nombre || d.tel}
                         <button type="button" onClick={() => setExClientes((xs) => xs.filter((x) => x.clave !== d.clave))} aria-label={`Volver a incluir a ${d.nombre || d.tel}`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 13, color: 'var(--df-text-muted)' }}>✕</button>
                       </span>
                     ))}
@@ -429,7 +430,7 @@ export function CampanaPlantilla({ p, onEnviada }: { p: PanelRemarketing; onEnvi
                 {aud.muestra.map((d) => (
                   <div key={d.clave} style={{ display: 'flex', gap: 10, padding: '6px 10px', borderBottom: '1px solid var(--df-border)', fontSize: 12.5, opacity: d.excluido ? 0.55 : 1 }}>
                     <b style={{ minWidth: 120 }}>{d.nombre || d.tel}</b>
-                    <span style={{ flex: 1, color: 'var(--df-text-muted)' }}>{d.origen === 'importado' && modo !== 'manual' ? '📇 ' : ''}{modo === 'manual' ? d.detalle : d.motivo}</span>
+                    <span style={{ flex: 1, color: 'var(--df-text-muted)' }}>{d.origen === 'importado' && modo !== 'manual' ? <IcoTexto n="contacto" tam={12} /> : ''}{modo === 'manual' ? d.detalle : d.motivo}</span>
                     {d.excluido && <span style={{ color: '#B45309', fontWeight: 600 }}>{d.excluido}</span>}
                   </div>
                 ))}

@@ -1,4 +1,6 @@
 import { AutorMensaje } from '../components/AutorMensaje';
+import { Icono, IcoTexto } from '../components/Icono';
+import { IconoDF } from '../components/IconoDF';
 import { PresenciaChat, PresenciaEnLista } from '../components/PresenciaChat';
 import { ymdCO } from '../lib/fechaCO';
 import { clicAparte } from '../components/EnlaceApp';
@@ -47,7 +49,7 @@ export function AnuncioCard({ anuncio, productos }: { anuncio: Anuncio; producto
         <img src={anuncio.media} alt="" style={{ width: 46, height: 46, borderRadius: 8, objectFit: 'cover', flexShrink: 0, background: 'var(--df-surface-2)' }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
       )}
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-brand-dark)', letterSpacing: '0.02em' }}>📢 Vino del anuncio</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-brand-dark)', letterSpacing: '0.02em' }}><IcoTexto n="campana" tam={12} />Vino del anuncio</div>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--df-text-body)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={titulo}>{titulo}</div>
         {anuncio.texto && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{anuncio.texto}</div>}
       </div>
@@ -63,7 +65,7 @@ export function AnuncioCard({ anuncio, productos }: { anuncio: Anuncio; producto
             options={[{ value: '', label: 'Sin vincular' }, ...productos.map((p) => ({ value: String(p.id), label: p.nombre }))]} />
         </div>
         <span style={{ fontSize: 11, color: guardado ? 'var(--df-brand-dark)' : 'var(--df-text-faint)', fontWeight: guardado ? 700 : 400 }}>
-          {guardado ? '✓ Guardado' : prod.productId ? (prod.auto ? '⚡ detectado solo' : 'Llegan sin disparador → su mensaje inicial') : 'Vincúlalo para enviar su mensaje inicial'}
+          {guardado ? '✓ Guardado' : prod.productId ? (prod.auto ? 'detectado solo' : 'Llegan sin disparador → su mensaje inicial') : 'Vincúlalo para enviar su mensaje inicial'}
         </span>
       </div>
     )}
@@ -98,7 +100,7 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
         onClick={() => setOpen((o) => !o)}
         title="Enviar mensaje inicial o plantilla"
         style={{ width: size, height: size, borderRadius: 10, border: '1px solid var(--df-border)', background: open ? 'var(--df-surface-2)' : 'var(--df-surface)', color: 'var(--df-brand)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}
-      >⚡</button>
+      ><IconoDF n="rapido" size={18} style={{ display: 'block', margin: '0 auto' }} /></button>
       {open && (
         <div style={{ position: 'absolute', bottom: size + 8, left: 0, width: llenar ? 300 : 268, maxHeight: llenar ? 460 : 340, overflowY: 'auto', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 10px 34px rgba(15,23,42,.28)', zIndex: 60, padding: 6 }}>
           {verProductos ? (
@@ -107,7 +109,7 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
               {df.flujoProductos.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes productos aún.</div>}
               {df.flujoProductos.map((p) => (
                 <button key={p.id} onClick={() => { df.enviarFlujoInicial(p.id); setOpen(false); setVerProductos(false); }} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                  <span style={{ fontSize: 15 }}>🛍️</span>
+                  <Icono nombre="bolsa" tam={16} degradado />
                   <span style={{ flex: 1, textAlign: 'left', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</span>
                 </button>
               ))}
@@ -126,7 +128,7 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
               {df.plantillasAprobadas.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--df-text-muted)' }}>No tienes plantillas aprobadas todavía. Si ya te las aprobaron en Meta, toca <b>↻ Actualizar desde Meta</b>.</div>}
               {df.plantillasAprobadas.map((t) => (
                 <button key={t.id} onClick={() => { if (plantillaPideDatos(t)) { setLlenar(t); return; } df.enviarPlantillaAChat(t.id); cerrar(); }} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                  <span style={{ fontSize: 15 }}>{t.encabezadoTipo === 'IMAGE' ? '🖼️' : t.encabezadoTipo === 'VIDEO' ? '🎬' : t.encabezadoTipo === 'DOCUMENT' ? '📄' : '📋'}</span>
+                  <Icono nombre={t.encabezadoTipo === 'IMAGE' ? 'imagen' : t.encabezadoTipo === 'VIDEO' ? 'video' : t.encabezadoTipo === 'DOCUMENT' ? 'documento' : 'plantillas'} tam={16} degradado />
                   <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nombre}{t.origen === 'meta' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--df-text-faint)', marginLeft: 5 }}>· Meta</span>}</div>
                     <div style={{ fontSize: 11, color: 'var(--df-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.cuerpo}</div>
@@ -138,7 +140,7 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
             <>
               <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-faint)', textTransform: 'uppercase', letterSpacing: '.04em', padding: '8px 10px 6px' }}>Flujos</div>
               <button onClick={() => setVerProductos(true)} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                <span style={{ fontSize: 17 }}>📣</span>
+                <IconoDF n="mensaje" size={22} />
                 <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 13 }}>Mensaje inicial</div>
                   <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Envía la presentación de un producto</div>
@@ -146,7 +148,7 @@ export function FlujosButton({ df, size = 40 }: { df: DealFlowState; size?: numb
                 <span style={{ color: 'var(--df-text-faint)' }}>›</span>
               </button>
               <button onClick={() => setVerPlantillas(true)} style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--df-surface-2)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                <span style={{ fontSize: 17 }}>📋</span>
+                <Icono nombre="plantillas" tam={20} degradado style={{ margin: '0 1px' }} />
                 <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 13 }}>Plantillas aprobadas</div>
                   <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Mensajes que llegan aun pasadas las 24 h</div>
@@ -316,7 +318,7 @@ export function CRM({ df }: { df: DealFlowState }) {
           title="Ver el registro de actividad y errores de toda la tienda"
           style={{ background: 'transparent', border: 'none', color: 'var(--df-text-faint)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 6px' }}
         >
-          🩺 Registro general
+          <Icono nombre="registro" tam={14} />Registro general
         </button>
       </div>
 
@@ -335,7 +337,7 @@ export function CRM({ df }: { df: DealFlowState }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontWeight: c.sinResponder ? 800 : 600, fontSize: 14 }}>{c.nombre}</span>
-                  {c.anuncio && (c.anuncio.titular || c.anuncio.id || c.anuncio.url) && <span title={`Vino del anuncio: ${c.anuncio.titular || 'campaña'}`} style={{ fontSize: 11 }}>📢</span>}
+                  {c.anuncio && (c.anuncio.titular || c.anuncio.id || c.anuncio.url) && <span title={`Vino del anuncio: ${c.anuncio.titular || 'campaña'}`} style={{ fontSize: 11, display: 'inline-flex', color: 'var(--df-brand-dark)' }}><Icono nombre="campana" tam={12} /></span>}
                   {c.etiquetaStyle && <span style={c.etiquetaStyle}>{c.etiqueta}</span>}
                   <span style={{ color: c.sinResponder ? '#25D366' : 'var(--df-text-faint)', fontWeight: c.sinResponder ? 700 : 400, fontSize: 11.5, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{c.fechaHoraLabel}</span>
                 </div>
@@ -388,7 +390,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                 title="Ver el registro de actividad de ESTE chat"
                 style={{ background: 'var(--df-surface)', color: 'var(--df-text-secondary)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}
               >
-                🩺 Registro
+                <IcoTexto n="registro" />Registro
               </button>
               <BloquearContacto leadId={String(chat.id)} />
               <button
@@ -446,7 +448,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                           )}
                         </span>
                         {(m.estado === 'fallido' || m.estado === 'bloqueado') && m.error && (
-                          <div style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.4, padding: '5px 8px', borderRadius: 6, background: m.de === 'vendedor' ? 'rgba(0,0,0,.18)' : 'var(--df-danger-bg, rgba(220,38,38,.08))', color: m.de === 'vendedor' ? '#fff' : 'var(--df-danger)', maxWidth: 320 }}>⚠ {m.error}</div>
+                          <div style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.4, padding: '5px 8px', borderRadius: 6, background: m.de === 'vendedor' ? 'rgba(0,0,0,.18)' : 'var(--df-danger-bg, rgba(220,38,38,.08))', color: m.de === 'vendedor' ? '#fff' : 'var(--df-danger)', maxWidth: 320 }}><IcoTexto n="alerta" tam={12} />{m.error}</div>
                         )}
                       </div>
                       {m.de === 'vendedor' && <AutorMensaje autor={m.autor} />}
@@ -541,7 +543,7 @@ export function CRM({ df }: { df: DealFlowState }) {
                 ariaLabel="Etiqueta esta conversación"
                 value={chat.etiqueta || ''}
                 onChange={(v) => df.setLeadEtiqueta(chat.id, v)}
-                options={[{ value: '', label: '🏷️ Sin etiqueta' }, ...df.etiquetasCrm.map((et) => ({ value: et, label: et }))]}
+                options={[{ value: '', label: 'Sin etiqueta' }, ...df.etiquetasCrm.map((et) => ({ value: et, label: et }))]}
               />
             </div>
 
@@ -552,27 +554,27 @@ export function CRM({ df }: { df: DealFlowState }) {
                   onClick={() => { df.setOrderQuery(chat.tel); df.go('pedidos'); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
                 >
-                  🛒 Ver pedidos de este cliente
+                  <Icono nombre="carrito" tam={16} />Ver pedidos de este cliente
                 </button>
                 <button
                   onClick={() => df.abrirCrearPedido({ cliente: chat.nombre, tel: chat.tel }, chat.id)}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
                 >
-                  🧾 Crear pedido para él/ella
+                  <Icono nombre="guia" tam={16} />Crear pedido para él/ella
                 </button>
                 <button
                   onClick={() => { setPanelCliente(false); df.abrirCompletarPedido(chat.id); }}
                   title="Lee el pedido de este chat con IA y completa/corrige el pedido existente"
                   style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
                 >
-                  ✅ Completar pedido desde el chat
+                  <Icono nombre="ok" tam={16} />Completar pedido desde el chat
                 </button>
                 <button
                   onClick={() => df.setLeadOptin(chat.id, !df.crmOptin)}
                   title="Marca si este cliente aceptó recibir promociones. Sirve para saber a quién puedes escribirle con ofertas sin generar reportes."
                   style={{ display: 'flex', alignItems: 'center', gap: 8, background: df.crmOptin ? 'var(--df-brand-soft, rgba(52,211,153,.12))' : 'var(--df-surface)', border: `1px solid ${df.crmOptin ? 'var(--df-brand)' : 'var(--df-border)'}`, color: 'var(--df-text-body)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', textAlign: 'left' }}
                 >
-                  {df.crmOptin ? '🔔 Acepta promociones (opt-in ✓)' : '🔕 Sin opt-in de promociones'}
+                  <Icono nombre={df.crmOptin ? 'notificacion' : 'silenciado'} tam={16} />{df.crmOptin ? 'Acepta promociones (opt-in ✓)' : 'Sin opt-in de promociones'}
                 </button>
               </div>
               <div style={{ marginTop: 8 }}>

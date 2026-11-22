@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { IcoTexto } from './components/Icono';
 import { Header } from './components/Header';
 import { BotPreloader } from './components/BotPreloader';
 import { InstalarAppPopup, esAppInstalada, esIOS } from './components/InstalarAppPopup';
@@ -131,7 +132,7 @@ function SuscripcionBanner({ df }: { df: DealFlowState }) {
         fontWeight: 600,
       }}
     >
-      <span>⏳ Tu renta mensual (plan {s.plan}) vence en {s.diasRestantes} día{s.diasRestantes === 1 ? '' : 's'}.</span>
+      <span><IcoTexto n="pendiente" />Tu renta mensual (plan {s.plan}) vence en {s.diasRestantes} día{s.diasRestantes === 1 ? '' : 's'}.</span>
       <div style={{ flex: 1 }} />
       <button
         onClick={() => df.pagarSuscripcion()}
@@ -188,7 +189,7 @@ function Paywall({ df }: { df: DealFlowState }) {
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', color: 'var(--df-brand-dark)', fontSize: 13.5, fontWeight: 700 }}>
-          🎁 Cupón <b>{cupon.codigo}</b> · {etiquetaCupon}
+          <IcoTexto n="regalo" />Cupón <b>{cupon.codigo}</b> · {etiquetaCupon}
           <button onClick={quitarCupon} style={{ background: 'transparent', border: 'none', color: 'var(--df-text-faint)', fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline' }}>quitar</button>
         </div>
       )}
@@ -261,7 +262,7 @@ function Paywall({ df }: { df: DealFlowState }) {
               <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 8 }}>Incluye 30 días de servicio{cupon ? ` · cupón: ${etiquetaCupon}` : ''}</div>
               {/* Los cupones normales solo cubren la instalación; los generales, también la mensualidad. */}
               <div style={{ fontSize: 13.5, color: 'var(--df-brand)', fontWeight: 700, marginBottom: p.incluyeTienda ? 6 : 14 }}>+ {money(cupon?.alcance === 'total' ? conDesc(p.mensual) : p.mensual)} de mensualidad</div>
-              {p.incluyeTienda && <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)', borderRadius: 8, padding: '5px 9px', marginBottom: 14, alignSelf: 'flex-start' }}>🛍️ Incluye la Tienda en línea</div>}
+              {p.incluyeTienda && <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)', borderRadius: 8, padding: '5px 9px', marginBottom: 14, alignSelf: 'flex-start' }}><IcoTexto n="bolsa" tam={13} />Incluye la Tienda en línea</div>}
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 18px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                 {p.features.map((f) => (
                   <li key={f} style={{ display: 'flex', gap: 8, fontSize: 13, color: 'var(--df-text-body)', lineHeight: 1.4 }}>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icono } from './Icono';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import logo from '../assets/logo.png';
 import {
@@ -92,25 +93,25 @@ export function FloatingNav({ df }: { df: DealFlowState }) {
                 <div style={{ color: 'var(--df-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 10px 6px' }}>
                   {df.isSoporte ? 'Soporte' : 'Administración'}
                 </div>
-                {fila(false, () => { window.open('/drive', '_blank', 'noopener'); }, <span style={{ fontSize: 16 }}>☁️</span>, 'Drive del equipo', undefined, '/drive')}
+                {fila(false, () => { window.open('/drive', '_blank', 'noopener'); }, <Icono nombre="nube" tam={17} grosor={1.8} />, 'Drive del equipo', undefined, '/drive')}
                 {df.isSuperadmin ? (
                   <>
                     {fila(aSection === 'superadmin', () => goA('superadmin'), <IconCuentas />, 'Todas las tiendas', undefined, urlDe({ mode: 'admin', adminSection: 'superadmin' }))}
-                    {fila(aSection === 'plantillas', () => goA('plantillas'), <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA', undefined, urlDe({ mode: 'admin', adminSection: 'plantillas' }))}
+                    {fila(aSection === 'plantillas', () => goA('plantillas'), <Icono nombre="plantillas" tam={17} grosor={1.8} />, 'Plantillas WA', undefined, urlDe({ mode: 'admin', adminSection: 'plantillas' }))}
                     {fila(aSection === 'contabilidad', () => goA('contabilidad'), <IconVentas />, 'Contabilidad', undefined, urlDe({ mode: 'admin', adminSection: 'contabilidad' }))}
-                    {fila(aSection === 'equipo', () => goA('equipo'), <span style={{ fontSize: 16 }}>👥</span>, 'Equipo DealFlow', undefined, urlDe({ mode: 'admin', adminSection: 'equipo' }))}
-                    {fila(aSection === 'soporte', () => goA('soporte'), <span style={{ fontSize: 16 }}>📞</span>, 'Soporte en vivo', undefined, urlDe({ mode: 'admin', adminSection: 'soporte' }))}
-                    {fila(aSection === 'proveedores', () => goA('proveedores'), <span style={{ fontSize: 16 }}>🤝</span>, 'Proveedores', undefined, urlDe({ mode: 'admin', adminSection: 'proveedores' }))}
+                    {fila(aSection === 'equipo', () => goA('equipo'), <Icono nombre="equipoDF" tam={17} grosor={1.8} />, 'Equipo DealFlow', undefined, urlDe({ mode: 'admin', adminSection: 'equipo' }))}
+                    {fila(aSection === 'soporte', () => goA('soporte'), <Icono nombre="soporte" tam={17} grosor={1.8} />, 'Soporte en vivo', undefined, urlDe({ mode: 'admin', adminSection: 'soporte' }))}
+                    {fila(aSection === 'proveedores', () => goA('proveedores'), <Icono nombre="aliado" tam={17} grosor={1.8} />, 'Proveedores', undefined, urlDe({ mode: 'admin', adminSection: 'proveedores' }))}
                   </>
                 ) : (
                   <>
-                    {fila(aSection === 'soporte', () => goA('soporte'), <span style={{ fontSize: 16 }}>📞</span>, 'Soporte en vivo', undefined, urlDe({ mode: 'admin', adminSection: 'soporte' }))}
-                    {fila(aSection === 'trazabilidad', () => goA('trazabilidad'), <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad', undefined, urlDe({ mode: 'admin', adminSection: 'trazabilidad' }))}
+                    {fila(aSection === 'soporte', () => goA('soporte'), <Icono nombre="soporte" tam={17} grosor={1.8} />, 'Soporte en vivo', undefined, urlDe({ mode: 'admin', adminSection: 'soporte' }))}
+                    {fila(aSection === 'trazabilidad', () => goA('trazabilidad'), <Icono nombre="ruta" tam={17} grosor={1.8} />, 'Trazabilidad', undefined, urlDe({ mode: 'admin', adminSection: 'trazabilidad' }))}
                     {!df.isSoporte && <>
-                    {fila(aSection === 'proveedores', () => goA('proveedores'), <span style={{ fontSize: 16 }}>🤝</span>, 'Proveedores', undefined, urlDe({ mode: 'admin', adminSection: 'proveedores' }))}
+                    {fila(aSection === 'proveedores', () => goA('proveedores'), <Icono nombre="aliado" tam={17} grosor={1.8} />, 'Proveedores', undefined, urlDe({ mode: 'admin', adminSection: 'proveedores' }))}
                     {fila(aSection === 'planes', () => goA('planes'), <IconPlanes />, 'Planes', undefined, urlDe({ mode: 'admin', adminSection: 'planes' }))}
                     {fila(aSection === 'cuentas', () => goA('cuentas'), <IconCuentas />, 'Cuentas', undefined, urlDe({ mode: 'admin', adminSection: 'cuentas' }))}
-                    {fila(aSection === 'cupones', () => goA('cupones'), <span style={{ fontSize: 16 }}>🎁</span>, 'Cupones', undefined, urlDe({ mode: 'admin', adminSection: 'cupones' }))}
+                    {fila(aSection === 'cupones', () => goA('cupones'), <Icono nombre="cupon" tam={17} grosor={1.8} />, 'Cupones', undefined, urlDe({ mode: 'admin', adminSection: 'cupones' }))}
                     {fila(aSection === 'biblioteca', () => goA('biblioteca'), <IconBiblioteca />, 'Biblioteca', undefined, urlDe({ mode: 'admin', adminSection: 'biblioteca' }))}
                     </>}
                   </>

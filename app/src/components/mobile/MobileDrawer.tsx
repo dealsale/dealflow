@@ -95,33 +95,33 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
             {/* El superadmin ve TODO lo del admin y, además, "Todas las tiendas". */}
             {df.isSuperadmin && (
               <div onClick={() => df.goAdmin('superadmin')} style={itemStyle(df.adminSection === 'superadmin')}>
-                <span>🌐 Todas las tiendas</span>
+                <span>Todas las tiendas</span>
               </div>
             )}
             {df.isSuperadmin && (
               <div onClick={() => df.goAdmin('plantillas')} style={itemStyle(df.adminSection === 'plantillas')}>
-                <span>📩 Plantillas WA</span>
+                <span>Plantillas WA</span>
               </div>
             )}
             {df.isSuperadmin && (
               <div onClick={() => df.goAdmin('equipo')} style={itemStyle(df.adminSection === 'equipo')}>
-                <span>👥 Equipo DealFlow</span>
+                <span>Equipo DealFlow</span>
               </div>
             )}
             <div onClick={() => df.goAdmin('soporte')} style={itemStyle(df.adminSection === 'soporte')}>
-              <span>📞 Soporte en vivo</span>
+              <span>Soporte en vivo</span>
             </div>
             <div onClick={() => df.goAdmin('trazabilidad')} style={itemStyle(df.adminSection === 'trazabilidad')}>
-              <span>🧭 Trazabilidad</span>
+              <span>Trazabilidad</span>
             </div>
             <a href={'/drive'} target="_blank" rel="noopener" style={{ ...itemStyle(false), textDecoration: 'none', color: 'inherit', display: 'block' }}>
-              <span>☁️ Drive del equipo</span>
+              <span>Drive del equipo</span>
             </a>
             {!df.isSoporte && <div onClick={() => df.goAdmin('proveedores')} style={itemStyle(df.adminSection === 'proveedores')}>
-              <span>🤝 Proveedores</span>
+              <span>Proveedores</span>
             </div>}
             {!df.isSoporte && <div onClick={() => df.goAdmin('estudio')} style={itemStyle(df.adminSection === 'estudio')}>
-              <span>🎬 Estudio IA</span>
+              <span>Estudio IA</span>
             </div>}
             {!df.isSoporte && ADMIN_ITEMS.filter((m) => m.id !== 'contabilidad' || df.isSuperadmin).map((m) => (
               <div key={m.id} onClick={() => df.goAdmin(m.id)} style={itemStyle(df.adminSection === m.id)}>

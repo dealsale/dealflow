@@ -1,21 +1,22 @@
 import { RendimientoServidor } from './Rendimiento';
+import { Icono, IcoTexto, type NombreIcono } from '../../components/Icono';
 import { useEffect, useRef, useState } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../../components/Dropdown';
 import { apiTrazabilidad, apiTrazaPedido, apiResumenAvisos } from '../../lib/api';
 import type { EventoTraza, PedidoTraza, ResumenTraza, ResumenAvisos } from '../../lib/api';
 
-const ETAPAS: { value: string; label: string; icono: string }[] = [
-  { value: '', label: 'Todas las etapas', icono: '' },
-  { value: 'pedido', label: 'Pedido creado', icono: '🛒' },
-  { value: 'estado', label: 'Cambio de estado', icono: '🔁' },
-  { value: 'despacho', label: 'Despacho', icono: '📦' },
-  { value: 'guia', label: 'Guía', icono: '🏷️' },
-  { value: 'api', label: 'Llamadas a API', icono: '🔌' },
-  { value: 'webhook', label: 'Avisos de Effi', icono: '📡' },
-  { value: 'aviso', label: 'Aviso al cliente', icono: '💬' },
+const ETAPAS: { value: string; label: string; icono?: NombreIcono }[] = [
+  { value: '', label: 'Todas las etapas' },
+  { value: 'pedido', label: 'Pedido creado', icono: 'carrito' },
+  { value: 'estado', label: 'Cambio de estado', icono: 'repetido' },
+  { value: 'despacho', label: 'Despacho', icono: 'paquete' },
+  { value: 'guia', label: 'Guía', icono: 'etiqueta' },
+  { value: 'api', label: 'Llamadas a API', icono: 'api' },
+  { value: 'webhook', label: 'Avisos de Effi', icono: 'antena' },
+  { value: 'aviso', label: 'Aviso al cliente', icono: 'chat' },
 ];
-const iconoEtapa = (e: string) => ETAPAS.find((x) => x.value === e)?.icono || '•';
+const iconoEtapa = (e: string, tam = 13, color?: string) => { const n = ETAPAS.find((x) => x.value === e)?.icono; return n ? <Icono nombre={n} tam={tam} color={color} /> : '•'; };
 const COLOR: Record<string, string> = { ok: 'var(--df-brand)', info: 'var(--df-text-faint)', warn: 'var(--df-warning, #d97706)', error: 'var(--df-danger, #dc2626)' };
 
 // Las fechas vienen en UTC (SQLite); se muestran en hora de Colombia.
@@ -88,7 +89,7 @@ function PanelPedido({ orderId, onClose }: { orderId: string; onClose: () => voi
           {d?.eventos.map((e, i) => (
             <div key={e.id} style={{ display: 'flex', gap: 10, paddingBottom: 14, position: 'relative' }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: 26 }}>
-                <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, background: 'var(--df-surface)', border: `2px solid ${COLOR[e.nivel] || COLOR.info}` }}>{iconoEtapa(e.etapa)}</div>
+                <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, background: 'var(--df-surface)', border: `2px solid ${COLOR[e.nivel] || COLOR.info}` }}>{iconoEtapa(e.etapa, 13, COLOR[e.nivel] || COLOR.info)}</div>
                 {i < d.eventos.length - 1 && <div style={{ flex: 1, width: 2, background: 'var(--df-border)', marginTop: 2 }} />}
               </div>
               <div style={{ flex: 1, minWidth: 0, paddingTop: 3 }}>
@@ -131,7 +132,7 @@ function AvisosCliente({ store, onTienda }: { store: string; onTienda: (id: stri
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 15, color: 'var(--df-text-strong)' }}>{abierto ? '▾' : '▸'} 💬 Avisos al cliente</button>
+        <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 15, color: 'var(--df-text-strong)' }}>{abierto ? '▾' : '▸'} <IcoTexto n="chat" tam={15} />Avisos al cliente</button>
         <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>
           {r ? <>{tot.enviados} enviados ({tot.seguimientos} de seguimiento) · <b style={{ color: tot.no ? COLOR.warn : undefined }}>{tot.no} no salieron</b> · {tot.pend} en cola{tot.normales ? ` · ${tot.normales} no hacían falta (ya se había avisado algo más nuevo)` : ''}</> : 'Cargando…'}
         </span>
@@ -164,7 +165,7 @@ function AvisosCliente({ store, onTienda }: { store: string; onTienda: (id: stri
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Por qué no salieron</div>
-            {!r.motivos.length ? <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>Todo salió ✅</div> : r.motivos.map((m) => (
+            {!r.motivos.length ? <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}><IcoTexto n="ok" tam={13} />Todo salió bien</div> : r.motivos.map((m) => (
               <div key={m.motivo} style={{ display: 'flex', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--df-border)', fontSize: 12.5 }}>
                 <b style={{ minWidth: 34, textAlign: 'right', color: COLOR.warn }}>{m.n}</b>
                 <div style={{ minWidth: 0 }}>
@@ -215,7 +216,7 @@ export function Trazabilidad({ df }: { df: DealFlowState }) {
   return (
     <section data-screen-label="Admin Trazabilidad">
       <RendimientoServidor />
-      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Trazabilidad de pedidos 🧭</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}><IcoTexto n="brujula" tam={22} degradado />Trazabilidad de pedidos</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 16px' }}>Todo lo que le pasa a cada pedido: creación, estados, envíos a Effi y Dropi con lo que se mandó y lo que respondieron, guías, avisos y mensajes al cliente.</p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 14 }}>
@@ -231,12 +232,12 @@ export function Trazabilidad({ df }: { df: DealFlowState }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="🔍 DF-1234, cliente, teléfono, guía o remisión…"
+          placeholder="DF-1234, cliente, teléfono, guía o remisión…"
           style={{ flex: '1 1 240px', minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 999, padding: '8px 14px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text-body)' }}
         />
         <Dropdown variant="pill" label="Tienda" value={store} onChange={setStore} options={tiendas} />
         <Dropdown variant="pill" label="Nivel" value={nivel} onChange={setNivel} options={[{ value: '', label: 'Todo' }, { value: 'problemas', label: 'Solo problemas' }, { value: 'error', label: 'Solo errores' }, { value: 'ok', label: 'Solo éxitos' }]} />
-        <Dropdown variant="pill" label="Etapa" value={etapa} onChange={setEtapa} options={ETAPAS.map((e) => ({ value: e.value, label: `${e.icono ? e.icono + ' ' : ''}${e.label}` }))} />
+        <Dropdown variant="pill" label="Etapa" value={etapa} onChange={setEtapa} options={ETAPAS.map((e) => ({ value: e.value, label: e.label }))} />
         <button onClick={() => cargar(false)} title="Actualizar" style={{ height: 34, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 999, padding: '0 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', color: 'var(--df-text-body)' }}>{cargando ? '…' : '↻ Actualizar'}</button>
       </div>
 
@@ -262,7 +263,7 @@ export function Trazabilidad({ df }: { df: DealFlowState }) {
                     <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--df-text-faint)', whiteSpace: 'nowrap' }}>{fecha(e.created_at)}</span>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: e.nivel === 'error' ? COLOR.error : 'var(--df-text-strong)', marginTop: 2, wordBreak: 'break-word' }}>
-                    <span style={{ marginRight: 6 }}>{iconoEtapa(e.etapa)}</span>{e.titulo}
+                    <span style={{ marginRight: 6, display: 'inline-flex', verticalAlign: '-0.15em' }}>{iconoEtapa(e.etapa, 14)}</span>{e.titulo}
                   </div>
                   {e.detalle && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{e.detalle}</div>}
                 </div>

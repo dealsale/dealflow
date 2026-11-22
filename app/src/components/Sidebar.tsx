@@ -1,4 +1,5 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { Icono } from './Icono';
 import logo from '../assets/logo.png';
 import {
   IconAsistente,
@@ -24,6 +25,41 @@ import {
 import type { AdminSection, VendedorSection } from '../types';
 import { EnlaceApp } from './EnlaceApp';
 import { urlDe } from '../lib/rutas';
+import { useEffect, useState } from 'react';
+
+// Frases del recuadro de DealFlow en el menú: cambian solas cada pocos segundos.
+const FRASES = [
+  'Cada chat es una venta esperando.',
+  'Hoy es un gran día para vender.',
+  'Pequeños pasos, grandes ventas.',
+  'Tu tienda vende aunque duermas.',
+  'Responde rápido, vende más.',
+  'La constancia vence al talento.',
+  'Cada pedido cuenta. ¡Sigue así!',
+  'Lo que no se mide, no crece.',
+  'Hoy puedes vender más que ayer.',
+  'Tu esfuerzo de hoy es la venta de mañana.',
+  'Los grandes negocios empezaron pequeños.',
+  'Un cliente feliz trae a otro.',
+];
+
+function FraseMotivacional() {
+  const [i, setI] = useState(() => Math.floor(Math.random() * FRASES.length));
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    let espera: ReturnType<typeof setTimeout>;
+    const t = setInterval(() => {
+      setVisible(false);
+      espera = setTimeout(() => { setI((n) => (n + 1) % FRASES.length); setVisible(true); }, 400);
+    }, 7000);
+    return () => { clearInterval(t); clearTimeout(espera); };
+  }, []);
+  return (
+    <div style={{ color: 'rgba(255,255,255,.88)', fontSize: 12, lineHeight: 1.4, marginTop: 3, marginBottom: 10, minHeight: 34, whiteSpace: 'normal', overflowWrap: 'anywhere', opacity: visible ? 1 : 0, transform: visible ? 'none' : 'translateY(3px)', transition: 'opacity .4s, transform .4s' }}>
+      {FRASES[i]}
+    </div>
+  );
+}
 
 export function Sidebar({ df }: { df: DealFlowState }) {
   const vSection = df.isVendedor ? df.section : null;
@@ -118,23 +154,23 @@ export function Sidebar({ df }: { df: DealFlowState }) {
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {/* El superadmin ve TODO lo del admin y, además, "Todas las tiendas". */}
-            {df.isSuperadmin && adminItem('superadmin', <span style={{ fontSize: 16 }}>🌐</span>, 'Todas las tiendas')}
-            {df.isSuperadmin && adminItem('plantillas', <span style={{ fontSize: 16 }}>📩</span>, 'Plantillas WA')}
-            {df.isSuperadmin && adminItem('equipo', <span style={{ fontSize: 16 }}>👥</span>, 'Equipo DealFlow')}
-            {adminItem('soporte', <span style={{ fontSize: 16 }}>📞</span>, 'Soporte en vivo')}
-            {adminItem('trazabilidad', <span style={{ fontSize: 16 }}>🧭</span>, 'Trazabilidad')}
+            {df.isSuperadmin && adminItem('superadmin', <Icono nombre="web" tam={17} grosor={1.8} />, 'Todas las tiendas')}
+            {df.isSuperadmin && adminItem('plantillas', <Icono nombre="plantillas" tam={17} grosor={1.8} />, 'Plantillas WA')}
+            {df.isSuperadmin && adminItem('equipo', <Icono nombre="equipoDF" tam={17} grosor={1.8} />, 'Equipo DealFlow')}
+            {adminItem('soporte', <Icono nombre="soporte" tam={17} grosor={1.8} />, 'Soporte en vivo')}
+            {adminItem('trazabilidad', <Icono nombre="ruta" tam={17} grosor={1.8} />, 'Trazabilidad')}
             {/* Drive del equipo: se abre aparte (/drive). */}
             <a href={'/drive'} target="_blank" rel="noopener" title="Abrir el Drive del equipo en otra pestaña" style={{ ...navStylePremium(false), textDecoration: 'none' }}>
-              <span style={{ fontSize: 16 }}>☁️</span>
+              <Icono nombre="nube" tam={17} grosor={1.8} />
               <span>Drive del equipo</span>
             </a>
             {!df.isSoporte && <>
-            {adminItem('proveedores', <span style={{ fontSize: 16 }}>🤝</span>, 'Proveedores')}
-            {adminItem('estudio', <span style={{ fontSize: 16 }}>🎬</span>, 'Estudio IA')}
+            {adminItem('proveedores', <Icono nombre="aliado" tam={17} grosor={1.8} />, 'Proveedores')}
+            {adminItem('estudio', <Icono nombre="estudio" tam={17} grosor={1.8} />, 'Estudio IA')}
             {df.isSuperadmin && adminItem('contabilidad', <IconVentas />, 'Contabilidad')}
             {adminItem('planes', <IconPlanes />, 'Planes')}
             {adminItem('cuentas', <IconCuentas />, 'Cuentas')}
-            {adminItem('cupones', <span style={{ fontSize: 16 }}>🎁</span>, 'Cupones')}
+            {adminItem('cupones', <Icono nombre="cupon" tam={17} grosor={1.8} />, 'Cupones')}
             {adminItem('biblioteca', <IconBiblioteca />, 'Biblioteca')}
             </>}
           </nav>
@@ -146,7 +182,7 @@ export function Sidebar({ df }: { df: DealFlowState }) {
         href="/tutoriales"
         style={{ ...df.navStyle(false), textDecoration: 'none', marginTop: 8, borderTop: '1px solid var(--df-text-strong)', paddingTop: 12, borderRadius: 0 }}
       >
-        <span style={{ fontSize: 16 }}>🎓</span>
+        <Icono nombre="tutoriales" tam={17} grosor={1.8} />
         <span>Tutoriales</span>
       </a>
 
@@ -154,14 +190,14 @@ export function Sidebar({ df }: { df: DealFlowState }) {
       {premium && (
         <div
           style={{
-            position: 'relative', overflow: 'hidden', borderRadius: 14, padding: '16px 14px', marginBottom: 10,
+            position: 'relative', overflow: 'hidden', borderRadius: 14, padding: '14px 14px', marginBottom: 10, flexShrink: 0,
             background: 'linear-gradient(145deg,#4338CA,#7C3AED 55%,#2563EB)', boxShadow: '0 10px 26px -8px rgba(99,102,241,.6)',
           }}
         >
           <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 25% 15%, rgba(255,255,255,.28), transparent 55%)' }} />
           <div style={{ position: 'relative' }}>
             <div style={{ color: '#fff', fontWeight: 800, fontSize: 15, letterSpacing: '-0.01em' }}>DealFlow</div>
-            <div style={{ color: 'rgba(255,255,255,.85)', fontSize: 11.5, marginTop: 2, marginBottom: 12 }}>Automatiza · Vende · Crece</div>
+            <FraseMotivacional />
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(255,255,255,.24)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14 }}>→</div>
           </div>
         </div>

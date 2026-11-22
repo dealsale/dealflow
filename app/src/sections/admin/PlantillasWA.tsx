@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { IcoTexto } from '../../components/Icono';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { apiPlantillaMetaTiendas, type PlantillaMeta, type NuevaPlantilla, type BotonPlantilla, type EstadoPlantillaTienda } from '../../lib/api';
 import { Dropdown } from '../../components/Dropdown';
@@ -42,14 +43,14 @@ export function PlantillasWA({ df }: { df: DealFlowState }) {
           </p>
         </div>
         {!form && df.tiendasCloudCount > 0 && df.plantillasMeta.length > 0 && (<>
-          <button onClick={df.refrescarTodasPlantillasMeta} disabled={df.enviandoPlantillas} title="Consulta a Meta el estado real de todas las plantillas en todas las tiendas" style={{ background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '9px 15px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>🔄 Actualizar estados</button>
-          <button onClick={df.publicarTodasPlantillasMeta} disabled={df.enviandoPlantillas} title="Envía TODAS las plantillas a verificación en todas las tiendas donde aún no están aprobadas (no toca las aprobadas)" style={{ background: 'var(--df-surface)', color: 'var(--df-brand-dark)', border: '1px solid var(--df-brand)', borderRadius: 9, padding: '9px 15px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: df.enviandoPlantillas ? 'wait' : 'pointer', whiteSpace: 'nowrap', opacity: df.enviandoPlantillas ? 0.6 : 1 }}>{df.enviandoPlantillas ? '⏳ Enviando…' : '📤 Enviar todas a verificación'}</button>
+          <button onClick={df.refrescarTodasPlantillasMeta} disabled={df.enviandoPlantillas} title="Consulta a Meta el estado real de todas las plantillas en todas las tiendas" style={{ background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '9px 15px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}><IcoTexto n="actualizar" tam={13} />Actualizar estados</button>
+          <button onClick={df.publicarTodasPlantillasMeta} disabled={df.enviandoPlantillas} title="Envía TODAS las plantillas a verificación en todas las tiendas donde aún no están aprobadas (no toca las aprobadas)" style={{ background: 'var(--df-surface)', color: 'var(--df-brand-dark)', border: '1px solid var(--df-brand)', borderRadius: 9, padding: '9px 15px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: df.enviandoPlantillas ? 'wait' : 'pointer', whiteSpace: 'nowrap', opacity: df.enviandoPlantillas ? 0.6 : 1 }}>{df.enviandoPlantillas ? 'Enviando…' : <><IcoTexto n="enviar" tam={13} />Enviar todas a verificación</>}</button>
         </>)}
         {!form && <button onClick={abrirNueva} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 9, padding: '9px 15px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Nueva plantilla</button>}
       </div>
       {df.tiendasCloudCount === 0 ? (
         <div style={{ background: 'var(--df-danger-subtle-2)', border: '1px solid var(--df-danger-border, rgba(220,38,38,.3))', borderRadius: 10, padding: '11px 13px', marginBottom: 16, fontSize: 12.5, color: 'var(--df-danger-dark)' }}>
-          ⚠️ <b>No hay tiendas conectadas por WhatsApp Cloud API.</b> Las plantillas de Meta solo se publican en cuentas <b>Cloud API (oficial)</b>; las tiendas conectadas por <b>QR</b> no tienen sistema de plantillas. Por eso «Publicar en todas» no envía a ninguna. Conecta al menos una tienda por Cloud API.
+          <IcoTexto n="alerta" tam={14} /><b>No hay tiendas conectadas por WhatsApp Cloud API.</b> Las plantillas de Meta solo se publican en cuentas <b>Cloud API (oficial)</b>; las tiendas conectadas por <b>QR</b> no tienen sistema de plantillas. Por eso «Publicar en todas» no envía a ninguna. Conecta al menos una tienda por Cloud API.
         </div>
       ) : (
         <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 16 }}>
@@ -104,7 +105,7 @@ export function PlantillasWA({ df }: { df: DealFlowState }) {
             <button onClick={guardar} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 9, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{editId ? 'Guardar cambios' : 'Crear plantilla'}</button>
             <button onClick={() => { setForm(null); setEditId(null); }} style={{ background: 'transparent', color: 'var(--df-text-muted)', border: '1px solid var(--df-border)', borderRadius: 9, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
           </div>
-          <div style={{ marginTop: 12, fontSize: 11.5, color: 'var(--df-text-faint)' }}>💡 Al crear la plantilla no se publica sola. Después dale «Publicar en todas» para enviarla a verificación de Meta en cada tienda.</div>
+          <div style={{ marginTop: 12, fontSize: 11.5, color: 'var(--df-text-faint)' }}><IcoTexto n="idea" tam={12} />Al crear la plantilla no se publica sola. Después dale «Publicar en todas» para enviarla a verificación de Meta en cada tienda.</div>
         </div>
       )}
 
@@ -125,21 +126,21 @@ export function PlantillasWA({ df }: { df: DealFlowState }) {
                 <div style={{ display: 'flex', gap: 5 }}>
                   {df.tiendasCloudCount - p.publicadas > 0 && <span title="Tiendas donde aún no se ha enviado" style={chip('var(--df-surface-2)', 'var(--df-text-muted)')}>○ {df.tiendasCloudCount - p.publicadas} sin enviar</span>}
                   {p.resumen.aprobada > 0 && <span style={chip('var(--df-brand-subtle)', 'var(--df-brand-dark)')}>✓ {p.resumen.aprobada}</span>}
-                  {p.resumen.pendiente > 0 && <span style={chip('rgba(245,158,11,.12)', '#B45309')}>⏳ {p.resumen.pendiente}</span>}
+                  {p.resumen.pendiente > 0 && <span style={chip('rgba(245,158,11,.12)', '#B45309')}><IcoTexto n="pendiente" tam={11} />{p.resumen.pendiente}</span>}
                   {p.resumen.rechazada > 0 && <span style={chip('var(--df-danger-subtle-2)', 'var(--df-danger-dark)')}>✕ {p.resumen.rechazada}</span>}
-                  {p.resumen.error > 0 && <span style={chip('var(--df-danger-subtle-2)', 'var(--df-danger-dark)')}>⚠ {p.resumen.error}</span>}
-                  {!!p.reclasificadas?.length && <span title={`Meta la pasó a Marketing en: ${p.reclasificadas.join(', ')}`} style={chip('var(--df-purple-subtle)', 'var(--df-purple)')}>⚠ Marketing en {p.reclasificadas.length}</span>}
+                  {p.resumen.error > 0 && <span style={chip('var(--df-danger-subtle-2)', 'var(--df-danger-dark)')}><IcoTexto n="alerta" tam={11} />{p.resumen.error}</span>}
+                  {!!p.reclasificadas?.length && <span title={`Meta la pasó a Marketing en: ${p.reclasificadas.join(', ')}`} style={chip('var(--df-purple-subtle)', 'var(--df-purple)')}><IcoTexto n="alerta" tam={11} />Marketing en {p.reclasificadas.length}</span>}
                 </div>
               )}
             </div>
             <div style={{ fontSize: 13, color: 'var(--df-text-body)', whiteSpace: 'pre-wrap', lineHeight: 1.5, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', marginBottom: 10 }}>
-              {p.encabezado && <div style={{ fontWeight: 700, marginBottom: 4 }}>{p.encabezado === '{{IMAGEN}}' ? '🖼️ Foto (se pone al enviar)' : p.encabezado}</div>}
+              {p.encabezado && <div style={{ fontWeight: 700, marginBottom: 4 }}>{p.encabezado === '{{IMAGEN}}' ? <><IcoTexto n="imagen" tam={13} />Foto (se pone al enviar)</> : p.encabezado}</div>}
               {p.cuerpo}
               {p.pie && <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginTop: 4 }}>{p.pie}</div>}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={() => df.publicarPlantillaMeta(p.id)} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>📤 Publicar en todas ({df.tiendasCloudCount})</button>
-              {p.publicadas > 0 && <button onClick={() => df.refrescarPlantillaMeta(p.id)} style={{ background: 'var(--df-surface-2)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>🔄 Refrescar estado</button>}
+              <button onClick={() => df.publicarPlantillaMeta(p.id)} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}><IcoTexto n="enviar" tam={13} />Publicar en todas ({df.tiendasCloudCount})</button>
+              {p.publicadas > 0 && <button onClick={() => df.refrescarPlantillaMeta(p.id)} style={{ background: 'var(--df-surface-2)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}><IcoTexto n="actualizar" tam={13} />Refrescar estado</button>}
               <PorTienda id={p.id} />
               <button onClick={() => abrirEditar(p)} style={{ background: 'transparent', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Editar</button>
               <button onClick={async () => { if (await confirmar({ titulo: 'Eliminar plantilla', mensaje: `¿Eliminar la plantilla "${p.nombre}" de DealFlow? No la borra de las tiendas donde ya está aprobada en Meta.`, aceptar: 'Eliminar', peligro: true })) df.eliminarPlantillaMeta(p.id); }} style={{ background: 'transparent', color: 'var(--df-danger-dark)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Eliminar</button>
@@ -204,9 +205,9 @@ function ResumenGlobal({ plantillas, tiendas }: { plantillas: PlantillaMeta[]; t
 
 const ETQ: Record<string, [string, string, string]> = {
   aprobada: ['✓ Aprobada', 'var(--df-brand-subtle)', 'var(--df-brand-dark)'],
-  pendiente: ['⏳ En revisión', 'rgba(245,158,11,.12)', '#B45309'],
+  pendiente: ['◷ En revisión', 'rgba(245,158,11,.12)', '#B45309'],
   rechazada: ['✕ Rechazada', 'var(--df-danger-subtle-2)', 'var(--df-danger-dark)'],
-  error: ['⚠ Error', 'var(--df-danger-subtle-2)', 'var(--df-danger-dark)'],
+  error: ['! Error', 'var(--df-danger-subtle-2)', 'var(--df-danger-dark)'],
   sin_enviar: ['○ Sin enviar', 'var(--df-surface-2)', 'var(--df-text-muted)'],
 };
 

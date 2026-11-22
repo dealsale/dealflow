@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { IcoTexto } from '../components/Icono';
 import type { CSSProperties, ReactNode } from 'react';
 import logo from '../assets/logo.png';
 import { Donut, HBars, LineChart } from '../components/Charts';
@@ -267,7 +268,7 @@ function Panel({ yo, onSalir }: { yo: Yo; onSalir: () => void }) {
 
       {yo.comoAdmin && (
         <div style={{ background: '#1E1B4B', color: '#E0E7FF', fontSize: 13, textAlign: 'center', padding: '7px 16px' }}>
-          👁 Estás viendo el portal como <b>{yo.nombre}</b> (vista de administrador, se cierra sola en 2 horas).
+          <IcoTexto n="ver" />Estás viendo el portal como <b>{yo.nombre}</b> (vista de administrador, se cierra sola en 2 horas).
         </div>
       )}
       <main style={{ maxWidth: 1280, margin: '0 auto', padding: '22px 20px 60px', display: 'grid', gap: 16 }}>
@@ -317,8 +318,8 @@ function Panel({ yo, onSalir }: { yo: Yo; onSalir: () => void }) {
             <section className="pp-card" style={{ overflow: 'hidden' }}>
               <div style={{ padding: '14px 16px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0, flex: '1 1 auto' }}>Pedidos <span style={{ color: 'var(--df-text-muted)', fontWeight: 600 }}>({filtrados.length})</span></h2>
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Buscar pedido, cliente, guía, ciudad…" style={{ flex: '1 1 240px', maxWidth: 360, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 999, padding: '8px 14px', font: 'inherit', fontSize: 13.5, background: 'var(--df-surface)', color: 'var(--df-text-body)' }} />
-                <button className="pp-btn" onClick={descargar} disabled={!filtrados.length}>⬇ Descargar</button>
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar pedido, cliente, guía, ciudad…" style={{ flex: '1 1 240px', maxWidth: 360, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 999, padding: '8px 14px', font: 'inherit', fontSize: 13.5, background: 'var(--df-surface)', color: 'var(--df-text-body)' }} />
+                <button className="pp-btn" onClick={descargar} disabled={!filtrados.length}><IcoTexto n="descargar" />Descargar</button>
               </div>
               <div style={{ display: 'flex', gap: 6, padding: '0 16px 14px', overflowX: 'auto' }}>
                 <button className="pp-chip" aria-pressed={etapa === ''} onClick={() => setEtapa('')}>Todos · {t.pedidos.length}</button>

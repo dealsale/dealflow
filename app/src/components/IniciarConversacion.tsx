@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 import { apiPlantillasAprobadas, apiIniciarConPlantilla, apiSincronizarPlantillas, type PlantillaAprobada, type ExtraPlantilla } from '../lib/api';
 import { CamposPlantilla } from './LlenarPlantilla';
@@ -116,7 +117,7 @@ export function IniciarConversacion({ onAbrirChat }: { onAbrirChat: (id: string)
               <input type="checkbox" checked={asistente} onChange={(e) => setAsistente(e.target.checked)} /> Que el asistente atienda cuando respondan
             </label>
             <div style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '9px 11px', marginTop: 12, lineHeight: 1.5 }}>
-              ⚠️ Escríbele solo a clientes que ya compraron o aceptaron que los contactes. Si muchos bloquean o reportan, Meta baja la calidad de tu número. Meta cobra cada plantilla a tu cuenta.
+              <IcoTexto n="alerta" tam={13} />Escríbele solo a clientes que ya compraron o aceptaron que los contactes. Si muchos bloquean o reportan, Meta baja la calidad de tu número. Meta cobra cada plantilla a tu cuenta.
             </div>
 
             {enviando && <div style={{ fontSize: 13, marginTop: 12 }}>Enviando… {hechos} de {contactos.length}</div>}
@@ -127,7 +128,7 @@ export function IniciarConversacion({ onAbrirChat }: { onAbrirChat: (id: string)
                 <div style={{ maxHeight: 180, overflowY: 'auto', marginTop: 6 }}>
                   {resultados.map((r) => (
                     <div key={r.tel} style={{ display: 'flex', gap: 8, fontSize: 12.5, padding: '4px 0', borderBottom: '1px solid var(--df-border)' }}>
-                      <span>{r.ok ? '✅' : '⚠️'}</span>
+                      <Icono nombre={r.ok ? 'ok' : 'alerta'} tam={15} color={r.ok ? 'var(--df-success)' : 'var(--df-danger-dark)'} style={{ marginTop: 1 }} />
                       <span style={{ flex: 1 }}>{r.nombre || r.tel} <span style={{ color: 'var(--df-text-faint)' }}>{r.tel}</span>{r.error && <div style={{ color: 'var(--df-danger-dark)' }}>{r.error}</div>}</span>
                       {r.leadId && <button onClick={() => { onAbrirChat(r.leadId!); cerrar(); }} style={{ background: 'none', border: 0, color: 'var(--df-brand-dark)', fontWeight: 700, cursor: 'pointer', fontSize: 12.5 }}>Abrir chat</button>}
                     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IconoDF, type IconoDFNombre } from './IconoDF';
 
 /**
  * Ventana de "procesando" que tapa la pantalla mientras se guarda o se despacha algo:
@@ -6,7 +7,7 @@ import { useEffect, useState } from 'react';
  * la guía o el guardado). Cualquier componente lo enciende con
  * `enProceso(texto, fn)` y cambia el texto del paso con `set`.
  */
-type Estado = { texto: string; icono: string } | null;
+type Estado = { texto: string; icono: IconoDFNombre } | null;
 /**
  * Dos "canales": el global (tapa toda la pantalla, para guardar) y el del PEDIDO (tapa
  * solo el panel del pedido abierto: remisión, guía, Dropi… el resto de la app sigue libre).
@@ -23,12 +24,12 @@ const canalDe = (a: Ambito): Canal => canales[a === 'pedido' && panelesPedido > 
 const emitir = (c: Canal) => c.oyentes.forEach((f) => f(c.estado));
 
 /** Icono según lo que se está haciendo. */
-function iconoDe(texto: string): string {
-  if (/gu[ií]a|transport/i.test(texto)) return '🚚';
-  if (/remisi[oó]n|effi|dropi|despach/i.test(texto)) return '📦';
-  if (/whatsapp|envi/i.test(texto)) return '💬';
-  if (/consult|busc|revis|prepar|cotiz/i.test(texto)) return '🔎';
-  return '💾';
+function iconoDe(texto: string): IconoDFNombre {
+  if (/gu[ií]a|transport/i.test(texto)) return 'despacho';
+  if (/remisi[oó]n|effi|dropi|despach/i.test(texto)) return 'producto';
+  if (/whatsapp|envi/i.test(texto)) return 'mensaje';
+  if (/consult|busc|revis|prepar|cotiz/i.test(texto)) return 'buscar';
+  return 'guardado';
 }
 
 export function procesoActivo() { return canales.global.activos > 0 || canales.pedido.activos > 0; }
@@ -103,7 +104,7 @@ export function ProcesoPedido() {
       <div style={{ width: 'min(300px, 100%)', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 16, padding: '20px 18px 16px', boxShadow: '0 18px 40px -18px rgba(15,23,42,.45)', textAlign: 'center' }}>
         <div style={{ position: 'relative', width: 58, height: 58, margin: '0 auto 10px' }}>
           <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '3px solid var(--df-purple-subtle, #ede9fe)', borderTopColor: 'var(--df-purple, #7c3aed)', animation: 'dfpp-giro .9s linear infinite' }} />
-          <span key={e.icono} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 24, animation: 'dfpp-bote 1.1s ease-in-out infinite' }}>{e.icono}</span>
+          <span key={e.icono} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 24, animation: 'dfpp-bote 1.1s ease-in-out infinite' }}><IconoDF n={e.icono} size={26} /></span>
         </div>
         <div key={e.texto} style={{ fontWeight: 800, fontSize: 14, color: 'var(--df-text-strong)', lineHeight: 1.35 }}>{e.texto}</div>
         <div style={{ position: 'relative', height: 4, borderRadius: 4, background: 'var(--df-border)', overflow: 'hidden', margin: '12px 0 8px' }}>
@@ -167,7 +168,7 @@ export function ProcesoOverlay() {
       <div style={{ width: 'min(360px, 100%)', background: 'var(--df-surface)', borderRadius: 18, padding: '26px 22px 20px', boxShadow: '0 24px 60px -20px rgba(15,23,42,.55)', textAlign: 'center', animation: 'dfp-entra .18s ease-out' }}>
         <div style={{ position: 'relative', width: 74, height: 74, margin: '0 auto 14px' }}>
           <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '4px solid var(--df-purple-subtle, #ede9fe)', borderTopColor: 'var(--df-purple, #7c3aed)', animation: 'dfp-giro .9s linear infinite' }} />
-          <span key={e.icono} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 30, animation: 'dfp-bote 1.1s ease-in-out infinite' }}>{e.icono}</span>
+          <span key={e.icono} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 30, animation: 'dfp-bote 1.1s ease-in-out infinite' }}><IconoDF n={e.icono} size={32} /></span>
         </div>
         <div key={e.texto} style={{ fontWeight: 800, fontSize: 15.5, color: 'var(--df-text-strong)', lineHeight: 1.35, animation: 'dfp-entra .2s ease-out' }}>{e.texto}</div>
         <div style={{ position: 'relative', height: 4, borderRadius: 4, background: 'var(--df-border)', overflow: 'hidden', margin: '14px 0 10px' }}>

@@ -1,4 +1,5 @@
 import { clicAparte } from '../components/EnlaceApp';
+import { Icono, IcoTexto } from '../components/Icono';
 import { urlDe } from '../lib/rutas';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -8,6 +9,7 @@ import { SearchInput } from '../components/Filters';
 import { Dropdown } from '../components/Dropdown';
 import { confirmar } from '../components/dialogs';
 import { useFiltrosPedidos, PanelFiltros, ResumenFiltros, ORDENES, fechaCorta, valorPedido, type Orden } from '../components/PedidosFiltros';
+import { LogoMarca } from '../components/LogoMarca';
 
 // Columnas tipo Excel: cada dato en su celda. Una sola tabla que se acomoda al
 // ancho disponible (portátil incluido); en pantallas angostas, tarjetas.
@@ -70,7 +72,7 @@ export function Pedidos({ df }: { df: DealFlowState }) {
             title="Trae de Shopify los pedidos de la última semana que aún no estén en DealFlow (también se revisa solo cada 5 minutos)"
             style={{ background: 'var(--df-surface)', color: '#5E8E3E', border: '1px solid #5E8E3E', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: trayendo ? 0.6 : 1 }}
           >
-            {trayendo ? 'Revisando Shopify…' : '🛍️ Traer pedidos de Shopify'}
+            {trayendo ? 'Revisando Shopify…' : <><LogoMarca marca="shopify" size={14} style={{ marginRight: 5, verticalAlign: '-0.18em' }} />Traer pedidos de Shopify</>}
           </button>
         )}
         <button
@@ -78,7 +80,7 @@ export function Pedidos({ df }: { df: DealFlowState }) {
           title="Descarga en Excel (CSV) los pedidos que estás viendo con los filtros actuales"
           style={{ background: 'var(--df-surface)', color: 'var(--df-text-body)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
-          ⬇ Exportar {fp.filtrados.length} a Excel
+          <IcoTexto n="descargar" />Exportar {fp.filtrados.length} a Excel
         </button>
         </div>
       </div>
@@ -162,7 +164,7 @@ function Fila({ o, modo, repetido = 0, motivo = '' }: { o: DecoratedOrder; modo:
   );
   const cliente = (
     <div style={{ minWidth: 0 }} title={`${o.cliente}${o.tel ? ` · ${o.tel}` : ''}`}>
-      <div style={{ ...celda, fontWeight: 700, fontSize: 14, color: 'var(--df-text-strong)' }}>{repetido > 1 && <span title={motivo || `Hay ${repetido} pedidos con estos datos`} style={chipRep}>🔁 ×{repetido}</span>}{o.cliente}</div>
+      <div style={{ ...celda, fontWeight: 700, fontSize: 14, color: 'var(--df-text-strong)' }}>{repetido > 1 && <span title={motivo || `Hay ${repetido} pedidos con estos datos`} style={chipRep}><IcoTexto n="repetido" tam={12} />×{repetido}</span>}{o.cliente}</div>
       <div style={{ ...celda, fontSize: 12, color: 'var(--df-text-muted)', marginTop: 2 }}>{repetido > 1 && o.tel ? `${o.tel} · ` : ''}{o.ciudad || '—'}{o.departamento ? ` · ${o.departamento}` : ''}</div>
       {repetido > 1 && motivo && <div style={{ ...celda, fontSize: 11.5, color: '#B45309', marginTop: 2 }}>{motivo}</div>}
     </div>
@@ -198,7 +200,7 @@ function Fila({ o, modo, repetido = 0, motivo = '' }: { o: DecoratedOrder; modo:
       aria-label={`Eliminar ${o.id}`}
       className="df-danger-hover"
       style={{ background: 'transparent', border: 'none', color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 15, padding: 2 }}
-    >🗑</button>
+    ><Icono nombre="eliminar" tam={16} /></button>
   );
 
   if (modo === 'tarjetas') {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Icono } from '../components/Icono';
 
 /**
  * Drive de DealFlow (drive.dealflow.sbs): la nube del equipo. Los archivos viven en el Google
@@ -259,7 +260,7 @@ function Explorador({ estado, recargarEstado }: { estado: Estado; recargarEstado
           {/* Lateral (en el celular: dos botones arriba y el espacio en una línea) */}
           <aside className="dfd-aside">
             <button type="button" onClick={() => entrada.current?.click()} style={{ ...btnP, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 12px 26px -14px rgba(4,120,87,.7)' }}>
-              <span style={{ fontSize: 18, lineHeight: 1 }}>⬆</span> Subir archivos
+              <Icono nombre="subir" tam={18} degradado /> Subir archivos
             </button>
             <button type="button" onClick={() => setDialogo({ tipo: 'carpeta' })} style={{ ...btnS, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><IconoCarpeta size={18} /> Nueva carpeta</button>
             <input ref={entrada} id="drive-archivos" type="file" multiple hidden onChange={(e) => { if (e.target.files) subir(e.target.files); e.target.value = ''; }} />

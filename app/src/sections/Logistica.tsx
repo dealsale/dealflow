@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Icono, IcoTexto, type NombreIcono } from '../components/Icono';
+import { IconoDF } from '../components/IconoDF';
 import { createPortal } from 'react-dom';
 import { useRecordado } from '../lib/rutas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
@@ -14,15 +16,15 @@ import { fmtCO } from '../lib/fechaCO';
  * novedades de entrega para gestionarlas desde aquí.
  */
 type Etapa = GuiaLogistica['etapa'];
-const ETAPAS: { id: Etapa; titulo: string; icono: string; color: string; ayuda: string }[] = [
-  { id: 'sin_guia', titulo: 'Sin guía', icono: '🧾', color: '#94A3B8', ayuda: 'Remisión creada en Effi; falta la guía.' },
-  { id: 'por_recoger', titulo: 'Por recoger', icono: '📦', color: '#8B5CF6', ayuda: 'Guía generada: la transportadora aún no la recoge.' },
-  { id: 'transito', titulo: 'En tránsito', icono: '🚚', color: '#0EA5E9', ayuda: 'Va en camino hacia la ciudad del cliente.' },
-  { id: 'reparto', titulo: 'Llega hoy', icono: '🛵', color: '#F59E0B', ayuda: 'En reparto: el mensajero la lleva hoy.' },
-  { id: 'oficina', titulo: 'En oficina', icono: '🏢', color: '#DB2777', ayuda: 'Para recoger en la oficina de la transportadora: el cliente tiene unos días antes de que la devuelvan.' },
-  { id: 'novedad', titulo: 'Novedad', icono: '⚠️', color: '#EF4444', ayuda: 'La transportadora reportó un problema.' },
-  { id: 'entregado', titulo: 'Entregado', icono: '✅', color: '#10B981', ayuda: 'El cliente ya lo recibió.' },
-  { id: 'devuelto', titulo: 'Devuelto', icono: '↩️', color: '#64748B', ayuda: 'Volvió a la bodega.' },
+const ETAPAS: { id: Etapa; titulo: string; icono: NombreIcono; color: string; ayuda: string }[] = [
+  { id: 'sin_guia', titulo: 'Sin guía', icono: 'guia', color: '#94A3B8', ayuda: 'Remisión creada en Effi; falta la guía.' },
+  { id: 'por_recoger', titulo: 'Por recoger', icono: 'paquete', color: '#8B5CF6', ayuda: 'Guía generada: la transportadora aún no la recoge.' },
+  { id: 'transito', titulo: 'En tránsito', icono: 'despachar', color: '#0EA5E9', ayuda: 'Va en camino hacia la ciudad del cliente.' },
+  { id: 'reparto', titulo: 'Llega hoy', icono: 'moto', color: '#F59E0B', ayuda: 'En reparto: el mensajero la lleva hoy.' },
+  { id: 'oficina', titulo: 'En oficina', icono: 'oficina', color: '#DB2777', ayuda: 'Para recoger en la oficina de la transportadora: el cliente tiene unos días antes de que la devuelvan.' },
+  { id: 'novedad', titulo: 'Novedad', icono: 'alerta', color: '#EF4444', ayuda: 'La transportadora reportó un problema.' },
+  { id: 'entregado', titulo: 'Entregado', icono: 'entregado', color: '#10B981', ayuda: 'El cliente ya lo recibió.' },
+  { id: 'devuelto', titulo: 'Devuelto', icono: 'devolver', color: '#64748B', ayuda: 'Volvió a la bodega.' },
 ];
 const PASOS: Etapa[] = ['sin_guia', 'por_recoger', 'transito', 'reparto', 'entregado'];
 const pesos = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CO');
@@ -67,10 +69,10 @@ function Tarjeta({ g, df, i }: { g: GuiaLogistica; df: DealFlowState; i: number 
         {g.externa && <span title="Esta guía se hizo en Effi, por fuera de DealFlow" style={{ fontSize: 10, fontWeight: 800, color: 'var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 999, padding: '1px 7px' }}>SOLO EFFI</span>}
         {g.llegaHoy && <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: '#F59E0B', borderRadius: 999, padding: '1px 7px' }}>HOY</span>}
         <span style={{ flex: 1 }} />
-        {g.transportadora && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-text-muted)', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 6, padding: '1px 6px', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🚚 {g.transportadora}</span>}
+        {g.transportadora && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--df-text-muted)', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 6, padding: '1px 6px', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><IcoTexto n="despachar" tam={11} />{g.transportadora}</span>}
       </div>
       <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.cliente}</div>
-      <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>📍 {[g.ciudad, g.departamento].filter(Boolean).join(', ') || 'Sin ciudad'}</div>
+      <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}><IcoTexto n="ubicacion" tam={12} />{[g.ciudad, g.departamento].filter(Boolean).join(', ') || 'Sin ciudad'}</div>
       <Progreso etapa={g.etapa} color={e.color} />
       {g.ultimoMovimiento ? (
         <div style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--df-text-body)' }}>
@@ -79,9 +81,9 @@ function Tarjeta({ g, df, i }: { g: GuiaLogistica; df: DealFlowState; i: number 
           <div style={{ fontSize: 10.5, color: 'var(--df-text-faint)' }}>{fecha(g.ultimoMovimiento.fecha)}</div>
         </div>
       ) : g.estadoEffi ? <div style={{ fontSize: 11.5, color: 'var(--df-text-body)', fontWeight: 600 }}>{g.estadoEffi}</div> : null}
-      {g.entregaEstimada && g.etapa !== 'entregado' && <div style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>🗓️ Entrega estimada: <b>{g.entregaEstimada}</b></div>}
+      {g.entregaEstimada && g.etapa !== 'entregado' && <div style={{ fontSize: 11, color: 'var(--df-text-muted)' }}><IcoTexto n="calendario" tam={11} />Entrega estimada: <b>{g.entregaEstimada}</b></div>}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
-        {g.recaudo > 0 && <span style={{ fontWeight: 700, color: '#047857', background: 'rgba(16,185,129,.12)', borderRadius: 6, padding: '2px 7px' }}>💵 Recaudo {pesos(g.recaudo)}</span>}
+        {g.recaudo > 0 && <span style={{ fontWeight: 700, color: '#047857', background: 'rgba(16,185,129,.12)', borderRadius: 6, padding: '2px 7px' }}><IcoTexto n="dinero" tam={12} />Recaudo {pesos(g.recaudo)}</span>}
         {g.flete > 0 && <span style={{ fontWeight: 700, color: '#B45309', background: 'rgba(245,158,11,.14)', borderRadius: 6, padding: '2px 7px' }}>Flete {pesos(g.flete)}</span>}
         {g.envioCobrado > 0 && <span style={{ fontWeight: 600, color: 'var(--df-text-muted)', background: 'var(--df-bg)', borderRadius: 6, padding: '2px 7px' }}>Envío cobrado {pesos(g.envioCobrado)}</span>}
       </div>
@@ -93,9 +95,9 @@ function Tarjeta({ g, df, i }: { g: GuiaLogistica; df: DealFlowState; i: number 
           </button>
         ) : <span style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>{g.remision || 'Sin remisión'}</span>}
         <span style={{ flex: 1 }} />
-        {(g.guia || g.rowId) && <button onClick={() => setDatos(true)} title="Ver los datos que manda Effi de esta guía (flete, recaudo…)" aria-label="Ver datos de Effi" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, padding: 0 }}>🔍</button>}
-        {g.guiaUrl && <a href={g.guiaUrl} target="_blank" rel="noreferrer" title="Ver la guía" style={{ fontSize: 13, textDecoration: 'none' }}>📄</a>}
-        {(g.leadId || g.tel) && <button onClick={() => df.abrirChatDePedido({ leadId: g.leadId, tel: g.tel })} title="Abrir el chat del cliente" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: 0 }}>💬</button>}
+        {(g.guia || g.rowId) && <button onClick={() => setDatos(true)} title="Ver los datos que manda Effi de esta guía (flete, recaudo…)" aria-label="Ver datos de Effi" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, padding: 0, color: 'var(--df-text-muted)', display: 'inline-flex' }}><Icono nombre="buscar" tam={15} /></button>}
+        {g.guiaUrl && <a href={g.guiaUrl} target="_blank" rel="noreferrer" title="Ver la guía" style={{ fontSize: 13, textDecoration: 'none', color: 'var(--df-text-muted)', display: 'inline-flex' }}><Icono nombre="documento" tam={15} /></a>}
+        {(g.leadId || g.tel) && <button onClick={() => df.abrirChatDePedido({ leadId: g.leadId, tel: g.tel })} title="Abrir el chat del cliente" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: 0, color: 'var(--df-text-muted)', display: 'inline-flex' }}><Icono nombre="chat" tam={15} /></button>}
       </div>
       {datos && <DatosEffi guia={g.guia} pedido={g.rowId} titulo={g.externa ? `Guía ${g.guia}` : `${g.id} · guía ${g.guia || 'sin número'}`} onCerrar={() => setDatos(false)} />}
     </div>
@@ -187,10 +189,10 @@ export function Logistica({ df }: { df: DealFlowState }) {
   const columnas = ETAPAS.filter((e) => verCerradas || (e.id !== 'entregado' && e.id !== 'devuelto'));
   const r = t?.resumen;
 
-  const kpi = (titulo: string, valor: number, color: string, icono: string, formato?: (n: number) => string, pulso = false) => (
+  const kpi = (titulo: string, valor: number, color: string, icono: NombreIcono, formato?: (n: number) => string, pulso = false) => (
     <div className="df-log-kpi" style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderTop: `3px solid ${color}`, borderRadius: 12, padding: '10px 12px', position: 'relative', overflow: 'hidden' }}>
       <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-        {pulso && valor > 0 && <span className="df-log-punto" style={{ background: color }} />}{icono} {titulo}
+        {pulso && valor > 0 && <span className="df-log-punto" style={{ background: color }} />}<Icono nombre={icono} tam={14} color={color} />{titulo}
       </div>
       <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}><Contador valor={valor} formato={formato} /></div>
     </div>
@@ -228,19 +230,19 @@ export function Logistica({ df }: { df: DealFlowState }) {
           {actualizando ? <><span className="df-log-gira">↻</span> Consultando Effi…</> : '↻ Actualizar desde Effi'}
         </button>
       </div>
-      <div className="df-log-via" aria-hidden="true"><span>🚚</span></div>
+      <div className="df-log-via" aria-hidden="true"><span><IconoDF n="despacho" size={24} /></span></div>
 
       {error && <div style={{ color: 'var(--df-danger)', fontSize: 13, marginBottom: 10 }}>{error}</div>}
 
       {r && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginBottom: 14 }}>
-          {kpi('Guías activas', r.activas, '#0EA5E9', '🚚')}
-          {kpi('Llegan hoy', r.llegaHoy, '#F59E0B', '🛵', undefined, true)}
-          {kpi('Novedades', r.novedades, '#EF4444', '⚠️', undefined, true)}
-          {kpi('Entregadas', r.entregadas, '#10B981', '✅')}
-          {kpi('Por recaudar', r.porRecaudar, '#047857', '💵', pesos)}
-          {kpi('Fletes', r.fleteTotal, '#B45309', '🧾', pesos)}
-          {r.efectividad != null && kpi('Efectividad', r.efectividad, '#8B5CF6', '🎯', (n) => `${Math.round(n)}%`)}
+          {kpi('Guías activas', r.activas, '#0EA5E9', 'despachar')}
+          {kpi('Llegan hoy', r.llegaHoy, '#F59E0B', 'moto', undefined, true)}
+          {kpi('Novedades', r.novedades, '#EF4444', 'alerta', undefined, true)}
+          {kpi('Entregadas', r.entregadas, '#10B981', 'entregado')}
+          {kpi('Por recaudar', r.porRecaudar, '#047857', 'dinero', pesos)}
+          {kpi('Fletes', r.fleteTotal, '#B45309', 'guia', pesos)}
+          {r.efectividad != null && kpi('Efectividad', r.efectividad, '#8B5CF6', 'objetivo', (n) => `${Math.round(n)}%`)}
         </div>
       )}
 
@@ -248,7 +250,7 @@ export function Logistica({ df }: { df: DealFlowState }) {
       <NovedadesBandeja df={df} />
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '12px 0' }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Buscar por pedido, cliente, guía o ciudad…"
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por pedido, cliente, guía o ciudad…"
           style={{ flex: '1 1 240px', minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 999, padding: '8px 14px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text-body)' }} />
         {!!r?.soloEffi && (
           <Dropdown variant="pill" label="Origen" value={origen} onChange={(v) => setOrigen(v as '' | 'df' | 'effi')}
@@ -278,7 +280,7 @@ export function Logistica({ df }: { df: DealFlowState }) {
               <div key={e.id} style={{ flex: '1 0 220px', maxWidth: 320, minWidth: 220, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 12, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 260px)', minHeight: 180, scrollSnapAlign: 'start' }}>
                 <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--df-border)', display: 'flex', alignItems: 'center', gap: 7 }} title={e.ayuda}>
                   <span className={e.id === 'reparto' || e.id === 'oficina' || e.id === 'novedad' ? 'df-log-punto' : undefined} style={{ width: 8, height: 8, borderRadius: '50%', background: e.color, display: 'inline-block' }} />
-                  <b style={{ fontSize: 13, flex: 1 }}>{e.icono} {e.titulo}</b>
+                  <b style={{ fontSize: 13, flex: 1 }}><IcoTexto n={e.icono} tam={15} color={e.color} />{e.titulo}</b>
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 999, padding: '1px 8px' }}>{lista.length}</span>
                 </div>
                 <div style={{ overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 7 }}>

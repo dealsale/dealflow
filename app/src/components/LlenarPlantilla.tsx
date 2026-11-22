@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from './Icono';
 import { apiDatosPlantilla, apiUpload, NOMBRE_CAMPO_PLANTILLA, type ExtraPlantilla, type PlantillaAprobada } from '../lib/api';
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)', margin: '6px 0 3px' };
@@ -35,7 +36,7 @@ export function SubirArchivo({ tipo, onListo, texto }: { tipo: string; onListo: 
   return (
     <span style={{ display: 'inline-grid', gap: 2, flexShrink: 0 }}>
       <label style={{ border: '1px solid var(--df-border)', background: 'var(--df-surface-2)', borderRadius: 8, padding: '7px 10px', fontSize: 12.5, fontWeight: 700, cursor: subiendo ? 'wait' : 'pointer', whiteSpace: 'nowrap', color: 'var(--df-text)' }}>
-        {subiendo ? 'Subiendo…' : texto || '📎 Adjuntar'}
+        {subiendo ? 'Subiendo…' : texto || <><IcoTexto n="adjunto" tam={13} />Adjuntar</>}
         <input type="file" accept={ACEPTA[tipo] || '*/*'} disabled={subiendo} onChange={(e) => { elegir(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
       </label>
       {error && <span style={{ fontSize: 11, color: 'var(--df-danger, #dc2626)' }}>{error}</span>}
@@ -63,7 +64,7 @@ export function CamposPlantilla({ p, params, setParams, extra, setExtra, nombreC
           <label style={lbl}>{MEDIA[tipo]} (va arriba del mensaje)</label>
           {extra.media?.startsWith('/api/media/') ? (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, minWidth: 0 }}>
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {extra.mediaNombre || 'Archivo adjunto'}</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><IcoTexto n="adjunto" tam={13} />{extra.mediaNombre || 'Archivo adjunto'}</span>
               <button type="button" onClick={() => setExtra({ ...extra, media: '', mediaNombre: '' })} style={{ border: '1px solid var(--df-border)', background: 'var(--df-surface)', borderRadius: 7, padding: '4px 8px', fontFamily: 'inherit', fontSize: 12, cursor: 'pointer', color: 'var(--df-text)' }}>Quitar</button>
             </div>
           ) : (

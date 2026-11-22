@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Icono, IcoTexto } from '../../components/Icono';
 import type { CSSProperties } from 'react';
 import { apiBorrarProveedor, apiCrearProveedor, apiEditarProveedor, apiProveedores, apiVerComoProveedor, type ConvenioConocido, type ProveedorAcceso } from '../../lib/api';
 import { confirmar, notificar } from '../../components/dialogs';
@@ -95,7 +96,7 @@ export function Proveedores() {
           <b>✓ Cuenta lista para {creado.nombre}. Envíale estos datos:</b>
           <div style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12.5, lineHeight: 1.7 }}>{URL_PORTAL}<br />Correo: {creado.email}<br />Contraseña: {creado.password}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button style={btnPri} onClick={() => copiarDatos(creado)}>📋 Copiar datos</button>
+            <button style={btnPri} onClick={() => copiarDatos(creado)}><IcoTexto n="copiar" />Copiar datos</button>
             <button style={btn} onClick={() => setCreado(null)}>Listo</button>
           </div>
           <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>La contraseña no se vuelve a mostrar. Si la pierde, edita la cuenta y ponle una nueva.</span>
@@ -115,7 +116,7 @@ export function Proveedores() {
             <label style={{ fontSize: 12.5, fontWeight: 700, display: 'grid', gap: 4 }}>{form.id ? 'Nueva contraseña (opcional)' : 'Contraseña'}
               <span style={{ display: 'flex', gap: 6 }}>
                 <input style={input} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={form.id ? 'Vacía = no se cambia' : 'Mínimo 6 caracteres'} />
-                <button type="button" style={btn} title="Generar una contraseña" onClick={() => setForm({ ...form, password: claveAleatoria() })}>🎲</button>
+                <button type="button" style={btn} title="Generar una contraseña" onClick={() => setForm({ ...form, password: claveAleatoria() })}><Icono nombre="dados" tam={15} /></button>
               </span>
             </label>
           </div>
@@ -127,7 +128,7 @@ export function Proveedores() {
               {form.convenios.map((c) => (
                 <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--df-brand-subtle)', color: 'var(--df-brand-dark)', border: '1px solid var(--df-brand-border)', borderRadius: 999, padding: '4px 6px 4px 11px', fontSize: 12.5, fontWeight: 700 }}>
                   {c}{infoConv(c)?.tiendas.length ? <span style={{ fontWeight: 500, opacity: 0.8 }}>· {infoConv(c)!.tiendas.length} {infoConv(c)!.tiendas.length === 1 ? 'tienda' : 'tiendas'}</span> : null}
-                  {duenoDe.get(c) && <span title={`También está vinculado a ${duenoDe.get(c)}`}>⚠️</span>}
+                  {duenoDe.get(c) && <span title={`También está vinculado a ${duenoDe.get(c)}`}><Icono nombre="alerta" tam={15} /></span>}
                   <button type="button" aria-label={`Quitar ${c}`} onClick={() => setForm({ ...form, convenios: form.convenios.filter((x) => x !== c) })} style={{ border: 0, background: 'none', cursor: 'pointer', color: 'inherit', fontSize: 14, lineHeight: 1, padding: '0 4px' }}>×</button>
                 </span>
               ))}
@@ -160,7 +161,7 @@ export function Proveedores() {
       <div style={{ ...card, overflow: 'hidden' }}>
         <div style={{ padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid var(--df-border)' }}>
           <b style={{ flex: 1, fontSize: 14.5 }}>Cuentas de proveedor {lista ? <span style={{ color: 'var(--df-text-muted)', fontWeight: 600 }}>({lista.length})</span> : null}</b>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Buscar proveedor o convenio" style={{ ...input, width: 260, borderRadius: 999 }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar proveedor o convenio" style={{ ...input, width: 260, borderRadius: 999 }} />
         </div>
         {lista === null && !error && <div style={{ padding: 20, fontSize: 13, color: 'var(--df-text-muted)' }}>Cargando…</div>}
         {error && !form && <div style={{ padding: 20, fontSize: 13, color: 'var(--df-danger)' }}>{error}</div>}
@@ -180,7 +181,7 @@ export function Proveedores() {
               <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>pedidos en 30 días</div>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button style={btn} onClick={() => void verComo(p)} title="Abre su portal tal como lo ve el proveedor">👁 Ver portal</button>
+              <button style={btn} onClick={() => void verComo(p)} title="Abre su portal tal como lo ve el proveedor"><IcoTexto n="ver" />Ver portal</button>
               <button style={btn} onClick={() => { setCreado(null); setError(''); setCodigo(''); setForm({ id: p.id, nombre: p.nombre, email: p.email, password: '', convenios: p.convenios }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Editar</button>
               <button style={btn} onClick={() => void apiEditarProveedor(p.id, { activo: !p.activo }).then((r) => (r.error ? notificar(r.error, 'error') : cargar()))}>{p.activo ? 'Desactivar' : 'Activar'}</button>
               <button style={{ ...btn, color: 'var(--df-danger)' }} onClick={() => void confirmar({ titulo: 'Borrar proveedor', mensaje: `${p.nombre} ya no podrá entrar al portal. Los pedidos no se tocan.`, aceptar: 'Borrar' }).then((ok) => { if (ok) void apiBorrarProveedor(p.id).then(cargar); })}>Borrar</button>

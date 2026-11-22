@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { IcoTexto } from './Icono';
 import { apiSoporteContestar, apiSoporteEntrante, apiSoporteRechazar } from '../lib/api';
 import { iniciarLlamada, useLlamada } from '../lib/llamadaRTC';
 
@@ -107,7 +108,7 @@ export function LlamadaEntrante({ mobile }: { mobile?: boolean }) {
             </button>
             <button type="button" onClick={() => void contestar()} disabled={ocupado} autoFocus
               style={{ flex: 1.4, minHeight: 56, border: 0, borderRadius: 14, background: '#10B981', color: '#052e1f', fontFamily: 'inherit', fontWeight: 800, fontSize: 16, cursor: 'pointer' }}>
-              {ocupado ? 'Conectando…' : '📞 Contestar'}
+              {ocupado ? 'Conectando…' : <><IcoTexto n="llamar" />Contestar</>}
             </button>
           </div>
           <div style={{ fontSize: 12, color: '#94A3B8' }}>Te pediremos permiso para usar el micrófono.</div>

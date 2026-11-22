@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono } from './Icono';
 
 /*
  * Aviso de "pago offline": cuando los pagos en línea (Wompi) están apagados y alguien
@@ -26,7 +27,7 @@ export function PagoOffline() {
     <div onClick={cerrar} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(2,6,23,.55)', display: 'grid', placeItems: 'center', padding: 16 }}>
       <div role="dialog" aria-label="Pago offline" onClick={(e) => e.stopPropagation()}
         style={{ width: 'min(420px, 100%)', background: 'var(--df-surface, #fff)', color: 'var(--df-text, #0F172A)', borderRadius: 18, padding: 24, boxShadow: '0 30px 70px -20px rgba(2,6,23,.6)', textAlign: 'center' }}>
-        <div style={{ fontSize: 40, lineHeight: 1 }}>💬</div>
+        <div style={{ lineHeight: 1 }}><Icono nombre="chat" tam={40} degradado /></div>
         <div style={{ fontWeight: 800, fontSize: 18, marginTop: 10 }}>Pago offline</div>
         <p style={{ fontSize: 14, lineHeight: 1.55, color: 'var(--df-text-muted, #475569)', margin: '8px 0 18px' }}>{a.mensaje}</p>
         {a.whatsapp ? (

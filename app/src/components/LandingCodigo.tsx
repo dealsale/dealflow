@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 import { apiCodigoLanding, apiExportarCodigoLanding, apiGuardarCodigoLanding, apiVistaCodigoLanding, type CodigoLanding } from '../lib/api';
 import { confirmar, notificar } from './dialogs';
@@ -77,22 +78,22 @@ export function LandingCodigo({ id, onVista, onModo }: { id: string; onVista: (h
 
       <div style={{ display: 'flex', gap: 6 }}>
         {(['landing', 'gracias'] as const).map((p) => (
-          <button key={p} onClick={() => setPag(p)} style={{ ...btn, flex: 1, ...(pag === p ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>{p === 'landing' ? '🛍️ Página del producto' : '🎉 Página de gracias'}</button>
+          <button key={p} onClick={() => setPag(p)} style={{ ...btn, flex: 1, ...(pag === p ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>{p === 'landing' ? 'Página del producto' : 'Página de gracias'}</button>
         ))}
       </div>
       {pag === 'gracias' && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Opcional. Si la subes, después de comprar el cliente pasa a esta página (para un upsell, un video o tu mensaje). Si no, ve el mensaje de gracias en el mismo formulario.</div>}
 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <button onClick={() => void descargar()} style={btn}>⬇ Descargar {texto[pag].trim() ? 'mi código' : pag === 'landing' ? 'el diseño actual' : 'la de gracias'}</button>
-        <button onClick={() => archivo.current?.click()} style={btn}>⬆ Subir .html</button>
+        <button onClick={() => void descargar()} style={btn}><IcoTexto n="descargar" />Descargar {texto[pag].trim() ? 'mi código' : pag === 'landing' ? 'el diseño actual' : 'la de gracias'}</button>
+        <button onClick={() => archivo.current?.click()} style={btn}><IcoTexto n="subir" />Subir .html</button>
         <input ref={archivo} type="file" accept=".html,.htm,text/html" style={{ display: 'none' }} onChange={(e) => { subir(e.target.files?.[0]); e.target.value = ''; }} />
-        <button onClick={() => setVerInstr((v) => !v)} style={btn}>🤖 Instrucciones para la IA</button>
+        <button onClick={() => setVerInstr((v) => !v)} style={btn}><IcoTexto n="bot" />Instrucciones para la IA</button>
       </div>
       {verInstr && (
         <div style={{ border: '1px solid var(--df-border)', borderRadius: 9, padding: 10, background: 'var(--df-bg)' }}>
           <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 6 }}>Pégale esto a Claude o Astra junto con el código que descargaste, y dile qué quieres cambiar.</div>
           <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11.5, margin: 0, maxHeight: 220, overflow: 'auto', fontFamily: "'JetBrains Mono',monospace" }}>{c.instrucciones}</pre>
-          <button onClick={copiarInstr} style={{ ...btn, marginTop: 8 }}>📋 Copiar instrucciones</button>
+          <button onClick={copiarInstr} style={{ ...btn, marginTop: 8 }}><IcoTexto n="copiar" />Copiar instrucciones</button>
         </div>
       )}
 
@@ -101,7 +102,7 @@ export function LandingCodigo({ id, onVista, onModo }: { id: string; onVista: (h
         style={{ width: '100%', boxSizing: 'border-box', minHeight: 300, resize: 'vertical', border: '1px solid var(--df-border)', borderRadius: 8, padding: 10, fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, lineHeight: 1.45, background: '#0f172a', color: '#e2e8f0', tabSize: 2 }} />
       <div style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>{(texto[pag].length / 1024).toFixed(0)} KB de 1.500 KB</div>
 
-      {avisos.map((a, i) => <div key={i} style={{ fontSize: 12, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 8, padding: '7px 10px' }}>⚠️ {a}</div>)}
+      {avisos.map((a, i) => <div key={i} style={{ fontSize: 12, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 8, padding: '7px 10px' }}><IcoTexto n="alerta" />{a}</div>)}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button onClick={() => void guardar().then((ok) => ok && notificar('✓ Código guardado.'))} disabled={guardando || !cambiado} style={{ ...btnPri, opacity: guardando || !cambiado ? 0.6 : 1 }}>{guardando ? 'Guardando…' : 'Guardar código'}</button>

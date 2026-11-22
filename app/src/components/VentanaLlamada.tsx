@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import {
   useLlamada, retomarGuardada, iniciarLlamada, colgarLlamada, cerrarVentanaLlamada, silenciarLlamada, compartirPantalla,
   dejarDeCompartir, minimizarLlamada, puedeCompartirPantalla, abrirVentanaAparte, traerLlamadaAqui, irAVentanaAparte, volverALaPestana,
@@ -56,7 +57,7 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
     const p: React.CSSProperties = { border: 0, borderRadius: 999, padding: '7px 11px', fontFamily: 'inherit', fontWeight: 800, fontSize: 12, cursor: 'pointer' };
     return (
       <div data-df-no-remoto="" role="status" style={{ position: 'fixed', right: mobile ? 12 : 104, bottom: mobile ? 'calc(env(safe-area-inset-bottom,0px) + 84px)' : 32, zIndex: 58, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', maxWidth: 'calc(100vw - 24px)', borderRadius: 999, padding: '6px 6px 6px 14px', background: '#047857', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, boxShadow: '0 12px 28px -10px rgba(4,120,87,.7)' }}>
-        <span>📞 Llamada en {ll.otraEsVentana ? 'la ventana aparte' : 'otra pestaña'}{tiempo ? ` · ${tiempo}` : ''}</span>
+        <span><IcoTexto n="llamar" tam={13} />Llamada en {ll.otraEsVentana ? 'la ventana aparte' : 'otra pestaña'}{tiempo ? ` · ${tiempo}` : ''}</span>
         {ll.otraEsVentana && <button type="button" onClick={irAVentanaAparte} style={{ ...p, background: 'rgba(255,255,255,.18)', color: '#fff' }}>Ir a la ventana</button>}
         <button type="button" onClick={traerLlamadaAqui} style={{ ...p, background: '#fff', color: '#047857' }}>Traer aquí</button>
       </div>
@@ -69,7 +70,7 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
       <>
         <Audios ll={ll} />
         <button data-df-no-remoto="" onClick={() => minimizarLlamada(false)} style={{ position: 'fixed', right: mobile ? 12 : 104, bottom: mobile ? 'calc(env(safe-area-inset-bottom,0px) + 84px)' : 32, zIndex: 58, border: 0, borderRadius: 999, padding: '10px 16px', background: '#047857', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: '0 12px 28px -10px rgba(4,120,87,.7)' }}>
-          📞 {ll.fase === 'conectada' ? `En llamada ${tiempo}` : 'Llamada de soporte'}{ll.silenciado ? ' · 🔇' : ''}{ll.compartiendo ? ' · 🖥️' : ''}
+          <IcoTexto n="llamar" />{ll.fase === 'conectada' ? `En llamada ${tiempo}` : 'Llamada de soporte'}{ll.silenciado && <> · <IcoTexto n="silenciarMic" tam={13} /></>}{ll.compartiendo && <> · <IcoTexto n="compartirPantalla" tam={13} /></>}
         </button>
       </>
     );
@@ -90,7 +91,7 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
       : { position: 'fixed', right: mobile ? 8 : 20, bottom: mobile ? 'calc(env(safe-area-inset-bottom,0px) + 84px)' : 100, zIndex: 58, width: ancho, maxHeight: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column', background: '#0B1220', color: '#fff', borderRadius: 16, boxShadow: '0 30px 70px -20px rgba(2,6,23,.75)', overflow: 'hidden', fontFamily: 'inherit' }}>
       <Audios ll={ll} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: 'linear-gradient(135deg, #047857, #1D4ED8)' }}>
-        <span style={{ fontSize: 18 }}>📞</span>
+        <Icono nombre="llamar" tam={18} />
         <div style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
           <div style={{ fontWeight: 800, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{soporte ? ll.titulo : ll.atendidoPor.includes('DealFlow') ? ll.atendidoPor : 'Soporte DealFlow'}</div>
           <div style={{ fontSize: 11.5, opacity: 0.85 }}>{tiempo ? `En llamada · ${tiempo}` : ll.fase === 'terminada' ? 'Terminada' : 'Llamada de voz'}</div>
@@ -108,8 +109,8 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
           <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: completa ? '100vh' : undefined, maxHeight: altoVideo, display: 'block', objectFit: 'contain', background: '#000' }} />
           {controlando && <CapaControl video={videoRef} />}
           <button onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void marcoRef.current?.requestFullscreen?.(); }} title="Pantalla completa" style={{ ...cab, position: 'absolute', right: 8, top: 8, background: 'rgba(0,0,0,.55)', zIndex: 2 }}>⛶</button>
-          <div style={{ position: 'absolute', left: 8, bottom: 8, fontSize: 11, fontWeight: 700, background: controlando ? '#C2410C' : 'rgba(0,0,0,.55)', borderRadius: 6, padding: '2px 7px', zIndex: 2, pointerEvents: 'none' }}>{controlando ? '🖱 Tienes el control: clic aquí y escribe' : `🖥️ Pantalla de ${soporte ? 'la tienda' : (ll.atendidoPor || 'soporte')}`}</div>
-          {controlando && <button onClick={soltarControl} style={{ ...bChico, position: 'absolute', right: 48, top: 8, background: '#fff', color: '#C2410C', zIndex: 2 }}>✋ Soltar control</button>}
+          <div style={{ position: 'absolute', left: 8, bottom: 8, fontSize: 11, fontWeight: 700, background: controlando ? '#C2410C' : 'rgba(0,0,0,.55)', borderRadius: 6, padding: '2px 7px', zIndex: 2, pointerEvents: 'none' }}>{controlando ? <><IcoTexto n="puntero" tam={12} />Tienes el control: clic aquí y escribe</> : <><IcoTexto n="compartirPantalla" tam={12} />{`Pantalla de ${soporte ? 'la tienda' : (ll.atendidoPor || 'soporte')}`}</>}</div>
+          {controlando && <button onClick={soltarControl} style={{ ...bChico, position: 'absolute', right: 48, top: 8, background: '#fff', color: '#C2410C', zIndex: 2 }}><IcoTexto n="soltar" tam={13} />Soltar control</button>}
         </div>
       )}
       {!(activa && ll.remotoVideo) && <video ref={videoRef} muted style={{ display: 'none' }} />}
@@ -129,7 +130,7 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
           </div>
         )}
         {soporte && ll.equipo.length > 1 && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.7)' }}>Si cuelgas, sales tú y la llamada sigue con {ll.equipo.length - 1 === 1 ? 'la otra persona' : 'las demás personas'} del equipo.</div>}
-        {ll.compartiendo && <div style={{ fontSize: 12, fontWeight: 700, color: '#FDE68A' }}>🖥️ Estás compartiendo tu pantalla{soporte ? '' : ': soporte la está viendo'}.</div>}
+        {ll.compartiendo && <div style={{ fontSize: 12, fontWeight: 700, color: '#FDE68A' }}><IcoTexto n="compartirPantalla" tam={13} />Estás compartiendo tu pantalla{soporte ? '' : ': soporte la está viendo'}.</div>}
 
         {/* Control remoto — equipo */}
         {CONTROL_DEALFLOW && soporte && activa && tiendaPantallaCompleta && ll.miControl !== 'activo' && <div style={{ fontSize: 12, color: 'rgba(255,255,255,.75)', lineHeight: 1.4 }}>La tienda comparte la pantalla completa: el control de DealFlow solo funciona compartiendo la pestaña. Para manejar todo su computador, usa «Pedir acceso a todo el computador».</div>}
@@ -137,22 +138,22 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
             {!ll.controlListo ? <span style={{ color: 'rgba(255,255,255,.6)' }}>Control remoto: conectando con la tienda…</span>
               : ll.miControl === 'activo' ? <>
-                <button onClick={soltarControl} style={{ ...bChico, background: '#FED7AA', color: '#7C2D12' }}>✋ Soltar control</button>
+                <button onClick={soltarControl} style={{ ...bChico, background: '#FED7AA', color: '#7C2D12' }}><IcoTexto n="soltar" tam={13} />Soltar control</button>
                 <span style={{ color: 'rgba(255,255,255,.75)' }}>Clic, doble clic, clic derecho, rueda y teclado (pegar con Ctrl+V). Solo dentro de DealFlow; nunca contraseñas.</span>
               </>
               : ll.miControl === 'pidiendo' ? <>
                 <span style={{ color: '#FDE68A', fontWeight: 700 }}>Esperando que la tienda acepte…</span>
                 <button onClick={soltarControl} style={{ ...bChico, background: 'rgba(255,255,255,.14)', color: '#fff' }}>Cancelar</button>
               </>
-              : <button onClick={pedirControl} style={{ ...bChico, background: '#F97316', color: '#fff' }}>🖱 Pedir control de DealFlow</button>}
+              : <button onClick={pedirControl} style={{ ...bChico, background: '#F97316', color: '#fff' }}><IcoTexto n="puntero" tam={13} />Pedir control de DealFlow</button>}
           </div>
         )}
-        {soporte && controlando && ll.controlCoincide === false && <div style={{ fontSize: 12, color: '#FDE68A', lineHeight: 1.4 }}>⚠ La tienda no está compartiendo la pestaña de DealFlow (o la pantalla entera): los clics pueden no caer donde son. Pídele que vuelva a compartir y elija <b>la pestaña de DealFlow</b>.</div>}
+        {soporte && controlando && ll.controlCoincide === false && <div style={{ fontSize: 12, color: '#FDE68A', lineHeight: 1.4 }}><IcoTexto n="alerta" tam={12} />La tienda no está compartiendo la pestaña de DealFlow (o la pantalla entera): los clics pueden no caer donde son. Pídele que vuelva a compartir y elija <b>la pestaña de DealFlow</b>.</div>}
         {soporte && activa && <ComputadoresTienda llamadaId={ll.id} />}
-        {soporte && activa && ll.controlListo && !codigoVigente && <button onClick={pedirAccesoComputador} style={{ ...bChico, justifySelf: 'start', alignSelf: 'flex-start', background: 'rgba(255,255,255,.12)', color: '#fff' }}>💻 Pedir acceso a todo el computador</button>}
+        {soporte && activa && ll.controlListo && !codigoVigente && <button onClick={pedirAccesoComputador} style={{ ...bChico, justifySelf: 'start', alignSelf: 'flex-start', background: 'rgba(255,255,255,.12)', color: '#fff' }}><IcoTexto n="computador" tam={13} />Pedir acceso a todo el computador</button>}
         {soporte && codigoVigente && (
           <div style={{ background: '#1E3A8A', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>💻 La tienda te dio acceso a todo su computador</div>
+            <div style={{ fontWeight: 800, fontSize: 13 }}><IcoTexto n="computador" tam={14} />La tienda te dio acceso a todo su computador</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 18, fontWeight: 800, letterSpacing: '.06em' }}>{codigoVigente.replace(/(\d{4})(?=\d)/g, '$1 ')}</span>
               <button onClick={() => void navigator.clipboard?.writeText(codigoVigente).catch(() => {})} style={{ ...bChico, background: 'rgba(255,255,255,.16)', color: '#fff' }}>Copiar</button>
@@ -170,7 +171,7 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
         {/* Control remoto — tienda */}
         {!soporte && ll.control?.pedido && (
           <div role="alertdialog" aria-label="Permiso de control remoto" style={{ background: '#7C2D12', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
-            <div style={{ fontWeight: 800, fontSize: 13.5 }}>🖱 {ll.control.pedido.nombre} quiere controlar DealFlow para ayudarte</div>
+            <div style={{ fontWeight: 800, fontSize: 13.5 }}><IcoTexto n="puntero" tam={14} />{ll.control.pedido.nombre} quiere controlar DealFlow para ayudarte</div>
             <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.92 }}>Podrá hacer clic, escribir y desplazarse <b>solo dentro de DealFlow</b>, en la pestaña que estás compartiendo. No puede ver ni escribir contraseñas, ni tocar el resto de tu computador. Lo quitas cuando quieras.</div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => responderControl(false)} style={{ ...boton(false), background: 'rgba(255,255,255,.16)' }}>No</button>
@@ -180,7 +181,7 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
         )}
         {!soporte && ll.control?.activo && (
           <div style={{ background: '#7C2D12', borderRadius: 12, padding: '9px 10px 9px 12px', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700 }}>🖱 {ll.control.activo.nombre} está controlando DealFlow</span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700 }}><IcoTexto n="puntero" tam={13} />{ll.control.activo.nombre} está controlando DealFlow</span>
             <button onClick={quitarControl} style={{ ...bChico, background: '#fff', color: '#7C2D12' }}>Quitar control</button>
           </div>
         )}
@@ -189,15 +190,15 @@ export function VentanaLlamada({ mobile, aparte }: { mobile?: boolean; aparte?: 
 
         {ll.fase === 'pausada' ? (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => iniciarLlamada(ll.id, ll.rol, ll.titulo)} style={{ ...boton(false), background: '#10B981' }}>🔄 Reconectar</button>
+            <button onClick={() => iniciarLlamada(ll.id, ll.rol, ll.titulo)} style={{ ...boton(false), background: '#10B981' }}><IcoTexto n="actualizar" />Reconectar</button>
             <button onClick={() => void colgarLlamada()} style={{ ...boton(false), background: '#DC2626' }}>Colgar</button>
           </div>
         ) : activa ? (
           <div style={{ display: 'flex', gap: 8 }}>
-            {ll.mic && <button onClick={silenciarLlamada} style={boton(ll.silenciado)}>{ll.silenciado ? '🔇 Activar mic' : '🎤 Silenciar'}</button>}
+            {ll.mic && <button onClick={silenciarLlamada} style={boton(ll.silenciado)}>{ll.silenciado ? <><IcoTexto n="silenciarMic" />Activar mic</> : <><IcoTexto n="microfono" />Silenciar</>}</button>}
             {puedeCompartirPantalla() && (ll.compartiendo
-              ? <button onClick={dejarDeCompartir} style={boton(true)}>⏹ Dejar de compartir</button>
-              : <button onClick={() => compartirPantalla(true)} disabled={ll.fase !== 'conectada'} style={{ ...boton(false), opacity: ll.fase === 'conectada' ? 1 : 0.45 }}>🖥️ Compartir pantalla</button>)}
+              ? <button onClick={dejarDeCompartir} style={boton(true)}><IcoTexto n="detener" tam={13} />Dejar de compartir</button>
+              : <button onClick={() => compartirPantalla(true)} disabled={ll.fase !== 'conectada'} style={{ ...boton(false), opacity: ll.fase === 'conectada' ? 1 : 0.45 }}><IcoTexto n="compartirPantalla" />Compartir pantalla</button>)}
             <button onClick={() => void colgarLlamada()} style={{ ...boton(false), background: '#DC2626' }}>Colgar</button>
           </div>
         ) : null}
@@ -232,7 +233,7 @@ function ComputadoresTienda({ llamadaId }: { llamadaId: string }) {
     <>
       {enLinea.map((e) => (
         <button key={e.id} onClick={() => void conectar(e)} disabled={!!e.ocupado} title={e.ocupado ? `${e.ocupado} ya está conectado` : `App DealFlow Soporte ${e.version} · ${e.so}`}
-          style={{ ...b, justifySelf: 'start', alignSelf: 'flex-start', background: '#10B981', color: '#052e1f', opacity: e.ocupado ? 0.55 : 1 }}>💻 Conectar a su computador · {e.nombre}{e.ocupado ? ` (con ${e.ocupado})` : ''}</button>
+          style={{ ...b, justifySelf: 'start', alignSelf: 'flex-start', background: '#10B981', color: '#052e1f', opacity: e.ocupado ? 0.55 : 1 }}><IcoTexto n="computador" />Conectar a su computador · {e.nombre}{e.ocupado ? ` (con ${e.ocupado})` : ''}</button>
       ))}
       {equipos && !enLinea.length && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.65)' }}>{equipos.length ? 'La app «DealFlow Soporte» de la tienda no está abierta ahora.' : 'La tienda no tiene la app «DealFlow Soporte»: para entrar a todo su computador sin códigos, que la descargue en app.dealflow.sbs/escritorio.'}</div>}
       {error && <div style={{ fontSize: 12, color: '#FCA5A5' }}>{error}</div>}
@@ -250,13 +251,13 @@ function AccesoComputador({ pedido }: { pedido: string }) {
   const [quien, setQuien] = useState('');
   // Si el equipo lo pide, se abre (y sigue abierto después de enviar el código, para ver el ✓).
   useEffect(() => { if (pedido) { setAbierto(true); setQuien(pedido); } }, [pedido]);
-  if (!abierto && !pedido) return <button onClick={() => setAbierto(true)} style={{ ...b, background: 'transparent', color: 'rgba(255,255,255,.8)', padding: 0, textDecoration: 'underline', justifySelf: 'start', alignSelf: 'flex-start' }}>💻 Dar acceso a todo mi computador</button>;
+  if (!abierto && !pedido) return <button onClick={() => setAbierto(true)} style={{ ...b, background: 'transparent', color: 'rgba(255,255,255,.8)', padding: 0, textDecoration: 'underline', justifySelf: 'start', alignSelf: 'flex-start' }}><IcoTexto n="computador" tam={13} />Dar acceso a todo mi computador</button>;
   const digitos = codigo.replace(/\D/g, '');
   return (
     <div role="region" aria-label="Acceso a todo el computador" style={{ background: '#1E3A8A', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
-      <div style={{ fontWeight: 800, fontSize: 13.5 }}>{quien ? `💻 ${quien} pide acceso a todo tu computador` : '💻 Acceso a todo tu computador'}</div>
+      <div style={{ fontWeight: 800, fontSize: 13.5 }}><IcoTexto n="computador" tam={14} />{quien ? `${quien} pide acceso a todo tu computador` : 'Acceso a todo tu computador'}</div>
       <div style={{ fontSize: 12, lineHeight: 1.5, background: 'rgba(255,255,255,.08)', borderRadius: 8, padding: '7px 9px' }}>
-        ⭐ Lo más fácil: <a href="/api/escritorio/descargar" style={{ color: '#BBF7D0', fontWeight: 800 }}>descarga la app DealFlow Soporte (Windows)</a>, entra con tu cuenta y déjala abierta: soporte se conecta sin códigos (siempre te pide permiso).
+        <b>★</b> Lo más fácil: <a href="/api/escritorio/descargar" style={{ color: '#BBF7D0', fontWeight: 800 }}>descarga la app DealFlow Soporte (Windows)</a>, entra con tu cuenta y déjala abierta: soporte se conecta sin códigos (siempre te pide permiso).
       </div>
       <div style={{ fontSize: 11.5, opacity: 0.8 }}>O con el Escritorio remoto de Chrome:</div>
       <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.5 }}>
@@ -346,7 +347,7 @@ function Audios({ ll }: { ll: NonNullable<ReturnType<typeof useLlamada>> }) {
       {ll.remotos.map((r) => <audio key={r.clave} autoPlay ref={(el) => { if (el) refs.current.set(r.clave, el); else refs.current.delete(r.clave); }} />)}
       {bloqueado && (
         <button onClick={activar} style={{ position: 'fixed', left: '50%', top: 16, transform: 'translateX(-50%)', zIndex: 95, border: 0, borderRadius: 999, padding: '12px 20px', background: '#047857', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 14px 30px -10px rgba(4,120,87,.7)' }}>
-          🔊 Toca aquí para escuchar la llamada
+          <IcoTexto n="altavoz" />Toca aquí para escuchar la llamada
         </button>
       )}
     </>

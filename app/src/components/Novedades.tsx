@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { apiNovedadAvisar, apiNovedadOcultar, apiNovedadSolucion, apiNovedadVincular, apiNovedadesEstado, apiNovedadesSync, type EstadoNovedades, type NovedadPedido, type PropuestaNovedad } from '../lib/api';
+import { LogoMarca } from './LogoMarca';
 
 /**
  * Novedades de envío (Effi): lo que reporta la transportadora cuando no pudo
@@ -82,22 +84,22 @@ export function NovedadCard({ df, sel }: { df: DealFlowState; sel: DecoratedOrde
   return (
     <div style={{ border: `1px solid ${n.abierta ? 'var(--df-warning-border)' : 'var(--df-border)'}`, background: n.abierta ? 'var(--df-warning-subtle-2)' : 'var(--df-bg)', borderRadius: 12, padding: 14, marginBottom: 12 }} className="df-novedad">
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <span style={{ fontSize: 20, lineHeight: 1 }}>{n.abierta ? '⚠️' : '✅'}</span>
+        <Icono nombre={n.abierta ? 'alerta' : 'ok'} tam={20} color={n.abierta ? 'var(--df-warning)' : 'var(--df-brand-dark)'} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 14, color: n.abierta ? 'var(--df-warning)' : 'var(--df-text-strong)' }}>Novedad: {n.nombre || 'problema en la entrega'}</div>
           <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 2 }}>{n.transportadora || 'Transportadora'} · {hace(n.dias)} · {n.estado}</div>
           {n.aclaracion && <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', marginTop: 6 }}>{n.aclaracion}</div>}
           <div style={{ fontSize: 12, fontWeight: 700, color: av.color, marginTop: 6 }}>{av.texto}</div>
         </div>
-        {n.foto && <a href={n.foto} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-purple)' }}>📷 Foto</a>}
+        {n.foto && <a href={n.foto} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-purple)' }}><IcoTexto n="foto" tam={13} />Foto</a>}
       </div>
 
       {n.abierta && n.tipo === 1 && <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-text-muted)' }}>Novedad operativa: la está gestionando la transportadora; no necesitas enviar solución.</div>}
-      {n.abierta && n.tipo !== 1 && !n.aviso && <div style={{ marginTop: 10 }}><button onClick={avisar} style={btn(false)}>💬 Avisar al cliente por WhatsApp</button></div>}
+      {n.abierta && n.tipo !== 1 && !n.aviso && <div style={{ marginTop: 10 }}><button onClick={avisar} style={btn(false)}><LogoMarca marca="whatsapp" size={14} style={{ marginRight: 5, verticalAlign: '-0.18em' }} />Avisar al cliente por WhatsApp</button></div>}
 
       {puedeEnviar && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--df-warning-border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {n.propuesta?.origen === 'bot' && n.propuestaEstado !== 'enviada' && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>🤖 Lo acordó el asistente con el cliente; revísalo y envíalo.</div>}
+          {n.propuesta?.origen === 'bot' && n.propuestaEstado !== 'enviada' && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}><IcoTexto n="bot" tam={13} />Lo acordó el asistente con el cliente; revísalo y envíalo.</div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
             {SOLUCIONES.map((s) => {
               const on = p.solucion === s.id;
@@ -119,7 +121,7 @@ export function NovedadCard({ df, sel }: { df: DealFlowState; sel: DecoratedOrde
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={enviar} disabled={enviando} style={{ ...btn(true), opacity: enviando ? 0.6 : 1 }}>{enviando ? 'Enviando…' : '📤 Enviar solución a Effi'}</button>
+            <button onClick={enviar} disabled={enviando} style={{ ...btn(true), opacity: enviando ? 0.6 : 1 }}>{enviando ? 'Enviando…' : <><IcoTexto n="enviar" />Enviar solución a Effi</>}</button>
             <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>La fecha debe ser entre mañana y 5 días.</span>
           </div>
         </div>
@@ -159,7 +161,7 @@ export function NovedadesBandeja({ df }: { df: DealFlowState }) {
   const colorMsg = (m: string) => (m.startsWith('✓') ? 'var(--df-brand-dark)' : m.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)');
   const errorEffi = estado?.error ? (
     <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)', background: 'var(--df-danger-subtle)', border: '1px solid var(--df-danger-border)', borderRadius: 8, padding: '8px 11px', marginTop: 8 }}>
-      ⚠️ No pudimos leer las novedades de Effi: <b>{estado.error}</b>. Revisa en Effi que el usuario de la API key tenga permiso de consulta en «Novedades de guías de transporte».
+      <IcoTexto n="alerta" tam={13} />No pudimos leer las novedades de Effi: <b>{estado.error}</b>. Revisa en Effi que el usuario de la API key tenga permiso de consulta en «Novedades de guías de transporte».
     </div>
   ) : null;
   const ultima = estado?.ts ? `Última revisión: ${new Date(estado.ts.replace(' ', 'T') + 'Z').toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}` : '';
@@ -167,7 +169,7 @@ export function NovedadesBandeja({ df }: { df: DealFlowState }) {
     return (
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'var(--df-text-muted)', flexWrap: 'wrap' }}>
-          <span>{estado?.error ? '⚠️ Novedades de envío sin revisar.' : '✅ Sin novedades de envío por resolver.'}</span>
+          <span>{estado?.error ? <><IcoTexto n="alerta" tam={13} />Novedades de envío sin revisar.</> : <><IcoTexto n="ok" tam={13} />Sin novedades de envío por resolver.</>}</span>
           <button onClick={revisar} style={{ background: 'transparent', border: 'none', color: 'var(--df-purple)', fontWeight: 700, fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', padding: 0 }}>↻ Revisar en Effi</button>
           {ultima && <span style={{ color: 'var(--df-text-faint)' }}>{ultima}</span>}
           {msg && <span style={{ color: colorMsg(msg) }}>{msg}</span>}
@@ -192,7 +194,7 @@ export function NovedadesBandeja({ df }: { df: DealFlowState }) {
     <div style={{ border: '1px solid var(--df-warning-border)', background: 'var(--df-warning-subtle-2)', borderRadius: 12, marginBottom: 14, overflow: 'hidden' }} className="df-novedad">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
         <button onClick={() => setVer((x) => !x)} aria-expanded={ver} style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, color: 'var(--df-warning)' }}>
-          {total ? `⚠️ ${total} ${total === 1 ? 'novedad' : 'novedades'} por resolver` : '✅ Ninguna novedad por resolver'} {ver ? '▴' : '▾'}
+          <IcoTexto n={total ? 'alerta' : 'ok'} tam={15} />{total ? `${total} ${total === 1 ? 'novedad' : 'novedades'} por resolver` : 'Ninguna novedad por resolver'} {ver ? '▴' : '▾'}
         </button>
         <span style={{ fontSize: 12, color: 'var(--df-warning)', opacity: 0.8 }}>Resuélvelas antes de que la transportadora devuelva el pedido.</span>
         <div style={{ flex: 1 }} />
@@ -239,7 +241,7 @@ function AccionesSinPedido({ n, alTerminar }: { n: NovedadPedido; alTerminar: ()
         </>
       ) : (
         <>
-          <button onClick={() => setAbierto(true)} style={b} title="Si este envío es de un pedido que está en DealFlow, únelo por su número">🔗 Unir a un pedido</button>
+          <button onClick={() => setAbierto(true)} style={b} title="Si este envío es de un pedido que está en DealFlow, únelo por su número"><IcoTexto n="enlace" tam={13} />Unir a un pedido</button>
           <button onClick={ocultar} style={{ ...b, color: 'var(--df-text-muted)' }} title="No mostrarla más aquí (la sigues viendo en Effi)">Ocultar</button>
         </>
       )}

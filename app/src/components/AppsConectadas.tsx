@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import { apiActivarRecepcion, apiAppsConectadas, type AppConectada } from '../lib/api';
 
 /**
@@ -35,7 +36,7 @@ export function AppsConectadas() {
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontWeight: 800, fontSize: 15 }}>🔌 Apps conectadas a tu número</div>
+          <div style={{ fontWeight: 800, fontSize: 15 }}><IcoTexto n="api" />Apps conectadas a tu número</div>
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5, marginTop: 2 }}>
             Le preguntamos a Meta qué apps reciben los mensajes de tu WhatsApp. Si aparece una plataforma que ya no usas, puede ser la que sigue contestando.
           </div>
@@ -47,7 +48,7 @@ export function AppsConectadas() {
       {error && <div style={{ fontSize: 12.5, color: 'var(--df-danger)', marginTop: 10 }}>{error}</div>}
       {apps && falta && (
         <div style={{ marginTop: 12, border: '1px solid var(--df-danger-border)', background: 'var(--df-danger-subtle, rgba(239,68,68,.06))', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--df-danger)' }}>⚠️ Los mensajes que te escriben NO están llegando a DealFlow</div>
+          <div style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--df-danger)' }}><IcoTexto n="alerta" />Los mensajes que te escriben NO están llegando a DealFlow</div>
           <div style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--df-text-body)' }}>
             Tu número está conectado y puede enviar, pero Meta no le está avisando a DealFlow cuando un cliente te escribe; por eso el Inbox no recibe nada. Toca el botón para activarlo.
           </div>
@@ -62,7 +63,7 @@ export function AppsConectadas() {
           {!apps.length && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Meta no reporta apps conectadas.</div>}
           {apps.map((a) => (
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, border: `1px solid ${a.esDealFlow ? 'var(--df-border)' : 'var(--df-danger-border)'}`, background: a.esDealFlow ? 'var(--df-bg)' : 'var(--df-danger-subtle, rgba(239,68,68,.06))' }}>
-              <span style={{ fontSize: 16 }}>{a.esDealFlow ? '✅' : '⚠️'}</span>
+              <Icono nombre={a.esDealFlow ? 'ok' : 'alerta'} tam={16} color={a.esDealFlow ? 'var(--df-success)' : '#B45309'} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13 }}>{a.nombre}{a.esDealFlow ? ' (DealFlow)' : ''}</div>
                 <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', fontFamily: "'JetBrains Mono', monospace" }}>App ID {a.id}{a.enlace ? ` · ${a.enlace}` : ''}</div>

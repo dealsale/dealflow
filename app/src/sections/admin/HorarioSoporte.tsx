@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto, Punto } from '../../components/Icono';
 import { apiAdminSoporteConfig, apiAdminSoportePausa, type CfgLlamadas, type FranjaSoporte, type ServicioLlamadas } from '../../lib/api';
 import { notificar } from '../../components/dialogs';
 
@@ -80,7 +81,7 @@ export function HorarioSoporte({ cfg, servicio, onCambio }: { cfg: CfgLlamadas; 
 
   return (
     <div style={card}>
-      <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>🕐 Horario de atención</div>
+      <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}><IcoTexto n="reloj" />Horario de atención</div>
       <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 12 }}>Cada día puede tener varias franjas (hora Colombia). El tiempo entre una franja y otra es descanso: ahí el botón aparece como no disponible y la tienda ve a qué hora vuelven.</div>
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, fontWeight: 600, marginBottom: 12, cursor: 'pointer' }}>
         <input type="checkbox" checked={cfg.activo} onChange={(e) => void guardar({ activo: e.target.checked })} /> Mostrar el botón «Llamar a soporte» a las tiendas
@@ -125,7 +126,7 @@ export function HorarioSoporte({ cfg, servicio, onCambio }: { cfg: CfgLlamadas; 
       </div>
 
       <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--df-border)' }}>
-        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 4 }}>📅 Días sin atención</div>
+        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 4 }}><IcoTexto n="calendario" />Días sin atención</div>
         <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 8 }}>Festivos, vacaciones o un día que no van a atender. Ese día el botón aparece como no disponible aunque el horario diga otra cosa.</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {cfg.cerrados.map((f) => (
@@ -145,7 +146,7 @@ export function HorarioSoporte({ cfg, servicio, onCambio }: { cfg: CfgLlamadas; 
         {servicio && (
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginTop: 8, lineHeight: 1.5 }}>
             Las tiendas ven: «Soporte por llamada: {servicio.horario}».<br />
-            {servicio.abierto ? `🟢 Ahora está disponible.${servicio.hasta ? ` ${servicio.hasta}` : ''}` : `⚪ Ahora no está disponible.${servicio.siguiente ? ` ${servicio.siguiente}` : ''}`}
+            <Punto color={servicio.abierto ? '#10B981' : '#CBD5E1'} tam={7} />{servicio.abierto ? `Ahora está disponible.${servicio.hasta ? ` ${servicio.hasta}` : ''}` : `Ahora no está disponible.${servicio.siguiente ? ` ${servicio.siguiente}` : ''}`}
           </div>
         )}
       </div>
@@ -168,7 +169,7 @@ export function PausaSoporte({ servicio, onCambio }: { servicio: ServicioLlamada
     return (
       <div style={{ ...card, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', background: 'var(--df-warning-subtle-2, #FFFBEB)', borderColor: 'var(--df-warning-border, #FDE68A)' }}>
         <span style={{ fontSize: 13, flex: '1 1 260px', minWidth: 0, lineHeight: 1.45 }}>
-          <b>⏸ Soporte {servicio.pausa.charAt(0).toLowerCase() + servicio.pausa.slice(1)}</b><br />
+          <b><IcoTexto n="pausa" />Soporte {servicio.pausa.charAt(0).toLowerCase() + servicio.pausa.slice(1)}</b><br />
           <span style={{ color: 'var(--df-text-muted)' }}>Las tiendas ven el botón como no disponible{servicio.siguiente ? ` y el aviso «${servicio.siguiente}»` : ''}</span>
         </span>
         <button type="button" disabled={ocupado} onClick={() => void pausar({ minutos: 0 })} style={{ ...btnS, background: '#047857', color: '#fff', borderColor: '#047857' }}>Reanudar ahora</button>
@@ -177,7 +178,7 @@ export function PausaSoporte({ servicio, onCambio }: { servicio: ServicioLlamada
   }
   return (
     <div style={{ ...card, padding: '12px 14px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 13, fontWeight: 700, flex: '1 1 200px', minWidth: 0 }}>☕ ¿Un descanso fuera del horario? Pausa el soporte:</span>
+      <span style={{ fontSize: 13, fontWeight: 700, flex: '1 1 200px', minWidth: 0 }}><IcoTexto n="cafe" />¿Un descanso fuera del horario? Pausa el soporte:</span>
       {[[15, '15 min'], [30, '30 min'], [60, '1 hora'], [120, '2 horas']].map(([m, t]) => (
         <button key={m} type="button" disabled={ocupado} onClick={() => void pausar({ minutos: Number(m) })} style={btnS}>{t}</button>
       ))}

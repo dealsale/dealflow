@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from '../../components/Icono';
 import { apiEquipoDF, apiEquipoDFCambiar, apiEquipoDFCrear, apiEquipoDFEliminar, type UsuarioEquipo } from '../../lib/api';
 import { confirmar, notificar, pedirTexto } from '../../components/dialogs';
 import { fmtCO } from '../../lib/fechaCO';
@@ -57,12 +58,12 @@ export function EquipoDealFlow() {
     <section data-screen-label="Equipo DealFlow" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>Equipo DealFlow</h1>
-        <a href={'/drive'} target="_blank" rel="noopener" style={{ ...btnS, display: 'inline-block', marginTop: 8, textDecoration: 'none' }}>☁️ Abrir el Drive del equipo</a>
+        <a href={'/drive'} target="_blank" rel="noopener" style={{ ...btnS, display: 'inline-block', marginTop: 8, textDecoration: 'none' }}><IcoTexto n="nube" />Abrir el Drive del equipo</a>
         <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '4px 0 0' }}>Cuentas de las personas que administran DealFlow o atienden el soporte. Cada quien entra con su propio correo (queda registrado quién hizo qué).</p>
       </div>
 
       <div style={card}>
-        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12 }}>➕ Crear cuenta</div>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12 }}><IcoTexto n="agregar" />Crear cuenta</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
           <div><label style={lbl}>Nombre</label><input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Laura Gómez" style={inp} /></div>
           <div><label style={lbl}>Correo</label><input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="laura@dealflow.sbs" style={inp} autoComplete="off" /></div>
@@ -82,7 +83,7 @@ export function EquipoDealFlow() {
       </div>
 
       <div style={card}>
-        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>👥 Cuentas {lista && <span style={{ color: 'var(--df-text-muted)', fontWeight: 600 }}>({lista.length})</span>}</div>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}><IcoTexto n="equipoDF" />Cuentas {lista && <span style={{ color: 'var(--df-text-muted)', fontWeight: 600 }}>({lista.length})</span>}</div>
         {!lista && <div style={{ fontSize: 13, color: 'var(--df-text-faint)' }}>Cargando…</div>}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {(lista || []).map((u) => (

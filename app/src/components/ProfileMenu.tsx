@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { IconoDF, type IconoDFNombre } from './IconoDF';
 import { setAsistenteVisible, useAsistenteVisible, useSoporteConfig } from './AsistenteSoporte';
 import { cambiarIdiomaUI, idiomaUI, type IdiomaUI } from '../i18n/traductor';
 import type { DealFlowState } from '../hooks/useDealFlowState';
@@ -59,7 +60,7 @@ function Avatar({ foto, iniciales, size, premium, waEstado }: { foto: string; in
 
 /** Botones de opciones (usados para elegir el tema). Una opción puede pedir un
  * fondo de gradiente propio cuando está activa (el pill "Premium"). */
-function Pills<T extends string>({ value, options, onChange }: { value: T; options: { v: T; label: string; icon?: string; gradient?: string }[]; onChange: (v: T) => void }) {
+function Pills<T extends string>({ value, options, onChange }: { value: T; options: { v: T; label: string; icon?: IconoDFNombre; gradient?: string }[]; onChange: (v: T) => void }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
       {options.map((o) => (
@@ -67,14 +68,14 @@ function Pills<T extends string>({ value, options, onChange }: { value: T; optio
           key={o.v}
           onClick={() => onChange(o.v)}
           style={{
-            display: 'flex', alignItems: 'center', gap: 5,
+            display: 'flex', alignItems: 'center', gap: 6,
             background: value === o.v ? (o.gradient || 'var(--df-text)') : 'var(--df-surface)',
             color: value === o.v ? (o.gradient ? '#fff' : 'var(--df-surface)') : 'var(--df-text-secondary)',
             border: '1px solid ' + (value === o.v ? 'transparent' : 'var(--df-border)'), borderRadius: 8,
             padding: '7px 11px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
-          {o.icon && <span>{o.icon}</span>}
+          {o.icon && <IconoDF n={o.icon} size={16} blanco={value === o.v && !!o.gradient} />}
           {o.label}
         </button>
       ))}
@@ -193,8 +194,8 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
               style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}
             >
               <Avatar foto={df.userFoto} iniciales={df.userInitials} size={52} premium={premium} />
-              <div style={{ position: 'absolute', bottom: -2, right: -2, width: 20, height: 20, borderRadius: '50%', background: 'var(--df-text)', color: 'var(--df-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, border: '2px solid var(--df-surface)' }}>
-                📷
+              <div style={{ position: 'absolute', bottom: -3, right: -3, width: 24, height: 24, borderRadius: '50%', background: 'var(--df-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--df-border)', boxShadow: '0 2px 6px rgba(15,23,42,.18)' }}>
+                <IconoDF n="camara" size={14} />
               </div>
             </div>
             <input
@@ -221,7 +222,7 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
               ) : (
                 <div onClick={() => setEditandoNombre(true)} title="Editar nombre" style={{ fontWeight: 700, fontSize: 14.5, color: 'var(--df-text)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{df.sessionUser?.nombre || df.userLabel}</span>
-                  <span style={{ fontSize: 11, color: 'var(--df-text-faint)', flexShrink: 0 }}>✎</span>
+                  <IconoDF n="editar" size={13} style={{ opacity: 0.85 }} />
                 </div>
               )}
               <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{df.sessionUser?.email}</div>
@@ -239,26 +240,26 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
               value={df.theme}
               onChange={df.setTheme}
               options={[
-                { v: 'light', label: 'Claro', icon: '☀️' },
-                { v: 'dark', label: 'Dark System', icon: '🌙' },
-                ...(df.premiumHabilitado ? [{ v: 'premium' as const, label: 'Premium', icon: '💎', gradient: 'linear-gradient(135deg,#6D28D9,#2563EB)' }] : []),
+                { v: 'light', label: 'Claro', icon: 'claro' },
+                { v: 'dark', label: 'Dark System', icon: 'oscuro' },
+                ...(df.premiumHabilitado ? [{ v: 'premium' as const, label: 'Premium', icon: 'premium' as const, gradient: 'linear-gradient(135deg,#6D28D9,#2563EB)' }] : []),
               ]}
             />
             {df.theme === 'premium' && <FondoAnimado />}
             {!df.premiumHabilitado && (
-              <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)' }}>💎 El tema Premium es exclusivo: pregúntale a tu administrador de DealFlow si te lo puede habilitar.</div>
+              <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)', display: 'flex', gap: 6, alignItems: 'flex-start' }}><IconoDF n="premium" size={14} style={{ marginTop: 1 }} />El tema Premium es exclusivo: pregúntale a tu administrador de DealFlow si te lo puede habilitar.</div>
             )}
           </div>
 
           {/* Idioma de la plataforma */}
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--df-border)' }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 8 }}>Idioma</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><IconoDF n="idioma" size={15} />Idioma</div>
             <Pills
               value={idiomaUI()}
               onChange={(v) => cambiarIdiomaUI(v as IdiomaUI)}
               options={[
-                { v: 'es', label: 'Español', icon: '🇪🇸' },
-                { v: 'en', label: 'English', icon: '🇺🇸' },
+                { v: 'es', label: 'Español' },
+                { v: 'en', label: 'English' },
               ]}
             />
           </div>
@@ -267,9 +268,9 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--df-border)' }}>
             <div
               onClick={() => setMostrarPassword((v) => !v)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--df-text)' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--df-text)' }}
             >
-              <span>🔒</span>
+              <IconoDF n="candado" size={20} />
               <span style={{ flex: 1 }}>Cambiar contraseña</span>
               <span style={{ fontSize: 10, color: 'var(--df-text-faint)', transform: mostrarPassword ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
             </div>
@@ -287,9 +288,9 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
           <div
             onClick={df.toggleFloatingNav}
             className="df-row-hover"
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 16px', fontSize: 13, fontWeight: 700, color: df.floatingNav ? 'var(--df-brand-dark)' : 'var(--df-text)', cursor: 'pointer', borderBottom: '1px solid var(--df-border)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', fontSize: 13, fontWeight: 700, color: df.floatingNav ? 'var(--df-brand-dark)' : 'var(--df-text)', cursor: 'pointer', borderBottom: '1px solid var(--df-border)' }}
           >
-            <span>◉</span>
+            <IconoDF n="menu-flotante" size={20} />
             <span style={{ flex: 1 }}>Menú flotante</span>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: df.floatingNav ? 'var(--df-brand-dark)' : 'var(--df-text-faint)' }}>{df.floatingNav ? 'Activado' : 'Desactivado'}</span>
           </div>
@@ -298,9 +299,9 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
             <div
               onClick={() => setAsistenteVisible(!soporteVisible)}
               className="df-row-hover"
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 16px', fontSize: 13, fontWeight: 700, color: soporteVisible ? 'var(--df-brand-dark)' : 'var(--df-text)', cursor: 'pointer', borderBottom: '1px solid var(--df-border)' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', fontSize: 13, fontWeight: 700, color: soporteVisible ? 'var(--df-brand-dark)' : 'var(--df-text)', cursor: 'pointer', borderBottom: '1px solid var(--df-border)' }}
             >
-              <span>💬</span>
+              <IconoDF n="mensaje" size={20} />
               <span style={{ flex: 1 }}>{soporte.nombre}</span>
               <span style={{ fontSize: 11.5, fontWeight: 700, color: soporteVisible ? 'var(--df-brand-dark)' : 'var(--df-text-faint)' }}>{soporteVisible ? 'Visible' : 'Oculto'}</span>
             </div>
@@ -310,9 +311,9 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
             <div
               onClick={() => { setOpen(false); df.instalarPwa(); }}
               className="df-row-hover"
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 16px', fontSize: 13, fontWeight: 700, color: 'var(--df-brand-dark)', cursor: 'pointer', borderBottom: '1px solid var(--df-border)' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', fontSize: 13, fontWeight: 700, color: 'var(--df-brand-dark)', cursor: 'pointer', borderBottom: '1px solid var(--df-border)' }}
             >
-              <span>📲</span>
+              <IconoDF n="instalar-app" size={20} />
               <span>Instalar la app</span>
             </div>
           )}
@@ -320,8 +321,9 @@ export function ProfileMenu({ df, onDarkBar }: { df: DealFlowState; onDarkBar?: 
           <div
             onClick={() => { setOpen(false); df.logout(); }}
             className="df-danger-hover"
-            style={{ padding: '13px 16px', fontSize: 13, fontWeight: 700, color: 'var(--df-danger)', cursor: 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', fontSize: 13, fontWeight: 700, color: 'var(--df-danger)', cursor: 'pointer' }}
           >
+            <IconoDF n="cerrar-sesion" size={20} />
             Cerrar sesión
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { IcoTexto, type NombreIcono } from './Icono';
 import { PhotoAddChip } from './PhotoUpload';
 import { AutoTextarea } from './AutoTextarea';
 import { archivosDePortapapeles } from '../lib/clipboard';
@@ -14,6 +15,15 @@ export interface BloqueEditable extends MensajeBloque {
   removeMedia: (mediaIndex: number) => void;
   moverMedia: (from: number, to: number) => void;
 }
+
+// Cada tipo de bloque con su color e icono, para distinguirlos de un vistazo.
+const TIPO: Record<string, { nombre: string; icono: NombreIcono; color: string }> = {
+  texto: { nombre: 'Texto', icono: 'chat', color: '#38BDF8' },
+  imagen: { nombre: 'Imagen', icono: 'imagen', color: '#C084FC' },
+  video: { nombre: 'Video', icono: 'video', color: '#F87171' },
+  audio: { nombre: 'Audio', icono: 'microfono', color: '#FBBF24' },
+};
+const accionBloque: React.CSSProperties = { background: 'none', border: '1px solid var(--df-border)', borderRadius: 7, padding: '3px 8px', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-body)', cursor: 'pointer' };
 
 /** Contenido de un bloque de imagen/video/audio: varias piezas, cada una con quitar y mover. */
 function MediaEnBloque({ b }: { b: BloqueEditable }) {
@@ -82,40 +92,42 @@ export function BloquesBuilder({ bloques, moverBloque, textoDraft, setTextoDraft
                 onDrop={() => { if (drag !== null) moverBloque(drag, i); setDrag(null); setOver(null); }}
                 onDragEnd={() => { setDrag(null); setOver(null); }}
                 style={{
-                  display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-surface)',
+                  background: 'var(--df-bg)',
                   border: '1px solid ' + (esObjetivo ? 'var(--df-brand)' : 'var(--df-border)'),
+                  borderLeft: `4px solid ${TIPO[b.tipo]?.color || 'var(--df-border)'}`,
                   boxShadow: esObjetivo ? '0 -2px 0 var(--df-brand) inset' : 'none',
-                  borderRadius: 10, padding: '9px 12px', opacity: drag === i ? 0.4 : 1,
+                  borderRadius: 10, padding: '8px 10px 10px', opacity: drag === i ? 0.4 : 1,
                 }}
               >
-                <span
-                  draggable
-                  onDragStart={() => setDrag(i)}
-                  title="Arrastra para reordenar"
-                  style={{ color: 'var(--df-border-strong)', fontSize: 16, flexShrink: 0, cursor: 'grab', lineHeight: 1, marginTop: 6 }}
-                >⠿</span>
-                <span style={{ background: 'var(--df-surface-2)', color: 'var(--df-text-muted)', borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace", marginTop: 4 }}>{i + 1}</span>
-                <span style={{ color: 'var(--df-text-faint)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', width: 52, flexShrink: 0, marginTop: 5 }}>
-                  {b.tipo === 'texto' ? 'Texto' : b.tipo === 'imagen' ? 'Imagen' : b.tipo === 'audio' ? 'Audio' : 'Video'}
-                </span>
+                {/* Encabezado del bloque: orden, tipo (con su color) y acciones. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                  <span draggable onDragStart={() => setDrag(i)} title="Arrastra para cambiar el orden"
+                    style={{ color: 'var(--df-text-muted)', fontSize: 16, cursor: 'grab', lineHeight: 1 }}>⠿</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--df-text-strong)' }}>Bloque {i + 1}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, borderRadius: 999, padding: '2px 9px', color: TIPO[b.tipo]?.color, background: `color-mix(in srgb, ${TIPO[b.tipo]?.color || '#888'} 16%, transparent)` }}>
+                    {TIPO[b.tipo] && <IcoTexto n={TIPO[b.tipo].icono} tam={13} color={TIPO[b.tipo].color} />}{TIPO[b.tipo]?.nombre || b.tipo}
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  <button onClick={b.duplicate} className="df-copy-hover" title="Duplicar este bloque" style={accionBloque}>⧉ Duplicar</button>
+                  <button onClick={b.remove} className="df-danger-hover" title="Quitar este bloque" style={accionBloque}>✕ Quitar</button>
+                </div>
                 {b.tipo === 'texto' ? (
                   <AutoTextarea
                     value={b.valor || ''}
                     onChange={(v) => b.editText(v)}
-                    placeholder="Escribe el texto de este bloque…"
-                    style={{ flex: 1, minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5, minHeight: 38, boxSizing: 'border-box' }}
+                    placeholder="Escribe el texto de este mensaje…"
+                    style={{ width: '100%', minWidth: 0, border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13.5, lineHeight: 1.55, minHeight: 40, boxSizing: 'border-box', background: 'var(--df-surface)', color: 'var(--df-text-strong)' }}
                   />
                 ) : (
                   <MediaEnBloque b={b} />
                 )}
-                <span onClick={b.duplicate} className="df-copy-hover" title="Duplicar este bloque" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 2, alignSelf: 'flex-start', marginTop: 4 }}>⧉</span>
-                <span onClick={b.remove} className="df-danger-hover" title="Quitar bloque" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, alignSelf: 'flex-start', marginTop: 4 }}>✕</span>
               </div>
             );
           })}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--df-text-body)', margin: `${bloques.length ? 14 : 2}px 0 6px` }}>{bloques.length ? '＋ Agregar otro bloque' : '＋ Agrega el primer bloque'}</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', border: '1.5px dashed var(--df-border-strong)', borderRadius: 10, padding: 8 }}>
         <input
           className="df-input"
           value={textoDraft}

@@ -31,6 +31,9 @@
   /* Marca (verde esmeralda) */
   --df-brand: #059669;
   --df-brand-dark: #047857;
+  /* Verde de «correcto»: sigue al verde de la marca de cada tema (claro, oscuro y premium). */
+  --df-success: var(--df-brand-dark);
+  --df-success-subtle: var(--df-brand-subtle);
   --df-brand-mid: #10B981;
   --df-brand-light: #34D399;
   --df-brand-border: #A7F3D0;
@@ -770,3 +773,7 @@ h1, h2, h3 { font-family: 'Sora', 'Plus Jakarta Sans', system-ui, sans-serif; le
 .df-est-giro { width: 38px; height: 38px; border-radius: 50%; border: 3px solid rgba(255,255,255,.18); border-top-color: #34D399; animation: df-est-giro .9s linear infinite; }
 .df-est-flota { animation: df-est-flotar 3.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .df-est-cargando, .df-est-giro, .df-est-flota { animation: none; } }
+
+/* Iconos de DealFlow (app/public/iconos-df): el de «cargando / guardando» gira. */
+@keyframes dfIconoGira { to { transform: rotate(360deg); } }
+.df-icono-gira { animation: dfIconoGira .9s linear infinite; }

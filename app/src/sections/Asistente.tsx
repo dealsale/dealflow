@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icono, IcoTexto, type NombreIcono } from '../components/Icono';
 import { AudioChat } from '../components/MediaBubble';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { apiWebchatList, apiWebchatSend } from '../lib/api';
@@ -25,7 +26,7 @@ function SegChips<T extends string | boolean>({ label, value, opciones, onPick }
 }
 
 /** Tarjetas de opción grandes (personalidad, forma de vender). */
-function OpcionCards<T extends string>({ value, opciones, onPick, min = 150 }: { value: T | undefined; opciones: { v: T; icono: string; t: string; d: string }[]; onPick: (v: T) => void; min?: number }) {
+function OpcionCards<T extends string>({ value, opciones, onPick, min = 150 }: { value: T | undefined; opciones: { v: T; icono?: NombreIcono; sigla?: string; t: string; d: string }[]; onPick: (v: T) => void; min?: number }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${min}px, 1fr))`, gap: 8 }}>
       {opciones.map((o) => {
@@ -33,7 +34,7 @@ function OpcionCards<T extends string>({ value, opciones, onPick, min = 150 }: {
         return (
           <button key={o.v} onClick={() => onPick(o.v)}
             style={{ textAlign: 'left', background: activo ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', border: `1.5px solid ${activo ? 'var(--df-brand)' : 'var(--df-border)'}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--df-text-body)', transition: 'border-color .15s, background .15s' }}>
-            <div style={{ fontSize: 18, marginBottom: 2 }}>{o.icono}</div>
+            <div style={{ marginBottom: 4, height: 20, display: 'flex', alignItems: 'center' }}>{o.icono ? <Icono nombre={o.icono} tam={20} degradado /> : <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.04em', color: 'var(--df-brand-dark)', border: '1.5px solid var(--df-brand)', borderRadius: 6, padding: '1px 5px' }}>{o.sigla}</span>}</div>
             <div style={{ fontWeight: 700, fontSize: 13, color: activo ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}>{o.t}</div>
             <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.4, marginTop: 2 }}>{o.d}</div>
           </button>
@@ -55,10 +56,10 @@ function Switch({ on, onChange, title }: { on: boolean; onChange: () => void; ti
 const inputSt: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: 'var(--df-text-strong)', background: 'var(--df-surface)', resize: 'vertical' };
 
 /** Campo con título y ayuda. */
-function Campo({ titulo, ayuda, children }: { titulo: string; ayuda?: string; children: React.ReactNode }) {
+function Campo({ titulo, icono, ayuda, children }: { titulo: string; icono?: NombreIcono; ayuda?: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{titulo}</div>
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{icono && <IcoTexto n={icono} tam={16} degradado />}{titulo}</div>
       {ayuda && <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, marginBottom: 8, lineHeight: 1.45 }}>{ayuda}</div>}
       {children}
     </div>
@@ -114,7 +115,7 @@ function PruebaAsistente({ storeId }: { storeId: string }) {
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, boxShadow: '0 1px 2px rgba(15,23,42,.04)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px', borderBottom: '1px solid var(--df-border)' }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>🧪 Prueba tu asistente</div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}><IcoTexto n="experimento" tam={16} degradado />Prueba tu asistente</div>
           <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Chatea aquí mismo con tu IA, como si fueras un cliente. No usa WhatsApp: funciona aunque Meta esté caído.</div>
         </div>
         <div style={{ flex: 1 }} />
@@ -173,11 +174,11 @@ function PruebaAsistente({ storeId }: { storeId: string }) {
 }
 
 type Pestana = 'personalidad' | 'negocio' | 'venta' | 'reglas';
-const PESTANAS: { id: Pestana; t: string }[] = [
-  { id: 'personalidad', t: '🎭 Personalidad' },
-  { id: 'negocio', t: '🏪 Tu negocio' },
-  { id: 'venta', t: '💰 Cómo vende' },
-  { id: 'reglas', t: '🛡️ Reglas y límites' },
+const PESTANAS: { id: Pestana; t: string; icono: NombreIcono }[] = [
+  { id: 'personalidad', t: 'Personalidad', icono: 'personalidad' },
+  { id: 'negocio', t: 'Tu negocio', icono: 'tienda' },
+  { id: 'venta', t: 'Cómo vende', icono: 'dinero' },
+  { id: 'reglas', t: 'Reglas y límites', icono: 'escudo' },
 ];
 
 export function Asistente({ df }: { df: DealFlowState }) {
@@ -206,7 +207,7 @@ export function Asistente({ df }: { df: DealFlowState }) {
               return (
                 <button key={p.id} onClick={() => elegirTab(p.id)}
                   style={{ background: 'none', border: 'none', borderBottom: `2px solid ${activo ? 'var(--df-brand)' : 'transparent'}`, color: activo ? 'var(--df-text-strong)' : 'var(--df-text-muted)', fontWeight: activo ? 800 : 600, fontSize: 13, padding: '9px 12px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                  {p.t}
+                  <IcoTexto n={p.icono} tam={15} />{p.t}
                 </button>
               );
             })}
@@ -220,18 +221,18 @@ export function Asistente({ df }: { df: DealFlowState }) {
                 </Campo>
                 <Campo titulo="Personalidad" ayuda="Cómo se siente hablar con él.">
                   <OpcionCards value={e.personalidad} onPick={(v) => set({ personalidad: v })} opciones={[
-                    { v: 'amigable', icono: '😊', t: 'Amigable', d: 'Cálido y cercano, como un amigo que sabe.' },
-                    { v: 'profesional', icono: '👔', t: 'Profesional', d: 'Claro, respetuoso y serio.' },
-                    { v: 'divertido', icono: '🎉', t: 'Divertido', d: 'Buena energía y humor ligero.' },
-                    { v: 'experto', icono: '🧠', t: 'Asesor experto', d: 'Explica beneficios con seguridad.' },
-                    { v: 'directo', icono: '⚡', t: 'Directo', d: 'Al grano, facilita la compra.' },
+                    { v: 'amigable', icono: 'sonrisa', t: 'Amigable', d: 'Cálido y cercano, como un amigo que sabe.' },
+                    { v: 'profesional', icono: 'maletin', t: 'Profesional', d: 'Claro, respetuoso y serio.' },
+                    { v: 'divertido', icono: 'fiesta', t: 'Divertido', d: 'Buena energía y humor ligero.' },
+                    { v: 'experto', icono: 'cerebro', t: 'Asesor experto', d: 'Explica beneficios con seguridad.' },
+                    { v: 'directo', icono: 'rapido', t: 'Directo', d: 'Al grano, facilita la compra.' },
                   ]} />
                 </Campo>
                 <Campo titulo="Idioma" ayuda="En qué idioma le habla a tus clientes. Incluye los mensajes automáticos (confirmación del pedido, estados y guía).">
                   <OpcionCards min={150} value={e.idioma || 'es'} onPick={(v) => set({ idioma: v })} opciones={[
-                    { v: 'es', icono: '🇪🇸', t: 'Español', d: 'Siempre en español.' },
-                    { v: 'en', icono: '🇺🇸', t: 'English', d: 'Always in English.' },
-                    { v: 'auto', icono: '🌐', t: 'Automático', d: 'Responde en el idioma en que le escriben.' },
+                    { v: 'es', sigla: 'ES', t: 'Español', d: 'Siempre en español.' },
+                    { v: 'en', sigla: 'EN', t: 'English', d: 'Always in English.' },
+                    { v: 'auto', icono: 'web', t: 'Automático', d: 'Responde en el idioma en que le escriben.' },
                   ]} />
                 </Campo>
                 <Campo titulo="Tono y estilo" ayuda="Se aplica a todas sus respuestas (incluido el seguimiento).">
@@ -254,27 +255,27 @@ export function Asistente({ df }: { df: DealFlowState }) {
             {tab === 'negocio' && (
               <>
                 <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 14, lineHeight: 1.5 }}>Lo que escribas aquí el asistente lo responde <b>tal cual</b> cuando le pregunten. Lo que dejes vacío, no lo menciona ni lo inventa.</div>
-                <Campo titulo="🚚 Envíos" ayuda="Tiempos de entrega, costo del envío, a qué ciudades llegas.">
+                <Campo icono="despachar" titulo="Envíos" ayuda="Tiempos de entrega, costo del envío, a qué ciudades llegas.">
                   <textarea className="df-input" rows={2} value={negocio.envios || ''} onChange={(ev) => setNegocio({ envios: ev.target.value })} placeholder="Ej: Enviamos a toda Colombia. Llega en 2 a 5 días hábiles. Envío gratis desde $150.000." style={inputSt} />
                 </Campo>
-                <Campo titulo="💳 Formas de pago">
+                <Campo icono="pago" titulo="Formas de pago">
                   <textarea className="df-input" rows={2} value={negocio.pagos || ''} onChange={(ev) => setNegocio({ pagos: ev.target.value })} placeholder="Ej: Pago contra entrega en efectivo. También Nequi y Bancolombia." style={inputSt} />
                 </Campo>
-                <Campo titulo="🔄 Cambios y garantía">
+                <Campo icono="cambio" titulo="Cambios y garantía">
                   <textarea className="df-input" rows={2} value={negocio.cambios || ''} onChange={(ev) => setNegocio({ cambios: ev.target.value })} placeholder="Ej: Cambios por talla dentro de los 5 días siguientes a la entrega." style={inputSt} />
                 </Campo>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 12px' }}>
-                  <Campo titulo="🕘 Horario de atención">
+                  <Campo icono="reloj" titulo="Horario de atención">
                     <input className="df-input" value={negocio.horario || ''} onChange={(ev) => setNegocio({ horario: ev.target.value })} placeholder="Ej: Lunes a sábado, 8 a.m. a 7 p.m." style={inputSt} />
                   </Campo>
-                  <Campo titulo="📍 Ubicación / redes">
+                  <Campo icono="ubicacion" titulo="Ubicación / redes">
                     <input className="df-input" value={negocio.ubicacion || ''} onChange={(ev) => setNegocio({ ubicacion: ev.target.value })} placeholder="Ej: Solo tienda virtual · @lunaaccesorios" style={inputSt} />
                   </Campo>
                 </div>
-                <Campo titulo="📝 Otra información" ayuda="Cualquier otra cosa que deba saber: quiénes son, materiales, promociones fijas, etc.">
+                <Campo icono="nota" titulo="Otra información" ayuda="Cualquier otra cosa que deba saber: quiénes son, materiales, promociones fijas, etc.">
                   <textarea className="df-input" rows={3} value={negocio.extra || ''} onChange={(ev) => setNegocio({ extra: ev.target.value })} style={inputSt} />
                 </Campo>
-                <Campo titulo="❓ Preguntas frecuentes" ayuda="Preguntas que te hacen mucho, con la respuesta exacta que quieres que dé.">
+                <Campo icono="pregunta" titulo="Preguntas frecuentes" ayuda="Preguntas que te hacen mucho, con la respuesta exacta que quieres que dé.">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {faqs.length === 0 && <div style={{ color: 'var(--df-text-faint)', fontSize: 13 }}>Aún no hay preguntas. Agrega la primera.</div>}
                     {faqs.map((f, i) => (
@@ -299,9 +300,9 @@ export function Asistente({ df }: { df: DealFlowState }) {
               <>
                 <Campo titulo="Qué tanto insiste" ayuda="Qué tan activo es para llevar al cliente a comprar.">
                   <OpcionCards min={170} value={e.insistencia || 'equilibrada'} onPick={(v) => set({ insistencia: v })} opciones={[
-                    { v: 'suave', icono: '🌱', t: 'Suave', d: 'Informa y deja decidir. Cero presión.' },
-                    { v: 'equilibrada', icono: '⚖️', t: 'Equilibrada', d: 'Resuelve y propone el siguiente paso.' },
-                    { v: 'persuasiva', icono: '🔥', t: 'Persuasiva', d: 'Resalta beneficios y maneja objeciones.' },
+                    { v: 'suave', icono: 'brote', t: 'Suave', d: 'Informa y deja decidir. Cero presión.' },
+                    { v: 'equilibrada', icono: 'balanza', t: 'Equilibrada', d: 'Resuelve y propone el siguiente paso.' },
+                    { v: 'persuasiva', icono: 'fuego', t: 'Persuasiva', d: 'Resalta beneficios y maneja objeciones.' },
                   ]} />
                 </Campo>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '12px 14px' }}>
@@ -316,7 +317,7 @@ export function Asistente({ df }: { df: DealFlowState }) {
                 </Campo>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '12px 14px' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>Mensaje automático de actividad 💬</div>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}><IcoTexto n="chat" tam={15} degradado />Mensaje automático de actividad</div>
                     <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Si el cliente deja de responder, le vuelve a escribir a los <b>5 min</b>, <b>30 min</b> y <b>1 hora</b>, según lo que hablaban. Se detiene apenas responde y respeta la ventana de 24 h.</div>
                   </div>
                   <Switch on={df.seguimientoActivo} onChange={df.toggleSeguimientoActivo} />
@@ -329,7 +330,7 @@ export function Asistente({ df }: { df: DealFlowState }) {
                 {df.plantillaActiva && (
                   <details style={{ border: '1px solid var(--df-brand-border, var(--df-border))', background: 'var(--df-brand-subtle-2, var(--df-surface-2))', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 13, lineHeight: 1.5 }}>
                     <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--df-brand-dark, var(--df-text-strong))' }}>
-                      🚀 Tu asistente usa la plantilla «{df.plantillaActiva.nombre}» (v{df.plantillaActiva.version}): método de venta y {df.plantillaActiva.reglas.length} reglas de venta y trato
+                      <IcoTexto n="cohete" tam={13} />Tu asistente usa la plantilla «{df.plantillaActiva.nombre}» (v{df.plantillaActiva.version}): método de venta y {df.plantillaActiva.reglas.length} reglas de venta y trato
                     </summary>
                     <div style={{ color: 'var(--df-text-muted)', margin: '8px 0' }}>
                       Van aparte de tus reglas y se actualizan desde DealShop sin tocar lo tuyo. Si alguna de tus reglas dice algo distinto, gana la tuya.
@@ -356,13 +357,13 @@ export function Asistente({ df }: { df: DealFlowState }) {
                     <button onClick={df.addRule} className="df-btn-outline-green" style={{ background: 'var(--df-surface)', color: 'var(--df-brand)', border: '1px solid var(--df-brand)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Agregar regla</button>
                   </div>
                 </Campo>
-                <Campo titulo="🚫 Nunca debe…" ayuda="Temas, palabras o promesas que el asistente jamás debe tocar.">
+                <Campo icono="bloquear" titulo="Nunca debe…" ayuda="Temas, palabras o promesas que el asistente jamás debe tocar.">
                   <textarea className="df-input" rows={3} value={e.prohibido || ''} onChange={(ev) => set({ prohibido: ev.target.value })} placeholder="Ej: Hablar de la competencia, prometer fechas exactas de entrega, dar descuentos, hablar de política." style={inputSt} />
                 </Campo>
                 <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '12px 14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>🙋 Pasar el chat a una persona</div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}><IcoTexto n="ayudaHumana" tam={16} degradado />Pasar el chat a una persona</div>
                       <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Cuando pase lo que indiques, el asistente avisa al cliente y deja de responder. El chat queda en el Inbox como “Equipo (pidió asesor)” para que lo atiendas.</div>
                     </div>
                     <Switch on={humano.activo !== false} onChange={() => setHumano({ activo: humano.activo === false })} />
@@ -396,7 +397,7 @@ export function Asistente({ df }: { df: DealFlowState }) {
         <div style={{ position: 'sticky', top: 12, minWidth: 0 }}>
           {df.apiMode && df.storeId
             ? <PruebaAsistente storeId={df.storeId} />
-            : <div style={{ ...tarjeta, padding: 20, color: 'var(--df-text-muted)', fontSize: 13 }}>🧪 El chat de prueba está disponible cuando tu tienda está conectada.</div>}
+            : <div style={{ ...tarjeta, padding: 20, color: 'var(--df-text-muted)', fontSize: 13 }}><IcoTexto n="experimento" tam={13} />El chat de prueba está disponible cuando tu tienda está conectada.</div>}
         </div>
       </div>
     </section>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 
 import { fmtCO } from '../lib/fechaCO';
 /**
@@ -238,7 +239,7 @@ function AdRow({ d, color, pct, orden }: { d: AnuncioStat; color: string; pct: n
       <div style={{ width: 52, height: 52, borderRadius: 8, flexShrink: 0, background: 'var(--df-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         {d.media && imgOk
           ? <img src={d.media} alt="" onError={() => setImgOk(false)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : <span style={{ fontSize: 20 }}>📢</span>}
+          : <Icono nombre="campana" tam={20} degradado />}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -249,9 +250,9 @@ function AdRow({ d, color, pct, orden }: { d: AnuncioStat; color: string; pct: n
           <div style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: color }} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 600 }}>💬 {d.chats}</span>
-          <span style={{ fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 600 }}>🛒 {d.pedidos}</span>
-          <span style={{ fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 600 }}>💰 {money(d.ventas)}</span>
+          <span style={{ fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 600 }}><IcoTexto n="chat" />{d.chats}</span>
+          <span style={{ fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 600 }}><IcoTexto n="carrito" />{d.pedidos}</span>
+          <span style={{ fontSize: 11, color: 'var(--df-text-muted)', fontWeight: 600 }}><IcoTexto n="dinero" />{money(d.ventas)}</span>
           {clickable && <span style={{ fontSize: 11, color: 'var(--df-brand-dark)', fontWeight: 700, marginLeft: 'auto' }}>Ver anuncio ↗</span>}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { clicAparte } from '../components/EnlaceApp';
+import { Icono, IcoTexto } from '../components/Icono';
 import { urlDe } from '../lib/rutas';
 import { useState, useEffect } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -9,16 +10,17 @@ import type { Variante, Opcion } from '../types';
 import type { DealFlowState, DecoratedProduct } from '../hooks/useDealFlowState';
 import { EffiVinculoProducto, ConvenioProductoEffi } from '../components/EffiProductos';
 import { Dropdown } from '../components/Dropdown';
+import { IconoDF, type IconoDFNombre } from '../components/IconoDF';
 import { useSkydropx } from '../components/SkydropxCard';
 import { SkydropxProductos } from '../components/SkydropxProductos';
 import { VinculosBarra } from '../components/VinculosBarra';
 import { useBodegas } from '../components/BodegasProveedores';
 import { apiSincronizarDropi, apiSoltarVariantesDropi, type ResultadoSyncDropi } from '../lib/api';
+import { LogoMarca } from '../components/LogoMarca';
 
 
-const TITULO_NEGRO: CSSProperties = { fontSize: 13.5, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '-0.01em', margin: '2px 0 10px' };
 // Subtítulo dentro de un grupo (jerarquía secundaria, en gris).
-const SUBLABEL: CSSProperties = { fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 8px' };
+const SUBLABEL: CSSProperties = { fontSize: 12, fontWeight: 800, color: 'var(--df-text-body)', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 8px' };
 
 /** Editor de opciones del producto: grupos como Color (Negro, Azul…) y Talla (S, M, L…). */
 function OpcionesEditor({ p }: { p: DecoratedProduct }) {
@@ -111,9 +113,9 @@ function BotonGenerarVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowSta
       <button
         onClick={p.generarVariantes}
         style={{ background: 'var(--df-surface)', border: '1px solid var(--df-purple-border)', color: 'var(--df-purple)', borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
-      >⚡ Sincronizar variantes con las opciones ({totalPosibles} en total)</button>
+      ><IcoTexto n="rapido" />Sincronizar variantes con las opciones ({totalPosibles} en total)</button>
       <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>Deja exactamente las {totalPosibles} combinaciones (talla × color): crea las que falten y quita repetidas o sobrantes. Se hace solo al guardar, esto es por si quieres forzarlo ya.</div>
-      {df.variantesGenMsg && <div style={{ marginTop: 6, fontSize: 12.5, color: df.variantesGenMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.variantesGenMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.variantesGenMsg}</div>}
+      {df.variantesGenMsg && <div style={{ marginTop: 6, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6, color: df.variantesGenMsg.startsWith('✓') ? 'var(--df-brand-dark)' : df.variantesGenMsg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{df.variantesGenMsg.startsWith('✓') ? <><IconoDF n="guardado" size={16} />{df.variantesGenMsg.replace(/^✓s*/, '')}</> : df.variantesGenMsg.includes('…') ? <><IconoDF n="cargando" size={16} />{df.variantesGenMsg}</> : df.variantesGenMsg}</div>}
     </div>
   );
 }
@@ -142,7 +144,7 @@ function SeDespachaPor({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
   const donde = actual === 'effi' ? 'El artículo de Effi de cada variante' : actual === 'dropi' ? 'La conexión con Dropi' : 'El producto de Skydropx de cada variante';
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>🚚 Se despacha por</div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 7 }}><IconoDF n="despacho" size={22} />Se despacha por</div>
       <div style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'hidden' }}>
         {[...opciones, { k: '', t: 'Sin definir', logo: '', color: 'var(--df-surface-2)', ok: true }].map((o) => {
           const on = actual === o.k;
@@ -172,7 +174,7 @@ function SaleDesde({ p }: { p: DecoratedProduct }) {
   const actual = bodegas.some((b) => b.id === p.bodegaId) ? String(p.bodegaId) : '';
   return (
     <div style={{ marginBottom: 12, maxWidth: 380 }}>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>🏭 Sale desde (Skydropx)</div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 7 }}><IconoDF n="bodega" size={22} />Sale desde (Skydropx)</div>
       <Dropdown ariaLabel="Bodega desde la que sale el producto" value={actual} onChange={(v) => p.setBodegaId(v)}
         options={[{ value: '', label: `Tu dirección${sky.origen.ciudad ? ` (${sky.origen.ciudad})` : ''}` }, ...bodegas.map((b) => ({ value: b.id, label: `Bodega de ${b.nombre} (${b.ciudad})` }))]} />
       {actual && <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>La transportadora lo recoge en la bodega del proveedor y a él le llega la guía por WhatsApp.</div>}
@@ -238,7 +240,7 @@ function ConexionesVariantes({ p, df }: { p: DecoratedProduct; df: DealFlowState
         </BloquePlegable>
       )}
       {activas.length > 0 && <>
-      <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4, letterSpacing: '.02em' }}>🔗 Conexiones por variante</div>
+      <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4, letterSpacing: '.02em' }}><IcoTexto n="enlace" tam={14} degradado />Conexiones por variante</div>
       <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>
         Pon el código de cada variante si vendes este producto por allá. Se guarda al salir del campo.
       </div>
@@ -288,7 +290,7 @@ function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <input value={id} onChange={(e) => setId(e.target.value)} onBlur={alSalir} onKeyDown={(e) => { if (e.key === 'Enter') alSalir(); }} placeholder="ID del producto en Dropi (ej: 48213)" inputMode="numeric" disabled={cargando}
           style={{ flex: 1, minWidth: 180, border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: cargando ? 'var(--df-warning)' : 'var(--df-text-faint)' }}>{cargando ? 'Vinculando con Dropi…' : deDropi ? '✓ Conectado' : 'Se vincula al salir del campo'}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: cargando ? 'var(--df-warning)' : 'var(--df-text-faint)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>{cargando ? <><IconoDF n="cargando" size={16} />Vinculando con Dropi…</> : deDropi ? <><IconoDF n="guardado" size={16} />Conectado</> : 'Se vincula al salir del campo'}</span>
       </div>
       {error && <div style={{ fontSize: 12.5, color: 'var(--df-danger)', marginTop: 8 }}>{error}</div>}
       {res && (
@@ -296,18 +298,18 @@ function SyncDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
           {res.tipo === 'SIMPLE'
             ? <>✓ <b>{res.nombreDropi}</b> en Dropi no tiene variantes: quedó vinculado como producto simple.</>
             : <>✓ <b>{res.nombreDropi}</b>: {res.total} variaciones en Dropi · <b>{res.vinculadas}</b> vinculadas · <b>{res.creadas}</b> nuevas{res.renombradas ? ` · ${res.renombradas} con su nombre completado (talla y color)` : ''}{res.conStock ? ` · stock tomado de Dropi en ${res.conStock}` : ''}.</>}
-          {!!(res.duplicadasQuitadas || res.gruposQuitados?.length) && <div style={{ marginTop: 4, color: 'var(--df-brand-dark)' }}>🧹 Se repararon duplicados de una sincronización anterior: {res.duplicadasQuitadas ? `${res.duplicadasQuitadas} variante${res.duplicadasQuitadas === 1 ? '' : 's'} repetida${res.duplicadasQuitadas === 1 ? '' : 's'} quitada${res.duplicadasQuitadas === 1 ? '' : 's'} (sus pedidos y códigos pasaron a la original)` : ''}{res.duplicadasQuitadas && res.gruposQuitados?.length ? ' y ' : ''}{res.gruposQuitados?.length ? `grupo repetido quitado: ${res.gruposQuitados.join(', ')}` : ''}.</div>}
-          {!!res.sinVariante?.length && <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>⚠️ {res.sinVariante.length} variación{res.sinVariante.length === 1 ? '' : 'es'} de Dropi no tiene{res.sinVariante.length === 1 ? '' : 'n'} variante en DealFlow: <b>{res.sinVariante.slice(0, 8).join(', ')}{res.sinVariante.length > 8 ? '…' : ''}</b>. Si las vendes, agrégalas en Opciones y vuelve a vincular.</div>}
+          {!!(res.duplicadasQuitadas || res.gruposQuitados?.length) && <div style={{ marginTop: 4, color: 'var(--df-brand-dark)' }}><IcoTexto n="ok" tam={13} />Se repararon duplicados de una sincronización anterior: {res.duplicadasQuitadas ? `${res.duplicadasQuitadas} variante${res.duplicadasQuitadas === 1 ? '' : 's'} repetida${res.duplicadasQuitadas === 1 ? '' : 's'} quitada${res.duplicadasQuitadas === 1 ? '' : 's'} (sus pedidos y códigos pasaron a la original)` : ''}{res.duplicadasQuitadas && res.gruposQuitados?.length ? ' y ' : ''}{res.gruposQuitados?.length ? `grupo repetido quitado: ${res.gruposQuitados.join(', ')}` : ''}.</div>}
+          {!!res.sinVariante?.length && <div style={{ marginTop: 4, color: 'var(--df-warning)' }}><IcoTexto n="alerta" tam={13} />{res.sinVariante.length} variación{res.sinVariante.length === 1 ? '' : 'es'} de Dropi no tiene{res.sinVariante.length === 1 ? '' : 'n'} variante en DealFlow: <b>{res.sinVariante.slice(0, 8).join(', ')}{res.sinVariante.length > 8 ? '…' : ''}</b>. Si las vendes, agrégalas en Opciones y vuelve a vincular.</div>}
           {!!res.deDropi?.length && (
             <details style={{ marginTop: 4 }}>
               <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Ver las {res.total} variaciones que trae Dropi</summary>
               <div style={{ marginTop: 4, color: 'var(--df-text-muted)' }}>{res.deDropi.join(' · ')}{res.total > res.deDropi.length ? ' …' : ''}</div>
             </details>
           )}
-          {!!res.repetidas?.length && <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>⚠️ En Dropi hay variaciones que no se distinguen ({res.repetidas.slice(0, 4).join(', ')}). Revisa en Dropi que cada una tenga su talla y su color.</div>}
+          {!!res.repetidas?.length && <div style={{ marginTop: 4, color: 'var(--df-warning)' }}><IcoTexto n="alerta" tam={13} />En Dropi hay variaciones que no se distinguen ({res.repetidas.slice(0, 4).join(', ')}). Revisa en Dropi que cada una tenga su talla y su color.</div>}
           {res.sinDropi.length > 0 && (
             <div style={{ marginTop: 4, color: 'var(--df-warning)' }}>
-              ⚠️ {res.sinDropi.length} variante{res.sinDropi.length === 1 ? '' : 's'} de DealFlow no existe{res.sinDropi.length === 1 ? '' : 'n'} en Dropi: <b>{res.sinDropi.slice(0, 8).join(', ')}{res.sinDropi.length > 8 ? '…' : ''}</b>. No se borraron; elimínalas si ya no las vendes, o el asistente podría ofrecerlas.
+              <IcoTexto n="alerta" tam={13} />{res.sinDropi.length} variante{res.sinDropi.length === 1 ? '' : 's'} de DealFlow no existe{res.sinDropi.length === 1 ? '' : 'n'} en Dropi: <b>{res.sinDropi.slice(0, 8).join(', ')}{res.sinDropi.length > 8 ? '…' : ''}</b>. No se borraron; elimínalas si ya no las vendes, o el asistente podría ofrecerlas.
             </div>
           )}
         </div>
@@ -353,7 +355,7 @@ function VinculosDropi({ p, df }: { p: DecoratedProduct; df: DealFlowState }) {
       <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-body)' }}>
         {abierto ? '▾' : '▸'} Ver vínculos de cada variante · <span style={{ color: vinc === variantes.length ? 'var(--df-brand-dark)' : 'var(--df-warning)' }}>{vinc}/{variantes.length} vinculadas</span>
       </button>
-      {sinColor && <div style={{ fontSize: 12, color: 'var(--df-warning)', marginTop: 6 }}>⚠️ Las variantes solo tienen un dato ({titulos[0]}) aunque el producto tiene {grupos.join(' y ')}. Toca <b>↻ Volver a vincular con Dropi</b> para completar sus nombres.</div>}
+      {sinColor && <div style={{ fontSize: 12, color: 'var(--df-warning)', marginTop: 6 }}><IcoTexto n="alerta" tam={13} />Las variantes solo tienen un dato ({titulos[0]}) aunque el producto tiene {grupos.join(' y ')}. Toca <b>↻ Volver a vincular con Dropi</b> para completar sus nombres.</div>}
       {abierto && (
         <div style={{ marginTop: 8, border: '1px solid var(--df-border)', borderRadius: 9, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
@@ -426,7 +428,7 @@ function PanelIntegracion({ integ, p, df, variantes }: { integ: { id: IntegId; n
                 onClick={() => { setPublicando(true); df.publicarEnShopify(String(p.id), false, () => setPublicando(false)); }}
                 disabled={publicando}
                 style={{ background: integ.color, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', opacity: publicando ? 0.6 : 1 }}
-              >{publicando ? 'Creando en Shopify…' : '🛍️ Crear este producto en Shopify'}</button>
+              >{publicando ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><IconoDF n="cargando" size={16} />Creando en Shopify…</span> : <><LogoMarca marca="shopify" size={14} color="#fff" style={{ marginRight: 5, verticalAlign: '-0.18em' }} />Crear este producto en Shopify</>}</button>
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -511,12 +513,15 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
   toggleGroup: (k: string) => void;
 }) {
   const inputStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontSize: 13 };
-  const label: CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
+  const label: CSSProperties = { color: 'var(--df-text-body)', fontSize: 12.5, fontWeight: 700, marginBottom: 6 };
 
-  const grupos: { id: string; titulo: string; body: ReactNode }[] = [
+  const grupos: { id: string; titulo: string; icono: IconoDFNombre; sub: string; color: string; body: ReactNode }[] = [
     {
       id: 'datos',
       titulo: 'Producto',
+      icono: 'producto',
+      sub: 'Lo básico: cómo se llama, cuánto vale y por dónde se despacha.',
+      color: 'var(--df-brand)',
       body: (
         <>
           {/* Cambiar entre producto físico y servicio (sin tener que borrar y volver a subir). */}
@@ -531,7 +536,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
                     onClick={() => p.setTipo(t)}
                     style={{ background: activo ? 'var(--df-brand)' : 'var(--df-surface)', color: activo ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                   >
-                    {t === 'producto' ? '📦 Producto' : '🧩 Servicio'}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><IconoDF n={t} size={20} blanco={activo} />{t === 'producto' ? 'Producto' : 'Servicio'}</span>
                   </button>
                 );
               })}
@@ -567,9 +572,11 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
     {
       id: 'info',
       titulo: 'Información',
+      icono: 'informacion',
+      sub: 'La usa el asistente para explicar el producto y resolver dudas.',
+      color: '#60A5FA',
       body: (
         <>
-          <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>La usa el asistente para vender.</div>
           <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <div>
               <div style={label}>Descripción</div>
@@ -596,59 +603,74 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
     {
       id: 'mensaje',
       titulo: 'Mensaje inicial',
-      body: (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>Fotos, textos y videos que se envían solos cuando el cliente pregunta por el producto.</span>
-            <div style={{ flex: 1 }} />
-            <span style={{ fontSize: 12, color: p.mensajeInicialActivo !== false ? 'var(--df-brand)' : 'var(--df-text-faint)', fontWeight: 600 }}>
-              {p.mensajeInicialActivo !== false ? 'Encendido' : 'Apagado'}
-            </span>
-            <span
-              onClick={p.toggleMensajeInicial}
-              title="Encender o apagar el envío automático del mensaje inicial"
-              className="df-switch" data-on={p.mensajeInicialActivo !== false}
-              style={{ width: 40, height: 23, borderRadius: 999, background: p.mensajeInicialActivo !== false ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', cursor: 'pointer', transition: 'background .2s', flexShrink: 0 }}
-            >
-              <span style={{ position: 'absolute', top: 2, left: p.mensajeInicialActivo !== false ? 19 : 2, width: 19, height: 19, borderRadius: '50%', background: 'var(--df-surface)', transition: 'left .2s', boxShadow: '0 1px 2px rgba(15,23,42,.3)' }} />
-            </span>
-          </div>
-          <MensajesTabs p={p} />
-          <div style={{ marginBottom: 12 }}>
-            <div style={label}>Disparador · si el primer mensaje se parece a esto, envía todo el mensaje inicial</div>
-            <input className="df-input" value={p.disparador || ''} onChange={(e) => p.setDisparador(e.target.value)} placeholder="Ej: ¡Hola! Me interesan los Bota recta ámbar." style={inputStyle} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-            {p.bloquesDecorados.length === 0 && !!(p.mensajeInicial || '').trim() && (
-              <div style={{ color: 'var(--df-text-faint)', fontSize: 12, background: 'var(--df-surface)', border: '1px dashed var(--df-border)', borderRadius: 8, padding: '9px 12px' }}>
-                Hoy el asistente usa este texto: “{p.mensajeInicial}”. Agrega bloques y los usará en su lugar.
+      icono: 'mensaje',
+      sub: 'Lo primero que recibe el cliente cuando pregunta por este producto: textos, fotos, videos o audios, en orden.',
+      color: '#22C55E',
+      body: (() => {
+        const on = p.mensajeInicialActivo !== false;
+        const sel = p.mensajesDecorados.find((m) => m.seleccionado) || p.mensajesDecorados[0];
+        return (
+          <>
+            {/* Interruptor general: que se vea claro si se envía o no. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${on ? 'var(--df-brand)' : 'var(--df-border)'}`, background: on ? 'var(--df-brand-subtle)' : 'var(--df-surface-2)', marginBottom: 18 }}>
+              <IconoDF n={on ? 'encendido' : 'apagado'} size={34} title={on ? 'Encendido' : 'Apagado'} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--df-text-strong)' }}>{on ? 'Envío automático encendido' : 'Envío automático apagado'}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', marginTop: 2 }}>{on ? 'Cuando un cliente pregunte por este producto, le llega este mensaje solo.' : 'El asistente responde normal, sin enviar este mensaje.'}</div>
               </div>
-            )}
-            <BloquesBuilder
-              bloques={p.bloquesDecorados}
-              moverBloque={p.moverBloque}
-              textoDraft={df.bloqueTexto}
-              setTextoDraft={df.setBloqueTexto}
-              onAddTexto={p.addBloqueTexto}
-              onAddImagen={p.addBloqueImagen}
-              onAddVideo={p.addBloqueVideo}
-              onAddAudio={p.addBloqueAudio}
-              placeholderTexto="Escribe un bloque de texto · ej: ¡Claro! Te cuento: 3 joggers por $109.900…"
-            />
-          </div>
-          <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
-            Cuando un cliente pregunte por este producto, el asistente enviará estos bloques en orden, como mensajes de WhatsApp.
-            {p.mensajesDecorados.filter((m) => m.activo).length > 1 && ' Como tienes varios mensajes encendidos, a cada cliente le llega uno de ellos al azar.'}
-          </div>
-        </>
-      ),
+              <span
+                onClick={p.toggleMensajeInicial}
+                title="Encender o apagar el envío automático del mensaje inicial"
+                className="df-switch" data-on={on}
+                style={{ width: 46, height: 26, borderRadius: 999, background: on ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', cursor: 'pointer', transition: 'background .2s', flexShrink: 0 }}
+              >
+                <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(15,23,42,.35)' }} />
+              </span>
+            </div>
+
+            <PasoMensaje n={1} titulo="¿Cuándo se envía?" ayuda="Si el primer mensaje del cliente se parece a esta frase, le llega el mensaje inicial completo. Normalmente es el texto del botón de tu anuncio.">
+              <input className="df-input" value={p.disparador || ''} onChange={(e) => p.setDisparador(e.target.value)} placeholder="Ej: ¡Hola! Me interesan los Airpods" style={{ ...inputStyle, fontSize: 13.5 }} />
+            </PasoMensaje>
+
+            <PasoMensaje n={2} titulo="Versiones del mensaje" ayuda="Puedes tener varias versiones (por ejemplo, una con promo y otra sin promo). Enciende una para enviar siempre esa. Si enciendes varias, a cada cliente le llega una al azar.">
+              <MensajesTabs p={p} />
+            </PasoMensaje>
+
+            <PasoMensaje n={3} titulo={<>Qué se envía en <span style={{ color: 'var(--df-brand)' }}>«{nombreVersion(sel?.nombre || 'Mensaje 1')}»</span></>} ayuda="Cada bloque le llega al cliente como un mensaje de WhatsApp aparte, en este orden. Arrastra ⠿ para cambiar el orden." ultimo>
+              <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.55fr) minmax(250px,1fr)', gap: 16, alignItems: 'start' }}>
+                <div style={{ minWidth: 0 }}>
+                  {p.bloquesDecorados.length === 0 && !!(p.mensajeInicial || '').trim() && (
+                    <div style={{ color: 'var(--df-text-body)', fontSize: 12.5, background: 'var(--df-surface-2)', border: '1px dashed var(--df-border-strong)', borderRadius: 8, padding: '9px 12px', marginBottom: 8 }}>
+                      Hoy el asistente usa este texto: “{p.mensajeInicial}”. Agrega bloques y los usará en su lugar.
+                    </div>
+                  )}
+                  <BloquesBuilder
+                    bloques={p.bloquesDecorados}
+                    moverBloque={p.moverBloque}
+                    textoDraft={df.bloqueTexto}
+                    setTextoDraft={df.setBloqueTexto}
+                    onAddTexto={p.addBloqueTexto}
+                    onAddImagen={p.addBloqueImagen}
+                    onAddVideo={p.addBloqueVideo}
+                    onAddAudio={p.addBloqueAudio}
+                    placeholderTexto="Escribe un texto nuevo · ej: ¡Claro! Te cuento: 3 joggers por $109.900…"
+                  />
+                </div>
+                <VistaPreviaWhatsApp disparador={p.disparador || ''} bloques={p.bloquesDecorados} apagado={!on || !sel?.activo} />
+              </div>
+            </PasoMensaje>
+          </>
+        );
+      })(),
     },
     {
       id: 'combos',
       titulo: 'Combos',
+      icono: 'combos',
+      sub: 'Varias unidades por un precio especial, para subir el valor de cada pedido.',
+      color: '#F59E0B',
       body: (
         <>
-          <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Llevar varias unidades por un precio especial.</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
             {p.bundlesDecorados.map((b, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '9px 12px' }}>
@@ -675,6 +697,9 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
     {
       id: 'multimedia',
       titulo: 'Multimedia',
+      icono: 'multimedia',
+      sub: 'Fotos, capturas de clientes felices y videos que el asistente puede enviar.',
+      color: '#EC4899',
       body: (
         <>
           <div style={SUBLABEL}>Fotos principales · las que envía el asistente al ofrecer el producto</div>
@@ -706,9 +731,11 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
     {
       id: 'variantes',
       titulo: 'Variantes',
+      icono: 'variantes',
+      sub: 'Tallas, colores, referencias… El asistente se las ofrece al cliente. Aquí también se conectan con Effi, Dropi y Skydropx.',
+      color: 'var(--df-purple)',
       body: (
         <>
-          <div style={{ color: 'var(--df-text-faint)', fontSize: 12, marginBottom: 10 }}>Color, Talla… El asistente las ofrece al cliente.</div>
           <OpcionesEditor p={p} />
           <BotonGenerarVariantes p={p} df={df} />
           <ConexionesVariantes p={p} df={df} />
@@ -718,6 +745,9 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
     {
       id: 'reglas',
       titulo: 'Reglas y preguntas',
+      icono: 'reglas',
+      sub: 'Lo que el asistente debe saber sí o sí, y cómo responder las preguntas de siempre.',
+      color: '#14B8A6',
       body: (
         <>
           <div style={SUBLABEL}>Reglas para el asistente · agrega todas las que necesites</div>
@@ -757,9 +787,9 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
                     value={f.respuesta}
                     onChange={(v) => f.editar('respuesta', v)}
                     placeholder="Respuesta"
-                    style={{ fontSize: 13, color: 'var(--df-text-muted)', border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', lineHeight: 1.5 }}
+                    style={{ fontSize: 13, color: 'var(--df-text-body)', border: '1px solid transparent', background: 'transparent', borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', lineHeight: 1.5 }}
                     onFocus={(e) => { e.currentTarget.style.background = 'var(--df-bg)'; e.currentTarget.style.borderColor = 'var(--df-border)'; e.currentTarget.style.color = 'var(--df-text-strong)'; }}
-                    onBlur={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = 'var(--df-text-muted)'; }}
+                    onBlur={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = 'var(--df-text-body)'; }}
                   />
                 </div>
                 <span onClick={f.remove} className="df-danger-hover" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, marginTop: 6 }}>✕</span>
@@ -777,11 +807,11 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
   ];
 
   return (
-    <div className="df-pexp" style={{ background: 'var(--df-bg)', borderBottom: '1px solid var(--df-border)', padding: '18px 18px 18px 84px' }}>
+    <div className="df-pexp" style={{ background: 'var(--df-bg)', borderBottom: '1px solid var(--df-border)', padding: '18px 22px 20px' }}>
       {p.bloqueado && (
         <>
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
-            <span style={{ fontSize: 18 }}>🔒</span>
+            <Icono nombre="candado" tam={18} color="var(--df-warning)" />
             <div style={{ fontSize: 13, color: 'var(--df-warning)', lineHeight: 1.5 }}>
               <b>Producto de la biblioteca.</b> Su estructura (mensaje inicial, reglas, descripción, combos, variantes) está <b>bloqueada</b> para proteger la venta con el bot. Solo puedes ajustar el <b>precio</b> y el <b>SKU</b> de tu tienda.
             </div>
@@ -807,22 +837,23 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
       {grupos.map((g) => {
         const key = `${p.id}::${g.id}`;
         const abierto = vista === 'normal' || !!openGroups[key];
+        // Cada sección es una tarjeta con su color, icono, título y una explicación legible.
+        const cabecera = (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ width: 40, height: 40, borderRadius: 11, display: 'grid', placeItems: 'center', flexShrink: 0, background: `color-mix(in srgb, ${g.color} 12%, transparent)`, border: `1px solid color-mix(in srgb, ${g.color} 30%, transparent)` }}><IconoDF n={g.icono} size={24} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--df-text-strong)', letterSpacing: '-0.01em' }}>{g.titulo}</div>
+              <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginTop: 2, lineHeight: 1.45 }}>{g.sub}</div>
+            </div>
+            {vista === 'agrupada' && <span style={{ color: 'var(--df-text-muted)', fontSize: 14, display: 'inline-block', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>}
+          </div>
+        );
         return (
-          <div key={g.id} style={{ marginBottom: vista === 'agrupada' ? 8 : 18 }}>
-            {vista === 'agrupada' ? (
-              <div
-                onClick={() => toggleGroup(key)}
-                className="df-row-hover"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '11px 14px', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10 }}
-              >
-                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--df-text)', letterSpacing: '-0.01em' }}>{g.titulo}</span>
-                <div style={{ flex: 1 }} />
-                <span style={{ color: 'var(--df-text-faint)', fontSize: 13, display: 'inline-block', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
-              </div>
-            ) : (
-              <div style={TITULO_NEGRO}>{g.titulo}</div>
-            )}
-            {abierto && <div style={{ paddingTop: vista === 'agrupada' ? 12 : 0 }}>{g.body}</div>}
+          <div key={g.id} style={{ marginBottom: 14, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderLeft: `4px solid ${g.color}`, borderRadius: 14, overflow: 'visible' }}>
+            {vista === 'agrupada'
+              ? <div onClick={() => toggleGroup(key)} className="df-row-hover" style={{ cursor: 'pointer', padding: '14px 16px', borderRadius: 14 }}>{cabecera}</div>
+              : <div style={{ padding: '16px 18px 0' }}>{cabecera}</div>}
+            {abierto && <div style={{ padding: '16px 18px 18px', marginTop: vista === 'agrupada' ? 0 : 4, borderTop: vista === 'agrupada' ? '1px solid var(--df-border)' : 'none' }}>{g.body}</div>}
           </div>
         );
       })}
@@ -844,7 +875,7 @@ function ProductoEditor({ p, df, vista, openGroups, toggleGroup }: {
           ⧉ Duplicar producto
         </button>
         <div style={{ flex: 1 }} />
-        {p.saved && <span style={{ color: 'var(--df-brand)', fontSize: 13, fontWeight: 600 }}>✓ Producto guardado. El asistente ya lo ofrece así.</span>}
+        {p.saved && <span style={{ color: 'var(--df-brand)', fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 7 }}><IconoDF n="guardado" size={20} />Producto guardado. El asistente ya lo ofrece así.</span>}
         <button onClick={p.save} className="df-btn-primary" style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Guardar producto</button>
       </div>
     </div>
@@ -875,7 +906,7 @@ export function Productos({ df }: { df: DealFlowState }) {
     <section data-screen-label="Productos">
       {duplicados.length > 0 && (
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-          <span style={{ fontSize: 18 }}>⚠️</span>
+          <Icono nombre="alerta" tam={18} color="var(--df-warning)" />
           <div style={{ fontSize: 13, color: 'var(--df-warning)', lineHeight: 1.5 }}>
             <b>Hay productos duplicados</b> (mismo disparador o nombre). El bot puede enviar la versión vieja/importada en vez de la que editaste. Deja <b>solo uno</b> de cada grupo y elimina el repetido:
             <div style={{ marginTop: 4 }}>{duplicados.map((g, i) => <div key={i}>• {g.join('  ·  ')}</div>)}</div>
@@ -921,7 +952,7 @@ export function Productos({ df }: { df: DealFlowState }) {
                 onClick={() => df.setNewProdTipo(t)}
                 style={{ background: df.newProdTipo === t ? 'var(--df-brand)' : 'var(--df-surface)', color: df.newProdTipo === t ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '8px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
               >
-                {t === 'producto' ? '📦 Producto' : '🧩 Servicio'}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><IconoDF n={t} size={20} blanco={df.newProdTipo === t} />{t === 'producto' ? 'Producto' : 'Servicio'}</span>
               </button>
             ))}
           </div>
@@ -1011,8 +1042,8 @@ export function Productos({ df }: { df: DealFlowState }) {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
                   {p.nombre}
-                  {p.tipo === 'servicio' && <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--df-indigo)', background: 'var(--df-indigo-subtle)', borderRadius: 5, padding: '1px 6px' }}>🧩 SERVICIO</span>}
-                  {p.bloqueado && <span title="Producto de la biblioteca: estructura bloqueada" style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 5, padding: '1px 6px' }}>🔒 BIBLIOTECA</span>}
+                  {p.tipo === 'servicio' && <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--df-indigo)', background: 'var(--df-indigo-subtle)', borderRadius: 5, padding: '1px 6px 1px 2px', display: 'inline-flex', alignItems: 'center', gap: 4 }}><IconoDF n="servicio" size={15} />SERVICIO</span>}
+                  {p.bloqueado && <span title="Producto de la biblioteca: estructura bloqueada" style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 5, padding: '1px 6px' }}><IcoTexto n="candado" tam={11} />BIBLIOTECA</span>}
                 </div>
                 <div style={{ color: 'var(--df-text-muted)', fontSize: 12, marginTop: 1 }}>{p.precioFmt}{p.tipo === 'servicio' ? (p.duracion ? ' · ' + p.duracion : '') : ' · ' + p.variantesLabel}</div>
               </div>
@@ -1039,66 +1070,128 @@ function MensajesTabs({ p }: { p: DecoratedProduct }) {
   const [borrar, setBorrar] = useState<string | null>(null);
   const activos = p.mensajesDecorados.filter((m) => m.activo).length;
   const sel = p.mensajesDecorados.find((m) => m.seleccionado) || p.mensajesDecorados[0];
-  const chip = (on: boolean): CSSProperties => ({
-    display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600,
-    border: '1.5px solid ' + (on ? 'var(--df-brand)' : 'var(--df-border)'), background: on ? 'var(--df-brand-subtle, rgba(16,185,129,.08))' : 'var(--df-surface)', color: on ? 'var(--df-text-strong)' : 'var(--df-text-secondary)',
+  const tarjeta = (selec: boolean, activo: boolean): CSSProperties => ({
+    display: 'flex', flexDirection: 'column', gap: 6, minWidth: 150, padding: '10px 12px', borderRadius: 12, cursor: 'pointer', position: 'relative',
+    border: `2px solid ${selec ? 'var(--df-brand)' : 'var(--df-border)'}`,
+    background: selec ? 'var(--df-brand-subtle)' : 'var(--df-bg)',
+    opacity: activo || selec ? 1 : 0.75,
+    boxShadow: selec ? '0 6px 18px -10px var(--df-brand)' : 'none',
   });
-  const btn: CSSProperties = { padding: '7px 11px', borderRadius: 10, border: '1px dashed var(--df-border-strong)', background: 'var(--df-surface)', color: 'var(--df-text-secondary)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
+  const btnNuevo: CSSProperties = { minWidth: 120, minHeight: 66, padding: '10px 12px', borderRadius: 12, border: '1.5px dashed var(--df-border-strong)', background: 'transparent', color: 'var(--df-text-body)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' };
+  const accion: CSSProperties = { cursor: 'pointer', fontWeight: 700, fontSize: 12.5, background: 'none', border: 'none', padding: 0, fontFamily: 'inherit' };
   return (
-    <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: 12, marginBottom: 14, background: 'var(--df-bg)' }}>
+    <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Mensajes iniciales</span>
-        <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '2px 9px', background: activos > 1 ? 'rgba(99,102,241,.12)' : 'var(--df-surface)', color: activos > 1 ? '#6366F1' : 'var(--df-text-faint)', border: '1px solid ' + (activos > 1 ? 'rgba(99,102,241,.35)' : 'var(--df-border)') }}>
-          {activos > 1 ? `🎲 Aleatorio entre ${activos}` : '1 encendido'}
+        <span style={{ fontSize: 12, fontWeight: 800, borderRadius: 999, padding: '3px 10px', background: activos > 1 ? 'rgba(129,140,248,.16)' : activos === 1 ? 'var(--df-brand-subtle)' : 'var(--df-danger-subtle)', color: activos > 1 ? '#A5B4FC' : activos === 1 ? 'var(--df-brand)' : 'var(--df-danger)', border: '1px solid ' + (activos > 1 ? 'rgba(129,140,248,.4)' : activos === 1 ? 'var(--df-brand)' : 'var(--df-danger-border)') }}>
+          {activos > 1 ? <><IcoTexto n="repetido" tam={12} />{`Se envía una al azar entre ${activos}`}</> : activos === 1 ? '✓ Se envía siempre la versión encendida' : <><IcoTexto n="alerta" tam={12} />Ninguna versión encendida: no se envía nada</>}
         </span>
       </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
         {p.mensajesDecorados.map((m) => (
-          <div key={m.id} onClick={m.elegir} style={chip(m.seleccionado)} title={m.seleccionado ? 'Editando este mensaje' : 'Editar este mensaje'}>
-            <span
-              onClick={(e) => { e.stopPropagation(); m.toggle(); }}
-              title={m.activo ? 'Encendido: se puede enviar. Toca para apagarlo.' : 'Apagado: no se envía. Toca para encenderlo.'}
-              className="df-switch" data-on={m.activo}
-              style={{ width: 30, height: 17, borderRadius: 999, background: m.activo ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', flexShrink: 0, transition: 'background .2s' }}
-            >
-              <span style={{ position: 'absolute', top: 2, left: m.activo ? 15 : 2, width: 13, height: 13, borderRadius: '50%', background: '#fff', transition: 'left .2s' }} />
-            </span>
-            {renombrando === m.id ? (
-              <input
-                autoFocus
-                defaultValue={m.nombre}
-                onClick={(e) => e.stopPropagation()}
-                onBlur={(e) => { m.renombrar(e.target.value.trim() || m.nombre); setRenombrando(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenombrando(null); }}
-                style={{ width: 120, border: '1px solid var(--df-border)', borderRadius: 6, padding: '2px 6px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text-body)' }}
-              />
-            ) : (
-              <span onDoubleClick={(e) => { e.stopPropagation(); setRenombrando(m.id); }} style={{ opacity: m.activo ? 1 : 0.6 }}>{m.nombre}</span>
-            )}
-            <span style={{ fontSize: 11, color: 'var(--df-text-faint)', fontWeight: 500 }}>{m.piezas ? `${m.piezas} bloque${m.piezas === 1 ? '' : 's'}` : 'vacío'}</span>
+          <div key={m.id} onClick={m.elegir} style={tarjeta(m.seleccionado, m.activo)} title={m.seleccionado ? 'Estás editando esta versión' : 'Toca para editar esta versión'}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {renombrando === m.id ? (
+                <input
+                  autoFocus
+                  defaultValue={nombreVersion(m.nombre)}
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={(e) => { m.renombrar(e.target.value.trim() || m.nombre); setRenombrando(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenombrando(null); }}
+                  style={{ width: 120, border: '1px solid var(--df-border)', borderRadius: 6, padding: '3px 7px', fontFamily: 'inherit', fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text-strong)' }}
+                />
+              ) : (
+                <span onDoubleClick={(e) => { e.stopPropagation(); setRenombrando(m.id); }} style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--df-text-strong)', flex: 1 }}>{nombreVersion(m.nombre)}</span>
+              )}
+              {m.seleccionado && <span style={{ fontSize: 10.5, fontWeight: 800, color: '#fff', background: 'var(--df-brand)', borderRadius: 999, padding: '2px 7px', whiteSpace: 'nowrap' }}><IcoTexto n="editar" tam={10} />Editando</span>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span
+                onClick={(e) => { e.stopPropagation(); m.toggle(); }}
+                title={m.activo ? 'Encendida: se puede enviar. Toca para apagarla.' : 'Apagada: no se envía. Toca para encenderla.'}
+                className="df-switch" data-on={m.activo}
+                style={{ width: 32, height: 18, borderRadius: 999, background: m.activo ? 'var(--df-brand)' : 'var(--df-border-strong)', position: 'relative', flexShrink: 0, transition: 'background .2s' }}
+              >
+                <span style={{ position: 'absolute', top: 2, left: m.activo ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', transition: 'left .2s' }} />
+              </span>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: m.activo ? 'var(--df-brand)' : 'var(--df-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 5 }}><IconoDF n={m.activo ? 'encendido' : 'apagado'} size={16} />{m.activo ? 'Encendida' : 'Apagada'}</span>
+              <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>· {m.piezas ? `${m.piezas} bloque${m.piezas === 1 ? '' : 's'}` : 'vacía'}</span>
+            </div>
           </div>
         ))}
-        <button onClick={() => p.nuevoMensaje(false)} style={btn}>+ Nuevo mensaje</button>
-        <button onClick={() => p.nuevoMensaje(true)} style={btn} title="Crea uno nuevo copiando el que estás editando">⧉ Duplicar</button>
+        <button onClick={() => p.nuevoMensaje(false)} style={btnNuevo}>＋ Nueva versión<div style={{ fontWeight: 500, fontSize: 11, color: 'var(--df-text-muted)', marginTop: 2 }}>empieza vacía</div></button>
+        <button onClick={() => p.nuevoMensaje(true)} style={btnNuevo} title="Crea una versión nueva copiando la que estás editando">⧉ Duplicar<div style={{ fontWeight: 500, fontSize: 11, color: 'var(--df-text-muted)', marginTop: 2 }}>copia la que editas</div></button>
       </div>
       {sel && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, fontSize: 12, color: 'var(--df-text-faint)', flexWrap: 'wrap' }}>
-          <span>Editando <b style={{ color: 'var(--df-text-strong)' }}>{sel.nombre}</b>{!sel.activo && ' (apagado: no se envía hasta que lo enciendas)'}</span>
-          <span onClick={() => setRenombrando(sel.id)} style={{ cursor: 'pointer', color: 'var(--df-brand)', fontWeight: 600 }}>Renombrar</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10, fontSize: 12.5, color: 'var(--df-text-body)', flexWrap: 'wrap' }}>
+          {!sel.activo && <span style={{ color: 'var(--df-warning)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><IconoDF n="apagado" size={18} />«{nombreVersion(sel.nombre)}» está apagada: no se envía hasta que la enciendas.</span>}
+          <button onClick={() => setRenombrando(sel.id)} style={{ ...accion, color: 'var(--df-brand)' }}><IcoTexto n="editar" tam={13} />Renombrar «{nombreVersion(sel.nombre)}»</button>
           {p.mensajesDecorados.length > 1 && (borrar === sel.id ? (
             <span>
-              ¿Eliminar “{sel.nombre}”?{' '}
-              <span onClick={() => { sel.eliminar(); setBorrar(null); }} style={{ cursor: 'pointer', color: 'var(--df-danger)', fontWeight: 700 }}>Sí, eliminar</span>{' · '}
-              <span onClick={() => setBorrar(null)} style={{ cursor: 'pointer', fontWeight: 600 }}>Cancelar</span>
+              ¿Eliminar «{nombreVersion(sel.nombre)}»?{' '}
+              <button onClick={() => { sel.eliminar(); setBorrar(null); }} style={{ ...accion, color: 'var(--df-danger)' }}>Sí, eliminar</button>{' · '}
+              <button onClick={() => setBorrar(null)} style={{ ...accion, color: 'var(--df-text-body)' }}>Cancelar</button>
             </span>
           ) : (
-            <span onClick={() => setBorrar(sel.id)} style={{ cursor: 'pointer', color: 'var(--df-danger)', fontWeight: 600 }}>Eliminar</span>
+            <button onClick={() => setBorrar(sel.id)} style={{ ...accion, color: 'var(--df-danger)' }}><IcoTexto n="eliminar" tam={13} />Eliminar esta versión</button>
           ))}
         </div>
       )}
-      {p.mensajeAviso && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--df-warning)' }}>{p.mensajeAviso}</div>}
-      <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--df-text-faint)', lineHeight: 1.5 }}>
-        Enciende uno para enviar siempre ese. Si enciendes varios, cada cliente recibe uno de ellos al azar. Doble clic en el nombre para renombrarlo.
+      {p.mensajeAviso && <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--df-warning)' }}>{p.mensajeAviso}</div>}
+    </div>
+  );
+}
+
+/** Un paso numerado dentro del mensaje inicial (1 · cuándo, 2 · versiones, 3 · qué se envía). */
+function PasoMensaje({ n, titulo, ayuda, children, ultimo }: { n: number; titulo: ReactNode; ayuda: string; children: ReactNode; ultimo?: boolean }) {
+  return (
+    <div style={{ display: 'flex', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+        <span style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--df-brand)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13.5 }}>{n}</span>
+        {!ultimo && <span style={{ flex: 1, width: 2, background: 'var(--df-border)', marginTop: 4 }} />}
+      </div>
+      <div style={{ flex: 1, minWidth: 0, paddingBottom: ultimo ? 0 : 20 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--df-text-strong)', marginTop: 3 }}>{titulo}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', margin: '3px 0 10px', lineHeight: 1.5 }}>{ayuda}</div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Vista previa: así le llega el mensaje inicial al cliente en WhatsApp. */
+function VistaPreviaWhatsApp({ disparador, bloques, apagado }: { disparador: string; bloques: { tipo: string; valor?: string; mediaLista: string[] }[]; apagado: boolean }) {
+  const burbuja = (propia: boolean): CSSProperties => ({
+    alignSelf: propia ? 'flex-end' : 'flex-start', maxWidth: '86%', background: propia ? '#005C4B' : '#202C33', color: '#E9EDEF',
+    borderRadius: propia ? '10px 2px 10px 10px' : '2px 10px 10px 10px', padding: '6px 9px', fontSize: 12.5, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word', boxShadow: '0 1px 1px rgba(0,0,0,.25)',
+  });
+  return (
+    <div style={{ position: 'sticky', top: 12, borderRadius: 14, overflow: 'hidden', border: '1px solid var(--df-border)' }}>
+      <div style={{ background: '#202C33', color: '#E9EDEF', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span style={{ width: 28, height: 28, borderRadius: '50%', background: '#00A884', display: 'grid', placeItems: 'center', fontSize: 14 }}><Icono nombre="usuario" tam={15} color="#fff" /></span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 12.5 }}>Así le llega al cliente</div>
+          <div style={{ fontSize: 10.5, color: '#8696A0' }}>Vista previa en WhatsApp</div>
+        </div>
+      </div>
+      <div style={{ background: '#0B141A', padding: 12, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 520, overflowY: 'auto', minHeight: 160 }}>
+        <div style={burbuja(false)}>{disparador.trim() || 'Hola, me interesa este producto'}</div>
+        {apagado && <div style={{ alignSelf: 'center', fontSize: 11, color: '#FBBF24', background: 'rgba(0,0,0,.4)', borderRadius: 8, padding: '4px 9px', margin: '4px 0' }}><IcoTexto n="pausa" tam={11} />Esta versión está apagada: hoy no se envía</div>}
+        {!bloques.length && <div style={{ alignSelf: 'center', fontSize: 11.5, color: '#8696A0', textAlign: 'center', padding: '14px 6px' }}>Agrega bloques a la izquierda y aquí verás cómo le llegan al cliente.</div>}
+        {bloques.map((b, i) => {
+          if (b.tipo === 'texto') return b.valor?.trim() ? <div key={i} style={burbuja(true)}>{b.valor}</div> : null;
+          if (!b.mediaLista.length) return null;
+          if (b.tipo === 'imagen') return (
+            <div key={i} style={{ ...burbuja(true), padding: 3, display: 'grid', gridTemplateColumns: b.mediaLista.length > 1 ? '1fr 1fr' : '1fr', gap: 3 }}>
+              {b.mediaLista.slice(0, 4).map((src, k) => <img key={k} src={src} alt="" style={{ width: '100%', height: b.mediaLista.length > 1 ? 80 : 150, objectFit: 'cover', borderRadius: 7, display: 'block' }} />)}
+            </div>
+          );
+          return (
+            <div key={i} style={{ ...burbuja(true), display: 'flex', alignItems: 'center', gap: 7 }}>
+              <Icono nombre={b.tipo === 'video' ? 'video' : 'microfono'} tam={16} />
+              <span>{b.tipo === 'video' ? `Video${b.mediaLista.length > 1 ? ` ×${b.mediaLista.length}` : ''}` : `Audio${b.mediaLista.length > 1 ? ` ×${b.mediaLista.length}` : ''}`}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1123,7 +1216,7 @@ function PrecioPromo({ p }: { p: { precio: number; precioPromo?: number; setPrec
   return (
     <div style={{ maxWidth: 560, marginBottom: 14, border: `1px solid ${activa ? 'var(--df-brand)' : 'var(--df-border)'}`, background: activa ? 'var(--df-brand-subtle, var(--df-bg))' : 'var(--df-bg)', borderRadius: 10, padding: '10px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, flex: '1 1 200px' }}>🏷️ Precio de promoción <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· por unidad, opcional</span></div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}><IconoDF n="promo" size={22} />Precio de promoción <span style={{ fontWeight: 400, color: 'var(--df-text-faint)' }}>· por unidad, opcional</span></div>
         <input className="df-input" value={promo ? String(promo) : ''} onChange={(e) => p.setPrecioPromo(e.target.value)} placeholder="Sin promo" style={{ width: 140, border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 10px', fontFamily: "'JetBrains Mono',monospace", fontSize: 13, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 6, lineHeight: 1.5 }}>
@@ -1140,4 +1233,9 @@ function PrecioPromo({ p }: { p: { precio: number; precioPromo?: number; setPrec
       )}
     </div>
   );
+}
+
+/** Las versiones viejas se llamaban «Mensaje 1, 2…» y se confundían con los bloques: se muestran como «Versión 1, 2…». */
+function nombreVersion(nombre: string): string {
+  return String(nombre || '').replace(/^Mensaje (\d+)$/, 'Versión $1');
 }

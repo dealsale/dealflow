@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto, type NombreIcono } from './Icono';
 import { useRecordado } from '../lib/rutas';
 import { apiAnalisis, type Analisis, type FiltrosAnalisis } from '../lib/api';
 import { fmt } from '../lib/format';
@@ -11,10 +12,10 @@ const COLOR_CANAL: Record<string, string> = { whatsapp: '#10B981', messenger: '#
 const COLOR_ESTADO: Record<string, string> = { Nuevo: '#3B82F6', Confirmado: '#6366F1', 'Guía generada': '#8B5CF6', 'En tránsito': '#F59E0B', 'En reparto': '#F97316', 'En oficina': '#DB2777', Novedad: '#EF4444', Entregado: '#10B981', Devuelto: '#DC2626', Cancelado: '#94A3B8' };
 const money = (n: number) => (Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : Math.abs(n) >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`);
 
-function Kpi({ label, valor, sub, color }: { label: string; valor: string; sub?: string; color?: string }) {
+function Kpi({ label, icono, valor, sub, color }: { label: string; icono?: NombreIcono; valor: string; sub?: string; color?: string }) {
   return (
     <div style={{ ...card, padding: 14 }}>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{label}</div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{icono && <IcoTexto n={icono} tam={13} />}{label}</div>
       <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', color: color || 'var(--df-text)' }}>{valor}</div>
       {sub && <div style={{ color: 'var(--df-text-faint)', fontSize: 11.5, marginTop: 2 }}>{sub}</div>}
     </div>
@@ -138,8 +139,8 @@ export function AnalisisVentas({ desde, hasta }: { desde: string; hasta: string 
       {/* Barra de filtros */}
       <div style={{ ...card, marginBottom: 14, padding: 14 }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-muted)' }}>🔎 Filtrar:</span>
-          {sel('origen', 'Todo origen', [{ value: 'anuncio', label: '📢 Desde anuncios' }, { value: 'organico', label: '🌱 Orgánico' }], 150)}
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--df-text-muted)' }}><IcoTexto n="buscar" tam={13} />Filtrar:</span>
+          {sel('origen', 'Todo origen', [{ value: 'anuncio', label: 'Desde anuncios' }, { value: 'organico', label: 'Orgánico' }], 150)}
           {sel('canal', 'Todos los canales', (o?.canales || []).map((c) => ({ value: c, label: NOMBRE_CANAL[c] || c })), 160)}
           {sel('producto', 'Todos los productos', (o?.productos || []).map((p) => ({ value: p.id, label: p.nombre })), 190)}
           {(o?.campanas.length || 0) > 0 && sel('campana', 'Todas las campañas', (o?.campanas || []).map((c) => ({ value: c.id, label: c.nombre })), 190)}
@@ -166,14 +167,14 @@ export function AnalisisVentas({ desde, hasta }: { desde: string; hasta: string 
         <>
           {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 14 }}>
-            <Kpi label="💰 Ventas" valor={fmt(k!.ventas)} sub={`${k!.unidades} unidades · ticket ${fmt(k!.ticket)}`} color="var(--df-brand-dark)" />
-            <Kpi label="🛒 Pedidos" valor={String(k!.pedidos)} sub={`${k!.cancelados} cancelados`} color="var(--df-warning-mid)" />
-            <Kpi label="💬 Chats" valor={String(k!.chats)} sub={`${k!.chatsAnuncio} de anuncios · ${k!.respondieron} respondieron`} />
-            <Kpi label="📈 Conversión" valor={`${k!.conversion}%`} sub="pedidos ÷ chats" />
-            <Kpi label="✅ Entregados" valor={String(k!.entregados)} sub={`${fmt(k!.ventasEntregadas)} · tasa ${k!.tasaEntrega || 0}%`} color="var(--df-success)" />
-            <Kpi label="↩️ Devueltos" valor={String(k!.devueltos)} sub={`${k!.despachados} despachados`} color={k!.devueltos ? 'var(--df-danger)' : undefined} />
-            {k!.gasto > 0 && <Kpi label="💸 Inversión Meta" valor={fmt(k!.gasto)} sub={`${fmt(k!.costoChat)} por chat · ${fmt(k!.costoPedido)} por pedido`} />}
-            {k!.gasto > 0 && <Kpi label="🎯 ROAS" valor={`${k!.roas}x`} sub="ventas ÷ inversión" color={k!.roas >= 3 ? 'var(--df-success)' : k!.roas >= 1.5 ? 'var(--df-warning-mid)' : 'var(--df-danger)'} />}
+            <Kpi icono="dinero" label="Ventas" valor={fmt(k!.ventas)} sub={`${k!.unidades} unidades · ticket ${fmt(k!.ticket)}`} color="var(--df-brand-dark)" />
+            <Kpi icono="carrito" label="Pedidos" valor={String(k!.pedidos)} sub={`${k!.cancelados} cancelados`} color="var(--df-warning-mid)" />
+            <Kpi icono="chat" label="Chats" valor={String(k!.chats)} sub={`${k!.chatsAnuncio} de anuncios · ${k!.respondieron} respondieron`} />
+            <Kpi icono="estadisticas" label="Conversión" valor={`${k!.conversion}%`} sub="pedidos ÷ chats" />
+            <Kpi icono="entregado" label="Entregados" valor={String(k!.entregados)} sub={`${fmt(k!.ventasEntregadas)} · tasa ${k!.tasaEntrega || 0}%`} color="var(--df-success)" />
+            <Kpi icono="devolver" label="Devueltos" valor={String(k!.devueltos)} sub={`${k!.despachados} despachados`} color={k!.devueltos ? 'var(--df-danger)' : undefined} />
+            {k!.gasto > 0 && <Kpi icono="pago" label="Inversión Meta" valor={fmt(k!.gasto)} sub={`${fmt(k!.costoChat)} por chat · ${fmt(k!.costoPedido)} por pedido`} />}
+            {k!.gasto > 0 && <Kpi icono="objetivo" label="ROAS" valor={`${k!.roas}x`} sub="ventas ÷ inversión" color={k!.roas >= 3 ? 'var(--df-success)' : k!.roas >= 1.5 ? 'var(--df-warning-mid)' : 'var(--df-danger)'} />}
           </div>
 
           <div style={{ ...card, marginBottom: 14 }}>
@@ -195,12 +196,12 @@ export function AnalisisVentas({ desde, hasta }: { desde: string; hasta: string 
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, marginBottom: 14 }}>
             <div style={card}>
-              <div style={titulo}>🏷️ Productos más vendidos</div>
+              <div style={titulo}><IcoTexto n="etiqueta" tam={15} degradado />Productos más vendidos</div>
               <Barras filas={a.porProducto.slice(0, 10).map((p) => ({ k: p.id || p.nombre, label: p.nombre, valor: p.ventas, texto: fmt(p.ventas), sub: `${p.unidades} u.` }))}
                 onClick={(id) => { if (o?.productos.some((p) => p.id === id)) poner('producto', id); }} />
             </div>
             <div style={card}>
-              <div style={titulo}>📍 Ciudades</div>
+              <div style={titulo}><IcoTexto n="ubicacion" tam={15} degradado />Ciudades</div>
               <Barras filas={a.porCiudad.slice(0, 10).map((c) => ({ k: c.ciudad, label: c.ciudad, valor: c.pedidos, texto: `${c.pedidos} ped.`, sub: `${fmt(c.ventas)}${c.devueltos ? ` · ${c.devueltos} dev.` : ''}` }))} color={PALETA[1]}
                 onClick={(c) => c !== '—' && poner('ciudad', c)} />
             </div>
@@ -226,11 +227,11 @@ export function AnalisisVentas({ desde, hasta }: { desde: string; hasta: string 
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
             <div style={card}>
-              <div style={titulo}>🕐 Pedidos por hora del día</div>
+              <div style={titulo}><IcoTexto n="reloj" tam={15} degradado />Pedidos por hora del día</div>
               <Columnas datos={a.porHora.map((h) => ({ label: `${h.h}h`, valor: h.pedidos, extra: `${h.chats} chats` }))} color={PALETA[3]} etiqueta="pedidos" />
             </div>
             <div style={card}>
-              <div style={titulo}>📅 Ventas por día de la semana</div>
+              <div style={titulo}><IcoTexto n="calendario" tam={15} degradado />Ventas por día de la semana</div>
               <Columnas datos={a.porSemana.map((d) => ({ label: d.dia, valor: d.pedidos, extra: fmt(d.ventas) }))} color={PALETA[0]} etiqueta="pedidos" />
             </div>
           </div>

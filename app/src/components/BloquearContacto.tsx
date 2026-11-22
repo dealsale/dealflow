@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import { apiLeadBloqueo, apiLeadBloquear, apiLeadDesbloquear, type EstadoBloqueo } from '../lib/api';
 import { confirmar, notificar } from './dialogs';
 
@@ -41,14 +42,14 @@ export function BloquearContacto({ leadId, compacto = false }: { leadId: string;
   if (compacto) {
     return (
       <div onClick={() => !ocupado && void alternar()} title={titulo} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: e.bloqueado ? '#F87171' : 'var(--df-text-faint)', fontSize: 17 }}>
-        ⛔
+        <Icono nombre="bloquear" tam={18} />
       </div>
     );
   }
   return (
     <button onClick={() => void alternar()} disabled={ocupado} title={titulo}
       style={{ background: e.bloqueado ? 'var(--df-danger)' : 'var(--df-surface)', color: e.bloqueado ? '#fff' : 'var(--df-danger)', border: `1px solid ${e.bloqueado ? 'var(--df-danger)' : 'var(--df-danger-border)'}`, borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap', opacity: ocupado ? 0.6 : 1 }}>
-      {e.bloqueado ? '⛔ Bloqueado' : '⛔ Bloquear'}
+      <IcoTexto n="bloquear" tam={13} />{e.bloqueado ? 'Bloqueado' : 'Bloquear'}
     </button>
   );
 }

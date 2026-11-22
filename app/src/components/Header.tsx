@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icono } from './Icono';
 import { BotonSoporte } from './BotonSoporte';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { NotificationsMenu } from './NotificationsMenu';
@@ -52,7 +53,7 @@ function StoreSwitcher({ df }: { df: DealFlowState }) {
                     className="df-danger-hover"
                     title="Eliminar esta tienda"
                     style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 3 }}
-                  >🗑</span>
+                  ><Icono nombre="eliminar" tam={15} /></span>
                 )}
               </div>
             ))}

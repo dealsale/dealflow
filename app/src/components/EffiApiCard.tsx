@@ -1,4 +1,5 @@
 import { VerificacionEffi } from './VerificacionEffi';
+import { Icono, IcoTexto, type NombreIcono } from './Icono';
 import { Dropdown } from './Dropdown';
 import { useEffect, useMemo, useState } from 'react';
 import { IntegracionFila, LogoInteg } from './IntegracionFila';
@@ -70,14 +71,14 @@ function RemitentesConvenio({ remitentes, alCambiar, version, alRenombrar }: { r
       <p style={ayuda}>El remitente de la guía es a donde la transportadora <b>devuelve</b> el paquete. Por eso cada proveedor sale desde SU bodega: si un pedido de un proveedor sale con la bodega de otro, la devolución le llega al otro. Ponle nombre a cada convenio y fija su bodega.</p>
       {faltan.length > 0 && (
         <div style={{ background: 'rgba(245, 158, 11, .12)', border: '1px solid var(--df-warning, #F59E0B)', borderRadius: 8, padding: '8px 10px', fontSize: 12.5, lineHeight: 1.45, marginBottom: 10 }}>
-          ⚠️ Falta la bodega de <b>{faltan.map((cv) => (/^Convenio /.test(cv.nombre) ? `convenio ${cv.id}` : cv.nombre)).join(', ')}</b>.{' '}
+          <IcoTexto n="alerta" tam={13} />Falta la bodega de <b>{faltan.map((cv) => (/^Convenio /.test(cv.nombre) ? `convenio ${cv.id}` : cv.nombre)).join(', ')}</b>.{' '}
           {convenios.length === 1 ? 'Mientras sea tu único proveedor (y no despaches mercancía propia), sus guías salen desde tu remitente por defecto.' : datos.guiaAutomatica ? 'Sus pedidos no tendrán guía automática hasta que la fijes (la eliges en el pedido).' : 'Sus pedidos te pedirán elegirla al crear la guía.'}
         </div>
       )}
       {malas.length > 0 && (
         <div style={{ background: 'rgba(220, 38, 38, .08)', border: '1px solid #DC2626', borderRadius: 8, padding: '8px 10px', fontSize: 12.5, lineHeight: 1.45, marginBottom: 10 }}>
           <button onClick={() => setVerMalas((v) => !v)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, color: '#B91C1C', textAlign: 'left' }}>
-            {verMalas ? '▾' : '▸'} 🚨 {malas.length} guía{malas.length === 1 ? '' : 's'} de los últimos 60 días salieron desde la bodega de otro proveedor
+            {verMalas ? '▾' : '▸'} <IcoTexto n="alerta" tam={13} />{malas.length} guía{malas.length === 1 ? '' : 's'} de los últimos 60 días salieron desde la bodega de otro proveedor
           </button>
           {verMalas && (
             <>
@@ -116,8 +117,8 @@ function RemitentesConvenio({ remitentes, alCambiar, version, alRenombrar }: { r
               <div style={{ fontSize: 11.5, marginTop: 5, lineHeight: 1.45 }}>
                 {fija ? <span style={{ color: 'var(--df-brand-dark)', fontWeight: 600 }}>✓ Los pedidos de {nombreProv} salen desde esta bodega.</span>
                   : marcadas.length === 1 ? <span style={{ color: 'var(--df-brand-dark)', fontWeight: 600 }}>✓ Salen desde {nombreRem(marcadas[0])} (la marcaste como de {nombreProv}).</span>
-                  : marcadas.length > 1 ? <span style={{ color: 'var(--df-warning, #B45309)', fontWeight: 600 }}>⚠️ Marcaste varias bodegas como de {nombreProv}: fija cuál es.</span>
-                  : <span style={{ color: 'var(--df-warning, #B45309)', fontWeight: 600 }}>⚠️ Sin bodega: elige la de {nombreProv}.</span>}
+                  : marcadas.length > 1 ? <span style={{ color: 'var(--df-warning, #B45309)', fontWeight: 600 }}><IcoTexto n="alerta" tam={13} />Marcaste varias bodegas como de {nombreProv}: fija cuál es.</span>
+                  : <span style={{ color: 'var(--df-warning, #B45309)', fontWeight: 600 }}><IcoTexto n="alerta" tam={13} />Sin bodega: elige la de {nombreProv}.</span>}
                 {!fija && pistas.length > 0 && (
                   <div style={{ marginTop: 4, color: 'var(--df-text-muted)' }}>
                     Sus guías han salido desde:{' '}
@@ -160,14 +161,14 @@ function NombresBodegas({ remitentes, alCambiar }: { remitentes: { id: string; n
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--df-border)', paddingTop: 12 }}>
       <button onClick={() => setAbierto((a) => !a)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, color: 'var(--df-text)' }}>{abierto ? '▾' : '▸'} Tus remitentes: bodega y proveedor {sinNombre ? `(${sinNombre} sin identificar)` : ''}</button>
-      <p style={ayuda}>Ponle nombre a cada bodega y, si es de un proveedor, escribe su nombre igual que el del convenio: así sus pedidos salen solos desde ahí (📌 bodega · 🏭 proveedor). Déjalo vacío si la bodega es tuya.</p>
+      <p style={ayuda}>Ponle nombre a cada bodega y, si es de un proveedor, escribe su nombre igual que el del convenio: así sus pedidos salen solos desde ahí (bodega · proveedor). Déjalo vacío si la bodega es tuya.</p>
       {abierto && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <datalist id="df-proveedores-effi">{provs.map((p) => <option key={p} value={p} />)}</datalist>
           {remitentes.map((r) => (
             <div key={r.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 8, alignItems: 'center', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 9px' }}>
               <div style={{ fontSize: 12, minWidth: 0 }}><b>#{r.id}</b> · {[r.ciudad, r.direccion].filter(Boolean).join(' · ') || 'Sin dirección en Effi'}
-                {!!r.productos?.length && <div style={{ fontSize: 11.5, color: 'var(--df-brand-dark)' }}>📦 {r.productos.slice(0, 3).join(', ')}{r.productos.length > 3 ? ` y ${r.productos.length - 3} más` : ''}</div>}
+                {!!r.productos?.length && <div style={{ fontSize: 11.5, color: 'var(--df-brand-dark)' }}><IcoTexto n="paquete" tam={12} />{r.productos.slice(0, 3).join(', ')}{r.productos.length > 3 ? ` y ${r.productos.length - 3} más` : ''}</div>}
               </div>
               <input value={datos[r.id]?.alias || ''} onChange={(e) => campo(r.id, 'alias', e.target.value)} onBlur={() => guardar(r)} placeholder="Bodega (ej. Bodega Medellín)" style={{ ...inp, padding: '7px 9px' }} />
               <input list="df-proveedores-effi" value={datos[r.id]?.proveedor || ''} onChange={(e) => campo(r.id, 'proveedor', e.target.value)} onBlur={() => guardar(r)} placeholder="Proveedor (ej. Fares)" style={{ ...inp, padding: '7px 9px' }} />
@@ -222,10 +223,10 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
 
   // Conexión automática: se corren los pasos uno por uno y se ven avanzar.
   type EstadoPaso = 'espera' | 'corriendo' | 'ok' | 'aviso';
-  const PASOS_AUTO: { id: 'config' | 'convenios' | 'productos'; titulo: string; icono: string }[] = [
-    { id: 'config', titulo: 'Configurando de dónde salen tus remisiones', icono: '🏬' },
-    { id: 'convenios', titulo: 'Buscando tus convenios dropshipping', icono: '🤝' },
-    { id: 'productos', titulo: 'Conectando tus productos y su stock', icono: '📦' },
+  const PASOS_AUTO: { id: 'config' | 'convenios' | 'productos'; titulo: string; icono: NombreIcono }[] = [
+    { id: 'config', titulo: 'Configurando de dónde salen tus remisiones', icono: 'bodega' as NombreIcono },
+    { id: 'convenios', titulo: 'Buscando tus convenios dropshipping', icono: 'aliado' as NombreIcono },
+    { id: 'productos', titulo: 'Conectando tus productos y su stock', icono: 'paquete' as NombreIcono },
   ];
   const [auto, setAuto] = useState<Record<string, { estado: EstadoPaso; detalle: string }> | null>(null);
   const autoconfigurar = async () => {
@@ -313,15 +314,15 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
       {auto && (
         <div style={{ border: '1px solid var(--df-purple-border)', borderRadius: 12, padding: '12px 14px', background: 'var(--df-purple-subtle)', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <style>{`@keyframes dfAutoGira { to { transform: rotate(360deg) } } @keyframes dfAutoEntra { from { opacity: 0; transform: translateX(-6px) } to { opacity: 1; transform: none } } @keyframes dfAutoBarra { 0% { background-position: 0 0 } 100% { background-position: 40px 0 } }`}</style>
-          <div style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--df-purple)' }}>⚡ Conexión automática</div>
+          <div style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--df-purple)' }}><IcoTexto n="rapido" tam={14} />Conexión automática</div>
           {PASOS_AUTO.map((p, i) => {
             const e = auto[p.id];
-            const ico = e.estado === 'corriendo' ? <span style={{ display: 'inline-block', animation: 'dfAutoGira .9s linear infinite' }}>⟳</span> : e.estado === 'ok' ? '✅' : e.estado === 'aviso' ? '⚠️' : '○';
+            const ico = e.estado === 'corriendo' ? <span style={{ display: 'inline-block', animation: 'dfAutoGira .9s linear infinite' }}>⟳</span> : e.estado === 'ok' ? <Icono nombre="ok" tam={16} color="var(--df-success)" /> : e.estado === 'aviso' ? <Icono nombre="alerta" tam={16} color="#B45309" /> : '○';
             return (
               <div key={p.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', opacity: e.estado === 'espera' ? 0.5 : 1, animation: `dfAutoEntra .4s ${i * 0.08}s both` }}>
                 <span style={{ width: 22, textAlign: 'center', fontSize: 15 }}>{ico}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>{p.icono} {p.titulo}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}><IcoTexto n={p.icono} tam={14} degradado />{p.titulo}</div>
                   {e.estado === 'corriendo' && <div style={{ marginTop: 5, height: 4, borderRadius: 999, background: 'repeating-linear-gradient(90deg, var(--df-purple) 0 20px, transparent 20px 40px)', animation: 'dfAutoBarra .6s linear infinite', opacity: 0.6 }} />}
                   {e.detalle && <div style={{ fontSize: 12, color: e.estado === 'aviso' ? 'var(--df-warning)' : 'var(--df-text-muted)', marginTop: 2, lineHeight: 1.45 }}>{e.detalle}</div>}
                 </div>
@@ -336,7 +337,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
       {est.conectado && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <button onClick={() => void autoconfigurar()} disabled={!!auto && Object.values(auto).some((x) => x.estado === 'corriendo')} style={{ ...btn, background: 'linear-gradient(90deg, var(--df-purple), #6366F1)' }}>⚡ Configurar todo automático</button>
+            <button onClick={() => void autoconfigurar()} disabled={!!auto && Object.values(auto).some((x) => x.estado === 'corriendo')} style={{ ...btn, background: 'linear-gradient(90deg, var(--df-purple), #6366F1)' }}><IcoTexto n="rapido" />Configurar todo automático</button>
             <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Elige la configuración, detecta tus convenios y conecta tus productos con su stock. No cambia lo que ya elegiste.</span>
           </div>
           <VerificacionEffi />
@@ -369,7 +370,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
                   <p style={{ ...ayuda, margin: '0 0 10px' }}>Si vendes artículos de un <b>proveedor dropshipping</b> en Effi, la remisión debe llevar el convenio: así Effi <b>no exige stock en tu bodega</b> (lo despacha el proveedor). DealFlow elige <b>solo</b> el convenio de cada producto según sus ventas anteriores en Effi (y lo aprende de cada envío); el que pongas aquí se usa solo para productos de proveedor que todavía no tienen ventas. Los tuyos siguen como mercancía propia.</p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <input value={cfg.convenioDropshipping || ''} onChange={(e) => set({ convenioDropshipping: e.target.value.replace(/[^A-Za-z0-9_-]/g, '') })} placeholder="Código del convenio" style={{ ...inp, width: 200, flex: '0 0 auto' }} />
-                    <button onClick={detectarConvenios} disabled={buscandoConv} style={btnSec}>{buscandoConv ? 'Buscando…' : '🔍 Detectar en Effi'}</button>
+                    <button onClick={detectarConvenios} disabled={buscandoConv} style={btnSec}>{buscandoConv ? 'Buscando…' : <><IcoTexto n="buscar" tam={13} />Detectar en Effi</>}</button>
                   </div>
                   {(() => {
                     // Todos los convenios: los agregados a mano + los detectados en Effi (sin repetir).
@@ -461,7 +462,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
 
               {/* Novedades de envío */}
               <div style={seccion}>
-                <div style={titulo}>⚠️ Novedades de envío</div>
+                <div style={titulo}><IcoTexto n="alerta" tam={16} degradado />Novedades de envío</div>
                 <p style={ayuda}>Cuando la transportadora no puede entregar (cliente ausente, dirección errada…), DealFlow lo detecta en Effi, pone el pedido en <b>Novedad</b> y te lo muestra en Pedidos.</p>
                 {([
                   ['avisarCliente', 'Avisarle al cliente por WhatsApp', 'Si pasaron más de 24 h desde su último mensaje, va con la plantilla aprobada «novedad_envio_pedido».'],
@@ -486,7 +487,7 @@ export function EffiApiCard({ df }: { df: DealFlowState }) {
               {/* 3. Productos: el vínculo se hace en cada producto (Productos → Variantes). */}
               <div style={seccion}>
                 <div style={titulo}>3 · Productos</div>
-                <p style={ayuda}><b>⚡ Todo es automático.</b> En los productos que se despachan por Effi, DealFlow vincula solo cada variante con su artículo (por referencia o por nombre + talla/color), al guardar el producto, al abrirlo y cada 30 min, y también las variantes nuevas. Si el producto es de un proveedor, usa el artículo vinculado al proveedor. Si hay dos artículos iguales en Effi, <b>no adivina</b>: te los muestra en el producto para que elijas con un clic. <b>Lo que elijas a mano nunca se cambia.</b> El stock llega solo de Effi cada 30 min. Para desconectar un producto entero: <b>Productos → el producto → Variantes → Effi → Quitar todo</b>.</p>
+                <p style={ayuda}><b><IcoTexto n="rapido" tam={13} />Todo es automático.</b> En los productos que se despachan por Effi, DealFlow vincula solo cada variante con su artículo (por referencia o por nombre + talla/color), al guardar el producto, al abrirlo y cada 30 min, y también las variantes nuevas. Si el producto es de un proveedor, usa el artículo vinculado al proveedor. Si hay dos artículos iguales en Effi, <b>no adivina</b>: te los muestra en el producto para que elijas con un clic. <b>Lo que elijas a mano nunca se cambia.</b> El stock llega solo de Effi cada 30 min. Para desconectar un producto entero: <b>Productos → el producto → Variantes → Effi → Quitar todo</b>.</p>
               </div>
 
               {/* 4. Webhooks */}

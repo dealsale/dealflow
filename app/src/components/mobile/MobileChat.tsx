@@ -1,4 +1,5 @@
 import { AutorMensaje } from '../AutorMensaje';
+import { Icono, IcoTexto } from '../Icono';
 import { useVentana24h, BarraVentanaCerrada, AvisoVentana } from '../Ventana24h';
 import { CargandoChat } from '../CargandoChat';
 import { BloquearContacto } from '../BloquearContacto';
@@ -56,14 +57,14 @@ export function MobileChat({ df }: { df: DealFlowState }) {
           title="Completar pedido desde el chat"
           style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--df-brand-dark)', fontSize: 18 }}
         >
-          🧾
+          <Icono nombre="guia" tam={19} />
         </div>
         <div
           onClick={() => df.abrirLogs(String(chat.id), chat.nombre)}
           title="Registro de actividad de este chat"
           style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 18 }}
         >
-          🩺
+          <Icono nombre="registro" tam={19} />
         </div>
         <BloquearContacto leadId={String(chat.id)} compacto />
         <div
@@ -122,7 +123,7 @@ export function MobileChat({ df }: { df: DealFlowState }) {
                     )}
                   </span>
                   {(m.estado === 'fallido' || m.estado === 'bloqueado') && m.error && (
-                    <div style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.4, padding: '5px 8px', borderRadius: 6, background: m.de === 'vendedor' ? 'rgba(0,0,0,.18)' : 'rgba(220,38,38,.08)', color: m.de === 'vendedor' ? '#fff' : 'var(--df-danger)' }}>⚠ {m.error}</div>
+                    <div style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.4, padding: '5px 8px', borderRadius: 6, background: m.de === 'vendedor' ? 'rgba(0,0,0,.18)' : 'rgba(220,38,38,.08)', color: m.de === 'vendedor' ? '#fff' : 'var(--df-danger)' }}><IcoTexto n="alerta" />{m.error}</div>
                   )}
                 </div>
                 {m.de === 'vendedor' && <AutorMensaje autor={m.autor} />}

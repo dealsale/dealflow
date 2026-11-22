@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Icono, IcoTexto } from './Icono';
 
 /**
  * Ventana de 24 h de WhatsApp en el Inbox: si el cliente no escribe hace más de
@@ -38,7 +39,7 @@ export function BarraVentanaCerrada({ plantillas, extra }: { plantillas: ReactNo
         <span className="df-rayo-flecha" style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--df-warning)', whiteSpace: 'nowrap' }}>← Enviar plantilla</span>
       </div>
       <div style={{ flex: 1, minWidth: 200, fontSize: 12.5, lineHeight: 1.45, color: 'var(--df-text-body)' }}>
-        <b>🔒 No puedes escribir en este chat.</b> Pasaron más de 24 h desde el último mensaje del cliente: WhatsApp solo permite enviarle una <b>plantilla aprobada</b> (botón ⚡). Cuando el cliente responda, se desbloquea.
+        <b><IcoTexto n="candado" tam={13} />No puedes escribir en este chat.</b> Pasaron más de 24 h desde el último mensaje del cliente: WhatsApp solo permite enviarle una <b>plantilla aprobada</b> (botón <Icono nombre="rapido" tam={13} style={{ verticalAlign: '-0.15em' }} />). Cuando el cliente responda, se desbloquea.
       </div>
       {extra}
     </div>
@@ -48,5 +49,5 @@ export function BarraVentanaCerrada({ plantillas, extra }: { plantillas: ReactNo
 /** Aviso pequeño cuando a la ventana le quedan menos de 4 h. */
 export function AvisoVentana({ restante }: { restante: number | null }) {
   if (restante == null || restante <= 0 || restante > 4 * 3600e3) return null;
-  return <div style={{ fontSize: 11.5, color: 'var(--df-warning)', marginTop: 6 }}>⏳ La ventana de 24 h de WhatsApp se cierra en {fmt(restante)}. Después solo podrás enviar plantillas aprobadas.</div>;
+  return <div style={{ fontSize: 11.5, color: 'var(--df-warning)', marginTop: 6 }}><IcoTexto n="pendiente" tam={12} />La ventana de 24 h de WhatsApp se cierra en {fmt(restante)}. Después solo podrás enviar plantillas aprobadas.</div>;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 import type { DecoratedMensaje } from '../hooks/useDealFlowState';
 
@@ -32,7 +33,7 @@ export function MediaContent({ m }: { m: DecoratedMensaje }) {
     const linkColor: CSSProperties = { color: m.de === 'vendedor' ? '#fff' : 'var(--df-brand)', textDecoration: 'underline' };
     return (
       <a href={url} target="_blank" rel="noreferrer" download={m.mediaNombre || undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, ...linkColor }}>
-        <span style={{ fontSize: 16 }}>📎</span>
+        <Icono nombre="adjunto" tam={16} />
         <span>{m.mediaNombre || 'Descargar archivo'}</span>
       </a>
     );
@@ -93,7 +94,7 @@ export function AudioChat({ url, ancho = 240 }: { url: string; ancho?: number })
     urlEscuchable(url).then((u) => { if (vivo) setSrc(u); }).catch(() => { if (vivo) { setError(true); setSrc(url); } });
     return () => { vivo = false; };
   }, [url, directo]);
-  if (!src) return <div style={{ fontSize: 12, opacity: 0.7, padding: '6px 2px', minWidth: 160 }}>🎤 Cargando audio…</div>;
+  if (!src) return <div style={{ fontSize: 12, opacity: 0.7, padding: '6px 2px', minWidth: 160 }}><IcoTexto n="microfono" tam={13} />Cargando audio…</div>;
   return (
     <div>
       <audio src={src} controls preload="metadata" playsInline style={{ maxWidth: ancho, display: 'block' }} />

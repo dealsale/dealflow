@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import type { DealFlowState, PrefillPedido } from '../hooks/useDealFlowState';
 import { Dropdown } from './Dropdown';
 import { Combobox } from './Combobox';
@@ -144,11 +145,11 @@ export function ManualOrderModal({ df, open, onClose, prefill }: { df: DealFlowS
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--df-surface)', width: 'min(640px, 100%)', maxHeight: '88vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(15,23,42,.3)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px', borderBottom: '1px solid var(--df-border)' }}>
-          <span style={{ fontSize: 18 }}>🧾</span>
+          <Icono nombre="guia" tam={18} degradado />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, fontSize: 16 }}>{prefill?.desdeChat || prefill?.leyendo ? 'Crear pedido desde el chat' : 'Crear pedido manual'}</div>
-            {prefill?.leyendo && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 2 }}>⏳ Leyendo la conversación para autocompletar…</div>}
-            {prefill?.desdeChat && <div style={{ fontSize: 12, color: 'var(--df-brand)', fontWeight: 600, marginTop: 2 }}>✨ Autocompletado con lo que el cliente dio en el chat. Revísalo antes de guardar.</div>}
+            {prefill?.leyendo && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 2 }}><IcoTexto n="pendiente" />Leyendo la conversación para autocompletar…</div>}
+            {prefill?.desdeChat && <div style={{ fontSize: 12, color: 'var(--df-brand)', fontWeight: 600, marginTop: 2 }}><IcoTexto n="ia" />Autocompletado con lo que el cliente dio en el chat. Revísalo antes de guardar.</div>}
             {!prefill?.desdeChat && !prefill?.leyendo && <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>Para pedidos que no llegaron por el bot (logística manual).</div>}
           </div>
           <span onClick={onClose} title="Cerrar" style={{ cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 20, padding: 4, lineHeight: 1 }}>✕</span>
@@ -165,7 +166,7 @@ export function ManualOrderModal({ df, open, onClose, prefill }: { df: DealFlowS
             <div><label style={lbl}>Ciudad</label><Combobox value={ciudad} onChange={setCiudad} options={ciudadesDeDepto(departamento)} placeholder="Bogotá" inputStyle={inp} /></div>
             <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', color: 'var(--df-text)' }}>
               <input type="checkbox" checked={confirmar} onChange={(e) => setConfirmar(e.target.checked)} />
-              📲 Enviarle al cliente el resumen del pedido para que confirme por WhatsApp (Sí / No)
+              <IcoTexto n="instalar" />Enviarle al cliente el resumen del pedido para que confirme por WhatsApp (Sí / No)
             </label>
             <div style={{ gridColumn: '1 / -1' }}><label style={lbl}>Dirección</label><input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Calle 1 #2-3, apto…" style={inp} /></div>
           </div>

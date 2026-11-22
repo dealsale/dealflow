@@ -1,4 +1,5 @@
 import { apiGuardarSkyClavePropia, apiSkyClavePropia, apiShopifyPedidosCfg, apiShopifyPedidosGuardar, apiShopifyTraerPedidos, type CfgPedidosShopify } from '../lib/api';
+import { Icono, IcoTexto } from '../components/Icono';
 import { useEffect, useRef, useState } from 'react';
 import { EffiApiCard } from '../components/EffiApiCard';
 import { SkydropxCard } from '../components/SkydropxCard';
@@ -7,6 +8,10 @@ import { Dropdown } from '../components/Dropdown';
 import { IntegracionFila, LogoInteg } from '../components/IntegracionFila';
 import { DiagnosticoMessenger, CapiCard, AnunciosProductos } from '../components/MetaExtras';
 import { ExtensionDescarga, ExtensionShopify } from '../components/ExtensionShopify';
+import { LogoMarca, type Marca } from '../components/LogoMarca';
+
+// Integraciones que muestran el logo real de la marca.
+const MARCA_INTEG: Record<string, Marca> = { deepseek: 'deepseek', claude: 'claude', openai: 'openai', grok: 'grok', wa: 'whatsapp' };
 
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 11px', fontFamily: 'inherit', fontSize: 13 };
 
@@ -30,7 +35,7 @@ function PedidosShopifyCfg({ alTraer }: { alTraer?: () => void }) {
       setTrayendo(false);
       if (r.error || !r.data) { setMsg(r.error || 'No se pudo consultar Shopify.'); return; }
       const d = r.data;
-      setMsg((d.nuevos ? `✅ ${d.nuevos} pedido(s) nuevo(s) traído(s).` : `Sin pedidos nuevos (revisados ${d.revisados} de la última semana).`) + (d.aviso ? ` ⚠️ ${d.aviso}` : ''));
+      setMsg((d.nuevos ? `✓ ${d.nuevos} pedido(s) nuevo(s) traído(s).` : `Sin pedidos nuevos (revisados ${d.revisados} de la última semana).`) + (d.aviso ? ` ⚠️ ${d.aviso}` : ''));
       if (d.nuevos) alTraer?.();
     });
   };
@@ -63,12 +68,12 @@ function RevisionPedidosShopify({ df }: { df: DealFlowState }) {
   if (!df.shopifyConectado) return null;
   const hace = (iso: string) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 1 ? 'hace un momento' : m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`; };
   const caja: React.CSSProperties = { fontSize: 12, lineHeight: 1.5, borderRadius: 8, padding: '8px 10px', marginTop: 8 };
-  if (!r) return <div style={{ ...caja, background: 'var(--df-bg)', color: 'var(--df-text-muted)' }}>⏳ La revisión automática de pedidos aún no ha corrido (se hace cada 5 minutos). Puedes usar «Traer pedidos de Shopify».</div>;
-  if (!r.ok) return <div style={{ ...caja, background: '#FDECEC', color: '#9B1C1C' }}><b>⚠️ No están llegando los pedidos.</b> Última revisión {hace(r.at)}: {r.error}</div>;
+  if (!r) return <div style={{ ...caja, background: 'var(--df-bg)', color: 'var(--df-text-muted)' }}><IcoTexto n="pendiente" />La revisión automática de pedidos aún no ha corrido (se hace cada 5 minutos). Puedes usar «Traer pedidos de Shopify».</div>;
+  if (!r.ok) return <div style={{ ...caja, background: '#FDECEC', color: '#9B1C1C' }}><b><IcoTexto n="alerta" />No están llegando los pedidos.</b> Última revisión {hace(r.at)}: {r.error}</div>;
   return (
     <div style={{ ...caja, background: r.aviso ? '#FFF6E0' : '#EAF5E4', color: r.aviso ? '#7A4B00' : '#2F5B1C' }}>
       ✓ Última revisión de pedidos {hace(r.at)}: {r.revisados} pedido(s) en Shopify desde la conexión{r.nuevos ? `, ${r.nuevos} nuevo(s) traído(s)` : ', todos ya están en DealFlow'}.
-      {r.aviso && <><br />⚠️ {r.aviso}</>}
+      {r.aviso && <><br /><IcoTexto n="alerta" tam={13} />{r.aviso}</>}
     </div>
   );
 }
@@ -99,7 +104,7 @@ function ShopifyCard({ df }: { df: DealFlowState }) {
   });
   return (
     <IntegracionFila
-      logo={<LogoInteg fondo="#5E8E3E">🛍️</LogoInteg>}
+      logo={<LogoInteg><LogoMarca marca="shopify" size={26} /></LogoInteg>}
       nombre="Shopify"
       desc={conectada ? <>Conectada a <b>{df.shopifyNombre}</b> ({df.shopifyShop}). Trae productos por SKU y crea pedidos.</> : 'Trae tus productos (por SKU) y crea los pedidos en tu tienda Shopify.'}
       estado={conectada ? 'on' : 'off'}
@@ -243,7 +248,7 @@ function MetaAdsCard({ df }: { df: DealFlowState }) {
   const [abierta, setAbierta] = useState(false);
   return (
     <IntegracionFila
-      logo={<LogoInteg fondo="#1877F2">📣</LogoInteg>}
+      logo={<LogoInteg fondo="#1877F2"><Icono nombre="campana" tam={18} color="#fff" /></LogoInteg>}
       nombre="Meta Ads (Administrador de anuncios)"
       desc={conectada ? `✓ ${ads!.adAccountNombre}${ads!.pageNombre ? ` · página ${ads!.pageNombre}` : ''}` : 'Trae el gasto, las impresiones y los clics de cada anuncio para ver en Estadísticas el costo por chat, por pedido y el ROAS.'}
       estado={conectada ? 'on' : 'off'}
@@ -335,7 +340,7 @@ function MetaCanalesCard({ df }: { df: DealFlowState }) {
   const [abierta, setAbierta] = useState(false);
   return (
     <IntegracionFila
-      logo={<LogoInteg fondo="linear-gradient(135deg,#0084FF,#E1306C)">💬</LogoInteg>}
+      logo={<LogoInteg><span style={{ display: 'flex', alignItems: 'center', gap: 2 }}><LogoMarca marca="messenger" size={18} /><LogoMarca marca="instagram" size={18} /></span></LogoInteg>}
       nombre="Messenger e Instagram"
       desc={on ? `✓ ${e.paginas.join(', ')} · Messenger${e.instagram ? ' + Instagram' : ''}` : 'Responde los mensajes directos de Facebook e Instagram desde el mismo Inbox, con tu asistente.'}
       estado={on ? 'on' : 'off'}
@@ -411,10 +416,11 @@ export function Integraciones({ df }: { df: DealFlowState }) {
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 8px' }}>
         Conecta DealFlow con las herramientas que ya usas. Cada tienda pone sus propias claves y paga solo lo que consume.
       </p>
-      <div style={{ background: 'var(--df-brand-subtle-3)', border: '1px solid #BBF7D0', borderRadius: 10, padding: '11px 14px', fontSize: 13, color: '#166534', margin: '0 0 18px', lineHeight: 1.6 }}>
-        🧠 <b>Tu asistente usa dos IA para ahorrar:</b> conecta <b>DeepSeek</b> (escribe los textos, más económico) y <b>OpenAI</b> (transcribe las notas de voz y entiende las imágenes de tus clientes). Con las dos, tu asistente lee, oye y ve.
-        <br />
-        ✨ <b>¿Prefieres Claude?</b> También puede escribir las respuestas: registra los pedidos con datos ordenados, ve las imágenes por sí mismo y tú eliges el modelo. Para las notas de voz sigue haciendo falta OpenAI.
+      {/* Qué hace cada IA, en etiquetas cortas (el detalle sale al pasar el mouse). */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 18px' }}>
+        <EtiquetaIA marca="deepseek" nombre="DeepSeek" texto="Escribe las respuestas · la más económica" detalle="Escribe los textos de tu asistente. Es la IA más económica." />
+        <EtiquetaIA marca="openai" nombre="OpenAI" texto="Oye notas de voz y ve fotos" detalle="Transcribe las notas de voz y entiende las imágenes de tus clientes. Con DeepSeek y OpenAI tu asistente lee, oye y ve." />
+        <EtiquetaIA marca="claude" nombre="Claude" texto="Escribe y ve fotos · tú eliges el modelo" detalle="Otra opción para escribir las respuestas: registra los pedidos con datos ordenados y ve las imágenes por sí mismo. Para las notas de voz sigue haciendo falta OpenAI." />
       </div>
       {df.integracionMsg && (
         <div style={{ background: df.integracionMsg.startsWith('✓') ? 'var(--df-brand-subtle-2)' : 'var(--df-danger-subtle)', border: '1px solid ' + (df.integracionMsg.startsWith('✓') ? 'var(--df-brand-border)' : 'var(--df-danger-border)'), color: df.integracionMsg.startsWith('✓') ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)', borderRadius: 10, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
@@ -450,10 +456,10 @@ export function Integraciones({ df }: { df: DealFlowState }) {
                 return (
                   <IntegracionFila
                     key={i.id}
-                    logo={<div style={{ ...i.logoStyle, width: 44, height: 44, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i.logoText}</div>}
+                    logo={MARCA_INTEG[i.id] ? <LogoInteg><LogoMarca marca={MARCA_INTEG[i.id]} size={26} /></LogoInteg> : <div style={{ ...i.logoStyle, width: 44, height: 44, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i.logoText}</div>}
                     nombre={i.nombre}
                     desc={i.desc}
-                    extra={esAgente ? <span title="Este es el agente que responde tus chats" style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)', borderRadius: 6, padding: '2px 7px' }}>🤖 Agente</span> : undefined}
+                    extra={esAgente ? <span title="Este es el agente que responde tus chats" style={{ fontSize: 11, fontWeight: 800, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle)', borderRadius: 6, padding: '2px 7px' }}><IcoTexto n="bot" />Agente</span> : undefined}
                     estado={conectado ? 'on' : 'off'}
                     abierta={abiertaEsta}
                     onToggle={() => abrir(i.id)}
@@ -524,5 +530,16 @@ export function Integraciones({ df }: { df: DealFlowState }) {
         );
       })}
     </section>
+  );
+}
+
+/** Etiqueta corta con el logo de la IA y lo que hace. */
+function EtiquetaIA({ marca, nombre, texto, detalle }: { marca: Marca; nombre: string; texto: string; detalle: string }) {
+  return (
+    <span title={detalle} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 12px 5px 6px', borderRadius: 999, border: '1px solid var(--df-border)', background: 'var(--df-surface)', fontSize: 12.5, lineHeight: 1.35, color: 'var(--df-text-secondary)', maxWidth: '100%', boxSizing: 'border-box', cursor: 'help' }}>
+      <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#fff', border: '1px solid var(--df-border)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><LogoMarca marca={marca} size={15} /></span>
+      <b style={{ color: 'var(--df-text-strong)' }}>{nombre}</b>
+      <span>{texto}</span>
+    </span>
   );
 }

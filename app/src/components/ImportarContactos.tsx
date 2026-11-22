@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { IcoTexto } from './Icono';
 import { Dropdown } from './Dropdown';
 import { confirmar, notificar } from './dialogs';
 import { apiBorrarEtiqueta, apiImportarContactos, type ResultadoImportacion } from '../lib/api';
@@ -99,8 +100,8 @@ export function ImportarContactos({ etiquetas, onCambio }: { etiquetas: { etique
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ fontWeight: 800, fontSize: 15, flex: 1 }}>📇 Contactos y etiquetas</div>
-        <button onClick={() => setAbierto(!abierto)} style={btnS}>{abierto ? 'Cerrar' : '⬆️ Importar CSV'}</button>
+        <div style={{ fontWeight: 800, fontSize: 15, flex: 1 }}><IcoTexto n="contacto" />Contactos y etiquetas</div>
+        <button onClick={() => setAbierto(!abierto)} style={btnS}>{abierto ? 'Cerrar' : <><IcoTexto n="subir" tam={13} />Importar CSV</>}</button>
       </div>
       <p style={{ fontSize: 12.5, color: 'var(--df-text-muted)', margin: '4px 0 10px', lineHeight: 1.5 }}>
         Trae los contactos de otro bot (su exporte en CSV) con una etiqueta y úsalos en tus campañas. No aparecen en el Inbox hasta que les envíes una campaña o te escriban.
@@ -109,7 +110,7 @@ export function ImportarContactos({ etiquetas, onCambio }: { etiquetas: { etique
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {etiquetas.map((e) => (
             <span key={e.etiqueta} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 999, padding: '4px 6px 4px 10px', fontSize: 12.5 }}>
-              🏷️ <b>{e.etiqueta}</b> <span style={{ color: 'var(--df-text-muted)' }}>{e.n.toLocaleString('es-CO')}</span>
+              <IcoTexto n="etiqueta" /><b>{e.etiqueta}</b> <span style={{ color: 'var(--df-text-muted)' }}>{e.n.toLocaleString('es-CO')}</span>
               <button onClick={() => void borrar(e.etiqueta, e.n)} aria-label={`Quitar etiqueta ${e.etiqueta}`} style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--df-text-faint)', fontSize: 13, padding: '0 4px' }}>✕</button>
             </span>
           ))}

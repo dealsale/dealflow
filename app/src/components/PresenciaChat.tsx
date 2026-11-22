@@ -1,4 +1,5 @@
 import { CirculoPersona } from './AutorMensaje';
+import { Icono, IcoTexto } from './Icono';
 import { textoPresencia, usePresencia } from '../lib/presencia';
 
 /** Aviso arriba de la caja de texto: quién más está en este chat o escribiendo. */
@@ -13,7 +14,7 @@ export function PresenciaChat({ chatId }: { chatId: string }) {
       <span style={{ display: 'inline-flex' }}>
         {aqui.slice(0, 5).map((p, i) => <CirculoPersona key={p.nombre + i} nombre={p.nombre} size={22} titulo={`${p.nombre}${p.escribiendo ? ' (escribiendo)' : ' (está en este chat)'}`} style={{ marginLeft: i ? -6 : 0 }} />)}
       </span>
-      <span aria-hidden>{t.escribiendo ? '✍️' : '👀'}</span>
+      <Icono nombre={t.escribiendo ? 'escribiendo' : 'ver'} tam={16} />
       <span style={{ flex: 1 }}>{t.texto}{t.escribiendo ? ' Espera antes de responder para no repetirle al cliente.' : ''}</span>
     </div>
   );
@@ -28,7 +29,7 @@ export function PresenciaEnLista({ chatId }: { chatId: string }) {
   return (
     <span title={ps.map((p) => `${p.nombre}${p.escribiendo ? ' (escribiendo)' : ''}`).join(', ')}
       style={{ fontSize: 11, fontWeight: 700, color: escribe ? 'var(--df-warning)' : 'var(--df-indigo)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
-      {escribe ? `✍️ ${escribe.nombre}` : `👀 ${ps[0].nombre}${ps.length > 1 ? ` +${ps.length - 1}` : ''}`}
+      <IcoTexto n={escribe ? 'escribiendo' : 'ver'} tam={12} />{escribe ? escribe.nombre : `${ps[0].nombre}${ps.length > 1 ? ` +${ps.length - 1}` : ''}`}
     </span>
   );
 }

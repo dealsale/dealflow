@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 import type { DealFlowState, DecoratedOrder } from '../hooks/useDealFlowState';
 import { apiDevolucionEffi, apiRastreo, type PasoRastreo } from '../lib/api';
@@ -34,7 +35,7 @@ export function RastreoGuia({ sel }: { sel: DecoratedOrder }) {
   return (
     <div style={caja}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <b>📍 Rastreo de la guía</b>
+        <b><IcoTexto n="ubicacion" />Rastreo de la guía</b>
         <div style={{ flex: 1 }} />
         {abierto && <button onClick={() => void cargar(true)} style={btnLink}>↻ Actualizar</button>}
         <button onClick={alternar} style={btnLink}>{abierto ? 'Ocultar' : 'Ver movimientos'}</button>
@@ -55,7 +56,7 @@ export function RastreoGuia({ sel }: { sel: DecoratedOrder }) {
                     <b style={{ color: i === 0 ? 'var(--df-text-strong)' : 'var(--df-text-body)' }}>{p.estado || p.estadoGlobal}</b>
                     <span style={{ color: 'var(--df-text-muted)', marginLeft: 6, fontSize: 11.5 }}>{fechaCO(p.fecha)}</span>
                     {p.observacion && <div style={{ color: 'var(--df-text-muted)', fontSize: 12 }}>{p.observacion}</div>}
-                    {p.foto && <a href={p.foto} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-purple)' }}>📷 Evidencia</a>}
+                    {p.foto && <a href={p.foto} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-purple)' }}><IcoTexto n="foto" tam={13} />Evidencia</a>}
                   </span>
                 </li>
               ))}
@@ -73,7 +74,7 @@ export function DevolucionEffi({ df, sel }: { df: DealFlowState; sel: DecoratedO
   const [enviando, setEnviando] = useState(false);
   useEffect(() => setMsg(''), [sel.id]);
   if (sel.despachoProveedor !== 'effi' || !sel.effiRemision) return null;
-  if (sel.effiDevolucion) return <div style={caja}>↩️ Devolución <b>{sel.effiDevolucion}</b> registrada en Effi: la mercancía volvió a la bodega.</div>;
+  if (sel.effiDevolucion) return <div style={caja}><IcoTexto n="devolver" />Devolución <b>{sel.effiDevolucion}</b> registrada en Effi: la mercancía volvió a la bodega.</div>;
   if (sel.estado !== 'Devuelto') return null;
   const registrar = async () => {
     setEnviando(true); setMsg('Registrando la devolución en Effi…');
@@ -85,7 +86,7 @@ export function DevolucionEffi({ df, sel }: { df: DealFlowState; sel: DecoratedO
   };
   return (
     <div style={{ ...caja, borderColor: 'var(--df-warning-border)', background: 'var(--df-warning-subtle-2)' }}>
-      <b>↩️ Pedido devuelto</b>
+      <b><IcoTexto n="devolver" />Pedido devuelto</b>
       <div style={{ color: 'var(--df-text-body)', margin: '2px 0 8px' }}>Registra la devolución en Effi para que los productos vuelvan al inventario de tu bodega.</div>
       <button onClick={registrar} disabled={enviando} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 13px', fontWeight: 700, fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer', opacity: enviando ? 0.6 : 1 }}>Registrar devolución en Effi</button>
       {msg && <div style={{ marginTop: 6, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-brand-dark)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}

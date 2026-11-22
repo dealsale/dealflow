@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import { cambiarIdiomaUI, idiomaUI, t } from '../i18n/traductor';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { apiOlvide, apiRestablecer, apiValidarRestablecer } from '../lib/api';
@@ -235,13 +236,13 @@ function Recuperar({ modo, token, correoInicial, onListo }: { modo: 'pedir' | 'n
   };
   return (
     <div>
-      <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em', marginBottom: 4 }}>{modo === 'pedir' ? 'Recupera tu cuenta 🔑' : 'Elige tu contraseña nueva 🔑'}</div>
+      <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em', marginBottom: 4 }}><IcoTexto n="llave" tam={18} />{modo === 'pedir' ? 'Recupera tu cuenta' : 'Elige tu contraseña nueva'}</div>
       <div style={{ color: C.muted, fontSize: 13.5, marginBottom: 22, lineHeight: 1.5 }}>
         {modo === 'pedir' ? 'Escribe el correo de tu cuenta y te enviamos un enlace para cambiar la contraseña.' : cuenta ? <>Para la cuenta <b>{cuenta}</b>.</> : 'Revisando el enlace…'}
       </div>
       {listo ? (
         <div style={{ fontSize: 13.5, lineHeight: 1.55, color: '#A7F3D0', background: 'rgba(16,185,129,.08)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 11, padding: '12px 14px' }}>
-          📬 Si <b>{correo}</b> tiene una cuenta, te llegará un correo en unos minutos. Revisa también spam. El enlace vence en 1 hora.
+          <IcoTexto n="correo" />Si <b>{correo}</b> tiene una cuenta, te llegará un correo en unos minutos. Revisa también spam. El enlace vence en 1 hora.
         </div>
       ) : (
         <form onSubmit={(e) => { e.preventDefault(); void enviar(); }}>
@@ -258,7 +259,7 @@ function Recuperar({ modo, token, correoInicial, onListo }: { modo: 'pedir' | 'n
               <div className="dfl-field" style={{ marginBottom: 18 }}><IcoLock /><input id="dfl-rec-c2" type="password" className="dfl-input" value={clave2} onChange={(e) => setClave2(e.target.value)} autoComplete="new-password" /></div>
             </>
           )}
-          {error && <div style={{ display: 'flex', gap: 9, color: '#FFC2CF', fontSize: 13, marginBottom: 14, background: 'rgba(255,107,138,.1)', border: '1px solid rgba(255,107,138,.35)', borderRadius: 11, padding: '10px 12px' }}><span>⚠️</span><span>{error}</span></div>}
+          {error && <div style={{ display: 'flex', gap: 9, color: '#FFC2CF', fontSize: 13, marginBottom: 14, background: 'rgba(255,107,138,.1)', border: '1px solid rgba(255,107,138,.35)', borderRadius: 11, padding: '10px 12px' }}><span><Icono nombre="alerta" tam={15} /></span><span>{error}</span></div>}
           <button type="submit" className="dfl-btn" disabled={enviando || (modo === 'nueva' && !cuenta)}>
             {enviando ? <><span className="dfl-spin" />{modo === 'pedir' ? 'Enviando…' : 'Guardando…'}</> : modo === 'pedir' ? 'Enviarme el enlace →' : 'Guardar contraseña →'}
           </button>
@@ -384,7 +385,7 @@ export function Login({ df }: { df: DealFlowState }) {
               </div>
 
               <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em', marginBottom: 4 }}>
-                {esRegistro ? <>Activa tu <span className="dfl-grad">asistente</span> 🚀</> : <>¡Hola de nuevo! 👋</>}
+                {esRegistro ? <>Activa tu <span className="dfl-grad">asistente</span></> : <>¡Hola de nuevo! 👋</>}
               </div>
               <div style={{ color: C.muted, fontSize: 13.5, marginBottom: 22, lineHeight: 1.5 }}>
                 {esRegistro ? 'Regístrate y deja que la IA empiece a vender por ti.' : 'Tu tienda y tu asistente de WhatsApp te están esperando.'}
@@ -427,7 +428,7 @@ export function Login({ df }: { df: DealFlowState }) {
 
                 {df.loginError && (
                   <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', color: '#FFC2CF', fontSize: 13, marginBottom: 14, background: 'rgba(255,107,138,.1)', border: '1px solid rgba(255,107,138,.35)', borderRadius: 11, padding: '10px 12px', animation: 'dflMsg .3s ease both' }}>
-                    <span>⚠️</span>
+                    <span><Icono nombre="alerta" tam={15} /></span>
                     <span>{df.loginError}</span>
                   </div>
                 )}
@@ -441,7 +442,7 @@ export function Login({ df }: { df: DealFlowState }) {
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0 0', color: C.faint, fontSize: 11.5, fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>
                 <span style={{ flex: 1, height: 1, background: C.line }} />
-                <span>🔒 conexión cifrada · API oficial de WhatsApp</span>
+                <span><IcoTexto n="candado" />conexión cifrada · API oficial de WhatsApp</span>
                 <span style={{ flex: 1, height: 1, background: C.line }} />
               </div>
               </>}

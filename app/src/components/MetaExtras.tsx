@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import { apiMetaDiagnostico, apiMetaResuscribir, apiCapi, apiConfigurarPixelMeta, apiGuardarCapi, apiCapiDetectar, apiCapiEnviar, apiAnunciosMeta, apiVincularAnuncio, type DiagnosticoMeta, type EstadoCapi, type AnuncioMeta } from '../lib/api';
 import { Dropdown } from './Dropdown';
 import { IntegracionFila, LogoInteg } from './IntegracionFila';
@@ -22,15 +23,15 @@ export function DiagnosticoMessenger() {
   const algunaMal = d?.paginas.some((p) => !p.suscrita || p.faltan.length || p.error);
   return (
     <div style={{ marginTop: 12, borderTop: '1px dashed var(--df-border)', paddingTop: 12 }}>
-      <button onClick={() => void revisar()} disabled={cargando} style={btn}>{cargando ? 'Revisando…' : '🔍 ¿No llegan los mensajes? Revisar conexión'}</button>
+      <button onClick={() => void revisar()} disabled={cargando} style={btn}>{cargando ? 'Revisando…' : <><IcoTexto n="buscar" tam={13} />¿No llegan los mensajes? Revisar conexión</>}</button>
       {msg && <div style={{ fontSize: 12.5, marginTop: 8, color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</div>}
       {d && (
         <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12.5, lineHeight: 1.5 }}>
           {d.paginas.map((p) => (
             <div key={p.pageId} style={{ border: '1px solid var(--df-border)', borderRadius: 9, padding: '9px 11px' }}>
               <b>{p.nombre}</b>{p.ig ? ' · con Instagram' : ''}
-              <div>{p.error ? `⚠️ ${p.error}` : p.suscrita ? (p.faltan.length ? `⚠️ Suscrita, pero faltan los avisos: ${p.faltan.join(', ')}.` : '✅ DealFlow está suscrito a los mensajes de esta página.') : '❌ DealFlow NO está suscrito a esta página.'}</div>
-              {p.suscrita && !p.error && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{p.campos.includes('feed') ? '💬 Comentarios de Facebook: activos.' : '💬 Comentarios de Facebook: no llegan (la app de Meta no tiene el campo «feed»). Dale «Volver a suscribir» cuando agregues el permiso.'}</div>}
+              <div><IcoTexto n={p.error || (p.suscrita && p.faltan.length) ? 'alerta' : p.suscrita ? 'ok' : 'error'} tam={13} color={p.error || (p.suscrita && p.faltan.length) ? '#B45309' : p.suscrita ? 'var(--df-success)' : 'var(--df-danger)'} />{p.error ? p.error : p.suscrita ? (p.faltan.length ? `Suscrita, pero faltan los avisos: ${p.faltan.join(', ')}.` : 'DealFlow está suscrito a los mensajes de esta página.') : 'DealFlow NO está suscrito a esta página.'}</div>
+              {p.suscrita && !p.error && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}><IcoTexto n="chat" tam={12} />{p.campos.includes('feed') ? 'Comentarios de Facebook: activos.' : 'Comentarios de Facebook: no llegan (la app de Meta no tiene el campo «feed»). Dale «Volver a suscribir» cuando agregues el permiso.'}</div>}
               <div style={{ color: 'var(--df-text-muted)' }}>{p.ultimoAviso ? `Último aviso de Meta: ${hora(p.ultimoAviso)}` : 'Meta no ha mandado ningún aviso de esta página desde el último reinicio del servidor.'}</div>
             </div>
           ))}
@@ -114,7 +115,7 @@ export function CapiCard() {
     : 'Falta el píxel y su token: sin eso Meta no ve tus ventas de WhatsApp y el ROAS sale en cero.';
   return (
     <IntegracionFila
-      logo={<LogoInteg fondo="linear-gradient(135deg,#1877F2,#10B981)">🎯</LogoInteg>}
+      logo={<LogoInteg fondo="linear-gradient(135deg,#1877F2,#10B981)"><Icono nombre="objetivo" tam={18} color="#fff" /></LogoInteg>}
       nombre="Reportar ventas a Meta (API de Conversiones)"
       desc={desc}
       estado={porPixel || mensajeria ? 'on' : 'off'}
@@ -130,7 +131,7 @@ export function CapiCard() {
           {tit('1', 'Píxel de Meta y su token', 'Es lo principal. Funciona con WhatsApp por QR o por la API oficial.')}
           {!porPixel && (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', background: 'var(--df-brand-subtle, rgba(16,185,129,.08))', border: '1px solid var(--df-brand, #10B981)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
-              <button type="button" disabled={auto} onClick={() => void configurarAuto()} style={{ background: 'var(--df-brand)', color: '#fff', border: 0, borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{auto ? 'Configurando…' : '⚡ Configurar mi píxel automáticamente'}</button>
+              <button type="button" disabled={auto} onClick={() => void configurarAuto()} style={{ background: 'var(--df-brand)', color: '#fff', border: 0, borderRadius: 8, padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{auto ? 'Configurando…' : <><IcoTexto n="rapido" tam={13} />Configurar mi píxel automáticamente</>}</button>
               <span style={{ fontSize: 12, color: 'var(--df-text-muted)', flex: '1 1 220px' }}>Usa el píxel de tu cuenta de Anuncios (o crea uno), lo pone en «Mi tienda» y en las ventas de WhatsApp, y lo conecta sin copiar tokens.</span>
             </div>
           )}
@@ -138,7 +139,7 @@ export function CapiCard() {
           <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5 }}>Píxel</div>
           <SelectorPixel valor={pixel} onChange={(id) => { setPixel(id); if (id !== e.pixelVentas && (id.length >= 8 || !id)) void guardar({ pixelVentas: id }); }} />
           <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', margin: '4px 0 10px' }}>Si ya lo pusiste en Tienda en línea → «Mi tienda», aparece aquí solo.</div>
-          {pixel ? <ApiConversionesMeta key={pixel} pixelId={pixel} /> : <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>⚡ Elige el píxel para conectarlo.</div>}
+          {pixel ? <ApiConversionesMeta key={pixel} pixelId={pixel} /> : <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}><IcoTexto n="rapido" tam={12} />Elige el píxel para conectarlo.</div>}
           {pixel && !porPixel && <div style={{ fontSize: 12, color: 'var(--df-warning-mid)', marginTop: 8 }}>Falta el token de este píxel: sin token no se envía nada.</div>}
         </div>
 
@@ -159,7 +160,7 @@ export function CapiCard() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: mensajeria ? 'var(--df-success)' : 'var(--df-warning-mid, #b45309)' }}>
-                {mensajeria ? `✓ Activo · conjunto de datos ${e.datasetId}${e.testCode ? ' · ⚠️ con código de prueba (no cuenta para las campañas)' : ''}` : e.activoManual && !e.activo ? 'Pausado por ti' : 'Sin activar: tus campañas de clic a WhatsApp no están recibiendo las ventas'}
+                {mensajeria ? `✓ Activo · conjunto de datos ${e.datasetId}${e.testCode ? ' · ⚠ con código de prueba (no cuenta para las campañas)' : ''}` : e.activoManual && !e.activo ? 'Pausado por ti' : 'Sin activar: tus campañas de clic a WhatsApp no están recibiendo las ventas'}
               </div>
               {e.ctwa && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
@@ -200,7 +201,7 @@ export function CapiCard() {
           <div style={{ border: '1px solid var(--df-border)', borderRadius: 9, maxHeight: 220, overflowY: 'auto' }}>
             {e.ultimos.map((u, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 12, padding: '6px 10px', borderTop: i ? '1px solid var(--df-border)' : 'none' }}>
-                <span>{u.estado === 'enviado' ? '✅' : '⚠️'}</span>
+                <Icono nombre={u.estado === 'enviado' ? 'ok' : 'alerta'} tam={14} color={u.estado === 'enviado' ? 'var(--df-success)' : '#B45309'} />
                 <b>{u.evento === 'Purchase' ? `Compra ${fmt(u.valor)}` : 'Chat calificado'}</b>
                 <span style={{ color: 'var(--df-text-muted)' }}>{u.canal} · mensajería</span>
                 <span style={{ color: 'var(--df-text-faint)', marginLeft: 'auto' }}>{hora(u.created_at)}</span>
@@ -238,7 +239,7 @@ export function AnunciosProductos({ productos }: { productos: { id: string; nomb
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <b style={{ fontSize: 13 }}>🏷️ Anuncios y productos</b>
+        <b style={{ fontSize: 13 }}><IcoTexto n="etiqueta" tam={14} degradado />Anuncios y productos</b>
         <span style={{ fontSize: 12, color: sinVinculo ? 'var(--df-warning-mid)' : 'var(--df-success)', fontWeight: 700 }}>{sinVinculo ? `${sinVinculo} sin producto` : 'Todos vinculados'}</span>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar anuncio…" style={{ marginLeft: 'auto', border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 9px', fontFamily: 'inherit', fontSize: 12, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
       </div>
@@ -246,12 +247,12 @@ export function AnunciosProductos({ productos }: { productos: { id: string; nomb
       {visibles.map((a) => (
         <div key={a.adId} style={{ display: 'flex', alignItems: 'center', gap: 9, border: '1px solid var(--df-border)', borderRadius: 9, padding: 7, flexWrap: 'wrap' }}>
           <span style={{ width: 40, height: 40, borderRadius: 7, overflow: 'hidden', background: 'var(--df-surface-2)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-            {a.thumb ? <img src={a.thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span>📢</span>}
+            {a.thumb ? <img src={a.thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icono nombre="campana" tam={16} degradado />}
           </span>
           <span style={{ flex: '1 1 180px', minWidth: 0 }}>
             <span style={{ display: 'block', fontWeight: 700, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nombre}</span>
             <span style={{ display: 'block', fontSize: 11, color: 'var(--df-text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {[a.campana, a.estado === 'ACTIVE' ? '🟢 activo' : a.estado ? '⏸ ' + a.estado.toLowerCase() : '', a.gasto ? `${fmt(a.gasto)} en 60 días` : ''].filter(Boolean).join(' · ')}
+              {[a.campana, a.estado === 'ACTIVE' ? 'activo' : a.estado ? a.estado.toLowerCase() : '', a.gasto ? `${fmt(a.gasto)} en 60 días` : ''].filter(Boolean).join(' · ')}
               {a.url && <> · <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--df-brand-dark)' }}>ver ↗</a></>}
             </span>
           </span>

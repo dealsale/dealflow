@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
+import { IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 
 /**
@@ -34,7 +35,7 @@ export function ConsumoIA() {
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 16, marginBottom: 16, display: 'grid', gap: 10 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontWeight: 800, fontSize: 15 }}>🧠 IA por tienda: modelo y consumo</div>
+          <div style={{ fontWeight: 800, fontSize: 15 }}><IcoTexto n="cerebro" />IA por tienda: modelo y consumo</div>
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Tokens enviados a la IA de cada tienda (DeepSeek, Claude u OpenAI) y costo estimado. «Peso por respuesta» alto = catálogo o instrucciones muy largas; muchas respuestas en un solo chat = posible bucle.</div>
         </div>
         <select value={dias} onChange={(e) => setDias(Number(e.target.value))} style={{ border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 8px', fontFamily: 'inherit', fontSize: 12.5 }}>

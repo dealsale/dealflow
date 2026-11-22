@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from '../components/Icono';
 import type { CSSProperties } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { apiTeamList, apiTeamCreate, apiTeamDelete, apiTeamEditar, apiRolGuardar, apiRolBorrar, type TeamMember, type RolEquipo, type PermisoDef } from '../lib/api';
@@ -66,7 +67,7 @@ export function Equipo(_props: { df: DealFlowState }) {
                   <Dropdown ariaLabel={`Rol de ${m.nombre}`} value={m.roleId || ''} options={opcionesRol}
                     onChange={(v) => void apiTeamEditar(m.id, { roleId: v }).then((r) => { if (r.error) notificar(r.error, 'error'); else { notificar(`✓ ${m.nombre} ahora es ${opcionesRol.find((o) => o.value === v)?.label}. Lo verá al recargar.`); void cargar(); } })} />
                 </div>
-                <button onClick={() => setEditMiembro(m)} style={btn}>✏️ Editar</button>
+                <button onClick={() => setEditMiembro(m)} style={btn}><IcoTexto n="editar" />Editar</button>
                 {!m.esTu && <button onClick={() => void quitar(m)} style={{ ...btn, color: 'var(--df-danger)', borderColor: 'var(--df-danger-border)' }}>Quitar</button>}
               </div>
             )}
@@ -99,7 +100,7 @@ export function Equipo(_props: { df: DealFlowState }) {
                 {!r.permisos.length && <span style={{ fontSize: 12, color: 'var(--df-text-faint)' }}>Sin permisos</span>}
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 'auto' }}>
-                <button onClick={() => setEditRol(r)} style={btn}>✏️ Editar permisos</button>
+                <button onClick={() => setEditRol(r)} style={btn}><IcoTexto n="editar" />Editar permisos</button>
                 <button onClick={() => void (async () => {
                   if (!(await confirmar({ titulo: `¿Borrar el rol "${r.nombre}"?`, mensaje: 'Solo se puede borrar si nadie lo tiene.', aceptar: 'Borrar', peligro: true }))) return;
                   const x = await apiRolBorrar(r.id); if (x.error) notificar(x.error, 'error'); else void cargar();

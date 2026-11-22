@@ -1,4 +1,5 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { IcoTexto } from '../components/Icono';
 import { ymdCO } from '../lib/fechaCO';
 import { RecaudosEffi } from '../components/RecaudosEffi';
 import { ConversionAnuncios } from '../components/ConversionAnuncios';
@@ -38,7 +39,7 @@ export function Estadisticas({ df }: { df: DealFlowState }) {
 
   return (
     <section data-screen-label="Estadísticas">
-      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Estadísticas 📊</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}><IcoTexto n="estadisticas" tam={22} degradado />Estadísticas</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 16px' }}>Rendimiento de tus chats, campañas y ventas. Filtra por el periodo que quieras.</p>
 
       <RecaudosEffi df={df} />

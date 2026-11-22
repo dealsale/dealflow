@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 import { apiCodigoPruebaConversiones, apiConectarAutoConversiones, apiConversiones, apiProbarConversiones, apiTokenConversiones } from '../lib/api';
 import type { EstadoConversiones } from '../lib/api';
@@ -57,14 +58,14 @@ export function ApiConversionesMeta({ pixelId }: { pixelId: string }) {
   };
 
   const caja: CSSProperties = { border: '1px solid var(--df-border)', borderRadius: 10, padding: 10, display: 'grid', gap: 8, background: 'var(--df-surface-2, rgba(0,0,0,.02))' };
-  if (!pixel) return <div style={{ ...caja, fontSize: 12.5, color: 'var(--df-text-muted)' }}>⚡ <b>API de Conversiones (token):</b> escribe primero el ID del píxel.</div>;
+  if (!pixel) return <div style={{ ...caja, fontSize: 12.5, color: 'var(--df-text-muted)' }}><IcoTexto n="rapido" tam={13} /><b>API de Conversiones (token):</b> escribe primero el ID del píxel.</div>;
   const compras = e?.resumen.find((r) => r.evento === 'Purchase');
   const errores = (e?.ultimos || []).filter((u) => u.estado === 'error');
 
   return (
     <div style={caja} aria-label="API de Conversiones de Meta">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 700, fontSize: 13 }}>⚡ API de Conversiones (token)</span>
+        <span style={{ fontWeight: 700, fontSize: 13 }}><IcoTexto n="rapido" />API de Conversiones (token)</span>
         <span style={{ fontSize: 11.5, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: conToken ? '#dcfce7' : '#fef3c7', color: conToken ? '#166534' : '#92400e' }}>
           {conToken ? (fila!.auto ? 'Activa · con tu cuenta de Anuncios' : `Activa · token ····${fila!.final}`) : 'Sin conectar: solo el píxel del navegador'}
         </span>
@@ -83,7 +84,7 @@ export function ApiConversionesMeta({ pixelId }: { pixelId: string }) {
       )}
       {!conToken && e?.anuncios && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button type="button" disabled={ocupado} onClick={() => void conectarAuto()} style={btnPri}>{ocupado ? 'Conectando…' : '⚡ Conectar con mi cuenta de Meta'}</button>
+          <button type="button" disabled={ocupado} onClick={() => void conectarAuto()} style={btnPri}>{ocupado ? 'Conectando…' : <><IcoTexto n="rapido" />Conectar con mi cuenta de Meta</>}</button>
           <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Sin copiar tokens: usa tu conexión de Anuncios. Si Meta no lo acepta, pega el token abajo.</span>
         </div>
       )}
@@ -107,7 +108,7 @@ export function ApiConversionesMeta({ pixelId }: { pixelId: string }) {
           <button type="button" disabled={codigo === (e?.testCode || '')} onClick={() => void guardarCodigo()} style={{ ...btn, opacity: codigo === (e?.testCode || '') ? 0.55 : 1 }}>{codigo || !e?.testCode ? 'Guardar código' : 'Quitar código'}</button>
         </div>
       )}
-      {conToken && e?.testCode && <div style={{ fontSize: 11.5, color: '#92400e' }}>⚠️ Con código de prueba, los eventos van a «Probar eventos» y <b>no cuentan para tus campañas</b>. Quítalo cuando termines de probar.</div>}
+      {conToken && e?.testCode && <div style={{ fontSize: 11.5, color: '#92400e' }}><IcoTexto n="alerta" />Con código de prueba, los eventos van a «Probar eventos» y <b>no cuentan para tus campañas</b>. Quítalo cuando termines de probar.</div>}
       {msg && <div role="status" style={{ fontSize: 12.5, color: msg.ok ? '#047857' : 'var(--df-danger-dark, #b91c1c)' }}>{msg.t}</div>}
       {conToken && !!e?.resumen.length && (
         <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { IcoTexto } from '../../components/Icono';
 import { confirmar, notificar } from '../../components/dialogs';
 import {
   apiAdminEstudio, apiAdminEstudioAnalizar, apiAdminEstudioBorrar, apiAdminEstudioEditar, apiAdminEstudioIndicaciones, apiAdminEstudioSubir,
@@ -73,7 +74,7 @@ export function EstudioAdmin() {
           <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Nombre (ej: Unboxing faja que vendió mucho)" style={input} />
           <select value={estilo} onChange={(e) => setEstilo(e.target.value as typeof estilo)} style={input}>{ESTILOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
           <label style={{ ...btnGris, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 12px' }}>
-            🎞️ {archivo ? archivo.name.slice(0, 28) : 'Elegir video (MP4, MOV · máx. 18 MB)'}
+            <IcoTexto n="pelicula" />{archivo ? archivo.name.slice(0, 28) : 'Elegir video (MP4, MOV · máx. 18 MB)'}
             <input type="file" accept="video/mp4,video/quicktime,video/webm" style={{ display: 'none' }} onChange={(e) => setArchivo(e.target.files?.[0] || null)} />
           </label>
         </div>
@@ -118,7 +119,7 @@ function Referencia({ r, onCambio }: { r: ReferenciaEstudio; onCambio: () => voi
               {r.transcripcion && <button onClick={() => setVerTx(!verTx)} style={btnGris}>{verTx ? 'Ocultar' : 'Ver'} lo que dice el audio</button>}
               <button onClick={() => void borrar()} style={{ ...btnGris, color: 'var(--df-danger-dark)' }}>Borrar</button>
             </div>
-            {verTx && <div style={{ fontSize: 12.5, background: 'var(--df-bg)', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>🎙️ {r.transcripcion}</div>}
+            {verTx && <div style={{ fontSize: 12.5, background: 'var(--df-bg)', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}><IcoTexto n="microfono" />{r.transcripcion}</div>}
           </>
         )}
         <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Subido por {r.creadoPor || '—'}</div>

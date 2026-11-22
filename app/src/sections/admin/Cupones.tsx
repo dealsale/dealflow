@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from '../../components/Icono';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 
 export function Cupones({ df }: { df: DealFlowState }) {
@@ -34,7 +35,7 @@ export function Cupones({ df }: { df: DealFlowState }) {
 
   return (
     <section data-screen-label="Admin Cupones">
-      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Cupones 🎁</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}><IcoTexto n="cupon" tam={22} degradado />Cupones</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 18px' }}>Descuentos que das a las tiendas. Los cupones normales solo cubren la <b>instalación</b> (un cupón del 100% la deja gratis). {esSuper ? 'Como superadmin también puedes crear cupones generales, que cubren la instalación y la mensualidad.' : 'Los cupones generales (que también cubren la mensualidad) solo los crea el superadmin.'}</p>
 
       {/* Crear cupón */}

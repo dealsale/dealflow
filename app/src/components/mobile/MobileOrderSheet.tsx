@@ -1,4 +1,5 @@
 import { OrigenBadge } from '../OrigenPedido';
+import { Icono } from '../Icono';
 import { useEffect } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { Dropdown } from '../Dropdown';
@@ -82,11 +83,11 @@ export function MobileOrderSheet({ df }: { df: DealFlowState }) {
               onClick={() => df.abrirEditarPedido(sel)}
               title="Editar pedido"
               style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-strong)', cursor: 'pointer', minHeight: 44 }}
-            >✏️</button>
+            ><Icono nombre="editar" tam={15} /></button>
             <button
               onClick={async () => { if (await confirmar({ titulo: `Eliminar ${sel.id}`, mensaje: 'Solo lo quita del panel; no cancela nada en Dropi/Effi.', aceptar: 'Eliminar', peligro: true })) sel.eliminar(); }}
               style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '11px 13px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-danger-dark)', cursor: 'pointer', minHeight: 44 }}
-            >🗑</button>
+            ><Icono nombre="eliminar" tam={15} /></button>
           </div>
         </div>
       </div>

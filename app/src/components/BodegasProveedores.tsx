@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import { confirmar, notificar } from './dialogs';
 import { apiBodegas, apiBodegaGuardar, apiBodegaBorrar, type BodegaProveedor } from '../lib/api';
 
@@ -72,10 +73,10 @@ export function BodegasProveedores() {
 
       {bodegas.map((b) => (
         <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--df-border)', borderRadius: 10, padding: '9px 12px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 18 }}>🏭</span>
+          <Icono nombre="bodega" tam={18} degradado />
           <div style={{ flex: 1, minWidth: 160 }}>
             <div style={{ fontWeight: 700, fontSize: 13 }}>{b.nombre}{b.empresa ? <span style={{ color: 'var(--df-text-muted)', fontWeight: 500 }}> · {b.empresa}</span> : null}</div>
-            <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{b.direccion}, {b.ciudad} · 📱 {b.telefono}{b.avisar ? ' · recibe la guía por WhatsApp' : ' · sin aviso por WhatsApp'}</div>
+            <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{b.direccion}, {b.ciudad} · <IcoTexto n="celular" tam={12} />{b.telefono}{b.avisar ? ' · recibe la guía por WhatsApp' : ' · sin aviso por WhatsApp'}</div>
           </div>
           <button onClick={() => { setEditando({ ...b }); setMsg(''); }} style={{ ...btnSec, minHeight: 32, padding: '5px 12px', fontSize: 12 }}>Editar</button>
           <button onClick={() => void borrar(b)} style={{ background: 'transparent', border: 'none', color: 'var(--df-danger)', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Borrar</button>

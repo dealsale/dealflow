@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from './Icono';
 import { ImportarContactos } from './ImportarContactos';
 import { CampanaPlantilla } from './CampanaPlantilla';
 import { Dropdown } from './Dropdown';
@@ -44,8 +45,8 @@ function Cifras({ r }: { r: ResultadoRmk }) {
 }
 
 const ESTADO_PLANTILLA: Record<string, [string, string]> = {
-  aprobada: ['✓ Aprobada por Meta', '#047857'], pendiente: ['⏳ En revisión de Meta', '#B45309'], rechazada: ['✗ Rechazada por Meta', '#B91C1C'],
-  error: ['⚠️ No se pudo enviar a Meta', '#B91C1C'], sin_publicar: ['⏳ Todavía no se ha enviado a Meta', '#B45309'],
+  aprobada: ['✓ Aprobada por Meta', '#047857'], pendiente: ['◷ En revisión de Meta', '#B45309'], rechazada: ['✗ Rechazada por Meta', '#B91C1C'],
+  error: ['! No se pudo enviar a Meta', '#B91C1C'], sin_publicar: ['◷ Todavía no se ha enviado a Meta', '#B45309'],
 };
 
 export function Remarketing() {
@@ -67,7 +68,7 @@ export function Remarketing() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {!oficial && (
         <div style={{ ...card, background: 'rgba(245,158,11,.1)', borderColor: 'var(--df-warning, #F59E0B)', fontSize: 13, lineHeight: 1.5 }}>
-          ⚠️ {p.whatsapp === 'qr'
+          <IcoTexto n="alerta" />{p.whatsapp === 'qr'
             ? 'Tu WhatsApp está conectado por QR: solo funciona el rescate antes de las 24 h. Los envíos con plantilla necesitan la conexión oficial (por QR el riesgo de bloqueo es muy alto).'
             : 'Conecta WhatsApp para usar el remarketing.'}
         </div>
@@ -75,7 +76,7 @@ export function Remarketing() {
 
       {/* Automático */}
       <div style={card}>
-        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>🤖 Automático</div>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}><IcoTexto n="bot" />Automático</div>
         <p style={{ fontSize: 12.5, color: 'var(--df-text-muted)', margin: '0 0 14px', lineHeight: 1.5 }}>Para los clientes que ya dieron sus datos y no terminaron la compra. Corre solo; si el cliente responde, el asistente sigue la conversación y cierra el pedido.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
@@ -108,7 +109,7 @@ export function Remarketing() {
       {/* Historial de envíos */}
       {p.campanas.length > 0 && (
         <div style={card}>
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>📊 Envíos</div>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}><IcoTexto n="estadisticas" />Envíos</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {p.campanas.map((c) => (
               <div key={c.id} style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px' }}>
@@ -116,7 +117,7 @@ export function Remarketing() {
                   <b style={{ fontSize: 13, flex: 1, minWidth: 180 }}>{c.nombre}</b>
                   <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{new Date(c.creado.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                   <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '2px 9px', background: c.estado === 'enviando' ? 'rgba(124,58,237,.1)' : c.estado === 'pausada' ? 'rgba(245,158,11,.15)' : 'var(--df-surface-2)', color: c.estado === 'pausada' ? '#B45309' : 'var(--df-text-body)' }}>
-                    {c.estado === 'enviando' ? '📤 Enviando' : c.estado === 'pausada' ? '⏸ Pausado' : c.estado === 'cancelada' ? 'Cancelado' : '✓ Terminado'}
+                    {c.estado === 'enviando' ? 'Enviando' : c.estado === 'pausada' ? ' Pausado' : c.estado === 'cancelada' ? 'Cancelado' : '✓ Terminado'}
                   </span>
                   {c.estado === 'enviando' && <button onClick={() => accion(c.id, 'pausar')} style={btnS}>Pausar</button>}
                   {c.estado === 'pausada' && <button onClick={() => accion(c.id, 'reanudar')} style={btnS}>Reanudar</button>}

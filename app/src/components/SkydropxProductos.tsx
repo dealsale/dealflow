@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { IcoTexto } from './Icono';
 import { Dropdown } from './Dropdown';
 import { notificar } from './dialogs';
 import { VinculosBarra } from './VinculosBarra';
@@ -78,7 +79,7 @@ export function SkydropxProductos({ productId }: { productId?: string } = {}) {
       </div>
       {productId && !cargando && <VinculosBarra productId={productId} integ="skydropx" pausado={pausado} vinculadas={vinculadas} total={vars.length} onCambio={() => void vincularYCargar()} />}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <button onClick={() => void descargar()} style={btnSec}>⬇ Descargar variantes</button>
+        <button onClick={() => void descargar()} style={btnSec}><IcoTexto n="descargar" />Descargar variantes</button>
         <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{trabajando ? 'Vinculando con Skydropx…' : cargando ? 'Cargando…' : <><b>{vinculadas}</b> de {vars.length} vinculadas · {prods.length} producto{prods.length === 1 ? '' : 's'} en Skydropx</>}</span>
       </div>
       {error && <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)' }}>{error}</div>}

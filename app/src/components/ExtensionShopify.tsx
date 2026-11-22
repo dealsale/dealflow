@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from './Icono';
 import { apiBorrarCodigoExt, apiCodigosExt, apiCrearCodigoExt, type CodigoExt } from '../lib/api';
 
 import { fmtCO } from '../lib/fechaCO';
@@ -48,7 +49,7 @@ export function ExtensionDescarga({ titulo, desc, zip, pasos }: { titulo: string
           <div style={{ fontWeight: 800, fontSize: 14 }}>{titulo}</div>
           <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{desc}</div>
         </div>
-        <a href={zip} download className="df-btn-primary" style={{ ...btn, background: 'var(--df-brand)', color: '#fff', border: 'none', fontWeight: 700 }}>⬇ Descargar extensión</a>
+        <a href={zip} download className="df-btn-primary" style={{ ...btn, background: 'var(--df-brand)', color: '#fff', border: 'none', fontWeight: 700 }}><IcoTexto n="descargar" />Descargar extensión</a>
       </div>
       <ol style={{ fontSize: 12.5, lineHeight: 1.65, margin: '12px 0 10px', paddingLeft: 20 }}>
         {pasos.map((x, i) => <li key={i}>{x}</li>)}
@@ -63,14 +64,14 @@ export function ExtensionDescarga({ titulo, desc, zip, pasos }: { titulo: string
           </div>
         </div>
       ) : (
-        <button onClick={() => void crear()} style={btn}>🔑 Generar código de conexión</button>
+        <button onClick={() => void crear()} style={btn}><IcoTexto n="llave" />Generar código de conexión</button>
       )}
       {msg && <div style={{ fontSize: 12, color: 'var(--df-danger)', marginTop: 6 }}>{msg}</div>}
       {!!codigos?.length && (
         <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {codigos.map((c) => (
             <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, flexWrap: 'wrap' }}>
-              <span>🔑 <b>{c.nombre}</b></span>
+              <span><IcoTexto n="llave" tam={13} /><b>{c.nombre}</b></span>
               <span style={{ color: 'var(--df-text-muted)' }}>creado {fecha(c.created_at)} · último uso {fecha(c.ultimo_uso)}</span>
               <button onClick={() => void apiBorrarCodigoExt(c.id).then(cargar)} style={{ ...btn, padding: '4px 9px', color: 'var(--df-danger)', marginLeft: 'auto' }}>Desactivar</button>
             </div>

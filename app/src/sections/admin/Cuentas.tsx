@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto, Punto } from '../../components/Icono';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
@@ -95,11 +96,11 @@ export function Cuentas({ df }: { df: DealFlowState }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.tienda}</span>
-                    {a.oculta && <span title="Oculta para el admin normal; solo tú (superadmin) la ves" style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, color: 'var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 6, padding: '1px 7px', letterSpacing: '.02em' }}>👻 Oculta</span>}
+                    {a.oculta && <span title="Oculta para el admin normal; solo tú (superadmin) la ves" style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, color: 'var(--df-purple)', background: 'var(--df-purple-subtle)', borderRadius: 6, padding: '1px 7px', letterSpacing: '.02em' }}><IcoTexto n="oculto" tam={11} />Oculta</span>}
                   </div>
                   <div style={{ color: 'var(--df-text-faint)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {a.correo} · Plan {a.plan}
-                    <span style={{ color: 'var(--df-purple)', fontWeight: 700 }}> · 🎨 {(a.creditos ?? 0).toLocaleString('es-CO')} créditos</span>
+                    <span style={{ color: 'var(--df-purple)', fontWeight: 700 }}> · <IcoTexto n="paleta" tam={12} />{(a.creditos ?? 0).toLocaleString('es-CO')} créditos</span>
                   </div>
                 </div>
                 <div style={{ minWidth: 0 }}>
@@ -185,16 +186,16 @@ function DetalleTiendaInline({ df }: { df: DealFlowState }) {
         </span>
         <button onClick={() => df.sincronizarWhatsapp(d.id)} title="Consulta a Meta el número actual de esta WABA y actualiza el que usa DealFlow"
           style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-          🔄 Sincronizar número con Meta
+          <IcoTexto n="actualizar" tam={13} />Sincronizar número con Meta
         </button>
         <button onClick={async () => { if (await confirmar({ titulo: 'Intervención humana', mensaje: `¿Poner TODOS los chats de "${d.nombre}" en intervención humana? El asistente dejará de responder en esta tienda y los chats quedarán atendidos por una persona.`, aceptar: 'Intervenir todo', peligro: true })) df.intervenirTodosLosChats(d.id); }}
           title="Marca todos los chats como atendidos por una persona (pausa el bot en esta tienda)"
           style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-          🙋 Intervenir todos los chats
+          <IcoTexto n="ayudaHumana" tam={13} />Intervenir todos los chats
         </button>
         <button onClick={() => df.auditarBaneoStore(d.id)} title="Revisa todos los chats y reporta posibles infracciones a la política de WhatsApp"
           style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', color: 'var(--df-text-body)', borderRadius: 8, padding: '6px 12px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-          🔍 Auditoría anti-baneo
+          <IcoTexto n="buscar" tam={13} />Auditoría anti-baneo
         </button>
         {d.porEstado.map((e) => (
           <span key={e.estado} style={{ fontSize: 12.5, color: 'var(--df-text-secondary)' }}>{e.estado}: <b>{e.n}</b></span>
@@ -366,7 +367,7 @@ function FilaAjuste({ h, conTienda }: { h: AjustePlan; conTienda?: boolean }) {
       <span style={{ color: 'var(--df-text-faint)' }}>{cuando}</span>
       <span>
         {conTienda && <b>{h.tienda || h.store_id} · </b>}
-        <span style={{ fontWeight: 700, color: h.tipo === 'pago' ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}>{h.tipo === 'pago' ? '💳 Pago' : '✏️ Ajuste'}</span>
+        <span style={{ fontWeight: 700, color: h.tipo === 'pago' ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}><IcoTexto n={h.tipo === 'pago' ? 'pago' : 'editar'} tam={13} />{h.tipo === 'pago' ? 'Pago' : 'Ajuste'}</span>
         {' '}{h.antes ? fechaLarga(h.antes) : 'sin fecha'} → <b>{fechaLarga(h.despues)}</b>
         {h.dias ? <span style={{ color: h.dias > 0 ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)' }}> ({h.dias > 0 ? '+' : ''}{h.dias} días)</span> : null}
         <span style={{ color: 'var(--df-text-muted)' }}> · {h.tipo === 'pago' ? h.motivo : `${h.quien} (${h.rol === 'SUPERADMIN' ? 'superadmin' : 'admin'}): ${h.motivo}`}</span>
@@ -384,7 +385,7 @@ function HistorialMensualidades() {
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
-        <div style={{ fontWeight: 800, fontSize: 16, flex: 1 }}>🗓️ Historial de mensualidades</div>
+        <div style={{ fontWeight: 800, fontSize: 16, flex: 1 }}><IcoTexto n="calendario" tam={17} degradado />Historial de mensualidades</div>
         <label style={{ fontSize: 12.5, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" checked={soloManual} onChange={(e) => setSoloManual(e.target.checked)} /> Solo ajustes a mano</label>
       </div>
       <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 12 }}>Quién cambió los días de cada tienda, cuándo, de qué fecha a cuál y por qué. También los pagos que la renovaron.</div>
@@ -410,7 +411,7 @@ function TiendaOnlineAdmin({ storeId }: { storeId: string }) {
   const estado = !m ? 'Cargando…' : m.cortesia ? 'Gratis para todas (el precio está en $0 en Planes)' : m.activa ? `Activa hasta el ${fecha(m.vence)} (${m.diasRestantes} días)` : m.enGracia ? `Vencida el ${fecha(m.vence)} · en días de gracia` : m.vence ? `Vencida el ${fecha(m.vence)}` : 'Sin membresía';
   return (
     <div style={{ borderTop: '1px solid var(--df-border)', paddingTop: 16, marginTop: 16 }}>
-      <div style={labelStyle}>🛍️ Tienda en línea · {estado}</div>
+      <div style={labelStyle}><IcoTexto n="bolsa" tam={13} />Tienda en línea · {estado}</div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="number" value={dias} onChange={(e) => setDias(e.target.value)} placeholder="Ej: 30 o -15" style={{ ...inputStyle, width: 110 }} />
         <button onClick={() => { const d = Number(dias); if (d) void ajustar(d); }} disabled={!Number(dias)}
@@ -435,7 +436,7 @@ function ReporteBaneoPanel({ df }: { df: DealFlowState }) {
   const [hasta, setHasta] = useState('');
   const colorGrav = (g: string) => g === 'alta' ? 'var(--df-danger-dark)' : g === 'media' ? '#B45309' : g === 'baja' ? 'var(--df-text-muted)' : 'var(--df-brand-dark)';
   const bgGrav = (g: string) => g === 'alta' ? 'var(--df-danger-subtle-2)' : g === 'media' ? 'rgba(245,158,11,.12)' : g === 'baja' ? 'var(--df-surface-2)' : 'var(--df-brand-subtle)';
-  const iconGrav = (g: string) => g === 'alta' ? '🔴' : g === 'media' ? '🟠' : g === 'baja' ? '⚪' : '🟢';
+  const colorPunto = (g: string) => g === 'alta' ? '#DC2626' : g === 'media' ? '#F59E0B' : g === 'baja' ? '#CBD5E1' : '#10B981';
   // Presets rápidos (hora local del navegador → formato datetime-local).
   const fmtDT = (d: Date) => { const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
   const preset = (horas: number) => { const ahora = new Date(); setHasta(fmtDT(ahora)); setDesde(fmtDT(new Date(ahora.getTime() - horas * 3600000))); df.auditarBaneoStore(storeId, fmtDT(new Date(ahora.getTime() - horas * 3600000)), fmtDT(ahora)); };
@@ -443,7 +444,7 @@ function ReporteBaneoPanel({ df }: { df: DealFlowState }) {
   return (
     <div style={{ background: 'var(--df-surface-2)', border: '1px solid var(--df-border)', borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 800, fontSize: 14 }}>🔍 Auditoría anti-baneo</span>
+        <span style={{ fontWeight: 800, fontSize: 14 }}><IcoTexto n="buscar" tam={15} degradado />Auditoría anti-baneo</span>
         {r && <span style={{ color: 'var(--df-text-muted)', fontSize: 12 }}>· {r.totales.chats} chats · {r.rango.desde || '—'} a {r.rango.hasta || '—'} ({r.rango.dias} días)</span>}
       </div>
       {/* Filtro por fecha y hora (barrido de un periodo concreto). */}
@@ -473,7 +474,7 @@ function ReporteBaneoPanel({ df }: { df: DealFlowState }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
             {r.hallazgos.map((h, i) => (
               <div key={i} style={{ background: bgGrav(h.gravedad), border: `1px solid ${colorGrav(h.gravedad)}22`, borderRadius: 9, padding: '9px 11px' }}>
-                <div style={{ fontWeight: 700, fontSize: 12.5, color: colorGrav(h.gravedad), marginBottom: 2 }}>{iconGrav(h.gravedad)} {h.titulo}</div>
+                <div style={{ fontWeight: 700, fontSize: 12.5, color: colorGrav(h.gravedad), marginBottom: 2 }}><Punto color={colorPunto(h.gravedad)} />{h.titulo}</div>
                 <div style={{ fontSize: 12, color: 'var(--df-text-body)', lineHeight: 1.5 }}>{h.detalle}</div>
                 {h.dato && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 3, fontFamily: "'JetBrains Mono',monospace" }}>{h.dato}</div>}
               </div>
@@ -543,7 +544,7 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
     <>
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>🗑️ Papelera de tiendas</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}><IcoTexto n="eliminar" tam={17} degradado />Papelera de tiendas</h2>
           <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Las tiendas eliminadas se pueden restaurar durante {dias} días.</span>
         </div>
         {msg && <div style={{ fontSize: 12.5, marginTop: 8, color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</div>}
@@ -561,7 +562,7 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
       </div>
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>💾 Copias de seguridad de la base</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}><IcoTexto n="respaldo" tam={17} degradado />Copias de seguridad de la base</h2>
           <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', flex: 1 }}>Una copia automática cada día a las 12 a. m. (hora Colombia); se guarda solo la última y la anterior se borra. Si haces una a mano, se reemplaza con la de la siguiente medianoche.</span>
           <button onClick={() => void copiarAhora()} disabled={!!ocupado} style={{ ...linkBtn('var(--df-brand)'), border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 12px' }}>{ocupado === 'copia' ? 'Copiando…' : '＋ Crear copia ahora'}</button>
         </div>
@@ -575,15 +576,15 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
               <div style={{ width: `${pct}%`, height: '100%', background: pct > 90 ? 'var(--df-danger)' : pct > 75 ? 'var(--df-warning)' : 'var(--df-brand)' }} />
             </div>
             <div style={{ color: 'var(--df-text-muted)', marginTop: 5 }}>Base de datos {espacio.baseMb} MB · copias {espacio.copiasMb} MB · papelera {espacio.papeleraMb} MB · fotos y archivos {espacio.archivosMb} MB</div>
-            {espacio.libreMb < espacio.baseMb * 2.5 && <div style={{ color: 'var(--df-danger)', marginTop: 5, fontWeight: 600 }}>⚠️ Queda poco espacio: no alcanza para una copia nueva. Elimina copias viejas o tiendas de la papelera, o amplía el volumen en Railway.</div>}
+            {espacio.libreMb < espacio.baseMb * 2.5 && <div style={{ color: 'var(--df-danger)', marginTop: 5, fontWeight: 600 }}><IcoTexto n="alerta" tam={13} />Queda poco espacio: no alcanza para una copia nueva. Elimina copias viejas o tiendas de la papelera, o amplía el volumen en Railway.</div>}
           </div>
         )}
         {msgCopias && <div style={{ fontSize: 12.5, marginTop: 8, color: msgCopias.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msgCopias}</div>}
         {cifrado && (cifrado.activo ? (
-          <div style={{ fontSize: 12.5, color: 'var(--df-success)', marginTop: 10, fontWeight: 600 }}>🔒 Cifrado propio activo (AES-256): copias, papelera y tokens de Shopify se guardan cifrados. Al descargar una copia se entrega descifrada.</div>
+          <div style={{ fontSize: 12.5, color: 'var(--df-success)', marginTop: 10, fontWeight: 600 }}><IcoTexto n="candado" tam={13} />Cifrado propio activo (AES-256): copias, papelera y tokens de Shopify se guardan cifrados. Al descargar una copia se entrega descifrada.</div>
         ) : (
           <div style={{ fontSize: 12.5, color: 'var(--df-text-body)', marginTop: 10, lineHeight: 1.6, background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '10px 12px' }}>
-            <b>⚠️ Falta activar el cifrado propio.</b> En Railway → tu servicio → <b>Variables</b>, crea <code>DATA_ENCRYPTION_KEY</code> con esta llave (se generó solo para ti y no se guarda en ningún lado). <b>Guárdala también en un lugar seguro:</b> sin ella no se pueden abrir las copias cifradas.
+            <b><IcoTexto n="alerta" tam={13} />Falta activar el cifrado propio.</b> En Railway → tu servicio → <b>Variables</b>, crea <code>DATA_ENCRYPTION_KEY</code> con esta llave (se generó solo para ti y no se guarda en ningún lado). <b>Guárdala también en un lugar seguro:</b> sin ella no se pueden abrir las copias cifradas.
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
               <code style={{ flex: 1, minWidth: 0, fontSize: 12, overflowWrap: 'anywhere', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 6, padding: '6px 8px' }}>{verLlave ? cifrado.llaveSugerida : '•'.repeat(32)}</code>
               <button onClick={() => setVerLlave((v) => !v)} style={{ ...linkBtn('var(--df-brand)'), border: '1px solid var(--df-border)', borderRadius: 8 }}>{verLlave ? 'Ocultar' : 'Ver'}</button>
@@ -595,7 +596,7 @@ function PapeleraYCopias({ df }: { df: DealFlowState }) {
         {respaldos.map((r) => (
           <div key={r.archivo} style={fila}>
             <span style={{ flex: 1, fontSize: 13, fontFamily: "'JetBrains Mono', monospace", minWidth: 0, overflowWrap: 'anywhere' }}>{r.archivo} <span style={{ fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: r.manual ? 'var(--df-purple)' : 'var(--df-text-faint)' }}>{r.manual ? 'MANUAL' : 'AUTOMÁTICA'}</span></span>
-            <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{r.cifrado ? '🔒 ' : ''}{r.tamanoMb} MB · {fechaCorta(r.fecha)}</span>
+            <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{r.cifrado && <IcoTexto n="candado" tam={12} />}{r.tamanoMb} MB · {fechaCorta(r.fecha)}</span>
             <a href={`/api/admin/respaldos/${encodeURIComponent(r.archivo)}`} style={{ ...linkBtn('var(--df-brand)'), textDecoration: 'none' }}>Descargar</a>
             <button onClick={() => void eliminarCopia(r)} disabled={!!ocupado} style={{ ...linkBtn('var(--df-danger)') }}>{ocupado === r.archivo ? 'Eliminando…' : 'Eliminar'}</button>
           </div>
@@ -616,14 +617,14 @@ function SeguridadEquipo() {
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>🛡️ Seguridad</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}><IcoTexto n="escudo" tam={17} degradado />Seguridad</h2>
         <span style={{ fontSize: 12.5, color: malos.length ? 'var(--df-danger)' : 'var(--df-success)', fontWeight: 700 }}>{malos.length ? `${malos.length} punto(s) por corregir en Railway → Variables` : 'Todo en orden'}</span>
         <a href="/legal/seguridad.html" target="_blank" rel="noopener" style={{ ...linkBtn('var(--df-brand)'), marginLeft: 'auto', textDecoration: 'none' }}>Política de seguridad ↗</a>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
         {estado.map((e) => (
           <div key={e.punto} style={{ display: 'flex', gap: 8, fontSize: 12.5, alignItems: 'flex-start' }}>
-            <span>{e.ok ? '✅' : '⚠️'}</span>
+            <Icono nombre={e.ok ? 'ok' : 'alerta'} tam={15} color={e.ok ? 'var(--df-success)' : '#B45309'} style={{ marginTop: 1 }} />
             <span><b style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>{e.punto}</b> <span style={{ color: 'var(--df-text-muted)' }}>— {e.detalle}</span></span>
           </div>
         ))}
@@ -665,7 +666,7 @@ function CorreosServidor() {
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>✉️ Correos</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}><IcoTexto n="correo" tam={17} degradado />Correos</h2>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: e.configurado ? 'var(--df-success)' : 'var(--df-danger)' }}>
           {e.configurado ? `Activo · ${e.proveedor === 'resend' ? 'Resend' : `SMTP ${e.host}`}` : 'Sin configurar'}
         </span>
@@ -685,7 +686,7 @@ function CorreosServidor() {
           {e.ultimos.map((c, i) => (
             <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12, padding: '7px 10px', borderTop: i ? '1px solid var(--df-border)' : 'none' }}>
               <span style={{ color: 'var(--df-text-faint)', minWidth: 120 }}>{c.created_at}</span>
-              <span>{c.estado === 'enviado' ? '✅' : '⚠️'}</span>
+              <Icono nombre={c.estado === 'enviado' ? 'ok' : 'alerta'} tam={14} color={c.estado === 'enviado' ? 'var(--df-success)' : '#B45309'} />
               <b style={{ minWidth: 160 }}>{c.para}</b>
               <span style={{ flex: 1, minWidth: 160 }}>{c.asunto}{c.error ? <span style={{ color: 'var(--df-danger)' }}> — {c.error}</span> : ''}</span>
             </div>
@@ -719,13 +720,13 @@ function AuditoriaRemitentesEffi() {
   const celda: React.CSSProperties = { padding: '6px 8px', borderTop: '1px solid var(--df-border)', fontSize: 12.5, verticalAlign: 'top' };
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 20 }}>
-      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>🏭 Auditoría de remitentes (Effi)</div>
+      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}><IcoTexto n="bodega" tam={17} degradado />Auditoría de remitentes (Effi)</div>
       <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 12, lineHeight: 1.5 }}>
         Desde qué remitente (bodega de origen) salieron las guías de cada tienda: el total en Effi y las que creó DealFlow (últimos 120 días), con las que siguen por recoger. Tarda un poco: consulta a Effi tienda por tienda.
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={() => void auditar()} disabled={cargando} style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: cargando ? 0.6 : 1 }}>{cargando ? 'Consultando a Effi…' : 'Auditar todas las tiendas'}</button>
-        {datos && <button onClick={csv} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>⬇ Descargar Excel (CSV)</button>}
+        {datos && <button onClick={csv} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}><IcoTexto n="descargar" />Descargar Excel (CSV)</button>}
       </div>
       {error && <div style={{ color: 'var(--df-danger)', fontSize: 12.5, marginTop: 8 }}>{error}</div>}
       {datos?.map((t) => (
@@ -768,7 +769,7 @@ function PagosAdmin() {
   const numero = c.whatsapp || c.numeroLanding;
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, marginTop: 20 }}>
-      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>💳 Pagos en línea ({c.boldListo ? 'Bold' : 'Wompi'})</div>
+      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}><IcoTexto n="pago" tam={17} degradado />Pagos en línea ({c.boldListo ? 'Bold' : 'Wompi'})</div>
       <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
         {c.offline
           ? <>Apagados: cuando una tienda va a pagar (plan, renta, Tienda en línea, Biblioteca o créditos) ve que el pago es <b>offline</b> y un botón para escribir por WhatsApp. Lo gratis (cupones al 100 %, membresías en $0) sigue funcionando.</>

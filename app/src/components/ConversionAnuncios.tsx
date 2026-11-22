@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import { useRecordado } from '../lib/rutas';
 import { apiStatsAnuncios, apiSincronizarAnuncios, type ConversionAnuncio, type EstadoMetaAds } from '../lib/api';
 import { fmt } from '../lib/format';
@@ -112,7 +113,7 @@ export function ConversionAnuncios({ desde, hasta, onDia }: { desde: string; has
   return (
     <div style={{ ...card, marginTop: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>📈 Conversión por anuncio</div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}><IcoTexto n="estadisticas" tam={16} degradado />Conversión por anuncio</div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 8, overflow: 'hidden' }}>
             {([['anuncio', 'Anuncio'], ['conjunto', 'Conjunto'], ['campana', 'Campaña']] as [Nivel, string][]).map(([k, l]) => (
@@ -134,7 +135,7 @@ export function ConversionAnuncios({ desde, hasta, onDia }: { desde: string; has
             <button onClick={() => void sincronizar()} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--df-brand-dark)', fontWeight: 700, fontFamily: 'inherit', fontSize: 12, cursor: 'pointer' }}>↻ Traer ahora</button>
           </>
         ) : (
-          <span>💡 Conecta tu <b>Administrador de anuncios</b> en Marketing para ver aquí el gasto, el costo por chat, el costo por pedido y el ROAS de cada anuncio.</span>
+          <span><IcoTexto n="idea" tam={13} />Conecta tu <b>Administrador de anuncios</b> en Marketing para ver aquí el gasto, el costo por chat, el costo por pedido y el ROAS de cada anuncio.</span>
         )}
         {msg && <span style={{ color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</span>}
       </div>
@@ -142,8 +143,8 @@ export function ConversionAnuncios({ desde, hasta, onDia }: { desde: string; has
       {/* Filtros */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '10px 0 6px' }}>
         <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 8, overflow: 'hidden' }}>
-          <button onClick={() => setVista('anuncio')} style={seg(vista === 'anuncio')}>📢 Por anuncio</button>
-          <button onClick={() => setVista('dia')} style={seg(vista === 'dia')}>📅 Por día</button>
+          <button onClick={() => setVista('anuncio')} style={seg(vista === 'anuncio')}><IcoTexto n="campana" tam={13} />Por anuncio</button>
+          <button onClick={() => setVista('dia')} style={seg(vista === 'dia')}><IcoTexto n="calendario" tam={13} />Por día</button>
         </div>
         {campanas.length > 0 && (
           <div style={{ minWidth: 190 }}>
@@ -173,18 +174,18 @@ export function ConversionAnuncios({ desde, hasta, onDia }: { desde: string; has
               <thead>
                 <tr>
                   <th style={{ ...th, textAlign: 'left' }}>{nivel === 'campana' ? 'Campaña' : nivel === 'conjunto' ? 'Conjunto de anuncios' : 'Anuncio'}</th>
-                  {conGasto && <th style={th} title="Inversión en Meta en el periodo">💸 Gasto</th>}
-                  <th style={th} title="Chats que entraron por el anuncio">💬 Chats</th>
+                  {conGasto && <th style={th} title="Inversión en Meta en el periodo"><IcoTexto n="dinero" tam={12} />Gasto</th>}
+                  <th style={th} title="Chats que entraron por el anuncio"><IcoTexto n="chat" tam={12} />Chats</th>
                   {conGasto && <th style={th} title="Gasto ÷ chats">Costo/chat</th>}
                   <th style={th} title="El cliente escribió 2 o más mensajes">Respondieron</th>
-                  <th style={th}>🛒 Pedidos</th>
+                  <th style={th}><IcoTexto n="carrito" tam={12} />Pedidos</th>
                   <th style={th} title="Pedidos ÷ chats">Conversión</th>
                   {conGasto && <th style={th} title="Gasto ÷ pedidos (sin cancelados)">Costo/pedido</th>}
-                  <th style={th}>🚚 Despachados</th>
-                  <th style={th}>✅ Entregados</th>
-                  <th style={th}>↩️ Devueltos</th>
-                  <th style={th}>❌ Cancelados</th>
-                  <th style={th}>💰 Ventas</th>
+                  <th style={th}><IcoTexto n="despachar" tam={12} />Despachados</th>
+                  <th style={th}><IcoTexto n="entregado" tam={12} />Entregados</th>
+                  <th style={th}><IcoTexto n="devolver" tam={12} />Devueltos</th>
+                  <th style={th}><IcoTexto n="error" tam={12} />Cancelados</th>
+                  <th style={th}><IcoTexto n="dinero" tam={12} />Ventas</th>
                   <th style={th} title="Dinero de pedidos entregados">Entregado $</th>
                   {conGasto && <th style={th} title="Ventas ÷ gasto: cuántos pesos vendiste por cada peso invertido">ROAS</th>}
                 </tr>
@@ -239,13 +240,13 @@ function TablaDias({ dias, conGasto, onDia }: { dias: { fecha: string; gasto: nu
           <thead>
             <tr>
               <th style={{ ...th, textAlign: 'left' }}>Día</th>
-              {conGasto && <th style={th}>💸 Gasto</th>}
-              <th style={th}>💬 Chats</th>
+              {conGasto && <th style={th}><IcoTexto n="dinero" tam={12} />Gasto</th>}
+              <th style={th}><IcoTexto n="chat" tam={12} />Chats</th>
               {conGasto && <th style={th}>Costo/chat</th>}
-              <th style={th}>🛒 Pedidos</th>
+              <th style={th}><IcoTexto n="carrito" tam={12} />Pedidos</th>
               <th style={th}>Conversión</th>
               {conGasto && <th style={th}>Costo/pedido</th>}
-              <th style={th}>💰 Ventas</th>
+              <th style={th}><IcoTexto n="dinero" tam={12} />Ventas</th>
               {conGasto && <th style={th}>ROAS</th>}
             </tr>
           </thead>
@@ -273,7 +274,7 @@ function FilaAd({ f, color, abierto, onClick, td, conGasto }: { f: ConversionAnu
   const org = f.id === 'organico';
   const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : '—');
   const dinero = (n: number) => (n ? fmt(n) : '—');
-  const sub = f.producto ? `🏷️ ${f.producto}` : org ? 'Chats que no vinieron de una pauta' : f.campaignName && f.campaignName !== f.titular ? `📣 ${f.campaignName}` : f.canal || ' ';
+  const sub = f.producto ? `Producto: ${f.producto}` : org ? 'Chats que no vinieron de una pauta' : f.campaignName && f.campaignName !== f.titular ? `Campaña: ${f.campaignName}` : f.canal || ' ';
   return (
     <>
       <tr onClick={onClick} style={{ cursor: 'pointer', background: abierto ? 'var(--df-bg)' : undefined }}>
@@ -281,7 +282,7 @@ function FilaAd({ f, color, abierto, onClick, td, conGasto }: { f: ConversionAnu
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <span style={{ width: 4, alignSelf: 'stretch', borderRadius: 4, background: color, flexShrink: 0 }} />
             <span style={{ width: 36, height: 36, borderRadius: 7, overflow: 'hidden', background: 'var(--df-surface-2)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-              {f.media && imgOk ? <img src={f.media} alt="" onError={() => setImgOk(false)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 16 }}>{org ? '🌱' : '📢'}</span>}
+              {f.media && imgOk ? <img src={f.media} alt="" onError={() => setImgOk(false)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icono nombre={org ? 'brote' : 'campana'} tam={16} degradado />}
             </span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: 'block', fontWeight: 700, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.titular}</span>

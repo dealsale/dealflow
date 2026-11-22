@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from './Icono';
 import { apiCalidad, apiGuardarCalidad, type ResumenCalidad } from '../lib/api';
 
 /**
@@ -57,7 +58,7 @@ export function CalidadCard({ calidad }: { calidad?: string }) {
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div style={{ fontWeight: 800, fontSize: 15 }}>🛡️ Protección de la calidad del número</div>
+        <div style={{ fontWeight: 800, fontSize: 15 }}><IcoTexto n="escudo" />Protección de la calidad del número</div>
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}><b style={{ color: 'var(--df-text-strong)' }}>{r.bajas}</b> cliente{r.bajas === 1 ? '' : 's'} pidieron no recibir mensajes</span>
       </div>
@@ -76,7 +77,7 @@ export function CalidadCard({ calidad }: { calidad?: string }) {
 
       {frenoOn && (
         <div style={{ marginBottom: 14, background: 'var(--df-warning-subtle-2)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '11px 14px', fontSize: 13, lineHeight: 1.5 }}>
-          <b style={{ color: 'var(--df-warning)' }}>⏸ Freno automático activo.</b> Como la calidad está en {calidad === 'RED' || calidad === 'LOW' ? 'baja' : 'media'}, DealFlow pausó el seguimiento de pedidos, los recordatorios del asistente y el remarketing. La confirmación, la guía y los avisos de entrega siguen saliendo. Todo se reanuda solo cuando Meta vuelva a poner la calidad en alta.
+          <b style={{ color: 'var(--df-warning)' }}><IcoTexto n="pausa" />Freno automático activo.</b> Como la calidad está en {calidad === 'RED' || calidad === 'LOW' ? 'baja' : 'media'}, DealFlow pausó el seguimiento de pedidos, los recordatorios del asistente y el remarketing. La confirmación, la guía y los avisos de entrega siguen saliendo. Todo se reanuda solo cuando Meta vuelva a poner la calidad en alta.
         </div>
       )}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>

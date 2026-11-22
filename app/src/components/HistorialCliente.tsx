@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto, type NombreIcono } from './Icono';
 import { apiHistorialCliente, type HistorialCliente } from '../lib/api';
 import { confirmar } from './dialogs';
 
@@ -35,17 +36,17 @@ export function AvisoDevolucionPropia({ h }: { h: HistorialCliente | null }) {
   if (!n) return null;
   return (
     <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-danger-subtle, #FEF2F2)', border: '1px solid var(--df-danger-border, #FECACA)', borderRadius: 10, padding: '10px 12px', fontSize: 13, color: 'var(--df-text-body)' }}>
-      <span style={{ fontSize: 18, lineHeight: 1 }}>⛔</span>
+      <Icono nombre="error" tam={18} color="var(--df-danger-dark, #B91C1C)" />
       <span><b style={{ color: 'var(--df-danger-dark, #B91C1C)' }}>Este cliente ya tuvo {n} {n === 1 ? 'devolución' : 'devoluciones'} con {h!.propia?.tienda || 'tu tienda'}.</b> Despáchalo solo si el pago es anticipado o si ya lo confirmaste por llamada.</span>
     </div>
   );
 }
 
-const RIESGO: Record<HistorialCliente['riesgo'], { icono: string; titulo: string; color: string; fondo: string; borde: string }> = {
-  nuevo: { icono: '🆕', titulo: 'Cliente nuevo', color: 'var(--df-text-body)', fondo: 'var(--df-bg)', borde: 'var(--df-border)' },
-  bajo: { icono: '✅', titulo: 'Buen historial', color: 'var(--df-brand-dark)', fondo: 'var(--df-brand-subtle-2)', borde: 'var(--df-brand-border)' },
-  medio: { icono: '⚠️', titulo: 'Ha devuelto pedidos', color: '#B45309', fondo: 'var(--df-warning-subtle-2, #FFFBEB)', borde: 'var(--df-warning-border, #FDE68A)' },
-  alto: { icono: '⛔', titulo: 'Riesgo alto de devolución', color: 'var(--df-danger-dark, #B91C1C)', fondo: 'var(--df-danger-subtle, #FEF2F2)', borde: 'var(--df-danger-border, #FECACA)' },
+const RIESGO: Record<HistorialCliente['riesgo'], { icono: NombreIcono; titulo: string; color: string; fondo: string; borde: string }> = {
+  nuevo: { icono: 'usuario', titulo: 'Cliente nuevo', color: 'var(--df-text-body)', fondo: 'var(--df-bg)', borde: 'var(--df-border)' },
+  bajo: { icono: 'ok', titulo: 'Buen historial', color: 'var(--df-brand-dark)', fondo: 'var(--df-brand-subtle-2)', borde: 'var(--df-brand-border)' },
+  medio: { icono: 'alerta', titulo: 'Ha devuelto pedidos', color: '#B45309', fondo: 'var(--df-warning-subtle-2, #FFFBEB)', borde: 'var(--df-warning-border, #FDE68A)' },
+  alto: { icono: 'error', titulo: 'Riesgo alto de devolución', color: 'var(--df-danger-dark, #B91C1C)', fondo: 'var(--df-danger-subtle, #FEF2F2)', borde: 'var(--df-danger-border, #FECACA)' },
 };
 
 /**
@@ -60,19 +61,19 @@ export function HistorialClienteCard({ rowId, tel }: { rowId?: string; tel: stri
   return (
     <div style={{ background: c.fondo, border: `1px solid ${c.borde}`, borderRadius: 10, padding: '10px 12px', marginBottom: 18, fontSize: 12.5, display: 'grid', gap: 5 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 15 }}>{c.icono}</span>
+        <Icono nombre={c.icono} tam={16} color={c.color} />
         <b style={{ color: c.color, fontSize: 13 }}>{c.titulo}</b>
         <span style={{ color: 'var(--df-text-body)' }}>{h.resumen}</span>
       </div>
-      {h.propia.devueltos > 0 && <div style={{ color: 'var(--df-danger-dark, #B91C1C)', fontWeight: 700 }}>⛔ {h.propia.devueltos} {h.propia.devueltos === 1 ? 'devolución' : 'devoluciones'} con {h.propia.tienda}</div>}
+      {h.propia.devueltos > 0 && <div style={{ color: 'var(--df-danger-dark, #B91C1C)', fontWeight: 700 }}><IcoTexto n="error" tam={13} />{h.propia.devueltos} {h.propia.devueltos === 1 ? 'devolución' : 'devoluciones'} con {h.propia.tienda}</div>}
       {h.red.pedidos > 0 && (
         <div style={{ color: 'var(--df-text-muted)' }}>
-          🛡️ <b>Red DealFlow</b>: {n(h.red.pedidos, 'pedido anterior', 'pedidos anteriores')} · {n(h.red.entregados, 'entregado', 'entregados')} · {n(h.red.devueltos, 'devuelto', 'devueltos')}{h.red.cancelados ? ` · ${n(h.red.cancelados, 'cancelado', 'cancelados')}` : ''}{h.red.enCurso ? ` · ${h.red.enCurso} en curso` : ''}
+          <IcoTexto n="equipoDF" tam={13} /><b>Red DealFlow</b>: {n(h.red.pedidos, 'pedido anterior', 'pedidos anteriores')} · {n(h.red.entregados, 'entregado', 'entregados')} · {n(h.red.devueltos, 'devuelto', 'devueltos')}{h.red.cancelados ? ` · ${n(h.red.cancelados, 'cancelado', 'cancelados')}` : ''}{h.red.enCurso ? ` · ${h.red.enCurso} en curso` : ''}
         </div>
       )}
       {h.effi && h.effi.guias > 0 && (
         <div style={{ color: 'var(--df-text-muted)' }}>
-          📦 <b>Tu Effi</b>: {n(h.effi.guias, 'guía', 'guías')} · {n(h.effi.entregadas, 'entregada', 'entregadas')} · {n(h.effi.devoluciones, 'devolución', 'devoluciones')}{h.effi.conNovedad ? ` · ${h.effi.conNovedad} con novedad` : ''}
+          <IcoTexto n="paquete" tam={13} /><b>Tu Effi</b>: {n(h.effi.guias, 'guía', 'guías')} · {n(h.effi.entregadas, 'entregada', 'entregadas')} · {n(h.effi.devoluciones, 'devolución', 'devoluciones')}{h.effi.conNovedad ? ` · ${h.effi.conNovedad} con novedad` : ''}
         </div>
       )}
       {(h.riesgo === 'medio' || h.riesgo === 'alto') && <div style={{ color: c.color, fontWeight: 600 }}>Antes de despachar, confírmalo por llamada o pide un anticipo del envío.</div>}

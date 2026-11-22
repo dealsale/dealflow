@@ -1,10 +1,11 @@
 /** Filtros unificados y livianos para Pedidos, Leads y Chat. */
 import { Dropdown } from './Dropdown';
+import { Icono } from './Icono';
 
 export function SearchInput({ value, onChange, placeholder, width }: { value: string; onChange: (v: string) => void; placeholder: string; width?: number | string }) {
   return (
     <div style={{ position: 'relative', width: width ?? 260, maxWidth: '100%' }}>
-      <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--df-text-faint)', pointerEvents: 'none' }}>🔍</span>
+      <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--df-text-faint)', pointerEvents: 'none', display: 'flex' }}><Icono nombre="buscar" tam={15} /></span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}

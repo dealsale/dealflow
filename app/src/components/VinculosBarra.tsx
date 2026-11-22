@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { IcoTexto } from './Icono';
 import { apiQuitarVinculos, apiReanudarVinculos, type IntegVinculo } from '../lib/api';
 import { confirmar, notificar } from './dialogs';
 
@@ -40,10 +41,10 @@ export function VinculosBarra({ productId, integ, pausado, vinculadas, total, on
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       <span style={{ fontSize: 12, fontWeight: 700, color: total && vinculadas === total ? 'var(--df-brand-dark)' : 'var(--df-warning)' }}>{vinculadas}/{total} variantes conectadas</span>
       {pausado
-        ? <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)' }}>⏸ Vinculación automática en pausa</span>
-        : <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--df-text-faint)' }}>⚡ Se vinculan solas, también las variantes nuevas</span>}
+        ? <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)' }}><IcoTexto n="pausa" />Vinculación automática en pausa</span>
+        : <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--df-text-faint)' }}><IcoTexto n="rapido" />Se vinculan solas, también las variantes nuevas</span>}
       <span style={{ flex: 1 }} />
-      {pausado && <button onClick={() => void reanudar()} disabled={trabajando} style={{ ...btn, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)' }}>⚡ Vincular solas de nuevo</button>}
+      {pausado && <button onClick={() => void reanudar()} disabled={trabajando} style={{ ...btn, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)' }}><IcoTexto n="rapido" />Vincular solas de nuevo</button>}
       {vinculadas > 0 && <button onClick={() => void quitar()} disabled={trabajando} style={{ ...btn, color: 'var(--df-danger)' }}>{trabajando ? 'Quitando…' : 'Quitar todo'}</button>}
     </div>
   );

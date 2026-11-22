@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 import { apiPlantillasTienda, apiGuardarPlantillaTienda, apiBorrarPlantillaTienda, apiVistaPlantillaTienda, apiUsarPlantilla, type PlantillaTienda, type LandingResumen } from '../lib/api';
 import { confirmar, notificar } from './dialogs';
@@ -34,7 +35,7 @@ export function PlantillasModal({ landings, onCerrar }: { landings: LandingResum
           <>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 240 }}>
-                <div style={{ fontWeight: 800, fontSize: 17 }}>🎨 Mis plantillas</div>
+                <div style={{ fontWeight: 800, fontSize: 17 }}><IcoTexto n="paleta" />Mis plantillas</div>
                 <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginTop: 2, lineHeight: 1.5 }}>Diseños propios en HTML, como los temas de Shopify. Haces (o le pides a una IA) la plantilla una vez con marcas como <code>{'{{producto.nombre}}'}</code>, <code>{'{{precio}}'}</code> o <code>{'{{formulario}}'}</code>, y cualquier landing la usa llenándose con su producto, sus fotos, variantes y ofertas.</div>
               </div>
               <button onClick={() => setEditando({ id: '', nombre: '', html: ejemplo, gracias: '', usos: 0, updatedAt: '' })} style={btnPri}>＋ Nueva plantilla</button>
@@ -50,8 +51,8 @@ export function PlantillasModal({ landings, onCerrar }: { landings: LandingResum
                         <div style={{ fontWeight: 700, fontSize: 14 }}>{p.nombre}</div>
                         <div style={{ fontSize: 12, color: 'var(--df-text-faint)' }}>{p.usos} landing{p.usos === 1 ? '' : 's'} la usa{p.usos === 1 ? '' : 'n'} · editada {fecha(p.updatedAt)}{p.gracias.trim() ? ' · con página de gracias' : ''}</div>
                       </div>
-                      <button onClick={() => setEditando(p)} style={btn}>✏️ Editar</button>
-                      <button onClick={() => descargar(`${archivoSeguro(p.nombre)}.html`, p.html)} style={btn}>⬇ Descargar</button>
+                      <button onClick={() => setEditando(p)} style={btn}><IcoTexto n="editar" />Editar</button>
+                      <button onClick={() => descargar(`${archivoSeguro(p.nombre)}.html`, p.html)} style={btn}><IcoTexto n="descargar" />Descargar</button>
                       <button onClick={() => void borrar(p)} style={{ ...btn, color: 'var(--df-danger)' }}>Borrar</button>
                     </div>
                   ))}
@@ -91,7 +92,7 @@ function EditorPlantilla({ p, landings, guia, onVolver }: { p: PlantillaTienda; 
     setGuardando(false);
     if (!r.data) return notificar(r.error || 'No se pudo guardar.', 'error');
     setId(r.data.plantilla.id); setGuardado({ landing: texto.landing, gracias: texto.gracias, nombre });
-    notificar(`✓ Plantilla guardada.${r.data.plantilla.usos ? ` Las ${r.data.plantilla.usos} landings que la usan ya se ven así.` : ' Elígela en cualquier landing → 🎨 Diseño de la página.'}`);
+    notificar(`✓ Plantilla guardada.${r.data.plantilla.usos ? ` Las ${r.data.plantilla.usos} landings que la usan ya se ven así.` : ' Elígela en cualquier landing → Diseño de la página.'}`);
   };
   const volver = async () => { if (cambiado && !(await confirmar({ titulo: 'Tienes cambios sin guardar', mensaje: '¿Salir sin guardar?', aceptar: 'Salir sin guardar', peligro: true }))) return; onVolver(); };
   const subir = (f?: File) => {
@@ -110,24 +111,24 @@ function EditorPlantilla({ p, landings, guia, onVolver }: { p: PlantillaTienda; 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 12, flex: 1, minHeight: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {(['landing', 'gracias'] as const).map((x) => <button key={x} onClick={() => setPag(x)} style={{ ...btn, ...(pag === x ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>{x === 'landing' ? '🛍️ Página del producto' : '🎉 Página de gracias'}</button>)}
-            <button onClick={() => archivo.current?.click()} style={btn}>⬆ Subir .html</button>
+            {(['landing', 'gracias'] as const).map((x) => <button key={x} onClick={() => setPag(x)} style={{ ...btn, ...(pag === x ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>{x === 'landing' ? 'Página del producto' : 'Página de gracias'}</button>)}
+            <button onClick={() => archivo.current?.click()} style={btn}><IcoTexto n="subir" />Subir .html</button>
             <input ref={archivo} type="file" accept=".html,.htm,text/html" style={{ display: 'none' }} onChange={(e) => { subir(e.target.files?.[0]); e.target.value = ''; }} />
-            <button onClick={() => descargar(`${archivoSeguro(nombre)}${pag === 'gracias' ? '-gracias' : ''}.html`, texto[pag])} style={btn}>⬇ Descargar</button>
-            <button onClick={() => setVerGuia((v) => !v)} style={btn}>🤖 Guía para la IA</button>
+            <button onClick={() => descargar(`${archivoSeguro(nombre)}${pag === 'gracias' ? '-gracias' : ''}.html`, texto[pag])} style={btn}><IcoTexto n="descargar" />Descargar</button>
+            <button onClick={() => setVerGuia((v) => !v)} style={btn}><IcoTexto n="bot" />Guía para la IA</button>
           </div>
           {verGuia && (
             <div style={{ border: '1px solid var(--df-border)', borderRadius: 9, padding: 10, background: 'var(--df-bg)' }}>
               <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 6 }}>Pégale esto a Claude, Astra u otra IA junto con el diseño que quieres (una captura, un enlace o esta plantilla) y te devuelve la plantilla lista para subir.</div>
               <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11.5, margin: 0, maxHeight: 200, overflow: 'auto', fontFamily: "'JetBrains Mono',monospace" }}>{guia}</pre>
-              <button onClick={() => void navigator.clipboard?.writeText(guia).then(() => notificar('✓ Guía copiada.'))} style={{ ...btn, marginTop: 8 }}>📋 Copiar guía</button>
+              <button onClick={() => void navigator.clipboard?.writeText(guia).then(() => notificar('✓ Guía copiada.'))} style={{ ...btn, marginTop: 8 }}><IcoTexto n="copiar" />Copiar guía</button>
             </div>
           )}
           {pag === 'gracias' && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>Opcional: después de comprar, el cliente pasa a esta página (upsell, video, mensaje). Usa <code>{'<b data-dealflow="numero"></b>'}</code> y <code>{'<span data-dealflow="total"></span>'}</code> para el número y el total.</div>}
           <textarea value={texto[pag]} onChange={(e) => setTexto((x) => ({ ...x, [pag]: e.target.value }))} spellCheck={false}
             placeholder={pag === 'landing' ? 'HTML de la plantilla con marcas {{…}}' : 'HTML de la página de gracias (opcional)'}
             style={{ flex: 1, minHeight: 320, resize: 'none', border: '1px solid var(--df-border)', borderRadius: 8, padding: 10, fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, lineHeight: 1.45, background: '#0f172a', color: '#e2e8f0' }} />
-          {avisos.map((a, i) => <div key={i} style={{ fontSize: 12, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 8, padding: '6px 9px' }}>⚠️ {a}</div>)}
+          {avisos.map((a, i) => <div key={i} style={{ fontSize: 12, color: 'var(--df-warning)', background: 'var(--df-warning-subtle)', border: '1px solid var(--df-warning-border)', borderRadius: 8, padding: '6px 9px' }}><IcoTexto n="alerta" />{a}</div>)}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -136,8 +137,8 @@ function EditorPlantilla({ p, landings, guia, onVolver }: { p: PlantillaTienda; 
               {!landings.length && <option value="">(crea una landing para ver datos reales)</option>}
               {landings.map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
             </select>
-            <button onClick={() => setDisp('cel')} style={{ ...btn, ...(disp === 'cel' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>📱</button>
-            <button onClick={() => setDisp('pc')} style={{ ...btn, ...(disp === 'pc' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>🖥️</button>
+            <button onClick={() => setDisp('cel')} style={{ ...btn, ...(disp === 'cel' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}><Icono nombre="celular" tam={15} /></button>
+            <button onClick={() => setDisp('pc')} style={{ ...btn, ...(disp === 'pc' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}><Icono nombre="pantalla" tam={15} /></button>
           </div>
           <div style={{ flex: 1, minHeight: 360, background: 'var(--df-surface-2, #f4f4f5)', borderRadius: 10, display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
             <iframe title="Vista previa de la plantilla" srcDoc={vista} sandbox="allow-scripts" style={{ width: disp === 'cel' ? 390 : '100%', maxWidth: '100%', height: '100%', border: 'none', background: '#fff' }} />
@@ -163,10 +164,10 @@ export function DisenoLanding({ landingId, plantillaId, modoCodigo, onCambio, on
       <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Elige con qué diseño se muestra esta página. Con una plantilla, lo que escribas aquí (nombre, precio, fotos, variantes, ofertas, testimonios) la llena sola.</div>
       <select value={plantillaId} onChange={(e) => void elegir(e.target.value)} style={inp}>
         <option value="">Diseño del editor (DealFlow)</option>
-        {lista.map((p) => <option key={p.id} value={p.id}>🎨 {p.nombre}</option>)}
+        {lista.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
       </select>
-      {modoCodigo && <div style={{ fontSize: 12, color: 'var(--df-warning)' }}>⚠️ Esta landing tiene activo el <b>Modo código</b> (su propio HTML), que manda sobre la plantilla. Para usar la plantilla, toca «Volver al editor» en Modo código.</div>}
-      <button onClick={onAdministrar} style={{ ...btn, alignSelf: 'flex-start' }}>🎨 Administrar mis plantillas</button>
+      {modoCodigo && <div style={{ fontSize: 12, color: 'var(--df-warning)' }}><IcoTexto n="alerta" />Esta landing tiene activo el <b>Modo código</b> (su propio HTML), que manda sobre la plantilla. Para usar la plantilla, toca «Volver al editor» en Modo código.</div>}
+      <button onClick={onAdministrar} style={{ ...btn, alignSelf: 'flex-start' }}><IcoTexto n="paleta" />Administrar mis plantillas</button>
     </div>
   );
 }

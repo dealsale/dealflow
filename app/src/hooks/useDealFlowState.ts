@@ -2335,7 +2335,7 @@ export function useDealFlowState() {
     if (guardar) queuePatch(productId, { mensajes });
   }
   const nuevoIdMensaje = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  const nombreLibre = (l: MensajeInicialVar[]) => { let n = l.length + 1; while (l.some((m) => m.nombre === `Mensaje ${n}`)) n++; return `Mensaje ${n}`; };
+  const nombreLibre = (l: MensajeInicialVar[]) => { let n = l.length + 1; while (l.some((m) => m.nombre === `Mensaje ${n}` || m.nombre === `Versión ${n}`)) n++; return `Versión ${n}`; };
 
   async function addTestimonios(productId: number | string, files: File[]) {
     const urls = await subir(files, 'image/');

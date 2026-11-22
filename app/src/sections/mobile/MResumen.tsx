@@ -1,4 +1,5 @@
 import type { DealFlowState } from '../../hooks/useDealFlowState';
+import { IcoTexto } from '../../components/Icono';
 
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 14 };
 
@@ -14,16 +15,16 @@ export function MResumen({ df }: { df: DealFlowState }) {
         <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 3, opacity: 0.95 }}>{df.ventasMesComparacion}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <div style={{ flex: 1, background: 'var(--df-hero-chip)', borderRadius: 9, padding: '8px 10px' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, opacity: 0.9 }}>🧾 Pedidos</div>
+            <div style={{ fontSize: 10.5, fontWeight: 600, opacity: 0.9 }}><IcoTexto n="guia" />Pedidos</div>
             <div style={{ fontSize: 17, fontWeight: 800, marginTop: 1 }}>{df.pedidosMesCount}</div>
           </div>
           <div style={{ flex: 1, background: 'var(--df-hero-chip)', borderRadius: 9, padding: '8px 10px' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, opacity: 0.9 }}>🎯 Ticket prom.</div>
+            <div style={{ fontSize: 10.5, fontWeight: 600, opacity: 0.9 }}><IcoTexto n="objetivo" />Ticket prom.</div>
             <div style={{ fontSize: 17, fontWeight: 800, marginTop: 1 }}>{df.ticketPromedio}</div>
           </div>
         </div>
         {df.productoTopMes && (
-          <div style={{ fontSize: 12, marginTop: 10, opacity: 0.95 }}>⭐ Producto estrella: <strong>{df.productoTopMes}</strong> ({df.productoTopUnidades})</div>
+          <div style={{ fontSize: 12, marginTop: 10, opacity: 0.95 }}><IcoTexto n="estrella" />Producto estrella: <strong>{df.productoTopMes}</strong> ({df.productoTopUnidades})</div>
         )}
       </div>
 

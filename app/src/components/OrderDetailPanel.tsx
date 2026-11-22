@@ -1,4 +1,5 @@
 import { OrigenBadge } from './OrigenPedido';
+import { Icono, IcoTexto, type NombreIcono } from './Icono';
 import { NovedadCard } from './Novedades';
 import { DevolucionEffi, RastreoGuia } from './EnvioEffi';
 import { useState, useEffect, useRef } from 'react';
@@ -19,6 +20,7 @@ import { useSkydropx, LogoSkydropx } from './SkydropxCard';
 import { useBodegas } from './BodegasProveedores';
 import { apiBodegaPedido, apiGuiaProveedorReenviar } from '../lib/api';
 import { fmtCO } from '../lib/fechaCO';
+import { LogoMarca } from './LogoMarca';
 const pesos = (n: number) => '$' + Number(n || 0).toLocaleString('es-CO');
 
 /**
@@ -82,11 +84,11 @@ export function DropiDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: De
         <InterruptorCobro cod={recaudo === 'con'} onCambio={(c) => setRecaudo(c ? 'con' : 'sin')} color="var(--df-brand)" total={sel.total && sel.total > 0 ? sel.total : sel.items.reduce((a, it) => a + it.qty * it.precio, 0) + (sel.envio || 0)} />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={cotizar} disabled={paso !== 'idle'} style={{ ...btnP, flex: '1 1 170px', opacity: paso !== 'idle' ? 0.7 : 1 }}>
-            {paso === 'cargando' ? 'Cotizando…' : '📦 Cotizar y generar guía'}
+            {paso === 'cargando' ? 'Cotizando…' : <><IcoTexto n="paquete" />Cotizar y generar guía</>}
           </button>
           <button onClick={() => void soloPedido()} disabled={paso !== 'idle'} title="Crea el pedido en Dropi sin transportadora ni guía, para revisar la huella del cliente y generar la guía allá"
             style={{ ...btnP, flex: '1 1 150px', background: 'var(--df-surface)', color: 'var(--df-brand-dark)', border: '1.5px solid var(--df-brand)', textShadow: 'none', opacity: paso !== 'idle' ? 0.7 : 1 }}>
-            {paso === 'solo' ? 'Enviando…' : '📝 Solo enviar el pedido'}
+            {paso === 'solo' ? 'Enviando…' : <><IcoTexto n="nota" />Solo enviar el pedido</>}
           </button>
         </div>
         <div style={{ fontSize: 11, color: 'var(--df-text-muted)', lineHeight: 1.45 }}>«Solo enviar»: queda en Dropi como Pendiente confirmación; revisas la huella del cliente y haces la guía allá. Llega sola a DealFlow.</div>
@@ -252,23 +254,23 @@ function SkydropxDespacho({ df, sel, onHecho }: { df: DealFlowState; sel: Decora
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {bodegas.length > 0 && (
           <div>
-            <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>🏭 Sale desde</div>
+            <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 4 }}><IcoTexto n="bodega" />Sale desde</div>
             <Dropdown ariaLabel="Bodega desde la que sale el envío" value={bodegaSel ? bodega : ''} onChange={setBodega}
               options={[{ value: '', label: `Tu dirección${sky?.origen.ciudad ? ` (${sky.origen.ciudad})` : ''}` }, ...bodegas.map((b) => ({ value: b.id, label: `Bodega de ${b.nombre} (${b.ciudad})` }))]} />
-            {mixto && <div style={{ fontSize: 11.5, color: 'var(--df-warning)', marginTop: 4 }}>⚠️ Este pedido tiene productos de bodegas distintas. Una guía sale de un solo lugar: elige desde dónde, o divide el pedido.</div>}
+            {mixto && <div style={{ fontSize: 11.5, color: 'var(--df-warning)', marginTop: 4 }}><IcoTexto n="alerta" tam={13} />Este pedido tiene productos de bodegas distintas. Una guía sale de un solo lugar: elige desde dónde, o divide el pedido.</div>}
           </div>
         )}
         <InterruptorCobro cod={recaudo === 'con'} onCambio={(c) => setRecaudo(c ? 'con' : 'sin')} color="var(--df-brand)" total={total} />
         <button onClick={cotizar} disabled={paso !== 'idle'} style={{ ...btnP, opacity: paso !== 'idle' ? 0.7 : 1 }}>
-          {paso === 'cargando' ? 'Cotizando…' : '📦 Cotizar y generar guía'}
+          {paso === 'cargando' ? 'Cotizando…' : <><IcoTexto n="paquete" />Cotizar y generar guía</>}
         </button>
         {msg && <div style={{ fontSize: 12.5, color: 'var(--df-danger-dark)' }}>{msg}</div>}
         {mpio && (
           <div style={{ border: '1px solid var(--df-warning)', background: 'var(--df-warning-subtle)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 12.5, color: 'var(--df-text)', lineHeight: 1.45 }}>📍 {mpio.mensaje}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--df-text)', lineHeight: 1.45 }}><IcoTexto n="ubicacion" />{mpio.mensaje}</div>
             <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', lineHeight: 1.45 }}>Skydropx solo trabaja con municipios. {otros ? `${otros} tiene${otros.includes(' o ') ? 'n' : ''} su propia lista de ciudades, por eso allá sí puede aparecer. ` : ''}La dirección y «{mpio.ciudad}» siguen yendo en la guía para el mensajero.</div>
             <Dropdown ariaLabel={`Municipio al que pertenece ${mpio.ciudad}`} buscar placeholder="Escoge el municipio…" value={mpioCod} onChange={setMpioCod}
-              options={mpio.opciones.map((o) => ({ value: o.codigo, label: `${o.sugerido ? '⭐ ' : ''}${o.nombre}${o.depto && !mpio.departamento ? ` (${o.depto})` : ''}` }))} />
+              options={mpio.opciones.map((o) => ({ value: o.codigo, label: `${o.sugerido ? '★ ' : ''}${o.nombre}${o.depto && !mpio.departamento ? ` (${o.depto})` : ''}` }))} />
             <button onClick={() => void usarMunicipio()} disabled={!mpioCod} style={{ ...btnP, opacity: mpioCod ? 1 : 0.6 }}>Usar este municipio y cotizar</button>
           </div>
         )}
@@ -337,14 +339,14 @@ function GuiaAlProveedor({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }
     await df.recargarPedidos();
   };
   const [icono, texto, color] = !e
-    ? ['⏳', sel.hasGuia ? `Preparando la guía para ${quien}…` : `Cuando llegue la guía se le manda a ${quien}.`, 'var(--df-text-muted)']
-    : e.estado === 'enviada' ? ['✅', `Guía enviada a ${quien} por WhatsApp.`, 'var(--df-brand-dark)']
-      : e.estado === 'pendiente' ? ['⏳', `Esperando que ${quien} responda en WhatsApp para mandarle la guía.`, 'var(--df-text-muted)']
-        : e.estado === 'apagado' ? ['🔕', `${quien} tiene apagado el aviso por WhatsApp.`, 'var(--df-text-muted)']
-          : ['⚠️', `No se pudo mandar la guía a ${quien}.`, 'var(--df-danger-dark)'];
+    ? ['pendiente', sel.hasGuia ? `Preparando la guía para ${quien}…` : `Cuando llegue la guía se le manda a ${quien}.`, 'var(--df-text-muted)']
+    : e.estado === 'enviada' ? ['ok', `Guía enviada a ${quien} por WhatsApp.`, 'var(--df-brand-dark)']
+      : e.estado === 'pendiente' ? ['pendiente', `Esperando que ${quien} responda en WhatsApp para mandarle la guía.`, 'var(--df-text-muted)']
+        : e.estado === 'apagado' ? ['silenciado', `${quien} tiene apagado el aviso por WhatsApp.`, 'var(--df-text-muted)']
+          : ['alerta', `No se pudo mandar la guía a ${quien}.`, 'var(--df-danger-dark)'];
   return (
     <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '8px 10px' }}>
-      <span>{icono}</span>
+      <Icono nombre={icono as NombreIcono} tam={17} color={color} style={{ marginTop: 1 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12.5, fontWeight: 700, color }}>{texto}</div>
         {e?.detalle && e.estado !== 'enviada' && <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 2 }}>{e.detalle}</div>}
@@ -558,7 +560,7 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
       ) : prev && (
         <div className="df-expand" style={{ border: '1px solid var(--df-purple-border)', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ padding: '10px 12px', background: 'var(--df-purple-subtle)', fontSize: 12, fontWeight: 700, color: 'var(--df-purple)', display: 'flex', gap: 8 }}>
-            <span>📍 {prev.ubicacion}</span><span style={{ marginLeft: 'auto' }}>{pesos(prev.total)}</span>
+            <span><IcoTexto n="ubicacion" />{prev.ubicacion}</span><span style={{ marginLeft: 'auto' }}>{pesos(prev.total)}</span>
           </div>
           {prev.lineas.map((l, i) => (
             <div key={i} style={{ padding: '9px 12px', borderTop: '1px solid var(--df-border)', fontSize: 12.5 }}>
@@ -566,17 +568,17 @@ function EffiApiDespacho({ df, sel, reintentar, onHecho }: { df: DealFlowState; 
               <div style={{ color: 'var(--df-text-muted)', fontSize: 11.5, marginTop: 2 }}>→ {l.articulo}</div>
             </div>
           ))}
-          {prev.avisos.map((a, i) => <div key={i} style={{ padding: '8px 12px', borderTop: '1px solid var(--df-border)', fontSize: 12, color: 'var(--df-warning)', background: 'var(--df-warning-subtle-2)' }}>⚠ {a}</div>)}
+          {prev.avisos.map((a, i) => <div key={i} style={{ padding: '8px 12px', borderTop: '1px solid var(--df-border)', fontSize: 12, color: 'var(--df-warning)', background: 'var(--df-warning-subtle-2)' }}><IcoTexto n="alerta" tam={13} />{a}</div>)}
           {guiaAuto && (
             <div style={{ padding: 12, borderTop: '1px solid var(--df-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700 }}>🚚 La guía se crea sola con la transportadora configurada. Revisa desde qué bodega sale:</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700 }}><IcoTexto n="despachar" />La guía se crea sola con la transportadora configurada. Revisa desde qué bodega sale:</div>
               <CampoRemitente g={g} />
             </div>
           )}
           {!guiaAuto && (
             <div style={{ padding: 12, borderTop: '1px solid var(--df-border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                <input type="checkbox" checked={conGuia} onChange={(e) => setConGuia(e.target.checked)} /> 🚚 Crear también la guía de transporte
+                <input type="checkbox" checked={conGuia} onChange={(e) => setConGuia(e.target.checked)} /> <IcoTexto n="despachar" />Crear también la guía de transporte
               </label>
               {conGuia && cotOk && sel.rowId && <CotizadorEffi compacto rowId={String(sel.rowId)} valor={g.d.transportadora} remitente={g.d.remitente} declarado={g.d.valorDeclarado} onElegir={(o) => setCot(o)} onCambiar={() => { setPaso('idle'); setPrev(null); }} />}
               {conGuia && <CamposGuia g={g} items={sel.items} sinTransportadora={!!cot && cotOk && cot.id === g.d.transportadora} />}
@@ -629,14 +631,14 @@ function CorregirVariantes({ df, sel, onListo }: { df: DealFlowState; sel: Decor
   };
   return (
     <div style={{ border: '1px solid var(--df-warning-border, var(--df-border))', background: 'var(--df-warning-subtle)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 12.5, lineHeight: 1.45 }}><b>🧩 Corrige la talla o el color</b> — estos productos del pedido piden una variante que no existe. Elige la correcta (pregúntale al cliente si hace falta):</div>
+      <div style={{ fontSize: 12.5, lineHeight: 1.45 }}><b><IcoTexto n="variante" />Corrige la talla o el color</b> — estos productos del pedido piden una variante que no existe. Elige la correcta (pregúntale al cliente si hace falta):</div>
       {faltan.map((f) => (
         <div key={f.itemId} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, minWidth: 160, flex: '1 1 160px' }}>{f.qty}× <s style={{ color: 'var(--df-text-muted)' }}>{f.nombre}</s></span>
           <div style={{ flex: '1 1 200px', minWidth: 180 }}>
             {f.opciones.length
               ? <Dropdown ariaLabel={`Variante correcta de ${f.nombre}`} placeholder="Elige la variante…" buscar value={elegida[f.itemId] || ''} onChange={(v) => setElegida((m) => ({ ...m, [f.itemId]: v }))} options={f.opciones.map((o) => ({ value: o.variantId, label: o.label }))} />
-              : <span style={{ fontSize: 12, color: 'var(--df-danger)' }}>No encontramos el producto: corrígelo con ✏️ Editar.</span>}
+              : <span style={{ fontSize: 12, color: 'var(--df-danger)' }}>No encontramos el producto: corrígelo con <b>Editar</b>.</span>}
           </div>
         </div>
       ))}
@@ -825,11 +827,11 @@ function CampoRemitente({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
       <div id="df-campo-remitente" style={{ border: `2px solid ${g.avisoRemitente && !d.remitente ? '#DC2626' : d.remitente ? 'var(--df-brand-border, #A7F3D0)' : 'var(--df-warning, #F59E0B)'}`, borderRadius: 10, padding: 10, background: g.avisoRemitente && !d.remitente ? 'rgba(220, 38, 38, .08)' : 'transparent' }}>
         <label style={{ ...lb, fontSize: 12, color: 'var(--df-text)' }}>Remitente (bodega de origen) · obligatorio</label>
         <Dropdown ariaLabel="Remitente" placeholder="Elige desde qué bodega sale el paquete…" value={d.remitente} onChange={(v) => g.elegirRemitente(v)} options={ops.remitentes.map((x) => ({ value: x.id, label: x.nombre }))} />
-        {d.remitente && <button type="button" onClick={() => void g.nombrarRemitente(d.remitente)} style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, color: 'var(--df-purple)', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>✏️ Nombre de la bodega y proveedor</button>}
-        {g.sugerido && d.remitente && d.remitente === g.sugerido.remitente && <div style={{ fontSize: 11.5, color: ojo ? 'var(--df-warning, #B45309)' : 'var(--df-brand-dark)', marginTop: 5, fontWeight: 600 }}>{ojo ? '⚠️' : '✓'} Se puso solo: {g.sugerido.motivo}. Revísalo antes de crear la guía.</div>}
+        {d.remitente && <button type="button" onClick={() => void g.nombrarRemitente(d.remitente)} style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, color: 'var(--df-purple)', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}><IcoTexto n="editar" tam={12} />Nombre de la bodega y proveedor</button>}
+        {g.sugerido && d.remitente && d.remitente === g.sugerido.remitente && <div style={{ fontSize: 11.5, color: ojo ? 'var(--df-warning, #B45309)' : 'var(--df-brand-dark)', marginTop: 5, fontWeight: 600 }}><IcoTexto n={ojo ? 'alerta' : 'listo'} tam={13} />Se puso solo: {g.sugerido.motivo}. Revísalo antes de crear la guía.</div>}
         {g.sugerido?.pendiente && (
           <div style={{ marginTop: 6, background: 'rgba(245, 158, 11, .12)', border: '1px solid var(--df-warning, #F59E0B)', borderRadius: 8, padding: '8px 10px', fontSize: 12, lineHeight: 1.45, color: 'var(--df-text)' }}>
-            <b>📦 Este pedido es de {g.sugerido.proveedor}.</b> Elige SU bodega: el remitente es a donde la transportadora devuelve el paquete. Si eliges la bodega de otro proveedor, la devolución le llega a él.
+            <b><IcoTexto n="paquete" />Este pedido es de {g.sugerido.proveedor}.</b> Elige SU bodega: el remitente es a donde la transportadora devuelve el paquete. Si eliges la bodega de otro proveedor, la devolución le llega a él.
           </div>
         )}
         {g.sugerido?.convenio && d.remitente && (g.sugerido.pendiente || d.remitente !== g.sugerido.remitente) && (
@@ -840,7 +842,7 @@ function CampoRemitente({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
         )}
         {g.avisoRemitente && !d.remitente ? (
           <div role="alert" style={{ marginTop: 8, background: '#DC2626', color: '#fff', borderRadius: 8, padding: '12px 14px', fontSize: 15, fontWeight: 800, lineHeight: 1.35 }}>
-            ⚠️ Tienes que seleccionar el remitente
+            <IcoTexto n="alerta" tam={13} />Tienes que seleccionar el remitente
             <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 3, opacity: 0.95 }}>Elige la bodega desde donde sale el paquete (revisa la ciudad y la dirección) y vuelve a crear la guía.</div>
           </div>
         ) : !d.remitente && <div style={{ fontSize: 11.5, color: 'var(--df-warning, #B45309)', marginTop: 5, fontWeight: 600 }}>Revisa la ciudad y la dirección: varios remitentes pueden tener el mismo nombre.</div>}
@@ -889,12 +891,12 @@ function CamposGuia({ g, items = [], sinTransportadora = false }: { g: ReturnTyp
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div><label style={lb}>Contenido (opcional)</label><input value={d.contenido} onChange={(e) => set({ contenido: e.target.value })} placeholder="Se copia de la remisión" style={sel_} />
           {items.length > 0 && <button type="button" onClick={() => set({ contenido: contenidoDeItems(items) })} title={contenidoDeItems(items)}
-            style={{ marginTop: 5, background: 'none', border: '1px dashed var(--df-purple-border, var(--df-border))', borderRadius: 7, padding: '4px 8px', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: 'var(--df-purple)', cursor: 'pointer' }}>📋 Copiar de los artículos (con variantes)</button>}
+            style={{ marginTop: 5, background: 'none', border: '1px dashed var(--df-purple-border, var(--df-border))', borderRadius: 7, padding: '4px 8px', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: 'var(--df-purple)', cursor: 'pointer' }}><IcoTexto n="copiar" tam={12} />Copiar de los artículos (con variantes)</button>}
         </div>
         <div><label style={lb}>Valor declarado (opcional)</label><input type="number" min={0} value={d.valorDeclarado || ''} onChange={(e) => set({ valorDeclarado: Number(e.target.value) })} placeholder="Del total de la remisión" style={sel_} /></div>
         <div style={{ gridColumn: '1 / -1' }}><label style={lb}>Nota en la guía (opcional)</label><input value={d.nota} onChange={(e) => set({ nota: e.target.value })} placeholder="Ej: llamar antes de entregar" style={sel_} />
           {items.length > 0 && <button type="button" onClick={() => { const det = notaDeItems(items); set({ nota: d.nota && !d.nota.includes(det) ? `${d.nota} · ${det}`.slice(0, 255) : det }); }} title={notaDeItems(items)}
-            style={{ marginTop: 5, background: 'none', border: '1px dashed var(--df-purple-border, var(--df-border))', borderRadius: 7, padding: '4px 8px', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: 'var(--df-purple)', cursor: 'pointer' }}>📋 Copiar productos con tallas y cantidades</button>}
+            style={{ marginTop: 5, background: 'none', border: '1px dashed var(--df-purple-border, var(--df-border))', borderRadius: 7, padding: '4px 8px', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: 'var(--df-purple)', cursor: 'pointer' }}><IcoTexto n="copiar" tam={12} />Copiar productos con tallas y cantidades</button>}
         </div>
       </div>
       <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, cursor: 'pointer' }}>
@@ -922,7 +924,7 @@ function GuiaEffiForm({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
     setMsg(`✓ Guía ${r.data.guia || r.data.idTransaccion} creada${r.data.transportadora ? ` con ${r.data.transportadora}` : ''}.`);
     await df.refrescarPedidos();
   };
-  if (!abierto) return <button onClick={abrir} style={{ ...btnP, marginTop: 12 }}>🚚 Generar guía en Effi</button>;
+  if (!abierto) return <button onClick={abrir} style={{ ...btnP, marginTop: 12 }}><IcoTexto n="despachar" />Generar guía en Effi</button>;
   return (
     <div className="df-expand" style={{ marginTop: 12, border: '1px solid var(--df-purple-border)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -983,27 +985,27 @@ function GuiaAcciones({ df, sel }: { df: DealFlowState; sel: DecoratedOrder }) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 140, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, color: 'var(--df-text-strong)' }}>Guía {sel.guia}</div>
         <button onClick={() => df.copyGuia(sel.guia!)} className="df-copy-btn" style={btnS}>{df.guiaBtnLabel}</button>
-        {archivo && <a href={archivo} download={`Guia-${sel.id}`} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)', textDecoration: 'none' }}>⬇ Descargar</a>}
+        {archivo && <a href={archivo} download={`Guia-${sel.id}`} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)', textDecoration: 'none' }}><IcoTexto n="descargar" />Descargar</a>}
       </div>
       {sel.guiaImg && <a href={sel.guiaImg} target="_blank" rel="noreferrer"><img src={sel.guiaImg} alt={`Guía ${sel.guia}`} style={{ width: '100%', maxHeight: 380, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--df-border)', background: '#fff' }} /></a>}
       {/* La guía se le envía sola al cliente: subir/enviar a mano solo aparece si ese envío falló. */}
       {(fallo || !entregada) && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <label style={{ ...btnS, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: ocupado ? 'progress' : 'pointer' }}>
-          📎 {archivo ? 'Cambiar documento' : 'Subir guía (PDF o imagen)'}
+          <IcoTexto n="adjunto" />{archivo ? 'Cambiar documento' : 'Subir guía (PDF o imagen)'}
           <input type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden onChange={(e) => { subir(e.target.files?.[0]); e.target.value = ''; }} />
         </label>
-        <button onClick={enviar} disabled={ocupado} style={{ ...btnS, background: '#25D366', borderColor: '#25D366', color: '#05301a', fontWeight: 700 }}>💬 {fallo ? 'Volver a enviar la guía al cliente' : 'Reenviar la guía'}</button>
+        <button onClick={enviar} disabled={ocupado} style={{ ...btnS, background: '#25D366', borderColor: '#25D366', color: '#05301a', fontWeight: 700 }}><IcoTexto n="chat" />{fallo ? 'Volver a enviar la guía al cliente' : 'Reenviar la guía'}</button>
       </div>}
       {av && (
         <div style={{ fontSize: 12, lineHeight: 1.45, borderRadius: 8, padding: '8px 10px', background: av.ok ? 'rgba(37,211,102,.1)' : 'var(--df-warning-subtle)', color: av.ok ? '#047857' : 'var(--df-text-body)' }}>
           {av.ok && (entregada || !conEstado)
-            ? <>✅ <b>{entregada ? (vista ? 'El cliente ya vio la guía' : 'La guía le llegó al cliente') : 'Guía enviada al cliente'}</b>{av.chat === 'plantilla' ? ' (con plantilla, la ventana de 24 h estaba cerrada)' : av.con === 'image' ? ' (con la imagen de la guía)' : av.con === 'document' ? ' (con el PDF)' : ''}.{av.reintento ? ' Se reenvió porque el primer mensaje no llegó.' : ''}</>
+            ? <><IcoTexto n="ok" /><b>{entregada ? (vista ? 'El cliente ya vio la guía' : 'La guía le llegó al cliente') : 'Guía enviada al cliente'}</b>{av.chat === 'plantilla' ? ' (con plantilla, la ventana de 24 h estaba cerrada)' : av.con === 'image' ? ' (con la imagen de la guía)' : av.con === 'document' ? ' (con el PDF)' : ''}.{av.reintento ? ' Se reenvió porque el primer mensaje no llegó.' : ''}</>
             : av.ok
-            ? <>📤 <b>Guía enviada, WhatsApp todavía no confirma que le llegó.</b> {sinConfirmar ? 'Puede tener el celular apagado o sin datos. Si el cliente no la tiene, reenvíala.' : 'Se actualiza sola.'}</>
-            : <>⚠️ <b>{av.falloChat || av.falloContacto ? 'WhatsApp no le entregó la guía al cliente.' : 'No se le pudo enviar la guía al cliente.'}</b> {av.detalle || av.falloChat || av.falloContacto || 'Revisa el registro del pedido.'} {/plantilla/i.test(av.detalle) && 'Publica y espera la aprobación de la plantilla «guia_envio_pedido» en WhatsApp → Plantillas.'} DealFlow lo vuelve a intentar solo cada 2 horas.</>}
+            ? <><IcoTexto n="enviar" /><b>Guía enviada, WhatsApp todavía no confirma que le llegó.</b> {sinConfirmar ? 'Puede tener el celular apagado o sin datos. Si el cliente no la tiene, reenvíala.' : 'Se actualiza sola.'}</>
+            : <><IcoTexto n="alerta" /><b>{av.falloChat || av.falloContacto ? 'WhatsApp no le entregó la guía al cliente.' : 'No se le pudo enviar la guía al cliente.'}</b> {av.detalle || av.falloChat || av.falloContacto || 'Revisa el registro del pedido.'} {/plantilla/i.test(av.detalle) && 'Publica y espera la aprobación de la plantilla «guia_envio_pedido» en WhatsApp → Plantillas.'} DealFlow lo vuelve a intentar solo cada 2 horas.</>}
         </div>
       )}
-      {!av && sel.hasGuia && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>📨 La guía se le está enviando sola al cliente por WhatsApp.</div>}
+      {!av && sel.hasGuia && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}><IcoTexto n="enviar" />La guía se le está enviando sola al cliente por WhatsApp.</div>}
       {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : msg.includes('…') ? 'var(--df-text-muted)' : 'var(--df-danger-dark)' }}>{msg}</div>}
     </div>
   );
@@ -1063,8 +1065,8 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
           <button onClick={sel.sincronizarEffi} style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)' }}>↻ Actualizar</button>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-          {remision && <span style={chip('var(--df-purple-subtle)', 'var(--df-purple)')}>🧾 {remision}</span>}
-          {sel.transportadora && !(sel.transportadora === 'Dropi' && !dropiCreado) && <span style={chip('var(--df-warning-subtle)', 'var(--df-warning)')}>🚚 {sel.transportadora}</span>}
+          {remision && <span style={chip('var(--df-purple-subtle)', 'var(--df-purple)')}><IcoTexto n="guia" tam={13} />{remision}</span>}
+          {sel.transportadora && !(sel.transportadora === 'Dropi' && !dropiCreado) && <span style={chip('var(--df-warning-subtle)', 'var(--df-warning)')}><IcoTexto n="despachar" tam={13} />{sel.transportadora}</span>}
         </div>
         <PasosEnvio sel={sel} />
         {sel.novedad && <div style={{ marginTop: 12 }}><NovedadCard df={df} sel={sel} /></div>}
@@ -1075,9 +1077,9 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
         {!dropiCreado && !!sel.effiRemision && !sel.hasGuia && df.effiApi.conectado && !sel.effiGuiaCreada && <GuiaEffiForm df={df} sel={sel} />}
         {!sel.hasGuia && sel.effiGuiaCreada && (
           <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--df-text-muted)', background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div>🚚 Guía creada en Effi{sel.effiGuiaTx ? <> (<b style={{ color: 'var(--df-text-strong)' }}>{sel.effiGuiaTx}</b>)</> : ''} · esperando que la transportadora asigne el número. Llega solo; apenas llegue se le envía al cliente.</div>
+            <div><IcoTexto n="despachar" />Guía creada en Effi{sel.effiGuiaTx ? <> (<b style={{ color: 'var(--df-text-strong)' }}>{sel.effiGuiaTx}</b>)</> : ''} · esperando que la transportadora asigne el número. Llega solo; apenas llegue se le envía al cliente.</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {(sel.guiaUrl || sel.guiaImg) && <a href={sel.guiaImg || sel.guiaUrl} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)', textDecoration: 'none' }}>📄 Ver la guía</a>}
+              {(sel.guiaUrl || sel.guiaImg) && <a href={sel.guiaImg || sel.guiaUrl} target="_blank" rel="noreferrer" style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)', textDecoration: 'none' }}><IcoTexto n="documento" />Ver la guía</a>}
               <button onClick={sel.sincronizarEffi} style={{ ...btnS, color: 'var(--df-brand-dark)', borderColor: 'var(--df-brand)' }}>↻ Buscar el número ahora</button>
             </div>
           </div>
@@ -1105,7 +1107,7 @@ export function DespachoPedido({ df, sel }: { df: DealFlowState; sel: DecoratedO
   if (!df.puede('despachar')) {
     return (
       <div style={{ border: '1px dashed var(--df-border-strong)', borderRadius: 12, padding: 14, marginBottom: 18, textAlign: 'center', color: 'var(--df-text-muted)', fontSize: 12.5 }}>
-        🔒 Tu rol no tiene permiso para despachar. Lo despacha alguien del equipo con ese permiso.
+        <IcoTexto n="candado" />Tu rol no tiene permiso para despachar. Lo despacha alguien del equipo con ese permiso.
       </div>
     );
   }
@@ -1167,7 +1169,7 @@ function CambioCliente({ sel, onListo }: { sel: DecoratedOrder; onListo: () => v
   const cuando = (() => { const d = new Date(c.at); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); })();
   return (
     <div role="alert" style={{ border: '1.5px solid #F59E0B', background: 'rgba(245,158,11,.1)', borderRadius: 10, padding: '11px 13px', marginBottom: 16, display: 'grid', gap: 6 }}>
-      <div style={{ fontWeight: 800, fontSize: 13.5, color: '#92400E' }}>✏️ El cliente pidió modificar este pedido{cuando ? ` · ${cuando}` : ''}</div>
+      <div style={{ fontWeight: 800, fontSize: 13.5, color: '#92400E' }}><IcoTexto n="editar" tam={15} />El cliente pidió modificar este pedido{cuando ? ` · ${cuando}` : ''}</div>
       <div style={{ fontSize: 13, color: 'var(--df-text-body)' }}>{c.detalle}</div>
       <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{c.anular ? (sel.despachoProveedor === 'dropi' ? 'Cancela la orden en Dropi y corrige el pedido.' : 'Anula la guía/remisión en Effi (más abajo, «Anular en Effi»), corrige el pedido y vuelve a despacharlo.') : 'Corrige el pedido con lo que pidió.'} Así no queda un pedido duplicado.</div>
       <button disabled={ocupado} onClick={() => { setOcupado(true); void apiCambioResuelto(sel.rowId!).then(() => { setOcupado(false); onListo(); }); }}
@@ -1199,7 +1201,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--df-text-muted)', fontSize: 12.5, marginBottom: 14 }}>
-            <span>📅</span>
+            <Icono nombre="calendario" tam={15} />
             <span>
               Pedido el <b style={{ color: 'var(--df-text-strong)' }}>{sel.fecha || 'hoy'}</b> a las <b style={{ color: 'var(--df-text-strong)' }}>{sel.hora}</b>
             </span>
@@ -1211,15 +1213,15 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Datos de envío</div>
           <div style={{ background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 10, padding: 14, marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 7 }}>
             {[
-              { icono: '👤', k: 'Nombre', v: sel.cliente },
-              { icono: '📞', k: 'Contacto', v: sel.tel, mono: true },
-              { icono: '🏔️', k: 'Departamento', v: sel.departamento || '' },
-              { icono: '🏙️', k: 'Ciudad', v: sel.ciudad },
-              { icono: '🏡', k: 'Dirección', v: sel.direccion },
-              { icono: '💳', k: 'Método de pago', v: 'Contraentrega' },
+              { icono: 'usuario' as NombreIcono, k: 'Nombre', v: sel.cliente },
+              { icono: 'llamar' as NombreIcono, k: 'Contacto', v: sel.tel, mono: true },
+              { icono: 'departamento' as NombreIcono, k: 'Departamento', v: sel.departamento || '' },
+              { icono: 'ciudad' as NombreIcono, k: 'Ciudad', v: sel.ciudad },
+              { icono: 'casa' as NombreIcono, k: 'Dirección', v: sel.direccion },
+              { icono: 'pago' as NombreIcono, k: 'Método de pago', v: 'Contraentrega' },
             ].filter((f) => f.v).map((f) => (
               <div key={f.k} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13.5, lineHeight: 1.5, flexWrap: f.k === 'Dirección' ? 'wrap' : undefined }}>
-                <span style={{ flexShrink: 0 }}>{f.icono}</span>
+                <Icono nombre={f.icono} tam={16} degradado style={{ marginTop: 3 }} />
                 <span style={{ color: 'var(--df-text-muted)', fontWeight: 600, minWidth: 118, flexShrink: 0 }}>{f.k}:</span>
                 <span style={{ fontWeight: f.k === 'Nombre' ? 700 : 500, fontFamily: f.mono ? "'JetBrains Mono',monospace" : undefined, fontSize: f.mono ? 12.5 : undefined, flex: f.k === 'Dirección' ? '1 1 0' : undefined, minWidth: 0 }}>{f.v}</span>
                 {f.k === 'Dirección' && <OrdenarDireccion rowId={sel.rowId} direccion={sel.direccion} ciudad={sel.ciudad} departamento={sel.departamento || ''} onCambio={() => void df.recargarPedidos()} />}
@@ -1252,7 +1254,7 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
 
           {sel.hasNota && (
             <div style={{ background: 'var(--df-warning-subtle-2)', border: '1px solid var(--df-warning-border)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#92400E', marginBottom: 18 }}>
-              📝 {sel.nota}
+              <IcoTexto n="nota" />{sel.nota}
             </div>
           )}
 
@@ -1291,13 +1293,13 @@ export function OrderDetailPanel({ df }: { df: DealFlowState }) {
               onClick={() => df.abrirEditarPedido(sel)}
               title="Editar pedido"
               style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-text-strong)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >✏️ Editar</button>
+            ><IcoTexto n="editar" />Editar</button>
             <button
               onClick={async () => { if (await confirmar({ titulo: `Eliminar ${sel.id}`, mensaje: 'Esto solo lo quita del panel; no cancela nada en Dropi/Effi.', aceptar: 'Eliminar', peligro: true })) sel.eliminar(); }}
               title="Eliminar pedido"
               style={{ background: 'var(--df-surface)', border: '1px solid var(--df-danger-border, var(--df-border))', borderRadius: 8, padding: '9px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: 'var(--df-danger-dark)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >🗑 Eliminar</button>
-          </div> : <div style={{ fontSize: 13, fontWeight: 700 }}>{sel.estado} <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--df-text-faint)' }}>· 🔒 tu rol no puede editar pedidos</span></div>}
+            ><IcoTexto n="eliminar" />Eliminar</button>
+          </div> : <div style={{ fontSize: 13, fontWeight: 700 }}>{sel.estado} <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--df-text-faint)' }}>· <IcoTexto n="candado" tam={12} />tu rol no puede editar pedidos</span></div>}
         </div>
         {sel.rowId && <RegistroPedido key={String(sel.rowId)} rowId={String(sel.rowId)} />}
       </div>
@@ -1323,7 +1325,7 @@ function RegistroPedido({ rowId }: { rowId: string }) {
     <div style={{ padding: '12px 20px 16px', borderTop: '1px solid var(--df-border)' }}>
       <button onClick={() => setAbierto((a) => !a)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
         <span style={{ fontSize: 11, color: 'var(--df-text-faint)', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', flex: 1 }}>🧾 Registro del pedido</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', flex: 1 }}><IcoTexto n="guia" />Registro del pedido</span>
         {abierto && eventos && <span style={{ fontSize: 11, color: errores ? 'var(--df-danger)' : 'var(--df-text-faint)' }}>{eventos.length} eventos{errores ? ` · ${errores} con error` : ''}</span>}
       </button>
       {abierto && (
@@ -1357,12 +1359,12 @@ function ConfirmacionShopify({ sel }: { sel: DecoratedOrder }) {
   const [enviando, setEnviando] = useState(false);
   const [enviada, setEnviada] = useState(false);
   const c = enviada && sel.confirmacion !== 'si' && sel.confirmacion !== 'no' ? 'esperando' : sel.confirmacion || '';
-  const info: Record<string, [string, string, string]> = {
-    esperando: ['⏳', 'Esperando que el cliente confirme por WhatsApp', 'var(--df-warning)'],
-    si: ['✅', 'El cliente confirmó el pedido por WhatsApp', 'var(--df-success)'],
-    no: ['❌', 'El cliente respondió que NO: escríbele desde el Inbox', 'var(--df-danger)'],
-    fallo: ['⚠️', 'No le llegó el resumen al cliente (se reintenta solo)', 'var(--df-danger)'],
-    '': ['💬', 'Al cliente no le ha llegado el resumen para confirmar', 'var(--df-warning)'],
+  const info: Record<string, [NombreIcono, string, string]> = {
+    esperando: ['pendiente', 'Esperando que el cliente confirme por WhatsApp', 'var(--df-warning)'],
+    si: ['ok', 'El cliente confirmó el pedido por WhatsApp', 'var(--df-success)'],
+    no: ['error', 'El cliente respondió que NO: escríbele desde el Inbox', 'var(--df-danger)'],
+    fallo: ['alerta', 'No le llegó el resumen al cliente (se reintenta solo)', 'var(--df-danger)'],
+    '': ['chat', 'Al cliente no le ha llegado el resumen para confirmar', 'var(--df-warning)'],
   };
   const [ico, texto, color] = info[c] || info[''];
   const reenviar = async () => {
@@ -1376,12 +1378,12 @@ function ConfirmacionShopify({ sel }: { sel: DecoratedOrder }) {
   return (
     <div style={{ border: '1px solid var(--df-border)', borderRadius: 12, padding: '11px 13px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span>{ico}</span>
+        <Icono nombre={ico} tam={17} color={color} />
         <span style={{ fontSize: 13, fontWeight: 700, color, flex: 1, minWidth: 180 }}>{texto}</span>
         {c !== 'si' && <button onClick={() => void reenviar()} disabled={enviando} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '6px 11px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12, cursor: 'pointer', color: 'var(--df-text-body)', opacity: enviando ? 0.6 : 1 }}>{enviando ? 'Enviando…' : c ? 'Reenviar confirmación' : 'Pedir confirmación'}</button>}
       </div>
       {c === 'fallo' && sel.confirmacionError && !msg && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.45 }}>{sel.confirmacionError}</div>}
-      {sel.shopifyEnviado && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>🛍️ Marcado como enviado en Shopify con su guía.</div>}
+      {sel.shopifyEnviado && <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}><LogoMarca marca="shopify" size={14} style={{ marginRight: 5, verticalAlign: '-0.18em' }} />Marcado como enviado en Shopify con su guía.</div>}
       {msg && <div style={{ fontSize: 12, color: msg.startsWith('✓') ? 'var(--df-success)' : 'var(--df-danger)' }}>{msg}</div>}
     </div>
   );

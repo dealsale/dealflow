@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icono } from './Icono';
 import { SesionVisor, type EstadoConexion } from '../escritorio/conexion';
 import { CapaControl } from './VentanaLlamada';
 
@@ -40,7 +41,7 @@ export function VisorEscritorio({ sesionId, equipo, onCerrar }: { sesionId: stri
   return (
     <div role="dialog" aria-label="Computador de la tienda" data-df-no-remoto="" style={{ position: 'fixed', inset: 0, zIndex: 85, background: 'rgba(2,6,23,.92)', display: 'flex', flexDirection: 'column', fontFamily: 'inherit', color: '#fff' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'linear-gradient(135deg,#1E3A8A,#047857)', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 18 }}>💻</span>
+        <Icono nombre="computador" tam={18} degradado />
         <div style={{ flex: 1, minWidth: 160 }}>
           <div style={{ fontWeight: 800, fontSize: 14 }}>{equipo}</div>
           <div role="status" style={{ fontSize: 12, opacity: 0.9 }}>{txt[estado]}</div>

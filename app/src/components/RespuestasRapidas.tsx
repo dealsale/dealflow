@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import { apiBorrarRespuestaRapida, apiGuardarRespuestaRapida, type RespuestaRapida } from '../lib/api';
 import { recargarRespuestas, useRespuestasRapidas } from '../lib/respuestasRapidas';
 
@@ -31,7 +32,7 @@ export function RespuestasRapidasModal({ onCerrar, atajoInicial = '' }: { onCerr
       <div role="dialog" aria-label="Mensajes rápidos" onClick={(e) => e.stopPropagation()}
         style={{ width: 'min(560px, 100%)', maxHeight: '90vh', overflowY: 'auto', background: 'var(--df-surface)', color: 'var(--df-text)', borderRadius: 16, padding: 18, boxShadow: '0 30px 70px -20px rgba(2,6,23,.6)' }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-          <div style={{ fontWeight: 800, fontSize: 16.5, flex: 1 }}>⚡ Mensajes rápidos</div>
+          <div style={{ fontWeight: 800, fontSize: 16.5, flex: 1 }}><IcoTexto n="rapido" />Mensajes rápidos</div>
           <button onClick={onCerrar} aria-label="Cerrar" style={btn}>✕</button>
         </div>
         <p style={{ fontSize: 12.5, color: 'var(--df-text-muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
@@ -64,7 +65,7 @@ export function RespuestasRapidasModal({ onCerrar, atajoInicial = '' }: { onCerr
                 <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', whiteSpace: 'pre-wrap', maxHeight: 54, overflow: 'hidden' }}>{x.texto}</div>
               </div>
               <button onClick={() => { setEdit({ id: x.id, atajo: x.atajo, texto: x.texto }); setMsg(''); }} style={btn}>Editar</button>
-              <button onClick={() => void borrar(x)} aria-label={`Borrar /${x.atajo}`} style={{ ...btn, color: 'var(--df-danger-dark)' }}>🗑</button>
+              <button onClick={() => void borrar(x)} aria-label={`Borrar /${x.atajo}`} style={{ ...btn, color: 'var(--df-danger-dark)' }}><Icono nombre="eliminar" tam={15} /></button>
             </div>
           ))}
         </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Icono, IcoTexto } from '../components/Icono';
 import { DialogHost, notificar, confirmar } from '../components/dialogs';
 import { Dropdown } from '../components/Dropdown';
 
@@ -144,7 +145,7 @@ function Encabezado({ sesion, esAdmin, admin, setAdmin, onVolver }: { sesion: Se
         <div style={{ flex: 1 }} />
         {esAdmin && (
           <button className="ac-btn" onClick={() => setAdmin(!admin)} style={admin ? btnPrimary : btnGhost}>
-            {admin ? '👁️ Ver portal' : '⚙️ Administrar'}
+            {admin ? <><IcoTexto n="ver" />Ver portal</> : <><IcoTexto n="ajustes" />Administrar</>}
           </button>
         )}
         <span style={{ color: C.muted, fontSize: 13 }}>{sesion.nombre}</span>
@@ -165,7 +166,7 @@ function Portal({ cursos, onAbrir }: { cursos: Curso[]; onAbrir: (c: Curso) => v
       </h1>
       <p style={{ color: C.muted, fontSize: 16, margin: '0 0 26px', animation: 'acFadeUp .5s .05s ease both' }}>Tutoriales y cursos: cómo crear automatizaciones, subir productos, atender por WhatsApp y mucho más.</p>
       {cursos.length === 0 ? (
-        <div style={{ ...tarjeta, textAlign: 'center', color: C.muted, animation: 'acFadeUp .5s ease both' }}>Pronto habrá contenido nuevo por aquí. 📚</div>
+        <div style={{ ...tarjeta, textAlign: 'center', color: C.muted, animation: 'acFadeUp .5s ease both' }}>Pronto habrá contenido nuevo por aquí.</div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 18 }}>
           {cursos.map((c, i) => {
@@ -176,7 +177,7 @@ function Portal({ cursos, onAbrir }: { cursos: Curso[]; onAbrir: (c: Curso) => v
                   <div className="ac-cover" style={{ height: '100%', background: c.portada ? `center/cover no-repeat url(${c.portada})` : `linear-gradient(140deg,${nivelColor},${C.panel} 130%)` }} />
                   {/* Sin portada propia: un ícono decorativo para que la tarjeta no se vea vacía. */}
                   {!c.portada && (
-                    <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 52, opacity: 0.9, filter: 'drop-shadow(0 4px 14px rgba(0,0,0,.35))', pointerEvents: 'none' }}>🎓</span>
+                    <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 52, opacity: 0.9, filter: 'drop-shadow(0 4px 14px rgba(0,0,0,.35))', pointerEvents: 'none' }}><Icono nombre="tutoriales" tam={50} color="#fff" /></span>
                   )}
                 </div>
                 <div style={{ padding: '14px 16px' }}>
@@ -263,7 +264,7 @@ function VistaCurso({ cursoId }: { cursoId: string }) {
                 {pct > 0 && pct < 100 && <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent)', backgroundSize: '200% 100%', animation: 'acShine 1.8s linear infinite' }} />}
               </div>
             </div>
-            <span style={{ fontSize: 12, color: pct === 100 ? C.emerald : C.muted, fontWeight: 700, whiteSpace: 'nowrap' }}>{pct === 100 ? '🎉 100%' : `${pct}%`}</span>
+            <span style={{ fontSize: 12, color: pct === 100 ? C.emerald : C.muted, fontWeight: 700, whiteSpace: 'nowrap' }}>{pct === 100 ? <><IcoTexto n="fiesta" tam={12} />100%</> : `${pct}%`}</span>
           </div>
           <div style={{ fontSize: 11.5, color: C.muted2, marginTop: 5 }}>{hechas} de {total} lecciones completadas</div>
         </div>
@@ -291,7 +292,7 @@ function VistaCurso({ cursoId }: { cursoId: string }) {
                 return (
                   <button key={l.id} onClick={() => setActiva(l)} className="ac-lec" style={{ display: 'flex', gap: 9, width: '100%', textAlign: 'left', background: activa?.id === l.id ? 'rgba(52,211,153,.14)' : 'transparent', border: 'none', borderRadius: 9, padding: '8px 10px 8px 22px', cursor: 'pointer', color: C.text, alignItems: 'center' }}>
                     <span style={{ width: 16, height: 16, borderRadius: 99, flexShrink: 0, display: 'grid', placeItems: 'center', fontSize: 10, border: `1.5px solid ${done ? C.emerald : C.line2}`, background: done ? C.emerald : 'transparent', color: '#052018', transition: 'background .2s,border-color .2s' }}>{done ? '✓' : ''}</span>
-                    <span style={{ color: C.muted2, fontSize: 13 }}>{l.tipo === 'video' ? '▶' : '📄'}</span>
+                    <span style={{ color: C.muted2, fontSize: 13 }}>{l.tipo === 'video' ? '▶' : <Icono nombre="documento" tam={13} />}</span>
                     <span style={{ flex: 1, fontSize: 13, color: done ? C.muted : C.text }}>{i + 1}. {l.titulo}</span>
                     {l.duracion && <span style={{ color: C.muted2, fontSize: 11.5 }}>{l.duracion}</span>}
                   </button>
@@ -341,7 +342,7 @@ function GuiaPasos({ pasos }: { pasos: PasoImagen[] }) {
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span>📸 Paso a paso</span><span style={{ height: 1, flex: 1, background: C.line }} />
+        <span><IcoTexto n="foto" />Paso a paso</span><span style={{ height: 1, flex: 1, background: C.line }} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         {pasos.map((p, i) => (
@@ -484,7 +485,7 @@ function FormCurso({ curso, onGuardar, onCancelar }: { curso: Partial<Curso>; on
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
         {f.portada && <img src={f.portada} alt="" style={{ width: 96, height: 60, objectFit: 'cover', borderRadius: 8, border: `1px solid ${C.line2}` }} />}
         <label style={{ ...btnGhost, display: 'inline-block', borderStyle: 'dashed', cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
-          {subiendo ? 'Subiendo…' : (f.portada ? '🖼️ Cambiar portada' : '🖼️ Subir portada')}
+          {subiendo ? 'Subiendo…' : <><IcoTexto n="imagen" />{f.portada ? 'Cambiar portada' : 'Subir portada'}</>}
           <input type="file" accept="image/*" disabled={subiendo} onChange={(e) => { const file = e.target.files?.[0]; if (file) void subirPortada(file); e.target.value = ''; }} style={{ display: 'none' }} />
         </label>
         {f.portada && <button onClick={() => set('portada', '')} style={{ ...btnGhost, padding: '5px 10px', color: C.danger }}>Quitar</button>}
@@ -559,7 +560,7 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
                 {renombrando === s.id ? (
                   <input autoFocus defaultValue={s.titulo} onBlur={(e) => renombrarSeccion(s.id, e.target.value)} onKeyDown={(e) => e.key === 'Enter' && renombrarSeccion(s.id, (e.target as HTMLInputElement).value)} style={{ ...inputA, marginBottom: 0, flex: 1 }} />
                 ) : (
-                  <div style={{ flex: 1, fontWeight: 750, fontSize: 14 }}>📁 {s.titulo}</div>
+                  <div style={{ flex: 1, fontWeight: 750, fontSize: 14 }}><IcoTexto n="carpeta" />{s.titulo}</div>
                 )}
                 <button onClick={() => setRenombrando(s.id)} style={{ ...btnGhost, padding: '3px 8px', fontSize: 12 }}>Renombrar</button>
                 <button onClick={() => borrarSeccion(s.id)} style={{ ...btnGhost, padding: '3px 8px', fontSize: 12, color: C.danger }}>Eliminar</button>
@@ -570,7 +571,7 @@ function CursoAdmin({ curso, onEditar, onBorrar, onCambio }: { curso: Curso; onE
                     <button onClick={() => moverLeccion(s, li, -1)} disabled={li === 0} style={{ ...flechita, opacity: li === 0 ? 0.35 : 1 }} title="Subir">▲</button>
                     <button onClick={() => moverLeccion(s, li, 1)} disabled={li === s.lecciones.length - 1} style={{ ...flechita, opacity: li === s.lecciones.length - 1 ? 0.35 : 1 }} title="Bajar">▼</button>
                   </div>
-                  <span style={{ color: C.emerald }}>{l.tipo === 'video' ? '▶' : '📄'}</span>
+                  <span style={{ color: C.emerald }}>{l.tipo === 'video' ? '▶' : <Icono nombre="documento" tam={13} />}</span>
                   <span style={{ flex: 1 }}>{l.titulo} {!l.publicado && <span style={{ color: C.muted2, fontSize: 11 }}>(oculta)</span>}</span>
                   <button onClick={() => setEditLec({ seccionId: s.id, leccion: l })} style={{ ...btnGhost, padding: '3px 8px' }}>Editar</button>
                   <button onClick={() => borrarLec(l.id)} style={{ ...btnGhost, padding: '3px 8px', color: C.danger }}>×</button>
@@ -628,7 +629,7 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
       </div>
       {f.tipo !== 'articulo' && (
         <div style={{ border: `1px dashed ${C.line2}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 10 }}>🎬 Videos de la lección</div>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 10 }}><IcoTexto n="video" />Videos de la lección</div>
           {videos.map((v, i) => (
             <div key={i} style={{ marginBottom: 12, background: 'rgba(255,255,255,.03)', borderRadius: 9, padding: 10 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
@@ -649,7 +650,7 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => setVideos([...videos, { url: '', titulo: '' }])} style={{ ...btnGhost, borderStyle: 'dashed', fontSize: 12.5 }}>+ Agregar video por URL</button>
             <label style={{ ...btnGhost, display: 'inline-block', borderStyle: 'dashed', cursor: subVideo ? 'default' : 'pointer', opacity: subVideo ? 0.6 : 1, fontSize: 12.5 }}>
-              {subVideo ? 'Subiendo video…' : '⬆️ Subir video (mp4)'}
+              {subVideo ? 'Subiendo video…' : <><IcoTexto n="subir" />Subir video (mp4)</>}
               <input type="file" accept="video/*" disabled={subVideo} onChange={(e) => { const file = e.target.files?.[0]; if (file) void subirVideo(file); e.target.value = ''; }} style={{ display: 'none' }} />
             </label>
           </div>
@@ -660,7 +661,7 @@ function FormLeccion({ leccion, onGuardar, onCancelar }: { leccion: Partial<Lecc
 
       {/* Guía paso a paso: capturas de pantalla numeradas, cada una con su descripción. */}
       <div style={{ border: `1px dashed ${C.line2}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 10 }}>📸 Paso a paso (capturas)</div>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 10 }}><IcoTexto n="foto" />Paso a paso (capturas)</div>
         {pasos.map((p, i) => (
           <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10, background: 'rgba(255,255,255,.03)', borderRadius: 9, padding: 8 }}>
             <span style={{ width: 22, height: 22, borderRadius: '50%', background: C.emerald, color: '#052018', fontWeight: 800, fontSize: 11.5, display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 4 }}>{i + 1}</span>

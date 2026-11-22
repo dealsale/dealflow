@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import type { CSSProperties, ReactNode } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
@@ -21,7 +22,7 @@ const btn: CSSProperties = { background: 'var(--df-surface)', border: '1px solid
 const card: CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column' };
 const Portada = ({ src }: { src: string | null }) => (
   <div style={{ aspectRatio: '16/10', background: 'var(--df-surface-2)', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
-    {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <span style={{ fontSize: 30, color: 'var(--df-border-strong)' }}>🛍️</span>}
+    {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Icono nombre="bolsa" tam={30} style={{ opacity: 0.35 }} />}
   </div>
 );
 
@@ -49,7 +50,7 @@ export function BibliotecaLandingsModal({ onCerrar, onImportada }: { onCerrar: (
       <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--df-surface)', borderRadius: 14, width: 'min(920px, 100%)', maxHeight: '88vh', overflow: 'auto', padding: 18, boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 17 }}>📚 Biblioteca de landings</div>
+            <div style={{ fontWeight: 800, fontSize: 17 }}><IcoTexto n="biblioteca" />Biblioteca de landings</div>
             <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginTop: 2 }}>Páginas de venta ya armadas (fotos, ofertas, testimonios y textos). Se importan como borrador con el nombre, logo y WhatsApp de tu tienda; tú eliges el producto y la publicas.</div>
           </div>
           <button onClick={onCerrar} style={btn}>Cerrar</button>
@@ -108,8 +109,8 @@ export function BibliotecaLandingsAdmin({ df }: { df: DealFlowState }) {
   return (
     <>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        {pestana('tiendas', `🏬 Landings de las tiendas · ${todas ? todas.length : '…'}`)}
-        {pestana('biblioteca', `📚 En la biblioteca · ${items.length}`)}
+        {pestana('tiendas', `Landings de las tiendas · ${todas ? todas.length : '…'}`)}
+        {pestana('biblioteca', `En la biblioteca · ${items.length}`)}
       </div>
       {vista === 'tiendas' ? (
         <CatalogoTiendas df={df} todas={todas} alCambiar={cargar} />
@@ -219,13 +220,13 @@ function CardTienda({ l, df, alCambiar }: { l: SuperLandingTienda; df: DealFlowS
       <div style={{ padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3 }}>{l.nombre}</div>
-          <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, marginTop: 2 }}>🏬 {l.tienda}</div>
+          <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5, marginTop: 2 }}><IcoTexto n="tienda" />{l.tienda}</div>
         </div>
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
           {l.estado === 'publicada' ? <Insignia tono="verde">PUBLICADA</Insignia> : <Insignia>BORRADOR</Insignia>}
-          {l.enBiblioteca && <Insignia tono="morado">📚 EN BIBLIOTECA</Insignia>}
-          {l.modoCodigo && <Insignia tono="ambar">💻 CÓDIGO PROPIO</Insignia>}
-          {l.conPlantilla && <Insignia tono="ambar">🧩 PLANTILLA</Insignia>}
+          {l.enBiblioteca && <Insignia tono="morado"><IcoTexto n="biblioteca" />EN BIBLIOTECA</Insignia>}
+          {l.modoCodigo && <Insignia tono="ambar"><IcoTexto n="computador" />CÓDIGO PROPIO</Insignia>}
+          {l.conPlantilla && <Insignia tono="ambar"><IcoTexto n="variante" />PLANTILLA</Insignia>}
         </div>
         <div style={{ color: 'var(--df-text-faint)', fontSize: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {l.precio > 0 && <span>Precio <b style={{ color: 'var(--df-text-body)' }}>{fmt(l.precio)}</b></span>}
@@ -233,15 +234,15 @@ function CardTienda({ l, df, alCambiar }: { l: SuperLandingTienda; df: DealFlowS
           {l.updatedAt && <span>· {fechaCorta(l.updatedAt)}</span>}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <a href={vista} target="_blank" rel="noreferrer" style={botonChico}>👁 Ver</a>
-          {l.url && <a href={l.url} target="_blank" rel="noreferrer" style={botonChico} title={l.url}>🔗 Pública</a>}
-          <button onClick={() => void abrirEnTienda()} disabled={!!ocupado} style={botonChico} title="Abrir el editor de esta landing entrando a la tienda">{ocupado === 'abrir' ? '…' : '✏️ Editar'}</button>
+          <a href={vista} target="_blank" rel="noreferrer" style={botonChico}><IcoTexto n="ver" />Ver</a>
+          {l.url && <a href={l.url} target="_blank" rel="noreferrer" style={botonChico} title={l.url}><IcoTexto n="enlace" />Pública</a>}
+          <button onClick={() => void abrirEnTienda()} disabled={!!ocupado} style={botonChico} title="Abrir el editor de esta landing entrando a la tienda">{ocupado === 'abrir' ? '…' : <><IcoTexto n="editar" tam={12} />Editar</>}</button>
         </div>
         <div style={{ flex: 1 }} />
         {!abrirBib ? (
           <button onClick={() => setAbrirBib(true)} disabled={!!ocupado}
             style={{ border: '1px solid var(--df-purple-border)', background: 'var(--df-purple-subtle)', color: 'var(--df-purple)', borderRadius: 8, padding: '8px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
-            📚 {l.enBiblioteca ? 'Enviar otra vez a la biblioteca' : 'Enviar a la biblioteca'}
+            <IcoTexto n="biblioteca" tam={12} />{l.enBiblioteca ? 'Enviar otra vez a la biblioteca' : 'Enviar a la biblioteca'}
           </button>
         ) : (
           <div style={{ border: '1px solid var(--df-purple-border)', background: 'var(--df-purple-subtle)', borderRadius: 8, padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -289,8 +290,8 @@ function CardAdmin({ l, df, patch, eliminar }: { l: LibraryLandingAdmin; df: Dea
           style={{ fontWeight: 700, fontSize: 14, border: '1px solid transparent', borderRadius: 6, padding: '3px 4px', fontFamily: 'inherit', background: 'transparent', color: 'var(--df-text)' }} />
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
           {l.origen && <span style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>Copiada de {l.origen}{l.precio > 0 ? ` · ${fmt(l.precio)}` : ''}</span>}
-          {l.modoCodigo && <Insignia tono="ambar">💻 CÓDIGO PROPIO</Insignia>}
-          {l.conPlantilla && <Insignia tono="ambar">🧩 PLANTILLA</Insignia>}
+          {l.modoCodigo && <Insignia tono="ambar"><IcoTexto n="computador" />CÓDIGO PROPIO</Insignia>}
+          {l.conPlantilla && <Insignia tono="ambar"><IcoTexto n="variante" />PLANTILLA</Insignia>}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -316,7 +317,7 @@ function CardAdmin({ l, df, patch, eliminar }: { l: LibraryLandingAdmin; df: Dea
             style={{ flex: 1, border: '1px solid ' + (l.activo ? 'var(--df-border)' : 'var(--df-warning-border)'), background: l.activo ? 'var(--df-surface)' : 'var(--df-warning-subtle-2)', color: l.activo ? 'var(--df-text-body)' : 'var(--df-warning)', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
             {l.activo ? 'Visible · ocultar' : 'Oculta · mostrar'}
           </button>
-          <span onClick={() => void eliminar(l)} title="Quitar de la biblioteca" className="df-danger-hover" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, padding: 4 }}>🗑</span>
+          <span onClick={() => void eliminar(l)} title="Quitar de la biblioteca" className="df-danger-hover" style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, padding: 4, display: 'inline-flex' }}><Icono nombre="eliminar" tam={15} /></span>
         </div>
       </div>
     </div>

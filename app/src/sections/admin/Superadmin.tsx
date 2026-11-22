@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icono, IcoTexto } from '../../components/Icono';
 import { PlantillasPropiasEncendidas } from '../../components/PlantillasPropiasEncendidas';
 import { ConsumoIA } from '../../components/ConsumoIA';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
@@ -151,7 +152,7 @@ function Tiendas({ df }: { df: DealFlowState }) {
               <span style={{ fontSize: 12.5, fontWeight: 700, color: s.activa ? 'var(--df-brand-dark)' : 'var(--df-danger-dark)', background: s.activa ? 'var(--df-brand-subtle)' : 'var(--df-danger-subtle-2)', borderRadius: 6, padding: '3px 9px', justifySelf: 'start' }}>{s.activa ? 'Activa' : 'Inactiva'}</span>
               <button onClick={() => df.toggleHideStore(s.id, s.oculta)}
                 style={{ border: '1px solid ' + (s.oculta ? 'var(--df-purple)' : 'var(--df-border)'), background: s.oculta ? 'var(--df-purple)' : 'var(--df-surface)', color: s.oculta ? '#fff' : 'var(--df-text-body)', borderRadius: 8, padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                {s.oculta ? '👻 Oculta · Mostrar' : 'Ocultar del admin'}
+                {s.oculta ? <><IcoTexto n="oculto" tam={12} />Oculta · Mostrar</> : 'Ocultar del admin'}
               </button>
             </div>
           ))}
@@ -186,7 +187,7 @@ export function BibliotecaAdmin({ df }: { df: DealFlowState }) {
         </div>
         <button onClick={df.entrarBiblioteca}
           style={{ background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 9, padding: '11px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          ✏️ Crear / editar productos
+          <IcoTexto n="editar" />Crear / editar productos
         </button>
       </div>
 
@@ -235,7 +236,7 @@ export function BibliotecaAdmin({ df }: { df: DealFlowState }) {
           <div>
             <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Edición del cliente</div>
             <div style={{ display: 'inline-flex', border: '1px solid var(--df-border)', borderRadius: 8, overflow: 'hidden' }}>
-              {([[true, 'Editable'], [false, '🔒 Bloqueado']] as const).map(([e, label]) => (
+              {([[true, 'Editable'], [false, 'Bloqueado']] as const).map(([e, label]) => (
                 <button key={label} onClick={() => setEditable(e)}
                   style={{ background: editable === e ? '#0F172A' : 'var(--df-surface)', color: editable === e ? '#fff' : 'var(--df-text-body)', border: 'none', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{label}</button>
               ))}
@@ -271,7 +272,7 @@ function CardBiblioteca({ p, df }: { p: LibraryAdminItem; df: DealFlowState }) {
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
       <div style={{ height: 130, background: 'var(--df-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        {p.portada ? <img src={p.portada} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: 'var(--df-border-strong)', fontSize: 28 }}>🛍️</span>}
+        {p.portada ? <img src={p.portada} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ display: 'inline-flex' }}><Icono nombre="bolsa" tam={28} style={{ opacity: 0.35 }} /></span>}
       </div>
       <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 9 }}>
         <div style={{ fontWeight: 700, fontSize: 14 }}>{p.nombre}</div>
@@ -279,7 +280,7 @@ function CardBiblioteca({ p, df }: { p: LibraryAdminItem; df: DealFlowState }) {
         {/* Editar con el editor completo */}
         <button onClick={() => df.editarBibliotecaItem(p.id)}
           style={{ border: '1px solid var(--df-brand)', background: 'var(--df-brand-subtle)', color: 'var(--df-brand-dark)', borderRadius: 8, padding: '7px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
-          ✏️ Editar producto
+          <IcoTexto n="editar" />Editar producto
         </button>
 
         {/* Enviar a una tienda */}
@@ -315,7 +316,7 @@ function CardBiblioteca({ p, df }: { p: LibraryAdminItem; df: DealFlowState }) {
         <button onClick={() => df.actualizarBibliotecaItem(p.id, { editable: !p.editable })}
           title={p.editable ? 'Los clientes pueden editar su estructura' : 'Estructura bloqueada: el cliente no puede editarla'}
           style={{ alignSelf: 'flex-start', border: '1px solid ' + (p.editable ? 'var(--df-border)' : 'var(--df-warning-border)'), background: p.editable ? 'var(--df-surface)' : 'var(--df-warning-subtle-2)', color: p.editable ? 'var(--df-text-body)' : 'var(--df-warning)', borderRadius: 7, padding: '4px 10px', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-          {p.editable ? 'Editable' : '🔒 Bloqueado'}
+          {p.editable ? 'Editable' : <><IcoTexto n="candado" tam={11} />Bloqueado</>}
         </button>
         <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>{p.importos} {p.importos === 1 ? 'tienda lo importó' : 'tiendas lo importaron'}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -324,7 +325,7 @@ function CardBiblioteca({ p, df }: { p: LibraryAdminItem; df: DealFlowState }) {
             {p.activo ? 'Visible · ocultar' : 'Oculto · mostrar'}
           </button>
           <span onClick={() => df.eliminarBibliotecaItem(p.id)} title="Eliminar de la biblioteca" className="df-danger-hover"
-            style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, padding: 4 }}>🗑</span>
+            style={{ color: 'var(--df-text-faint)', cursor: 'pointer', fontSize: 14, padding: 4, display: 'inline-flex' }}><Icono nombre="eliminar" tam={15} /></span>
         </div>
       </div>
     </div>

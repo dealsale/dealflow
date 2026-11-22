@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Icono, IcoTexto, Punto, type NombreIcono } from '../components/Icono';
 import { confirmar, notificar } from '../components/dialogs';
 import { ymdCO } from '../lib/fechaCO';
 import {
@@ -138,7 +139,7 @@ export function AdsManager() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 2px' }}>Administrador de anuncios</h1>
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>
-            {p.conectada ? <>🟢 En vivo · actualizado hace {hace < 60 ? `${hace} s` : `${Math.round(hace / 60)} min`} · el gasto de Meta se trae cada 30 min (o con «Sincronizar»)</> : '⚪ Sin conectar a Meta'}
+            {p.conectada ? <><Punto color="#10B981" tam={7} />En vivo · actualizado hace {hace < 60 ? `${hace} s` : `${Math.round(hace / 60)} min`} · el gasto de Meta se trae cada 30 min (o con «Sincronizar»)</> : <><Punto color="#CBD5E1" tam={7} />Sin conectar a Meta</>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -149,7 +150,7 @@ export function AdsManager() {
 
       {!p.conectada && (
         <div style={{ ...card, background: 'var(--df-warning-subtle)', borderColor: 'var(--df-warning)', fontSize: 13, lineHeight: 1.5 }}>
-          ⚠️ {p.errorMeta || 'Conecta tu cuenta publicitaria.'} Ve a <b>Integraciones → Meta Ads</b> y dale «Conectar». Mientras tanto ves los chats y pedidos que llegaron por anuncios.
+          <IcoTexto n="alerta" tam={14} />{p.errorMeta || 'Conecta tu cuenta publicitaria.'} Ve a <b>Integraciones → Meta Ads</b> y dale «Conectar». Mientras tanto ves los chats y pedidos que llegaron por anuncios.
         </div>
       )}
 
@@ -210,7 +211,7 @@ export function AdsManager() {
             {!p.sugerencias.length && <div style={{ fontSize: 12.5, color: '#94A3B8' }}>Todo en orden con los datos de este periodo.</div>}
             {p.sugerencias.map((sg) => (
               <div key={sg.id} style={{ background: '#131C2E', border: '1px solid #1E293B', borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{sg.tipo === 'escalar' ? '📈 ' : sg.tipo === 'recortar' ? '✂️ ' : sg.tipo === 'creativo' ? '🎬 ' : sg.tipo === 'publico' ? '📍 ' : 'ℹ️ '}{sg.titulo}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}><IcoTexto n={sg.tipo === 'escalar' ? 'estadisticas' : sg.tipo === 'recortar' ? 'tijera' : sg.tipo === 'creativo' ? 'estudio' : sg.tipo === 'publico' ? 'ubicacion' : 'info'} tam={14} />{sg.titulo}</div>
                 <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 3, lineHeight: 1.45 }}>{sg.porque}</div>
                 {sg.accion && <button onClick={() => aplicar(sg)} disabled={ocupado === 'sug' + sg.id} style={{ ...btnP, marginTop: 7, padding: '6px 11px', fontSize: 12 }}>{sg.accion.tipo === 'estado' ? 'Pausar en Meta' : `Subir a ${pesos(sg.accion.valor)}`}</button>}
               </div>
@@ -297,7 +298,7 @@ export function AdsManager() {
                     </div>
                   </td>
                   <td style={tdN}>{pesos(a.gasto)}</td><td style={tdN}>{a.clics}</td><td style={tdN}>{a.visitas || '—'}</td><td style={tdN}>{a.carritos || '—'}</td><td style={tdN}>{a.chats}</td><td style={tdN}>{a.respondieron}</td><td style={tdN}>{a.dieronDatos}</td>
-                  <td style={tdN}>{a.pedidos - a.cancelados}{a.soloMeta ? ' ⚠️' : ''}</td><td style={tdN}>{a.comprasMeta || '—'}</td><td style={tdN}>{a.entregados}</td><td style={tdN}>{a.devueltos}</td>
+                  <td style={tdN}>{a.pedidos - a.cancelados}{a.soloMeta && <Icono nombre="alerta" tam={12} color="#B45309" style={{ marginLeft: 4, verticalAlign: '-0.15em' }} />}</td><td style={tdN}>{a.comprasMeta || '—'}</td><td style={tdN}>{a.entregados}</td><td style={tdN}>{a.devueltos}</td>
                   <td style={tdN}>{a.ctr ? `${dec(a.ctr)}%` : '—'}</td>
                   <td style={{ ...tdN, color: a.frecuencia >= 3.5 ? 'var(--df-danger-dark)' : undefined }}>{a.frecuencia ? dec(a.frecuencia) : '—'}</td>
                   <td style={tdN}><span style={colorRoas(a.roasMeta, a.comprasMeta ? a.gasto : 0)}>{a.comprasMeta ? dec(a.roasMeta) : '—'}</span></td>
@@ -378,7 +379,7 @@ function FilaCampana({ c, abierta, onAbrir, ocupado, onEstado, onPres, onEditar 
           </button>
         </td>
         <td style={td}>{c.presupuestoEn === 'campaign' ? presBotones(c.id, c.nombre, c.presupuesto) : c.presupuestoEn === 'adset' ? <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{pesos(c.presupuesto)} en conjuntos ▸</span> : '—'}</td>
-        <td style={tdN}>{pesos(c.gasto)}</td><td style={tdN}>{c.chats}</td><td style={tdN} title={c.soloMeta ? 'Meta reporta compras que no llegaron asignadas a DealFlow: agrega los Parámetros de URL al anuncio' : undefined}>{c.pedidos - c.cancelados}{c.soloMeta ? ' ⚠️' : ''}</td><td style={tdN}>{c.comprasMeta || '—'}</td><td style={tdN}>{c.entregados}</td>
+        <td style={tdN}>{pesos(c.gasto)}</td><td style={tdN}>{c.chats}</td><td style={tdN} title={c.soloMeta ? 'Meta reporta compras que no llegaron asignadas a DealFlow: agrega los Parámetros de URL al anuncio' : undefined}>{c.pedidos - c.cancelados}{c.soloMeta && <Icono nombre="alerta" tam={12} color="#B45309" style={{ marginLeft: 4, verticalAlign: '-0.15em' }} />}</td><td style={tdN}>{c.comprasMeta || '—'}</td><td style={tdN}>{c.entregados}</td>
         <td style={tdN}>{c.entregados + c.devueltos ? `${c.tasaDevolucion}%` : '—'}</td>
         <td style={tdN}><span style={colorRoas(c.roasMeta, c.comprasMeta ? c.gasto : 0)}>{c.comprasMeta ? dec(c.roasMeta) : '—'}</span></td>
         <td style={tdN}><span style={colorRoas(c.roasNeto, c.gasto)}>{c.gasto ? dec(c.roasNeto) : '—'}</span></td>
@@ -394,7 +395,7 @@ function FilaCampana({ c, abierta, onAbrir, ocupado, onEstado, onPres, onEditar 
             {!c.activa && a.activa && <div style={{ fontSize: 11, color: 'var(--df-warning)', fontWeight: 600 }}>No está corriendo: su campaña está en pausa</div>}
           </td>
           <td style={td}>{a.presupuesto ? presBotones(a.id, a.nombre, a.presupuesto) : <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>de la campaña</span>}</td>
-          <td style={tdN}>{pesos(a.gasto)}</td><td style={tdN}>{a.chats}</td><td style={tdN} title={a.soloMeta ? 'Meta reporta compras que no llegaron asignadas a DealFlow: agrega los Parámetros de URL al anuncio' : undefined}>{a.pedidos - a.cancelados}{a.soloMeta ? ' ⚠️' : ''}</td><td style={tdN}>{a.comprasMeta || '—'}</td><td style={tdN}>{a.entregados}</td>
+          <td style={tdN}>{pesos(a.gasto)}</td><td style={tdN}>{a.chats}</td><td style={tdN} title={a.soloMeta ? 'Meta reporta compras que no llegaron asignadas a DealFlow: agrega los Parámetros de URL al anuncio' : undefined}>{a.pedidos - a.cancelados}{a.soloMeta && <Icono nombre="alerta" tam={12} color="#B45309" style={{ marginLeft: 4, verticalAlign: '-0.15em' }} />}</td><td style={tdN}>{a.comprasMeta || '—'}</td><td style={tdN}>{a.entregados}</td>
           <td style={tdN}>{a.entregados + a.devueltos ? `${a.tasaDevolucion}%` : '—'}</td>
           <td style={tdN}><span style={colorRoas(a.roasMeta, a.comprasMeta ? a.gasto : 0)}>{a.comprasMeta ? dec(a.roasMeta) : '—'}</span></td>
           <td style={tdN}><span style={colorRoas(a.roasNeto, a.gasto)}>{a.gasto ? dec(a.roasNeto) : '—'}</span></td>
@@ -600,7 +601,7 @@ function PruebasAB({ onCambio }: { onCambio: () => void }) {
                 const pierde = (p.ganador === 'a' || p.ganador === 'b') && !gana;
                 return (
                   <div key={k} style={{ borderRadius: 8, padding: 8, background: gana ? 'var(--df-brand-50, rgba(16,185,129,.1))' : 'var(--df-bg)', border: `1px solid ${gana ? 'var(--df-brand)' : 'var(--df-border)'}`, opacity: pierde ? 0.6 : 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)' }}>{k.toUpperCase()}{gana ? ' · 🏆 Ganador' : pierde ? ' · Perdedor' : ''}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-text-muted)' }}>{k.toUpperCase()}{gana ? <> · <IcoTexto n="trofeo" tam={11} color="#B45309" />Ganador</> : pierde ? ' · Perdedor' : ''}</div>
                     <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.nombre}>{l.nombre}</div>
                     <div style={{ fontSize: 18, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{valor(p, l)}</div>
                     <div style={{ fontSize: 11, color: 'var(--df-text-muted)' }}>{pesos(l.gasto)} gastado · {l.pedidos} ventas{l.devueltos ? ` · ${l.devueltos} devueltas` : ''}</div>
@@ -628,7 +629,7 @@ function PruebasAB({ onCambio }: { onCambio: () => void }) {
 }
 
 // ── Alertas al celular ───────────────────────────────────────────────────────────────────────
-const ICONO_ALERTA: Record<TipoAlertaAds, string> = { gasto_sin_venta: '💸', cpa_alto: '📈', rechazado: '⛔', cuenta: '💳', pixel: '📡', resumen: '☀️' };
+const ICONO_ALERTA: Record<TipoAlertaAds, NombreIcono> = { gasto_sin_venta: 'dinero', cpa_alto: 'estadisticas', rechazado: 'bloquear', cuenta: 'pago', pixel: 'antena', resumen: 'sol' };
 function Alertas() {
   const [cfg, setCfg] = useState<CfgAlertasAds | null>(null);
   const [tipos, setTipos] = useState<Record<TipoAlertaAds, string> | null>(null);
@@ -646,7 +647,7 @@ function Alertas() {
     setOcupado('probar');
     await apiAdsProbarAlerta();
     setOcupado('');
-    notificar(permiso === 'granted' ? '✓ Enviada. Debe llegarte en unos segundos.' : '✓ Enviada. Si no te llega, activa las notificaciones en la campana 🔔 de arriba.');
+    notificar(permiso === 'granted' ? '✓ Enviada. Debe llegarte en unos segundos.' : '✓ Enviada. Si no te llega, activa las notificaciones en la campana de arriba.');
   };
   const revisar = async () => {
     setOcupado('revisar');
@@ -663,7 +664,7 @@ function Alertas() {
     <div style={{ ...card, flex: '1 1 340px', minWidth: 0 }}>
       <b style={{ fontSize: 14 }}>Alertas al celular</b>
       <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 10px' }}>Te llegan como notificación al celular del dueño (y por correo si quieres). Se revisan cada 30 minutos y cada alerta sale como mucho una vez al día.</div>
-      {permiso !== 'granted' && <div style={{ fontSize: 12, background: 'var(--df-warning-bg, #fff7e6)', color: 'var(--df-warning-dark, #8a5a00)', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{permiso === 'unsupported' ? 'Este navegador no recibe notificaciones. Abre DealFlow en tu celular (Chrome o la app instalada).' : 'Las notificaciones no están activas en este dispositivo. Actívalas en la campana 🔔 de arriba, desde tu celular.'}</div>}
+      {permiso !== 'granted' && <div style={{ fontSize: 12, background: 'var(--df-warning-bg, #fff7e6)', color: 'var(--df-warning-dark, #8a5a00)', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{permiso === 'unsupported' ? 'Este navegador no recibe notificaciones. Abre DealFlow en tu celular (Chrome o la app instalada).' : 'Las notificaciones no están activas en este dispositivo. Actívalas en la campana de arriba, desde tu celular.'}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {(Object.keys(tipos) as TipoAlertaAds[]).map((t) => (
           <div key={t} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 12.5 }}>
@@ -679,7 +680,7 @@ function Alertas() {
         ))}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 12.5, borderTop: '1px solid var(--df-border)', paddingTop: 8 }}>
           <Switch on={cfg.correo} label={cfg.correo ? 'No enviar por correo' : 'Enviar también por correo'} onChange={() => void guardar({ ...cfg, correo: !cfg.correo })} />
-          <span style={{ flex: 1 }}>✉️ También por correo</span>
+          <span style={{ flex: 1 }}><IcoTexto n="correo" tam={14} />También por correo</span>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
@@ -692,7 +693,7 @@ function Alertas() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
             {ultimas.map((a, i) => (
               <div key={i} style={{ fontSize: 12.5, borderBottom: '1px solid var(--df-border)', paddingBottom: 6 }}>
-                <b>{ICONO_ALERTA[a.tipo] || '🔔'} {a.titulo}</b>
+                <b><IcoTexto n={ICONO_ALERTA[a.tipo] || 'notificacion'} tam={14} degradado />{a.titulo}</b>
                 <div style={{ color: 'var(--df-text-muted)' }}>{a.detalle}</div>
                 <div style={{ fontSize: 11, color: 'var(--df-text-faint)' }}>{new Date(a.creado.replace(' ', 'T') + 'Z').toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
               </div>
@@ -849,8 +850,8 @@ function EditorPresupuesto({ nombre, actual, tope, totalActivo, onCerrar, onApli
           <div style={{ fontSize: 22, fontWeight: 800 }}>{pesos(nuevo)} <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--df-text-muted)' }}>al día</span></div>
           {!sinCambio && <div style={{ fontSize: 12.5, fontWeight: 700, color: dif > 0 ? 'var(--df-brand-dark, #047857)' : 'var(--df-danger-dark, #b91c1c)' }}>{dif > 0 ? '▲ +' : '▼ −'}{pesos(Math.abs(dif))} ({dif > 0 ? '+' : '−'}{Math.abs(difPct)} %)</div>}
         </div>
-        {errores.map((x) => <div key={x} style={{ fontSize: 12.5, color: 'var(--df-danger-dark, #b91c1c)' }}>⛔ {x}</div>)}
-        {avisos.map((x) => <div key={x} style={{ fontSize: 12, color: 'var(--df-warning-dark, #92400e)', background: 'var(--df-warning-subtle, #fff7e6)', borderRadius: 8, padding: '6px 9px' }}>⚠️ {x}</div>)}
+        {errores.map((x) => <div key={x} style={{ fontSize: 12.5, color: 'var(--df-danger-dark, #b91c1c)' }}><IcoTexto n="error" tam={13} />{x}</div>)}
+        {avisos.map((x) => <div key={x} style={{ fontSize: 12, color: 'var(--df-warning-dark, #92400e)', background: 'var(--df-warning-subtle, #fff7e6)', borderRadius: 8, padding: '6px 9px' }}><IcoTexto n="alerta" tam={13} />{x}</div>)}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCerrar} style={btnS}>Cancelar</button>
           <button onClick={() => void onAplicar(nuevo)} disabled={!!errores.length || sinCambio} style={{ ...btnP, opacity: errores.length || sinCambio ? 0.5 : 1 }}>Aplicar en Meta</button>

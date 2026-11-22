@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import { apiSoporteLlamar } from '../lib/api';
 import { refrescarSoporteConfig, useSoporteConfig } from './AsistenteSoporte';
 import { useLlamada, iniciarLlamada, minimizarLlamada } from '../lib/llamadaRTC';
@@ -48,7 +49,7 @@ export function BotonSoporte({ seccion, compacto }: { seccion: string; compacto?
     return (
       <button type="button" onClick={() => minimizarLlamada(false)} title="Ver la llamada"
         style={{ ...pill, background: '#047857', borderColor: '#047857', color: '#fff' }}>
-        <span className="df-sop-onda" />📞 {ll!.fase === 'conectada' && ll!.inicio ? `En llamada ${dur(Date.now() - ll!.inicio)}` : ll!.fase === 'pausada' ? 'Llamada en pausa' : 'Llamando a soporte…'}
+        <span className="df-sop-onda" /><IcoTexto n="llamar" />{ll!.fase === 'conectada' && ll!.inicio ? `En llamada ${dur(Date.now() - ll!.inicio)}` : ll!.fase === 'pausada' ? 'Llamada en pausa' : 'Llamando a soporte…'}
         <style>{'.df-sop-onda { width: 7px; height: 7px; border-radius: 50%; background: #6EE7B7; animation: dfSopOnda 1.2s ease-in-out infinite } @keyframes dfSopOnda { 0%,100% { opacity: .4 } 50% { opacity: 1 } }'}</style>
       </button>
     );
@@ -57,21 +58,21 @@ export function BotonSoporte({ seccion, compacto }: { seccion: string; compacto?
     <div ref={caja} style={{ position: 'relative' }}>
       <button type="button" onClick={() => { if (!abierto) refrescarSoporteConfig(); setAbierto((v) => !v); }} title={serv.abierto ? `Habla con el equipo de DealFlow (audio y pantalla compartida).${serv.hasta ? ` ${serv.hasta}` : ''}` : `Soporte por llamada: ${serv.siguiente || serv.horario}`}
         style={{ ...pill, background: 'var(--df-surface)', borderColor: 'var(--df-border)', color: serv.abierto ? 'var(--df-text-body)' : 'var(--df-text-muted)' }}>
-        <span style={{ fontSize: 13 }}>🎧</span>{compacto ? 'Soporte' : 'Llamar a soporte'}
+        <Icono nombre="soporte" tam={13} degradado />{compacto ? 'Soporte' : 'Llamar a soporte'}
         {serv.abierto && <span title="Disponible ahora" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--df-brand-mid, #10B981)' }} />}
       </button>
       {abierto && (
         <div role="dialog" aria-label="Llamar a soporte" style={{ ...(compacto ? { position: 'fixed', left: 12, right: 12, top: 'calc(env(safe-area-inset-top, 0px) + 72px)' } : { position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 300 }), zIndex: 70, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, boxShadow: '0 20px 50px -18px rgba(2,6,23,.45)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12.5, lineHeight: 1.45, color: 'var(--df-text-body)' }}>
-          <b style={{ fontSize: 14, color: 'var(--df-text-strong)' }}>🎧 Soporte DealFlow</b>
+          <b style={{ fontSize: 14, color: 'var(--df-text-strong)' }}><IcoTexto n="soporte" />Soporte DealFlow</b>
           {serv.abierto ? (
             <>
-              {serv.hasta && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-warning, #B45309)' }}>🕐 {serv.hasta}</div>}
+              {serv.hasta && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-warning, #B45309)' }}><IcoTexto n="reloj" />{serv.hasta}</div>}
               <div style={{ color: 'var(--df-text-muted)' }}>Te llamamos aquí mismo, sin instalar nada: hablas con el equipo y, si quieres, nos muestras tu pantalla. Te pediremos permiso para el micrófono.</div>
               <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={200} autoFocus placeholder="¿Con qué te ayudamos? (opcional)" onKeyDown={(e) => { if (e.key === 'Enter') void llamar(); }}
                 style={{ font: 'inherit', fontSize: 13, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--df-border)', background: 'var(--df-bg)', color: 'var(--df-text)' }} />
               <button type="button" onClick={() => void llamar()} disabled={ocupado}
                 style={{ border: 0, borderRadius: 10, padding: '10px 12px', background: '#047857', color: '#fff', font: 'inherit', fontWeight: 800, fontSize: 13, cursor: 'pointer', opacity: ocupado ? 0.6 : 1 }}>
-                {ocupado ? 'Llamando…' : '📞 Llamar ahora'}
+                {ocupado ? 'Llamando…' : <><IcoTexto n="llamar" />Llamar ahora</>}
               </button>
             </>
           ) : (

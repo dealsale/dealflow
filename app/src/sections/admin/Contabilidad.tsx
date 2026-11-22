@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Icono, IcoTexto } from '../../components/Icono';
 import type { CSSProperties } from 'react';
 import { fmt } from '../../lib/format';
 import { Dropdown } from '../../components/Dropdown';
@@ -72,7 +73,7 @@ export function Contabilidad() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => nuevo('ingreso')} style={{ ...btn(true), background: '#059669' }}>+ Ingreso</button>
           <button onClick={() => nuevo('egreso')} style={{ ...btn(true), background: '#DC2626' }}>+ Egreso</button>
-          <button onClick={exportar} style={btn()}>⬇ Exportar para el contador</button>
+          <button onClick={exportar} style={btn()}><IcoTexto n="descargar" />Exportar para el contador</button>
         </div>
       </div>
 
@@ -137,7 +138,7 @@ export function Contabilidad() {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead><tr style={{ textAlign: 'left', color: 'var(--df-text-muted)', fontSize: 11.5, background: 'var(--df-bg)' }}>
-                  <th style={th}>Fecha</th><th style={th}>Concepto</th><th style={th}>Categoría</th><th style={th}>Tercero</th><th style={{ ...th, textAlign: 'right' }}>Valor</th><th style={th}>Medio</th><th style={th}>📎</th>
+                  <th style={th}>Fecha</th><th style={th}>Concepto</th><th style={th}>Categoría</th><th style={th}>Tercero</th><th style={{ ...th, textAlign: 'right' }}>Valor</th><th style={th}>Medio</th><th style={th}><Icono nombre="adjunto" tam={13} /></th>
                 </tr></thead>
                 <tbody>{d.movimientos.map((m) => (
                   <tr key={m.id} onClick={() => setEditando(m)} style={{ cursor: 'pointer', borderTop: '1px solid var(--df-border)', opacity: m.estado === 'anulado' ? 0.5 : 1 }}>
@@ -267,7 +268,7 @@ function EditorMovimiento({ m, datos, onCerrar, onCambio }: { m: Partial<Movimie
           <div style={lbl}>Comprobantes (factura, recibo, soporte de pago, XML de factura electrónica…)</div>
           {[...archivos.map((a) => ({ id: a.id, nombre: a.nombre, guardado: true })), ...pendientes.map((p, i) => ({ id: `p${i}`, nombre: p.name, guardado: false }))].map((a) => (
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--df-border)' }}>
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {a.nombre}{!a.guardado && <span style={{ color: 'var(--df-text-faint)' }}> · se sube al guardar</span>}</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><IcoTexto n="adjunto" />{a.nombre}{!a.guardado && <span style={{ color: 'var(--df-text-faint)' }}> · se sube al guardar</span>}</span>
               {a.guardado ? <>
                 <a href={`/api/admin/contabilidad/adjuntos/${a.id}`} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, fontWeight: 700 }}>Ver</a>
                 <a href={`/api/admin/contabilidad/adjuntos/${a.id}?descargar=1`} style={{ fontSize: 12.5, fontWeight: 700 }}>Descargar</a>

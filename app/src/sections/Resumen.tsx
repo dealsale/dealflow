@@ -1,4 +1,5 @@
 import { OrigenBadge } from '../components/OrigenPedido';
+import { Icono, IcoTexto } from '../components/Icono';
 import { useState } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
@@ -38,7 +39,7 @@ export function Resumen({ df }: { df: DealFlowState }) {
           background: df.antibaneo.nivel === 'alerta' ? 'var(--df-danger-subtle)' : 'var(--df-warning-subtle)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 14, color: df.antibaneo.nivel === 'alerta' ? 'var(--df-danger-dark)' : 'var(--df-warning)' }}>
-            <span style={{ fontSize: 16 }}>{df.antibaneo.nivel === 'alerta' ? '🚨' : '⚠️'}</span>
+            <Icono nombre={df.antibaneo.nivel === 'alerta' ? 'sirena' : 'alerta'} tam={16} />
             Monitor anti-baneo de WhatsApp
           </div>
           <ul style={{ margin: '8px 0 0', paddingLeft: 20, color: 'var(--df-text-secondary)', fontSize: 13, lineHeight: 1.55 }}>
@@ -100,15 +101,15 @@ export function Resumen({ df }: { df: DealFlowState }) {
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ background: 'var(--df-hero-chip)', borderRadius: 10, padding: '10px 14px', minWidth: 120 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.9 }}>🧾 Pedidos del mes</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.9 }}><IcoTexto n="guia" />Pedidos del mes</div>
               <div style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{df.pedidosMesCount}</div>
             </div>
             <div style={{ background: 'var(--df-hero-chip)', borderRadius: 10, padding: '10px 14px', minWidth: 120 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.9 }}>🎯 Ticket promedio</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.9 }}><IcoTexto n="objetivo" />Ticket promedio</div>
               <div style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{df.ticketPromedio}</div>
             </div>
             <div style={{ background: 'var(--df-hero-chip)', borderRadius: 10, padding: '10px 14px', minWidth: 140, maxWidth: 200 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.9 }}>⭐ Producto estrella</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.9 }}><IcoTexto n="estrella" />Producto estrella</div>
               <div style={{ fontSize: 15, fontWeight: 800, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={df.productoTopMes || undefined}>
                 {df.productoTopMes ? `${df.productoTopMes} (${df.productoTopUnidades})` : '—'}
               </div>

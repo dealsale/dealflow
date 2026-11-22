@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Icono, IcoTexto, type NombreIcono } from '../components/Icono';
 import { apiPreviaPlantilla, type PreviaPlantilla } from '../lib/api';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
-const ICONO: Record<string, string> = {
-  'ecommerce-v10': '🛍️',
-  'ecommerce-v2': '🚀',
+const ICONO: Record<string, NombreIcono> = {
+  'ecommerce-v10': 'bolsa',
+  'ecommerce-v2': 'cohete',
 };
 const NOMBRE_CAMPO: Record<string, string> = {
   trato: 'Trato (tú / usted)', emojis: 'Emojis', emojiNivel: 'Cantidad de emojis', largo: 'Largo de respuestas', personalidad: 'Personalidad',
@@ -47,7 +48,7 @@ export function DealShop({ df }: { df: DealFlowState }) {
           <div key={p.id} style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 22, boxShadow: '0 1px 2px rgba(15,23,42,.04)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
               <div style={{ width: 46, height: 46, borderRadius: 12, background: 'linear-gradient(140deg,var(--df-brand-light),var(--df-brand))', color: '#052018', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 20 }}>
-                {ICONO[p.id] || '🛍️'}
+                <Icono nombre={ICONO[p.id] || 'bolsa'} tam={24} />
               </div>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.01em' }}>{p.nombre}</div>
@@ -95,7 +96,7 @@ export function DealShop({ df }: { df: DealFlowState }) {
 
             {p.detalle && (
               <div style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5, background: 'var(--df-brand-subtle-2, var(--df-surface-2))', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
-                🔒 No toca tu información del negocio (envíos, pagos, cambios, horario), tus preguntas frecuentes, tus productos ni las reglas que escribiste tú. Solo actualiza lo de la plantilla.
+                <IcoTexto n="candado" tam={13} />No toca tu información del negocio (envíos, pagos, cambios, horario), tus preguntas frecuentes, tus productos ni las reglas que escribiste tú. Solo actualiza lo de la plantilla.
               </div>
             )}
 
@@ -103,7 +104,7 @@ export function DealShop({ df }: { df: DealFlowState }) {
             {p.actualizacion && (
               <button onClick={() => setConfirmar({ id: p.id, nombre: p.nombre, force: true })} disabled={!!df.instalando} className="df-btn-primary"
                 style={{ width: '100%', background: 'var(--df-brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 16px', marginBottom: 8, fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                ⬆️ Actualizar a la versión {p.version}
+                <IcoTexto n="subir" tam={13} />Actualizar a la versión {p.version}
               </button>
             )}
             {p.instalada ? (
@@ -160,7 +161,7 @@ export function DealShop({ df }: { df: DealFlowState }) {
                   cursor: df.instalando === p.id ? 'default' : 'pointer',
                 }}
               >
-                {df.instalando === p.id ? 'Instalando…' : p.mejoraDe ? '⬆️ Actualizar mi asistente a esta versión' : 'Instalar con un clic'}
+                {df.instalando === p.id ? 'Instalando…' : p.mejoraDe ? <><IcoTexto n="subir" />Actualizar mi asistente a esta versión</> : 'Instalar con un clic'}
               </button>
             )}
           </div>
@@ -180,12 +181,12 @@ export function DealShop({ df }: { df: DealFlowState }) {
               <div><b>No se toca:</b> tu información del negocio (envíos, pagos, cambios, horario, ubicación), tus preguntas frecuentes, tus productos, tus instrucciones propias ni las reglas que escribiste tú.</div>
               {!previa ? <div style={{ color: 'var(--df-text-muted)' }}>Revisando tu asistente…</div> : (
                 <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', background: 'var(--df-surface-2)', display: 'grid', gap: 8, maxHeight: 280, overflowY: 'auto' }}>
-                  <div>✅ Se conservan <b>{previa.conservar.length}</b> regla(s) que escribiste tú.</div>
-                  {previa.quitaInstrucciones && <div>🔁 Tus instrucciones tienen el texto de la plantilla anterior: se quita ese texto y se deja lo que agregaste tú.</div>}
-                  {previa.respetado.length > 0 && <div>🔒 Respetamos lo que cambiaste en: {previa.respetado.join(', ')}.</div>}
+                  <div><IcoTexto n="ok" tam={13} />Se conservan <b>{previa.conservar.length}</b> regla(s) que escribiste tú.</div>
+                  {previa.quitaInstrucciones && <div><IcoTexto n="repetido" tam={13} />Tus instrucciones tienen el texto de la plantilla anterior: se quita ese texto y se deja lo que agregaste tú.</div>}
+                  {previa.respetado.length > 0 && <div><IcoTexto n="candado" tam={13} />Respetamos lo que cambiaste en: {previa.respetado.join(', ')}.</div>}
                   {previa.reemplazar.length > 0 && (
                     <div>
-                      <div style={{ marginBottom: 6 }}>🔁 Estas <b>{previa.reemplazar.length}</b> regla(s) venían de la plantilla anterior y se reemplazan. Marca las que quieras conservar como tuyas:</div>
+                      <div style={{ marginBottom: 6 }}><IcoTexto n="repetido" tam={13} />Estas <b>{previa.reemplazar.length}</b> regla(s) venían de la plantilla anterior y se reemplazan. Marca las que quieras conservar como tuyas:</div>
                       <div style={{ display: 'grid', gap: 5 }}>
                         {previa.reemplazar.map((r) => (
                           <label key={r} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, cursor: 'pointer' }}>
@@ -235,7 +236,7 @@ export function DealShop({ df }: { df: DealFlowState }) {
                 onClick={() => { df.desinstalarPlantilla(desinst.id, true); setDesinst(null); }}
                 style={{ background: 'var(--df-danger)', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
               >
-                🗑️ Sí, borrar todo (asistente + productos)
+                <IcoTexto n="eliminar" />Sí, borrar todo (asistente + productos)
               </button>
               <button
                 onClick={() => { df.desinstalarPlantilla(desinst.id, false); setDesinst(null); }}

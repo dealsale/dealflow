@@ -4,6 +4,7 @@ import { CalidadCard } from '../components/CalidadCard';
 import { AppsConectadas } from '../components/AppsConectadas';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { WA_NUMBER } from '../data';
+import { LogoMarca } from '../components/LogoMarca';
 
 const label: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 };
 const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '10px 12px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 };
@@ -154,7 +155,7 @@ export function WhatsAppSection({ df }: { df: DealFlowState }) {
 
   return (
     <section data-screen-label="WhatsApp" style={{ maxWidth: 720 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>WhatsApp</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 9 }}><LogoMarca marca="whatsapp" size={24} />WhatsApp</h1>
       <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: '0 0 18px' }}>Conecta el WhatsApp de tu negocio para atender y vender desde aquí.</p>
 
       <div style={df.waCardStyleResolved}>

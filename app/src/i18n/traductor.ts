@@ -29,9 +29,18 @@ export function cambiarIdiomaUI(idioma: IdiomaUI): void {
 }
 
 const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
-const exactos = new Map<string, string>(Object.entries((dic as unknown as { exactos: Record<string, string> }).exactos));
+// Los emojis del panel se cambiaron por íconos: el texto en pantalla ya no lleva el emoji ("🚚 Envíos" → ícono + "Envíos").
+// Cada frase del diccionario que tenga emoji se registra también sin él, para que se siga traduciendo.
+const sinEmoji = (s: string) => norm(s.replace(/[\p{Extended_Pictographic}️‍]/gu, ''));
+const conVariantes = <T,>(pares: [string, T][], quitar: (v: T) => T): [string, T][] => {
+  const extra: [string, T][] = [];
+  for (const [es, en] of pares) { const k = sinEmoji(es); if (k && k !== es) extra.push([k, quitar(en)]); }
+  return [...pares, ...extra];
+};
+const exactos = new Map<string, string>();
+for (const [es, en] of conVariantes(Object.entries((dic as unknown as { exactos: Record<string, string> }).exactos), sinEmoji)) if (!exactos.has(es)) exactos.set(es, en);
 const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const plantillas = ((dic as unknown as { plantillas: [string, string][] }).plantillas)
+const plantillas = conVariantes(((dic as unknown as { plantillas: [string, string][] }).plantillas), sinEmoji)
   .map(([es, en]) => {
     // "Vence en {0} día{1}" → /^Vence en (.+?) día(.*?)$/
     const partes = es.split(/\{(\d+)\}/);

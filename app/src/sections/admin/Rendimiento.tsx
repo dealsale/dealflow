@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { IcoTexto } from '../../components/Icono';
 import { apiRendimiento, apiRendimientoReiniciar, type ReporteRendimiento } from '../../lib/api';
 
 /**
@@ -19,7 +20,7 @@ export function RendimientoServidor() {
   return (
     <div style={caja}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <b style={{ fontSize: 14.5, flex: 1, minWidth: 200 }}>⚡ Rendimiento del servidor</b>
+        <b style={{ fontSize: 14.5, flex: 1, minWidth: 200 }}><IcoTexto n="rapido" />Rendimiento del servidor</b>
         {abierto && <button type="button" onClick={() => void apiRendimientoReiniciar().then(medir)} style={btn}>Medir desde cero</button>}
         <button type="button" onClick={() => { setAbierto(true); void medir(); }} style={{ ...btn, background: '#047857', color: '#fff', borderColor: '#047857' }}>{cargando ? 'Midiendo…' : abierto ? 'Actualizar' : 'Ver qué lo frena'}</button>
       </div>

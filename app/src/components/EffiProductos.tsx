@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { IcoTexto } from './Icono';
+import { IconoDF } from './IconoDF';
 import { createPortal } from 'react-dom';
 import { Dropdown } from './Dropdown';
 import {
@@ -248,7 +250,7 @@ export function EffiProductos({ onMsg }: { onMsg: (m: string) => void }) {
                           <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: v.effiId ? 'var(--df-text-body)' : 'var(--df-warning)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {v.effiId ? `→ ${nombres[v.effiId] || `Artículo #${v.effiId}`}` : 'Sin artículo de Effi'}
                           </span>
-                          {v.effiId && v.auto && <span title="DealFlow lo vinculó solo por nombre y variante. Si no es el correcto, cámbialo." style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: '2px 7px', background: 'var(--df-purple-subtle)', color: 'var(--df-purple)' }}>⚡ automático</span>}
+                          {v.effiId && v.auto && <span title="DealFlow lo vinculó solo por nombre y variante. Si no es el correcto, cámbialo." style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: '2px 7px', background: 'var(--df-purple-subtle)', color: 'var(--df-purple)' }}><IcoTexto n="rapido" />automático</span>}
                           <button onClick={() => setAbierto(abierto === v.variantId ? '' : v.variantId)} style={mini}>{abierto === v.variantId ? 'Cerrar' : v.effiId ? 'Cambiar' : 'Buscar en Effi'}</button>
                         </div>
                         {abierto === v.variantId && (
@@ -312,8 +314,8 @@ export function EffiVinculoProducto({ productId, productoNombre, onCambio }: { p
   const actual = (v: EffiVarianteDF) => v.provId || v.effiId;
   const vinculadas = vars.filter(actual).length;
   const estado = (v: EffiVarianteDF): { t: string; c: string } => actual(v)
-    ? (v.auto ? { t: '⚡ automático', c: 'var(--df-brand-dark)' } : { t: '✋ fijado a mano', c: 'var(--df-purple)' })
-    : auto.dudas[v.variantId]?.length ? { t: '⚠ elige uno', c: 'var(--df-warning)' }
+    ? (v.auto ? { t: 'automático', c: 'var(--df-brand-dark)' } : { t: 'fijado a mano', c: 'var(--df-purple)' })
+    : auto.dudas[v.variantId]?.length ? { t: 'elige uno', c: 'var(--df-warning)' }
       : v.sinAuto ? { t: 'sin artículo (lo quitaste)', c: 'var(--df-text-muted)' }
         : auto.pausado ? { t: 'sin conexión', c: 'var(--df-text-muted)' }
           : { t: '✗ no está en Effi con ese nombre', c: 'var(--df-danger)' };
@@ -499,7 +501,7 @@ export function ConvenioProductoEffi({ productId }: { productId: string }) {
   };
   return (
     <div style={{ marginTop: 10, maxWidth: 420 }}>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>🤝 Convenio en Effi {msg && <span style={{ fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>· {msg}</span>}</div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}><IconoDF n="convenio" size={22} />Convenio en Effi {msg && <span style={{ fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>· {msg}</span>}</div>
       <Dropdown ariaLabel="Convenio del producto en Effi" value={convenio} onChange={(v) => void cambiar(v)}
         options={opcionesConvenio(convenio, convenios).map((o) => (o.value === '' && nombreAprendido ? { ...o, label: `Automático: ${nombreAprendido} (el de su última venta)` } : o))} />
       <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>
@@ -530,7 +532,7 @@ function BodegaProductoEffi({ productId }: { productId: string }) {
   };
   return (
     <div style={{ marginTop: 10 }}>
-      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>🏭 Bodega (remitente de la guía) {msg && <span style={{ fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>· {msg}</span>}</div>
+      <div style={{ color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}><IcoTexto n="bodega" tam={14} />Bodega (remitente de la guía) {msg && <span style={{ fontWeight: 600, color: msg.startsWith('✓') ? 'var(--df-purple)' : 'var(--df-danger)' }}>· {msg}</span>}</div>
       <Dropdown ariaLabel="Bodega del producto en Effi" value={d.fija} onChange={(v) => void cambiar(v)} options={[{ value: '', label: auto }, ...d.remitentes.map((x) => ({ value: x.id, label: x.nombre }))]} />
       <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginTop: 5 }}>
         {d.fija ? 'Todas las guías de este producto salen de esta bodega.' : d.aprendida
@@ -579,12 +581,12 @@ export function RevisionVinculos({ productId, onCambio }: { productId: string; o
     </span>
   ) : <span style={{ color: 'var(--df-text-faint)' }}>—</span>;
   const color: Record<SugerenciaVinculo['estado'], string> = { ok: 'var(--df-brand-dark)', cambiar: 'var(--df-warning)', sin: 'var(--df-text-faint)', revisar: 'var(--df-danger)' };
-  const texto: Record<SugerenciaVinculo['estado'], string> = { ok: '✓ bien', cambiar: '↻ cambiar', sin: 'no encontrado', revisar: '⚠ revisar' };
+  const texto: Record<SugerenciaVinculo['estado'], string> = { ok: '✓ bien', cambiar: '↻ cambiar', sin: 'no encontrado', revisar: 'revisar' };
   const nCambiar = filas?.filter((f) => f.estado === 'cambiar').length || 0;
   return (
     <div style={{ border: '1px dashed var(--df-purple-border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={() => void revisar()} disabled={cargando} style={{ ...mini, color: 'var(--df-purple)', borderColor: 'var(--df-purple-border)', fontWeight: 800 }}>{cargando ? 'Revisando en Effi…' : filas ? '↻ Volver a revisar' : '🔍 Revisar todos los vínculos'}</button>
+        <button onClick={() => void revisar()} disabled={cargando} style={{ ...mini, color: 'var(--df-purple)', borderColor: 'var(--df-purple-border)', fontWeight: 800 }}>{cargando ? 'Revisando en Effi…' : filas ? '↻ Volver a revisar' : <><IcoTexto n="buscar" tam={13} />Revisar todos los vínculos</>}</button>
         <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)', flex: 1, minWidth: 200 }}>Compara cada variante con el artículo de Effi del mismo nombre (prefiere el del <b>proveedor</b>) y te muestra cuáles quedaron mal.</span>
       </div>
       {filas && (

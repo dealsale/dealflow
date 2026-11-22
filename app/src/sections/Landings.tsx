@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Icono, IcoTexto, type NombreIcono } from '../components/Icono';
 import type { CSSProperties, ReactNode } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import {
@@ -108,10 +109,10 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Tienda en línea</h1>
           <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>Tu tienda con todos tus productos y una página de venta (landing) por producto para pautar. Pago contra entrega; los pedidos llegan directo a DealFlow.</p>
         </div>
-        <a href="/tutorial-tienda-en-linea" target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>📘 Ver tutorial</a>
+        <a href="/tutorial-tienda-en-linea" target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}><IcoTexto n="libro" />Ver tutorial</a>
         {dominio && membresia?.activa && (dominio.estado === 'activo' || dominio.raiz) && <a href={`https://${dominio.estado === 'activo' ? dominio.dominio : `${dominio.sub}.${dominio.raiz}`}`} target="_blank" rel="noreferrer" style={{ ...btn, padding: '10px 14px', fontSize: 13.5, textDecoration: 'none' }}>Ver mi tienda ↗</a>}
-        <button onClick={() => setPlantillas(true)} style={{ ...btn, padding: '10px 14px', fontSize: 13.5 }}>🎨 Mis plantillas</button>
-        <button onClick={() => setBiblioteca(true)} style={{ ...btn, padding: '10px 14px', fontSize: 13.5 }}>📚 Biblioteca de landings</button>
+        <button onClick={() => setPlantillas(true)} style={{ ...btn, padding: '10px 14px', fontSize: 13.5 }}><IcoTexto n="paleta" />Mis plantillas</button>
+        <button onClick={() => setBiblioteca(true)} style={{ ...btn, padding: '10px 14px', fontSize: 13.5 }}><IcoTexto n="biblioteca" />Biblioteca de landings</button>
         <button onClick={() => setCreando(true)} className="df-btn-primary" style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Agregar producto</button>
       </div>
 
@@ -124,7 +125,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
       {lista === null ? <div style={{ color: 'var(--df-text-muted)', fontSize: 13 }}>Cargando…</div>
         : !lista.length ? (
           <div style={{ ...card, padding: '34px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: 40 }}>🛍️</div>
+            <div><Icono nombre="bolsa" tam={42} degradado /></div>
             <div style={{ fontWeight: 800, fontSize: 16, margin: '6px 0 4px' }}>Agrega tu primer producto</div>
             <div style={{ color: 'var(--df-text-muted)', fontSize: 13.5, maxWidth: 460, margin: '0 auto 14px' }}>Tráelo de tu catálogo de DealFlow (con fotos, variantes y combos) o crea uno solo para la tienda. Cada producto tiene su propia página y su enlace para pautar.</div>
             <button onClick={() => setCreando(true)} style={{ ...btnPri, padding: '10px 16px', fontSize: 14 }}>+ Agregar producto</button>
@@ -139,7 +140,7 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
                 <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <div style={{ fontWeight: 700, fontSize: 14.5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nombre}</div>
-                    {l.modoCodigo && <span title="Usa su propio código" style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-indigo)', background: 'var(--df-indigo-subtle)', borderRadius: 6, padding: '2px 7px' }}>💻 Código</span>}
+                    {l.modoCodigo && <span title="Usa su propio código" style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-indigo)', background: 'var(--df-indigo-subtle)', borderRadius: 6, padding: '2px 7px' }}><IcoTexto n="codigo" tam={11} />Código</span>}
                     <Estado l={l} />
                   </div>
                   {l.estado === 'publicada' && (
@@ -149,8 +150,8 @@ function Lista({ df, onAbrir }: { df: DealFlowState; onAbrir: (id: string) => vo
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--df-text-muted)' }}>
-                    <span>👁 {l.vistas.toLocaleString('es-CO')} visitas</span>
-                    <span>🛒 {l.pedidos} pedidos</span>
+                    <span><IcoTexto n="ver" tam={13} />{l.vistas.toLocaleString('es-CO')} visitas</span>
+                    <span><IcoTexto n="carrito" tam={13} />{l.pedidos} pedidos</span>
                     {l.vistas > 0 && <span>{((l.pedidos / l.vistas) * 100).toFixed(1)}% conv.</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 'auto', flexWrap: 'wrap' }}>
@@ -183,7 +184,7 @@ function Miniatura({ id }: { id: string }) {
     if (fotos.has(id)) return;
     void apiLanding(id).then((r) => { const f = r.data?.landing.datos.galeria[0] || ''; fotos.set(id, f); setSrc(f); });
   }, [id]);
-  return src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 34, opacity: 0.5 }}>🖼️</span>;
+  return src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icono nombre="imagen" tam={34} style={{ opacity: 0.45 }} />;
 }
 
 function CrearModal({ df, onCerrar, onCreada }: { df: DealFlowState; onCerrar: () => void; onCreada: (id: string) => void }) {
@@ -205,9 +206,9 @@ function CrearModal({ df, onCerrar, onCreada }: { df: DealFlowState; onCerrar: (
       <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: 'min(460px, 100%)', padding: 20 }}>
         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 12 }}>Agregar producto a la tienda</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
-          {([['catalogo', '📦 De mi catálogo', 'Trae fotos, variantes, precio y combos. Los pedidos quedan ligados al producto para despacharlos.'], ['nuevo', '✨ Producto nuevo', 'Solo para la tienda en línea. Lo armas desde cero.']] as const).map(([k, t, dsc]) => (
+          {([['catalogo', 'De mi catálogo', 'Trae fotos, variantes, precio y combos. Los pedidos quedan ligados al producto para despacharlos.'], ['nuevo', 'Producto nuevo', 'Solo para la tienda en línea. Lo armas desde cero.']] as const).map(([k, t, dsc]) => (
             <button key={k} type="button" onClick={() => setOrigen(k)} style={{ textAlign: 'left', border: `1.5px solid ${origen === k ? 'var(--df-purple)' : 'var(--df-border)'}`, background: origen === k ? 'var(--df-purple-subtle, var(--df-surface))' : 'var(--df-surface)', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--df-text)' }}>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t}</div>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}><IcoTexto n={k === 'catalogo' ? 'paquete' : 'ia'} tam={15} degradado />{t}</div>
               <div style={{ fontSize: 11.5, color: 'var(--df-text-muted)', marginTop: 3 }}>{dsc}</div>
             </button>
           ))}
@@ -325,13 +326,13 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
 
   const formularios = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <Bloque titulo={l.plantillaId ? 'Diseño: mi plantilla' : 'Diseño de la página'} icono="🎨">
+      <Bloque titulo={l.plantillaId ? 'Diseño: mi plantilla' : 'Diseño de la página'} icono="paleta">
         <DisenoLanding landingId={id} plantillaId={l.plantillaId || ''} modoCodigo={!!l.modoCodigo} onCambio={(plantillaId) => setL((x) => (x ? { ...x, plantillaId } : x))} onAdministrar={() => setVerPlantillas(true)} />
       </Bloque>
-      <Bloque titulo={l.modoCodigo ? 'Modo código (activo)' : 'Modo código (HTML propio)'} icono="💻">
+      <Bloque titulo={l.modoCodigo ? 'Modo código (activo)' : 'Modo código (HTML propio)'} icono="codigo">
         <LandingCodigo id={id} onVista={(h) => { setHtmlCodigo(h); }} onModo={(modoCodigo) => setL((x) => (x ? { ...x, modoCodigo } : x))} />
       </Bloque>
-      <Bloque titulo="Producto y precio" icono="🏷️" abierto>
+      <Bloque titulo="Producto y precio" icono="etiqueta" abierto>
         <Campo label="Nombre del producto"><input value={d.nombre} onChange={(e) => set({ nombre: e.target.value })} style={inp} /></Campo>
         <Dos>
           <Campo label="Precio (1 unidad)"><Dinero valor={d.precio} onChange={(v) => set({ precio: v })} /></Campo>
@@ -351,20 +352,20 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
         </Campo>
       </Bloque>
 
-      <Bloque titulo="Fotos del producto" icono="📸" abierto>
+      <Bloque titulo="Fotos del producto" icono="foto" abierto>
         <ListaImagenes titulo="Galería (la primera es la principal)" urls={d.galeria} onChange={(galeria) => set({ galeria })} max={15} cuadrada />
         <UnaImagen titulo="Banner de arriba (opcional, encima del producto)" url={d.bannerSuperior} onChange={(bannerSuperior) => set({ bannerSuperior })} />
       </Bloque>
 
-      <Bloque titulo="Variantes" icono="🎨">
+      <Bloque titulo="Variantes" icono="variante">
         <Opciones d={d} set={set} />
       </Bloque>
 
-      <Bloque titulo="Ofertas (bundles)" icono="🎁">
+      <Bloque titulo="Ofertas (bundles)" icono="regalo">
         <Bundles d={d} set={set} />
       </Bloque>
 
-      <Bloque titulo="Botón, beneficios y envío" icono="🛒">
+      <Bloque titulo="Botón, beneficios y envío" icono="carrito">
         <Dos>
           <Campo label="Texto del botón"><input value={d.boton} onChange={(e) => set({ boton: e.target.value })} placeholder="ENVÍO GRATIS PAGO CONTRA ENTREGA" style={inp} /></Campo>
           <Campo label="Segunda línea del botón"><input value={d.botonSub} onChange={(e) => set({ botonSub: e.target.value })} placeholder="Aquí eliges tallas y colores" style={inp} /></Campo>
@@ -384,16 +385,16 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
         </Campo>
       </Bloque>
 
-      <Bloque titulo="Imágenes de abajo" icono="🖼️">
+      <Bloque titulo="Imágenes de abajo" icono="imagen">
         <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginBottom: 8 }}>Las imágenes largas que van debajo del producto (beneficios, tallas, antes y después…). Se muestran a lo ancho, una tras otra.</div>
         <ListaImagenes titulo="" urls={d.imagenes} onChange={(imagenes) => set({ imagenes })} max={30} />
       </Bloque>
 
-      <Bloque titulo="Testimonios" icono="💬">
+      <Bloque titulo="Testimonios" icono="chat">
         <Testimonios d={d} set={set} />
       </Bloque>
 
-      <Bloque titulo="Marca y colores" icono="✨">
+      <Bloque titulo="Marca y colores" icono="ia">
         <Campo label="Nombre de la tienda"><input value={d.nombreTienda} onChange={(e) => set({ nombreTienda: e.target.value })} style={inp} /></Campo>
         <UnaImagen titulo="Logo (si no hay, se muestra el nombre)" url={d.logo} onChange={(logo) => set({ logo })} png />
         <Dos>
@@ -403,7 +404,7 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
         <Campo label="Cintas y oferta elegida"><Color valor={d.colorAcento} onChange={(colorAcento) => set({ colorAcento })} opciones={['#0f3a3f', '#121212', '#7c2d12', '#4c1d95', '#be123c']} /></Campo>
       </Bloque>
 
-      <Bloque titulo="SEO y vista al compartir" icono="🔎">
+      <Bloque titulo="SEO y vista al compartir" icono="buscar">
         <SeoCampos titulo={d.seoTitulo} descripcion={d.seoDescripcion} imagen={d.seoImagen}
           autoTitulo={`${d.nombre}${d.nombreTienda ? ' | ' + d.nombreTienda : ''}`}
           autoDescripcion={[d.destacado, d.descripcion.replace(/\*\*/g, '')].filter(Boolean).join('. ') || `${d.nombre}. Pago contra entrega y envío a toda Colombia.`}
@@ -411,7 +412,7 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
           onChange={(p) => set(p)} />
       </Bloque>
 
-      <Bloque titulo="Pedidos y seguimiento" icono="📦">
+      <Bloque titulo="Pedidos y seguimiento" icono="paquete">
         <Interruptor valor={d.confirmarWhatsapp} onChange={(confirmarWhatsapp) => set({ confirmarWhatsapp })} titulo="Pedir confirmación por WhatsApp" ayuda="Al llegar el pedido, el cliente recibe la plantilla de confirmación (Sí / No)." />
         <Interruptor valor={d.autoDespacho} onChange={(autoDespacho) => set({ autoDespacho })} titulo="Despachar solo cuando el cliente confirme" ayuda="Crea la remisión/guía automáticamente al recibir el «Sí»." />
         <Interruptor valor={d.pedirCorreo} onChange={(pedirCorreo) => set({ pedirCorreo })} titulo="Pedir correo en el formulario (opcional para el cliente)" />
@@ -424,7 +425,7 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
           <Campo label="WhatsApp del botón flotante" ayuda="Con indicativo, ej. 573001234567. Vacío = sin botón."><input value={d.whatsapp} onChange={(e) => set({ whatsapp: e.target.value.replace(/\D/g, '') })} inputMode="numeric" style={inp} /></Campo>
           <Campo label="Píxel de Meta" ayuda="Vacío = usa el píxel de «Mi tienda». Registra visitas, inicio de compra y compras."><SelectorPixel valor={d.pixelMeta} onChange={(pixelMeta) => set({ pixelMeta })} vacio="Usar el de «Mi tienda»" estilo={inp} /></Campo>
         </Dos>
-        {d.pixelMeta ? <ApiConversionesMeta pixelId={d.pixelMeta} /> : <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>⚡ Esta landing usa el píxel (y el token de la API de Conversiones) de <b>«Mi tienda · página de inicio»</b>.</div>}
+        {d.pixelMeta ? <ApiConversionesMeta pixelId={d.pixelMeta} /> : <div style={{ fontSize: 12, color: 'var(--df-text-muted)' }}><IcoTexto n="rapido" tam={12} />Esta landing usa el píxel (y el token de la API de Conversiones) de <b>«Mi tienda · página de inicio»</b>.</div>}
       </Bloque>
     </div>
   );
@@ -433,8 +434,8 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
     <div style={{ ...card, padding: 10, position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', height: angosto ? '78vh' : 'calc(100vh - 170px)' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)', flex: 1 }}>Vista previa{htmlCodigo !== null ? ' · tu código' : htmlPlantilla !== null ? ' · tu plantilla' : ''}</span>
-        <button onClick={() => setDisp('cel')} style={{ ...btn, ...(disp === 'cel' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>📱 Celular</button>
-        <button onClick={() => setDisp('pc')} style={{ ...btn, ...(disp === 'pc' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>🖥️ Computador</button>
+        <button onClick={() => setDisp('cel')} style={{ ...btn, ...(disp === 'cel' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}><IcoTexto n="celular" />Celular</button>
+        <button onClick={() => setDisp('pc')} style={{ ...btn, ...(disp === 'pc' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}><IcoTexto n="pantalla" />Computador</button>
       </div>
       <div style={{ flex: 1, minHeight: 0, background: 'var(--df-surface-2, #f4f4f5)', borderRadius: 10, display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
         <iframe title="Vista previa de la landing" srcDoc={htmlCodigo ?? htmlPlantilla ?? html} sandbox="allow-scripts"
@@ -469,8 +470,8 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
       {angosto ? (
         <>
           <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-            <button onClick={() => setPestana('editar')} style={{ ...btn, flex: 1, ...(pestana === 'editar' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>✏️ Editar</button>
-            <button onClick={() => setPestana('ver')} style={{ ...btn, flex: 1, ...(pestana === 'ver' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}>👁 Vista previa</button>
+            <button onClick={() => setPestana('editar')} style={{ ...btn, flex: 1, ...(pestana === 'editar' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}><IcoTexto n="editar" />Editar</button>
+            <button onClick={() => setPestana('ver')} style={{ ...btn, flex: 1, ...(pestana === 'ver' ? { borderColor: 'var(--df-purple)', color: 'var(--df-purple)' } : {}) }}><IcoTexto n="ver" />Vista previa</button>
           </div>
           {pestana === 'editar' ? formularios : vista}
         </>
@@ -486,12 +487,12 @@ function Editor({ id, df, onSalir }: { id: string; df: DealFlowState; onSalir: (
 }
 
 // ── Piezas del formulario ──────────────────────────────────────────────
-function Bloque({ titulo, icono, abierto = false, children }: { titulo: string; icono: string; abierto?: boolean; children: ReactNode }) {
+function Bloque({ titulo, icono, abierto = false, children }: { titulo: string; icono: NombreIcono; abierto?: boolean; children: ReactNode }) {
   const [a, setA] = useState(abierto);
   return (
     <div style={card}>
       <button onClick={() => setA(!a)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', padding: '12px 14px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, cursor: 'pointer', color: 'var(--df-text-strong)', textAlign: 'left' }}>
-        <span>{icono}</span><span style={{ flex: 1 }}>{titulo}</span><span style={{ color: 'var(--df-text-faint)', fontSize: 11, transform: a ? 'rotate(180deg)' : 'none' }}>▼</span>
+        <Icono nombre={icono} tam={17} degradado /><span style={{ flex: 1 }}>{titulo}</span><span style={{ color: 'var(--df-text-faint)', fontSize: 11, transform: a ? 'rotate(180deg)' : 'none' }}>▼</span>
       </button>
       {a && <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>{children}</div>}
     </div>
@@ -637,7 +638,7 @@ function FotoValor({ url, onChange }: { url: string; onChange: (u: string) => vo
       <input ref={ref} type="file" accept="image/*" hidden onChange={async (e) => { const f = Array.from(e.target.files || []); e.target.value = ''; const u = await subir(f); if (u[0]) onChange(u[0]); }} />
       <button type="button" title={url ? 'Cambiar foto (clic derecho para quitar)' : 'Foto de esta variante (opcional)'} onClick={() => ref.current?.click()} onContextMenu={(e) => { e.preventDefault(); onChange(''); }}
         style={{ width: 22, height: 22, borderRadius: '50%', border: '1px solid var(--df-border)', padding: 0, cursor: 'pointer', overflow: 'hidden', background: 'var(--df-surface-2, #f4f4f5)', fontSize: 10 }}>
-        {url ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📷'}
+        {url ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icono nombre="foto" tam={20} style={{ opacity: 0.6 }} />}
       </button>
     </>
   );
@@ -800,7 +801,7 @@ function DominioCard({ d, landings, enLinea, onCambio }: { d: DominioLandings; l
   return (
     <div style={{ ...card, marginBottom: 16 }}>
       <button onClick={() => setAbierto(!abierto)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', padding: '12px 14px', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left', color: 'var(--df-text-strong)' }}>
-        <span style={{ fontSize: 18 }}>🌐</span>
+        <Icono nombre="web" tam={18} degradado />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ fontWeight: 700, fontSize: 14 }}>{d.raiz ? 'Dirección de tu tienda' : 'Dominio propio'}</span>
           <span style={{ display: 'block', fontSize: 12.5, color: 'var(--df-text-muted)' }}>{d.dominio ? <>{d.dominio} · {activo ? <b style={{ color: 'var(--df-success, #16a34a)' }}>Activo</b> : <b style={{ color: 'var(--df-warning)' }}>Pendiente</b>}</> : d.raiz ? <><b style={{ color: 'var(--df-text-body)' }}>{d.sub}.{d.raiz}</b> · gratis · o conecta tu propio dominio</> : 'Muestra tus landings en tutienda.com/producto'}</span>
@@ -811,8 +812,8 @@ function DominioCard({ d, landings, enLinea, onCambio }: { d: DominioLandings; l
         <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {d.raiz && (
             <div style={{ border: '1px solid var(--df-border)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>🎁 Tu dirección gratis</div>
-              {!enLinea && <div style={{ fontSize: 12.5, background: 'var(--df-warning-subtle-2, #FFFBEB)', border: '1px solid var(--df-warning-border, #FDE68A)', borderRadius: 8, padding: '7px 10px', color: 'var(--df-text-body)' }}>⏸️ Tu tienda está en pausa: quien abra la dirección ve «Tienda en pausa». Se enciende sola cuando actives la membresía (arriba). Para cambiar el nombre de la dirección también necesitas la membresía activa.</div>}
+              <div style={{ fontSize: 13, fontWeight: 700 }}><IcoTexto n="regalo" tam={14} degradado />Tu dirección gratis</div>
+              {!enLinea && <div style={{ fontSize: 12.5, background: 'var(--df-warning-subtle-2, #FFFBEB)', border: '1px solid var(--df-warning-border, #FDE68A)', borderRadius: 8, padding: '7px 10px', color: 'var(--df-text-body)' }}><IcoTexto n="pausa" tam={13} />Tu tienda está en pausa: quien abra la dirección ve «Tienda en pausa». Se enciende sola cuando actives la membresía (arriba). Para cambiar el nombre de la dirección también necesitas la membresía activa.</div>}
               {enLinea && !publicadas.length && <div style={{ fontSize: 12.5, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 10px', color: 'var(--df-text-body)' }}>Aún no tienes productos publicados: tu dirección muestra «Pronto tendremos productos disponibles». Publica al menos uno.</div>}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 13 }}>
                 <span style={{ color: 'var(--df-text-muted)' }}>https://</span>
@@ -825,7 +826,7 @@ function DominioCard({ d, landings, enLinea, onCambio }: { d: DominioLandings; l
               <div style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Tu tienda queda en {d.sub}.{d.raiz} y cada producto en {d.sub}.{d.raiz}/nombre-del-producto. Si cambias el nombre, los enlaces anteriores dejan de funcionar.</div>
             </div>
           )}
-          {d.raiz && !d.dominio && <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>🌐 ¿Tienes tu propio dominio? (opcional)</div>}
+          {d.raiz && !d.dominio && <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}><IcoTexto n="web" tam={14} degradado />¿Tienes tu propio dominio? (opcional)</div>}
           {!d.dominio ? (
             <>
               <div style={{ fontSize: 13, color: 'var(--df-text-body)' }}>Escribe el dominio que compraste (te recomendamos usar <b>www</b>, por ejemplo <b>www.tutienda.com</b>).</div>
@@ -843,7 +844,7 @@ function DominioCard({ d, landings, enLinea, onCambio }: { d: DominioLandings; l
                   {fila('Nombre', d.nombreRegistro)}
                   {fila('Apunta a', d.cname)}
                   <div style={{ fontSize: 12, color: 'var(--df-text-faint)', marginTop: 6 }}>Si usas Cloudflare, pon ese registro con la nube <b>gris</b> («Solo DNS»). Si usaste www, en tu proveedor redirige también tutienda.com (sin www) hacia www.tutienda.com.</div>
-                  {d.apex && <div style={{ fontSize: 12, marginTop: 6, background: 'var(--df-warning-subtle-2, #FFFBEB)', border: '1px solid var(--df-warning-border, #FDE68A)', borderRadius: 8, padding: '7px 10px' }}>⚠️ Conectaste el dominio sin <b>www</b>. Muchos proveedores (GoDaddy, Hostinger…) no dejan crear un CNAME ahí y por eso nunca se activa. Si en 15 minutos sigue pendiente, desconéctalo y conecta <b>www.{d.dominio}</b>.</div>}
+                  {d.apex && <div style={{ fontSize: 12, marginTop: 6, background: 'var(--df-warning-subtle-2, #FFFBEB)', border: '1px solid var(--df-warning-border, #FDE68A)', borderRadius: 8, padding: '7px 10px' }}><IcoTexto n="alerta" tam={13} />Conectaste el dominio sin <b>www</b>. Muchos proveedores (GoDaddy, Hostinger…) no dejan crear un CNAME ahí y por eso nunca se activa. Si en 15 minutos sigue pendiente, desconéctalo y conecta <b>www.{d.dominio}</b>.</div>}
                   <div style={{ fontWeight: 700, margin: '10px 0 0' }}>2. Listo: lo revisamos solos cada par de minutos (preguntando directo a tu proveedor, así vemos los cambios al instante) y te avisamos. También puedes tocar «Verificar».</div>
                   {d.diag && (
                     <div style={{ marginTop: 10, border: '1px solid var(--df-border)', borderRadius: 10, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -852,7 +853,7 @@ function DominioCard({ d, landings, enLinea, onCambio }: { d: DominioLandings; l
                         ['Certificado de seguridad (HTTPS)', d.diag.dns !== 'ok' ? 'espera' : d.diag.ssl, d.diag.dns !== 'ok' ? 'Se genera solo apenas el DNS apunte bien.' : d.diag.sslDetalle],
                       ] as const).map(([t, est, det]) => (
                         <div key={t} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5 }}>
-                          <span style={{ fontSize: 14, lineHeight: 1.2 }}>{est === 'ok' ? '✅' : est === 'error' ? '❌' : '⏳'}</span>
+                          <Icono nombre={est === 'ok' ? 'ok' : est === 'error' ? 'error' : 'pendiente'} tam={15} color={est === 'ok' ? 'var(--df-success)' : est === 'error' ? 'var(--df-danger)' : '#B45309'} style={{ marginTop: 1 }} />
                           <span><b>{t}</b>{det ? <span style={{ display: 'block', color: 'var(--df-text-muted)' }}>{det}</span> : null}</span>
                         </div>
                       ))}
@@ -913,7 +914,7 @@ function MembresiaCard({ m }: { m: MembresiaTienda }) {
     const pronto = m.diasRestantes <= 5;
     return (
       <div style={{ ...card, padding: '11px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', borderColor: pronto ? 'var(--df-warning)' : 'var(--df-border)' }}>
-        <span style={{ fontSize: 18 }}>{pronto ? '⏳' : '✅'}</span>
+        <Icono nombre={pronto ? 'pendiente' : 'ok'} tam={18} color={pronto ? '#B45309' : 'var(--df-success)'} />
         <div style={{ fontSize: 13.5, flex: 1, minWidth: 220 }}>Membresía activa hasta el <b>{fecha(m.vence)}</b>{pronto ? <> · vence en {m.diasRestantes} día{m.diasRestantes === 1 ? '' : 's'}</> : ''}.</div>
         <button onClick={() => void pagar()} disabled={ocupado} style={pronto ? btnPri : btn}>{ocupado ? 'Abriendo…' : `Renovar · ${pesos(m.precio)}`}</button>
       </div>
@@ -921,7 +922,7 @@ function MembresiaCard({ m }: { m: MembresiaTienda }) {
   }
   return (
     <div style={{ ...card, padding: '18px 18px', marginBottom: 16, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', background: 'linear-gradient(135deg, var(--df-purple-subtle, #f5f3ff), var(--df-surface))', borderColor: 'var(--df-purple-border, var(--df-border))' }}>
-      <span style={{ fontSize: 34 }}>🛍️</span>
+      <Icono nombre="bolsa" tam={34} degradado />
       <div style={{ flex: 1, minWidth: 240 }}>
         <div style={{ fontWeight: 800, fontSize: 16 }}>{m.enGracia ? 'Tu membresía venció: renuévala para que tu tienda siga en línea' : 'Activa tu Tienda en línea'}</div>
         <div style={{ fontSize: 13, color: 'var(--df-text-body)', marginTop: 3 }}>
@@ -957,7 +958,7 @@ function TiendaCard({ t, onGuardada }: { t: TiendaConfig; onGuardada: (t: Tienda
   return (
     <div style={{ ...card, marginBottom: 14 }}>
       <button onClick={() => setAbierto(!abierto)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', padding: '12px 14px', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left', color: 'var(--df-text-strong)' }}>
-        {t.logo ? <img src={t.logo} alt="" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} /> : <span style={{ fontSize: 18 }}>🏪</span>}
+        {t.logo ? <img src={t.logo} alt="" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} /> : <Icono nombre="tienda" tam={18} degradado />}
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ fontWeight: 700, fontSize: 14 }}>Mi tienda · página de inicio</span>
           <span style={{ display: 'block', fontSize: 12.5, color: 'var(--df-text-muted)' }}>{t.nombre} · logo, portada, colores y textos de la página con todos tus productos</span>
@@ -984,7 +985,7 @@ function TiendaCard({ t, onGuardada }: { t: TiendaConfig; onGuardada: (t: Tienda
             </Dos>
             <ApiConversionesMeta pixelId={c.pixelMeta} />
             <div style={{ borderTop: '1px solid var(--df-border)', paddingTop: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🔎 SEO de la página de inicio</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}><IcoTexto n="buscar" tam={14} degradado />SEO de la página de inicio</div>
               <SeoCampos titulo={c.seoTitulo} descripcion={c.seoDescripcion} imagen={c.seoImagen}
                 autoTitulo={`${c.nombre}${c.titulo ? ' | ' + c.titulo : ''}`} autoDescripcion={c.descripcion || `${c.nombre}: pago contra entrega y envío a toda Colombia.`}
                 autoImagen={c.banner || c.logo} url="" onChange={(p) => set(p)} />

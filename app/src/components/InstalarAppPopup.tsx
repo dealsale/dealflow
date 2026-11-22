@@ -1,4 +1,5 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { Icono, IcoTexto } from './Icono';
 import logo from '../assets/logo.png';
 
 /** ¿La app ya corre instalada (PWA en pantalla completa)? */
@@ -55,9 +56,9 @@ export function InstalarAppPopup({ df, onClose }: { df: DealFlowState; onClose: 
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <div className="df-ins-li"><i>⚡</i>Abre directo desde tu escritorio o celular</div>
-          <div className="df-ins-li"><i>🔔</i>Avisos al instante de pedidos y chats nuevos</div>
-          <div className="df-ins-li"><i>🖥️</i>Pantalla completa, sin pestañas del navegador</div>
+          <div className="df-ins-li"><i><Icono nombre="rapido" tam={15} color="#9CC2FF" /></i>Abre directo desde tu escritorio o celular</div>
+          <div className="df-ins-li"><i><Icono nombre="notificacion" tam={15} color="#9CC2FF" /></i>Avisos al instante de pedidos y chats nuevos</div>
+          <div className="df-ins-li"><i><Icono nombre="pantalla" tam={15} color="#9CC2FF" /></i>Pantalla completa, sin pestañas del navegador</div>
         </div>
 
         {ios ? (
@@ -72,7 +73,7 @@ export function InstalarAppPopup({ df, onClose }: { df: DealFlowState; onClose: 
         ) : (
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="df-ins-sec" onClick={onClose}>Ahora no</button>
-            <button className="df-ins-btn" onClick={instalar}>📲 Instalar ahora</button>
+            <button className="df-ins-btn" onClick={instalar}><IcoTexto n="instalar" />Instalar ahora</button>
           </div>
         )}
       </div>

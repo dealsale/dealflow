@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icono, IcoTexto } from '../components/Icono';
 import { puente, type AccionEntrada } from './puente';
 import { SesionComputador, type EstadoConexion } from './conexion';
 
@@ -103,7 +104,7 @@ export function PaginaEscritorio() {
         <img src="/logo.png" alt="" style={{ width: 56, height: 56, justifySelf: 'center' }} />
         <div style={{ fontWeight: 800, fontSize: 18 }}>DealFlow Soporte</div>
         <div style={{ fontSize: 14, opacity: 0.8 }}>Esta página es para la app de escritorio. Descárgala, instálala y entra con tu cuenta: así el equipo de DealFlow te puede ayudar en todo tu computador (siempre con tu permiso).</div>
-        <a href="/api/escritorio/descargar" style={{ ...btn('#10B981', '#052e1f'), textDecoration: 'none' }}>⬇ Descargar para Windows</a>
+        <a href="/api/escritorio/descargar" style={{ ...btn('#10B981', '#052e1f'), textDecoration: 'none' }}><IcoTexto n="descargar" />Descargar para Windows</a>
       </div>
     </div>
   );
@@ -114,8 +115,8 @@ export function PaginaEscritorio() {
   if (fase === 'sesion') return (
     <div style={{ ...fondo, placeItems: 'stretch', padding: 12 }}>
       <div style={{ display: 'grid', gap: 10, alignContent: 'center' }}>
-        <div style={{ fontWeight: 800, fontSize: 14 }}>🖱 {quienRef.current || 'Soporte DealFlow'} {estado === 'conectada' ? 'está controlando tu computador' : estado === 'reconectando' ? '· reconectando…' : '· conectando…'}</div>
-        <button onClick={() => void detener()} style={btn('#DC2626')}>⏹ Detener</button>
+        <div style={{ fontWeight: 800, fontSize: 14 }}><IcoTexto n="puntero" />{quienRef.current || 'Soporte DealFlow'} {estado === 'conectada' ? 'está controlando tu computador' : estado === 'reconectando' ? '· reconectando…' : '· conectando…'}</div>
+        <button onClick={() => void detener()} style={btn('#DC2626')}><IcoTexto n="detener" />Detener</button>
       </div>
     </div>
   );
@@ -137,7 +138,7 @@ export function PaginaEscritorio() {
       {fase === 'pedido' && pedido && (
         <div role="alertdialog" aria-label="Permiso de conexión" style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,.85)', display: 'grid', placeItems: 'center', padding: 20 }}>
           <div style={{ ...tarjeta, background: '#111A2E', borderRadius: 18, padding: 22, boxShadow: '0 30px 70px -20px rgba(0,0,0,.8)' }}>
-            <div style={{ fontSize: 40 }}>💻</div>
+            <div><Icono nombre="computador" tam={40} degradado /></div>
             <div style={{ fontWeight: 800, fontSize: 17 }}>{pedido.quien} quiere conectarse a tu computador</div>
             <div style={{ fontSize: 13.5, lineHeight: 1.5, opacity: 0.88 }}>Podrá <b>ver tu pantalla</b> y <b>manejar el ratón y el teclado</b> para ayudarte. Lo detienes cuando quieras con «Detener».</div>
             <div style={{ display: 'flex', gap: 10 }}>

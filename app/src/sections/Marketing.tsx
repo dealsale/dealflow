@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icono, IcoTexto, type NombreIcono } from '../components/Icono';
+import { IconoDF } from '../components/IconoDF';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import type { Campana } from '../lib/api';
 import { Dropdown } from '../components/Dropdown';
@@ -15,10 +17,10 @@ const META = '#1877F2';
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CO');
 
 const OBJETIVOS = [
-  { id: 'mensajes', icono: '💬', nombre: 'Mensajes a WhatsApp', sub: 'Que te escriban para comprar' },
-  { id: 'ventas', icono: '🛒', nombre: 'Ventas', sub: 'Que compren el producto' },
-  { id: 'trafico', icono: '🔗', nombre: 'Tráfico', sub: 'Que visiten tu tienda' },
-  { id: 'reconocimiento', icono: '📢', nombre: 'Reconocimiento', sub: 'Que conozcan tu marca' },
+  { id: 'mensajes', icono: 'chat' as NombreIcono, nombre: 'Mensajes a WhatsApp', sub: 'Que te escriban para comprar' },
+  { id: 'ventas', icono: 'carrito' as NombreIcono, nombre: 'Ventas', sub: 'Que compren el producto' },
+  { id: 'trafico', icono: 'enlace' as NombreIcono, nombre: 'Tráfico', sub: 'Que visiten tu tienda' },
+  { id: 'reconocimiento', icono: 'campana' as NombreIcono, nombre: 'Reconocimiento', sub: 'Que conozcan tu marca' },
 ];
 const objetivoDe = (id: string) => OBJETIVOS.find((o) => o.id === id) || OBJETIVOS[0];
 
@@ -82,10 +84,10 @@ function Pasos({ c, paso, onIr }: { c: Campana; paso: number; onIr: (n: number) 
 }
 
 /** Encabezado de cada paso: ícono, título y ayuda. */
-function Titulo({ icono, titulo, ayuda }: { icono: string; titulo: string; ayuda: React.ReactNode }) {
+function Titulo({ icono, titulo, ayuda }: { icono: NombreIcono; titulo: string; ayuda: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 16 }}>
-      <span style={{ width: 40, height: 40, borderRadius: 11, background: 'var(--df-brand-subtle-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{icono}</span>
+      <span style={{ width: 40, height: 40, borderRadius: 11, background: 'var(--df-brand-subtle-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}><Icono nombre={icono} tam={21} degradado /></span>
       <div>
         <div style={{ fontWeight: 800, fontSize: 16 }}>{titulo}</div>
         <div style={{ color: 'var(--df-text-muted)', fontSize: 13, marginTop: 2, lineHeight: 1.55 }}>{ayuda}</div>
@@ -143,7 +145,7 @@ function PasoProducto({ df, c }: { df: DealFlowState; c: Campana }) {
   return (
     <>
       <div style={card}>
-        <Titulo icono="🔎" titulo="Cuéntale a la IA qué vendes" ayuda="Antes de crear nada, la IA estudia tu producto: a quién le sirve, qué problema resuelve y con qué ángulos se vende mejor." />
+        <Titulo icono="buscar" titulo="Cuéntale a la IA qué vendes" ayuda="Antes de crear nada, la IA estudia tu producto: a quién le sirve, qué problema resuelve y con qué ángulos se vende mejor." />
         <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 14, marginBottom: 12 }}>
           <div>
             <div style={label}>¿Qué vendes?</div>
@@ -154,7 +156,7 @@ function PasoProducto({ df, c }: { df: DealFlowState; c: Campana }) {
           <label style={{ cursor: 'pointer' }}>
             <div style={label}>Foto (opcional)</div>
             <div style={{ height: 128, border: '1.5px dashed var(--df-border)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: 'var(--df-bg)', textAlign: 'center' }}>
-              {imagen ? <img src={imagen} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 12, color: 'var(--df-text-muted)', padding: 8 }}><span style={{ fontSize: 24, display: 'block' }}>📷</span>La IA la analiza</span>}
+              {imagen ? <img src={imagen} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 12, color: 'var(--df-text-muted)', padding: 8 }}><Icono nombre="foto" tam={24} degradado style={{ display: 'block', margin: '0 auto 4px' }} />La IA la analiza</span>}
             </div>
             <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) void comprimirImagen(f).then(setImagen); }} />
           </label>
@@ -164,7 +166,7 @@ function PasoProducto({ df, c }: { df: DealFlowState; c: Campana }) {
           <div><div style={label}>¿A quién se lo vendes? (opcional)</div><input value={publico} onChange={(e) => setPublico(e.target.value)} placeholder="Mujeres 25-45, Bogotá" style={input} /></div>
         </div>
         <button onClick={() => df.pasoProducto(c.id, { idea, precio, publico, imagen: imagen || undefined })} disabled={df.mkLoading} style={{ ...btn, opacity: df.mkLoading ? 0.8 : 1 }}>
-          {df.mkLoading ? <><Rueda /> Estudiando el producto…</> : b ? '↻ Volver a estudiar' : '✨ Estudiar mi producto'}
+          {df.mkLoading ? <><Rueda /> Estudiando el producto…</> : b ? '↻ Volver a estudiar' : <><IcoTexto n="ia" />Estudiar mi producto</>}
         </button>
       </div>
 
@@ -177,7 +179,7 @@ function PasoProducto({ df, c }: { df: DealFlowState; c: Campana }) {
           </div>
           <div style={{ padding: 20, display: 'grid', gap: 16 }}>
             {b.descripcion && <div style={{ color: 'var(--df-text-body)', fontSize: 13.5, lineHeight: 1.6 }}>{b.descripcion}</div>}
-            {b.publico && <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-bg)', borderRadius: 10, padding: '10px 12px' }}><span style={{ fontSize: 18 }}>🎯</span><div><div style={{ ...label, fontSize: 11, marginBottom: 2, letterSpacing: '.06em' }}>PÚBLICO OBJETIVO</div><div style={{ fontSize: 13.5 }}>{b.publico}</div></div></div>}
+            {b.publico && <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-bg)', borderRadius: 10, padding: '10px 12px' }}><Icono nombre="objetivo" tam={18} degradado style={{ marginTop: 2 }} /><div><div style={{ ...label, fontSize: 11, marginBottom: 2, letterSpacing: '.06em' }}>PÚBLICO OBJETIVO</div><div style={{ fontSize: 13.5 }}>{b.publico}</div></div></div>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
               <Chips titulo="PROBLEMAS QUE RESUELVE" items={b.dolores} color="rgba(239,68,68,.10)" />
               <Chips titulo="BENEFICIOS" items={b.beneficios} color="rgba(16,185,129,.12)" />
@@ -202,18 +204,18 @@ function PasoCreativos({ df, c }: { df: DealFlowState; c: Campana }) {
   const [cantidad, setCantidad] = useState(1);
   const costo = (df.costoCreditos?.imagen || 20) * cantidad;
 
-  if (!c.brief) return <Falta icono="🔎" texto="Primero completa el paso 1 para que la IA sepa qué dibujar." />;
+  if (!c.brief) return <Falta icono="buscar" texto="Primero completa el paso 1 para que la IA sepa qué dibujar." />;
 
   return (
     <>
       <div style={card}>
-        <Titulo icono="🎨" titulo="Crea las imágenes del anuncio" ayuda={<>Se generan a partir de lo que la IA entendió de <b>{c.brief.producto}</b>. ¿Quieres videos? Créalos en <b>🎬 Videos y fotos</b>.</>} />
+        <Titulo icono="paleta" titulo="Crea las imágenes del anuncio" ayuda={<>Se generan a partir de lo que la IA entendió de <b>{c.brief.producto}</b>. ¿Quieres videos? Créalos en <b>Videos y fotos</b>.</>} />
         {c.brief.ideasCreativo.length > 0 && (
           <div style={{ marginBottom: 14 }}>
             <div style={label}>Ideas de la IA · toca una para usarla</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {c.brief.ideasCreativo.map((idea, i) => (
-                <button key={i} onClick={() => setInstruccion(idea)} style={{ ...btnGris, fontSize: 12.5, textAlign: 'left', borderRadius: 999, padding: '6px 12px', borderColor: instruccion === idea ? 'var(--df-brand)' : 'var(--df-border)', background: instruccion === idea ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)' }}>💡 {idea}</button>
+                <button key={i} onClick={() => setInstruccion(idea)} style={{ ...btnGris, fontSize: 12.5, textAlign: 'left', borderRadius: 999, padding: '6px 12px', borderColor: instruccion === idea ? 'var(--df-brand)' : 'var(--df-border)', background: instruccion === idea ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)' }}><IcoTexto n="idea" tam={13} />{idea}</button>
               ))}
             </div>
           </div>
@@ -236,7 +238,7 @@ function PasoCreativos({ df, c }: { df: DealFlowState; c: Campana }) {
             {[1, 2, 3, 4].map((n) => <button key={n} onClick={() => setCantidad(n)} style={{ border: 'none', background: cantidad === n ? '#0F172A' : 'var(--df-surface)', color: cantidad === n ? '#fff' : 'var(--df-text-body)', padding: '9px 14px', fontFamily: 'inherit', fontWeight: 700, cursor: 'pointer' }}>{n}</button>)}
           </div>
           <button onClick={() => df.pasoCreativos(c.id, { instruccion, cantidad, tamano })} disabled={df.mkLoading} style={{ ...btn, opacity: df.mkLoading ? 0.8 : 1 }}>
-            {df.mkLoading ? <><Rueda /> Creando…</> : `✨ Generar ${cantidad} imagen${cantidad > 1 ? 'es' : ''}`}
+            {df.mkLoading ? <><Rueda /> Creando…</> : <><IcoTexto n="ia" />{`Generar ${cantidad} imagen${cantidad > 1 ? 'es' : ''}`}</>}
           </button>
           <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', background: 'var(--df-bg)', borderRadius: 999, padding: '5px 11px' }}>{costo} créditos · tienes {df.creditos}</span>
         </div>
@@ -268,7 +270,7 @@ function PasoTextos({ df, c }: { df: DealFlowState; c: Campana }) {
   const [cantidad, setCantidad] = useState(4);
   const copys = c.copys;
 
-  if (!c.brief) return <Falta icono="🔎" texto="Primero completa el paso 1." />;
+  if (!c.brief) return <Falta icono="buscar" texto="Primero completa el paso 1." />;
 
   const set = (k: 'textos' | 'titulos' | 'descripciones') => (v: string[]) =>
     df.editarCampana(c.id, { copys: { ...(copys || { textos: [], titulos: [], descripciones: [] }), [k]: v } });
@@ -276,7 +278,7 @@ function PasoTextos({ df, c }: { df: DealFlowState; c: Campana }) {
   return (
     <>
       <div style={card}>
-        <Titulo icono="✍️" titulo="Escribe los textos del anuncio" ayuda={<>Con la estructura de Meta: <b>texto principal</b>, <b>título</b> y <b>descripción</b>. Cada variante con un ángulo distinto para que pruebes cuál vende más.</>} />
+        <Titulo icono="escribiendo" titulo="Escribe los textos del anuncio" ayuda={<>Con la estructura de Meta: <b>texto principal</b>, <b>título</b> y <b>descripción</b>. Cada variante con un ángulo distinto para que pruebes cuál vende más.</>} />
         <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
           <div>
             <div style={label}>Tono</div>
@@ -288,7 +290,7 @@ function PasoTextos({ df, c }: { df: DealFlowState; c: Campana }) {
           </div>
         </div>
         <button onClick={() => df.pasoTextos(c.id, { tono, cantidad })} disabled={df.mkLoading} style={{ ...btn, opacity: df.mkLoading ? 0.8 : 1 }}>
-          {df.mkLoading ? <><Rueda /> Escribiendo…</> : copys ? '↻ Escribir otros textos' : '✨ Escribir los textos'}
+          {df.mkLoading ? <><Rueda /> Escribiendo…</> : copys ? '↻ Escribir otros textos' : <><IcoTexto n="ia" />Escribir los textos</>}
         </button>
       </div>
 
@@ -313,7 +315,7 @@ function VistaPrevia({ pagina, texto, titulo, descripcion, imagen, objetivo }: {
     <div style={{ border: '1px solid var(--df-border)', borderRadius: 14, background: '#fff', color: '#050505', overflow: 'hidden', boxShadow: '0 8px 24px rgba(15,23,42,.08)', maxWidth: 380, width: '100%' }}>
       <div style={{ display: 'flex', gap: 9, alignItems: 'center', padding: '10px 12px' }}>
         <span style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#10B981,#6366F1)', color: '#fff', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{(pagina || 'T').slice(0, 1).toUpperCase()}</span>
-        <div style={{ lineHeight: 1.2 }}><div style={{ fontWeight: 700, fontSize: 13.5 }}>{pagina || 'Tu página'}</div><div style={{ fontSize: 11.5, color: '#65676B' }}>Publicidad · 🌎</div></div>
+        <div style={{ lineHeight: 1.2 }}><div style={{ fontWeight: 700, fontSize: 13.5 }}>{pagina || 'Tu página'}</div><div style={{ fontSize: 11.5, color: '#65676B' }}>Publicidad · <Icono nombre="web" tam={11} /></div></div>
       </div>
       <div style={{ padding: '0 12px 10px', fontSize: 13.5, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{texto}</div>
       {imagen ? <img src={imagen} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block' }} /> : <div style={{ aspectRatio: '1 / 1', background: '#F0F2F5' }} />}
@@ -322,7 +324,7 @@ function VistaPrevia({ pagina, texto, titulo, descripcion, imagen, objetivo }: {
           <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titulo || 'Título'}</div>
           {descripcion && <div style={{ fontSize: 12.5, color: '#65676B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{descripcion}</div>}
         </div>
-        <span style={{ background: '#E4E6EB', borderRadius: 6, padding: '7px 12px', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>{objetivo === 'mensajes' ? '🟢 ' : ''}{cta}</span>
+        <span style={{ background: '#E4E6EB', borderRadius: 6, padding: '7px 12px', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>{objetivo === 'mensajes' && <Icono nombre="chat" tam={13} color="#25D366" style={{ marginRight: 5, verticalAlign: '-0.15em' }} />}{cta}</span>
       </div>
     </div>
   );
@@ -361,7 +363,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
   if (ops) {
     return (
       <div style={card}>
-        <Titulo icono="🔗" titulo="Elige dónde publicar" ayuda="Estas son las cuentas publicitarias y páginas de tu Facebook." />
+        <Titulo icono="enlace" titulo="Elige dónde publicar" ayuda="Estas son las cuentas publicitarias y páginas de tu Facebook." />
         <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
           <div>
             <div style={label}>Cuenta publicitaria</div>
@@ -389,7 +391,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
     return (
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
         <div style={{ background: `linear-gradient(135deg, ${META}, #4F46E5)`, color: '#fff', padding: '22px 22px', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="df-est-flota" style={{ fontSize: 38 }}>📣</span>
+          <span className="df-est-flota" style={{ display: 'inline-flex' }}><Icono nombre="campana" tam={40} color="#fff" /></span>
           <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ fontWeight: 800, fontSize: 17 }}>Conecta tu Administrador de anuncios</div>
             <div style={{ fontSize: 13.5, opacity: 0.9, marginTop: 4, lineHeight: 1.5 }}>Publica desde aquí en tu propia cuenta de Meta. <b>La pauta la pagas directo a Meta</b> con tu método de pago.</div>
@@ -405,7 +407,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
 
   if (!listo) {
     const ok = hechos(c);
-    return <Falta icono="🧩" texto={`Para publicar te falta ${[!ok[1] && 'al menos una imagen (paso 2)', !ok[2] && 'los textos (paso 3)'].filter(Boolean).join(' y ')}.`} />;
+    return <Falta icono="variante" texto={`Para publicar te falta ${[!ok[1] && 'al menos una imagen (paso 2)', !ok[2] && 'los textos (paso 3)'].filter(Boolean).join(' y ')}.`} />;
   }
 
   const cp = c.copys!;
@@ -423,7 +425,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
 
       <div className="df-collapse" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,380px)', gap: 16, alignItems: 'start' }}>
         <div style={{ ...card, marginBottom: 0 }}>
-          <Titulo icono="🚀" titulo="Arma el anuncio" ayuda={<>Objetivo: <b>{objetivoDe(c.objetivo).icono} {objetivoDe(c.objetivo).nombre}</b>. Lo que elijas se ve al lado tal como saldrá.</>} />
+          <Titulo icono="cohete" titulo="Arma el anuncio" ayuda={<>Objetivo: <b><IcoTexto n={objetivoDe(c.objetivo).icono} />{objetivoDe(c.objetivo).nombre}</b>. Lo que elijas se ve al lado tal como saldrá.</>} />
           <div style={{ marginBottom: 14 }}>
             <div style={label}>Imagen</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -446,7 +448,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
             <div style={{ fontSize: 12, color: 'var(--df-text-faint)', marginTop: 6 }}>≈ {money(presupuesto * 30)} al mes si la dejas activa todos los días.</div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--df-warning-subtle-2)', border: '1px solid var(--df-warning-border)', borderRadius: 11, padding: '11px 13px', marginBottom: 16, color: 'var(--df-warning)', fontSize: 13, lineHeight: 1.55 }}>
-            <span>⏸</span><span>El anuncio se crea <b>en pausa</b>. No se gasta ni un peso hasta que le des play en tu Administrador de anuncios.</span>
+            <Icono nombre="pausa" tam={16} style={{ marginTop: 1 }} /><span>El anuncio se crea <b>en pausa</b>. No se gasta ni un peso hasta que le des play en tu Administrador de anuncios.</span>
           </div>
           <button
             onClick={() => { void df.publicarCampana(c.id, { presupuesto, textoIdx: sel.texto, tituloIdx: sel.titulo, descripcionIdx: sel.descripcion, creativoIdx: sel.creativo }).then((ok) => setPublicado(!!ok)); }}
@@ -456,7 +458,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
           {df.mkError && <div style={{ color: 'var(--df-danger-dark)', fontSize: 13, marginTop: 10 }}>{df.mkError}</div>}
           {(publicado || c.estado === 'publicada') && (
             <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', background: 'var(--df-brand-subtle-2)', borderRadius: 11, padding: '11px 13px', color: 'var(--df-brand-dark)', fontSize: 13.5, fontWeight: 600 }}>
-              <span style={{ fontSize: 18 }}>🎉</span> La campaña quedó creada en pausa dentro de tu Administrador de anuncios.
+              <Icono nombre="fiesta" tam={18} degradado /> La campaña quedó creada en pausa dentro de tu Administrador de anuncios.
             </div>
           )}
         </div>
@@ -471,10 +473,10 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
   );
 }
 
-function Falta({ icono, texto }: { icono: string; texto: string }) {
+function Falta({ icono, texto }: { icono: NombreIcono; texto: string }) {
   return (
     <div style={{ ...card, display: 'flex', gap: 14, alignItems: 'center' }}>
-      <span style={{ fontSize: 28 }}>{icono}</span>
+      <Icono nombre={icono} tam={28} degradado />
       <span style={{ fontSize: 14, color: 'var(--df-text-body)' }}>{texto}</span>
     </div>
   );
@@ -489,7 +491,7 @@ function ListaCampanas({ df }: { df: DealFlowState }) {
     <>
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
         <div style={{ background: `linear-gradient(135deg, ${META} 0%, #4F46E5 60%, #7C3AED 100%)`, color: '#fff', padding: '20px 22px', display: 'flex', gap: 16, alignItems: 'center' }}>
-          <span className="df-est-flota" style={{ fontSize: 34 }}>📣</span>
+          <span className="df-est-flota" style={{ display: 'inline-flex' }}><Icono nombre="campana" tam={36} color="#fff" /></span>
           <div>
             <div style={{ fontWeight: 800, fontSize: 17 }}>Nueva campaña para Meta</div>
             <div style={{ fontSize: 13.5, opacity: 0.9, marginTop: 3 }}>La IA estudia tu producto, crea las imágenes, escribe los textos y la publica en tu cuenta (en pausa).</div>
@@ -507,7 +509,7 @@ function ListaCampanas({ df }: { df: DealFlowState }) {
                 cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', borderRadius: 12, padding: '12px 13px', display: 'flex', gap: 10, alignItems: 'flex-start',
                 border: '1.5px solid ' + (objetivo === o.id ? 'var(--df-brand)' : 'var(--df-border)'), background: objetivo === o.id ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', color: 'var(--df-text)',
               }}>
-                <span style={{ fontSize: 22 }}>{o.icono}</span>
+                <Icono nombre={o.icono} tam={22} degradado />
                 <span><span style={{ display: 'block', fontWeight: 700, fontSize: 13.5, color: objetivo === o.id ? 'var(--df-brand-dark)' : 'var(--df-text-strong)' }}>{o.nombre}</span><span style={{ display: 'block', color: 'var(--df-text-muted)', fontSize: 12 }}>{o.sub}</span></span>
               </button>
             ))}
@@ -527,14 +529,14 @@ function ListaCampanas({ df }: { df: DealFlowState }) {
               return (
                 <div key={c.id} className="df-est-tarjeta" style={{ ...card, marginBottom: 0, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                   <button onClick={() => void df.abrirCampana(c.id)} style={{ padding: 0, border: 'none', cursor: 'pointer', position: 'relative', height: 140, background: 'transparent' }} className={c.creativos[0] ? '' : 'df-est-idea'}>
-                    {c.creativos[0] ? <img src={c.creativos[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <span style={{ fontSize: 34 }}>{objetivoDe(c.objetivo).icono}</span>}
+                    {c.creativos[0] ? <img src={c.creativos[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <Icono nombre={objetivoDe(c.objetivo).icono} tam={34} degradado />}
                     <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '3px 9px', color: st.c, background: st.bg, boxShadow: '0 1px 3px rgba(0,0,0,.12)' }}>{st.t}</span>
-                    {c.creativos.length > 1 && <span style={{ position: 'absolute', left: 10, bottom: 10, fontSize: 11, fontWeight: 700, borderRadius: 6, padding: '2px 7px', color: '#fff', background: 'rgba(15,23,42,.7)' }}>🖼️ {c.creativos.length}</span>}
+                    {c.creativos.length > 1 && <span style={{ position: 'absolute', left: 10, bottom: 10, fontSize: 11, fontWeight: 700, borderRadius: 6, padding: '2px 7px', color: '#fff', background: 'rgba(15,23,42,.7)' }}><IcoTexto n="imagen" tam={12} />{c.creativos.length}</span>}
                   </button>
                   <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 14.5 }}>{c.nombre}</div>
-                      <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5 }}>{objetivoDe(c.objetivo).icono} {objetivoDe(c.objetivo).nombre}</div>
+                      <div style={{ color: 'var(--df-text-muted)', fontSize: 12.5 }}><IcoTexto n={objetivoDe(c.objetivo).icono} tam={13} />{objetivoDe(c.objetivo).nombre}</div>
                     </div>
                     <div>
                       <div style={{ display: 'flex', gap: 4 }}>{ok.map((h, i) => <span key={i} title={PASOS[i].t} style={{ flex: 1, height: 5, borderRadius: 3, background: h ? 'var(--df-brand)' : 'var(--df-border)' }} />)}</div>
@@ -542,7 +544,7 @@ function ListaCampanas({ df }: { df: DealFlowState }) {
                     </div>
                     <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
                       <button onClick={() => void df.abrirCampana(c.id)} style={{ ...btn, padding: '8px 14px', fontSize: 13, flex: 1, justifyContent: 'center' }}>{c.estado === 'publicada' ? 'Ver' : 'Continuar'}</button>
-                      <button onClick={() => df.borrarCampana(c.id)} title="Eliminar" style={{ ...btnGris, padding: '8px 11px', color: 'var(--df-danger-dark)' }}>🗑</button>
+                      <button onClick={() => df.borrarCampana(c.id)} title="Eliminar" style={{ ...btnGris, padding: '8px 11px', color: 'var(--df-danger-dark)', display: 'inline-flex', alignItems: 'center' }}><Icono nombre="eliminar" tam={16} /></button>
                     </div>
                   </div>
                 </div>
@@ -567,7 +569,7 @@ function MarketingEnPruebas({ whatsapp }: { whatsapp: string }) {
   return (
     <section data-screen-label="Marketing IA" style={{ display: 'grid', placeItems: 'center', minHeight: '60vh', padding: 16 }}>
       <div style={{ width: 'min(520px, 100%)', background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 18, padding: 28, textAlign: 'center' }}>
-        <div style={{ fontSize: 44, lineHeight: 1 }}>🧪</div>
+        <div style={{ lineHeight: 1 }}><Icono nombre="experimento" tam={44} degradado /></div>
         <h1 style={{ fontSize: 21, fontWeight: 800, margin: '12px 0 6px', letterSpacing: '-0.02em' }}>Marketing IA está en etapa de pruebas</h1>
         <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--df-text-muted)', margin: '0 0 8px' }}>
           Crea videos estilo UGC y fotos de producto con inteligencia artificial, y lánzalos como campañas en Meta desde DealFlow.
@@ -613,7 +615,7 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
         </div>
         {(c || vista !== 'estudio') && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 999, padding: '7px 14px' }}>
-            <span style={{ fontSize: 15 }}>⚡</span>
+            <IconoDF n="rapido" size={18} />
             <span style={{ fontWeight: 800, fontSize: 15, color: df.creditos > 20 ? 'var(--df-brand-dark)' : 'var(--df-warning)' }}>{df.creditos.toLocaleString('es-CO')}</span>
             <span style={{ color: 'var(--df-text-muted)', fontSize: 12.5 }}>créditos</span>
           </div>
@@ -622,18 +624,18 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
 
       {!c && (
         <div style={{ display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%', gap: 4, padding: 4, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 12, marginBottom: 16 }}>
-          {([['estudio', '🎬 Videos y fotos'], ['ugc', '🎥 Video UGC'], ['campanas', '📣 Campañas en Meta']] as const).map(([v, t]) => (
-            <button key={v} onClick={() => irA(v)} style={{ background: vista === v ? 'var(--df-surface)' : 'transparent', color: vista === v ? 'var(--df-text)' : 'var(--df-text-muted)', border: 'none', borderRadius: 9, padding: '8px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', boxShadow: vista === v ? '0 1px 3px rgba(15,23,42,.12)' : 'none' }}>{t}</button>
+          {([['estudio', 'Videos y fotos', 'estudio'], ['ugc', 'Video UGC', 'video'], ['campanas', 'Campañas en Meta', 'campana']] as const).map(([v, t, ico]) => (
+            <button key={v} onClick={() => irA(v)} style={{ background: vista === v ? 'var(--df-surface)' : 'transparent', color: vista === v ? 'var(--df-text)' : 'var(--df-text-muted)', border: 'none', borderRadius: 9, padding: '8px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', boxShadow: vista === v ? '0 1px 3px rgba(15,23,42,.12)' : 'none' }}><IcoTexto n={ico} tam={15} />{t}</button>
           ))}
         </div>
       )}
 
       {df.mkSinCreditos && (
         <div style={{ ...card, display: 'flex', gap: 12, alignItems: 'center', background: 'var(--df-warning-subtle-2)', borderColor: 'var(--df-warning-border)' }}>
-          <span style={{ fontSize: 24 }}>⚡</span>
+          <IconoDF n="rapido" size={28} />
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--df-warning)' }}>Te quedaste sin créditos</div>
-            <div style={{ color: 'var(--df-warning)', fontSize: 13, marginTop: 2 }}>Recarga en «🎬 Videos y fotos» → Recargar créditos para seguir generando.</div>
+            <div style={{ color: 'var(--df-warning)', fontSize: 13, marginTop: 2 }}>Recarga en «Videos y fotos» → Recargar créditos para seguir generando.</div>
           </div>
         </div>
       )}
@@ -649,7 +651,7 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
             <button onClick={df.cerrarCampana} style={btnGris}>← Mis campañas</button>
             <div style={{ flex: 1, minWidth: 220, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '0 12px' }}>
-              <span style={{ fontSize: 16 }}>{objetivoDe(c.objetivo).icono}</span>
+              <Icono nombre={objetivoDe(c.objetivo).icono} tam={16} degradado />
               <input value={c.nombre} onChange={(e) => df.renombrarCampana(c.id, e.target.value)} style={{ ...input, border: 'none', padding: '10px 0', fontWeight: 800, fontSize: 15, background: 'transparent' }} title="Toca para cambiar el nombre" />
               <span style={{ fontSize: 12, color: 'var(--df-text-faint)', whiteSpace: 'nowrap' }}>✎</span>
             </div>

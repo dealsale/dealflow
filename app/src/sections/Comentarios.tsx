@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from '../components/Icono';
 import { notificar } from '../components/dialogs';
 import {
   apiComentarios, apiConfigComentarios, apiIgnorarComentario, apiOcultarComentario, apiResponderComentario, apiSincronizarComentarios, apiSugerirComentario,
@@ -78,12 +79,12 @@ export function Comentarios() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 2px' }}>Comentarios</h1>
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>
-            Facebook e Instagram{d.paginas.length ? ` · ${d.paginas.map((p) => p.nombre + (p.instagram ? ' + Instagram' : '')).join(', ')}` : ''}{d.config.auto ? ' · 🤖 respondiendo solo' : ''}
+            Facebook e Instagram{d.paginas.length ? ` · ${d.paginas.map((p) => p.nombre + (p.instagram ? ' + Instagram' : '')).join(', ')}` : ''}{d.config.auto ? ' · respondiendo solo' : ''}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button onClick={() => void traer()} disabled={trayendo || sinPaginas} style={{ ...btnS, opacity: sinPaginas ? 0.5 : 1 }}>{trayendo ? 'Trayendo…' : '↻ Traer comentarios'}</button>
-          <button onClick={() => setAjustes(!ajustes)} aria-expanded={ajustes} style={{ ...btnS, ...(ajustes ? activo : {}) }}>⚙️ Respuestas automáticas</button>
+          <button onClick={() => setAjustes(!ajustes)} aria-expanded={ajustes} style={{ ...btnS, ...(ajustes ? activo : {}) }}><IcoTexto n="ajustes" />Respuestas automáticas</button>
         </div>
       </div>
 
@@ -113,7 +114,7 @@ export function Comentarios() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {!d.comentarios.length && <div style={{ ...card, fontSize: 13, color: 'var(--df-text-faint)' }}>{estado === 'nuevo' ? '🎉 No hay comentarios sin responder.' : 'No hay comentarios con este filtro.'}</div>}
+        {!d.comentarios.length && <div style={{ ...card, fontSize: 13, color: 'var(--df-text-faint)' }}>{estado === 'nuevo' ? <><IcoTexto n="fiesta" />No hay comentarios sin responder.</> : 'No hay comentarios con este filtro.'}</div>}
         {d.comentarios.map((c) => <Tarjeta key={c.id} c={c} cfg={d.config} onCambio={cargar} />)}
       </div>
     </section>
@@ -164,7 +165,7 @@ function Tarjeta({ c, cfg, onCambio }: { c: ComentarioMeta; cfg: CfgComentarios;
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <b style={{ fontSize: 13.5 }}>{c.autor || 'Alguien'}</b>
             <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>{hace(c.creado)}</span>
-            {c.adId && <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: 'var(--df-bg)', color: 'var(--df-text-muted)' }}>📣 Anuncio</span>}
+            {c.adId && <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: 'var(--df-bg)', color: 'var(--df-text-muted)' }}><IcoTexto n="campana" />Anuncio</span>}
             <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: badge[1], color: badge[2] }}>{badge[0]}</span>
           </div>
           <div style={{ fontSize: 14, margin: '4px 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c.texto || <i style={{ color: 'var(--df-text-faint)' }}>(sin texto: foto o sticker)</i>}</div>
@@ -177,7 +178,7 @@ function Tarjeta({ c, cfg, onCambio }: { c: ComentarioMeta; cfg: CfgComentarios;
           {c.respuesta && <div style={{ fontSize: 12.5, marginTop: 6, paddingLeft: 10, borderLeft: '3px solid var(--df-brand)' }}><b>Respuesta:</b> {c.respuesta}</div>}
           {c.privado && <div style={{ fontSize: 12.5, marginTop: 4, paddingLeft: 10, borderLeft: '3px solid #1877F2' }}><b>Al privado:</b> {c.privado} <span style={{ color: 'var(--df-text-faint)' }}>· si contesta, sigue en el Inbox</span></div>}
           {c.oculto && c.motivo && <div style={{ fontSize: 12, marginTop: 4, color: 'var(--df-text-muted)' }}>Oculto: {c.motivo}</div>}
-          {c.error && <div style={{ fontSize: 12, marginTop: 4, color: 'var(--df-danger-dark, #b91c1c)' }}>⚠️ {c.error}</div>}
+          {c.error && <div style={{ fontSize: 12, marginTop: 4, color: 'var(--df-danger-dark, #b91c1c)' }}><IcoTexto n="alerta" />{c.error}</div>}
 
           {!abierta && c.estado !== 'oculto' && <button onClick={() => setAbierta(true)} style={{ ...btnS, marginTop: 8, padding: '4px 9px' }}>Responder</button>}
           {abierta && c.estado !== 'oculto' && (
@@ -193,7 +194,7 @@ function Tarjeta({ c, cfg, onCambio }: { c: ComentarioMeta; cfg: CfgComentarios;
               )}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button onClick={() => void responder()} disabled={ocupado === 'resp' || (!texto.trim() && !(conPrivado && !c.privado && privado.trim()))} style={{ ...btnP, opacity: !texto.trim() && !(conPrivado && !c.privado && privado.trim()) ? 0.5 : 1 }}>{ocupado === 'resp' ? 'Enviando…' : 'Responder'}</button>
-                <button onClick={() => void sugerir()} disabled={ocupado === 'ia'} style={btnS}>{ocupado === 'ia' ? 'Pensando…' : '✨ Sugerir con IA'}</button>
+                <button onClick={() => void sugerir()} disabled={ocupado === 'ia'} style={btnS}>{ocupado === 'ia' ? 'Pensando…' : <><IcoTexto n="ia" tam={13} />Sugerir con IA</>}</button>
                 <button onClick={() => void ocultar()} disabled={ocupado === 'ocu'} style={btnS}>Ocultar</button>
                 <button onClick={() => void ignorar()} style={btnS}>{c.estado === 'ignorado' ? 'Quitar de ignorados' : 'Ignorar'}</button>
               </div>
@@ -230,7 +231,7 @@ function Ajustes({ cfg, onGuardado }: { cfg: CfgComentarios; onGuardado: (c: Cfg
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: 12.5 }}>
           Respuesta pública:
           <button onClick={() => setC({ ...c, modo: 'plantilla' })} aria-pressed={c.modo === 'plantilla'} style={{ ...btnS, padding: '5px 10px', ...(c.modo === 'plantilla' ? activo : {}) }}>Mis textos (se turnan)</button>
-          <button onClick={() => setC({ ...c, modo: 'ia' })} aria-pressed={c.modo === 'ia'} style={{ ...btnS, padding: '5px 10px', ...(c.modo === 'ia' ? activo : {}) }}>✨ La IA según el comentario</button>
+          <button onClick={() => setC({ ...c, modo: 'ia' })} aria-pressed={c.modo === 'ia'} style={{ ...btnS, padding: '5px 10px', ...(c.modo === 'ia' ? activo : {}) }}><IcoTexto n="ia" />La IA según el comentario</button>
         </div>
       )}
       <label style={{ display: 'grid', gap: 4, fontSize: 12.5, fontWeight: 700 }}>

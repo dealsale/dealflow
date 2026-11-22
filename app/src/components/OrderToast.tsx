@@ -1,4 +1,5 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { Icono } from './Icono';
 
 /** Notificación de pedido entrante: se muestra unos segundos y permite abrirlo directo. */
 export function OrderToast({ df, mobile = false }: { df: DealFlowState; mobile?: boolean }) {
@@ -24,7 +25,7 @@ export function OrderToast({ df, mobile = false }: { df: DealFlowState; mobile?:
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span style={{ fontSize: 15 }}>🛍️</span>
+        <Icono nombre="bolsa" tam={15} degradado />
         <span style={{ fontWeight: 800, fontSize: 13.5 }}>Pedido nuevo</span>
         <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'var(--df-text-muted)' }}>{o.id}</span>
         <div style={{ flex: 1 }} />

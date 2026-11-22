@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 
 /**
@@ -28,7 +29,7 @@ export function PlantillasPropiasEncendidas() {
   return (
     <div style={{ background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 12, padding: 16, marginBottom: 16, display: 'grid', gap: 10 }}>
       <div>
-        <div style={{ fontWeight: 800, fontSize: 15 }}>💬 Tiendas con plantillas propias de WhatsApp encendidas</div>
+        <div style={{ fontWeight: 800, fontSize: 15 }}><IcoTexto n="chat" />Tiendas con plantillas propias de WhatsApp encendidas</div>
         <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Si alguna no debería estar aquí, apágala: sus mensajes vuelven a salir con las plantillas de DealFlow.</div>
       </div>
       {filas === null ? <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>Cargando…</div>

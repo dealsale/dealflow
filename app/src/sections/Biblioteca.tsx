@@ -1,4 +1,5 @@
 import type { DealFlowState } from '../hooks/useDealFlowState';
+import { Icono } from '../components/Icono';
 import { fmt } from '../lib/format';
 
 /**
@@ -34,7 +35,7 @@ export function Biblioteca({ df }: { df: DealFlowState }) {
               <div style={{ height: 150, background: 'var(--df-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                 {p.portada
                   ? <img src={p.portada} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : <span style={{ color: 'var(--df-border-strong)', fontSize: 30 }}>🛍️</span>}
+                  : <span style={{ display: 'inline-flex' }}><Icono nombre="bolsa" tam={30} style={{ opacity: 0.35 }} /></span>}
               </div>
               <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

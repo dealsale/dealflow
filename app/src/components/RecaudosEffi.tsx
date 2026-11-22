@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 import { apiRecaudos, type ResumenRecaudos } from '../lib/api';
@@ -37,7 +38,7 @@ export function RecaudosEffi({ df }: { df: DealFlowState }) {
     <div style={{ ...caja, marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <div>
-          <div style={{ fontWeight: 800, fontSize: 16 }}>💵 Recaudos contraentrega · Effi</div>
+          <div style={{ fontWeight: 800, fontSize: 16 }}><IcoTexto n="dinero" tam={17} degradado />Recaudos contraentrega · Effi</div>
           <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>Lo que Effi ya consignó en tu Wallet por cada guía, y lo que falta.</div>
         </div>
         <div style={{ flex: 1 }} />
@@ -47,7 +48,7 @@ export function RecaudosEffi({ df }: { df: DealFlowState }) {
         </label>
       </div>
       {cargando && <div style={{ fontSize: 13, color: 'var(--df-text-muted)' }}>Consultando tu Wallet en Effi…</div>}
-      {error && !cargando && <div style={{ fontSize: 13, color: 'var(--df-danger-dark)' }}>⚠️ {error}. Revisa que el usuario de la API key de Effi tenga permiso de consulta en «Movimientos de wallets».</div>}
+      {error && !cargando && <div style={{ fontSize: 13, color: 'var(--df-danger-dark)' }}><IcoTexto n="alerta" tam={13} />{error}. Revisa que el usuario de la API key de Effi tenga permiso de consulta en «Movimientos de wallets».</div>}
       {r && !cargando && (
         <>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

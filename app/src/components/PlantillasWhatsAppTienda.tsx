@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Icono, IcoTexto } from './Icono';
 import {
   apiSincronizarPlantillas, apiUpload, apiWaAutomatizacion, apiWaPlantillaCrear, apiWaPlantillaRevisar, apiWaPlantillas,
   type AutomatizacionWA, type BasePlantillaWA, type DefPlantillaWA, type EstadoPlantillasWA, type PlantillaTiendaWA, type RiesgoPlantilla,
@@ -66,8 +67,8 @@ export function PlantillasWhatsAppTienda() {
       {msg && <div role="status" style={{ fontSize: 12.5, marginTop: 8, color: 'var(--df-text-muted)' }}>{msg}</div>}
       {(pausadas.length > 0 || reclasificadas.length > 0) && (
         <div role="alert" style={{ marginTop: 12, border: '1px solid var(--df-danger-border, #fecaca)', background: 'var(--df-danger-subtle-2, #fef2f2)', borderRadius: 10, padding: '10px 12px', fontSize: 13, color: 'var(--df-danger-dark, #991b1b)', display: 'grid', gap: 4 }}>
-          {pausadas.map((a) => <div key={a.clave}>⚠ <b>{a.titulo}</b>: {a.seleccion?.motivo} Mientras tanto se usa la plantilla de DealFlow.</div>)}
-          {reclasificadas.map((p) => <div key={p.metaId}>⚠ Meta pasó <b>{p.nombre}</b> de Utilidad a Marketing: se cobra como Marketing y no sirve para las automatizaciones.</div>)}
+          {pausadas.map((a) => <div key={a.clave}><IcoTexto n="alerta" tam={12} /><b>{a.titulo}</b>: {a.seleccion?.motivo} Mientras tanto se usa la plantilla de DealFlow.</div>)}
+          {reclasificadas.map((p) => <div key={p.metaId}><IcoTexto n="alerta" />Meta pasó <b>{p.nombre}</b> de Utilidad a Marketing: se cobra como Marketing y no sirve para las automatizaciones.</div>)}
         </div>
       )}
       {permisos.automatizaciones && <Automatizaciones d={d} onCambio={setD} />}
@@ -129,7 +130,7 @@ function FilaAuto({ a, utiles, campos, docs, onCambio }: { a: AutomatizacionWA; 
       <div style={{ fontSize: 12, color: 'var(--df-text-muted)', margin: '2px 0 8px' }}>{a.descripcion}</div>
       <select aria-label={`Plantilla para ${a.titulo}`} value={metaId} onChange={(e) => elegir(e.target.value)} style={inp}>
         <option value="">Plantilla de DealFlow (por defecto)</option>
-        {utiles.filter((x) => x.encabezadoTipo !== 'DOCUMENT' || docs).map((x) => <option key={x.metaId} value={x.metaId}>{x.nombre}{x.encabezadoTipo === 'DOCUMENT' ? ' · 📄' : x.encabezadoTipo === 'IMAGE' ? ' · 🖼️' : ''}</option>)}
+        {utiles.filter((x) => x.encabezadoTipo !== 'DOCUMENT' || docs).map((x) => <option key={x.metaId} value={x.metaId}>{x.nombre}{x.encabezadoTipo === 'DOCUMENT' ? ' · documento' : x.encabezadoTipo === 'IMAGE' ? ' · foto️' : ''}</option>)}
       </select>
       {metaId && a.seleccion?.metaId === metaId && !p && <div style={{ fontSize: 12, color: 'var(--df-danger-dark)', marginTop: 6 }}>«{a.seleccion.nombre}» ya no está aprobada como Utilidad.</div>}
       {p && (
@@ -172,7 +173,7 @@ function ArchivoFijo({ tipo, valor, onCambio }: { tipo: string; valor: { url: st
   const [sub, setSub] = useState(false); const [err, setErr] = useState('');
   return (
     <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
-      {valor.url && <span style={{ fontSize: 12.5, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {valor.nombre || 'archivo'}</span>}
+      {valor.url && <span style={{ fontSize: 12.5, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><IcoTexto n="adjunto" />{valor.nombre || 'archivo'}</span>}
       <label style={{ ...btnS, padding: '5px 10px', fontSize: 12 }}>
         {sub ? 'Subiendo…' : valor.url ? 'Cambiar' : 'Subir archivo'}
         <input type="file" accept={tipo === 'DOCUMENT' ? 'application/pdf' : tipo === 'IMAGE' ? 'image/jpeg,image/png' : 'video/mp4'} style={{ display: 'none' }}
@@ -234,7 +235,7 @@ function Constructor({ d, onCreada }: { d: EstadoPlantillasWA; onCreada: () => v
       </div>
       <label style={lbl}>Empezar desde una base (ya escrita para que Meta la apruebe como Utilidad)</label>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {d.bases.map((b) => <button key={b.id} type="button" onClick={() => usarBase(b)} style={{ ...btnS, padding: '6px 10px', fontSize: 12.5, ...(def.base === b.id ? { borderColor: 'var(--df-brand)', color: 'var(--df-brand-dark)' } : {}) }}>{b.documento ? '📄 ' : ''}{b.titulo}</button>)}
+        {d.bases.map((b) => <button key={b.id} type="button" onClick={() => usarBase(b)} style={{ ...btnS, padding: '6px 10px', fontSize: 12.5, ...(def.base === b.id ? { borderColor: 'var(--df-brand)', color: 'var(--df-brand-dark)' } : {}) }}>{b.documento && <IcoTexto n="documento" tam={12} />}{b.titulo}</button>)}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
         <div><label style={lbl} htmlFor="tpl-nombre">Nombre (solo para ti y Meta)</label><input id="tpl-nombre" value={def.nombre} onChange={(e) => set({ nombre: e.target.value })} placeholder="confirmacion_pedido" style={inp} />{rev?.nombre && rev.nombre !== def.nombre && <div style={{ fontSize: 11, color: 'var(--df-text-faint)', marginTop: 2 }}>Se guarda como «{rev.nombre}»</div>}</div>
@@ -286,7 +287,7 @@ function Constructor({ d, onCreada }: { d: EstadoPlantillasWA; onCreada: () => v
         <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--df-text-muted)' }}>Así lo verá el cliente (con datos de ejemplo)</div>
           <div style={{ background: 'var(--df-brand-subtle-2, #ECFDF5)', border: '1px solid var(--df-border)', borderRadius: 10, padding: '9px 11px', fontSize: 13, whiteSpace: 'pre-wrap', color: 'var(--df-text)' }}>
-            {def.encabezadoTipo === 'DOCUMENT' && <div>📄 Guia-DF-1049.pdf</div>}{def.encabezadoTipo === 'IMAGE' && <div>🖼️ Foto</div>}
+            {def.encabezadoTipo === 'DOCUMENT' && <div><IcoTexto n="documento" />Guia-DF-1049.pdf</div>}{def.encabezadoTipo === 'IMAGE' && <div><IcoTexto n="imagen" />Foto</div>}
             {def.encabezadoTipo === 'TEXT' && def.encabezado && <b>{def.encabezado}{'\n'}</b>}{rev.vista}{def.pie && <span style={{ color: 'var(--df-text-muted)' }}>{'\n'}{def.pie}</span>}
             {(def.botones || []).filter((b) => b.texto.trim()).map((b, i) => <div key={i} style={{ marginTop: 6, textAlign: 'center', color: '#0369A1', fontWeight: 600 }}>↩ {b.texto}</div>)}
           </div>
@@ -324,7 +325,7 @@ function ListaPropias({ propias }: { propias: PlantillaTiendaWA[] }) {
           return (
             <div key={p.metaId} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', border: '1px solid var(--df-border)', borderRadius: 8, padding: '7px 10px', fontSize: 12.5, minWidth: 0 }}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }}>{p.nombre}</span>
-              {p.encabezadoTipo === 'DOCUMENT' && <span title="Lleva un documento arriba">📄</span>}
+              {p.encabezadoTipo === 'DOCUMENT' && <span title="Lleva un documento arriba" style={{ display: 'inline-flex' }}><Icono nombre="documento" tam={13} /></span>}
               <span style={chip(e[1], e[2])}>{e[0]}</span>
               <span style={chip(p.categoria.toUpperCase() === 'MARKETING' ? 'var(--df-purple-subtle, #F3E8FF)' : 'var(--df-surface-2)', p.categoria.toUpperCase() === 'MARKETING' ? 'var(--df-purple, #7C3AED)' : 'var(--df-text-muted)')}>{catNombre(p.categoria)}</span>
               {p.reclasificada && <span style={chip('var(--df-danger-subtle-2)', 'var(--df-danger-dark)')}>Meta la pasó a Marketing</span>}

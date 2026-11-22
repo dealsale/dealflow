@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { IcoTexto } from './Icono';
 import type { CSSProperties } from 'react';
 import { archivosDePortapapeles } from '../lib/clipboard';
 import { marcarEscribiendo } from '../lib/presencia';
@@ -94,7 +95,7 @@ export function CajaMensaje({ chatId, onSend, onFile, placeholder, inputStyle, b
             ))}
             <button type="button" onMouseDown={(e) => { e.preventDefault(); setGestionar(opciones.length ? '' : (m?.[2] || '')); }}
               style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid var(--df-border)', marginTop: 4, padding: '7px 8px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: 'var(--df-brand-dark)' }}>
-              {opciones.length ? '⚙ Crear y editar mensajes rápidos' : `＋ Crear mensaje rápido${m?.[2] ? ` /${m[2]}` : ''}`}
+              {opciones.length ? <><IcoTexto n="ajustes" tam={13} />Crear y editar mensajes rápidos</> : `＋ Crear mensaje rápido${m?.[2] ? ` /${m[2]}` : ''}`}
             </button>
           </div>
         )}

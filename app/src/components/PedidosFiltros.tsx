@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { IcoTexto } from './Icono';
 import { ymdCO } from '../lib/fechaCO';
 import type { CSSProperties } from 'react';
 import type { DecoratedOrder } from '../hooks/useDealFlowState';
@@ -310,7 +311,7 @@ export function PanelFiltros({ fp }: { fp: FiltrosPedidos }) {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {REPETIDOS.map((r) => (
             <button key={r.id} onClick={() => fp.alternarRepetido(r.id)} style={chip(f.repetidos.includes(r.id))} title={r.ayuda}>
-              🔁 {r.label} <span style={{ opacity: 0.7 }}>{fp.repetidos[r.id] || 0}</span>
+              <IcoTexto n="repetido" tam={12} />{r.label} <span style={{ opacity: 0.7 }}>{fp.repetidos[r.id] || 0}</span>
             </button>
           ))}
         </div>

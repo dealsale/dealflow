@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icono } from './Icono';
 import type { DealFlowState } from '../hooks/useDealFlowState';
 
 import { fmtCO } from '../lib/fechaCO';
@@ -36,7 +37,7 @@ export function ActivityLog({ df }: { df: DealFlowState }) {
         style={{ background: 'var(--df-surface)', width: 'min(680px, 100%)', maxHeight: '82vh', borderRadius: 14, boxShadow: '0 20px 60px rgba(15,23,42,.3)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: '1px solid var(--df-border)' }}>
-          <span style={{ fontSize: 16 }}>🩺</span>
+          <Icono nombre="registro" tam={18} degradado />
           <div>
             <div style={{ fontWeight: 800, fontSize: 15 }}>{df.logsLeadId ? 'Registro del chat' : 'Registro de actividad'}</div>
             <div style={{ color: 'var(--df-text-faint)', fontSize: 12 }}>
@@ -64,7 +65,7 @@ export function ActivityLog({ df }: { df: DealFlowState }) {
         <div style={{ overflowY: 'auto', padding: '8px 12px' }}>
           {items.length === 0 ? (
             <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--df-text-faint)', fontSize: 13 }}>
-              {soloErrores ? 'Sin errores registrados. 🎉' : 'Aún no hay actividad registrada.'}
+              {soloErrores ? 'Sin errores registrados.' : 'Aún no hay actividad registrada.'}
             </div>
           ) : (
             items.map((l, i) => {
