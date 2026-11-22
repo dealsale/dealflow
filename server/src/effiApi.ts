@@ -214,6 +214,7 @@ export async function listasEffi(apiKey: string): Promise<Record<string, unknown
   const res = await Promise.all(nombres.map((n) => todo<Fila>(apiKey, `/api/${n}`, {}, 5)));
   const err = res.find((r) => !Array.isArray(r)) as { error: string } | undefined;
   if (err && !Array.isArray(res[0])) return err; // si falla lo básico, no seguimos
+  if (Array.isArray(res[7])) await completarServicios(apiKey, res[7] as Fila[]);
   const L = (i: number) => (Array.isArray(res[i]) ? (res[i] as Fila[]) : []);
   return {
     sucursales: L(0).map((f) => ({ id: txt(f.id), nombre: txt(f.nombre), prefijo: txt(f.prefijo_trans) })),
@@ -225,8 +226,8 @@ export async function listasEffi(apiKey: string): Promise<Record<string, unknown
     cuentas: L(6).map((f) => ({ id: txt(f.id), nombre: [txt(f.nombre_banco), txt(f.nombre)].filter(Boolean).join(' · ') })),
     transportadoras: L(7).map((f) => ({
       id: txt(f.id), nombre: txt(f.nombre), effi: txt(f.nombre_transportadora_efficommerce),
-      servicios: Array.isArray(f.t_servicio) ? (f.t_servicio as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
-      formasPago: Array.isArray(f.t_forma_pago) ? (f.t_forma_pago as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
+      servicios: subLista(f, CLAVES_SERVICIO),
+      formasPago: subLista(f, CLAVES_FORMA_PAGO),
     })),
     remitentes: L(8).map(opcionRemitente),
     ecommerce: L(9).map((f) => ({ id: txt(f.id), nombre: txt(f.nombre), plataforma: txt(f.nombre_api) })),
@@ -295,15 +296,52 @@ export async function autoconfigurarEffi(storeId: string, paso: PasoAuto): Promi
   return { ok: true, listo: effiApiListo(storeId), detalle: `Leímos ${r.total} artículos de Effi. ${r.productosEffi} producto${r.productosEffi === 1 ? '' : 's'} de tu tienda se despacha${r.productosEffi === 1 ? '' : 'n'} por Effi${r.marcados ? ` (${r.marcados} marcados ahora)` : ''}: ${r.vinculadas} variantes conectadas, stock al día en ${r.stockActualizado}.${r.sinVinculo.length ? ` ${r.sinVinculo.length} variantes no casaron por nombre: revísalas en Artículos.` : ''}` };
 }
 
+// Effi manda los servicios («Paquete 6 kg»…) y las formas de pago del flete de cada transportadora
+// dentro de la lista. A veces cambia el formato (texto JSON, objeto por id u otro nombre de campo) o
+// los deja vacíos: se leen en cualquiera de esas formas y, si no vienen, se piden una por una.
+const CLAVES_SERVICIO = ['t_servicio', 't_servicios', 'servicios', 'servicio', 'tipo_servicio', 'tipos_servicio'];
+const CLAVES_FORMA_PAGO = ['t_forma_pago', 't_formas_pago', 'formas_pago', 'forma_pago', 'formas_pago_flete'];
+function subLista(f: Fila, claves: string[]): { id: string; nombre: string }[] {
+  for (const k of claves) {
+    let v: unknown = f[k];
+    if (typeof v === 'string') { try { v = JSON.parse(v); } catch { continue; } }
+    if (v && typeof v === 'object' && !Array.isArray(v)) v = Object.values(v as Fila);
+    if (!Array.isArray(v) || !v.length) continue;
+    const out = (v as unknown[]).map((s) => {
+      if (s && typeof s === 'object') { const o = s as Fila; return { id: txt(o.id ?? o.codigo ?? o.id_servicio ?? o.id_forma_pago), nombre: txt(o.tipo ?? o.nombre ?? o.descripcion) }; }
+      return { id: txt(s), nombre: txt(s) };
+    }).filter((s) => s.id);
+    if (out.length) return out.map((s) => ({ ...s, nombre: s.nombre || s.id }));
+  }
+  return [];
+}
+/** Muestra de lo último que mandó Effi cuando faltaron los servicios (para el diagnóstico del superadmin). */
+export let muestraTransportadora: { claves: string[]; muestra: string; detalle?: string } | null = null;
+async function completarServicios(apiKey: string, lista: Fila[]): Promise<void> {
+  const vacias = lista.filter((f) => txt(f.vigente) !== '0' && !subLista(f, CLAVES_SERVICIO).length);
+  if (!vacias.length) return;
+  muestraTransportadora = { claves: Object.keys(vacias[0]), muestra: JSON.stringify(vacias[0]).slice(0, 1500) };
+  await Promise.all(vacias.slice(0, 20).map(async (f) => {
+    const r = await effi<Fila | Fila[]>(apiKey, 'GET', `/api/transportadora/${encodeURIComponent(txt(f.id))}`).catch(() => null);
+    if (!r?.ok) return;
+    const d = (Array.isArray(r.body.data) ? r.body.data[0] : r.body.data) as Fila | undefined;
+    if (!d || typeof d !== 'object') return;
+    if (muestraTransportadora && !muestraTransportadora.detalle) muestraTransportadora.detalle = JSON.stringify(d).slice(0, 1500);
+    for (const k of [...CLAVES_SERVICIO, ...CLAVES_FORMA_PAGO]) if (d[k] != null && f[k] == null) f[k] = d[k];
+    for (const k of ['t_servicio', 't_forma_pago']) if (d[k] != null) f[k] = d[k];
+  }));
+}
+
 /** Solo lo que pide el formulario de guía (más liviano que todas las listas). */
 export async function opcionesGuiaEffi(apiKey: string): Promise<{ transportadoras: unknown[]; remitentes: unknown[] } | { error: string }> {
   const [t, r] = await Promise.all([todo<Fila>(apiKey, '/api/transportadora', {}, 5), todo<Fila>(apiKey, '/api/remitente', {}, 5)]);
   if (!Array.isArray(t)) return t;
+  await completarServicios(apiKey, t);
   return {
     transportadoras: t.filter((f) => txt(f.vigente) !== '0').map((f) => ({
       id: txt(f.id), nombre: txt(f.nombre), effi: txt(f.nombre_transportadora_efficommerce),
-      servicios: Array.isArray(f.t_servicio) ? (f.t_servicio as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
-      formasPago: Array.isArray(f.t_forma_pago) ? (f.t_forma_pago as Fila[]).map((s) => ({ id: txt(s.id), nombre: txt(s.tipo) })) : [],
+      servicios: subLista(f, CLAVES_SERVICIO),
+      formasPago: subLista(f, CLAVES_FORMA_PAGO),
     })),
     remitentes: Array.isArray(r) ? r.map(opcionRemitente) : [],
   };

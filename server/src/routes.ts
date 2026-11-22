@@ -2395,7 +2395,8 @@ api.get('/effi-api/opciones-guia', requireAuth, requireStore, requirePermiso('de
   // Remitente que le toca a este pedido (la bodega del proveedor de su convenio), si se sabe.
   const sugerido = req.query.orderId || req.query.convenio
     ? await ef.remitenteSugerido(req.user!.storeId!, c.apiKey, { orderId: String(req.query.orderId || ''), convenio: String(req.query.convenio || '') }) : null;
-  res.json({ ...r, defaults: c.guia, sugerido });
+  // Superadmin: si Effi no mandó los servicios, se ve lo que sí mandó (para corregir el formato).
+  res.json({ ...r, defaults: c.guia, sugerido, ...(['SUPERADMIN', 'ADMIN', 'SOPORTE'].includes(req.user!.role) && ef.muestraTransportadora ? { diagnostico: ef.muestraTransportadora } : {}) });
 });
 // Apodo de un remitente (Effi les pone a todos el nombre de la tienda).
 api.put('/effi-api/remitentes/:codigo/alias', requireAuth, requireStore, requirePermiso('despachar'), async (req, res) => {

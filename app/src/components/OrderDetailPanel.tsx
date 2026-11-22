@@ -715,8 +715,9 @@ function useGuiaEffi(orderId?: string) {
     const t = o.transportadoras.find((y) => y.id === id);
     if (!t) return x;
     return { ...x, transportadora: id,
-      servicio: servicioMasLiviano(t.servicios) || (t.servicios.some((v) => v.id === x.servicio) ? x.servicio : t.servicios.length === 1 ? t.servicios[0].id : ''),
-      formaPagoFlete: t.formasPago.some((v) => v.id === x.formaPagoFlete) ? x.formaPagoFlete : t.formasPago.length === 1 ? t.formasPago[0].id : '' };
+      // Si Effi no mandó la lista de servicios / formas de pago, se deja el de la configuración de guías.
+      servicio: !t.servicios.length ? x.servicio : servicioMasLiviano(t.servicios) || (t.servicios.some((v) => v.id === x.servicio) ? x.servicio : t.servicios.length === 1 ? t.servicios[0].id : ''),
+      formaPagoFlete: !t.formasPago.length ? x.formaPagoFlete : t.formasPago.some((v) => v.id === x.formaPagoFlete) ? x.formaPagoFlete : t.formasPago.length === 1 ? t.formasPago[0].id : '' };
   };
   const elegirTransportadora = (id: string) => {
     if (!ops) { pendiente.current = id; setD((x) => ({ ...x, transportadora: id })); return; }
@@ -850,6 +851,20 @@ function CampoRemitente({ g }: { g: ReturnType<typeof useGuiaEffi> }) {
   );
 }
 
+/**
+ * Effi no mandó la lista (servicios o formas de pago) de esta transportadora: en vez de una lista
+ * vacía, se usa el código de la configuración de guías y se puede escribir otro a mano.
+ */
+function SinListaEffi({ valor, que, onCambio }: { valor: string; que: string; onCambio: (v: string) => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <input value={valor} onChange={(e) => onCambio(e.target.value.replace(/\D/g, ''))} inputMode="numeric" placeholder={`Código de ${que} en Effi`} aria-label={`Código de ${que} en Effi`}
+        style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--df-border)', borderRadius: 8, padding: '8px 9px', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--df-surface)', color: 'var(--df-text)' }} />
+      <span style={{ fontSize: 11, color: 'var(--df-text-muted)', lineHeight: 1.4 }}>Effi no mandó la lista de {que} de esta transportadora. {valor ? 'Se usa el de tu configuración de guías.' : 'Escribe el código que usas en Effi.'}</span>
+    </div>
+  );
+}
+
 /** Campos de la guía (transportadora, servicio, paquete…). */
 function CamposGuia({ g, items = [], sinTransportadora = false }: { g: ReturnType<typeof useGuiaEffi>; items?: { qty: number; nombre: string }[]; sinTransportadora?: boolean }) {
   const { ops, d, setD } = g;
@@ -874,10 +889,12 @@ function CamposGuia({ g, items = [], sinTransportadora = false }: { g: ReturnTyp
                   style={{ border: `1px solid ${on ? 'var(--df-purple)' : 'var(--df-border-strong)'}`, background: on ? 'var(--df-purple-subtle)' : 'var(--df-surface)', color: on ? 'var(--df-purple)' : 'var(--df-text-body)', borderRadius: 999, padding: '0 11px', minHeight: 34, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}>{x.nombre}</button>;
               })}
             </div>
-          ) : <Dropdown ariaLabel="Servicio" placeholder="Elige…" value={d.servicio} onChange={(v) => set({ servicio: v })} options={(t?.servicios || []).map((x) => ({ value: x.id, label: x.nombre }))} />}
+          ) : t && !t.servicios.length ? <SinListaEffi valor={d.servicio} que="servicio" onCambio={(v) => set({ servicio: v })} />
+          : <Dropdown ariaLabel="Servicio" placeholder="Elige…" value={d.servicio} onChange={(v) => set({ servicio: v })} options={(t?.servicios || []).map((x) => ({ value: x.id, label: x.nombre }))} />}
         </div>
         <div><label style={lb}>Pago del flete</label>
-          <Dropdown ariaLabel="Pago del flete" placeholder="Elige…" value={d.formaPagoFlete} onChange={(v) => set({ formaPagoFlete: v })} options={(t?.formasPago || []).map((x) => ({ value: x.id, label: x.nombre }))} /></div>
+          {t && !t.formasPago.length ? <SinListaEffi valor={d.formaPagoFlete} que="pago del flete" onCambio={(v) => set({ formaPagoFlete: v })} />
+            : <Dropdown ariaLabel="Pago del flete" placeholder="Elige…" value={d.formaPagoFlete} onChange={(v) => set({ formaPagoFlete: v })} options={(t?.formasPago || []).map((x) => ({ value: x.id, label: x.nombre }))} />}</div>
       </div>
       <CampoRemitente g={g} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
