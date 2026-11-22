@@ -299,8 +299,8 @@ export async function autoconfigurarEffi(storeId: string, paso: PasoAuto): Promi
 // Effi manda los servicios («Paquete 6 kg»…) y las formas de pago del flete de cada transportadora
 // dentro de la lista. A veces cambia el formato (texto JSON, objeto por id u otro nombre de campo) o
 // los deja vacíos: se leen en cualquiera de esas formas y, si no vienen, se piden una por una.
-const CLAVES_SERVICIO = ['t_servicio', 't_servicios', 'servicios', 'servicio', 'tipo_servicio', 'tipos_servicio'];
-const CLAVES_FORMA_PAGO = ['t_forma_pago', 't_formas_pago', 'formas_pago', 'forma_pago', 'formas_pago_flete'];
+const CLAVES_SERVICIO = ['lista_tipos_servicio', 't_servicio', 't_servicios', 'servicios', 'servicio', 'tipo_servicio', 'tipos_servicio'];
+const CLAVES_FORMA_PAGO = ['lista_formas_pago', 't_forma_pago', 't_formas_pago', 'formas_pago', 'forma_pago', 'formas_pago_flete'];
 function subLista(f: Fila, claves: string[]): { id: string; nombre: string }[] {
   for (const k of claves) {
     let v: unknown = f[k];
@@ -308,7 +308,13 @@ function subLista(f: Fila, claves: string[]): { id: string; nombre: string }[] {
     if (v && typeof v === 'object' && !Array.isArray(v)) v = Object.values(v as Fila);
     if (!Array.isArray(v) || !v.length) continue;
     const out = (v as unknown[]).map((s) => {
-      if (s && typeof s === 'object') { const o = s as Fila; return { id: txt(o.id ?? o.codigo ?? o.id_servicio ?? o.id_forma_pago), nombre: txt(o.tipo ?? o.nombre ?? o.descripcion) }; }
+      if (s && typeof s === 'object') {
+        const o = s as Fila;
+        // Effi cambia los nombres de los campos: id y nombre por los nombres conocidos o, si no, el primero que sirva.
+        const id = o.id ?? o.codigo ?? o.id_servicio ?? o.id_tipo_servicio ?? o.id_forma_pago ?? Object.entries(o).find(([k, v]) => /^id/.test(k) && v != null)?.[1];
+        const nombre = o.tipo ?? o.nombre ?? o.descripcion ?? o.tipo_servicio ?? o.forma_pago ?? o.nombre_tipo_servicio ?? o.nombre_forma_pago ?? Object.entries(o).find(([k, v]) => !/^id/.test(k) && typeof v === 'string' && /[a-z]/i.test(v))?.[1];
+        return { id: txt(id), nombre: txt(nombre) };
+      }
       return { id: txt(s), nombre: txt(s) };
     }).filter((s) => s.id);
     if (out.length) return out.map((s) => ({ ...s, nombre: s.nombre || s.id }));
@@ -320,7 +326,8 @@ export let muestraTransportadora: { claves: string[]; muestra: string; detalle?:
 async function completarServicios(apiKey: string, lista: Fila[]): Promise<void> {
   const vacias = lista.filter((f) => txt(f.vigente) !== '0' && !subLista(f, CLAVES_SERVICIO).length);
   if (!vacias.length) return;
-  muestraTransportadora = { claves: Object.keys(vacias[0]), muestra: JSON.stringify(vacias[0]).slice(0, 1500) };
+  const { lista_estados: _e, ...sinEstados } = vacias[0]; void _e;
+  muestraTransportadora = { claves: Object.keys(vacias[0]), muestra: JSON.stringify(sinEstados).slice(0, 1500) };
   await Promise.all(vacias.slice(0, 20).map(async (f) => {
     const r = await effi<Fila | Fila[]>(apiKey, 'GET', `/api/transportadora/${encodeURIComponent(txt(f.id))}`).catch(() => null);
     if (!r?.ok) return;
