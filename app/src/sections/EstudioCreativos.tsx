@@ -4,17 +4,27 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import { comprimirImagen } from '../components/PhotoUpload';
 import { confirmar, notificar } from '../components/dialogs';
 import {
-  apiEstudio, apiEstudioAgregar, apiEstudioBorrar, apiEstudioEditarPieza, apiEstudioGenerar, apiEstudioGuardar, apiEstudioLanzar, apiEstudioLanzEstado,
-  apiEstudioLanzReintentar, apiEstudioMeta, apiEstudioPaquete, apiEstudioProyecto, apiRecargarCreditos,
-  type BriefEstudio, type LanzamientoEstudio, type OpcionesLanzar, type PiezaEstudio, type PreciosEstudio, type ProyectoEstudio, type ProyectoEstudioResumen,
+  apiEstudio, apiEstudioBorrar, apiEstudioEditarPieza, apiEstudioFoto, apiEstudioGenerar, apiEstudioGuardar, apiEstudioLanzar, apiEstudioLanzEstado,
+  apiEstudioLanzReintentar, apiEstudioMeta, apiEstudioPaquete, apiEstudioProyecto, apiRecargarCreditos, apiUgc,
+  type ActorUgc, type BriefEstudio, type LanzamientoEstudio, type OpcionesLanzar, type PiezaEstudio, type PreciosEstudio, type ProyectoEstudio, type ProyectoEstudioResumen,
 } from '../lib/api';
 
 /**
- * Estudio de videos y fotos (Marketing IA). La tienda describe su producto (con varias fotos
- * reales: la IA entiende mejor con más ángulos), la IA propone videos UGC y fotos de e-commerce
- * con ángulos distintos, cada pieza se genera aparte mostrando antes cuántos créditos cuesta, y
- * las piezas listas se lanzan a Meta desde aquí. Solo se cobra con créditos.
+ * Fotos IA (Marketing IA). La tienda describe su producto (con varias fotos reales: la IA lo
+ * entiende mejor con más ángulos) y crea fotos de e-commerce eligiendo el TIPO (fondo blanco,
+ * en uso, con modelo, testimonio con reseña real, banner, detalle o su propio prompt). También
+ * puede pedirle ideas a la IA. Cada foto muestra antes cuántos créditos cuesta y las listas se
+ * lanzan a Meta desde aquí. Los videos se hacen en «Video UGC».
  */
+const TIPOS_FOTO: { id: string; t: string; s: string; icono: NombreIcono }[] = [
+  { id: 'fondo_blanco', t: 'Fondo blanco', s: 'Catálogo, Shopify, Mercado Libre', icono: 'imagen' },
+  { id: 'en_uso', t: 'Producto en uso', s: 'En un ambiente real', icono: 'casa' },
+  { id: 'modelo', t: 'Con modelo', s: 'Tu modelo o una persona IA', icono: 'usuario' },
+  { id: 'testimonio', t: 'Testimonio', s: 'Con la reseña real de un cliente', icono: 'estrella' },
+  { id: 'banner', t: 'Banner con oferta', s: 'Fondo de color y texto grande', icono: 'etiqueta' },
+  { id: 'detalle', t: 'Detalle', s: 'Textura y acabados de cerca', icono: 'buscar' },
+  { id: 'libre', t: 'Mi propio prompt', s: 'Escribe exactamente lo que quieres', icono: 'escribiendo' },
+];
 
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 18, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 };
 const label: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 5, display: 'block' };
@@ -32,7 +42,7 @@ const ESTILOS = [
 ] as const;
 const FORMATOS = [
   { id: '9:16', nombre: 'Vertical 9:16', sub: 'Reels, TikTok, historias' },
-  { id: '1:1', nombre: 'Cuadrado', sub: 'Feed (los videos salen verticales)' },
+  { id: '1:1', nombre: 'Cuadrado', sub: 'Feed y catálogo' },
   { id: '16:9', nombre: 'Horizontal', sub: 'YouTube, web' },
 ] as const;
 const ESTADOS: Record<PiezaEstudio['estado'], { t: string; c: string; bg: string }> = {
@@ -65,8 +75,8 @@ export function EstudioCreativos({ df }: { df: DealFlowState }) {
       <div className="df-est-idea" style={{ padding: '18px 20px', color: '#fff', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div className="df-est-flota" style={{ lineHeight: 1 }}><Icono nombre="estudio" tam={36} degradado /></div>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontWeight: 800, fontSize: 16 }}>Estudio de videos y fotos</div>
-          <div style={{ fontSize: 13, opacity: 0.8, marginTop: 3, lineHeight: 1.5 }}>Videos UGC con voz y fotos de producto para vender lo que sea. Pagas con créditos solo lo que generas; si algo falla, vuelven solos.</div>
+          <div style={{ fontWeight: 800, fontSize: 16 }}>Estudio de fotos</div>
+          <div style={{ fontSize: 13, opacity: 0.8, marginTop: 3, lineHeight: 1.5 }}>Fotos de producto para vender lo que sea: fondo blanco, en uso, con modelo, testimonios y banners. Pagas con créditos solo lo que generas; si algo falla, vuelven solos.</div>
         </div>
         <div style={{ textAlign: 'center', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, padding: '8px 16px' }}>
           <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.75, letterSpacing: '.06em' }}>CRÉDITOS</div>
@@ -79,9 +89,9 @@ export function EstudioCreativos({ df }: { df: DealFlowState }) {
           {recarga && <Recarga df={df} />}
           {precios && (
             <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: recarga ? 10 : 0 }}>
-              <span><IcoTexto n="idea" tam={13} />Ideas y guiones: <b>{precios.paquete}</b></span>
+              <span><IcoTexto n="idea" tam={13} />Ideas de la IA: <b>{precios.paquete}</b></span>
               <span><IcoTexto n="imagen" tam={13} />Foto: <b>{precios.imagen.medium}</b> · alta calidad <b>{precios.imagen.high}</b></span>
-              <span><IcoTexto n="video" tam={13} />Video 8 s: <b>{precios.video['sora-2']?.['8']}</b> · pro <b>{precios.video['sora-2-pro']?.['8']}</b></span>
+              <span><IcoTexto n="video" tam={13} />Los videos se hacen en «Video UGC»</span>
               {!precios.disponible && <span style={{ color: 'var(--df-danger)' }}><IcoTexto n="alerta" tam={13} />La IA no está configurada en el servidor.</span>}
             </div>
           )}
@@ -118,7 +128,7 @@ export function EstudioCreativos({ df }: { df: DealFlowState }) {
               </div>
               <div style={{ padding: '11px 13px' }}>
                 <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--df-text)' }}>{p.nombre}</div>
-                <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 2 }}><IcoTexto n="video" tam={12} />{p.videos} video{p.videos === 1 ? '' : 's'} · <IcoTexto n="imagen" tam={12} />{p.imagenes} foto{p.imagenes === 1 ? '' : 's'}</div>
+                <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 2 }}><IcoTexto n="imagen" tam={12} />{p.imagenes} foto{p.imagenes === 1 ? '' : 's'}{p.videos ? <> · <IcoTexto n="video" tam={12} />{p.videos} video{p.videos === 1 ? '' : 's'}</> : null}</div>
               </div>
             </button>
           ))}
@@ -231,10 +241,9 @@ function FormBrief({ titulo, inicial, fotos: fotosIniciales, nombre: nombreInici
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{FORMATOS.map((o) => <button key={o.id} onClick={() => set({ formato: o.id })} style={opcion(b.formato === o.id)}><div style={{ fontWeight: 700, fontSize: 13 }}>{o.nombre}</div><div style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{o.sub}</div></button>)}</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 12 }}>
-        <div><span style={label}>Ideas de video</span><input type="number" min={0} max={13} value={b.videos} onChange={(e) => set({ videos: Math.min(13, Math.max(0, Number(e.target.value) || 0)) })} style={input} /></div>
-        <div><span style={label}>Ideas de foto</span><input type="number" min={0} max={10} value={b.imagenes} onChange={(e) => set({ imagenes: Math.min(10, Math.max(0, Number(e.target.value) || 0)) })} style={input} /></div>
+        <div><span style={label}>Ideas de foto cuando le pidas a la IA</span><input type="number" min={1} max={10} value={b.imagenes || 4} onChange={(e) => set({ imagenes: Math.min(10, Math.max(1, Number(e.target.value) || 1)), videos: 0 })} style={input} /></div>
       </div>
-      <div style={{ marginBottom: 14 }}><span style={label}>Notas para la IA (opcional)</span><input value={b.notas} onChange={(e) => set({ notas: e.target.value })} placeholder="Ej: que se vea en una cocina colombiana; voz de mujer joven" style={input} /></div>
+      <div style={{ marginBottom: 14 }}><span style={label}>Notas para la IA (opcional)</span><input value={b.notas} onChange={(e) => set({ notas: e.target.value })} placeholder="Ej: que se vea en una cocina colombiana; tonos cálidos" style={input} /></div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={() => void guardar()} disabled={guardando} style={{ ...btn, opacity: guardando ? 0.6 : 1 }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
         <button onClick={onCancelar} style={btnGris}>Cancelar</button>
@@ -250,8 +259,6 @@ function Proyecto({ id, precios, onSaldo, onCerrar }: { id: string; precios: Pre
   const [lanzar, setLanzar] = useState(false);
   const [fotoGrande, setFotoGrande] = useState(0);
   const [msg, setMsg] = useState('');
-  const [nuevaTipo, setNuevaTipo] = useState<'video' | 'imagen'>('video');
-  const [nuevaPrompt, setNuevaPrompt] = useState('');
   const cargar = useRef(() => Promise.resolve());
   cargar.current = () => apiEstudioProyecto(id).then((r) => { if (r.data) { setP(r.data.proyecto); onSaldo(r.data.saldo); } });
   useEffect(() => { void cargar.current(); }, [id]);
@@ -269,19 +276,15 @@ function Proyecto({ id, precios, onSaldo, onCerrar }: { id: string; precios: Pre
   const pedirIdeas = async () => {
     setMsg('');
     const r = await apiEstudioPaquete(p.id);
-    if (r.error) setMsg(r.error); else setMsg(`✓ La IA propuso ${r.data?.videos} videos y ${r.data?.imagenes} fotos. Revisa cada idea y genera las que te gusten.`);
+    if (r.error) setMsg(r.error); else setMsg(`✓ La IA propuso ${r.data?.imagenes} fotos. Revisa cada idea (puedes editar su prompt) y genera las que te gusten.`);
     void cargar.current();
   };
   const borrar = async () => {
     if (!(await confirmar({ titulo: `¿Borrar «${p.nombre}» del estudio?`, mensaje: 'Se borran las ideas y la lista de piezas. Los créditos ya usados no se devuelven.', aceptar: 'Borrar', peligro: true }))) return;
     await apiEstudioBorrar(p.id); onCerrar();
   };
-  const agregar = async () => {
-    const r = await apiEstudioAgregar(p.id, { tipo: nuevaTipo, prompt: nuevaPrompt });
-    if (r.error) { notificar(r.error, 'error'); return; }
-    setNuevaPrompt(''); void cargar.current();
-  };
-  const videos = p.piezas.filter((x) => x.tipo === 'video');
+  // Los videos viejos (del generador anterior) solo se muestran si quedaron hechos: ya no se generan aquí.
+  const videos = p.piezas.filter((x) => x.tipo === 'video' && x.url);
   const fotos = p.piezas.filter((x) => x.tipo === 'imagen');
   const listas = p.piezas.filter((x) => x.url && ['listo', 'aprobado'].includes(x.estado));
   const hayAprobadas = p.piezas.some((x) => x.url && x.estado === 'aprobado');
@@ -332,24 +335,15 @@ function Proyecto({ id, precios, onSaldo, onCerrar }: { id: string; precios: Pre
 
       <Lanzamientos proyecto={p} abierto={lanzar} onCerrar={() => setLanzar(false)} />
 
-      {p.piezas.length === 0 && <div style={{ ...card, color: 'var(--df-text-muted)', fontSize: 13.5 }}>Pide ideas a la IA: te propone {b.videos} videos y {b.imagenes} fotos, cada uno con un ángulo distinto (problema → solución, unboxing contraentrega, demostración, testimonio UGC…), su guion con la voz y sus textos de anuncio. Luego generas solo los que te gusten.</div>}
+      <CrearFoto proyecto={p} precios={precios} onCreada={() => void cargar.current()} />
 
-      {videos.length > 0 && <h3 style={{ fontSize: 15, fontWeight: 800, margin: '6px 0 10px' }}><IcoTexto n="video" tam={16} />Videos ({videos.length})</h3>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14, marginBottom: 16 }}>
-        {videos.map((x) => <Pieza key={x.id} x={x} precios={precios} onCambio={() => void cargar.current()} />)}
-      </div>
       {fotos.length > 0 && <h3 style={{ fontSize: 15, fontWeight: 800, margin: '6px 0 10px' }}><IcoTexto n="imagen" tam={16} />Fotos ({fotos.length})</h3>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14, marginBottom: 16 }}>
         {fotos.map((x) => <Pieza key={x.id} x={x} precios={precios} onCambio={() => void cargar.current()} />)}
       </div>
-
-      <div style={card}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Agregar una pieza con tu propia idea</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-          {(['video', 'imagen'] as const).map((t) => <button key={t} onClick={() => setNuevaTipo(t)} style={{ ...btnGris, background: nuevaTipo === t ? 'var(--df-brand)' : 'var(--df-surface)', color: nuevaTipo === t ? '#fff' : 'var(--df-text-body)' }}><IcoTexto n={t === 'video' ? 'video' : 'imagen'} />{t === 'video' ? 'Video' : 'Foto'}</button>)}
-        </div>
-        <textarea value={nuevaPrompt} onChange={(e) => setNuevaPrompt(e.target.value)} rows={3} placeholder={nuevaTipo === 'video' ? 'Ej: Una mujer abre el paquete en la puerta de su casa y dice «¡Llegó y pagué al recibir!», saca el producto y lo muestra a la cámara del celular. Luz natural.' : 'Ej: El producto sobre una mesa de madera en una cocina luminosa, con espacio arriba para el precio.'} style={{ ...input, resize: 'vertical', marginBottom: 8 }} />
-        <button onClick={() => void agregar()} disabled={nuevaPrompt.trim().length < 10} style={{ ...btn, opacity: nuevaPrompt.trim().length < 10 ? 0.5 : 1 }}>Agregar (gratis; pagas al generar)</button>
+      {videos.length > 0 && <h3 style={{ fontSize: 15, fontWeight: 800, margin: '6px 0 10px' }}><IcoTexto n="video" tam={16} />Videos anteriores ({videos.length})</h3>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14, marginBottom: 16 }}>
+        {videos.map((x) => <Pieza key={x.id} x={x} precios={precios} onCambio={() => void cargar.current()} />)}
       </div>
 
       {(p.copys.textos?.length || p.copys.titulares?.length) ? (
@@ -361,6 +355,88 @@ function Proyecto({ id, precios, onSaldo, onCerrar }: { id: string; precios: Pre
         </div>
       ) : null}
     </>
+  );
+}
+
+/** Crear una foto eligiendo el tipo, el modelo (opcional) y tu propio prompt o indicaciones. */
+function CrearFoto({ proyecto, precios, onCreada }: { proyecto: ProyectoEstudio; precios: PreciosEstudio | null; onCreada: () => void }) {
+  const [tipo, setTipo] = useState('fondo_blanco');
+  const [instrucciones, setInstrucciones] = useState('');
+  const [actores, setActores] = useState<ActorUgc[]>([]);
+  const [actorId, setActorId] = useState('');
+  const [resena, setResena] = useState('');
+  const [autor, setAutor] = useState('');
+  const [textoBanner, setTextoBanner] = useState('');
+  const [formato, setFormato] = useState<string>(proyecto.brief.formato || '1:1');
+  const [calidad, setCalidad] = useState<'medium' | 'high'>('medium');
+  const [creando, setCreando] = useState(false);
+  useEffect(() => { void apiUgc().then((r) => { if (r.data) setActores(r.data.actores.filter((a) => a.imagen)); }); }, []);
+  const conModelo = ['modelo', 'en_uso', 'libre'].includes(tipo);
+  const costo = calidad === 'high' ? precios?.imagen.high : precios?.imagen.medium;
+  const falta = tipo === 'libre' && instrucciones.trim().length < 10 ? 'Escribe tu prompt (mínimo una frase).' : tipo === 'testimonio' && resena.trim().length < 8 ? 'Pega la reseña real de tu cliente.' : '';
+  const crear = async () => {
+    setCreando(true);
+    const r = await apiEstudioFoto(proyecto.id, { estilo: tipo, instrucciones, actorId: conModelo ? actorId : '', resena, autor, textoBanner, formato, calidad });
+    setCreando(false);
+    if (r.error) notificar(r.error, 'error');
+    else { notificar(r.data?.estado === 'listo' ? '✓ Foto lista.' : 'Creando tu foto… aparece abajo en un momento.'); if (tipo === 'testimonio') { setResena(''); setAutor(''); } }
+    onCreada();
+  };
+  const opcion = (activo: boolean): React.CSSProperties => ({ cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', borderRadius: 11, padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'flex-start', border: '1.5px solid ' + (activo ? 'var(--df-brand)' : 'var(--df-border)'), background: activo ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)', color: 'var(--df-text)' });
+  return (
+    <div style={card}>
+      <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}><IcoTexto n="foto" tam={16} />Crear una foto</div>
+      <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginBottom: 12 }}>Elige el tipo de foto. Puedes agregar tus indicaciones o escribir tu propio prompt; después puedes editarlo y rehacerla.</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8, marginBottom: 14 }}>
+        {TIPOS_FOTO.map((t) => (
+          <button key={t.id} onClick={() => setTipo(t.id)} style={opcion(tipo === t.id)}>
+            <Icono nombre={t.icono} tam={20} degradado />
+            <span><span style={{ display: 'block', fontWeight: 700, fontSize: 13 }}>{t.t}</span><span style={{ display: 'block', fontSize: 11.5, color: 'var(--df-text-muted)' }}>{t.s}</span></span>
+          </button>
+        ))}
+      </div>
+
+      {tipo === 'testimonio' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 200px', gap: 10, marginBottom: 10 }} className="df-collapse">
+          <div><span style={label}>Reseña real de tu cliente *</span><textarea value={resena} onChange={(e) => setResena(e.target.value.slice(0, 300))} rows={2} placeholder="Ej: Me llegó en 2 días y la calidad es increíble, ya pedí otro." style={{ ...input, resize: 'vertical' }} /></div>
+          <div><span style={label}>Nombre (opcional)</span><input value={autor} onChange={(e) => setAutor(e.target.value.slice(0, 40))} placeholder="Ej: Laura M., Cali" style={input} /></div>
+          <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'var(--df-warning)' }}>Usa reseñas reales que te dejaron tus clientes (copia lo que te escribieron). Inventarlas va contra las reglas de Meta y puede ser publicidad engañosa.</div>
+        </div>
+      )}
+      {tipo === 'banner' && (
+        <div style={{ marginBottom: 10 }}><span style={label}>Texto del banner (opcional)</span><input value={textoBanner} onChange={(e) => setTextoBanner(e.target.value.slice(0, 80))} placeholder={proyecto.brief.oferta || 'Ej: 2x1 solo hoy · Pago contraentrega'} style={input} /></div>
+      )}
+      {conModelo && (
+        <div style={{ marginBottom: 10 }}>
+          <span style={label}>Modelo (opcional)</span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button onClick={() => setActorId('')} style={{ ...btnGris, borderColor: !actorId ? 'var(--df-brand)' : 'var(--df-border)', background: !actorId ? 'var(--df-brand-subtle-2)' : 'var(--df-surface)' }}>{tipo === 'modelo' ? 'Persona creada por la IA' : 'Sin modelo'}</button>
+            {actores.map((a) => (
+              <button key={a.id} onClick={() => setActorId(a.id)} title={a.nombre} style={{ padding: 0, width: 46, height: 46, borderRadius: 10, overflow: 'hidden', cursor: 'pointer', border: actorId === a.id ? '3px solid var(--df-brand)' : '1px solid var(--df-border)', background: 'var(--df-bg)' }}>
+                <img src={a.imagen} alt={a.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </button>
+            ))}
+            <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)' }}>Sube tus modelos en «Video UGC» → Personaje y voz.</span>
+          </div>
+        </div>
+      )}
+      <div style={{ marginBottom: 10 }}>
+        <span style={label}>{tipo === 'libre' ? 'Tu prompt *' : 'Tus indicaciones (opcional)'}</span>
+        <textarea value={instrucciones} onChange={(e) => setInstrucciones(e.target.value.slice(0, 1500))} rows={tipo === 'libre' ? 4 : 2}
+          placeholder={tipo === 'libre' ? 'Describe exactamente la foto: escena, luz, ángulo, colores, qué hace la persona… Ej: El producto sobre una mesa de mármol blanco, luz de ventana por la izquierda, plantas desenfocadas atrás, vista desde arriba.' : 'Ej: fondo beige en vez de blanco · que se vea la etiqueta · en una cocina moderna'}
+          style={{ ...input, resize: 'vertical' }} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={formato} onChange={(e) => setFormato(e.target.value)} style={{ ...input, width: 'auto' }} title="Formato">
+          <option value="1:1">Cuadrada 1:1</option><option value="9:16">Vertical 9:16</option><option value="16:9">Horizontal 16:9</option>
+        </select>
+        <select value={calidad} onChange={(e) => setCalidad(e.target.value === 'high' ? 'high' : 'medium')} style={{ ...input, width: 'auto' }} title="Calidad">
+          <option value="medium">Calidad normal</option><option value="high">Alta calidad</option>
+        </select>
+        <button onClick={() => void crear()} disabled={creando || !!falta} title={falta} style={{ ...btn, opacity: creando || falta ? 0.55 : 1 }}>{creando ? 'Creando…' : <><IcoTexto n="ia" tam={14} />Crear foto · {costo ?? '…'} cr</>}</button>
+        {falta && <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{falta}</span>}
+      </div>
+    </div>
   );
 }
 
@@ -398,7 +474,7 @@ function Pieza({ x, precios, onCambio }: { x: PiezaEstudio; precios: PreciosEstu
             <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: '#6EE7B7' }}>{x.tipo === 'video' ? (x.angulo || 'VIDEO').toUpperCase() : (x.uso || 'FOTO').toUpperCase()}</span>
             {x.hook && <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.35 }}>“{x.hook}”</span>}
             {!x.hook && x.titular && <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.35 }}>{x.titular}</span>}
-            <span style={{ fontSize: 12, color: '#94A3B8' }}>{x.estado === 'fallido' ? 'No salió: ajusta el guion y vuelve a intentar.' : 'Idea lista. Revisa el guion y genérala.'}</span>
+            <span style={{ fontSize: 12, color: '#94A3B8' }}>{x.estado === 'fallido' ? 'No salió: ajusta el prompt y vuelve a intentar.' : 'Idea lista. Revisa el prompt y genérala.'}</span>
           </div>
         )}
         {x.estado === 'generando' && (
@@ -416,18 +492,11 @@ function Pieza({ x, precios, onCambio }: { x: PiezaEstudio; precios: PreciosEstu
         {x.titular && <div style={{ fontSize: 12.5 }}><b>{x.titular}</b></div>}
         {x.texto && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{x.texto}</div>}
         {x.error && x.estado === 'fallido' && <div style={{ fontSize: 12, color: 'var(--df-danger-dark)' }}>{x.error} Los créditos se devolvieron.</div>}
-        <button onClick={() => setVerPrompt(!verPrompt)} style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left', fontFamily: 'inherit', fontSize: 12, color: 'var(--df-text-muted)', cursor: 'pointer' }}>{verPrompt ? '▾ Ocultar guion' : '▸ Ver / editar el guion y la voz'}</button>
-        {verPrompt && <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} onBlur={() => { if (prompt !== x.prompt) void editar({ prompt }); }} rows={7} disabled={x.estado === 'generando'} style={{ ...input, fontSize: 12, resize: 'vertical' }} />}
-        {x.estado !== 'generando' && (
+        {x.tipo === 'imagen' && <button onClick={() => setVerPrompt(!verPrompt)} style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left', fontFamily: 'inherit', fontSize: 12, color: 'var(--df-text-muted)', cursor: 'pointer' }}>{verPrompt ? '▾ Ocultar el prompt' : '▸ Ver / editar el prompt'}</button>}
+        {verPrompt && x.tipo === 'imagen' && <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} onBlur={() => { if (prompt !== x.prompt) void editar({ prompt }); }} rows={7} disabled={x.estado === 'generando'} style={{ ...input, fontSize: 12, resize: 'vertical' }} />}
+        {x.estado !== 'generando' && x.tipo === 'imagen' && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 'auto' }}>
-            {x.tipo === 'video' ? (
-              <>
-                <select value={x.modelo || 'sora-2'} onChange={(e) => void editar({ modelo: e.target.value })} style={sel} title="Modelo de video"><option value="sora-2">Normal</option><option value="sora-2-pro">Pro (más realista)</option></select>
-                <select value={String(x.segundos || 8)} onChange={(e) => void editar({ segundos: Number(e.target.value) })} style={sel} title="Duración"><option value="4">4 s</option><option value="8">8 s</option><option value="12">12 s</option></select>
-              </>
-            ) : (
-              <select value={x.calidad || 'medium'} onChange={(e) => void editar({ calidad: e.target.value })} style={sel} title="Calidad"><option value="medium">Calidad normal</option><option value="high">Alta calidad</option></select>
-            )}
+            <select value={x.calidad || 'medium'} onChange={(e) => void editar({ calidad: e.target.value })} style={sel} title="Calidad"><option value="medium">Calidad normal</option><option value="high">Alta calidad</option></select>
             <button onClick={() => void generar()} style={{ ...btn, padding: '7px 12px', fontSize: 12.5 }}>{x.url ? '↻ Rehacer' : <><IcoTexto n="ia" tam={13} />Generar</>} · {c} cr</button>
           </div>
         )}

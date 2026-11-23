@@ -26,6 +26,8 @@ import { descargarImagenSegura } from './descargaSegura.js';
 import { abonar, cobrar, saldo } from './creditos.js';
 import { chatJSON, SIN_OPENAI } from './marketing.js';
 import { mediaDir, mediaPath } from './media.js';
+import { modeloImagen } from './modelosIA.js';
+import { bloqueMaestro, instruccionesMaestras } from './mkAjustes.js';
 
 type Fila = Record<string, unknown>;
 const txt = (v: unknown) => (v == null ? '' : String(v));
@@ -77,6 +79,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS ugc_actores (
   estilo TEXT NOT NULL DEFAULT '', apariencia TEXT NOT NULL DEFAULT '', ambiente TEXT NOT NULL DEFAULT '', voz TEXT NOT NULL DEFAULT '',
   imagen TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
+// origen: 'ia' (personaje creado con IA) | 'propio' (foto de un modelo real que subió la tienda).
+try { db.exec("ALTER TABLE ugc_actores ADD COLUMN origen TEXT NOT NULL DEFAULT 'ia'"); } catch { /* ya existe */ }
 db.exec(`CREATE TABLE IF NOT EXISTS ugc_videos (
   id TEXT PRIMARY KEY, store_id TEXT NOT NULL, nombre TEXT NOT NULL DEFAULT '', actor_id TEXT NOT NULL DEFAULT '',
   config TEXT NOT NULL DEFAULT '{}', guion TEXT NOT NULL DEFAULT '[]', tomas TEXT NOT NULL DEFAULT '[]',
@@ -128,7 +132,7 @@ function limpiarGuion(lista: unknown, duracion: number): ParteGuion[] {
 }
 export const costoVideo = (guion: ParteGuion[], calidad: string) => guion.reduce((a, p) => a + p.segundos, 0) * tarifa(calidad);
 
-function mapActor(a: Fila) { return { id: txt(a.id), nombre: txt(a.nombre), genero: txt(a.genero), edad: txt(a.edad), estilo: txt(a.estilo), apariencia: txt(a.apariencia), ambiente: txt(a.ambiente), voz: txt(a.voz), imagen: txt(a.imagen) }; }
+function mapActor(a: Fila) { return { id: txt(a.id), nombre: txt(a.nombre), genero: txt(a.genero), edad: txt(a.edad), estilo: txt(a.estilo), apariencia: txt(a.apariencia), ambiente: txt(a.ambiente), voz: txt(a.voz), imagen: txt(a.imagen), origen: txt(a.origen) || 'ia' }; }
 function mapVideo(v: Fila) {
   const config = { ...CONFIG_BASE, ...pj<ConfigUgc>(v.config, CONFIG_BASE) };
   const guion = limpiarGuion(pj(v.guion, []), config.duracion);
@@ -200,7 +204,7 @@ export async function crearActor(storeId: string, b: Fila): Promise<{ actor: Ret
   try {
     const res = await fetch(`${OPENAI()}/images/generations`, {
       method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1', prompt, size: '1024x1536', quality: 'medium', n: 1 }), signal: AbortSignal.timeout(240_000),
+      body: JSON.stringify({ model: modeloImagen(), prompt, size: '1024x1536', quality: 'medium', n: 1 }), signal: AbortSignal.timeout(240_000),
     });
     const body = (await res.json().catch(() => ({}))) as { data?: { b64_json?: string }[]; error?: { message?: string } };
     const b64 = body.data?.[0]?.b64_json;
@@ -214,6 +218,24 @@ export async function crearActor(storeId: string, b: Fila): Promise<{ actor: Ret
     abonar(storeId, costo, 'Devolución: personaje que no se pudo crear');
     return { error: (e as Error)?.name === 'TimeoutError' ? 'OpenAI tardó demasiado. Te devolvimos los créditos.' : 'No pudimos hablar con OpenAI. Te devolvimos los créditos.' };
   }
+}
+/**
+ * Modelo propio: la tienda sube la foto de una persona real (con su permiso) para usarla en los
+ * videos UGC y en las fotos con modelo. Gratis: no se genera nada.
+ */
+export function subirActor(storeId: string, b: Fila): { actor: ReturnType<typeof mapActor> } | { error: string } {
+  if (b.permiso !== true) return { error: 'Confirma que tienes el permiso de esta persona para usar su imagen en anuncios.' };
+  const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/s.exec(txt(b.imagen));
+  if (!m) return { error: 'Sube una foto JPG, PNG o WEBP de la persona.' };
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length < 5_000) return { error: 'La foto es muy pequeña. Usa una foto nítida donde se vea bien la cara.' };
+  if (buf.length > 12 * 1024 * 1024) return { error: 'La foto pesa más de 12 MB.' };
+  const imagen = guardarArchivo(storeId, buf, m[1] === 'jpeg' ? 'jpg' : m[1]);
+  const id = uid();
+  db.prepare("INSERT INTO ugc_actores (id, store_id, nombre, genero, edad, estilo, apariencia, ambiente, voz, imagen, origen) VALUES (?,?,?,?,?,?,?,?,?,?, 'propio')")
+    .run(id, storeId, corto(b.nombre, 40) || 'Mi modelo', corto(b.genero, 20) || 'mujer', corto(b.edad, 20) || '25 a 35', '', '', '',
+      VOCES.some((v) => v.id === b.voz) ? txt(b.voz) : 'coral', imagen);
+  return { actor: mapActor(db.prepare('SELECT * FROM ugc_actores WHERE id = ?').get(id) as Fila) };
 }
 export function borrarActor(storeId: string, id: string): void {
   db.prepare('DELETE FROM ugc_actores WHERE id = ? AND store_id = ?').run(id, storeId);
@@ -269,7 +291,9 @@ Oferta: ${config.oferta || '—'} · Llamado a la acción: ${config.cta || '—'
 Tono: ${config.tono} · Objetivo del anuncio: ${config.objetivo} · Duración total: ${config.duracion} s
 Quién presenta: ${actor ? `${txt(actor.nombre)}, ${txt(actor.genero)} de ${txt(actor.edad)}, estilo ${txt(actor.estilo)}, en ${txt(actor.ambiente)}` : 'una persona joven y cercana'}
 ${soloParte >= 0 ? `Reescribe SOLO la parte «${ETIQUETAS[soloParte]}» con otra idea; las demás déjalas igual:\n${JSON.stringify(actual.map((p) => ({ texto: p.texto, escena: p.escena, camara: p.camara, habla: p.habla })))}` : 'Escribe el guion completo.'}`;
-  const r = await chatJSON<{ partes?: Fila[] }>(system, user, { maxTokens: 1200, temperatura: 0.9 });
+  // Guía de los videos de referencia del equipo (Admin → Estudio IA) + instrucciones maestras de la tienda.
+  const { guiaEstiloEquipo } = await import('./estudio.js');
+  const r = await chatJSON<{ partes?: Fila[] }>(system + guiaEstiloEquipo('ugc') + bloqueMaestro(storeId), user, { maxTokens: 1500, temperatura: 0.9 });
   if (r.error || !Array.isArray(r.data?.partes) || r.data!.partes!.length < 4) { abonar(storeId, costo, 'Devolución: guion que no se pudo escribir'); return { error: r.error || 'La IA no devolvió el guion completo. Te devolvimos los créditos.' }; }
   const nuevas = limpiarGuion(r.data!.partes!.map((p, i) => ({ ...p, segundos: actual[i]?.segundos || segs[i] })), config.duracion);
   const guion = soloParte >= 0 ? actual.map((p, i) => (i === soloParte ? nuevas[i] : p)) : nuevas;
@@ -278,7 +302,7 @@ ${soloParte >= 0 ? `Reescribe SOLO la parte «${ETIQUETAS[soloParte]}» con otra
 }
 
 // ── Generación con Seedance ──────────────────────────────────────────────────
-function promptToma(p: ParteGuion, config: ConfigUgc, actor: Fila | undefined, conVoz: boolean): string {
+function promptToma(p: ParteGuion, config: ConfigUgc, actor: Fila | undefined, conVoz: boolean, maestras = ''): string {
   const ratio = config.formato;
   return [
     `Video ${ratio === '9:16' ? 'vertical' : ratio === '16:9' ? 'horizontal' : 'cuadrado'} estilo UGC, grabado con celular, luz natural, realista, movimiento de cámara en mano suave.`,
@@ -287,13 +311,15 @@ function promptToma(p: ParteGuion, config: ConfigUgc, actor: Fila | undefined, c
     `Escena: ${p.escena || p.texto}. Plano: ${p.camara}.`,
     conVoz && p.habla ? `La persona mira a cámara y dice en español de Colombia, con naturalidad y buena dicción: "${p.texto}"` : 'La persona no habla en esta toma.',
     'Sin texto en pantalla, sin subtítulos, sin logos, sin marcas de agua.',
-  ].join('\n');
+    maestras ? `Estilo de la marca (instrucciones de la tienda): ${maestras.slice(0, 800)}` : '',
+  ].filter(Boolean).join('\n');
 }
 
 const mensajeSeedance = (b: Fila, http: number): string => {
   const e = (b.error || {}) as Fila;
   const m = txt(e.message || b.message);
   if (http === 401 || http === 403) return 'BytePlus rechazó la clave de Seedance (revisa SEEDANCE_API_KEY y que el modelo esté activado en tu cuenta).';
+  if (/real.?(person|human|face)|portrait|privacy|celebrit/i.test(m + txt(e.code))) return 'Seedance no aceptó la foto de la persona (BytePlus bloquea algunos rostros reales). Prueba con otra foto del modelo o con un personaje creado con IA.';
   if (/sensitive|policy|moderat|risk/i.test(m + txt(e.code))) return 'Seedance rechazó la toma por sus políticas de contenido. Cambia la escena o las fotos y vuelve a intentar.';
   return m ? `Seedance: ${m.slice(0, 200)}` : `Seedance respondió ${http}.`;
 };
@@ -313,7 +339,7 @@ async function lanzarToma(storeId: string, videoId: string, i: number): Promise<
   for (const f of config.producto.fotos.slice(0, 3)) { const r = await referencia(storeId, f); if (r) refs.push(r); }
   const body = {
     model: modeloSeedance(config.calidad),
-    content: [{ type: 'text', text: promptToma(p, config, actor, conVoz) }, ...refs.map((url) => ({ type: 'image_url', image_url: { url }, role: 'reference_image' }))],
+    content: [{ type: 'text', text: promptToma(p, config, actor, conVoz, instruccionesMaestras(storeId)) }, ...refs.map((url) => ({ type: 'image_url', image_url: { url }, role: 'reference_image' }))],
     ratio: config.formato, duration: p.segundos, resolution: process.env.SEEDANCE_RESOLUTION || '720p',
     generate_audio: conVoz && p.habla, watermark: false,
   };

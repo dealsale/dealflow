@@ -187,7 +187,7 @@ export async function publicar(
   storeId: string,
   campanaId: string,
   opciones: { presupuesto: number; textoIdx?: number; tituloIdx?: number; descripcionIdx?: number; creativoIdx?: number },
-): Promise<{ ok?: true; ids?: Record<string, string>; error?: string }> {
+): Promise<{ ok?: true; ids?: Record<string, string>; error?: string; enProceso?: boolean }> {
   const f = filaDe(storeId);
   if (!f?.conectada || !f.access_token || !f.ad_account_id) return { error: 'Conecta primero tu Administrador de anuncios.' };
   if (!f.page_id) return { error: 'Necesitas elegir una página de Facebook para publicar el anuncio.' };
@@ -218,6 +218,25 @@ export async function publicar(
   const titulo = c.copys.titulos[opciones.tituloIdx || 0] || c.copys.titulos[0] || '';
   const descripcion = c.copys.descripciones[opciones.descripcionIdx || 0] || c.copys.descripciones[0] || '';
   const creativo = c.creativos[opciones.creativoIdx || 0] || c.creativos[0];
+
+  // Video (subido por la tienda o hecho en Video UGC): Meta tarda minutos en procesarlo, así que
+  // se crea en segundo plano con el mismo sistema del Estudio (sube, espera, crea todo en pausa).
+  if (/\.(mp4|mov|webm|m4v)$/i.test(creativo.split('?')[0])) {
+    if (!['mensajes', 'ventas', 'trafico'].includes(c.objetivo)) return { error: 'Los anuncios con video se publican con el objetivo Mensajes, Ventas o Tráfico. Cambia el objetivo o elige una foto.' };
+    const { piezaDeUrl } = await import('./bibliotecaMk.js');
+    const pieza = piezaDeUrl(storeId, creativo);
+    if (!pieza) return { error: 'No encontramos ese video. Vuelve a subirlo desde la Biblioteca.' };
+    const { crearLanzamiento } = await import('./estudioMeta.js');
+    const r = await crearLanzamiento(storeId, pieza.proyectoId, {
+      nombre: c.nombre, objetivo: c.objetivo as 'mensajes' | 'ventas' | 'trafico', presupuesto,
+      enlace: destino.enlace, pixelId: destino.pixel,
+      piezas: [{ id: pieza.id, texto, titular: titulo }],
+    });
+    if ('error' in r) return { error: r.error };
+    db.prepare("UPDATE campanas SET estado = 'publicada', publicacion = ?, updated_at = datetime('now') WHERE id = ? AND store_id = ?")
+      .run(j({ lanzamientoId: r.id, video: true, fecha: new Date().toISOString() }), campanaId, storeId);
+    return { ok: true, ids: { lanzamientoId: r.id }, enProceso: true };
+  }
 
   // 1) Campaña (en pausa).
   const camp = await post<{ id?: string }>(`${act}/campaigns`, {

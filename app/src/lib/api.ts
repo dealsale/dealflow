@@ -1398,12 +1398,13 @@ export interface PiezaEstudio {
   id: string; tipo: 'video' | 'imagen'; orden: number; angulo: string; hook: string; prompt: string; texto: string; titular: string; uso: string;
   formato: string; modelo: string; segundos: number; calidad: string; estado: 'borrador' | 'generando' | 'listo' | 'fallido' | 'aprobado' | 'descartado';
   creditos: number; progreso: number; url: string; miniatura: string; error: string; actualizado: string;
+  estiloFoto: string; actorId: string;
 }
 export interface ProyectoEstudio { id: string; nombre: string; brief: BriefEstudio; foto: string; fotos: string[]; copys: { textos?: string[]; titulares?: string[]; descripciones?: string[] }; piezas: PiezaEstudio[] }
 export interface ProyectoEstudioResumen { id: string; nombre: string; foto: string; videos: number; imagenes: number; generando: number; actualizado: string }
 export interface PreciosEstudio { paquete: number; imagen: { medium: number; high: number }; video: Record<string, Record<string, number>>; disponible: boolean }
 // ── Video UGC con Seedance (Marketing IA) ──
-export interface ActorUgc { id: string; nombre: string; genero: string; edad: string; estilo: string; apariencia: string; ambiente: string; voz: string; imagen: string }
+export interface ActorUgc { id: string; nombre: string; genero: string; edad: string; estilo: string; apariencia: string; ambiente: string; voz: string; imagen: string; origen?: 'ia' | 'propio' }
 export interface ConfigUgc {
   producto: { id: string; nombre: string; fotos: string[]; notas: string; precio: number };
   voz: { modo: 'persona' | 'locutor'; id: string };
@@ -1424,6 +1425,7 @@ export interface EstadoUgc {
 }
 export const apiUgc = () => reqBase<EstadoUgc>('/api/ugc', 'GET');
 export const apiUgcCrearActor = (b: Partial<ActorUgc>) => req<{ actor: ActorUgc }>('/api/ugc/actores', 'POST', b);
+export const apiUgcSubirActor = (b: { nombre: string; genero: string; edad: string; voz: string; imagen: string; permiso: boolean }) => req<{ actor: ActorUgc }>('/api/ugc/actores/subir', 'POST', b);
 export const apiUgcBorrarActor = (id: string) => reqBase<{ ok: true }>(`/api/ugc/actores/${encodeURIComponent(id)}`, 'DELETE');
 export const apiUgcVideo = (id: string) => reqBase<{ video: VideoUgc }>(`/api/ugc/videos/${encodeURIComponent(id)}`, 'GET');
 export const apiUgcNuevo = (b: { actorId?: string; config?: Partial<ConfigUgc> }) => reqBase<{ video: VideoUgc }>('/api/ugc/videos', 'POST', b);
@@ -1440,7 +1442,10 @@ export const apiEstudioGuardar = (id: string | null, b: { nombre?: string; brief
 export const apiEstudioBorrar = (id: string) => req<{ ok: true }>(`/api/estudio/proyectos/${id}`, 'DELETE');
 export const apiEstudioPaquete = (id: string) => req<{ ok: true; videos: number; imagenes: number }>(`/api/estudio/proyectos/${id}/paquete`, 'POST');
 export const apiEstudioAgregar = (id: string, b: { tipo: 'video' | 'imagen'; prompt: string }) => req<{ id: string }>(`/api/estudio/proyectos/${id}/piezas`, 'POST', b);
-export const apiEstudioEditarPieza = (id: string, b: Partial<Pick<PiezaEstudio, 'prompt' | 'texto' | 'titular' | 'modelo' | 'segundos' | 'calidad' | 'formato' | 'estado'>>) =>
+/** Foto por tipo: fondo blanco, en uso, con modelo, testimonio (reseña real), banner, detalle o tu propio prompt. Se genera al momento. */
+export interface PedidoFoto { estilo: string; instrucciones?: string; actorId?: string; resena?: string; autor?: string; textoBanner?: string; formato?: string; calidad?: 'medium' | 'high' }
+export const apiEstudioFoto = (id: string, b: PedidoFoto) => reqBase<{ id: string; estado?: string }>(`/api/estudio/proyectos/${id}/fotos`, 'POST', b);
+export const apiEstudioEditarPieza = (id: string, b: Partial<Pick<PiezaEstudio, 'prompt' | 'texto' | 'titular' | 'modelo' | 'segundos' | 'calidad' | 'formato' | 'estado' | 'actorId'>>) =>
   reqBase<{ ok: true }>(`/api/estudio/piezas/${id}`, 'PATCH', b);
 export const apiEstudioGenerar = (id: string) => req<{ ok: true; estado: string }>(`/api/estudio/piezas/${id}/generar`, 'POST');
 
@@ -1556,3 +1561,28 @@ export const apiResponderComentario = (id: string, texto: string, privado: strin
 export const apiOcultarComentario = (id: string, ocultar: boolean) => req<{ ok: true }>(`/api/comentarios/${encodeURIComponent(id)}/ocultar`, 'POST', { ocultar });
 export const apiIgnorarComentario = (id: string, ignorar: boolean) => req<{ ok: boolean }>(`/api/comentarios/${encodeURIComponent(id)}/ignorar`, 'POST', { ignorar });
 export const apiSugerirComentario = (id: string) => req<{ texto: string }>(`/api/comentarios/${encodeURIComponent(id)}/sugerir`, 'POST', {});
+
+// ── Biblioteca de Marketing IA (todo lo generado y lo subido) ──
+export interface MedioBiblioteca { id: string; tipo: 'imagen' | 'video'; url: string; miniatura: string; nombre: string; origen: 'fotos' | 'ugc' | 'subido' | 'modelo' | 'campana' | 'video'; fecha: string; borrable: boolean }
+export const apiMkBiblioteca = () => reqBase<{ medios: MedioBiblioteca[] }>('/api/marketing/biblioteca', 'GET');
+export const apiMkBibliotecaBorrar = (id: string) => reqBase<{ ok: true }>(`/api/marketing/biblioteca/${encodeURIComponent(id)}`, 'DELETE');
+/** Sube una foto o video tal cual (sin pasarlo a texto): aguanta videos de hasta ~95 MB y avisa el avance. */
+export function apiMkBibliotecaSubir(archivo: File, alAvanzar?: (pct: number) => void): Promise<{ data?: { medio: MedioBiblioteca }; error?: string }> {
+  return new Promise((resolver) => {
+    const x = new XMLHttpRequest();
+    x.open('POST', `/api/marketing/biblioteca?nombre=${encodeURIComponent(archivo.name)}`);
+    x.setRequestHeader('Content-Type', archivo.type || 'application/octet-stream');
+    x.upload.onprogress = (e) => { if (e.lengthComputable && alAvanzar) alAvanzar(Math.round((e.loaded / e.total) * 100)); };
+    x.onload = () => {
+      let b: { medio?: MedioBiblioteca; error?: string } = {};
+      try { b = JSON.parse(x.responseText); } catch { /* respuesta no JSON */ }
+      if (x.status === 413) return resolver({ error: 'El archivo es muy pesado (máximo 95 MB).' });
+      if (x.status >= 400 || !b.medio) return resolver({ error: b.error || 'No pudimos subir el archivo.' });
+      resolver({ data: { medio: b.medio } });
+    };
+    x.onerror = () => resolver({ error: 'Se cortó la conexión mientras subía el archivo.' });
+    x.send(archivo);
+  });
+}
+export const apiInstrucciones = () => reqBase<{ texto: string }>('/api/marketing/instrucciones', 'GET');
+export const apiGuardarInstrucciones = (texto: string) => reqBase<{ texto: string }>('/api/marketing/instrucciones', 'PUT', { texto });

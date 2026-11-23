@@ -3,9 +3,10 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { confirmar, notificar } from '../components/dialogs';
 import {
-  apiUgc, apiUgcBorrar, apiUgcBorrarActor, apiUgcCrearActor, apiUgcGenerar, apiUgcGuardar, apiUgcGuion, apiUgcMontar, apiUgcNuevo, apiUgcRehacer, apiUgcVideo,
+  apiUgc, apiUgcBorrar, apiUgcBorrarActor, apiUgcCrearActor, apiUgcGenerar, apiUgcGuardar, apiUgcGuion, apiUgcMontar, apiUgcNuevo, apiUgcRehacer, apiUgcSubirActor, apiUgcVideo,
   type ActorUgc, type ConfigUgc, type EstadoUgc, type ParteGuionUgc, type VideoUgc,
 } from '../lib/api';
+import { comprimirImagen } from '../components/PhotoUpload';
 
 /**
  * Video UGC con Seedance (Marketing IA): producto → personaje y voz → guion → generar.
@@ -213,6 +214,20 @@ function PasoPersonaje({ est, v, cambiar, bloqueado, onActores, onSaldo }: { est
     setCrear(false); notificar('✓ Personaje creado.');
   };
   const set = (k: keyof typeof f, val: string) => setF((x) => ({ ...x, [k]: val }));
+  // Modelo propio: foto de una persona real (con su permiso). Gratis.
+  const [subir, setSubir] = useState(false);
+  const [m, setM] = useState({ nombre: '', genero: 'mujer', edad: '25 a 35', voz: 'coral', imagen: '', permiso: false });
+  const [subiendo, setSubiendo] = useState(false);
+  const subirModelo = async () => {
+    setSubiendo(true);
+    const r = await apiUgcSubirActor(m);
+    setSubiendo(false);
+    if (r.error || !r.data) return notificar(r.error || 'No se pudo subir.', 'error');
+    onActores([r.data.actor, ...est.actores]);
+    cambiar({ actorId: r.data.actor.id, config: { voz: { ...v.config.voz, id: r.data.actor.voz } } });
+    setSubir(false); setM({ nombre: '', genero: 'mujer', edad: '25 a 35', voz: 'coral', imagen: '', permiso: false });
+    notificar('✓ Modelo guardado. También lo puedes usar en «Fotos IA».');
+  };
   return (
     <section style={card} aria-labelledby="ugc2">
       <h2 id="ugc2" style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>2. ¿Quién lo presenta y cómo suena?</h2>
@@ -222,7 +237,7 @@ function PasoPersonaje({ est, v, cambiar, bloqueado, onActores, onSaldo }: { est
             <div key={a.id} style={{ position: 'relative' }}>
               <button role="radio" aria-checked={v.actorId === a.id} disabled={bloqueado} onClick={() => cambiar({ actorId: a.id, config: { voz: { ...v.config.voz, id: a.voz || v.config.voz.id } } })} style={tarjeta(v.actorId === a.id)}>
                 {a.imagen ? <img src={a.imagen} alt="" style={{ width: 52, height: 64, borderRadius: 9, objectFit: 'cover', flexShrink: 0 }} /> : <span style={{ width: 52, height: 64, borderRadius: 9, background: 'var(--df-border)' }} />}
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}><b style={{ fontSize: 14 }}>{a.nombre}</b><span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{a.genero} · {a.edad} · {a.estilo}</span></span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}><b style={{ fontSize: 14 }}>{a.nombre}</b><span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{a.origen === 'propio' ? 'Tu modelo · ' : ''}{a.genero} · {a.edad}{a.estilo ? ` · ${a.estilo}` : ''}</span></span>
               </button>
               <button aria-label={`Borrar ${a.nombre}`} onClick={async () => { if (await confirmar({ titulo: `Borrar a ${a.nombre}`, mensaje: 'Los videos que ya hiciste con este personaje no se borran.', aceptar: 'Borrar', peligro: true })) { await apiUgcBorrarActor(a.id); onActores(est.actores.filter((x) => x.id !== a.id)); } }}
                 style={{ position: 'absolute', top: 6, right: 6, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, width: 28, height: 28, cursor: 'pointer', color: 'var(--df-text-muted)' }}>✕</button>
@@ -230,7 +245,39 @@ function PasoPersonaje({ est, v, cambiar, bloqueado, onActores, onSaldo }: { est
           ))}
         </div>
       )}
-      {!crear ? <button onClick={() => setCrear(true)} style={{ ...btnGris, alignSelf: 'flex-start' }}>+ Crear personaje nuevo · {est.precios.actor} créditos</button> : (
+      {!subir ? <button onClick={() => { setSubir(true); setCrear(false); }} style={{ ...btnGris, alignSelf: 'flex-start' }}>+ Subir mi modelo (foto de una persona real) · gratis</button> : (
+        <div style={{ border: '1px dashed var(--df-border-strong)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <b style={{ fontSize: 13.5 }}>Subir mi modelo</b>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <label style={{ width: 110, height: 140, borderRadius: 10, border: '1.5px dashed var(--df-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', textAlign: 'center', fontSize: 11.5, color: 'var(--df-text-muted)', background: 'var(--df-bg)', flexShrink: 0 }}>
+              {m.imagen ? <img src={m.imagen} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ padding: 8 }}>Toca para elegir la foto</span>}
+              <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={(e) => { const file = e.target.files?.[0]; if (file) void comprimirImagen(file, 1536, 0.9).then((img) => setM((x) => ({ ...x, imagen: img }))); e.target.value = ''; }} />
+            </label>
+            <div style={{ flex: 1, minWidth: 220, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: 10 }}>
+              <label style={lb}>Nombre<input value={m.nombre} onChange={(e) => setM((x) => ({ ...x, nombre: e.target.value }))} placeholder="Ej: Daniela" style={input} /></label>
+              <div style={lb}>Es
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{['mujer', 'hombre'].map((g) => <button key={g} onClick={() => setM((x) => ({ ...x, genero: g }))} aria-pressed={m.genero === g} style={pill(m.genero === g)}>{g === 'mujer' ? 'Mujer' : 'Hombre'}</button>)}</div>
+              </div>
+              <div style={lb}>Edad
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{['18 a 24', '25 a 35', '36 a 50', 'más de 50'].map((e) => <button key={e} onClick={() => setM((x) => ({ ...x, edad: e }))} aria-pressed={m.edad === e} style={pill(m.edad === e)}>{e}</button>)}</div>
+              </div>
+              <label style={lb}>Voz (para la voz en off)
+                <Dropdown ariaLabel="Voz del modelo" value={m.voz} onChange={(x) => setM((y) => ({ ...y, voz: x }))} options={est.voces.map((x) => ({ value: x.id, label: x.nombre }))} />
+              </label>
+            </div>
+          </div>
+          <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Usa una foto nítida, de frente, con buena luz y de la cintura para arriba. Sale igual en tus videos UGC y en tus fotos «Con modelo».</span>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, cursor: 'pointer' }}>
+            <input type="checkbox" checked={m.permiso} onChange={(e) => setM((x) => ({ ...x, permiso: e.target.checked }))} style={{ marginTop: 2 }} />
+            <span>Tengo el permiso de esta persona para usar su imagen en anuncios. No es un famoso ni un menor de edad.</span>
+          </label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => void subirModelo()} disabled={subiendo || !m.imagen || !m.permiso} style={{ ...btn, opacity: subiendo || !m.imagen || !m.permiso ? 0.55 : 1 }}>{subiendo ? 'Guardando…' : 'Guardar modelo'}</button>
+            <button onClick={() => setSubir(false)} style={btnGris}>Cancelar</button>
+          </div>
+        </div>
+      )}
+      {!crear ? <button onClick={() => { setCrear(true); setSubir(false); }} style={{ ...btnGris, alignSelf: 'flex-start' }}>+ Crear personaje con IA · {est.precios.actor} créditos</button> : (
         <div style={{ border: '1px dashed var(--df-border-strong)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <b style={{ fontSize: 13.5 }}>Crear personaje (se hace una vez y sale igual en todos tus videos)</b>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 10 }}>

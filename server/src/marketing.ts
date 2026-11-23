@@ -1,4 +1,5 @@
 import { saveOutgoingMedia } from './media.js';
+import { modeloImagen } from './modelosIA.js';
 
 /**
  * Capa de IA compartida del Marketing (la paga DealFlow con su cuenta de
@@ -9,7 +10,7 @@ import { saveOutgoingMedia } from './media.js';
 // Base de la API de OpenAI (variable por si algún día se usa un proxy).
 const OPENAI = process.env.OPENAI_BASE || 'https://api.openai.com/v1';
 
-// Tamaños de imagen por ubicación del anuncio (los que acepta gpt-image-1).
+// Tamaños de imagen por ubicación del anuncio (los que acepta el modelo de fotos).
 export const TAMANOS: Record<string, string> = {
   feed: '1024x1024', // cuadrado (feed de Facebook/Instagram)
   historia: '1024x1536', // vertical (historias y reels)
@@ -85,7 +86,7 @@ export async function generarImagen(
     const res = await fetch(`${OPENAI}/images/generations`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1', prompt, n, size, quality: process.env.OPENAI_IMAGE_QUALITY || 'medium' }),
+      body: JSON.stringify({ model: modeloImagen(), prompt, n, size, quality: process.env.OPENAI_IMAGE_QUALITY || 'medium' }),
       signal: AbortSignal.timeout(300_000),
     });
     const body = (await res.json().catch(() => ({}))) as { data?: { b64_json?: string; url?: string }[]; error?: { message?: string } };

@@ -1,5 +1,6 @@
 import { db, uid, j, pj } from './db.js';
 import { chatJSON, generarImagen } from './marketing.js';
+import { bloqueMaestro } from './mkAjustes.js';
 
 /**
  * Campañas publicitarias con IA. Una campaña se arma en tres pasos, en orden,
@@ -54,16 +55,29 @@ const OBJETIVOS: Record<string, string> = {
 const BASE_COPY = `Eres un director creativo de publicidad para ecommerce con pago contra entrega en Colombia. Escribes en español colombiano cercano, con gancho real, beneficios concretos y sin promesas falsas. Emojis con moderación.`;
 
 function fila(r: Record<string, unknown>): Campana {
+  const publicacion = r.publicacion ? pj<Record<string, unknown> | null>(r.publicacion as string, null) : null;
+  let estado = String(r.estado);
+  // Campaña con video: se crea en segundo plano (Estudio → Meta). Se muestra cómo va de verdad.
+  if (publicacion && typeof publicacion.lanzamientoId === 'string') {
+    try {
+      const l = db.prepare('SELECT estado, paso, error FROM estudio_lanzamientos WHERE id = ?').get(publicacion.lanzamientoId) as { estado: string; paso: string; error: string } | undefined;
+      if (l) {
+        publicacion.meta = { estado: l.estado, paso: l.paso, error: l.error };
+        if (l.estado === 'error') estado = 'error_meta';
+        else if (l.estado === 'creando') estado = 'publicando';
+      }
+    } catch { /* tabla aún no creada */ }
+  }
   return {
     id: String(r.id),
     nombre: String(r.nombre),
-    estado: String(r.estado),
+    estado,
     paso: Number(r.paso) || 1,
     objetivo: String(r.objetivo || 'mensajes'),
     brief: r.brief ? pj<Brief | null>(r.brief as string, null) : null,
     creativos: pj<string[]>(r.creativos as string, []),
     copys: r.copys ? pj<CopysAnuncio | null>(r.copys as string, null) : null,
-    publicacion: r.publicacion ? pj<Record<string, unknown> | null>(r.publicacion as string, null) : null,
+    publicacion,
     fecha: String(r.updated_at || r.created_at || ''),
   };
 }
@@ -104,7 +118,10 @@ export function guardarPartes(storeId: string, id: string, partes: { brief?: Bri
   const c = obtener(storeId, id);
   if (!c) return false;
   if (partes.brief) db.prepare('UPDATE campanas SET brief = ? WHERE id = ?').run(j(partes.brief), id);
-  if (partes.creativos) db.prepare('UPDATE campanas SET creativos = ? WHERE id = ?').run(j(partes.creativos), id);
+  if (Array.isArray(partes.creativos)) {
+    const propios = partes.creativos.filter((u) => typeof u === 'string' && ((u.startsWith(`/api/media/${storeId}/`) && !u.includes('..')) || c.creativos.includes(u))).slice(0, 20);
+    db.prepare('UPDATE campanas SET creativos = ? WHERE id = ?').run(j(propios), id);
+  }
   if (partes.copys) db.prepare('UPDATE campanas SET copys = ? WHERE id = ?').run(j(partes.copys), id);
   tocar(id);
   return true;
@@ -171,7 +188,7 @@ export async function crearCreativos(
     input.instruccion?.trim() ? `Indicación del cliente: ${input.instruccion.trim()}.` : (b.ideasCreativo[0] ? `Idea visual: ${b.ideasCreativo[0]}.` : ''),
     `Iluminación cuidada, colores vivos, composición limpia con espacio para texto, aspecto real y creíble.`,
     `Sin texto ni letras dentro de la imagen, sin marcas de agua, sin collage.`,
-  ].filter(Boolean).join(' ');
+  ].filter(Boolean).join(' ') + bloqueMaestro(storeId);
 
   const r = await generarImagen(storeId, prompt, input.cantidad || 1, input.tamano || 'feed');
   if (r.error || !r.urls) return { error: r.error || 'No pudimos generar el creativo.' };

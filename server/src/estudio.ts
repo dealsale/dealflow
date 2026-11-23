@@ -1,5 +1,6 @@
 /**
- * Estudio de creativos (Marketing IA): videos UGC y fotos de producto para vender cualquier
+ * Estudio de fotos (Marketing IA, pestaña «Fotos IA»): fotos de e-commerce (fondo blanco, en uso,
+ * con modelo, testimonio con reseña real, banner, detalle) para vender cualquier
  * producto en e-commerce, generados con la cuenta OpenAI de DealFlow y cobrados SOLO con
  * créditos (sin membresías: la tienda ya paga su mensualidad; DealFlow gana con las recargas).
  *
@@ -25,6 +26,8 @@ import { db, uid } from './db.js';
 import { abonar, cobrar, saldo } from './creditos.js';
 import { chatJSON, SIN_OPENAI } from './marketing.js';
 import { mediaDir, mediaPath } from './media.js';
+import { modeloImagen } from './modelosIA.js';
+import { bloqueMaestro } from './mkAjustes.js';
 
 const OPENAI = process.env.OPENAI_BASE || 'https://api.openai.com/v1';
 const txt = (v: unknown) => (v == null ? '' : String(v));
@@ -72,6 +75,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS estudio_piezas (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_estudio_piezas_proy ON estudio_piezas(proyecto_id, tipo, orden)');
+// Fotos por tipo (fondo blanco, testimonio, con modelo…) y el modelo (persona) que sale en la foto.
+try { db.exec("ALTER TABLE estudio_piezas ADD COLUMN estilo_foto TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+try { db.exec("ALTER TABLE estudio_piezas ADD COLUMN actor_id TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+/** Proyectos que arma DealFlow solo (no son productos): no salen en la lista de «Fotos IA». */
+export const PROYECTOS_ESPECIALES = ['Videos UGC', 'Mis archivos'];
 db.exec("CREATE INDEX IF NOT EXISTS idx_estudio_piezas_gen ON estudio_piezas(estado) WHERE estado = 'generando'");
 
 // ── Precios en créditos ──────────────────────────────────────────────────────
@@ -137,6 +145,7 @@ function mapPieza(p: Fila) {
     texto: txt(p.texto), titular: txt(p.titular), uso: txt(p.uso), formato: txt(p.formato), modelo: txt(p.modelo), segundos: Number(p.segundos) || 0,
     calidad: txt(p.calidad), estado: txt(p.estado), creditos: Number(p.creditos) || 0, progreso: Number(p.progreso) || 0,
     url: txt(p.url), miniatura: txt(p.miniatura), error: txt(p.error), actualizado: txt(p.updated_at),
+    estiloFoto: txt(p.estilo_foto), actorId: txt(p.actor_id),
   };
 }
 // ── Referencias de estilo del equipo DealFlow (Admin → Estudio IA) ──────────
@@ -161,7 +170,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS estudio_ajustes (clave TEXT PRIMARY KEY, val
 export const DIR_REF = '__estudio__';
 
 /** Indicaciones generales del equipo + guías de las referencias activas del estilo pedido. */
-function guiaEstiloEquipo(estilo: string): string {
+export function guiaEstiloEquipo(estilo: string): string {
   const general = txt((db.prepare("SELECT valor FROM estudio_ajustes WHERE clave = 'indicaciones'").get() as { valor: string } | undefined)?.valor).trim();
   const refs = db.prepare(`SELECT titulo, estilo, guia FROM estudio_referencias WHERE activa = 1 AND estado = 'listo' AND guia != ''
       AND (estilo = 'general' OR ? = 'mixto' OR estilo = ?) ORDER BY created_at DESC LIMIT 5`).all(estilo, estilo) as { titulo: string; estilo: string; guia: string }[];
@@ -308,7 +317,8 @@ export function listarProyectos(storeId: string) {
       (SELECT COUNT(*) FROM estudio_piezas x WHERE x.proyecto_id = p.id AND x.tipo = 'video' AND x.url != '') videos,
       (SELECT COUNT(*) FROM estudio_piezas x WHERE x.proyecto_id = p.id AND x.tipo = 'imagen' AND x.url != '') imagenes,
       (SELECT COUNT(*) FROM estudio_piezas x WHERE x.proyecto_id = p.id AND x.estado = 'generando') generando
-    FROM estudio_proyectos p WHERE p.store_id = ? ORDER BY p.updated_at DESC LIMIT 100`).all(storeId) as Fila[])
+    FROM estudio_proyectos p WHERE p.store_id = ? AND p.nombre NOT IN (${PROYECTOS_ESPECIALES.map(() => '?').join(',')})
+    ORDER BY p.updated_at DESC LIMIT 100`).all(storeId, ...PROYECTOS_ESPECIALES) as Fila[])
     .map((p) => ({ id: txt(p.id), nombre: txt(p.nombre), foto: txt(p.foto), videos: Number(p.videos), imagenes: Number(p.imagenes), generando: Number(p.generando), actualizado: txt(p.updated_at) }));
 }
 export function obtenerProyecto(storeId: string, id: string) {
@@ -373,8 +383,7 @@ const POLITICAS_META = [
 const ANGULOS_BASE = 'hook de problema→solución, demostración del producto en uso, unboxing contraentrega (llega a la puerta y lo abre), detalle de calidad en macro, ocasión de uso real (lifestyle), testimonio estilo UGC (persona hablando a cámara en su casa, grabado con celular), variantes/colores disponibles, comparación con la alternativa común, «3 razones para comprarlo».';
 
 interface PaqueteIA {
-  videos?: { angulo?: string; hook?: string; prompt?: string; texto?: string; titular?: string }[];
-  imagenes?: { uso?: string; prompt?: string; texto?: string; titular?: string }[];
+  imagenes?: { tipo?: string; uso?: string; prompt?: string; texto?: string; titular?: string }[];
   copys?: { textos?: string[]; titulares?: string[]; descripciones?: string[] };
 }
 
@@ -391,21 +400,21 @@ export async function generarPaquete(storeId: string, id: string): Promise<{ ok:
   if (!pr) return { error: 'Proyecto no encontrado.' };
   if (!process.env.OPENAI_API_KEY) return { error: SIN_OPENAI };
   const b = pj<BriefEstudio>(pr.brief, limpiarBrief({}));
-  if (!b.videos && !b.imagenes) return { error: 'Pide al menos un video o una foto.' };
+  // «Fotos IA» es solo de fotos: los videos se hacen en «Video UGC» (Seedance).
+  const nFotos = Math.min(10, Math.max(1, b.imagenes || 4));
   const costo = PRECIOS_ESTUDIO.paquete;
   if (!cobrar(storeId, costo, `Estudio IA: ideas y prompts para ${b.producto}`)) return { error: `Necesitas ${costo} créditos para armar el paquete.`, sinCreditos: true };
-  const estilo = b.estilo === 'ugc' ? 'UGC (contenido estilo usuario real grabado con celular, natural y cercano)' : b.estilo === 'ecommerce' ? 'e-commerce de catálogo (producto limpio, fondo de estudio, tomas de producto profesionales)' : 'mezcla de UGC (estilo usuario real con celular) y e-commerce de catálogo';
-  const system = `Eres director creativo de anuncios de e-commerce en Colombia (ventas por WhatsApp y contraentrega). Creas piezas para vender CUALQUIER tipo de producto (moda, belleza, hogar, tecnología, mascotas, salud y bienestar, accesorios, juguetes, comida…): adapta las escenas a la categoría real del producto, no asumas que es ropa.
+  const estilo = b.estilo === 'ugc' ? 'natural, estilo foto de cliente real con celular' : b.estilo === 'ecommerce' ? 'e-commerce de catálogo (producto limpio, fondo de estudio, fotos profesionales)' : 'mezcla de catálogo profesional y fotos naturales estilo cliente real';
+  const system = `Eres director de arte de fotos para e-commerce en Colombia (ventas por WhatsApp y contraentrega). Creas fotos para vender CUALQUIER tipo de producto (moda, belleza, hogar, tecnología, mascotas, salud y bienestar, accesorios, juguetes, comida…): adapta las escenas a la categoría real del producto, no asumas que es ropa.
 Devuelve SOLO un JSON con esta forma:
-{"videos":[{"angulo":"","hook":"","prompt":"","texto":"","titular":""}],"imagenes":[{"uso":"","prompt":"","texto":"","titular":""}],"copys":{"textos":[""],"titulares":[""],"descripciones":[""]}}
+{"imagenes":[{"tipo":"","uso":"","prompt":"","texto":"","titular":""}],"copys":{"textos":[""],"titulares":[""],"descripciones":[""]}}
 Reglas:
-- "videos": exactamente ${b.videos}. Cada uno con un ÁNGULO DISTINTO (rota entre: ${ANGULOS_BASE}). "hook" = lo que pasa o se dice en los primeros 2 segundos para detener el scroll.
-- El "prompt" de cada video es para Sora (genera video CON audio), en español, con esta estructura en líneas: Formato (vertical ${b.formato}, estilo ${estilo}) · Escena · Sujeto (el producto, fiel a las fotos de referencia en color, forma y detalles) · Acción (qué pasa segundo a segundo) · Cámara · Luz · Audio (voz: quién habla, tono y acento colombiano natural, y el TEXTO EXACTO que dice entre comillas, corto para que quepa en el tiempo; más sonido ambiente y música si aplica) · Beneficio a mostrar · Restricciones: ${RESTRICCIONES}
-- Si hay personas: adultos genéricos generados (nunca reales), preferiblemente tomas sin rostro o de espaldas, manos, cuello hacia abajo.
-- "imagenes": exactamente ${b.imagenes}, para anuncios y catálogo (packshot fondo blanco, producto en uso, detalle, variantes, foto estilo cliente real, banner con espacio para oferta…). "uso" = dónde sirve. El "prompt" es para un generador de imágenes, fotográfico y realista, con las mismas restricciones.
-- "texto" (texto principal del anuncio, 1–3 frases, cálido, colombiano, con la oferta) y "titular" (máx. 40 caracteres) para cada pieza.
+- "imagenes": exactamente ${nFotos}, con estilo ${estilo}. "tipo" es uno de: "fondo_blanco" (packshot de catálogo sobre blanco puro), "en_uso" (producto en uso en un ambiente real), "detalle" (macro de textura y acabados), "banner" (anuncio con fondo de color y el texto de la oferta). Mezcla tipos; al menos una de fondo blanco.
+- "uso" = dónde sirve (catálogo, feed, historias, Mercado Libre…). El "prompt" es para un generador de imágenes, fotográfico y realista, fiel al producto de las fotos de referencia (forma, color, materiales). Solo los "banner" llevan texto (la oferta, corto y exacto); las demás, sin texto.
+- Si hay personas: adultos ficticios, preferiblemente sin rostro (manos, de espaldas, del cuello hacia abajo). ${RESTRICCIONES.replace('Sin texto en pantalla, ', '')}
+- "texto" (texto principal del anuncio, 1–3 frases, cálido, colombiano, con la oferta) y "titular" (máx. 40 caracteres) para cada foto.
 - "copys": 5 textos principales, 5 titulares y 3 descripciones extra.
-- Políticas de Meta (obligatorias): ${POLITICAS_META}${guiaEstiloEquipo(b.estilo)}`;
+- Políticas de Meta (obligatorias): ${POLITICAS_META}${bloqueMaestro(storeId)}`;
   const user = `Producto: ${b.producto}
 Categoría: ${b.categoria || 'no indicada (dedúcela)'}
 Precio: ${b.precio ? '$' + b.precio.toLocaleString('es-CO') + ' COP' : 'no indicado'}
@@ -417,36 +426,111 @@ Notas: ${b.notas || '—'}
 ${fotosDe(pr).length ? `Te adjunto ${fotosDe(pr).length} foto(s) reales del producto: míralas todas y describe el producto con fidelidad (forma, color, materiales, tamaño, detalles) en cada prompt.` : 'No hay foto: describe el producto de forma genérica pero creíble.'}`;
   const r = await chatJSON<PaqueteIA>(system, user, { imagenes: fotosDe(pr).map((u) => dataUrlDe(storeId, u)).filter(Boolean), maxTokens: 7000, temperatura: 0.8 });
   if (r.error || !r.data) { abonar(storeId, costo, 'Devolución: no se pudo armar el paquete'); return { error: r.error || 'La IA no respondió.' }; }
-  const vids = (r.data.videos || []).filter((v) => txt(v.prompt).trim()).slice(0, b.videos);
-  const imgs = (r.data.imagenes || []).filter((v) => txt(v.prompt).trim()).slice(0, b.imagenes);
-  if (!vids.length && !imgs.length) { abonar(storeId, costo, 'Devolución: la IA no devolvió piezas'); return { error: 'La IA no devolvió ideas. Intenta de nuevo.' }; }
-  const modeloVideo = process.env.OPENAI_VIDEO_MODEL || 'sora-2';
+  const imgs = (r.data.imagenes || []).filter((v) => txt(v.prompt).trim()).slice(0, nFotos);
+  if (!imgs.length) { abonar(storeId, costo, 'Devolución: la IA no devolvió ideas'); return { error: 'La IA no devolvió ideas. Intenta de nuevo.' }; }
   const ultimo = (tipo: string) => (db.prepare('SELECT COALESCE(MAX(orden),0) n FROM estudio_piezas WHERE proyecto_id = ? AND tipo = ?').get(id, tipo) as { n: number }).n;
-  const ins = db.prepare(`INSERT INTO estudio_piezas (id, proyecto_id, store_id, tipo, orden, angulo, hook, prompt, texto, titular, uso, formato, modelo, segundos, calidad)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const ins = db.prepare(`INSERT INTO estudio_piezas (id, proyecto_id, store_id, tipo, orden, angulo, hook, prompt, texto, titular, uso, formato, modelo, segundos, calidad, estilo_foto)
+    VALUES (?,?,?,'imagen',?,'','',?,?,?,?,?,?,0,'medium',?)`);
   db.transaction(() => {
-    let ov = ultimo('video'), oi = ultimo('imagen');
-    for (const v of vids) ins.run(uid(), id, storeId, 'video', ++ov, txt(v.angulo).slice(0, 80), txt(v.hook).slice(0, 300), txt(v.prompt).slice(0, 4000), txt(v.texto).slice(0, 600), txt(v.titular).slice(0, 80), '', b.formato, modeloVideo, 8, '');
-    for (const v of imgs) ins.run(uid(), id, storeId, 'imagen', ++oi, '', '', txt(v.prompt).slice(0, 4000), txt(v.texto).slice(0, 600), txt(v.titular).slice(0, 80), txt(v.uso).slice(0, 80), b.formato, process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1', 0, 'medium');
+    let oi = ultimo('imagen');
+    for (const v of imgs) {
+      const tipo = ['fondo_blanco', 'en_uso', 'detalle', 'banner'].includes(txt(v.tipo)) ? txt(v.tipo) : 'en_uso';
+      ins.run(uid(), id, storeId, ++oi, txt(v.prompt).slice(0, 4000), txt(v.texto).slice(0, 600), txt(v.titular).slice(0, 80), (txt(v.uso) || ESTILOS_FOTO[tipo].nombre).slice(0, 80), b.formato, modeloImagen(), tipo);
+    }
     db.prepare("UPDATE estudio_proyectos SET copys = ?, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(r.data!.copys || {}), id);
   })();
-  return { ok: true, videos: vids.length, imagenes: imgs.length };
+  return { ok: true, videos: 0, imagenes: imgs.length };
 }
 
 /** Pieza a mano (sin pasar por la IA de ideas): la tienda escribe su propio prompt. */
 export function agregarPieza(storeId: string, proyectoId: string, b: Record<string, unknown>): { id: string } | { error: string } {
   const pr = db.prepare('SELECT brief FROM estudio_proyectos WHERE id = ? AND store_id = ?').get(proyectoId, storeId) as Fila | undefined;
   if (!pr) return { error: 'Proyecto no encontrado.' };
-  const tipo = b.tipo === 'video' ? 'video' : 'imagen';
+  if (b.tipo === 'video') return { error: 'Los videos ahora se hacen en «Video UGC».' };
+  const tipo = 'imagen';
   const prompt = txt(b.prompt).trim().slice(0, 4000);
   if (prompt.length < 10) return { error: 'Describe lo que quieres ver (mínimo una frase).' };
   const formato = pj<BriefEstudio>(pr.brief, limpiarBrief({})).formato;
   const orden = (db.prepare('SELECT COALESCE(MAX(orden),0)+1 n FROM estudio_piezas WHERE proyecto_id = ? AND tipo = ?').get(proyectoId, tipo) as { n: number }).n;
   const id = uid();
   db.prepare(`INSERT INTO estudio_piezas (id, proyecto_id, store_id, tipo, orden, angulo, prompt, formato, modelo, segundos, calidad) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(id, proyectoId, storeId, tipo, orden, tipo === 'video' ? 'Personalizado' : '', prompt, formato,
-      tipo === 'video' ? (process.env.OPENAI_VIDEO_MODEL || 'sora-2') : (process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1'), tipo === 'video' ? 8 : 0, tipo === 'video' ? '' : 'medium');
+    .run(id, proyectoId, storeId, tipo, orden, '', prompt, formato,
+      modeloImagen(), 0, 'medium');
+  db.prepare("UPDATE estudio_piezas SET estilo_foto = 'libre' WHERE id = ?").run(id);
   return { id };
+}
+
+// ── Fotos por tipo (la tienda elige qué foto quiere) ────────────────────────
+/** Tipos de foto de e-commerce. `texto`: si la foto lleva letras (testimonio, banner). */
+export const ESTILOS_FOTO: Record<string, { nombre: string; texto: boolean }> = {
+  fondo_blanco: { nombre: 'Fondo blanco', texto: false },
+  en_uso: { nombre: 'Producto en uso', texto: false },
+  modelo: { nombre: 'Con modelo', texto: false },
+  testimonio: { nombre: 'Testimonio', texto: true },
+  banner: { nombre: 'Banner con oferta', texto: true },
+  detalle: { nombre: 'Detalle', texto: false },
+  libre: { nombre: 'Mi propio prompt', texto: true },
+};
+
+/** Prompt de cada tipo de foto (la tienda lo ve y lo puede editar antes de rehacer). */
+function promptFoto(estilo: string, b: BriefEstudio, x: { instrucciones: string; resena: string; autor: string; textoBanner: string; conModelo: boolean }): string {
+  const prod = `${b.producto}${b.categoria ? ` (${b.categoria})` : ''}`;
+  const base: Record<string, string> = {
+    fondo_blanco: `Foto de catálogo e-commerce (packshot) de ${prod}: el producto solo, centrado y completo, sobre fondo blanco puro (#FFFFFF) sin degradados ni objetos, sombra suave y realista debajo, luz de estudio pareja, muy nítido, colores fieles. Lista para Shopify, Mercado Libre y catálogos.`,
+    en_uso: `Foto lifestyle realista de ${prod} en uso, en un ambiente cotidiano de Colombia acorde al producto (casa, calle, oficina, gimnasio…), luz natural, composición de anuncio con el producto como protagonista.${x.conModelo ? ' La persona que lo usa es la de la primera imagen de referencia.' : ' Si aparece una persona, que sea un adulto ficticio, preferiblemente sin mostrar la cara (manos, de espaldas o del cuello hacia abajo).'}`,
+    modelo: `Foto de moda y e-commerce: ${x.conModelo ? 'la persona de la primera imagen de referencia' : 'una persona adulta latinoamericana ficticia'} usando o sosteniendo ${prod}. Pose natural y segura, plano completo o medio según el producto, fondo de estudio claro o exterior urbano suave, luz favorecedora, aspecto profesional de catálogo.`,
+    testimonio: `Imagen de testimonio para redes sociales: foto realista estilo celular de ${prod} en un ambiente cotidiano y, encima, una tarjeta de reseña con bordes redondeados, 5 estrellas amarillas y este texto EXACTO en español, bien escrito y legible: «${x.resena}»${x.autor ? ` — ${x.autor}` : ''}. Tipografía limpia tipo app, colores suaves, el producto bien visible.`,
+    banner: `Banner publicitario para e-commerce: ${prod} destacado, fondo de color llamativo que combine con el producto y texto grande y legible en español: «${x.textoBanner || b.oferta || 'Pago contraentrega'}»${b.precio && !x.textoBanner ? ` y el precio «${b.precio.toLocaleString('es-CO')}»` : ''}. Diseño limpio y moderno estilo anuncio de Instagram, máximo 2 bloques de texto.`,
+    detalle: `Foto macro de detalle de ${prod}: acercamiento a la textura, materiales, costuras o acabados, enfoque muy nítido, fondo desenfocado, luz suave que resalte la calidad.`,
+  };
+  if (estilo === 'libre') return x.instrucciones;
+  return [base[estilo] || base.en_uso, x.instrucciones ? `Indicaciones de la tienda: ${x.instrucciones}` : ''].filter(Boolean).join('\n');
+}
+
+/** Reglas que van al final del prompt según el tipo de foto. */
+function restriccionesFoto(estilo: string, conModelo: boolean): string {
+  if (!estilo) return RESTRICCIONES; // fotos viejas (antes de los tipos)
+  const texto = ESTILOS_FOTO[estilo]?.texto ? 'Solo el texto pedido, bien escrito en español; ningún otro texto.' : 'Sin texto ni letras en la imagen.';
+  const personas = conModelo ? 'La única persona reconocible es la de la imagen de referencia (modelo de la tienda); sin celebridades.' : 'Sin rostros de personas reales ni celebridades.';
+  return `${texto} Sin marcas de agua, sin logos ni marcas de terceros. ${personas} Sin menores de edad, sin deformaciones en manos ni en el producto.`;
+}
+
+/** Foto de un modelo propio o personaje (Video UGC → personajes), si existe en esta tienda. */
+function fotoModelo(storeId: string, actorId: string): string {
+  if (!actorId) return '';
+  try {
+    const a = db.prepare('SELECT imagen FROM ugc_actores WHERE id = ? AND store_id = ?').get(actorId, storeId) as { imagen: string } | undefined;
+    const u = txt(a?.imagen);
+    if (!u.startsWith(`/api/media/${storeId}/`)) return '';
+    const ruta = mediaPath(storeId, u.split('/').pop()!);
+    return existsSync(ruta) ? ruta : '';
+  } catch { return ''; }
+}
+
+/** La tienda elige el tipo de foto (y si quiere, un modelo y su propio texto): se arma el prompt y se genera. */
+export async function crearFoto(storeId: string, proyectoId: string, b: Record<string, unknown>): Promise<{ id: string; estado?: string } | { error: string; sinCreditos?: boolean; id?: string }> {
+  const pr = db.prepare('SELECT brief FROM estudio_proyectos WHERE id = ? AND store_id = ?').get(proyectoId, storeId) as Fila | undefined;
+  if (!pr) return { error: 'Producto no encontrado.' };
+  const estilo = ESTILOS_FOTO[txt(b.estilo)] ? txt(b.estilo) : 'libre';
+  const instrucciones = txt(b.instrucciones).trim().slice(0, 1500);
+  const resena = txt(b.resena).replace(/\s+/g, ' ').trim().slice(0, 300);
+  const autor = txt(b.autor).replace(/\s+/g, ' ').trim().slice(0, 40);
+  const textoBanner = txt(b.textoBanner).replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (estilo === 'libre' && instrucciones.length < 10) return { error: 'Escribe tu prompt: qué quieres ver en la foto (mínimo una frase).' };
+  if (estilo === 'testimonio' && resena.length < 8) return { error: 'Pega la reseña real que te dejó un cliente.' };
+  const actorId = txt(b.actorId);
+  if (actorId && !fotoModelo(storeId, actorId)) return { error: 'Ese modelo ya no existe o no tiene foto.' };
+  const brief = pj<BriefEstudio>(pr.brief, limpiarBrief({}));
+  const formato = ['9:16', '1:1', '16:9'].includes(txt(b.formato)) ? txt(b.formato) : brief.formato;
+  const calidad = txt(b.calidad) === 'high' ? 'high' : 'medium';
+  const prompt = promptFoto(estilo, brief, { instrucciones, resena, autor, textoBanner, conModelo: !!actorId }).slice(0, 4000);
+  const orden = (db.prepare("SELECT COALESCE(MAX(orden),0)+1 n FROM estudio_piezas WHERE proyecto_id = ? AND tipo = 'imagen'").get(proyectoId) as { n: number }).n;
+  const id = uid();
+  db.prepare(`INSERT INTO estudio_piezas (id, proyecto_id, store_id, tipo, orden, prompt, uso, formato, modelo, segundos, calidad, estilo_foto, actor_id)
+    VALUES (?,?,?,'imagen',?,?,?,?,?,0,?,?,?)`).run(id, proyectoId, storeId, orden, prompt, ESTILOS_FOTO[estilo].nombre, formato, modeloImagen(), calidad, estilo, actorId);
+  const g = await generarSinEsperar(storeId, id);
+  if ('error' in g) return { ...g, id };
+  return { id, estado: g.estado };
 }
 
 export function editarPieza(storeId: string, id: string, b: Record<string, unknown>): { ok: true } | { error: string } {
@@ -461,6 +545,7 @@ export function editarPieza(storeId: string, id: string, b: Record<string, unkno
   if (b.segundos != null && p.tipo === 'video' && SEGUNDOS.includes(Number(b.segundos) as 4)) poner('segundos', Number(b.segundos));
   if (typeof b.calidad === 'string' && p.tipo === 'imagen' && ['medium', 'high'].includes(b.calidad)) poner('calidad', b.calidad);
   if (typeof b.formato === 'string' && ['9:16', '1:1', '16:9'].includes(b.formato)) poner('formato', b.formato);
+  if (typeof b.actorId === 'string' && p.tipo === 'imagen' && (!b.actorId || fotoModelo(storeId, b.actorId))) poner('actor_id', b.actorId);
   if (typeof b.estado === 'string' && ['aprobado', 'descartado'].includes(b.estado) && p.estado !== 'generando') poner('estado', b.estado);
   if (b.estado === 'listo' && p.estado === 'aprobado') poner('estado', 'listo'); // quitar la aprobación
   if (!sets.length) return { ok: true };
@@ -510,6 +595,8 @@ export async function generarPieza(storeId: string, id: string): Promise<{ ok: t
   const p = db.prepare('SELECT * FROM estudio_piezas WHERE id = ? AND store_id = ?').get(id, storeId) as Fila | undefined;
   if (!p) return { error: 'Pieza no encontrada.' };
   if (p.estado === 'generando') return { error: 'Esta pieza ya se está generando.' };
+  // El generador de video anterior (OpenAI) se apagó el 24-sep-2026: los videos se hacen en «Video UGC».
+  if (p.tipo === 'video') return { error: 'Los videos ahora se hacen en la pestaña «Video UGC».' };
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { error: SIN_OPENAI };
   const pr = db.prepare('SELECT foto, fotos, brief FROM estudio_proyectos WHERE id = ?').get(txt(p.proyecto_id)) as Fila;
@@ -521,19 +608,26 @@ export async function generarPieza(storeId: string, id: string): Promise<{ ok: t
   const fila = { ...p, creditos: costo } as Fila;
   const fotos = pr ? fotosDe(pr) : [];
   const foto = fotos[0] || '';
-  const prompt = `${txt(p.prompt)}\n\n${RESTRICCIONES}`;
+  const modeloPersona = p.tipo === 'imagen' ? fotoModelo(storeId, txt(p.actor_id)) : '';
+  const prompt = `${txt(p.prompt)}\n\n${p.tipo === 'imagen' ? restriccionesFoto(txt(p.estilo_foto), !!modeloPersona) : RESTRICCIONES}${bloqueMaestro(storeId)}`;
 
   if (p.tipo === 'imagen') {
     try {
       const size = tamanoImagen(txt(p.formato));
-      const modelo = txt(p.modelo) || 'gpt-image-1';
+      // Siempre el modelo vigente (las fotos viejas guardaban uno que OpenAI ya apagó).
+      const modelo = modeloImagen();
+      db.prepare('UPDATE estudio_piezas SET modelo = ? WHERE id = ?').run(modelo, id);
       let res: Response;
-      const refs = fotos.filter((u) => u.startsWith(`/api/media/${storeId}/`)).map((u) => mediaPath(storeId, u.split('/').pop()!)).filter((r) => existsSync(r)).slice(0, 4);
+      const delProducto = fotos.filter((u) => u.startsWith(`/api/media/${storeId}/`)).map((u) => mediaPath(storeId, u.split('/').pop()!)).filter((r) => existsSync(r)).slice(0, 4);
+      const refs = modeloPersona ? [modeloPersona, ...delProducto] : delProducto;
       if (refs.length) {
-        // Con las fotos reales: edits mantiene el producto fiel (hasta 4 ángulos de referencia).
+        // Con las fotos reales: edits mantiene el producto fiel (hasta 4 ángulos de referencia + el modelo).
         const form = new FormData();
         form.append('model', modelo);
-        form.append('prompt', refs.length > 1 ? `${prompt}\n\nLas imágenes adjuntas son el MISMO producto desde distintos ángulos: respétalo con fidelidad.` : prompt);
+        const guia = modeloPersona
+          ? (delProducto.length ? `La imagen 1 es la PERSONA (modelo de la tienda): misma cara, pelo, tono de piel y contextura. Las imágenes 2 en adelante son el MISMO producto desde distintos ángulos: respétalo con fidelidad.` : 'La imagen adjunta es la PERSONA (modelo de la tienda): misma cara, pelo, tono de piel y contextura.')
+          : refs.length > 1 ? 'Las imágenes adjuntas son el MISMO producto desde distintos ángulos: respétalo con fidelidad.' : '';
+        form.append('prompt', guia ? `${prompt}\n\n${guia}` : prompt);
         form.append('size', size);
         form.append('quality', txt(p.calidad) || 'medium');
         refs.forEach((ref, k) => {
@@ -709,7 +803,17 @@ export function preciosPublicos() {
   return {
     paquete: PRECIOS_ESTUDIO.paquete,
     imagen: { medium: PRECIOS_ESTUDIO.imagenMedia, high: PRECIOS_ESTUDIO.imagenAlta },
-    video: Object.fromEntries(MODELOS_VIDEO.map((m) => [m, Object.fromEntries(SEGUNDOS.map((s) => [s, costoPieza({ tipo: 'video', modelo: m, segundos: s })]))])),
+    video: {} as Record<string, Record<string, number>>, // los videos se hacen en «Video UGC»
     disponible: !!process.env.OPENAI_API_KEY,
   };
+}
+
+/**
+ * Pide la generación y responde en máx. 3 s: si la IA sigue trabajando, la pieza queda «generando»
+ * y la pantalla se refresca sola. (Cloudflare corta en 100 s y una foto puede tardar más.)
+ */
+export async function generarSinEsperar(storeId: string, id: string): Promise<{ ok: true; estado: string } | { error: string; sinCreditos?: boolean }> {
+  const trabajo = generarPieza(storeId, id).catch((e) => ({ error: 'No se pudo generar: ' + ((e as Error)?.message || 'error') }));
+  const r = await Promise.race([trabajo, new Promise<null>((ok) => setTimeout(() => ok(null), 3000))]);
+  return r || { ok: true, estado: 'generando' };
 }

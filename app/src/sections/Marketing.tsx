@@ -2,11 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { Icono, IcoTexto, type NombreIcono } from '../components/Icono';
 import { IconoDF } from '../components/IconoDF';
 import type { DealFlowState } from '../hooks/useDealFlowState';
-import type { Campana } from '../lib/api';
+import { apiMkBibliotecaSubir, apiGuardarInstrucciones, apiInstrucciones, type Campana } from '../lib/api';
 import { Dropdown } from '../components/Dropdown';
 import { comprimirImagen } from '../components/PhotoUpload';
+import { notificar } from '../components/dialogs';
 import { EstudioCreativos } from './EstudioCreativos';
 import { VideoUGC } from './VideoUGC';
+import { BibliotecaMarketing } from './BibliotecaMarketing';
+
+/** ¿El creativo es un video? (subido por la tienda o hecho en Video UGC). */
+const esVideo = (u: string) => /\.(mp4|mov|webm|m4v)$/i.test((u || '').split('?')[0]);
 
 const card: React.CSSProperties = { background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 14, padding: 20, boxShadow: '0 1px 2px rgba(15,23,42,.04)', marginBottom: 14 };
 const label: React.CSSProperties = { color: 'var(--df-text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 6 };
@@ -31,7 +36,9 @@ const PASOS = [
   { n: 4, t: 'Publicar', s: 'En tu cuenta de anuncios' },
 ];
 /** ¿Qué pasos están hechos de verdad? (no basta con haber pasado por ellos). */
-const hechos = (c: Campana) => [!!c.brief, c.creativos.length > 0, !!c.copys?.textos.length, c.estado === 'publicada'];
+const hechos = (c: Campana) => [!!c.brief, c.creativos.length > 0, !!c.copys?.textos.length, c.estado === 'publicada' || c.estado === 'publicando'];
+/** Avance en Meta de una campaña con video (se crea en segundo plano). */
+const metaDe = (c: Campana) => (c.publicacion?.meta || null) as { estado: string; paso: string; error: string } | null;
 
 /** Rueda pequeña para los botones mientras la IA trabaja. */
 const Rueda = ({ claro = true }: { claro?: boolean }) => (
@@ -202,14 +209,34 @@ function PasoCreativos({ df, c }: { df: DealFlowState; c: Campana }) {
   const [instruccion, setInstruccion] = useState('');
   const [tamano, setTamano] = useState('feed');
   const [cantidad, setCantidad] = useState(1);
+  const [verBiblioteca, setVerBiblioteca] = useState(false);
+  const [subiendo, setSubiendo] = useState('');
+  const archivo = useRef<HTMLInputElement>(null);
   const costo = (df.costoCreditos?.imagen || 20) * cantidad;
+  const agregarCreativo = (url: string) => {
+    if (c.creativos.includes(url)) { notificar('Ese archivo ya está en la campaña.', 'info'); return; }
+    df.editarCampana(c.id, { creativos: [...c.creativos, url] });
+    notificar('✓ Agregado a la campaña.');
+  };
+  const subirPropios = async (files: FileList | null) => {
+    if (!files?.length) return;
+    let nuevos = [...c.creativos];
+    for (const f of Array.from(files).slice(0, 6)) {
+      setSubiendo(`Subiendo ${f.name}… 0%`);
+      const r = await apiMkBibliotecaSubir(f, (pct) => setSubiendo(`Subiendo ${f.name}… ${pct}%`));
+      if (r.error || !r.data) { notificar(`${f.name}: ${r.error}`, 'error'); continue; }
+      nuevos = [...nuevos, r.data.medio.url];
+    }
+    setSubiendo('');
+    if (nuevos.length !== c.creativos.length) df.editarCampana(c.id, { creativos: nuevos });
+  };
 
   if (!c.brief) return <Falta icono="buscar" texto="Primero completa el paso 1 para que la IA sepa qué dibujar." />;
 
   return (
     <>
       <div style={card}>
-        <Titulo icono="paleta" titulo="Crea las imágenes del anuncio" ayuda={<>Se generan a partir de lo que la IA entendió de <b>{c.brief.producto}</b>. ¿Quieres videos? Créalos en <b>Videos y fotos</b>.</>} />
+        <Titulo icono="paleta" titulo="Crea las imágenes del anuncio" ayuda={<>Se generan a partir de lo que la IA entendió de <b>{c.brief.producto}</b>. ¿Tienes tus propias fotos o videos? Súbelos o elígelos de tu Biblioteca más abajo.</>} />
         {c.brief.ideasCreativo.length > 0 && (
           <div style={{ marginBottom: 14 }}>
             <div style={label}>Ideas de la IA · toca una para usarla</div>
@@ -244,14 +271,27 @@ function PasoCreativos({ df, c }: { df: DealFlowState; c: Campana }) {
         </div>
       </div>
 
+      <div style={card}>
+        <Titulo icono="subir" titulo="Usa tus propias fotos o videos" ayuda="Sube archivos desde tu equipo (fotos JPG/PNG o videos MP4/MOV de hasta 95 MB) o elige algo que ya tengas en tu Biblioteca: fotos IA, videos UGC o lo que subiste antes. Gratis." />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button onClick={() => archivo.current?.click()} disabled={!!subiendo} style={{ ...btn, background: '#0F172A', opacity: subiendo ? 0.7 : 1 }}><Icono nombre="subir" tam={16} color="#fff" />Subir desde mi equipo</button>
+          <button onClick={() => setVerBiblioteca(!verBiblioteca)} style={btnGris}><IcoTexto n="biblioteca" />{verBiblioteca ? 'Cerrar la Biblioteca' : 'Elegir de mi Biblioteca'}</button>
+          {subiendo && <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)' }}>{subiendo}</span>}
+          <input ref={archivo} type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" style={{ display: 'none' }} onChange={(e) => { void subirPropios(e.target.files); e.target.value = ''; }} />
+        </div>
+        {verBiblioteca && <div style={{ marginTop: 14 }}><BibliotecaMarketing soloElegir onElegir={(m) => agregarCreativo(m.url)} /></div>}
+      </div>
+
       {(c.creativos.length > 0 || df.mkLoading) && (
         <div style={card}>
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12 }}>Tus imágenes ({c.creativos.length})</div>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12 }}>Fotos y videos de la campaña ({c.creativos.length})</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 12 }}>
             {df.mkLoading && Array.from({ length: cantidad }).map((_, i) => <div key={'c' + i} className="df-est-cargando" style={{ aspectRatio: '1 / 1', borderRadius: 12 }} />)}
             {c.creativos.map((url, i) => (
               <div key={i} className="df-est-tarjeta" style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--df-border)', background: 'var(--df-bg)' }}>
-                <a href={url} target="_blank" rel="noreferrer"><img src={url} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block' }} /></a>
+                {esVideo(url)
+                  ? <video src={url} controls playsInline preload="metadata" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'contain', display: 'block', background: '#0B1220' }} />
+                  : <a href={url} target="_blank" rel="noreferrer"><img src={url} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block' }} /></a>}
                 <span style={{ position: 'absolute', left: 8, top: 8, background: 'rgba(15,23,42,.7)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 6, padding: '2px 7px' }}>#{i + 1}</span>
                 <button onClick={() => df.editarCampana(c.id, { creativos: c.creativos.filter((_, k) => k !== i) })} title="Quitar esta imagen"
                   style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(255,255,255,.95)', border: 'none', borderRadius: 8, width: 28, height: 28, fontFamily: 'inherit', fontSize: 13, color: 'var(--df-danger-dark)', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,.15)' }}>✕</button>
@@ -318,7 +358,9 @@ function VistaPrevia({ pagina, texto, titulo, descripcion, imagen, objetivo }: {
         <div style={{ lineHeight: 1.2 }}><div style={{ fontWeight: 700, fontSize: 13.5 }}>{pagina || 'Tu página'}</div><div style={{ fontSize: 11.5, color: '#65676B' }}>Publicidad · <Icono nombre="web" tam={11} /></div></div>
       </div>
       <div style={{ padding: '0 12px 10px', fontSize: 13.5, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{texto}</div>
-      {imagen ? <img src={imagen} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block' }} /> : <div style={{ aspectRatio: '1 / 1', background: '#F0F2F5' }} />}
+      {imagen && esVideo(imagen)
+        ? <video src={imagen} controls muted playsInline preload="metadata" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'contain', display: 'block', background: '#000' }} />
+        : imagen ? <img src={imagen} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block' }} /> : <div style={{ aspectRatio: '1 / 1', background: '#F0F2F5' }} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#F0F2F5' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titulo || 'Título'}</div>
@@ -355,7 +397,7 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
   const [sel, setSel] = useState({ texto: 0, titulo: 0, descripcion: 0, creativo: 0 });
   const [cuenta, setCuenta] = useState('');
   const [pagina, setPagina] = useState('');
-  const [publicado, setPublicado] = useState(false);
+  const [publicado, setPublicado] = useState<'' | 'si' | 'video'>('');
 
   const listo = !!c.copys?.textos.length && c.creativos.length > 0;
 
@@ -427,14 +469,18 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
         <div style={{ ...card, marginBottom: 0 }}>
           <Titulo icono="cohete" titulo="Arma el anuncio" ayuda={<>Objetivo: <b><IcoTexto n={objetivoDe(c.objetivo).icono} />{objetivoDe(c.objetivo).nombre}</b>. Lo que elijas se ve al lado tal como saldrá.</>} />
           <div style={{ marginBottom: 14 }}>
-            <div style={label}>Imagen</div>
+            <div style={label}>Foto o video</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {c.creativos.map((url, i) => (
-                <button key={i} onClick={() => setSel((s) => ({ ...s, creativo: i }))} style={{ padding: 0, border: '3px solid ' + (sel.creativo === i ? 'var(--df-brand)' : 'transparent'), borderRadius: 11, cursor: 'pointer', background: 'transparent', outline: sel.creativo === i ? 'none' : '1px solid var(--df-border)' }}>
-                  <img src={url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, display: 'block' }} />
+                <button key={i} onClick={() => setSel((s) => ({ ...s, creativo: i }))} style={{ padding: 0, border: '3px solid ' + (sel.creativo === i ? 'var(--df-brand)' : 'transparent'), borderRadius: 11, cursor: 'pointer', background: 'transparent', outline: sel.creativo === i ? 'none' : '1px solid var(--df-border)', position: 'relative' }}>
+                  {esVideo(url)
+                    ? <video src={url} muted playsInline preload="metadata" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, display: 'block', background: '#000', pointerEvents: 'none' }} />
+                    : <img src={url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, display: 'block' }} />}
+                  {esVideo(url) && <span style={{ position: 'absolute', left: 4, bottom: 4, background: 'rgba(15,23,42,.75)', color: '#fff', fontSize: 9.5, fontWeight: 800, borderRadius: 4, padding: '1px 4px' }}>VIDEO</span>}
                 </button>
               ))}
             </div>
+            {esVideo(c.creativos[sel.creativo] || '') && <div style={{ fontSize: 12, color: 'var(--df-text-muted)', marginTop: 6 }}>Con video, Meta tarda unos minutos en procesarlo: la campaña se termina de crear sola (en pausa). El presupuesto mínimo es $5.000 al día.</div>}
           </div>
           <Variantes titulo="Texto principal" items={cp.textos} sel={sel.texto} onSel={(n) => setSel((s) => ({ ...s, texto: n }))} />
           <Variantes titulo="Título" items={cp.titulos} sel={sel.titulo} onSel={(n) => setSel((s) => ({ ...s, titulo: n }))} />
@@ -451,14 +497,26 @@ function PasoPublicar({ df, c }: { df: DealFlowState; c: Campana }) {
             <Icono nombre="pausa" tam={16} style={{ marginTop: 1 }} /><span>El anuncio se crea <b>en pausa</b>. No se gasta ni un peso hasta que le des play en tu Administrador de anuncios.</span>
           </div>
           <button
-            onClick={() => { void df.publicarCampana(c.id, { presupuesto, textoIdx: sel.texto, tituloIdx: sel.titulo, descripcionIdx: sel.descripcion, creativoIdx: sel.creativo }).then((ok) => setPublicado(!!ok)); }}
+            onClick={() => { void df.publicarCampana(c.id, { presupuesto, textoIdx: sel.texto, tituloIdx: sel.titulo, descripcionIdx: sel.descripcion, creativoIdx: sel.creativo }).then((ok) => setPublicado(ok === 'video' ? 'video' : ok ? 'si' : '')); }}
             disabled={df.mkLoading || presupuesto < 1000} style={{ ...btn, background: META, opacity: df.mkLoading ? 0.8 : 1, width: '100%', justifyContent: 'center' }}>
             {df.mkLoading ? <><Rueda /> Publicando en Meta…</> : 'Publicar en mi Administrador de anuncios'}
           </button>
           {df.mkError && <div style={{ color: 'var(--df-danger-dark)', fontSize: 13, marginTop: 10 }}>{df.mkError}</div>}
+          {c.estado === 'publicando' && !publicado && (
+            <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', background: 'var(--df-bg)', borderRadius: 11, padding: '11px 13px', fontSize: 13 }}>
+              <Rueda claro={false} /> Creando en Meta: {metaDe(c)?.paso || 'procesando el video…'}
+            </div>
+          )}
+          {c.estado === 'error_meta' && !publicado && (
+            <div style={{ marginTop: 12, background: 'var(--df-danger-subtle)', border: '1px solid var(--df-danger-border)', borderRadius: 11, padding: '11px 13px', color: 'var(--df-danger-dark)', fontSize: 13 }}>
+              Meta no pudo crear la campaña: {metaDe(c)?.error || 'error desconocido'}. Revisa y vuelve a publicar.
+            </div>
+          )}
           {(publicado || c.estado === 'publicada') && (
             <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', background: 'var(--df-brand-subtle-2)', borderRadius: 11, padding: '11px 13px', color: 'var(--df-brand-dark)', fontSize: 13.5, fontWeight: 600 }}>
-              <Icono nombre="fiesta" tam={18} degradado /> La campaña quedó creada en pausa dentro de tu Administrador de anuncios.
+              <Icono nombre="fiesta" tam={18} degradado /> {publicado === 'video'
+                ? 'Listo: Meta está procesando tu video. En unos minutos la campaña aparece en pausa en tu Administrador de anuncios (y en la sección Anuncios).'
+                : 'La campaña quedó creada en pausa dentro de tu Administrador de anuncios.'}
             </div>
           )}
         </div>
@@ -525,11 +583,16 @@ function ListaCampanas({ df }: { df: DealFlowState }) {
             {df.campanas.map((c) => {
               const ok = hechos(c);
               const n = ok.filter(Boolean).length;
-              const st = c.estado === 'publicada' ? { t: '● Publicada', c: '#fff', bg: 'var(--df-brand)' } : ok[1] && ok[2] ? { t: 'Lista para publicar', c: '#fff', bg: META } : { t: 'Borrador', c: 'var(--df-text-body)', bg: 'rgba(255,255,255,.92)' };
+              const st = c.estado === 'publicada' ? { t: '● Publicada', c: '#fff', bg: 'var(--df-brand)' }
+                : c.estado === 'publicando' ? { t: 'Creando en Meta…', c: '#fff', bg: '#4F46E5' }
+                : c.estado === 'error_meta' ? { t: 'Error en Meta', c: '#fff', bg: 'var(--df-danger)' }
+                : ok[1] && ok[2] ? { t: 'Lista para publicar', c: '#fff', bg: META } : { t: 'Borrador', c: 'var(--df-text-body)', bg: 'rgba(255,255,255,.92)' };
               return (
                 <div key={c.id} className="df-est-tarjeta" style={{ ...card, marginBottom: 0, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                   <button onClick={() => void df.abrirCampana(c.id)} style={{ padding: 0, border: 'none', cursor: 'pointer', position: 'relative', height: 140, background: 'transparent' }} className={c.creativos[0] ? '' : 'df-est-idea'}>
-                    {c.creativos[0] ? <img src={c.creativos[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <Icono nombre={objetivoDe(c.objetivo).icono} tam={34} degradado />}
+                    {c.creativos[0] && esVideo(c.creativos[0])
+                      ? <video src={c.creativos[0]} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', background: '#000', pointerEvents: 'none' }} />
+                      : c.creativos[0] ? <img src={c.creativos[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <Icono nombre={objetivoDe(c.objetivo).icono} tam={34} degradado />}
                     <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '3px 9px', color: st.c, background: st.bg, boxShadow: '0 1px 3px rgba(0,0,0,.12)' }}>{st.t}</span>
                     {c.creativos.length > 1 && <span style={{ position: 'absolute', left: 10, bottom: 10, fontSize: 11, fontWeight: 700, borderRadius: 6, padding: '2px 7px', color: '#fff', background: 'rgba(15,23,42,.7)' }}><IcoTexto n="imagen" tam={12} />{c.creativos.length}</span>}
                   </button>
@@ -590,12 +653,56 @@ function MarketingEnPruebas({ whatsapp }: { whatsapp: string }) {
   );
 }
 
+/**
+ * Instrucciones maestras de la tienda: se agregan a TODO lo que genera (fotos, guiones y tomas de
+ * video, imágenes de campañas). Ej.: estilo de la marca, colores, qué nunca debe salir.
+ */
+function InstruccionesMaestras() {
+  const [texto, setTexto] = useState<string | null>(null);
+  const [guardado, setGuardado] = useState('');
+  const [abierto, setAbierto] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => { void apiInstrucciones().then((r) => { const t = r.data?.texto || ''; setTexto(t); setGuardado(t); }); }, []);
+  if (texto === null) return null;
+  const guardar = async () => {
+    setGuardando(true);
+    const r = await apiGuardarInstrucciones(texto);
+    setGuardando(false);
+    if (r.error || !r.data) { notificar(r.error || 'No se pudo guardar.', 'error'); return; }
+    setTexto(r.data.texto); setGuardado(r.data.texto); setAbierto(false);
+    notificar(r.data.texto ? '✓ Instrucciones maestras guardadas: se usan en todo lo que generes.' : 'Instrucciones maestras borradas.');
+  };
+  return (
+    <div style={{ ...card, padding: abierto ? 18 : '12px 16px', borderColor: guardado ? 'var(--df-brand-border)' : 'var(--df-border)' }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Icono nombre="personalidad" tam={20} degradado />
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontWeight: 800, fontSize: 14 }}>Instrucciones maestras de tu marca {guardado && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--df-brand-dark)', background: 'var(--df-brand-subtle-2)', borderRadius: 999, padding: '2px 8px', marginLeft: 4 }}>activas</span>}</div>
+          {!abierto && <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{guardado || 'Escribe una vez cómo es tu marca y la IA lo aplica en cada foto, video y campaña.'}</div>}
+        </div>
+        {!abierto && <button onClick={() => setAbierto(true)} style={btnGris}>{guardado ? 'Editar' : 'Escribirlas'}</button>}
+      </div>
+      {abierto && (
+        <>
+          <div style={{ fontSize: 12.5, color: 'var(--df-text-muted)', margin: '8px 0 10px', lineHeight: 1.55 }}>Se agregan a <b>todo</b> lo que generes: fotos, guiones y tomas de video UGC, e imágenes de campañas. Escribe el estilo de tu marca, colores, el tipo de personas o lugares, y lo que nunca debe salir.</div>
+          <textarea value={texto} onChange={(e) => setTexto(e.target.value.slice(0, 2000))} rows={5} placeholder={'Ej: Marca juvenil y femenina. Colores beige, blanco y dorado. Fondos limpios y luz natural. Modelos latinas de 20 a 35 años. Nunca mostrar precios tachados ni la palabra «barato». Tono cercano y alegre.'} style={{ ...input, resize: 'vertical', lineHeight: 1.5 }} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+            <button onClick={() => void guardar()} disabled={guardando} style={{ ...btn, padding: '9px 16px', fontSize: 13.5, opacity: guardando ? 0.7 : 1 }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+            <button onClick={() => { setTexto(guardado); setAbierto(false); }} style={btnGris}>Cancelar</button>
+            <span style={{ fontSize: 11.5, color: 'var(--df-text-faint)', marginLeft: 'auto' }}>{texto.length}/2000</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function MarketingActivo({ df }: { df: DealFlowState }) {
   const c = df.campana;
   const [paso, setPaso] = useState(1);
-  // Dos espacios: el Estudio de videos y fotos (UGC / e-commerce) y las campañas para Meta.
-  type Vista = 'estudio' | 'ugc' | 'campanas';
-  const [vista, setVista] = useState<Vista>(() => { try { const x = localStorage.getItem('df-mk-vista'); return x === 'ugc' || x === 'campanas' ? x : 'estudio'; } catch { return 'estudio'; } });
+  // Cuatro espacios: Fotos IA (e-commerce), Video UGC, campañas para Meta y la Biblioteca.
+  type Vista = 'estudio' | 'ugc' | 'campanas' | 'biblioteca';
+  const [vista, setVista] = useState<Vista>(() => { try { const x = localStorage.getItem('df-mk-vista'); return x === 'ugc' || x === 'campanas' || x === 'biblioteca' ? x : 'estudio'; } catch { return 'estudio'; } });
   const irA = (v: Vista) => { setVista(v); try { localStorage.setItem('df-mk-vista', v); } catch { /* sin almacenamiento */ } };
   // Al entrar refrescamos campañas y saldo (por ref: las funciones se recrean en cada render).
   const recargar = useRef({ campanas: df.reloadCampanas, creditos: df.reloadCreditos });
@@ -610,7 +717,7 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
         <div style={{ flex: 1, minWidth: 220 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Marketing IA</h1>
           <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>
-            {c ? 'Arma tu campaña paso a paso y publícala en Meta.' : vista === 'estudio' ? 'Crea videos UGC y fotos de producto con IA para vender en redes y en tu tienda.' : vista === 'ugc' ? 'Una persona creada con IA presenta tu producto, habla en español y muestra la oferta. Hecho con Seedance.' : 'Campañas completas: la IA estudia tu producto, crea las imágenes, escribe los textos y la publica.'}
+            {c ? 'Arma tu campaña paso a paso y publícala en Meta.' : vista === 'estudio' ? 'Fotos para vender: fondo blanco, en uso, con modelo, testimonios, banners y detalle. Tú eliges el tipo y escribes tu prompt.' : vista === 'ugc' ? 'Una persona (creada con IA o tu propio modelo) presenta tu producto, habla en español y muestra la oferta. Hecho con Seedance.' : vista === 'biblioteca' ? 'Todo lo que generas y subes, en un solo lugar.' : 'Campañas completas: la IA estudia tu producto, crea las imágenes (o usas tus fotos y videos), escribe los textos y la publica.'}
           </p>
         </div>
         {(c || vista !== 'estudio') && (
@@ -624,7 +731,7 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
 
       {!c && (
         <div style={{ display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%', gap: 4, padding: 4, background: 'var(--df-bg)', border: '1px solid var(--df-border)', borderRadius: 12, marginBottom: 16 }}>
-          {([['estudio', 'Videos y fotos', 'estudio'], ['ugc', 'Video UGC', 'video'], ['campanas', 'Campañas en Meta', 'campana']] as const).map(([v, t, ico]) => (
+          {([['estudio', 'Fotos IA', 'imagen'], ['ugc', 'Video UGC', 'video'], ['campanas', 'Campañas en Meta', 'campana'], ['biblioteca', 'Biblioteca', 'biblioteca']] as const).map(([v, t, ico]) => (
             <button key={v} onClick={() => irA(v)} style={{ background: vista === v ? 'var(--df-surface)' : 'transparent', color: vista === v ? 'var(--df-text)' : 'var(--df-text-muted)', border: 'none', borderRadius: 9, padding: '8px 16px', fontFamily: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', boxShadow: vista === v ? '0 1px 3px rgba(15,23,42,.12)' : 'none' }}><IcoTexto n={ico} tam={15} />{t}</button>
           ))}
         </div>
@@ -635,15 +742,19 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
           <IconoDF n="rapido" size={28} />
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--df-warning)' }}>Te quedaste sin créditos</div>
-            <div style={{ color: 'var(--df-warning)', fontSize: 13, marginTop: 2 }}>Recarga en «Videos y fotos» → Recargar créditos para seguir generando.</div>
+            <div style={{ color: 'var(--df-warning)', fontSize: 13, marginTop: 2 }}>Recarga en «Fotos IA» → Recargar créditos para seguir generando.</div>
           </div>
         </div>
       )}
+
+      {!c && vista !== 'biblioteca' && <InstruccionesMaestras />}
 
       {!c && vista === 'estudio' ? (
         <EstudioCreativos df={df} />
       ) : !c && vista === 'ugc' ? (
         <VideoUGC df={df} onIrEstudio={() => irA('estudio')} />
+      ) : !c && vista === 'biblioteca' ? (
+        <BibliotecaMarketing />
       ) : !c ? (
         <ListaCampanas df={df} />
       ) : (

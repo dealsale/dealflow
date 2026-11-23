@@ -1,5 +1,5 @@
 import { mensajesDe as mensajesInicialesDe, normalizarMensajes, principal } from './mensajesIniciales.js';
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { rutasEscritorio } from './escritorioRutas.js';
 import type { Request as ExRequest, Response as ExResponse } from 'express';
 import { trazar, conPedido } from './trazabilidad.js';
@@ -2890,7 +2890,7 @@ api.post('/campanas/:id/publicar', requireAuth, requireStore, requireMarketingIA
     descripcionIdx: Number(b.descripcionIdx) || 0, creativoIdx: Number(b.creativoIdx) || 0,
   });
   if (r.error) return res.status(400).json({ error: r.error });
-  res.json({ ok: true, ids: r.ids });
+  res.json({ ok: true, ids: r.ids, enProceso: !!r.enProceso });
 });
 
 // ── Estudio de creativos (Marketing IA): videos UGC y fotos, pagados con créditos ──
@@ -2927,6 +2927,12 @@ api.post('/estudio/proyectos/:id/paquete', requireAuth, requireStore, requireMar
   if ('error' in r) return res.status(r.sinCreditos ? 402 : 400).json(r);
   res.json(r);
 });
+// Foto por tipo (fondo blanco, testimonio, con modelo…): se arma el prompt y se genera de una vez.
+api.post('/estudio/proyectos/:id/fotos', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = await (await import('./estudio.js')).crearFoto(req.user!.storeId!, req.params.id, req.body || {});
+  if ('error' in r) return res.status(r.sinCreditos ? 402 : 400).json(r);
+  res.json(r);
+});
 api.post('/estudio/proyectos/:id/piezas', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   const r = (await import('./estudio.js')).agregarPieza(req.user!.storeId!, req.params.id, req.body || {});
   if ('error' in r) return res.status(400).json(r);
@@ -2938,7 +2944,7 @@ api.patch('/estudio/piezas/:id', requireAuth, requireStore, async (req, res) => 
   res.json(r);
 });
 api.post('/estudio/piezas/:id/generar', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
-  const r = await (await import('./estudio.js')).generarPieza(req.user!.storeId!, req.params.id);
+  const r = await (await import('./estudio.js')).generarSinEsperar(req.user!.storeId!, req.params.id);
   if ('error' in r) return res.status(r.sinCreditos ? 402 : 400).json(r);
   res.json(r);
 });
@@ -2972,6 +2978,36 @@ api.post('/estudio/lanzamientos/:id/reintentar', requireAuth, requireStore, requ
 });
 
 // ── Video UGC con Seedance (Marketing IA, ugc.ts) ───────────────────
+// Modelo propio (foto de una persona real, con su permiso): gratis.
+api.post('/ugc/actores/subir', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = (await import('./ugc.js')).subirActor(req.user!.storeId!, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+
+// ── Biblioteca de Marketing IA (todo lo generado y lo subido) ─────────
+api.get('/marketing/biblioteca', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  res.json({ medios: (await import('./bibliotecaMk.js')).listarBiblioteca(req.user!.storeId!) });
+});
+// El archivo llega crudo (no como data URL) para aguantar videos de hasta ~95 MB.
+api.post('/marketing/biblioteca', requireAuth, requireStore, requireMarketingIA, express.raw({ type: () => true, limit: '96mb' }), async (req, res) => {
+  const r = await (await import('./bibliotecaMk.js')).subirMedio(req.user!.storeId!, req.body as Buffer, String(req.query.nombre || ''));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+api.delete('/marketing/biblioteca/:id', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = (await import('./bibliotecaMk.js')).borrarMedio(req.user!.storeId!, String(req.params.id));
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+// Instrucciones maestras de la tienda: se agregan a todo lo que genera (fotos, videos, campañas).
+api.get('/marketing/instrucciones', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  res.json({ texto: (await import('./mkAjustes.js')).instruccionesMaestras(req.user!.storeId!) });
+});
+api.put('/marketing/instrucciones', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  res.json({ texto: (await import('./mkAjustes.js')).guardarInstrucciones(req.user!.storeId!, String(req.body?.texto || '')) });
+});
+
 api.get('/ugc', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   res.json((await import('./ugc.js')).estadoUgc(req.user!.storeId!));
 });

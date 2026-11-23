@@ -3393,10 +3393,11 @@ export function useDealFlowState() {
     setMkLoading(true); setMkError('');
     return apiPublicarCampana(id, b).then((r) => {
       setMkLoading(false);
-      if (r.error || !r.data) { setMkError(r.error || 'Meta no aceptó la publicación.'); return false; }
+      if (r.error || !r.data) { setMkError(r.error || 'Meta no aceptó la publicación.'); return false as const; }
       setCampana((c) => (c && c.id === id ? { ...c, estado: 'publicada' } : c));
       void reloadCampanas();
-      return true;
+      // Con video, Meta lo procesa unos minutos: la campaña se termina de crear sola.
+      return (r.data as { enProceso?: boolean }).enProceso ? 'video' as const : true as const;
     });
   }
 
