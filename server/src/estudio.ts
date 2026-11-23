@@ -188,9 +188,24 @@ export function subirReferencia(b: Record<string, unknown>, quien: string): { id
   const m = /^data:(video\/(mp4|quicktime|webm));base64,(.+)$/s.exec(txt(b.videoDataUrl));
   if (!m) return { error: 'Sube un video MP4, MOV o WEBM.' };
   const buf = Buffer.from(m[3], 'base64');
-  if (buf.length > 18 * 1024 * 1024) return { error: 'El video pesa más de 18 MB. Usa uno más corto (los anuncios de referencia de 15–60 s bastan).' };
+  if (buf.length > 18 * 1024 * 1024) return { error: 'El video pesa más de 18 MB. Usa uno más corto (los anuncios de referencia de 15–60 s bastan) o súbelo desde un enlace.' };
+  return guardarReferencia(buf, m[2], b, quien);
+}
+
+/** Referencia desde un ENLACE directo al video (p. ej. de otra plataforma): DealFlow lo baja (hasta 80 MB) y lo analiza. */
+export async function subirReferenciaDesdeEnlace(b: Record<string, unknown>, quien: string): Promise<{ id: string } | { error: string }> {
+  const { descargarVideoSeguro } = await import('./descargaSegura.js');
+  const d = await descargarVideoSeguro(txt(b.url).trim());
+  if ('error' in d) return d;
+  let archivo = txt(b.url).split('?')[0].split('/').pop() || '';
+  try { archivo = decodeURIComponent(archivo); } catch { /* nombre raro: se deja igual */ }
+  const titulo = txt(b.titulo).trim() || archivo.replace(/\.[^.]+$/, '').slice(0, 60);
+  return guardarReferencia(d.buf, d.tipo.split('/')[1], { ...b, titulo }, quien);
+}
+
+function guardarReferencia(buf: Buffer, subtipo: string, b: Record<string, unknown>, quien: string): { id: string } {
   const id = uid();
-  const ext = m[2] === 'quicktime' ? 'mov' : m[2];
+  const ext = subtipo === 'quicktime' ? 'mov' : subtipo;
   const file = `${id}.${ext}`;
   writeFileSync(path.join(mediaDir(DIR_REF), file), buf);
   const estilo = ['ugc', 'ecommerce', 'general'].includes(txt(b.estilo)) ? txt(b.estilo) : 'general';

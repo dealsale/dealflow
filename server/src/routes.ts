@@ -3040,6 +3040,13 @@ api.post('/admin/estudio/referencias', requireAuth, requireAdmin, async (req, re
   registrarAccionEquipo(req.user!.email, `Subió un video de referencia al Estudio IA (${String(req.body?.titulo || '').slice(0, 60)})`);
   res.json(r);
 });
+// Desde un enlace directo al video (sin el límite de 18 MB de la subida desde el navegador).
+api.post('/admin/estudio/referencias/enlace', requireAuth, requireAdmin, async (req, res) => {
+  const r = await (await import('./estudio.js')).subirReferenciaDesdeEnlace(req.body || {}, req.user!.email);
+  if ('error' in r) return res.status(400).json(r);
+  registrarAccionEquipo(req.user!.email, `Subió un video de referencia al Estudio IA desde un enlace (${String(req.body?.titulo || '').slice(0, 60)})`);
+  res.json(r);
+});
 api.patch('/admin/estudio/referencias/:id', requireAuth, requireAdmin, async (req, res) => {
   (await import('./estudio.js')).editarReferencia(req.params.id, req.body || {});
   res.json({ ok: true });

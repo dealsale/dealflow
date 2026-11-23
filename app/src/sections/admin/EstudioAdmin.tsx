@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { IcoTexto } from '../../components/Icono';
 import { confirmar, notificar } from '../../components/dialogs';
 import {
-  apiAdminEstudio, apiAdminEstudioAnalizar, apiAdminEstudioBorrar, apiAdminEstudioEditar, apiAdminEstudioIndicaciones, apiAdminEstudioSubir,
+  apiAdminEstudio, apiAdminEstudioAnalizar, apiAdminEstudioBorrar, apiAdminEstudioEditar, apiAdminEstudioIndicaciones, apiAdminEstudioSubir, apiAdminEstudioEnlace,
   type ReferenciaEstudio,
 } from '../../lib/api';
 
@@ -28,6 +28,7 @@ export function EstudioAdmin() {
   const [estilo, setEstilo] = useState<'ugc' | 'ecommerce' | 'general'>('ugc');
   const [archivo, setArchivo] = useState<File | null>(null);
   const [subiendo, setSubiendo] = useState(false);
+  const [enlace, setEnlace] = useState('');
   const cargar = useRef(() => Promise.resolve());
   cargar.current = () => apiAdminEstudio().then((r) => { if (r.data) { setRefs(r.data.referencias); setIndicaciones((v) => (v === guardadas ? r.data!.indicaciones : v)); setGuardadas(r.data.indicaciones); } });
   useEffect(() => { void cargar.current(); }, []);
@@ -47,6 +48,17 @@ export function EstudioAdmin() {
     if (r.error) { notificar(r.error, 'error'); return; }
     setTitulo(''); setArchivo(null);
     notificar('Video subido. La IA lo está analizando (cuadros + audio).');
+    void cargar.current();
+  };
+  // Desde un enlace directo al video (sin el límite de 18 MB): DealFlow lo baja y lo analiza.
+  const subirEnlace = async () => {
+    if (!/^https:\/\//i.test(enlace.trim())) { notificar('Pega el enlace completo del video (empieza por https://).', 'error'); return; }
+    setSubiendo(true);
+    const r = await apiAdminEstudioEnlace({ titulo, estilo, url: enlace.trim() });
+    setSubiendo(false);
+    if (r.error) { notificar(r.error, 'error'); return; }
+    setTitulo(''); setEnlace('');
+    notificar('Video bajado. La IA lo está analizando (cuadros + audio).');
     void cargar.current();
   };
   const guardarIndicaciones = async () => {
@@ -80,6 +92,11 @@ export function EstudioAdmin() {
         </div>
         <button onClick={() => void subir()} disabled={!archivo || subiendo} style={{ ...btn, opacity: !archivo || subiendo ? 0.5 : 1 }}>{subiendo ? 'Subiendo…' : 'Subir y analizar'}</button>
         <span style={{ fontSize: 12, color: 'var(--df-text-faint)', marginLeft: 10 }}>Videos de 15–60 s funcionan mejor. El análisis lo paga DealFlow (no gasta créditos de nadie).</span>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+          <input value={enlace} onChange={(e) => setEnlace(e.target.value)} placeholder="…o pega el enlace directo al video (.mp4), hasta 80 MB" style={{ ...input, flex: '1 1 320px' }} />
+          <button onClick={() => void subirEnlace()} disabled={!enlace.trim() || subiendo} style={{ ...btnGris, padding: '9px 14px', opacity: !enlace.trim() || subiendo ? 0.5 : 1 }}>{subiendo ? 'Bajando…' : 'Subir desde enlace'}</button>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--df-text-faint)', marginTop: 6 }}>La IA usa las 5 referencias más recientes de cada estilo: sube pocas y buenas.</div>
       </div>
 
       {!refs ? <div className="df-est-cargando" style={{ height: 120, borderRadius: 14 }} /> : refs.length === 0 ? (

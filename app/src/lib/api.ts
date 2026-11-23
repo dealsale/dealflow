@@ -1462,6 +1462,8 @@ export interface ReferenciaEstudio { id: string; titulo: string; estilo: 'ugc' |
 export const apiAdminEstudio = () => reqBase<{ indicaciones: string; referencias: ReferenciaEstudio[] }>('/api/admin/estudio', 'GET');
 export const apiAdminEstudioIndicaciones = (texto: string) => req<{ ok: true }>('/api/admin/estudio/indicaciones', 'PUT', { texto });
 export const apiAdminEstudioSubir = (b: { titulo: string; estilo: string; videoDataUrl: string }) => req<{ id: string }>('/api/admin/estudio/referencias', 'POST', b);
+/** Referencia desde el enlace directo a un video (DealFlow lo baja; hasta 80 MB). */
+export const apiAdminEstudioEnlace = (b: { titulo: string; estilo: string; url: string }) => req<{ id: string }>('/api/admin/estudio/referencias/enlace', 'POST', b);
 export const apiAdminEstudioEditar = (id: string, b: Partial<Pick<ReferenciaEstudio, 'guia' | 'titulo' | 'estilo' | 'activa'>>) => reqBase<{ ok: true }>(`/api/admin/estudio/referencias/${id}`, 'PATCH', b);
 export const apiAdminEstudioAnalizar = (id: string) => reqBase<{ ok: true }>(`/api/admin/estudio/referencias/${id}/analizar`, 'POST');
 export const apiAdminEstudioBorrar = (id: string) => req<{ ok: true }>(`/api/admin/estudio/referencias/${id}`, 'DELETE');
