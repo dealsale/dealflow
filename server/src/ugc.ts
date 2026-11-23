@@ -153,7 +153,9 @@ function diasCara(a: Fila): number {
   return Number.isFinite(t) ? Math.max(0, Math.ceil((t + DIAS_CARA * 86_400_000 - Date.now()) / 86_400_000)) : 0;
 }
 function aptoVideo(a: Fila): { listo: boolean; aviso: string } {
-  if (txt(a.asset_id)) return { listo: true, aviso: '' };
+  // Los códigos de BytePlus (asset-…) necesitan el «Asset Service», que la cuenta no tiene, y los personajes de
+  // su biblioteca son solo para pruebas: ya no sirven para video.
+  if (txt(a.asset_id) || txt(a.origen) === 'byteplus') return { listo: false, aviso: 'Usa un código de BytePlus, que no funciona en tu cuenta. Crea un presentador con IA.' };
   if (txt(a.origen) === 'seedream') {
     const d = diasCara(a);
     return d > 0 ? { listo: true, aviso: `Sirve para video ${d} día${d === 1 ? '' : 's'} más` } : { listo: false, aviso: 'Venció: BytePlus solo acepta caras de los últimos 30 días. Crea uno nuevo.' };
@@ -419,8 +421,7 @@ async function lanzarToma(storeId: string, videoId: string, i: number): Promise<
   const actor = txt(v.actor_id) === SIN_PERSONA ? undefined : db.prepare('SELECT * FROM ugc_actores WHERE id = ?').get(txt(v.actor_id)) as Fila | undefined;
   const conVoz = config.voz.modo === 'persona' && !!actor;
   const refs: string[] = [];
-  if (actor && txt(actor.asset_id)) refs.push(`asset://${txt(actor.asset_id)}`);
-  else if (actor && aptoVideo(actor).listo) { const buf = await bytesDe(storeId, txt(actor.imagen)); const u = buf ? dataUrlOriginal(buf) : ''; if (u) refs.push(u); }
+  if (actor && aptoVideo(actor).listo) { const buf = await bytesDe(storeId, txt(actor.imagen)); const u = buf ? dataUrlOriginal(buf) : ''; if (u) refs.push(u); }
   if (actor && !refs.length) { fallaToma(storeId, videoId, i, 'No encontramos la foto del presentador. Crea uno nuevo.'); return; }
   const personaRef = refs.length > 0;
   for (const f of config.producto.fotos.slice(0, 3)) { const r = await referencia(storeId, f); if (r) refs.push(r); }

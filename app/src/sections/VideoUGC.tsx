@@ -3,10 +3,11 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { confirmar, notificar } from '../components/dialogs';
 import {
-  apiUgc, apiUgcBorrar, apiUgcBorrarActor, apiUgcGenerar, apiUgcGuardar, apiUgcGuion, apiUgcMontar, apiUgcNuevo, apiUgcRehacer, apiUgcCrearActor, apiUgcVideo,
+  apiUgc, apiUgcBorrar, apiUgcBorrarActor, apiUgcGenerar, apiUgcGuardar, apiUgcGuion, apiUgcMontar, apiUgcNuevo, apiUgcRehacer, apiUgcCrearActor, apiUgcVideo, apiMkBibliotecaSubir,
   type ActorUgc, type ConfigUgc, type EstadoUgc, type ParteGuionUgc, type VideoUgc,
 } from '../lib/api';
 import { Icono } from '../components/Icono';
+import { BibliotecaMarketing } from './BibliotecaMarketing';
 
 /**
  * Video UGC con Seedance (Marketing IA): producto → personaje y voz → guion → generar.
@@ -150,43 +151,84 @@ export function VideoUGC({ df, onIrEstudio }: { df: DealFlowState; onIrEstudio: 
 
 type Cambiar = (c: { config?: Partial<ConfigUgc>; guion?: ParteGuionUgc[]; actorId?: string }) => void;
 
+const OTRO = 'otro';
 function PasoProducto({ df, v, cambiar, bloqueado }: { df: DealFlowState; v: VideoUgc; cambiar: Cambiar; bloqueado: boolean }) {
   const productos = df.products.filter((p) => p.tipo !== 'servicio');
   const prod = productos.find((p) => String(p.id) === v.config.producto.id);
-  const fotos = prod ? fotosDe(prod) : [];
+  const otro = v.config.producto.id === OTRO;
+  const fotosCatalogo = prod ? fotosDe(prod) : [];
+  // Fotos propias (subidas aquí o elegidas de la Biblioteca): las que no son del catálogo.
+  const propias = v.config.producto.fotos.filter((f) => !fotosCatalogo.includes(f));
+  const fotos = [...fotosCatalogo, ...propias];
+  const [subiendo, setSubiendo] = useState<number | null>(null);
+  const [verBiblioteca, setVerBiblioteca] = useState(false);
   const elegir = (id: string) => {
+    if (id === OTRO) return cambiar({ config: { producto: { id: OTRO, nombre: '', fotos: [], notas: '', precio: 0 } } });
     const p = productos.find((x) => String(x.id) === id);
     if (!p) return;
     const notas = [p.descripcion, p.caracteristicas].filter(Boolean).join(' ').replace(/\s+/g, ' ').slice(0, 400);
     cambiar({ config: { producto: { id: String(p.id), nombre: p.nombre, fotos: fotosDe(p).slice(0, 3), notas, precio: p.precioPromo || p.precio } } });
   };
   const sel = new Set(v.config.producto.fotos);
-  const toggle = (f: string) => {
-    const l = sel.has(f) ? v.config.producto.fotos.filter((x) => x !== f) : [...v.config.producto.fotos, f].slice(0, 4);
-    cambiar({ config: { producto: { ...v.config.producto, fotos: l } } });
+  const ponerFotos = (l: string[]) => cambiar({ config: { producto: { ...v.config.producto, fotos: l } } });
+  const toggle = (f: string) => ponerFotos(sel.has(f) ? v.config.producto.fotos.filter((x) => x !== f) : [...v.config.producto.fotos, f].slice(0, 4));
+  // Las fotos se agregan de una en una (subir varias): se lee la lista más reciente con una referencia.
+  const actuales = useRef(v.config.producto.fotos);
+  actuales.current = v.config.producto.fotos;
+  const agregar = (url: string) => {
+    const l = actuales.current;
+    if (l.includes(url)) return;
+    if (l.length >= 4) { notificar('Ya tienes 4 fotos elegidas: quita una para agregar otra.', 'error'); return; }
+    actuales.current = [...l, url];
+    ponerFotos(actuales.current);
   };
+  const subir = async (archivo: File) => {
+    if (!archivo.type.startsWith('image/')) { notificar('Sube una foto (JPG, PNG o WEBP).', 'error'); return; }
+    setSubiendo(0);
+    const r = await apiMkBibliotecaSubir(archivo, setSubiendo);
+    setSubiendo(null);
+    if (r.error || !r.data) { notificar(r.error || 'No se pudo subir la foto.', 'error'); return; }
+    agregar(r.data.medio.url);
+  };
+  const cuadro: React.CSSProperties = { width: 84, height: 84, borderRadius: 10, flexShrink: 0 };
   return (
     <section style={card} aria-labelledby="ugc1">
       <h2 id="ugc1" style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>1. ¿Qué producto vas a mostrar?</h2>
       <label style={lb}>Producto
-        <Dropdown ariaLabel="Producto" placeholder="Elige un producto…" value={v.config.producto.id} onChange={(x) => !bloqueado && elegir(x)} options={productos.map((p) => ({ value: String(p.id), label: p.nombre }))} />
+        <Dropdown ariaLabel="Producto" placeholder="Elige un producto…" value={v.config.producto.id} onChange={(x) => !bloqueado && elegir(x)}
+          options={[...productos.map((p) => ({ value: String(p.id), label: p.nombre })), { value: OTRO, label: '✏️ Otro producto (escribo el nombre)' }]} />
       </label>
-      {prod && (
+      {otro && (
+        <label style={lb}>Nombre del producto
+          <input value={v.config.producto.nombre} disabled={bloqueado} onChange={(e) => cambiar({ config: { producto: { ...v.config.producto, nombre: e.target.value } } })} placeholder="Ej: Conjunto deportivo ALLO" style={input} />
+        </label>
+      )}
+      {(prod || otro) && (
         <>
-          <div style={lb}>Fotos que usa la IA (hasta 4; con varios ángulos el producto sale más fiel). Elige fotos SIN caras de personas (solo el producto o la prenda): Seedance bloquea las fotos con caras.
-            {fotos.length ? (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {fotos.map((f) => {
-                  const on = sel.has(f);
-                  return (
-                    <button key={f.slice(-40)} onClick={() => !bloqueado && toggle(f)} aria-pressed={on} style={{ width: 84, height: 84, borderRadius: 10, padding: 0, overflow: 'hidden', cursor: 'pointer', border: `3px solid ${on ? 'var(--df-brand)' : 'var(--df-border)'}`, opacity: on ? 1 : 0.55, background: 'var(--df-bg)' }}>
-                      <img src={f} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </button>
-                  );
-                })}
-              </div>
-            ) : <span style={{ fontWeight: 500, color: 'var(--df-warning)' }}>Este producto no tiene fotos. Súbelas en Productos para poder hacer el video.</span>}
+          <div style={lb}>Fotos que usa la IA (hasta 4; con varios ángulos el producto sale más fiel). Usa fotos SIN caras de personas (solo el producto o la prenda): Seedance bloquea las fotos con caras.
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {fotos.map((f) => {
+                const on = sel.has(f);
+                return (
+                  <button key={f.slice(-48)} onClick={() => !bloqueado && toggle(f)} aria-pressed={on} title={on ? 'Quitar de este video' : 'Usar en este video'} style={{ ...cuadro, padding: 0, overflow: 'hidden', cursor: 'pointer', border: `3px solid ${on ? 'var(--df-brand)' : 'var(--df-border)'}`, opacity: on ? 1 : 0.55, background: 'var(--df-bg)' }}>
+                    <img src={f} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </button>
+                );
+              })}
+              <label title="Sube tus propias fotos del producto" style={{ ...cuadro, boxSizing: 'border-box', border: '1.5px dashed var(--df-border-strong)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, cursor: bloqueado || subiendo !== null ? 'default' : 'pointer', fontSize: 11.5, fontWeight: 700, color: 'var(--df-text-muted)', textAlign: 'center', background: 'var(--df-bg)' }}>
+                {subiendo !== null ? <span>Subiendo… {subiendo}%</span> : <><span style={{ fontSize: 20, lineHeight: 1 }}>+</span><span>Subir foto</span></>}
+                <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={bloqueado || subiendo !== null} style={{ display: 'none' }}
+                  onChange={(e) => { const l = [...(e.target.files || [])]; e.target.value = ''; void (async () => { for (const a of l) await subir(a); })(); }} />
+              </label>
+            </div>
+            {!fotos.length && <span style={{ fontWeight: 500, color: 'var(--df-warning)' }}>Sube al menos una foto del producto o elígela de tu Biblioteca.</span>}
+            <button onClick={() => setVerBiblioteca(!verBiblioteca)} disabled={bloqueado} style={{ ...btnGris, alignSelf: 'flex-start', padding: '6px 12px', fontSize: 12.5 }}>{verBiblioteca ? 'Cerrar Biblioteca' : 'Elegir de mi Biblioteca'}</button>
           </div>
+          {verBiblioteca && (
+            <div style={{ border: '1px dashed var(--df-border-strong)', borderRadius: 12, padding: 10 }}>
+              <BibliotecaMarketing soloElegir soloFotos onElegir={(m) => { if (m.tipo !== 'imagen') { notificar('Para el producto usa fotos, no videos.', 'error'); return; } agregar(m.url); setVerBiblioteca(false); }} />
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 10 }}>
             <label style={lb}>Lo que lo hace especial (lo usa la IA para el guion)
               <textarea rows={3} value={v.config.producto.notas} disabled={bloqueado} onChange={(e) => cambiar({ config: { producto: { ...v.config.producto, notas: e.target.value } } })} placeholder="Ej: tela fría, no se arruga, tallas S a XL" style={{ ...input, resize: 'vertical' }} />
@@ -356,7 +398,7 @@ function PasoGenerar({ est, v, cambiar, bloqueado, onVideo, guardarYa, onIrEstud
   const faltan: string[] = [];
   if (!v.config.producto.nombre || !v.config.producto.fotos.length) faltan.push('el producto con fotos');
   if (!v.actorId) faltan.push('quién lo presenta');
-  else if (v.actorId !== 'sin-persona' && !est.actores.find((a) => a.id === v.actorId)?.listo) faltan.push('un presentador que sirva para video (paso 2)');
+  else if (v.actorId !== 'sin-persona') { const a = est.actores.find((x) => x.id === v.actorId); if (!a?.listo) faltan.push(a ? `cambiar de presentador: «${a.nombre}» ya no sirve para video (paso 2)` : 'quién lo presenta (paso 2)'); }
   if (v.guion.some((p) => !p.texto && !p.escena)) faltan.push('el guion');
   const generar = async () => {
     await guardarYa();

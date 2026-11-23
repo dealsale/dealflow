@@ -670,7 +670,7 @@ function MarketingActivo({ df }: { df: DealFlowState }) {
         <div style={{ flex: 1, minWidth: 220 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px' }}>Marketing IA</h1>
           <p style={{ color: 'var(--df-text-muted)', fontSize: 14, margin: 0 }}>
-            {c ? 'Arma tu campaña paso a paso y publícala en Meta.' : vista === 'ugc' ? 'Videos UGC con Seedance: una persona (de BytePlus o tu modelo autorizado) o solo el producto, con voz en español y la oferta.' : vista === 'biblioteca' ? 'Todo lo que generas y subes, en un solo lugar.' : 'Campañas para Meta con tus fotos o videos: la IA estudia tu producto, escribe los textos y la publica.'}
+            {c ? 'Arma tu campaña paso a paso y publícala en Meta.' : vista === 'ugc' ? 'Videos UGC con Seedance: un presentador creado con IA o solo el producto, con voz en español y la oferta.' : vista === 'biblioteca' ? 'Todo lo que generas y subes, en un solo lugar.' : 'Campañas para Meta con tus fotos o videos: la IA estudia tu producto, escribe los textos y la publica.'}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

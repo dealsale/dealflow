@@ -24,7 +24,7 @@ type Filtro = typeof FILTROS[number]['id'];
 const ORIGEN: Record<MedioBiblioteca['origen'], string> = { fotos: 'Fotos IA', ugc: 'Video UGC', subido: 'Subido por ti', modelo: 'Modelo', campana: 'Campaña', video: 'Video IA' };
 const fecha = (f: string) => { const d = new Date(f.replace(' ', 'T') + (f.includes('Z') || f.includes('+') ? '' : 'Z')); return isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }); };
 
-export function BibliotecaMarketing({ onElegir, soloElegir = false }: { onElegir?: (m: MedioBiblioteca) => void; soloElegir?: boolean }) {
+export function BibliotecaMarketing({ onElegir, soloElegir = false, soloFotos = false }: { onElegir?: (m: MedioBiblioteca) => void; soloElegir?: boolean; soloFotos?: boolean }) {
   const [medios, setMedios] = useState<MedioBiblioteca[] | null>(null);
   const [filtro, setFiltro] = useState<Filtro>('todo');
   const [subiendo, setSubiendo] = useState<{ nombre: string; pct: number } | null>(null);
@@ -59,7 +59,7 @@ export function BibliotecaMarketing({ onElegir, soloElegir = false }: { onElegir
         <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontWeight: 800, fontSize: 15.5 }}>{soloElegir ? 'Elige de tu Biblioteca' : 'Tu Biblioteca'}</div>
           <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginTop: 2, lineHeight: 1.5 }}>
-            {soloElegir ? 'Toca «Usar» en la foto o el video que quieras para la campaña.' : 'Tus videos UGC, tus modelos y lo que subes. Descárgalo o úsalo en tus campañas de Meta.'}
+            {soloElegir ? `Toca «Usar» en ${soloFotos ? 'la foto que quieras usar' : 'la foto o el video que quieras para la campaña'}.` : 'Tus videos UGC, tus modelos y lo que subes. Descárgalo o úsalo en tus campañas de Meta.'}
           </div>
         </div>
         <button onClick={() => input.current?.click()} disabled={!!subiendo} style={{ ...btn, opacity: subiendo ? 0.7 : 1 }}><Icono nombre="subir" tam={16} color="#fff" />Subir fotos o videos</button>

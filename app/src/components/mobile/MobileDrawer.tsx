@@ -2,7 +2,29 @@ import type { CSSProperties } from 'react';
 import type { DealFlowState } from '../../hooks/useDealFlowState';
 import type { AdminSection, VendedorSection } from '../../types';
 import logo from '../../assets/logo.png';
-import { IconToggleMode } from '../icons';
+import type { ReactNode } from 'react';
+import {
+  IconAsistente, IconBiblioteca, IconComentarios, IconCRM, IconCuentas, IconDealShop, IconEquipo, IconEstadisticas, IconIntegraciones,
+  IconLandings, IconLeads, IconLogistica, IconMarketing, IconPedidos, IconPlanes, IconProductos, IconResumen, IconToggleMode, IconVentas, IconWhatsApp,
+} from '../icons';
+import { Icono } from '../Icono';
+import { iconoColor } from '../Sidebar';
+
+// Los mismos íconos de colores del menú lateral de escritorio.
+const ICONOS: Record<string, () => ReactNode> = {
+  resumen: () => <IconResumen />, estadisticas: () => <IconEstadisticas />, productos: () => <IconProductos />, landings: () => <IconLandings />,
+  asistente: () => <IconAsistente />, whatsapp: () => <IconWhatsApp />, logistica: () => <IconLogistica />, pedidos: () => <IconPedidos />,
+  crm: () => <IconCRM />, comentarios: () => <IconComentarios />, leads: () => <IconLeads />, marketing: () => <IconMarketing />,
+  anuncios: () => <IconEstadisticas />, biblioteca: () => <IconBiblioteca />, dealshop: () => <IconDealShop />, equipo: () => <IconEquipo />,
+  integraciones: () => <IconIntegraciones />, contabilidad: () => <IconVentas />, planes: () => <IconPlanes />, cuentas: () => <IconCuentas />,
+  cupones: () => <Icono nombre="cupon" tam={17} grosor={1.8} />, superadmin: () => <Icono nombre="web" tam={17} grosor={1.8} />,
+  plantillas: () => <Icono nombre="plantillas" tam={17} grosor={1.8} />, equipoDF: () => <Icono nombre="equipoDF" tam={17} grosor={1.8} />,
+  soporte: () => <Icono nombre="soporte" tam={17} grosor={1.8} />, trazabilidad: () => <Icono nombre="ruta" tam={17} grosor={1.8} />,
+  drive: () => <Icono nombre="nube" tam={17} grosor={1.8} />, proveedores: () => <Icono nombre="aliado" tam={17} grosor={1.8} />,
+  estudio: () => <Icono nombre="estudio" tam={17} grosor={1.8} />,
+};
+/** Ícono de color de la sección (`clave` elige el ícono si difiere del id que da el color). */
+const icono = (id: string, clave = id) => (ICONOS[clave] ? iconoColor(id, ICONOS[clave]()) : null);
 
 const VENDOR_ITEMS: { id: VendedorSection; label: string }[] = [
   { id: 'resumen', label: 'Resumen' },
@@ -75,6 +97,7 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
         {df.isVendedor &&
           VENDOR_ITEMS.filter((m) => df.puedeVerSeccion(m.id)).map((m) => (
             <div key={m.id} onClick={() => df.go(m.id)} style={itemStyle(df.section === m.id)}>
+              {icono(m.id)}
               <span>{m.label}</span>
               {m.id === 'pedidos' && df.hasNewOrders && (
                 <span style={{ marginLeft: 'auto', background: 'var(--df-warning-mid)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '1px 7px' }}>
@@ -95,36 +118,45 @@ export function MobileDrawer({ df }: { df: DealFlowState }) {
             {/* El superadmin ve TODO lo del admin y, además, "Todas las tiendas". */}
             {df.isSuperadmin && (
               <div onClick={() => df.goAdmin('superadmin')} style={itemStyle(df.adminSection === 'superadmin')}>
+                {icono('superadmin')}
                 <span>Todas las tiendas</span>
               </div>
             )}
             {df.isSuperadmin && (
               <div onClick={() => df.goAdmin('plantillas')} style={itemStyle(df.adminSection === 'plantillas')}>
+                {icono('plantillas')}
                 <span>Plantillas WA</span>
               </div>
             )}
             {df.isSuperadmin && (
               <div onClick={() => df.goAdmin('equipo')} style={itemStyle(df.adminSection === 'equipo')}>
+                {icono('equipo', 'equipoDF')}
                 <span>Equipo DealFlow</span>
               </div>
             )}
             <div onClick={() => df.goAdmin('soporte')} style={itemStyle(df.adminSection === 'soporte')}>
+              {icono('soporte')}
               <span>Soporte en vivo</span>
             </div>
             <div onClick={() => df.goAdmin('trazabilidad')} style={itemStyle(df.adminSection === 'trazabilidad')}>
+              {icono('trazabilidad')}
               <span>Trazabilidad</span>
             </div>
-            <a href={'/drive'} target="_blank" rel="noopener" style={{ ...itemStyle(false), textDecoration: 'none', color: 'inherit', display: 'block' }}>
+            <a href={'/drive'} target="_blank" rel="noopener" style={{ ...itemStyle(false), textDecoration: 'none' }}>
+              {icono('drive')}
               <span>Drive del equipo</span>
             </a>
             {!df.isSoporte && <div onClick={() => df.goAdmin('proveedores')} style={itemStyle(df.adminSection === 'proveedores')}>
+              {icono('proveedores')}
               <span>Proveedores</span>
             </div>}
             {!df.isSoporte && <div onClick={() => df.goAdmin('estudio')} style={itemStyle(df.adminSection === 'estudio')}>
+              {icono('estudio')}
               <span>Estudio IA</span>
             </div>}
             {!df.isSoporte && ADMIN_ITEMS.filter((m) => m.id !== 'contabilidad' || df.isSuperadmin).map((m) => (
               <div key={m.id} onClick={() => df.goAdmin(m.id)} style={itemStyle(df.adminSection === m.id)}>
+                {icono(m.id)}
                 <span>{m.label}</span>
               </div>
             ))}
