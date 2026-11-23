@@ -164,7 +164,7 @@ ${pixel ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n
 :root{--p:${d.colorPrincipal};--b:${d.colorBoton};--a:${d.colorAcento};--t:#121212;--m:#6b7280;--bd:#e5e7eb;--g:#f3f3f3}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{margin:0;background:#fff;color:var(--t);font:14px/1.5 Poppins,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
-img{max-width:100%;display:block}button,input,select{font-family:inherit}
+img{max-width:100%;height:auto;display:block}button,input,select{font-family:inherit}
 s{color:#777}
 /* Barra de anuncios en movimiento */
 .ticker{background:var(--p);color:#fff;overflow:hidden;white-space:nowrap;position:relative;z-index:5}
@@ -507,7 +507,7 @@ ${t.pixelMeta ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=functi
 <style>
 :root{--p:${t.colorPrincipal};--b:${t.colorBoton};--a:${t.colorAcento};--t:#121212;--m:#6b7280;--g:#f3f3f3}
 *{box-sizing:border-box}body{margin:0;background:#fff;color:var(--t);font:14px/1.5 Poppins,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-img{max-width:100%;display:block}a{color:inherit}
+img{max-width:100%;height:auto;display:block}a{color:inherit}
 .ticker{background:var(--p);color:#fff;overflow:hidden;white-space:nowrap}
 .ticker .pista{display:inline-flex;animation:correr ${Math.max(18, tira.length * 3)}s linear infinite}
 .ticker span{font:600 13.5px/1 Poppins,sans-serif;letter-spacing:.6px;text-transform:uppercase;padding:13px 0;margin:0 34px}
