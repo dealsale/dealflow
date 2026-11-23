@@ -113,7 +113,8 @@ const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 const h = (v: unknown, norm: (s: string) => string = (s) => s.trim().toLowerCase()) => { const s = norm(String(v || '')); return s ? [sha(s)] : undefined; };
 const lugar = (s: string) => sinTildes(s).toLowerCase().replace(/[^a-z]/g, '');
 export interface Cliente { tel?: string; nombre?: string; apellido?: string; ciudad?: string; departamento?: string; correo?: string }
-export interface Navegador { ip?: string; ua?: string; fbp?: string; fbc?: string; url?: string }
+/** vid: identificador del visitante (cookie _dfvid), el mismo que lleva el píxel del navegador como external_id. */
+export interface Navegador { ip?: string; ua?: string; fbp?: string; fbc?: string; url?: string; vid?: string }
 
 /** fbc desde la cookie o, si no hay, desde el fbclid del enlace del anuncio. */
 function fbcDe(n: Navegador): string {
@@ -125,9 +126,10 @@ function fbcDe(n: Navegador): string {
 function userData(c: Cliente, n: Navegador): Record<string, unknown> {
   const tel = String(c.tel || '').replace(/\D/g, '');
   const tel57 = tel ? (tel.length === 10 ? '57' + tel : tel) : '';
+  const vid = /^[a-f0-9]{64}$/.test(String(n.vid || '')) ? String(n.vid) : ''; // ya viene con forma de SHA-256 (igual que en el navegador)
   const u: Record<string, unknown> = {
     ph: tel57 ? [sha(tel57)] : undefined,
-    external_id: tel57 ? [sha(tel57)] : undefined,
+    external_id: vid || tel57 ? [vid, tel57 ? sha(tel57) : ''].filter(Boolean) : undefined,
     fn: h(c.nombre, (s) => sinTildes(s.trim().split(/\s+/)[0] || '').toLowerCase()),
     ln: h(c.apellido, (s) => sinTildes(s.trim().split(/\s+/)[0] || '').toLowerCase()),
     ct: h(c.ciudad, lugar),

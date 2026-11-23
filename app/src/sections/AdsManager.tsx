@@ -258,11 +258,11 @@ export function AdsManager() {
         <div style={{ overflowX: 'auto', border: '1px solid var(--df-border)', borderRadius: 10 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1060 }}>
             <thead><tr style={{ background: 'var(--df-bg)' }}>
-              {['', 'Campaña', 'Presupuesto diario', 'Gasto', 'Chats', 'Pedidos', 'Compras Meta', 'Entregados', 'Devol.', 'ROAS Meta', 'ROAS esperado', 'Costo/venta', 'Utilidad'].map((h, i) => <th key={i} title={h.includes('Meta') ? 'Lo que reporta Meta con el píxel / API de Conversiones (igual que el Administrador de anuncios)' : undefined} style={{ ...th, textAlign: i >= 3 ? 'right' : 'left' }}>{h}</th>)}
+              {['', 'Campaña', 'Presupuesto diario', 'Gasto', 'Chats', 'Pedidos', 'Ventas', 'Compras Meta', 'Valor Meta', 'Entregados', 'Devol.', 'ROAS Meta', 'ROAS esperado', 'Costo/venta', 'Utilidad'].map((h, i) => <th key={i} title={h.includes('Meta') ? 'Lo que reporta Meta con el píxel / API de Conversiones (igual que el Administrador de anuncios)' : undefined} style={{ ...th, textAlign: i >= 3 ? 'right' : 'left' }}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {!p.campanas.length && <tr><td colSpan={13} style={{ ...td, color: 'var(--df-text-faint)' }}>No hay campañas {p.conectada ? 'en tu cuenta' : '(conecta Meta Ads)'}.</td></tr>}
-              {!!p.campanas.length && !campanasVistas.length && <tr><td colSpan={13} style={{ ...td, color: 'var(--df-text-faint)' }}>Ninguna campaña con ese filtro. <button onClick={() => { setFiltroCamp('todas'); setBuscar(''); }} style={{ ...btnS, padding: '3px 8px' }}>Ver todas</button></td></tr>}
+              {!p.campanas.length && <tr><td colSpan={15} style={{ ...td, color: 'var(--df-text-faint)' }}>No hay campañas {p.conectada ? 'en tu cuenta' : '(conecta Meta Ads)'}.</td></tr>}
+              {!!p.campanas.length && !campanasVistas.length && <tr><td colSpan={15} style={{ ...td, color: 'var(--df-text-faint)' }}>Ninguna campaña con ese filtro. <button onClick={() => { setFiltroCamp('todas'); setBuscar(''); }} style={{ ...btnS, padding: '3px 8px' }}>Ver todas</button></td></tr>}
               {campanasVistas.map((c) => <FilaCampana key={c.id} c={c} abierta={!!abiertas[c.id]} onAbrir={() => setAbiertas((a) => ({ ...a, [c.id]: !a[c.id] }))} ocupado={ocupado}
                 onEstado={cambiarEstado} onPres={cambiarPres} onEditar={(id, nombre, actual) => setEditPres({ id, nombre, actual })} />)}
             </tbody>
@@ -282,10 +282,10 @@ export function AdsManager() {
         <div style={{ overflowX: 'auto', border: '1px solid var(--df-border)', borderRadius: 10 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1250 }}>
             <thead><tr style={{ background: 'var(--df-bg)' }}>
-              {['Anuncio', 'Gasto', 'Clics', 'Visitas web', 'Carritos', 'Chats', 'Respondieron', 'Dieron datos', 'Pedidos', 'Compras Meta', 'Entregados', 'Devueltos', 'CTR', 'Frecuencia', 'ROAS Meta', 'ROAS esperado'].map((h, i) => <th key={h} style={{ ...th, textAlign: i ? 'right' : 'left' }}>{h}</th>)}
+              {['Anuncio', 'Gasto', 'Clics', 'Visitas web', 'Carritos', 'Chats', 'Respondieron', 'Dieron datos', 'Pedidos', 'Ventas', 'Compras Meta', 'Valor Meta', 'Entregados', 'Devueltos', 'CTR', 'Frecuencia', 'ROAS Meta', 'ROAS esperado'].map((h, i) => <th key={h} style={{ ...th, textAlign: i ? 'right' : 'left' }}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {!anunciosVistos.length && <tr><td colSpan={16} style={{ ...td, color: 'var(--df-text-faint)' }}>{p.anuncios.length ? 'Ningún anuncio coincide con la búsqueda.' : 'Sin anuncios con gasto o chats en este periodo.'}</td></tr>}
+              {!anunciosVistos.length && <tr><td colSpan={18} style={{ ...td, color: 'var(--df-text-faint)' }}>{p.anuncios.length ? 'Ningún anuncio coincide con la búsqueda.' : 'Sin anuncios con gasto o chats en este periodo.'}</td></tr>}
               {anunciosVistos.slice(0, verTodosAds || q ? 200 : 15).map((a) => (
                 <tr key={a.id}>
                   <td style={{ ...td, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -298,7 +298,7 @@ export function AdsManager() {
                     </div>
                   </td>
                   <td style={tdN}>{pesos(a.gasto)}</td><td style={tdN}>{a.clics}</td><td style={tdN}>{a.visitas || '—'}</td><td style={tdN}>{a.carritos || '—'}</td><td style={tdN}>{a.chats}</td><td style={tdN}>{a.respondieron}</td><td style={tdN}>{a.dieronDatos}</td>
-                  <td style={tdN}>{a.pedidos - a.cancelados}{a.soloMeta && <Icono nombre="alerta" tam={12} color="#B45309" style={{ marginLeft: 4, verticalAlign: '-0.15em' }} />}</td><td style={tdN}>{a.comprasMeta || '—'}</td><td style={tdN}>{a.entregados}</td><td style={tdN}>{a.devueltos}</td>
+                  <td style={tdN}>{a.pedidos - a.cancelados}{a.soloMeta && <Icono nombre="alerta" tam={12} color="#B45309" style={{ marginLeft: 4, verticalAlign: '-0.15em' }} />}</td><td style={{ ...tdN, fontWeight: 700 }}>{a.ventas ? pesos(a.ventas) : '—'}</td><td style={tdN}>{a.comprasMeta || '—'}</td><td style={tdN}>{a.valorMeta ? pesos(a.valorMeta) : '—'}</td><td style={tdN}>{a.entregados}</td><td style={tdN}>{a.devueltos}</td>
                   <td style={tdN}>{a.ctr ? `${dec(a.ctr)}%` : '—'}</td>
                   <td style={{ ...tdN, color: a.frecuencia >= 3.5 ? 'var(--df-danger-dark)' : undefined }}>{a.frecuencia ? dec(a.frecuencia) : '—'}</td>
                   <td style={tdN}><span style={colorRoas(a.roasMeta, a.comprasMeta ? a.gasto : 0)}>{a.comprasMeta ? dec(a.roasMeta) : '—'}</span></td>
@@ -379,7 +379,7 @@ function FilaCampana({ c, abierta, onAbrir, ocupado, onEstado, onPres, onEditar 
           </button>
         </td>
         <td style={td}>{c.presupuestoEn === 'campaign' ? presBotones(c.id, c.nombre, c.presupuesto) : c.presupuestoEn === 'adset' ? <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>{pesos(c.presupuesto)} en conjuntos ▸</span> : '—'}</td>
-        <td style={tdN}>{pesos(c.gasto)}</td><td style={tdN}>{c.chats}</td><td style={tdN} title={c.soloMeta ? 'Meta reporta compras que no llegaron asignadas a DealFlow: agrega los Parámetros de URL al anuncio' : undefined}>{c.pedidos - c.cancelados}{c.soloMeta && <Icono nombre="alerta" tam={12} color="#B45309" style={{ marginLeft: 4, verticalAlign: '-0.15em' }} />}</td><td style={tdN}>{c.comprasMeta || '—'}</td><td style={tdN}>{c.entregados}</td>
+        <td style={tdN}>{pesos(c.gasto)}</td><td style={tdN}>{c.chats}</td><td style={tdN} title={c.soloMeta ? 'Meta reporta compras que no llegaron asignadas a DealFlow: agrega los Parámetros de URL al anuncio' : undefined}>{c.pedidos - c.cancelados}{c.soloMeta && <Icono nombre="alerta" tam={12} color="#B45309" style={{ marginLeft: 4, verticalAlign: '-0.15em' }} />}</td><td style={{ ...tdN, fontWeight: 700 }}>{c.ventas ? pesos(c.ventas) : '—'}</td><td style={tdN}>{c.comprasMeta || '—'}</td><td style={tdN}>{c.valorMeta ? pesos(c.valorMeta) : '—'}</td><td style={tdN}>{c.entregados}</td>
         <td style={tdN}>{c.entregados + c.devueltos ? `${c.tasaDevolucion}%` : '—'}</td>
         <td style={tdN}><span style={colorRoas(c.roasMeta, c.comprasMeta ? c.gasto : 0)}>{c.comprasMeta ? dec(c.roasMeta) : '—'}</span></td>
         <td style={tdN}><span style={colorRoas(c.roasNeto, c.gasto)}>{c.gasto ? dec(c.roasNeto) : '—'}</span></td>
@@ -395,7 +395,7 @@ function FilaCampana({ c, abierta, onAbrir, ocupado, onEstado, onPres, onEditar 
             {!c.activa && a.activa && <div style={{ fontSize: 11, color: 'var(--df-warning)', fontWeight: 600 }}>No está corriendo: su campaña está en pausa</div>}
           </td>
           <td style={td}>{a.presupuesto ? presBotones(a.id, a.nombre, a.presupuesto) : <span style={{ fontSize: 12, color: 'var(--df-text-muted)' }}>de la campaña</span>}</td>
-          <td style={tdN}>{pesos(a.gasto)}</td><td style={tdN}>{a.chats}</td><td style={tdN} title={a.soloMeta ? 'Meta reporta compras que no llegaron asignadas a DealFlow: agrega los Parámetros de URL al anuncio' : undefined}>{a.pedidos - a.cancelados}{a.soloMeta && <Icono nombre="alerta" tam={12} color="#B45309" style={{ marginLeft: 4, verticalAlign: '-0.15em' }} />}</td><td style={tdN}>{a.comprasMeta || '—'}</td><td style={tdN}>{a.entregados}</td>
+          <td style={tdN}>{pesos(a.gasto)}</td><td style={tdN}>{a.chats}</td><td style={tdN} title={a.soloMeta ? 'Meta reporta compras que no llegaron asignadas a DealFlow: agrega los Parámetros de URL al anuncio' : undefined}>{a.pedidos - a.cancelados}{a.soloMeta && <Icono nombre="alerta" tam={12} color="#B45309" style={{ marginLeft: 4, verticalAlign: '-0.15em' }} />}</td><td style={{ ...tdN, fontWeight: 700 }}>{a.ventas ? pesos(a.ventas) : '—'}</td><td style={tdN}>{a.comprasMeta || '—'}</td><td style={tdN}>{a.valorMeta ? pesos(a.valorMeta) : '—'}</td><td style={tdN}>{a.entregados}</td>
           <td style={tdN}>{a.entregados + a.devueltos ? `${a.tasaDevolucion}%` : '—'}</td>
           <td style={tdN}><span style={colorRoas(a.roasMeta, a.comprasMeta ? a.gasto : 0)}>{a.comprasMeta ? dec(a.roasMeta) : '—'}</span></td>
           <td style={tdN}><span style={colorRoas(a.roasNeto, a.gasto)}>{a.gasto ? dec(a.roasNeto) : '—'}</span></td>

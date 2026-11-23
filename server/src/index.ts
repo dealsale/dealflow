@@ -102,7 +102,8 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Dominio propio de una tienda (tutienda.com/producto): solo se sirven sus landings,
 // sus imágenes y su formulario; nada del panel de DealFlow responde en ese dominio.
-app.get('/l/ping', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ df: 'landings', host: String(req.headers['x-df-host'] || req.headers['x-forwarded-host'] || req.headers.host || '') }); });
+// ip: la que se le manda a Meta con los eventos de la landing (para revisar que sea la del visitante y no la de Cloudflare).
+app.get('/l/ping', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ df: 'landings', host: String(req.headers['x-df-host'] || req.headers['x-forwarded-host'] || req.headers.host || ''), ip: String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim() }); });
 app.use(async (req, res, next) => {
   const host = String(req.headers['x-df-host'] || req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase();
   if (!host || /(^|\.)dealflow\.(sbs|co)(:\d+)?$|^localhost|^127\.|railway\.app(:\d+)?$/.test(host)) return next();
@@ -242,7 +243,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'landings-nombres-11222300',
+    build: 'pixel-ventas-11230900',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

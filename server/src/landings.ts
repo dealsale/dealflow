@@ -834,7 +834,7 @@ export async function pedidoLanding(landingId: string, b: Fila, ip: string, ua =
     storeId, pixelId: pixel, landingId, evento: 'Purchase', eventId: oid, valor: bundle.precio, guardarPayload: true,
     contenido: { nombre: d.nombre, cantidad: bundle.cantidad },
     cliente: { tel, nombre: corto(b.nombre, 60), apellido: corto(b.apellido, 60), ciudad, departamento, correo: corto(b.correo, 80) },
-    nav: { ip, ua, fbp: txt(b.fbp), fbc: txt(b.fbc), url: txt(b.url) },
+    nav: { ip, ua, fbp: txt(b.fbp), fbc: txt(b.fbc), url: txt(b.url), vid: txt(b.vid) },
   })).catch(() => {});
   return { ok: true, numero, eventId: oid };
 }
@@ -861,7 +861,7 @@ export async function eventoLanding(landingId: string, b: Fila, ip: string, ua: 
   const bu = bundles[Math.max(0, Math.min(bundles.length - 1, Math.round(num(b.bundle, d.bundleInicial))))];
   const m = await import('./metaPixelWeb.js');
   await m.enviarEventoWeb({ storeId, pixelId: pixel, landingId, evento, eventId, valor: bu?.precio || d.precio, guardarPayload: false,
-    contenido: { nombre: d.nombre, cantidad: bu?.cantidad || 1 }, cliente: {}, nav: { ip, ua, fbp: txt(b.fbp), fbc: txt(b.fbc), url: txt(b.url) } });
+    contenido: { nombre: d.nombre, cantidad: bu?.cantidad || 1 }, cliente: {}, nav: { ip, ua, fbp: txt(b.fbp), fbc: txt(b.fbc), url: txt(b.url), vid: txt(b.vid) } });
 }
 
 /** ¿Despachar solo al confirmar? (lo elige cada landing). */
