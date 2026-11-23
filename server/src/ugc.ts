@@ -81,6 +81,13 @@ db.exec(`CREATE TABLE IF NOT EXISTS ugc_actores (
 )`);
 // origen: 'ia' (personaje creado con IA) | 'propio' (foto de un modelo real que subió la tienda).
 try { db.exec("ALTER TABLE ugc_actores ADD COLUMN origen TEXT NOT NULL DEFAULT 'ia'"); } catch { /* ya existe */ }
+// Seedance 2.0 NO acepta fotos con caras reales (ni caras hechas con IA que parezcan reales). Las
+// personas entran por su código de BytePlus: personaje de la biblioteca digital de BytePlus o
+// persona real verificada y autorizada en la consola de ModelArk. Se manda como asset://<código>.
+try { db.exec("ALTER TABLE ugc_actores ADD COLUMN asset_id TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+/** «Personaje» especial: video sin persona en cámara (solo el producto, con voz en off). */
+export const SIN_PERSONA = 'sin-persona';
+const limpiarAsset = (v: unknown) => { const s = txt(v).trim().replace(/^asset:\/\//i, ''); return /^asset-[a-z0-9-]{6,80}$/i.test(s) ? s : ''; };
 db.exec(`CREATE TABLE IF NOT EXISTS ugc_videos (
   id TEXT PRIMARY KEY, store_id TEXT NOT NULL, nombre TEXT NOT NULL DEFAULT '', actor_id TEXT NOT NULL DEFAULT '',
   config TEXT NOT NULL DEFAULT '{}', guion TEXT NOT NULL DEFAULT '[]', tomas TEXT NOT NULL DEFAULT '[]',
@@ -132,7 +139,7 @@ function limpiarGuion(lista: unknown, duracion: number): ParteGuion[] {
 }
 export const costoVideo = (guion: ParteGuion[], calidad: string) => guion.reduce((a, p) => a + p.segundos, 0) * tarifa(calidad);
 
-function mapActor(a: Fila) { return { id: txt(a.id), nombre: txt(a.nombre), genero: txt(a.genero), edad: txt(a.edad), estilo: txt(a.estilo), apariencia: txt(a.apariencia), ambiente: txt(a.ambiente), voz: txt(a.voz), imagen: txt(a.imagen), origen: txt(a.origen) || 'ia' }; }
+function mapActor(a: Fila) { return { id: txt(a.id), nombre: txt(a.nombre), genero: txt(a.genero), edad: txt(a.edad), estilo: txt(a.estilo), apariencia: txt(a.apariencia), ambiente: txt(a.ambiente), voz: txt(a.voz), imagen: txt(a.imagen), origen: txt(a.origen) || 'ia', assetId: txt(a.asset_id) }; }
 function mapVideo(v: Fila) {
   const config = { ...CONFIG_BASE, ...pj<ConfigUgc>(v.config, CONFIG_BASE) };
   const guion = limpiarGuion(pj(v.guion, []), config.duracion);
@@ -230,11 +237,39 @@ export function subirActor(storeId: string, b: Fila): { actor: ReturnType<typeof
   const buf = Buffer.from(m[2], 'base64');
   if (buf.length < 5_000) return { error: 'La foto es muy pequeña. Usa una foto nítida donde se vea bien la cara.' };
   if (buf.length > 12 * 1024 * 1024) return { error: 'La foto pesa más de 12 MB.' };
+  if (txt(b.assetId).trim() && !limpiarAsset(b.assetId)) return { error: 'El código de BytePlus empieza por «asset-» (cópialo tal cual).' };
   const imagen = guardarArchivo(storeId, buf, m[1] === 'jpeg' ? 'jpg' : m[1]);
   const id = uid();
-  db.prepare("INSERT INTO ugc_actores (id, store_id, nombre, genero, edad, estilo, apariencia, ambiente, voz, imagen, origen) VALUES (?,?,?,?,?,?,?,?,?,?, 'propio')")
+  db.prepare("INSERT INTO ugc_actores (id, store_id, nombre, genero, edad, estilo, apariencia, ambiente, voz, imagen, origen, asset_id) VALUES (?,?,?,?,?,?,?,?,?,?, 'propio', ?)")
     .run(id, storeId, corto(b.nombre, 40) || 'Mi modelo', corto(b.genero, 20) || 'mujer', corto(b.edad, 20) || '25 a 35', '', '', '',
-      VOCES.some((v) => v.id === b.voz) ? txt(b.voz) : 'coral', imagen);
+      VOCES.some((v) => v.id === b.voz) ? txt(b.voz) : 'coral', imagen, limpiarAsset(b.assetId));
+  return { actor: mapActor(db.prepare('SELECT * FROM ugc_actores WHERE id = ?').get(id) as Fila) };
+}
+
+/** Personaje de la biblioteca digital de BytePlus (gratis): se guarda su código y una foto de muestra opcional. */
+export function agregarPersonajeBytePlus(storeId: string, b: Fila): { actor: ReturnType<typeof mapActor> } | { error: string } {
+  const asset = limpiarAsset(b.assetId);
+  if (!asset) return { error: 'Pega el código del personaje tal como sale en BytePlus (empieza por «asset-»).' };
+  let imagen = '';
+  const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/s.exec(txt(b.imagen));
+  if (m) {
+    const buf = Buffer.from(m[2], 'base64');
+    if (buf.length > 12 * 1024 * 1024) return { error: 'La foto de muestra pesa más de 12 MB.' };
+    imagen = guardarArchivo(storeId, buf, m[1] === 'jpeg' ? 'jpg' : m[1]);
+  }
+  const id = uid();
+  db.prepare("INSERT INTO ugc_actores (id, store_id, nombre, genero, edad, estilo, apariencia, ambiente, voz, imagen, origen, asset_id) VALUES (?,?,?,?,?,'','','',?,?, 'byteplus', ?)")
+    .run(id, storeId, corto(b.nombre, 40) || 'Personaje', corto(b.genero, 20) || 'mujer', corto(b.edad, 20) || '25 a 35',
+      VOCES.some((v) => v.id === b.voz) ? txt(b.voz) : 'coral', imagen, asset);
+  return { actor: mapActor(db.prepare('SELECT * FROM ugc_actores WHERE id = ?').get(id) as Fila) };
+}
+
+/** Agregar (o quitar) el código de BytePlus de un personaje que ya existe (p. ej. el modelo ya se verificó). */
+export function codigoActor(storeId: string, id: string, assetId: unknown): { actor: ReturnType<typeof mapActor> } | { error: string } {
+  const asset = limpiarAsset(assetId);
+  if (txt(assetId).trim() && !asset) return { error: 'El código de BytePlus empieza por «asset-» (cópialo tal cual).' };
+  const r = db.prepare('UPDATE ugc_actores SET asset_id = ? WHERE id = ? AND store_id = ?').run(asset, id, storeId);
+  if (!r.changes) return { error: 'Personaje no encontrado.' };
   return { actor: mapActor(db.prepare('SELECT * FROM ugc_actores WHERE id = ?').get(id) as Fila) };
 }
 export function borrarActor(storeId: string, id: string): void {
@@ -289,7 +324,7 @@ export async function generarGuion(storeId: string, id: string, soloParte = -1):
 Lo que lo hace especial (de la tienda): ${config.producto.notas || '—'}
 Oferta: ${config.oferta || '—'} · Llamado a la acción: ${config.cta || '—'}
 Tono: ${config.tono} · Objetivo del anuncio: ${config.objetivo} · Duración total: ${config.duracion} s
-Quién presenta: ${actor ? `${txt(actor.nombre)}, ${txt(actor.genero)} de ${txt(actor.edad)}, estilo ${txt(actor.estilo)}, en ${txt(actor.ambiente)}` : 'una persona joven y cercana'}
+Quién presenta: ${txt(v.actor_id) === SIN_PERSONA ? 'NADIE en cámara: solo el producto (y manos), con voz en off; todas las partes con "habla": false' : actor ? `${txt(actor.nombre)}, ${txt(actor.genero)} de ${txt(actor.edad)}, estilo ${txt(actor.estilo)}, en ${txt(actor.ambiente)}` : 'una persona joven y cercana'}
 ${soloParte >= 0 ? `Reescribe SOLO la parte «${ETIQUETAS[soloParte]}» con otra idea; las demás déjalas igual:\n${JSON.stringify(actual.map((p) => ({ texto: p.texto, escena: p.escena, camara: p.camara, habla: p.habla })))}` : 'Escribe el guion completo.'}`;
   // Guía de los videos de referencia del equipo (Admin → Estudio IA) + instrucciones maestras de la tienda.
   const { guiaEstiloEquipo } = await import('./estudio.js');
@@ -302,14 +337,19 @@ ${soloParte >= 0 ? `Reescribe SOLO la parte «${ETIQUETAS[soloParte]}» con otra
 }
 
 // ── Generación con Seedance ──────────────────────────────────────────────────
-function promptToma(p: ParteGuion, config: ConfigUgc, actor: Fila | undefined, conVoz: boolean, maestras = ''): string {
+function promptToma(p: ParteGuion, config: ConfigUgc, actor: Fila | undefined, conVoz: boolean, maestras = '', personaRef = false, nProducto = 0): string {
   const ratio = config.formato;
+  // BytePlus pide nombrar las referencias como «Image N» (en el orden en que van).
+  const desde = personaRef ? 2 : 1;
+  const imgsProducto = nProducto > 1 ? `Image ${desde} a Image ${desde + nProducto - 1}` : `Image ${desde}`;
   return [
     `Video ${ratio === '9:16' ? 'vertical' : ratio === '16:9' ? 'horizontal' : 'cuadrado'} estilo UGC, grabado con celular, luz natural, realista, movimiento de cámara en mano suave.`,
-    actor ? `Personaje: la persona de la primera imagen de referencia (misma cara, pelo, piel y ropa), ${txt(actor.genero)} de ${txt(actor.edad)} años.` : 'Personaje: una persona joven latinoamericana, cercana.',
-    `Producto: el de las demás imágenes de referencia (${config.producto.nombre}); respeta su forma, color y detalles exactos, no lo cambies.`,
+    !actor ? 'Sin personas en cámara: solo el producto y, si hace falta, manos (sin caras).'
+      : personaRef ? `Personaje: la persona de Image 1 (misma cara, pelo, piel y ropa en toda la toma), ${txt(actor.genero)} de ${txt(actor.edad)} años.`
+      : `Personaje: ${txt(actor.genero)} latinoamericano(a) de ${txt(actor.edad)} años, cercano(a).`,
+    nProducto ? `Producto: el de ${imgsProducto} (${config.producto.nombre}); respeta su forma, color y detalles exactos, no lo cambies.` : `Producto: ${config.producto.nombre}.`,
     `Escena: ${p.escena || p.texto}. Plano: ${p.camara}.`,
-    conVoz && p.habla ? `La persona mira a cámara y dice en español de Colombia, con naturalidad y buena dicción: "${p.texto}"` : 'La persona no habla en esta toma.',
+    !actor ? 'Nadie habla a cámara.' : conVoz && p.habla ? `La persona mira a cámara y dice en español de Colombia, con naturalidad y buena dicción: "${p.texto}"` : 'La persona no habla en esta toma.',
     'Sin texto en pantalla, sin subtítulos, sin logos, sin marcas de agua.',
     maestras ? `Estilo de la marca (instrucciones de la tienda): ${maestras.slice(0, 800)}` : '',
   ].filter(Boolean).join('\n');
@@ -319,7 +359,7 @@ const mensajeSeedance = (b: Fila, http: number): string => {
   const e = (b.error || {}) as Fila;
   const m = txt(e.message || b.message);
   if (http === 401 || http === 403) return 'BytePlus rechazó la clave de Seedance (revisa SEEDANCE_API_KEY y que el modelo esté activado en tu cuenta).';
-  if (/real.?(person|human|face)|portrait|privacy|celebrit/i.test(m + txt(e.code))) return 'Seedance no aceptó la foto de la persona (BytePlus bloquea algunos rostros reales). Prueba con otra foto del modelo o con un personaje creado con IA.';
+  if (/real.?(person|human|face)|portrait|privacy|celebrit/i.test(m + txt(e.code))) return `Seedance no acepta caras reales en las fotos de referencia. Usa un personaje con código de BytePlus y fotos del producto SIN caras (solo la prenda o el producto).${e.code ? ` (${txt(e.code)})` : ''}`;
   if (/sensitive|policy|moderat|risk/i.test(m + txt(e.code))) return 'Seedance rechazó la toma por sus políticas de contenido. Cambia la escena o las fotos y vuelve a intentar.';
   return m ? `Seedance: ${m.slice(0, 200)}` : `Seedance respondió ${http}.`;
 };
@@ -332,14 +372,15 @@ async function lanzarToma(storeId: string, videoId: string, i: number): Promise<
   const tomas = pj<Toma[]>(v.tomas, []);
   const p = guion[i], t = tomas[i];
   if (!p || !t) return;
-  const actor = db.prepare('SELECT * FROM ugc_actores WHERE id = ?').get(txt(v.actor_id)) as Fila | undefined;
-  const conVoz = config.voz.modo === 'persona';
+  const actor = txt(v.actor_id) === SIN_PERSONA ? undefined : db.prepare('SELECT * FROM ugc_actores WHERE id = ?').get(txt(v.actor_id)) as Fila | undefined;
+  const conVoz = config.voz.modo === 'persona' && !!actor;
   const refs: string[] = [];
-  if (actor && txt(actor.imagen)) { const r = await referencia(storeId, txt(actor.imagen)); if (r) refs.push(r); }
+  if (actor && txt(actor.asset_id)) refs.push(`asset://${txt(actor.asset_id)}`);
+  const personaRef = refs.length > 0;
   for (const f of config.producto.fotos.slice(0, 3)) { const r = await referencia(storeId, f); if (r) refs.push(r); }
   const body = {
     model: modeloSeedance(config.calidad),
-    content: [{ type: 'text', text: promptToma(p, config, actor, conVoz, instruccionesMaestras(storeId)) }, ...refs.map((url) => ({ type: 'image_url', image_url: { url }, role: 'reference_image' }))],
+    content: [{ type: 'text', text: promptToma(p, config, actor, conVoz, instruccionesMaestras(storeId), personaRef, refs.length - (personaRef ? 1 : 0)) }, ...refs.map((url) => ({ type: 'image_url', image_url: { url }, role: 'reference_image' }))],
     ratio: config.formato, duration: p.segundos, resolution: process.env.SEEDANCE_RESOLUTION || '720p',
     generate_audio: conVoz && p.habla, watermark: false,
   };
@@ -382,8 +423,14 @@ export async function generarVideo(storeId: string, id: string): Promise<{ video
   const config = { ...CONFIG_BASE, ...pj<ConfigUgc>(v.config, CONFIG_BASE) };
   const guion = limpiarGuion(pj(v.guion, []), config.duracion);
   if (!config.producto.nombre || !config.producto.fotos.length) return { error: 'Elige el producto y al menos una foto.' };
-  const actor = db.prepare('SELECT * FROM ugc_actores WHERE id = ? AND store_id = ?').get(txt(v.actor_id), storeId) as Fila | undefined;
-  if (!actor) return { error: 'Elige quién presenta el video (o crea un personaje).' };
+  const sinPersona = txt(v.actor_id) === SIN_PERSONA;
+  const actor = sinPersona ? undefined : db.prepare('SELECT * FROM ugc_actores WHERE id = ? AND store_id = ?').get(txt(v.actor_id), storeId) as Fila | undefined;
+  if (!sinPersona && !actor) return { error: 'Elige quién presenta el video (o «Sin persona»).' };
+  if (actor && !txt(actor.asset_id)) return { error: `«${txt(actor.nombre)}» no tiene código de BytePlus. Seedance no acepta fotos de caras reales (ni de personajes hechos con IA): usa un personaje de BytePlus o agrega el código de tu modelo autorizado en BytePlus.` };
+  if (sinPersona && config.voz.modo !== 'locutor') {
+    config.voz = { ...config.voz, modo: 'locutor' };
+    db.prepare('UPDATE ugc_videos SET config = ? WHERE id = ?').run(JSON.stringify(config), id);
+  }
   if (guion.some((p) => !p.texto && !p.escena)) return { error: 'Completa el guion: cada toma necesita lo que se dice o la escena.' };
   if (config.voz.modo === 'locutor' && !process.env.OPENAI_API_KEY) return { error: SIN_OPENAI };
   const costo = costoVideo(guion, config.calidad);

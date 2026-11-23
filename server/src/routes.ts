@@ -3008,6 +3008,19 @@ api.put('/marketing/instrucciones', requireAuth, requireStore, requireMarketingI
   res.json({ texto: (await import('./mkAjustes.js')).guardarInstrucciones(req.user!.storeId!, String(req.body?.texto || '')) });
 });
 
+// Personaje de la biblioteca digital de BytePlus (por su código asset-…): gratis.
+api.post('/ugc/actores/byteplus', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = (await import('./ugc.js')).agregarPersonajeBytePlus(req.user!.storeId!, req.body || {});
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+// Código de BytePlus de un personaje que ya existe (p. ej. el modelo ya quedó autorizado).
+api.patch('/ugc/actores/:id', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
+  const r = (await import('./ugc.js')).codigoActor(req.user!.storeId!, String(req.params.id), req.body?.assetId);
+  if ('error' in r) return res.status(400).json(r);
+  res.json(r);
+});
+
 api.get('/ugc', requireAuth, requireStore, requireMarketingIA, async (req, res) => {
   res.json((await import('./ugc.js')).estadoUgc(req.user!.storeId!));
 });

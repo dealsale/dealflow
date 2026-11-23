@@ -138,7 +138,7 @@ export function EstudioCreativos({ df }: { df: DealFlowState }) {
   );
 }
 
-function Recarga({ df }: { df: DealFlowState }) {
+export function Recarga({ df }: { df: DealFlowState }) {
   const [msg, setMsg] = useState('');
   const pagar = async (id: string) => {
     setMsg('Abriendo el pago…');

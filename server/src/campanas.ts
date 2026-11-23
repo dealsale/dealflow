@@ -147,7 +147,7 @@ Producto: ${input.idea || 'el de la imagen'}
 ${input.precio ? `Precio: ${input.precio}` : ''}
 ${input.publico ? `Público que cree el dueño: ${input.publico}` : ''}`;
 
-  const r = await chatJSON<Brief>(system, user, { imagen: input.imagen, maxTokens: 1400, temperatura: 0.7 });
+  const r = await chatJSON<Brief>(system + bloqueMaestro(storeId), user, { imagen: input.imagen, maxTokens: 1400, temperatura: 0.7 });
   if (r.error || !r.data) return { error: r.error || 'No pudimos estudiar el producto.' };
 
   const lista = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean).slice(0, 6) : []);
@@ -230,7 +230,7 @@ Propuesta de valor: ${b.propuesta}
 Objetivo de la campaña: ${OBJETIVOS[c.objetivo] || OBJETIVOS.mensajes}
 Tono: ${input.tono || 'cercano y vendedor'}`;
 
-  const r = await chatJSON<CopysAnuncio>(system, user, { maxTokens: 400 + n * 320, temperatura: 0.95 });
+  const r = await chatJSON<CopysAnuncio>(system + bloqueMaestro(storeId), user, { maxTokens: 400 + n * 320, temperatura: 0.95 });
   if (r.error || !r.data) return { error: r.error || 'No pudimos escribir los textos.' };
 
   const lista = (v: unknown, max: number) => (Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean).slice(0, max) : []);

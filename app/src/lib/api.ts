@@ -1404,7 +1404,7 @@ export interface ProyectoEstudio { id: string; nombre: string; brief: BriefEstud
 export interface ProyectoEstudioResumen { id: string; nombre: string; foto: string; videos: number; imagenes: number; generando: number; actualizado: string }
 export interface PreciosEstudio { paquete: number; imagen: { medium: number; high: number }; video: Record<string, Record<string, number>>; disponible: boolean }
 // ── Video UGC con Seedance (Marketing IA) ──
-export interface ActorUgc { id: string; nombre: string; genero: string; edad: string; estilo: string; apariencia: string; ambiente: string; voz: string; imagen: string; origen?: 'ia' | 'propio' }
+export interface ActorUgc { id: string; nombre: string; genero: string; edad: string; estilo: string; apariencia: string; ambiente: string; voz: string; imagen: string; origen?: 'ia' | 'propio' | 'byteplus'; assetId?: string }
 export interface ConfigUgc {
   producto: { id: string; nombre: string; fotos: string[]; notas: string; precio: number };
   voz: { modo: 'persona' | 'locutor'; id: string };
@@ -1425,7 +1425,9 @@ export interface EstadoUgc {
 }
 export const apiUgc = () => reqBase<EstadoUgc>('/api/ugc', 'GET');
 export const apiUgcCrearActor = (b: Partial<ActorUgc>) => req<{ actor: ActorUgc }>('/api/ugc/actores', 'POST', b);
-export const apiUgcSubirActor = (b: { nombre: string; genero: string; edad: string; voz: string; imagen: string; permiso: boolean }) => req<{ actor: ActorUgc }>('/api/ugc/actores/subir', 'POST', b);
+export const apiUgcPersonajeBytePlus = (b: { nombre: string; genero: string; edad: string; voz: string; assetId: string; imagen?: string }) => req<{ actor: ActorUgc }>('/api/ugc/actores/byteplus', 'POST', b);
+export const apiUgcCodigoActor = (id: string, assetId: string) => reqBase<{ actor: ActorUgc }>(`/api/ugc/actores/${encodeURIComponent(id)}`, 'PATCH', { assetId });
+export const apiUgcSubirActor = (b: { nombre: string; genero: string; edad: string; voz: string; imagen: string; permiso: boolean; assetId?: string }) => req<{ actor: ActorUgc }>('/api/ugc/actores/subir', 'POST', b);
 export const apiUgcBorrarActor = (id: string) => reqBase<{ ok: true }>(`/api/ugc/actores/${encodeURIComponent(id)}`, 'DELETE');
 export const apiUgcVideo = (id: string) => reqBase<{ video: VideoUgc }>(`/api/ugc/videos/${encodeURIComponent(id)}`, 'GET');
 export const apiUgcNuevo = (b: { actorId?: string; config?: Partial<ConfigUgc> }) => reqBase<{ video: VideoUgc }>('/api/ugc/videos', 'POST', b);

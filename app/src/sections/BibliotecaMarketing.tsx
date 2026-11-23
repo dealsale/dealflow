@@ -59,7 +59,7 @@ export function BibliotecaMarketing({ onElegir, soloElegir = false }: { onElegir
         <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontWeight: 800, fontSize: 15.5 }}>{soloElegir ? 'Elige de tu Biblioteca' : 'Tu Biblioteca'}</div>
           <div style={{ fontSize: 13, color: 'var(--df-text-muted)', marginTop: 2, lineHeight: 1.5 }}>
-            {soloElegir ? 'Toca «Usar» en la foto o el video que quieras para la campaña.' : 'Todo lo que generas (fotos, videos UGC, modelos) y lo que subes. Descárgalo o úsalo en tus campañas de Meta.'}
+            {soloElegir ? 'Toca «Usar» en la foto o el video que quieras para la campaña.' : 'Tus videos UGC, tus modelos y lo que subes. Descárgalo o úsalo en tus campañas de Meta.'}
           </div>
         </div>
         <button onClick={() => input.current?.click()} disabled={!!subiendo} style={{ ...btn, opacity: subiendo ? 0.7 : 1 }}><Icono nombre="subir" tam={16} color="#fff" />Subir fotos o videos</button>
@@ -84,7 +84,7 @@ export function BibliotecaMarketing({ onElegir, soloElegir = false }: { onElegir
 
       {!medios ? <div className="df-est-cargando" style={{ height: 160, borderRadius: 14 }} /> : lista.length === 0 ? (
         <div style={{ ...card, textAlign: 'center', padding: '34px 20px', color: 'var(--df-text-muted)', fontSize: 13.5 }}>
-          {medios.length === 0 ? 'Todavía no hay nada. Genera fotos en «Fotos IA», videos en «Video UGC» o sube tus propios archivos.' : 'No hay archivos en este filtro.'}
+          {medios.length === 0 ? 'Todavía no hay nada. Haz videos en «Video UGC» o sube tus propias fotos y videos.' : 'No hay archivos en este filtro.'}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
