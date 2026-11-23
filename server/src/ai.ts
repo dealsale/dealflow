@@ -942,7 +942,9 @@ ${MECANICA_MARCADORES}`;
     // 'pregunta': el cliente ya tenía un pedido y se le preguntó si es nuevo o un cambio (ya se le escribió).
     let pedidoCreado = resMarcador === 'creado' || resMarcador === 'actualizado' || resMarcador === 'invalido' || resMarcador === 'pregunta';
     // La IA repitió el MISMO pedido: no se vuelve a decir "tu pedido quedó registrado".
-    const repetido = resMarcador === 'igual';
+    const repetido = resMarcador === 'igual' || resMarcador === 'frenado';
+    // Frenado (solo respondió un aviso, o reclama): no se manda un texto de la IA que hable de un pedido nuevo.
+    const frenado = resMarcador === 'frenado';
 
     // RED DE SEGURIDAD: la IA mostró el "Resumen de tu pedido" y el cliente confirmó
     // (sí/sisas/dale/correcto…), pero la IA NO puso el marcador o lo puso mal. Tomamos
@@ -961,7 +963,7 @@ ${MECANICA_MARCADORES}`;
 
     // Si se creó el pedido, el mensaje de confirmación ya lo mandó crearPedido;
     // no repetimos con el texto de la IA.
-    if (texto && !pedidoCreado && !(repetido && /registrad|confirmad|qued[oó] (listo|creado)|placed|confirmed/i.test(texto))) {
+    if (texto && !pedidoCreado && !(repetido && /registrad|confirmad|qued[oó] (listo|creado)|placed|confirmed/i.test(texto)) && !(frenado && /resumen|pedido|confirm|total|\$|order/i.test(texto))) {
       const textoFinal = rellenar(texto, lead);
       await esperarRespuestaHumana(t0); // el bot tarda ~4-5 s en total (parece que "escribe")
       const mid = uid();
@@ -1249,7 +1251,7 @@ Reglas: usa SOLO datos que aparezcan en la conversación; NO inventes. En telefo
   } catch { return ''; }
 }
 
-type ResultadoPedido = 'creado' | 'actualizado' | 'igual' | 'invalido' | 'pregunta' | false;
+type ResultadoPedido = 'creado' | 'actualizado' | 'igual' | 'invalido' | 'pregunta' | 'frenado' | false;
 
 /**
  * El celular del pedido, SOLO si el cliente lo escribió en la conversación (o dijo que es
@@ -1529,6 +1531,26 @@ export async function crearPedido(storeId: string, lead: { id: string; nombre: s
         marcarEnviado(mid, await sendWhatsappText(storeId, destino, msg, pn));
         return 'pregunta';
       }
+    }
+  }
+
+  // FRENO: el cliente solo respondió «ok/gracias» a un aviso de su pedido (guía, en camino, en
+  // oficina, entregado…), o tiene un reclamo abierto. Antes el asistente volvía a registrar la misma
+  // compra (DF-2518 tras «Tu pedido ya te fue entregado» → «Ok») o convertía un reclamo en una venta.
+  {
+    const cp = await import('./cambiosPedido.js');
+    const freno = cp.frenoPedidoNuevo(storeId, lead.id, tels);
+    if (freno) {
+      const num = `DF-${String(freno.pedido.numero)}`;
+      if (freno.motivo === 'aviso') {
+        trazar(storeId, String(freno.pedido.id), { etapa: 'pedido', nivel: 'info', titulo: 'Se evitó un pedido repetido', detalle: `El cliente solo respondió al aviso de su pedido ${num}; el asistente iba a registrar otro (no se creó).`, datos: { marcador: inner } });
+        registrarLog(storeId, 'info', 'pedido', `Se evitó un pedido repetido: ${cliente} solo respondió al aviso de ${num}.`, lead.id);
+      } else {
+        trazar(storeId, String(freno.pedido.id), { etapa: 'pedido', nivel: 'warn', titulo: 'Reclamo del cliente: no se creó un pedido nuevo', detalle: `El asistente iba a registrar otro pedido mientras el cliente reclama por ${num}. El chat pasó al equipo.`, datos: { marcador: inner } });
+        (await import('./pasoHumano.js')).pasarAHumano(storeId, lead.id, `${cliente} tiene un reclamo por ${num} y el asistente iba a registrar un pedido nuevo (no se creó). Revisa qué necesita.`,
+          { titulo: `Reclamo en ${num} 🙋`, cuerpo: `${cliente} está reclamando. El asistente no creó otro pedido: atiéndelo desde el Inbox.` });
+      }
+      return 'frenado';
     }
   }
 

@@ -179,3 +179,50 @@ export async function respuestaCambioPedido(storeId: string, leadId: string, tex
   marcarEnviado(mid, await sendWhatsappText(storeId, lead.wa_id || lead.tel, r.respuesta, lead.tel));
   return true;
 }
+
+// ── Freno: que un «ok» a un aviso, o un reclamo, no se conviertan en un pedido nuevo ──────────
+
+/** Mensaje del bot que es un aviso sobre un pedido que ya existe (guía, en camino, en oficina, entregado…). */
+export function esAvisoDePedido(texto: string): boolean {
+  const t = norm(texto);
+  if (!t || /resumen de tu pedido|¿?confirmas|lo que pediste|vas a pagar/.test(t)) return false;
+  return /tenemos noticias de tu pedido|disponible para recoger|en la oficina de la transportadora|foto de tu guia|numero de guia|tu guia|guia de envio|ya te fue entregado|fue entregado|ya lo recogio|va en camino|esta en camino|en reparto|novedad|tu pedido (ya|df-)/.test(t);
+}
+
+/** Respuesta corta que solo acusa recibo («ok», «gracias», «ya lo recogí»), sin pedir nada nuevo. */
+export function esAcuseDeRecibo(texto: string): boolean {
+  const t = norm(texto);
+  if (!t || t.length > 160) return false;
+  return !/\b(quiero|quisiera|necesito|otro|otra|otros|mas|pedir|pido|comprar|compro|pack|paquete|talla|color|unidades|enviame|mandame|me (envia|envian|manda|mandan)|agrega|agregar|adicional)\b/.test(t);
+}
+
+const RECLAMO = /\b(reclamo|reclamar|reclamacion|me llego|me llegaron|llegaron|llego (mal|roto|danad\w*|incomplet\w*|otro|otra)|no es lo que (pedi|ped\w*)|no son los que|defectuos\w*|danad\w*|roto|rota|garantia|devoluci\w*|devolver|mi plata|reembols\w*|estafa\w*|boletiar|boletear|denunci\w*|ratas?|ladron\w*|no sirve|incomplet\w*|faltan|falto|equivocad\w*)\b/;
+
+/**
+ * ¿Hay que frenar el pedido nuevo? El cliente ya tiene un pedido despachado o entregado y:
+ *  - 'aviso': lo último que hizo fue responder con un «ok/gracias» a un aviso de ese pedido; o
+ *  - 'reclamo': en los últimos 3 días se quejó del pedido (le llegó mal, garantía, devolución…).
+ * En los dos casos no es una compra nueva: el asistente no la registra sola.
+ */
+export function frenoPedidoNuevo(storeId: string, leadId: string, tels: string[]): { motivo: 'aviso' | 'reclamo'; pedido: Fila } | null {
+  const t = tels.filter((x) => x.length === 10);
+  const pedido = db.prepare(
+    `SELECT * FROM orders WHERE store_id = ? AND estado != 'Cancelado' AND created_at > datetime('now','-45 days')
+       AND (COALESCE(guia,'') != '' OR COALESCE(effi_remision,'') != '' OR COALESCE(dropi_order_id,'') != '' OR estado NOT IN ('Nuevo','Confirmado'))
+       AND (lead_id = ? ${t.map(() => "OR substr(REPLACE(REPLACE(REPLACE(REPLACE(tel,' ',''),'+',''),'-',''),'(',''), -10) = ?").join(' ')})
+     ORDER BY created_at DESC LIMIT 1`,
+  ).get(storeId, leadId, ...t) as Fila | undefined;
+  if (!pedido) return null;
+  const msgs = (db.prepare("SELECT de, texto, created_at FROM messages WHERE lead_id = ? AND TRIM(COALESCE(texto,'')) != '' ORDER BY created_at DESC, rowid DESC LIMIT 14").all(leadId) as { de: string; texto: string; created_at: string }[]);
+  const iCliente = msgs.findIndex((m) => m.de === 'cliente');
+  if (iCliente < 0) return null;
+  const ultCliente = msgs[iCliente].texto;
+  // 1) Respondió un aviso del pedido con un «ok/gracias» (si pide algo nuevo, «quiero otro pack», no es acuse).
+  const botAntes = msgs.slice(iCliente + 1).find((m) => m.de === 'bot');
+  if (botAntes && esAvisoDePedido(botAntes.texto) && esAcuseDeRecibo(ultCliente)) return { motivo: 'aviso', pedido };
+  // 2) Reclamo reciente (aunque diga «necesito solución» o «sí»): mensajes del cliente de los últimos 3 días.
+  const hace3 = Date.now() - 3 * 86400e3;
+  const recientes = msgs.filter((m) => m.de === 'cliente' && new Date(String(m.created_at).replace(' ', 'T') + 'Z').getTime() > hace3);
+  if (recientes.some((m) => RECLAMO.test(norm(m.texto)))) return { motivo: 'reclamo', pedido };
+  return null;
+}
