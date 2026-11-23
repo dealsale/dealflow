@@ -3,10 +3,9 @@ import type { DealFlowState } from '../hooks/useDealFlowState';
 import { Dropdown } from '../components/Dropdown';
 import { confirmar, notificar } from '../components/dialogs';
 import {
-  apiUgc, apiUgcBorrar, apiUgcBorrarActor, apiUgcGenerar, apiUgcGuardar, apiUgcGuion, apiUgcMontar, apiUgcNuevo, apiUgcRehacer, apiUgcSubirActor, apiUgcPersonajeBytePlus, apiUgcCodigoActor, apiUgcVideo,
+  apiUgc, apiUgcBorrar, apiUgcBorrarActor, apiUgcGenerar, apiUgcGuardar, apiUgcGuion, apiUgcMontar, apiUgcNuevo, apiUgcRehacer, apiUgcCrearActor, apiUgcVideo,
   type ActorUgc, type ConfigUgc, type EstadoUgc, type ParteGuionUgc, type VideoUgc,
 } from '../lib/api';
-import { comprimirImagen } from '../components/PhotoUpload';
 import { Icono } from '../components/Icono';
 
 /**
@@ -205,141 +204,74 @@ function PasoProducto({ df, v, cambiar, bloqueado }: { df: DealFlowState; v: Vid
 
 /** Video sin persona en cámara: solo el producto, con voz en off. */
 const SIN_PERSONA = 'sin-persona';
-const DONDE_CODIGO = 'En BytePlus: ModelArk → Playground de Seedance 2.0 → pestaña «Digital Character Library». Elige la persona y copia su Asset ID (empieza por «asset-»).';
+const ESTILOS_PRESENTADOR = ['casual', 'elegante', 'deportivo', 'profesional'];
+const NUEVO_PRESENTADOR = { nombre: '', genero: 'mujer', edad: '25 a 35', estilo: 'casual', apariencia: '', ambiente: '', voz: 'coral' };
 
-function PasoPersonaje({ est, v, cambiar, bloqueado, onActores }: { est: EstadoUgc; v: VideoUgc; cambiar: Cambiar; bloqueado: boolean; onActores: (a: ActorUgc[]) => void; onSaldo: () => void }) {
-  // Seedance no acepta fotos de caras reales: las personas entran por su código de BytePlus.
-  const [abierto, setAbierto] = useState<'' | 'byteplus' | 'modelo'>('');
-  const [guardando, setGuardando] = useState(false);
-  const [bp, setBp] = useState({ nombre: '', genero: 'mujer', edad: '25 a 35', voz: 'coral', assetId: '', imagen: '' });
-  const [m, setM] = useState({ nombre: '', genero: 'mujer', edad: '25 a 35', voz: 'coral', imagen: '', permiso: false, assetId: '' });
-  const [editando, setEditando] = useState('');
-  const [codigo, setCodigo] = useState('');
+function PasoPersonaje({ est, v, cambiar, bloqueado, onActores, onSaldo }: { est: EstadoUgc; v: VideoUgc; cambiar: Cambiar; bloqueado: boolean; onActores: (a: ActorUgc[]) => void; onSaldo: () => void }) {
+  // Seedance no acepta fotos de caras reales; sí las caras que crea Seedream (BytePlus) en la misma cuenta, por 30 días.
+  const [abierto, setAbierto] = useState(false);
+  const [creando, setCreando] = useState(false);
+  const [f, setF] = useState(NUEVO_PRESENTADOR);
+  const set = (p: Partial<typeof f>) => setF((x) => ({ ...x, ...p }));
   const elegir = (a: ActorUgc) => cambiar({ actorId: a.id, config: { voz: { ...v.config.voz, id: a.voz || v.config.voz.id } } });
-  const listo = (a: ActorUgc) => { onActores([a, ...est.actores.filter((x) => x.id !== a.id)]); elegir(a); setAbierto(''); };
-  const guardarBp = async () => {
-    setGuardando(true);
-    const r = await apiUgcPersonajeBytePlus(bp);
-    setGuardando(false);
-    if (r.error || !r.data) return notificar(r.error || 'No se pudo guardar.', 'error');
-    listo(r.data.actor); setBp({ nombre: '', genero: 'mujer', edad: '25 a 35', voz: 'coral', assetId: '', imagen: '' });
-    notificar('✓ Personaje guardado y listo para tus videos.');
+  const crear = async () => {
+    setCreando(true);
+    const r = await apiUgcCrearActor(f);
+    setCreando(false);
+    onSaldo();
+    if (r.error || !r.data) return notificar(r.error || 'No se pudo crear el presentador.', 'error');
+    onActores([r.data.actor, ...est.actores]); elegir(r.data.actor); setAbierto(false); setF(NUEVO_PRESENTADOR);
+    notificar('✓ Presentador listo para tus videos.');
   };
-  const subirModelo = async () => {
-    setGuardando(true);
-    const r = await apiUgcSubirActor(m);
-    setGuardando(false);
-    if (r.error || !r.data) return notificar(r.error || 'No se pudo subir.', 'error');
-    listo(r.data.actor); setM({ nombre: '', genero: 'mujer', edad: '25 a 35', voz: 'coral', imagen: '', permiso: false, assetId: '' });
-    notificar(r.data.actor.assetId ? '✓ Modelo guardado y listo para tus videos.' : 'Modelo guardado. Cuando BytePlus lo autorice, agrégale su código para usarlo en videos.');
-  };
-  const guardarCodigo = async (a: ActorUgc) => {
-    const r = await apiUgcCodigoActor(a.id, codigo);
-    if (r.error || !r.data) return notificar(r.error || 'No se pudo guardar.', 'error');
-    onActores(est.actores.map((x) => (x.id === a.id ? r.data!.actor : x)));
-    setEditando(''); setCodigo('');
-    notificar('✓ Código guardado.');
-  };
-  const fotoInput = (alElegir: (img: string) => void) => (
-    <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={(e) => { const file = e.target.files?.[0]; if (file) void comprimirImagen(file, 1536, 0.9).then(alElegir); e.target.value = ''; }} />
-  );
-  const cuadroFoto: React.CSSProperties = { width: 96, height: 120, borderRadius: 10, border: '1.5px dashed var(--df-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', textAlign: 'center', fontSize: 11.5, color: 'var(--df-text-muted)', background: 'var(--df-bg)', flexShrink: 0 };
-  const datosPersona = (d: { nombre: string; genero: string; edad: string; voz: string }, set: (p: Partial<typeof d>) => void, ej: string) => (
-    <>
-      <label style={lb}>Nombre<input value={d.nombre} onChange={(e) => set({ nombre: e.target.value })} placeholder={ej} style={input} /></label>
-      <div style={lb}>Es
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{['mujer', 'hombre'].map((g) => <button key={g} onClick={() => set({ genero: g })} aria-pressed={d.genero === g} style={pill(d.genero === g)}>{g === 'mujer' ? 'Mujer' : 'Hombre'}</button>)}</div>
-      </div>
-      <div style={lb}>Edad
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{['18 a 24', '25 a 35', '36 a 50', 'más de 50'].map((e) => <button key={e} onClick={() => set({ edad: e })} aria-pressed={d.edad === e} style={pill(d.edad === e)}>{e}</button>)}</div>
-      </div>
-      <label style={lb}>Voz (para la voz en off)
-        <Dropdown ariaLabel="Voz" value={d.voz} onChange={(x) => set({ voz: x })} options={est.voces.map((x) => ({ value: x.id, label: x.nombre }))} />
-      </label>
-    </>
-  );
   return (
     <section style={card} aria-labelledby="ugc2">
       <h2 id="ugc2" style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>2. ¿Quién lo presenta y cómo suena?</h2>
-      <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Seedance (BytePlus) no acepta fotos de caras reales, ni de personas hechas con IA que parezcan reales. Por eso las personas se usan con su <b>código de BytePlus</b>: un personaje de su biblioteca (gratis) o tu modelo, ya autorizado en BytePlus.</span>
-      <div role="radiogroup" aria-label="Personaje" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 230px), 1fr))', gap: 10 }}>
+      <span style={{ fontSize: 12.5, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Crea tu presentador con IA: una persona ficticia que hace BytePlus, la única cara que Seedance acepta en el video. Sirve 30 días; después creas otro. O haz el video sin persona.</span>
+      <div role="radiogroup" aria-label="Presentador" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 230px), 1fr))', gap: 10 }}>
         <button role="radio" aria-checked={v.actorId === SIN_PERSONA} disabled={bloqueado} onClick={() => cambiar({ actorId: SIN_PERSONA, config: { voz: { ...v.config.voz, modo: 'locutor' } } })} style={tarjeta(v.actorId === SIN_PERSONA)}>
           <span style={{ width: 52, height: 64, borderRadius: 9, background: 'var(--df-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icono nombre="paquete" tam={24} degradado /></span>
           <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}><b style={{ fontSize: 14 }}>Sin persona</b><span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>Solo el producto (y manos), con voz en off</span></span>
         </button>
         {est.actores.map((a) => (
           <div key={a.id} style={{ position: 'relative' }}>
-            <button role="radio" aria-checked={v.actorId === a.id} disabled={bloqueado} onClick={() => elegir(a)} style={{ ...tarjeta(v.actorId === a.id), opacity: a.assetId ? 1 : 0.8 }}>
+            <button role="radio" aria-checked={v.actorId === a.id} disabled={bloqueado || !a.listo} onClick={() => elegir(a)} style={{ ...tarjeta(v.actorId === a.id), opacity: a.listo ? 1 : 0.6, cursor: a.listo ? 'pointer' : 'default' }}>
               {a.imagen ? <img src={a.imagen} alt="" style={{ width: 52, height: 64, borderRadius: 9, objectFit: 'cover', flexShrink: 0 }} /> : <span style={{ width: 52, height: 64, borderRadius: 9, background: 'var(--df-border)', flexShrink: 0 }} />}
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, paddingRight: 22 }}>
                 <b style={{ fontSize: 14 }}>{a.nombre}</b>
-                <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{a.origen === 'propio' ? 'Tu modelo · ' : a.origen === 'byteplus' ? 'BytePlus · ' : 'Personaje IA · '}{a.genero} · {a.edad}</span>
-                {a.assetId
-                  ? <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-brand-dark)' }}>✓ Listo para video</span>
-                  : <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--df-warning)' }}>Falta su código de BytePlus</span>}
+                <span style={{ fontSize: 11.5, color: 'var(--df-text-muted)' }}>{a.genero} · {a.edad}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: a.listo ? 'var(--df-brand-dark)' : 'var(--df-warning)' }}>{a.listo ? `✓ ${a.aviso || 'Listo para video'}` : a.aviso}</span>
               </span>
             </button>
-            {!a.assetId && editando !== a.id && <button onClick={() => { setEditando(a.id); setCodigo(''); }} style={{ ...btnGris, marginTop: 6, padding: '5px 10px', fontSize: 12 }}>Agregar código de BytePlus</button>}
-            {editando === a.id && (
-              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="asset-2026…" style={{ ...input, padding: '6px 9px', fontSize: 12.5 }} />
-                <button onClick={() => void guardarCodigo(a)} style={{ ...btn, padding: '6px 11px', fontSize: 12 }}>Guardar</button>
-                <button onClick={() => setEditando('')} style={{ ...btnGris, padding: '6px 9px', fontSize: 12 }}>✕</button>
-              </div>
-            )}
-            <button aria-label={`Borrar ${a.nombre}`} onClick={async () => { if (await confirmar({ titulo: `Borrar a ${a.nombre}`, mensaje: 'Los videos que ya hiciste con este personaje no se borran.', aceptar: 'Borrar', peligro: true })) { await apiUgcBorrarActor(a.id); onActores(est.actores.filter((x) => x.id !== a.id)); } }}
+            <button aria-label={`Borrar ${a.nombre}`} onClick={async () => { if (await confirmar({ titulo: `Borrar a ${a.nombre}`, mensaje: 'Los videos que ya hiciste con este presentador no se borran.', aceptar: 'Borrar', peligro: true })) { await apiUgcBorrarActor(a.id); onActores(est.actores.filter((x) => x.id !== a.id)); } }}
               style={{ position: 'absolute', top: 6, right: 6, background: 'var(--df-surface)', border: '1px solid var(--df-border)', borderRadius: 8, width: 28, height: 28, cursor: 'pointer', color: 'var(--df-text-muted)' }}>✕</button>
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={() => setAbierto(abierto === 'byteplus' ? '' : 'byteplus')} style={{ ...btnGris, borderColor: abierto === 'byteplus' ? 'var(--df-brand)' : undefined }}>+ Personaje de BytePlus · gratis</button>
-        <button onClick={() => setAbierto(abierto === 'modelo' ? '' : 'modelo')} style={{ ...btnGris, borderColor: abierto === 'modelo' ? 'var(--df-brand)' : undefined }}>+ Mi modelo (persona real autorizada)</button>
-      </div>
-
-      {abierto === 'byteplus' && (
+      {!abierto && <button onClick={() => setAbierto(true)} disabled={bloqueado} style={{ ...btnGris, alignSelf: 'flex-start' }}>+ Crear presentador con IA · {est.precios.actor} créditos</button>}
+      {abierto && (
         <div style={{ border: '1px dashed var(--df-border-strong)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <b style={{ fontSize: 13.5 }}>Personaje de la biblioteca de BytePlus</b>
-          <span style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>BytePlus tiene más de 10.000 personas digitales listas para video, gratis. {DONDE_CODIGO}</span>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <label style={cuadroFoto} title="Foto de muestra (opcional): una captura para reconocerla">
-              {bp.imagen ? <img src={bp.imagen} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ padding: 8 }}>Foto de muestra (opcional)</span>}
-              {fotoInput((img) => setBp((x) => ({ ...x, imagen: img })))}
-            </label>
-            <div style={{ flex: 1, minWidth: 220, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: 10 }}>
-              <label style={lb}>Código de BytePlus *<input value={bp.assetId} onChange={(e) => setBp((x) => ({ ...x, assetId: e.target.value }))} placeholder="asset-20260410114236-8cdfz" style={input} /></label>
-              {datosPersona(bp, (p) => setBp((x) => ({ ...x, ...p })), 'Ej: Valentina')}
+          <b style={{ fontSize: 13.5 }}>Nuevo presentador</b>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10 }}>
+            <label style={lb}>Nombre<input value={f.nombre} onChange={(e) => set({ nombre: e.target.value })} placeholder="Ej: Valentina" style={input} /></label>
+            <div style={lb}>Es
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{['mujer', 'hombre'].map((g) => <button key={g} onClick={() => set({ genero: g, voz: g === 'hombre' ? 'ash' : 'coral' })} aria-pressed={f.genero === g} style={pill(f.genero === g)}>{g === 'mujer' ? 'Mujer' : 'Hombre'}</button>)}</div>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => void guardarBp()} disabled={guardando || !bp.assetId.trim()} style={{ ...btn, opacity: guardando || !bp.assetId.trim() ? 0.55 : 1 }}>{guardando ? 'Guardando…' : 'Guardar personaje'}</button>
-            <button onClick={() => setAbierto('')} style={btnGris}>Cancelar</button>
-          </div>
-        </div>
-      )}
-
-      {abierto === 'modelo' && (
-        <div style={{ border: '1px dashed var(--df-border-strong)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <b style={{ fontSize: 13.5 }}>Mi modelo (persona real)</b>
-          <span style={{ fontSize: 12, color: 'var(--df-text-muted)', lineHeight: 1.5 }}>Para que Seedance acepte a una persona real, ella tiene que <b>verificarse y dar su autorización en BytePlus</b> (ModelArk → Asset library → real-human assets). Al terminar, BytePlus da su código («asset-…»). Puedes guardarla ya y agregar el código después.</span>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <label style={cuadroFoto}>
-              {m.imagen ? <img src={m.imagen} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ padding: 8 }}>Toca para elegir la foto</span>}
-              {fotoInput((img) => setM((x) => ({ ...x, imagen: img })))}
-            </label>
-            <div style={{ flex: 1, minWidth: 220, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: 10 }}>
-              <label style={lb}>Código de BytePlus (si ya lo tienes)<input value={m.assetId} onChange={(e) => setM((x) => ({ ...x, assetId: e.target.value }))} placeholder="asset-…" style={input} /></label>
-              {datosPersona(m, (p) => setM((x) => ({ ...x, ...p })), 'Ej: Daniela')}
+            <div style={lb}>Edad
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{['18 a 24', '25 a 35', '36 a 50', 'más de 50'].map((e) => <button key={e} onClick={() => set({ edad: e })} aria-pressed={f.edad === e} style={pill(f.edad === e)}>{e}</button>)}</div>
             </div>
+            <div style={lb}>Estilo
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{ESTILOS_PRESENTADOR.map((e) => <button key={e} onClick={() => set({ estilo: e })} aria-pressed={f.estilo === e} style={pill(f.estilo === e)}>{e[0].toUpperCase() + e.slice(1)}</button>)}</div>
+            </div>
+            <label style={lb}>Cómo se ve (opcional)<input value={f.apariencia} onChange={(e) => set({ apariencia: e.target.value })} placeholder="Ej: pelo rizado, piel morena, gafas" style={input} /></label>
+            <label style={lb}>Dónde está (opcional)<input value={f.ambiente} onChange={(e) => set({ ambiente: e.target.value })} placeholder="Ej: una cocina moderna" style={input} /></label>
+            <label style={lb}>Voz (para la voz en off)
+              <Dropdown ariaLabel="Voz" value={f.voz} onChange={(x) => set({ voz: x })} options={est.voces.map((x) => ({ value: x.id, label: x.nombre }))} />
+            </label>
           </div>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, cursor: 'pointer' }}>
-            <input type="checkbox" checked={m.permiso} onChange={(e) => setM((x) => ({ ...x, permiso: e.target.checked }))} style={{ marginTop: 2 }} />
-            <span>Tengo el permiso de esta persona para usar su imagen en anuncios. No es un famoso ni un menor de edad.</span>
-          </label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => void subirModelo()} disabled={guardando || !m.imagen || !m.permiso} style={{ ...btn, opacity: guardando || !m.imagen || !m.permiso ? 0.55 : 1 }}>{guardando ? 'Guardando…' : 'Guardar modelo'}</button>
-            <button onClick={() => setAbierto('')} style={btnGris}>Cancelar</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button onClick={() => void crear()} disabled={creando || !est.activo.seedance} style={{ ...btn, opacity: creando || !est.activo.seedance ? 0.6 : 1 }}>{creando ? 'Creando… (unos 20 segundos)' : `Crear presentador · ${est.precios.actor} créditos`}</button>
+            {!creando && <button onClick={() => setAbierto(false)} style={btnGris}>Cancelar</button>}
           </div>
         </div>
       )}
@@ -424,7 +356,7 @@ function PasoGenerar({ est, v, cambiar, bloqueado, onVideo, guardarYa, onIrEstud
   const faltan: string[] = [];
   if (!v.config.producto.nombre || !v.config.producto.fotos.length) faltan.push('el producto con fotos');
   if (!v.actorId) faltan.push('quién lo presenta');
-  else if (v.actorId !== 'sin-persona' && !est.actores.find((a) => a.id === v.actorId)?.assetId) faltan.push('el código de BytePlus del personaje (paso 2)');
+  else if (v.actorId !== 'sin-persona' && !est.actores.find((a) => a.id === v.actorId)?.listo) faltan.push('un presentador que sirva para video (paso 2)');
   if (v.guion.some((p) => !p.texto && !p.escena)) faltan.push('el guion');
   const generar = async () => {
     await guardarYa();

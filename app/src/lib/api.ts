@@ -1404,7 +1404,7 @@ export interface ProyectoEstudio { id: string; nombre: string; brief: BriefEstud
 export interface ProyectoEstudioResumen { id: string; nombre: string; foto: string; videos: number; imagenes: number; generando: number; actualizado: string }
 export interface PreciosEstudio { paquete: number; imagen: { medium: number; high: number }; video: Record<string, Record<string, number>>; disponible: boolean }
 // ── Video UGC con Seedance (Marketing IA) ──
-export interface ActorUgc { id: string; nombre: string; genero: string; edad: string; estilo: string; apariencia: string; ambiente: string; voz: string; imagen: string; origen?: 'ia' | 'propio' | 'byteplus'; assetId?: string }
+export interface ActorUgc { id: string; nombre: string; genero: string; edad: string; estilo: string; apariencia: string; ambiente: string; voz: string; imagen: string; origen?: 'seedream' | 'ia' | 'propio' | 'byteplus'; assetId?: string; listo?: boolean; aviso?: string }
 export interface ConfigUgc {
   producto: { id: string; nombre: string; fotos: string[]; notas: string; precio: number };
   voz: { modo: 'persona' | 'locutor'; id: string };

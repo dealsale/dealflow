@@ -1,3 +1,4 @@
+import './envLocal.js'; // claves locales de prueba (solo en el PC)
 import { noCaerPorPromesas } from './protegerRutas.js';
 import './landings.js'; // tablas del Creador de landings (los pagos aprobados las usan)
 import express from 'express';
@@ -244,7 +245,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'ugc-byteplus-11231900',
+    build: 'ugc-presentador-11231510',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

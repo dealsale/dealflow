@@ -15,7 +15,13 @@
  *   SEEDANCE_API_KEY (o ARK_API_KEY) · SEEDANCE_BASE_URL (https://ark.ap-southeast.bytepluses.com/api/v3)
  *   SEEDANCE_MODEL (dreamina-seedance-2-0-260128) · SEEDANCE_MODEL_RAPIDO (dreamina-seedance-2-0-fast-260128)
  *   SEEDANCE_RESOLUTION (720p) · OPENAI_API_KEY · OPENAI_TTS_MODEL (gpt-4o-mini-tts)
- *   UGC_CRED_SEG (30) · UGC_CRED_SEG_RAPIDO (20) · UGC_CRED_ACTOR (100) · UGC_CRED_GUION (2)
+ *   SEEDREAM_MODEL (dola-seedream-5-0-flash-260915: crea la cara del presentador; hay que activarlo en ModelArk)
+ *   UGC_CRED_SEG (30) · UGC_CRED_SEG_RAPIDO (20) · UGC_CRED_ACTOR (20) · UGC_CRED_GUION (2)
+ *
+ * Caras: Seedance NO acepta fotos con caras reales (ni caras realistas hechas con otra IA). Sí acepta
+ * las fotos que crea Seedream (text-to-image) en la MISMA cuenta de BytePlus durante 30 días, siempre
+ * que se manden tal cual salieron (sin recomprimir). Por eso el presentador se crea con Seedream y su
+ * archivo original se guarda y se manda sin tocar.
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -26,7 +32,6 @@ import { descargarImagenSegura } from './descargaSegura.js';
 import { abonar, cobrar, saldo } from './creditos.js';
 import { chatJSON, SIN_OPENAI } from './marketing.js';
 import { mediaDir, mediaPath } from './media.js';
-import { modeloImagen } from './modelosIA.js';
 import { bloqueMaestro, instruccionesMaestras } from './mkAjustes.js';
 
 type Fila = Record<string, unknown>;
@@ -35,6 +40,9 @@ const pj = <T>(s: unknown, d: T): T => { try { const v = JSON.parse(txt(s)); ret
 const OPENAI = () => process.env.OPENAI_BASE || 'https://api.openai.com/v1';
 const SEEDANCE = () => (process.env.SEEDANCE_BASE_URL || 'https://ark.ap-southeast.bytepluses.com/api/v3').replace(/\/+$/, '');
 const claveSeedance = () => process.env.SEEDANCE_API_KEY || process.env.ARK_API_KEY || '';
+const modeloSeedream = () => process.env.SEEDREAM_MODEL || 'dola-seedream-5-0-flash-260915';
+/** BytePlus confía en las caras de Seedream por 30 días; dejamos 1 de margen. */
+const DIAS_CARA = 29;
 const modeloSeedance = (calidad: string) => (calidad === 'rapida'
   ? process.env.SEEDANCE_MODEL_RAPIDO || 'dreamina-seedance-2-0-fast-260128'
   : process.env.SEEDANCE_MODEL || 'dreamina-seedance-2-0-260128');
@@ -46,7 +54,7 @@ const n = (v: string | undefined, d: number) => (Number(v) > 0 ? Math.round(Numb
 export const PRECIOS_UGC = {
   segundo: n(process.env.UGC_CRED_SEG, 30),
   segundoRapido: n(process.env.UGC_CRED_SEG_RAPIDO, 20),
-  actor: n(process.env.UGC_CRED_ACTOR, 100),
+  actor: n(process.env.UGC_CRED_ACTOR, 20),
   guion: n(process.env.UGC_CRED_GUION, 2),
 };
 const tarifa = (calidad: string) => (calidad === 'rapida' ? PRECIOS_UGC.segundoRapido : PRECIOS_UGC.segundo);
@@ -79,11 +87,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS ugc_actores (
   estilo TEXT NOT NULL DEFAULT '', apariencia TEXT NOT NULL DEFAULT '', ambiente TEXT NOT NULL DEFAULT '', voz TEXT NOT NULL DEFAULT '',
   imagen TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
-// origen: 'ia' (personaje creado con IA) | 'propio' (foto de un modelo real que subió la tienda).
+// origen: 'seedream' (presentador creado con Seedream: sirve para video 30 días) | 'ia' (viejo, creado con
+// otra IA: Seedance lo rechaza) | 'propio' (foto de una persona real) | 'byteplus' (por código asset-…).
 try { db.exec("ALTER TABLE ugc_actores ADD COLUMN origen TEXT NOT NULL DEFAULT 'ia'"); } catch { /* ya existe */ }
-// Seedance 2.0 NO acepta fotos con caras reales (ni caras hechas con IA que parezcan reales). Las
-// personas entran por su código de BytePlus: personaje de la biblioteca digital de BytePlus o
-// persona real verificada y autorizada en la consola de ModelArk. Se manda como asset://<código>.
+// Código de BytePlus (asset-…) de una persona real verificada en la consola de ModelArk. Se manda
+// como asset://<código>. (Los personajes de la biblioteca digital de BytePlus son solo para pruebas.)
 try { db.exec("ALTER TABLE ugc_actores ADD COLUMN asset_id TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
 /** «Personaje» especial: video sin persona en cámara (solo el producto, con voz en off). */
 export const SIN_PERSONA = 'sin-persona';
@@ -139,7 +147,20 @@ function limpiarGuion(lista: unknown, duracion: number): ParteGuion[] {
 }
 export const costoVideo = (guion: ParteGuion[], calidad: string) => guion.reduce((a, p) => a + p.segundos, 0) * tarifa(calidad);
 
-function mapActor(a: Fila) { return { id: txt(a.id), nombre: txt(a.nombre), genero: txt(a.genero), edad: txt(a.edad), estilo: txt(a.estilo), apariencia: txt(a.apariencia), ambiente: txt(a.ambiente), voz: txt(a.voz), imagen: txt(a.imagen), origen: txt(a.origen) || 'ia', assetId: txt(a.asset_id) }; }
+/** Días que le quedan a una cara de Seedream para que Seedance la acepte (0 = venció). */
+function diasCara(a: Fila): number {
+  const t = Date.parse(`${txt(a.created_at).replace(' ', 'T')}Z`);
+  return Number.isFinite(t) ? Math.max(0, Math.ceil((t + DIAS_CARA * 86_400_000 - Date.now()) / 86_400_000)) : 0;
+}
+function aptoVideo(a: Fila): { listo: boolean; aviso: string } {
+  if (txt(a.asset_id)) return { listo: true, aviso: '' };
+  if (txt(a.origen) === 'seedream') {
+    const d = diasCara(a);
+    return d > 0 ? { listo: true, aviso: `Sirve para video ${d} día${d === 1 ? '' : 's'} más` } : { listo: false, aviso: 'Venció: BytePlus solo acepta caras de los últimos 30 días. Crea uno nuevo.' };
+  }
+  return { listo: false, aviso: 'Seedance no acepta esta foto (no la creó Seedream). Crea un presentador nuevo.' };
+}
+function mapActor(a: Fila) { return { id: txt(a.id), nombre: txt(a.nombre), genero: txt(a.genero), edad: txt(a.edad), estilo: txt(a.estilo), apariencia: txt(a.apariencia), ambiente: txt(a.ambiente), voz: txt(a.voz), imagen: txt(a.imagen), origen: txt(a.origen) || 'ia', assetId: txt(a.asset_id), ...aptoVideo(a) }; }
 function mapVideo(v: Fila) {
   const config = { ...CONFIG_BASE, ...pj<ConfigUgc>(v.config, CONFIG_BASE) };
   const guion = limpiarGuion(pj(v.guion, []), config.duracion);
@@ -192,38 +213,60 @@ async function referencia(storeId: string, src: string): Promise<string> {
     writeFileSync(path.join(dir, 'in'), buf);
     const r = await ffmpeg(['-i', path.join(dir, 'in'), '-vf', "scale='min(1024,iw)':'min(1024,ih)':force_original_aspect_ratio=decrease", '-frames:v', '1', '-q:v', '3', path.join(dir, 'out.jpg')], 30_000);
     const out = path.join(dir, 'out.jpg');
-    return r.status === 0 && existsSync(out) ? `data:image/jpeg;base64,${readFileSync(out).toString('base64')}` : '';
-  } catch { return ''; } finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
+    if (r.status === 0 && existsSync(out)) return `data:image/jpeg;base64,${readFileSync(out).toString('base64')}`;
+    return dataUrlOriginal(buf, 8 * 1024 * 1024);
+  } catch { return dataUrlOriginal(buf, 8 * 1024 * 1024); } finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
+}
+
+/** El archivo tal cual (sin recomprimir) como data URL; '' si no es JPG/PNG/WEBP o pesa más de `max`. */
+function dataUrlOriginal(buf: Buffer, max = 20 * 1024 * 1024): string {
+  const tipo = buf[0] === 0xff && buf[1] === 0xd8 ? 'jpeg' : buf.subarray(1, 4).toString() === 'PNG' ? 'png' : buf.subarray(8, 12).toString() === 'WEBP' ? 'webp' : '';
+  return tipo && buf.length <= max ? `data:image/${tipo};base64,${buf.toString('base64')}` : '';
 }
 
 // ── Personajes ───────────────────────────────────────────────────────────────
+const EN: Record<string, string> = {
+  mujer: 'woman', hombre: 'man', '18 a 24': '18 to 24', '25 a 35': '25 to 35', '36 a 50': '36 to 50', 'más de 50': 'over 50',
+  casual: 'casual', elegante: 'elegant', deportivo: 'sporty', profesional: 'smart professional',
+};
+/**
+ * Presentador creado con Seedream (BytePlus): una persona ficticia, realista, tipo creadora de contenido.
+ * Se guarda el archivo ORIGINAL (sin recomprimir) para que Seedance lo reconozca como salida de la cuenta.
+ */
 export async function crearActor(storeId: string, b: Fila): Promise<{ actor: ReturnType<typeof mapActor> } | { error: string; sinCreditos?: boolean }> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return { error: SIN_OPENAI };
+  if (!claveSeedance()) return { error: SIN_SEEDANCE };
   const d = {
-    nombre: corto(b.nombre, 40) || 'Mi personaje', genero: corto(b.genero, 20) || 'mujer', edad: corto(b.edad, 20) || '25 a 35',
-    estilo: corto(b.estilo, 80) || 'casual', apariencia: corto(b.apariencia, 240), ambiente: corto(b.ambiente, 120) || 'una sala de casa bien iluminada',
-    voz: VOCES.some((v) => v.id === b.voz) ? txt(b.voz) : 'coral',
+    nombre: corto(b.nombre, 40) || 'Mi presentador', genero: txt(b.genero) === 'hombre' ? 'hombre' : 'mujer', edad: corto(b.edad, 20) || '25 a 35',
+    estilo: corto(b.estilo, 80) || 'casual', apariencia: corto(b.apariencia, 240), ambiente: corto(b.ambiente, 120),
+    voz: VOCES.some((v) => v.id === b.voz) ? txt(b.voz) : (txt(b.genero) === 'hombre' ? 'ash' : 'coral'),
   };
   const costo = PRECIOS_UGC.actor;
-  if (saldo(storeId) < costo || !cobrar(storeId, costo, `Video UGC: crear personaje ${d.nombre}`)) return { error: `Necesitas ${costo} créditos para crear un personaje.`, sinCreditos: true };
-  const prompt = `Foto vertical tipo selfie, realista, tomada con celular, luz natural. Persona ficticia (no es una persona real ni famosa): ${d.genero} latinoamericano(a) de ${d.edad} años${d.apariencia ? `, ${d.apariencia}` : ''}, ropa ${d.estilo}, en ${d.ambiente}. Mira a cámara con una sonrisa natural, de la cintura para arriba, cara bien visible y nítida. Sin texto, sin logos, sin marcas, sin filtros exagerados.`;
+  if (saldo(storeId) < costo || !cobrar(storeId, costo, `Video UGC: crear presentador ${d.nombre}`)) return { error: `Necesitas ${costo} créditos para crear un presentador.`, sinCreditos: true };
+  const prompt = [
+    `Realistic vertical smartphone photo (9:16) of a fictional Latin American ${EN[d.genero]} from Colombia, ${EN[d.edad] || d.edad} years old, wearing ${EN[d.estilo] || d.estilo} clothes.`,
+    d.apariencia ? `Appearance details (Spanish): ${d.apariencia}.` : '',
+    `Setting: ${d.ambiente ? `${d.ambiente} (Spanish)` : 'a bright, tidy living room at home'}.`,
+    'Waist-up framing, facing the camera, natural friendly smile, face clearly visible and sharp, soft natural window light, authentic UGC content creator look.',
+    'Not a celebrity. No text, no logos, no brand names, no watermark, no heavy filters.',
+  ].filter(Boolean).join(' ');
+  const devolver = (msg: string) => { abonar(storeId, costo, 'Devolución: presentador que no se pudo crear'); return { error: msg }; };
   try {
-    const res = await fetch(`${OPENAI()}/images/generations`, {
-      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: modeloImagen(), prompt, size: '1024x1536', quality: 'medium', n: 1 }), signal: AbortSignal.timeout(240_000),
+    const res = await fetch(`${SEEDANCE()}/images/generations`, {
+      method: 'POST', headers: { Authorization: `Bearer ${claveSeedance()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modeloSeedream(), prompt, size: '1440x2560', output_format: 'jpeg', response_format: 'b64_json', watermark: false }),
+      signal: AbortSignal.timeout(150_000),
     });
-    const body = (await res.json().catch(() => ({}))) as { data?: { b64_json?: string }[]; error?: { message?: string } };
+    const body = (await res.json().catch(() => ({}))) as { data?: { b64_json?: string }[]; error?: { message?: string; code?: string } };
     const b64 = body.data?.[0]?.b64_json;
-    if (!res.ok || !b64) { abonar(storeId, costo, 'Devolución: personaje que no se pudo crear'); return { error: body.error?.message ? `OpenAI: ${body.error.message}` : 'No se pudo crear el personaje. Te devolvimos los créditos.' }; }
-    const imagen = guardarArchivo(storeId, Buffer.from(b64, 'base64'), 'png');
+    if (!res.ok || !b64) return devolver(body.error?.message ? `BytePlus: ${body.error.message.slice(0, 200)} Te devolvimos los créditos.` : 'No se pudo crear el presentador. Te devolvimos los créditos.');
+    const buf = Buffer.from(b64, 'base64');
+    const imagen = guardarArchivo(storeId, buf, buf[0] === 0xff ? 'jpg' : 'png');
     const id = uid();
-    db.prepare('INSERT INTO ugc_actores (id, store_id, nombre, genero, edad, estilo, apariencia, ambiente, voz, imagen) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    db.prepare("INSERT INTO ugc_actores (id, store_id, nombre, genero, edad, estilo, apariencia, ambiente, voz, imagen, origen) VALUES (?,?,?,?,?,?,?,?,?,?, 'seedream')")
       .run(id, storeId, d.nombre, d.genero, d.edad, d.estilo, d.apariencia, d.ambiente, d.voz, imagen);
     return { actor: mapActor(db.prepare('SELECT * FROM ugc_actores WHERE id = ?').get(id) as Fila) };
   } catch (e) {
-    abonar(storeId, costo, 'Devolución: personaje que no se pudo crear');
-    return { error: (e as Error)?.name === 'TimeoutError' ? 'OpenAI tardó demasiado. Te devolvimos los créditos.' : 'No pudimos hablar con OpenAI. Te devolvimos los créditos.' };
+    return devolver((e as Error)?.name === 'TimeoutError' ? 'BytePlus tardó demasiado. Te devolvimos los créditos.' : 'No pudimos hablar con BytePlus. Te devolvimos los créditos.');
   }
 }
 /**
@@ -359,7 +402,8 @@ const mensajeSeedance = (b: Fila, http: number): string => {
   const e = (b.error || {}) as Fila;
   const m = txt(e.message || b.message);
   if (http === 401 || http === 403) return 'BytePlus rechazó la clave de Seedance (revisa SEEDANCE_API_KEY y que el modelo esté activado en tu cuenta).';
-  if (/real.?(person|human|face)|portrait|privacy|celebrit/i.test(m + txt(e.code))) return `Seedance no acepta caras reales en las fotos de referencia. Usa un personaje con código de BytePlus y fotos del producto SIN caras (solo la prenda o el producto).${e.code ? ` (${txt(e.code)})` : ''}`;
+  if (/asset service/i.test(m)) return 'Tu cuenta de BytePlus no tiene activado el servicio de códigos de personajes. Usa un presentador creado aquí con IA o «Sin persona».';
+  if (/real.?(person|human|face)|portrait|privacy|celebrit/i.test(m + txt(e.code))) return `Seedance no acepta caras reales en las fotos de referencia. Usa un presentador creado aquí con IA (o «Sin persona») y fotos del producto SIN caras (solo la prenda o el producto).${e.code ? ` (${txt(e.code)})` : ''}`;
   if (/sensitive|policy|moderat|risk/i.test(m + txt(e.code))) return 'Seedance rechazó la toma por sus políticas de contenido. Cambia la escena o las fotos y vuelve a intentar.';
   return m ? `Seedance: ${m.slice(0, 200)}` : `Seedance respondió ${http}.`;
 };
@@ -376,6 +420,8 @@ async function lanzarToma(storeId: string, videoId: string, i: number): Promise<
   const conVoz = config.voz.modo === 'persona' && !!actor;
   const refs: string[] = [];
   if (actor && txt(actor.asset_id)) refs.push(`asset://${txt(actor.asset_id)}`);
+  else if (actor && aptoVideo(actor).listo) { const buf = await bytesDe(storeId, txt(actor.imagen)); const u = buf ? dataUrlOriginal(buf) : ''; if (u) refs.push(u); }
+  if (actor && !refs.length) { fallaToma(storeId, videoId, i, 'No encontramos la foto del presentador. Crea uno nuevo.'); return; }
   const personaRef = refs.length > 0;
   for (const f of config.producto.fotos.slice(0, 3)) { const r = await referencia(storeId, f); if (r) refs.push(r); }
   const body = {
@@ -426,7 +472,7 @@ export async function generarVideo(storeId: string, id: string): Promise<{ video
   const sinPersona = txt(v.actor_id) === SIN_PERSONA;
   const actor = sinPersona ? undefined : db.prepare('SELECT * FROM ugc_actores WHERE id = ? AND store_id = ?').get(txt(v.actor_id), storeId) as Fila | undefined;
   if (!sinPersona && !actor) return { error: 'Elige quién presenta el video (o «Sin persona»).' };
-  if (actor && !txt(actor.asset_id)) return { error: `«${txt(actor.nombre)}» no tiene código de BytePlus. Seedance no acepta fotos de caras reales (ni de personajes hechos con IA): usa un personaje de BytePlus o agrega el código de tu modelo autorizado en BytePlus.` };
+  if (actor && !aptoVideo(actor).listo) return { error: `«${txt(actor.nombre)}» no sirve para video: ${aptoVideo(actor).aviso}` };
   if (sinPersona && config.voz.modo !== 'locutor') {
     config.voz = { ...config.voz, modo: 'locutor' };
     db.prepare('UPDATE ugc_videos SET config = ? WHERE id = ?').run(JSON.stringify(config), id);
@@ -453,6 +499,8 @@ export async function rehacerToma(storeId: string, id: string, i: number, b: Fil
   const guion = limpiarGuion(pj(v.guion, []), config.duracion);
   const tomas = pj<Toma[]>(v.tomas, []);
   if (!guion[i] || !tomas[i]) return { error: 'Esa toma no existe.' };
+  const actorR = txt(v.actor_id) === SIN_PERSONA ? undefined : db.prepare('SELECT * FROM ugc_actores WHERE id = ? AND store_id = ?').get(txt(v.actor_id), storeId) as Fila | undefined;
+  if (actorR && !aptoVideo(actorR).listo) return { error: `«${txt(actorR.nombre)}» no sirve para video: ${aptoVideo(actorR).aviso}` };
   if (b.texto !== undefined) guion[i].texto = corto(b.texto, 260);
   if (b.escena !== undefined) guion[i].escena = corto(b.escena, 400);
   if (CAMARAS.includes(txt(b.camara))) guion[i].camara = txt(b.camara);

@@ -3,3 +3,7 @@ tsconfig.tsbuildinfo
 
 # Base de datos local de pruebas
 server/data-local/
+
+# Claves para probar en el PC (nunca se suben)
+.env.local
+server/.env.local
