@@ -22,7 +22,11 @@
  * las fotos que crea Seedream (text-to-image) en la MISMA cuenta de BytePlus durante 30 días, siempre
  * que se manden tal cual salieron (sin recomprimir). Por eso el presentador se crea con Seedream y su
  * archivo original se guarda y se manda sin tocar.
+ * Fotos del producto con modelo: Seedance las rechaza al instante (sin cobrar) y dice cuál foto fue
+ * (content[N]). Entonces Seedream hace una versión de esa foto SIN la persona (la prenda en maniquí
+ * invisible o el producto solo), se guarda para no repetirla y la toma se vuelve a pedir sola.
  */
+import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -93,6 +97,11 @@ try { db.exec("ALTER TABLE ugc_actores ADD COLUMN origen TEXT NOT NULL DEFAULT '
 // Código de BytePlus (asset-…) de una persona real verificada en la consola de ModelArk. Se manda
 // como asset://<código>. (Los personajes de la biblioteca digital de BytePlus son solo para pruebas.)
 try { db.exec("ALTER TABLE ugc_actores ADD COLUMN asset_id TEXT NOT NULL DEFAULT ''"); } catch { /* ya existe */ }
+// Versión SIN persona de una foto del producto (hecha con Seedream) para que Seedance la acepte.
+db.exec(`CREATE TABLE IF NOT EXISTS ugc_fotos_limpias (
+  store_id TEXT NOT NULL, clave TEXT NOT NULL, url TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (store_id, clave)
+)`);
 /** «Personaje» especial: video sin persona en cámara (solo el producto, con voz en off). */
 export const SIN_PERSONA = 'sin-persona';
 const limpiarAsset = (v: unknown) => { const s = txt(v).trim().replace(/^asset:\/\//i, ''); return /^asset-[a-z0-9-]{6,80}$/i.test(s) ? s : ''; };
@@ -224,6 +233,44 @@ async function referencia(storeId: string, src: string): Promise<string> {
 function dataUrlOriginal(buf: Buffer, max = 20 * 1024 * 1024): string {
   const tipo = buf[0] === 0xff && buf[1] === 0xd8 ? 'jpeg' : buf.subarray(1, 4).toString() === 'PNG' ? 'png' : buf.subarray(8, 12).toString() === 'WEBP' ? 'webp' : '';
   return tipo && buf.length <= max ? `data:image/${tipo};base64,${buf.toString('base64')}` : '';
+}
+
+// ── Fotos del producto sin persona ───────────────────────────────────────────
+const claveFoto = (src: string) => createHash('sha1').update(src).digest('hex');
+function fotoLimpiaGuardada(storeId: string, src: string): string {
+  const f = db.prepare('SELECT url FROM ugc_fotos_limpias WHERE store_id = ? AND clave = ?').get(storeId, claveFoto(src)) as Fila | undefined;
+  const url = txt(f?.url);
+  return url && rutaMedia(storeId, url) && existsSync(rutaMedia(storeId, url)) ? url : '';
+}
+const PROMPT_SIN_PERSONA = 'Turn this into a clean e-commerce product photo of the exact same product, with NO person: remove the model completely (no face, no head, no hands, no skin). If it is clothing, show the same garments on an invisible ghost mannequin, front view, full outfit visible. If it is another product, show it alone. Keep exactly the same colors, logos, prints, stripes, zippers, fabric texture, shape and proportions. Plain light grey studio background, soft even light. No text added.';
+const limpiando = new Map<string, Promise<string>>();
+/** Crea (una sola vez por foto) la versión sin persona con Seedream. Devuelve su URL o '' si no se pudo. */
+function limpiarFoto(storeId: string, src: string): Promise<string> {
+  const ya = fotoLimpiaGuardada(storeId, src);
+  if (ya) return Promise.resolve(ya);
+  const k = `${storeId}:${claveFoto(src)}`;
+  if (!limpiando.has(k)) {
+    limpiando.set(k, (async () => {
+      try {
+        const buf = await bytesDe(storeId, src);
+        if (!buf) return '';
+        const imagen = dataUrlOriginal(buf, 8 * 1024 * 1024) || (await referencia(storeId, src));
+        if (!imagen) return '';
+        const res = await fetch(`${SEEDANCE()}/images/generations`, {
+          method: 'POST', headers: { Authorization: `Bearer ${claveSeedance()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: modeloSeedream(), image: imagen, prompt: PROMPT_SIN_PERSONA, size: '2K', output_format: 'jpeg', response_format: 'b64_json', watermark: false }),
+          signal: AbortSignal.timeout(150_000),
+        });
+        const body = (await res.json().catch(() => ({}))) as { data?: { b64_json?: string }[]; error?: { message?: string } };
+        const b64 = body.data?.[0]?.b64_json;
+        if (!res.ok || !b64) { console.warn('[ugc] no se pudo quitar la persona de la foto:', res.status, body.error?.message); return ''; }
+        const url = guardarArchivo(storeId, Buffer.from(b64, 'base64'), 'jpg');
+        db.prepare('INSERT OR REPLACE INTO ugc_fotos_limpias (store_id, clave, url) VALUES (?,?,?)').run(storeId, claveFoto(src), url);
+        return url;
+      } catch (e) { console.warn('[ugc] limpiar foto', (e as Error)?.message); return ''; } finally { limpiando.delete(k); }
+    })());
+  }
+  return limpiando.get(k)!;
 }
 
 // ── Personajes ───────────────────────────────────────────────────────────────
@@ -405,12 +452,19 @@ const mensajeSeedance = (b: Fila, http: number): string => {
   const m = txt(e.message || b.message);
   if (http === 401 || http === 403) return 'BytePlus rechazó la clave de Seedance (revisa SEEDANCE_API_KEY y que el modelo esté activado en tu cuenta).';
   if (/asset service/i.test(m)) return 'Tu cuenta de BytePlus no tiene activado el servicio de códigos de personajes. Usa un presentador creado aquí con IA o «Sin persona».';
-  if (/real.?(person|human|face)|portrait|privacy|celebrit/i.test(m + txt(e.code))) return `Seedance no acepta caras reales en las fotos de referencia. Usa un presentador creado aquí con IA (o «Sin persona») y fotos del producto SIN caras (solo la prenda o el producto).${e.code ? ` (${txt(e.code)})` : ''}`;
+  if (/real.?(person|human|face)|portrait|privacy|celebrit/i.test(m + txt(e.code))) return `Seedance sigue viendo una cara en una foto y no pudimos quitarla sola. Usa otra foto del producto (solo la prenda o el producto) o un presentador creado aquí con IA.${e.code ? ` (${txt(e.code)})` : ''}`;
   if (/sensitive|policy|moderat|risk/i.test(m + txt(e.code))) return 'Seedance rechazó la toma por sus políticas de contenido. Cambia la escena o las fotos y vuelve a intentar.';
   return m ? `Seedance: ${m.slice(0, 200)}` : `Seedance respondió ${http}.`;
 };
 
+const lanzando = new Set<string>();
 async function lanzarToma(storeId: string, videoId: string, i: number): Promise<void> {
+  const k = `${videoId}:${i}`;
+  if (lanzando.has(k)) return; // ya se está pidiendo (p. ej. mientras se limpia una foto)
+  lanzando.add(k);
+  try { await pedirToma(storeId, videoId, i); } finally { lanzando.delete(k); }
+}
+async function pedirToma(storeId: string, videoId: string, i: number): Promise<void> {
   const v = db.prepare('SELECT * FROM ugc_videos WHERE id = ?').get(videoId) as Fila | undefined;
   if (!v) return;
   const config = { ...CONFIG_BASE, ...pj<ConfigUgc>(v.config, CONFIG_BASE) };
@@ -420,17 +474,9 @@ async function lanzarToma(storeId: string, videoId: string, i: number): Promise<
   if (!p || !t) return;
   const actor = txt(v.actor_id) === SIN_PERSONA ? undefined : db.prepare('SELECT * FROM ugc_actores WHERE id = ?').get(txt(v.actor_id)) as Fila | undefined;
   const conVoz = config.voz.modo === 'persona' && !!actor;
-  const refs: string[] = [];
-  if (actor && aptoVideo(actor).listo) { const buf = await bytesDe(storeId, txt(actor.imagen)); const u = buf ? dataUrlOriginal(buf) : ''; if (u) refs.push(u); }
-  if (actor && !refs.length) { fallaToma(storeId, videoId, i, 'No encontramos la foto del presentador. Crea uno nuevo.'); return; }
-  const personaRef = refs.length > 0;
-  for (const f of config.producto.fotos.slice(0, 3)) { const r = await referencia(storeId, f); if (r) refs.push(r); }
-  const body = {
-    model: modeloSeedance(config.calidad),
-    content: [{ type: 'text', text: promptToma(p, config, actor, conVoz, instruccionesMaestras(storeId), personaRef, refs.length - (personaRef ? 1 : 0)) }, ...refs.map((url) => ({ type: 'image_url', image_url: { url }, role: 'reference_image' }))],
-    ratio: config.formato, duration: p.segundos, resolution: process.env.SEEDANCE_RESOLUTION || '720p',
-    generate_audio: conVoz && p.habla, watermark: false,
-  };
+  let cara = '';
+  if (actor && aptoVideo(actor).listo) { const buf = await bytesDe(storeId, txt(actor.imagen)); cara = buf ? dataUrlOriginal(buf) : ''; }
+  if (actor && !cara) { fallaToma(storeId, videoId, i, 'No encontramos la foto del presentador. Crea uno nuevo.'); return; }
   const marcar = (cambios: Partial<Toma>) => {
     const fila = db.prepare('SELECT tomas FROM ugc_videos WHERE id = ?').get(videoId) as Fila | undefined;
     const ts = pj<Toma[]>(fila?.tomas, []);
@@ -438,16 +484,46 @@ async function lanzarToma(storeId: string, videoId: string, i: number): Promise<
     ts[i] = { ...ts[i], ...cambios };
     db.prepare("UPDATE ugc_videos SET tomas = ?, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(ts), videoId);
   };
-  try {
-    const res = await fetch(`${SEEDANCE()}/contents/generations/tasks`, {
-      method: 'POST', headers: { Authorization: `Bearer ${claveSeedance()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000),
-    });
-    const r = (await res.json().catch(() => ({}))) as Fila;
-    if (!res.ok || !txt(r.id)) { fallaToma(storeId, videoId, i, mensajeSeedance(r, res.status)); return; }
-    marcar({ estado: 'generando', task: txt(r.id), error: '', inicio: new Date().toISOString() });
-  } catch (e) {
-    fallaToma(storeId, videoId, i, (e as Error)?.name === 'TimeoutError' ? 'Seedance tardó demasiado en responder.' : 'No pudimos hablar con Seedance.');
+  const fotos = config.producto.fotos.slice(0, 3);
+  // Hasta 1 + nº de fotos intentos: cada rechazo por cara limpia la foto señalada y se vuelve a pedir.
+  for (let intento = 0; intento <= fotos.length; intento++) {
+    // Referencias: [cara del presentador] + fotos del producto (la versión sin persona si ya existe).
+    const refs: string[] = cara ? [cara] : [];
+    const origen: (string | null)[] = cara ? [null] : [];
+    for (const f of fotos) { const r = await referencia(storeId, fotoLimpiaGuardada(storeId, f) || f); if (r) { refs.push(r); origen.push(f); } }
+    const body = {
+      model: modeloSeedance(config.calidad),
+      content: [{ type: 'text', text: promptToma(p, config, actor, conVoz, instruccionesMaestras(storeId), !!cara, refs.length - (cara ? 1 : 0)) }, ...refs.map((url) => ({ type: 'image_url', image_url: { url }, role: 'reference_image' }))],
+      ratio: config.formato, duration: p.segundos, resolution: process.env.SEEDANCE_RESOLUTION || '720p',
+      generate_audio: conVoz && p.habla, watermark: false,
+    };
+    let res: Response, r: Fila;
+    try {
+      res = await fetch(`${SEEDANCE()}/contents/generations/tasks`, {
+        method: 'POST', headers: { Authorization: `Bearer ${claveSeedance()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000),
+      });
+      r = (await res.json().catch(() => ({}))) as Fila;
+    } catch (e) {
+      fallaToma(storeId, videoId, i, (e as Error)?.name === 'TimeoutError' ? 'Seedance tardó demasiado en responder.' : 'No pudimos hablar con Seedance.');
+      return;
+    }
+    if (res.ok && txt(r.id)) { marcar({ estado: 'generando', task: txt(r.id), error: '', inicio: new Date().toISOString() }); return; }
+    // ¿Rechazo por cara en una foto del producto? Seedance dice cuál: «input image 'content[N]'».
+    const e = (r.error || {}) as Fila;
+    const msg = txt(e.message || r.message);
+    if (/privacy|real.?person/i.test(msg + txt(e.code))) {
+      const n = /content\[(\d+)\]/.exec(msg);
+      const culpables = (n ? [origen[Number(n[1]) - 1]] : origen).filter((f): f is string => !!f && !fotoLimpiaGuardada(storeId, f));
+      if (culpables.length) {
+        marcar({ error: 'Quitando a la persona de una foto del producto para que Seedance la acepte…' });
+        const hechas = await Promise.all(culpables.map((f) => limpiarFoto(storeId, f)));
+        if (hechas.some(Boolean)) continue;
+      }
+    }
+    fallaToma(storeId, videoId, i, mensajeSeedance(r, res.status));
+    return;
   }
+  fallaToma(storeId, videoId, i, 'Seedance siguió rechazando las fotos del producto. Usa otras fotos (solo la prenda o el producto).');
 }
 
 /** Toma fallida: se marca y se devuelven sus créditos (una sola vez). */
@@ -486,7 +562,7 @@ export async function generarVideo(storeId: string, id: string): Promise<{ video
   const ahora = new Date().toISOString();
   const tomas: Toma[] = guion.map((p) => ({ estado: 'pendiente', task: '', url: '', error: '', creditos: p.segundos * t, devuelto: false, inicio: ahora }));
   db.prepare("UPDATE ugc_videos SET tomas = ?, estado = 'generando', creditos = creditos + ?, error = '', video = '', miniatura = '', montajes = 0, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(tomas), costo, id);
-  for (let i = 0; i < tomas.length; i++) await lanzarToma(storeId, id, i);
+  void (async () => { for (let i = 0; i < tomas.length; i++) await lanzarToma(storeId, id, i); })().catch((e) => console.warn('[ugc] lanzar tomas', id, e));
   return { video: obtenerVideo(storeId, id)! };
 }
 
@@ -509,7 +585,7 @@ export async function rehacerToma(storeId: string, id: string, i: number, b: Fil
   if (saldo(storeId) < costo || !cobrar(storeId, costo, `Video UGC: rehacer toma ${i + 1} (${guion[i].etiqueta})`)) return { error: `Necesitas ${costo} créditos para rehacer esta toma.`, sinCreditos: true };
   tomas[i] = { estado: 'pendiente', task: '', url: '', error: '', creditos: costo, devuelto: false, inicio: new Date().toISOString() };
   db.prepare("UPDATE ugc_videos SET guion = ?, tomas = ?, estado = 'generando', creditos = creditos + ?, error = '', updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(guion), JSON.stringify(tomas), costo, id);
-  await lanzarToma(storeId, id, i);
+  void lanzarToma(storeId, id, i).catch((e) => console.warn('[ugc] rehacer toma', id, i, e));
   return { video: obtenerVideo(storeId, id)! };
 }
 

@@ -205,7 +205,7 @@ function PasoProducto({ df, v, cambiar, bloqueado }: { df: DealFlowState; v: Vid
       )}
       {(prod || otro) && (
         <>
-          <div style={lb}>Fotos que usa la IA (hasta 4; con varios ángulos el producto sale más fiel). Usa fotos SIN caras de personas (solo el producto o la prenda): Seedance bloquea las fotos con caras.
+          <div style={lb}>Fotos que usa la IA (hasta 4; con varios ángulos el producto sale más fiel). Pueden tener modelo: si Seedance ve una cara, DealFlow quita a la persona solo y deja la prenda (tarda unos segundos más).
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {fotos.map((f) => {
                 const on = sel.has(f);
@@ -447,7 +447,7 @@ function PasoGenerar({ est, v, cambiar, bloqueado, onVideo, guardarYa, onIrEstud
                 <span style={{ flex: 1, minWidth: 0 }}>Toma {i + 1} · {v.guion[i]?.etiqueta}</span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: ESTADO_TOMA[t.estado]?.[1] }}>{ESTADO_TOMA[t.estado]?.[0]}</span>
                 {!bloqueado && (t.estado === 'fallida' || t.estado === 'lista') && <button onClick={() => void rehacer(i)} style={{ ...btnGris, minHeight: 30, fontSize: 11.5 }}>Rehacer · {(v.guion[i]?.segundos || 4) * tarifa}</button>}
-                {t.error && <span style={{ flexBasis: '100%', fontSize: 11.5, color: 'var(--df-danger-dark)' }}>{t.error}</span>}
+                {t.error && <span style={{ flexBasis: '100%', fontSize: 11.5, color: t.estado === 'fallida' ? 'var(--df-danger-dark)' : 'var(--df-text-muted)' }}>{t.error}</span>}
               </div>
             ))}
             <div style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
