@@ -117,6 +117,15 @@ app.use(async (req, res, next) => {
   if (/^\/l\/(media|api)\//.test(req.path) || req.path === '/l/sdk.js') return next();
   const origen = `https://${host.replace(/:\d+$/, '')}`;
   if (req.path === '/robots.txt') return res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /l/api/\nSitemap: ${origen}/sitemap.xml\n`);
+  if (req.path === '/llms.txt') {
+    // Ficha corta de la tienda para los asistentes de IA (lo revisa PageSpeed en «Navegación con agentes»).
+    if (!L.tiendaEnLinea(storeId)) return res.status(404).end();
+    const t = L.configTienda(storeId);
+    const lineas = [`# ${t.nombre || 'Tienda'}`, '', `> ${(t.descripcion || t.titulo || 'Tienda online en Colombia').replace(/\s+/g, ' ').trim()}`, '', 'Pago contra entrega y envíos a toda Colombia.', '', '## Productos', '',
+      ...L.catalogoTienda(storeId).map((p) => `- [${p.nombre}](${origen}/${p.slug})${p.precio ? `: $${Math.round(p.precio).toLocaleString('es-CO')}` : ''}`)];
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.type('text/markdown; charset=utf-8').send(lineas.join('\n') + '\n');
+  }
   if (req.path === '/sitemap.xml') { if (!L.tiendaEnLinea(storeId)) return res.status(404).end(); return res.type('application/xml').send(L.sitemapTienda(storeId, origen)); }
   const m = req.method === 'GET' ? req.path.match(/^\/([a-z0-9-]{0,60})\/?$/i) : null;
   // Página de gracias de una landing en modo código: /<landing>/gracias
@@ -233,7 +242,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'landings-fotos-11222100',
+    build: 'landings-nombres-11222300',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

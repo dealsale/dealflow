@@ -157,7 +157,7 @@ function premium(d: LandingDatos, o: OpcionesRender): string {
 ${cabeceraSeo({ titulo: tituloSeo, descripcion: descSeo, imagen: imagenSeo, url: o.url, favicon: o.tienda?.favicon || o.tienda?.logo || d.logo, sitio, color: d.colorPrincipal, tipo: 'product', precio: sel.precio, jsonld, vista: o.vista })}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"></noscript>
-${d.galeria[0] ? precargaFoto(d.galeria[0], '(min-width:900px) 700px, 100vw') : ''}
+${d.galeria[0] ? precargaFoto(d.galeria[0], '(min-width:900px) 700px, calc(100vw - 28px)') : ''}
 <script>${o.vista ? '' : ATRIB_JS}</script>
 ${pixel ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];var go=function(){if(f.__dfPx)return;f.__dfPx=1;t=b.createElement(e);t.async=!0;t.src=v;b.head.appendChild(t)};['scroll','touchstart','pointerdown','keydown'].forEach(function(x){f.addEventListener(x,go,{once:!0,passive:!0})});var w=function(){setTimeout(go,3500)};b.readyState==='complete'?w():f.addEventListener('load',w)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixel}');fbq('track','PageView');${EV_PIXEL(o.id || '')}__dfEv('ViewContent',{content_name:${json(d.nombre)},value:${sel.precio},currency:'COP'},{bundle:${inicial}});</script>` : ''}
 <style>
@@ -342,10 +342,10 @@ ${d.bannerSuperior ? `<div class="banner"><img ${foto(d.bannerSuperior, '100vw')
   </div>
   <div class="media">
     <div class="principal">
-      <div class="slides" id="slides">${(d.galeria.length ? d.galeria : ['']).map((g, i) => g ? `<img ${foto(g, '(min-width:900px) 700px, 100vw')} alt="${esc(d.nombre)}" ${i ? 'loading="lazy" decoding="async"' : 'fetchpriority="high"'}>` : '<div style="flex:0 0 100%;aspect-ratio:4/5;display:grid;place-items:center;color:#999">Agrega fotos del producto</div>').join('')}</div>
+      <div class="slides" id="slides">${(d.galeria.length ? d.galeria : ['']).map((g, i) => g ? `<img ${foto(g, '(min-width:900px) 700px, calc(100vw - 28px)', 1440, i > 0)} data-g="${esc(g)}" alt="${esc(d.nombre)}" ${i ? 'decoding="async"' : 'fetchpriority="high"'}>` : '<div style="flex:0 0 100%;aspect-ratio:4/5;display:grid;place-items:center;color:#999">Agrega fotos del producto</div>').join('')}</div>
       ${d.galeria.length > 1 ? `<button class="flecha izq" data-dir="-1" aria-label="Anterior">‹</button><button class="flecha der" data-dir="1" aria-label="Siguiente">›</button><div class="puntos">${d.galeria.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}
     </div>
-    ${d.galeria.length > 1 ? `<div class="miniaturas" id="miniaturas">${d.galeria.map((g, i) => `<img ${foto(g, '120px', 320)} data-i="${i}" class="${i ? '' : 'on'}" alt="" loading="lazy" decoding="async">`).join('')}</div>` : ''}
+    ${d.galeria.length > 1 ? `<div class="miniaturas" id="miniaturas">${d.galeria.map((g, i) => `<img ${foto(g, '(min-width:900px) 110px, 18vw', 320, true)} data-i="${i}" class="${i ? '' : 'on'}" alt="" loading="lazy" decoding="async">`).join('')}</div>` : ''}
   </div>
 </section></main>
 ${d.imagenes.length ? `<section class="largas">${d.imagenes.map((g) => `<img ${foto(g, '(min-width:1000px) 1000px, 100vw')} alt="" loading="lazy" decoding="async" data-rev>`).join('')}</section>
@@ -400,10 +400,14 @@ function atar(c){
     var f=C.opciones[+s.dataset.o].valores[+s.value].foto;if(f)verFoto(f);
     $$('select[data-u="'+s.dataset.u+'"][data-o="'+s.dataset.o+'"]').forEach(function(x){if(x!==s)x.value=s.value})}});
 }
-// Galería
+// Galería. Las fotos secundarias y las miniaturas bajan cuando la página ya cargó (o al primer toque),
+// así no le quitan velocidad a la foto principal.
+function cargarDif(){$$('img[data-dsrc]').forEach(function(im){if(im.dataset.dset)im.srcset=im.dataset.dset;im.src=im.dataset.dsrc;delete im.dataset.dsrc})}
+if(document.readyState==='complete')setTimeout(cargarDif,1);else window.addEventListener('load',function(){setTimeout(cargarDif,1)});
+['touchstart','pointerdown','scroll','keydown'].forEach(function(x){window.addEventListener(x,cargarDif,{once:true,passive:true})});
 var sl=$('#slides');
 function irA(i){if(!sl)return;var n=sl.children.length;i=(i+n)%n;sl.scrollTo({left:i*sl.clientWidth,behavior:'smooth'})}
-function verFoto(src){if(!sl)return;var k=$$('img',sl).findIndex(function(im){return im.getAttribute('src')===src});if(k>=0)irA(k)}
+function verFoto(src){if(!sl)return;var k=$$('img',sl).findIndex(function(im){return im.getAttribute('data-g')===src});if(k>=0)irA(k)}
 if(sl){sl.addEventListener('scroll',function(){var i=Math.round(sl.scrollLeft/sl.clientWidth);$$('#miniaturas img').forEach(function(t,k){t.classList.toggle('on',k===i)});$$('.puntos i').forEach(function(t,k){t.classList.toggle('on',k===i)})},{passive:true})}
 $$('#miniaturas img').forEach(function(t){t.onclick=function(){irA(+t.dataset.i)}});
 $$('.flecha').forEach(function(b){b.onclick=function(){irA(Math.round(sl.scrollLeft/sl.clientWidth)+(+b.dataset.dir))}});

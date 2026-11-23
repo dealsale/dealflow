@@ -6,12 +6,15 @@
  * el original no se toca: solo cambia lo que se le manda al navegador.
  */
 import path from 'node:path';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { imageSize } from 'image-size';
 import { DATA_DIR } from './db.js';
 
 /** Anchos que se generan (se redondea hacia arriba al más cercano). */
-export const ANCHOS = [160, 320, 480, 640, 828, 1080, 1440] as const;
+export const ANCHOS = [160, 240, 320, 480, 640, 720, 828, 1080, 1440] as const;
+/** Versión de la compresión: si cambia, las fotos livianas se vuelven a generar. */
+const VERSION = 'v2';
+const nombreCache = (archivo: string, w: number) => `${path.basename(archivo).replace(/\.[a-z0-9]+$/i, '')}-${w}-${VERSION}.webp`;
 const anchoValido = (w: number) => ANCHOS.find((a) => a >= w) || ANCHOS[ANCHOS.length - 1];
 
 const dirCache = (storeId: string) => {
@@ -44,8 +47,7 @@ async function turno<T>(fn: () => Promise<T>): Promise<T> {
  */
 export async function fotoOptimizada(storeId: string, original: string, ancho: number): Promise<string | null> {
   const w = anchoValido(ancho);
-  const base = path.basename(original).replace(/\.[a-z0-9]+$/i, '');
-  const destino = path.join(dirCache(storeId), `${base}-${w}.webp`);
+  const destino = path.join(dirCache(storeId), nombreCache(original, w));
   if (existsSync(destino)) return destino;
   const clave = destino;
   const ya = enCurso.get(clave);
@@ -58,7 +60,7 @@ export async function fotoOptimizada(storeId: string, original: string, ancho: n
       await sharp(original, { animated: animada, limitInputPixels: 150_000_000 })
         .rotate()
         .resize({ width: w, withoutEnlargement: true })
-        .webp({ quality: animada ? 70 : 76, effort: 4 })
+        .webp({ quality: animada ? 65 : w <= 320 ? 60 : 70, effort: 5, smartSubsample: true })
         .toFile(destino);
       return destino;
     } catch (e) {
@@ -105,7 +107,7 @@ export function medidaFoto(u: string): { w: number; h: number } | null {
  * conocen, width/height. `tam` es el ancho con que se ve en pantalla (atributo sizes).
  * Las fotos externas (https://…) quedan como están.
  */
-export function atributosFoto(u: string, tam: string, maxAncho = 1440): string {
+export function atributosFoto(u: string, tam: string, maxAncho = 1440, diferida = false): string {
   const e = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   if (!rutaMedia(u)) return `src="${e(u)}"`;
   const md = medidaFoto(u);
@@ -113,7 +115,11 @@ export function atributosFoto(u: string, tam: string, maxAncho = 1440): string {
   const unicos = [...new Set([...ANCHOS.filter((a) => a < tope), anchoValido(tope)])].filter((a) => a <= Math.max(maxAncho, 160));
   const medio = unicos.find((a) => a >= 640) || unicos[unicos.length - 1];
   const dim = md ? ` width="${md.w}" height="${md.h}"` : '';
-  return `src="${e(u)}?w=${medio}" srcset="${unicos.map((a) => `${e(u)}?w=${a} ${a}w`).join(', ')}" sizes="${e(tam)}"${dim}`;
+  const set = unicos.map((a) => `${e(u)}?w=${a} ${a}w`).join(', ');
+  // Diferida: un marco vacío con la misma forma; la foto de verdad baja cuando la página ya
+  // cargó (así no le quita velocidad a la foto principal).
+  if (diferida && md) return `src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${md.w} ${md.h}'/%3E" data-dsrc="${e(u)}?w=${medio}" data-dset="${set}" sizes="${e(tam)}"${dim}`;
+  return `src="${e(u)}?w=${medio}" srcset="${set}" sizes="${e(tam)}"${dim}`;
 }
 
 /** <link rel="preload"> de la primera foto con el mismo srcset que la <img> (no se baja dos veces). */
@@ -139,15 +145,22 @@ export function fotoSimple(u: string, ancho: number): string {
  */
 export async function prepararFotosExistentes(filas: { store_id: string; datos: string }[]): Promise<number> {
   let hechas = 0;
+  // Las versiones viejas (otra compresión) ya no se usan: se borran para no llenar el disco.
+  try {
+    const raiz = path.resolve(DATA_DIR, 'landings-media-opt');
+    if (existsSync(raiz)) {
+      for (const t of readdirSync(raiz)) for (const a of readdirSync(path.join(raiz, t))) if (!a.endsWith(`-${VERSION}.webp`)) rmSync(path.join(raiz, t, a), { force: true });
+    }
+  } catch { /* opcional */ }
   const vistos = new Set<string>();
   for (const f of filas) {
     let d: Record<string, unknown> = {};
     try { d = JSON.parse(f.datos || '{}'); } catch { continue; }
     const lista = (k: string) => (Array.isArray(d[k]) ? (d[k] as unknown[]).map(String) : []);
     const trabajos: [string, number[]][] = [
-      ...lista('galeria').slice(0, 1).map((u) => [u, [480, 640, 828, 1080]] as [string, number[]]),
-      ...lista('galeria').slice(1).map((u) => [u, [828]] as [string, number[]]),
-      ...lista('galeria').map((u) => [u, [320]] as [string, number[]]),
+      ...lista('galeria').slice(0, 1).map((u) => [u, [480, 720, 828, 1080]] as [string, number[]]),
+      ...lista('galeria').slice(1).map((u) => [u, [720]] as [string, number[]]),
+      ...lista('galeria').map((u) => [u, [160, 240]] as [string, number[]]),
       ...lista('imagenes').map((u) => [u, [828]] as [string, number[]]),
     ];
     for (const [u, anchos] of trabajos) {
@@ -159,7 +172,7 @@ export async function prepararFotosExistentes(filas: { store_id: string; datos: 
         const k = `${u}|${w}`;
         if (vistos.has(k)) continue;
         vistos.add(k);
-        const destino = path.join(dirCache(m.storeId), `${m.file.replace(/\.[a-z0-9]+$/i, '')}-${anchoValido(w)}.webp`);
+        const destino = path.join(dirCache(m.storeId), nombreCache(m.file, anchoValido(w)));
         if (existsSync(destino)) continue;
         if (await fotoOptimizada(m.storeId, p, w)) hechas++;
         await new Promise((r) => setTimeout(r, 40));

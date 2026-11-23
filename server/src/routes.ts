@@ -28,6 +28,7 @@ import { listarProveedores, crearProveedor, editarProveedor, borrarProveedor, ab
 import * as pm from './plantillasMeta.js';
 import * as rr from './respuestasRapidas.js';
 import * as lp from './llenarPlantilla.js';
+import { nombreAlGuardar } from './nombreProducto.js';
 import type { ExtraPlantilla } from './plantillasMeta.js';
 import { guardarPermisos as guardarPermisosPlantillas, permisosPlantillas as permisosPlantillasWA } from './plantillasWA.js';
 
@@ -858,7 +859,8 @@ api.post('/products', requireAuth, requireStore, requirePermiso('productos_edita
   if (!nombre?.trim() || (!esServicio && !Number(precio))) return res.status(400).json({ error: 'Falta el nombre o el precio.' });
   const id = uid();
   db.prepare('INSERT INTO products (id, store_id, nombre, precio, color, txt, tipo, duracion) VALUES (?,?,?,?,?,?,?,?)')
-    .run(id, req.user!.storeId, nombre.trim(), Number(precio) || 0, color, txt, esServicio ? 'servicio' : 'producto', esServicio ? String(duracion || '') : '');
+    .run(id, req.user!.storeId, nombreAlGuardar(null, nombre.trim()).nombre, Number(precio) || 0, color, txt, esServicio ? 'servicio' : 'producto', esServicio ? String(duracion || '') : '');
+  { const n = nombreAlGuardar(null, nombre.trim()); if (n.disparador) db.prepare('UPDATE products SET disparador = ? WHERE id = ?').run(n.disparador, id); }
   db.prepare('INSERT INTO variants (id, product_id, label, stock, fotos) VALUES (?,?,?,?,0)').run(uid(), id, 'Única', esServicio ? 0 : Number(stock) || 0);
   if (req.user!.storeId === MASTER_STORE_ID) sincronizarSnapshotMaster(id); // producto de biblioteca
   res.json({ id });
@@ -907,7 +909,12 @@ api.patch('/products/:id', requireAuth, requireStore, requirePermiso('productos_
       db.prepare('UPDATE products SET mensajes_iniciales = ?, mensaje_bloques = ? WHERE id = ?').run(j(lista), j(principal(lista).bloques), req.params.id);
     }
   }
-  if (nombre !== undefined) db.prepare('UPDATE products SET nombre = ? WHERE id = ?').run(String(nombre), req.params.id);
+  if (nombre !== undefined) {
+    // «¡Hola! Deseo información sobre…» no es un nombre: se limpia y el saludo pasa a frase disparadora.
+    const n = nombreAlGuardar(req.params.id, String(nombre));
+    db.prepare('UPDATE products SET nombre = ? WHERE id = ?').run(n.nombre, req.params.id);
+    if (n.disparador && disparador === undefined) db.prepare('UPDATE products SET disparador = ? WHERE id = ?').run(n.disparador, req.params.id);
+  }
   if (descripcion !== undefined) db.prepare('UPDATE products SET descripcion = ? WHERE id = ?').run(String(descripcion), req.params.id);
   if (caracteristicas !== undefined) db.prepare('UPDATE products SET caracteristicas = ? WHERE id = ?').run(String(caracteristicas), req.params.id);
   if (mensajeInicial !== undefined) db.prepare('UPDATE products SET mensaje_inicial = ? WHERE id = ?').run(String(mensajeInicial), req.params.id);
