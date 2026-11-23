@@ -215,6 +215,18 @@ function guardarReferencia(buf: Buffer, subtipo: string, b: Record<string, unkno
   return { id };
 }
 
+/** La guía en texto, venga como texto, lista u objeto ({"ritmo": "…"} → «• ritmo: …»). */
+function textoGuia(v: unknown, nivel = 0): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v.trim();
+  if (typeof v !== 'object') return String(v);
+  if (Array.isArray(v)) return v.map((x) => textoGuia(x, nivel)).filter(Boolean).map((x) => (/^[•-]/.test(x) ? x : '• ' + x)).join('\n');
+  return Object.entries(v as Record<string, unknown>).map(([k, x]) => {
+    const t = textoGuia(x, nivel + 1);
+    return t ? '  '.repeat(nivel) + '• ' + k + ': ' + (t.includes('\n') ? '\n' + t : t) : '';
+  }).filter(Boolean).join('\n');
+}
+
 /** Extrae 6 cuadros y el audio, transcribe y le pide a la IA la guía de estilo. Lo paga DealFlow. */
 export async function analizarReferencia(id: string): Promise<void> {
   const r = db.prepare('SELECT * FROM estudio_referencias WHERE id = ?').get(id) as Fila | undefined;
@@ -257,7 +269,7 @@ export async function analizarReferencia(id: string): Promise<void> {
       transcripcion = txt(tj.text).trim();
     }
     if (!cuadros.length) { err('No pudimos leer el video.'); return; }
-    const g = await chatJSON<{ guia?: string }>(
+    const g = await chatJSON<{ guia?: unknown } & Record<string, unknown>>(
       'Eres director creativo de anuncios en video para e-commerce en Colombia. Analizas un video de REFERENCIA (cuadros en orden + transcripción del audio) para que otra IA haga videos con el mismo estilo. Devuelve SOLO JSON {"guia": "..."}.',
       `Escribe una guía de estilo concreta y reutilizable (no describas este producto en particular), en viñetas cortas, que cubra:
 - Formato y duración aproximada (${Math.round(dur)} s), tipo de video (UGC con celular, estudio, mixto).
@@ -269,9 +281,12 @@ export async function analizarReferencia(id: string): Promise<void> {
 Transcripción del audio: ${transcripcion ? `"${transcripcion.slice(0, 3000)}"` : '(sin voz o no se pudo transcribir)'}`,
       { imagenes: cuadros, maxTokens: 1500, temperatura: 0.4 },
     );
-    if (!g.data?.guia) { err(g.error || 'La IA no devolvió la guía.'); return; }
+    // La IA a veces devuelve la guía como lista u objeto (o la parte en otras claves): se arma el texto igual.
+    let guia = textoGuia(g.data?.guia);
+    if (guia.length < 50 && g.data) { const { guia: _g, ...resto } = g.data; guia = textoGuia(resto); }
+    if (guia.length < 50) { err(g.error || 'La IA no devolvió la guía. Dale «Analizar de nuevo».'); return; }
     db.prepare("UPDATE estudio_referencias SET cuadros = ?, transcripcion = ?, guia = ?, estado = 'listo', error = '' WHERE id = ?")
-      .run(JSON.stringify(urls), transcripcion.slice(0, 6000), txt(g.data.guia).slice(0, 4000), id);
+      .run(JSON.stringify(urls), transcripcion.slice(0, 6000), guia.slice(0, 4000), id);
   } catch (e) { err('No pudimos analizar el video: ' + ((e as Error)?.message || 'error')); }
   finally { if (dir) try { rmSync(dir, { recursive: true, force: true }); } catch { /* nada */ } }
 }
