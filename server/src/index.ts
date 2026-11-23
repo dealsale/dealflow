@@ -49,6 +49,16 @@ import('./dropiSync.js').then((m) => m.iniciarSyncDropi()).catch((e) => console.
 import('./shopifyPedidos.js').then((m) => m.iniciarEnviosShopify()).catch((e) => console.error('[shopify]', e));
 import('./logistica.js').then((m) => m.iniciarGuiasEffi()).catch((e) => console.error('[logistica]', e));
 import('./landings.js').then((m) => m.iniciarRevisionDominios()).catch((e) => console.error('[dominios]', e));
+// Fotos livianas (WebP al tamaño justo) de las landings publicadas que ya existían.
+if (process.env.FOTOS_LANDING_PREPARAR !== 'off') {
+  setTimeout(() => {
+    void (async () => {
+      const filas = db.prepare("SELECT store_id, datos FROM landings WHERE estado = 'publicada' ORDER BY updated_at DESC").all() as { store_id: string; datos: string }[];
+      const n = await (await import('./imagenesLanding.js')).prepararFotosExistentes(filas);
+      console.log(`[landings] fotos livianas listas: ${n} nuevas en ${filas.length} landings publicadas`);
+    })().catch((e) => console.warn('[landings] no se pudieron preparar las fotos livianas', e));
+  }, 45_000).unref();
+}
 import('./correo.js').then((m) => m.iniciarCorreos()).catch((e) => console.error('[correo]', e));
 import('./avisosEstado.js').then((m) => m.iniciarAvisosEstado()).catch((e) => console.error('[avisos]', e));
 import('./remarketing.js').then((m) => m.iniciarRemarketing()).catch((e) => console.error('[remarketing]', e));
@@ -158,6 +168,12 @@ app.get('/l/media/:storeId/:file', async (req, res) => {
   const p = (await import('./landings.js')).archivoPublico(req.params.storeId, req.params.file);
   if (!p) return res.status(404).end();
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  // ?w=828 → la misma foto en WebP y a ese ancho (mucho más liviana); si falla, la original.
+  const w = Number(req.query.w);
+  if (w > 0) {
+    const opt = await (await import('./imagenesLanding.js')).fotoOptimizada(req.params.storeId, p, w).catch(() => null);
+    if (opt) { res.type('image/webp'); return res.sendFile(opt); }
+  }
   res.sendFile(p);
 });
 app.get('/l/:tienda', async (req, res) => {
@@ -217,7 +233,7 @@ app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'color-chat2-11222000',
+    build: 'landings-rapidas-11221500',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

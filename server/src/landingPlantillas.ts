@@ -12,6 +12,7 @@ import type { LandingDatos, BundleL, TiendaConfig, ProductoCatalogo } from './la
 import { BASE_TIENDA } from './tiendaPublica.js';
 import { COLOMBIA } from './colombiaGeo.js';
 import { ATRIB_JS } from './atribucion.js';
+import { atributosFoto as foto, precargaFoto, fotoSimple } from './imagenesLanding.js';
 
 const txt = (v: unknown) => (v == null ? '' : String(v));
 const esc = (s: unknown) => txt(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -155,10 +156,10 @@ function premium(d: LandingDatos, o: OpcionesRender): string {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 ${cabeceraSeo({ titulo: tituloSeo, descripcion: descSeo, imagen: imagenSeo, url: o.url, favicon: o.tienda?.favicon || o.tienda?.logo || d.logo, sitio, color: d.colorPrincipal, tipo: 'product', precio: sel.precio, jsonld, vista: o.vista })}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-${d.galeria[0] ? `<link rel="preload" as="image" href="${esc(d.galeria[0])}">` : ''}
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"></noscript>
+${d.galeria[0] ? precargaFoto(d.galeria[0], '(min-width:900px) 700px, 100vw') : ''}
 <script>${o.vista ? '' : ATRIB_JS}</script>
-${pixel ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixel}');fbq('track','PageView');${EV_PIXEL(o.id || '')}__dfEv('ViewContent',{content_name:${json(d.nombre)},value:${sel.precio},currency:'COP'},{bundle:${inicial}});</script>` : ''}
+${pixel ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];var go=function(){if(f.__dfPx)return;f.__dfPx=1;t=b.createElement(e);t.async=!0;t.src=v;b.head.appendChild(t)};['scroll','touchstart','pointerdown','keydown'].forEach(function(x){f.addEventListener(x,go,{once:!0,passive:!0})});var w=function(){setTimeout(go,3500)};b.readyState==='complete'?w():f.addEventListener('load',w)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixel}');fbq('track','PageView');${EV_PIXEL(o.id || '')}__dfEv('ViewContent',{content_name:${json(d.nombre)},value:${sel.precio},currency:'COP'},{bundle:${inicial}});</script>` : ''}
 <style>
 :root{--p:${d.colorPrincipal};--b:${d.colorBoton};--a:${d.colorAcento};--t:#121212;--m:#6b7280;--bd:#e5e7eb;--g:#f3f3f3}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
@@ -325,8 +326,8 @@ footer b{color:#fff;font-weight:600}
 @keyframes caer{to{transform:translateY(105vh) rotate(720deg);opacity:.2}}
 </style></head><body>
 ${tira.length ? `<div class="ticker" aria-label="${esc(anuncios.join(' · '))}"><div class="pista">${[...tira, ...tira].map((t) => `<span>${esc(t)}</span>`).join('')}</div></div>` : ''}
-${d.logo ? `<header><img src="${esc(d.logo)}" alt="${esc(d.nombreTienda)}"></header>` : ''}
-${d.bannerSuperior ? `<div class="banner"><img src="${esc(d.bannerSuperior)}" alt=""></div>` : ''}
+${d.logo ? `<header><img ${fotoSimple(d.logo, 480)} alt="${esc(d.nombreTienda)}"></header>` : ''}
+${d.bannerSuperior ? `<div class="banner"><img ${foto(d.bannerSuperior, '100vw')} alt="" style="height:auto"></div>` : ''}
 <main class="wrap"><section class="prod">
   <div class="info">
     ${d.calificacion > 0 ? `<div class="rating"><span>${estrellas(d.calificacion)}</span><span>${esc(d.calificacion.toFixed(1))}${d.resenas ? ` (${esc(d.resenas)})` : ''}</span></div>` : ''}
@@ -341,19 +342,19 @@ ${d.bannerSuperior ? `<div class="banner"><img src="${esc(d.bannerSuperior)}" al
   </div>
   <div class="media">
     <div class="principal">
-      <div class="slides" id="slides">${(d.galeria.length ? d.galeria : ['']).map((g, i) => g ? `<img src="${esc(g)}" alt="${esc(d.nombre)}" ${i ? 'loading="lazy"' : 'fetchpriority="high"'}>` : '<div style="flex:0 0 100%;aspect-ratio:4/5;display:grid;place-items:center;color:#999">Agrega fotos del producto</div>').join('')}</div>
+      <div class="slides" id="slides">${(d.galeria.length ? d.galeria : ['']).map((g, i) => g ? `<img ${foto(g, '(min-width:900px) 700px, 100vw')} alt="${esc(d.nombre)}" ${i ? 'loading="lazy" decoding="async"' : 'fetchpriority="high"'}>` : '<div style="flex:0 0 100%;aspect-ratio:4/5;display:grid;place-items:center;color:#999">Agrega fotos del producto</div>').join('')}</div>
       ${d.galeria.length > 1 ? `<button class="flecha izq" data-dir="-1" aria-label="Anterior">‹</button><button class="flecha der" data-dir="1" aria-label="Siguiente">›</button><div class="puntos">${d.galeria.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}
     </div>
-    ${d.galeria.length > 1 ? `<div class="miniaturas" id="miniaturas">${d.galeria.map((g, i) => `<img src="${esc(g)}" data-i="${i}" class="${i ? '' : 'on'}" alt="" loading="lazy">`).join('')}</div>` : ''}
+    ${d.galeria.length > 1 ? `<div class="miniaturas" id="miniaturas">${d.galeria.map((g, i) => `<img ${foto(g, '120px', 320)} data-i="${i}" class="${i ? '' : 'on'}" alt="" loading="lazy" decoding="async">`).join('')}</div>` : ''}
   </div>
 </section></main>
-${d.imagenes.length ? `<section class="largas">${d.imagenes.map((g) => `<img src="${esc(g)}" alt="" loading="lazy" data-rev>`).join('')}</section>
+${d.imagenes.length ? `<section class="largas">${d.imagenes.map((g) => `<img ${foto(g, '(min-width:1000px) 1000px, 100vw')} alt="" loading="lazy" decoding="async" data-rev>`).join('')}</section>
 <div class="otra" data-rev><button class="cta" type="button" data-abrir>${I.carrito}<span class="tx"><span class="t1">${esc(d.boton)}</span>${d.botonSub ? `<span class="t2">${esc(d.botonSub)}</span>` : ''}</span></button></div>` : ''}
 ${d.testimonios.length ? `<section class="testi">${d.tituloTestimonios ? `<h2 data-rev>${esc(d.tituloTestimonios)}</h2>` : ''}<div class="posts">${d.testimonios.map((t) => {
-    const av = (src: string, n: string) => src ? `<img class="av" src="${esc(src)}" alt="" loading="lazy">` : `<span class="av" style="background:hsl(${(n.charCodeAt(0) || 0) * 37 % 360} 45% 52%)">${esc(n.slice(0, 1).toUpperCase())}</span>`;
+    const av = (src: string, n: string) => src ? `<img class="av" ${foto(src, '40px', 160)} alt="" loading="lazy" decoding="async">` : `<span class="av" style="background:hsl(${(n.charCodeAt(0) || 0) * 37 % 360} 45% 52%)">${esc(n.slice(0, 1).toUpperCase())}</span>`;
     // Comentarios con foto (los de landings viejas vienen en comentario*).
     const coms = (t.comentarios?.length ? t.comentarios : t.comentarioTexto ? [{ autor: t.comentarioAutor, avatar: t.comentarioAvatar, texto: t.comentarioTexto }] : []).filter((c) => c.texto);
-    return `<article class="post" data-rev><div class="cab">${av(t.avatar, t.autor)}<div><div class="nm">${esc(t.autor)}</div><div class="tm">${esc(t.tiempo || 'Hace 1 día')}</div></div><span class="mas">···</span></div>${t.texto ? `<div class="tx">${esc(t.texto).replace(/\n/g, '<br>')}</div>` : ''}${t.imagen ? `<img class="img" src="${esc(t.imagen)}" alt="" loading="lazy">` : ''}<div class="rx"><span class="em"><i>👍</i><i>❤️</i><i>🥰</i></span><span>${esc(t.reacciones || '12')}</span>${coms.length ? `<span class="cm">${coms.length} Comentario${coms.length === 1 ? '' : 's'}</span>` : ''}</div><div class="ac"><span>${I.megusta}Me gusta</span><span>${I.comentar}Comentar</span><span>${I.compartir}Compartir</span></div>${coms.map((c, k) => `<div class="rep"${k ? ' style="border-top:0;padding-top:4px"' : ''}>${av(c.avatar, c.autor || 'A')}<div><div class="bur"><b>${esc(c.autor || 'Cliente')}</b>${esc(c.texto)}</div><div class="pie"><span>Hace 1 día</span><span>Me gusta</span><span>Responder</span></div></div></div>`).join('')}</article>`;
+    return `<article class="post" data-rev><div class="cab">${av(t.avatar, t.autor)}<div><div class="nm">${esc(t.autor)}</div><div class="tm">${esc(t.tiempo || 'Hace 1 día')}</div></div><span class="mas">···</span></div>${t.texto ? `<div class="tx">${esc(t.texto).replace(/\n/g, '<br>')}</div>` : ''}${t.imagen ? `<img class="img" ${foto(t.imagen, '(min-width:900px) 300px, 84vw', 828)} alt="" loading="lazy" decoding="async" style="height:auto">` : ''}<div class="rx"><span class="em"><i>👍</i><i>❤️</i><i>🥰</i></span><span>${esc(t.reacciones || '12')}</span>${coms.length ? `<span class="cm">${coms.length} Comentario${coms.length === 1 ? '' : 's'}</span>` : ''}</div><div class="ac"><span>${I.megusta}Me gusta</span><span>${I.comentar}Comentar</span><span>${I.compartir}Compartir</span></div>${coms.map((c, k) => `<div class="rep"${k ? ' style="border-top:0;padding-top:4px"' : ''}>${av(c.avatar, c.autor || 'A')}<div><div class="bur"><b>${esc(c.autor || 'Cliente')}</b>${esc(c.texto)}</div><div class="pie"><span>Hace 1 día</span><span>Me gusta</span><span>Responder</span></div></div></div>`).join('')}</article>`;
   }).join('')}</div></section>` : ''}
 <footer>${o.inicio ? `<a href="${esc(o.inicio)}" style="display:inline-block;color:#fff;font-weight:600;border:1px solid #444;border-radius:20px;padding:7px 16px;margin-bottom:12px;text-decoration:none">← Ver todos los productos</a><br>` : ''}© ${new Date().getFullYear()}, <b>${esc(d.nombreTienda || d.nombre)}</b> · Pago contra entrega en toda Colombia</footer>
 <div class="pegado" id="pegado"><button class="cta" type="button" data-abrir>${I.carrito}<span class="tx"><span class="t1">${esc(d.boton)}</span>${d.botonSub ? `<span class="t2">${esc(d.botonSub)}</span>` : ''}</span></button></div>
@@ -376,7 +377,7 @@ function cinta(t){return escH(t).replace(/(\\p{Extended_Pictographic}\\uFE0F?)/g
 function oferta(b,i){
   var on=i===bi;
   var h='<div class="of'+(on?' on':'')+'" data-b="'+i+'" role="radio" tabindex="0" aria-checked="'+on+'">'+(b.insignia?'<span class="cinta">'+cinta(b.insignia)+'</span>':'')+
-    '<div class="fila"><span class="rad"></span>'+(b.imagen?'<img class="mini" src="'+escH(b.imagen)+'" alt="">':'')+'<div class="tt"><b>'+escH(b.titulo||(b.cantidad+' unidad'+(b.cantidad>1?'es':'')))+'</b>'+(b.subtitulo?'<span class="verde">'+escH(b.subtitulo)+'</span>':'')+'</div>'+
+    '<div class="fila"><span class="rad"></span>'+(b.imagen?'<img class="mini" src="'+escH(b.imagen.indexOf('/l/media/')===0?b.imagen+'?w=160':b.imagen)+'" alt="" width="46" height="46">':'')+'<div class="tt"><b>'+escH(b.titulo||(b.cantidad+' unidad'+(b.cantidad>1?'es':'')))+'</b>'+(b.subtitulo?'<span class="verde">'+escH(b.subtitulo)+'</span>':'')+'</div>'+
     '<div class="pp"><b>'+fmt(b.precio)+'</b>'+(b.precioAntes>b.precio?'<s>'+fmt(b.precioAntes)+'</s>':'')+'</div></div>';
   if(on&&C.opciones.length){
     h+='<div class="vars" style="--n:'+C.opciones.length+'"><div class="cab"><span></span>'+C.opciones.map(function(o){return '<span>'+escH(o.nombre)+'</span>'}).join('')+'</div>';
@@ -500,9 +501,9 @@ export function renderCatalogo(t: TiendaConfig, productos: ProductoCatalogo[], b
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 ${cabeceraSeo({ titulo: tituloSeo, descripcion: descSeo, imagen: t.seoImagen || t.banner || productos[0]?.foto || t.logo, url, favicon: t.favicon || t.logo, sitio: t.nombre, color: t.colorPrincipal, tipo: 'website', jsonld, vista })}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"></noscript>
 <script>${ATRIB_JS}</script>
-${t.pixelMeta ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${t.pixelMeta}');fbq('track','PageView');</script>` : ''}
+${t.pixelMeta ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];var go=function(){if(f.__dfPx)return;f.__dfPx=1;t=b.createElement(e);t.async=!0;t.src=v;b.head.appendChild(t)};['scroll','touchstart','pointerdown','keydown'].forEach(function(x){f.addEventListener(x,go,{once:!0,passive:!0})});var w=function(){setTimeout(go,3500)};b.readyState==='complete'?w():f.addEventListener('load',w)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${t.pixelMeta}');fbq('track','PageView');</script>` : ''}
 <style>
 :root{--p:${t.colorPrincipal};--b:${t.colorBoton};--a:${t.colorAcento};--t:#121212;--m:#6b7280;--g:#f3f3f3}
 *{box-sizing:border-box}body{margin:0;background:#fff;color:var(--t);font:14px/1.5 Poppins,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
@@ -536,12 +537,12 @@ footer{background:#121212;color:#d4d4d4;text-align:center;font-size:12px;padding
 @keyframes flota{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 </style></head><body>
 ${tira.length ? `<div class="ticker"><div class="pista">${[...tira, ...tira].map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>` : ''}
-<header>${t.logo ? `<img src="${esc(t.logo)}" alt="${titulo}">` : `<b>${titulo}</b>`}</header>
-${t.banner ? `<div class="banner"><img src="${esc(t.banner)}" alt=""></div>` : ''}
+<header>${t.logo ? `<img ${fotoSimple(t.logo, 480)} alt="${titulo}">` : `<b>${titulo}</b>`}</header>
+${t.banner ? `<div class="banner"><img ${foto(t.banner, '100vw')} alt="" style="height:auto"></div>` : ''}
 ${t.titulo || t.descripcion ? `<section class="hero">${t.titulo ? `<h1>${esc(t.titulo)}</h1>` : ''}${t.descripcion ? `<p>${esc(t.descripcion)}</p>` : ''}</section>` : ''}
 ${productos.length ? `<main class="grid">${productos.map((p, i) => {
     const off = p.precioAntes > p.precio ? Math.round((1 - p.precio / p.precioAntes) * 100) : 0;
-    return `<a class="card" href="${esc(base + p.slug)}" style="animation-delay:${Math.min(i, 12) * 0.06}s"><div class="foto">${p.foto ? `<img class="uno" src="${esc(p.foto)}" alt="${esc(p.nombre)}" loading="${i < 4 ? 'eager' : 'lazy'}">` : ''}${p.foto2 ? `<img class="dos" src="${esc(p.foto2)}" alt="" loading="lazy">` : ''}${off ? `<span class="desc">-${off}%</span>` : ''}</div>${p.calificacion > 0 ? `<div class="st">${'★'.repeat(Math.round(p.calificacion))}<span>${esc(p.calificacion.toFixed(1))}</span></div>` : ''}<div class="nm">${esc(p.nombre)}</div><div class="pr"><b>${pesos(p.precio)}</b>${p.precioAntes > p.precio ? `<s>${pesos(p.precioAntes)}</s>` : ''}</div><div class="ver">Ver producto</div></a>`;
+    return `<a class="card" href="${esc(base + p.slug)}" style="animation-delay:${Math.min(i, 12) * 0.06}s"><div class="foto">${p.foto ? `<img class="uno" ${foto(p.foto, '(min-width:900px) 290px, 50vw', 828)} alt="${esc(p.nombre)}" loading="${i < 4 ? 'eager' : 'lazy'}">` : ''}${p.foto2 ? `<img class="dos" ${foto(p.foto2, '(min-width:900px) 290px, 50vw', 828)} alt="" loading="lazy" decoding="async">` : ''}${off ? `<span class="desc">-${off}%</span>` : ''}</div>${p.calificacion > 0 ? `<div class="st">${'★'.repeat(Math.round(p.calificacion))}<span>${esc(p.calificacion.toFixed(1))}</span></div>` : ''}<div class="nm">${esc(p.nombre)}</div><div class="pr"><b>${pesos(p.precio)}</b>${p.precioAntes > p.precio ? `<s>${pesos(p.precioAntes)}</s>` : ''}</div><div class="ver">Ver producto</div></a>`;
   }).join('')}</main>` : '<div class="vacio">Pronto tendremos productos disponibles.</div>'}
 <footer>© ${new Date().getFullYear()}, <b>${titulo}</b> · Pago contra entrega en toda Colombia</footer>
 ${t.whatsapp ? `<a class="wa" href="https://wa.me/${esc(t.whatsapp)}" target="_blank" rel="noopener" aria-label="WhatsApp">${I.wa}</a>` : ''}
