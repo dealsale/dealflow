@@ -764,7 +764,8 @@ export { renderLanding, renderCatalogo, paginaNoDisponible } from './landingPlan
 // ── Pedido desde la landing ────────────────────────────────────────────
 const intentos = new Map<string, number[]>();
 /** Crea el pedido en DealFlow (origen "landing") y pide la confirmación por WhatsApp. */
-export async function pedidoLanding(landingId: string, b: Fila, ip: string, ua = ''): Promise<{ ok: true; numero: number; eventId: string } | { error: string }> {
+/** ip: para el antispam; ipMeta: la del visitante para Meta ('' si solo se vio la de Cloudflare: mejor no mandar ninguna). */
+export async function pedidoLanding(landingId: string, b: Fila, ip: string, ua = '', ipMeta?: string): Promise<{ ok: true; numero: number; eventId: string } | { error: string }> {
   // Antispam: máximo 5 pedidos por IP cada 10 minutos.
   const ahora = Date.now();
   const lista = (intentos.get(ip) || []).filter((t) => ahora - t < 10 * 60e3);
@@ -834,14 +835,14 @@ export async function pedidoLanding(landingId: string, b: Fila, ip: string, ua =
     storeId, pixelId: pixel, landingId, evento: 'Purchase', eventId: oid, valor: bundle.precio, guardarPayload: true,
     contenido: { nombre: d.nombre, cantidad: bundle.cantidad },
     cliente: { tel, nombre: corto(b.nombre, 60), apellido: corto(b.apellido, 60), ciudad, departamento, correo: corto(b.correo, 80) },
-    nav: { ip, ua, fbp: txt(b.fbp), fbc: txt(b.fbc), url: txt(b.url), vid: txt(b.vid) },
+    nav: { ip: ipMeta ?? ip, ua, fbp: txt(b.fbp), fbc: txt(b.fbc), url: txt(b.url), vid: txt(b.vid) },
   })).catch(() => {});
   return { ok: true, numero, eventId: oid };
 }
 
 const intentosEv = new Map<string, number[]>();
 /** ViewContent / InitiateCheckout que la página manda (con el mismo eventID que el píxel). */
-export async function eventoLanding(landingId: string, b: Fila, ip: string, ua: string): Promise<void> {
+export async function eventoLanding(landingId: string, b: Fila, ip: string, ua: string, ipMeta?: string): Promise<void> {
   const evento = txt(b.evento);
   if (evento !== 'ViewContent' && evento !== 'InitiateCheckout') return;
   const eventId = txt(b.eventId).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80);
@@ -861,7 +862,7 @@ export async function eventoLanding(landingId: string, b: Fila, ip: string, ua: 
   const bu = bundles[Math.max(0, Math.min(bundles.length - 1, Math.round(num(b.bundle, d.bundleInicial))))];
   const m = await import('./metaPixelWeb.js');
   await m.enviarEventoWeb({ storeId, pixelId: pixel, landingId, evento, eventId, valor: bu?.precio || d.precio, guardarPayload: false,
-    contenido: { nombre: d.nombre, cantidad: bu?.cantidad || 1 }, cliente: {}, nav: { ip, ua, fbp: txt(b.fbp), fbc: txt(b.fbc), url: txt(b.url), vid: txt(b.vid) } });
+    contenido: { nombre: d.nombre, cantidad: bu?.cantidad || 1 }, cliente: {}, nav: { ip: ipMeta ?? ip, ua, fbp: txt(b.fbp), fbc: txt(b.fbc), url: txt(b.url), vid: txt(b.vid) } });
 }
 
 /** ¿Despachar solo al confirmar? (lo elige cada landing). */

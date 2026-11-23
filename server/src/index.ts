@@ -12,6 +12,7 @@ import { api, webhooks } from './routes.js';
 import './cambiosPedido.js'; // columnas y disparador de la hora de la guía (antes de cualquier ruta)
 import { proveedorApi } from './proveedores.js';
 import { db } from './db.js';
+import { ipCliente, ipsCandidatas } from './ipCliente.js';
 import { paginaTienda } from './tiendaPublica.js';
 import { paginaApp, cspIncrustada } from './shopifyApp.js';
 import { seed } from './seed.js';
@@ -103,7 +104,7 @@ if (process.env.NODE_ENV !== 'production') {
 // Dominio propio de una tienda (tutienda.com/producto): solo se sirven sus landings,
 // sus imágenes y su formulario; nada del panel de DealFlow responde en ese dominio.
 // ip: la que se le manda a Meta con los eventos de la landing (para revisar que sea la del visitante y no la de Cloudflare).
-app.get('/l/ping', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ df: 'landings', host: String(req.headers['x-df-host'] || req.headers['x-forwarded-host'] || req.headers.host || ''), ip: String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim() }); });
+app.get('/l/ping', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ df: 'landings', host: String(req.headers['x-df-host'] || req.headers['x-forwarded-host'] || req.headers.host || ''), ip: ipCliente(req), candidatas: ipsCandidatas(req) }); });
 app.use(async (req, res, next) => {
   const host = String(req.headers['x-df-host'] || req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase();
   if (!host || /(^|\.)dealflow\.(sbs|co)(:\d+)?$|^localhost|^127\.|railway\.app(:\d+)?$/.test(host)) return next();
@@ -225,8 +226,8 @@ app.get('/l/:tienda/:slug', async (req, res) => {
 app.options('/l/api/:id/pedido', (_req, res) => { res.set({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' }); res.status(204).end(); });
 app.post('/l/api/:id/pedido', async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
-  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-  const r = await (await import('./landings.js')).pedidoLanding(req.params.id, req.body || {}, ip, String(req.headers['user-agent'] || ''));
+  const ip = ipCliente(req) || String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim(); // la del visitante, no la de Cloudflare
+  const r = await (await import('./landings.js')).pedidoLanding(req.params.id, req.body || {}, ip, String(req.headers['user-agent'] || ''), ipCliente(req));
   if ('error' in r) return res.status(400).json(r);
   res.json(r);
 });
@@ -236,14 +237,14 @@ app.post('/l/api/:id/evento', express.text({ type: '*/*', limit: '4kb' }), (req,
   res.status(204).end();
   let b: Record<string, unknown> = {};
   try { b = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); } catch { return; }
-  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-  void import('./landings.js').then((L) => L.eventoLanding(req.params.id, b, ip, String(req.headers['user-agent'] || ''))).catch(() => {});
+  const ip = ipCliente(req) || String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  void import('./landings.js').then((L) => L.eventoLanding(req.params.id, b, ip, String(req.headers['user-agent'] || ''), ipCliente(req))).catch(() => {});
 });
 app.get('/salud', (_req, res) =>
   res.json({
     ok: true,
     // Marca de build para saber qué versión está en vivo (sube al desplegar).
-    build: 'pixel-ventas-11230900',
+    build: 'ip-real-11231000',
     // Con el volumen de Railway montado en /srv/data, esto lo confirma.
     datosPersistentes: process.env.RAILWAY_VOLUME_MOUNT_PATH === '/srv/data' || undefined,
     // Diagnóstico de almacenamiento: si dataDir NO apunta al volumen, la base es

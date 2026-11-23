@@ -11,6 +11,9 @@ export default {
     headers.set('X-DF-Host', url.hostname);
     const ip = request.headers.get('CF-Connecting-IP');
     if (ip) headers.set('X-Forwarded-For', ip);
+    // IP del visitante en una cabecera propia: al pasar otra vez por Cloudflare (app.dealflow.sbs)
+    // X-Forwarded-For y CF-Connecting-IP quedan con la IP de Cloudflare, y a Meta le llegaba esa.
+    if (ip) headers.set('X-DF-IP', ip);
     const sinCuerpo = request.method === 'GET' || request.method === 'HEAD';
     return fetch(DESTINO + url.pathname + url.search, {
       method: request.method,
